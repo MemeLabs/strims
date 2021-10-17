@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/directory"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
@@ -32,9 +34,9 @@ const streamUpdateInterval = time.Minute
 func newIngressService(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	transfer control.TransferControl,
-	network control.NetworkControl,
-	directory control.DirectoryControl,
+	transfer transfer.Control,
+	network network.Control,
+	directory directory.Control,
 ) *ingressService {
 	return &ingressService{
 		logger:     logger,
@@ -50,9 +52,9 @@ func newIngressService(
 type ingressService struct {
 	logger     *zap.Logger
 	store      *dao.ProfileStore
-	transfer   control.TransferControl
-	network    control.NetworkControl
-	directory  control.DirectoryControl
+	transfer   transfer.Control
+	network    network.Control
+	directory  directory.Control
 	transcoder *rtmpingress.Transcoder
 
 	lock    sync.Mutex
@@ -172,9 +174,9 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 func newIngressStream(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	transfer control.TransferControl,
-	network control.NetworkControl,
-	directory control.DirectoryControl,
+	transfer transfer.Control,
+	network network.Control,
+	directory directory.Control,
 	addr *rtmpingress.StreamAddr,
 	conn io.Closer,
 ) (s *ingressStream, err error) {
@@ -228,9 +230,9 @@ func newIngressStream(
 type ingressStream struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
-	transfer  control.TransferControl
-	network   control.NetworkControl
-	directory control.DirectoryControl
+	transfer  transfer.Control
+	network   network.Control
+	directory directory.Control
 
 	ctx       context.Context
 	cancelCtx context.CancelFunc

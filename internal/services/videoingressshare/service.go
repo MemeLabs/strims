@@ -5,7 +5,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/dialer"
+	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/videochannel"
 	"github.com/MemeLabs/go-ppspp/internal/videoingress"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
@@ -50,7 +50,7 @@ func (s *videoIngressShareService) toRemoteChannel(ctx context.Context, channel 
 		Owner: &videov1.VideoChannel_RemoteShare_{
 			RemoteShare: &videov1.VideoChannel_RemoteShare{
 				Id:          channel.Id,
-				NetworkKey:  dao.CertificateRoot(dialer.VPNCertificate(ctx).GetParent()).Key,
+				NetworkKey:  dao.CertificateRoot(network.VPNCertificate(ctx).GetParent()).Key,
 				ServiceKey:  s.profile.Key.Public,
 				ServiceSalt: videoingress.ShareAddressSalt,
 				ServerAddr:  serverAddr,
@@ -63,7 +63,7 @@ func (s *videoIngressShareService) toRemoteChannel(ctx context.Context, channel 
 
 func (s *videoIngressShareService) CreateChannel(ctx context.Context, r *videov1.VideoIngressShareCreateChannelRequest) (*videov1.VideoIngressShareCreateChannelResponse, error) {
 	channel, err := s.app.VideoChannel().CreateChannel(
-		videochannel.WithLocalShareOwner(dialer.VPNCertificate(ctx).GetParent()),
+		videochannel.WithLocalShareOwner(network.VPNCertificate(ctx).GetParent()),
 		videochannel.WithDirectorySnippet(r.DirectoryListingSnippet),
 	)
 	if err != nil {
@@ -79,14 +79,14 @@ func (s *videoIngressShareService) CreateChannel(ctx context.Context, r *videov1
 }
 
 func (s *videoIngressShareService) UpdateChannel(ctx context.Context, r *videov1.VideoIngressShareUpdateChannelRequest) (*videov1.VideoIngressShareUpdateChannelResponse, error) {
-	id, err := dao.GetVideoChannelIDByOwnerCert(s.store, dialer.VPNCertificate(ctx).GetParent())
+	id, err := dao.GetVideoChannelIDByOwnerCert(s.store, network.VPNCertificate(ctx).GetParent())
 	if err != nil {
 		return nil, err
 	}
 
 	channel, err := s.app.VideoChannel().UpdateChannel(
 		id,
-		videochannel.WithLocalShareOwner(dialer.VPNCertificate(ctx).GetParent()),
+		videochannel.WithLocalShareOwner(network.VPNCertificate(ctx).GetParent()),
 		videochannel.WithDirectorySnippet(r.DirectoryListingSnippet),
 	)
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *videoIngressShareService) UpdateChannel(ctx context.Context, r *videov1
 }
 
 func (s *videoIngressShareService) DeleteChannel(ctx context.Context, r *videov1.VideoIngressShareDeleteChannelRequest) (*videov1.VideoIngressShareDeleteChannelResponse, error) {
-	id, err := dao.GetVideoChannelIDByOwnerCert(s.store, dialer.VPNCertificate(ctx).GetParent())
+	id, err := dao.GetVideoChannelIDByOwnerCert(s.store, network.VPNCertificate(ctx).GetParent())
 	if err != nil {
 		return nil, err
 	}

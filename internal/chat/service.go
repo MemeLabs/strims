@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dialer"
+	"github.com/MemeLabs/go-ppspp/internal/network"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -113,7 +113,7 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 }
 
 func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRequest) (*chatv1.SendMessageResponse, error) {
-	hostCert := dialer.VPNCertificate(ctx)
+	hostCert := network.VPNCertificate(ctx)
 
 	m := &chatv1.Message{
 		ServerTime: time.Now().UnixNano() / int64(time.Millisecond),

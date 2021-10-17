@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -16,14 +16,17 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ control.VideoEgressControl = &Control{}
+// ControlBase ...
+type ControlBase interface {
+	OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error)
+}
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer control.TransferControl) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer transfer.Control) Control {
 	// events := make(chan interface{}, 8)
 	// observers.Notify(events)
 
-	return &Control{
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		observers: observers,
@@ -33,27 +36,27 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, t
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	observers *event.Observers
 	// events    chan interface{}
-	transfer control.TransferControl
+	transfer transfer.Control
 
 	lock sync.Mutex
 }
 
 // Run ...
-func (t *Control) Run(ctx context.Context) {
+func (t *control) Run(ctx context.Context) {
 	<-ctx.Done()
 	t.close()
 }
 
-func (t *Control) close() {
+func (t *control) close() {
 
 }
 
-func (t *Control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, error) {
+func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, error) {
 	uri, err := ppspp.ParseURI(swarmURI)
 	if err != nil {
 		return nil, nil, err
@@ -81,7 +84,7 @@ func (t *Control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Sw
 }
 
 // OpenStream ...
-func (t *Control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
+func (t *control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
 	transferID, swarm, err := t.open(swarmURI, networkKeys)
 	if err != nil {
 		return nil, nil, err
@@ -104,7 +107,7 @@ func (t *Control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.
 // VideoReader ...
 type VideoReader struct {
 	logger     *zap.Logger
-	transfer   control.TransferControl
+	transfer   transfer.Control
 	transferID []byte
 	swarm      *ppspp.Swarm
 	r          io.Reader

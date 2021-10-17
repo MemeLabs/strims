@@ -15,8 +15,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type Peer interface {
+	AssignPort(id []byte, peerChannel uint64) (uint64, bool)
+	Close(id []byte)
+	Announce(t *transfer)
+	Remove(t *transfer)
+}
+
+var _ Peer = &peer{}
+
 // Peer ...
-type Peer struct {
+type peer struct {
 	logger     *zap.Logger
 	ctx        context.Context
 	vnicPeer   *vnic.Peer
@@ -30,7 +39,7 @@ type Peer struct {
 
 // AssignPort starts a peer transfer when it exists in response to announce from
 // peer
-func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
+func (p *peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 	pt, ok := p.getPeerTransfer(id)
 	if !ok {
 		return 0, false
@@ -45,14 +54,14 @@ func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 }
 
 // Close stops a peer transfer when it exists in response to close from peer
-func (p *Peer) Close(id []byte) {
+func (p *peer) Close(id []byte) {
 	if pt, ok := p.getPeerTransfer(id); ok {
 		p.stopPeerTransfer(pt, false)
 	}
 }
 
 // Announce creates and notifies peer of the transfer t
-func (p *Peer) Announce(t *transfer) {
+func (p *peer) Announce(t *transfer) {
 	pt := p.getOrCreatePeerTransfer(t)
 
 	pt.logger.Debug("announcing swarm")
@@ -76,7 +85,7 @@ func (p *Peer) Announce(t *transfer) {
 }
 
 // Remove cleans up the peer transfer for the removed transfer t
-func (p *Peer) Remove(t *transfer) {
+func (p *peer) Remove(t *transfer) {
 	p.lock.Lock()
 	pt, ok := p.transfers.Delete(&peerTransfer{transfer: t}).(*peerTransfer)
 	p.lock.Unlock()
@@ -87,7 +96,7 @@ func (p *Peer) Remove(t *transfer) {
 	}
 }
 
-func (p *Peer) getPeerTransfer(id []byte) (*peerTransfer, bool) {
+func (p *peer) getPeerTransfer(id []byte) (*peerTransfer, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -95,7 +104,7 @@ func (p *Peer) getPeerTransfer(id []byte) (*peerTransfer, bool) {
 	return pt, ok
 }
 
-func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
+func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -124,7 +133,7 @@ func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	return pt
 }
 
-func (p *Peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
+func (p *peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
 	pt.lock.Lock()
 	defer pt.lock.Unlock()
 
@@ -157,7 +166,7 @@ func (p *Peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
 	return true
 }
 
-func (p *Peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
+func (p *peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
 	pt.lock.Lock()
 	defer pt.lock.Unlock()
 

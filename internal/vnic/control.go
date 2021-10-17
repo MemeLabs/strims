@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
@@ -12,7 +11,11 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ control.VNICControl = &Control{}
+type Control interface {
+	Run(ctx context.Context)
+	GetConfig() (*vnicv1.Config, error)
+	SetConfig(config *vnicv1.Config) error
+}
 
 // NewControl ...
 func NewControl(
@@ -20,11 +23,11 @@ func NewControl(
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-) *Control {
+) Control {
 	// events := make(chan interface{}, 8)
 	// observers.Notify(events)
 
-	return &Control{
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
@@ -35,7 +38,7 @@ func NewControl(
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
@@ -47,17 +50,17 @@ type Control struct {
 }
 
 // Run ...
-func (c *Control) Run(ctx context.Context) {
+func (c *control) Run(ctx context.Context) {
 	go c.loadConfig()
 
 	// TODO: sync reload?
 }
 
-func (c *Control) applyConfig(config *vnicv1.Config) {
+func (c *control) applyConfig(config *vnicv1.Config) {
 	c.vpn.VNIC().QOS().SetRateLimit(config.MaxUploadBytesPerSecond)
 }
 
-func (c *Control) loadConfig() {
+func (c *control) loadConfig() {
 	config, err := dao.GetVNICConfig(c.store)
 	if err != nil {
 		c.logger.Debug("failed to load vnic config", zap.Error(err))
@@ -68,12 +71,12 @@ func (c *Control) loadConfig() {
 }
 
 // GetConfig ...
-func (c *Control) GetConfig() (*vnicv1.Config, error) {
+func (c *control) GetConfig() (*vnicv1.Config, error) {
 	return dao.GetVNICConfig(c.store)
 }
 
 // SetConfig ...
-func (c *Control) SetConfig(config *vnicv1.Config) error {
+func (c *control) SetConfig(config *vnicv1.Config) error {
 	if err := dao.SetVNICConfig(c.store, config); err != nil {
 		return err
 	}

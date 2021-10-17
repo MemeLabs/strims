@@ -4,11 +4,10 @@ import (
 	"context"
 	"io"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/services/peer"
+	"github.com/MemeLabs/go-ppspp/internal/peer"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -125,5 +124,5 @@ type ServiceParams struct {
 	Profile *profilev1.Profile
 	Store   *dao.ProfileStore
 	VPN     *vpn.Host
-	App     control.AppControl
+	App     app.Control
 }

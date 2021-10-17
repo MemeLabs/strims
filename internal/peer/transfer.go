@@ -3,13 +3,13 @@ package peer
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	transfer "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 )
 
 type transferService struct {
-	Peer control.Peer
-	App  control.AppControl
+	Peer app.Peer
+	App  app.Control
 }
 
 func (s *transferService) Announce(ctx context.Context, req *transfer.TransferPeerAnnounceRequest) (*transfer.TransferPeerAnnounceResponse, error) {

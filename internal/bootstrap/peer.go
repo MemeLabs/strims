@@ -5,9 +5,13 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
 
+type Peer interface{}
+
+var _ Peer = &peer{}
+
 // Peer ...
-type Peer struct {
-	vnic           *vnic.Peer
+type peer struct {
+	vnicPeer       *vnic.Peer
 	client         api.PeerClient
 	PublishEnabled bool
 }

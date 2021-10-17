@@ -6,8 +6,10 @@ import (
 	"errors"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/directory"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
@@ -25,16 +27,22 @@ var (
 	ErrIDNotFound = errors.New("id not found")
 )
 
-var _ control.VideoCaptureControl = &Control{}
+type Control interface {
+	Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error)
+	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
+	Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error
+	Append(id []byte, b []byte, segmentEnd bool) error
+	Close(id []byte) error
+}
 
 // NewControl ...
 func NewControl(
 	logger *zap.Logger,
-	transfer control.TransferControl,
-	directory control.DirectoryControl,
-	network control.NetworkControl,
-) *Control {
-	return &Control{
+	transfer transfer.Control,
+	directory directory.Control,
+	network network.Control,
+) Control {
+	return &control{
 		logger:    logger,
 		directory: directory,
 		network:   network,
@@ -43,18 +51,18 @@ func NewControl(
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
-	directory control.DirectoryControl
-	network   control.NetworkControl
-	transfer  control.TransferControl
+	directory directory.Control
+	network   network.Control
+	transfer  transfer.Control
 
 	lock    sync.Mutex
 	streams llrb.LLRB
 }
 
 // Open ...
-func (c *Control) Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error) {
+func (c *control) Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error) {
 	key, err := dao.GenerateKey()
 	if err != nil {
 		return nil, err
@@ -78,7 +86,7 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1directory.Lis
 }
 
 // OpenWithSwarmWriterOptions ...
-func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
+func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
 	w, err := ppspp.NewWriter(options)
 	if err != nil {
 		return nil, err
@@ -120,7 +128,7 @@ func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 }
 
 // Update ...
-func (c *Control) Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error {
+func (c *control) Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -137,7 +145,7 @@ func (c *Control) Update(id []byte, directorySnippet *networkv1directory.Listing
 }
 
 // Append ...
-func (c *Control) Append(id []byte, b []byte, segmentEnd bool) error {
+func (c *control) Append(id []byte, b []byte, segmentEnd bool) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -158,7 +166,7 @@ func (c *Control) Append(id []byte, b []byte, segmentEnd bool) error {
 }
 
 // Close ...
-func (c *Control) Close(id []byte) error {
+func (c *control) Close(id []byte) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -172,7 +180,7 @@ func (c *Control) Close(id []byte) error {
 	return nil
 }
 
-func (c *Control) publishStream(s *stream) {
+func (c *control) publishStream(s *stream) {
 	for _, k := range s.networkKeys {
 		go func(k []byte) {
 			id, err := c.publishDirectoryListing(k, s)
@@ -190,7 +198,7 @@ func (c *Control) publishStream(s *stream) {
 	}
 }
 
-func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) (uint64, error) {
+func (c *control) publishDirectoryListing(networkKey []byte, s *stream) (uint64, error) {
 	listing := &networkv1directory.Listing{
 		Content: &networkv1directory.Listing_Media_{
 			Media: &networkv1directory.Listing_Media{
@@ -203,7 +211,7 @@ func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) (uint64,
 	return c.directory.Publish(context.Background(), listing, networkKey)
 }
 
-func (c *Control) unpublishDirectoryListing(networkKey []byte, s *stream) error {
+func (c *control) unpublishDirectoryListing(networkKey []byte, s *stream) error {
 	return c.directory.Unpublish(context.Background(), s.directoryID, networkKey)
 }
 

@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -128,8 +129,8 @@ type chatServer struct {
 
 func (s *chatServer) Run(
 	ctx context.Context,
-	dialer control.DialerControl,
-	transfer control.TransferControl,
+	dialer network.Dialer,
+	transfer transfer.Control,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel

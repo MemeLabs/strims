@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 type bootstrapService struct {
-	Peer  control.Peer
-	App   control.AppControl
+	Peer  app.Peer
+	App   app.Control
 	Store *dao.ProfileStore
 }
 

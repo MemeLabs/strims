@@ -6,6 +6,7 @@ import (
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -114,6 +115,13 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 			ServerConfig: &networkv1.ServerConfig{
 				Name: name,
 				Key:  key,
+				Directory: &networkv1directory.ServerConfig{
+					Integrations: &networkv1directory.ServerConfig_Integrations{
+						Swarm: &networkv1directory.ServerConfig_Integrations_Swarm{
+							Enable: true,
+						},
+					},
+				},
 			},
 		},
 	}

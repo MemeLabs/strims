@@ -6,7 +6,7 @@ package frontend
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -21,7 +21,7 @@ func init() {
 
 // videoHLSEgressService ...
 type videoHLSEgressService struct {
-	app control.AppControl
+	app app.Control
 }
 
 // IsSupported ...

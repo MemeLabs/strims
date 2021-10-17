@@ -10,7 +10,7 @@ import (
 func createProfileStore(t *testing.T) *ProfileStore {
 	t.Helper()
 
-	profile, err := NewProfile("jbpratt")
+	profile, err := NewProfile("testuser")
 	assert.Nil(t, err, "failed to create profile")
 
 	key, err := NewStorageKey("majoraautumn")
@@ -40,6 +40,6 @@ func TestGetProfile(t *testing.T) {
 	pfStore := createProfileStore(t)
 	profile, err := GetProfile(pfStore)
 	assert.Nil(t, err, "failed to get profile")
-	assert.Equal(t, profile.GetName(), "jbpratt")
+	assert.Equal(t, profile.GetName(), "testuser")
 	assert.NotNil(t, profile.GetKey())
 }

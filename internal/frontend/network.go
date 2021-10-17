@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
@@ -34,7 +34,7 @@ func init() {
 type networkService struct {
 	profile *profilev1.Profile
 	store   *dao.ProfileStore
-	app     control.AppControl
+	app     app.Control
 }
 
 // CreateServer ...

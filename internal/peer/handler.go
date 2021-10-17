@@ -3,7 +3,7 @@ package peer
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
@@ -16,7 +16,7 @@ import (
 )
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.ProfileStore, qosc *qos.Class) vnic.PeerHandler {
+func NewPeerHandler(logger *zap.Logger, app app.Control, store *dao.ProfileStore, qosc *qos.Class) vnic.PeerHandler {
 	return func(peer *vnic.Peer) {
 		logger := logger.With(zap.Stringer("host", peer.HostID()))
 		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort, qosc)

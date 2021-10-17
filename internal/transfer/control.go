@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -23,26 +22,35 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ control.TransferControl = &Control{}
+type Control interface {
+	Run(ctx context.Context)
+	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
+	RemovePeer(id uint64)
+	Add(swarm *ppspp.Swarm, salt []byte) []byte
+	Remove(id []byte)
+	List() []*transferv1.Transfer
+	Publish(id []byte, networkKey []byte)
+	IsPublished(id []byte, networkKey []byte) bool
+}
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
-	return &Control{
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		qosc:      vpn.VNIC().QOS().AddClass(1),
 		observers: observers,
 		events:    events,
-		peers:     map[uint64]*Peer{},
+		peers:     map[uint64]*peer{},
 		runner:    ppspp.NewRunner(context.Background(), logger),
 	}
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	qosc      *qos.Class
@@ -50,7 +58,7 @@ type Control struct {
 	observers *event.Observers
 	events    chan interface{}
 	transfers llrb.LLRB
-	peers     map[uint64]*Peer
+	peers     map[uint64]*peer
 	networks  llrb.LLRB
 	runner    *ppspp.Runner
 
@@ -58,7 +66,7 @@ type Control struct {
 }
 
 // Run ...
-func (c *Control) Run(ctx context.Context) {
+func (c *control) Run(ctx context.Context) {
 	loadPeersTicker := time.NewTicker(10 * time.Second)
 	defer loadPeersTicker.Stop()
 
@@ -83,21 +91,21 @@ func (c *Control) Run(ctx context.Context) {
 	}
 }
 
-func (c *Control) handleNetworkStart(networkKey []byte) {
+func (c *control) handleNetworkStart(networkKey []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.getOrInsertNetwork(networkKey)
 }
 
-func (c *Control) handleNetworkStop(networkKey []byte) {
+func (c *control) handleNetworkStop(networkKey []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.networks.Delete(&network{key: networkKey})
 }
 
-func (c *Control) handleNetworkPeerOpen(peerID uint64, networkKey []byte) {
+func (c *control) handleNetworkPeerOpen(peerID uint64, networkKey []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -116,7 +124,7 @@ func (c *Control) handleNetworkPeerOpen(peerID uint64, networkKey []byte) {
 	})
 }
 
-func (c *Control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
+func (c *control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -130,7 +138,7 @@ func (c *Control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 	// TODO: close peer transfers associated with this network?
 }
 
-func (c *Control) loadPeers(ctx context.Context) {
+func (c *control) loadPeers(ctx context.Context) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -140,7 +148,7 @@ func (c *Control) loadPeers(ctx context.Context) {
 	})
 }
 
-func (c *Control) loadNetworkPeers(ctx context.Context, n *network) {
+func (c *control) loadNetworkPeers(ctx context.Context, n *network) {
 	node, ok := c.vpn.Node(n.key)
 	if !ok {
 		return
@@ -175,7 +183,7 @@ func (c *Control) loadNetworkPeers(ctx context.Context, n *network) {
 	})
 }
 
-func (c *Control) connectFoundHost(n *network, p *vpn.PeerIndexHost) {
+func (c *control) connectFoundHost(n *network, p *vpn.PeerIndexHost) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -204,18 +212,18 @@ func (f *contactedHost) Less(o llrb.Item) bool {
 }
 
 // AddPeer ...
-func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
-	ctx, close := context.WithCancel(peer.Context())
-	w := vnic.NewFrameWriter(peer.Link, vnic.TransferPort, c.qosc)
-	cr, rp := c.runner.RunPeer(peer.HostID().Bytes(nil), w)
-	p := &Peer{
-		logger:     c.logger.With(zap.Stringer("peer", peer.HostID())),
+func (c *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
+	ctx, close := context.WithCancel(vnicPeer.Context())
+	w := vnic.NewFrameWriter(vnicPeer.Link, vnic.TransferPort, c.qosc)
+	cr, rp := c.runner.RunPeer(vnicPeer.HostID().Bytes(nil), w)
+	p := &peer{
+		logger:     c.logger.With(zap.Stringer("peer", vnicPeer.HostID())),
 		ctx:        ctx,
-		vnicPeer:   peer,
+		vnicPeer:   vnicPeer,
 		runnerPeer: rp,
 		client:     client,
 	}
-	peer.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
+	vnicPeer.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
 		err := cr.HandleMessage(f.Body)
 		if err != nil {
 			close()
@@ -231,7 +239,7 @@ func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Pe
 }
 
 // RemovePeer ...
-func (c *Control) RemovePeer(id uint64) {
+func (c *control) RemovePeer(id uint64) {
 	c.lock.Lock()
 	p, ok := c.peers[id]
 	delete(c.peers, id)
@@ -246,7 +254,7 @@ func (c *Control) RemovePeer(id uint64) {
 }
 
 // Add ...
-func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
+func (c *control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 	ctx, close := context.WithCancel(context.Background())
 
 	t := &transfer{
@@ -271,7 +279,7 @@ func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 }
 
 // Remove ...
-func (c *Control) Remove(id []byte) {
+func (c *control) Remove(id []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -300,7 +308,7 @@ func (c *Control) Remove(id []byte) {
 }
 
 // List ...
-func (c *Control) List() []*transferv1.Transfer {
+func (c *control) List() []*transferv1.Transfer {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -316,7 +324,7 @@ func (c *Control) List() []*transferv1.Transfer {
 }
 
 // Publish ...
-func (c *Control) Publish(id []byte, networkKey []byte) {
+func (c *control) Publish(id []byte, networkKey []byte) {
 	c.lock.Lock()
 
 	t, ok := c.transfers.Get(&transfer{id: id}).(*transfer)
@@ -345,7 +353,7 @@ func (c *Control) Publish(id []byte, networkKey []byte) {
 	}
 }
 
-func (c *Control) IsPublished(id []byte, networkKey []byte) bool {
+func (c *control) IsPublished(id []byte, networkKey []byte) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -357,12 +365,12 @@ func (c *Control) IsPublished(id []byte, networkKey []byte) bool {
 	return n.transfers.Has(&transfer{id: id})
 }
 
-func (c *Control) getOrInsertNetwork(networkKey []byte) *network {
+func (c *control) getOrInsertNetwork(networkKey []byte) *network {
 	n, ok := c.networks.Get(&network{key: networkKey}).(*network)
 	if !ok {
 		n = &network{
 			key:   networkKey,
-			peers: map[uint64]*Peer{},
+			peers: map[uint64]*peer{},
 		}
 		c.networks.ReplaceOrInsert(n)
 	}
@@ -388,7 +396,7 @@ func (t *transfer) Less(o llrb.Item) bool {
 // network ...
 type network struct {
 	key       []byte
-	peers     map[uint64]*Peer
+	peers     map[uint64]*peer
 	transfers llrb.LLRB
 }
 

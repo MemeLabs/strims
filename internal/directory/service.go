@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dialer"
+	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -299,8 +299,8 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	defer d.lock.Unlock()
 
 	l = d.listings.GetOrInsert(l).(*listing)
-	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
 
 	l.publishers.ReplaceOrInsert(s)
 	s.publishedListings.ReplaceOrInsert(l)
@@ -317,7 +317,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
@@ -338,8 +338,8 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
 
 	l.viewers.ReplaceOrInsert(s)
 	s.viewedListings.ReplaceOrInsert(l)
@@ -356,11 +356,11 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	d.users.Touch(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
 
 	if l.viewers.Delete(s) == nil {
 		return nil, errors.New("not viewing this listing")
@@ -374,7 +374,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}

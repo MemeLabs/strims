@@ -22,8 +22,8 @@ func createMetadataStore(t *testing.T) *MetadataStore {
 func TestCreateProfile(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	name := "jbpratt"
-	profile, profileStore, err := CreateProfile(mdStore, name, "autumnmajora")
+	name := "testuser"
+	profile, profileStore, err := CreateProfile(mdStore, name, "1234")
 	assert.Nil(t, err, "failed to create profile")
 	assert.NotNil(t, profile)
 	assert.NotNil(t, profileStore)
@@ -34,18 +34,18 @@ func TestCreateProfile(t *testing.T) {
 func TestCreateProfileUsernameTaken(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	name := "jbpratt"
-	_, _, err := CreateProfile(mdStore, name, "autumnmajora")
+	name := "testuser"
+	_, _, err := CreateProfile(mdStore, name, "1234")
 	assert.Nil(t, err, "failed to create profile")
 
-	_, _, err = CreateProfile(mdStore, name, "autumnmajora")
+	_, _, err = CreateProfile(mdStore, name, "1234")
 	assert.EqualError(t, err, ErrProfileNameNotAvailable.Error())
 }
 
 func TestDeleteProfile(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	profile, _, err := CreateProfile(mdStore, "jbpratt", "autumnmajora")
+	profile, _, err := CreateProfile(mdStore, "testuser", "1234")
 	assert.Nil(t, err, "failed to create profile")
 	assert.Nil(t, DeleteProfile(mdStore, profile), "failed to delete profile")
 }
@@ -53,11 +53,11 @@ func TestDeleteProfile(t *testing.T) {
 func TestGetProfileSummaries(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	_, _, err := CreateProfile(mdStore, "jbpratt", "autumnmajora")
+	_, _, err := CreateProfile(mdStore, "testuser", "1234")
 	assert.Nil(t, err, "failed to create profile")
-	_, _, err = CreateProfile(mdStore, "autumn", "jbprattmajora")
+	_, _, err = CreateProfile(mdStore, "testuser1", "1234")
 	assert.Nil(t, err, "failed to create profile")
-	_, _, err = CreateProfile(mdStore, "majora", "jbprattautumn")
+	_, _, err = CreateProfile(mdStore, "testuser2", "1234")
 	assert.Nil(t, err, "failed to create profile")
 
 	summaries, err := GetProfileSummaries(mdStore)

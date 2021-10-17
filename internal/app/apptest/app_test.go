@@ -1,21 +1,20 @@
-package app
+package apptest
 
 import (
 	"context"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/services/peer"
-	"github.com/MemeLabs/go-ppspp/internal/services/servicestest"
+	"github.com/MemeLabs/go-ppspp/internal/peer"
 
 	"go.uber.org/zap"
 )
 
 // NewTestControlPair ...
-func NewTestControlPair(logger *zap.Logger) ([]byte, []control.AppControl, error) {
-	cluster := &servicestest.Cluster{
+func NewTestControlPair(logger *zap.Logger) ([]byte, []app.Control, error) {
+	cluster := &Cluster{
 		Logger:             logger,
 		NodeCount:          2,
 		PeersPerNode:       1,
@@ -25,9 +24,9 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []control.AppControl, error
 		return nil, nil, err
 	}
 
-	ctrl := make([]control.AppControl, len(cluster.Hosts))
+	ctrl := make([]app.Control, len(cluster.Hosts))
 	for i, node := range cluster.Hosts {
-		ctrl[i] = NewControl(
+		ctrl[i] = app.NewControl(
 			logger,
 			network.NewBroker(logger),
 			node.VPN,

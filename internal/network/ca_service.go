@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"context"
@@ -16,16 +16,16 @@ import (
 var AddressSalt = []byte("ca")
 
 // New ...
-func New(logger *zap.Logger, store *dao.ProfileStore, network *networkv1.Network) *Service {
-	return &Service{
+func newCAService(logger *zap.Logger, store *dao.ProfileStore, network *networkv1.Network) *CAService {
+	return &CAService{
 		logger:  logger,
 		store:   store,
 		network: network,
 	}
 }
 
-// Service ...
-type Service struct {
+// CAService ...
+type CAService struct {
 	logger  *zap.Logger
 	store   *dao.ProfileStore
 	lock    sync.Mutex
@@ -38,14 +38,14 @@ type Service struct {
 }
 
 // UpdateNetwork ...
-func (s *Service) UpdateNetwork(network *networkv1.Network) {
+func (s *CAService) UpdateNetwork(network *networkv1.Network) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.network = network
 }
 
 // Renew ...
-func (s *Service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*networkv1ca.CARenewResponse, error) {
+func (s *CAService) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*networkv1ca.CARenewResponse, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -74,7 +74,7 @@ func (s *Service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*
 }
 
 // Find ...
-func (s *Service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*networkv1ca.CAFindResponse, error) {
+func (s *CAService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*networkv1ca.CAFindResponse, error) {
 	if req.Subject == "" && req.SerialNumber == nil {
 		return nil, errors.New("find request must specify subject or serial number")
 	}

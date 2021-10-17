@@ -1,22 +1,30 @@
 package videochannel
 
 import (
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
-var _ control.VideoChannelControl = &Control{}
+// Option ...
+type Option func(channel *videov1.VideoChannel) error
+
+type Control interface {
+	GetChannel(id uint64) (*videov1.VideoChannel, error)
+	ListChannels() ([]*videov1.VideoChannel, error)
+	CreateChannel(opts ...Option) (*videov1.VideoChannel, error)
+	UpdateChannel(id uint64, opts ...Option) (*videov1.VideoChannel, error)
+	DeleteChannel(id uint64) error
+}
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
-	return &Control{
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) Control {
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
@@ -25,7 +33,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, obse
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
@@ -33,18 +41,18 @@ type Control struct {
 }
 
 // GetChannel ...
-func (c *Control) GetChannel(id uint64) (*video.VideoChannel, error) {
+func (c *control) GetChannel(id uint64) (*videov1.VideoChannel, error) {
 	return dao.GetVideoChannel(c.store, id)
 }
 
 // ListChannels ...
-func (c *Control) ListChannels() ([]*video.VideoChannel, error) {
+func (c *control) ListChannels() ([]*videov1.VideoChannel, error) {
 	// TODO: enrich channel data with liveness?
 	return dao.GetVideoChannels(c.store)
 }
 
 // CreateChannel ...
-func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*video.VideoChannel, error) {
+func (c *control) CreateChannel(opts ...Option) (*videov1.VideoChannel, error) {
 	channel, err := dao.NewVideoChannel(c.store)
 	if err != nil {
 		return nil, err
@@ -62,8 +70,8 @@ func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*video.Vide
 }
 
 // UpdateChannel ...
-func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (*video.VideoChannel, error) {
-	var channel *video.VideoChannel
+func (c *control) UpdateChannel(id uint64, opts ...Option) (*videov1.VideoChannel, error) {
+	var channel *videov1.VideoChannel
 	err := c.store.Update(func(tx kv.RWTx) (err error) {
 		channel, err = dao.GetVideoChannel(tx, id)
 		if err != nil {
@@ -85,9 +93,9 @@ func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (
 	return channel, err
 }
 
-type channelOptionSlice []control.VideoChannelOption
+type channelOptionSlice []Option
 
-func (s channelOptionSlice) Apply(channel *video.VideoChannel) error {
+func (s channelOptionSlice) Apply(channel *videov1.VideoChannel) error {
 	for _, o := range s {
 		if err := o(channel); err != nil {
 			return err
@@ -97,18 +105,18 @@ func (s channelOptionSlice) Apply(channel *video.VideoChannel) error {
 }
 
 // WithDirectorySnippet ...
-func WithDirectorySnippet(snippet *networkv1directory.ListingSnippet) control.VideoChannelOption {
-	return func(channel *video.VideoChannel) error {
+func WithDirectorySnippet(snippet *networkv1directory.ListingSnippet) Option {
+	return func(channel *videov1.VideoChannel) error {
 		channel.DirectoryListingSnippet = snippet
 		return nil
 	}
 }
 
 // WithLocalOwner ...
-func WithLocalOwner(profileKey, networkKey []byte) control.VideoChannelOption {
-	return func(channel *video.VideoChannel) error {
-		channel.Owner = &video.VideoChannel_Local_{
-			Local: &video.VideoChannel_Local{
+func WithLocalOwner(profileKey, networkKey []byte) Option {
+	return func(channel *videov1.VideoChannel) error {
+		channel.Owner = &videov1.VideoChannel_Local_{
+			Local: &videov1.VideoChannel_Local{
 				AuthKey:    profileKey,
 				NetworkKey: networkKey,
 			},
@@ -118,10 +126,10 @@ func WithLocalOwner(profileKey, networkKey []byte) control.VideoChannelOption {
 }
 
 // WithLocalShareOwner ...
-func WithLocalShareOwner(cert *certificate.Certificate) control.VideoChannelOption {
-	return func(channel *video.VideoChannel) error {
-		channel.Owner = &video.VideoChannel_LocalShare_{
-			LocalShare: &video.VideoChannel_LocalShare{
+func WithLocalShareOwner(cert *certificate.Certificate) Option {
+	return func(channel *videov1.VideoChannel) error {
+		channel.Owner = &videov1.VideoChannel_LocalShare_{
+			LocalShare: &videov1.VideoChannel_LocalShare{
 				Certificate: cert,
 			},
 		}
@@ -130,9 +138,9 @@ func WithLocalShareOwner(cert *certificate.Certificate) control.VideoChannelOpti
 }
 
 // WithRemoteShareOwner ...
-func WithRemoteShareOwner(share *video.VideoChannel_RemoteShare) control.VideoChannelOption {
-	return func(channel *video.VideoChannel) error {
-		channel.Owner = &video.VideoChannel_RemoteShare_{
+func WithRemoteShareOwner(share *videov1.VideoChannel_RemoteShare) Option {
+	return func(channel *videov1.VideoChannel) error {
+		channel.Owner = &videov1.VideoChannel_RemoteShare_{
 			RemoteShare: share,
 		}
 		return nil
@@ -140,7 +148,7 @@ func WithRemoteShareOwner(share *video.VideoChannel_RemoteShare) control.VideoCh
 }
 
 // DeleteChannel ...
-func (c *Control) DeleteChannel(id uint64) error {
+func (c *control) DeleteChannel(id uint64) error {
 	if err := dao.DeleteVideoChannel(c.store, id); err != nil {
 		return err
 	}

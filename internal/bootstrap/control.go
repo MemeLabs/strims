@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -18,25 +17,31 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ control.BootstrapControl = &Control{}
+type Control interface {
+	Run(ctx context.Context)
+	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
+	RemovePeer(id uint64)
+	PublishingEnabled() bool
+	Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error
+}
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
-	return &Control{
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
 		events:    events,
-		peers:     map[uint64]*Peer{},
+		peers:     map[uint64]*peer{},
 	}
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger *zap.Logger
 	vpn    *vpn.Host
 	store  *dao.ProfileStore
@@ -47,11 +52,11 @@ type Control struct {
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 	nextID            uint64
-	peers             map[uint64]*Peer
+	peers             map[uint64]*peer
 }
 
 // Run ...
-func (t *Control) Run(ctx context.Context) {
+func (t *control) Run(ctx context.Context) {
 	go t.startClients()
 
 	for {
@@ -67,7 +72,7 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handlePeerAdd(ctx context.Context, id uint64) {
+func (t *control) handlePeerAdd(ctx context.Context, id uint64) {
 	peer, ok := t.peers[id]
 	if !ok {
 		return
@@ -88,10 +93,10 @@ func (t *Control) handlePeerAdd(ctx context.Context, id uint64) {
 }
 
 // AddPeer ...
-func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
-	p := &Peer{
-		vnic:   peer,
-		client: client,
+func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
+	p := &peer{
+		vnicPeer: vnicPeer,
+		client:   client,
 	}
 
 	t.lock.Lock()
@@ -103,14 +108,14 @@ func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Pe
 }
 
 // RemovePeer ...
-func (t *Control) RemovePeer(id uint64) {
+func (t *control) RemovePeer(id uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	delete(t.peers, id)
 }
 
-func (t *Control) startClients() {
+func (t *control) startClients() {
 	clients, err := dao.GetBootstrapClients(t.store)
 	if err != nil {
 		t.logger.Fatal(
@@ -128,7 +133,7 @@ func (t *Control) startClients() {
 	}
 }
 
-func (t *Control) startClient(client *bootstrap.BootstrapClient) error {
+func (t *control) startClient(client *bootstrap.BootstrapClient) error {
 	switch client := client.ClientOptions.(type) {
 	case *bootstrap.BootstrapClient_WebsocketOptions:
 		return t.vpn.VNIC().Dial(vnic.WebSocketAddr{
@@ -140,12 +145,12 @@ func (t *Control) startClient(client *bootstrap.BootstrapClient) error {
 }
 
 // PublishingEnabled ...
-func (t *Control) PublishingEnabled() bool {
+func (t *control) PublishingEnabled() bool {
 	return true
 }
 
 // Publish ...
-func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error {
+func (t *control) Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error {
 	peer, ok := t.peers[peerID]
 	if !ok {
 		return errors.New("peer id not found")
@@ -165,8 +170,8 @@ func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.N
 		return err
 	}
 	csr := &certificate.CertificateRequest{
-		Key:      peer.vnic.Certificate.Key,
-		KeyType:  peer.vnic.Certificate.KeyType,
+		Key:      peer.vnicPeer.Certificate.Key,
+		KeyType:  peer.vnicPeer.Certificate.KeyType,
 		KeyUsage: certificate.KeyUsage_KEY_USAGE_BROKER | certificate.KeyUsage_KEY_USAGE_SIGN,
 	}
 	cert, err := dao.SignCertificateRequest(csr, validDuration, config.Key)

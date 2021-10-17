@@ -3,12 +3,19 @@
 
 package videoegress
 
+// Control ...
+type Control interface {
+	ControlBase
+	OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error)
+	CloseHLSStream(swarmURI string) error
+}
+
 // OpenHLSStream ...
-func (t *Control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error) {
+func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error) {
 	return "", nil
 }
 
 // CloseHLSStream ...
-func (t *Control) CloseHLSStream(swarmURI string) error {
+func (t *control) CloseHLSStream(swarmURI string) error {
 	return nil
 }

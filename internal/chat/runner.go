@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -21,8 +22,8 @@ func newRunner(ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
-	dialer control.DialerControl,
-	transfer control.TransferControl,
+	dialer network.Dialer,
+	transfer transfer.Control,
 	key []byte,
 	networkKey []byte,
 	config *chatv1.Server,
@@ -58,8 +59,8 @@ type runner struct {
 	logger   *zap.Logger
 	vpn      *vpn.Host
 	store    *dao.ProfileStore
-	dialer   control.DialerControl
-	transfer control.TransferControl
+	dialer   network.Dialer
+	transfer transfer.Control
 
 	lock     sync.Mutex
 	closed   bool

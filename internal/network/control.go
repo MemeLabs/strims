@@ -6,11 +6,8 @@ import (
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
-	caservice "github.com/MemeLabs/go-ppspp/internal/ca/service"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
@@ -41,20 +38,33 @@ var (
 const certRecheckInterval = time.Minute * 5
 const certRenewScheduleAheadDuration = time.Hour * 24 * 7
 
+type Control interface {
+	CA() CA
+	Dialer() Dialer
+	Run(ctx context.Context)
+	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
+	RemovePeer(id uint64)
+	Certificate(networkKey []byte) (*certificate.Certificate, bool)
+	Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error
+	Remove(id uint64) error
+	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
+	UpdateDisplayOrder(ids []uint64) error
+}
+
 // Broker negotiates common networks with peers.
 type Broker interface {
 	SendKeys(c ioutil.ReadWriteFlusher, keys [][]byte) error
 	ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error)
 }
 
-var _ control.NetworkControl = &Control{}
-
 // NewControl ...
-func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
+func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
-	return &Control{
+	dialer := newDialer(logger, vpn, profile.Key)
+
+	return &control{
 		logger:           logger,
 		broker:           broker,
 		vpn:              vpn,
@@ -63,16 +73,17 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		profile:          profile,
 		observers:        observers,
 		events:           events,
+		ca:               newCA(logger, vpn, store, observers, dialer),
 		dialer:           dialer,
 		certRenewTimeout: time.NewTimer(0),
 		networks:         map[uint64]*network{},
-		peers:            map[uint64]*Peer{},
+		peers:            map[uint64]*peer{},
 		certificates:     &certificateMap{},
 	}
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger  *zap.Logger
 	broker  Broker
 	vpn     *vpn.Host
@@ -83,16 +94,25 @@ type Control struct {
 	lock              sync.Mutex
 	observers         *event.Observers
 	events            chan interface{}
-	dialer            *dialer.Control
+	ca                *ca
+	dialer            *dialer
 	certRenewTimeout  *time.Timer
 	nextCertRenewTime timeutil.Time
 	networks          map[uint64]*network
-	peers             map[uint64]*Peer
+	peers             map[uint64]*peer
 	certificates      *certificateMap
 }
 
+func (t *control) CA() CA {
+	return t.ca
+}
+
+func (t *control) Dialer() Dialer {
+	return t.dialer
+}
+
 // Run ...
-func (t *Control) Run(ctx context.Context) {
+func (t *control) Run(ctx context.Context) {
 	t.startNetworks()
 	t.scheduleCertRenewal()
 
@@ -123,7 +143,7 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
+func (t *control) handlePeerAdd(ctx context.Context, peerID uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -140,7 +160,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
 	}()
 }
 
-func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkKeys [][]byte) {
+func (t *control) handlePeerBinding(ctx context.Context, peerID uint64, networkKeys [][]byte) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -164,7 +184,7 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 			if err := t.renewCertificateWithPeer(ctx, n.network, peer); err != nil {
 				t.logger.Debug(
 					"certificate renew via peer failed",
-					zap.Stringer("peer", peer.peer.HostID()),
+					zap.Stringer("peer", peer.vnicPeer.HostID()),
 					logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),
 					zap.Error(err),
 				)
@@ -173,7 +193,7 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 	}
 }
 
-func (t *Control) handleNetworkCertUpdate(network *networkv1.Network) {
+func (t *control) handleNetworkCertUpdate(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -185,7 +205,7 @@ func (t *Control) handleNetworkCertUpdate(network *networkv1.Network) {
 	}
 }
 
-func (t *Control) handleNetworkAdd(ctx context.Context) {
+func (t *control) handleNetworkAdd(ctx context.Context) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -200,7 +220,7 @@ func (t *Control) handleNetworkAdd(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
+func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 	t.lock.Lock()
 	n, ok := t.networks[networkID]
 	if !ok {
@@ -221,7 +241,7 @@ func (t *Control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 
 // renewCertificateWithRenewFunc ...
-func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
+func (t *control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
 	subject := t.profile.Name
 	if network.Alias != "" {
 		subject = network.Alias
@@ -251,7 +271,7 @@ func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn c
 }
 
 // renewCertificate ...
-func (t *Control) renewCertificate(network *networkv1.Network) error {
+func (t *control) renewCertificate(network *networkv1.Network) error {
 	if config := network.GetServerConfig(); config != nil {
 		return t.renewCertificateWithRenewFunc(
 			network,
@@ -265,7 +285,7 @@ func (t *Control) renewCertificate(network *networkv1.Network) error {
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := networkKeyForCertificate(network.Certificate)
-			client, err := t.dialer.Client(networkKey, networkKey, caservice.AddressSalt)
+			client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 			if err != nil {
 				return nil, err
 			}
@@ -285,7 +305,7 @@ func (t *Control) renewCertificate(network *networkv1.Network) error {
 	)
 }
 
-func (t *Control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *Peer) error {
+func (t *control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *peer) error {
 	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
@@ -303,8 +323,8 @@ func (t *Control) renewCertificateWithPeer(ctx context.Context, network *network
 }
 
 // AddPeer ...
-func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
-	p := NewPeer(id, peer, client, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
+func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
+	p := newPeer(id, vnicPeer, client, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
 
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -315,7 +335,7 @@ func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Pe
 }
 
 // RemovePeer ...
-func (t *Control) RemovePeer(id uint64) {
+func (t *control) RemovePeer(id uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -323,7 +343,7 @@ func (t *Control) RemovePeer(id uint64) {
 	delete(t.peers, id)
 }
 
-func (t *Control) startNetworks() {
+func (t *control) startNetworks() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -335,7 +355,7 @@ func (t *Control) startNetworks() {
 	for _, n := range networks {
 		t.networks[n.Id] = &network{network: n}
 		t.certificates.Insert(n)
-		t.dialer.ReplaceOrInsertNetwork(n)
+		t.dialer.replaceOrInsertNetwork(n)
 
 		cert := dao.CertificateRoot(n.Certificate)
 
@@ -359,7 +379,7 @@ func (t *Control) startNetworks() {
 	}
 }
 
-func (t *Control) scheduleCertRenewal() {
+func (t *control) scheduleCertRenewal() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -384,7 +404,7 @@ func (t *Control) scheduleCertRenewal() {
 	t.certRenewTimeout.Reset(minNextTime.Sub(now))
 }
 
-func (t *Control) renewExpiredCerts() {
+func (t *control) renewExpiredCerts() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -408,7 +428,7 @@ func (t *Control) renewExpiredCerts() {
 	}
 }
 
-func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.Network) error, finalize func(*networkv1.Network)) error {
+func (t *control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.Network) error, finalize func(*networkv1.Network)) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -434,11 +454,11 @@ func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.N
 
 func noopMutateNetworkFinalizer(*networkv1.Network) {}
 
-func (t *Control) mutateNetwork(id uint64, mutate func(*networkv1.Network) error) error {
+func (t *control) mutateNetwork(id uint64, mutate func(*networkv1.Network) error) error {
 	return t.mutateNetworkWithFinalizer(id, mutate, noopMutateNetworkFinalizer)
 }
 
-func (t *Control) setCertificate(id uint64, cert *certificate.Certificate) error {
+func (t *control) setCertificate(id uint64, cert *certificate.Certificate) error {
 	return t.mutateNetworkWithFinalizer(
 		id,
 		func(network *networkv1.Network) error {
@@ -447,13 +467,13 @@ func (t *Control) setCertificate(id uint64, cert *certificate.Certificate) error
 		},
 		func(network *networkv1.Network) {
 			t.certificates.Insert(network)
-			t.dialer.ReplaceOrInsertNetwork(network)
+			t.dialer.replaceOrInsertNetwork(network)
 			t.observers.EmitGlobal(event.NetworkCertUpdate{Network: proto.Clone(network).(*networkv1.Network)})
 		},
 	)
 }
 
-func (t *Control) setNetworkAlias(id uint64, name string) error {
+func (t *control) setNetworkAlias(id uint64, name string) error {
 	return t.mutateNetwork(id, func(network *networkv1.Network) error {
 		network.Alias = name
 		return nil
@@ -461,7 +481,7 @@ func (t *Control) setNetworkAlias(id uint64, name string) error {
 }
 
 // Certificate ...
-func (t *Control) Certificate(networkKey []byte) (*certificate.Certificate, bool) {
+func (t *control) Certificate(networkKey []byte) (*certificate.Certificate, bool) {
 	if ci, ok := t.certificates.Get(networkKey); ok {
 		return ci.certificate, true
 	}
@@ -469,7 +489,7 @@ func (t *Control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 }
 
 // Add ...
-func (t *Control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error {
+func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -502,7 +522,7 @@ func (t *Control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 
 	t.networks[n.Id] = &network{network: n}
 	t.certificates.Insert(n)
-	t.dialer.ReplaceOrInsertNetwork(n)
+	t.dialer.replaceOrInsertNetwork(n)
 
 	t.observers.EmitGlobal(event.NetworkAdd{Network: n})
 	t.observers.EmitLocal(event.NetworkStart{Network: n})
@@ -511,7 +531,7 @@ func (t *Control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 }
 
 // Remove ...
-func (t *Control) Remove(id uint64) error {
+func (t *control) Remove(id uint64) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -539,7 +559,7 @@ func (t *Control) Remove(id uint64) error {
 		return err
 	}
 
-	t.dialer.RemoveNetwork(n.network)
+	t.dialer.removeNetwork(n.network)
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
 
@@ -549,7 +569,7 @@ func (t *Control) Remove(id uint64) error {
 	return nil
 }
 
-func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {
+func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {
 	ch := make(chan *networkv1.NetworkEvent, 8)
 
 	go func() {
@@ -609,7 +629,7 @@ func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	return ch
 }
 
-func (t *Control) UpdateDisplayOrder(ids []uint64) error {
+func (t *control) UpdateDisplayOrder(ids []uint64) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

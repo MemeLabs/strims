@@ -68,11 +68,11 @@ func newEmbedLoader(logger *zap.Logger, config *networkv1directory.ServerConfig_
 		loaders: map[embedService]embedServiceLoader{},
 	}
 
-	if config.Angelthump.Enable {
+	if config.GetAngelthump().GetEnable() {
 		l.loaders[embedServiceAngelthump] = &angelThumpEmbedLoader{}
 	}
 
-	if config.Twitch.Enable {
+	if config.GetTwitch().GetEnable() {
 		api := &twitchAPI{
 			ClientID:     config.Twitch.ClientId,
 			ClientSecret: config.Twitch.ClientSecret,
@@ -81,7 +81,7 @@ func newEmbedLoader(logger *zap.Logger, config *networkv1directory.ServerConfig_
 		l.loaders[embedServiceTwitchVOD] = &twitchVODEmbedLoader{api}
 	}
 
-	if config.Youtube.Enable {
+	if config.GetYoutube().GetEnable() {
 		l.loaders[embedServiceYouTube] = &youTubeEmbedLoader{
 			PublicAPIKey: config.Youtube.PublicApiKey,
 		}

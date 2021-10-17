@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
@@ -45,7 +45,7 @@ type chatReader struct {
 	cancel      context.CancelFunc
 }
 
-func (d *chatReader) Run(ctx context.Context, transfer control.TransferControl) error {
+func (d *chatReader) Run(ctx context.Context, transfer transfer.Control) error {
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 

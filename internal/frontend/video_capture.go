@@ -3,7 +3,7 @@ package frontend
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -18,7 +18,7 @@ func init() {
 
 // videoCaptureService ...
 type videoCaptureService struct {
-	app control.AppControl
+	app app.Control
 }
 
 // Open ...

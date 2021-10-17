@@ -1,13 +1,10 @@
-package ca
+package network
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
-	"github.com/MemeLabs/go-ppspp/internal/ca/service"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -18,21 +15,23 @@ import (
 	"go.uber.org/zap"
 )
 
-var ErrNetworkNotFound = errors.New("network not found")
+// var ErrNetworkNotFound = errors.New("network not found")
 
-var _ control.CAControl = &Control{}
+type CA interface {
+	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
+}
 
-// NewControl ...
-func NewControl(logger *zap.Logger,
+// newCA ...
+func newCA(logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-	dialer control.DialerControl,
-) *Control {
+	dialer Dialer,
+) *ca {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
-	return &Control{
+	return &ca{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
@@ -43,8 +42,8 @@ func NewControl(logger *zap.Logger,
 	}
 }
 
-// Control ...
-type Control struct {
+// CA ...
+type ca struct {
 	logger            *zap.Logger
 	vpn               *vpn.Host
 	store             *dao.ProfileStore
@@ -52,13 +51,13 @@ type Control struct {
 	lock              sync.Mutex
 	servers           map[uint64]context.CancelFunc
 	events            chan interface{}
-	dialer            control.DialerControl
+	dialer            Dialer
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 }
 
 // Run ...
-func (t *Control) Run(ctx context.Context) {
+func (t *ca) Run(ctx context.Context) {
 	for {
 		select {
 		case e := <-t.events:
@@ -74,7 +73,7 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
+func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
 	config := network.GetServerConfig()
 	if config == nil {
 		return
@@ -85,7 +84,7 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 		logutil.ByteHex("network", config.Key.Public),
 	)
 
-	server, err := t.dialer.Server(config.Key.Public, config.Key, service.AddressSalt)
+	server, err := t.dialer.Server(config.Key.Public, config.Key, AddressSalt)
 	if err != nil {
 		t.logger.Error(
 			"starting certificate authority failed",
@@ -95,23 +94,23 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 		return
 	}
 
-	networkv1ca.RegisterCAService(server, service.New(t.logger, t.store, network))
+	networkv1ca.RegisterCAService(server, newCAService(t.logger, t.store, network))
 	ctx, cancel := context.WithCancel(ctx)
 	go server.Listen(ctx)
 
 	t.servers[network.Id] = cancel
 }
 
-func (t *Control) handleNetworkStop(network *networkv1.Network) {
+func (t *ca) handleNetworkStop(network *networkv1.Network) {
 	if server, ok := t.servers[network.Id]; ok {
 		server()
 	}
 }
 
 // ForwardRenewRequest ...
-func (t *Control) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+func (t *ca) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 	networkKey := networkKeyForCertificate(cert)
-	client, err := t.dialer.Client(networkKey, networkKey, service.AddressSalt)
+	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +126,4 @@ func (t *Control) ForwardRenewRequest(ctx context.Context, cert *certificate.Cer
 	}
 
 	return renewRes.Certificate, nil
-}
-
-func networkKeyForCertificate(cert *certificate.Certificate) []byte {
-	return dao.CertificateRoot(cert).Key
 }

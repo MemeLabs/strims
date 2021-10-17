@@ -3,7 +3,7 @@ package frontend
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -17,7 +17,7 @@ func init() {
 }
 
 type vnicFrontendService struct {
-	app control.AppControl
+	app app.Control
 }
 
 func (s *vnicFrontendService) GetConfig(ctx context.Context, r *vnicv1.GetConfigRequest) (*vnicv1.GetConfigResponse, error) {

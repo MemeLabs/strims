@@ -6,9 +6,11 @@ package videoingress
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -22,22 +24,21 @@ func NewControl(
 	store *dao.ProfileStore,
 	profile *profilev1.Profile,
 	observers *event.Observers,
-	transfer control.TransferControl,
-	dialer control.DialerControl,
-	network control.NetworkControl,
-	directory control.DirectoryControl,
-) *Control {
-	return &Control{}
+	transfer transfer.Control,
+	network network.Control,
+	directory directory.Control,
+) Control {
+	return &control{}
 }
 
 // Control ...
-type Control struct{}
+type control struct{}
 
 // Run ...
-func (c *Control) Run(ctx context.Context) {}
+func (c *control) Run(ctx context.Context) {}
 
 // GetIngressConfig ...
-func (c *Control) GetIngressConfig() (*videov1.VideoIngressConfig, error) { return nil, nil }
+func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) { return nil, nil }
 
 // SetIngressConfig ...
-func (c *Control) SetIngressConfig(config *videov1.VideoIngressConfig) error { return nil }
+func (c *control) SetIngressConfig(config *videov1.VideoIngressConfig) error { return nil }

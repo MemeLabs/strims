@@ -3,13 +3,13 @@ package peer
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 )
 
 type networkService struct {
-	Peer control.Peer
-	App  control.AppControl
+	Peer app.Peer
+	App  app.Control
 }
 
 func (s *networkService) Negotiate(ctx context.Context, req *network.NetworkPeerNegotiateRequest) (*network.NetworkPeerNegotiateResponse, error) {

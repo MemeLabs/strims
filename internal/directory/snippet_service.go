@@ -7,8 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
-	"github.com/MemeLabs/go-ppspp/internal/dialer"
+	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
@@ -21,7 +20,7 @@ import (
 
 type snippetServer struct {
 	ctx      context.Context
-	dialer   *dialer.Control
+	dialer   network.Dialer
 	snippets *snippetMap
 	service  snippetService
 }
@@ -45,7 +44,7 @@ func (s *snippetServer) stop() {
 var _ networkv1directory.DirectorySnippetService = &snippetService{}
 
 type snippetService struct {
-	transfer   control.TransferControl
+	transfer   transfer.Control
 	snippets   *snippetMap
 	networkKey []byte
 }

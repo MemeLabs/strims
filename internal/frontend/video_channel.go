@@ -3,7 +3,7 @@ package frontend
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/videochannel"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
@@ -22,7 +22,7 @@ func init() {
 // videoChannelService ...
 type videoChannelService struct {
 	profile *profilev1.Profile
-	app     control.AppControl
+	app     app.Control
 }
 
 func (s *videoChannelService) List(ctx context.Context, r *videov1.VideoChannelListRequest) (*videov1.VideoChannelListResponse, error) {

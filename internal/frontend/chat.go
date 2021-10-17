@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -27,7 +27,7 @@ func init() {
 
 // chatService ...
 type chatService struct {
-	app   control.AppControl
+	app   app.Control
 	store *dao.ProfileStore
 
 	lock         sync.Mutex

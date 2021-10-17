@@ -56,8 +56,6 @@ const toFileType = (t: ImageType) => {
       return "image/jpeg";
     case ImageType.IMAGE_TYPE_PNG:
       return "image/png";
-    case ImageType.IMAGE_TYPE_SVG:
-      return "image/svg+xml";
     case ImageType.IMAGE_TYPE_WEBP:
       return "image/webp";
   }

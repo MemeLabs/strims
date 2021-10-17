@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -24,46 +25,52 @@ var (
 	ErrNetworkNotFound = errors.New("network not found")
 )
 
-var _ control.DirectoryControl = &Control{}
+type Control interface {
+	Run(ctx context.Context)
+	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
+	Unpublish(ctx context.Context, id uint64, networkKey []byte) error
+	Join(ctx context.Context, id uint64, networkKey []byte) error
+	Part(ctx context.Context, id uint64, networkKey []byte) error
+}
 
 // NewControl ...
 func NewControl(logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-	dialer control.DialerControl,
-	transfer control.TransferControl,
-) *Control {
+	network network.Control,
+	transfer transfer.Control,
+) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
-	return &Control{
+	return &control{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
 		events:    events,
-		dialer:    dialer,
+		network:   network,
 		transfer:  transfer,
 	}
 }
 
 // Control ...
-type Control struct {
+type control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
 	events    chan interface{}
-	dialer    control.DialerControl
-	transfer  control.TransferControl
+	network   network.Control
+	transfer  transfer.Control
 
 	lock    sync.Mutex
 	runners llrb.LLRB
 }
 
 // Run ...
-func (t *Control) Run(ctx context.Context) {
+func (t *control) Run(ctx context.Context) {
 	pingTimer := time.NewTimer(pingStartupDelay)
 	defer pingTimer.Stop()
 
@@ -86,11 +93,11 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
+func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	r := newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, network)
+	r := newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, network)
 	t.runners.ReplaceOrInsert(r)
 
 	go func() {
@@ -121,7 +128,7 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	}()
 }
 
-func (t *Control) handleNetworkStop(network *networkv1.Network) {
+func (t *control) handleNetworkStop(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -132,7 +139,7 @@ func (t *Control) handleNetworkStop(network *networkv1.Network) {
 	}
 }
 
-func (t *Control) ping(ctx context.Context) {
+func (t *control) ping(ctx context.Context) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -155,8 +162,8 @@ func (t *Control) ping(ctx context.Context) {
 	})
 }
 
-func (t *Control) client(networkKey []byte) (*rpc.Client, *networkv1directory.DirectoryClient, error) {
-	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
+func (t *control) client(networkKey []byte) (*rpc.Client, *networkv1directory.DirectoryClient, error) {
+	client, err := t.network.Dialer().Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -165,7 +172,7 @@ func (t *Control) client(networkKey []byte) (*rpc.Client, *networkv1directory.Di
 }
 
 // Publish ...
-func (t *Control) Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error) {
+func (t *control) Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error) {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return 0, err
@@ -178,7 +185,7 @@ func (t *Control) Publish(ctx context.Context, listing *networkv1directory.Listi
 }
 
 // Unpublish ...
-func (t *Control) Unpublish(ctx context.Context, id uint64, networkKey []byte) error {
+func (t *control) Unpublish(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
@@ -189,7 +196,7 @@ func (t *Control) Unpublish(ctx context.Context, id uint64, networkKey []byte) e
 }
 
 // Join ...
-func (t *Control) Join(ctx context.Context, id uint64, networkKey []byte) error {
+func (t *control) Join(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
@@ -200,7 +207,7 @@ func (t *Control) Join(ctx context.Context, id uint64, networkKey []byte) error 
 }
 
 // Part ...
-func (t *Control) Part(ctx context.Context, id uint64, networkKey []byte) error {
+func (t *control) Part(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err

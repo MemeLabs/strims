@@ -3,7 +3,7 @@ package frontend
 import (
 	"context"
 
-	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -22,7 +22,7 @@ func init() {
 
 // directoryService ...
 type directoryService struct {
-	app control.AppControl
+	app app.Control
 }
 
 // Open ...
@@ -68,7 +68,7 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 
 // Test ...
 func (s *directoryService) Test(ctx context.Context, r *networkv1directory.FrontendTestRequest) (*networkv1directory.FrontendTestResponse, error) {
-	client, err := s.app.Dialer().Client(r.NetworkKey, r.NetworkKey, directory.AddressSalt)
+	client, err := s.app.Network().Dialer().Client(r.NetworkKey, r.NetworkKey, directory.AddressSalt)
 	if err != nil {
 		return nil, err
 	}

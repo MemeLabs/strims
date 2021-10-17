@@ -1,4 +1,4 @@
-package dialer
+package network
 
 import (
 	"bytes"
