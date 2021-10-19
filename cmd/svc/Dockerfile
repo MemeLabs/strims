@@ -7,6 +7,10 @@ RUN export CGO_ENABLED=0 && go build -trimpath ./cmd/svc
 
 FROM alpine:latest
 
+RUN apk update && \
+    apk add ffmpeg && \
+    rm -rf /var/cache/apk/*
+
 WORKDIR /app
 COPY --from=build /go/src/app/svc .
 RUN adduser svc --disabled-password && echo "svc:" | chpasswd
