@@ -17,6 +17,8 @@ import (
 
 // var ErrNetworkNotFound = errors.New("network not found")
 
+var _ CA = &ca{}
+
 type CA interface {
 	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 }
@@ -104,6 +106,7 @@ func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network)
 func (t *ca) handleNetworkStop(network *networkv1.Network) {
 	if server, ok := t.servers[network.Id]; ok {
 		server()
+		delete(t.servers, network.Id)
 	}
 }
 

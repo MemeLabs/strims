@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -27,6 +28,8 @@ var (
 
 type Control interface {
 	Run(ctx context.Context)
+	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
+	DeleteSnippet(swarmID ppspp.SwarmID)
 	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
 	Unpublish(ctx context.Context, id uint64, networkKey []byte) error
 	Join(ctx context.Context, id uint64, networkKey []byte) error
@@ -44,6 +47,8 @@ func NewControl(logger *zap.Logger,
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
+	snippets := &snippetMap{}
+
 	return &control{
 		logger:    logger,
 		vpn:       vpn,
@@ -52,6 +57,15 @@ func NewControl(logger *zap.Logger,
 		events:    events,
 		network:   network,
 		transfer:  transfer,
+
+		snippets: snippets,
+		snippetServer: &snippetServer{
+			logger:   logger,
+			dialer:   network.Dialer(),
+			transfer: transfer,
+			snippets: snippets,
+			servers:  map[uint64]context.CancelFunc{},
+		},
 	}
 }
 
@@ -67,6 +81,9 @@ type control struct {
 
 	lock    sync.Mutex
 	runners llrb.LLRB
+
+	snippets      *snippetMap
+	snippetServer *snippetServer
 }
 
 // Run ...
@@ -100,6 +117,8 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	r := newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, network)
 	t.runners.ReplaceOrInsert(r)
 
+	go t.snippetServer.start(ctx, network)
+
 	go func() {
 		for {
 			er, err := r.EventReader(ctx)
@@ -131,6 +150,8 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 func (t *control) handleNetworkStop(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+
+	t.snippetServer.stop(network.Id)
 
 	key := &runner{key: dao.NetworkKey(network)}
 	if r, ok := t.runners.Get(key).(*runner); ok {
@@ -169,6 +190,16 @@ func (t *control) client(networkKey []byte) (*rpc.Client, *networkv1directory.Di
 	}
 
 	return client, networkv1directory.NewDirectoryClient(client), nil
+}
+
+// PushSnippet ...
+func (t *control) PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
+	t.snippets.Update(swarmID, snippet)
+}
+
+// DeleteSnippet ...
+func (t *control) DeleteSnippet(swarmID ppspp.SwarmID) {
+	t.snippets.Delete(swarmID)
 }
 
 // Publish ...

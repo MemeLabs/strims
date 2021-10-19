@@ -1,124 +1,113 @@
 package directory
 
 import (
-	"context"
-	"log"
 	"testing"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/image"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-type mockTransferControl struct{}
+func getTestSnippets() (a, b *networkv1directory.ListingSnippet, k *key.Key) {
+	k, _ = dao.GenerateKey()
 
-func (c *mockTransferControl) Add(swarm *ppspp.Swarm, salt []byte) []byte {
-	return nil
-}
-
-func (c *mockTransferControl) Remove(id []byte) {}
-
-func (c *mockTransferControl) List() []*transferv1.Transfer {
-	return nil
-}
-
-func (c *mockTransferControl) Publish(id []byte, networkKey []byte) {}
-
-func (c *mockTransferControl) IsPublished(id []byte, networkKey []byte) bool {
-	return true
-}
-
-func TestFoo(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger, err := zap.NewDevelopment()
-	assert.NoError(t, err)
-
-	a, b := ppspptest.NewConnPair()
-	rpcServer := rpc.NewServer(logger, &rpc.RWFDialer{
-		Logger:           logger,
-		ReadWriteFlusher: a,
-	})
-
-	key, err := dao.GenerateKey()
-	assert.NoError(t, err)
-	swarmID := ppspp.NewSwarmID(key.Public)
-
-	snippets := &snippetMap{}
-	service := &snippetService{
-		transfer: &mockTransferControl{},
-		snippets: snippets,
+	a = &networkv1directory.ListingSnippet{
+		Title:       "test a",
+		Description: "some description",
+		Tags:        []string{"a", "b", "c"},
+		Category:    "",
+		ChannelName: "test channel name",
+		ViewerCount: uint64(0),
+		Live:        false,
+		IsMature:    true,
+		Thumbnail: &networkv1directory.ListingSnippetImage{
+			SourceOneof: &networkv1directory.ListingSnippetImage_Image{
+				Image: &image.Image{
+					Type: image.ImageType_IMAGE_TYPE_JPEG,
+					Data: make([]byte, 1024),
+				},
+			},
+		},
+		ChannelLogo: &networkv1directory.ListingSnippetImage{
+			SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+				Url: "https://test.com/a.png",
+			},
+		},
 	}
-	networkv1directory.RegisterDirectorySnippetService(rpcServer, service)
+	dao.SignMessage(a, k)
 
-	go rpcServer.Listen(ctx)
-
-	go func() {
-		snippet := &networkv1directory.ListingSnippet{
-			Title:       "title",
-			Description: "description",
-			Tags:        []string{"a", "b", "c"},
-			Category:    "category",
-			ChannelName: "channel name",
-			ViewerCount: 100,
-			Live:        true,
-			IsMature:    true,
-			Thumbnail: &networkv1directory.ListingSnippetImage{
-				SourceOneof: &networkv1directory.ListingSnippetImage_Image{
-					Image: &image.Image{
-						Type: image.ImageType_IMAGE_TYPE_UNDEFINED,
-						Data: make([]byte, 128),
-					},
-				},
+	b = &networkv1directory.ListingSnippet{
+		Title:       "test b",
+		Description: "some description",
+		Tags:        []string{},
+		Category:    "test category",
+		ChannelName: "",
+		ViewerCount: uint64(10),
+		Live:        true,
+		IsMature:    false,
+		Thumbnail:   nil,
+		ChannelLogo: &networkv1directory.ListingSnippetImage{
+			SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+				Url: "https://test.com/b.png",
 			},
+		},
+	}
+	dao.SignMessage(b, k)
+
+	return
+}
+
+func TestDiffSnippets(t *testing.T) {
+	a, b, _ := getTestSnippets()
+	delta := diffSnippets(a, b)
+
+	assert.True(t, proto.Equal(delta, &networkv1directory.ListingSnippetDelta{
+		Title:       &wrapperspb.StringValue{Value: b.Title},
+		Category:    &wrapperspb.StringValue{Value: b.Category},
+		ChannelName: &wrapperspb.StringValue{Value: b.ChannelName},
+		ViewerCount: &wrapperspb.UInt64Value{Value: b.ViewerCount},
+		Live:        &wrapperspb.BoolValue{Value: b.Live},
+		IsMature:    &wrapperspb.BoolValue{Value: b.IsMature},
+		TagsOneof: &networkv1directory.ListingSnippetDelta_Tags_{
+			Tags: &networkv1directory.ListingSnippetDelta_Tags{},
+		},
+		ThumbnailOneof: &networkv1directory.ListingSnippetDelta_Thumbnail{
+			Thumbnail: nil,
+		},
+		ChannelLogoOneof: &networkv1directory.ListingSnippetDelta_ChannelLogo{
 			ChannelLogo: &networkv1directory.ListingSnippetImage{
-				SourceOneof: &networkv1directory.ListingSnippetImage_Image{
-					Image: &image.Image{
-						Type: image.ImageType_IMAGE_TYPE_UNDEFINED,
-						Data: make([]byte, 128),
-					},
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+					Url: b.GetChannelLogo().GetUrl(),
 				},
 			},
-		}
-		err := dao.SignMessage(snippet, key)
-		assert.NoError(t, err)
+		},
+		Signature: &wrapperspb.BytesValue{Value: b.Signature},
+	}))
+}
 
-		log.Println("calling UpdateSnippet")
-		snippets.Update(swarmID, snippet)
-	}()
+func TestIsNilSnippetDelta(t *testing.T) {
+	assert.True(t, isNilSnippetDelta(&networkv1directory.ListingSnippetDelta{}))
+}
 
-	time.Sleep(time.Millisecond)
+func TestDiffSnippetsWithEqualValues(t *testing.T) {
+	a, _, _ := getTestSnippets()
+	assert.True(t, isNilSnippetDelta(diffSnippets(a, a)))
+}
 
-	rpcClient, err := rpc.NewClient(logger, &rpc.RWFDialer{
-		Logger:           logger,
-		ReadWriteFlusher: b,
-	})
-	assert.NoError(t, err)
-	client := networkv1directory.NewDirectorySnippetClient(rpcClient)
+func TestMergeSnippet(t *testing.T) {
+	a, b, _ := getTestSnippets()
+	c := proto.Clone(a).(*networkv1directory.ListingSnippet)
+	mergeSnippet(c, diffSnippets(a, b))
+	assert.True(t, proto.Equal(c, b))
+}
 
-	req := &networkv1directory.SnippetSubscribeRequest{SwarmId: swarmID}
-	res := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
-
-	go func() {
-		var n int
-		for delta := range res {
-			debug.PrintJSON(delta)
-			if n++; n == 2 {
-				cancel()
-			}
-		}
-	}()
-
-	log.Println("calling Subscribe")
-	err = client.Subscribe(ctx, req, res)
-	assert.ErrorIs(t, err, context.Canceled)
+func TestMergeSnippetCopy(t *testing.T) {
+	_, b, _ := getTestSnippets()
+	c := &networkv1directory.ListingSnippet{}
+	mergeSnippet(c, diffSnippets(c, b))
+	assert.True(t, proto.Equal(c, b))
 }

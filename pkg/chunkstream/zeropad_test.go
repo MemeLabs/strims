@@ -33,12 +33,12 @@ func TestZeroPadWriter(t *testing.T) {
 		index int
 		value []byte
 	}{
-		{0, []byte{0, 0}},
-		{32, []byte{0, 0}},
-		{64, []byte{0x80, 0x11}},
+		{0, []byte{0x00, 0x00, 0x00, 0x00}},
+		{32, []byte{0x00, 0x00, 0x00, 0x00}},
+		{64, []byte{0x80, 0x00, 0x00, 0x17}},
 	}
 	for _, h := range headers {
-		oh := o[h.index : h.index+2]
+		oh := o[h.index : h.index+4]
 		assert.Equal(t, oh, h.value, "header mismatch at index %d", h.index)
 	}
 }
@@ -59,7 +59,7 @@ func TestZeroPadReader(t *testing.T) {
 		},
 		{
 			writes: []int{75, 75, 75},
-			reads:  []int{45, 75, 75},
+			reads:  []int{47, 75, 75},
 			offset: 32,
 			size:   32,
 		},

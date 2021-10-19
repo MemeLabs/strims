@@ -22,8 +22,8 @@ func TestMinCostMaxFlow(t *testing.T) {
 
 	var f MinCostMaxFlow
 	flow, cost := f.ComputeMaxFlow(g, 0, 5)
-	assert.Equal(t, 2, flow)
-	assert.Equal(t, 2, cost)
+	assert.EqualValues(t, 2, flow)
+	assert.EqualValues(t, 2, cost)
 }
 
 func BenchmarkMinCostMaxFlow(b *testing.B) {
@@ -66,6 +66,6 @@ func TestMinCostMaxFlowLarge(t *testing.T) {
 
 	var f MinCostMaxFlow
 	flow, cost := f.ComputeMaxFlow(g, 0, 200)
-	assert.Equal(t, 99, flow)
-	assert.Equal(t, 99, cost)
+	assert.EqualValues(t, 99, flow)
+	assert.EqualValues(t, 99, cost)
 }

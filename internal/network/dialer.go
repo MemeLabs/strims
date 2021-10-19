@@ -17,9 +17,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ Dialer = &dialer{}
+
 type Dialer interface {
 	ServerDialer(networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error)
 	Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
+	ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server, error)
 	ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error)
 	Client(networkKey, key, salt []byte) (*rpc.Client, error)
 	ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*rpc.Client, error)
@@ -115,6 +118,15 @@ func (t *dialer) ServerDialer(networkKey []byte, port uint16, publisher HostAddr
 // Server ...
 func (t *dialer) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error) {
 	dialer, err := t.ServerDialer(networkKey, 0, &DHTHostAddrPublisher{key, salt})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewServer(t.logger, dialer), nil
+}
+
+// ServerWithHostAddr ...
+func (t *dialer) ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server, error) {
+	dialer, err := t.ServerDialer(networkKey, port, nil)
 	if err != nil {
 		return nil, err
 	}

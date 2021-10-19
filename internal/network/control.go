@@ -113,6 +113,8 @@ func (t *control) Dialer() Dialer {
 
 // Run ...
 func (t *control) Run(ctx context.Context) {
+	go t.ca.Run(ctx)
+
 	t.startNetworks()
 	t.scheduleCertRenewal()
 

@@ -30,6 +30,7 @@ const (
 
 	PeerExchangePort uint16 = 1001
 	TransferPort     uint16 = 1002
+	SnippetPort      uint16 = 1003
 )
 
 // peer link ports

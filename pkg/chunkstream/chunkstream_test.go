@@ -123,16 +123,18 @@ func TestOffsetReader(t *testing.T) {
 }
 
 func TestLengthAlignedWrite(t *testing.T) {
+	size := 128 * 1024
+
 	var buf bytes.Buffer
-	w, err := NewWriterSize(&buf, MaxSize)
+	w, err := NewWriterSize(&buf, size)
 	assert.Nil(t, err)
 
 	for i := 0; i < 3; i++ {
-		w.Write(make([]byte, MaxSize-3))
+		w.Write(make([]byte, size-3))
 		w.Flush()
 	}
 
-	r, err := NewReaderSize(&buf, 0, MaxSize)
+	r, err := NewReaderSize(&buf, 0, size)
 	assert.Nil(t, err)
 
 	b := make([]byte, 8*1024)

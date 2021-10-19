@@ -19,57 +19,14 @@ type embedServiceLoader interface {
 	Load(ctx context.Context, ids []string) ([]*embedLoaderResult, error)
 }
 
-type embedService int
-
-const (
-	_ embedService = iota
-	embedServiceAngelthump
-	embedServiceTwitchStream
-	embedServiceTwitchVOD
-	embedServiceYouTube
-	embedServiceSwarm
-)
-
-func (s embedService) String() string {
-	switch s {
-	case embedServiceAngelthump:
-		return "Angelthump"
-	case embedServiceTwitchStream:
-		return "TwitchStream"
-	case embedServiceTwitchVOD:
-		return "TwitchVOD"
-	case embedServiceYouTube:
-		return "YouTube"
-	case embedServiceSwarm:
-		return "Swarm"
-	default:
-		panic("invalid embed service")
-	}
-}
-
-func toEmbedService(s networkv1directory.Listing_Embed_Service) (embedService, bool) {
-	switch s {
-	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
-		return embedServiceAngelthump, true
-	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
-		return embedServiceTwitchStream, true
-	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
-		return embedServiceTwitchVOD, true
-	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
-		return embedServiceYouTube, true
-	default:
-		return 0, false
-	}
-}
-
 func newEmbedLoader(logger *zap.Logger, config *networkv1directory.ServerConfig_Integrations) *embedLoader {
 	l := &embedLoader{
 		logger:  logger,
-		loaders: map[embedService]embedServiceLoader{},
+		loaders: map[networkv1directory.Listing_Embed_Service]embedServiceLoader{},
 	}
 
 	if config.GetAngelthump().GetEnable() {
-		l.loaders[embedServiceAngelthump] = &angelThumpEmbedLoader{}
+		l.loaders[networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP] = &angelThumpEmbedLoader{}
 	}
 
 	if config.GetTwitch().GetEnable() {
@@ -77,12 +34,12 @@ func newEmbedLoader(logger *zap.Logger, config *networkv1directory.ServerConfig_
 			ClientID:     config.Twitch.ClientId,
 			ClientSecret: config.Twitch.ClientSecret,
 		}
-		l.loaders[embedServiceTwitchStream] = &twitchStreamEmbedLoader{api}
-		l.loaders[embedServiceTwitchVOD] = &twitchVODEmbedLoader{api}
+		l.loaders[networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM] = &twitchStreamEmbedLoader{api}
+		l.loaders[networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD] = &twitchVODEmbedLoader{api}
 	}
 
 	if config.GetYoutube().GetEnable() {
-		l.loaders[embedServiceYouTube] = &youTubeEmbedLoader{
+		l.loaders[networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE] = &youTubeEmbedLoader{
 			PublicAPIKey: config.Youtube.PublicApiKey,
 		}
 	}
@@ -92,17 +49,17 @@ func newEmbedLoader(logger *zap.Logger, config *networkv1directory.ServerConfig_
 
 type embedLoader struct {
 	logger  *zap.Logger
-	loaders map[embedService]embedServiceLoader
+	loaders map[networkv1directory.Listing_Embed_Service]embedServiceLoader
 }
 
-func (l *embedLoader) IsSupported(service embedService) bool {
+func (l *embedLoader) IsSupported(service networkv1directory.Listing_Embed_Service) bool {
 	_, ok := l.loaders[service]
 	return ok
 }
 
-func (l *embedLoader) Load(ctx context.Context, sets map[embedService][]string) map[embedService]map[string]*networkv1directory.ListingSnippet {
+func (l *embedLoader) Load(ctx context.Context, sets map[networkv1directory.Listing_Embed_Service][]string) map[networkv1directory.Listing_Embed_Service]map[string]*networkv1directory.ListingSnippet {
 	var resLock sync.Mutex
-	res := map[embedService]map[string]*networkv1directory.ListingSnippet{}
+	res := map[networkv1directory.Listing_Embed_Service]map[string]*networkv1directory.ListingSnippet{}
 	for service := range sets {
 		res[service] = map[string]*networkv1directory.ListingSnippet{}
 	}

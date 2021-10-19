@@ -10,6 +10,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -18,6 +19,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/image"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -26,9 +28,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
-const streamLockTimeout = time.Minute * 2
+// TODO: move to server config
 const streamUpdateInterval = time.Minute
 
 func newIngressService(
@@ -110,25 +113,24 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 			stream.w,
 		)
 		if err != nil {
-			s.logger.Debug(
+			stream.logger.Debug(
 				"transcoder finished",
-				zap.Uint64("id", stream.channel.Id),
 				zap.Error(err),
 			)
 		}
 	}()
 
-	s.logger.Info("rtmp stream opened", zap.Uint64("id", stream.channel.Id))
+	stream.logger.Info("rtmp stream opened")
 
 	s.lock.Lock()
-	s.streams[stream.channel.Id] = stream
+	s.streams[stream.channelID] = stream
 	s.lock.Unlock()
 
 	<-c.CloseNotify()
-	s.logger.Debug("rtmp stream closed", zap.Uint64("id", stream.channel.Id))
+	stream.logger.Debug("rtmp stream closed")
 
 	s.lock.Lock()
-	delete(s.streams, stream.channel.Id)
+	delete(s.streams, stream.channelID)
 	s.lock.Unlock()
 }
 
@@ -151,18 +153,18 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 		return nil, err
 	}
 
-	s.logger.Info("rtmp stream opened", zap.Uint64("id", stream.channel.Id))
+	stream.logger.Info("rtmp stream opened")
 
 	s.lock.Lock()
-	s.streams[stream.channel.Id] = stream
+	s.streams[stream.channelID] = stream
 	s.lock.Unlock()
 
 	go func() {
 		<-c.CloseNotify()
-		s.logger.Debug("rtmp stream closed", zap.Uint64("id", stream.channel.Id))
+		stream.logger.Debug("rtmp stream closed")
 
 		s.lock.Lock()
-		delete(s.streams, stream.channel.Id)
+		delete(s.streams, stream.channelID)
 		s.lock.Unlock()
 
 		stream.Close()
@@ -180,10 +182,15 @@ func newIngressStream(
 	addr *rtmpingress.StreamAddr,
 	conn io.Closer,
 ) (s *ingressStream, err error) {
+	channel, err := dao.GetVideoChannelByStreamKey(store, addr.Key)
+	if err != nil {
+		return nil, fmt.Errorf("getting channel: %w", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s = &ingressStream{
-		logger:    logger,
+		logger:    logger.With(zap.Uint64("channel", channel.Id)),
 		store:     store,
 		transfer:  transfer,
 		network:   network,
@@ -192,16 +199,16 @@ func newIngressStream(
 		ctx:       ctx,
 		cancelCtx: cancel,
 
-		startTime: timeutil.Now(),
-		conn:      conn,
+		startTime:      timeutil.Now(),
+		channelID:      channel.Id,
+		channelUpdates: make(chan struct{}, 1),
+		conn:           conn,
 	}
 
-	s.channel, err = dao.GetVideoChannelByStreamKey(store, addr.Key)
-	if err != nil {
-		return nil, fmt.Errorf("getting channel: %w", err)
-	}
+	s.channel.Store(channel)
+	s.channelUpdates <- struct{}{}
 
-	mu := dao.NewMutex(logger, store, strconv.AppendUint(nil, s.channel.Id, 10))
+	mu := dao.NewMutex(logger, store, strconv.AppendUint(nil, channel.Id, 10))
 	if _, err := mu.TryLock(ctx); err != nil {
 		return nil, fmt.Errorf("acquiring stream lock: %w", err)
 	}
@@ -215,13 +222,19 @@ func newIngressStream(
 	s.transferID = s.transfer.Add(s.swarm, []byte{})
 	s.transfer.Publish(s.transferID, s.channelNetworkKey())
 
+	snippet := proto.Clone(channel.DirectoryListingSnippet).(*networkv1directory.ListingSnippet)
+	if err := dao.SignMessage(snippet, channel.Key); err != nil {
+		return nil, fmt.Errorf("signing snippet: %w", err)
+	}
+	s.directory.PushSnippet(s.swarm.ID(), snippet)
+	go s.syncDirectorySnippet()
+
 	go func() {
 		id, err := s.publishDirectoryListing()
 		if err != nil {
 			s.logger.Debug("publishing stream to directory failed", zap.Error(err))
 		}
-		// TODO: store somewhere for use with unpublish/snippet stream
-		_ = id
+		s.directoryID = id
 	}()
 
 	return s, nil
@@ -238,14 +251,16 @@ type ingressStream struct {
 	cancelCtx context.CancelFunc
 	closeOnce sync.Once
 
-	startTime   timeutil.Time
-	channel     *videov1.VideoChannel
-	directoryID uint64
-	conn        io.Closer
+	startTime      timeutil.Time
+	channelID      uint64
+	channel        atomic.Value
+	channelUpdates chan struct{}
+	directoryID    uint64
+	conn           io.Closer
 
 	swarm      *ppspp.Swarm
 	transferID []byte
-	w          ioutil.WriteFlusher
+	w          *ioutil.WriteFlushSampler
 }
 
 func (s *ingressStream) Close() {
@@ -259,11 +274,20 @@ func (s *ingressStream) Close() {
 }
 
 func (s *ingressStream) UpdateChannel(channel *videov1.VideoChannel) {
-	s.channel = channel
-	s.publishDirectoryListing()
+	s.channel.Store(channel)
+
+	select {
+	case s.channelUpdates <- struct{}{}:
+	case <-s.ctx.Done():
+	default:
+	}
 }
 
-func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) {
+func (s *ingressStream) loadChannel() *videov1.VideoChannel {
+	return s.channel.Load().(*videov1.VideoChannel)
+}
+
+func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:          1024,
@@ -276,7 +300,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) 
 				LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 			},
 		},
-		Key: s.channel.Key,
+		Key: s.loadChannel().Key,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -287,11 +311,11 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) 
 		return nil, nil, err
 	}
 
-	return w.Swarm(), cw, nil
+	return w.Swarm(), ioutil.NewWriteFlushSampler(cw), nil
 }
 
 func (s *ingressStream) channelNetworkKey() []byte {
-	switch o := s.channel.Owner.(type) {
+	switch o := s.loadChannel().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
 	case *videov1.VideoChannel_LocalShare_:
@@ -302,7 +326,7 @@ func (s *ingressStream) channelNetworkKey() []byte {
 }
 
 func (s *ingressStream) channelCreatorCert() (*certificate.Certificate, error) {
-	switch o := s.channel.Owner.(type) {
+	switch o := s.loadChannel().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
@@ -331,4 +355,57 @@ func (s *ingressStream) publishDirectoryListing() (uint64, error) {
 
 func (s *ingressStream) unpublishDirectoryListing() error {
 	return s.directory.Unpublish(context.Background(), s.directoryID, s.channelNetworkKey())
+}
+
+func (s *ingressStream) syncDirectorySnippet() {
+	snippet := &networkv1directory.ListingSnippet{}
+
+	var thumbnailer rtmpingress.Thumbnailer
+	defer thumbnailer.Close()
+
+	t := timeutil.DefaultTickEmitter.Ticker(streamUpdateInterval)
+	for {
+		select {
+		case <-s.channelUpdates:
+			channelSnippet := s.loadChannel().DirectoryListingSnippet
+			snippet.Title = channelSnippet.Title
+			snippet.Description = channelSnippet.Description
+			snippet.Tags = channelSnippet.Tags
+			snippet.Category = channelSnippet.Category
+			snippet.ChannelName = channelSnippet.ChannelName
+			snippet.Live = channelSnippet.Live
+			snippet.IsMature = channelSnippet.IsMature
+			snippet.ChannelLogo = channelSnippet.ChannelLogo
+		case <-t.C:
+		case <-s.ctx.Done():
+			return
+		}
+
+		b, err := s.w.Sample()
+		if err != nil {
+			s.logger.Debug("sampling stream failed", zap.Error(err))
+			continue
+		}
+
+		img, err := thumbnailer.GetImageFromMp4(b[2:])
+		if err != nil {
+			s.logger.Debug("generating stream thumbnail failed", zap.Error(err))
+			continue
+		}
+
+		snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
+			SourceOneof: &networkv1directory.ListingSnippetImage_Image{
+				Image: &image.Image{
+					Type: image.ImageType_IMAGE_TYPE_JPEG,
+					Data: img,
+				},
+			},
+		}
+
+		if err := dao.SignMessage(snippet, s.loadChannel().Key); err != nil {
+			s.logger.Debug("signing listing snippet failed", zap.Error(err))
+			continue
+		}
+		s.directory.PushSnippet(s.swarm.ID(), snippet)
+	}
 }

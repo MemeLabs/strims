@@ -4,25 +4,27 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"sort"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/wrapperspb"
+	"go.uber.org/zap"
 )
 
 type snippetServer struct {
-	ctx      context.Context
+	logger   *zap.Logger
 	dialer   network.Dialer
+	transfer transfer.Control
 	snippets *snippetMap
-	service  snippetService
+	servers  map[uint64]context.CancelFunc
 }
 
 func (s *snippetServer) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
@@ -33,26 +35,71 @@ func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
 	s.snippets.Delete(swarmID)
 }
 
-func (s *snippetServer) start() {
+func (s *snippetServer) start(ctx context.Context, network *networkv1.Network) {
+	networkKey := dao.NetworkKey(network)
+
+	server, err := s.dialer.ServerWithHostAddr(networkKey, vnic.SnippetPort)
+	if err != nil {
+		panic(err)
+	}
+
+	networkv1directory.RegisterDirectorySnippetService(server, &snippetService{
+		logger:     s.logger.With(logutil.ByteHex("network", networkKey)),
+		transfer:   s.transfer,
+		snippets:   s.snippets,
+		networkKey: networkKey,
+	})
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	go func() {
+		s.logger.Debug(
+			"starting directory snippet server",
+			logutil.ByteHex("network", networkKey),
+		)
+		err := server.Listen(ctx)
+		s.logger.Debug(
+			"directory snippet server closed",
+			logutil.ByteHex("network", networkKey),
+			zap.Error(err),
+		)
+	}()
+
+	s.servers[network.Id] = cancel
+
 	// s.dialer.ServerDialer(networkKey []byte, port uint16, publisher dialer.HostAddrPublisher)
 }
 
-func (s *snippetServer) stop() {
-
+func (s *snippetServer) stop(id uint64) {
+	if cancel, ok := s.servers[id]; ok {
+		delete(s.servers, id)
+		cancel()
+	}
 }
 
 var _ networkv1directory.DirectorySnippetService = &snippetService{}
 
 type snippetService struct {
+	logger     *zap.Logger
 	transfer   transfer.Control
 	snippets   *snippetMap
 	networkKey []byte
 }
 
 func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.SnippetSubscribeRequest) (<-chan *networkv1directory.SnippetSubscribeResponse, error) {
+	// TODO: deny requests not from directory service hosts...
+	// token auth? signed message(swarmID|timestamp, profile.Key)
+	// local acl maintained via publish?
+	// can we id them based on their cert? if we save the remote profile key from the publish rpc?
+	// look up directory in dht? we should have it cached...
+
+	logger := s.logger.With(zap.Stringer("swarmID", ppspp.SwarmID(req.SwarmId)))
+
 	if !s.transfer.IsPublished(transfer.NewID(req.SwarmId, nil), s.networkKey) {
 		return nil, errors.New("snippet not found")
 	}
+
+	logger.Debug("received snippet service subscription")
 
 	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
 
@@ -108,7 +155,10 @@ func (m *snippetMap) Delete(swarmID ppspp.SwarmID) {
 	m.snippetsLock.Lock()
 	defer m.snippetsLock.Unlock()
 
-	m.snippets.Delete(&snippetItem{id: swarmID.Binary()})
+	it, ok := m.snippets.Delete(&snippetItem{id: swarmID.Binary()}).(*snippetItem)
+	if ok {
+		it.Destroy()
+	}
 }
 
 func (m *snippetMap) Get(swarmID ppspp.SwarmID) (*snippetItem, bool) {
@@ -141,38 +191,13 @@ func (i *snippetItem) Notify(ch chan *networkv1directory.ListingSnippetDelta) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
-	delta := &networkv1directory.ListingSnippetDelta{
-		Title:       &wrapperspb.StringValue{Value: i.snippet.Title},
-		Description: &wrapperspb.StringValue{Value: i.snippet.Description},
-		TagsOneof:   &networkv1directory.ListingSnippetDelta_Tags_{Tags: &networkv1directory.ListingSnippetDelta_Tags{Tags: i.snippet.Tags}},
-		Category:    &wrapperspb.StringValue{Value: i.snippet.Category},
-		ChannelName: &wrapperspb.StringValue{Value: i.snippet.ChannelName},
-		ViewerCount: &wrapperspb.UInt64Value{Value: i.snippet.ViewerCount},
-		Live:        &wrapperspb.BoolValue{Value: i.snippet.Live},
-		IsMature:    &wrapperspb.BoolValue{Value: i.snippet.IsMature},
-		Key:         &wrapperspb.BytesValue{Value: i.snippet.Key},
-		Signature:   &wrapperspb.BytesValue{Value: i.snippet.Signature},
-	}
-	changed := true
+	delta := diffSnippets(nilSnippet, i.snippet)
 
-	if i.snippet.ChannelLogo != nil {
-		delta.ChannelLogoOneof = &networkv1directory.ListingSnippetDelta_ChannelLogo{ChannelLogo: i.snippet.ChannelLogo}
-
-		// TODO: vpn message fragmentation.
-		// avoid exceeding MTU by returning channel logo and thumbnail separately.
-		ch <- delta
-		delta = &networkv1directory.ListingSnippetDelta{}
-		changed = false
+	if delta.GetThumbnail() != nil && delta.GetChannelLogo() != nil {
+		ch <- &networkv1directory.ListingSnippetDelta{ThumbnailOneof: delta.ThumbnailOneof}
+		delta.ThumbnailOneof = nil
 	}
-
-	if i.snippet.Thumbnail != nil {
-		delta.ThumbnailOneof = &networkv1directory.ListingSnippetDelta_Thumbnail{Thumbnail: i.snippet.Thumbnail}
-		changed = true
-	}
-
-	if changed {
-		ch <- delta
-	}
+	ch <- delta
 
 	i.deltas.Notify(ch)
 }
@@ -185,90 +210,19 @@ func (i *snippetItem) Update(snippet *networkv1directory.ListingSnippet) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
-	delta := &networkv1directory.ListingSnippetDelta{}
-	var changed bool
-
-	if i.snippet.Title != snippet.Title {
-		delta.Title = &wrapperspb.StringValue{Value: snippet.Title}
-		i.snippet.Title = snippet.Title
-		changed = true
+	delta := diffSnippets(i.snippet, snippet)
+	if isNilSnippetDelta(delta) {
+		return
 	}
+	mergeSnippet(i.snippet, delta)
 
-	if i.snippet.Description != snippet.Description {
-		delta.Description = &wrapperspb.StringValue{Value: snippet.Description}
-		i.snippet.Description = snippet.Description
-		changed = true
+	if delta.GetThumbnail() != nil && delta.GetChannelLogo() != nil {
+		i.deltas.Emit(&networkv1directory.ListingSnippetDelta{ThumbnailOneof: delta.ThumbnailOneof})
+		delta.ThumbnailOneof = nil
 	}
+	i.deltas.Emit(delta)
+}
 
-	tags := make([]string, len(snippet.Tags))
-	copy(tags, snippet.Tags)
-	sort.Strings(tags)
-	if !sortutil.EqualStrings(tags, snippet.Tags) {
-		delta.TagsOneof = &networkv1directory.ListingSnippetDelta_Tags_{Tags: &networkv1directory.ListingSnippetDelta_Tags{Tags: snippet.Tags}}
-		i.snippet.Tags = tags
-		changed = true
-	}
-
-	if i.snippet.Category != snippet.Category {
-		delta.Category = &wrapperspb.StringValue{Value: snippet.Category}
-		i.snippet.Category = snippet.Category
-		changed = true
-	}
-
-	if i.snippet.ChannelName != snippet.ChannelName {
-		delta.ChannelName = &wrapperspb.StringValue{Value: snippet.ChannelName}
-		i.snippet.ChannelName = snippet.ChannelName
-		changed = true
-	}
-
-	if i.snippet.ViewerCount != snippet.ViewerCount {
-		delta.ViewerCount = &wrapperspb.UInt64Value{Value: snippet.ViewerCount}
-		i.snippet.ViewerCount = snippet.ViewerCount
-		changed = true
-	}
-
-	if i.snippet.Live != snippet.Live {
-		delta.Live = &wrapperspb.BoolValue{Value: snippet.Live}
-		i.snippet.Live = snippet.Live
-		changed = true
-	}
-
-	if i.snippet.IsMature != snippet.IsMature {
-		delta.IsMature = &wrapperspb.BoolValue{Value: snippet.IsMature}
-		i.snippet.IsMature = snippet.IsMature
-		changed = true
-	}
-
-	if !bytes.Equal(i.snippet.Key, snippet.Key) {
-		delta.Key = &wrapperspb.BytesValue{Value: snippet.Key}
-		i.snippet.Key = make([]byte, len(snippet.Key))
-		copy(i.snippet.Key, snippet.Key)
-		changed = true
-	}
-
-	if !bytes.Equal(i.snippet.Signature, snippet.Signature) {
-		delta.Signature = &wrapperspb.BytesValue{Value: snippet.Signature}
-		i.snippet.Signature = make([]byte, len(snippet.Signature))
-		copy(i.snippet.Signature, snippet.Signature)
-		changed = true
-	}
-
-	if !proto.Equal(i.snippet.ChannelLogo, snippet.ChannelLogo) {
-		delta.ChannelLogoOneof = &networkv1directory.ListingSnippetDelta_ChannelLogo{ChannelLogo: snippet.ChannelLogo}
-		i.snippet.ChannelLogo = proto.Clone(snippet.ChannelLogo).(*networkv1directory.ListingSnippetImage)
-
-		i.deltas.Emit(delta)
-		delta = &networkv1directory.ListingSnippetDelta{}
-		changed = false
-	}
-
-	if !proto.Equal(i.snippet.Thumbnail, snippet.Thumbnail) {
-		delta.ThumbnailOneof = &networkv1directory.ListingSnippetDelta_Thumbnail{Thumbnail: snippet.Thumbnail}
-		i.snippet.Thumbnail = proto.Clone(snippet.Thumbnail).(*networkv1directory.ListingSnippetImage)
-		changed = true
-	}
-
-	if changed {
-		i.deltas.Emit(delta)
-	}
+func (i *snippetItem) Destroy() {
+	i.deltas.Close()
 }

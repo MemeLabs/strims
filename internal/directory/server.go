@@ -16,6 +16,7 @@ import (
 
 func newDirectoryServer(
 	logger *zap.Logger,
+	dialer network.Dialer,
 	network *networkv1.Network,
 ) (*directoryServer, error) {
 	config := network.GetServerConfig()
@@ -40,7 +41,7 @@ func newDirectoryServer(
 		logger:      logger,
 		config:      config,
 		swarm:       w.Swarm(),
-		service:     newDirectoryService(logger, config.Key, config.Directory, ew),
+		service:     newDirectoryService(logger, dialer, config.Key, config.Directory, ew),
 		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
 	}
 	return s, nil

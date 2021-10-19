@@ -33,7 +33,8 @@ class Runner {
 
   stop() {
     ReactDOM.unmountComponentAtNode(this.root);
-    this.bridge.close();
+    this.bridge?.close();
+    this.bridge = undefined;
   }
 
   restart() {

@@ -1,13 +1,12 @@
 .directory_grid {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  padding: 10px;
 
   &__item {
-    width: calc(25% - 20px);
     display: flex;
     flex-direction: column;
-    margin: 10px;
     box-shadow: rgba(0, 0, 0, 0.33) 2px 2px 4px;
 
     &__link {

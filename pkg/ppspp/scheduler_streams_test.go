@@ -30,6 +30,6 @@ func TestPeerStreamAssigner(t *testing.T) {
 
 	for _, a := range actual {
 		caps[a.channel]--
-		assert.LessOrEqual(t, 0, caps[a.channel], "expected assignment not to exceed channel capacity")
+		assert.LessOrEqual(t, int64(0), caps[a.channel], "expected assignment not to exceed channel capacity")
 	}
 }

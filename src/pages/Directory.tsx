@@ -70,16 +70,16 @@ interface DirectoryGridImageProps extends ComponentProps<"img"> {
 
 const DirectoryGridImage: React.FC<DirectoryGridImageProps> = ({
   fallback,
-  source: { sourceOneof: source },
+  source,
   ...imgProps
 }) => {
   let url = "";
-  switch (source.case) {
+  switch (source?.sourceOneof?.case) {
     case ListingSnippetImage.SourceOneofCase.URL:
-      url = source.url;
+      url = source.sourceOneof.url;
       break;
     case ListingSnippetImage.SourceOneofCase.IMAGE:
-      url = useImage(source.image);
+      url = useImage(source.sourceOneof.image);
       break;
   }
 

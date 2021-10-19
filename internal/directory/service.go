@@ -3,19 +3,22 @@ package directory
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/blake2b"
@@ -41,23 +44,25 @@ var (
 	ErrUserNotFound    = errors.New("user not found")
 )
 
-const chunkSize = 128
+const chunkSize = 1024
 
 var swarmOptions = ppspp.SwarmOptions{
 	ChunkSize:  chunkSize,
-	LiveWindow: 16 * 1024,
+	LiveWindow: 2 * 1024,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,
 	},
 }
 
-func newDirectoryService(logger *zap.Logger, key *key.Key, config *networkv1directory.ServerConfig, ew *protoutil.ChunkStreamWriter) *directoryService {
+func newDirectoryService(logger *zap.Logger, dialer network.Dialer, key *key.Key, config *networkv1directory.ServerConfig, ew *protoutil.ChunkStreamWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
+		dialer:          dialer,
+		key:             key,
+		config:          config,
 		done:            make(chan struct{}),
 		broadcastTicker: timeutil.DefaultTickEmitter.Ticker(broadcastInterval),
 		embedLoadTicker: timeutil.DefaultTickEmitter.Ticker(embedLoadInterval),
-		config:          config,
 		eventWriter:     ew,
 		embedLoader:     newEmbedLoader(logger, config.Integrations),
 		listings:        newIndexedLRU(),
@@ -66,13 +71,14 @@ func newDirectoryService(logger *zap.Logger, key *key.Key, config *networkv1dire
 
 type directoryService struct {
 	logger            *zap.Logger
-	transfer          *transfer.Control
+	dialer            network.Dialer
+	key               *key.Key
+	config            *networkv1directory.ServerConfig
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   timeutil.Ticker
 	embedLoadTicker   timeutil.Ticker
 	lastBroadcastTime timeutil.Time
-	config            *networkv1directory.ServerConfig
 	eventWriter       *protoutil.ChunkStreamWriter
 	embedLoader       *embedLoader
 	lock              sync.Mutex
@@ -90,11 +96,11 @@ func (d *directoryService) Run(ctx context.Context) error {
 		select {
 		case now := <-d.broadcastTicker.C:
 			if err := d.broadcast(now); err != nil {
-				return err
+				d.logger.Debug("directory broadcast failed", zap.Error(err))
 			}
 		case now := <-d.embedLoadTicker.C:
 			if err := d.loadEmbeds(ctx, now); err != nil {
-				return err
+				d.logger.Debug("directory embed loading failed", zap.Error(err))
 			}
 		case <-d.done:
 			return errors.New("closed")
@@ -222,19 +228,11 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	embedIDs := map[embedService][]string{}
+	embedIDs := map[networkv1directory.Listing_Embed_Service][]string{}
 
 	d.listings.Each(func(i keyer) bool {
-		l := i.(*listing)
-		switch c := l.listing.Content.(type) {
-		case *networkv1directory.Listing_Embed_:
-			svc, _ := toEmbedService(c.Embed.Service)
-			embedIDs[svc] = append(embedIDs[svc], c.Embed.Id)
-		case *networkv1directory.Listing_Media_:
-			uri, _ := ppspp.ParseURI(l.listing.GetMedia().SwarmUri)
-			embedIDs[embedServiceSwarm] = append(embedIDs[embedServiceSwarm], uri.ID.String())
-		case *networkv1directory.Listing_Service_:
-			// TODO: implement services
+		if embed := i.(*listing).listing.GetEmbed(); embed != nil {
+			embedIDs[embed.Service] = append(embedIDs[embed.Service], embed.Id)
 		}
 		return true
 	})
@@ -248,25 +246,14 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 
 		d.listings.Each(func(i keyer) bool {
 			l := i.(*listing)
-
-			var snippet *networkv1directory.ListingSnippet
-			var ok bool
-
-			switch c := l.listing.Content.(type) {
-			case *networkv1directory.Listing_Embed_:
-				svc, _ := toEmbedService(c.Embed.Service)
-				snippet, ok = res[svc][c.Embed.Id]
-			case *networkv1directory.Listing_Media_:
-				uri, _ := ppspp.ParseURI(l.listing.GetMedia().SwarmUri)
-				snippet, ok = res[embedServiceSwarm][uri.ID.String()]
-			case *networkv1directory.Listing_Service_:
-				// TODO: implement services
-			}
-
-			if ok {
-				l.snippet = snippet
-				l.modifiedTime = now
-				d.listings.Touch(i)
+			if embed := l.listing.GetEmbed(); embed != nil {
+				if svcSnippets, ok := res[embed.Service]; ok {
+					if snippet, ok := svcSnippets[embed.Id]; ok {
+						l.snippet = snippet
+						l.modifiedTime = now
+						d.listings.Touch(i)
+					}
+				}
 			}
 			return true
 		})
@@ -275,11 +262,53 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 	return nil
 }
 
+func (d *directoryService) mergeSnippet(listingID uint64, delta *networkv1directory.ListingSnippetDelta) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	l, ok := d.listings.GetByID(listingID).(*listing)
+	if !ok {
+		return
+	}
+
+	mergeSnippet(l.nextSnippet, delta)
+	if err := dao.VerifyMessage(l.nextSnippet); err != nil {
+		log.Println("message verification failed", err)
+		return
+	}
+
+	mergeSnippet(l.snippet, diffSnippets(l.snippet, l.nextSnippet))
+	l.modifiedTime = timeutil.Now()
+	d.listings.Touch(l)
+}
+
+func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64, swarmID ppspp.SwarmID, candidate kademlia.ID) error {
+	client, err := d.dialer.ClientWithHostAddr(d.key.Public, candidate, vnic.SnippetPort)
+	if err != nil {
+		return nil
+	}
+
+	snippetClient := networkv1directory.NewDirectorySnippetClient(client)
+
+	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
+	go func() {
+		for res := range ch {
+			d.mergeSnippet(listingID, res.SnippetDelta)
+		}
+	}()
+
+	req := &networkv1directory.SnippetSubscribeRequest{
+		SwarmId: swarmID.Binary(),
+	}
+	snippetClient.Subscribe(ctx, req, ch)
+
+	return nil
+}
+
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
 	switch c := req.Listing.Content.(type) {
 	case *networkv1directory.Listing_Embed_:
-		service, ok := toEmbedService(c.Embed.Service)
-		if !ok || !d.embedLoader.IsSupported(service) {
+		if !d.embedLoader.IsSupported(c.Embed.Service) {
 			return nil, errors.New("unsupported embed service")
 		}
 	case *networkv1directory.Listing_Media_:
@@ -289,6 +318,8 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	case *networkv1directory.Listing_Service_:
 		// TODO: implement services
 	}
+
+	// TODO: moderation
 
 	l, err := newListing(atomic.AddUint64(&d.nextID, 1), req.Listing)
 	if err != nil {
@@ -305,6 +336,16 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	l.publishers.ReplaceOrInsert(s)
 	s.publishedListings.ReplaceOrInsert(l)
 	u.sessions.ReplaceOrInsert(s)
+
+	// HAX
+	if media := req.Listing.GetMedia(); media != nil {
+		candidate, err := kademlia.UnmarshalID(network.VPNCertificate(ctx).GetKey())
+		if err != nil {
+			return nil, err
+		}
+		uri, _ := ppspp.ParseURI(req.Listing.GetMedia().SwarmUri)
+		go d.loadMediaEmbed(context.Background(), l.id, uri.ID, candidate)
+	}
 
 	return &networkv1directory.PublishResponse{Id: l.id}, nil
 }
@@ -422,6 +463,8 @@ func newListing(id uint64, l *networkv1directory.Listing) (*listing, error) {
 		id:           id,
 		key:          key,
 		listing:      l,
+		nextSnippet:  &networkv1directory.ListingSnippet{},
+		snippet:      &networkv1directory.ListingSnippet{},
 		modifiedTime: timeutil.Now(),
 	}, nil
 }
@@ -430,6 +473,7 @@ type listing struct {
 	id           uint64
 	key          []byte
 	listing      *networkv1directory.Listing
+	nextSnippet  *networkv1directory.ListingSnippet
 	snippet      *networkv1directory.ListingSnippet
 	modifiedTime timeutil.Time
 	publishers   llrb.LLRB
