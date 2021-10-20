@@ -4,6 +4,7 @@
 package videoingress
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -360,6 +361,8 @@ func (s *ingressStream) unpublishDirectoryListing() error {
 func (s *ingressStream) syncDirectorySnippet() {
 	snippet := &networkv1directory.ListingSnippet{}
 
+	var segment bytes.Buffer
+
 	var thumbnailer rtmpingress.Thumbnailer
 	defer thumbnailer.Close()
 
@@ -381,13 +384,18 @@ func (s *ingressStream) syncDirectorySnippet() {
 			return
 		}
 
-		b, err := s.w.Sample()
-		if err != nil {
+		segment.Reset()
+		if err := s.w.Sample(&segment); err != nil {
 			s.logger.Debug("sampling stream failed", zap.Error(err))
 			continue
 		}
 
-		img, err := thumbnailer.GetImageFromMp4(b[2:])
+		if segment.Len() < 2 {
+			s.logger.Debug("stream sample too short")
+			continue
+		}
+
+		img, err := thumbnailer.GetImageFromMp4(segment.Bytes()[2:])
 		if err != nil {
 			s.logger.Debug("generating stream thumbnail failed", zap.Error(err))
 			continue

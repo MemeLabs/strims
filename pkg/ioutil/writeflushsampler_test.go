@@ -21,9 +21,10 @@ func TestWriteFlushSampler(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		b, err := w.Sample()
+		var buf bytes.Buffer
+		err := w.Sample(&buf)
 		assert.NoError(t, err)
-		assert.EqualValues(t, 64, len(b))
+		assert.EqualValues(t, 64, buf.Len())
 		close(done)
 	}()
 

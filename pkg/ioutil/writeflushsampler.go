@@ -1,9 +1,9 @@
 package ioutil
 
 import (
-	"bytes"
 	"errors"
-	"sync/atomic"
+	"io"
+	"sync"
 )
 
 var (
@@ -12,7 +12,7 @@ var (
 )
 
 const (
-	sampleStateClean uint32 = iota
+	sampleStateClean = iota
 	sampleStateDirty
 	sampleStateWaiting
 	sampleStateReading
@@ -21,104 +21,93 @@ const (
 
 func NewWriteFlushSampler(w WriteFlusher) *WriteFlushSampler {
 	return &WriteFlushSampler{
-		w:   w,
-		buf: &bytes.Buffer{},
-		ch:  make(chan []byte),
+		w:    w,
+		errs: make(chan error),
 	}
 }
 
 type WriteFlushSampler struct {
+	mu    sync.Mutex
+	state int
+	errs  chan error
+	sw    io.Writer
 	w     WriteFlusher
-	buf   *bytes.Buffer
-	ch    chan []byte
-	state uint32
 }
 
 func (w *WriteFlushSampler) Write(p []byte) (int, error) {
-	for {
-		state := atomic.LoadUint32(&w.state)
-		switch state {
-		case sampleStateClean:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateDirty) {
-				continue
-			}
-		case sampleStateReading:
-			w.buf.Write(p)
+	w.mu.Lock()
+	state := w.state
+	if state == sampleStateClean {
+		w.state = sampleStateDirty
+	}
+	w.mu.Unlock()
+
+	if state == sampleStateReading {
+		if _, err := w.sw.Write(p); err != nil {
+			w.errs <- err
+
+			w.mu.Lock()
+			w.state = sampleStateDirty
+			w.sw = nil
+			w.mu.Unlock()
 		}
-		break
 	}
 
 	return w.w.Write(p)
 }
 
 func (w *WriteFlushSampler) Flush() error {
-	for {
-		state := atomic.LoadUint32(&w.state)
-		switch state {
-		case sampleStateWaiting:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateReading) {
-				continue
-			}
-		case sampleStateReading:
-			w.emitSample()
-			fallthrough
-		default:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateClean) {
-				continue
-			}
-		}
-		break
+	w.mu.Lock()
+	switch w.state {
+	case sampleStateWaiting:
+		w.state = sampleStateReading
+	case sampleStateReading:
+		w.errs <- nil
+		w.sw = nil
+		fallthrough
+	default:
+		w.state = sampleStateClean
 	}
+	w.mu.Unlock()
 
 	return w.w.Flush()
 }
 
 func (w *WriteFlushSampler) Close() error {
-	for {
-		state := atomic.LoadUint32(&w.state)
-		switch state {
-		case sampleStateClosed:
-			return ErrNewWriteFlushSamplerClosed
-		default:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateClosed) {
-				continue
-			}
-			close(w.ch)
-		}
-		return nil
-	}
-}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-func (w *WriteFlushSampler) emitSample() {
-	w.ch <- w.buf.Bytes()
-	w.buf = &bytes.Buffer{}
-}
-
-func (w *WriteFlushSampler) Sample() ([]byte, error) {
-	for {
-		state := atomic.LoadUint32(&w.state)
-		switch state {
-		case sampleStateClean:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateReading) {
-				continue
-			}
-		case sampleStateDirty:
-			if !atomic.CompareAndSwapUint32(&w.state, state, sampleStateWaiting) {
-				continue
-			}
-		case sampleStateWaiting:
-			fallthrough
-		case sampleStateReading:
-			return nil, ErrNewWriteFlushSamplerBusy
-		case sampleStateClosed:
-			return nil, ErrNewWriteFlushSamplerClosed
-		}
-		break
+	switch w.state {
+	case sampleStateClosed:
+		return ErrNewWriteFlushSamplerClosed
+	default:
+		w.state = sampleStateClosed
+		close(w.errs)
 	}
 
-	b, ok := <-w.ch
+	return nil
+}
+
+func (w *WriteFlushSampler) Sample(sw io.Writer) error {
+	w.mu.Lock()
+	switch w.state {
+	case sampleStateClean:
+		w.state = sampleStateReading
+	case sampleStateDirty:
+		w.state = sampleStateWaiting
+	case sampleStateWaiting:
+		fallthrough
+	case sampleStateReading:
+		return ErrNewWriteFlushSamplerBusy
+	case sampleStateClosed:
+		return ErrNewWriteFlushSamplerClosed
+	}
+	w.sw = sw
+	w.mu.Unlock()
+
+	err, ok := <-w.errs
 	if !ok {
-		return nil, ErrNewWriteFlushSamplerClosed
+		return ErrNewWriteFlushSamplerClosed
 	}
-	return b, nil
+	return err
 }

@@ -153,6 +153,7 @@ module.exports = (env, argv) => {
     plugins.unshift(
       new ReactRefreshWebpackPlugin({
         exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx$/,
+        overlay: false,
       })
     );
 

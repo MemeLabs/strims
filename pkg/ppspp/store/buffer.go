@@ -2,7 +2,6 @@ package store
 
 import (
 	"errors"
-	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -93,20 +92,20 @@ func (s *Buffer) Set(b binmap.Bin, d []byte) {
 }
 
 func (s *Buffer) set(b binmap.Bin, d []byte) {
-	copy(s.buf[s.index(b):], d)
-
-	h := b.BaseRight() + 2
-	if s.head < h {
+	l, r := b.Base()
+	if l < s.tail() {
+		return
+	}
+	if h := r + 2; s.head < h {
 		s.head = h
 	}
+
+	copy(s.buf[s.index(b):], d)
 
 	s.bins.Set(b)
 	if !b.Contains(s.next) {
 		if s.next < s.tail() {
-			select {
-			case s.readable <- ErrBufferUnderrun:
-			default:
-			}
+			s.swapReadable(ErrBufferUnderrun)
 		}
 		return
 	}
@@ -198,12 +197,6 @@ func (s *Buffer) Recover() (uint64, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	emptyBins := []binmap.Bin{}
-	for it := s.bins.IterateEmpty(); it.Next(); {
-		emptyBins = append(emptyBins, it.Value())
-	}
-	log.Println(emptyBins)
-
 	next := s.bins.FindFilledAfter(s.tail())
 	if next.IsNone() {
 		return 0, ErrReadOffsetNotFound
@@ -259,6 +252,12 @@ func (s *Buffer) Bins() *binmap.Map {
 
 func (s *Buffer) index(b binmap.Bin) int {
 	return int((uint64(b.BaseOffset()) & s.mask) * s.chunkSize)
+}
+
+func (s *Buffer) Tail() binmap.Bin {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.tail()
 }
 
 func (s *Buffer) tail() binmap.Bin {

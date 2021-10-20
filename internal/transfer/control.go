@@ -159,7 +159,7 @@ func (c *control) loadNetworkPeers(ctx context.Context, n *network) {
 
 		c.logger.Debug(
 			"searching for peers for",
-			logutil.ByteHex("swarm", t.swarm.ID()),
+			zap.Stringer("swarm", t.swarm.ID()),
 			logutil.ByteHex("salt", t.salt),
 		)
 
@@ -272,7 +272,7 @@ func (c *control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 	c.logger.Debug(
 		"added swarm",
 		logutil.ByteHex("id", t.id),
-		logutil.ByteHex("swarm", swarm.ID()),
+		zap.Stringer("swarm", swarm.ID()),
 	)
 
 	return t.id
@@ -303,7 +303,7 @@ func (c *control) Remove(id []byte) {
 	c.logger.Debug(
 		"closed swarm",
 		logutil.ByteHex("id", t.id),
-		logutil.ByteHex("swarm", t.swarm.ID()),
+		zap.Stringer("swarm", t.swarm.ID()),
 	)
 }
 

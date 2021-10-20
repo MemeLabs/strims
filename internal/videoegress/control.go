@@ -1,8 +1,8 @@
 package videoegress
 
 import (
-	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -91,16 +91,14 @@ func (t *control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.
 	}
 
 	r := &VideoReader{
-		logger:     t.logger,
+		logger: t.logger.With(
+			logutil.ByteHex("transfer", transferID),
+			zap.Stringer("swarm", swarm.ID()),
+		),
 		transfer:   t.transfer,
 		transferID: transferID,
-		swarm:      swarm,
+		b:          swarm.Reader(),
 	}
-	// TODO: close swarm if init doesn't succeed within deadline (ctx?)
-	if err := r.initReader(); err != nil {
-		return nil, nil, err
-	}
-
 	return transferID, r, nil
 }
 
@@ -109,8 +107,8 @@ type VideoReader struct {
 	logger     *zap.Logger
 	transfer   transfer.Control
 	transferID []byte
-	swarm      *ppspp.Swarm
-	r          io.Reader
+	b          *store.Buffer
+	r          *chunkstream.Reader
 }
 
 // Close ...
@@ -119,38 +117,59 @@ func (r *VideoReader) Close() error {
 	return nil
 }
 
-func (r *VideoReader) reinitReader() error {
-	sr := r.swarm.Reader()
-	sr.SetOffset(sr.Bins().FindLastFilled().BaseLeft())
-
-	return r.initReader()
-}
-
-func (r *VideoReader) initReader() error {
-	r.logger.Debug("waiting for reader")
-
-	sr := r.swarm.Reader()
-	r.logger.Debug("got swarm reader", zap.Uint64("offset", sr.Offset()))
-	cr, err := chunkstream.NewReaderSize(sr, int64(sr.Offset()), chunkstream.DefaultSize)
+func (r *VideoReader) initReader() (err error) {
+	r.r, err = chunkstream.NewReaderSize(r.b, int64(r.b.Offset()), chunkstream.DefaultSize)
 	if err != nil {
 		return err
 	}
-	r.logger.Debug("opened chunkstream reader")
 
-	// disard the first incomplete fragment
-	var b bytes.Buffer
-	if _, err := io.Copy(&b, cr); err != nil {
+	return r.discardFragment()
+}
+
+func (r *VideoReader) reinitReader() error {
+	if _, err := r.b.Recover(); err != nil {
 		return err
 	}
+	r.r.SetOffset(int64(r.b.Offset()))
 
-	r.logger.Debug("finished discarding chunk fragment")
+	return r.discardFragment()
+}
 
-	r.r = cr
+func (r *VideoReader) discardFragment() error {
+	off := r.b.Offset()
+	r.logger.Debug("discarding segment fragment", zap.Uint64("offset", off))
+
+	for {
+		if _, err := io.Copy(io.Discard, r.r); err == nil {
+			break
+		} else if err != store.ErrBufferUnderrun {
+			return err
+		}
+
+		if _, err := r.b.Recover(); err != nil {
+			return err
+		}
+		r.r.SetOffset(int64(r.b.Offset()))
+	}
+
+	doff := r.b.Offset()
+	r.logger.Debug(
+		"finished discarding segment fragment",
+		zap.Uint64("bytes", doff-off),
+		zap.Uint64("offset", doff),
+	)
+
 	return nil
 }
 
 // Read ...
 func (r *VideoReader) Read(b []byte) (int, error) {
+	for r.r == nil {
+		if err := r.initReader(); err != nil {
+			return 0, fmt.Errorf("unable to initialize reader: %w", err)
+		}
+	}
+
 	n, err := r.r.Read(b)
 	if err == store.ErrBufferUnderrun {
 		if err := r.reinitReader(); err != nil {

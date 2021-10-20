@@ -1,12 +1,12 @@
 module github.com/MemeLabs/go-ppspp
 
-go 1.13
+go 1.17
 
 require (
 	github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/MemeLabs/chat-parser v1.0.3
-	github.com/MemeLabs/protobuf v0.1.17
+	github.com/MemeLabs/protobuf v0.1.18
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -83,4 +83,53 @@ require (
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	lukechampine.com/uint128 v1.1.1
 	mvdan.cc/xurls/v2 v2.3.0
+)
+
+require (
+	cloud.google.com/go v0.94.1 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.1.1 // indirect
+	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
+	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
+	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/googleapis/gax-go/v2 v2.1.0 // indirect
+	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/josharian/intern v1.0.0 // indirect
+	github.com/knq/sysutil v0.0.0-20191005231841-15668db23d08 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
+	github.com/pion/datachannel v1.4.21 // indirect
+	github.com/pion/dtls/v2 v2.0.4 // indirect
+	github.com/pion/ice/v2 v2.0.14 // indirect
+	github.com/pion/interceptor v0.0.9 // indirect
+	github.com/pion/logging v0.2.2 // indirect
+	github.com/pion/mdns v0.0.4 // indirect
+	github.com/pion/randutil v0.1.0 // indirect
+	github.com/pion/rtcp v1.2.6 // indirect
+	github.com/pion/rtp v1.6.2 // indirect
+	github.com/pion/sctp v1.7.11 // indirect
+	github.com/pion/srtp/v2 v2.0.1 // indirect
+	github.com/pion/stun v0.3.5 // indirect
+	github.com/pion/transport v0.12.2 // indirect
+	github.com/pion/turn/v2 v2.0.5 // indirect
+	github.com/pion/udp v0.1.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/prometheus/client_model v0.2.0 // indirect
+	github.com/prometheus/procfs v0.2.0 // indirect
+	github.com/spf13/afero v1.5.1 // indirect
+	github.com/spf13/cast v1.3.1 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/subosito/gotenv v1.2.0 // indirect
+	github.com/volatiletech/inflect v0.0.1 // indirect
+	go.opencensus.io v0.23.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420 // indirect
+	golang.org/x/sys v0.0.0-20210908233432-aa78b53d3365 // indirect
+	golang.org/x/text v0.3.6 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/genproto v0.0.0-20210903162649-d08c68adba83 // indirect
+	google.golang.org/grpc v1.40.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

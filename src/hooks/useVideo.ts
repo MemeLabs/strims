@@ -175,8 +175,8 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     try {
       await ref.current.play();
     } catch (e) {
-      ref.current.muted = true;
       try {
+        ref.current.muted = true;
         await ref.current.play();
       } catch (e) {
         console.warn("error playing video", e);

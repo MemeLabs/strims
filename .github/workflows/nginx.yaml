@@ -5,6 +5,7 @@ on:
     branches: [ 'master' ]
     paths:
       - '.github/workflows/nginx.yaml'
+  workflow_dispatch:
 
 jobs:
   build:

@@ -47,6 +47,7 @@
     },
     "files.eol": "\n",
   },
+  "go.testFlags": ["-count=1", "-v=1", "-mod=readonly"],
   "go.useLanguageServer": true,
   "go.vetOnSave": "package",
   "gopls": {

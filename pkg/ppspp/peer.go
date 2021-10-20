@@ -196,10 +196,7 @@ func (p *peer) write() (bool, error) {
 
 			nn, err := pw.WriteData(p.w.MTU()-n, bin, t, peerPriority(i))
 			n += nn
-			if err != nil {
-				if !errors.Is(err, codec.ErrNotEnoughSpace) {
-					return true, err
-				}
+			if errors.Is(err, codec.ErrNotEnoughSpace) {
 				break
 			}
 		}

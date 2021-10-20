@@ -9,6 +9,7 @@ on:
       - 'go.sum'
       - 'vendor'
       - 'pkg'
+      - 'internal'
     branches: [ master ]
 
 jobs:

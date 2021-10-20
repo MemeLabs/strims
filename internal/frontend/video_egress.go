@@ -6,31 +6,43 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"go.uber.org/zap"
 )
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
 		videov1.RegisterEgressService(server, &videoEgressService{
-			app: params.App,
+			logger: params.Logger,
+			app:    params.App,
 		})
 	})
 }
 
 // videoEgressService ...
 type videoEgressService struct {
-	app app.Control
+	logger *zap.Logger
+	app    app.Control
 }
 
 // OpenStream ...
 func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOpenStreamRequest) (<-chan *videov1.EgressOpenStreamResponse, error) {
+	uri, err := ppspp.ParseURI(r.SwarmUri)
+	if err != nil {
+		return nil, err
+	}
+	logger := s.logger.With(zap.Stringer("swarm", uri.ID))
+
 	ch := make(chan *videov1.EgressOpenStreamResponse)
 	go func() {
 		defer close(ch)
 
 		transferID, r, err := s.app.VideoEgress().OpenStream(r.SwarmUri, r.NetworkKeys)
 		if err != nil {
+			logger.Debug("opening stream failed", zap.Error(err))
+
 			ch <- &videov1.EgressOpenStreamResponse{
 				Body: &videov1.EgressOpenStreamResponse_Error_{
 					Error: &videov1.EgressOpenStreamResponse_Error{
@@ -92,6 +104,8 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 					n = 0
 					break ReadLoop
 				default:
+					logger.Debug("stream closed", zap.Error(err))
+
 					ch <- &videov1.EgressOpenStreamResponse{
 						Body: &videov1.EgressOpenStreamResponse_Error_{
 							Error: &videov1.EgressOpenStreamResponse_Error{

@@ -242,13 +242,16 @@ func (s *seedSwarmScheduler) assignChannelStreams(c *seedChannelScheduler) {
 }
 
 func (s *seedSwarmScheduler) assignChannelStream(c *seedChannelScheduler, i codec.Stream) {
+	b := s.swarm.store.Tail()
+
 	c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
 		Stream:  i,
-		Address: 0,
+		Address: codec.Address(b),
 	})
-	c.peerRequestStreams[i] = 0
+	c.peerRequestStreams[i] = b
 
-	for it := c.s.haveBins.IterateFilled(); it.NextBase(); {
+	it := c.s.haveBins.IterateFilled()
+	for ok := it.NextBaseAfter(b); ok; ok = it.NextBase() {
 		if c.s.binStream(it.Value()) == i {
 			c.p.PushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 		}
@@ -549,6 +552,10 @@ func (c *seedChannelScheduler) HandlePong(nonce uint64) error {
 }
 
 func (c *seedChannelScheduler) HandleStreamRequest(s codec.Stream, b binmap.Bin) error {
+	if t := c.s.swarm.store.Tail(); b < t {
+		b = t
+	}
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	// add to requested streams map

@@ -1048,7 +1048,10 @@ func (c *peerChannelScheduler) addStreamCancel(s codec.Stream) {
 }
 
 func (c *peerChannelScheduler) addStreamOpen(s codec.Stream, b binmap.Bin) {
-	// add to requested streams map
+	if t := c.s.swarm.store.Tail(); b < t {
+		b = t
+	}
+
 	c.s.streams[s].addSubscriber(c, b)
 
 	it := c.s.haveBins.IterateFilled()

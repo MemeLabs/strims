@@ -159,3 +159,34 @@ func TestBufferBinOps(t *testing.T) {
 	assert.Equal(t, inputBin, b.Cover(binmap.NewBin(0, 0)), "Cover returned incorrect value")
 	assert.Equal(t, true, b.ReadBin(binmap.NewBin(0, 0), make([]byte, chunkSize)), "ReadBin failed")
 }
+
+func TestRecover(t *testing.T) {
+	b, err := NewBuffer(1024, 16)
+	assert.NoError(t, err, "buffer construction failed")
+
+	b.SetOffset(0)
+
+	src := make([]byte, 16)
+	dst := make([]byte, 128*16)
+
+	for i := binmap.Bin(0); i < 256; i = i.LayerRight() {
+		b.Set(i, src)
+	}
+
+	n, err := b.Read(dst)
+	assert.EqualValues(t, 128*16, n)
+	assert.NoError(t, err)
+
+	b.Set(4096, src)
+
+	_, err = b.Read(dst)
+	assert.Equal(t, ErrBufferUnderrun, err)
+
+	rn, err := b.Recover()
+	assert.EqualValues(t, 1920*16, rn)
+	assert.NoError(t, err)
+
+	n, err = b.Read(dst)
+	assert.EqualValues(t, 16, n)
+	assert.NoError(t, err)
+}

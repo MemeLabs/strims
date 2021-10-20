@@ -10,6 +10,7 @@ on:
       - 'go.sum'
       - 'vendor'
       - 'pkg'
+      - 'internal'
 
   pull_request:
     paths:

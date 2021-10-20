@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - "pkg/**"
+      - "internal/**"
       - "infra/**"
       - "integration/**"
       - "hack/**"

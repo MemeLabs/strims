@@ -114,9 +114,8 @@ func NewReaderSize(r io.Reader, offset int64, size int) (c *Reader, err error) {
 		r:      r,
 		header: make([]byte, 0, headerLen),
 		size:   size,
-		off:    int(offset % int64(size)),
-		roff:   math.MaxInt32,
 	}
+	c.SetOffset(offset)
 	return
 }
 
@@ -127,6 +126,12 @@ type Reader struct {
 	size   int // chunk byte length
 	off    int // read offset in current chunk
 	roff   int // record end index in current chunk (int max when undefined)
+}
+
+func (c *Reader) SetOffset(offset int64) {
+	c.header = c.header[:0]
+	c.off = int(offset % int64(c.size))
+	c.roff = math.MaxInt32
 }
 
 // Read implements io.Reader
