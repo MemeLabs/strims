@@ -23,7 +23,7 @@ import (
 
 var (
 	profileDir    string
-	addr          string
+	wsOptions     vnic.WSInterfaceOptions
 	metricsAddr   string
 	rtmpAddr      string
 	debugAddr     string
@@ -38,8 +38,21 @@ func init() {
 		log.Fatalf("failed to locate home directory: %s", err)
 	}
 
+	// TODO: use cobra
+
+	tlsCertFile := path.Join("hack", "tls", "development.crt")
+	tlsKeyFile := path.Join("hack", "tls", "development.key")
+	if _, err := os.Stat(tlsCertFile); os.IsNotExist(err) {
+		tlsCertFile = ""
+	}
+	if _, err := os.Stat(tlsKeyFile); os.IsNotExist(err) {
+		tlsKeyFile = ""
+	}
+
 	flag.StringVar(&profileDir, "profile-dir", homeDir, "profile db location")
-	flag.StringVar(&addr, "addr", ":8082", "bootstrap server listen address")
+	flag.StringVar(&wsOptions.ServerAddress, "addr", ":8082", "bootstrap server listen address")
+	flag.StringVar(&wsOptions.TLSCertFile, "tls-cert", tlsCertFile, "bootstrap server tls cert path")
+	flag.StringVar(&wsOptions.TLSKeyFile, "tls-key", tlsKeyFile, "bootstrap server tls key path")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":1971", "metrics server listen address")
 	flag.StringVar(&rtmpAddr, "rtmp-addr", ":1935", "rtmp server listen address")
 	flag.StringVar(&debugAddr, "debug-addr", ":6060", "debug server listen address")
@@ -94,7 +107,7 @@ func main() {
 			logger,
 			key,
 			vnic.WithLabel(vnicLabel),
-			vnic.WithInterface(vnic.NewWSInterface(logger, addr)),
+			vnic.WithInterface(vnic.NewWSInterface(logger, wsOptions)),
 			vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
 				logger,
 				&vnic.WebRTCDialerOptions{

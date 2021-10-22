@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConnThrottle(t *testing.T) {

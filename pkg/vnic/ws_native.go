@@ -77,19 +77,25 @@ func (w *WSReadWriter) Close() error {
 	return w.c.Close()
 }
 
+type WSInterfaceOptions struct {
+	ServerAddress string
+	TLSCertFile   string
+	TLSKeyFile    string
+}
+
 // NewWSInterface ...
-func NewWSInterface(logger *zap.Logger, serverAddress string) Interface {
+func NewWSInterface(logger *zap.Logger, options WSInterfaceOptions) Interface {
 	return &wsInterface{
-		logger:        logger,
-		ServerAddress: serverAddress,
+		logger:  logger,
+		options: options,
 	}
 }
 
 type wsInterface struct {
-	logger        *zap.Logger
-	ServerAddress string
-	serverLock    sync.Mutex
-	server        *http.Server
+	logger     *zap.Logger
+	options    WSInterfaceOptions
+	serverLock sync.Mutex
+	server     *http.Server
 }
 
 func (f *wsInterface) ValidScheme(scheme string) bool {
@@ -97,7 +103,7 @@ func (f *wsInterface) ValidScheme(scheme string) bool {
 }
 
 func (f *wsInterface) Listen(h *Host) error {
-	if f.ServerAddress == "" {
+	if f.options.ServerAddress == "" {
 		return nil
 	}
 
@@ -114,7 +120,7 @@ func (f *wsInterface) Listen(h *Host) error {
 	}
 
 	srv := &http.Server{
-		Addr: f.ServerAddress,
+		Addr: f.options.ServerAddress,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c, err := upgrader.Upgrade(w, r, nil)
 			if err != nil {
@@ -128,7 +134,16 @@ func (f *wsInterface) Listen(h *Host) error {
 	f.server = srv
 	f.serverLock.Unlock()
 
-	f.logger.Debug("starting websocket server", zap.String("address", f.ServerAddress))
+	f.logger.Debug(
+		"starting websocket server",
+		zap.String("address", f.options.ServerAddress),
+		zap.String("tlsCert", f.options.TLSCertFile),
+		zap.String("tlsKey", f.options.TLSKeyFile),
+	)
+
+	if f.options.TLSCertFile != "" && f.options.TLSKeyFile != "" {
+		return srv.ListenAndServeTLS(f.options.TLSCertFile, f.options.TLSKeyFile)
+	}
 	return srv.ListenAndServe()
 }
 

@@ -19,10 +19,11 @@ import (
 // ErrLockBusy ...
 var ErrLockBusy = errors.New("failed to update busy lock")
 
-const mutexTTL = 30 * time.Second
-const mutexRefreshInterval = 20 * time.Second
-const mutexRecheckMinInterval = 20 * time.Second
-const mutexRecheckMaxInterval = 40 * time.Second
+// TODO: expose as config
+const mutexTTL = 10 * time.Second
+const mutexRefreshInterval = 5 * time.Second
+const mutexRecheckMinInterval = 5 * time.Second
+const mutexRecheckMaxInterval = 15 * time.Second
 
 const mutexPrefix = "mutex:"
 

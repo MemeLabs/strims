@@ -3,7 +3,7 @@ package ppspptest
 import (
 	"testing"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConn(t *testing.T) {

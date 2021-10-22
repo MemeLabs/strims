@@ -40,7 +40,7 @@ RUN go mod download
 COPY assets ./assets
 COPY pkg ./pkg
 COPY src ./src
-COPY vendor ./vendor
+COPY vendor_modules ./vendor_modules
 COPY internal ./internal
 COPY \
   .eslintrc.js \

@@ -1,7 +1,6 @@
 package ppspp
 
 import (
-	"errors"
 	"log"
 	"sync"
 	"time"
@@ -173,7 +172,7 @@ func (p *peer) write() (bool, error) {
 		nn, err := pw.Write(p.w.MTU() - n)
 		n += nn
 		if err != nil {
-			if !errors.Is(err, codec.ErrNotEnoughSpace) {
+			if err != codec.ErrNotEnoughSpace {
 				return true, err
 			}
 
@@ -196,7 +195,7 @@ func (p *peer) write() (bool, error) {
 
 			nn, err := pw.WriteData(p.w.MTU()-n, bin, t, peerPriority(i))
 			n += nn
-			if errors.Is(err, codec.ErrNotEnoughSpace) {
+			if err == codec.ErrNotEnoughSpace {
 				break
 			}
 		}

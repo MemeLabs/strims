@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBufferWriteRead(t *testing.T) {
@@ -160,7 +160,7 @@ func TestBufferBinOps(t *testing.T) {
 	assert.Equal(t, true, b.ReadBin(binmap.NewBin(0, 0), make([]byte, chunkSize)), "ReadBin failed")
 }
 
-func TestRecover(t *testing.T) {
+func TestBufferRecover(t *testing.T) {
 	b, err := NewBuffer(1024, 16)
 	assert.NoError(t, err, "buffer construction failed")
 

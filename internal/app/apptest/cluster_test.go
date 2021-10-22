@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 

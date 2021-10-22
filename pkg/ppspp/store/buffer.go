@@ -260,6 +260,12 @@ func (s *Buffer) Tail() binmap.Bin {
 	return s.tail()
 }
 
+func (s *Buffer) Bounds() (head, tail binmap.Bin) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.head, s.tail()
+}
+
 func (s *Buffer) tail() binmap.Bin {
 	return s.head - binmap.Bin(s.size*2)
 }

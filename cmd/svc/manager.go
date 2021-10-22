@@ -25,7 +25,7 @@ func newManager(logger *zap.Logger) (*manager, error) {
 		Store:  store,
 		Logger: logger,
 		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, "")
+			ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
 			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
 			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
 			if err != nil {

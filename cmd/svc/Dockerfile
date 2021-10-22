@@ -2,7 +2,7 @@ FROM golang:1.17 as build
 
 WORKDIR /go/src/app
 COPY . .
-RUN export CGO_ENABLED=0 && go build -trimpath ./cmd/svc
+RUN export CGO_ENABLED=0 && go build -trimpath -mod=readonly ./cmd/svc
 
 
 FROM alpine:latest

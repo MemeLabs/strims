@@ -230,15 +230,39 @@ func (s *seedSwarmScheduler) assignChannelStreams(c *seedChannelScheduler) {
 	// 	}
 	// }
 
-	for i := 0; i < s.swarm.options.StreamCount; i++ {
-		s.assignChannelStream(c, codec.Stream(i))
-	}
+	s.assignAllChannelStreams(c)
 
 	// how do we pick the streams we want to try reassigning?
 	// * how much bandwidth do we have?
 	// * which streams are performing poorly?
 	// * which streams are undersubscribed?
 	// * are we happy with the distribution we already have? maybe we don't want to do anything
+}
+
+// HAX
+func (s *seedSwarmScheduler) assignAllChannelStreams(c *seedChannelScheduler) {
+	// head, tail := s.swarm.store.Bounds()
+	// if w := binmap.Bin(c.liveWindow * 2); head-tail > w {
+	// 	log.Println(">>> peer live window", w)
+	// 	tail = head - w
+	// }
+
+	tail := s.swarm.store.Tail()
+
+	bins := s.swarm.store.Bins()
+	bins.ResetBefore(tail)
+
+	for i := 0; i < s.swarm.options.StreamCount; i++ {
+		c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
+			Stream:  codec.Stream(i),
+			Address: codec.Address(tail),
+		})
+		c.peerRequestStreams[codec.Stream(i)] = tail
+	}
+
+	for it := bins.IterateFilled(); it.Next(); {
+		c.p.PushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
+	}
 }
 
 func (s *seedSwarmScheduler) assignChannelStream(c *seedChannelScheduler, i codec.Stream) {

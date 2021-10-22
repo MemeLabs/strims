@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 var BenchmarkUvarintLenResult int

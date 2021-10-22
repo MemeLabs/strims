@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPubSubPublish(t *testing.T) {

@@ -67,7 +67,7 @@
     "farce": "^0.4.5",
     "file-loader": "^6.2.0",
     "filter-obj": "^3.0.0",
-    "golang-wasm-async-loader": "file:./vendor/webpack-golang-wasm-async-loader",
+    "golang-wasm-async-loader": "file:./vendor_modules/webpack-golang-wasm-async-loader",
     "history": "^5.0.1",
     "html-webpack-plugin": "^5.3.2",
     "import-sort-style-module": "^6.0.0",
