@@ -59,7 +59,7 @@ module.exports = (env, argv) => {
   };
 
   const staticModuleRule = {
-    test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
+    test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s)$/i,
     type: "asset/resource",
   };
 

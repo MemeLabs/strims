@@ -3,10 +3,11 @@ import { PassThrough } from "stream";
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import * as chatv1 from "../../../apis/strims/chat/v1/chat";
+import { ChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import assetBundle from "../../mocks/chat/assetBundle";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
 
-export default class ChatService {
+export default class ChatService implements ChatFrontendService {
   messages: Readable<chatv1.Message>;
   assetBundles: Readable<chatv1.AssetBundle>;
 

@@ -262,7 +262,7 @@ type MainLayoutContextProps = {
 
 export const MainLayoutContext = createContext<MainLayoutContextProps>(null);
 
-export const MainLayout: React.FC = ({ children }) => {
+export const MainLayoutProvider: React.FC = ({ children }) => {
   const [theaterMode, toggleTheaterMode] = useState<boolean>(false);
   const context = useMemo<MainLayoutContextProps>(
     () => ({
@@ -272,27 +272,37 @@ export const MainLayout: React.FC = ({ children }) => {
     [theaterMode]
   );
 
+  return <MainLayoutContext.Provider value={context}>{children}</MainLayoutContext.Provider>;
+};
+
+const Body: React.FC = ({ children }) => {
+  const { theaterMode } = useContext(MainLayoutContext);
+
   const mainLayoutClass = clsx({
     "main_layout": true,
     "main_layout--theater_mode": theaterMode,
   });
 
   return (
-    <NetworkProvider>
-      <DirectoryProvider>
-        <MainLayoutContext.Provider value={context}>
-          <div className={mainLayoutClass}>
-            <Header />
-            <div className="main_layout__body">
-              <NetworkNav />
-              {children}
-            </div>
-          </div>
-        </MainLayoutContext.Provider>
-      </DirectoryProvider>
-    </NetworkProvider>
+    <div className={mainLayoutClass}>
+      <Header />
+      <div className="main_layout__body">
+        <NetworkNav />
+        {children}
+      </div>
+    </div>
   );
 };
+
+export const MainLayout: React.FC = ({ children }) => (
+  <NetworkProvider>
+    <DirectoryProvider>
+      <MainLayoutProvider>
+        <Body>{children}</Body>
+      </MainLayoutProvider>
+    </DirectoryProvider>
+  </NetworkProvider>
+);
 
 export const MainBodyLayout: React.FC = ({ children }) => {
   return (

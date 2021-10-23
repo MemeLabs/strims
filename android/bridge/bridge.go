@@ -66,7 +66,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 			vnicHost, err := vnic.New(
 				logger,
 				key,
-				vnic.WithInterface(vnic.NewWSInterface(logger, "")),
+				vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})),
 				vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))),
 			)
 			if err != nil {

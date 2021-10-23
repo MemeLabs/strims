@@ -56,10 +56,7 @@ interface VideoProgressBarProps {
   videoControls: VideoControls;
 }
 
-const VideoProgressBar: React.FC<VideoProgressBarProps> = ({
-  videoState,
-  videoControls,
-}) => {
+const VideoProgressBar: React.FC<VideoProgressBarProps> = ({ videoState, videoControls }) => {
   const { playing, bufferStart, bufferEnd, currentTime } = videoState;
 
   const { pause, play, setCurrentTime } = videoControls;
@@ -97,13 +94,13 @@ const VideoProgressBar: React.FC<VideoProgressBarProps> = ({
     }
   };
 
-  const handleSlideStart = (values) => {
+  const handleSlideStart = () => {
     setDragging(true);
     setWasPlaying(playing);
     pause();
   };
 
-  const handleSlideEnd = (values) => {
+  const handleSlideEnd = () => {
     setDragging(false);
 
     if (wasPlaying) {

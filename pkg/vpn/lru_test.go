@@ -19,17 +19,17 @@ func TestLRU(t *testing.T) {
 }
 
 func TestLRUTTL(t *testing.T) {
-	l := newMessageIDLRU(64, 2*time.Millisecond)
+	l := newMessageIDLRU(64, 3*time.Millisecond)
 
 	assert.True(t, l.Insert(MessageID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.True(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 
 	assert.False(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.True(t, l.Insert(MessageID{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 
 	assert.True(t, l.Insert(MessageID{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 

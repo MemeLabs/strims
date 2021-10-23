@@ -77,7 +77,7 @@ func main() {
 		Store:  store,
 		Logger: logger,
 		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, addr)
+			ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{ServerAddress: addr})
 			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
 				logger,
 				&vnic.WebRTCDialerOptions{

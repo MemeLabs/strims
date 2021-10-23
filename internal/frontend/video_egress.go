@@ -102,7 +102,6 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 				case store.ErrBufferUnderrun:
 					d.BufferUnderrun = true
 					n = 0
-					break ReadLoop
 				default:
 					logger.Debug("stream closed", zap.Error(err))
 

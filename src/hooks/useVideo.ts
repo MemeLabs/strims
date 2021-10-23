@@ -2,22 +2,22 @@ import { useRef, useState } from "react";
 
 import useReady from "./useReady";
 
-export const VideoReadyState = {
+export enum VideoReadyState {
   // No information is available about the media resource.
-  HAVE_NOTHING: 0,
+  HAVE_NOTHING = 0,
   // Enough of the media resource has been retrieved that the metadata attributes
   // are initialized. Seeking will no longer raise an exception.
-  HAVE_METADATA: 1,
+  HAVE_METADATA = 1,
   // Data is available for the current playback position, but not enough to
   // actually play more than one frame.
-  HAVE_CURRENT_DATA: 2,
+  HAVE_CURRENT_DATA = 2,
   // Data for the current playback position as well as for at least a little
   // bit of time into the future is available (in other words, at least two frames of video, for example).
-  HAVE_FUTURE_DATA: 3,
+  HAVE_FUTURE_DATA = 3,
   // Enough data is available—and the download rate is high enough—that the
   // media can be played through to the end without interruption.
-  HAVE_ENOUGH_DATA: 4,
-};
+  HAVE_ENOUGH_DATA = 4,
+}
 
 export interface VideoState {
   readyState: number;
@@ -71,6 +71,7 @@ export interface VideoControls {
 
 const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   const ref = useRef<HTMLVideoElement>();
+  const [src, setSrc] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -79,7 +80,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   const [muted, setMuted] = useState(true);
   const [volume, unsafelySetVolume] = useState(0);
   const [savedVolume, setSavedVolume] = useState(0);
-  const [readyState, setReadyState] = useState(0);
+  const [readyState, setReadyState] = useState<VideoReadyState>(VideoReadyState.HAVE_NOTHING);
   const [bufferStart, setBufferStart] = useState(0);
   const [bufferEnd, setBufferEnd] = useState(1);
   const [duration, setDuration] = useState(0);
@@ -233,8 +234,16 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     }
   };
 
-  const src = ref.current?.src;
-  const setSrc = (src: string) => ref.current && src && (ref.current.src = src);
+  useReady(() => {
+    setLoaded(false);
+    setPlaying(false);
+    setPaused(false);
+    setEnded(true);
+    setWaiting(true);
+    setMuted(true);
+
+    ref.current.src = src;
+  }, [ref.current, src]);
 
   return [
     {

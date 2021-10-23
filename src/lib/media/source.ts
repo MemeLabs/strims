@@ -35,6 +35,7 @@ export class Source {
   public reset(): void {
     this.sourceBufferTasks.insert(() => {
       this.sourceBufferTasks.reset();
+      this.sourceBufferTasks.pause();
 
       if (this.sourceBuffer) {
         this.mediaSource.removeSourceBuffer(this.sourceBuffer);
@@ -55,7 +56,6 @@ export class Source {
 
   public appendBuffer(b: ArrayBufferView | ArrayBuffer): void {
     this.sourceBufferTasks.insert(() => this.sourceBuffer.appendBuffer(b));
-    this.sourceBufferTasks.insert(() => this.prune());
   }
 
   public bounds(): [number, number] {
@@ -66,14 +66,14 @@ export class Source {
     return buffered.length === 0 ? [0, 0] : [buffered.start(0), buffered.end(buffered.length - 1)];
   }
 
-  private prune(): void {
-    const [start, end] = this.bounds();
-
-    if (end - start <= 10) {
-      this.sourceBufferTasks.runNext();
-      return;
-    }
-
-    this.sourceBuffer.remove(0, end - 10);
+  public prune(threshold: number): void {
+    this.sourceBufferTasks.insert(() => {
+      const [start, end] = this.bounds();
+      if (start < threshold && threshold < end) {
+        this.sourceBuffer.remove(0, threshold);
+      } else {
+        this.sourceBufferTasks.runNext();
+      }
+    });
   }
 }

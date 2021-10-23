@@ -4,12 +4,14 @@ import useFullscreen from "use-fullscreen";
 
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
+import useReady from "../../hooks/useReady";
 import useVideo from "../../hooks/useVideo";
 import { MainLayoutContext } from "../MainLayout";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
 type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
+  defaultControlsVisible?: boolean;
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
 };
@@ -18,6 +20,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,
   swarmUri,
   mimeType,
+  defaultControlsVisible,
   disableControls = false,
   defaultAspectRatio = "16/9",
 }) => {
@@ -32,15 +35,11 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     console.log(">>>", videoState.error);
   }, [videoState.error]);
 
-  useEffect(() => {
-    if (!videoProps.ref.current || !mediaSource) {
-      return;
-    }
-
+  useReady(() => {
     const src = URL.createObjectURL(mediaSource);
     videoControls.setSrc(src);
     return () => URL.revokeObjectURL(src);
-  }, [videoProps.ref, mediaSource]);
+  }, [mediaSource]);
 
   const waitingSpinner =
     videoState.waiting && videoState.loaded ? (
@@ -81,7 +80,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       <VideoControls
         videoState={videoState}
         videoControls={videoControls}
-        visible={!controlsHidden && !disableControls}
+        visible={(!controlsHidden || defaultControlsVisible) && !disableControls}
         fullscreen={isFullscreen}
         toggleFullscreen={handleToggleFullscreen}
         theaterMode={theaterMode}

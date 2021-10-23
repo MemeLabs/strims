@@ -54,11 +54,12 @@ const useMediaSource = ({
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {
         case EgressOpenStreamResponse.BodyCase.DATA:
-          decoder.write(body.data.data);
           if (body.data.bufferUnderrun) {
             decoder.reset();
             started = false;
           }
+
+          decoder.write(body.data.data);
 
           if (body.data.segmentEnd) {
             decoder.flush();
@@ -68,6 +69,10 @@ const useMediaSource = ({
               started = true;
               videoRef.current.currentTime = end - 1;
               void videoRef.current.play();
+            }
+
+            if (started) {
+              decoder.source.prune(videoRef.current.currentTime - 10);
             }
           }
       }
