@@ -28,8 +28,9 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
   const { theaterMode, toggleTheaterMode } = useContext(MainLayoutContext);
-  const [videoState, videoProps, videoControls] = useVideo();
-  const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef: videoProps.ref });
+  const videoRef = useRef<HTMLVideoElement>();
+  const [videoState, videoProps, videoControls] = useVideo(videoRef);
+  const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
 
   useEffect(() => {
     console.log(">>>", videoState.error);

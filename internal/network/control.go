@@ -121,7 +121,7 @@ func (t *control) Run(ctx context.Context) {
 	for {
 		select {
 		case <-t.certRenewTimeout.C:
-			t.renewExpiredCerts()
+			t.renewExpiredCerts(ctx)
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.PeerAdd:
@@ -243,7 +243,7 @@ func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 
 // renewCertificateWithRenewFunc ...
-func (t *control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
+func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *networkv1.Network, fn certificateRenewFunc) error {
 	subject := t.profile.Name
 	if network.Alias != "" {
 		subject = network.Alias
@@ -258,9 +258,6 @@ func (t *control) renewCertificateWithRenewFunc(network *networkv1.Network, fn c
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	cert, err := fn(ctx, network.Certificate, csr)
 	if err != nil {
 		return err
@@ -273,9 +270,10 @@ func (t *control) renewCertificateWithRenewFunc(network *networkv1.Network, fn c
 }
 
 // renewCertificate ...
-func (t *control) renewCertificate(network *networkv1.Network) error {
+func (t *control) renewCertificate(ctx context.Context, network *networkv1.Network) error {
 	if config := network.GetServerConfig(); config != nil {
 		return t.renewCertificateWithRenewFunc(
+			ctx,
 			network,
 			func(ctx context.Context, _ *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 				return dao.SignCertificateRequestWithNetwork(csr, config)
@@ -284,6 +282,7 @@ func (t *control) renewCertificate(network *networkv1.Network) error {
 	}
 
 	return t.renewCertificateWithRenewFunc(
+		ctx,
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := networkKeyForCertificate(network.Certificate)
@@ -309,6 +308,7 @@ func (t *control) renewCertificate(network *networkv1.Network) error {
 
 func (t *control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *peer) error {
 	return t.renewCertificateWithRenewFunc(
+		ctx,
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			req := &networkv1ca.CAPeerRenewRequest{
@@ -406,7 +406,7 @@ func (t *control) scheduleCertRenewal() {
 	t.certRenewTimeout.Reset(minNextTime.Sub(now))
 }
 
-func (t *control) renewExpiredCerts() {
+func (t *control) renewExpiredCerts(ctx context.Context) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -418,7 +418,7 @@ func (t *control) renewExpiredCerts() {
 
 		if now.After(nextCertificateRenewTime(n.network)) || isCertificateSubjectMismatched(n.network) {
 			go func() {
-				if err := t.renewCertificate(n.network); err != nil {
+				if err := t.renewCertificate(ctx, n.network); err != nil {
 					t.logger.Debug(
 						"network certificate renewal failed",
 						logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),

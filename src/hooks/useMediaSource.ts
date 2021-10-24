@@ -71,9 +71,7 @@ const useMediaSource = ({
               void videoRef.current.play();
             }
 
-            if (started) {
-              decoder.source.prune(videoRef.current.currentTime - 10);
-            }
+            decoder.source.prune(videoRef.current.currentTime - 10);
           }
       }
     });

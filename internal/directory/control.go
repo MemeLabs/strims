@@ -16,7 +16,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -183,7 +182,7 @@ func (t *control) ping(ctx context.Context) {
 	})
 }
 
-func (t *control) client(networkKey []byte) (*rpc.Client, *networkv1directory.DirectoryClient, error) {
+func (t *control) client(networkKey []byte) (*network.RPCClient, *networkv1directory.DirectoryClient, error) {
 	client, err := t.network.Dialer().Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, nil, err

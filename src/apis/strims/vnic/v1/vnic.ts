@@ -8,7 +8,7 @@ import {
 
 export type IPeerInit = {
   protocolVersion?: number;
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
   nodePlatform?: string;
   nodeVersion?: string;
 }
@@ -120,7 +120,7 @@ export class GetConfigRequest {
 }
 
 export type IGetConfigResponse = {
-  config?: IConfig | undefined;
+  config?: IConfig;
 }
 
 export class GetConfigResponse {
@@ -156,7 +156,7 @@ export class GetConfigResponse {
 }
 
 export type ISetConfigRequest = {
-  config?: IConfig | undefined;
+  config?: IConfig;
 }
 
 export class SetConfigRequest {
@@ -192,7 +192,7 @@ export class SetConfigRequest {
 }
 
 export type ISetConfigResponse = {
-  config?: IConfig | undefined;
+  config?: IConfig;
 }
 
 export class SetConfigResponse {

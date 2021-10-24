@@ -6,14 +6,14 @@ import {
   IImage as strims_type_IImage,
 } from "../../../type/image";
 import {
-  BoolValue as google_protobuf_BoolValue,
-  IBoolValue as google_protobuf_IBoolValue,
   BytesValue as google_protobuf_BytesValue,
   IBytesValue as google_protobuf_IBytesValue,
   StringValue as google_protobuf_StringValue,
   IStringValue as google_protobuf_IStringValue,
   UInt64Value as google_protobuf_UInt64Value,
   IUInt64Value as google_protobuf_IUInt64Value,
+  BoolValue as google_protobuf_BoolValue,
+  IBoolValue as google_protobuf_IBoolValue,
 } from "../../../../google/protobuf/wrappers";
 
 export type IServerConfig = {

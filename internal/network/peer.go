@@ -8,7 +8,6 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -46,10 +45,13 @@ func newPeer(
 	certificates *certificateMap,
 ) *peer {
 	return &peer{
-		id:           id,
-		client:       client,
-		vnicPeer:     vnicPeer,
-		logger:       logger,
+		id:       id,
+		client:   client,
+		vnicPeer: vnicPeer,
+		logger: logger.With(
+			zap.Uint64("id", id),
+			logutil.ByteHex("host", vnicPeer.HostID().Bytes(nil)),
+		),
 		observers:    observers,
 		broker:       broker,
 		vpn:          vpn,
@@ -231,9 +233,6 @@ func (p *peer) negotiateNetworks(ctx context.Context) error {
 		return errors.New("cannot begin new negotiation until previous negotiation finishes")
 	}
 	defer atomic.StoreUint32(&p.negotiating, 0)
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-	defer cancel()
 
 	keys := p.certificates.Keys()
 	err := p.client.Network().Negotiate(ctx, &networkv1.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &networkv1.NetworkPeerNegotiateResponse{})

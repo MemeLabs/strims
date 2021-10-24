@@ -37,9 +37,14 @@ func (x *entityExtractor) RemoveNick(nick string) {
 func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 	e := &chatv1.Message_Entities{}
 
-	for _, b := range x.urls.FindAllStringIndex(msg, -1) {
+	for _, b := range x.urls.FindAllStringSubmatchIndex(msg, -1) {
+		url := msg[b[0]:b[1]]
+		if b[2] == -1 {
+			url = "https://" + url
+		}
+
 		e.Links = append(e.Links, &chatv1.Message_Entities_Link{
-			Url:    msg[b[0]:b[1]],
+			Url:    url,
 			Bounds: &chatv1.Message_Entities_Bounds{Start: uint32(b[0]), End: uint32(b[1])},
 		})
 	}

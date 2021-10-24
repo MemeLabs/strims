@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { ComponentProps, useEffect, useRef, useState } from "react";
 
 import useReady from "./useReady";
 
@@ -42,22 +42,6 @@ export interface VideoState {
   error: MediaError | null;
 }
 
-export interface VideoProps {
-  ref: React.MutableRefObject<HTMLVideoElement>;
-  onEnded: () => void;
-  onError: () => void;
-  onPause: () => void;
-  onPlaying: () => void;
-  onCanPlay: () => void;
-  onCanPlayThrough: () => void;
-  onVolumeChange: () => void;
-  onWaiting: () => void;
-  onDurationChange: () => void;
-  onLoadedMetadata: () => void;
-  onLoadedData: () => void;
-  onTimeUpdate: () => void;
-}
-
 export interface VideoControls {
   mute: () => void;
   unmute: () => void;
@@ -69,9 +53,10 @@ export interface VideoControls {
   setSrc: (src: string) => void;
 }
 
-const useVideo = (): [VideoState, VideoProps, VideoControls] => {
-  const ref = useRef<HTMLVideoElement>();
-  const [src, setSrc] = useState("");
+const useVideo = (
+  ref: React.MutableRefObject<HTMLVideoElement>
+): [VideoState, ComponentProps<"video">, VideoControls] => {
+  const [src, setSrc] = useState<string>(null);
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -92,9 +77,15 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   useReady(() => {
     setMuted(ref.current.muted);
     setVolume(ref.current.volume);
-    setPaused(ref.current.paused);
     setReadyState(ref.current.readyState);
   }, [ref.current]);
+
+  useReady(() => {
+    setLoaded(false);
+    setPlaying(false);
+    setEnded(true);
+    setWaiting(true);
+  }, [src]);
 
   const onEnded = () => {
     setPlaying(false);
@@ -177,7 +168,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
       await ref.current.play();
     } catch (e) {
       try {
-        ref.current.muted = true;
+        mute();
         await ref.current.play();
       } catch (e) {
         console.warn("error playing video", e);
@@ -187,10 +178,12 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
 
   const mute = () => {
     setSavedVolume(ref.current.volume);
+    ref.current.muted = true;
     ref.current.volume = 0;
   };
 
   const unmute = () => {
+    ref.current.muted = false;
     ref.current.volume = savedVolume || 0.5;
   };
 
@@ -234,17 +227,6 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     }
   };
 
-  useReady(() => {
-    setLoaded(false);
-    setPlaying(false);
-    setPaused(false);
-    setEnded(true);
-    setWaiting(true);
-    setMuted(true);
-
-    ref.current.src = src;
-  }, [ref.current, src]);
-
   return [
     {
       readyState,
@@ -270,6 +252,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     },
     {
       ref,
+      src,
       onEnded,
       onError,
       onPause,

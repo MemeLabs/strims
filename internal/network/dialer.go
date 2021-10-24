@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -24,8 +26,8 @@ type Dialer interface {
 	Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
 	ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server, error)
 	ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error)
-	Client(networkKey, key, salt []byte) (*rpc.Client, error)
-	ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*rpc.Client, error)
+	Client(networkKey, key, salt []byte) (*RPCClient, error)
+	ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error)
 }
 
 // newDialer ...
@@ -149,21 +151,21 @@ func (t *dialer) ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc
 }
 
 // Client ...
-func (t *dialer) Client(networkKey, key, salt []byte) (*rpc.Client, error) {
+func (t *dialer) Client(networkKey, key, salt []byte) (*RPCClient, error) {
 	dialer, err := t.ClientDialer(networkKey, &DHTHostAddrResolver{key, salt})
 	if err != nil {
 		return nil, err
 	}
-	return rpc.NewClient(t.logger, dialer)
+	return NewRPCClient(t.logger, dialer)
 }
 
 // ClientWithHostAddr ...
-func (t *dialer) ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*rpc.Client, error) {
+func (t *dialer) ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error) {
 	dialer, err := t.ClientDialer(networkKey, &StaticHostAddrResolver{HostAddr{hostID, port}})
 	if err != nil {
 		return nil, err
 	}
-	return rpc.NewClient(t.logger, dialer)
+	return NewRPCClient(t.logger, dialer)
 }
 
 type hostCertKey struct {
@@ -215,4 +217,35 @@ func keyerLess(h keyer, o llrb.Item) bool {
 		return bytes.Compare(h.Key(), o.Key()) == -1
 	}
 	return !o.Less(h)
+}
+
+const (
+	RPCClientRetries = 3
+	RPCClientBackoff = 2
+	RPCClientDelay   = time.Second
+	RPCClientTimeout = 10 * time.Second
+)
+
+func NewRPCClient(logger *zap.Logger, dialer rpc.Dialer) (*RPCClient, error) {
+	c, err := rpc.NewClient(logger, dialer)
+	if err != nil {
+		return nil, err
+	}
+
+	rc := rpc.Caller(rpcutil.NewClientRetrier(c, RPCClientRetries, RPCClientBackoff, RPCClientDelay, RPCClientTimeout))
+	if l := logger.Check(zap.DebugLevel, "enabling client logging"); l != nil {
+		l.Write()
+		rc = rpcutil.NewClientLogger(rc, logger)
+	}
+
+	return &RPCClient{rc, c.Close}, nil
+}
+
+type RPCClient struct {
+	rpc.Caller
+	close func()
+}
+
+func (c *RPCClient) Close() {
+	c.close()
 }

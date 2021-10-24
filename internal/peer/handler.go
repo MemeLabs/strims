@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -9,10 +10,18 @@ import (
 	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
+)
+
+const (
+	RPCClientRetries = 3
+	RPCClientBackoff = 2
+	RPCClientDelay   = 100 * time.Millisecond
+	RPCClientTimeout = time.Second
 )
 
 // NewPeerHandler ...
@@ -30,12 +39,17 @@ func NewPeerHandler(logger *zap.Logger, app app.Control, store *dao.ProfileStore
 			return
 		}
 
+		rc := rpc.Caller(rpcutil.NewClientRetrier(c, RPCClientRetries, RPCClientBackoff, RPCClientDelay, RPCClientTimeout))
+		if l := logger.Check(zap.DebugLevel, "enabling client logging"); l != nil {
+			l.Write()
+			rc = rpcutil.NewClientLogger(rc, logger)
+		}
+
 		p := app.Peer().Add(peer, &client{
-			client:    c,
-			bootstrap: networkv1bootstrap.NewPeerServiceClient(c),
-			ca:        networkv1ca.NewCAPeerClient(c),
-			transfer:  transferv1.NewTransferPeerClient(c),
-			network:   networkv1.NewNetworkPeerClient(c),
+			bootstrap: networkv1bootstrap.NewPeerServiceClient(rc),
+			ca:        networkv1ca.NewCAPeerClient(rc),
+			transfer:  transferv1.NewTransferPeerClient(rc),
+			network:   networkv1.NewNetworkPeerClient(rc),
 		})
 
 		s := rpc.NewServer(logger, &rpc.RWFDialer{
@@ -60,7 +74,6 @@ func NewPeerHandler(logger *zap.Logger, app app.Control, store *dao.ProfileStore
 }
 
 type client struct {
-	client    *rpc.Client
 	bootstrap *networkv1bootstrap.PeerServiceClient
 	ca        *networkv1ca.CAPeerClient
 	transfer  *transferv1.TransferPeerClient

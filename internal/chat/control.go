@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +31,6 @@ type Control interface {
 	RemoveServer(id uint64)
 	SyncEmote(serverID uint64, e *chatv1.Emote)
 	RemoveEmote(id uint64)
-	client(networkKey, key []byte) (*rpc.Client, *chatv1.ChatClient, error)
 	ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
 	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
 }
@@ -151,7 +149,7 @@ func (t *control) RemoveEmote(id uint64) {
 	t.observers.EmitLocal(event.ChatEmoteRemove{ID: id})
 }
 
-func (t *control) client(networkKey, key []byte) (*rpc.Client, *chatv1.ChatClient, error) {
+func (t *control) client(networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {
 	client, err := t.network.Dialer().Client(networkKey, key, ServiceAddressSalt)
 	if err != nil {
 		return nil, nil, err

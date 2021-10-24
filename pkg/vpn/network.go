@@ -335,7 +335,7 @@ func (n *Network) handleMessage(m *Message) error {
 }
 
 func (n *Network) callHandler(m *Message) error {
-	if h, ok := n.handlers[m.Header.DstPort]; ok {
+	if h := n.Handler(m.Header.DstPort); h != nil {
 		var hs networkMessageHandler = func(n *Network, m *Message) error {
 			return h.HandleMessage(m)
 		}

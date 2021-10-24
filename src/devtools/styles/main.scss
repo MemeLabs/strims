@@ -79,11 +79,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  height: 100%;
 
   &__content {
-    background: gray;
+    background: black;
     width: 100%;
-    aspect-ratio: 16/9;
+    max-height: 100%;
     position: relative;
   }
 }

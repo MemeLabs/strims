@@ -51,6 +51,8 @@ func TestVideoCapture(t *testing.T) {
 		close(done)
 	}()
 
+	time.Sleep(100 * time.Millisecond)
+
 	id, err := ctrl[1].VideoCapture().OpenWithSwarmWriterOptions(
 		"application/binary+noise",
 		&networkv1directory.ListingSnippet{},
@@ -63,9 +65,8 @@ func TestVideoCapture(t *testing.T) {
 	_, err = rand.Read(b[:])
 	assert.NoError(t, err)
 
-	writeTicker := time.NewTicker(time.Millisecond * 10)
-
 	var n int
+	writeTicker := time.NewTicker(100 * time.Millisecond)
 WriteLoop:
 	for {
 		select {

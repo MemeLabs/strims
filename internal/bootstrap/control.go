@@ -79,9 +79,6 @@ func (t *control) handlePeerAdd(ctx context.Context, id uint64) {
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
 		var res bootstrap.BootstrapPeerGetPublishEnabledResponse
 		if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
 			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))

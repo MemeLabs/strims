@@ -2,16 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  CertificateRequest as strims_type_CertificateRequest,
-  ICertificateRequest as strims_type_ICertificateRequest,
   Certificate as strims_type_Certificate,
   ICertificate as strims_type_ICertificate,
+  CertificateRequest as strims_type_CertificateRequest,
+  ICertificateRequest as strims_type_ICertificateRequest,
 } from "../../../type/certificate";
 
 export type ICertificateLog = {
   id?: bigint;
   networkID?: bigint;
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class CertificateLog {
@@ -59,8 +59,8 @@ export class CertificateLog {
 }
 
 export type ICARenewRequest = {
-  certificate?: strims_type_ICertificate | undefined;
-  certificateRequest?: strims_type_ICertificateRequest | undefined;
+  certificate?: strims_type_ICertificate;
+  certificateRequest?: strims_type_ICertificateRequest;
 }
 
 export class CARenewRequest {
@@ -102,7 +102,7 @@ export class CARenewRequest {
 }
 
 export type ICARenewResponse = {
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class CARenewResponse {
@@ -188,7 +188,7 @@ export class CAFindRequest {
 }
 
 export type ICAFindResponse = {
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class CAFindResponse {

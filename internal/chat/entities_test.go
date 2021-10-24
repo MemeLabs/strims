@@ -32,7 +32,14 @@ var cases = []entityTest{
 		name:  "link",
 		input: "strims.gg",
 		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 9}}},
+			Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 9}}},
+		},
+	},
+	{
+		name:  "link",
+		input: "http://strims.gg",
+		entities: &chatv1.Message_Entities{
+			Links: []*chatv1.Message_Entities_Link{{Url: "http://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 16}}},
 		},
 	},
 	{
@@ -60,7 +67,7 @@ var cases = []entityTest{
 		name:  "tag",
 		input: "nsfw loud weeb nsfl google.com",
 		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "google.com", Bounds: &chatv1.Message_Entities_Bounds{Start: 20, End: 30}}},
+			Links: []*chatv1.Message_Entities_Link{{Url: "https://google.com", Bounds: &chatv1.Message_Entities_Bounds{Start: 20, End: 30}}},
 			Tags: []*chatv1.Message_Entities_Tag{
 				{Name: "nsfw", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
 				{Name: "loud", Bounds: &chatv1.Message_Entities_Bounds{Start: 5, End: 9}},
@@ -81,7 +88,7 @@ var cases = []entityTest{
 		name:  "entity in link",
 		input: "strims.gg/weeb",
 		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "strims.gg/weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 14}}},
+			Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg/weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 14}}},
 		},
 	},
 }
