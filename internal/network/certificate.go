@@ -12,9 +12,25 @@ import (
 	"github.com/petar/GoLLRB/llrb"
 )
 
+func newCertificateMap() *certificateMap {
+	return &certificateMap{
+		loaded: make(chan struct{}),
+	}
+}
+
 type certificateMap struct {
-	mu sync.Mutex
-	m  llrb.LLRB
+	mu         sync.Mutex
+	m          llrb.LLRB
+	loadedOnce sync.Once
+	loaded     chan struct{}
+}
+
+func (c *certificateMap) SetLoaded() {
+	c.loadedOnce.Do(func() { close(c.loaded) })
+}
+
+func (c *certificateMap) Loaded() <-chan struct{} {
+	return c.loaded
 }
 
 func (c *certificateMap) Insert(network *networkv1.Network) {

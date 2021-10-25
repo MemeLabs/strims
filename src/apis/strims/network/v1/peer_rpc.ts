@@ -1,6 +1,5 @@
 import strims_rpc_Host, { UnaryCallOptions as strims_rpc_UnaryCallOptions } from "@memelabs/protobuf/lib/rpc/host";
 import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
-import { registerType } from "@memelabs/protobuf/lib/rpc/registry";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import {
@@ -18,15 +17,6 @@ import {
   NetworkPeerUpdateCertificateResponse,
 } from "./peer";
 
-registerType("strims.network.v1.NetworkPeerNegotiateRequest", NetworkPeerNegotiateRequest);
-registerType("strims.network.v1.NetworkPeerNegotiateResponse", NetworkPeerNegotiateResponse);
-registerType("strims.network.v1.NetworkPeerOpenRequest", NetworkPeerOpenRequest);
-registerType("strims.network.v1.NetworkPeerOpenResponse", NetworkPeerOpenResponse);
-registerType("strims.network.v1.NetworkPeerCloseRequest", NetworkPeerCloseRequest);
-registerType("strims.network.v1.NetworkPeerCloseResponse", NetworkPeerCloseResponse);
-registerType("strims.network.v1.NetworkPeerUpdateCertificateRequest", NetworkPeerUpdateCertificateRequest);
-registerType("strims.network.v1.NetworkPeerUpdateCertificateResponse", NetworkPeerUpdateCertificateResponse);
-
 export interface NetworkPeerService {
   negotiate(req: NetworkPeerNegotiateRequest, call: strims_rpc_Call): Promise<NetworkPeerNegotiateResponse> | NetworkPeerNegotiateResponse;
   open(req: NetworkPeerOpenRequest, call: strims_rpc_Call): Promise<NetworkPeerOpenResponse> | NetworkPeerOpenResponse;
@@ -35,29 +25,29 @@ export interface NetworkPeerService {
 }
 
 export const registerNetworkPeerService = (host: strims_rpc_Service, service: NetworkPeerService): void => {
-  host.registerMethod<NetworkPeerNegotiateRequest, NetworkPeerNegotiateResponse>("strims.network.v1.NetworkPeer.Negotiate", service.negotiate.bind(service));
-  host.registerMethod<NetworkPeerOpenRequest, NetworkPeerOpenResponse>("strims.network.v1.NetworkPeer.Open", service.open.bind(service));
-  host.registerMethod<NetworkPeerCloseRequest, NetworkPeerCloseResponse>("strims.network.v1.NetworkPeer.Close", service.close.bind(service));
-  host.registerMethod<NetworkPeerUpdateCertificateRequest, NetworkPeerUpdateCertificateResponse>("strims.network.v1.NetworkPeer.UpdateCertificate", service.updateCertificate.bind(service));
+  host.registerMethod<NetworkPeerNegotiateRequest, NetworkPeerNegotiateResponse>("strims.network.v1.NetworkPeer.Negotiate", service.negotiate.bind(service), NetworkPeerNegotiateRequest);
+  host.registerMethod<NetworkPeerOpenRequest, NetworkPeerOpenResponse>("strims.network.v1.NetworkPeer.Open", service.open.bind(service), NetworkPeerOpenRequest);
+  host.registerMethod<NetworkPeerCloseRequest, NetworkPeerCloseResponse>("strims.network.v1.NetworkPeer.Close", service.close.bind(service), NetworkPeerCloseRequest);
+  host.registerMethod<NetworkPeerUpdateCertificateRequest, NetworkPeerUpdateCertificateResponse>("strims.network.v1.NetworkPeer.UpdateCertificate", service.updateCertificate.bind(service), NetworkPeerUpdateCertificateRequest);
 }
 
 export class NetworkPeerClient {
   constructor(private readonly host: strims_rpc_Host) {}
 
   public negotiate(req?: INetworkPeerNegotiateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<NetworkPeerNegotiateResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Negotiate", new NetworkPeerNegotiateRequest(req)), opts);
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Negotiate", new NetworkPeerNegotiateRequest(req)), NetworkPeerNegotiateResponse, opts);
   }
 
   public open(req?: INetworkPeerOpenRequest, opts?: strims_rpc_UnaryCallOptions): Promise<NetworkPeerOpenResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Open", new NetworkPeerOpenRequest(req)), opts);
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Open", new NetworkPeerOpenRequest(req)), NetworkPeerOpenResponse, opts);
   }
 
   public close(req?: INetworkPeerCloseRequest, opts?: strims_rpc_UnaryCallOptions): Promise<NetworkPeerCloseResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Close", new NetworkPeerCloseRequest(req)), opts);
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.Close", new NetworkPeerCloseRequest(req)), NetworkPeerCloseResponse, opts);
   }
 
   public updateCertificate(req?: INetworkPeerUpdateCertificateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<NetworkPeerUpdateCertificateResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.UpdateCertificate", new NetworkPeerUpdateCertificateRequest(req)), opts);
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkPeer.UpdateCertificate", new NetworkPeerUpdateCertificateRequest(req)), NetworkPeerUpdateCertificateResponse, opts);
   }
 }
 

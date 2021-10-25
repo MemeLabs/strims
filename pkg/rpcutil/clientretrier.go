@@ -30,16 +30,29 @@ func (c *ClientRetrier) CallUnary(ctx context.Context, method string, req proto.
 	retries := c.maxRetries
 	delay := c.delay
 
+	var timer *time.Timer
+
 	for {
 		callCtx, cancel := context.WithTimeout(ctx, c.timeout)
 		err := c.c.CallUnary(callCtx, method, req, res)
 		cancel()
 
-		if err == nil || retries <= 0 || ctx.Err() == context.Canceled || ctx.Err() == context.DeadlineExceeded {
+		if err == nil || retries == 0 {
 			return err
 		}
 
-		time.Sleep(delay)
+		if timer == nil {
+			timer = time.NewTimer(delay)
+			defer timer.Stop()
+		} else {
+			timer.Reset(delay)
+		}
+
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 
 		retries--
 		if c.backoff > 0 {

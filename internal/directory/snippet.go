@@ -2,7 +2,6 @@ package directory
 
 import (
 	"bytes"
-	"sort"
 
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
@@ -22,11 +21,7 @@ func diffSnippets(a, b *networkv1directory.ListingSnippet) *networkv1directory.L
 	if a.Description != b.Description {
 		delta.Description = &wrapperspb.StringValue{Value: b.Description}
 	}
-
-	tags := make([]string, len(b.Tags))
-	copy(tags, b.Tags)
-	sort.Strings(tags)
-	if !sortutil.EqualStrings(a.Tags, tags) {
+	if !sortutil.EqualStrings(a.Tags, b.Tags) {
 		delta.TagsOneof = &networkv1directory.ListingSnippetDelta_Tags_{Tags: &networkv1directory.ListingSnippetDelta_Tags{Tags: b.Tags}}
 	}
 	if a.Category != b.Category {

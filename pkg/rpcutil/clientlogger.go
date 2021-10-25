@@ -29,7 +29,7 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 	if err != nil {
 		c.logger.Debug(
 			"rpc error",
-			zap.Stringer("rtt", timeutil.Now().Sub(start)),
+			zap.Stringer("duration", timeutil.Now().Sub(start)),
 			zap.String("method", method),
 			zap.Reflect("req", req),
 			zap.Error(err),
@@ -39,7 +39,7 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 
 	c.logger.Debug(
 		"rpc response",
-		zap.Stringer("rtt", timeutil.Now().Sub(start)),
+		zap.Stringer("duration", timeutil.Now().Sub(start)),
 		zap.String("method", method),
 		zap.Reflect("req", req),
 		zap.Reflect("res", res),

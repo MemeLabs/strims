@@ -78,7 +78,7 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		certRenewTimeout: time.NewTimer(0),
 		networks:         map[uint64]*network{},
 		peers:            map[uint64]*peer{},
-		certificates:     &certificateMap{},
+		certificates:     newCertificateMap(),
 	}
 }
 
@@ -379,6 +379,8 @@ func (t *control) startNetworks() {
 
 		t.observers.EmitLocal(event.NetworkStart{Network: n})
 	}
+
+	t.certificates.SetLoaded()
 }
 
 func (t *control) scheduleCertRenewal() {

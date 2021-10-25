@@ -234,6 +234,12 @@ func (p *peer) negotiateNetworks(ctx context.Context) error {
 	}
 	defer atomic.StoreUint32(&p.negotiating, 0)
 
+	select {
+	case <-p.certificates.Loaded():
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
 	keys := p.certificates.Keys()
 	err := p.client.Network().Negotiate(ctx, &networkv1.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &networkv1.NetworkPeerNegotiateResponse{})
 	if err != nil {

@@ -77,7 +77,7 @@ type Host struct {
 
 	profileID kademlia.ID
 	peers     map[string]struct{}
-	conns     []*ppspptest.MeterConn
+	conns     []ppspptest.Conn
 }
 
 // NewCluster ...
@@ -167,15 +167,12 @@ func (c *Cluster) Run() error {
 
 				c0, c1 := ppspptest.NewUnbufferedConnPair()
 
-				mc0 := ppspptest.NewMeterConn(c0)
-				mc1 := ppspptest.NewMeterConn(c1)
-
-				c.Hosts[i].conns = append(c.Hosts[i].conns, mc0)
-				sortedNodes[j].conns = append(sortedNodes[j].conns, mc1)
+				c.Hosts[i].conns = append(c.Hosts[i].conns, c0)
+				sortedNodes[j].conns = append(sortedNodes[j].conns, c1)
 
 				wg.Add(2)
-				c.Hosts[i].VNIC.AddLink(mc0)
-				sortedNodes[j].VNIC.AddLink(mc1)
+				c.Hosts[i].VNIC.AddLink(c0)
+				sortedNodes[j].VNIC.AddLink(c1)
 
 				n++
 			}
