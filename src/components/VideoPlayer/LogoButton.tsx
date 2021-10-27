@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useDebounce } from "react-use";
 import { useHover } from "use-events";
 
-export type LogoButtonProps = {
+export interface LogoButtonProps {
   spin?: boolean;
   flicker?: boolean;
   pulse?: boolean;
@@ -13,7 +13,7 @@ export type LogoButtonProps = {
   error?: boolean;
   idleTimeout?: number;
   onClick?: (e: React.UIEvent) => void;
-};
+}
 
 const LogoButton: React.FC<LogoButtonProps> = ({
   spin = false,

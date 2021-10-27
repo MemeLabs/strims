@@ -1,4 +1,5 @@
 import "../styles/main.scss";
+import "../lib/i18n";
 
 import React from "react";
 import ReactDOM from "react-dom";

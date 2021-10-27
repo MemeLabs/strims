@@ -1,3 +1,5 @@
+.devcontainer
+.vscode
 vendor
 src/apis/google
 src/apis/strims

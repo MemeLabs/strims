@@ -9,6 +9,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Descendant,
   Editor,
@@ -78,6 +79,8 @@ interface ComposerProps {
 }
 
 const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
+  const { t } = useTranslation();
+
   const [[matchSources, matchEntries], setMatch] = useState<Match>(defaultMatch);
   const [selectedMatch, setSelectedMatch] = useState<SelectedMatch>(defaultSelectedMatch);
   const [currentSearch, setSearch] = useState<SearchState | null>(null);
@@ -233,7 +236,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
         <Editable
           decorate={decorate}
           onKeyDown={onKeyDown}
-          placeholder="Write a message..."
+          placeholder={t("chat.composer.Write a message")}
           renderLeaf={renderLeaf}
         />
       </Slate>
@@ -469,10 +472,11 @@ const useSearchSources = (
   emotes: string[],
   modifiers: string[]
 ): SearchSources => {
+  const { t } = useTranslation();
   const sources: SearchSources = {
     nicks: useMemo(
       () => ({
-        label: "members",
+        label: t("chat.composer.members"),
         entries: nicks.map((v) => ({
           type: "nick",
           value: v,
@@ -483,7 +487,7 @@ const useSearchSources = (
     ),
     tags: useMemo(
       () => ({
-        label: "tags",
+        label: t("chat.composer.tags"),
         entries: tags.map((v) => ({
           type: "tag",
           value: v,
@@ -494,7 +498,7 @@ const useSearchSources = (
     ),
     commands: useMemo(
       () => ({
-        label: "commands",
+        label: t("chat.composer.commands"),
         entries: commands.map((v) => ({
           type: "command",
           value: v,
@@ -506,7 +510,7 @@ const useSearchSources = (
     ),
     emotes: useMemo(
       () => ({
-        label: "emotes",
+        label: t("chat.composer.emotes"),
         entries: emotes.map((v) => ({
           type: "emote",
           value: v,
@@ -517,7 +521,7 @@ const useSearchSources = (
     ),
     modifiers: useMemo(
       () => ({
-        label: "modifiers",
+        label: t("chat.composer.modifiers"),
         entries: modifiers.map((v) => ({
           type: "modifier",
           value: v,

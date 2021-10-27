@@ -10,11 +10,11 @@ import { MainLayoutContext } from "../MainLayout";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
-type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
+interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> {
   defaultControlsVisible?: boolean;
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
-};
+}
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,

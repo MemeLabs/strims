@@ -39,6 +39,13 @@
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
+  "[jsonc]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+  },
+  "files.associations": {
+    "**/locales/*/*.json": "jsonc",
+  },
   "prettier.configPath": ".prettierrc.json",
   "[go]": {
     "editor.formatOnSave": true,

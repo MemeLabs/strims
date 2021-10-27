@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
+import { useTranslation } from "react-i18next";
 import { BiConversation, BiSmile } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
@@ -110,6 +111,8 @@ interface ChatThingProps {
 }
 
 const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
+  const { t } = useTranslation();
+
   const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
@@ -139,7 +142,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
       <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
       <div className="chat__messages">
         <ChatDrawer
-          title="Emotes"
+          title={t("chat.drawers.Emotes")}
           side="left"
           role={ChatDrawerRole.Emotes}
           active={activePanel === ChatDrawerRole.Emotes}
@@ -148,7 +151,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
           <EmotesDrawer />
         </ChatDrawer>
         <ChatDrawer
-          title="Whispers"
+          title={t("chat.drawers.Whispers")}
           side="left"
           role={ChatDrawerRole.Whispers}
           active={activePanel === ChatDrawerRole.Whispers}
@@ -157,7 +160,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
           <TestContent />
         </ChatDrawer>
         <ChatDrawer
-          title="Settings"
+          title={t("chat.drawers.Settings")}
           side="right"
           role={ChatDrawerRole.Settings}
           active={activePanel === ChatDrawerRole.Settings}
@@ -166,7 +169,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
           <SettingsDrawer />
         </ChatDrawer>
         <ChatDrawer
-          title="Users"
+          title={t("chat.drawers.Users")}
           side="right"
           role={ChatDrawerRole.Users}
           active={activePanel === ChatDrawerRole.Users}

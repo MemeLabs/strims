@@ -1,0 +1,81 @@
+{
+  "To get started, edit <1>src/App.js</1> and save to reload.": "To get started, edit <1>src/App.js</1> and save to reload.",
+  "Welcome to React": "Welcome to React and react-i18next",
+  "welcome": "Hello <br/> <strong>World</strong>",
+
+  // video player
+  "player": {
+    "Exit theater mode": "Exit theater mode",
+    "Theater mode": "Theater mode",
+    "Exit full screen": "Exit full screen",
+    "Full screen": "Full screen",
+    "Mute": "Mute",
+    "Unmute": "Unmute",
+    "Pause": "Pause",
+    "Play": "Play",
+    "Miniplayer": "Miniplayer"
+  },
+
+  "chat": {
+    "More messages below": "More messages below",
+
+    "composer": {
+      "members": "members",
+      "tags": "tags",
+      "commands": "commands",
+      "emotes": "emotes",
+      "modifiers": "modifiers",
+      "Write a message": "Write a message..."
+    },
+
+    "drawers": {
+      "Emotes": "Emotes",
+      "Whispers": "Whispers",
+      "Settings": "Settings",
+      "Users": "Users"
+    },
+
+    "settings": {
+      "Messages": "Messages",
+      "Whispers": "Whispers",
+      "Highlights, focus &amp; tags": "Highlights, focus &amp; tags",
+      "Autocomplete": "Autocomplete",
+      "Message formatters": "Message formatters",
+
+      "Show flair": "Show flair",
+      "Show time": "Show time",
+      "Harsh ignore": "Harsh ignore",
+      "Hide messages tagged nsfw or nsfl": "Hide messages tagged nsfw or nsfl",
+      "Loop animated emotes forever": "Loop animated emotes forever",
+      "Disable spoilers": "Disable spoilers",
+      "Shorten long links": "Shorten long links",
+      "Legacy emote spacing": "Legacy emote spacing",
+      "Maximum messages": "Maximum messages",
+      "Stream viewer indicators": "Stream viewer indicators",
+      "Banned messages": "Banned messages",
+      "In-line messages": "In-line messages",
+      "Highlight when mentioned": "Highlight when mentioned",
+      "Include mentions when focused": "Include mentions when focused",
+      "Increase visibility of tagged users": "Increase visibility of tagged users",
+      "Custom highlights": "Custom highlights",
+      "Comma separated...": "Comma separated...",
+      "Autocomplete helper": "Autocomplete helper",
+      "Show emote previews": "Show emote previews",
+      "Greentext": "Greentext",
+      "Emotes": "Emotes",
+      "Combos": "Combos",
+      "Modifiers": "Modifiers",
+
+      // viewer state indicator options
+      "Disable": "Disable",
+      "Bar": "Bar",
+      "Dot": "Dot",
+      "Array": "Array",
+
+      // banned messages options
+      "Remove": "Remove",
+      "Censor": "Censor",
+      "Do nothing": "Do nothing"
+    }
+  }
+}

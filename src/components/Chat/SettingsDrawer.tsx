@@ -1,7 +1,8 @@
 import { Base64 } from "js-base64";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
+import { Trans, useTranslation } from "react-i18next";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import { SelectInput, TextAreaInput, TextInput, ToggleInput } from "../../components/Form";
@@ -47,41 +48,43 @@ interface SettingsFormData {
   };
 }
 
-const viewerStateIndicatorOptions = [
-  {
-    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED,
-    label: "Disable",
-  },
-  {
-    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
-    label: "Bar",
-  },
-  {
-    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DOT,
-    label: "Dot",
-  },
-  {
-    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_ARRAY,
-    label: "Array",
-  },
-];
-
-const showRemovedOptions = [
-  {
-    value: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
-    label: "Remove",
-  },
-  {
-    value: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
-    label: "Censor",
-  },
-  {
-    value: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
-    label: "Do nothing",
-  },
-];
-
 const SettingsDrawer: React.FC = () => {
+  const { t } = useTranslation();
+
+  const viewerStateIndicatorOptions = [
+    {
+      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED,
+      label: t("chat.settings.Disable"),
+    },
+    {
+      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
+      label: t("chat.settings.Bar"),
+    },
+    {
+      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DOT,
+      label: t("chat.settings.Dot"),
+    },
+    {
+      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_ARRAY,
+      label: t("chat.settings.Array"),
+    },
+  ];
+
+  const showRemovedOptions = [
+    {
+      value: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
+      label: t("chat.settings.Remove"),
+    },
+    {
+      value: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
+      label: t("chat.settings.Censor"),
+    },
+    {
+      value: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
+      label: t("chat.settings.Do nothing"),
+    },
+  ];
+
   const [chat, { mergeUIConfig }] = useChat();
 
   const { control, getValues, reset } = useForm<SettingsFormData>({ mode: "onBlur" });
@@ -130,58 +133,60 @@ const SettingsDrawer: React.FC = () => {
       <form className="chat__settings_form">
         {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
         <fieldset>
-          <legend>Messages</legend>
+          <legend>
+            <Trans>chat.settings.Messages</Trans>
+          </legend>
           <ToggleInput
             control={control}
-            label="Show flair"
+            label={t("chat.settings.Show flair")}
             name="showFlairIcons"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Show time"
+            label={t("chat.settings.Show time")}
             name="showTime"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Harsh ignore"
+            label={t("chat.settings.Harsh ignore")}
             name="ignoreMentions"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Hide messages tagged nsfw or nsfl"
+            label={t("chat.settings.Hide messages tagged nsfw or nsfl")}
             name="hideNsfw"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Loop animated emotes forever"
+            label={t("chat.settings.Loop animated emotes forever")}
             name="animateForever"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Disable spoilers"
+            label={t("chat.settings.Disable spoilers")}
             name="disableSpoilers"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Shorten long links"
+            label={t("chat.settings.Shorten long links")}
             name="shortenLinks"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Legacy emote spacing"
+            label={t("chat.settings.Legacy emote spacing")}
             name="legacyEmoteSpacing"
             onChange={handleChange}
           />
           <TextInput
             control={control}
-            label="Maximum messages"
+            label={t("chat.settings.Maximum messages")}
             name="maxLines"
             type="number"
             rules={{
@@ -194,110 +199,103 @@ const SettingsDrawer: React.FC = () => {
           />
           <SelectInput
             control={control}
-            label="Stream viewer indicators"
+            label={t("chat.settings.Stream viewer indicators")}
             name="viewerStateIndicator"
             options={viewerStateIndicatorOptions}
             onChange={handleChange}
           />
           <SelectInput
             control={control}
-            label="Banned messages"
+            label={t("chat.settings.Banned messages")}
             name="showRemoved"
             options={showRemovedOptions}
             onChange={handleChange}
           />
         </fieldset>
         <fieldset>
-          <legend>Autocomplete</legend>
+          <legend>
+            <Trans>chat.settings.Whispers</Trans>
+          </legend>
           <ToggleInput
             control={control}
-            label="Auto-complete helper"
-            name="autocompleteHelper"
-            onChange={handleChange}
-          />
-          <ToggleInput
-            control={control}
-            label="Show emote preview"
-            name="autocompleteEmotePreview"
-            onChange={handleChange}
-          />
-        </fieldset>
-        <fieldset>
-          <legend>Whispers</legend>
-          <ToggleInput
-            control={control}
-            label="In-line messages"
+            label={t("chat.settings.In-line messages")}
             name="showWhispersInChat"
             onChange={handleChange}
           />
         </fieldset>
 
         <fieldset>
-          <legend>Highlights, focus &amp; tags</legend>
+          <legend>
+            <Trans>chat.settings.Highlights, focus &amp; tags</Trans>
+          </legend>
           <ToggleInput
             control={control}
-            label="Highlight when mentioned"
+            label={t("chat.settings.Highlight when mentioned")}
             name="highlight"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Include mentions when focused"
+            label={t("chat.settings.Include mentions when focused")}
             name="ignoreMentions"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Increase visibility of tagged users"
+            label={t("chat.settings.Increase visibility of tagged users")}
             name="taggedVisibility"
             onChange={handleChange}
           />
           <TextAreaInput
             control={control}
-            label="Custom highlights"
+            label={t("chat.settings.Custom highlights")}
             name="customHighlight"
-            placeholder="Comma separated..."
+            placeholder={t("chat.settings.Comma separated...")}
             onBlur={handleChange}
           />
         </fieldset>
         <fieldset>
-          <legend>Autocomplete</legend>
+          <legend>
+            <Trans>chat.settings.Autocomplete</Trans>
+          </legend>
           <ToggleInput
             control={control}
-            label="Autocomplete helper"
+            label={t("chat.settings.Autocomplete helper")}
             name="autocompleteHelper"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Show emote previews"
+            label={t("chat.settings.Show emote previews")}
             name="autocompleteEmotePreview"
             onChange={handleChange}
           />
         </fieldset>
         <fieldset>
-          <legend>Message formatters</legend>
+          <legend>
+            <Trans>chat.settings.Message formatters</Trans>
+          </legend>
           <ToggleInput
             control={control}
-            label="Greentext"
+            label={t("chat.settings.Greentext")}
             name="formatterGreen"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Emotes"
+            label={t("chat.settings.Emotes")}
             name="formatterEmote"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Combos"
+            label={t("chat.settings.Combos")}
             name="formatterCombo"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label="Modifiers"
+            label={t("chat.settings.Modifiers")}
             name="emoteModifiers"
             onChange={handleChange}
           />

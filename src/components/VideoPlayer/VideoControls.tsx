@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { IconType } from "react-icons/lib";
 import {
   MdFullscreen,
@@ -19,12 +20,12 @@ import { VideoControls, VideoState } from "../../hooks/useVideo";
 import VideoProgressBar from "./VideoProgressBar";
 import VideoVolume from "./VideoVolume";
 
-type ButtonProps = {
+interface ButtonProps {
   className: string;
   tooltip: string;
   icon: IconType;
   onClick: React.EventHandler<React.UIEvent>;
-};
+}
 
 const Button: React.FC<ButtonProps> = ({ className, tooltip, icon: Icon, onClick }) => (
   <div className={clsx("button-wrap", className)}>
@@ -34,52 +35,64 @@ const Button: React.FC<ButtonProps> = ({ className, tooltip, icon: Icon, onClick
   </div>
 );
 
-type PiPButtonProps = {
+interface PiPButtonProps {
   supported: boolean;
   toggle: () => void;
+}
+
+const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) => {
+  const { t } = useTranslation();
+  return !supported ? null : (
+    <Button
+      className="pip"
+      tooltip={t("player.Miniplayer")}
+      onClick={toggle}
+      icon={MdPictureInPictureAlt}
+    />
+  );
 };
 
-const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) =>
-  !supported ? null : (
-    <Button className="pip" tooltip="Miniplayer" onClick={toggle} icon={MdPictureInPictureAlt} />
-  );
-
-type TheaterButtonProps = {
+interface TheaterButtonProps {
   enabled: boolean;
   toggle: (state: boolean) => void;
+}
+
+const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => {
+  const { t } = useTranslation();
+  return (
+    <Button
+      className="theater"
+      tooltip={enabled ? t("player.Exit theater mode") : t("player.Theater mode")}
+      onClick={() => toggle(!enabled)}
+      icon={enabled ? RiLayout6Line : RiLayoutRightLine}
+    />
+  );
 };
 
-const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => (
-  <Button
-    className="theater"
-    tooltip={enabled ? "Exit theater mode" : "Theater mode"}
-    onClick={() => toggle(!enabled)}
-    icon={enabled ? RiLayout6Line : RiLayoutRightLine}
-  />
-);
-
-type FullscreenButtonProps = {
+interface FullscreenButtonProps {
   supported: boolean;
   enabled: boolean;
   toggle: () => void;
-};
+}
 
-const FullscreenButton: React.FC<FullscreenButtonProps> = ({ supported, enabled, toggle }) =>
-  !supported ? null : (
+const FullscreenButton: React.FC<FullscreenButtonProps> = ({ supported, enabled, toggle }) => {
+  const { t } = useTranslation();
+  return !supported ? null : (
     <Button
       className="fullscreen"
-      tooltip={enabled ? "Exit full screen" : "Full screen"}
+      tooltip={enabled ? t("player.Exit full screen") : t("player.Full screen")}
       onClick={toggle}
       icon={enabled ? MdFullscreenExit : MdFullscreen}
     />
   );
+};
 
-type VolumeControlProps = {
+interface VolumeControlProps {
   volume: number;
   videoControls: VideoControls;
   onUpdateStart: () => void;
   onUpdateEnd: () => void;
-};
+}
 
 const VolumeControl: React.FC<VolumeControlProps> = ({
   volume,
@@ -87,6 +100,8 @@ const VolumeControl: React.FC<VolumeControlProps> = ({
   onUpdateStart,
   onUpdateEnd,
 }) => {
+  const { t } = useTranslation();
+
   const volumeIcons = [MdVolumeOff, MdVolumeMute, MdVolumeDown, MdVolumeUp];
   const volumeLevel = Math.ceil(volume * (volumeIcons.length - 1));
   const VolumeIcon = volumeIcons[volumeLevel];
@@ -94,7 +109,10 @@ const VolumeControl: React.FC<VolumeControlProps> = ({
 
   return (
     <div className="volume button-wrap">
-      <button data-tip={volume === 0 ? "Unmute" : "Mute"} onClick={handleVolumeClick}>
+      <button
+        data-tip={volume === 0 ? t("player.Unmute") : t("player.Mute")}
+        onClick={handleVolumeClick}
+      >
         <VolumeIcon className={`volume-level-${volumeLevel}`} />
       </button>
       <VideoVolume
@@ -107,7 +125,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({
   );
 };
 
-type VideoControlsProps = {
+interface VideoControlsProps {
   visible: boolean;
   fullscreen: boolean;
   toggleFullscreen: () => void;
@@ -115,9 +133,11 @@ type VideoControlsProps = {
   toggleTheaterMode: (state: boolean) => void;
   videoState: VideoState;
   videoControls: VideoControls;
-};
+}
 
 const VideoControls: React.FC<VideoControlsProps> = (props) => {
+  const { t } = useTranslation();
+
   const [active, setActive] = useState(false);
   const visible = props.visible || active;
 
@@ -150,7 +170,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
       <div className="controls_group left">
         <Button
           className="play"
-          tooltip={playing ? "Pause" : "Play"}
+          tooltip={playing ? t("player.Pause") : t("player.Play")}
           onClick={playing ? videoControls.pause : videoControls.play}
           icon={playing ? MdPause : MdPlayArrow}
         />

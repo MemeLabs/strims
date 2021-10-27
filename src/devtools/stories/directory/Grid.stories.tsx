@@ -1,10 +1,10 @@
 import React from "react";
 
-import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
-import { DirectoryGrid } from "../../pages/Directory";
-import Nav from "../components/Nav";
+import { Listing, ListingSnippet } from "../../../apis/strims/network/v1/directory/directory";
+import { DirectoryGrid } from "../../../pages/Directory";
+import Nav from "../../components/Nav";
 
-const Foo: React.FC = () => {
+const Grid: React.FC = () => {
   const listing = {
     id: BigInt(1),
     listing: new Listing({
@@ -47,13 +47,15 @@ const Foo: React.FC = () => {
   }
 
   return (
-    <>
-      <Nav />
-      <div className="chat_mockup">
-        <DirectoryGrid networkKey="" listings={listings} />;
-      </div>
-    </>
+    <div className="chat_mockup">
+      <DirectoryGrid networkKey="" listings={listings} />
+    </div>
   );
 };
 
-export default Foo;
+export default [
+  {
+    name: "grid",
+    component: () => <Grid />,
+  },
+];

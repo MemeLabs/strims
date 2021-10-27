@@ -1,13 +1,7 @@
 import clsx from "clsx";
-import React, {
-  CSSProperties,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
+import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
 import { useDebounce } from "react-use";
 import {
@@ -203,7 +197,9 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
       </Scrollbars>
       {!autoScroll && (
         <div className="chat__scroller__resume_autoscroll" onClick={resumeAutoScroll}>
-          <span>More messages below</span>
+          <span>
+            <Trans>More messages below</Trans>
+          </span>
           <FiArrowDownCircle />
         </div>
       )}

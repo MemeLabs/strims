@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
@@ -8,6 +9,7 @@ const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin"
 const TerserPlugin = require("terser-webpack-plugin");
 const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
+const JSON5 = require("json5");
 
 module.exports = (env, argv) => {
   const scriptModuleRule = {
@@ -115,6 +117,15 @@ module.exports = (env, argv) => {
         {
           src: path.resolve("assets/splat.png"),
           sizes: [96, 128, 192, 256, 384, 512], // multiple sizes
+        },
+      ],
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: "public/locales",
+          to: "locales",
+          transform: (content) => JSON.stringify(JSON5.parse(content)),
         },
       ],
     }),
