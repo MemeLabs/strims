@@ -1,5 +1,5 @@
 import { Base64 } from "js-base64";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
@@ -226,7 +226,7 @@ const SettingsDrawer: React.FC = () => {
 
         <fieldset>
           <legend>
-            <Trans>chat.settings.Highlights, focus &amp; tags</Trans>
+            <Trans>chat.settings.Highlights, focus, and tags</Trans>
           </legend>
           <ToggleInput
             control={control}
@@ -250,7 +250,7 @@ const SettingsDrawer: React.FC = () => {
             control={control}
             label={t("chat.settings.Custom highlights")}
             name="customHighlight"
-            placeholder={t("chat.settings.Comma separated...")}
+            placeholder={t("chat.settings.Comma separated")}
             onBlur={handleChange}
           />
         </fieldset>

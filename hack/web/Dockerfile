@@ -14,7 +14,7 @@ ENV PATH="${GOPATH}/bin:${GOROOT}/bin:${PATH}"
 RUN \
   # Install deps
   apt-get update \
-  && apt-get install -y build-essential curl brotli \
+  && apt-get install -y build-essential git-core curl brotli \
   # Install go
   && curl -LO "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
   && tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz" \
@@ -37,10 +37,11 @@ COPY \
 # cache go modules
 RUN go mod download
 
+COPY .git ./.git
 COPY assets ./assets
-COPY pkg ./pkg
 COPY src ./src
 COPY vendor_modules ./vendor_modules
+COPY pkg ./pkg
 COPY internal ./internal
 COPY \
   .eslintrc.js \

@@ -2,24 +2,13 @@
 @import "mixins.scss";
 
 .main_layout {
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background: var(--body-bg);
   border-right: 1px solid var(--body-border-color);
   color: var(--body-color);
-
-  // @include color-scheme("dark") {
-  //   background: $slate-200;
-  //   border-right: 1px solid $slate-500;
-  //   color: #f6f6f6;
-  // }
-  // @include color-scheme("light") {
-  //   background: white;
-  //   border-right: 1px solid #ddd;
-  //   color: #222;
-  // }
 
   &__header {
     flex: 0 0 50px;

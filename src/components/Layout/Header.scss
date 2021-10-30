@@ -1,0 +1,133 @@
+.layout_header {
+  flex: 0 0 50px;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  box-shadow: var(--shadow-elevation-2);
+  background: var(--color-background-layout-header);
+
+  &__primary_nav {
+    flex: 1;
+    display: flex;
+    justify-content: flex-start;
+
+    &__link,
+    &__logo {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    &__logo {
+      width: 50px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      align-content: center;
+      font-size: 0;
+      color: transparent;
+
+      &:after {
+        display: block;
+        content: "";
+        height: 26px;
+        width: 26px;
+        background-image: url("../../../assets/ComfyApe.png");
+        background-size: 100%;
+        transition: all var(--timing-medium) ease-in-out;
+        filter: drop-shadow(0 1px 2px var(--color-opac-b-14));
+      }
+
+      &:hover:after {
+        transform: scale(1.1);
+        filter: drop-shadow(0 4px 8px var(--color-opac-b-7));
+      }
+    }
+
+    &__link {
+      overflow: hidden;
+      position: relative;
+      white-space: nowrap;
+      padding: 0 0.5em;
+
+      &:after {
+        display: block;
+        content: "";
+        background: var(--color-strims-orange-2);
+        border-radius: 2px;
+        height: 8px;
+        top: 100%;
+        transition: all var(--timing-medium) ease-in-out;
+        width: 50%;
+        position: absolute;
+        left: 25%;
+      }
+
+      &--active:after {
+        width: calc(100% - 20px);
+        left: 10px;
+      }
+
+      &--active:after,
+      &:hover:after {
+        transform: translateY(-4px);
+        background: var(--color-strims-orange-14);
+      }
+    }
+  }
+
+  &__search {
+    flex: 0 1 300px;
+    display: none;
+    flex-direction: row;
+    align-items: center;
+
+    @at-root .layout--min_width_md & {
+      display: flex;
+    }
+
+    &__input {
+      border: none;
+      display: block;
+      flex: 1 1;
+      height: 2em;
+      outline: none;
+      padding: 0 0.5em;
+      width: 100px;
+      width: auto;
+      background: var(--color-background-input);
+    }
+
+    &__button {
+      border: none;
+      display: flex;
+      flex: 0 1 1.5em;
+      height: 2em;
+      align-items: center;
+      outline: none;
+      background: var(--color-background-input);
+    }
+  }
+
+  &__user_nav {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+
+    &__link {
+      display: flex;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      padding: 0 0.5em;
+    }
+  }
+
+  &--theater_mode {
+    .main_layout__left,
+    .main_layout__header {
+      flex: 0 0 0;
+      overflow: hidden;
+    }
+  }
+}

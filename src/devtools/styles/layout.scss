@@ -5,16 +5,16 @@ body {
   overscroll-behavior-x: contain;
 }
 
-button,
-input {
-  margin: 5px;
-  display: block;
-}
+// button,
+// input {
+//   margin: 5px;
+//   display: block;
+// }
 
 $chat-width-lg: 420px;
 $chat-width-sm: 260px;
 
-.root--portable:not(.root--pwa) .deadzone {
+.layout--portable:not(.layout--pwa) .deadzone {
   opacity: 0.25;
   border-style: solid;
   border-color: black;
@@ -29,10 +29,13 @@ $chat-width-sm: 260px;
   z-index: 1000;
 }
 
-.root {
+.layout {
+  --network-nav-collapsed-width: 60px;
+  --network-nav-expanded-width: 200px;
+
   position: fixed;
-  height: 100%;
-  width: 100%;
+  height: var(--layout-height, 100%);
+  width: var(--layout-width, 100%);
   top: 0;
   left: 0;
   display: flex;
@@ -87,8 +90,8 @@ $chat-width-sm: 260px;
   flex-direction: column;
   flex: 1;
 
-  @at-root .root--landscape_ccw &,
-    .root--landscape_cw & {
+  @at-root .layout--landscape_ccw &,
+    .layout--landscape_cw & {
     flex-direction: row;
   }
 }
@@ -96,7 +99,11 @@ $chat-width-sm: 260px;
 .nav_panel {
   background: blue;
   display: flex;
-  flex: 60px 0 0;
+  flex: var(--network-nav-collapsed-width) 0 0;
+
+  @at-root .layout--expand_nav & {
+    flex: var(--network-nav-expanded-width) 0 0;
+  }
 }
 
 .video_panel {
@@ -104,7 +111,7 @@ $chat-width-sm: 260px;
   max-height: calc(100vw * 9 / 16);
   background: yellow;
 
-  @at-root .root--hide_chat & {
+  @at-root .layout--hide_chat & {
     max-height: unset;
   }
 }
@@ -112,8 +119,10 @@ $chat-width-sm: 260px;
 .chat_panel {
   flex: 1;
   background: teal;
+  display: flex;
+  flex-direction: column;
 
-  @at-root .root--hide_chat & {
+  @at-root .layout--hide_chat & {
     display: none;
   }
 }
@@ -124,18 +133,18 @@ $chat-width-sm: 260px;
   z-index: 1;
   transition: 200ms linear;
 
-  @at-root .root--portrait & {
+  @at-root .layout--portrait & {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
-.root--portable {
+.layout--portable {
   .nav_panel {
     background: blue;
     transition-delay: 200ms;
     height: 100%;
 
-    @at-root .root--nav_open & {
+    @at-root .layout--nav_open & {
       display: block;
     }
   }
@@ -156,11 +165,11 @@ $chat-width-sm: 260px;
 
   .foo_2 {
     position: fixed;
-    height: 100%;
-    width: 100%;
+    height: var(--layout-height);
+    width: var(--layout-width);
     top: 0;
     left: 0;
-    transform: translateX(calc(100% - max(var(--offset), 10px)));
+    transform: translateX(calc(100% - max(var(--layout-offset), 10px)));
     transition: 200ms ease-in-out;
 
     &--dragging {
@@ -172,12 +181,12 @@ $chat-width-sm: 260px;
     pointer-events: none;
   }
 
-  &.root--meme_open {
+  &.layout--meme_open {
     .foo_2--closing {
-      transform: translateX(var(--offset));
+      transform: translateX(var(--layout-offset));
     }
 
-    &.root--portrait {
+    &.layout--portrait {
       .nav_panel,
       .content_panel {
         height: calc(100% + 60px + env(safe-area-inset-bottom));
@@ -199,13 +208,13 @@ $chat-width-sm: 260px;
     }
   }
 
-  &.root--portrait {
+  &.layout--portrait {
     .chat_panel {
       min-height: 200px;
     }
   }
 
-  &.root--min_aspect_ratio_1_2 {
+  &.layout--min_aspect_ratio_1 {
     flex-direction: row-reverse;
 
     .body {
@@ -220,18 +229,18 @@ $chat-width-sm: 260px;
       z-index: 1;
     }
 
-    &.root--landscape_ccw.root--swap .chat_panel {
+    &.layout--landscape_ccw.layout--swap .chat_panel {
       padding-left: env(safe-area-inset-left);
     }
 
-    &.root--landscape_ccw:not(.root--swap),
-    &.root--landscape_ccw.root--hide_chat {
+    &.layout--landscape_ccw:not(.layout--swap),
+    &.layout--landscape_ccw.layout--hide_chat {
       .video_panel {
         padding-left: env(safe-area-inset-left);
       }
     }
 
-    &.root--landscape_ccw.root--hide_video {
+    &.layout--landscape_ccw.layout--hide_video {
       .chat_panel {
         padding-left: env(safe-area-inset-left);
       }
@@ -239,12 +248,24 @@ $chat-width-sm: 260px;
   }
 }
 
-.root:not(.root--portable) {
+.layout--tv,
+.layout--pc {
+  .header {
+    display: flex;
+    flex: 50px 0 0;
+    flex-direction: column;
+    background: red;
+  }
+
+  .footer {
+    display: none;
+  }
+
   .content_panel {
     display: none;
   }
 
-  &.root--meme_open {
+  &.layout--meme_open {
     .foo_2 {
       flex: 0;
     }
@@ -267,13 +288,13 @@ $chat-width-sm: 260px;
       flex: 1;
     }
 
-    &.root--min_width_1200 .video_panel {
+    &.layout--min_width_xl .video_panel {
       width: $chat-width-lg;
       height: calc(#{$chat-width-lg} * 9 / 16);
     }
 
-    &:not(.root--hide_chat) {
-      &.root--min_width_768 {
+    &:not(.layout--hide_chat) {
+      &.layout--min_width_md {
         .foo_2 {
           display: flex;
           flex-direction: column;
@@ -293,16 +314,16 @@ $chat-width-sm: 260px;
         }
 
         .chat_panel {
-          display: block;
+          display: flex;
           flex: 1;
         }
 
-        &.root--swap .foo_1 {
+        &.layout--swap .foo_1 {
           flex-direction: row-reverse;
         }
       }
 
-      &.root--min_width_1200 {
+      &.layout--min_width_xl {
         .foo_2 {
           flex: $chat-width-lg 0 0;
         }
@@ -314,7 +335,7 @@ $chat-width-sm: 260px;
     }
   }
 
-  &.root--theater_mode {
+  &.layout--theater_mode {
     .header {
       display: none;
     }
@@ -325,7 +346,7 @@ $chat-width-sm: 260px;
   }
 }
 
-.root--min_aspect_ratio_1_2 {
+.layout--min_aspect_ratio_1 {
   .foo_2 {
     flex-direction: row;
   }
@@ -339,15 +360,15 @@ $chat-width-sm: 260px;
     flex: $chat-width-sm 0 0;
   }
 
-  &.root--hide_video .chat_panel {
+  &.layout--hide_video .chat_panel {
     flex-grow: 1;
   }
 
-  &.root--min_width_1200 .chat_panel {
+  &.layout--min_width_xl .chat_panel {
     flex-basis: $chat-width-lg;
   }
 
-  &.root--swap {
+  &.layout--swap {
     .foo_1,
     .foo_2 {
       flex-direction: row-reverse;
@@ -355,21 +376,8 @@ $chat-width-sm: 260px;
   }
 }
 
-.root--min_aspect_ratio_4 {
+.layout--min_aspect_ratio_4 {
   .chat_panel {
     flex-basis: $chat-width-lg;
-  }
-}
-
-.root--tv,
-.root--pc {
-  .header {
-    display: unset;
-    flex: 50px 0 0;
-    background: red;
-  }
-
-  .footer {
-    display: none;
   }
 }

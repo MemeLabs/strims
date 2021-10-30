@@ -12,6 +12,8 @@ const webpack = require("webpack");
 const JSON5 = require("json5");
 
 module.exports = (env, argv) => {
+  const isProduction = argv.mode === "production";
+
   const scriptModuleRule = {
     test: /\.tsx?$/,
     exclude: /node_modules/,
@@ -60,14 +62,25 @@ module.exports = (env, argv) => {
     ],
   };
 
-  const staticModuleRule = {
-    test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s)$/i,
-    type: "asset/resource",
-  };
+  const sharedRules = [
+    scriptModuleRule,
+    styleModuleRule,
+    {
+      test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s)$/i,
+      type: "asset/resource",
+    },
+    {
+      test: /\.json$/i,
+      include: [path.resolve(__dirname, "assets", "locales")],
+      loader: "json5-loader",
+      type: "javascript/auto",
+    },
+  ];
 
   const htmlWebpackPluginOptions = {
     meta: {
-      viewport: "width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no",
+      viewport:
+        "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, shrink-to-fit=no",
       "theme:light": {
         name: "theme-color",
         content: "#d5d5d5",
@@ -123,7 +136,7 @@ module.exports = (env, argv) => {
     new CopyWebpackPlugin({
       patterns: [
         {
-          from: "public/locales",
+          from: path.resolve(__dirname, "assets", "locales"),
           to: "locales",
           transform: (content) => JSON.stringify(JSON5.parse(content)),
         },
@@ -133,11 +146,19 @@ module.exports = (env, argv) => {
       process: "process/browser",
       Buffer: ["buffer", "Buffer"],
     }),
+    new webpack.DefinePlugin({
+      IS_PRODUCTION: isProduction,
+      BUILD_TIME: Date.now(),
+      GIT_HASH: JSON.stringify(
+        require("child_process").execSync("git rev-parse HEAD").toString().trim()
+      ),
+      VERSION: JSON.stringify(require(path.resolve(__dirname, "package.json")).version),
+    }),
   ];
 
   let devtool, optimization;
 
-  if (argv.mode === "production") {
+  if (isProduction) {
     plugins.unshift(new CleanWebpackPlugin());
 
     scriptModuleRule.use = ["ts-loader"];
@@ -163,7 +184,7 @@ module.exports = (env, argv) => {
   } else {
     plugins.unshift(
       new ReactRefreshWebpackPlugin({
-        exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx$/,
+        exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx|src\/lib\/i18n\.ts$/,
         overlay: false,
       })
     );
@@ -185,7 +206,7 @@ module.exports = (env, argv) => {
       path: path.resolve(__dirname, "dist", "desktop"),
     },
     module: {
-      rules: [scriptModuleRule, styleModuleRule, staticModuleRule],
+      rules: sharedRules,
     },
     resolve: {
       extensions: [".tsx", ".ts", ".js"],
@@ -288,9 +309,7 @@ module.exports = (env, argv) => {
                 test: /\.wasm$/,
                 loader: "file-loader",
               },
-              scriptModuleRule,
-              styleModuleRule,
-              staticModuleRule,
+              ...sharedRules,
             ],
           },
           resolve: {

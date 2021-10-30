@@ -1,8 +1,4 @@
 {
-  "To get started, edit <1>src/App.js</1> and save to reload.": "To get started, edit <1>src/App.js</1> and save to reload.",
-  "Welcome to React": "Welcome to React and react-i18next",
-  "welcome": "Hello <br/> <strong>World</strong>",
-
   // video player
   "player": {
     "Exit theater mode": "Exit theater mode",
@@ -14,6 +10,24 @@
     "Pause": "Pause",
     "Play": "Play",
     "Miniplayer": "Miniplayer"
+  },
+
+  "layout": {
+    "header": {
+      "Home": "Home",
+      "Categories": "Categories",
+      "Streams": "Streams",
+      "Broadcast": "Broadcast",
+
+      "Search": "Search..."
+    },
+
+    "networkNav": {
+      "Networks": "Networks",
+      "Expand": "Expand",
+      "Collapse": "Collapse",
+      "Add network": "Add network"
+    }
   },
 
   "chat": {
@@ -38,7 +52,7 @@
     "settings": {
       "Messages": "Messages",
       "Whispers": "Whispers",
-      "Highlights, focus &amp; tags": "Highlights, focus &amp; tags",
+      "Highlights, focus, and tags": "Highlights, focus & tags",
       "Autocomplete": "Autocomplete",
       "Message formatters": "Message formatters",
 
@@ -58,7 +72,7 @@
       "Include mentions when focused": "Include mentions when focused",
       "Increase visibility of tagged users": "Increase visibility of tagged users",
       "Custom highlights": "Custom highlights",
-      "Comma separated...": "Comma separated...",
+      "Comma separated": "Comma separated...",
       "Autocomplete helper": "Autocomplete helper",
       "Show emote previews": "Show emote previews",
       "Greentext": "Greentext",

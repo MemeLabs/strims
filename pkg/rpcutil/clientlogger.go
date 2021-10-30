@@ -52,6 +52,11 @@ func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req pro
 	resIn := reflect.MakeChan(reflect.TypeOf(res), 0)
 	resOut := reflect.ValueOf(res)
 
+	logger := c.logger.With(
+		zap.String("method", method),
+		zap.Reflect("req", req),
+	)
+
 	go func() {
 		errs <- c.c.CallStreaming(ctx, method, req, resIn.Interface())
 	}()
@@ -68,24 +73,20 @@ func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req pro
 	}
 
 	for {
-		i, v, _ := reflect.Select(cases)
+		i, v, ok := reflect.Select(cases)
+		if !ok {
+			logger.Debug("rpc stream closed")
+			resOut.Close()
+			return nil
+		}
+
 		switch i {
 		case 0:
-			c.logger.Debug(
-				"rpc stream response",
-				zap.String("method", method),
-				zap.Reflect("req", req),
-				zap.Reflect("res", v.Interface()),
-			)
+			logger.Debug("rpc stream response", zap.Reflect("res", v.Interface()))
 			resOut.Send(v)
 		case 1:
 			err := v.Interface().(error)
-			c.logger.Debug(
-				"rpc stream closed",
-				zap.String("method", method),
-				zap.Reflect("req", req),
-				zap.Error(err),
-			)
+			logger.Debug("rpc stream closed", zap.Error(err))
 			return err
 		}
 	}

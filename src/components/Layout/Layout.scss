@@ -1,0 +1,187 @@
+@import "../../styles/main.scss";
+
+.layout {
+  --color-strims-orange: #ff9158;
+  --color-strims-orange-1: #1a0e09;
+  --color-strims-orange-2: #3c1c11;
+  --color-strims-orange-3: #80311e;
+  --color-strims-orange-4: #bd502d;
+  --color-strims-orange-5: #e26f3f;
+  --color-strims-orange-6: #f6854e;
+  --color-strims-orange-7: #fe8f56;
+  --color-strims-orange-8: #ff9158;
+  --color-strims-orange-9: #ff9259;
+  --color-strims-orange-10: #ff965f;
+  --color-strims-orange-11: #ffa06e;
+  --color-strims-orange-12: #ffb287;
+  --color-strims-orange-13: #ffc8aa;
+  --color-strims-orange-14: #ffdfce;
+  --color-strims-orange-15: #fff7f3;
+  --color-hinted-grey-1: #0e0e10;
+  --color-hinted-grey-2: #18181b;
+  --color-hinted-grey-3: #1f1f23;
+  --color-hinted-grey-4: #26262c;
+  --color-hinted-grey-5: #323239;
+  --color-hinted-grey-6: #3b3b44;
+  --color-hinted-grey-7: #53535f;
+  --color-hinted-grey-8: #848494;
+  --color-hinted-grey-9: #adadb8;
+  --color-hinted-grey-10: #c8c8d0;
+  --color-hinted-grey-11: #d3d3d9;
+  --color-hinted-grey-12: #dedee3;
+  --color-hinted-grey-13: #e6e6ea;
+  --color-hinted-grey-14: #efeff1;
+  --color-hinted-grey-15: #f7f7f8;
+  --color-transparent: transparent;
+  --color-opac-b-1: rgba(0, 0, 0, 0.05);
+  --color-opac-b-2: rgba(0, 0, 0, 0.1);
+  --color-opac-b-3: rgba(0, 0, 0, 0.15);
+  --color-opac-b-4: rgba(0, 0, 0, 0.2);
+  --color-opac-b-5: rgba(0, 0, 0, 0.25);
+  --color-opac-b-6: rgba(0, 0, 0, 0.3);
+  --color-opac-b-7: rgba(0, 0, 0, 0.4);
+  --color-opac-b-8: rgba(0, 0, 0, 0.5);
+  --color-opac-b-9: rgba(0, 0, 0, 0.6);
+  --color-opac-b-10: rgba(0, 0, 0, 0.7);
+  --color-opac-b-11: rgba(0, 0, 0, 0.75);
+  --color-opac-b-12: rgba(0, 0, 0, 0.8);
+  --color-opac-b-13: rgba(0, 0, 0, 0.85);
+  --color-opac-b-14: rgba(0, 0, 0, 0.9);
+  --color-opac-b-15: rgba(0, 0, 0, 0.95);
+  --color-opac-w-1: hsla(0, 0%, 100%, 0.05);
+  --color-opac-w-2: hsla(0, 0%, 100%, 0.1);
+  --color-opac-w-3: hsla(0, 0%, 100%, 0.15);
+  --color-opac-w-4: hsla(0, 0%, 100%, 0.2);
+  --color-opac-w-5: hsla(0, 0%, 100%, 0.25);
+  --color-opac-w-6: hsla(0, 0%, 100%, 0.3);
+  --color-opac-w-7: hsla(0, 0%, 100%, 0.4);
+  --color-opac-w-8: hsla(0, 0%, 100%, 0.5);
+  --color-opac-w-9: hsla(0, 0%, 100%, 0.6);
+  --color-opac-w-10: hsla(0, 0%, 100%, 0.7);
+  --color-opac-w-11: hsla(0, 0%, 100%, 0.75);
+  --color-opac-w-12: hsla(0, 0%, 100%, 0.8);
+  --color-opac-w-13: hsla(0, 0%, 100%, 0.85);
+  --color-opac-w-14: hsla(0, 0%, 100%, 0.9);
+  --color-opac-w-15: hsla(0, 0%, 100%, 0.95);
+  --color-opac-o-1: rgba(255, 145, 88, 0.05);
+  --color-opac-o-2: rgba(255, 145, 88, 0.1);
+  --color-opac-o-3: rgba(255, 145, 88, 0.15);
+  --color-opac-o-4: rgba(255, 145, 88, 0.2);
+  --color-opac-o-5: rgba(255, 145, 88, 0.25);
+  --color-opac-o-6: rgba(255, 145, 88, 0.3);
+  --color-opac-o-7: rgba(255, 145, 88, 0.4);
+  --color-opac-o-8: rgba(255, 145, 88, 0.5);
+  --color-opac-o-9: rgba(255, 145, 88, 0.6);
+  --color-opac-o-10: rgba(255, 145, 88, 0.7);
+  --color-opac-o-11: rgba(255, 145, 88, 0.75);
+  --color-opac-o-12: rgba(255, 145, 88, 0.8);
+  --color-opac-o-13: rgba(255, 145, 88, 0.85);
+  --color-opac-o-14: rgba(255, 145, 88, 0.9);
+  --color-opac-o-15: rgba(255, 145, 88, 0.95);
+  --font-size-1: 5.4rem;
+  --font-size-2: 3.6rem;
+  --font-size-3: 2.4rem;
+  --font-size-4: 1.8rem;
+  --font-size-5: 1.4rem;
+  --font-size-6: 1.3rem;
+  --font-size-7: 1.2rem;
+  --font-size-8: 1.2rem;
+  --font-size-base: 1.3rem;
+  --font-weight-normal: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-hdr: 400;
+  --line-height-body: 1.5;
+  --line-height-heading: 1.2;
+  --base-rem-unit: 10;
+  --timing-short: 100ms;
+  --timing-medium: 250ms;
+  --timing-long: 300ms;
+
+  --network-nav-collapsed-width: 60px;
+  --network-nav-expanded-width: 200px;
+
+  &--dark {
+    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-14), 0 0px 2px var(--color-opac-b-14);
+    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-7), 0 0px 4px var(--color-opac-b-7);
+    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-8), 0 0px 4px var(--color-opac-b-7);
+    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-8), 0 0px 8px var(--color-opac-b-7);
+    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-9), 0 0px 16px var(--color-opac-b-7);
+
+    --color-background-input: #{$slate-400};
+    --color-background-layout-header: #{$slate-500};
+    --color-background-network-nav: #{$slate-200};
+    --color-background-network-nav-link-hover: #{$slate-400};
+    --color-text-network-nav-link: #{$gray-100};
+
+    // ---
+
+    --body-background: #{$slate-300};
+    --body-foreground: #{$slate-400};
+    --body-border-color: #{$slate-400};
+    --body-color: #{$gray-500};
+
+    --card-bg: #{$slate-300};
+    --card-border: #{$slate-400};
+    --card-3d-border-top: #{$slate-500};
+    --card-3d-border-right: #{$slate-200};
+    --card-3d-border-bottom: #{$slate-200};
+    --card-3d-border-left: #{$slate-500};
+
+    --input-bg: #{$slate-400};
+    --input-fg: #{$slate-500};
+    --input-border-color: #{$slate-500};
+    --input-color: #{$gray-400};
+    --input-focus-bg: #{$slate-500};
+    --input-focus-color: #{$gray-500};
+    --input-disabled-bg: #{$slate-300};
+    --input-disabled-color: #{$gray-100};
+    --input-placeholder-color: #{$gray-100};
+    --input-button-hover-bg: #{$slate-500};
+    --input-button-hover-color: #{$gray-500};
+
+    --link-active-bg: #{$slate-300};
+    --link-hover-bg: #{$slate-400};
+  }
+
+  &--light {
+    box-shadow: rgba(0, 0, 0, 0.25) 0 0 3px;
+
+    // ---
+
+    --body-background: #{$gray-500};
+    --body-foreground: #{$gray-400};
+    --body-border-color: #{$gray-600};
+    --body-color: #{$slate-200};
+
+    --card-bg: #{$gray-300};
+    --card-border: #{$gray-500};
+    --card-3d-border-top: #{$gray-500};
+    --card-3d-border-right: #{$gray-200};
+    --card-3d-border-bottom: #{$gray-200};
+    --card-3d-border-left: #{$gray-500};
+
+    --input-bg: #{$gray-400};
+    --input-fg: #{$gray-200};
+    --input-border-color: #{$gray-500};
+    --input-color: #{$slate-200};
+    --input-focus-bg: #{$gray-500};
+    --input-focus-color: #{$slate-100};
+    --input-disabled-bg: #{$gray-500};
+    --input-disabled-color: #{$slate-500};
+    --input-placeholder-color: #{$slate-400};
+    --input-button-hover-bg: #{$gray-500};
+    --input-button-hover-color: #{$slate-300};
+
+    --link-active-bg: #{$gray-300};
+    --link-hover-bg: #{$gray-400};
+  }
+
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--body-bg);
+  border-right: 1px solid var(--body-border-color);
+  color: var(--body-color);
+}

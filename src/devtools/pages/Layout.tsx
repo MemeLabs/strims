@@ -1,13 +1,29 @@
 import "../styles/layout.scss";
+import "../../components/Layout/Layout.scss";
 
+import { PassThrough } from "stream";
+
+import Host from "@memelabs/protobuf/lib/rpc/host";
+import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import clsx from "clsx";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { RefCallback, useContext, useEffect, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
-import { NavLink } from "react-router-dom";
 import { useDrag } from "react-use-gesture";
 import UAParser from "ua-parser-js";
 
+import { FrontendClient } from "../../apis/client";
+import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
+import { registerNetworkServiceService } from "../../apis/strims/network/v1/network_rpc";
+import Header from "../../components/Layout/Header";
+import NetworkNav from "../../components/Layout/NetworkNav";
+import { Provider as ApiProvider } from "../../contexts/FrontendApi";
+import { Provider as NetworkProvider } from "../../contexts/Network";
+import { Provider as ThemeProvider } from "../../contexts/Theme";
 import isPWA from "../../lib/isPWA";
+import TestChat from "../components/TestChat";
+import { LayoutContext, LayoutContextProvider } from "../contexts/Layout";
+import ChatService from "../mocks/chat/service";
+import NetworkService from "../mocks/network/service";
 
 export const enum DeviceType {
   TV = "tv",
@@ -48,7 +64,11 @@ interface ExtendedTouchEvent extends TouchEvent {
   relatedTarget: EventTarget;
 }
 
-const LayoutPage: React.FC = () => {
+interface LayoutPageProps {
+  rootRef: RefCallback<HTMLElement>;
+}
+
+const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
   const [orientation, setOrientation] = useState(window.orientation || 0);
   const [{ height, width }, setSize] = useState(getViewportSize);
   const aspectRatio = width / height;
@@ -163,55 +183,63 @@ const LayoutPage: React.FC = () => {
         })()
       : {};
 
-  const [swap, setSwap] = useState(false);
-  const [showChat, setShowChat] = useState(true);
-  const [showVideo, setShowVideo] = useState(true);
-  const [theaterMode, setTheaterMode] = useState(false);
+  const {
+    swapMainPanels,
+    showContent,
+    showChat,
+    showVideo,
+    theaterMode,
+    expandNav,
+    toggleSwapMainPanels,
+    toggleShowContent,
+    toggleShowChat,
+    toggleShowVideo,
+    toggleTheaterMode,
+  } = useContext(LayoutContext);
 
   const style = FORCE_FIXED_SIZE
     ? {
-        "height": `${height}px`,
-        "width": `${width}px`,
+        "--layout-height": `${height}px`,
+        "--layout-width": `${width}px`,
       }
     : {};
 
   return (
     <div
+      ref={rootRef}
       style={style}
       className={clsx({
-        "root": true,
-        [`root--${DEVICE_TYPE}`]: true,
-        "root--pwa": isPWA,
-        "root--portrait": orientation === 0,
-        "root--landscape_ccw": orientation === 90,
-        "root--landscape_cw": orientation === -90,
-        "root--min_aspect_ratio_1_2": aspectRatio >= 1.2,
-        "root--min_aspect_ratio_2": aspectRatio >= 2,
-        "root--min_aspect_ratio_4": aspectRatio >= 3,
-        "root--min_width_576": width >= 576,
-        "root--min_width_768": width >= 768,
-        "root--min_width_992": width >= 992,
-        "root--min_width_1200": width >= 1200,
-        "root--meme_open": !closed,
-        "root--swap": swap,
-        "root--hide_chat": !showChat,
-        "root--hide_video": !showVideo,
-        "root--theater_mode": theaterMode,
+        "layout": true,
+        "layout--dark": true,
+        [`layout--${DEVICE_TYPE}`]: true,
+        "layout--pwa": isPWA,
+        "layout--portrait": orientation === 0,
+        "layout--landscape_ccw": orientation === 90,
+        "layout--landscape_cw": orientation === -90,
+        "layout--min_aspect_ratio_1": aspectRatio >= 1.2,
+        "layout--min_aspect_ratio_2": aspectRatio >= 2,
+        "layout--min_aspect_ratio_4": aspectRatio >= 3,
+        "layout--min_width_sm": width >= 576,
+        "layout--min_width_md": width >= 768,
+        "layout--min_width_lg": width >= 992,
+        "layout--min_width_xl": width >= 1200,
+        "layout--meme_open": !closed,
+        "layout--swap": swapMainPanels,
+        "layout--hide_chat": !showChat,
+        "layout--hide_video": !showVideo,
+        "layout--theater_mode": theaterMode,
+        "layout--expand_nav": expandNav,
       })}
     >
       <div className="deadzone"></div>
-      <div className="header"></div>
+      <div className="header">
+        <Header />
+      </div>
       <div className="body">
         <div className="nav_panel">
-          <Scrollbars>
-            <div className="scroll_content_test">
-              {new Array(40).fill(0).map((_, i) => (
-                <div key={i}>{i}</div>
-              ))}
-            </div>
-          </Scrollbars>
+          <NetworkNav />
         </div>
-        <div className="foo_1">
+        <main className="foo_1">
           <div className="content_panel">
             <Scrollbars>
               <div className="scroll_content_test">
@@ -227,30 +255,33 @@ const LayoutPage: React.FC = () => {
               "foo_2--dragging": dragging,
               "foo_2--closing": closing,
             })}
-            style={{ "--offset": `${dx}px` }}
+            style={{ "--layout-offset": `${dx}px` }}
             {...dragHandlers}
           >
             {showVideo && (
               <div className="video_panel">
                 <button onClick={toggleClosed}>toggle</button>
-                <button onClick={() => setShowChat((prev) => !prev)}>toggle chat</button>
-                <button onClick={() => setShowVideo((prev) => !prev)}>toggle video</button>
-                <button onClick={() => setTheaterMode((prev) => !prev)}>toggle theater mode</button>
+                <button onClick={() => toggleShowChat((prev) => !prev)}>toggle chat</button>
+                <button onClick={() => toggleShowVideo((prev) => !prev)}>toggle video</button>
+                <button onClick={() => toggleTheaterMode((prev) => !prev)}>
+                  toggle theater mode
+                </button>
               </div>
             )}
             <div className="chat_panel">
-              <button onClick={() => setSwap((prev) => !prev)}>swap sides</button>
+              <TestChat />
+              {/* <button onClick={() => toggleSwapMainPanels((prev) => !prev)}>swap sides</button>
               <button onClick={toggleClosed}>toggle</button>
-              <button onClick={() => setShowChat((prev) => !prev)}>toggle chat</button>
-              <button onClick={() => setShowVideo((prev) => !prev)}>toggle video</button>
-              <button onClick={() => setTheaterMode((prev) => !prev)}>toggle theater mode</button>
+              <button onClick={() => toggleShowChat((prev) => !prev)}>toggle chat</button>
+              <button onClick={() => toggleShowVideo((prev) => !prev)}>toggle video</button>
+              <button onClick={() => toggleTheaterMode((prev) => !prev)}>toggle theater mode</button>
               <Scrollbars
                 renderView={(props) => <div {...props} className={"chat_panel__scroller"} />}
               >
                 {new Array(40).fill(0).map((_, i) => (
                   <div key={i}>{i}</div>
                 ))}
-              </Scrollbars>
+              </Scrollbars> */}
               {/* <input className="test_input" type="text" name="foo" defaultValue="test" /> */}
               {/* <div>
                 <NavLink to="/layout/test1" activeClassName="test_active_link">
@@ -265,11 +296,36 @@ const LayoutPage: React.FC = () => {
               </div> */}
             </div>
           </div>
-        </div>
+        </main>
       </div>
       <div className="footer"></div>
     </div>
   );
 };
 
-export default LayoutPage;
+const LayoutTest: React.FC = () => {
+  const [[chatService, client]] = React.useState((): [ChatService, FrontendClient] => {
+    const svc = new ServiceRegistry();
+    const chatService = new ChatService();
+    registerChatFrontendService(svc, chatService);
+    registerNetworkServiceService(svc, new NetworkService());
+
+    const [a, b] = [new PassThrough(), new PassThrough()];
+    new Host(a, b, svc);
+    return [chatService, new FrontendClient(b, a)];
+  });
+
+  React.useEffect(() => () => chatService.destroy(), [chatService]);
+
+  return (
+    <ApiProvider value={client}>
+      <NetworkProvider>
+        <ThemeProvider>
+          <LayoutContextProvider>{LayoutPage}</LayoutContextProvider>
+        </ThemeProvider>
+      </NetworkProvider>
+    </ApiProvider>
+  );
+};
+
+export default LayoutTest;

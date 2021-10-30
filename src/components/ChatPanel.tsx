@@ -110,7 +110,7 @@ interface ChatThingProps {
   className?: string;
 }
 
-const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
+export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
   const { t } = useTranslation();
 
   const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();

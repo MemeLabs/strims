@@ -3,7 +3,6 @@ package directory
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -262,47 +261,61 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 	return nil
 }
 
-func (d *directoryService) mergeSnippet(listingID uint64, delta *networkv1directory.ListingSnippetDelta) {
+func (d *directoryService) mergeSnippet(listingID uint64, delta *networkv1directory.ListingSnippetDelta) bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
 	l, ok := d.listings.GetByID(listingID).(*listing)
 	if !ok {
-		return
+		return false
 	}
 
 	mergeSnippet(l.nextSnippet, delta)
 	if err := dao.VerifyMessage(l.nextSnippet); err != nil {
-		log.Println("message verification failed", err)
-		return
+		return false
 	}
 
 	mergeSnippet(l.snippet, diffSnippets(l.snippet, l.nextSnippet))
 	l.modifiedTime = timeutil.Now()
 	d.listings.Touch(l)
+	return true
 }
 
 func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64, swarmID ppspp.SwarmID, candidate kademlia.ID) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	client, err := d.dialer.ClientWithHostAddr(d.key.Public, candidate, vnic.SnippetPort)
 	if err != nil {
 		return nil
 	}
+	defer client.Close()
 
 	snippetClient := networkv1directory.NewDirectorySnippetClient(client)
 
 	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
 	go func() {
-		for res := range ch {
-			d.mergeSnippet(listingID, res.SnippetDelta)
+		for {
+			select {
+			case res, ok := <-ch:
+				if !ok || res.SnippetDelta == nil {
+					cancel()
+					return
+				}
+				if d.mergeSnippet(listingID, res.SnippetDelta) {
+					// TODO: move on to another candidate if we haven't received a
+					// successful update after... some timeout
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	req := &networkv1directory.SnippetSubscribeRequest{
 		SwarmId: swarmID.Binary(),
 	}
-	snippetClient.Subscribe(ctx, req, ch)
-
-	return nil
+	return snippetClient.Subscribe(ctx, req, ch)
 }
 
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
