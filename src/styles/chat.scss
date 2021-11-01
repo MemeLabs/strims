@@ -11,7 +11,7 @@
 
   &__messages {
     flex: 1 1;
-    width: 420px;
+    position: relative;
   }
 
   &__message {
@@ -1095,24 +1095,22 @@
   }
 
   &__drawer {
-    $width: 350px;
-
     background: var(--body-background);
     display: flex;
     flex-direction: column;
     height: 100%;
     position: absolute;
     transition: transform 0.2s ease-in-out;
-    width: $width;
+    width: calc(var(--chat-width) - 20px);
     z-index: 1;
 
     &--left {
-      transform: translateX(-$width - 1);
+      transform: translateX(calc(-1 * var(--chat-width) - 1px));
     }
 
     &--right {
       right: 0;
-      transform: translateX($width + 1);
+      transform: translateX(calc(var(--chat-width) + 1px));
     }
 
     &--active {

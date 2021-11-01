@@ -203,6 +203,7 @@ const SettingsDrawer: React.FC = () => {
             name="viewerStateIndicator"
             options={viewerStateIndicatorOptions}
             onChange={handleChange}
+            isSearchable={false}
           />
           <SelectInput
             control={control}
@@ -210,6 +211,7 @@ const SettingsDrawer: React.FC = () => {
             name="showRemoved"
             options={showRemovedOptions}
             onChange={handleChange}
+            isSearchable={false}
           />
         </fieldset>
         <fieldset>

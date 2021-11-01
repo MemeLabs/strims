@@ -16,6 +16,7 @@ import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
 import { Provider, useChat } from "../contexts/Chat";
 import useClickAway from "../hooks/useClickAway";
+import useSize from "../hooks/useSize";
 import EmotesDrawer from "./Chat/EmotesDrawer";
 import SettingsDrawer from "./Chat/SettingsDrawer";
 import StyleSheet from "./Chat/StyleSheet";
@@ -113,6 +114,9 @@ interface ChatThingProps {
 export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
   const { t } = useTranslation();
 
+  const ref = useRef<HTMLDivElement>(null);
+  const size = useSize(ref.current);
+
   const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
@@ -138,7 +142,14 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
   );
 
   return (
-    <div className={clsx(className, "chat")}>
+    <div
+      ref={ref}
+      className={clsx(className, "chat")}
+      style={{
+        "--chat-width": `${size?.width}px`,
+        "--chat-height": `${size?.height}px`,
+      }}
+    >
       <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
       <div className="chat__messages">
         <ChatDrawer

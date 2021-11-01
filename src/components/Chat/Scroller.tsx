@@ -5,10 +5,8 @@ import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
 import { useDebounce } from "react-use";
 import {
-  AutoSizer,
   CellMeasurer,
   CellMeasurerCache,
-  Dimensions,
   Grid,
   List,
   ListRowRenderer,
@@ -16,6 +14,7 @@ import {
 } from "react-virtualized";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
+import useSize from "../../hooks/useSize";
 
 export interface MessageProps {
   style: CSSProperties;
@@ -32,14 +31,6 @@ interface ScrollerProps {
   onAutoScrollChange?: (state: boolean) => void;
 }
 
-const Scroller: React.FC<ScrollerProps> = (props) => {
-  return (
-    <AutoSizer>
-      {(dimensions: Dimensions) => <ScrollerContent {...dimensions} {...props} />}
-    </AutoSizer>
-  );
-};
-
 interface ListInternal {
   Grid: Grid & {
     _scrollingContainer: HTMLElement;
@@ -51,10 +42,8 @@ interface ScrollbarsInternal {
   view: HTMLElement;
 }
 
-const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
+const Scroller: React.FC<ScrollerProps> = ({
   uiConfig,
-  height,
-  width,
   messageCount,
   renderMessage,
   messageSizeCache,
@@ -67,6 +56,10 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const [autoScroll, setAutoScroll] = useState(true);
   const [resizing, setResizing] = useState(true);
   const autoScrollEvent = useRef(false);
+
+  const size = useSize(scrollbars.current?.container);
+  const width = size?.width ?? 0;
+  const height = size?.height ?? 0;
 
   const forceAutoScroll = () => {
     autoScrollEvent.current = true;
@@ -93,7 +86,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
     setResizing(true);
     const id = setTimeout(() => setResizing(false), resizeDebounceTimeout);
     return () => clearTimeout(id);
-  }, [height, width]);
+  }, [size]);
 
   useEffect(() => {
     list.current.Grid._scrollingContainer = scrollbars.current.view;
@@ -178,7 +171,6 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
         onScroll={handleScroll}
         onScrollStart={handleScrollStart}
         onScrollStop={handleScrollStop}
-        style={{ height, width }}
         renderThumbVertical={renderScrollThumb}
         onMouseEnter={handleScrollMouseEnter}
         onMouseLeave={handleScrollMouseLeave}
@@ -198,7 +190,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
       {!autoScroll && (
         <div className="chat__scroller__resume_autoscroll" onClick={resumeAutoScroll}>
           <span>
-            <Trans>More messages below</Trans>
+            <Trans>chat.More messages below</Trans>
           </span>
           <FiArrowDownCircle />
         </div>

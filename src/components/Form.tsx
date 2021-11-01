@@ -1,12 +1,14 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentProps, ReactElement, ReactHTML } from "react";
+import React, { ComponentProps, ReactElement, ReactHTML, useContext } from "react";
 import Dropzone from "react-dropzone";
 import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 import { MdAddAPhoto } from "react-icons/md";
 import Select, { Props as SelectProps } from "react-select";
 import CreatableSelect from "react-select/creatable";
+
+import { LayoutContext } from "../devtools/contexts/Layout";
 
 type CompatibleFieldPath<T extends FieldValues, V> = {
   [K in keyof T]: T[K] extends V ? K : never;
@@ -286,6 +288,8 @@ export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, 
     control,
   });
 
+  const { root } = useContext(LayoutContext);
+
   return (
     <InputLabel
       required={isRequired(rules)}
@@ -294,6 +298,9 @@ export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, 
       inputType="select"
     >
       <Select
+        classNamePrefix="react_select"
+        menuPortalTarget={root.current}
+        menuPlacement="auto"
         {...(inputProps as unknown)}
         {...field}
         onChange={(value, action) => {
@@ -305,7 +312,6 @@ export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, 
           inputProps.onBlur?.(e);
         }}
         className={clsx(className, "input_select")}
-        classNamePrefix="react_select"
       />
       <InputError error={error} />
     </InputLabel>
@@ -340,6 +346,8 @@ export const CreatableSelectInput = <T extends FieldValues>({
     control,
   });
 
+  const { root } = useContext(LayoutContext);
+
   return (
     <InputLabel
       required={isRequired(rules)}
@@ -348,6 +356,9 @@ export const CreatableSelectInput = <T extends FieldValues>({
       inputType="select"
     >
       <CreatableSelect
+        classNamePrefix="react_select"
+        menuPortalTarget={root.current}
+        menuPlacement="auto"
         {...(inputProps as unknown)}
         {...field}
         onChange={(value, action) => {
@@ -360,7 +371,6 @@ export const CreatableSelectInput = <T extends FieldValues>({
         }}
         isMulti={true}
         className={clsx(className, "input_select")}
-        classNamePrefix="react_select"
       />
       <InputError error={error} />
     </InputLabel>

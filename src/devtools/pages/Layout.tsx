@@ -31,26 +31,58 @@ export const enum DeviceType {
   PC = "pc",
 }
 
-const DEVICE_TYPE = (() => {
-  switch (new UAParser().getDevice().type) {
-    case "console":
-    case "smarttv":
-      return DeviceType.TV;
-    case "mobile":
-    case "tablet":
-    case "wearable":
-    case "embedded":
-      return DeviceType.Portable;
-    default:
-      return DeviceType.PC;
-  }
+const [DEVICE_TYPE, OS] = ((): [DeviceType, string] => {
+  const ua = new UAParser();
+  return [
+    {
+      "console": DeviceType.TV,
+      "smarttv": DeviceType.TV,
+      "mobile": DeviceType.Portable,
+      "tablet": DeviceType.Portable,
+      "wearable": DeviceType.Portable,
+      "embedded": DeviceType.Portable,
+    }[ua.getDevice().type] ?? DeviceType.PC,
+    ua.getOS().name,
+  ];
 })();
 const FORCE_FIXED_SIZE = DEVICE_TYPE !== DeviceType.PC;
 
-const getViewportSize = () => ({
-  height: window.visualViewport?.height || window.innerHeight,
-  width: window.visualViewport?.width || window.innerWidth,
-});
+interface ViewportShape {
+  height: number;
+  width: number;
+  orientation: number;
+  safariViewportBug: boolean;
+  useFixedSize: boolean;
+}
+
+const getViewportShape = (prev?: ViewportShape): ViewportShape => {
+  let height = window.visualViewport?.height ?? window.innerHeight;
+  let width = window.visualViewport?.width ?? window.innerWidth;
+  const orientation = window.orientation ?? 0;
+
+  // in ios if the on screen keyboard was opened while the app was in pwa
+  // fullscreen mode with landscape orientation the VisualViewport api returns
+  // erronious small heights in portrait mode. this bug clears after the next
+  // resize event in portrait mode.
+  let safariViewportBug = prev?.safariViewportBug ?? false;
+  let useFixedSize = true;
+  if (isPWA && OS === "iOS") {
+    if (prev?.orientation !== 0 && orientation !== 0 && prev?.height !== height) {
+      safariViewportBug = true;
+    }
+    if (prev?.orientation === 0 && orientation === 0 && prev?.height !== height) {
+      safariViewportBug = false;
+    }
+
+    if (safariViewportBug && orientation === 0) {
+      useFixedSize = false;
+      height = window.innerHeight;
+      width = window.innerWidth;
+    }
+  }
+
+  return { height, width, orientation, safariViewportBug, useFixedSize };
+};
 
 interface ExtendedTouchEvent extends TouchEvent {
   scale?: number;
@@ -69,9 +101,7 @@ interface LayoutPageProps {
 }
 
 const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
-  const [orientation, setOrientation] = useState(window.orientation || 0);
-  const [{ height, width }, setSize] = useState(getViewportSize);
-  const aspectRatio = width / height;
+  const [viewportShape, setViewportShape] = useState(getViewportShape);
 
   useEffect(() => {
     if (DEVICE_TYPE !== DeviceType.Portable || isPWA) {
@@ -120,6 +150,7 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
     // disable pinch zoom
     const handleTouchMove = (event: ExtendedTouchEvent) => {
       if ("scale" in event && event.scale !== 1) {
+        console.log("event stopped");
         event.preventDefault();
         event.stopPropagation();
       }
@@ -136,12 +167,7 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
   }, []);
 
   useEffect(() => {
-    // update variables used in our psuedo media query class names.
-    const handleOrientationChange = () => {
-      setOrientation(window.orientation || 0);
-      setSize(getViewportSize);
-    };
-    const handleResize = () => setSize(getViewportSize);
+    const handleViewportChange = () => setViewportShape(getViewportShape);
 
     // disable scroll events
     const handleScroll = (event: Event) => {
@@ -150,35 +176,50 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
       event.stopPropagation();
     };
 
-    window.addEventListener("orientationchange", handleOrientationChange);
-    window.visualViewport.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleViewportChange);
+    window.visualViewport.addEventListener("resize", handleViewportChange);
     window.visualViewport.addEventListener("scroll", handleScroll);
 
     return () => {
-      window.removeEventListener("orientationchange", handleOrientationChange);
-      window.visualViewport.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleViewportChange);
+      window.visualViewport.removeEventListener("resize", handleViewportChange);
       window.visualViewport.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
-  const [[closed, closing, dx, dragging], setClosed] = useState([true, false, 0, false]);
-  const toggleClosed = () => setClosed(([closed]) => [!closed, closed, 0, false]);
+  const foo2 = useRef<HTMLDivElement>(null);
+  const setDX = (v: number) => foo2.current?.style.setProperty("--layout-offset", `${v}px`);
+
+  const [memeState, setClosed] = useState([true, false, false]);
+  const [closed, closing, dragging] = memeState;
+  const toggleClosed = () => {
+    setDX(0);
+    setClosed(([closed]) => [!closed, closed, false]);
+  };
   const threshold = 200;
 
   const dragHandlers =
-    DEVICE_TYPE === "portable"
+    DEVICE_TYPE === DeviceType.Portable
       ? useDrag(({ movement: [mx], swipe: [sx], dragging }) => {
+          const prev = memeState;
+          let next: [boolean, boolean, boolean];
           if (dragging) {
             if (closing) {
-              setClosed([false, true, Math.max(mx, 0), true]);
+              setDX(Math.max(mx, 0));
+              next = [false, true, true];
             } else {
-              setClosed([mx >= -10, false, Math.max(-mx, 0), true]);
+              setDX(Math.max(-mx, 0));
+              next = [mx >= -10, false, true];
             }
           } else {
             const closed =
               (closing && (sx === 1 || mx > threshold)) ||
               (!closing && sx !== -1 && mx > -threshold);
-            setClosed([closed, !closed, 0, false]);
+            setDX(0);
+            next = [closed, !closed, false];
+          }
+          if (prev[0] !== next[0] || prev[1] !== next[1] || prev[2] !== next[2]) {
+            setClosed(next);
           }
         })()
       : {};
@@ -197,12 +238,21 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
     toggleTheaterMode,
   } = useContext(LayoutContext);
 
-  const style = FORCE_FIXED_SIZE
-    ? {
-        "--layout-height": `${height}px`,
-        "--layout-width": `${width}px`,
-      }
-    : {};
+  const { height, width, orientation } = viewportShape;
+  const aspectRatio = width / height;
+
+  const style =
+    FORCE_FIXED_SIZE && viewportShape.useFixedSize
+      ? {
+          "--layout-height": `${height}px`,
+          "--layout-width": `${width}px`,
+        }
+      : {
+          "--layout-height": "100%",
+          "--layout-width": "100%",
+        };
+
+  console.log({ aspectRatio });
 
   return (
     <div
@@ -216,7 +266,8 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
         "layout--portrait": orientation === 0,
         "layout--landscape_ccw": orientation === 90,
         "layout--landscape_cw": orientation === -90,
-        "layout--min_aspect_ratio_1": aspectRatio >= 1.2,
+        "layout--min_aspect_ratio_0_6": aspectRatio >= 0.6,
+        "layout--min_aspect_ratio_1_2": aspectRatio >= 1.2,
         "layout--min_aspect_ratio_2": aspectRatio >= 2,
         "layout--min_aspect_ratio_4": aspectRatio >= 3,
         "layout--min_width_sm": width >= 576,
@@ -250,12 +301,12 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
             </Scrollbars>
           </div>
           <div
+            ref={foo2}
             className={clsx({
               "foo_2": true,
               "foo_2--dragging": dragging,
               "foo_2--closing": closing,
             })}
-            style={{ "--layout-offset": `${dx}px` }}
             {...dragHandlers}
           >
             {showVideo && (
@@ -266,6 +317,7 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
                 <button onClick={() => toggleTheaterMode((prev) => !prev)}>
                   toggle theater mode
                 </button>
+                <button onClick={() => toggleSwapMainPanels((prev) => !prev)}>swap sides</button>
               </div>
             )}
             <div className="chat_panel">

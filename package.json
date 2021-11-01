@@ -26,6 +26,7 @@
   "devDependencies": {
     "@memelabs/protobuf": "^0.2.2",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.1",
+    "@react-hook/resize-observer": "^1.2.4",
     "@storybook/preset-scss": "^1.0.3",
     "@types/dom-mediacapture-record": "^1.0.10",
     "@types/history": "^4.7.9",
