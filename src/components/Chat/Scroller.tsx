@@ -1,9 +1,10 @@
 import clsx from "clsx";
+import { debounce } from "lodash";
 import React, { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
-import { useDebounce } from "react-use";
+import { useDebounce, useUpdateEffect } from "react-use";
 import {
   CellMeasurer,
   CellMeasurerCache,
@@ -12,9 +13,14 @@ import {
   ListRowRenderer,
   OnScrollParams,
 } from "react-virtualized";
+import { RenderedRows } from "react-virtualized/dist/es/List";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import useSize from "../../hooks/useSize";
+import { retrySync } from "../../lib/retry";
+
+const AUTOSCROLL_THRESHOLD = 20;
+const RESIZE_DEBOUNCE_TIMEOUT = 200;
 
 export interface MessageProps {
   style: CSSProperties;
@@ -26,8 +32,6 @@ interface ScrollerProps {
   renderMessage: (MessageProps) => ReactNode;
   messageCount: number;
   messageSizeCache: CellMeasurerCache;
-  autoScrollThreshold?: number;
-  resizeDebounceTimeout?: number;
   onAutoScrollChange?: (state: boolean) => void;
 }
 
@@ -47,22 +51,31 @@ const Scroller: React.FC<ScrollerProps> = ({
   messageCount,
   renderMessage,
   messageSizeCache,
-  autoScrollThreshold = 20,
-  resizeDebounceTimeout = 100,
   onAutoScrollChange,
 }) => {
   const list = useRef<List & ListInternal>();
   const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [resizing, setResizing] = useState(true);
-  const autoScrollEvent = useRef(false);
+
+  useEffect(() => {
+    list.current.Grid._scrollingContainer = scrollbars.current.view;
+  }, []);
 
   const size = useSize(scrollbars.current?.container);
   const width = size?.width ?? 0;
   const height = size?.height ?? 0;
 
+  const [autoScroll, setAutoScroll] = useState(true);
+  const state = useRef({
+    resizing: false,
+    scrollbarHeight: 0,
+    scrollbarWidth: 0,
+    index: 0,
+    autoScrollEvent: false,
+    recomputingRowHeights: false,
+  }).current;
+
   const forceAutoScroll = () => {
-    autoScrollEvent.current = true;
+    state.autoScrollEvent = true;
     list.current?.scrollToRow(list.current.props.rowCount);
   };
 
@@ -73,43 +86,87 @@ const Scroller: React.FC<ScrollerProps> = ({
   };
 
   const recomputeRowHeights = () => {
+    let getRow = () => list.current.props.rowCount - 1;
+    if (!autoScroll) {
+      const { index } = state;
+      getRow = () => index;
+    }
+
+    state.recomputingRowHeights = true;
     messageSizeCache.clearAll();
     list.current?.recomputeRowHeights();
-    window.requestAnimationFrame(applyAutoScroll);
+
+    // row heights are recomputed asynchronously and the api gives no indication
+    // of when the work is complete. attempting to scroll to a row whose
+    // position has not been computed causes the scroll top to revert to zero.
+    // to avoid this we poll the size cache until it's safe to fix up the scroll
+    // position.
+    const scrollToRow = () => {
+      const ready = messageSizeCache.has(getRow(), 0);
+      if (ready) {
+        state.autoScrollEvent = true;
+        list.current?.scrollToRow(getRow());
+        state.recomputingRowHeights = false;
+        state.resizing = false;
+      }
+      return ready;
+    };
+    retrySync(scrollToRow, 10, 10);
   };
 
-  useDebounce(recomputeRowHeights, 500, [width]);
-  useEffect(recomputeRowHeights, [uiConfig]);
-  useEffect(applyAutoScroll, [autoScroll, messageCount, height]);
-
-  useEffect(() => {
-    setResizing(true);
-    const id = setTimeout(() => setResizing(false), resizeDebounceTimeout);
-    return () => clearTimeout(id);
-  }, [size]);
-
-  useEffect(() => {
-    list.current.Grid._scrollingContainer = scrollbars.current.view;
-  }, []);
+  useDebounce(recomputeRowHeights, RESIZE_DEBOUNCE_TIMEOUT, [width]);
+  useUpdateEffect(recomputeRowHeights, [uiConfig]);
+  useEffect(applyAutoScroll, [messageCount]);
 
   const handleScroll = useCallback((e) => {
     // autoscroll acts on react-virtualized directly so there is no need to
     // forward the scroll event observed by react-custom-scrollbars. the list
     // only needs to be updated in response to user scroll events.
-
-    if (!autoScrollEvent.current) {
+    if (!state.autoScrollEvent) {
       list.current?.Grid?._onScroll(e);
     }
-    autoScrollEvent.current = false;
+    state.autoScrollEvent = false;
   }, []);
 
+  const clearResizing = useCallback(
+    debounce(() => (state.resizing = false), RESIZE_DEBOUNCE_TIMEOUT),
+    []
+  );
+
+  // during list scroll events determine whether the user has scrolled to within
+  // the autoscroll threshold and update the autoscroll state accordingly.
+  // during automatically triggered scroll events fix up the scroll position.
   const handleListScroll = useCallback(
     ({ scrollHeight, scrollTop, clientHeight }: OnScrollParams) => {
-      const thresholdExceeded = scrollHeight - scrollTop - clientHeight < autoScrollThreshold;
-      const isScrolling = list.current?.Grid?.state.isScrolling;
-      const enabled = !isScrolling ? autoScroll : thresholdExceeded;
+      // when the container is resized scroll events fire but the order the
+      // scroll and resize events are triggered isn't predictable. to work
+      // around this we manually track the scrollbar container size. if we
+      // detect a resize events we should avoid toggling autoscroll. if
+      // autoscroll is enabled we should fix up the scroll position.
+      const scrollbarHeight = scrollbars.current?.container?.scrollHeight;
+      const scrollbarWidth = scrollbars.current?.container?.scrollWidth;
+      if (
+        scrollbarHeight !== (state.scrollbarHeight ?? scrollbarHeight) ||
+        scrollbarWidth !== (state.scrollbarWidth ?? scrollbarWidth)
+      ) {
+        state.resizing = true;
+        clearResizing();
+      }
+      state.scrollbarHeight = scrollbarHeight;
+      state.scrollbarWidth = scrollbarWidth;
 
-      if (resizing && enabled) {
+      // while the row heights are being recomputed changing the scroll position
+      // or behavior will cause conflicts because the scroll offset can't be
+      // determined.
+      if (state.recomputingRowHeights) {
+        return;
+      }
+
+      const thresholdExceeded = scrollHeight - scrollTop - clientHeight < AUTOSCROLL_THRESHOLD;
+      const scrolling = list.current?.Grid?.state.isScrolling;
+      const enabled = state.resizing || !scrolling ? autoScroll : thresholdExceeded;
+
+      if (state.resizing && enabled) {
         forceAutoScroll();
       }
 
@@ -118,8 +175,12 @@ const Scroller: React.FC<ScrollerProps> = ({
         onAutoScrollChange?.(enabled);
       }
     },
-    [autoScroll, resizing]
+    [autoScroll]
   );
+
+  const handleListRowsRendered = useCallback(({ stopIndex }: RenderedRows) => {
+    state.index = stopIndex;
+  }, []);
 
   const renderRow: ListRowRenderer = useCallback(
     ({ index, key, style, parent }) => (
@@ -185,6 +246,7 @@ const Scroller: React.FC<ScrollerProps> = ({
           rowCount={messageCount}
           rowRenderer={renderRow}
           onScroll={handleListScroll}
+          onRowsRendered={handleListRowsRendered}
         />
       </Scrollbars>
       {!autoScroll && (

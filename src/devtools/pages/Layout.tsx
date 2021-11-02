@@ -252,8 +252,6 @@ const LayoutPage: React.FC<LayoutPageProps> = ({ rootRef }) => {
           "--layout-width": "100%",
         };
 
-  console.log({ aspectRatio });
-
   return (
     <div
       ref={rootRef}

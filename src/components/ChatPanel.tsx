@@ -189,6 +189,8 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
           <TestContent />
         </ChatDrawer>
         {!shouldHide && (
+          // TODO: scroller is super fucking sketchy... this should probably be
+          // wrapped with an error boundary to keep it from taking down the app
           <Scroller
             uiConfig={state.uiConfig}
             renderMessage={renderMessage}
