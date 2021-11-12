@@ -91,6 +91,8 @@ module.exports = (env, argv) => {
         content: "#222933",
         media: "(prefers-color-scheme: dark)",
       },
+      "apple-mobile-web-app-capable": "yes",
+      "apple-mobile-web-app-status-bar-style": "black",
     },
   };
 

@@ -4,8 +4,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
-import { PlayerContext, PlayerMode } from "../components/PlayerEmbed";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
+import { PlayerContext, PlayerMode } from "../contexts/Player";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
 import { certificateRoot } from "../lib/certificate";
@@ -21,7 +21,7 @@ interface PProfDownload {
 }
 
 const HomePage: React.FC = () => {
-  const [{ colorScheme }, { setColorScheme }] = useTheme();
+  const { colorScheme, setColorScheme } = useTheme();
   // const [{ profile }, { clearProfile }] = useProfile();
 
   const client = useClient();

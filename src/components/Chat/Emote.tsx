@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import React from "react";
 
-import { useChat } from "../../contexts/Chat";
+import { useRoom } from "../../contexts/Chat";
 
 type EmoteProps = {
   name: string;
@@ -21,8 +21,8 @@ const Emote: React.FC<EmoteProps> = ({
   legacySpacing = false,
   ...props
 }) => {
-  const [{ styles }] = useChat();
-  const style = styles.emotes[name];
+  const [room] = useRoom();
+  const style = room.styles.emotes[name];
 
   if (style === undefined) {
     return null;

@@ -1,0 +1,55 @@
+.room_menu {
+  flex: 1;
+  display: flex;
+
+  &__anchor {
+    align-items: center;
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    padding: 0 10px;
+  }
+
+  &__text {
+    flex: 1;
+  }
+
+  &__icon {
+    display: block;
+    flex: 0 0 24px;
+    height: 24px;
+    transition: all var(--timing-short) ease-in-out;
+    filter: drop-shadow(0 1px 2px var(--color-opac-b-14));
+  }
+
+  &__anchor:hover &__icon {
+    transform: scale(1.1);
+    filter: drop-shadow(0 4px 8px var(--color-opac-b-7));
+  }
+
+  &__menu {
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 10px);
+    box-sizing: border-box;
+    top: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &__item {
+    background: var(--color-background-layout-body);
+    text-align: left;
+    padding: 10px;
+    border-top: 1px solid var(--color-opac-w-1);
+
+    &:last-child {
+      border-radius: 0 0 var(--border-radius-small) var(--border-radius-small);
+    }
+
+    &:hover {
+      background: green;
+    }
+  }
+}

@@ -46,11 +46,7 @@ const Grid: React.FC = () => {
     listings.push({ ...listing, id: BigInt(i) });
   }
 
-  return (
-    <div className="chat_mockup">
-      <DirectoryGrid networkKey="" listings={listings} />
-    </div>
-  );
+  return <DirectoryGrid networkKey="" listings={listings} />;
 };
 
 export default [

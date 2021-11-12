@@ -1,0 +1,24 @@
+.footer {
+  display: flex;
+  justify-content: space-evenly;
+  height: 100%;
+
+  &__button {
+    display: flex;
+    padding: 0 10px;
+    align-items: center;
+
+    &__icon {
+      height: 28px;
+      width: 28px;
+    }
+  }
+}
+
+.layout--min_aspect_ratio_1_2 .footer {
+  flex-direction: column;
+
+  &__button {
+    padding: 10px 0;
+  }
+}

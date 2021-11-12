@@ -292,28 +292,32 @@ label.input_label {
   }
 }
 
-.input_select {
-  .react_select {
-    &-container {
-    }
+.input_select .input_select {
+  &-container {
+  }
 
-    &__single-value {
-      color: var(--input-color);
-    }
+  &__single-value {
+    color: var(--input-color);
+  }
 
-    &__control {
-      box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
-      border-style: none;
-      background: var(--input-bg);
-      color: var(--input-color);
-    }
+  &__control {
+    box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+    border-style: none;
+    background: var(--input-bg);
+    color: var(--input-color);
+  }
 
-    &__value-container {
-    }
+  &__value-container {
+  }
 
-    &__indicators {
-    }
+  &__indicators {
+  }
+}
 
+.input_select__menu-portal {
+  position: fixed !important;
+
+  .input_select {
     &__menu {
       background: var(--input-bg);
       color: var(--input-color);

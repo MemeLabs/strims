@@ -1,22 +1,19 @@
+import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
-import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { useTranslation } from "react-i18next";
 import { BiConversation, BiSmile } from "react-icons/bi";
-import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineUserGroup } from "react-icons/hi";
 import { ImCircleLeft, ImCircleRight } from "react-icons/im";
 import { IconType } from "react-icons/lib";
-import { useToggle } from "react-use";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
-import { Provider, useChat } from "../contexts/Chat";
+import { useChat, useRoom } from "../contexts/Chat";
 import useClickAway from "../hooks/useClickAway";
-import useSize from "../hooks/useSize";
 import EmotesDrawer from "./Chat/EmotesDrawer";
 import SettingsDrawer from "./Chat/SettingsDrawer";
 import StyleSheet from "./Chat/StyleSheet";
@@ -111,13 +108,11 @@ interface ChatThingProps {
   className?: string;
 }
 
-export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
+const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
   const { t } = useTranslation();
 
-  const ref = useRef<HTMLDivElement>(null);
-  const size = useSize(ref.current);
-
-  const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();
+  const [{ uiConfig }] = useChat();
+  const [room, { getMessage, getMessageCount, toggleMessageGC, sendMessage }] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
@@ -129,16 +124,21 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
   const toggleSettings = useCallback(drawerToggler(ChatDrawerRole.Settings), []);
   const toggleUsers = useCallback(drawerToggler(ChatDrawerRole.Users), []);
 
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = React.useState<DOMRectReadOnly>();
+  React.useLayoutEffect(() => setSize(ref.current?.getBoundingClientRect()), [ref.current, room]);
+  useResizeObserver(ref, (entry) => setSize(entry.contentRect));
+
   const renderMessage = useCallback(
     ({ index, style }: MessageProps) => (
       <Message
-        uiConfig={state.uiConfig}
+        uiConfig={uiConfig}
         message={getMessage(index)}
         style={style}
         isMostRecent={index === getMessageCount() - 1}
       />
     ),
-    [state.uiConfig, state.styles]
+    [uiConfig, room.styles]
   );
 
   return (
@@ -146,11 +146,11 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
       ref={ref}
       className={clsx(className, "chat")}
       style={{
-        "--chat-width": `${size?.width}px`,
-        "--chat-height": `${size?.height}px`,
+        "--chat-width": size ? `${size.width}px` : "100%",
+        "--chat-height": size ? `${size.height}px` : "100%",
       }}
     >
-      <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
+      <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <div className="chat__messages">
         <ChatDrawer
           title={t("chat.drawers.Emotes")}
@@ -192,20 +192,20 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
           // TODO: scroller is super fucking sketchy... this should probably be
           // wrapped with an error boundary to keep it from taking down the app
           <Scroller
-            uiConfig={state.uiConfig}
+            uiConfig={uiConfig}
             renderMessage={renderMessage}
-            messageCount={state.messages.length}
-            messageSizeCache={state.messageSizeCache}
+            messageCount={room.messages.length}
+            messageSizeCache={room.messageSizeCache}
             onAutoScrollChange={toggleMessageGC}
           />
         )}
       </div>
       <div className="chat__footer">
         <Composer
-          emotes={state.emotes}
-          modifiers={state.modifiers}
-          tags={state.tags}
-          nicks={state.nicks}
+          emotes={room.emotes}
+          modifiers={room.modifiers}
+          tags={room.tags}
+          nicks={room.nicks}
           onMessage={sendMessage}
         />
       </div>
@@ -239,35 +239,4 @@ export const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, classN
   );
 };
 
-const ChatPanel: React.FC = () => {
-  const [closed, toggleClosed] = useToggle(false);
-
-  const className = clsx({
-    "home_page__right": true,
-    "home_page__right--closed": closed,
-  });
-
-  return (
-    <aside className={className}>
-      <button className="home_page__right__toggle_on" onClick={toggleClosed}>
-        <BsArrowBarLeft size={22} />
-      </button>
-      <div className="home_page__right__body">
-        <header className="home_page__subheader">
-          <button className="home_page__right__toggle_off" onClick={toggleClosed}>
-            <BsArrowBarRight size={22} />
-          </button>
-        </header>
-        <header className="home_page__chat__promo"></header>
-        <Provider
-          networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
-          serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
-        >
-          <ChatThing className="home_page__chat" shouldHide={closed} />
-        </Provider>
-      </div>
-    </aside>
-  );
-};
-
-export default ChatPanel;
+export default ChatThing;

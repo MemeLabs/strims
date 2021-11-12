@@ -54,20 +54,20 @@ const scaleOptions = [
 
 export interface ChatEmoteFormProps {
   onSubmit: (data: ChatEmoteFormData) => void;
-  error: Error;
-  loading: boolean;
-  serverId: bigint;
+  error?: Error;
+  loading?: boolean;
+  serverId?: bigint;
   values?: ChatEmoteFormData;
-  indexLinkVisible: boolean;
+  indexLinkVisible?: boolean;
 }
 
 const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   onSubmit,
-  error,
-  loading,
-  serverId,
+  error = null,
+  loading = false,
+  serverId = BigInt(0),
   values = {},
-  indexLinkVisible,
+  indexLinkVisible = false,
 }) => {
   const { handleSubmit, control, watch } = useForm<ChatEmoteFormData>({
     mode: "onBlur",
@@ -82,19 +82,20 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
-      {indexLinkVisible ? (
-        <BackLink
-          to={`/settings/chat-servers/${serverId}/emotes`}
-          title="Emotes"
-          description="Some description of emotes..."
-        />
-      ) : (
-        <BackLink
-          to={`/settings/chat-servers/${serverId}`}
-          title="Server"
-          description="Some description of server..."
-        />
-      )}
+      {serverId &&
+        (indexLinkVisible ? (
+          <BackLink
+            to={`/settings/chat-servers/${serverId}/emotes`}
+            title="Emotes"
+            description="Some description of emotes..."
+          />
+        ) : (
+          <BackLink
+            to={`/settings/chat-servers/${serverId}`}
+            title="Server"
+            description="Some description of server..."
+          />
+        ))}
       <TextInput
         control={control}
         rules={{

@@ -1,11 +1,9 @@
-import "../styles/player.scss";
-
 import React from "react";
 
 export interface EmbedPlayerProps {
   service: string;
   id: string;
-  disableControls: boolean;
+  disableControls?: boolean;
 }
 
 const getEmbedUrl = (service: string, id: string): string | undefined => {

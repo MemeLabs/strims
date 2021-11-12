@@ -80,13 +80,17 @@ const Scroller: React.FC<ScrollerProps> = ({
   };
 
   const applyAutoScroll = () => {
-    if (autoScroll) {
+    if (autoScroll && !state.recomputingRowHeights) {
       forceAutoScroll();
     }
   };
 
   const recomputeRowHeights = () => {
-    let getRow = () => list.current.props.rowCount - 1;
+    if (state.recomputingRowHeights || !list.current?.props?.rowCount) {
+      return;
+    }
+
+    let getRow = () => (list.current?.props?.rowCount ?? 1) - 1;
     if (!autoScroll) {
       const { index } = state;
       getRow = () => index;

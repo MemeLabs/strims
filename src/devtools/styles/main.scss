@@ -56,23 +56,12 @@ body {
 
 // ---
 
-.storybook .app {
-  width: 100%;
-  min-height: calc(100vh - 60px);
-}
-
 .chat_mockup {
+  background: var(--body-background);
+  height: 100%;
+  width: 420px;
+  display: flex;
   flex-direction: row;
-  flex: 1;
-
-  &__content {
-    background: var(--body-background);
-    flex: 1;
-    width: 420px;
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-end;
-  }
 }
 
 .video_mockup {
@@ -103,12 +92,21 @@ body {
   }
 
   &__content {
-    flex: 1;
     background: #fff;
-    margin: 10px 10px 10px 0;
+    margin: 10px 10px 100px 0;
     box-shadow: rgba(0, 0, 0, 0.2) 0 0 5px;
     border-radius: 4px;
-    overflow: hidden;
+    position: relative;
+    height: calc(100vh - 60px) !important;
+    width: calc(100vw - 260px) !important;
+    overflow: auto !important;
+    background: var(--color-background-layout-body);
+  }
+
+  .layout {
+    position: absolute;
+    height: 100%;
+    width: 100%;
   }
 }
 
@@ -163,16 +161,21 @@ body {
 
 .emote_tester,
 .combo {
+  min-width: 1000px;
   justify-content: center;
   display: flex;
+  height: 100%;
 
   &__messages {
     max-width: 420px;
-    height: calc(100vh - 60px);
     border: 1px solid $gray-100;
   }
 
   &__form {
     padding: 20px;
   }
+}
+
+.emote_tester__form {
+  width: 500px;
 }

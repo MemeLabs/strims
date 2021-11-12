@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { useUpdateEffect } from "react-use";
 
 import { FrontendClient } from "../../../apis/client";
-import { AssetBundle, IEmoteImage, Message } from "../../../apis/strims/chat/v1/chat";
+import { AssetBundle, EmoteScale, IEmoteImage, Message } from "../../../apis/strims/chat/v1/chat";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import Emote from "../../../components/Chat/Emote";
 import ChatMessage from "../../../components/Chat/Message";
@@ -24,11 +24,16 @@ import {
   ToggleInput,
 } from "../../../components/Form";
 import {
-  Consumer as ChatConsumer,
+  ChatConsumer,
   Provider as ChatProvider,
+  RoomConsumer,
+  RoomProvider,
   useChat,
+  useRoom,
 } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
+import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
+import { toEmoteProps } from "../../../pages/Settings/Chat/utils";
 import { emotes, modifiers } from "../../mocks/chat/assetBundle";
 import imgBrick from "../../mocks/chat/emotes/static/Brick.png";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
@@ -59,15 +64,25 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
 
   return (
     <ApiProvider value={client}>
-      <ChatProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
-        {shouldRenderStyleSheet && (
-          <ChatConsumer>
-            {([{ liveEmotes, styles, uiConfig }]) => (
-              <StyleSheet liveEmotes={liveEmotes} styles={styles} uiConfig={uiConfig} />
-            )}
-          </ChatConsumer>
-        )}
-        <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
+      <ChatProvider>
+        <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
+          {shouldRenderStyleSheet && (
+            <ChatConsumer>
+              {([{ uiConfig }]) => (
+                <RoomConsumer>
+                  {([room]) => (
+                    <StyleSheet
+                      liveEmotes={room.liveEmotes}
+                      styles={room.styles}
+                      uiConfig={uiConfig}
+                    />
+                  )}
+                </RoomConsumer>
+              )}
+            </ChatConsumer>
+          )}
+          <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
+        </RoomProvider>
       </ChatProvider>
     </ApiProvider>
   );
@@ -87,7 +102,7 @@ const Modifiers: React.FC = () => {
   const values = watch();
 
   return (
-    <div className="emotes app app--dark">
+    <div className="emotes">
       <div className="emotes__grid">
         <Chat>
           {emotes.map((emote) => (
@@ -200,91 +215,54 @@ type EmoteSource =
   | ImageValue;
 
 interface EmoteTesterMessagesProps {
-  emoteSource?: EmoteSource;
-  legacyEmoteSpacing: boolean;
+  formData: ChatEmoteFormData;
 }
 
-const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({
-  emoteSource,
-  legacyEmoteSpacing,
-}) => {
-  const [state, { mergeUIConfig }] = useChat();
+const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) => {
+  const [{ uiConfig }, { mergeUIConfig }] = useChat();
+  const [room] = useRoom();
   const service = useContext(MockChatContext);
 
   useEffect(() => {
-    mergeUIConfig({ legacyEmoteSpacing });
-  }, [legacyEmoteSpacing]);
+    mergeUIConfig({
+      animateForever: true,
+    });
+  }, []);
 
   useEffect(() => {
-    const emitImage = (image: IEmoteImage) =>
-      service.emitAssetBundle(
-        new AssetBundle({
-          isDelta: true,
-          emotes: [
-            {
-              "id": BigInt(9999),
-              "name": "test",
-              "images": [image],
-              "effects": [],
-            },
-          ],
-        })
-      );
-
-    if (emoteSource && "data" in emoteSource) {
-      emitImage({
-        "data": Base64.toUint8Array(emoteSource.data),
-        "fileType": 1,
-        "height": emoteSource.height,
-        "width": emoteSource.width,
-        "scale": 2,
-      });
-    } else {
-      void fetch(imgBrick)
-        .then((res) => res.arrayBuffer())
-        .then((data) =>
-          emitImage({
-            "data": new Uint8Array(data),
-            "fileType": 1,
-            "height": emoteSource?.height || 128,
-            "width": emoteSource?.width || 168,
-            "scale": 2,
-          })
-        );
+    if (!formData) {
+      return;
     }
-  }, [service, emoteSource]);
 
-  const extraEmoteRules: ExtraRules = {};
-  const extraContainerRules: ExtraRules = {};
-  if (emoteSource && "url" in emoteSource) {
-    extraEmoteRules.test = [
-      ["background-image", `image-set(url(${emoteSource.url}) 4x)`],
-      ["background-image", `-webkit-image-set(url(${emoteSource.url}) 4x)`],
-    ];
-    extraContainerRules.test = [["--background-image", `url(${emoteSource.url})`]];
-  }
+    service.emitAssetBundle(
+      new AssetBundle({
+        isDelta: true,
+        emotes: [
+          {
+            ...toEmoteProps(formData),
+            "id": BigInt(9999),
+            "name": "test",
+          },
+        ],
+      })
+    );
+  }, [service, formData]);
 
   return (
     <>
-      <StyleSheet
-        liveEmotes={state.liveEmotes}
-        styles={state.styles}
-        uiConfig={state.uiConfig}
-        extraEmoteRules={extraEmoteRules}
-        extraContainerRules={extraContainerRules}
-      />
+      <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <ChatScroller
-        uiConfig={state.uiConfig}
+        uiConfig={uiConfig}
         renderMessage={({ index, style }: MessageProps) => (
           <ChatMessage
-            uiConfig={state.uiConfig}
-            message={state.messages[index]}
+            uiConfig={uiConfig}
+            message={room.messages[index]}
             style={style}
             isMostRecent={false}
           />
         )}
-        messageCount={state.messages.length}
-        messageSizeCache={state.messageSizeCache}
+        messageCount={room.messages.length}
+        messageSizeCache={room.messageSizeCache}
       />
     </>
   );
@@ -299,46 +277,48 @@ interface EmoteTesterFormProps {
 const EmoteTester: React.FC = () => {
   const messages = useMemo(() => initEmoteTesterMessages(), []);
 
-  const { control, watch } = useForm<EmoteTesterFormProps>();
-  const values = watch();
-
-  const [emoteSource, setEmoteSource] = useState<EmoteSource>();
+  const [formData, setFormData] = useState<ChatEmoteFormData>(null);
 
   useEffect(() => {
-    if (values.url) {
-      const img = new Image();
-      img.onload = () =>
-        setEmoteSource({
-          url: values.url,
-          height: img.height,
-          width: img.width,
-        });
-      img.src = values.url;
-    }
-  }, [values.url]);
-
-  useEffect(() => {
-    if (values.image) {
-      setEmoteSource(values.image);
-    }
-  }, [values.image]);
+    void fetch(imgBrick)
+      .then((res) => res.arrayBuffer())
+      .then((data) =>
+        setFormData({
+          name: "test",
+          image: {
+            data: Base64.fromUint8Array(new Uint8Array(data)),
+            type: "image/png",
+            height: 128,
+            width: 168,
+          },
+          scale: {
+            value: EmoteScale.EMOTE_SCALE_4X,
+            label: "4x",
+          },
+          contributor: "",
+          contributorLink: "",
+          css: "",
+          animated: false,
+          animationFrameCount: 0,
+          animationDuration: 0,
+          animationIterationCount: 0,
+          animationEndOnFrame: 0,
+          animationLoopForever: false,
+          animationAlternateDirection: false,
+          defaultModifiers: [],
+        })
+      );
+  }, []);
 
   return (
-    <div className="emote_tester app app--dark">
+    <div className="emote_tester">
       <div className="emote_tester__messages chat">
         <Chat messages={messages} shouldRenderStyleSheet={false}>
-          <EmoteTesterMessages
-            emoteSource={emoteSource}
-            legacyEmoteSpacing={values.legacyEmoteSpacing}
-          />
+          <EmoteTesterMessages formData={formData} />
         </Chat>
       </div>
       <div className="emote_tester__form">
-        <TextInput label="url" name="url" control={control} />
-        <InputLabel component="div" text="image">
-          <ImageInput name="image" control={control} />
-        </InputLabel>
-        <ToggleInput label="legacy spacing" name="legacyEmoteSpacing" control={control} />
+        {formData && <ChatEmoteForm values={formData} onSubmit={(values) => setFormData(values)} />}
       </div>
     </div>
   );
@@ -355,7 +335,8 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
   count = 10,
   interval = 100,
 }) => {
-  const [state] = useChat();
+  const [{ uiConfig }] = useChat();
+  const [room] = useRoom();
   const service = useContext(MockChatContext);
   const [done, setDone] = useState(true);
 
@@ -399,17 +380,17 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
 
   return (
     <ChatScroller
-      uiConfig={state.uiConfig}
+      uiConfig={uiConfig}
       renderMessage={({ index, style }: MessageProps) => (
         <ChatMessage
-          uiConfig={state.uiConfig}
-          message={state.messages[index]}
+          uiConfig={uiConfig}
+          message={room.messages[index]}
           style={style}
-          isMostRecent={!done && index === state.messages.length - 1}
+          isMostRecent={!done && index === room.messages.length - 1}
         />
       )}
-      messageCount={state.messages.length}
-      messageSizeCache={state.messageSizeCache}
+      messageCount={room.messages.length}
+      messageSizeCache={room.messageSizeCache}
     />
   );
 };
@@ -437,7 +418,7 @@ const Combo: React.FC = () => {
   const values = watch();
 
   return (
-    <div className="combo app app--dark">
+    <div className="combo">
       <div className="combo__messages chat">
         <Chat messages={messages}>
           <ComboMessages

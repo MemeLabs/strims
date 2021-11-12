@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package strims.notification.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1;notificationv1";
+option java_package = "gg.strims.notification.v1";
+option swift_prefix = "SNO";
+
+message Notification {
+  enum Status {
+    STATUS_INFO = 0;
+    STATUS_SUCCESS = 1;
+    STATUS_WARNING = 2;
+    STATUS_ERROR = 3;
+  }
+
+  message Subject {
+    enum Model {
+      NOTIFICATION_SUBJECT_MODEL_NETWORK = 0;
+    }
+
+    Model model = 1;
+    uint64 id = 2;
+  }
+
+  uint64 id = 1;
+  int64 created_at = 2;
+  Status status = 3;
+  string title = 4;
+  string message = 5;
+  Subject subject = 6;
+}
+
+message Event {
+  oneof body {
+    Notification notification = 1001;
+    uint64 Dismiss = 1002;
+  }
+}
+
+message WatchRequest {}
+
+message WatchResponse {
+  Event event = 1;
+}
+
+message DismissRequest {
+  repeated uint64 ids = 1;
+}
+
+message DismissResponse {}
+
+service NotificationFrontend {
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
+  rpc Dismiss(DismissRequest) returns (DismissResponse);
+}

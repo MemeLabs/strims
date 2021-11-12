@@ -1,0 +1,43 @@
+.layout_chat {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+
+  &__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  &__toggle_on,
+  &__toggle_off {
+    margin: 14px 10px;
+    display: block;
+    cursor: pointer;
+  }
+
+  &__toggle_on {
+    display: none;
+  }
+
+  &__header {
+    display: flex;
+    flex-direction: row;
+  }
+
+  // &--closed {
+  //   flex: 0 0 0;
+
+  //   &__toggle_on {
+  //     display: block;
+  //     position: absolute;
+  //     left: -50px;
+  //     z-index: 1;
+  //     opacity: 0.8;
+  //   }
+
+  //   &__body {
+  //     display: none;
+  //   }
+}

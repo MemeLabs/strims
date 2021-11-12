@@ -39,7 +39,12 @@ type networkService struct {
 
 // CreateServer ...
 func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateServerRequest) (*networkv1.CreateServerResponse, error) {
-	network, err := dao.NewNetwork(s.store, r.Name, r.Icon, s.profile)
+	var opts []dao.NewNetworkOption
+	if r.Alias != "" {
+		opts = append(opts, dao.WithCertificateRequestOption(dao.WithSubject(r.Alias)))
+	}
+
+	network, err := dao.NewNetwork(s.store, r.Name, r.Icon, s.profile, opts...)
 	if err != nil {
 		return nil, err
 	}

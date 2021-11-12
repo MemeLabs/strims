@@ -2,8 +2,9 @@
   background: var(--body-foreground);
   display: flex;
   flex-direction: column;
-  flex: 1 1 500px;
-  height: 0;
+  flex: 1;
+  // flex: 1 1 500px;
+  // height: 0;
   font-size: 0.8em;
   line-height: 1.6em;
   position: relative;
@@ -48,7 +49,8 @@
         text-decoration: underline;
       }
 
-      &:visited {
+      &:visited,
+      &:visited &__ellipsis {
         color: #a66be5;
       }
 
@@ -1058,6 +1060,8 @@
     flex: 0 1;
     display: flex;
     flex-direction: row;
+    padding-right: var(--layout-touch-padding-right);
+    padding-left: var(--layout-touch-padding-left);
 
     &__left,
     &__right {
@@ -1133,6 +1137,11 @@
       }
     }
 
+    &--right &__header {
+      padding-right: var(--layout-touch-padding-right, 10px);
+      padding-left: var(--layout-touch-padding-left, 10px);
+    }
+
     &__body {
       flex: 1;
     }
@@ -1153,6 +1162,11 @@
     }
 
     &__span {
+      &:-webkit-autofil,
+      l {
+        display: none;
+      }
+
       &--self {
         font-style: italic;
       }

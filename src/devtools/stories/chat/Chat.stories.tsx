@@ -2,11 +2,13 @@ import { PassThrough } from "stream";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
+import { Base64 } from "js-base64";
 import React from "react";
 
 import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import ChatPanel from "../../../components/ChatPanel";
+import { Provider as ChatProvider, RoomProvider } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import ChatService from "../../mocks/chat/service";
 
@@ -28,11 +30,16 @@ const Chat: React.FC<ChatProps> = ({ theme }) => {
   React.useEffect(() => () => service.destroy(), [service]);
 
   return (
-    <div className={`chat_mockup app app--${theme}`}>
+    <div className="chat_mockup">
       <ApiProvider value={client}>
-        <div className="chat_mockup__content">
-          <ChatPanel />
-        </div>
+        <ChatProvider>
+          <RoomProvider
+            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
+            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
+          >
+            <ChatPanel />
+          </RoomProvider>
+        </ChatProvider>
       </ApiProvider>
     </div>
   );

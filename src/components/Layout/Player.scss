@@ -14,7 +14,8 @@
   background: #000;
   max-height: calc(100vh - 100px);
 
-  &--full {
+  &--full,
+  &--pip {
     top: 0;
     left: 0;
     width: 100%;
@@ -26,13 +27,6 @@
     top: 0;
     left: 0;
     width: 100%;
-  }
-
-  &--pip {
-    position: fixed;
-    bottom: 0;
-    width: 400px;
-    z-index: 1;
   }
 
   &--closed {

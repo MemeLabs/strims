@@ -85,12 +85,12 @@ const SettingsDrawer: React.FC = () => {
     },
   ];
 
-  const [chat, { mergeUIConfig }] = useChat();
+  const [{ uiConfig }, { mergeUIConfig }] = useChat();
 
   const { control, getValues, reset } = useForm<SettingsFormData>({ mode: "onBlur" });
 
   useEffect(() => {
-    const { showRemoved, viewerStateIndicator, notificationSoundFile, ...values } = chat.uiConfig;
+    const { showRemoved, viewerStateIndicator, notificationSoundFile, ...values } = uiConfig;
 
     reset({
       showRemoved: showRemovedOptions.find(({ value }) => value === showRemoved),
@@ -105,7 +105,7 @@ const SettingsDrawer: React.FC = () => {
         : undefined,
       ...values,
     });
-  }, [chat.uiConfig]);
+  }, [uiConfig]);
 
   const handleChange = () => {
     const {

@@ -64,6 +64,7 @@ export default class ChatService implements ChatFrontendService {
 
     return ch;
   }
+
   clientSendMessage(
     req: chatv1.ClientSendMessageRequest
   ): Promise<chatv1.ClientSendMessageResponse> {

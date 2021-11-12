@@ -1,8 +1,14 @@
 import React, { Suspense, lazy } from "react";
 import { Redirect, Route, Switch } from "react-router-dom";
 
-import { MainBodyLayout, MainLayout } from "../components/MainLayout";
+import Layout from "../components/Layout";
+import LayoutBody from "../components/Layout/Body";
 import { PrivateRoute } from "../components/PrivateRoute";
+import { Provider as ChatProvider } from "../contexts/Chat";
+import { Provider as DirectoryProvider } from "../contexts/Directory";
+import { Provider as NetworkProvider } from "../contexts/Network";
+import { Provider as NotificationProvider } from "../contexts/Notification";
+import { Provider as PlayerProvider } from "../contexts/Player";
 import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
 import SettingsLayout from "../pages/Settings/Layout";
@@ -45,7 +51,7 @@ const MainRouter: React.FC = () => (
       </SettingsLayout>
     </PrivateRoute>
     <PrivateRoute>
-      <MainBodyLayout>
+      <LayoutBody>
         <Suspense fallback={null}>
           <Switch>
             <PrivateRoute path="/" exact component={lazy(() => import("../pages/Home"))} />
@@ -64,15 +70,10 @@ const MainRouter: React.FC = () => (
               exact
               component={lazy(() => import("../pages/Embed"))}
             />
-            <PrivateRoute
-              path="/activity"
-              exact
-              component={lazy(() => import("../pages/Activity"))}
-            />
             <Redirect to="/404" />
           </Switch>
         </Suspense>
-      </MainBodyLayout>
+      </LayoutBody>
     </PrivateRoute>
   </Switch>
 );
@@ -83,9 +84,19 @@ const RootRouter: React.FC = () => (
     <Route path="/signup" exact component={SignUp} />
     <Route path="/404" exact component={NotFound} />
     <PrivateRoute>
-      <MainLayout>
-        <MainRouter />
-      </MainLayout>
+      <DirectoryProvider>
+        <NetworkProvider>
+          <NotificationProvider>
+            <ChatProvider>
+              <PlayerProvider>
+                <Layout>
+                  <MainRouter />
+                </Layout>
+              </PlayerProvider>
+            </ChatProvider>
+          </NotificationProvider>
+        </NetworkProvider>
+      </DirectoryProvider>
     </PrivateRoute>
   </Switch>
 );

@@ -1,0 +1,37 @@
+.notification_toast {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1000;
+
+  &__item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    position: relative;
+    border: 1px solid black;
+    background: var(--color--background-notification);
+    padding: 10px;
+    opacity: 0;
+    box-sizing: border-box;
+    transform-origin: top center;
+    transition: transform var(--timing-medium) ease-out, opacity var(--timing-short) ease-out;
+    transition: transform 500ms ease-out, opacity 500ms ease-out, height 500ms ease-out;
+    margin: 5px;
+    cursor: default;
+    width: 300px;
+
+    &--open {
+      opacity: 1;
+    }
+
+    &--closing {
+      opacity: 0;
+    }
+
+    &__icon {
+      display: block;
+      margin-right: 5px;
+    }
+  }
+}

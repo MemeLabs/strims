@@ -10,9 +10,23 @@ import { FrontendClient } from "../../../apis/client";
 import { registerNetworkServiceService } from "../../../apis/strims/network/v1/network_rpc";
 import NetworkNav from "../../../components/Layout/NetworkNav";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
+import { withLayoutContext } from "../../../contexts/Layout";
 import { Provider as NetworkProvider } from "../../../contexts/Network";
-import { LayoutContextProvider } from "../../contexts/Layout";
 import NetworkService from "../../mocks/network/service";
+
+const NavTest = withLayoutContext(({ rootRef }) => (
+  <div ref={rootRef} className="layout layout--dark">
+    <div
+      style={{
+        "display": "flex",
+        "flexDirection": "row",
+        "height": "100%",
+      }}
+    >
+      <NetworkNav />
+    </div>
+  </div>
+));
 
 const Test: React.FC = () => {
   const [[service, client]] = React.useState((): [NetworkService, FrontendClient] => {
@@ -28,21 +42,7 @@ const Test: React.FC = () => {
   return (
     <ApiProvider value={client}>
       <NetworkProvider>
-        <LayoutContextProvider>
-          {({ rootRef }) => (
-            <div ref={rootRef} className="layout layout--dark">
-              <div
-                style={{
-                  "display": "flex",
-                  "flexDirection": "row",
-                  "height": "100%",
-                }}
-              >
-                <NetworkNav />
-              </div>
-            </div>
-          )}
-        </LayoutContextProvider>
+        <NavTest />
       </NetworkProvider>
     </ApiProvider>
   );

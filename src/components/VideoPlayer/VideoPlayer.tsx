@@ -1,12 +1,12 @@
-import React, { useContext, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
+import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
 import useReady from "../../hooks/useReady";
 import useVideo from "../../hooks/useVideo";
-import { MainLayoutContext } from "../MainLayout";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
@@ -27,7 +27,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
-  const { theaterMode, toggleTheaterMode } = useContext(MainLayoutContext);
+  const { theaterMode, toggleTheaterMode } = useLayout();
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
   const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });

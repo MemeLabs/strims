@@ -60,21 +60,25 @@ export class NetworkIcon {
 export type ICreateServerRequest = {
   name?: string;
   icon?: INetworkIcon;
+  alias?: string;
 }
 
 export class CreateServerRequest {
   name: string;
   icon: NetworkIcon | undefined;
+  alias: string;
 
   constructor(v?: ICreateServerRequest) {
     this.name = v?.name || "";
     this.icon = v?.icon && new NetworkIcon(v.icon);
+    this.alias = v?.alias || "";
   }
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name) w.uint32(10).string(m.name);
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
+    if (m.alias) w.uint32(26).string(m.alias);
     return w;
   }
 
@@ -90,6 +94,9 @@ export class CreateServerRequest {
         break;
         case 2:
         m.icon = NetworkIcon.decode(r, r.uint32());
+        break;
+        case 3:
+        m.alias = r.string();
         break;
         default:
         r.skipType(tag & 7);
@@ -770,24 +777,28 @@ export class InvitationV0 {
 }
 
 export type ICreateNetworkFromInvitationRequest = {
+  alias?: string;
   invitation?: CreateNetworkFromInvitationRequest.IInvitation
 }
 
 export class CreateNetworkFromInvitationRequest {
+  alias: string;
   invitation: CreateNetworkFromInvitationRequest.TInvitation;
 
   constructor(v?: ICreateNetworkFromInvitationRequest) {
+    this.alias = v?.alias || "";
     this.invitation = new CreateNetworkFromInvitationRequest.Invitation(v?.invitation);
   }
 
   static encode(m: CreateNetworkFromInvitationRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
+    if (m.alias) w.uint32(10).string(m.alias);
     switch (m.invitation.case) {
       case CreateNetworkFromInvitationRequest.InvitationCase.INVITATION_B64:
-      w.uint32(10).string(m.invitation.invitationB64);
+      w.uint32(8010).string(m.invitation.invitationB64);
       break;
       case CreateNetworkFromInvitationRequest.InvitationCase.INVITATION_BYTES:
-      w.uint32(18).bytes(m.invitation.invitationBytes);
+      w.uint32(8018).bytes(m.invitation.invitationBytes);
       break;
     }
     return w;
@@ -801,9 +812,12 @@ export class CreateNetworkFromInvitationRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
+        m.alias = r.string();
+        break;
+        case 1001:
         m.invitation = new CreateNetworkFromInvitationRequest.Invitation({ invitationB64: r.string() });
         break;
-        case 2:
+        case 1002:
         m.invitation = new CreateNetworkFromInvitationRequest.Invitation({ invitationBytes: r.bytes() });
         break;
         default:
@@ -818,8 +832,8 @@ export class CreateNetworkFromInvitationRequest {
 export namespace CreateNetworkFromInvitationRequest {
   export enum InvitationCase {
     NOT_SET = 0,
-    INVITATION_B64 = 1,
-    INVITATION_BYTES = 2,
+    INVITATION_B64 = 1001,
+    INVITATION_BYTES = 1002,
   }
 
   export type IInvitation =

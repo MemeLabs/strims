@@ -1,16 +1,16 @@
 import React from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 
-import { useChat } from "../../contexts/Chat";
+import { useRoom } from "../../contexts/Chat";
 import Emote from "./Emote";
 
 const EmotesDrawer: React.FC = () => {
-  const [chat] = useChat();
+  const [room] = useRoom();
 
   return (
     <Scrollbars autoHide={true}>
       <div className="chat__emote_grid">
-        {chat.emotes.map((name) => (
+        {room.emotes.map((name) => (
           <div key={name} className="chat__emote_grid__emote">
             <Emote name={name} shouldAnimateForever />
           </div>

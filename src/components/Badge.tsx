@@ -1,3 +1,5 @@
+import "./Badge.scss";
+
 import React from "react";
 
 export interface BadgeProps {

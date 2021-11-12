@@ -10,11 +10,10 @@ import { BiNetworkChart } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiPlus } from "react-icons/fi";
 import { Link } from "react-router-dom";
-import { useToggle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";
+import { useLayout } from "../../../contexts/Layout";
 import { NetworkContext } from "../../../contexts/Network";
-import { LayoutContext } from "../../../devtools/contexts/Layout";
 import { certificateRoot } from "../../../lib/certificate";
 import NetworkAddButton from "./NetworkAddButton";
 import NetworkGem from "./NetworkGem";
@@ -35,7 +34,7 @@ export interface NetworkNavItem {
 
 const NetworkNav: React.FC = () => {
   const { t } = useTranslation();
-  const { expandNav, toggleExpandNav } = useContext(LayoutContext);
+  const { expandNav, toggleExpandNav } = useLayout();
   const [networks, { updateDisplayOrder }] = useContext(NetworkContext);
 
   const onDragEnd = React.useCallback((result: DropResult) => {

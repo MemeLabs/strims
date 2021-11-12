@@ -9,8 +9,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/notification"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -58,7 +60,7 @@ type Broker interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers) Control {
+func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, notification notification.Control) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
@@ -73,6 +75,7 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		profile:          profile,
 		observers:        observers,
 		events:           events,
+		notification:     notification,
 		ca:               newCA(logger, vpn, store, observers, dialer),
 		dialer:           dialer,
 		certRenewTimeout: time.NewTimer(0),
@@ -94,6 +97,7 @@ type control struct {
 	lock              sync.Mutex
 	observers         *event.Observers
 	events            chan interface{}
+	notification      notification.Control
 	ca                *ca
 	dialer            *dialer
 	certRenewTimeout  *time.Timer
@@ -187,7 +191,7 @@ func (t *control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 				t.logger.Debug(
 					"certificate renew via peer failed",
 					zap.Stringer("peer", peer.vnicPeer.HostID()),
-					logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),
+					logutil.ByteHex("network", dao.NetworkKey(n.network)),
 					zap.Error(err),
 				)
 			}
@@ -199,7 +203,7 @@ func (t *control) handleNetworkCertUpdate(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	networkKey := networkKeyForCertificate(network.Certificate)
+	networkKey := dao.NetworkKey(network)
 	for _, peer := range t.peers {
 		if peer.hasNetworkBinding(networkKey) {
 			go peer.sendCertificateUpdate(network)
@@ -240,6 +244,42 @@ func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 	})
 }
 
+func (t *control) dispatchCertificateRenewNotification(network *networkv1.Network, renewErr error) {
+	var notification *notificationv1.Notification
+	var err error
+
+	if renewErr != nil {
+		notification, err = dao.NewNotification(
+			t.store,
+			notificationv1.Notification_STATUS_ERROR,
+			"Certificate renewal failed",
+			dao.WithNotificationMessage(renewErr.Error()),
+			dao.WithNotificationSubject(
+				notificationv1.Notification_Subject_NOTIFICATION_SUBJECT_MODEL_NETWORK,
+				network.Id,
+			),
+		)
+	} else {
+		notification, err = dao.NewNotification(
+			t.store,
+			notificationv1.Notification_STATUS_SUCCESS,
+			"Certificate renewed",
+			dao.WithNotificationSubject(
+				notificationv1.Notification_Subject_NOTIFICATION_SUBJECT_MODEL_NETWORK,
+				network.Id,
+			),
+		)
+	}
+	if err != nil {
+		t.logger.Debug(
+			"creating notification failed",
+			zap.Error(err),
+		)
+		return
+	}
+	t.notification.Dispatch(notification)
+}
+
 type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 
 // renewCertificateWithRenewFunc ...
@@ -255,18 +295,27 @@ func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *ne
 		dao.WithSubject(subject),
 	)
 	if err != nil {
+		go t.dispatchCertificateRenewNotification(network, err)
 		return err
 	}
 
 	cert, err := fn(ctx, network.Certificate, csr)
 	if err != nil {
+		go t.dispatchCertificateRenewNotification(network, err)
 		return err
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {
+		go t.dispatchCertificateRenewNotification(network, err)
 		return err
 	}
 
-	return t.setCertificate(network.Id, cert)
+	if err := t.setCertificate(network.Id, cert); err != nil {
+		go t.dispatchCertificateRenewNotification(network, err)
+		return err
+	}
+
+	go t.dispatchCertificateRenewNotification(network, nil)
+	return nil
 }
 
 // renewCertificate ...
@@ -285,7 +334,7 @@ func (t *control) renewCertificate(ctx context.Context, network *networkv1.Netwo
 		ctx,
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-			networkKey := networkKeyForCertificate(network.Certificate)
+			networkKey := dao.NetworkKey(network)
 			client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 			if err != nil {
 				return nil, err
@@ -423,7 +472,7 @@ func (t *control) renewExpiredCerts(ctx context.Context) {
 				if err := t.renewCertificate(ctx, n.network); err != nil {
 					t.logger.Debug(
 						"network certificate renewal failed",
-						logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),
+						logutil.ByteHex("network", dao.NetworkKey(n.network)),
 						zap.Error(err),
 					)
 				}
@@ -543,7 +592,7 @@ func (t *control) Remove(id uint64) error {
 	if !ok {
 		return ErrNetworkNotFound
 	}
-	networkKey := networkKeyForCertificate(n.network.Certificate)
+	networkKey := dao.NetworkKey(n.network)
 
 	err := t.store.Update(func(tx kv.RWTx) error {
 		if err := dao.DeleteCertificateLogByNetwork(tx, id); err != nil {

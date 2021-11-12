@@ -2,16 +2,24 @@
 
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentProps, useContext, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { ComponentProps, useContext, useEffect, useState } from "react";
+import { Link, useHistory, useParams } from "react-router-dom";
+import { useDebounce, useThrottle } from "react-use";
 
 import monkey from "../../assets/directory/monkey.png";
-import { Listing, ListingSnippetImage } from "../apis/strims/network/v1/directory/directory";
+import {
+  Listing,
+  ListingSnippet,
+  ListingSnippetImage,
+} from "../apis/strims/network/v1/directory/directory";
 import { Image, ImageType } from "../apis/strims/type/image";
 import { DirectoryContext, DirectoryListing } from "../contexts/Directory";
 import { useClient } from "../contexts/FrontendApi";
+import { useLayout } from "../contexts/Layout";
+import { PlayerContext, PlayerMode, PlayerSource } from "../contexts/Player";
 import useObjectURL from "../hooks/useObjectURL";
 import jsonutil from "../lib/jsonutil";
+import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
 
 interface DirectoryParams {
   networkKey: string;
@@ -41,6 +49,27 @@ const formatUri = (networkKey: string, { content }: Listing): string => {
     }
     default:
       return "";
+  }
+};
+
+const getPlayerSource = (networkKey: string, { content }: Listing): PlayerSource => {
+  switch (content.case) {
+    case Listing.ContentCase.EMBED:
+      return {
+        type: "embed",
+        service: toEmbedService(content.embed.service),
+        id: content.embed.id,
+      };
+    case Listing.ContentCase.MEDIA: {
+      return {
+        type: "swarm",
+        mimeType: content.media.mimeType,
+        swarmUri: content.media.swarmUri,
+        networkKey,
+      };
+    }
+    default:
+      null;
   }
 };
 
@@ -107,18 +136,51 @@ interface DirectoryGridItemProps extends DirectoryListing {
   networkKey: string;
 }
 
+const EMPTY_SNIPPET = new ListingSnippet();
+
 const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   listing,
   snippet,
   viewerCount,
   networkKey,
 }) => {
-  if (snippet === undefined) {
+  const history = useHistory();
+  const player = useContext(PlayerContext);
+  const layout = useLayout();
+
+  // on mobile while the directory grid is obstructed by the content panel we
+  // don't need to apply snippet changes. this prevents loading thumbnail and
+  // channel images but preserves the scroll position.
+  const willHide = !layout.showContent.closed && !layout.showContent.dragging;
+  const [hide, setHide] = useState(willHide);
+  useEffect(() => {
+    const tid = setTimeout(() => setHide(willHide), 200);
+    return () => clearTimeout(tid);
+  }, [willHide]);
+
+  if (snippet === undefined || snippet.viewerCount === BigInt(0)) {
     return null;
   }
 
-  // console.log(jsonutil.stringify(listing));
-  // console.log(jsonutil.stringify(snippet));
+  if (willHide && hide) {
+    snippet = EMPTY_SNIPPET;
+  }
+
+  const handleClick = () => {
+    layout.setShowContent({
+      closed: false,
+      closing: true,
+      dragging: false,
+    });
+    layout.toggleShowVideo(true);
+    player.setMode(PlayerMode.FULL);
+    player.setSource(getPlayerSource(networkKey, listing));
+    if (DEVICE_TYPE !== DeviceType.Portable) {
+      const path = formatUri(networkKey, listing);
+      player.setPath(path);
+      history.push(path);
+    }
+  };
 
   const title = snippet.title.trim();
 
@@ -128,7 +190,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
         "directory_grid__item": true,
       })}
     >
-      <Link className="directory_grid__item__link" to={formatUri(networkKey, listing)}>
+      <button className="directory_grid__item__link" onClick={handleClick}>
         <DirectoryGridImage
           className="directory_grid__item__thumbnail"
           fallback={monkey}
@@ -138,7 +200,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
           {formatNumber(Number(snippet.viewerCount))}{" "}
           {snippet.viewerCount === BigInt(1) ? "viewer" : "viewers"}
         </span>
-      </Link>
+      </button>
       <div className="directory_grid__item__channel">
         <DirectoryGridImage
           className="directory_grid__item__channel__logo"
@@ -181,7 +243,7 @@ const Directory: React.FC = () => {
 
   console.log(directories);
 
-  const listings = directories[params.networkKey] || [];
+  const listings = directories[params.networkKey]?.listings ?? [];
 
   // React.useEffect(() => {
   //   const networkKey = Base64.toUint8Array(params.networkKey);
@@ -198,14 +260,12 @@ const Directory: React.FC = () => {
   };
 
   return (
-    <section className="home_page__main__video">
-      <div>
-        <button onClick={handleTestClick} className="input input_button">
-          test
-        </button>
-        <DirectoryGrid listings={listings} networkKey={params.networkKey} />
-      </div>
-    </section>
+    <div>
+      <button onClick={handleTestClick} className="input input_button">
+        test
+      </button>
+      <DirectoryGrid listings={listings} networkKey={params.networkKey} />
+    </div>
   );
 };
 

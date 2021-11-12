@@ -19,7 +19,11 @@
       "Streams": "Streams",
       "Broadcast": "Broadcast",
 
-      "Search": "Search..."
+      "Search": "Search...",
+      "Close chat": "Close chat",
+      "Open chat": "Open chat",
+      "Settings": "Settings",
+      "Activity monitor": "Activity monitor"
     },
 
     "networkNav": {

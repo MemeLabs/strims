@@ -4,6 +4,9 @@ import { Redirect, Route, Switch, useHistory } from "react-router";
 import { NavLink } from "react-router-dom";
 import { useToggle } from "react-use";
 
+import { Provider as ThemeProvider } from "../../contexts/Theme";
+import { WithThemeProps, withTheme } from "../../components/Theme";
+import { WithRootRefProps, withLayoutContext } from "../../contexts/Layout";
 import Nav from "../components/Nav";
 
 const stories = require.context("../stories/", true, /\.stories\.tsx$/, "lazy");
@@ -180,6 +183,16 @@ const StorybookRoutes: React.FC<StorybookRoutesProps> = ({ node, extend }) => {
   );
 };
 
+interface StoryContainerProps extends WithThemeProps, WithRootRefProps {}
+
+const StoryContainerBase: React.FC<StoryContainerProps> = ({ className, rootRef, children }) => (
+  <div className={clsx(className, "storybook__content")} ref={rootRef}>
+    {children}
+  </div>
+);
+
+const StoryContainer = withTheme(withLayoutContext(StoryContainerBase));
+
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
 const Storybook: React.FC = () => {
@@ -192,13 +205,15 @@ const Storybook: React.FC = () => {
         <div className="storybook__nav">
           <StorybookNav node={node} extend={extend} />
         </div>
-        <div className="storybook__content">
-          <Suspense fallback={<LoadingMessage />}>
-            <Switch>
-              <StorybookRoutes node={node} extend={extend} />
-            </Switch>
-          </Suspense>
-        </div>
+        <ThemeProvider>
+          <StoryContainer>
+            <Suspense fallback={<LoadingMessage />}>
+              <Switch>
+                <StorybookRoutes node={node} extend={extend} />
+              </Switch>
+            </Suspense>
+          </StoryContainer>
+        </ThemeProvider>
       </div>
     </>
   );

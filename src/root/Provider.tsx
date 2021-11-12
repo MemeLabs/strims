@@ -14,9 +14,9 @@ export interface ProviderProps {
 const Provider: React.FC<ProviderProps> = ({ client, children }) => (
   <Suspense fallback={<LoadingMessage />}>
     <ApiProvider value={client}>
-      <ThemeProvider>
-        <ProfileProvider>{children}</ProfileProvider>
-      </ThemeProvider>
+      <ProfileProvider>
+        <ThemeProvider>{children}</ThemeProvider>
+      </ProfileProvider>
     </ApiProvider>
   </Suspense>
 );

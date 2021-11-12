@@ -1,11 +1,8 @@
-import "../styles/player.scss";
-
 import clsx from "clsx";
 import React, {
   CSSProperties,
   createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -17,8 +14,8 @@ import { FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import { useResizeObserver } from "use-events";
 
+import { useLayout } from "../contexts/Layout";
 import EmbedPlayer from "./EmbedPlayer";
-import { MainLayoutContext } from "./MainLayout";
 import VideoPlayer from "./VideoPlayer";
 
 export const enum PlayerMode {
@@ -56,7 +53,7 @@ const PlayerEmbed: React.FC = ({ children }) => {
   const [path, setPath] = useState<string>("");
   const [source, setSource] = useState<PlayerSource>(null);
   const [mode, setMode] = useState<PlayerMode>(PlayerMode.PIP);
-  const { theaterMode } = useContext(MainLayoutContext);
+  const { theaterMode } = useLayout();
 
   const context = useMemo<PlayerState>(
     () => ({

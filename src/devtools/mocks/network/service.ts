@@ -108,6 +108,8 @@ const network = new Network({
 });
 
 export default class NetworkService implements NetworkServiceService {
+  constructor(private limit: number = Infinity) {}
+
   public createServer(): Promise<networkv1.CreateServerResponse> {
     return Promise.resolve(new networkv1.CreateServerResponse());
   }
@@ -140,7 +142,7 @@ export default class NetworkService implements NetworkServiceService {
     const ch = new PassThrough({ objectMode: true });
 
     let i = 0;
-    for (const url of images) {
+    for (const url of images.slice(0, this.limit)) {
       void (async () => {
         const res = await fetch(url);
         const buf = await res.arrayBuffer();

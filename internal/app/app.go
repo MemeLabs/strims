@@ -9,6 +9,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/notification"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/internal/videocapture"
 	"github.com/MemeLabs/go-ppspp/internal/videochannel"
@@ -29,6 +30,7 @@ type Control interface {
 	Chat() chat.Control
 	Directory() directory.Control
 	Network() network.Control
+	Notification() notification.Control
 	Transfer() transfer.Control
 	VideoCapture() videocapture.Control
 	VideoChannel() videochannel.Control
@@ -48,8 +50,9 @@ func NewControl(
 	observers := &event.Observers{}
 
 	var (
+		notificationControl = notification.NewControl(logger, store, observers)
 		transferControl     = transfer.NewControl(logger, vpn, observers)
-		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers)
+		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers, notificationControl)
 		chatControl         = chat.NewControl(logger, vpn, store, observers, networkControl, transferControl)
 		directoryControl    = directory.NewControl(logger, vpn, store, observers, networkControl, transferControl)
 		bootstrapControl    = bootstrap.NewControl(logger, vpn, store, observers)
@@ -68,6 +71,7 @@ func NewControl(
 		directory:    directoryControl,
 		peer:         peerControl,
 		network:      networkControl,
+		notification: notificationControl,
 		transfer:     transferControl,
 		bootstrap:    bootstrapControl,
 		videocapture: videocaptureControl,
@@ -87,6 +91,7 @@ type control struct {
 	chat         chat.Control
 	directory    directory.Control
 	network      network.Control
+	notification notification.Control
 	transfer     transfer.Control
 	videocapture videocapture.Control
 	videochannel videochannel.Control
@@ -121,6 +126,9 @@ func (c *control) Chat() chat.Control { return c.chat }
 
 // Network ...
 func (c *control) Network() network.Control { return c.network }
+
+// Notification ...
+func (c *control) Notification() notification.Control { return c.notification }
 
 // Transfer ...
 func (c *control) Transfer() transfer.Control { return c.transfer }

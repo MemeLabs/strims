@@ -71,10 +71,16 @@ message Listing {
     string id = 2;
   }
 
+  message Chat {
+    bytes key = 1;
+    string name = 2;
+  }
+
   oneof content {
     Media media = 1001;
     Service service = 1002;
     Embed embed = 1003;
+    Chat chat = 1004;
   }
 }
 

@@ -1,5 +1,6 @@
-import clsx from "clsx";
-import React, { useCallback, useRef } from "react";
+import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
+import { Base64 } from "js-base64";
+import React, { ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
 
 import {
@@ -17,10 +18,10 @@ import {
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { useClient } from "./FrontendApi";
 
-type Action =
+type RoomAction =
   | {
-      type: "SET_UI_CONFIG";
-      uiConfig: UIConfig;
+      type: "INIT";
+      chatClient: Readable<OpenClientResponse>;
     }
   | {
       type: "TOGGLE_MESSAGE_GC";
@@ -38,6 +39,11 @@ type Action =
       type: "CLIENT_CLOSE";
     };
 
+type Action = {
+  type: "SET_UI_CONFIG";
+  uiConfig: UIConfig;
+};
+
 export interface Style {
   name: string;
   animated: boolean;
@@ -54,13 +60,17 @@ export interface ChatStyles {
   tags: Tag[];
 }
 
-export interface State {
+const enum RoomInitState {
+  NEW,
+  INITIALIZED,
+  OPEN,
+  CLOSED,
+}
+
+export interface RoomState {
+  chatClient: Readable<OpenClientResponse>;
   id: number;
   clientId?: bigint;
-  uiConfig: UIConfig;
-  config: {
-    messageGCThreshold: number;
-  };
   messages: Message[];
   messageGCEnabled: boolean;
   messageSizeCache: ChatCellMeasurerCache;
@@ -72,11 +82,55 @@ export interface State {
   nicks: string[];
   tags: string[];
   errors: Error[];
-  state: "new" | "open" | "closed";
+  state: RoomInitState;
 }
 
-const initialState: State = {
+export interface State {
+  uiConfig: UIConfig;
+  config: {
+    messageGCThreshold: number;
+  };
+  rooms: {
+    [key: string]: RoomState;
+  };
+}
+
+type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
+
+const initialRoomState: RoomState = {
+  chatClient: null,
   id: 0,
+  messages: [],
+  messageGCEnabled: true,
+  messageSizeCache: new ChatCellMeasurerCache(),
+  assetBundles: [],
+  liveEmotes: [],
+  styles: {
+    emotes: {},
+    modifiers: [],
+    tags: [],
+  },
+  emotes: [],
+  modifiers: [],
+  nicks: [],
+  tags: [],
+  errors: [],
+  state: RoomInitState.NEW,
+};
+
+let nextId = 0;
+const initializeRoomState = (
+  state: RoomState,
+  chatClient: Readable<OpenClientResponse>
+): RoomState => ({
+  ...state,
+  chatClient,
+  id: nextId++,
+  messageSizeCache: new ChatCellMeasurerCache(),
+  state: RoomInitState.INITIALIZED,
+});
+
+const initialState: State = {
   uiConfig: new UIConfig({
     showTime: false,
     showFlairIcons: true,
@@ -109,99 +163,116 @@ const initialState: State = {
   config: {
     messageGCThreshold: 250,
   },
-  messages: [],
-  messageGCEnabled: true,
-  messageSizeCache: null,
-  assetBundles: [],
-  liveEmotes: [],
-  styles: {
-    emotes: {},
-    modifiers: [],
-    tags: [],
-  },
-  emotes: [],
-  modifiers: [],
-  nicks: [],
-  tags: [],
-  errors: [],
-  state: "new",
+  rooms: {},
 };
 
-let nextId = 0;
-const initializeState = (state: State): State => ({
-  ...state,
-  id: nextId++,
-  messageSizeCache: new ChatCellMeasurerCache(),
-});
+type ChatActions = {
+  mergeUIConfig: (config: Partial<IUIConfig>) => void;
+};
 
-const ChatContext = React.createContext<[State, (action: Action) => void]>(null);
+const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
 
-const chatReducer = (state: State, action: Action): State => {
+type RoomActions = {
+  sendMessage: (body: string) => void;
+  getMessage: (index: number) => Message;
+  getMessageCount: () => number;
+  toggleMessageGC: (state: boolean) => void;
+};
+
+const RoomContext = React.createContext<[RoomState, RoomActions]>(null);
+
+const useStateReducer = (setState: StateDispatcher) => (action: Action) =>
+  setState((state) => stateReducer(state, action));
+
+const useRoomStateReducer = (setState: StateDispatcher, key: string) => (action: RoomAction) =>
+  setState((state) => ({
+    ...state,
+    rooms: {
+      ...state.rooms,
+      [key]: roomReducer(state, state.rooms[key] ?? initialRoomState, action),
+    },
+  }));
+
+const stateReducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "SET_UI_CONFIG":
       return {
         ...state,
         uiConfig: action.uiConfig,
       };
-    case "CLIENT_DATA":
-      return chatClientDataReducer(state, action.data);
-    case "CLIENT_ERROR":
-      return {
-        ...state,
-        errors: [...state.errors, action.error],
-      };
-    case "CLIENT_CLOSE":
-      return {
-        ...state,
-        state: "closed",
-      };
-    case "TOGGLE_MESSAGE_GC":
-      return {
-        ...state,
-        messageGCEnabled: action.state,
-      };
-    default:
-      return state;
-  }
-};
-const chatClientDataReducer = (state: State, event: OpenClientResponse): State => {
-  switch (event.body.case) {
-    case OpenClientResponse.BodyCase.OPEN:
-      return {
-        ...state,
-        clientId: event.body.open.clientId,
-        state: "open",
-      };
-    case OpenClientResponse.BodyCase.MESSAGE:
-      return messageReducer(state, event.body.message);
-    case OpenClientResponse.BodyCase.ASSET_BUNDLE:
-      return assetBundleReducer(state, event.body.assetBundle);
     default:
       return state;
   }
 };
 
-const messageReducer = (state: State, message: Message): State => {
-  const messages = [...state.messages];
+const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomState => {
+  switch (action.type) {
+    case "INIT":
+      return initializeRoomState(room, action.chatClient);
+    case "CLIENT_DATA":
+      return chatClientDataReducer(state, room, action.data);
+    case "CLIENT_ERROR":
+      return {
+        ...room,
+        errors: [...room.errors, action.error],
+      };
+    case "CLIENT_CLOSE":
+      return {
+        ...room,
+        state: RoomInitState.CLOSED,
+      };
+    case "TOGGLE_MESSAGE_GC":
+      return {
+        ...room,
+        messageGCEnabled: action.state,
+      };
+    default:
+      return room;
+  }
+};
+
+const chatClientDataReducer = (
+  state: State,
+  room: RoomState,
+  event: OpenClientResponse
+): RoomState => {
+  switch (event.body.case) {
+    case OpenClientResponse.BodyCase.OPEN:
+      return {
+        ...room,
+        clientId: event.body.open.clientId,
+        state: RoomInitState.OPEN,
+      };
+    case OpenClientResponse.BodyCase.MESSAGE:
+      return messageReducer(state, room, event.body.message);
+    case OpenClientResponse.BodyCase.ASSET_BUNDLE:
+      return assetBundleReducer(room, event.body.assetBundle);
+    default:
+      return room;
+  }
+};
+
+const messageReducer = (state: State, room: RoomState, message: Message): RoomState => {
+  const messages = [...room.messages];
   if (
     messages.length !== 0 &&
     message.entities.emotes.length === 1 &&
     message.entities.emotes[0].combo > 0
   ) {
     messages[messages.length - 1] = message;
-    state.messageSizeCache.clear(messages.length - 1, 0);
+    room.messageSizeCache.clear(messages.length - 1, 0);
   } else {
     messages.push(message);
   }
 
   const messageOverflow = messages.length - state.uiConfig.maxLines;
-  if (state.messageGCEnabled && messageOverflow > state.config.messageGCThreshold) {
+  if (room.messageGCEnabled && messageOverflow > state.config.messageGCThreshold) {
     messages.splice(0, messageOverflow);
-    state.messageSizeCache.prune(messageOverflow);
+    room.messageSizeCache.prune(messageOverflow);
   }
 
   return {
-    ...state,
+    ...room,
     messages,
   };
 };
@@ -211,7 +282,7 @@ interface Named {
 }
 const toNames = <T extends Named>(vs: T[]): string[] => vs.map(({ name }) => name).sort();
 
-const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
+const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState => {
   state.messageSizeCache.clearAll();
 
   const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
@@ -269,26 +340,20 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
   };
 };
 
-type Actions = {
-  sendMessage: (body: string) => void;
-  mergeUIConfig: (config: Partial<IUIConfig>) => void;
-  getMessage: (index: number) => Message;
-  getMessageCount: () => number;
-  toggleMessageGC: (state: boolean) => void;
-};
+export const Provider: React.FC = ({ children }) => {
+  const [state, setState] = useState(initialState);
+  const dispatch = useStateReducer(setState);
 
-export const useChat = (): [State, Actions] => {
-  const [state, dispatch] = React.useContext(ChatContext);
   const client = useClient();
 
-  const sendMessage = useCallback(
-    (body: string) =>
-      client.chat.clientSendMessage({
-        clientId: state.clientId,
-        body,
-      }),
-    [client, state.clientId]
-  );
+  useEffect(() => {
+    void (async () => {
+      const { uiConfig } = await client.chat.getUIConfig();
+      if (uiConfig) {
+        dispatch({ type: "SET_UI_CONFIG", uiConfig });
+      }
+    })();
+  }, []);
 
   const mergeUIConfig = useCallback(
     (values: Partial<IUIConfig>) => {
@@ -302,8 +367,59 @@ export const useChat = (): [State, Actions] => {
     [client, state.uiConfig]
   );
 
+  const value = useMemo<[State, ChatActions, StateDispatcher]>(
+    () => [state, { mergeUIConfig }, setState],
+    [state]
+  );
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+};
+
+Provider.displayName = "Chat.Provider";
+
+export const useChat = (): [State, ChatActions, StateDispatcher] => useContext(ChatContext);
+
+export const ChatConsumer = ChatContext.Consumer;
+
+interface RoomProviderProps {
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+}
+
+export const RoomProvider: React.FC<RoomProviderProps> = ({ networkKey, serverKey, children }) => {
+  const key = useMemo(
+    () => Base64.fromUint8Array(networkKey) + ":" + Base64.fromUint8Array(serverKey),
+    [networkKey, serverKey]
+  );
+
+  const [state, , setState] = React.useContext(ChatContext);
+  const dispatch = useRoomStateReducer(setState, key);
+
+  const client = useClient();
+
+  const room = state.rooms[key] ?? initialRoomState;
+  useEffect(() => {
+    if (room.state > RoomInitState.NEW) {
+      return;
+    }
+
+    const chatClient = client.chat.openClient({ networkKey, serverKey });
+    chatClient.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
+    chatClient.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
+    chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
+    dispatch({ type: "INIT", chatClient });
+  }, [networkKey, serverKey]);
+
+  const sendMessage = useCallback(
+    (body: string) =>
+      client.chat.clientSendMessage({
+        clientId: room.clientId,
+        body,
+      }),
+    [client, room.clientId]
+  );
+
   const messages = useRef<Message[]>();
-  messages.current = state.messages;
+  messages.current = room.messages;
 
   const getMessage = useCallback((index: number): Message => messages.current[index], []);
   const getMessageCount = useCallback((): number => messages.current.length, []);
@@ -313,48 +429,15 @@ export const useChat = (): [State, Actions] => {
     []
   );
 
-  const actions = {
-    sendMessage,
-    mergeUIConfig,
-    getMessage,
-    getMessageCount,
-    toggleMessageGC,
-  };
-  return [state, actions];
+  const value = useMemo<[RoomState, RoomActions]>(
+    () => [room, { sendMessage, getMessage, getMessageCount, toggleMessageGC }],
+    [room]
+  );
+  return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 };
 
-interface ProviderProps {
-  networkKey: Uint8Array;
-  serverKey: Uint8Array;
-}
+RoomProvider.displayName = "Room.Provider";
 
-export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, children }) => {
-  const [state, dispatch] = React.useReducer(chatReducer, initialState, initializeState);
-  const client = useClient();
+export const useRoom = (): [RoomState, RoomActions] => useContext(RoomContext);
 
-  useEffect(() => {
-    void (async () => {
-      const { uiConfig } = await client.chat.getUIConfig();
-      if (uiConfig) {
-        dispatch({ type: "SET_UI_CONFIG", uiConfig });
-      }
-    })();
-
-    const events = client.chat.openClient({ networkKey, serverKey });
-    events.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
-    events.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
-
-    const handleClose = () => dispatch({ type: "CLIENT_CLOSE" });
-    events.on("close", handleClose);
-    return () => {
-      events.off("close", handleClose);
-      events.destroy();
-    };
-  }, []);
-
-  return <ChatContext.Provider value={[state, dispatch]}>{children}</ChatContext.Provider>;
-};
-
-Provider.displayName = "Chat.Provider";
-
-export const Consumer = ChatContext.Consumer;
+export const RoomConsumer = RoomContext.Consumer;

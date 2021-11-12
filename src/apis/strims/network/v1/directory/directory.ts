@@ -395,6 +395,9 @@ export class Listing {
       case Listing.ContentCase.EMBED:
       Listing.Embed.encode(m.content.embed, w.uint32(8026).fork()).ldelim();
       break;
+      case Listing.ContentCase.CHAT:
+      Listing.Chat.encode(m.content.chat, w.uint32(8034).fork()).ldelim();
+      break;
     }
     return w;
   }
@@ -415,6 +418,9 @@ export class Listing {
         case 1003:
         m.content = new Listing.Content({ embed: Listing.Embed.decode(r, r.uint32()) });
         break;
+        case 1004:
+        m.content = new Listing.Content({ chat: Listing.Chat.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -430,6 +436,7 @@ export namespace Listing {
     MEDIA = 1001,
     SERVICE = 1002,
     EMBED = 1003,
+    CHAT = 1004,
   }
 
   export type IContent =
@@ -437,6 +444,7 @@ export namespace Listing {
   |{ case?: ContentCase.MEDIA, media: Listing.IMedia }
   |{ case?: ContentCase.SERVICE, service: Listing.IService }
   |{ case?: ContentCase.EMBED, embed: Listing.IEmbed }
+  |{ case?: ContentCase.CHAT, chat: Listing.IChat }
   ;
 
   export type TContent = Readonly<
@@ -444,12 +452,14 @@ export namespace Listing {
   |{ case: ContentCase.MEDIA, media: Listing.Media }
   |{ case: ContentCase.SERVICE, service: Listing.Service }
   |{ case: ContentCase.EMBED, embed: Listing.Embed }
+  |{ case: ContentCase.CHAT, chat: Listing.Chat }
   >;
 
   class ContentImpl {
     media: Listing.Media;
     service: Listing.Service;
     embed: Listing.Embed;
+    chat: Listing.Chat;
     case: ContentCase = ContentCase.NOT_SET;
 
     constructor(v?: IContent) {
@@ -464,6 +474,10 @@ export namespace Listing {
       if (v && "embed" in v) {
         this.case = ContentCase.EMBED;
         this.embed = new Listing.Embed(v.embed);
+      } else
+      if (v && "chat" in v) {
+        this.case = ContentCase.CHAT;
+        this.chat = new Listing.Chat(v.chat);
       }
     }
   }
@@ -474,6 +488,7 @@ export namespace Listing {
     T extends { media: Listing.IMedia } ? { case: ContentCase.MEDIA, media: Listing.Media } :
     T extends { service: Listing.IService } ? { case: ContentCase.SERVICE, service: Listing.Service } :
     T extends { embed: Listing.IEmbed } ? { case: ContentCase.EMBED, embed: Listing.Embed } :
+    T extends { chat: Listing.IChat } ? { case: ContentCase.CHAT, chat: Listing.Chat } :
     never
     >;
   };
@@ -607,6 +622,49 @@ export namespace Listing {
       DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM = 2,
       DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD = 3,
       DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE = 4,
+    }
+  }
+
+  export type IChat = {
+    key?: Uint8Array;
+    name?: string;
+  }
+
+  export class Chat {
+    key: Uint8Array;
+    name: string;
+
+    constructor(v?: IChat) {
+      this.key = v?.key || new Uint8Array();
+      this.name = v?.name || "";
+    }
+
+    static encode(m: Chat, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.key) w.uint32(10).bytes(m.key);
+      if (m.name) w.uint32(18).string(m.name);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Chat {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Chat();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.key = r.bytes();
+          break;
+          case 2:
+          m.name = r.string();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
     }
   }
 

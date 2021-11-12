@@ -18,8 +18,13 @@ export interface DirectoryListing {
   viewerCount: number;
 }
 
+export interface DirectoryListings {
+  networkKey: Uint8Array;
+  listings: DirectoryListing[];
+}
+
 export type State = {
-  [key: string]: DirectoryListing[];
+  [key: string]: DirectoryListings;
 };
 
 const initialState: State = {};
@@ -32,15 +37,20 @@ export const Provider: React.FC = ({ children }) => {
 
   const setDirectoryListings = (
     key: string,
-    set: (listings: DirectoryListing[]) => DirectoryListing[]
+    set: (listings: DirectoryListings) => DirectoryListings
   ) =>
     setDirectories((prev) => ({
       ...prev,
-      [key]: set(prev[key] || []),
+      [key]: set(
+        prev[key] || {
+          networkKey: Base64.toUint8Array(key),
+          listings: [],
+        }
+      ),
     }));
 
   const dispatchDirectoryEvent = (key: string, { events }: EventBroadcast) =>
-    setDirectoryListings(key, (listings) => {
+    setDirectoryListings(key, ({ networkKey, listings }) => {
       const next = listings.slice();
       for (const { body: event } of events) {
         switch (event.case) {
@@ -85,7 +95,7 @@ export const Provider: React.FC = ({ children }) => {
             break;
         }
       }
-      return next;
+      return { networkKey, listings: next };
     });
 
   const deleteDirectory = (key: string) => setDirectories((prev) => omit(key, prev));

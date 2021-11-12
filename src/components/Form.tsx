@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentProps, ReactElement, ReactHTML, useContext } from "react";
+import React, { ComponentProps, ReactElement, ReactHTML } from "react";
 import Dropzone from "react-dropzone";
 import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
@@ -8,7 +8,7 @@ import { MdAddAPhoto } from "react-icons/md";
 import Select, { Props as SelectProps } from "react-select";
 import CreatableSelect from "react-select/creatable";
 
-import { LayoutContext } from "../devtools/contexts/Layout";
+import { useLayout } from "../contexts/Layout";
 
 type CompatibleFieldPath<T extends FieldValues, V> = {
   [K in keyof T]: T[K] extends V ? K : never;
@@ -288,7 +288,7 @@ export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, 
     control,
   });
 
-  const { root } = useContext(LayoutContext);
+  const { root } = useLayout();
 
   return (
     <InputLabel
@@ -298,7 +298,7 @@ export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, 
       inputType="select"
     >
       <Select
-        classNamePrefix="react_select"
+        classNamePrefix="input_select"
         menuPortalTarget={root.current}
         menuPlacement="auto"
         {...(inputProps as unknown)}
@@ -346,7 +346,7 @@ export const CreatableSelectInput = <T extends FieldValues>({
     control,
   });
 
-  const { root } = useContext(LayoutContext);
+  const { root } = useLayout();
 
   return (
     <InputLabel
@@ -356,7 +356,7 @@ export const CreatableSelectInput = <T extends FieldValues>({
       inputType="select"
     >
       <CreatableSelect
-        classNamePrefix="react_select"
+        classNamePrefix="input_select"
         menuPortalTarget={root.current}
         menuPlacement="auto"
         {...(inputProps as unknown)}

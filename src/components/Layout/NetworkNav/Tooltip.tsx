@@ -1,16 +1,16 @@
 import "./NetworkNav.scss";
 
-import React, { RefObject, useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, { RefObject, useContext, useMemo, useRef, useState } from "react";
 import usePortal from "use-portal";
 
-import { LayoutContext } from "../../../devtools/contexts/Layout";
+import { useLayout } from "../../../contexts/Layout";
 
 export interface TooltipOverlayProps {
   anchor: RefObject<HTMLElement>;
 }
 
 const TooltipOverlay: React.FC<TooltipOverlayProps> = ({ anchor, children }) => {
-  const { root } = useContext(LayoutContext);
+  const { root } = useLayout();
   const { Portal } = usePortal({ target: root.current });
 
   const rect = useMemo(() => anchor.current.getBoundingClientRect(), []);

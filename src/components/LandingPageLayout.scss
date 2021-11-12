@@ -1,0 +1,101 @@
+@import "../styles/main.scss";
+
+.login_profile_list {
+  &__item {
+    background: $slate-400;
+    border-radius: 0.5em;
+    border: 1px solid $slate-500;
+    box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+    color: $gray-400;
+    cursor: pointer;
+    padding: 1em;
+    margin: 0.75em 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    &:hover {
+      background: $slate-500;
+    }
+  }
+
+  &__icon {
+    display: block;
+    padding-right: 0.5em;
+    height: 1.3em;
+    width: 1.3em;
+  }
+}
+
+.landing_page {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  background: $slate-500;
+
+  &__body {
+    height: 100%;
+    width: 100%;
+    margin: auto;
+    overflow-y: auto;
+    display: flex;
+    align-self: center;
+    margin: 0 auto;
+    flex-direction: column;
+    box-shadow: rgba(0, 0, 0, 0.25) 0 0 15px;
+
+    @include respond-to("small") {
+      flex-direction: row;
+      height: 500px;
+      max-width: 800px;
+    }
+  }
+
+  &__header {
+    flex: 0 1 50%;
+    background: $slate-200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    max-height: 200px;
+    padding: 2em;
+
+    @include respond-to("small") {
+      max-height: unset;
+    }
+
+    &__title {
+      display: block;
+      font-size: 2.2em;
+      margin: 0.1em 0;
+      color: $gray-500;
+    }
+
+    &__tagline {
+      margin: 0.1em 0;
+      color: $gray-300;
+    }
+  }
+
+  &__form_container {
+    flex: 1 50%;
+    background: $slate-300;
+    flex-direction: column;
+    justify-content: flex-start;
+    display: flex;
+    padding: 2em;
+
+    @include respond-to("small") {
+      justify-content: center;
+    }
+
+    .input_button--borderless {
+      color: $gray-300;
+      &:hover {
+        color: $gray-500;
+      }
+    }
+  }
+}

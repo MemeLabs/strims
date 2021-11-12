@@ -18,6 +18,7 @@ message NetworkIcon {
 message CreateServerRequest {
   string name = 1;
   NetworkIcon icon = 2;
+  string alias = 3;
 }
 
 message CreateServerResponse {
@@ -104,9 +105,11 @@ message InvitationV0 {
 }
 
 message CreateNetworkFromInvitationRequest {
+  string alias = 1;
+
   oneof invitation {
-    string invitation_b64 = 1;
-    bytes invitation_bytes = 2;
+    string invitation_b64 = 1001;
+    bytes invitation_bytes = 1002;
   }
 }
 

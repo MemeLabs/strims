@@ -2,12 +2,12 @@ import React, { ComponentType } from "react";
 import { HashRouter, MemoryRouter } from "react-router-dom";
 
 import { DevToolsClient } from "../../apis/client";
-import isPWA from "../../lib/isPWA";
+import { IS_PWA } from "../../lib/userAgent";
 import { Provider as ApiProvider } from "../contexts/DevToolsApi";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
-const Router: ComponentType = isPWA ? MemoryRouter : HashRouter;
+const Router: ComponentType = IS_PWA ? MemoryRouter : HashRouter;
 
 const Provider = ({ client, children }: { client: DevToolsClient; children: any }) => (
   <Router>

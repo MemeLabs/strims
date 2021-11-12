@@ -1,0 +1,71 @@
+import { PassThrough } from "stream";
+
+import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
+import { Base64 } from "js-base64";
+
+import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory";
+import { DirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
+
+export default class DirectoryService implements DirectoryFrontendService {
+  responses: Readable<directoryv1.FrontendOpenResponse>;
+
+  constructor(
+    responses: Readable<directoryv1.FrontendOpenResponse> = new PassThrough({ objectMode: true })
+  ) {
+    this.responses = responses;
+  }
+
+  destroy(): void {
+    this.responses.destroy();
+  }
+
+  emitOpenResponse(broadcast: directoryv1.FrontendOpenResponse): void {
+    this.responses.push(broadcast);
+  }
+
+  open(): Readable<directoryv1.FrontendOpenResponse> {
+    const ch = new PassThrough({ objectMode: true });
+
+    window.setTimeout(() => {
+      for (let i = 0; i < 10; i++) {
+        ch.push(
+          new directoryv1.FrontendOpenResponse({
+            networkKey: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
+            body: {
+              broadcast: {
+                events: [
+                  {
+                    body: {
+                      listingChange: {
+                        id: BigInt(i),
+                        listing: {
+                          content: {
+                            chat: {
+                              key: Base64.toUint8Array(
+                                "fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q="
+                              ),
+                              name: `test ${i}`,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          })
+        );
+      }
+    });
+
+    this.responses.on("data", (response) => ch.push(response));
+
+    return ch;
+  }
+
+  test(req: directoryv1.FrontendTestRequest): Promise<directoryv1.FrontendTestResponse> {
+    console.log("test", req);
+    return Promise.resolve(new directoryv1.FrontendTestResponse());
+  }
+}

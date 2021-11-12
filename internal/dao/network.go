@@ -96,8 +96,29 @@ func SignCertificateRequestWithNetwork(csr *certificate.CertificateRequest, conf
 	return cert, nil
 }
 
+type NewNetworkOptions struct {
+	CertificateRequestOptions []CertificateRequestOption
+}
+
+type NewNetworkOption func(o *NewNetworkOptions)
+
+func WithCertificateRequestOption(opt CertificateRequestOption) NewNetworkOption {
+	return func(o *NewNetworkOptions) {
+		o.CertificateRequestOptions = append(o.CertificateRequestOptions, opt)
+	}
+}
+
 // NewNetwork ...
-func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile *profilev1.Profile) (*networkv1.Network, error) {
+func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile *profilev1.Profile, opts ...NewNetworkOption) (*networkv1.Network, error) {
+	o := &NewNetworkOptions{
+		CertificateRequestOptions: []CertificateRequestOption{
+			WithSubject(profile.Name),
+		},
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -129,7 +150,7 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	csr, err := NewCertificateRequest(
 		profile.Key,
 		certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN,
-		WithSubject(profile.Name),
+		o.CertificateRequestOptions...,
 	)
 	if err != nil {
 		return nil, err
@@ -145,7 +166,16 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 }
 
 // NewNetworkFromInvitationV0 generates a network from a network invitation
-func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV0, profile *profilev1.Profile) (*networkv1.Network, error) {
+func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV0, profile *profilev1.Profile, opts ...NewNetworkOption) (*networkv1.Network, error) {
+	o := &NewNetworkOptions{
+		CertificateRequestOptions: []CertificateRequestOption{
+			WithSubject(profile.Name),
+		},
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -154,7 +184,7 @@ func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV
 	if err = VerifyCertificate(invitation.Certificate); err != nil {
 		return nil, err
 	}
-	csr, err := NewCertificateRequest(profile.Key, certificate.KeyUsage_KEY_USAGE_PEER, WithSubject(profile.Name))
+	csr, err := NewCertificateRequest(profile.Key, certificate.KeyUsage_KEY_USAGE_PEER, o.CertificateRequestOptions...)
 	if err != nil {
 		return nil, err
 	}
