@@ -2,7 +2,6 @@ package ppspptest
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 const connMTU = 1 << 14
@@ -74,25 +73,22 @@ func NewUnbufferedConnPair() (Conn, Conn) {
 	return &unbufferedConn{conn: conn{ar, bw}}, &unbufferedConn{conn: conn{br, aw}}
 }
 
-var reading, writing int64
-
 type unbufferedConn struct {
 	mu sync.Mutex
 	conn
 }
 
 func (c *unbufferedConn) Read(p []byte) (int, error) {
-	atomic.AddInt64(&reading, 1)
-	defer atomic.AddInt64(&reading, -1)
-	return c.conn.Read(p)
+	n, err := c.conn.Read(p)
+	// fmt.Printf("read %p %s", c, spew.Sdump(p[:n]))
+	return n, err
 }
 
 func (c *unbufferedConn) Write(p []byte) (int, error) {
-	atomic.AddInt64(&writing, 1)
-	defer atomic.AddInt64(&writing, -1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// fmt.Printf("write %p %s", c, spew.Sdump(p))
 	n, err := c.conn.Write(p)
 	if err != nil {
 		return 0, err
@@ -101,12 +97,4 @@ func (c *unbufferedConn) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return n, nil
-}
-
-func Reading() int64 {
-	return atomic.LoadInt64(&reading)
-}
-
-func Writing() int64 {
-	return atomic.LoadInt64(&writing)
 }

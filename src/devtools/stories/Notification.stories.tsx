@@ -2,24 +2,19 @@ import { PassThrough } from "stream";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
-import clsx from "clsx";
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ReactDOM from "react-dom";
-import { FiAlertCircle, FiAlertOctagon, FiAlertTriangle, FiCheckCircle } from "react-icons/fi";
+import React from "react";
 
-import { FrontendClient } from "../../../apis/client";
-import { Event, Notification } from "../../../apis/strims/notification/v1/notification";
-import { registerNotificationFrontendService } from "../../../apis/strims/notification/v1/notification_rpc";
-import Toast from "../../../components/Notification/Toast";
-import { Provider as ApiProvider, useClient } from "../../../contexts/FrontendApi";
-import { useLayout } from "../../../contexts/Layout";
+import { FrontendClient } from "../../apis/client";
+import { Event, Notification } from "../../apis/strims/notification/v1/notification";
+import { registerNotificationFrontendService } from "../../apis/strims/notification/v1/notification_rpc";
+import Toast from "../../components/Notification/Toast";
+import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import {
   Consumer as NotificationConsumer,
   Provider as NotificationProvider,
-  useNotification,
-} from "../../../contexts/Notification";
-import jsonutil from "../../../lib/jsonutil";
-import NotificationService from "../../mocks/notification/service";
+} from "../../contexts/Notification";
+import jsonutil from "../../lib/jsonutil";
+import NotificationService from "../mocks/notification/service";
 
 let nextId = BigInt(0);
 

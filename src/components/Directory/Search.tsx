@@ -1,0 +1,365 @@
+import "./Search.scss";
+
+import clsx from "clsx";
+import { Base64 } from "js-base64";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FiSearch } from "react-icons/fi";
+import { useHistory } from "react-router";
+import { useToggle } from "react-use";
+import { Key } from "ts-key-enum";
+
+import imgAngelThump from "../../../assets/directory/angelthump.png";
+import imgTwitch from "../../../assets/directory/twitch.png";
+import imgYouTube from "../../../assets/directory/youtube.png";
+import { Listing } from "../../apis/strims/network/v1/directory/directory";
+import { DirectoryContext, DirectoryListing } from "../../contexts/Directory";
+import { useLayout } from "../../contexts/Layout";
+import { PlayerContext, PlayerMode } from "../../contexts/Player";
+import useClickAway from "../../hooks/useClickAway";
+import { formatUri, getListingPlayerSource } from "../../lib/directory";
+import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import SnippetImage from "../Directory/SnippetImage";
+
+const EMBED_COMMON_ID = "([\\w-]{1,30})";
+const EMBED_URLS = [
+  {
+    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_COMMON_ID}`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`twitch\\.tv/${EMBED_COMMON_ID}/?$`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_COMMON_ID}$`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_COMMON_ID}`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`youtu\\.be/${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`youtube\\.com/embed/${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+    }),
+  },
+];
+
+interface Embed {
+  service: Listing.Embed.Service;
+  id: string;
+}
+
+interface EmbedMenuItemProps {
+  embed: Embed;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onSelect: () => void;
+}
+
+const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
+  embed,
+  selected,
+  onMouseEnter,
+  onSelect,
+}) => {
+  const { t } = useTranslation();
+
+  const label = (() => {
+    switch (embed.service) {
+      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
+        return {
+          logo: imgAngelThump,
+          name: t("directory.embedType.AngelThump"),
+        };
+      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
+        return {
+          logo: imgTwitch,
+          name: t("directory.embedType.Twitch"),
+        };
+      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
+        return {
+          logo: imgTwitch,
+          name: t("directory.embedType.Twitch VOD"),
+        };
+      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
+        return {
+          logo: imgYouTube,
+          name: t("directory.embedType.YouTube"),
+        };
+    }
+  })();
+
+  return (
+    <div
+      className={clsx({
+        "search__menu__embed": true,
+        "search__menu__embed--selected": selected,
+      })}
+      onMouseEnter={onMouseEnter}
+      onClick={onSelect}
+    >
+      <img className="search__menu__embed__logo" src={label.logo} />
+      {t("directory.Embed")} {label.name}
+    </div>
+  );
+};
+
+interface ListingMenuItemProps {
+  listing: DirectoryListing;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onSelect: () => void;
+}
+
+const ListingMenuItem: React.FC<ListingMenuItemProps> = ({
+  listing,
+  selected,
+  onMouseEnter,
+  onSelect,
+}) => {
+  const { snippet } = listing;
+  const title = snippet.title.trim();
+
+  return (
+    <div
+      className={clsx({
+        "search__menu__channel": true,
+        "search__menu__channel--selected": selected,
+      })}
+      onClick={onSelect}
+      onMouseEnter={onMouseEnter}
+    >
+      <SnippetImage className="search__menu__channel__logo" source={snippet.channelLogo} />
+      <div className="search__menu__channel__label">
+        {title && (
+          <span className="directory_grid__item__channel__title" title={title}>
+            {title}
+          </span>
+        )}
+        {snippet.channelName && (
+          <span className="search__menu__channel__name">{snippet.channelName}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+type SearchResult =
+  | {
+      type: "EMBED";
+      embed: Embed;
+      onSelect: () => void;
+    }
+  | {
+      type: "LISTING";
+      listing: DirectoryListing;
+      onSelect: () => void;
+    };
+
+interface SearchMenuProps {
+  results: SearchResult[];
+  selectedIndex: number;
+  onMouseEnter: (i: number) => void;
+  onMouseLeave: () => void;
+}
+
+const SearchMenu: React.FC<SearchMenuProps> = ({
+  results,
+  selectedIndex,
+  onMouseEnter,
+  onMouseLeave,
+}) => {
+  return (
+    <div className="search__menu" onMouseLeave={onMouseLeave}>
+      {results.map((result, i) => {
+        switch (result.type) {
+          case "EMBED":
+            return (
+              <EmbedMenuItem
+                key={i}
+                selected={selectedIndex === i}
+                onMouseEnter={() => onMouseEnter(i)}
+                {...result}
+              />
+            );
+          case "LISTING":
+            return (
+              <ListingMenuItem
+                key={i}
+                selected={selectedIndex === i}
+                onMouseEnter={() => onMouseEnter(i)}
+                {...result}
+              />
+            );
+        }
+      })}
+    </div>
+  );
+};
+
+const Search: React.FC = () => {
+  const { t } = useTranslation();
+
+  const ref = useRef<HTMLDivElement>(null);
+  const [isFocused, toggleIsFocused] = useToggle(false);
+  const [directory] = useContext(DirectoryContext);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [query, setQuery] = useState("https://www.twitch.tv/koil");
+
+  const menuOpen = isFocused && results.length !== 0;
+
+  useClickAway(ref, () => toggleIsFocused(false));
+
+  useEffect(() => {
+    if (query === "") {
+      setResults([]);
+      return;
+    }
+
+    const results: SearchResult[] = [];
+
+    for (const { pattern, embed } of EMBED_URLS) {
+      const match = pattern.exec(query);
+      if (match) {
+        setResults([]);
+        setResults([
+          {
+            type: "EMBED",
+            embed: embed(match),
+            onSelect: () => console.log(match),
+          },
+        ]);
+        return;
+      }
+    }
+
+    const pattern = new RegExp(query, "i");
+
+    for (const { networkKey, listings } of Object.values(directory)) {
+      for (const listing of listings) {
+        if (
+          pattern.exec(listing.snippet?.title) !== null ||
+          pattern.exec(listing.snippet?.channelName) !== null
+        ) {
+          results.push({
+            type: "LISTING",
+            listing,
+            onSelect: () => selectListing(networkKey, listing),
+          });
+        }
+      }
+    }
+
+    setResults(results.slice(0, 10));
+  }, [query, directory]);
+
+  useEffect(() => setSelectedIndex(-1), [results.length, query]);
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    switch (e.key) {
+      case Key.Tab:
+      case Key.ArrowDown:
+        e.preventDefault();
+        setSelectedIndex((i) => (i + 1) % results.length);
+        return;
+      case Key.ArrowUp:
+        e.preventDefault();
+        setSelectedIndex((i) => (results.length + i - 1) % results.length);
+        return;
+      case Key.Enter:
+        e.preventDefault();
+        results[selectedIndex]?.onSelect();
+        return;
+      case Key.Escape:
+        e.preventDefault();
+        e.currentTarget.blur();
+        return;
+    }
+  };
+
+  const history = useHistory();
+  const player = useContext(PlayerContext);
+  const layout = useLayout();
+
+  // TODO: DRY with grid (useDirectory?)
+  const selectListing = (networkKey: Uint8Array, listing: DirectoryListing) => {
+    layout.setShowContent({
+      closed: false,
+      closing: true,
+      dragging: false,
+    });
+    layout.toggleShowVideo(true);
+    player.setMode(PlayerMode.FULL);
+    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey), listing.listing));
+    if (DEVICE_TYPE !== DeviceType.Portable) {
+      const path = formatUri(Base64.fromUint8Array(networkKey), listing.listing);
+      player.setPath(path);
+      history.push(path);
+    }
+
+    setQuery("");
+  };
+
+  return (
+    <div
+      className={clsx({
+        "search": true,
+        "search--menu_open": menuOpen,
+      })}
+      ref={ref}
+    >
+      <div className="search__box">
+        <input
+          className="search__input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => toggleIsFocused(true)}
+          placeholder={t("directory.Search")}
+        />
+        <FiSearch className="search__icon" />
+      </div>
+      {menuOpen && (
+        <SearchMenu
+          selectedIndex={selectedIndex}
+          results={results}
+          onMouseEnter={(i) => setSelectedIndex(i)}
+          onMouseLeave={() => setSelectedIndex(-1)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default Search;

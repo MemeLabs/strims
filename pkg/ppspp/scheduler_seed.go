@@ -247,7 +247,15 @@ func (s *seedSwarmScheduler) assignAllChannelStreams(c *seedChannelScheduler) {
 	// 	tail = head - w
 	// }
 
-	tail := s.swarm.store.Tail()
+	var tail binmap.Bin
+	switch s.swarm.options.DeliveryMode {
+	case LowLatencyDeliveryMode:
+		tail = s.swarm.store.Next()
+	case BestEffortDeliveryMode:
+		fallthrough
+	case MandatoryDeliveryMode:
+		tail = s.swarm.store.Tail()
+	}
 
 	bins := s.swarm.store.Bins()
 	bins.ResetBefore(tail)

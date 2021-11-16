@@ -1,14 +1,11 @@
 import "./RoomMenu.scss";
 
-import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { useContext, useMemo, useRef, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { MdArrowDropDown } from "react-icons/md";
-import { useToggle } from "react-use";
 
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { DirectoryContext } from "../../contexts/Directory";
-import useClickAway from "../../hooks/useClickAway";
 import Dropdown from "../Dropdown";
 
 export interface RoomMenuItem {
@@ -31,7 +28,7 @@ const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
         if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
           const { key, name } = listing.content.chat;
           chats.push({
-            key: Base64.fromUint8Array(networkKey) + ":" + Base64.fromUint8Array(key),
+            key: Base64.fromUint8Array(key),
             networkKey,
             serverKey: key,
             name,

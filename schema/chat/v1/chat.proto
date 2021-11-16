@@ -90,6 +90,7 @@ message Modifier {
   string name = 2;
   uint32 priority = 3;
   bool internal = 4;
+  uint32 extra_wrap_count = 5;
 }
 
 message Tag {

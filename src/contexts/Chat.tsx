@@ -54,9 +54,13 @@ export type EmoteStyleMap = {
   [key: string]: Style;
 };
 
+export type ModifierMap = {
+  [key: string]: Modifier;
+};
+
 export interface ChatStyles {
   emotes: EmoteStyleMap;
-  modifiers: Modifier[];
+  modifiers: ModifierMap;
   tags: Tag[];
 }
 
@@ -107,7 +111,7 @@ const initialRoomState: RoomState = {
   liveEmotes: [],
   styles: {
     emotes: {},
-    modifiers: [],
+    modifiers: {},
     tags: [],
   },
   emotes: [],
@@ -331,7 +335,7 @@ const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState =>
     liveEmotes,
     styles: {
       emotes: emoteStyles,
-      modifiers: liveModifiers,
+      modifiers: Object.fromEntries(liveModifiers.map((m) => [m.name, m])),
       tags: liveTags,
     },
     emotes: toNames(liveEmotes),

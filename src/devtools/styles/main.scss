@@ -179,3 +179,14 @@ body {
 .emote_tester__form {
   width: 500px;
 }
+
+.directory_mockup {
+  &__header {
+    background: green;
+    height: 50px;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+  }
+}

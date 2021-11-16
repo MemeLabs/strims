@@ -1,3 +1,4 @@
+@use "sass:math";
 @import "../../styles/main.scss";
 
 html,
@@ -323,7 +324,7 @@ $chat-width-sm: 260px;
       position: fixed;
       bottom: 10px;
       right: 10px;
-      height: $chat-width-sm * 9/ 16;
+      height: $chat-width-sm * math.div(9, 16);
       width: $chat-width-sm;
     }
 
@@ -333,17 +334,17 @@ $chat-width-sm: 260px;
     }
 
     .scroll_content_test {
-      padding-bottom: $chat-width-sm * 9/ 16 + 10;
+      padding-bottom: $chat-width-sm * math.div(9, 16) + 10;
     }
 
     &.layout--min_width_xl {
       .layout__video {
         width: $chat-width-lg;
-        height: calc(#{$chat-width-lg} * 9 / 16);
+        height: $chat-width-lg * math.div(9, 16);
       }
 
       .scroll_content_test {
-        padding-bottom: $chat-width-lg * 9/ 16 + 10;
+        padding-bottom: $chat-width-lg * math.div(9, 16) + 10;
       }
     }
 
@@ -358,7 +359,7 @@ $chat-width-sm: 260px;
 
         .layout__video {
           flex: 1;
-          max-height: calc(#{$chat-width-sm} * 9 / 16);
+          max-height: $chat-width-sm * math.div(9, 16);
 
           position: unset;
           bottom: unset;

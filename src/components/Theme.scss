@@ -105,6 +105,15 @@
   --border-radius-extra-extra-large: 1.6rem;
   --border-radius-rounded: 9000px;
 
+  --z-index-modal: 5000;
+  --z-index-notification: 4000;
+  --z-index-overlay: 3000;
+  --z-index-balloon: 2000;
+  --z-index-sticky: 1000;
+  --z-index-above: 10;
+  --z-index-default: 1;
+  --z-index-below: -1;
+
   --network-nav-collapsed-width: 60px;
   --network-nav-expanded-width: 200px;
 

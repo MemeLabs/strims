@@ -1,8 +1,7 @@
 import React from "react";
 
 import { Listing, ListingSnippet } from "../../../apis/strims/network/v1/directory/directory";
-import { DirectoryGrid } from "../../../pages/Directory";
-import Nav from "../../components/Nav";
+import DirectoryGrid from "../../../components/Directory/Grid";
 
 const Grid: React.FC = () => {
   const listing = {

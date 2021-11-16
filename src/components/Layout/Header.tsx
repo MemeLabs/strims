@@ -10,6 +10,7 @@ import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import Debugger from "../Debugger";
+import DirectorySearch from "../Directory/Search";
 
 const Header: React.FC = () => {
   const { t } = useTranslation();
@@ -57,10 +58,11 @@ const Header: React.FC = () => {
         </NavLink>
       </div>
       <div className="layout_header__search">
-        <input className="layout_header__search__input" placeholder={t("layout.header.Search")} />
+        {/* <input className="layout_header__search__input" placeholder={t("layout.header.Search")} />
         <button className="layout_header__search__button">
           <FiSearch />
-        </button>
+        </button> */}
+        <DirectorySearch />
       </div>
       <div className="layout_header__user_nav">
         <button className="layout_header__user_nav__link" onClick={() => layout.toggleShowChat()}>

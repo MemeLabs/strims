@@ -644,8 +644,8 @@
     ) {
       &:before,
       &:after,
-      & .chat__emote:before,
-      & .chat__emote:after {
+      & .chat__emote_container--#{$name}__extra_1:before,
+      & .chat__emote_container--#{$name}__extra_1:after {
         @if $particle-image != "" {
           background-image: url($particle-image);
         }
@@ -673,7 +673,7 @@
         right: -2px;
       }
 
-      & .chat__emote {
+      & .chat__emote_container--#{$name}__extra_1 {
         &:before {
           /* left-inner particle */
           left: -3px;
@@ -691,8 +691,8 @@
       &.chat__emote_container--animate_forever {
         &:before,
         &:after,
-        & .chat__emote:before,
-        & .chat__emote:after {
+        & .chat__emote_container--#{$name}__extra_1:before,
+        & .chat__emote_container--#{$name}__extra_1:after {
           animation-iteration-count: infinite;
         }
       }
@@ -945,7 +945,8 @@
         z-index: 2;
 
         background-image: inherit;
-        background-size: 100% 100%;
+        background-size: inherit;
+        background-position: inherit;
         background-repeat: no-repeat;
 
         filter: opacity(0.1) drop-shadow(0px 0px 0px red) drop-shadow(0px 0px 0px red)

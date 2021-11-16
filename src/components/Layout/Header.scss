@@ -19,7 +19,7 @@
     }
 
     &__logo {
-      width: 50px;
+      width: var(--network-nav-collapsed-width);
       padding: 0;
       display: flex;
       align-items: center;

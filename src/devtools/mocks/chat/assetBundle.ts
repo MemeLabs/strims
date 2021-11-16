@@ -2799,10 +2799,13 @@ const src = {
     {
       "id": "3006",
       "name": "worth",
+      "extraWrapCount": 1,
+      "priority": 1,
     },
     {
       "id": "3007",
       "name": "dank",
+      "priority": 1,
     },
     {
       "id": "3008",
@@ -2811,6 +2814,8 @@ const src = {
     {
       "id": "3009",
       "name": "love",
+      "extraWrapCount": 1,
+      "priority": 1,
     },
     {
       "id": "3010",
@@ -2827,6 +2832,7 @@ const src = {
     {
       "id": "3013",
       "name": "banned",
+      "priority": 1,
     },
     {
       "id": "3014",
@@ -2851,6 +2857,8 @@ const src = {
     {
       "id": "3019",
       "name": "jam",
+      "extraWrapCount": 1,
+      "priority": 1,
     },
     {
       "id": "3020",
@@ -2863,6 +2871,7 @@ const src = {
     {
       "id": "3022",
       "name": "gold",
+      "priority": 1000,
     },
   ],
   "removedIds": [],

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import React from "react";
 
+import { Modifier } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
 
 type EmoteProps = {
@@ -28,12 +29,17 @@ const Emote: React.FC<EmoteProps> = ({
     return null;
   }
 
-  const effectiveModifiers = new Set<string>(style.modifiers);
+  const effectiveModifiers = new Set<Modifier>();
+  for (const m of style.modifiers) {
+    effectiveModifiers.add(room.styles.modifiers[m]);
+  }
   if (modifiers?.length > 0 && shouldShowModifiers) {
-    modifiers.forEach((m) => effectiveModifiers.add(m));
+    for (const m of modifiers) {
+      effectiveModifiers.add(room.styles.modifiers[m]);
+    }
   }
 
-  let rootDepth = effectiveModifiers.size + 1;
+  let rootDepth = effectiveModifiers.size;
 
   let emote = (
     <span
@@ -43,32 +49,37 @@ const Emote: React.FC<EmoteProps> = ({
         "chat__emote--animated": style.animated,
         "chat__emote--animate_forever": shouldAnimateForever,
         "chat__emote--legacy_spacing": legacySpacing,
-        "chat__emote--root": --rootDepth === 0,
+        "chat__emote--root": rootDepth === 0,
       })}
     >
       {children}
     </span>
   );
 
-  for (const modifier of effectiveModifiers) {
-    emote = (
-      <span
-        className={clsx(
-          `${style.name}_container`,
-          "chat__emote_container",
-          `chat__emote_container--emote_${name}`,
-          `chat__emote_container--${modifier}`,
-          {
-            "chat__emote_container--animated": style.animated,
-            "chat__emote_container--animate_forever": shouldAnimateForever,
-            "chat__emote_container--legacy_spacing": legacySpacing,
-            "chat__emote_container--root": --rootDepth === 0,
-          }
-        )}
-      >
-        {emote}
-      </span>
-    );
+  for (const modifier of Array.from(effectiveModifiers).sort((a, b) => b.priority - a.priority)) {
+    rootDepth--;
+
+    for (let i = modifier.extraWrapCount; i >= 0; i--) {
+      emote = (
+        <span
+          className={clsx(
+            `${style.name}_container`,
+            "chat__emote_container",
+            `chat__emote_container--emote_${name}`,
+            {
+              [`chat__emote_container--${modifier.name}`]: i === 0,
+              [`chat__emote_container--${modifier.name}__extra_${i}`]: i > 0,
+              "chat__emote_container--animated": style.animated,
+              "chat__emote_container--animate_forever": shouldAnimateForever,
+              "chat__emote_container--legacy_spacing": legacySpacing,
+              "chat__emote_container--root": rootDepth === 0 && i === 0,
+            }
+          )}
+        >
+          {emote}
+        </span>
+      );
+    }
   }
 
   return emote;

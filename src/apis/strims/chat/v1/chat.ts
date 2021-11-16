@@ -611,6 +611,7 @@ export type IModifier = {
   name?: string;
   priority?: number;
   internal?: boolean;
+  extraWrapCount?: number;
 }
 
 export class Modifier {
@@ -618,12 +619,14 @@ export class Modifier {
   name: string;
   priority: number;
   internal: boolean;
+  extraWrapCount: number;
 
   constructor(v?: IModifier) {
     this.id = v?.id || BigInt(0);
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
+    this.extraWrapCount = v?.extraWrapCount || 0;
   }
 
   static encode(m: Modifier, w?: Writer): Writer {
@@ -632,6 +635,7 @@ export class Modifier {
     if (m.name) w.uint32(18).string(m.name);
     if (m.priority) w.uint32(24).uint32(m.priority);
     if (m.internal) w.uint32(32).bool(m.internal);
+    if (m.extraWrapCount) w.uint32(40).uint32(m.extraWrapCount);
     return w;
   }
 
@@ -653,6 +657,9 @@ export class Modifier {
         break;
         case 4:
         m.internal = r.bool();
+        break;
+        case 5:
+        m.extraWrapCount = r.uint32();
         break;
         default:
         r.skipType(tag & 7);

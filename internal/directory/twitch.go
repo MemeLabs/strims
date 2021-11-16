@@ -16,6 +16,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// see first parameter bounds in helix api docs
+// https://dev.twitch.tv/docs/api/reference
+const twitchAPIMaxResults = 100
+
 type twitchAPI struct {
 	ClientID     string
 	ClientSecret string
@@ -26,9 +30,7 @@ type twitchAPI struct {
 }
 
 func (t *twitchAPI) BatchSize() int {
-	// see first parameter bounds in helix api docs
-	// https://dev.twitch.tv/docs/api/reference
-	return 100
+	return twitchAPIMaxResults
 }
 
 func (t *twitchAPI) getAccessToken() (string, error) {
@@ -65,7 +67,7 @@ func (t *twitchAPI) getAPIData(path string, data interface{}) error {
 		return err
 	}
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.twitch.tv/helix/%s&first=100", path), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.twitch.tv/helix/%s&first=%d", path, twitchAPIMaxResults), nil)
 	if err != nil {
 		return err
 	}

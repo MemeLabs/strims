@@ -12,12 +12,17 @@ import (
 	"google.golang.org/api/youtube/v3"
 )
 
+// see maxResults parameter bounds in youtube v3 videos/channels docs
+// https://developers.google.com/youtube/v3/docs/videos/list
+// https://developers.google.com/youtube/v3/docs/channels/list
+const youTubeAPIMaxResults = 50
+
 type youTubeEmbedLoader struct {
 	PublicAPIKey string
 }
 
 func (t *youTubeEmbedLoader) getAPIData(path string, data interface{}) error {
-	res, err := http.Get(fmt.Sprintf("https://www.googleapis.com/%s&key=%s&maxResults=50", path, t.PublicAPIKey))
+	res, err := http.Get(fmt.Sprintf("https://www.googleapis.com/%s&key=%s&maxResults=%d", path, t.PublicAPIKey, youTubeAPIMaxResults))
 	if err != nil {
 		return err
 	}
@@ -38,10 +43,7 @@ func (t *youTubeEmbedLoader) getChannels(ctx context.Context, ids []string) (*yo
 }
 
 func (t *youTubeEmbedLoader) BatchSize() int {
-	// see maxResults parameter bounds in youtube v3 videos/channels docs
-	// https://developers.google.com/youtube/v3/docs/videos/list
-	// https://developers.google.com/youtube/v3/docs/channels/list
-	return 50
+	return youTubeAPIMaxResults
 }
 
 func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLoaderResult, error) {

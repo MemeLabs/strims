@@ -95,5 +95,17 @@
       "Censor": "Censor",
       "Do nothing": "Do nothing"
     }
+  },
+
+  "directory": {
+    "Search": "Search...",
+    "Embed": "Embed",
+
+    "embedType": {
+      "AngelThump": "AngelThump stream",
+      "Twitch": "Twitch stream",
+      "Twitch VOD": "Twitch VOD",
+      "YouTube": "YouTube video"
+    }
   }
 }

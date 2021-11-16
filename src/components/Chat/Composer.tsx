@@ -24,6 +24,7 @@ import {
 } from "slate";
 import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
+import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
 
 import { useChat } from "../../contexts/Chat";
@@ -140,7 +141,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter") {
+      if (event.key === Key.Enter) {
         event.preventDefault();
         onMessage(ComposerEditor.text(editor).trim());
         ComposerEditor.clear(editor);
@@ -157,17 +158,17 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
       });
 
       switch (event.key) {
-        case "ArrowDown": {
+        case Key.ArrowDown: {
           event.preventDefault();
           setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
         }
-        case "ArrowUp": {
+        case Key.ArrowUp: {
           event.preventDefault();
           setSelectedMatch(({ index }) => getSelectedMatch(index - 1));
           return;
         }
-        case "Tab": {
+        case Key.Tab: {
           event.preventDefault();
 
           if (!selectedMatch.entry) {
@@ -179,7 +180,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
           setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
         }
-        case "Escape": {
+        case Key.Escape: {
           event.preventDefault();
           setSearch(null);
           return;

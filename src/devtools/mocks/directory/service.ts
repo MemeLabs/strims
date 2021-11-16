@@ -48,6 +48,9 @@ export default class DirectoryService implements DirectoryFrontendService {
                             },
                           },
                         },
+                        snippet: {
+                          channelName: `test ${i}`,
+                        },
                       },
                     },
                   },

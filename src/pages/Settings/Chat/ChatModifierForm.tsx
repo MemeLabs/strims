@@ -9,6 +9,7 @@ export interface ChatModifierFormData {
   name: string;
   priority: number;
   internal: boolean;
+  extraWrapCount: number;
 }
 
 export interface ChatModifierFormProps {
@@ -67,6 +68,20 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
         name="priority"
         label="Priority"
         placeholder="Enter a modifier priority"
+      />
+      <TextInput
+        control={control}
+        rules={{
+          min: 0,
+          max: {
+            value: 10,
+            message: "Rendering too many elements will degrade performance",
+          },
+        }}
+        type="number"
+        name="extraWrapCount"
+        label="Extra Wrappers"
+        placeholder="Enter a number of extra wrapper elements to render"
       />
       <ToggleInput control={control} name="internal" label="Internal" />
       <label className="input_label">
