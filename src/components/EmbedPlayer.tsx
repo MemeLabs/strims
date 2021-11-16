@@ -1,8 +1,13 @@
-import React from "react";
+import { Base64 } from "js-base64";
+import React, { useEffect } from "react";
+
+import { useClient } from "../contexts/FrontendApi";
+import { ServiceSlug, slugToService } from "../lib/directory";
 
 export interface EmbedPlayerProps {
-  service: string;
+  service: ServiceSlug;
   id: string;
+  networkKey?: string;
   disableControls?: boolean;
 }
 
@@ -19,11 +24,34 @@ const getEmbedUrl = (service: string, id: string): string | undefined => {
   }
 };
 
-const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id }) => {
+const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id, networkKey: networkKeyString }) => {
+  const client = useClient();
   const url = getEmbedUrl(service, id);
+
+  useEffect(() => {
+    if (!networkKeyString) {
+      return;
+    }
+
+    const networkKey = Base64.toUint8Array(networkKeyString);
+    const res = client.directory.publish({
+      networkKey,
+      listing: {
+        content: {
+          embed: {
+            service: slugToService(service),
+            id,
+          },
+        },
+      },
+    });
+    return () => res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
+  }, [service, id, networkKeyString]);
+
   if (!url) {
     return null;
   }
+
   return (
     <iframe
       className="embed_player__frame"

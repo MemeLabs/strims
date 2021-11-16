@@ -66,6 +66,84 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 	return ch, nil
 }
 
+func (s *directoryService) client(networkKey []byte) (*networkv1directory.DirectoryClient, error) {
+	client, err := s.app.Network().Dialer().Client(networkKey, networkKey, directory.AddressSalt)
+	if err != nil {
+		return nil, err
+	}
+	return networkv1directory.NewDirectoryClient(client), nil
+}
+
+// Publish ...
+func (s *directoryService) Publish(ctx context.Context, r *networkv1directory.FrontendPublishRequest) (*networkv1directory.FrontendPublishResponse, error) {
+	client, err := s.client(r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &networkv1directory.PublishResponse{}
+	if err := client.Publish(ctx, &networkv1directory.PublishRequest{Listing: r.Listing}, res); err != nil {
+		return nil, err
+	}
+
+	return &networkv1directory.FrontendPublishResponse{Id: res.Id}, nil
+}
+
+// Unpublish ...
+func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.FrontendUnpublishRequest) (*networkv1directory.FrontendUnpublishResponse, error) {
+	client, err := s.client(r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = client.Unpublish(
+		ctx,
+		&networkv1directory.UnpublishRequest{Id: r.Id},
+		&networkv1directory.UnpublishResponse{},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &networkv1directory.FrontendUnpublishResponse{}, nil
+}
+
+// Join ...
+func (s *directoryService) Join(ctx context.Context, r *networkv1directory.FrontendJoinRequest) (*networkv1directory.FrontendJoinResponse, error) {
+	client, err := s.client(r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = client.Join(
+		ctx,
+		&networkv1directory.JoinRequest{Id: r.Id},
+		&networkv1directory.JoinResponse{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1directory.FrontendJoinResponse{}, nil
+}
+
+// Part ...
+func (s *directoryService) Part(ctx context.Context, r *networkv1directory.FrontendPartRequest) (*networkv1directory.FrontendPartResponse, error) {
+	client, err := s.client(r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = client.Part(
+		ctx,
+		&networkv1directory.PartRequest{Id: r.Id},
+		&networkv1directory.PartResponse{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1directory.FrontendPartResponse{}, nil
+}
+
 // Test ...
 func (s *directoryService) Test(ctx context.Context, r *networkv1directory.FrontendTestRequest) (*networkv1directory.FrontendTestResponse, error) {
 	client, err := s.app.Network().Dialer().Client(r.NetworkKey, r.NetworkKey, directory.AddressSalt)

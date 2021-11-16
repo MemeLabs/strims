@@ -74,13 +74,8 @@ const EMBED_URLS = [
   },
 ];
 
-interface Embed {
-  service: Listing.Embed.Service;
-  id: string;
-}
-
 interface EmbedMenuItemProps {
-  embed: Embed;
+  embed: Listing.IEmbed;
   selected: boolean;
   onMouseEnter: () => void;
   onSelect: () => void;
@@ -177,7 +172,7 @@ const ListingMenuItem: React.FC<ListingMenuItemProps> = ({
 type SearchResult =
   | {
       type: "EMBED";
-      embed: Embed;
+      embed: Listing.IEmbed;
       onSelect: () => void;
     }
   | {
@@ -235,7 +230,7 @@ const Search: React.FC = () => {
   const [directory] = useContext(DirectoryContext);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [query, setQuery] = useState("https://www.twitch.tv/koil");
+  const [query, setQuery] = useState("");
 
   const menuOpen = isFocused && results.length !== 0;
 
@@ -257,7 +252,7 @@ const Search: React.FC = () => {
           {
             type: "EMBED",
             embed: embed(match),
-            onSelect: () => console.log(match),
+            onSelect: () => selectEmbed(embed(match)),
           },
         ]);
         return;
@@ -275,7 +270,7 @@ const Search: React.FC = () => {
           results.push({
             type: "LISTING",
             listing,
-            onSelect: () => selectListing(networkKey, listing),
+            onSelect: () => selectListing(networkKey, listing.listing),
           });
         }
       }
@@ -312,8 +307,14 @@ const Search: React.FC = () => {
   const player = useContext(PlayerContext);
   const layout = useLayout();
 
+  const selectEmbed = (embed: Listing.IEmbed) => {
+    // TODO: this blows up if there are no directories loaded... select input? checkboxes?
+    const [{ networkKey }] = Object.values(directory);
+    selectListing(networkKey, new Listing({ content: { embed } }));
+  };
+
   // TODO: DRY with grid (useDirectory?)
-  const selectListing = (networkKey: Uint8Array, listing: DirectoryListing) => {
+  const selectListing = (networkKey: Uint8Array, listing: Listing) => {
     layout.setShowContent({
       closed: false,
       closing: true,
@@ -321,9 +322,9 @@ const Search: React.FC = () => {
     });
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey), listing.listing));
+    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey), listing));
     if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(Base64.fromUint8Array(networkKey), listing.listing);
+      const path = formatUri(Base64.fromUint8Array(networkKey), listing);
       player.setPath(path);
       history.push(path);
     }

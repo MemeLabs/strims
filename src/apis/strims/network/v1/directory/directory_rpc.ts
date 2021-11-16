@@ -22,6 +22,18 @@ import {
   IFrontendOpenRequest,
   FrontendOpenRequest,
   FrontendOpenResponse,
+  IFrontendPublishRequest,
+  FrontendPublishRequest,
+  FrontendPublishResponse,
+  IFrontendUnpublishRequest,
+  FrontendUnpublishRequest,
+  FrontendUnpublishResponse,
+  IFrontendJoinRequest,
+  FrontendJoinRequest,
+  FrontendJoinResponse,
+  IFrontendPartRequest,
+  FrontendPartRequest,
+  FrontendPartResponse,
   IFrontendTestRequest,
   FrontendTestRequest,
   FrontendTestResponse,
@@ -72,11 +84,19 @@ export class DirectoryClient {
 
 export interface DirectoryFrontendService {
   open(req: FrontendOpenRequest, call: strims_rpc_Call): GenericReadable<FrontendOpenResponse>;
+  publish(req: FrontendPublishRequest, call: strims_rpc_Call): Promise<FrontendPublishResponse> | FrontendPublishResponse;
+  unpublish(req: FrontendUnpublishRequest, call: strims_rpc_Call): Promise<FrontendUnpublishResponse> | FrontendUnpublishResponse;
+  join(req: FrontendJoinRequest, call: strims_rpc_Call): Promise<FrontendJoinResponse> | FrontendJoinResponse;
+  part(req: FrontendPartRequest, call: strims_rpc_Call): Promise<FrontendPartResponse> | FrontendPartResponse;
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse;
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
   host.registerMethod<FrontendOpenRequest, FrontendOpenResponse>("strims.network.v1.directory.DirectoryFrontend.Open", service.open.bind(service), FrontendOpenRequest);
+  host.registerMethod<FrontendPublishRequest, FrontendPublishResponse>("strims.network.v1.directory.DirectoryFrontend.Publish", service.publish.bind(service), FrontendPublishRequest);
+  host.registerMethod<FrontendUnpublishRequest, FrontendUnpublishResponse>("strims.network.v1.directory.DirectoryFrontend.Unpublish", service.unpublish.bind(service), FrontendUnpublishRequest);
+  host.registerMethod<FrontendJoinRequest, FrontendJoinResponse>("strims.network.v1.directory.DirectoryFrontend.Join", service.join.bind(service), FrontendJoinRequest);
+  host.registerMethod<FrontendPartRequest, FrontendPartResponse>("strims.network.v1.directory.DirectoryFrontend.Part", service.part.bind(service), FrontendPartRequest);
   host.registerMethod<FrontendTestRequest, FrontendTestResponse>("strims.network.v1.directory.DirectoryFrontend.Test", service.test.bind(service), FrontendTestRequest);
 }
 
@@ -85,6 +105,22 @@ export class DirectoryFrontendClient {
 
   public open(req?: IFrontendOpenRequest): GenericReadable<FrontendOpenResponse> {
     return this.host.expectMany(this.host.call("strims.network.v1.directory.DirectoryFrontend.Open", new FrontendOpenRequest(req)), FrontendOpenResponse);
+  }
+
+  public publish(req?: IFrontendPublishRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendPublishResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Publish", new FrontendPublishRequest(req)), FrontendPublishResponse, opts);
+  }
+
+  public unpublish(req?: IFrontendUnpublishRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendUnpublishResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Unpublish", new FrontendUnpublishRequest(req)), FrontendUnpublishResponse, opts);
+  }
+
+  public join(req?: IFrontendJoinRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendJoinResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Join", new FrontendJoinRequest(req)), FrontendJoinResponse, opts);
+  }
+
+  public part(req?: IFrontendPartRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendPartResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Part", new FrontendPartRequest(req)), FrontendPartResponse, opts);
   }
 
   public test(req?: IFrontendTestRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendTestResponse> {

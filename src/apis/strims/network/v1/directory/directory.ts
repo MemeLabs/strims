@@ -1961,6 +1961,290 @@ export namespace FrontendOpenResponse {
 
 }
 
+export type IFrontendPublishRequest = {
+  networkKey?: Uint8Array;
+  listing?: IListing;
+}
+
+export class FrontendPublishRequest {
+  networkKey: Uint8Array;
+  listing: Listing | undefined;
+
+  constructor(v?: IFrontendPublishRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.listing = v?.listing && new Listing(v.listing);
+  }
+
+  static encode(m: FrontendPublishRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.listing) Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendPublishRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendPublishRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.listing = Listing.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendPublishResponse = {
+  id?: bigint;
+}
+
+export class FrontendPublishResponse {
+  id: bigint;
+
+  constructor(v?: IFrontendPublishResponse) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendPublishResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendPublishResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendPublishResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendUnpublishRequest = {
+  networkKey?: Uint8Array;
+  id?: bigint;
+}
+
+export class FrontendUnpublishRequest {
+  networkKey: Uint8Array;
+  id: bigint;
+
+  constructor(v?: IFrontendUnpublishRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendUnpublishRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendUnpublishRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendUnpublishRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendUnpublishResponse = {
+}
+
+export class FrontendUnpublishResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendUnpublishResponse) {
+  }
+
+  static encode(m: FrontendUnpublishResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendUnpublishResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendUnpublishResponse();
+  }
+}
+
+export type IFrontendJoinRequest = {
+  networkKey?: Uint8Array;
+  id?: bigint;
+}
+
+export class FrontendJoinRequest {
+  networkKey: Uint8Array;
+  id: bigint;
+
+  constructor(v?: IFrontendJoinRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendJoinRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendJoinRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendJoinRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendJoinResponse = {
+  id?: bigint;
+}
+
+export class FrontendJoinResponse {
+  id: bigint;
+
+  constructor(v?: IFrontendJoinResponse) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendJoinResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendJoinResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendJoinResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendPartRequest = {
+  networkKey?: Uint8Array;
+  id?: bigint;
+}
+
+export class FrontendPartRequest {
+  networkKey: Uint8Array;
+  id: bigint;
+
+  constructor(v?: IFrontendPartRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendPartRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendPartRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendPartRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendPartResponse = {
+}
+
+export class FrontendPartResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendPartResponse) {
+  }
+
+  static encode(m: FrontendPartResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendPartResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendPartResponse();
+  }
+}
+
 export type IFrontendTestRequest = {
   networkKey?: Uint8Array;
 }

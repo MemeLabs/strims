@@ -158,9 +158,9 @@ func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *net
 	case *networkv1.CreateNetworkFromInvitationRequest_InvitationBytes:
 		invBytes = r.GetInvitationBytes()
 	case nil:
-		return nil, errors.New("Invitation has no content")
+		return nil, errors.New("invitation has no content")
 	default:
-		return nil, fmt.Errorf("Invitation has unexpected type %T", x)
+		return nil, fmt.Errorf("invitation has unexpected type %T", x)
 	}
 
 	var wrapper networkv1.Invitation

@@ -97,6 +97,10 @@ func (c *DirectoryClient) Ping(
 // RegisterDirectoryFrontendService ...
 func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service DirectoryFrontendService) {
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Open", service.Open)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Publish", service.Publish)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Unpublish", service.Unpublish)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Join", service.Join)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Part", service.Part)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Test", service.Test)
 }
 
@@ -106,6 +110,22 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendOpenRequest,
 	) (<-chan *FrontendOpenResponse, error)
+	Publish(
+		ctx context.Context,
+		req *FrontendPublishRequest,
+	) (*FrontendPublishResponse, error)
+	Unpublish(
+		ctx context.Context,
+		req *FrontendUnpublishRequest,
+	) (*FrontendUnpublishResponse, error)
+	Join(
+		ctx context.Context,
+		req *FrontendJoinRequest,
+	) (*FrontendJoinResponse, error)
+	Part(
+		ctx context.Context,
+		req *FrontendPartRequest,
+	) (*FrontendPartResponse, error)
 	Test(
 		ctx context.Context,
 		req *FrontendTestRequest,
@@ -129,6 +149,42 @@ func (c *DirectoryFrontendClient) Open(
 	res chan *FrontendOpenResponse,
 ) error {
 	return c.client.CallStreaming(ctx, "strims.network.v1.directory.DirectoryFrontend.Open", req, res)
+}
+
+// Publish ...
+func (c *DirectoryFrontendClient) Publish(
+	ctx context.Context,
+	req *FrontendPublishRequest,
+	res *FrontendPublishResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Publish", req, res)
+}
+
+// Unpublish ...
+func (c *DirectoryFrontendClient) Unpublish(
+	ctx context.Context,
+	req *FrontendUnpublishRequest,
+	res *FrontendUnpublishResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Unpublish", req, res)
+}
+
+// Join ...
+func (c *DirectoryFrontendClient) Join(
+	ctx context.Context,
+	req *FrontendJoinRequest,
+	res *FrontendJoinResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Join", req, res)
+}
+
+// Part ...
+func (c *DirectoryFrontendClient) Part(
+	ctx context.Context,
+	req *FrontendPartRequest,
+	res *FrontendPartResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Part", req, res)
 }
 
 // Test ...

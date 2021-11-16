@@ -225,6 +225,38 @@ message FrontendOpenResponse {
   }
 }
 
+message FrontendPublishRequest {
+  bytes network_key = 1;
+  Listing listing = 2;
+}
+
+message FrontendPublishResponse {
+  uint64 id = 1;
+}
+
+message FrontendUnpublishRequest {
+  bytes network_key = 1;
+  uint64 id = 2;
+}
+
+message FrontendUnpublishResponse {}
+
+message FrontendJoinRequest {
+  bytes network_key = 1;
+  uint64 id = 2;
+}
+
+message FrontendJoinResponse {
+  uint64 id = 1;
+}
+
+message FrontendPartRequest {
+  bytes network_key = 1;
+  uint64 id = 2;
+}
+
+message FrontendPartResponse {}
+
 message FrontendTestRequest {
   bytes network_key = 1;
 }
@@ -233,6 +265,10 @@ message FrontendTestResponse {}
 
 service DirectoryFrontend {
   rpc Open(FrontendOpenRequest) returns (stream FrontendOpenResponse);
+  rpc Publish(FrontendPublishRequest) returns (FrontendPublishResponse);
+  rpc Unpublish(FrontendUnpublishRequest) returns (FrontendUnpublishResponse);
+  rpc Join(FrontendJoinRequest) returns (FrontendJoinResponse);
+  rpc Part(FrontendPartRequest) returns (FrontendPartResponse);
   rpc Test(FrontendTestRequest) returns (FrontendTestResponse);
 }
 

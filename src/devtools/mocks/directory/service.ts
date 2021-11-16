@@ -71,4 +71,26 @@ export default class DirectoryService implements DirectoryFrontendService {
     console.log("test", req);
     return Promise.resolve(new directoryv1.FrontendTestResponse());
   }
+
+  publish(req: directoryv1.FrontendPublishRequest): Promise<directoryv1.FrontendPublishResponse> {
+    console.log("publish", req);
+    return Promise.resolve(new directoryv1.FrontendPublishResponse());
+  }
+
+  unpublish(
+    req: directoryv1.FrontendUnpublishRequest
+  ): Promise<directoryv1.FrontendUnpublishResponse> {
+    console.log("unpublish", req);
+    return Promise.resolve(new directoryv1.FrontendUnpublishResponse());
+  }
+
+  join(req: directoryv1.FrontendJoinRequest): Promise<directoryv1.FrontendJoinResponse> {
+    console.log("join", req);
+    return Promise.resolve(new directoryv1.FrontendJoinResponse());
+  }
+
+  part(req: directoryv1.FrontendPartRequest): Promise<directoryv1.FrontendPartResponse> {
+    console.log("part", req);
+    return Promise.resolve(new directoryv1.FrontendPartResponse());
+  }
 }

@@ -1,5 +1,7 @@
 import React, { createContext, useMemo, useState } from "react";
 
+import { ServiceSlug } from "../lib/directory";
+
 export const enum PlayerMode {
   FULL,
   LARGE,
@@ -10,8 +12,9 @@ export const enum PlayerMode {
 export type PlayerSource =
   | {
       type: "embed";
-      service: string;
+      service: ServiceSlug;
       id: string;
+      networkKey?: string;
     }
   | {
       type: "swarm";

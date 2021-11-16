@@ -63,6 +63,7 @@ const Player: React.FC = ({ children }) => {
         )}
         {source?.type === "embed" && (
           <EmbedPlayer
+            networkKey={source.networkKey}
             service={source.service}
             id={source.id}
             disableControls={mode === PlayerMode.PIP}
