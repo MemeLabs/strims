@@ -1,6 +1,6 @@
 import React from "react";
 import { useForm } from "react-hook-form";
-import { Link, Redirect } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { ICreateProfileRequest } from "../apis/strims/profile/v1/profile";
 import { InputError, TextInput } from "../components/Form";
@@ -19,7 +19,7 @@ const SignUpPage: React.FC = () => {
   React.useEffect(profileActions.clearError, []);
 
   if (profile) {
-    return <Redirect to="/" />;
+    return <Navigate to="/" />;
   }
 
   const onSubmit = handleSubmit((data) => profileActions.createProfile(data));

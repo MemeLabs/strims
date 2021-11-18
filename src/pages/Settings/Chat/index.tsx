@@ -1,7 +1,6 @@
 import React from "react";
-import { Switch } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
-import { PrivateRoute } from "../../../components/PrivateRoute";
 import ChatEmoteCreateForm from "./ChatEmoteCreateForm";
 import ChatEmoteEditForm from "./ChatEmoteEditForm";
 import ChatEmoteList from "./ChatEmoteList";
@@ -17,52 +16,20 @@ import ChatTagList from "./ChatTagList";
 
 const Router: React.FC = () => (
   <main className="network_page">
-    <Switch>
-      <PrivateRoute path="/settings/chat-servers" exact component={ChatServerList} />
-      <PrivateRoute path="/settings/chat-servers/new" exact component={ChatServerCreateForm} />
-      <PrivateRoute path="/settings/chat-servers/:serverId" exact component={ChatServerEditForm} />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/emotes"
-        exact
-        component={ChatEmoteList}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/emotes/new"
-        exact
-        component={ChatEmoteCreateForm}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/emotes/:emoteId"
-        exact
-        component={ChatEmoteEditForm}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/modifiers"
-        exact
-        component={ChatModifierList}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/modifiers/new"
-        exact
-        component={ChatModifierCreateForm}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/modifiers/:modifierId"
-        exact
-        component={ChatModifierEditForm}
-      />
-      <PrivateRoute path="/settings/chat-servers/:serverId/tags" exact component={ChatTagList} />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/tags/new"
-        exact
-        component={ChatTagCreateForm}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers/:serverId/tags/:tagId"
-        exact
-        component={ChatTagEditForm}
-      />
-    </Switch>
+    <Routes>
+      <Route index element={<ChatServerList />} />
+      <Route path="new" element={<ChatServerCreateForm />} />
+      <Route path=":serverId" element={<ChatServerEditForm />} />
+      <Route path=":serverId/emotes" element={<ChatEmoteList />} />
+      <Route path=":serverId/emotes/new" element={<ChatEmoteCreateForm />} />
+      <Route path=":serverId/emotes/:emoteId" element={<ChatEmoteEditForm />} />
+      <Route path=":serverId/modifiers" element={<ChatModifierList />} />
+      <Route path=":serverId/modifiers/new" element={<ChatModifierCreateForm />} />
+      <Route path=":serverId/modifiers/:modifierId" element={<ChatModifierEditForm />} />
+      <Route path=":serverId/tags" element={<ChatTagList />} />
+      <Route path=":serverId/tags/new" element={<ChatTagCreateForm />} />
+      <Route path=":serverId/tags/:tagId" element={<ChatTagEditForm />} />
+    </Routes>
   </main>
 );
 

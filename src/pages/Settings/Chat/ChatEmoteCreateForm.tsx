@@ -1,18 +1,18 @@
 import React from "react";
-import { useHistory, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
 import { toEmoteProps } from "./utils";
 
 const ChatEmoteCreateFormPage: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ value }] = useCall("chatServer", "listEmotes", {
     args: [{ serverId: BigInt(serverId) }],
   });
-  const history = useHistory();
+  const navigate = useNavigate();
   const [{ error, loading }, createChatEmote] = useLazyCall("chatServer", "createEmote", {
-    onComplete: () => history.replace(`/settings/chat-servers/${serverId}/emotes`),
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true }),
   });
 
   const onSubmit = (data: ChatEmoteFormData) =>

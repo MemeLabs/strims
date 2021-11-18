@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, Redirect, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Emote, EmoteImage } from "../../../apis/strims/chat/v1/chat";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -58,7 +58,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDel
 };
 
 const ChatEmoteList: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getEmotes] = useCall("chatServer", "listEmotes", {
     args: [{ serverId: BigInt(serverId) }],
   });
@@ -67,7 +67,7 @@ const ChatEmoteList: React.FC = () => {
     return null;
   }
   if (!value?.emotes.length) {
-    return <Redirect to={`/settings/chat-servers/${serverId}/emotes/new`} />;
+    return <Navigate to={`/settings/chat-servers/${serverId}/emotes/new`} />;
   }
   return (
     <>

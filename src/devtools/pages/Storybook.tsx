@@ -1,12 +1,12 @@
 import clsx from "clsx";
 import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { Redirect, Route, Switch, useHistory } from "react-router";
+import { Location, Navigate, Route, Routes, useLocation } from "react-router";
 import { NavLink } from "react-router-dom";
 import { useToggle } from "react-use";
 
-import { Provider as ThemeProvider } from "../../contexts/Theme";
 import { WithThemeProps, withTheme } from "../../components/Theme";
 import { WithRootRefProps, withLayoutContext } from "../../contexts/Layout";
+import { Provider as ThemeProvider } from "../../contexts/Theme";
 import Nav from "../components/Nav";
 
 const stories = require.context("../stories/", true, /\.stories\.tsx$/, "lazy");
@@ -107,10 +107,8 @@ interface StorybookNavProps {
 const StorybookNav: React.FC<StorybookNavProps> = ({ node, shouldExpand = true, extend }) => {
   const path = formatPath(...node.path);
 
-  const history = useHistory();
-  const [expanded, toggleExpanded] = useToggle(
-    shouldExpand || history.location.pathname.startsWith(path)
-  );
+  const location = useLocation();
+  const [expanded, toggleExpanded] = useToggle(shouldExpand || location.pathname.startsWith(path));
 
   useEffect(() => {
     if (expanded && node.module) {
@@ -122,8 +120,12 @@ const StorybookNav: React.FC<StorybookNavProps> = ({ node, shouldExpand = true, 
   if (node.component) {
     return (
       <NavLink
-        className="storybook_nav__link"
-        activeClassName="storybook_nav__link--active"
+        className={({ isActive }) =>
+          clsx({
+            "storybook_nav__link": true,
+            "storybook_nav__link--active": isActive,
+          })
+        }
         to={path}
       >
         {node.name}
@@ -150,37 +152,25 @@ const StorybookNav: React.FC<StorybookNavProps> = ({ node, shouldExpand = true, 
   );
 };
 
-interface StorybookRoutesProps {
-  node: Nav;
-  extend: Extend;
-}
-
-const StorybookRoutes: React.FC<StorybookRoutesProps> = ({ node, extend }) => {
-  const history = useHistory();
-
-  const component = lazy(async (): Promise<{ default: React.ComponentType }> => {
+const storybookRoutes = (location: Location, node: Nav, extend: Extend): React.ReactElement[] => {
+  const C = lazy(async (): Promise<{ default: React.ComponentType }> => {
     const mod = (await stories(node.module)) as StoriesModule;
     extend(node.path, mod);
-    const story = mod.default.find(
-      (p) => formatPath(...node.path, p.name) === history.location.pathname
-    );
+    const story = mod.default.find((p) => formatPath(...node.path, p.name) === location.pathname);
     if (story) {
       return { default: story.component };
     }
     const route = mod.default[0];
     return {
-      default: () => <Redirect to={formatPath(...node.path, route.name)} />,
+      default: () => <Navigate to={formatPath(...node.path, route.name)} />,
     };
   });
 
-  return (
-    <>
-      {node.nodes.map((node) => (
-        <StorybookRoutes key={node.name} node={node} extend={extend} />
-      ))}
-      {node.module && <Route path={formatPath(...node.path)} component={component} />}
-    </>
-  );
+  const routes = node.nodes.map((node) => storybookRoutes(location, node, extend)).flat();
+  if (node.module) {
+    routes.push(<Route key={node.name} path={node.path.join("/") + "/*"} element={<C />} />);
+  }
+  return routes;
 };
 
 interface StoryContainerProps extends WithThemeProps, WithRootRefProps {}
@@ -197,6 +187,7 @@ const LoadingMessage = () => <p className="loading_message">loading</p>;
 
 const Storybook: React.FC = () => {
   const [node, extend] = useStorybookNav();
+  const location = useLocation();
 
   return (
     <>
@@ -208,9 +199,7 @@ const Storybook: React.FC = () => {
         <ThemeProvider>
           <StoryContainer>
             <Suspense fallback={<LoadingMessage />}>
-              <Switch>
-                <StorybookRoutes node={node} extend={extend} />
-              </Switch>
+              <Routes>{storybookRoutes(location, node, extend)}</Routes>
             </Suspense>
           </StoryContainer>
         </ThemeProvider>

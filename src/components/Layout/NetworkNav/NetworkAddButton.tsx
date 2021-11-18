@@ -1,6 +1,6 @@
 import { Base64 } from "js-base64";
 import React from "react";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import usePortal from "react-useportal";
 
 import { CreateServerResponse } from "../../../apis/strims/network/v1/network";
@@ -14,10 +14,10 @@ const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, 
     closePortal: () => void;
     Portal: React.ElementType;
   };
-  const history = useHistory();
+  const navigate = useNavigate();
 
   const handleCreate = (res: CreateServerResponse) => {
-    history.push(
+    navigate(
       `/directory/${Base64.fromUint8Array(certificateRoot(res.network.certificate).key, true)}`
     );
     closePortal();

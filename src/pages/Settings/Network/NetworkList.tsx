@@ -2,14 +2,13 @@ import "./ThingTable.scss";
 
 import React from "react";
 import { BsThreeDots } from "react-icons/bs";
-import { Link, Redirect } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { Network } from "../../../apis/strims/network/v1/network";
 import Dropdown from "../../../components/Dropdown";
 import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
 import { useProfile } from "../../../contexts/Profile";
 import { certificateRoot } from "../../../lib/certificate";
-import jsonutil from "../../../lib/jsonutil";
 import PublishNetworkModal from "./PublishNetworkModal";
 
 interface ChatServerTableProps {
@@ -104,7 +103,7 @@ const ChatServerList: React.FC = () => {
     return null;
   }
   // if (!value?.networks.length) {
-  //   return <Redirect to="/settings/networks/new" />;
+  //   return <Navigate to="/settings/networks/new" />;
   // }
   return (
     <>

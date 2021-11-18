@@ -5,7 +5,7 @@ import { Base64 } from "js-base64";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
-import { useHistory } from "react-router";
+import { useNavigate } from "react-router";
 import { useToggle } from "react-use";
 import { Key } from "ts-key-enum";
 
@@ -294,7 +294,7 @@ const Search: React.FC = () => {
         return;
       case Key.Enter:
         e.preventDefault();
-        results[selectedIndex]?.onSelect();
+        results[Math.max(selectedIndex, 0)]?.onSelect();
         return;
       case Key.Escape:
         e.preventDefault();
@@ -303,7 +303,7 @@ const Search: React.FC = () => {
     }
   };
 
-  const history = useHistory();
+  const navigate = useNavigate();
   const player = useContext(PlayerContext);
   const layout = useLayout();
 
@@ -326,7 +326,7 @@ const Search: React.FC = () => {
     if (DEVICE_TYPE !== DeviceType.Portable) {
       const path = formatUri(Base64.fromUint8Array(networkKey), listing);
       player.setPath(path);
-      history.push(path);
+      navigate(path);
     }
 
     setQuery("");

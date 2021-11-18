@@ -5,6 +5,7 @@ import { Base64 } from "js-base64";
 
 import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory";
 import { DirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
+import events from "./events";
 
 export default class DirectoryService implements DirectoryFrontendService {
   responses: Readable<directoryv1.FrontendOpenResponse>;
@@ -27,7 +28,7 @@ export default class DirectoryService implements DirectoryFrontendService {
     const ch = new PassThrough({ objectMode: true });
 
     window.setTimeout(() => {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < events.length; i++) {
         ch.push(
           new directoryv1.FrontendOpenResponse({
             networkKey: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
@@ -36,22 +37,7 @@ export default class DirectoryService implements DirectoryFrontendService {
                 events: [
                   {
                     body: {
-                      listingChange: {
-                        id: BigInt(i),
-                        listing: {
-                          content: {
-                            chat: {
-                              key: Base64.toUint8Array(
-                                "fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q="
-                              ),
-                              name: `test ${i}`,
-                            },
-                          },
-                        },
-                        snippet: {
-                          channelName: `test ${i}`,
-                        },
-                      },
+                      listingChange: events[i],
                     },
                   },
                 ],

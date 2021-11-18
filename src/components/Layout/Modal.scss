@@ -1,0 +1,56 @@
+.modal {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  height: var(--layout-height);
+  width: var(--layout-width);
+  top: 0;
+  left: 0;
+  transform: translateY(calc(100% - max(var(--layout-drag-offset, 0px), 0px)));
+  transition: transform 200ms ease-in-out;
+  box-shadow: var(--shadow-elevation-3);
+  touch-action: none;
+
+  &--dragging {
+    transition: none;
+  }
+
+  &--open.modal--closing {
+    transform: translateY(var(--layout-drag-offset, 0px));
+  }
+
+  &__header {
+    background: black;
+    flex: 0 0 50px;
+    user-select: none;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+
+    &__title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 0.5em;
+      display: flex;
+      align-items: center;
+    }
+
+    &__close {
+      flex: 0 0 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &__icon {
+        height: 1.6em;
+        width: 1.6em;
+      }
+    }
+  }
+
+  &__body {
+    flex: 1;
+    background: var(--color-background-layout-body);
+  }
+}

@@ -39,14 +39,14 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
   );
 
   return (
-    <div className="modal">
-      <div className="modal__background" onClick={onClose} />
-      <div className="modal__window">
-        <button className="modal__close_button" onClick={onClose}>
+    <div className="add_network_modal">
+      <div className="add_network_modal__background" onClick={onClose} />
+      <div className="add_network_modal__window">
+        <button className="add_network_modal__close_button" onClick={onClose}>
           <MdClose size={24} />
         </button>
         <form onSubmit={onSubmit}>
-          <div className="modal__body">
+          <div className="add_network_modal__body">
             <h1 className="create_network__title">Create a network</h1>
             <div className="create_network__description">
               Give your new network a personality with a name and an icon. You can always change it
@@ -65,7 +65,7 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
               placeholder="Network name"
             />
           </div>
-          <div className="modal__footer">
+          <div className="add_network_modal__footer">
             <button className="input input__button" disabled={loading}>
               Create
             </button>

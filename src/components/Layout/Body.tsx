@@ -1,18 +1,20 @@
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { isEqual } from "lodash";
-import React, { useRef } from "react";
+import React, { Suspense, useRef } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
+import { Outlet } from "react-router";
 
 import NetworkNav from "../../components/Layout/NetworkNav";
 import { ContentState, useLayout } from "../../contexts/Layout";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import LoadingPlaceholder from "../../root/LoadingPlaceholder";
 import Chat from "./Chat";
 import Player from "./Player";
 
 const DRAG_THRESHOLD = 200;
 
-export const LayoutBody: React.FC = ({ children }) => {
+export const LayoutBody: React.FC = () => {
   const layout = useLayout();
 
   const foo2 = useRef<HTMLDivElement>(null);
@@ -89,7 +91,11 @@ export const LayoutBody: React.FC = ({ children }) => {
       <main className="foo_1">
         <div className="content_panel">
           <Scrollbars autoHide>
-            <div className="scroll_content_test">{children}</div>
+            <div className="scroll_content_test">
+              <Suspense fallback={<LoadingPlaceholder />}>
+                <Outlet />
+              </Suspense>
+            </div>
           </Scrollbars>
         </div>
         <div

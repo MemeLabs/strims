@@ -1,8 +1,9 @@
 import "./Header.scss";
 
+import clsx from "clsx";
 import React, { useCallback, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { FiActivity, FiBell, FiCloud, FiSearch, FiUser } from "react-icons/fi";
+import { FiActivity, FiBell, FiCloud, FiUser } from "react-icons/fi";
 import { MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
 import { Link, NavLink } from "react-router-dom";
 
@@ -12,7 +13,11 @@ import { useLayout } from "../../contexts/Layout";
 import Debugger from "../Debugger";
 import DirectorySearch from "../Directory/Search";
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  search?: React.ReactNode;
+}
+
+const Header: React.FC<HeaderProps> = ({ search = <DirectorySearch /> }) => {
   const { t } = useTranslation();
   const client = useClient();
   const layout = useLayout();
@@ -28,42 +33,29 @@ const Header: React.FC = () => {
     console.log(new TextDecoder().decode(data));
   };
 
+  const linkClassName = ({ isActive }: { isActive: boolean }) =>
+    clsx({
+      "layout_header__primary_nav__link": true,
+      "layout_header__primary_nav__link--active": isActive,
+    });
+
   return (
     <header className="layout_header">
       <div className="layout_header__primary_nav">
         <Link to="/" className="layout_header__primary_nav__logo">
           <Trans>layout.header.Home</Trans>
         </Link>
-        <NavLink
-          to="/settings"
-          className="layout_header__primary_nav__link"
-          activeClassName="layout_header__primary_nav__link--active"
-        >
+        <NavLink to="/settings" className={linkClassName}>
           <Trans>layout.header.Categories</Trans>
         </NavLink>
-        <NavLink
-          to="/"
-          exact
-          className="layout_header__primary_nav__link"
-          activeClassName="layout_header__primary_nav__link--active"
-        >
+        <NavLink to="/" className={linkClassName}>
           <Trans>layout.header.Streams</Trans>
         </NavLink>
-        <NavLink
-          to="/broadcast"
-          className="layout_header__primary_nav__link"
-          activeClassName="layout_header__primary_nav__link--active"
-        >
+        <NavLink to="/broadcast" className={linkClassName}>
           <Trans>layout.header.Broadcast</Trans>
         </NavLink>
       </div>
-      <div className="layout_header__search">
-        {/* <input className="layout_header__search__input" placeholder={t("layout.header.Search")} />
-        <button className="layout_header__search__button">
-          <FiSearch />
-        </button> */}
-        <DirectorySearch />
-      </div>
+      <div className="layout_header__search">{search}</div>
       <div className="layout_header__user_nav">
         <button className="layout_header__user_nav__link" onClick={() => layout.toggleShowChat()}>
           {layout.showChat ? (

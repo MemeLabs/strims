@@ -1,17 +1,17 @@
 import React from "react";
-import { useHistory, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatTagForm, { ChatTagFormData } from "./ChatTagForm";
 
 const ChatTagCreateFormPage: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ value }] = useCall("chatServer", "listTags", {
     args: [{ serverId: BigInt(serverId) }],
   });
-  const history = useHistory();
+  const navigate = useNavigate();
   const [{ error, loading }, createChatTag] = useLazyCall("chatServer", "createTag", {
-    onComplete: (res) => history.replace(`/settings/chat-servers/${serverId}/tags`),
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}/tags`, { replace: true }),
   });
 
   const onSubmit = (data: ChatTagFormData) =>

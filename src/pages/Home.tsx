@@ -2,9 +2,14 @@
 
 // import { Base64 } from "js-base64";
 import React, { useContext, useEffect, useRef, useState } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router";
+import { useToggle } from "react-use";
+import usePortal from "use-portal";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
+import { useBackgroundRoute } from "../contexts/BackgroundRoute";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
+import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
@@ -12,6 +17,8 @@ import { certificateRoot } from "../lib/certificate";
 import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";
+import { settingsRoutes } from "../root/MainRouter";
+import SettingsLayout from "./Settings/Layout";
 
 // import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
@@ -200,6 +207,25 @@ const HomePage: React.FC = () => {
     console.log(new TextDecoder().decode(data));
   };
 
+  const [modalOpen, toggleModalOpen] = useToggle(false);
+  const { root } = useLayout();
+  const { Portal } = usePortal({ target: root.current });
+  const navigate = useNavigate();
+
+  const backgroundRoute = useBackgroundRoute();
+  const handleModalClick = () => {
+    backgroundRoute.toggle(true);
+    toggleModalOpen(true);
+    navigate("/settings");
+  };
+
+  const handleModalClose = () => {
+    backgroundRoute.toggle(false);
+    toggleModalOpen(false);
+  };
+
+  console.log(location, modalOpen, Portal, backgroundRoute);
+
   // useEffect(() => {
   //   handleTestClick();
   // }, []);
@@ -208,9 +234,20 @@ const HomePage: React.FC = () => {
 
   return (
     <>
+      {modalOpen && (
+        <Portal>
+          <div className="test_portal">
+            <button onClick={handleModalClose}>close</button>
+            <Routes>{settingsRoutes}</Routes>
+          </div>
+        </Portal>
+      )}
       <header className="home_page__subheader"></header>
       <section className="home_page__main__video">
         <div>
+          <button className="input input_button" onClick={handleModalClick}>
+            open modal
+          </button>
           <button className="input input_button" onClick={handleColorToggle}>
             toggle theme
           </button>

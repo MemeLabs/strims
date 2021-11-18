@@ -1,15 +1,15 @@
 import { Base64 } from "js-base64";
 import React from "react";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
 
 const ChatServerCreateFormPage: React.FC = () => {
   const [{ value }] = useCall("chatServer", "listServers");
-  const history = useHistory();
+  const navigate = useNavigate();
   const [{ error, loading }, createChatServer] = useLazyCall("chatServer", "createServer", {
-    onComplete: (res) => history.replace(`/settings/chat-servers/${res.server.id}`),
+    onComplete: (res) => navigate(`/settings/chat-servers/${res.server.id}`, { replace: true }),
   });
 
   const onSubmit = (data: ChatServerFormData) =>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, Redirect } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { Server } from "../../../apis/strims/chat/v1/chat";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -42,7 +42,7 @@ const ChatServerList: React.FC = () => {
     return null;
   }
   if (!value?.servers.length) {
-    return <Redirect to="/settings/chat-servers/new" />;
+    return <Navigate to="/settings/chat-servers/new" />;
   }
   return (
     <>

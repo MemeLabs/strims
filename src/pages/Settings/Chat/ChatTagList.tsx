@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, Redirect, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Tag } from "../../../apis/strims/chat/v1/chat";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -43,7 +43,7 @@ const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete })
 };
 
 const ChatTagList: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getTags] = useCall("chatServer", "listTags", {
     args: [{ serverId: BigInt(serverId) }],
   });
@@ -52,7 +52,7 @@ const ChatTagList: React.FC = () => {
     return null;
   }
   if (!value?.tags.length) {
-    return <Redirect to={`/settings/chat-servers/${serverId}/tags/new`} />;
+    return <Navigate to={`/settings/chat-servers/${serverId}/tags/new`} />;
   }
   return (
     <>

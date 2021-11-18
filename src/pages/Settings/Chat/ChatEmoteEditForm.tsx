@@ -8,7 +8,7 @@ import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
 import { fileTypeToMimeType, scaleToDOMScale, toEmoteProps } from "./utils";
 
 const ChatEmoteEditFormPage: React.FC = () => {
-  const { serverId, emoteId } = useParams<{ serverId: string; emoteId: string }>();
+  const { serverId, emoteId } = useParams<"serverId" | "emoteId">();
   const [{ value, ...getRes }] = useCall("chatServer", "getEmote", {
     args: [{ id: BigInt(emoteId) }],
   });

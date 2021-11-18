@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, Redirect, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Modifier } from "../../../apis/strims/chat/v1/chat";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -47,7 +47,7 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
 };
 
 const ChatModifierList: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getModifiers] = useCall("chatServer", "listModifiers", {
     args: [{ serverId: BigInt(serverId) }],
   });
@@ -56,7 +56,7 @@ const ChatModifierList: React.FC = () => {
     return null;
   }
   if (!value?.modifiers.length) {
-    return <Redirect to={`/settings/chat-servers/${serverId}/modifiers/new`} />;
+    return <Navigate to={`/settings/chat-servers/${serverId}/modifiers/new`} />;
   }
   return (
     <>

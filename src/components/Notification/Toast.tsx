@@ -41,10 +41,10 @@ interface ToastItemProps {
 const ToastItem: React.FC<ToastItemProps> = ({ closing, notification, onClick }) => {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const fid = window.requestAnimationFrame(() => {
+    const fid = requestAnimationFrame(() => {
       ref.current.classList.add("notification_toast__item--open");
     });
-    return () => window.cancelAnimationFrame(fid);
+    return () => cancelAnimationFrame(fid);
   }, []);
 
   return (

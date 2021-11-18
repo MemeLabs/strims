@@ -8,7 +8,7 @@ import { Provider as ThemeProvider } from "../../../contexts/Theme";
 const Test: React.FC = () => (
   <ThemeProvider>
     <div className="layout layout--dark">
-      <Header />
+      <Header search={null} />
     </div>
   </ThemeProvider>
 );

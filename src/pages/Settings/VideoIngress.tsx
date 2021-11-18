@@ -2,7 +2,7 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
-import { Link, Switch } from "react-router-dom";
+import { Link, Route, Routes } from "react-router-dom";
 import { useAsync } from "react-use";
 
 import { VideoChannel } from "../../apis/strims/video/v1/channel";
@@ -15,7 +15,6 @@ import {
   TextInput,
   ToggleInput,
 } from "../../components/Form";
-import { PrivateRoute } from "../../components/PrivateRoute";
 import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { certificateRoot } from "../../lib/certificate";
 import hostRegex from "../../lib/hostRegex";
@@ -347,10 +346,10 @@ const VideoIngressPage: React.FC = () => {
 
   return (
     <main className="network_page">
-      <Switch>
-        <PrivateRoute path="/settings/video-ingress" exact component={VideoIngressConfigForm} />
-        <PrivateRoute path="/settings/video-ingress/channels" exact component={VideoChannels} />
-      </Switch>
+      <Routes>
+        <Route index element={<VideoIngressConfigForm />} />
+        <Route path="channels" element={<VideoChannels />} />
+      </Routes>
     </main>
   );
 };

@@ -1,104 +1,31 @@
-import React, { Suspense, lazy } from "react";
-import { Redirect, Route, Switch } from "react-router-dom";
+import React, { lazy } from "react";
+import { Route, Routes } from "react-router-dom";
 
-import Layout from "../components/Layout";
-import LayoutBody from "../components/Layout/Body";
-import { PrivateRoute } from "../components/PrivateRoute";
-import { Provider as ChatProvider } from "../contexts/Chat";
-import { Provider as DirectoryProvider } from "../contexts/Directory";
-import { Provider as NetworkProvider } from "../contexts/Network";
-import { Provider as NotificationProvider } from "../contexts/Notification";
-import { Provider as PlayerProvider } from "../contexts/Player";
+import AuthGate from "../components/AuthGate";
+import { useBackgroundRoute } from "../contexts/BackgroundRoute";
 import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
-import SettingsLayout from "../pages/Settings/Layout";
 import SignUp from "../pages/SignUp";
 
-const SettingsRouter: React.FC = () => (
-  <Suspense fallback={null}>
-    <Switch>
-      <PrivateRoute
-        path="/settings/networks"
-        component={lazy(() => import("../pages/Settings/Network"))}
-      />
-      <PrivateRoute
-        path="/settings/bootstrap-clients"
-        exact
-        component={lazy(() => import("../pages/Settings/BootstrapClients"))}
-      />
-      <PrivateRoute
-        path="/settings/chat-servers"
-        component={lazy(() => import("../pages/Settings/Chat"))}
-      />
-      <PrivateRoute
-        path="/settings/video-ingress"
-        component={lazy(() => import("../pages/Settings/VideoIngress"))}
-      />
-      <PrivateRoute
-        path="/settings/vnic"
-        component={lazy(() => import("../pages/Settings/VNIC"))}
-      />
-      <Redirect to="/settings/networks" />
-    </Switch>
-  </Suspense>
-);
+const Main = lazy(() => import("./Main"));
 
-const MainRouter: React.FC = () => (
-  <Switch>
-    <PrivateRoute path="/settings">
-      <SettingsLayout>
-        <SettingsRouter />
-      </SettingsLayout>
-    </PrivateRoute>
-    <PrivateRoute>
-      <LayoutBody>
-        <Suspense fallback={null}>
-          <Switch>
-            <PrivateRoute path="/" exact component={lazy(() => import("../pages/Home"))} />
-            <PrivateRoute
-              path="/directory/:networkKey"
-              exact
-              component={lazy(() => import("../pages/Directory"))}
-            />
-            <PrivateRoute
-              path="/player/:networkKey"
-              exact
-              component={lazy(() => import("../pages/PlayerTest"))}
-            />
-            <PrivateRoute
-              path="/embed/:service/:id"
-              exact
-              component={lazy(() => import("../pages/Embed"))}
-            />
-            <Redirect to="/404" />
-          </Switch>
-        </Suspense>
-      </LayoutBody>
-    </PrivateRoute>
-  </Switch>
-);
-
-const RootRouter: React.FC = () => (
-  <Switch>
-    <Route path="/login" exact component={Login} />
-    <Route path="/signup" exact component={SignUp} />
-    <Route path="/404" exact component={NotFound} />
-    <PrivateRoute>
-      <DirectoryProvider>
-        <NetworkProvider>
-          <NotificationProvider>
-            <ChatProvider>
-              <PlayerProvider>
-                <Layout>
-                  <MainRouter />
-                </Layout>
-              </PlayerProvider>
-            </ChatProvider>
-          </NotificationProvider>
-        </NetworkProvider>
-      </DirectoryProvider>
-    </PrivateRoute>
-  </Switch>
-);
+const RootRouter: React.FC = () => {
+  const { location } = useBackgroundRoute();
+  return (
+    <Routes location={location}>
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
+      <Route path="/404" element={<NotFound />} />
+      <Route
+        path="/*"
+        element={
+          <AuthGate>
+            <Main />
+          </AuthGate>
+        }
+      />
+    </Routes>
+  );
+};
 
 export default RootRouter;

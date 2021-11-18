@@ -102,3 +102,13 @@ body {
   --link-active-bg: #{$gray-300};
   --link-hover-bg: #{$gray-400};
 }
+
+.test_portal {
+  position: fixed;
+  top: 100px;
+  left: 100px;
+  right: 100px;
+  bottom: 100px;
+  background: #{$slate-400};
+  overflow-y: scroll;
+}

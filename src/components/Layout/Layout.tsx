@@ -201,9 +201,11 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
         <Header />
       </div>
       <div className="layout__body">{children}</div>
-      <div className="layout__footer">
-        <Footer />
-      </div>
+      {DEVICE_TYPE === DeviceType.Portable && (
+        <div className="layout__footer">
+          <Footer />
+        </div>
+      )}
     </div>
   );
 };

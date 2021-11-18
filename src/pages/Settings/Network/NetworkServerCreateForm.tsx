@@ -6,7 +6,7 @@ import { InputError, TextInput } from "../../../components/Form";
 import { useLazyCall } from "../../../contexts/FrontendApi";
 
 interface CreateFormProps {
-  onCreate: (res: CreateServerResponse) => void;
+  onCreate?: (res: CreateServerResponse) => void;
 }
 
 const CreateForm: React.FC<CreateFormProps> = ({ onCreate }) => {

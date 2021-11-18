@@ -5,7 +5,7 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
 const ChatModifierEditForm: React.FC = () => {
-  const { serverId, modifierId } = useParams<{ serverId: string; modifierId: string }>();
+  const { serverId, modifierId } = useParams<"serverId" | "modifierId">();
   const [getRes] = useCall("chatServer", "getModifier", { args: [{ id: BigInt(modifierId) }] });
 
   const [updateRes, updateChatModifier] = useLazyCall("chatServer", "updateModifier");

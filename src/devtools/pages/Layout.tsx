@@ -16,8 +16,8 @@ import { Provider as DirectoryProvider } from "../../contexts/Directory";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { Provider as NetworkProvider } from "../../contexts/Network";
 import { Provider as NotificationProvider } from "../../contexts/Notification";
+import { Provider as ProfileProvider } from "../../contexts/Profile";
 import { Provider as ThemeProvider } from "../../contexts/Theme";
-// import TestDirectory from "../components/TestDirectory";
 import Directory from "../../pages/Directory";
 import ChatService from "../mocks/chat/service";
 import DirectoryService from "../mocks/directory/service";
@@ -42,21 +42,23 @@ const LayoutTest: React.FC = () => {
 
   return (
     <ApiProvider value={client}>
-      <ThemeProvider>
-        <DirectoryProvider>
-          <NetworkProvider>
-            <NotificationProvider>
-              <ChatProvider>
-                <LayoutPage>
-                  <LayoutBody>
-                    <Directory />
-                  </LayoutBody>
-                </LayoutPage>
-              </ChatProvider>
-            </NotificationProvider>
-          </NetworkProvider>
-        </DirectoryProvider>
-      </ThemeProvider>
+      <ProfileProvider>
+        <ThemeProvider>
+          <DirectoryProvider>
+            <NetworkProvider>
+              <NotificationProvider>
+                <ChatProvider>
+                  <LayoutPage>
+                    <LayoutBody>
+                      <Directory />
+                    </LayoutBody>
+                  </LayoutPage>
+                </ChatProvider>
+              </NotificationProvider>
+            </NetworkProvider>
+          </DirectoryProvider>
+        </ThemeProvider>
+      </ProfileProvider>
     </ApiProvider>
   );
 };

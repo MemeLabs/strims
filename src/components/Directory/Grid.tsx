@@ -2,7 +2,7 @@ import "./Grid.scss";
 
 import clsx from "clsx";
 import React, { useContext, useEffect, useState } from "react";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import monkey from "../../../assets/directory/monkey.png";
 import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
@@ -26,7 +26,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   viewerCount,
   networkKey,
 }) => {
-  const history = useHistory();
+  const navigate = useNavigate();
   const player = useContext(PlayerContext);
   const layout = useLayout();
 
@@ -56,7 +56,8 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
     if (DEVICE_TYPE !== DeviceType.Portable) {
       const path = formatUri(networkKey, listing);
       player.setPath(path);
-      history.push(path);
+
+      navigate(path);
     }
   };
 

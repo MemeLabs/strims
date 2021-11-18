@@ -7,6 +7,7 @@
     display: flex;
     padding: 0 10px;
     align-items: center;
+    -webkit-touch-callout: none;
 
     &__icon {
       height: 28px;

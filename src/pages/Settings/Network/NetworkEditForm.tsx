@@ -7,7 +7,7 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkForm, { NetworkFormData } from "./NetworkForm";
 
 const NetworkEditForm: React.FC = () => {
-  const { networkId } = useParams<{ networkId: string }>();
+  const { networkId } = useParams<"networkId">();
   const [{ value, ...getRes }] = useCall("network", "get", { args: [{ id: BigInt(networkId) }] });
 
   const network = value?.network;

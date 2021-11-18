@@ -1,20 +1,28 @@
 import React, { lazy } from "react";
-import { Route, Switch } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import NotFound from "../pages/NotFound";
 
+const Home = lazy(() => import("../pages/Home"));
+const CapConn = lazy(() => import("../pages/CapConn"));
+const Test = lazy(() => import("../pages/Test"));
+const Emotes = lazy(() => import("../pages/Emotes"));
+const Bridge = lazy(() => import("../pages/Bridge"));
+const Layout = lazy(() => import("../pages/Layout"));
+const Storybook = lazy(() => import("../pages/Storybook"));
+
 const Router: React.FC = () => {
   return (
-    <Switch>
-      <Route path="/" exact component={lazy(() => import("../pages/Home"))} />
-      <Route path="/capconn" exact component={lazy(() => import("../pages/CapConn"))} />
-      <Route path="/test" exact component={lazy(() => import("../pages/Test"))} />
-      <Route path="/emotes" exact component={lazy(() => import("../pages/Emotes"))} />
-      <Route path="/bridge" exact component={lazy(() => import("../pages/Bridge"))} />
-      <Route path="/layout" component={lazy(() => import("../pages/Layout"))} />
-      <Route path="/storybook" component={lazy(() => import("../pages/Storybook"))} />
-      <Route component={NotFound} />
-    </Switch>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/capconn" element={<CapConn />} />
+      <Route path="/test" element={<Test />} />
+      <Route path="/emotes" element={<Emotes />} />
+      <Route path="/bridge" element={<Bridge />} />
+      <Route path="/layout" element={<Layout />} />
+      <Route path="/storybook/*" element={<Storybook />} />
+      <Route element={<NotFound />} />
+    </Routes>
   );
 };
 

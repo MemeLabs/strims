@@ -1,47 +1,40 @@
-import React from "react";
-import { NavLink } from "react-router-dom";
+import clsx from "clsx";
+import React, { Suspense } from "react";
+import { NavLink, Outlet } from "react-router-dom";
 
-const SettingsLayout: React.FC = ({ children }) => {
+import LoadingPlaceholder from "../../root/LoadingPlaceholder";
+
+const SettingsLayout: React.FC = () => {
+  const linkClassName = ({ isActive }: { isActive: boolean }) =>
+    clsx({
+      "settings__nav__link": true,
+      "settings__nav__link--active": isActive,
+    });
+
   return (
     <div className="page_body settings">
       <div className="settings__nav">
-        <NavLink
-          className="settings__nav__link"
-          activeClassName="settings__nav__link--active"
-          to="/settings/networks"
-        >
+        <NavLink className={linkClassName} to="/settings/networks">
           Networks
         </NavLink>
-        <NavLink
-          className="settings__nav__link"
-          activeClassName="settings__nav__link--active"
-          to="/settings/bootstrap-clients"
-        >
+        <NavLink className={linkClassName} to="/settings/bootstrap-clients">
           Bootstrap Clients
         </NavLink>
-        <NavLink
-          className="settings__nav__link"
-          activeClassName="settings__nav__link--active"
-          to="/settings/chat-servers"
-        >
+        <NavLink className={linkClassName} to="/settings/chat-servers">
           Chat Servers
         </NavLink>
-        <NavLink
-          className="settings__nav__link"
-          activeClassName="settings__nav__link--active"
-          to="/settings/video-ingress"
-        >
+        <NavLink className={linkClassName} to="/settings/video-ingress">
           Video Ingress
         </NavLink>
-        <NavLink
-          className="settings__nav__link"
-          activeClassName="settings__nav__link--active"
-          to="/settings/vnic"
-        >
+        <NavLink className={linkClassName} to="/settings/vnic">
           VNIC
         </NavLink>
       </div>
-      <div className="settings__body">{children}</div>
+      <div className="settings__body">
+        <Suspense fallback={<LoadingPlaceholder />}>
+          <Outlet />
+        </Suspense>
+      </div>
     </div>
   );
 };

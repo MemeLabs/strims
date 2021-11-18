@@ -1,15 +1,15 @@
 import React from "react";
-import { Route, Switch } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import Home from "../pages/Home";
 import NotFound from "../pages/NotFound";
 
-const Router = () => {
+const Router: React.FC = () => {
   return (
-    <Switch>
-      <Route path="/funding.html" exact component={Home} />
-      <Route component={NotFound} />
-    </Switch>
+    <Routes>
+      <Route path="/funding.html" element={<Home />} />
+      <Route element={<NotFound />} />
+    </Routes>
   );
 };
 

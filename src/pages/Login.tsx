@@ -1,7 +1,7 @@
 import React from "react";
 import { useForm } from "react-hook-form";
 import { FiUser, FiUserPlus } from "react-icons/fi";
-import { Link, Redirect, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { ILoadProfileRequest, IProfileSummary } from "../apis/strims/profile/v1/profile";
 import { InputError, TextInput } from "../components/Form";
@@ -28,10 +28,10 @@ const LoginPage: React.FC = () => {
   React.useEffect(profileActions.clearError, []);
 
   if (!listProfilesRes.loading && !listProfilesRes.value?.profiles.length) {
-    return <Redirect to="/signup" />;
+    return <Navigate to="/signup" />;
   }
   if (profile) {
-    return <Redirect to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
+    return <Navigate to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
   }
 
   if (!selectedProfile) {

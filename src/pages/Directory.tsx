@@ -6,12 +6,8 @@ import DirectoryGrid from "../components/Directory/Grid";
 import { DirectoryContext } from "../contexts/Directory";
 import { useClient } from "../contexts/FrontendApi";
 
-interface DirectoryParams {
-  networkKey: string;
-}
-
 const Directory: React.FC = () => {
-  const params = useParams<DirectoryParams>();
+  const params = useParams<"networkKey">();
   // const [listings, dispatch] = React.useReducer(directoryReducer, []);
   const [directories] = useContext(DirectoryContext);
   const client = useClient();

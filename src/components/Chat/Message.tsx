@@ -257,10 +257,10 @@ const ComboMessage: React.FC<MessageProps> = ({
   const ref = useRef<HTMLDivElement>();
   useEffect(() => {
     ref.current.classList.remove(`chat__combo_message--hit`);
-    const rafId = window.requestAnimationFrame(() =>
+    const rafId = requestAnimationFrame(() =>
       ref.current?.classList.add(`chat__combo_message--hit`)
     );
-    return () => window.cancelAnimationFrame(rafId);
+    return () => cancelAnimationFrame(rafId);
   }, [count]);
 
   return (

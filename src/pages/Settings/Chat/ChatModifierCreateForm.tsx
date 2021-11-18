@@ -1,17 +1,17 @@
 import React from "react";
-import { useHistory, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { serverId } = useParams<"serverId">();
   const [{ value }] = useCall("chatServer", "listModifiers", {
     args: [{ serverId: BigInt(serverId) }],
   });
-  const history = useHistory();
+  const navigate = useNavigate();
   const [{ error, loading }, createChatModifier] = useLazyCall("chatServer", "createModifier", {
-    onComplete: () => history.replace(`/settings/chat-servers/${serverId}/modifiers`),
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`, { replace: true }),
   });
 
   const onSubmit = (data: ChatModifierFormData) =>
