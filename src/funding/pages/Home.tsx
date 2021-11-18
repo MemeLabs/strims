@@ -3,7 +3,7 @@ import { useAsync } from "react-use";
 
 import { useCall, useClient } from "../contexts/Api";
 
-const Home = () => {
+const Home: React.FC = () => {
   // declarative api
   const [testRes] = useCall("funding", "test", { args: [{ name: "world" }] });
 

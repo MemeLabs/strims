@@ -7,7 +7,7 @@ interface GenericMessagePort<TIn, TOut> extends MessagePort {
   onmessage: ((this: GenericMessagePort<TIn, TOut>, ev: MessageEvent<TIn>) => void) | null;
   onmessageerror: ((this: GenericMessagePort<TIn, TOut>, ev: MessageEvent<TIn>) => void) | null;
   postMessage(message: TOut, transfer: Transferable[]): void;
-  postMessage(message: TOut, options?: PostMessageOptions): void;
+  postMessage(message: TOut, options?: StructuredSerializeOptions): void;
 }
 
 type GenericChannel<TIn, TOut> = {

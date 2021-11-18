@@ -5,17 +5,13 @@ import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
 
-interface PlayerTestRouteParams {
-  networkKey: string;
-}
-
 interface PlayerTestQueryParams {
   swarmUri: string;
   mimeType: string;
 }
 
 const PlayerTest: React.FC = () => {
-  const params = useParams<PlayerTestRouteParams>();
+  const params = useParams<"networkKey">();
   const location = useLocation();
   const query = useQuery<PlayerTestQueryParams>(location.search);
   const { toggleShowVideo, setShowContent } = useLayout();

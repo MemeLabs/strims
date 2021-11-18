@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
 
 import type { Client } from "../apis/client";
 
@@ -6,14 +6,18 @@ type AnyFunction = (...arg: any) => any;
 type FunctionPropertyNames<T> = { [K in keyof T]: T[K] extends AnyFunction ? K : never }[keyof T];
 type ResultType<T extends AnyFunction> = ReturnType<T> extends Promise<infer U> ? U : ReturnType<T>;
 
+type MethodParameters<T> = T extends AnyFunction ? Parameters<T> : never;
+type MethodResultType<T> = T extends AnyFunction ? ResultType<T> : never;
+type MethodReturnType<T> = T extends AnyFunction ? ReturnType<T> : never;
+
 export interface Options<
   C extends Client,
   S extends keyof C,
   M extends FunctionPropertyNames<C[S]>
 > {
   skip?: boolean;
-  args?: Parameters<C[S][M]>;
-  onComplete?: (data: ResultType<C[S][M]>) => void;
+  args?: MethodParameters<C[S][M]>;
+  onComplete?: (data: MethodResultType<C[S][M]>) => void;
   onError?: (error: Error) => void;
 }
 
@@ -22,7 +26,7 @@ export interface CallHookState<
   S extends keyof C,
   M extends FunctionPropertyNames<C[S]>
 > {
-  value?: ResultType<C[S][M]>;
+  value?: MethodResultType<C[S][M]>;
   error?: Error;
   loading: boolean;
   called: boolean;
@@ -32,7 +36,7 @@ export type CallHookDispatcher<
   C extends Client,
   S extends keyof C,
   M extends FunctionPropertyNames<C[S]>
-> = (...arg: Parameters<C[S][M]>) => ReturnType<C[S][M]>;
+> = (...arg: MethodParameters<C[S][M]>) => MethodReturnType<C[S][M]>;
 
 export type CallHook<C extends Client> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
   serviceName: S,
@@ -90,7 +94,7 @@ const create = <C extends Client>(): Api<C> => {
       }
     };
 
-    const handleComplete = (value: ResultType<C[S][M]>) => {
+    const handleComplete = (value: MethodResultType<C[S][M]>) => {
       if (!mounted.current) {
         return;
       }
@@ -114,7 +118,7 @@ const create = <C extends Client>(): Api<C> => {
       }
 
       // eslint-disable-next-line
-      const value = (method as any).apply(service, args) as ResultType<C[S][M]>;
+      const value = (method as any).apply(service, args) as MethodResultType<C[S][M]>;
       if (value instanceof Promise) {
         setState((prev) => ({
           ...prev,
@@ -125,7 +129,7 @@ const create = <C extends Client>(): Api<C> => {
       } else {
         handleComplete(value);
       }
-      return value as ReturnType<C[S][M]>;
+      return value as MethodReturnType<C[S][M]>;
     };
 
     useEffect(() => {

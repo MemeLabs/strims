@@ -6,17 +6,12 @@ import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
 import { ServiceSlug } from "../lib/directory";
 
-interface EmbedRouteParams {
-  service: ServiceSlug;
-  id: string;
-}
-
 interface EmbedQueryParams {
   k: string;
 }
 
 const Embed: React.FC = () => {
-  const routeParams = useParams<EmbedRouteParams>();
+  const routeParams = useParams<"service" | "id">();
   const location = useLocation();
   const queryParams = useQuery<EmbedQueryParams>(location.search);
   const { toggleShowVideo, setShowContent } = useLayout();
@@ -32,7 +27,7 @@ const Embed: React.FC = () => {
     setMode(PlayerMode.FULL);
     setSource({
       type: "embed",
-      service: routeParams.service,
+      service: routeParams.service as ServiceSlug,
       id: routeParams.id,
       networkKey: queryParams.k,
     });

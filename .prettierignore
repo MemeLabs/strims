@@ -4,3 +4,4 @@ vendor
 src/apis/google
 src/apis/strims
 vendor_modules
+tsconfig.json
