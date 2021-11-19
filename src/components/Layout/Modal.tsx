@@ -19,11 +19,18 @@ const initialShowContent = {
 
 interface ModalProps {
   title?: string;
+  className?: string;
   defaultOpen?: boolean;
   onClose?: () => void;
 }
 
-const Modal: React.FC<ModalProps> = ({ title, defaultOpen = true, children, onClose }) => {
+const Modal: React.FC<ModalProps> = ({
+  title,
+  className,
+  defaultOpen = true,
+  children,
+  onClose,
+}) => {
   const modal = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLDivElement>(null);
 
@@ -87,7 +94,7 @@ const Modal: React.FC<ModalProps> = ({ title, defaultOpen = true, children, onCl
   return (
     <div
       ref={modal}
-      className={clsx({
+      className={clsx(className, {
         "modal": true,
         "modal--open": !showContent.closed,
         "modal--dragging": showContent.dragging,

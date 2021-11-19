@@ -20,6 +20,7 @@ import useSize from "../../hooks/useSize";
 import { retrySync } from "../../lib/retry";
 
 const AUTOSCROLL_THRESHOLD = 20;
+const AUTOSCROLL_DEBOUNCE_TIMEOUT = 10;
 const RESIZE_DEBOUNCE_TIMEOUT = 200;
 
 export interface MessageProps {
@@ -38,7 +39,7 @@ interface ScrollerProps {
 interface ListInternal {
   Grid: Grid & {
     _scrollingContainer: HTMLElement;
-    _onScroll: (e: UIEvent) => void;
+    _onScroll: (e: React.UIEvent) => void;
   };
 }
 
@@ -72,12 +73,18 @@ const Scroller: React.FC<ScrollerProps> = ({
     index: 0,
     autoScrollEvent: false,
     recomputingRowHeights: false,
+    messageCount: 0,
   }).current;
 
-  const forceAutoScroll = () => {
-    state.autoScrollEvent = true;
-    list.current?.scrollToRow(list.current.props.rowCount);
-  };
+  state.messageCount = messageCount;
+
+  const forceAutoScroll = useCallback(
+    debounce(() => {
+      state.autoScrollEvent = true;
+      list.current?.scrollToRow(state.messageCount);
+    }, AUTOSCROLL_DEBOUNCE_TIMEOUT),
+    []
+  );
 
   const applyAutoScroll = () => {
     if (autoScroll && !state.recomputingRowHeights) {
@@ -86,11 +93,11 @@ const Scroller: React.FC<ScrollerProps> = ({
   };
 
   const recomputeRowHeights = () => {
-    if (state.recomputingRowHeights || !list.current?.props?.rowCount) {
+    if (state.recomputingRowHeights || !state.messageCount) {
       return;
     }
 
-    let getRow = () => (list.current?.props?.rowCount ?? 1) - 1;
+    let getRow = () => (state.messageCount ?? 1) - 1;
     if (!autoScroll) {
       const { index } = state;
       getRow = () => index;
@@ -122,7 +129,7 @@ const Scroller: React.FC<ScrollerProps> = ({
   useUpdateEffect(recomputeRowHeights, [uiConfig]);
   useEffect(applyAutoScroll, [messageCount]);
 
-  const handleScroll = useCallback((e) => {
+  const handleScroll: React.UIEventHandler = useCallback((e) => {
     // autoscroll acts on react-virtualized directly so there is no need to
     // forward the scroll event observed by react-custom-scrollbars. the list
     // only needs to be updated in response to user scroll events.

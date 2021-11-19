@@ -116,6 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
     // disable pinch zoom
     const handleTouchMove = (event: ExtendedTouchEvent) => {
       if ("scale" in event && event.scale !== 1) {
+        console.log("lol it was this one");
         event.preventDefault();
         event.stopPropagation();
       }
@@ -136,9 +137,10 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
     // disable scroll events
     const handleScroll = (event: Event) => {
+      console.log("omegalol get fucked");
       window.scrollTo(0, 0);
-      event.preventDefault();
-      event.stopPropagation();
+      // event.preventDefault();
+      // event.stopPropagation();
     };
 
     window.addEventListener("orientationchange", handleViewportChange);

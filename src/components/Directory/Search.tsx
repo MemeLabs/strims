@@ -2,7 +2,8 @@ import "./Search.scss";
 
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import Scrollbars from "react-custom-scrollbars-2";
 import { useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
 import { useNavigate } from "react-router";
@@ -184,6 +185,7 @@ type SearchResult =
 interface SearchMenuProps {
   results: SearchResult[];
   selectedIndex: number;
+  scroll;
   onMouseEnter: (i: number) => void;
   onMouseLeave: () => void;
 }
@@ -191,11 +193,12 @@ interface SearchMenuProps {
 const SearchMenu: React.FC<SearchMenuProps> = ({
   results,
   selectedIndex,
+  scroll,
   onMouseEnter,
   onMouseLeave,
 }) => {
-  return (
-    <div className="search__menu" onMouseLeave={onMouseLeave}>
+  let body = (
+    <>
       {results.map((result, i) => {
         switch (result.type) {
           case "EMBED":
@@ -218,11 +221,35 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             );
         }
       })}
+    </>
+  );
+
+  if (scroll) {
+    body = <Scrollbars autoHide>{body}</Scrollbars>;
+  }
+
+  return (
+    <div className="search__menu" onMouseLeave={onMouseLeave}>
+      {body}
     </div>
   );
 };
 
-const Search: React.FC = () => {
+interface SearchProps {
+  menuOpen?: boolean;
+  maxResults?: number;
+  scrollMenu?: boolean;
+  autoFocus?: boolean;
+  onSelect?: () => void;
+}
+
+const Search: React.FC<SearchProps> = ({
+  menuOpen: forceMenuOpen = false,
+  maxResults = Infinity,
+  scrollMenu = false,
+  autoFocus = false,
+  onSelect,
+}) => {
   const { t } = useTranslation();
 
   const ref = useRef<HTMLDivElement>(null);
@@ -232,7 +259,7 @@ const Search: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
 
-  const menuOpen = isFocused && results.length !== 0;
+  const menuOpen = forceMenuOpen || (isFocused && results.length !== 0);
 
   useClickAway(ref, () => toggleIsFocused(false));
 
@@ -276,7 +303,7 @@ const Search: React.FC = () => {
       }
     }
 
-    setResults(results.slice(0, 10));
+    setResults(results.slice(0, maxResults));
   }, [query, directory]);
 
   useEffect(() => setSelectedIndex(-1), [results.length, query]);
@@ -311,6 +338,7 @@ const Search: React.FC = () => {
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
     const [{ networkKey }] = Object.values(directory);
     selectListing(networkKey, new Listing({ content: { embed } }));
+    onSelect?.();
   };
 
   // TODO: DRY with grid (useDirectory?)
@@ -330,7 +358,15 @@ const Search: React.FC = () => {
     }
 
     setQuery("");
+    onSelect?.();
   };
+
+  const input = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    if (autoFocus) {
+      input.current.focus();
+    }
+  }, []);
 
   return (
     <div
@@ -342,7 +378,10 @@ const Search: React.FC = () => {
     >
       <div className="search__box">
         <input
+          ref={input}
           className="search__input"
+          autoCapitalize="off"
+          spellCheck="false"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -355,6 +394,7 @@ const Search: React.FC = () => {
         <SearchMenu
           selectedIndex={selectedIndex}
           results={results}
+          scroll={scrollMenu}
           onMouseEnter={(i) => setSelectedIndex(i)}
           onMouseLeave={() => setSelectedIndex(-1)}
         />

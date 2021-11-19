@@ -17,7 +17,9 @@ interface HeaderProps {
   search?: React.ReactNode;
 }
 
-const Header: React.FC<HeaderProps> = ({ search = <DirectorySearch /> }) => {
+const defaultSearch = <DirectorySearch maxResults={10} />;
+
+const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
   const { t } = useTranslation();
   const client = useClient();
   const layout = useLayout();

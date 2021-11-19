@@ -10,6 +10,30 @@
   transition: transform 200ms ease-in-out;
   box-shadow: var(--shadow-elevation-3);
   touch-action: none;
+  box-sizing: border-box;
+  background: var(--color-background-layout-body);
+  z-index: var(--z-index-modal);
+
+  @at-root {
+    .layout--portrait &,
+    .layout--landscape_cw &,
+    .layout--landscape_ccw & {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .layout--portrait.layout--min_aspect_ratio_0_6 & {
+      padding-bottom: 0;
+    }
+
+    .layout--landscape_cw & {
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .layout--landscape_ccw & {
+      padding-left: env(safe-area-inset-left);
+      padding-right: 10px;
+    }
+  }
 
   &--dragging {
     transition: none;
@@ -51,6 +75,5 @@
 
   &__body {
     flex: 1;
-    background: var(--color-background-layout-body);
   }
 }

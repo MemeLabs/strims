@@ -25,7 +25,7 @@ const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
     const chats: RoomMenuItem[] = [];
     for (const { networkKey, listings } of Object.values(directories)) {
       for (const { listing } of listings) {
-        if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
+        if (listing?.content?.case === directoryv1.Listing.ContentCase.CHAT) {
           const { key, name } = listing.content.chat;
           chats.push({
             key: Base64.fromUint8Array(key),
@@ -40,7 +40,7 @@ const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
   }, [directories]);
 
   const [selection, setSelection] = useState<RoomMenuItem>(null);
-  const handleItemClick = (item) => {
+  const handleItemClick = (item: RoomMenuItem) => {
     setSelection(item);
     onChange?.(item);
   };

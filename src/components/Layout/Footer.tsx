@@ -1,35 +1,29 @@
 import "./Footer.scss";
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useCallback, useEffect } from "react";
 import { FiList, FiSearch, FiUser } from "react-icons/fi";
 import { Link, Routes, useNavigate } from "react-router-dom";
 import { useToggle } from "react-use";
 
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
 import { settingsRoutes } from "../../root/MainRouter";
+import Search from "../Directory/Search";
 import Modal from "./Modal";
 
-interface MemeModalProps {
+interface ModalProps {
   onClose: () => void;
 }
 
-const MemeModal1: React.FC<MemeModalProps> = ({ onClose }) => {
-  const input = useRef<HTMLInputElement>(null);
+const SearchModal: React.FC<ModalProps> = ({ onClose }) => (
+  <Modal title="Search" className="layout_footer__search" onClose={onClose}>
+    <Search menuOpen={true} scrollMenu autoFocus onSelect={onClose} />
+  </Modal>
+);
 
-  useLayoutEffect(() => input.current.focus(), []);
-
-  return (
-    <Modal title="Search" onClose={onClose}>
-      <input ref={input} type="text" style={{ background: "white" }} />
-    </Modal>
-  );
-};
-
-const MemeModal2: React.FC<MemeModalProps> = ({ onClose }) => {
+const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   const navigate = useNavigate();
 
   const backgroundRoute = useBackgroundRoute();
-  console.log("===", backgroundRoute.location);
   useEffect(() => {
     backgroundRoute.toggle(true);
     navigate("/settings");
@@ -48,13 +42,13 @@ const MemeModal2: React.FC<MemeModalProps> = ({ onClose }) => {
 };
 
 const Footer: React.FC = () => {
-  const [showMemes1, toggleShowMemes1] = useToggle(false);
-  const [showMemes2, toggleShowMemes2] = useToggle(false);
+  const [showSearch, toggleShowMemes1] = useToggle(false);
+  const [showSettings, toggleShowMemes2] = useToggle(false);
 
   return (
     <>
-      {showMemes1 && <MemeModal1 onClose={() => toggleShowMemes1(false)} />}
-      {showMemes2 && <MemeModal2 onClose={() => toggleShowMemes2(false)} />}
+      {showSearch && <SearchModal onClose={() => toggleShowMemes1(false)} />}
+      {showSettings && <SettingsModal onClose={() => toggleShowMemes2(false)} />}
       <div className="footer">
         <Link className="footer__button" to="/">
           <FiList className="footer__button__icon" />
