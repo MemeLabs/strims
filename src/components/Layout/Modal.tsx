@@ -19,15 +19,17 @@ const initialShowContent = {
 
 interface ModalProps {
   title?: string;
+  showHeader?: boolean;
   className?: string;
-  defaultOpen?: boolean;
+  open?: boolean;
   onClose?: () => void;
 }
 
 const Modal: React.FC<ModalProps> = ({
-  title,
+  title = "",
+  showHeader = title !== "",
   className,
-  defaultOpen = true,
+  open = true,
   children,
   onClose,
 }) => {
@@ -44,11 +46,9 @@ const Modal: React.FC<ModalProps> = ({
     });
 
   useLayoutEffect(() => {
-    if (defaultOpen) {
-      const rafId = window.requestAnimationFrame(() => toggleShowContent(defaultOpen));
-      return () => window.cancelAnimationFrame(rafId);
-    }
-  }, []);
+    const rafId = window.requestAnimationFrame(() => toggleShowContent(open));
+    return () => window.cancelAnimationFrame(rafId);
+  }, [open]);
 
   useUpdates(() => {
     if (showContent.closed) {
@@ -83,7 +83,7 @@ const Modal: React.FC<ModalProps> = ({
       }
     },
     {
-      target: header,
+      target: showHeader ? header : modal,
       eventOptions: {
         capture: true,
         passive: false,
@@ -101,12 +101,14 @@ const Modal: React.FC<ModalProps> = ({
         "modal--closing": showContent.closing,
       })}
     >
-      <div ref={header} className="modal__header">
-        {title && <div className="modal__header__title">{title}</div>}
-        <button className="modal__header__close" onClick={() => toggleShowContent(false)}>
-          <BsArrowBarDown className="modal__header__close__icon" />
-        </button>
-      </div>
+      {showHeader && (
+        <div ref={header} className="modal__header">
+          {title && <div className="modal__header__title">{title}</div>}
+          <button className="modal__header__close" onClick={() => toggleShowContent(false)}>
+            <BsArrowBarDown className="modal__header__close__icon" />
+          </button>
+        </div>
+      )}
       <div className="modal__body">{children}</div>
     </div>
   );

@@ -161,7 +161,7 @@ const initialState: State = {
     emoteModifiers: true,
     disableSpoilers: false,
     shortenLinks: true,
-    legacyEmoteSpacing: false,
+    compactEmoteSpacing: false,
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
   config: {

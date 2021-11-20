@@ -48,6 +48,8 @@ const BootstrapClientForm = ({
             message: "Invalid format",
           },
         }}
+        autoCapitalize="off"
+        autoCorrect="off"
         label="URL"
         name="url"
         placeholder="Enter a bootstrap url"

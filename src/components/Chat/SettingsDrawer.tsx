@@ -41,7 +41,7 @@ interface SettingsFormData {
   emoteModifiers: boolean;
   disableSpoilers: boolean;
   shortenLinks: boolean;
-  legacyEmoteSpacing: boolean;
+  compactEmoteSpacing: boolean;
   viewerStateIndicator: {
     value: UIConfig.ViewerStateIndicator;
     label: string;
@@ -180,8 +180,8 @@ const SettingsDrawer: React.FC = () => {
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Legacy emote spacing")}
-            name="legacyEmoteSpacing"
+            label={t("chat.settings.Compact emote spacing")}
+            name="compactEmoteSpacing"
             onChange={handleChange}
           />
           <TextInput

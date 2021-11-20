@@ -1,10 +1,11 @@
 import "./Search.scss";
 
 import clsx from "clsx";
+import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
 import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import { useToggle } from "react-use";
@@ -240,7 +241,8 @@ interface SearchProps {
   maxResults?: number;
   scrollMenu?: boolean;
   autoFocus?: boolean;
-  onSelect?: () => void;
+  showCancel?: boolean;
+  onDone?: () => void;
 }
 
 const Search: React.FC<SearchProps> = ({
@@ -248,7 +250,8 @@ const Search: React.FC<SearchProps> = ({
   maxResults = Infinity,
   scrollMenu = false,
   autoFocus = false,
-  onSelect,
+  showCancel = false,
+  onDone,
 }) => {
   const { t } = useTranslation();
 
@@ -286,7 +289,7 @@ const Search: React.FC<SearchProps> = ({
       }
     }
 
-    const pattern = new RegExp(query, "i");
+    const pattern = new RegExp(escapeStringRegexp(query), "i");
 
     for (const { networkKey, listings } of Object.values(directory)) {
       for (const listing of listings) {
@@ -338,7 +341,7 @@ const Search: React.FC<SearchProps> = ({
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
     const [{ networkKey }] = Object.values(directory);
     selectListing(networkKey, new Listing({ content: { embed } }));
-    onSelect?.();
+    onDone?.();
   };
 
   // TODO: DRY with grid (useDirectory?)
@@ -358,7 +361,7 @@ const Search: React.FC<SearchProps> = ({
     }
 
     setQuery("");
-    onSelect?.();
+    onDone?.();
   };
 
   const input = useRef<HTMLInputElement>(null);
@@ -368,6 +371,34 @@ const Search: React.FC<SearchProps> = ({
     }
   }, []);
 
+  let box = (
+    <div className="search__box">
+      <input
+        ref={input}
+        className="search__input"
+        autoCapitalize="off"
+        spellCheck="false"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => toggleIsFocused(true)}
+        placeholder={t("directory.Search")}
+      />
+      <FiSearch className="search__icon" />
+    </div>
+  );
+
+  if (showCancel) {
+    box = (
+      <div className="search__base">
+        {box}
+        <button className="search__cancel" onClick={onDone}>
+          <Trans>Cancel</Trans>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className={clsx({
@@ -376,20 +407,7 @@ const Search: React.FC<SearchProps> = ({
       })}
       ref={ref}
     >
-      <div className="search__box">
-        <input
-          ref={input}
-          className="search__input"
-          autoCapitalize="off"
-          spellCheck="false"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => toggleIsFocused(true)}
-          placeholder={t("directory.Search")}
-        />
-        <FiSearch className="search__icon" />
-      </div>
+      {box}
       {menuOpen && (
         <SearchMenu
           selectedIndex={selectedIndex}

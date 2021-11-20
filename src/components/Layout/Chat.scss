@@ -3,6 +3,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
 
   &__body {
     display: flex;
@@ -40,4 +41,39 @@
   //   &__body {
   //     display: none;
   //   }
+}
+
+.layout--portable {
+  .layout_chat {
+    &__header {
+      position: absolute;
+      width: 100%;
+      height: 0;
+      z-index: var(--z-index-modal);
+      transition: height var(--timing-medium) step-end;
+      user-select: none;
+
+      &__room_list_button {
+        position: absolute;
+        right: 0;
+        padding: 10px;
+        z-index: 1;
+      }
+
+      &__room_list {
+        background: var(--color-background-chat);
+        transform: translateY(-100%);
+        transition: transform var(--timing-medium) ease-in-out;
+      }
+
+      &--open {
+        transition: height 0s step-end;
+        height: calc(100% + env(safe-area-inset-bottom));
+
+        .layout_chat__header__room_list {
+          transform: translateY(0);
+        }
+      }
+    }
+  }
 }

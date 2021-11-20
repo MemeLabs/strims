@@ -1,4 +1,6 @@
 {
+  "Cancel": "Cancel",
+
   // video player
   "player": {
     "Exit theater mode": "Exit theater mode",
@@ -67,7 +69,7 @@
       "Loop animated emotes forever": "Loop animated emotes forever",
       "Disable spoilers": "Disable spoilers",
       "Shorten long links": "Shorten long links",
-      "Legacy emote spacing": "Legacy emote spacing",
+      "Compact emote spacing": "Compact emote spacing",
       "Maximum messages": "Maximum messages",
       "Stream viewer indicators": "Stream viewer indicators",
       "Banned messages": "Banned messages",

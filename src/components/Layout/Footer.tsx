@@ -14,11 +14,15 @@ interface ModalProps {
   onClose: () => void;
 }
 
-const SearchModal: React.FC<ModalProps> = ({ onClose }) => (
-  <Modal title="Search" className="layout_footer__search" onClose={onClose}>
-    <Search menuOpen={true} scrollMenu autoFocus onSelect={onClose} />
-  </Modal>
-);
+const SearchModal: React.FC<ModalProps> = ({ onClose }) => {
+  const [open, toggleOpen] = useToggle(true);
+
+  return (
+    <Modal className="layout_footer__search" open={open} onClose={onClose}>
+      <Search menuOpen={true} scrollMenu autoFocus showCancel onDone={() => toggleOpen(false)} />
+    </Modal>
+  );
+};
 
 const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   const navigate = useNavigate();

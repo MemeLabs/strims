@@ -40,7 +40,7 @@ interface MessageEmoteProps {
   entity: chatv1_Message.Entities.Emote;
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
-  legacySpacing?: boolean;
+  compactSpacing?: boolean;
 }
 
 const MessageEmote: React.FC<MessageEmoteProps> = ({
@@ -48,14 +48,14 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   entity,
   shouldAnimateForever,
   shouldShowModifiers,
-  legacySpacing,
+  compactSpacing,
 }) => (
   <Emote
     name={entity.name}
     modifiers={entity.modifiers}
     shouldAnimateForever={shouldAnimateForever}
     shouldShowModifiers={shouldShowModifiers}
-    legacySpacing={legacySpacing}
+    compactSpacing={compactSpacing}
   >
     {children}
   </Emote>
@@ -297,7 +297,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       formatter.insertEntity(MessageEmote, entity, {
         shouldAnimateForever: uiConfig.animateForever,
         shouldShowModifiers: uiConfig.emoteModifiers,
-        legacySpacing: uiConfig.legacyEmoteSpacing,
+        compactSpacing: uiConfig.compactEmoteSpacing,
       })
     );
   }

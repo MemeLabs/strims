@@ -341,8 +341,8 @@
     vertical-align: middle;
     line-height: 0;
 
-    &.chat__emote--legacy_spacing,
-    &.chat__emote_container--legacy_spacing {
+    &.chat__emote--compact_spacing,
+    &.chat__emote_container--compact_spacing {
       margin: calc(-0.6 * var(--height)) 3px calc(-0.4 * var(--height));
     }
   }

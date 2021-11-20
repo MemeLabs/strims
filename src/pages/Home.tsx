@@ -224,8 +224,6 @@ const HomePage: React.FC = () => {
     toggleModalOpen(false);
   };
 
-  console.log(location, modalOpen, Portal, backgroundRoute);
-
   // useEffect(() => {
   //   handleTestClick();
   // }, []);

@@ -336,7 +336,7 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
         modifiers={modifiers}
         shouldAnimateForever={uiConfig.animateForever}
         shouldShowModifiers={uiConfig.emoteModifiers}
-        legacySpacing={uiConfig.legacyEmoteSpacing}
+        compactSpacing={uiConfig.compactEmoteSpacing}
       >
         {children}
       </Emote>

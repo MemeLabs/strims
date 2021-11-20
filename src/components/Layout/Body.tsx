@@ -63,26 +63,6 @@ export const LayoutBody: React.FC = () => {
     );
   }
 
-  const testButtons = (
-    <>
-      <div>
-        <button onClick={toggleClosed}>toggle</button>
-      </div>
-      <div>
-        <button onClick={() => layout.toggleShowChat()}>toggle chat</button>
-      </div>
-      <div>
-        <button onClick={() => layout.toggleShowVideo()}>toggle video</button>
-      </div>
-      <div>
-        <button onClick={() => layout.toggleTheaterMode()}>toggle theater mode</button>
-      </div>
-      <div>
-        <button onClick={() => layout.toggleSwapMainPanels()}>swap sides</button>
-      </div>
-    </>
-  );
-
   return (
     <>
       <div className="layout__nav">
@@ -108,7 +88,6 @@ export const LayoutBody: React.FC = () => {
         >
           {layout.showVideo && (
             <div className="layout__video">
-              {/* testButtons */}
               <Player />
             </div>
           )}

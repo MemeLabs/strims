@@ -3,7 +3,7 @@ import { RefObject, useEffect, useRef } from "react";
 const defaultEvents = ["mousedown", "touchstart"];
 
 const useClickAway = <E extends Event = Event>(
-  ref: RefObject<HTMLElement | null>,
+  ref: RefObject<HTMLElement | null> | RefObject<HTMLElement | null>[],
   onClickAway: (event: E) => void,
   events: string[] = defaultEvents
 ): void => {
@@ -11,17 +11,28 @@ const useClickAway = <E extends Event = Event>(
   useEffect(() => {
     savedCallback.current = onClickAway;
   }, [onClickAway]);
+
   useEffect(() => {
+    const refs = Array.isArray(ref) ? ref : [ref];
+
     const handler = (event: E) => {
-      const el = ref.current;
       const target = event.target as Element;
-      if (el && document.contains(target) && !el.contains(target)) {
-        savedCallback.current(event);
+      if (!document.contains(target)) {
+        return;
       }
+      for (const ref of refs) {
+        if (ref.current?.contains(target)) {
+          return;
+        }
+      }
+
+      savedCallback.current(event);
     };
+
     for (const eventName of events) {
       document.addEventListener(eventName, handler);
     }
+
     return () => {
       for (const eventName of events) {
         document.removeEventListener(eventName, handler);

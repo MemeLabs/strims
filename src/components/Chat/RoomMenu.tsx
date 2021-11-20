@@ -1,7 +1,7 @@
 import "./RoomMenu.scss";
 
 import { Base64 } from "js-base64";
-import React, { useContext, useMemo, useState } from "react";
+import React, { forwardRef, useContext, useMemo, useState } from "react";
 import { MdArrowDropDown } from "react-icons/md";
 
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
@@ -19,7 +19,7 @@ export interface RoomMenuProps {
   onChange?: (item: RoomMenuItem) => void;
 }
 
-const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
+export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange }) => {
   const [directories] = useContext(DirectoryContext);
   const chats = useMemo(() => {
     const chats: RoomMenuItem[] = [];
@@ -39,8 +39,32 @@ const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
     return chats.sort((a, b) => a.name.localeCompare(b.name));
   }, [directories]);
 
-  const [selection, setSelection] = useState<RoomMenuItem>(null);
-  const handleItemClick = (item: RoomMenuItem) => {
+  return (
+    <>
+      {chats.map((chat) => (
+        <button className="room_menu__item" onClick={() => onChange?.(chat)} key={chat.key}>
+          {chat.name}
+        </button>
+      ))}
+    </>
+  );
+};
+
+export const RoomList = forwardRef<HTMLDivElement, RoomMenuProps>((props, ref) => (
+  <div ref={ref} className="room_list">
+    <RoomButtons {...props} />
+  </div>
+));
+
+interface RoomDropdownPsop extends RoomMenuProps {
+  defaultSelection: RoomMenuItem;
+}
+
+export const RoomDropdown: React.FC<RoomDropdownPsop> = ({ onChange, defaultSelection }) => {
+  // TODO: set initial selection for label...
+
+  const [selection, setSelection] = useState<RoomMenuItem>(defaultSelection);
+  const handleChange = (item: RoomMenuItem) => {
     setSelection(item);
     onChange?.(item);
   };
@@ -54,13 +78,7 @@ const RoomMenu: React.FC<RoomMenuProps> = ({ onChange }) => {
           <MdArrowDropDown className="room_menu__icon" />
         </>
       }
-      items={chats.map((chat) => (
-        <button className="room_menu__item" onClick={() => handleItemClick(chat)} key={chat.key}>
-          {chat.name}
-        </button>
-      ))}
+      items={<RoomButtons onChange={handleChange} />}
     />
   );
 };
-
-export default RoomMenu;

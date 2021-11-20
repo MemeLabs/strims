@@ -125,7 +125,8 @@ module.exports = (env, argv) => {
       description: "Live stream viewing with friends",
       background_color: "#222933",
       display: "fullscreen",
-      start_url: "/devtools.html",
+      // start_url: "/devtools.html",
+      start_url: "/",
       orientation: "omit",
       ios: true,
       icons: [

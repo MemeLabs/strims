@@ -53,3 +53,9 @@
     }
   }
 }
+
+.room_list {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-elevation-3);
+}
