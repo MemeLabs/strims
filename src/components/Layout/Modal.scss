@@ -4,15 +4,11 @@
   position: fixed;
   height: var(--layout-height);
   width: var(--layout-width);
-  top: 0;
-  left: 0;
-  transform: translateY(calc(100% - max(var(--layout-drag-offset, 0px), 0px)));
-  transition: transform 200ms ease-in-out;
   box-shadow: var(--shadow-elevation-3);
-  touch-action: none;
   box-sizing: border-box;
   background: var(--color-background-layout-body);
   z-index: var(--z-index-modal);
+  top: var(--layout-height);
 
   @at-root {
     .layout--portrait &,
@@ -35,14 +31,6 @@
     }
   }
 
-  &--dragging {
-    transition: none;
-  }
-
-  &--open.modal--closing {
-    transform: translateY(var(--layout-drag-offset, 0px));
-  }
-
   &__header {
     background: black;
     flex: 0 0 50px;
@@ -50,6 +38,7 @@
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
+    touch-action: none;
 
     &__title {
       flex: 1;

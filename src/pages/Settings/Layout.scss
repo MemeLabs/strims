@@ -1,0 +1,22 @@
+.layout--portable {
+  .settings {
+    height: 100%;
+    width: 100%;
+    position: relative;
+
+    &__nav {
+      background: green;
+      position: absolute;
+      height: 100%;
+      box-shadow: var(--shadow-elevation-2);
+
+      &__link {
+        white-space: nowrap;
+      }
+    }
+  }
+
+  .modal .settings__nav {
+    height: calc(100% + env(safe-area-inset-bottom));
+  }
+}

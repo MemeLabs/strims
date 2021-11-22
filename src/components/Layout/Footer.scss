@@ -23,3 +23,15 @@
     padding: 10px 0;
   }
 }
+
+.footer__settings {
+  &__title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  &__menu_button {
+    padding: 0.5em;
+  }
+}

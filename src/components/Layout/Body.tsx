@@ -1,67 +1,18 @@
-import { useDrag } from "@use-gesture/react";
-import clsx from "clsx";
-import { isEqual } from "lodash";
-import React, { Suspense, useRef } from "react";
+import React, { Suspense } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { Outlet } from "react-router";
 
 import NetworkNav from "../../components/Layout/NetworkNav";
-import { ContentState, useLayout } from "../../contexts/Layout";
-import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import { useLayout } from "../../contexts/Layout";
 import LoadingPlaceholder from "../../root/LoadingPlaceholder";
+import SwipablePanel, { DragState } from "../SwipablePanel";
 import Chat from "./Chat";
 import Player from "./Player";
 
-const DRAG_THRESHOLD = 200;
+export const LayoutBody: React.FC = ({ children }) => {
+  const { showVideo, toggleMemeOpen } = useLayout();
 
-export const LayoutBody: React.FC = () => {
-  const layout = useLayout();
-
-  const foo2 = useRef<HTMLDivElement>(null);
-  const setDragOffset = (v: number) =>
-    foo2.current?.style.setProperty("--layout-drag-offset", `${v}px`);
-
-  const toggleClosed = () => {
-    setDragOffset(0);
-    layout.setShowContent(({ closed }) => ({
-      closed: !closed,
-      closing: closed,
-      dragging: false,
-    }));
-  };
-
-  if (DEVICE_TYPE === DeviceType.Portable) {
-    useDrag(
-      ({ movement: [mx], swipe: [sx], dragging }) => {
-        let next: ContentState;
-        if (dragging) {
-          if (layout.showContent.closing) {
-            setDragOffset(Math.max(mx, 0));
-            next = { closed: false, closing: true, dragging: true };
-          } else {
-            setDragOffset(Math.max(-mx, 0));
-            next = { closed: mx >= -10, closing: false, dragging: true };
-          }
-        } else {
-          const closed =
-            (layout.showContent.closing && (sx === 1 || mx > DRAG_THRESHOLD)) ||
-            (!layout.showContent.closing && sx !== -1 && mx > -DRAG_THRESHOLD);
-          setDragOffset(0);
-          next = { closed, closing: !closed, dragging: false };
-        }
-        if (!isEqual(layout.showContent, next)) {
-          layout.setShowContent(next);
-        }
-      },
-      {
-        target: foo2,
-        eventOptions: {
-          capture: true,
-          passive: false,
-        },
-      }
-    );
-  }
+  const handleDragStateChange = (state: DragState) => toggleMemeOpen(!state.closed);
 
   return (
     <>
@@ -74,19 +25,18 @@ export const LayoutBody: React.FC = () => {
             <div className="scroll_content_test">
               <Suspense fallback={<LoadingPlaceholder />}>
                 <Outlet />
+                {children}
               </Suspense>
             </div>
           </Scrollbars>
         </div>
-        <div
-          ref={foo2}
-          className={clsx({
-            "foo_2": true,
-            "foo_2--dragging": layout.showContent.dragging,
-            "foo_2--closing": layout.showContent.closing,
-          })}
+        <SwipablePanel
+          className="foo_2"
+          direction="left"
+          open={false}
+          onDragStateChange={handleDragStateChange}
         >
-          {layout.showVideo && (
+          {showVideo && (
             <div className="layout__video">
               <Player />
             </div>
@@ -94,7 +44,7 @@ export const LayoutBody: React.FC = () => {
           <div className="layout__chat">
             <Chat />
           </div>
-        </div>
+        </SwipablePanel>
       </main>
     </>
   );

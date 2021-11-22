@@ -10,6 +10,7 @@ import Dropdown from "../Dropdown";
 
 export interface RoomMenuItem {
   key?: string;
+  directoryListingId?: bigint;
   networkKey: Uint8Array;
   serverKey: Uint8Array;
   name: string;
@@ -24,11 +25,12 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange }) => {
   const chats = useMemo(() => {
     const chats: RoomMenuItem[] = [];
     for (const { networkKey, listings } of Object.values(directories)) {
-      for (const { listing } of listings) {
+      for (const { id, listing } of listings) {
         if (listing?.content?.case === directoryv1.Listing.ContentCase.CHAT) {
           const { key, name } = listing.content.chat;
           chats.push({
             key: Base64.fromUint8Array(key),
+            directoryListingId: id,
             networkKey,
             serverKey: key,
             name,
@@ -61,8 +63,6 @@ interface RoomDropdownPsop extends RoomMenuProps {
 }
 
 export const RoomDropdown: React.FC<RoomDropdownPsop> = ({ onChange, defaultSelection }) => {
-  // TODO: set initial selection for label...
-
   const [selection, setSelection] = useState<RoomMenuItem>(defaultSelection);
   const handleChange = (item: RoomMenuItem) => {
     setSelection(item);

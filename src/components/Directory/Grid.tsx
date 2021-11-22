@@ -111,8 +111,8 @@ export const DirectoryGrid: React.FC<DirectoryGridProps> = ({ listings, networkK
     {listings
       .filter(
         ({ listing }) =>
-          listing.content?.case === Listing.ContentCase.EMBED ||
-          listing.content?.case === Listing.ContentCase.MEDIA
+          listing?.content?.case === Listing.ContentCase.EMBED ||
+          listing?.content?.case === Listing.ContentCase.MEDIA
       )
       .map((listing) => (
         <DirectoryGridItem key={listing.id.toString()} networkKey={networkKey} {...listing} />

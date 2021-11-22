@@ -96,15 +96,10 @@ func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.
 		return nil, err
 	}
 
-	err = client.Unpublish(
-		ctx,
-		&networkv1directory.UnpublishRequest{Id: r.Id},
-		&networkv1directory.UnpublishResponse{},
-	)
+	err = client.Unpublish(ctx, &networkv1directory.UnpublishRequest{Id: r.Id}, &networkv1directory.UnpublishResponse{})
 	if err != nil {
 		return nil, err
 	}
-
 	return &networkv1directory.FrontendUnpublishResponse{}, nil
 }
 
@@ -115,11 +110,7 @@ func (s *directoryService) Join(ctx context.Context, r *networkv1directory.Front
 		return nil, err
 	}
 
-	err = client.Join(
-		ctx,
-		&networkv1directory.JoinRequest{Id: r.Id},
-		&networkv1directory.JoinResponse{},
-	)
+	err = client.Join(ctx, &networkv1directory.JoinRequest{Id: r.Id}, &networkv1directory.JoinResponse{})
 	if err != nil {
 		return nil, err
 	}
@@ -133,11 +124,7 @@ func (s *directoryService) Part(ctx context.Context, r *networkv1directory.Front
 		return nil, err
 	}
 
-	err = client.Part(
-		ctx,
-		&networkv1directory.PartRequest{Id: r.Id},
-		&networkv1directory.PartResponse{},
-	)
+	err = client.Part(ctx, &networkv1directory.PartRequest{Id: r.Id}, &networkv1directory.PartResponse{})
 	if err != nil {
 		return nil, err
 	}

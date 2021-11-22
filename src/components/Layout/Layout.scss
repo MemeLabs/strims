@@ -182,16 +182,7 @@ $chat-width-sm: 260px;
     position: fixed;
     height: var(--layout-height);
     width: var(--layout-width);
-    top: 0;
-    left: 0;
-    transform: translateX(calc(100% - max(var(--layout-drag-offset, 0px), 10px)));
-    transition: transform 200ms ease-in-out;
     box-shadow: var(--shadow-elevation-3);
-    touch-action: none;
-
-    &--dragging {
-      transition: none;
-    }
   }
 
   .layout__chat,
@@ -200,10 +191,6 @@ $chat-width-sm: 260px;
   }
 
   &.layout--meme_open {
-    .foo_2--closing {
-      transform: translateX(var(--layout-drag-offset, 0px));
-    }
-
     .layout__chat,
     .layout__video {
       pointer-events: unset;
@@ -273,9 +260,7 @@ $chat-width-sm: 260px;
 
   &.layout--landscape_cw {
     &:not(.layout--meme_open) .foo_2 {
-      transform: translateX(
-        calc(100% - max(var(--layout-drag-offset, 0px), env(safe-area-inset-right), 10px))
-      );
+      --swipable-peek-size: calc(max(env(safe-area-inset-right), 10px));
     }
 
     &:not(.layout--swap) .layout__video,

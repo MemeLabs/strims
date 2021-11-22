@@ -47,7 +47,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
     return (
       <tr className="thing_list__item" key={network.id.toString()}>
         <td>
-          <Link to={`/settings/networks/${network.id}`}>
+          <Link to={network.id.toString()}>
             {certificateRoot(network.certificate).subject || "unknown"}
           </Link>
         </td>

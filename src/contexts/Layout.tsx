@@ -6,7 +6,6 @@ import React, {
   useContext,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { useToggle } from "react-use";
 
@@ -21,13 +20,13 @@ export interface ContentState {
 export interface LayoutContextProps {
   root: RefObject<HTMLElement>;
   swapMainPanels: boolean;
-  showContent: ContentState;
+  memeOpen: boolean;
   showChat: boolean;
   showVideo: boolean;
   theaterMode: boolean;
   expandNav: boolean;
   toggleSwapMainPanels: ToggleFunc;
-  setShowContent: React.Dispatch<React.SetStateAction<ContentState>>;
+  toggleMemeOpen: ToggleFunc;
   toggleShowChat: ToggleFunc;
   toggleShowVideo: ToggleFunc;
   toggleTheaterMode: ToggleFunc;
@@ -40,17 +39,13 @@ export interface WithRootRefProps {
   rootRef: RefCallback<HTMLElement>;
 }
 
-export const withLayoutContext = <T extends any>(
+export const withLayoutContext = <T,>(
   C: ComponentType<T & WithRootRefProps>
 ): React.FC<Omit<T, keyof WithRootRefProps>> => {
   const Provider: React.FC<T> = (props) => {
     const root = useRef<HTMLElement>(null);
     const [swapMainPanels, toggleSwapMainPanels] = useToggle(false);
-    const [showContent, setShowContent] = useState({
-      closed: true,
-      closing: false,
-      dragging: false,
-    });
+    const [memeOpen, toggleMemeOpen] = useToggle(false);
     const [showChat, toggleShowChat] = useToggle(true);
     const [showVideo, toggleShowVideo] = useToggle(false);
     const [theaterMode, toggleTheaterMode] = useToggle(false);
@@ -62,19 +57,19 @@ export const withLayoutContext = <T extends any>(
       () => ({
         root,
         swapMainPanels,
-        showContent,
+        memeOpen,
         showChat,
         showVideo,
         theaterMode,
         expandNav,
         toggleSwapMainPanels,
-        setShowContent,
+        toggleMemeOpen,
         toggleShowChat,
         toggleShowVideo,
         toggleTheaterMode,
         toggleExpandNav,
       }),
-      [swapMainPanels, showContent, showChat, showVideo, theaterMode, expandNav]
+      [swapMainPanels, memeOpen, showChat, showVideo, theaterMode, expandNav]
     );
 
     return (

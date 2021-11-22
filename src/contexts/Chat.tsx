@@ -387,9 +387,15 @@ export const ChatConsumer = ChatContext.Consumer;
 interface RoomProviderProps {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
+  directoryListingId?: bigint;
 }
 
-export const RoomProvider: React.FC<RoomProviderProps> = ({ networkKey, serverKey, children }) => {
+export const RoomProvider: React.FC<RoomProviderProps> = ({
+  networkKey,
+  serverKey,
+  directoryListingId,
+  children,
+}) => {
   const key = useMemo(
     () => Base64.fromUint8Array(networkKey) + ":" + Base64.fromUint8Array(serverKey),
     [networkKey, serverKey]
@@ -412,6 +418,19 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ networkKey, serverKe
     chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
     dispatch({ type: "INIT", chatClient });
   }, [networkKey, serverKey]);
+
+  useEffect(() => {
+    if (directoryListingId === BigInt(0)) {
+      return;
+    }
+
+    const req = {
+      networkKey,
+      id: directoryListingId,
+    };
+    void client.directory.join(req);
+    return () => void client.directory.part(req);
+  }, [networkKey, directoryListingId]);
 
   const sendMessage = useCallback(
     (body: string) =>

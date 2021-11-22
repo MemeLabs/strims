@@ -187,7 +187,7 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
         "layout--min_width_md": width >= 768,
         "layout--min_width_lg": width >= 992,
         "layout--min_width_xl": width >= 1200,
-        "layout--meme_open": !layout.showContent.closed,
+        "layout--meme_open": layout.memeOpen,
         "layout--swap": layout.swapMainPanels,
         "layout--show_chat": layout.showChat,
         "layout--show_video": layout.showVideo,

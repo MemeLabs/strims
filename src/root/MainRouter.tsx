@@ -1,4 +1,4 @@
-import React, { lazy } from "react";
+import React, { ReactElement, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import LayoutBody from "../components/Layout/Body";
@@ -16,8 +16,8 @@ const Directory = lazy(() => import("../pages/Directory"));
 const PlayerTest = lazy(() => import("../pages/PlayerTest"));
 const Embed = lazy(() => import("../pages/Embed"));
 
-export const settingsRoutes = (
-  <Route path="settings/*" element={<SettingsLayout />}>
+export const createSettingsRoutes = (layout: ReactElement) => (
+  <Route path="settings/*" element={layout}>
     <Route index element={<Navigate replace to="networks" />} />
     <Route path="networks/*" element={<Network />} />
     <Route path="bootstrap-clients/*" element={<BootstrapClients />} />
@@ -27,7 +27,9 @@ export const settingsRoutes = (
   </Route>
 );
 
-export const mainRoutes = (
+const settingsRoutes = createSettingsRoutes(<SettingsLayout />);
+
+const mainRoutes = (
   <Route path="*" element={<LayoutBody />}>
     <Route index element={<Home />} />
     <Route path="directory/:networkKey" element={<Directory />} />

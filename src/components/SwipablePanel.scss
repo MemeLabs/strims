@@ -1,0 +1,67 @@
+.swipable {
+  position: absolute;
+  transition: transform 200ms ease-in-out;
+  touch-action: none;
+
+  &--dragging {
+    transition: none;
+  }
+
+  &--up {
+    top: 100%;
+    transform: translateY(
+      calc(-1 * min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%))
+    );
+  }
+
+  &--up.swipable--open.swipable--closing {
+    transform: translateY(
+      calc(-100% + min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
+    );
+  }
+
+  &--down {
+    top: 0;
+    transform: translateY(
+      calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
+    );
+  }
+
+  &--down.swipable--open.swipable--closing {
+    transform: translateY(
+      calc(
+        -100% + min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%)
+      )
+    );
+  }
+
+  &--left {
+    top: 0;
+    left: 100%;
+    transform: translateX(
+      calc(-1 * min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%))
+    );
+  }
+
+  &--left.swipable--open.swipable--closing {
+    transform: translateX(
+      calc(-100% + min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
+    );
+  }
+
+  &--right {
+    top: 0;
+    left: 0;
+    transform: translateX(
+      calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
+    );
+  }
+
+  &--right.swipable--open.swipable--closing {
+    transform: translateX(
+      calc(
+        -100% + min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%)
+      )
+    );
+  }
+}
