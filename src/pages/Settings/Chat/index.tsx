@@ -1,5 +1,5 @@
-import React, { ComponentProps, createContext, useContext } from "react";
-import { Location, Route, Routes, useHref, useLinkClickHandler, useRoutes } from "react-router-dom";
+import React from "react";
+import { Route, Routes } from "react-router-dom";
 
 import ChatEmoteCreateForm from "./ChatEmoteCreateForm";
 import ChatEmoteEditForm from "./ChatEmoteEditForm";
@@ -32,56 +32,5 @@ const Router: React.FC = () => (
     </Routes>
   </main>
 );
-
-interface NavigationPushOptions {
-  back?: boolean;
-}
-
-interface NavigationContextValues {
-  history: Location[];
-  focusedIndex: number;
-  push(location: Location, options?: NavigationPushOptions);
-  focusPrev(): void;
-  focusNext(): void;
-}
-
-const NavigationContext = createContext<NavigationContextValues>(null);
-
-export const useNavigation = () => useContext(NavigationContext);
-export const useInNavigationContext = () => useNavigation() !== undefined;
-export const useLinkClickHandler2 = (to: string, options: NavigationPushOptions) => {
-  const navigation = useNavigation();
-
-  const location = {
-    pathname: to,
-    hash: "",
-    search: "",
-    state: null,
-    key: null,
-  };
-
-  return () => void navigation.push(location, options);
-};
-export const useBackLinkClickHandler = () => {
-  const navigation = useNavigation();
-  return () => navigation.focusPrev();
-};
-
-interface LinkProps extends ComponentProps<"a"> {
-  to: string;
-  back?: boolean;
-}
-
-export const Link: React.FC<LinkProps> = ({ to, back, ...props }) => {
-  const handleClick = useInNavigationContext()
-    ? useLinkClickHandler2(to, { back })
-    : useLinkClickHandler(useHref(to));
-
-  return <a {...props} onClick={handleClick} />;
-};
-
-export const Something: React.FC = () => {
-  return null;
-};
 
 export default Router;

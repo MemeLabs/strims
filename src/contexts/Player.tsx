@@ -14,6 +14,7 @@ export type PlayerSource =
       type: "embed";
       service: ServiceSlug;
       id: string;
+      queryParams?: Map<string, string>;
       networkKey?: string;
     }
   | {

@@ -20,7 +20,13 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
     });
 
   return (
-    <SwipablePanel className="settings__nav" open={open} onToggle={onToggle} direction="right">
+    <SwipablePanel
+      className="settings__nav"
+      open={open}
+      onToggle={onToggle}
+      dragThreshold={100}
+      direction="right"
+    >
       <NavLink className={linkClassName} to="networks">
         Networks
       </NavLink>

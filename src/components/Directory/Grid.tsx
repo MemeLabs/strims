@@ -33,7 +33,8 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   // on mobile while the directory grid is obstructed by the content panel we
   // don't need to apply snippet changes. this prevents loading thumbnail and
   // channel images but preserves the scroll position.
-  const willHide = !layout.showContent.closed && !layout.showContent.dragging;
+  const willHide =
+    (layout.overlayState.open && !layout.overlayState.transitioning) || layout.modalOpen;
   const [hide, setHide] = useState(willHide);
   useEffect(() => {
     const tid = setTimeout(() => setHide(willHide), 200);
@@ -45,11 +46,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   }
 
   const handleClick = () => {
-    layout.setShowContent({
-      closed: false,
-      closing: true,
-      dragging: false,
-    });
+    layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
     player.setSource(getListingPlayerSource(networkKey, listing));

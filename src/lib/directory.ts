@@ -1,4 +1,6 @@
 import { Base64 } from "js-base64";
+import { isEmpty } from "lodash";
+import qs from "qs";
 
 import { Listing } from "../apis/strims/network/v1/directory/directory";
 import { PlayerSource } from "../contexts/Player";
@@ -20,8 +22,13 @@ export const slugToService = (t: ServiceSlug): Listing.Embed.Service =>
 
 export const formatUri = (networkKey: string, { content }: Listing): string => {
   switch (content.case) {
-    case Listing.ContentCase.EMBED:
-      return `/embed/${serviceToSlug(content.embed.service)}/${content.embed.id}?k=${networkKey}`;
+    case Listing.ContentCase.EMBED: {
+      let search = "?k=" + networkKey;
+      if (!isEmpty(content.embed.queryParams)) {
+        search += "&" + qs.stringify(Object.fromEntries(content.embed.queryParams));
+      }
+      return `/embed/${serviceToSlug(content.embed.service)}/${content.embed.id}${search}`;
+    }
     case Listing.ContentCase.MEDIA: {
       const mimeType = encodeURIComponent(content.media.mimeType);
       const swarmUri = encodeURIComponent(content.media.swarmUri);
@@ -39,6 +46,7 @@ export const getListingPlayerSource = (networkKey: string, { content }: Listing)
         type: "embed",
         service: serviceToSlug(content.embed.service),
         id: content.embed.id,
+        queryParams: content.embed.queryParams,
         networkKey,
       };
     case Listing.ContentCase.MEDIA: {

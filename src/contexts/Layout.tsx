@@ -6,31 +6,34 @@ import React, {
   useContext,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { useToggle } from "react-use";
 
 type ToggleFunc = (v?: boolean | ((v: boolean) => boolean)) => void;
 
-export interface ContentState {
-  closed: boolean;
-  closing: boolean;
-  dragging: boolean;
+export interface OverlayState {
+  open: boolean;
+  transitioning: boolean;
 }
 
 export interface LayoutContextProps {
   root: RefObject<HTMLElement>;
   swapMainPanels: boolean;
-  memeOpen: boolean;
+  overlayState: OverlayState;
   showChat: boolean;
   showVideo: boolean;
   theaterMode: boolean;
   expandNav: boolean;
+  modalOpen: boolean;
   toggleSwapMainPanels: ToggleFunc;
-  toggleMemeOpen: ToggleFunc;
+  setOverlayState: React.Dispatch<React.SetStateAction<OverlayState>>;
+  toggleOverlayOpen: ToggleFunc;
   toggleShowChat: ToggleFunc;
   toggleShowVideo: ToggleFunc;
   toggleTheaterMode: ToggleFunc;
   toggleExpandNav: ToggleFunc;
+  toggleModalOpen: ToggleFunc;
 }
 
 const LayoutContext = React.createContext<LayoutContextProps>(null);
@@ -45,31 +48,44 @@ export const withLayoutContext = <T,>(
   const Provider: React.FC<T> = (props) => {
     const root = useRef<HTMLElement>(null);
     const [swapMainPanels, toggleSwapMainPanels] = useToggle(false);
-    const [memeOpen, toggleMemeOpen] = useToggle(false);
+    const [overlayState, setOverlayState] = useState<OverlayState>({
+      open: false,
+      transitioning: false,
+    });
     const [showChat, toggleShowChat] = useToggle(true);
     const [showVideo, toggleShowVideo] = useToggle(false);
     const [theaterMode, toggleTheaterMode] = useToggle(false);
     const [expandNav, toggleExpandNav] = useToggle(false);
+    const [modalOpen, toggleModalOpen] = useToggle(false);
 
     const setRoot: RefCallback<HTMLElement> = useCallback((e) => (root.current = e), []);
+
+    const toggleOverlayOpen = (open: boolean) =>
+      setOverlayState({
+        open,
+        transitioning: false,
+      });
 
     const value = useMemo(
       () => ({
         root,
         swapMainPanels,
-        memeOpen,
+        overlayState,
         showChat,
         showVideo,
         theaterMode,
         expandNav,
+        modalOpen,
         toggleSwapMainPanels,
-        toggleMemeOpen,
+        setOverlayState,
+        toggleOverlayOpen,
         toggleShowChat,
         toggleShowVideo,
         toggleTheaterMode,
         toggleExpandNav,
+        toggleModalOpen,
       }),
-      [swapMainPanels, memeOpen, showChat, showVideo, theaterMode, expandNav]
+      [swapMainPanels, overlayState, showChat, showVideo, theaterMode, expandNav, modalOpen]
     );
 
     return (

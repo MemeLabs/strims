@@ -6,14 +6,14 @@ import {
   IImage as strims_type_IImage,
 } from "../../../type/image";
 import {
-  StringValue as google_protobuf_StringValue,
-  IStringValue as google_protobuf_IStringValue,
   UInt64Value as google_protobuf_UInt64Value,
   IUInt64Value as google_protobuf_IUInt64Value,
   BoolValue as google_protobuf_BoolValue,
   IBoolValue as google_protobuf_IBoolValue,
   BytesValue as google_protobuf_BytesValue,
   IBytesValue as google_protobuf_IBytesValue,
+  StringValue as google_protobuf_StringValue,
+  IStringValue as google_protobuf_IStringValue,
 } from "../../../../google/protobuf/wrappers";
 
 export type IServerConfig = {
@@ -575,21 +575,26 @@ export namespace Listing {
   export type IEmbed = {
     service?: Listing.Embed.Service;
     id?: string;
+    queryParams?: Map<string, string> | { [key: string]: string };
   }
 
   export class Embed {
     service: Listing.Embed.Service;
     id: string;
+    queryParams: Map<string, string>;
 
     constructor(v?: IEmbed) {
       this.service = v?.service || 0;
       this.id = v?.id || "";
+      if (v?.queryParams) this.queryParams = v.queryParams instanceof Map ? v.queryParams : new Map(Object.entries(v.queryParams));
+      else this.queryParams = new Map<string, string>();
     }
 
     static encode(m: Embed, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.service) w.uint32(8).uint32(m.service);
       if (m.id) w.uint32(18).string(m.id);
+      for (const [k, v] of m.queryParams) w.uint32(26).fork().uint32(10).string(k).uint32(18).string(v).ldelim();
       return w;
     }
 
@@ -605,6 +610,26 @@ export namespace Listing {
           break;
           case 2:
           m.id = r.string();
+          break;
+          case 3:
+          {
+            const flen = r.uint32();
+            const fend = r.pos + flen;
+            let key: string;
+            let value: string;
+            while (r.pos < fend) {
+              const ftag = r.uint32();
+              switch (ftag >> 3) {
+                case 1:
+                key = r.string()
+                break;
+                case 2:
+                value = r.string();
+                break;
+              }
+            }
+            m.queryParams.set(key, value)
+          }
           break;
           default:
           r.skipType(tag & 7);

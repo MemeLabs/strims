@@ -83,12 +83,15 @@ body {
 .storybook {
   display: flex;
   height: calc(100vh - 40px);
+  background: #eee;
 
   &__nav {
-    flex: 0 0 250px;
+    flex: 0 0 150px;
     display: flex;
     flex-direction: column;
     margin-top: 10px;
+
+    padding-left: env(safe-area-inset-left);
   }
 
   &__content {
@@ -98,7 +101,7 @@ body {
     border-radius: 4px;
     position: relative;
     height: calc(100vh - 60px) !important;
-    width: calc(100vw - 260px) !important;
+    width: calc(100vw - 160px - env(safe-area-inset-left)) !important;
     overflow: auto !important;
     background: var(--color-background-layout-body);
   }

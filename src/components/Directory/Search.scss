@@ -89,7 +89,8 @@
   }
 }
 
-.layout_header__search {
+.layout--tv,
+.layout--pc {
   .search {
     flex-direction: row;
     align-items: center;
@@ -129,7 +130,7 @@
   }
 }
 
-.footer__search {
+.layout--portable {
   .search {
     flex-direction: column;
 

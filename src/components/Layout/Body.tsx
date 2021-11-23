@@ -1,6 +1,7 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { Outlet } from "react-router";
+import { useToggle } from "react-use";
 
 import NetworkNav from "../../components/Layout/NetworkNav";
 import { useLayout } from "../../contexts/Layout";
@@ -10,9 +11,21 @@ import Chat from "./Chat";
 import Player from "./Player";
 
 export const LayoutBody: React.FC = ({ children }) => {
-  const { showVideo, toggleMemeOpen } = useLayout();
+  const { showVideo, overlayState, setOverlayState } = useLayout();
 
-  const handleDragStateChange = (state: DragState) => toggleMemeOpen(!state.closed);
+  const handleDragStateChange = (state: DragState) => {
+    setOverlayState({
+      open: !state.closed,
+      transitioning: state.transitioning,
+    });
+  };
+
+  const [open, toggleOpen] = useToggle(false);
+  useEffect(() => {
+    if (!overlayState.transitioning) {
+      toggleOpen(overlayState.open);
+    }
+  }, [overlayState]);
 
   return (
     <>
@@ -33,7 +46,7 @@ export const LayoutBody: React.FC = ({ children }) => {
         <SwipablePanel
           className="foo_2"
           direction="left"
-          open={false}
+          open={open}
           onDragStateChange={handleDragStateChange}
         >
           {showVideo && (

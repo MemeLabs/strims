@@ -8,39 +8,33 @@ import { ServiceSlug } from "../lib/directory";
 
 interface EmbedQueryParams {
   k: string;
+  [key: string]: string;
 }
 
 const Embed: React.FC = () => {
   const routeParams = useParams<"service" | "id">();
   const location = useLocation();
-  const queryParams = useQuery<EmbedQueryParams>(location.search);
-  const { toggleShowVideo, setShowContent } = useLayout();
+  const { k: networkKey, ...queryParams } = useQuery<EmbedQueryParams>(location.search);
+  const { toggleShowVideo, toggleOverlayOpen } = useLayout();
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {
-    setShowContent({
-      closed: false,
-      closing: true,
-      dragging: false,
-    });
+    toggleOverlayOpen(true);
     toggleShowVideo(true);
     setMode(PlayerMode.FULL);
     setSource({
       type: "embed",
       service: routeParams.service as ServiceSlug,
       id: routeParams.id,
-      networkKey: queryParams.k,
+      queryParams: new Map(Object.entries(queryParams)),
+      networkKey,
     });
     setPath(location.pathname + location.search);
     return () => {
-      setShowContent({
-        closed: true,
-        closing: false,
-        dragging: false,
-      });
+      toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };
-  }, [routeParams.service, routeParams.id, queryParams.k]);
+  }, [routeParams.service, routeParams.id, networkKey]);
 
   return null;
 };

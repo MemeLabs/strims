@@ -66,6 +66,7 @@ const Player: React.FC = ({ children }) => {
             networkKey={source.networkKey}
             service={source.service}
             id={source.id}
+            queryParams={source.queryParams}
             disableControls={mode === PlayerMode.PIP}
           />
         )}

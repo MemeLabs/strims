@@ -2458,8 +2458,9 @@ type Listing_Embed struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Service Listing_Embed_Service `protobuf:"varint,1,opt,name=service,proto3,enum=strims.network.v1.directory.Listing_Embed_Service" json:"service,omitempty"`
-	Id      string                `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Service     Listing_Embed_Service `protobuf:"varint,1,opt,name=service,proto3,enum=strims.network.v1.directory.Listing_Embed_Service" json:"service,omitempty"`
+	Id          string                `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	QueryParams map[string]string     `protobuf:"bytes,3,rep,name=query_params,json=queryParams,proto3" json:"query_params,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (x *Listing_Embed) Reset() {
@@ -2506,6 +2507,13 @@ func (x *Listing_Embed) GetId() string {
 		return x.Id
 	}
 	return ""
+}
+
+func (x *Listing_Embed) GetQueryParams() map[string]string {
+	if x != nil {
+		return x.QueryParams
+	}
+	return nil
 }
 
 type Listing_Chat struct {
@@ -2574,7 +2582,7 @@ type ListingSnippetDelta_Tags struct {
 func (x *ListingSnippetDelta_Tags) Reset() {
 	*x = ListingSnippetDelta_Tags{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[43]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2587,7 +2595,7 @@ func (x *ListingSnippetDelta_Tags) String() string {
 func (*ListingSnippetDelta_Tags) ProtoMessage() {}
 
 func (x *ListingSnippetDelta_Tags) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[43]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2623,7 +2631,7 @@ type Event_ListingChange struct {
 func (x *Event_ListingChange) Reset() {
 	*x = Event_ListingChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[44]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2636,7 +2644,7 @@ func (x *Event_ListingChange) String() string {
 func (*Event_ListingChange) ProtoMessage() {}
 
 func (x *Event_ListingChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[44]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2684,7 +2692,7 @@ type Event_Unpublish struct {
 func (x *Event_Unpublish) Reset() {
 	*x = Event_Unpublish{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[45]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2697,7 +2705,7 @@ func (x *Event_Unpublish) String() string {
 func (*Event_Unpublish) ProtoMessage() {}
 
 func (x *Event_Unpublish) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[45]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2732,7 +2740,7 @@ type Event_ViewerCountChange struct {
 func (x *Event_ViewerCountChange) Reset() {
 	*x = Event_ViewerCountChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[46]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2745,7 +2753,7 @@ func (x *Event_ViewerCountChange) String() string {
 func (*Event_ViewerCountChange) ProtoMessage() {}
 
 func (x *Event_ViewerCountChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[46]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2788,7 +2796,7 @@ type Event_ViewerStateChange struct {
 func (x *Event_ViewerStateChange) Reset() {
 	*x = Event_ViewerStateChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[47]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[48]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2801,7 +2809,7 @@ func (x *Event_ViewerStateChange) String() string {
 func (*Event_ViewerStateChange) ProtoMessage() {}
 
 func (x *Event_ViewerStateChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[47]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[48]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2849,7 +2857,7 @@ type Event_Ping struct {
 func (x *Event_Ping) Reset() {
 	*x = Event_Ping{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[48]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[49]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2862,7 +2870,7 @@ func (x *Event_Ping) String() string {
 func (*Event_Ping) ProtoMessage() {}
 
 func (x *Event_Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[48]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[49]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2894,7 +2902,7 @@ type FrontendOpenResponse_Close struct {
 func (x *FrontendOpenResponse_Close) Reset() {
 	*x = FrontendOpenResponse_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[49]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2907,7 +2915,7 @@ func (x *FrontendOpenResponse_Close) String() string {
 func (*FrontendOpenResponse_Close) ProtoMessage() {}
 
 func (x *FrontendOpenResponse_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[49]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2987,7 +2995,7 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52,
 	0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x22, 0x15, 0x0a, 0x13, 0x54,
 	0x65, 0x73, 0x74, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x9e, 0x06, 0x0a, 0x07, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x43,
+	0x73, 0x65, 0x22, 0xbe, 0x07, 0x0a, 0x07, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x43,
 	0x0a, 0x05, 0x6d, 0x65, 0x64, 0x69, 0x61, 0x18, 0xe9, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2a,
 	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
 	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73,
@@ -3011,13 +3019,23 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x77, 0x61, 0x72, 0x6d, 0x5f, 0x75, 0x72, 0x69, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08,
 	0x73, 0x77, 0x61, 0x72, 0x6d, 0x55, 0x72, 0x69, 0x1a, 0x1d, 0x0a, 0x07, 0x53, 0x65, 0x72, 0x76,
 	0x69, 0x63, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x1a, 0xe0, 0x02, 0x0a, 0x05, 0x45, 0x6d, 0x62, 0x65,
+	0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x1a, 0x80, 0x04, 0x0a, 0x05, 0x45, 0x6d, 0x62, 0x65,
 	0x64, 0x12, 0x4c, 0x0a, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01,
 	0x28, 0x0e, 0x32, 0x32, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
 	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
 	0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x2e, 0x45, 0x6d, 0x62, 0x65, 0x64, 0x2e, 0x53,
 	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x52, 0x07, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12,
-	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22,
+	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12,
+	0x5e, 0x0a, 0x0c, 0x71, 0x75, 0x65, 0x72, 0x79, 0x5f, 0x70, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x18,
+	0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x3b, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74,
+	0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x2e, 0x45, 0x6d, 0x62, 0x65,
+	0x64, 0x2e, 0x51, 0x75, 0x65, 0x72, 0x79, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x45, 0x6e, 0x74,
+	0x72, 0x79, 0x52, 0x0b, 0x71, 0x75, 0x65, 0x72, 0x79, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x1a,
+	0x3e, 0x0a, 0x10, 0x51, 0x75, 0x65, 0x72, 0x79, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x45, 0x6e,
+	0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22,
 	0xf8, 0x01, 0x0a, 0x07, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x2d, 0x0a, 0x29, 0x44,
 	0x49, 0x52, 0x45, 0x43, 0x54, 0x4f, 0x52, 0x59, 0x5f, 0x4c, 0x49, 0x53, 0x54, 0x49, 0x4e, 0x47,
 	0x5f, 0x45, 0x4d, 0x42, 0x45, 0x44, 0x5f, 0x53, 0x45, 0x52, 0x56, 0x49, 0x43, 0x45, 0x5f, 0x55,
@@ -3375,7 +3393,7 @@ func file_network_v1_directory_directory_proto_rawDescGZIP() []byte {
 }
 
 var file_network_v1_directory_directory_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_network_v1_directory_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_network_v1_directory_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_network_v1_directory_directory_proto_goTypes = []interface{}{
 	(Listing_Embed_Service)(0),                   // 0: strims.network.v1.directory.Listing.Embed.Service
 	(*ServerConfig)(nil),                         // 1: strims.network.v1.directory.ServerConfig
@@ -3421,18 +3439,19 @@ var file_network_v1_directory_directory_proto_goTypes = []interface{}{
 	(*Listing_Service)(nil),                      // 41: strims.network.v1.directory.Listing.Service
 	(*Listing_Embed)(nil),                        // 42: strims.network.v1.directory.Listing.Embed
 	(*Listing_Chat)(nil),                         // 43: strims.network.v1.directory.Listing.Chat
-	(*ListingSnippetDelta_Tags)(nil),             // 44: strims.network.v1.directory.ListingSnippetDelta.Tags
-	(*Event_ListingChange)(nil),                  // 45: strims.network.v1.directory.Event.ListingChange
-	(*Event_Unpublish)(nil),                      // 46: strims.network.v1.directory.Event.Unpublish
-	(*Event_ViewerCountChange)(nil),              // 47: strims.network.v1.directory.Event.ViewerCountChange
-	(*Event_ViewerStateChange)(nil),              // 48: strims.network.v1.directory.Event.ViewerStateChange
-	(*Event_Ping)(nil),                           // 49: strims.network.v1.directory.Event.Ping
-	(*FrontendOpenResponse_Close)(nil),           // 50: strims.network.v1.directory.FrontendOpenResponse.Close
-	(*image.Image)(nil),                          // 51: strims.type.Image
-	(*wrapperspb.StringValue)(nil),               // 52: google.protobuf.StringValue
-	(*wrapperspb.UInt64Value)(nil),               // 53: google.protobuf.UInt64Value
-	(*wrapperspb.BoolValue)(nil),                 // 54: google.protobuf.BoolValue
-	(*wrapperspb.BytesValue)(nil),                // 55: google.protobuf.BytesValue
+	nil,                                          // 44: strims.network.v1.directory.Listing.Embed.QueryParamsEntry
+	(*ListingSnippetDelta_Tags)(nil),             // 45: strims.network.v1.directory.ListingSnippetDelta.Tags
+	(*Event_ListingChange)(nil),                  // 46: strims.network.v1.directory.Event.ListingChange
+	(*Event_Unpublish)(nil),                      // 47: strims.network.v1.directory.Event.Unpublish
+	(*Event_ViewerCountChange)(nil),              // 48: strims.network.v1.directory.Event.ViewerCountChange
+	(*Event_ViewerStateChange)(nil),              // 49: strims.network.v1.directory.Event.ViewerStateChange
+	(*Event_Ping)(nil),                           // 50: strims.network.v1.directory.Event.Ping
+	(*FrontendOpenResponse_Close)(nil),           // 51: strims.network.v1.directory.FrontendOpenResponse.Close
+	(*image.Image)(nil),                          // 52: strims.type.Image
+	(*wrapperspb.StringValue)(nil),               // 53: google.protobuf.StringValue
+	(*wrapperspb.UInt64Value)(nil),               // 54: google.protobuf.UInt64Value
+	(*wrapperspb.BoolValue)(nil),                 // 55: google.protobuf.BoolValue
+	(*wrapperspb.BytesValue)(nil),                // 56: google.protobuf.BytesValue
 }
 var file_network_v1_directory_directory_proto_depIdxs = []int32{
 	35, // 0: strims.network.v1.directory.ServerConfig.integrations:type_name -> strims.network.v1.directory.ServerConfig.Integrations
@@ -3440,29 +3459,29 @@ var file_network_v1_directory_directory_proto_depIdxs = []int32{
 	41, // 2: strims.network.v1.directory.Listing.service:type_name -> strims.network.v1.directory.Listing.Service
 	42, // 3: strims.network.v1.directory.Listing.embed:type_name -> strims.network.v1.directory.Listing.Embed
 	43, // 4: strims.network.v1.directory.Listing.chat:type_name -> strims.network.v1.directory.Listing.Chat
-	51, // 5: strims.network.v1.directory.ListingSnippetImage.image:type_name -> strims.type.Image
+	52, // 5: strims.network.v1.directory.ListingSnippetImage.image:type_name -> strims.type.Image
 	6,  // 6: strims.network.v1.directory.ListingSnippet.thumbnail:type_name -> strims.network.v1.directory.ListingSnippetImage
 	6,  // 7: strims.network.v1.directory.ListingSnippet.channel_logo:type_name -> strims.network.v1.directory.ListingSnippetImage
-	52, // 8: strims.network.v1.directory.ListingSnippetDelta.title:type_name -> google.protobuf.StringValue
-	52, // 9: strims.network.v1.directory.ListingSnippetDelta.description:type_name -> google.protobuf.StringValue
-	52, // 10: strims.network.v1.directory.ListingSnippetDelta.category:type_name -> google.protobuf.StringValue
-	52, // 11: strims.network.v1.directory.ListingSnippetDelta.channel_name:type_name -> google.protobuf.StringValue
-	53, // 12: strims.network.v1.directory.ListingSnippetDelta.viewer_count:type_name -> google.protobuf.UInt64Value
-	54, // 13: strims.network.v1.directory.ListingSnippetDelta.live:type_name -> google.protobuf.BoolValue
-	54, // 14: strims.network.v1.directory.ListingSnippetDelta.is_mature:type_name -> google.protobuf.BoolValue
-	55, // 15: strims.network.v1.directory.ListingSnippetDelta.key:type_name -> google.protobuf.BytesValue
-	55, // 16: strims.network.v1.directory.ListingSnippetDelta.signature:type_name -> google.protobuf.BytesValue
-	44, // 17: strims.network.v1.directory.ListingSnippetDelta.tags:type_name -> strims.network.v1.directory.ListingSnippetDelta.Tags
+	53, // 8: strims.network.v1.directory.ListingSnippetDelta.title:type_name -> google.protobuf.StringValue
+	53, // 9: strims.network.v1.directory.ListingSnippetDelta.description:type_name -> google.protobuf.StringValue
+	53, // 10: strims.network.v1.directory.ListingSnippetDelta.category:type_name -> google.protobuf.StringValue
+	53, // 11: strims.network.v1.directory.ListingSnippetDelta.channel_name:type_name -> google.protobuf.StringValue
+	54, // 12: strims.network.v1.directory.ListingSnippetDelta.viewer_count:type_name -> google.protobuf.UInt64Value
+	55, // 13: strims.network.v1.directory.ListingSnippetDelta.live:type_name -> google.protobuf.BoolValue
+	55, // 14: strims.network.v1.directory.ListingSnippetDelta.is_mature:type_name -> google.protobuf.BoolValue
+	56, // 15: strims.network.v1.directory.ListingSnippetDelta.key:type_name -> google.protobuf.BytesValue
+	56, // 16: strims.network.v1.directory.ListingSnippetDelta.signature:type_name -> google.protobuf.BytesValue
+	45, // 17: strims.network.v1.directory.ListingSnippetDelta.tags:type_name -> strims.network.v1.directory.ListingSnippetDelta.Tags
 	6,  // 18: strims.network.v1.directory.ListingSnippetDelta.thumbnail:type_name -> strims.network.v1.directory.ListingSnippetImage
 	6,  // 19: strims.network.v1.directory.ListingSnippetDelta.channel_logo:type_name -> strims.network.v1.directory.ListingSnippetImage
-	45, // 20: strims.network.v1.directory.Event.listing_change:type_name -> strims.network.v1.directory.Event.ListingChange
-	46, // 21: strims.network.v1.directory.Event.unpublish:type_name -> strims.network.v1.directory.Event.Unpublish
-	47, // 22: strims.network.v1.directory.Event.viewer_count_change:type_name -> strims.network.v1.directory.Event.ViewerCountChange
-	48, // 23: strims.network.v1.directory.Event.viewer_state_change:type_name -> strims.network.v1.directory.Event.ViewerStateChange
-	49, // 24: strims.network.v1.directory.Event.ping:type_name -> strims.network.v1.directory.Event.Ping
+	46, // 20: strims.network.v1.directory.Event.listing_change:type_name -> strims.network.v1.directory.Event.ListingChange
+	47, // 21: strims.network.v1.directory.Event.unpublish:type_name -> strims.network.v1.directory.Event.Unpublish
+	48, // 22: strims.network.v1.directory.Event.viewer_count_change:type_name -> strims.network.v1.directory.Event.ViewerCountChange
+	49, // 23: strims.network.v1.directory.Event.viewer_state_change:type_name -> strims.network.v1.directory.Event.ViewerStateChange
+	50, // 24: strims.network.v1.directory.Event.ping:type_name -> strims.network.v1.directory.Event.Ping
 	9,  // 25: strims.network.v1.directory.EventBroadcast.events:type_name -> strims.network.v1.directory.Event
 	5,  // 26: strims.network.v1.directory.PublishRequest.listing:type_name -> strims.network.v1.directory.Listing
-	50, // 27: strims.network.v1.directory.FrontendOpenResponse.close:type_name -> strims.network.v1.directory.FrontendOpenResponse.Close
+	51, // 27: strims.network.v1.directory.FrontendOpenResponse.close:type_name -> strims.network.v1.directory.FrontendOpenResponse.Close
 	10, // 28: strims.network.v1.directory.FrontendOpenResponse.broadcast:type_name -> strims.network.v1.directory.EventBroadcast
 	5,  // 29: strims.network.v1.directory.FrontendPublishRequest.listing:type_name -> strims.network.v1.directory.Listing
 	8,  // 30: strims.network.v1.directory.SnippetSubscribeResponse.snippet_delta:type_name -> strims.network.v1.directory.ListingSnippetDelta
@@ -3471,37 +3490,38 @@ var file_network_v1_directory_directory_proto_depIdxs = []int32{
 	38, // 33: strims.network.v1.directory.ServerConfig.Integrations.youtube:type_name -> strims.network.v1.directory.ServerConfig.Integrations.YouTube
 	39, // 34: strims.network.v1.directory.ServerConfig.Integrations.swarm:type_name -> strims.network.v1.directory.ServerConfig.Integrations.Swarm
 	0,  // 35: strims.network.v1.directory.Listing.Embed.service:type_name -> strims.network.v1.directory.Listing.Embed.Service
-	5,  // 36: strims.network.v1.directory.Event.ListingChange.listing:type_name -> strims.network.v1.directory.Listing
-	7,  // 37: strims.network.v1.directory.Event.ListingChange.snippet:type_name -> strims.network.v1.directory.ListingSnippet
-	11, // 38: strims.network.v1.directory.Directory.Publish:input_type -> strims.network.v1.directory.PublishRequest
-	13, // 39: strims.network.v1.directory.Directory.Unpublish:input_type -> strims.network.v1.directory.UnpublishRequest
-	15, // 40: strims.network.v1.directory.Directory.Join:input_type -> strims.network.v1.directory.JoinRequest
-	17, // 41: strims.network.v1.directory.Directory.Part:input_type -> strims.network.v1.directory.PartRequest
-	19, // 42: strims.network.v1.directory.Directory.Ping:input_type -> strims.network.v1.directory.PingRequest
-	21, // 43: strims.network.v1.directory.DirectoryFrontend.Open:input_type -> strims.network.v1.directory.FrontendOpenRequest
-	23, // 44: strims.network.v1.directory.DirectoryFrontend.Publish:input_type -> strims.network.v1.directory.FrontendPublishRequest
-	25, // 45: strims.network.v1.directory.DirectoryFrontend.Unpublish:input_type -> strims.network.v1.directory.FrontendUnpublishRequest
-	27, // 46: strims.network.v1.directory.DirectoryFrontend.Join:input_type -> strims.network.v1.directory.FrontendJoinRequest
-	29, // 47: strims.network.v1.directory.DirectoryFrontend.Part:input_type -> strims.network.v1.directory.FrontendPartRequest
-	31, // 48: strims.network.v1.directory.DirectoryFrontend.Test:input_type -> strims.network.v1.directory.FrontendTestRequest
-	33, // 49: strims.network.v1.directory.DirectorySnippet.Subscribe:input_type -> strims.network.v1.directory.SnippetSubscribeRequest
-	12, // 50: strims.network.v1.directory.Directory.Publish:output_type -> strims.network.v1.directory.PublishResponse
-	14, // 51: strims.network.v1.directory.Directory.Unpublish:output_type -> strims.network.v1.directory.UnpublishResponse
-	16, // 52: strims.network.v1.directory.Directory.Join:output_type -> strims.network.v1.directory.JoinResponse
-	18, // 53: strims.network.v1.directory.Directory.Part:output_type -> strims.network.v1.directory.PartResponse
-	20, // 54: strims.network.v1.directory.Directory.Ping:output_type -> strims.network.v1.directory.PingResponse
-	22, // 55: strims.network.v1.directory.DirectoryFrontend.Open:output_type -> strims.network.v1.directory.FrontendOpenResponse
-	24, // 56: strims.network.v1.directory.DirectoryFrontend.Publish:output_type -> strims.network.v1.directory.FrontendPublishResponse
-	26, // 57: strims.network.v1.directory.DirectoryFrontend.Unpublish:output_type -> strims.network.v1.directory.FrontendUnpublishResponse
-	28, // 58: strims.network.v1.directory.DirectoryFrontend.Join:output_type -> strims.network.v1.directory.FrontendJoinResponse
-	30, // 59: strims.network.v1.directory.DirectoryFrontend.Part:output_type -> strims.network.v1.directory.FrontendPartResponse
-	32, // 60: strims.network.v1.directory.DirectoryFrontend.Test:output_type -> strims.network.v1.directory.FrontendTestResponse
-	34, // 61: strims.network.v1.directory.DirectorySnippet.Subscribe:output_type -> strims.network.v1.directory.SnippetSubscribeResponse
-	50, // [50:62] is the sub-list for method output_type
-	38, // [38:50] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	44, // 36: strims.network.v1.directory.Listing.Embed.query_params:type_name -> strims.network.v1.directory.Listing.Embed.QueryParamsEntry
+	5,  // 37: strims.network.v1.directory.Event.ListingChange.listing:type_name -> strims.network.v1.directory.Listing
+	7,  // 38: strims.network.v1.directory.Event.ListingChange.snippet:type_name -> strims.network.v1.directory.ListingSnippet
+	11, // 39: strims.network.v1.directory.Directory.Publish:input_type -> strims.network.v1.directory.PublishRequest
+	13, // 40: strims.network.v1.directory.Directory.Unpublish:input_type -> strims.network.v1.directory.UnpublishRequest
+	15, // 41: strims.network.v1.directory.Directory.Join:input_type -> strims.network.v1.directory.JoinRequest
+	17, // 42: strims.network.v1.directory.Directory.Part:input_type -> strims.network.v1.directory.PartRequest
+	19, // 43: strims.network.v1.directory.Directory.Ping:input_type -> strims.network.v1.directory.PingRequest
+	21, // 44: strims.network.v1.directory.DirectoryFrontend.Open:input_type -> strims.network.v1.directory.FrontendOpenRequest
+	23, // 45: strims.network.v1.directory.DirectoryFrontend.Publish:input_type -> strims.network.v1.directory.FrontendPublishRequest
+	25, // 46: strims.network.v1.directory.DirectoryFrontend.Unpublish:input_type -> strims.network.v1.directory.FrontendUnpublishRequest
+	27, // 47: strims.network.v1.directory.DirectoryFrontend.Join:input_type -> strims.network.v1.directory.FrontendJoinRequest
+	29, // 48: strims.network.v1.directory.DirectoryFrontend.Part:input_type -> strims.network.v1.directory.FrontendPartRequest
+	31, // 49: strims.network.v1.directory.DirectoryFrontend.Test:input_type -> strims.network.v1.directory.FrontendTestRequest
+	33, // 50: strims.network.v1.directory.DirectorySnippet.Subscribe:input_type -> strims.network.v1.directory.SnippetSubscribeRequest
+	12, // 51: strims.network.v1.directory.Directory.Publish:output_type -> strims.network.v1.directory.PublishResponse
+	14, // 52: strims.network.v1.directory.Directory.Unpublish:output_type -> strims.network.v1.directory.UnpublishResponse
+	16, // 53: strims.network.v1.directory.Directory.Join:output_type -> strims.network.v1.directory.JoinResponse
+	18, // 54: strims.network.v1.directory.Directory.Part:output_type -> strims.network.v1.directory.PartResponse
+	20, // 55: strims.network.v1.directory.Directory.Ping:output_type -> strims.network.v1.directory.PingResponse
+	22, // 56: strims.network.v1.directory.DirectoryFrontend.Open:output_type -> strims.network.v1.directory.FrontendOpenResponse
+	24, // 57: strims.network.v1.directory.DirectoryFrontend.Publish:output_type -> strims.network.v1.directory.FrontendPublishResponse
+	26, // 58: strims.network.v1.directory.DirectoryFrontend.Unpublish:output_type -> strims.network.v1.directory.FrontendUnpublishResponse
+	28, // 59: strims.network.v1.directory.DirectoryFrontend.Join:output_type -> strims.network.v1.directory.FrontendJoinResponse
+	30, // 60: strims.network.v1.directory.DirectoryFrontend.Part:output_type -> strims.network.v1.directory.FrontendPartResponse
+	32, // 61: strims.network.v1.directory.DirectoryFrontend.Test:output_type -> strims.network.v1.directory.FrontendTestResponse
+	34, // 62: strims.network.v1.directory.DirectorySnippet.Subscribe:output_type -> strims.network.v1.directory.SnippetSubscribeResponse
+	51, // [51:63] is the sub-list for method output_type
+	39, // [39:51] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_network_v1_directory_directory_proto_init() }
@@ -4026,7 +4046,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ListingSnippetDelta_Tags); i {
 			case 0:
 				return &v.state
@@ -4038,7 +4058,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Event_ListingChange); i {
 			case 0:
 				return &v.state
@@ -4050,7 +4070,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Event_Unpublish); i {
 			case 0:
 				return &v.state
@@ -4062,7 +4082,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Event_ViewerCountChange); i {
 			case 0:
 				return &v.state
@@ -4074,7 +4094,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Event_ViewerStateChange); i {
 			case 0:
 				return &v.state
@@ -4086,7 +4106,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Event_Ping); i {
 			case 0:
 				return &v.state
@@ -4098,7 +4118,7 @@ func file_network_v1_directory_directory_proto_init() {
 				return nil
 			}
 		}
-		file_network_v1_directory_directory_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
+		file_network_v1_directory_directory_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*FrontendOpenResponse_Close); i {
 			case 0:
 				return &v.state
@@ -4143,7 +4163,7 @@ func file_network_v1_directory_directory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_network_v1_directory_directory_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   50,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

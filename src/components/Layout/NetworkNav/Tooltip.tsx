@@ -1,6 +1,6 @@
 import "./NetworkNav.scss";
 
-import React, { RefObject, useContext, useMemo, useRef, useState } from "react";
+import React, { RefObject, useMemo, useRef, useState } from "react";
 import usePortal from "use-portal";
 
 import { useLayout } from "../../../contexts/Layout";

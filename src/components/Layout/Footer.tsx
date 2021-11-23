@@ -1,6 +1,6 @@
 import "./Footer.scss";
 
-import React, { useCallback, useEffect } from "react";
+import React, { RefObject, useCallback, useEffect, useRef } from "react";
 import { FiList, FiMenu, FiSearch, FiUser } from "react-icons/fi";
 import { useResolvedPath } from "react-router";
 import { Link, Routes, useNavigate } from "react-router-dom";
@@ -16,22 +16,23 @@ interface ModalProps {
   onClose: () => void;
 }
 
-const SearchModal: React.FC<ModalProps> = ({ onClose }) => {
-  const [open, toggleOpen] = useToggle(true);
+interface SearchModalProps extends ModalProps {
+  open: boolean;
+  inputRef: RefObject<HTMLInputElement>;
+}
 
-  return (
-    <Modal className="footer__search" open={open} onClose={onClose}>
-      <Search menuOpen={true} scrollMenu autoFocus showCancel onDone={() => toggleOpen(false)} />
-    </Modal>
-  );
-};
+const SearchModal: React.FC<SearchModalProps> = ({ open, onClose, inputRef }) => (
+  <Modal className="footer__search" open={open} onClose={onClose}>
+    <Search menuOpen={true} scrollMenu showCancel inputRef={inputRef} onDone={onClose} />
+  </Modal>
+);
 
 const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   const navigate = useNavigate();
+  const backgroundRoute = useBackgroundRoute();
 
   const path = useResolvedPath("settings");
 
-  const backgroundRoute = useBackgroundRoute();
   useEffect(() => {
     const tid = setTimeout(() => {
       backgroundRoute.toggle(true);
@@ -41,11 +42,10 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   }, []);
 
   const handleModalClose = useCallback(() => {
-    const tid = setTimeout(() => {
+    setTimeout(() => {
       backgroundRoute.toggle(false);
       onClose?.();
     });
-    return () => clearTimeout(tid);
   }, []);
 
   const [navOpen, toggleNavOpen] = useToggle(true);
@@ -69,21 +69,33 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
 };
 
 const Footer: React.FC = () => {
-  const [showSearch, toggleShowMemes1] = useToggle(false);
-  const [showSettings, toggleShowMemes2] = useToggle(false);
+  const [showSearch, toggleShowSearch] = useToggle(false);
+  const [showSettings, toggleShowSettings] = useToggle(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const handleSearchClick = () => {
+    // if react defers rendering the search modal changes ios safari forgets
+    // the event was triggered by a click and ignores the input focus call.
+    searchInputRef.current.focus();
+    toggleShowSearch(true);
+  };
 
   return (
     <>
-      {showSearch && <SearchModal onClose={() => toggleShowMemes1(false)} />}
-      {showSettings && <SettingsModal onClose={() => toggleShowMemes2(false)} />}
+      <SearchModal
+        inputRef={searchInputRef}
+        open={showSearch}
+        onClose={() => toggleShowSearch(false)}
+      />
+      {showSettings && <SettingsModal onClose={() => toggleShowSettings(false)} />}
       <div className="footer">
         <Link className="footer__button" to="/">
           <FiList className="footer__button__icon" />
         </Link>
-        <button className="footer__button" onClick={toggleShowMemes1}>
+        <button className="footer__button" onClick={handleSearchClick}>
           <FiSearch className="footer__button__icon" />
         </button>
-        <button className="footer__button" onClick={toggleShowMemes2}>
+        <button className="footer__button" onClick={toggleShowSettings}>
           <FiUser className="footer__button__icon" />
         </button>
       </div>

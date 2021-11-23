@@ -14,15 +14,11 @@ const PlayerTest: React.FC = () => {
   const params = useParams<"networkKey">();
   const location = useLocation();
   const query = useQuery<PlayerTestQueryParams>(location.search);
-  const { toggleShowVideo, setShowContent } = useLayout();
+  const { toggleShowVideo, toggleOverlayOpen } = useLayout();
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {
-    setShowContent({
-      closed: false,
-      closing: true,
-      dragging: false,
-    });
+    toggleOverlayOpen(true);
     toggleShowVideo(true);
     setMode(PlayerMode.LARGE);
     setSource({
@@ -33,11 +29,7 @@ const PlayerTest: React.FC = () => {
     });
     setPath(location.pathname + location.search);
     return () => {
-      setShowContent({
-        closed: true,
-        closing: false,
-        dragging: false,
-      });
+      toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };
   }, [params.networkKey, query.swarmUri, query.mimeType]);

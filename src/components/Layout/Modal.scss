@@ -9,6 +9,7 @@
   background: var(--color-background-layout-body);
   z-index: var(--z-index-modal);
   top: var(--layout-height);
+  --swipable-peek-size: 0px;
 
   @at-root {
     .layout--portrait &,
@@ -58,6 +59,19 @@
       &__icon {
         height: 1.6em;
         width: 1.6em;
+      }
+    }
+
+    @at-root {
+      .layout--landscape_cw & {
+        margin-right: calc(-1 * env(safe-area-inset-right));
+        padding-right: env(safe-area-inset-right);
+      }
+      .layout--landscape_ccw & {
+        margin-left: calc(-1 * env(safe-area-inset-left));
+        padding-left: env(safe-area-inset-left);
+        margin-right: -10px;
+        padding-right: 10px;
       }
     }
   }

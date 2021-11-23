@@ -8,23 +8,26 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import useUpdates from "../hooks/useUpdates";
 import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
 
-const DRAG_THRESHOLD = 200;
+const TOGGLE_UPDATE_DELAY = 50;
+const TOGGLE_TRANSITION_DURATION = 200; // todo sync with scss
 
 export interface DragState {
   closed: boolean;
   closing: boolean;
   dragging: boolean;
+  transitioning?: boolean;
 }
 
-const initialDragState: DragState = {
-  closed: true,
-  closing: false,
+const getDragState = (open: boolean) => ({
+  closed: !open,
+  closing: open,
   dragging: false,
-};
+});
 
 interface SwipablePaneProps {
   direction: "up" | "down" | "left" | "right";
   className?: string;
+  dragThreshold?: number;
   open?: boolean;
   animateInitialState?: boolean;
   handleRef?: EventTarget | React.RefObject<EventTarget>;
@@ -36,8 +39,10 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   direction,
   children,
   className,
+  dragThreshold = 200,
   open = true,
   animateInitialState = false,
+  handleRef,
   onToggle,
   onDragStateChange,
 }) => {
@@ -46,29 +51,21 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   }
 
   const ref = useRef<HTMLDivElement>(null);
-  const [dragState, setDragState] = useState(initialDragState);
 
-  const toggleDragState = (open: boolean) =>
-    setDragState({
-      closed: !open,
-      closing: open,
-      dragging: false,
-    });
+  const [dragState, setDragState] = useState(() => getDragState(open && !animateInitialState));
+  const toggleDragState = (open: boolean) => setDragState(getDragState(open));
 
   useLayoutEffect(() => {
-    if (!animateInitialState) {
-      toggleDragState(open);
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    const rafId = window.requestAnimationFrame(() => toggleDragState(open));
-    return () => window.cancelAnimationFrame(rafId);
+    const tid = setTimeout(() => toggleDragState(open), TOGGLE_UPDATE_DELAY);
+    return () => clearTimeout(tid);
   }, [open]);
 
   useUpdates(() => {
     if (!dragState.dragging) {
-      const tid = setTimeout(() => onToggle?.(!dragState.closed), 200);
+      const tid = setTimeout(() => {
+        onToggle?.(!dragState.closed);
+        onDragStateChange?.({ ...dragState, transitioning: false });
+      }, TOGGLE_TRANSITION_DURATION);
       return () => clearTimeout(tid);
     }
   }, [dragState]);
@@ -111,18 +108,18 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
         }
       } else {
         const closed =
-          (dragState.closing && (s === 1 || m > DRAG_THRESHOLD)) ||
-          (!dragState.closing && s !== -1 && m > -DRAG_THRESHOLD);
+          (dragState.closing && (s === 1 || m > dragThreshold)) ||
+          (!dragState.closing && s !== -1 && m > -dragThreshold);
         setDragOffset(0);
         next = { closed, closing: !closed, dragging: false };
       }
       if (!isEqual(dragState, next)) {
         setDragState(next);
-        onDragStateChange?.(next);
+        onDragStateChange?.({ ...next, transitioning: true });
       }
     },
     {
-      target: ref,
+      target: handleRef ?? ref,
       eventOptions: {
         capture: true,
         passive: false,

@@ -116,6 +116,7 @@ label.input_label {
     overflow: hidden;
     position: relative;
     width: 2em;
+    transform: translateZ(0);
   }
 
   &__switch {
@@ -127,7 +128,7 @@ label.input_label {
       display: block;
       height: 1em;
       position: absolute;
-      transition: transform 200ms ease-in-out;
+      transition: transform var(--timing-medium) ease-in-out;
     }
 
     &:before {

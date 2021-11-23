@@ -16,7 +16,17 @@
     }
   }
 
+  .settings__nav {
+    --swipable-peek-size: 10px;
+  }
+
   .modal .settings__nav {
     height: calc(100% + env(safe-area-inset-bottom));
+  }
+
+  &.layout--landscape_ccw .settings__nav {
+    margin-left: calc(-1 * env(safe-area-inset-left));
+    padding-left: env(safe-area-inset-left);
+    --swipable-peek-size: calc(env(safe-area-inset-left) + 10px);
   }
 }

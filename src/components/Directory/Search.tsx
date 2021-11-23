@@ -3,7 +3,7 @@ import "./Search.scss";
 import clsx from "clsx";
 import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
-import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { RefObject, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
@@ -26,10 +26,11 @@ import SnippetImage from "../Directory/SnippetImage";
 const EMBED_COMMON_ID = "([\\w-]{1,30})";
 const EMBED_URLS = [
   {
-    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_COMMON_ID}`),
+    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
       id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
     }),
   },
   {
@@ -54,24 +55,27 @@ const EMBED_URLS = [
     }),
   },
   {
-    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
     }),
   },
   {
-    pattern: new RegExp(`youtu\\.be/${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    pattern: new RegExp(`youtu\\.be/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
     }),
   },
   {
-    pattern: new RegExp(`youtube\\.com/embed/${EMBED_COMMON_ID}(?:&(?!t)|$| )`),
+    pattern: new RegExp(`youtube\\.com/embed/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
     }),
   },
 ];
@@ -240,18 +244,18 @@ interface SearchProps {
   menuOpen?: boolean;
   maxResults?: number;
   scrollMenu?: boolean;
-  autoFocus?: boolean;
   showCancel?: boolean;
   onDone?: () => void;
+  inputRef?: RefObject<HTMLInputElement>;
 }
 
 const Search: React.FC<SearchProps> = ({
   menuOpen: forceMenuOpen = false,
   maxResults = Infinity,
   scrollMenu = false,
-  autoFocus = false,
   showCancel = false,
   onDone,
+  inputRef,
 }) => {
   const { t } = useTranslation();
 
@@ -346,16 +350,12 @@ const Search: React.FC<SearchProps> = ({
 
   // TODO: DRY with grid (useDirectory?)
   const selectListing = (networkKey: Uint8Array, listing: Listing) => {
-    layout.setShowContent({
-      closed: false,
-      closing: true,
-      dragging: false,
-    });
+    layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey), listing));
+    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey, true), listing));
     if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(Base64.fromUint8Array(networkKey), listing);
+      const path = formatUri(Base64.fromUint8Array(networkKey, true), listing);
       player.setPath(path);
       navigate(path);
     }
@@ -364,17 +364,10 @@ const Search: React.FC<SearchProps> = ({
     onDone?.();
   };
 
-  const input = useRef<HTMLInputElement>(null);
-  useLayoutEffect(() => {
-    if (autoFocus) {
-      input.current.focus();
-    }
-  }, []);
-
   let box = (
     <div className="search__box">
       <input
-        ref={input}
+        ref={inputRef}
         className="search__input"
         autoCapitalize="off"
         spellCheck="false"

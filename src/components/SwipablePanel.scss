@@ -1,5 +1,5 @@
 .swipable {
-  position: absolute;
+  position: fixed;
   transition: transform 200ms ease-in-out;
   touch-action: none;
 
@@ -9,6 +9,7 @@
 
   &--up {
     top: 100%;
+    left: 0;
     transform: translateY(
       calc(-1 * min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%))
     );
@@ -22,6 +23,7 @@
 
   &--down {
     top: 0;
+    left: 0;
     transform: translateY(
       calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
     );

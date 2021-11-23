@@ -176,7 +176,7 @@ const storybookRoutes = (location: Location, node: Nav, extend: Extend): React.R
 interface StoryContainerProps extends WithThemeProps, WithRootRefProps {}
 
 const StoryContainerBase: React.FC<StoryContainerProps> = ({ className, rootRef, children }) => (
-  <div className={clsx(className, "storybook__content")} ref={rootRef}>
+  <div className={clsx(className, "storybook__content layout--pc")} ref={rootRef}>
     {children}
   </div>
 );
