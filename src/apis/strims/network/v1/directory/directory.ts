@@ -6,14 +6,14 @@ import {
   IImage as strims_type_IImage,
 } from "../../../type/image";
 import {
-  UInt64Value as google_protobuf_UInt64Value,
-  IUInt64Value as google_protobuf_IUInt64Value,
   BoolValue as google_protobuf_BoolValue,
   IBoolValue as google_protobuf_IBoolValue,
   BytesValue as google_protobuf_BytesValue,
   IBytesValue as google_protobuf_IBytesValue,
   StringValue as google_protobuf_StringValue,
   IStringValue as google_protobuf_IStringValue,
+  UInt64Value as google_protobuf_UInt64Value,
+  IUInt64Value as google_protobuf_IUInt64Value,
 } from "../../../../google/protobuf/wrappers";
 
 export type IServerConfig = {
@@ -586,7 +586,7 @@ export namespace Listing {
     constructor(v?: IEmbed) {
       this.service = v?.service || 0;
       this.id = v?.id || "";
-      if (v?.queryParams) this.queryParams = v.queryParams instanceof Map ? v.queryParams : new Map(Object.entries(v.queryParams));
+      if (v?.queryParams) this.queryParams = new Map(v.queryParams instanceof Map ? v.queryParams : Object.entries(v.queryParams));
       else this.queryParams = new Map<string, string>();
     }
 
