@@ -103,6 +103,8 @@ message ListingSnippet {
   bool is_mature = 8;
   ListingSnippetImage thumbnail = 9;
   ListingSnippetImage channel_logo = 10;
+  uint32 video_height = 11;
+  uint32 video_width = 12;
 
   bytes key = 10001;
   bytes signature = 10002;
@@ -122,6 +124,8 @@ message ListingSnippetDelta {
   google.protobuf.BoolValue is_mature = 7;
   google.protobuf.BytesValue key = 8;
   google.protobuf.BytesValue signature = 9;
+  google.protobuf.UInt32Value video_height = 10;
+  google.protobuf.UInt32Value video_width = 11;
 
   oneof tags_oneof {
     Tags tags = 1001;

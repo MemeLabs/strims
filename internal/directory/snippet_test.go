@@ -24,6 +24,8 @@ func getTestSnippets() (a, b *networkv1directory.ListingSnippet, k *key.Key) {
 		ViewerCount: uint64(0),
 		Live:        false,
 		IsMature:    true,
+		VideoHeight: 1080,
+		VideoWidth:  1920,
 		Thumbnail: &networkv1directory.ListingSnippetImage{
 			SourceOneof: &networkv1directory.ListingSnippetImage_Image{
 				Image: &image.Image{
@@ -72,6 +74,8 @@ func TestDiffSnippets(t *testing.T) {
 		ViewerCount: &wrapperspb.UInt64Value{Value: b.ViewerCount},
 		Live:        &wrapperspb.BoolValue{Value: b.Live},
 		IsMature:    &wrapperspb.BoolValue{Value: b.IsMature},
+		VideoHeight: &wrapperspb.UInt32Value{Value: b.VideoHeight},
+		VideoWidth:  &wrapperspb.UInt32Value{Value: b.VideoWidth},
 		TagsOneof: &networkv1directory.ListingSnippetDelta_Tags_{
 			Tags: &networkv1directory.ListingSnippetDelta_Tags{},
 		},

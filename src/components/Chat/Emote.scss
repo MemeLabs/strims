@@ -1,0 +1,57 @@
+.chat {
+  &__emote,
+  &__emote_container {
+    display: inline-block;
+    position: relative;
+  }
+
+  &__emote--root,
+  &__emote_container--root {
+    margin: 0 3px;
+    vertical-align: middle;
+    line-height: 0;
+
+    &.chat__emote--compact_spacing,
+    &.chat__emote_container--compact_spacing {
+      margin: calc(-0.6 * var(--height)) 3px calc(-0.4 * var(--height));
+    }
+  }
+
+  &__emote {
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+    height: var(--height);
+    width: var(--width);
+    background-repeat: no-repeat;
+    z-index: 1;
+
+    &--animated {
+      background-position-x: calc(var(--animation-end-on-frame) * var(--width));
+      animation-name: sprite-animation;
+      animation-duration: calc(var(--animation-duration-ms) * 1ms);
+      animation-timing-function: steps(var(--animation-frame-count));
+      animation-direction: var(--animation-direction);
+      animation-iteration-count: calc(
+        var(--animation-iterations) + var(--animation-end-on-frame) / var(--animation-frame-count)
+      );
+    }
+
+    &--animate_forever {
+      animation-iteration-count: var(--animation-max-iterations);
+    }
+
+    &:hover {
+      animation-iteration-count: infinite;
+    }
+  }
+
+  @keyframes sprite-animation {
+    0% {
+      background-position-x: 0;
+    }
+    100% {
+      background-position-x: calc(-1 * var(--animation-spritesheet-width));
+    }
+  }
+}

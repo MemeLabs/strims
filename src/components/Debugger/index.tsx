@@ -1,4 +1,4 @@
-import "../../styles/debugger.scss";
+import "./Debugger.scss";
 
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
 import React, { useState } from "react";

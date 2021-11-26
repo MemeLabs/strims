@@ -38,6 +38,12 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 			Title            string `json:"title"`
 			Nsfw             bool   `json:"nsfw"`
 		} `json:"user"`
+		Ingest struct {
+			Stats struct {
+				Height int `json:"height,string"`
+				Width  int `json:"width,string"`
+			} `json:"stats"`
+		} `json:"ingest"`
 	}{}
 
 	err = json.NewDecoder(res.Body).Decode(&data)
@@ -53,6 +59,8 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 			Title:       data.User.Title,
 			IsMature:    data.User.Nsfw,
 			ChannelName: data.User.DisplayName,
+			VideoHeight: uint32(data.Ingest.Stats.Height),
+			VideoWidth:  uint32(data.Ingest.Stats.Width),
 			Thumbnail: &networkv1directory.ListingSnippetImage{
 				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: fmt.Sprintf("%s?_t=%x", data.ThumbnailURL, timeutil.Now().Unix()),

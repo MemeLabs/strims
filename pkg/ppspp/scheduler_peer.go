@@ -258,20 +258,23 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	if !s.firstChunkSet && !s.haveBins.Empty() {
 		s.firstChunkSet = true
 
+		var b binmap.Bin
 		switch s.swarm.options.DeliveryMode {
 		case BestEffortDeliveryMode:
-			// TODO: start near the left of peer availability window
-			fallthrough
+			// TODO: this is a bit arbitrary... add backfill target swarm option?
+			if halfWindow := s.liveWindow / 4 * 2; halfWindow < s.haveBinMax {
+				b = s.haveBinMax - halfWindow
+			}
 		case LowLatencyDeliveryMode:
-			s.requestBins.FillBefore(s.haveBinMax)
-			s.swarm.store.SetOffset(s.haveBinMax)
-		case MandatoryDeliveryMode:
-			s.swarm.store.SetOffset(0)
+			b = s.haveBinMax
 		}
+		s.requestBins.FillBefore(b)
+		s.swarm.store.SetOffset(b)
 
 		s.logger.Debug(
 			"set request offset",
-			zap.Uint64("bin", s.swarm.store.Offset()),
+			zap.Uint64("bin", uint64(b)),
+			zap.Uint64("offset", b.BaseOffset()),
 		)
 	}
 }

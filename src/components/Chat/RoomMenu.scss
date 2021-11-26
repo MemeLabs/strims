@@ -1,6 +1,8 @@
 .room_menu {
   flex: 1;
   display: flex;
+  margin: 5px 10px 0 0;
+  padding-bottom: 5px;
 
   &__anchor {
     align-items: center;
@@ -30,7 +32,7 @@
   &__menu {
     display: flex;
     flex-direction: column;
-    width: calc(100% - 10px);
+    width: 100%;
     box-sizing: border-box;
     top: 100%;
     overflow: hidden;
@@ -39,17 +41,29 @@
   }
 
   &__item {
-    background: var(--color-background-layout-body);
+    background: var(--body-foreground);
     text-align: left;
     padding: 10px;
     border-top: 1px solid var(--color-opac-w-1);
+    cursor: pointer;
 
     &:last-child {
-      border-radius: 0 0 var(--border-radius-small) var(--border-radius-small);
+      border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
     }
 
     &:hover {
-      background: green;
+      background: var(--body-background);
+    }
+  }
+
+  &--open {
+    box-shadow: var(--shadow-elevation-2);
+    border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
+
+    .room_menu__menu {
+      box-shadow: var(--shadow-elevation-3);
+      clip-path: inset(0px -22px -22px -22px);
+      border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
     }
   }
 }

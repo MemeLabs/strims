@@ -7,7 +7,7 @@ import React, { useState } from "react";
 
 import { FrontendClient } from "../../apis/client";
 import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
-import ChatThing from "../../components/ChatPanel";
+import ChatShell from "../../components/Chat/Shell";
 import { Provider as ChatProvider, RoomProvider } from "../../contexts/Chat";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import ChatService from "../mocks/chat/service";
@@ -32,7 +32,7 @@ const TestChat: React.FC = () => {
           networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
           serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
         >
-          <ChatThing className="home_page__chat" shouldHide={closed} />
+          <ChatShell className="home_page__chat" shouldHide={closed} />
         </RoomProvider>
       </ChatProvider>
     </ApiProvider>

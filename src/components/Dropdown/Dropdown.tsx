@@ -19,18 +19,18 @@ const Dropdown: React.FC<DropdownProps> = ({ baseClassName, anchor, items }) => 
   useClickAway(ref, () => toggleOpen(false), ["click"]);
 
   return (
-    <div className={clsx("dropdown", baseClassName)} ref={ref} onClick={() => toggleOpen()}>
+    <div
+      className={clsx({
+        "dropdown": true,
+        "dropdown--open": open,
+        [baseClassName]: true,
+        [`${baseClassName}--open`]: open,
+      })}
+      ref={ref}
+      onClick={() => toggleOpen()}
+    >
       <div className={clsx("dropdown__anchor", `${baseClassName}__anchor`)}>{anchor}</div>
-      <div
-        className={clsx({
-          "dropdown__menu": true,
-          "dropdown__menu--open": open,
-          [`${baseClassName}__menu`]: true,
-          [`${baseClassName}__menu--open`]: open,
-        })}
-      >
-        {items}
-      </div>
+      <div className={clsx("dropdown__menu", `${baseClassName}__menu`)}>{items}</div>
     </div>
   );
 };

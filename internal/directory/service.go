@@ -51,6 +51,7 @@ var swarmOptions = ppspp.SwarmOptions{
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,
 	},
+	DeliveryMode: ppspp.BestEffortDeliveryMode,
 }
 
 func newDirectoryService(logger *zap.Logger, dialer network.Dialer, key *key.Key, config *networkv1directory.ServerConfig, ew *protoutil.ChunkStreamWriter) *directoryService {

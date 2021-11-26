@@ -7,7 +7,7 @@ import React from "react";
 
 import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
-import ChatPanel from "../../../components/ChatPanel";
+import ChatPanel from "../../../components/Chat/Shell";
 import { Provider as ChatProvider, RoomProvider } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import ChatService from "../../mocks/chat/service";

@@ -296,13 +296,26 @@ $chat-width-sm: 260px;
     display: none;
   }
 
+  .layout__chat {
+    display: none;
+    flex: 0 1 0;
+  }
+
+  &.layout--min_width_md,
+  &.layout--meme_open {
+    .layout__chat {
+      display: flex;
+      min-height: none;
+    }
+
+    &.layout--show_chat .layout__chat {
+      flex-grow: 1;
+    }
+  }
+
   &:not(.layout--meme_open) {
     .foo_2 {
       flex: 0;
-    }
-
-    .layout__chat {
-      display: none;
     }
 
     .layout__video {
@@ -359,8 +372,7 @@ $chat-width-sm: 260px;
         }
 
         .layout__chat {
-          display: flex;
-          flex: 1;
+          flex-grow: 1;
         }
 
         &.layout--swap .foo_1 {
@@ -391,6 +403,7 @@ $chat-width-sm: 260px;
   }
 }
 
+// landscape
 .layout--min_aspect_ratio_1_2 {
   .foo_2 {
     flex-direction: row;
@@ -400,17 +413,18 @@ $chat-width-sm: 260px;
     max-height: none;
   }
 
-  .layout__chat {
-    min-height: none;
-    flex: $chat-width-sm 1 0;
-  }
+  &.layout--show_chat.layout--meme_open {
+    .layout__chat {
+      flex: $chat-width-sm 1 0;
+    }
 
-  &.layout--show_video .layout__chat {
-    flex-grow: 0;
-  }
+    &.layout--show_video .layout__chat {
+      flex-grow: 0;
+    }
 
-  &.layout--min_width_xl .layout__chat {
-    flex-basis: $chat-width-lg;
+    &.layout--min_width_xl .layout__chat {
+      flex-basis: $chat-width-lg;
+    }
   }
 
   &.layout--swap {
@@ -421,7 +435,8 @@ $chat-width-sm: 260px;
   }
 }
 
-.layout--min_aspect_ratio_4 {
+// mobile landscape with keyboard
+.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
   .layout__chat {
     flex-basis: $chat-width-lg;
   }

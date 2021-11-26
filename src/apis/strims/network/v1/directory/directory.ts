@@ -12,6 +12,8 @@ import {
   IBytesValue as google_protobuf_IBytesValue,
   StringValue as google_protobuf_StringValue,
   IStringValue as google_protobuf_IStringValue,
+  UInt32Value as google_protobuf_UInt32Value,
+  IUInt32Value as google_protobuf_IUInt32Value,
   UInt64Value as google_protobuf_UInt64Value,
   IUInt64Value as google_protobuf_IUInt64Value,
 } from "../../../../google/protobuf/wrappers";
@@ -799,6 +801,8 @@ export type IListingSnippet = {
   isMature?: boolean;
   thumbnail?: IListingSnippetImage;
   channelLogo?: IListingSnippetImage;
+  videoHeight?: number;
+  videoWidth?: number;
   key?: Uint8Array;
   signature?: Uint8Array;
 }
@@ -814,6 +818,8 @@ export class ListingSnippet {
   isMature: boolean;
   thumbnail: ListingSnippetImage | undefined;
   channelLogo: ListingSnippetImage | undefined;
+  videoHeight: number;
+  videoWidth: number;
   key: Uint8Array;
   signature: Uint8Array;
 
@@ -828,6 +834,8 @@ export class ListingSnippet {
     this.isMature = v?.isMature || false;
     this.thumbnail = v?.thumbnail && new ListingSnippetImage(v.thumbnail);
     this.channelLogo = v?.channelLogo && new ListingSnippetImage(v.channelLogo);
+    this.videoHeight = v?.videoHeight || 0;
+    this.videoWidth = v?.videoWidth || 0;
     this.key = v?.key || new Uint8Array();
     this.signature = v?.signature || new Uint8Array();
   }
@@ -844,6 +852,8 @@ export class ListingSnippet {
     if (m.isMature) w.uint32(64).bool(m.isMature);
     if (m.thumbnail) ListingSnippetImage.encode(m.thumbnail, w.uint32(74).fork()).ldelim();
     if (m.channelLogo) ListingSnippetImage.encode(m.channelLogo, w.uint32(82).fork()).ldelim();
+    if (m.videoHeight) w.uint32(88).uint32(m.videoHeight);
+    if (m.videoWidth) w.uint32(96).uint32(m.videoWidth);
     if (m.key) w.uint32(80010).bytes(m.key);
     if (m.signature) w.uint32(80018).bytes(m.signature);
     return w;
@@ -886,6 +896,12 @@ export class ListingSnippet {
         case 10:
         m.channelLogo = ListingSnippetImage.decode(r, r.uint32());
         break;
+        case 11:
+        m.videoHeight = r.uint32();
+        break;
+        case 12:
+        m.videoWidth = r.uint32();
+        break;
         case 10001:
         m.key = r.bytes();
         break;
@@ -911,6 +927,8 @@ export type IListingSnippetDelta = {
   isMature?: google_protobuf_IBoolValue;
   key?: google_protobuf_IBytesValue;
   signature?: google_protobuf_IBytesValue;
+  videoHeight?: google_protobuf_IUInt32Value;
+  videoWidth?: google_protobuf_IUInt32Value;
   tagsOneof?: ListingSnippetDelta.ITagsOneof
   thumbnailOneof?: ListingSnippetDelta.IThumbnailOneof
   channelLogoOneof?: ListingSnippetDelta.IChannelLogoOneof
@@ -926,6 +944,8 @@ export class ListingSnippetDelta {
   isMature: google_protobuf_BoolValue | undefined;
   key: google_protobuf_BytesValue | undefined;
   signature: google_protobuf_BytesValue | undefined;
+  videoHeight: google_protobuf_UInt32Value | undefined;
+  videoWidth: google_protobuf_UInt32Value | undefined;
   tagsOneof: ListingSnippetDelta.TTagsOneof;
   thumbnailOneof: ListingSnippetDelta.TThumbnailOneof;
   channelLogoOneof: ListingSnippetDelta.TChannelLogoOneof;
@@ -940,6 +960,8 @@ export class ListingSnippetDelta {
     this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
     this.key = v?.key && new google_protobuf_BytesValue(v.key);
     this.signature = v?.signature && new google_protobuf_BytesValue(v.signature);
+    this.videoHeight = v?.videoHeight && new google_protobuf_UInt32Value(v.videoHeight);
+    this.videoWidth = v?.videoWidth && new google_protobuf_UInt32Value(v.videoWidth);
     this.tagsOneof = new ListingSnippetDelta.TagsOneof(v?.tagsOneof);
     this.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof(v?.thumbnailOneof);
     this.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof(v?.channelLogoOneof);
@@ -956,6 +978,8 @@ export class ListingSnippetDelta {
     if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(58).fork()).ldelim();
     if (m.key) google_protobuf_BytesValue.encode(m.key, w.uint32(66).fork()).ldelim();
     if (m.signature) google_protobuf_BytesValue.encode(m.signature, w.uint32(74).fork()).ldelim();
+    if (m.videoHeight) google_protobuf_UInt32Value.encode(m.videoHeight, w.uint32(82).fork()).ldelim();
+    if (m.videoWidth) google_protobuf_UInt32Value.encode(m.videoWidth, w.uint32(90).fork()).ldelim();
     switch (m.tagsOneof.case) {
       case ListingSnippetDelta.TagsOneofCase.TAGS:
       ListingSnippetDelta.Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
@@ -1007,6 +1031,12 @@ export class ListingSnippetDelta {
         break;
         case 9:
         m.signature = google_protobuf_BytesValue.decode(r, r.uint32());
+        break;
+        case 10:
+        m.videoHeight = google_protobuf_UInt32Value.decode(r, r.uint32());
+        break;
+        case 11:
+        m.videoWidth = google_protobuf_UInt32Value.decode(r, r.uint32());
         break;
         case 1001:
         m.tagsOneof = new ListingSnippetDelta.TagsOneof({ tags: ListingSnippetDelta.Tags.decode(r, r.uint32()) });

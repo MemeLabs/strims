@@ -1,0 +1,50 @@
+.chat {
+  background: var(--body-foreground);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  font-size: 0.8em;
+  line-height: 1.6em;
+  position: relative;
+  overflow: hidden;
+
+  &__messages {
+    flex: 1 1;
+    position: relative;
+  }
+
+  &__footer {
+    flex: 0 1;
+  }
+
+  &__nav {
+    flex: 0 1;
+    display: flex;
+    flex-direction: row;
+    padding-right: var(--layout-touch-padding-right);
+    padding-left: var(--layout-touch-padding-left);
+
+    &__left,
+    &__right {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+    }
+
+    &__right {
+      justify-content: flex-end;
+    }
+
+    &__icon {
+      width: 20px;
+      height: 20px;
+      margin: 0 5px 5px;
+      cursor: pointer;
+      color: var(--color-icon);
+
+      &--active {
+        color: var(--color-icon-hover);
+      }
+    }
+  }
+}

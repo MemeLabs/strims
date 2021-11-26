@@ -1,3 +1,5 @@
+import "./SettingsDrawer.scss";
+
 import { Base64 } from "js-base64";
 import React, { useEffect } from "react";
 import Scrollbars from "react-custom-scrollbars-2";

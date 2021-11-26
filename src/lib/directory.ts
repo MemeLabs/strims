@@ -1,4 +1,3 @@
-import { Base64 } from "js-base64";
 import { isEmpty } from "lodash";
 import qs from "qs";
 
@@ -49,15 +48,14 @@ export const getListingPlayerSource = (networkKey: string, { content }: Listing)
         queryParams: content.embed.queryParams,
         networkKey,
       };
-    case Listing.ContentCase.MEDIA: {
+    case Listing.ContentCase.MEDIA:
       return {
         type: "swarm",
         mimeType: content.media.mimeType,
         swarmUri: content.media.swarmUri,
         networkKey,
       };
-    }
     default:
-      null;
+      return null;
   }
 };

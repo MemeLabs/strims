@@ -1,3 +1,5 @@
+import "./Shell.scss";
+
 import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
 import React, { useCallback, useRef, useState } from "react";
@@ -6,17 +8,16 @@ import { useTranslation } from "react-i18next";
 import { BiConversation, BiSmile } from "react-icons/bi";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineUserGroup } from "react-icons/hi";
-import { ImCircleLeft, ImCircleRight } from "react-icons/im";
 import { IconType } from "react-icons/lib";
 
-import Composer from "../components/Chat/Composer";
-import Message from "../components/Chat/Message";
-import Scroller, { MessageProps } from "../components/Chat/Scroller";
-import { useChat, useRoom } from "../contexts/Chat";
-import useClickAway from "../hooks/useClickAway";
-import EmotesDrawer from "./Chat/EmotesDrawer";
-import SettingsDrawer from "./Chat/SettingsDrawer";
-import StyleSheet from "./Chat/StyleSheet";
+import { useChat, useRoom } from "../../contexts/Chat";
+import Composer from "./Composer";
+import ChatDrawer from "./Drawer";
+import EmotesDrawer from "./EmotesDrawer";
+import Message from "./Message";
+import Scroller, { MessageProps } from "./Scroller";
+import SettingsDrawer from "./SettingsDrawer";
+import StyleSheet from "./StyleSheet";
 
 enum ChatDrawerRole {
   None = "none",
@@ -25,56 +26,6 @@ enum ChatDrawerRole {
   Settings = "settings",
   Users = "users",
 }
-
-interface ChatDrawerBodyProps {
-  onClose: () => void;
-}
-
-const ChatDrawerBody: React.FC<ChatDrawerBodyProps> = ({ onClose, children }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  useClickAway(ref, onClose, ["click"]);
-
-  return (
-    <div className="chat__drawer__body" ref={ref}>
-      {children}
-    </div>
-  );
-};
-
-interface ChatDrawerProps extends ChatDrawerBodyProps {
-  side: "left" | "right";
-  role: ChatDrawerRole;
-  title: string;
-  active: boolean;
-}
-
-const ChatDrawer: React.FC<ChatDrawerProps> = ({
-  side,
-  role,
-  active,
-  title,
-  onClose,
-  children,
-}) => {
-  const classNames = clsx({
-    "chat__drawer": true,
-    [`chat__drawer--${side}`]: true,
-    [`chat__drawer--${role}`]: true,
-    "chat__drawer--active": active,
-  });
-
-  const Icon = side === "left" ? ImCircleLeft : ImCircleRight;
-
-  return (
-    <div className={classNames}>
-      <div className="chat__drawer__header">
-        <span>{title}</span>
-        <Icon className="chat__drawer__header__close_button" onClick={onClose} />
-      </div>
-      {active && <ChatDrawerBody onClose={onClose}>{children}</ChatDrawerBody>}
-    </div>
-  );
-};
 
 type ChatDrawerButtonProps = {
   icon: IconType;
@@ -103,12 +54,12 @@ const TestContent: React.FC = () => (
   </Scrollbars>
 );
 
-interface ChatThingProps {
+interface ShellProps {
   shouldHide?: boolean;
   className?: string;
 }
 
-const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
+const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
   const { t } = useTranslation();
 
   const [{ uiConfig }] = useChat();
@@ -239,4 +190,4 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
   );
 };
 
-export default ChatThing;
+export default Shell;

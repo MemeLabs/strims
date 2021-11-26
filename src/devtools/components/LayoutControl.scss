@@ -1,0 +1,20 @@
+.layout_control {
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: auto;
+  display: flex;
+  flex-direction: Column;
+  z-index: 10000;
+  background: rgba(0, 100, 0, 0.8);
+
+  &__handle {
+    height: 20px;
+    background: #030;
+  }
+
+  button {
+    text-align: left;
+    padding: 5px 10px;
+  }
+}

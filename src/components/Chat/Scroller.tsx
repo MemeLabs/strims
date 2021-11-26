@@ -1,3 +1,5 @@
+import "./Scroller.scss";
+
 import clsx from "clsx";
 import { debounce } from "lodash";
 import React, { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";

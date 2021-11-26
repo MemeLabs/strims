@@ -1,0 +1,278 @@
+.chat {
+  &__message {
+    box-sizing: border-box;
+    line-height: 1.4em;
+    overflow-wrap: break-word;
+    padding: 3px 7px;
+
+    &__time {
+      white-space: nowrap;
+      margin-right: 3px;
+    }
+
+    &__author {
+      background: var(--card-bg);
+      border-radius: 3px;
+      border: 1px solid var(--card-outset-border-top) var(--card-outset-border-right)
+        var(--card-outset-border-bottom) var(--card-outset-border-left);
+      display: inline-block;
+      margin: -1px 0;
+      padding: 1px 8px 1px 3px;
+    }
+
+    &__colon {
+      margin: 0 3px 0 -8px;
+    }
+
+    &__link {
+      color: #02c2ff;
+      position: relative;
+      word-break: break-all;
+
+      &:hover {
+        text-decoration: underline;
+      }
+
+      &:visited,
+      &:visited &__ellipsis {
+        color: #a66be5;
+      }
+
+      @at-root .chat__message--tagged & {
+        border-bottom: 1px dashed var(--tag-color, red);
+      }
+
+      &__ellipsis {
+        user-select: none;
+      }
+
+      &__overflow {
+        color: transparent;
+        font-size: 0;
+        vertical-align: top;
+      }
+    }
+
+    &__nick {
+      cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+
+    &__spoiler {
+      cursor: pointer;
+      padding: 0 3px;
+      transition: color 0.2s ease-in-out;
+      background: var(--chat-spoiler-color, black);
+
+      & > .chat__emote,
+      & > .chat__emote_container,
+      & > .chat__message__code,
+      & > .chat__message__link {
+        transition: opacity 0.2s ease-in-out;
+      }
+
+      &--hidden {
+        color: transparent;
+
+        & > .chat__emote,
+        & > .chat__emote_container,
+        & > .chat__message__code,
+        & > .chat__message__link {
+          opacity: 0;
+        }
+      }
+    }
+
+    &__code {
+      color: gray;
+      font-family: monospace;
+    }
+
+    &__greentext {
+      color: #6ca528;
+    }
+  }
+
+  &__combo_message {
+    line-height: 34px;
+    padding-left: 5px;
+
+    &__body {
+      display: inline-block;
+    }
+
+    &__hits,
+    &__combo,
+    &__count,
+    &__x {
+      font-style: normal;
+      display: inline-block;
+      vertical-align: middle;
+      text-shadow: -1px -1px 0 var(--color-chat-combo-text-shadow),
+        1px -1px 0 var(--color-chat-combo-text-shadow),
+        -1px 1px 0 var(--color-chat-combo-text-shadow),
+        1px 1px 0 var(--color-chat-combo-text-shadow);
+    }
+
+    &__combo {
+      display: none;
+      font-weight: normal;
+    }
+
+    &--hit .chat__combo_message__hits {
+      animation: emote-hit 600ms 1;
+    }
+
+    &__hits {
+      color: var(--body-color);
+      font-style: italic;
+      text-transform: uppercase;
+      margin-left: 0;
+      letter-spacing: 0.05em;
+      display: inline-block;
+    }
+
+    &__count {
+      font-size: 1.2em;
+      letter-spacing: -0.05em;
+      font-weight: bold;
+    }
+
+    &--scale_5 {
+      .chat__combo_message__count {
+        font-size: 1.5em;
+      }
+    }
+
+    &--scale_10,
+    &--scale_15 {
+      .chat__combo_message__count {
+        font-size: 2em;
+      }
+      .chat__combo_message__combo {
+        font-weight: bold;
+      }
+    }
+
+    &--scale_20,
+    &--scale_25 {
+      .chat__combo_message__count {
+        font-size: 3em;
+      }
+      .chat__combo_message__combo {
+        font-weight: bold;
+      }
+    }
+
+    &--scale_30,
+    &--scale_35,
+    &--scale_40,
+    &--scale_45 {
+      padding-bottom: 0.5em;
+
+      .chat__combo_message__count {
+        font-size: 4em;
+      }
+      .chat__combo_message__combo {
+        font-weight: bold;
+      }
+    }
+
+    &--scale_50 {
+      padding-bottom: 0.7em;
+
+      .chat__combo_message__count {
+        font-size: 5em;
+      }
+      .chat__combo_message__combo {
+        font-weight: bold;
+      }
+    }
+
+    &--complete {
+      &.chat__combo_message--scale_10,
+      &.chat__combo_message--scale_20,
+      &.chat__combo_message--scale_30,
+      &.chat__combo_message--scale_50 {
+        .chat__combo_message__body {
+          animation: emote-greyout 3500ms 1;
+          background: transparent url("../../../assets/splat.png") no-repeat center center;
+          background-size: 100% 100%;
+          filter: grayscale(100%);
+        }
+
+        .chat__combo_message__combo {
+          color: var(--body-color);
+          margin-left: 5px;
+        }
+      }
+
+      .chat__combo_message__combo {
+        animation: emote-complete 1000ms 1;
+        display: inline-block;
+      }
+
+      .chat__combo_message__hits {
+        display: none;
+      }
+    }
+
+    @keyframes emote-hit {
+      0% {
+        color: #b91010;
+        font-size: 200%;
+      }
+      1% {
+        color: var(--body-color);
+        font-size: 190%;
+      }
+      2% {
+        color: #b91010;
+        font-size: 200%;
+      }
+      3% {
+        color: var(--body-color);
+        font-size: 190%;
+      }
+      4% {
+        color: #b91010;
+        font-size: 200%;
+      }
+      100% {
+        color: var(--body-color);
+        font-size: 120%;
+      }
+    }
+
+    @keyframes emote-complete {
+      0% {
+        transform: translate(-10px, 0);
+        text-shadow: 0 0 3px rgba(white, 1);
+      }
+      2% {
+        transform: translate(10px, 0);
+        color: white;
+        text-shadow: 0 0 10px rgba(white, 0.5);
+      }
+      100% {
+        transform: translate(0, 0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes emote-greyout {
+      0% {
+        filter: grayscale(0);
+      }
+      75% {
+        filter: grayscale(0);
+      }
+      100% {
+        filter: grayscale(100%);
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+.chat {
+  &__settings_form {
+    margin: 0 15px;
+
+    fieldset {
+      margin-top: 10px;
+
+      legend {
+        color: var(--color-chat-settings-legend);
+        text-transform: uppercase;
+        font-size: 1.1em;
+      }
+    }
+
+    .input_label--toggle {
+      flex-direction: row-reverse;
+
+      .input_label__body {
+        flex-basis: 2.5em;
+      }
+
+      .input_label__text {
+        flex: 1;
+      }
+    }
+  }
+}

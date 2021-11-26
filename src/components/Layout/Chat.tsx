@@ -13,7 +13,7 @@ import { RoomProvider } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
-import ChatThing from "../ChatPanel";
+import ChatShell from "../Chat/Shell";
 
 interface PortableHeaderProps {
   onRoomChange: (item: RoomMenuItem) => void;
@@ -72,7 +72,7 @@ const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 );
 
 const Chat: React.FC = () => {
-  const { toggleShowChat } = useLayout();
+  const { showChat, toggleShowChat } = useLayout();
 
   const [chatRoom, setChatRoom] = useState<RoomMenuItem>({
     networkKey: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
@@ -81,7 +81,12 @@ const Chat: React.FC = () => {
   });
 
   return (
-    <div className="layout_chat">
+    <div
+      className={clsx({
+        "layout_chat": true,
+        "layout_chat--closed": !showChat,
+      })}
+    >
       <button className="layout_chat__toggle_on" onClick={() => toggleShowChat()}>
         <BsArrowBarLeft size={22} />
       </button>
@@ -96,7 +101,7 @@ const Chat: React.FC = () => {
           />
         )}
         <RoomProvider {...chatRoom}>
-          <ChatThing className="home_page__chat" shouldHide={closed} />
+          <ChatShell className="home_page__chat" shouldHide={closed} />
         </RoomProvider>
       </div>
     </div>

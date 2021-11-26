@@ -1,0 +1,64 @@
+.input_image {
+  height: 128px;
+  width: 128px;
+  cursor: pointer;
+
+  &__placeholder {
+    height: 128px;
+    width: 128px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    &__icon {
+      color: var(--color-icon-input);
+    }
+
+    &__text {
+      color: var(--color-text-input);
+      text-transform: uppercase;
+      font-size: 0.8em;
+    }
+  }
+
+  &__preview {
+    height: 128px;
+    width: 128px;
+    object-fit: contain;
+  }
+}
+
+.input_avatar {
+  height: 80px;
+  width: 80px;
+  cursor: pointer;
+
+  &__placeholder {
+    height: 80px;
+    width: 80px;
+    border: 3px dashed var(--input-border-color);
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    &__icon {
+      color: var(--color-icon-input);
+    }
+
+    &__text {
+      color: var(--color-text-input);
+      text-transform: uppercase;
+      font-size: 0.8em;
+    }
+  }
+
+  &__preview {
+    height: 80px;
+    width: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+}

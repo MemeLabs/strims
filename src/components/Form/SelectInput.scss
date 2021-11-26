@@ -1,0 +1,51 @@
+.input_select .input_select {
+  &-container {
+  }
+
+  &__single-value {
+    color: var(--input-color);
+  }
+
+  &__control {
+    box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+    border-style: none;
+    background: var(--input-bg);
+    color: var(--input-color);
+  }
+
+  &__value-container {
+  }
+
+  &__indicators {
+  }
+}
+
+.input_select__menu-portal {
+  position: fixed !important;
+  z-index: var(--z-index-menu) !important;
+
+  .input_select {
+    &__menu {
+      background: var(--input-bg);
+      color: var(--input-color);
+    }
+
+    &__menu-list {
+    }
+
+    &__option {
+      background: var(--input-bg);
+      color: var(--input-color);
+
+      &--is-disabled {
+        color: var(--input-disabled-color);
+      }
+
+      &--is-focused,
+      &--is-selected {
+        background: var(--input-focus-bg);
+        color: var(--input-focus-color);
+      }
+    }
+  }
+}

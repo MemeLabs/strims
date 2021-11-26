@@ -16,9 +16,11 @@ import { Provider as DirectoryProvider } from "../../contexts/Directory";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { Provider as NetworkProvider } from "../../contexts/Network";
 import { Provider as NotificationProvider } from "../../contexts/Notification";
+import { Provider as PlayerProvider } from "../../contexts/Player";
 import { Provider as ProfileProvider } from "../../contexts/Profile";
 import { Provider as ThemeProvider } from "../../contexts/Theme";
 import Directory from "../../pages/Directory";
+import LayoutControl from "../components/LayoutControl";
 import ChatService from "../mocks/chat/service";
 import DirectoryService from "../mocks/directory/service";
 import NetworkService from "../mocks/network/service";
@@ -48,11 +50,14 @@ const LayoutTest: React.FC = () => {
             <NetworkProvider>
               <NotificationProvider>
                 <ChatProvider>
-                  <LayoutPage>
-                    <LayoutBody>
-                      <Directory />
-                    </LayoutBody>
-                  </LayoutPage>
+                  <PlayerProvider>
+                    <LayoutPage>
+                      <LayoutControl />
+                      <LayoutBody>
+                        <Directory />
+                      </LayoutBody>
+                    </LayoutPage>
+                  </PlayerProvider>
                 </ChatProvider>
               </NotificationProvider>
             </NetworkProvider>

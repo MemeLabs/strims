@@ -1,3 +1,5 @@
+import "./EmoteDrawer.scss";
+
 import React from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 

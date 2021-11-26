@@ -1,3 +1,5 @@
+import "./Message.scss";
+
 import clsx from "clsx";
 import date from "date-and-time";
 import React, { ReactNode, useEffect, useRef } from "react";

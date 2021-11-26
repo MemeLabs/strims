@@ -1,3 +1,5 @@
+import "./Composer.scss";
+
 import clsx from "clsx";
 import filterObj from "filter-obj";
 import Prism from "prismjs";
@@ -132,7 +134,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   );
 
   const onChange = useCallback(
-    (newValue) => {
+    (newValue: Descendant[]) => {
       setValue(newValue);
       setSearch(getSearchState(editor, grammar, searchSources));
     },

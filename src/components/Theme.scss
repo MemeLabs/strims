@@ -105,6 +105,7 @@
   --border-radius-extra-extra-large: 1.6rem;
   --border-radius-rounded: 9000px;
 
+  --z-index-menu: 6000;
   --z-index-modal: 5000;
   --z-index-notification: 4000;
   --z-index-overlay: 3000;
@@ -138,6 +139,20 @@
     --color-background-layout-body: #{$slate-300};
 
     --color-text-base: #{$gray-500};
+
+    --color-chat-combo-text-shadow: #000;
+    --color-chat-scroller-handle: var(--color-opac-w-8);
+    --color-chat-settings-legend: #{$gray-200};
+
+    --color-icon: var(--color-opac-w-8);
+    --color-icon-hover: var(--color-opac-w-12);
+
+    --color-background-error: #{lighten($red-base, 30%)};
+    --color-border-error: #{lighten($red-base, 40%)};
+
+    --color-icon-input: #{$slate-500};
+    --color-text-input: #{$slate-500};
+    --color-background-input-toggle: #{$green-200};
 
     // ---
 
@@ -200,6 +215,9 @@
 
     --link-active-bg: #{$gray-300};
     --link-hover-bg: #{$gray-400};
+
+    --color-icon: rgba($slate-300, 0.5);
+    --color-icon-hover: rgba($slate-300, 0.8);
   }
 
   color: var(--color-text-base);

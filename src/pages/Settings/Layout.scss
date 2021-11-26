@@ -30,3 +30,33 @@
     --swipable-peek-size: calc(env(safe-area-inset-left) + 10px);
   }
 }
+
+.settings {
+  display: flex;
+  flex-direction: row;
+
+  &__nav {
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+
+    &__link {
+      padding: 8px;
+      margin: 4px;
+      border-radius: 4px;
+
+      &:hover {
+        background: var(--link-hover-bg);
+      }
+
+      &--active,
+      &--active:hover {
+        background: var(--link-active-bg);
+      }
+    }
+  }
+
+  &__body {
+    flex: 1;
+  }
+}

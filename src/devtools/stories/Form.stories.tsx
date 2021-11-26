@@ -51,7 +51,7 @@ const InputStory: React.FC = () => {
       boolean: true,
       textarea: "test textarea value",
       select: selectOptions[0],
-      creatableSelect: [],
+      creatableSelect: selectOptions,
     },
   });
 

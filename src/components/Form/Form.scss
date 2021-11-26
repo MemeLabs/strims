@@ -1,0 +1,109 @@
+.input {
+  font-size: 1em;
+  padding: 0.5em 0.8em;
+  margin: 0.25em 0;
+  border-radius: 0.25em;
+  box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+  background: var(--input-bg);
+  color: var(--input-color);
+  flex: 1;
+
+  &::placeholder {
+    color: var(--input-placeholder-color);
+  }
+
+  &:disabled {
+    background: var(--input-disabled-bg);
+    color: var(--input-disabled-color);
+  }
+}
+
+.input_buttons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.input_button {
+  background: var(--input-bg);
+
+  &:hover:not(:disabled) {
+    cursor: pointer;
+    background: var(--input-button-hover-bg);
+    color: var(--input-button-hover-color);
+  }
+
+  &:disabled {
+    background: var(--input-disabled-bg);
+    color: var(--input-disabled-color);
+  }
+
+  &--borderless {
+    border: none;
+    box-shadow: none;
+  }
+}
+
+.thing_form,
+.thing_list {
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+
+  .input_label,
+  .thing_list__item {
+    text-align: left;
+    border-width: 1px;
+    border-style: solid;
+    border-bottom-style: none;
+    padding: 10px;
+    margin: 0;
+    border-color: var(--card-border);
+    background: var(--card-bg);
+
+    &:first-child {
+      border-top-left-radius: 5px;
+      border-top-right-radius: 5px;
+    }
+
+    &:last-child {
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
+      border-bottom-style: solid;
+    }
+  }
+}
+
+.thing_form {
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+
+  .input_label {
+    text-align: left;
+    border-width: 1px;
+    border-style: solid;
+    border-bottom-style: none;
+    padding: 10px;
+    margin: 0;
+    display: flex;
+    flex-direction: row;
+
+    &__text {
+      display: block;
+      flex: 200px 0;
+      font-size: 0.8em;
+      line-height: 2em;
+    }
+
+    &__body {
+      flex: 1 1;
+    }
+
+    &__description {
+      font-size: 0.8em;
+      padding: 0.5em 0;
+    }
+  }
+}

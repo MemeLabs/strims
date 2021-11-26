@@ -58,11 +58,7 @@ const EmbedPlayer: React.FC<EmbedPlayerProps> = ({
         },
       },
     });
-    console.log(">>> the initial conditions were", service, id, networkKeyString);
-    return () => {
-      console.log(">>> something changed and we fucked up");
-      void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
-    };
+    return () => void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
   }, [service, id, networkKeyString]);
 
   if (!url) {
