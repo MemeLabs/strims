@@ -7,7 +7,7 @@ import { Link, Navigate } from "react-router-dom";
 import { Network } from "../../../apis/strims/network/v1/network";
 import Dropdown from "../../../components/Dropdown";
 import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
-import { useProfile } from "../../../contexts/Profile";
+import { useSession } from "../../../contexts/Session";
 import { certificateRoot } from "../../../lib/certificate";
 import PublishNetworkModal from "./PublishNetworkModal";
 
@@ -21,7 +21,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
     onComplete: onDelete,
   });
   const client = useClient();
-  const [{ profile }] = useProfile();
+  const [{ profile }] = useSession();
 
   const [publishNetwork, setPublishNetwork] = React.useState<Network>();
 

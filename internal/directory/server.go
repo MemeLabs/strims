@@ -63,7 +63,7 @@ func (s *directoryServer) Run(ctx context.Context, dialer network.Dialer, transf
 	transferID := transfer.Add(s.swarm, AddressSalt)
 	transfer.Publish(transferID, s.config.Key.Public)
 
-	server, err := dialer.Server(s.config.Key.Public, s.config.Key, AddressSalt)
+	server, err := dialer.Server(ctx, s.config.Key.Public, s.config.Key, AddressSalt)
 	if err != nil {
 		return err
 	}

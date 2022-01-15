@@ -291,10 +291,10 @@ func (s *ingressStream) loadChannel() *videov1.VideoChannel {
 func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
-			ChunkSize:          1024,
+			ChunkSize:          4096,
 			ChunksPerSignature: 32,
 			StreamCount:        16,
-			LiveWindow:         32 * 1024,
+			LiveWindow:         8 * 1024,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod:       integrity.ProtectionMethodMerkleTree,
 				MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionBLAKE2B256,

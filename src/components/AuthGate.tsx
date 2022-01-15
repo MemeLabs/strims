@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-import { useProfile } from "../contexts/Profile";
+import { useSession } from "../contexts/Session";
 
 export interface AuthGateProps {
   children: React.ReactElement;
@@ -9,7 +9,7 @@ export interface AuthGateProps {
 
 const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const { pathname, search, hash } = useLocation();
-  const [{ profile, loading }] = useProfile();
+  const [{ profile, loading }] = useSession();
 
   if (loading) {
     return null;

@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		debugv1.RegisterDebugService(server, &debugService{})
 	})
 }

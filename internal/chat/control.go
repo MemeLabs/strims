@@ -149,8 +149,8 @@ func (t *control) RemoveEmote(id uint64) {
 	t.observers.EmitLocal(event.ChatEmoteRemove{ID: id})
 }
 
-func (t *control) client(networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {
-	client, err := t.network.Dialer().Client(networkKey, key, ServiceAddressSalt)
+func (t *control) client(ctx context.Context, networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {
+	client, err := t.network.Dialer().Client(ctx, networkKey, key, ServiceAddressSalt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -232,7 +232,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 // SendMessage ...
 func (t *control) SendMessage(ctx context.Context, networkKey, key []byte, m string) error {
-	c, cc, err := t.client(networkKey, key)
+	c, cc, err := t.client(ctx, networkKey, key)
 	if err != nil {
 		return err
 	}

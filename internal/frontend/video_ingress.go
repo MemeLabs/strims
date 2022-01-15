@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		videov1.RegisterVideoIngressService(server, &videoIngressService{
 			profile: params.Profile,
 			app:     params.App,

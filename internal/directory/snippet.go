@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -21,7 +21,7 @@ func diffSnippets(a, b *networkv1directory.ListingSnippet) *networkv1directory.L
 	if a.Description != b.Description {
 		delta.Description = &wrapperspb.StringValue{Value: b.Description}
 	}
-	if !sortutil.EqualStrings(a.Tags, b.Tags) {
+	if !slices.Equal(a.Tags, b.Tags) {
 		delta.TagsOneof = &networkv1directory.ListingSnippetDelta_Tags_{Tags: &networkv1directory.ListingSnippetDelta_Tags{Tags: b.Tags}}
 	}
 	if a.Category != b.Category {

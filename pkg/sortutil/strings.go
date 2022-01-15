@@ -2,18 +2,6 @@ package sortutil
 
 import "strings"
 
-func EqualStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // DiffStrings ...
 func DiffStrings(prev, next []string) (removed, added []string) {
 	for i, j := 0, 0; i < len(prev) || j < len(next); {

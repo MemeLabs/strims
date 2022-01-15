@@ -140,7 +140,7 @@ func (s *chatServer) Run(
 	transfer.Publish(eventTransferID, s.config.NetworkKey)
 	transfer.Publish(assetTransferID, s.config.NetworkKey)
 
-	server, err := dialer.Server(s.config.NetworkKey, s.config.Key, ServiceAddressSalt)
+	server, err := dialer.Server(ctx, s.config.NetworkKey, s.config.Key, ServiceAddressSalt)
 	if err != nil {
 		return err
 	}

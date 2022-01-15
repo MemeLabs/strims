@@ -1,5 +1,10 @@
 package queue
 
+func RingWithSize(n uint64) (r Ring) {
+	r.Resize(n)
+	return
+}
+
 // Ring ...
 type Ring struct {
 	size uint64
@@ -25,6 +30,11 @@ func (r *Ring) Resize(size uint64) {
 	if r.size&r.mask != 0 {
 		panic("ring size should be power of 2")
 	}
+}
+
+// Len ...
+func (r *Ring) Len() uint64 {
+	return r.high - r.low
 }
 
 // Head ...

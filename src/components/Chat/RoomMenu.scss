@@ -61,7 +61,7 @@
     border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
 
     .room_menu__menu {
-      box-shadow: var(--shadow-elevation-3);
+      box-shadow: var(--shadow-elevation-2);
       clip-path: inset(0px -22px -22px -22px);
       border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
     }
@@ -71,5 +71,5 @@
 .room_list {
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-elevation-3);
+  box-shadow: var(--shadow-elevation-2);
 }

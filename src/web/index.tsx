@@ -1,17 +1,55 @@
 import "../styles/main.scss";
 import "../lib/i18n";
 
+import { Readable, Writable } from "stream";
+
 import React from "react";
 import ReactDOM from "react-dom";
 
-import { FrontendClient } from "../apis/client";
+import { ClientConstructor, ConnFactoryThing } from "../contexts/Session";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import Worker from "./svc.worker";
 
+class WorkerConn {
+  bridge: WindowBridge;
+  bus: Promise<Readable & Writable>;
+
+  constructor() {
+    this.bridge = new WindowBridge(Worker);
+    this.bus = new Promise<Readable & Writable>((resolve) => {
+      this.bridge.once("busopen:default", (b: Readable & Writable) => resolve(b));
+    });
+  }
+
+  async client<T>(C: ClientConstructor<T>): Promise<T> {
+    const b = await this.bus;
+    return new C(b, b);
+  }
+
+  close() {
+    this.bridge.close();
+  }
+}
+
+class WSConn extends WSReadWriter {
+  client<T>(C: ClientConstructor<T>): Promise<T> {
+    return Promise.resolve(new C(this, this));
+  }
+}
+
+class FooFactoryThing implements ConnFactoryThing {
+  static local(): WorkerConn {
+    return new WorkerConn();
+  }
+
+  static remote(address: string): WSConn {
+    return new WSConn(address);
+  }
+}
+
 class Runner {
   root: HTMLDivElement;
-  bridge: WindowBridge;
 
   constructor() {
     this.root = document.createElement("div");
@@ -20,22 +58,12 @@ class Runner {
   }
 
   async start() {
-    this.bridge = new WindowBridge(Worker);
-    const client = await new Promise<FrontendClient>((resolve) => {
-      this.bridge.once("busopen:default", (b: any) => resolve(new FrontendClient(b, b)));
-    });
-
-    // const ws: any = new WSReadWriter(`wss://${location.host}/manage`);
-    // const client = new FrontendClient(ws, ws);
-
     const { default: App } = await import(/* webpackPreload: true */ "./App");
-    ReactDOM.render(<App client={client} />, this.root);
+    ReactDOM.render(<App thing={FooFactoryThing} />, this.root);
   }
 
   stop() {
     ReactDOM.unmountComponentAtNode(this.root);
-    this.bridge?.close();
-    this.bridge = undefined;
   }
 
   restart() {

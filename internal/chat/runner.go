@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
@@ -210,14 +211,14 @@ type runnerDirectoryPublisher struct {
 	id   uint64
 }
 
-func (p *runnerDirectoryPublisher) client() (*network.RPCClient, error) {
-	return p.r.dialer.Client(p.r.networkKey, p.r.networkKey, directory.AddressSalt)
+func (p *runnerDirectoryPublisher) client(ctx context.Context) (*network.RPCClient, error) {
+	return p.r.dialer.Client(ctx, p.r.networkKey, p.r.networkKey, directory.AddressSalt)
 }
 
 func (p *runnerDirectoryPublisher) publish(ctx context.Context) error {
 	defer close(p.done)
 
-	client, err := p.client()
+	client, err := p.client(ctx)
 	if err != nil {
 		return err
 	}
@@ -247,13 +248,16 @@ func (p *runnerDirectoryPublisher) unpublish() error {
 		return errors.New("directory listing id not set")
 	}
 
-	client, err := p.client()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client, err := p.client(ctx)
 	if err != nil {
 		return err
 	}
 
 	return networkv1directory.NewDirectoryClient(client).Unpublish(
-		context.Background(),
+		ctx,
 		&networkv1directory.UnpublishRequest{Id: p.id},
 		&networkv1directory.UnpublishResponse{},
 	)

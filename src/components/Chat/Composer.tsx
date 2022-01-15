@@ -190,7 +190,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
       }
 
       setLastSearch(null);
-      // setSelectedMatch(defaultSelectedMatch);
+      setSelectedMatch(defaultSelectedMatch);
     },
     [matchEntries, selectedMatch, search, currentSearch]
   );
@@ -205,8 +205,10 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
 
   const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
     insertAutocompleteEntry(entry);
-    setLastSearch(search);
+    // setLastSearch(search);
+    setLastSearch(null);
     setSearch(null);
+    setSelectedMatch(defaultSelectedMatch);
   };
 
   const showSuggestions = search && matchEntries.length > (lastSearch ? 1 : 0);
@@ -610,6 +612,31 @@ const getSearchState = (
   if (invalidContext || !(punct || query) || sources.length === 0) {
     return null;
   }
+
+  console.log({
+    text,
+    offset,
+    contiguousContext,
+    delta,
+    prefix,
+    punct,
+    queryStart,
+    suffixStart,
+    suffixEnd,
+    queryEnd,
+    hasSuffix,
+    query,
+    targetStart,
+    targetEnd,
+    target,
+    entityRanges,
+    contextEnd,
+    modifierContextRange,
+    modifierContext,
+    modifierTarget,
+    invalidContext,
+    sources,
+  });
 
   return {
     debounceDelay: punct ? 0 : 100,

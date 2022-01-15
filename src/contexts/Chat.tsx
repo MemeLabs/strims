@@ -281,10 +281,7 @@ const messageReducer = (state: State, room: RoomState, message: Message): RoomSt
   };
 };
 
-interface Named {
-  name: string;
-}
-const toNames = <T extends Named>(vs: T[]): string[] => vs.map(({ name }) => name).sort();
+const toNames = (vs: { name: string }[]): string[] => vs.map(({ name }) => name).sort();
 
 const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState => {
   state.messageSizeCache.clearAll();
@@ -303,7 +300,7 @@ const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState =>
     b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
     b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
     b.tags.forEach((e) => liveTagMap.set(e.id, e));
-    room = b.room || room;
+    room = b.room ?? room;
   }
   const liveEmotes = Array.from(liveEmoteMap.values());
   const emoteStyles = Object.fromEntries(
@@ -351,12 +348,13 @@ export const Provider: React.FC = ({ children }) => {
   const client = useClient();
 
   useEffect(() => {
-    void (async () => {
-      const { uiConfig } = await client.chat.getUIConfig();
-      if (uiConfig) {
+    let unmounted = false;
+    void client.chat.getUIConfig().then(({ uiConfig }) => {
+      if (!unmounted && uiConfig) {
         dispatch({ type: "SET_UI_CONFIG", uiConfig });
       }
-    })();
+    });
+    return () => (unmounted = true);
   }, []);
 
   const mergeUIConfig = useCallback(

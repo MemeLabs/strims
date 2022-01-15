@@ -2,12 +2,13 @@ package ppspp
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/slab"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 type timeSet struct {
-	root     *timeSetNode
-	freeHead *timeSetNode
+	root      *timeSetNode
+	allocator *slab.Allocator[timeSetNode]
 }
 
 func (t *timeSet) Size() int {
@@ -16,6 +17,7 @@ func (t *timeSet) Size() int {
 
 func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 	if t.root == nil {
+		t.allocator = slab.New[timeSetNode]()
 		t.root = t.allocNode(bin, 0)
 	}
 
@@ -57,14 +59,7 @@ func (t *timeSet) Prune(bin binmap.Bin) {
 }
 
 func (t *timeSet) allocNode(b binmap.Bin, c uint64) *timeSetNode {
-	r := t.freeHead
-	if r == nil {
-		r = &timeSetNode{}
-	} else {
-		t.freeHead = r.right
-		r.right = nil
-	}
-
+	r := t.allocator.Alloc()
 	r.bin = b
 	r.count = c
 	return r
@@ -72,9 +67,9 @@ func (t *timeSet) allocNode(b binmap.Bin, c uint64) *timeSetNode {
 
 func (t *timeSet) freeNode(r *timeSetNode) {
 	r.left = nil
-	r.right = t.freeHead
+	r.right = nil
 	r.time = 0
-	t.freeHead = r
+	t.allocator.Free(r)
 }
 
 type timeSetNodeAllocator interface {

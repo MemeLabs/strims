@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/slab"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
@@ -14,10 +15,11 @@ import (
 func newMessageIDLRU(size int, ttl time.Duration) *messageIDLRU {
 	size = 1 << bits.Len(uint(size))
 	l := &messageIDLRU{
-		ttl:    ttl,
-		nextGC: timeutil.Now().Add(ttl),
-		mask:   uint64(size - 1),
-		v:      make([]*messageIDLRUItem, size),
+		ttl:       ttl,
+		nextGC:    timeutil.Now().Add(ttl),
+		mask:      uint64(size - 1),
+		v:         make([]*messageIDLRUItem, size),
+		allocator: slab.New[messageIDLRUItem](),
 	}
 	l.h.SetSeed(maphash.MakeSeed())
 	return l
@@ -31,8 +33,8 @@ type messageIDLRU struct {
 	nextGC      timeutil.Time
 	h           maphash.Hash
 	v           []*messageIDLRUItem
-	freeTop     *messageIDLRUItem
 	first, last *messageIDLRUItem
+	allocator   *slab.Allocator[messageIDLRUItem]
 }
 
 type messageIDLRUItem struct {
@@ -75,22 +77,15 @@ func (l *messageIDLRU) alloc() (e *messageIDLRUItem) {
 	if l.len*3/4 > len(l.v) {
 		l.grow()
 	}
-
-	if l.freeTop == nil {
-		return &messageIDLRUItem{}
-	}
-	e = l.freeTop
-	l.freeTop = e.next
-	e.next = nil
-	return e
+	return l.allocator.Alloc()
 }
 
 func (l *messageIDLRU) free(e *messageIDLRUItem) {
 	l.len--
 	e.list = nil
 	e.prev = nil
-	e.next = l.freeTop
-	l.freeTop = e
+	e.next = nil
+	l.allocator.Free(e)
 }
 
 func (l *messageIDLRU) grow() {

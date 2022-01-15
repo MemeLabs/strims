@@ -27,7 +27,7 @@ func unmarshalSessionID(id string) (uint64, *dao.StorageKey, error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	storageKey := dao.NewStorageKeyFromBytes(kb)
+	storageKey, _ := dao.NewStorageKeyFromBytes(kb, nil)
 
 	return profileID, storageKey, nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		videov1.RegisterCaptureService(server, &videoCaptureService{
 			app: params.App,
 		})

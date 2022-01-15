@@ -722,21 +722,32 @@ export class Profile {
 export type IProfileSummary = {
   id?: bigint;
   name?: string;
+  auth?: ProfileSummary.IAuth
 }
 
 export class ProfileSummary {
   id: bigint;
   name: string;
+  auth: ProfileSummary.TAuth;
 
   constructor(v?: IProfileSummary) {
     this.id = v?.id || BigInt(0);
     this.name = v?.name || "";
+    this.auth = new ProfileSummary.Auth(v?.auth);
   }
 
   static encode(m: ProfileSummary, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.name) w.uint32(18).string(m.name);
+    switch (m.auth.case) {
+      case ProfileSummary.AuthCase.REMOTE:
+      ProfileSummary.RemoteAuth.encode(m.auth.remote, w.uint32(8010).fork()).ldelim();
+      break;
+      case ProfileSummary.AuthCase.LOCAL:
+      ProfileSummary.LocalAuth.encode(m.auth.local, w.uint32(8018).fork()).ldelim();
+      break;
+    }
     return w;
   }
 
@@ -753,6 +764,12 @@ export class ProfileSummary {
         case 2:
         m.name = r.string();
         break;
+        case 1001:
+        m.auth = new ProfileSummary.Auth({ remote: ProfileSummary.RemoteAuth.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.auth = new ProfileSummary.Auth({ local: ProfileSummary.LocalAuth.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -760,6 +777,146 @@ export class ProfileSummary {
     }
     return m;
   }
+}
+
+export namespace ProfileSummary {
+  export enum AuthCase {
+    NOT_SET = 0,
+    REMOTE = 1001,
+    LOCAL = 1002,
+  }
+
+  export type IAuth =
+  { case?: AuthCase.NOT_SET }
+  |{ case?: AuthCase.REMOTE, remote: ProfileSummary.IRemoteAuth }
+  |{ case?: AuthCase.LOCAL, local: ProfileSummary.ILocalAuth }
+  ;
+
+  export type TAuth = Readonly<
+  { case: AuthCase.NOT_SET }
+  |{ case: AuthCase.REMOTE, remote: ProfileSummary.RemoteAuth }
+  |{ case: AuthCase.LOCAL, local: ProfileSummary.LocalAuth }
+  >;
+
+  class AuthImpl {
+    remote: ProfileSummary.RemoteAuth;
+    local: ProfileSummary.LocalAuth;
+    case: AuthCase = AuthCase.NOT_SET;
+
+    constructor(v?: IAuth) {
+      if (v && "remote" in v) {
+        this.case = AuthCase.REMOTE;
+        this.remote = new ProfileSummary.RemoteAuth(v.remote);
+      } else
+      if (v && "local" in v) {
+        this.case = AuthCase.LOCAL;
+        this.local = new ProfileSummary.LocalAuth(v.local);
+      }
+    }
+  }
+
+  export const Auth = AuthImpl as {
+    new (): Readonly<{ case: AuthCase.NOT_SET }>;
+    new <T extends IAuth>(v: T): Readonly<
+    T extends { remote: ProfileSummary.IRemoteAuth } ? { case: AuthCase.REMOTE, remote: ProfileSummary.RemoteAuth } :
+    T extends { local: ProfileSummary.ILocalAuth } ? { case: AuthCase.LOCAL, local: ProfileSummary.LocalAuth } :
+    never
+    >;
+  };
+
+  export type IRemoteAuth = {
+    serverUrl?: string;
+    token?: Uint8Array;
+    tokenEol?: bigint;
+  }
+
+  export class RemoteAuth {
+    serverUrl: string;
+    token: Uint8Array;
+    tokenEol: bigint;
+
+    constructor(v?: IRemoteAuth) {
+      this.serverUrl = v?.serverUrl || "";
+      this.token = v?.token || new Uint8Array();
+      this.tokenEol = v?.tokenEol || BigInt(0);
+    }
+
+    static encode(m: RemoteAuth, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.serverUrl) w.uint32(10).string(m.serverUrl);
+      if (m.token) w.uint32(18).bytes(m.token);
+      if (m.tokenEol) w.uint32(24).uint64(m.tokenEol);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): RemoteAuth {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new RemoteAuth();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.serverUrl = r.string();
+          break;
+          case 2:
+          m.token = r.bytes();
+          break;
+          case 3:
+          m.tokenEol = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type ILocalAuth = {
+    isEncrypted?: boolean;
+    key?: Uint8Array;
+  }
+
+  export class LocalAuth {
+    isEncrypted: boolean;
+    key: Uint8Array;
+
+    constructor(v?: ILocalAuth) {
+      this.isEncrypted = v?.isEncrypted || false;
+      this.key = v?.key || new Uint8Array();
+    }
+
+    static encode(m: LocalAuth, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.isEncrypted) w.uint32(8).bool(m.isEncrypted);
+      if (m.key) w.uint32(18).bytes(m.key);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): LocalAuth {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new LocalAuth();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.isEncrypted = r.bool();
+          break;
+          case 2:
+          m.key = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
 }
 
 export type IProfileID = {

@@ -23,6 +23,11 @@ type Store struct {
 	db *bboltlib.DB
 }
 
+// Close ...
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
 // CreateStoreIfNotExists ...
 func (s *Store) CreateStoreIfNotExists(table string) error {
 	return s.db.Update(func(tx *bboltlib.Tx) error {

@@ -2,6 +2,7 @@ import { Readable, Writable } from "stream";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 
+import { AuthFrontendClient } from "./strims/auth/v1/auth_rpc";
 import { ChatFrontendClient, ChatServerFrontendClient } from "./strims/chat/v1/chat_rpc";
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
 import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc";
@@ -19,6 +20,7 @@ import { VideoIngressClient } from "./strims/video/v1/ingress_rpc";
 import { VNICFrontendClient } from "./strims/vnic/v1/vnic_rpc";
 
 export class FrontendClient {
+  public auth: AuthFrontendClient;
   public bootstrap: BootstrapFrontendClient;
   public chat: ChatFrontendClient;
   public chatServer: ChatServerFrontendClient;
@@ -35,6 +37,7 @@ export class FrontendClient {
 
   constructor(w: Writable, r: Readable) {
     const host = new Host(w, r);
+    this.auth = new AuthFrontendClient(host);
     this.bootstrap = new BootstrapFrontendClient(host);
     this.chat = new ChatFrontendClient(host);
     this.chatServer = new ChatServerFrontendClient(host);

@@ -19,8 +19,8 @@ func createProfileStore(t *testing.T) *ProfileStore {
 	kvStore, err := kvtest.NewMemStore("strims")
 	assert.Nil(t, err, "failed to kv store")
 
-	pfStore := NewProfileStore(1, kvStore, key)
-	assert.Nil(t, pfStore.Init(profile), "failed to create profile store")
+	pfStore := NewProfileStore(profile.Id, kvStore, key)
+	assert.Nil(t, pfStore.Init(), "failed to create profile store")
 
 	return pfStore
 }

@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		svc := &chatService{
 			app:   params.App,
 			store: params.Store,

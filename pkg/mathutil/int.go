@@ -1,13 +1,31 @@
 package mathutil
 
-import "math"
+import "constraints"
 
-func MinInt(ns ...int) int {
-	n := math.MaxInt
-	for i := range ns {
+func Min[T constraints.Ordered](ns ...T) (n T) {
+	if len(ns) == 0 {
+		return
+	}
+
+	n = ns[0]
+	for i := 1; i < len(ns); i++ {
 		if ns[i] < n {
 			n = ns[i]
 		}
 	}
-	return n
+	return
+}
+
+func Max[T constraints.Ordered](ns ...T) (n T) {
+	if len(ns) == 0 {
+		return
+	}
+
+	n = ns[0]
+	for i := 1; i < len(ns); i++ {
+		if ns[i] > n {
+			n = ns[i]
+		}
+	}
+	return
 }

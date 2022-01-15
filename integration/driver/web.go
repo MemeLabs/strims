@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/avast/retry-go"
 	"github.com/chromedp/cdproto/network"
@@ -162,7 +162,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	rw := vnic.NewWSReadWriter(c)
+	rw := httputil.NewWSReadWriter(c)
 	client, err := rpc.NewClient(t.logger, &rpc.RWDialer{
 		Logger:     t.logger,
 		ReadWriter: rw,

@@ -1,11 +1,11 @@
 package dao
 
 import (
+	"errors"
 	"strconv"
 
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"google.golang.org/protobuf/proto"
 )
 
 const profileKeyPrefix = "profile:"
@@ -16,41 +16,42 @@ func prefixProfileKey(id uint64) string {
 
 // CreateProfile ...
 func CreateProfile(s kv.BlobStore, name, password string) (*profilev1.Profile, *ProfileStore, error) {
-	profile, err := NewProfile(name)
-	if err != nil {
-		return nil, nil, err
-	}
-	storageKey, err := NewStorageKey(password)
-	if err != nil {
-		return nil, nil, err
-	}
+	// profile, err := NewProfile(name)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// storageKey, err := NewStorageKey(password)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-	err = s.Update(metadataTable, func(tx kv.BlobTx) error {
-		if ok, err := exists(tx, prefixProfileSummaryKey(name)); err != nil {
-			return err
-		} else if ok {
-			return ErrProfileNameNotAvailable
-		}
+	// err = s.Update(metadataTable, func(tx kv.BlobTx) error {
+	// 	if ok, err := exists(tx, prefixProfileSummaryKey(name)); err != nil {
+	// 		return err
+	// 	} else if ok {
+	// 		return ErrProfileNameNotAvailable
+	// 	}
 
-		b, err := proto.Marshal(NewProfileSummary(profile))
-		if err != nil {
-			return err
-		}
-		if err := tx.Put(prefixProfileSummaryKey(name), b); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, nil, err
-	}
+	// 	b, err := proto.Marshal(NewProfileSummary(profile))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	if err := tx.Put(prefixProfileSummaryKey(name), b); err != nil {
+	// 		return err
+	// 	}
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-	store := NewProfileStore(profile.Id, s, storageKey)
-	if err := store.Init(profile); err != nil {
-		return nil, nil, err
-	}
+	// store := NewProfileStore(profile.Id, s, storageKey)
+	// if err := store.Init(profile); err != nil {
+	// 	return nil, nil, err
+	// }
 
-	return profile, store, nil
+	// return profile, store, nil
+	return nil, nil, errors.New("deprecated")
 }
 
 // DeleteProfile ...

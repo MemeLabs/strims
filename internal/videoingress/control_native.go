@@ -204,7 +204,7 @@ func (c *control) tryStartIngressShareServer(networkKey []byte) {
 }
 
 func (c *control) startIngressShareServer(ctx context.Context, networkKey []byte) error {
-	server, err := c.network.Dialer().Server(networkKey, c.profile.Key, ShareAddressSalt)
+	server, err := c.network.Dialer().Server(ctx, networkKey, c.profile.Key, ShareAddressSalt)
 	if err != nil {
 		return err
 	}

@@ -46,6 +46,29 @@
     }
   }
 
+  .layout_chat__toggle_off {
+    transform: rotate(-90deg);
+  }
+
+  &.layout--min_aspect_ratio_1_2 {
+    .layout_chat__toggle_off {
+      transform: scaleX(-1);
+    }
+
+    &.layout--swap {
+      .layout_chat {
+        &__toggle_off {
+          transform: unset;
+        }
+
+        &__toggle_on {
+          left: 0px;
+          transform: scaleX(-1);
+        }
+      }
+    }
+  }
+
   .layout_chat__header {
     border-bottom: 1px solid var(--color-opac-w-2);
   }

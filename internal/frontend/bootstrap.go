@@ -8,17 +8,15 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		bootstrap.RegisterBootstrapFrontendService(server, &bootstrapService{
 			logger: params.Logger,
 			store:  params.Store,
-			vpn:    params.VPN,
 			app:    params.App,
 		})
 	})
@@ -28,7 +26,6 @@ func init() {
 type bootstrapService struct {
 	logger *zap.Logger
 	store  *dao.ProfileStore
-	vpn    *vpn.Host
 	app    app.Control
 }
 

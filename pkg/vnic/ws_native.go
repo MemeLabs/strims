@@ -5,82 +5,16 @@ package vnic
 
 import (
 	"crypto/tls"
-	"errors"
-	"io"
+	"fmt"
 	"net/http"
-	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
-var wsMTU = 64 * 1024
-
-// ErrUnexpectedMessageType ...
-var ErrUnexpectedMessageType = errors.New("unexpected non-binary message type")
-
-// NewWSReadWriter ...
-func NewWSReadWriter(c *websocket.Conn) *WSReadWriter {
-	return &WSReadWriter{
-		c: c,
-	}
-}
-
-// WSReadWriter ...
-type WSReadWriter struct {
-	c *websocket.Conn
-	l sync.Mutex
-	r io.Reader
-}
-
-// MTU ...
-func (w *WSReadWriter) MTU() int {
-	return wsMTU
-}
-
-// Read ...
-func (w *WSReadWriter) Read(b []byte) (n int, err error) {
-	if w.r == nil {
-		var t int
-		t, w.r, err = w.c.NextReader()
-		if err != nil {
-			return
-		}
-		if t != websocket.BinaryMessage {
-			return 0, ErrUnexpectedMessageType
-		}
-	}
-
-	n, err = w.r.Read(b)
-	if err == io.EOF {
-		w.r = nil
-		err = nil
-
-		if n == 0 {
-			return w.Read(b)
-		}
-	}
-
-	return
-}
-
-// Write ...
-func (w *WSReadWriter) Write(b []byte) (int, error) {
-	w.l.Lock()
-	defer w.l.Unlock()
-	err := w.c.WriteMessage(websocket.BinaryMessage, b)
-	return len(b), err
-}
-
-// Close ...
-func (w *WSReadWriter) Close() error {
-	return w.c.Close()
-}
-
 type WSInterfaceOptions struct {
-	ServerAddress string
-	TLSCertFile   string
-	TLSKeyFile    string
+	ServeMux *httputil.MapServeMux
 }
 
 // NewWSInterface ...
@@ -92,10 +26,9 @@ func NewWSInterface(logger *zap.Logger, options WSInterfaceOptions) Interface {
 }
 
 type wsInterface struct {
-	logger     *zap.Logger
-	options    WSInterfaceOptions
-	serverLock sync.Mutex
-	server     *http.Server
+	logger  *zap.Logger
+	options WSInterfaceOptions
+	path    string
 }
 
 func (f *wsInterface) ValidScheme(scheme string) bool {
@@ -103,61 +36,21 @@ func (f *wsInterface) ValidScheme(scheme string) bool {
 }
 
 func (f *wsInterface) Listen(h *Host) error {
-	if f.options.ServerAddress == "" {
-		return nil
+	if f.options.ServeMux != nil {
+		f.path = fmt.Sprintf("/%x", h.profileKey.Public)
+		f.logger.Debug("ws vnic listener starting", zap.String("path", f.path))
+		f.options.ServeMux.HandleWSFunc(f.path, func(c *websocket.Conn) {
+			h.AddLink(httputil.NewWSReadWriter(c))
+		})
 	}
-
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
-
-	f.serverLock.Lock()
-	if f.server != nil {
-		f.serverLock.Unlock()
-		return errors.New("server already running")
-	}
-
-	srv := &http.Server{
-		Addr: f.options.ServerAddress,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				f.logger.Warn("websocket upgrade error", zap.Error(err))
-				return
-			}
-			h.AddLink(NewWSReadWriter(c))
-		}),
-	}
-
-	f.server = srv
-	f.serverLock.Unlock()
-
-	f.logger.Debug(
-		"starting websocket server",
-		zap.String("address", f.options.ServerAddress),
-		zap.String("tlsCert", f.options.TLSCertFile),
-		zap.String("tlsKey", f.options.TLSKeyFile),
-	)
-
-	if f.options.TLSCertFile != "" && f.options.TLSKeyFile != "" {
-		return srv.ListenAndServeTLS(f.options.TLSCertFile, f.options.TLSKeyFile)
-	}
-	return srv.ListenAndServe()
+	return nil
 }
 
 func (f *wsInterface) Close() error {
-	f.serverLock.Lock()
-	defer f.serverLock.Unlock()
-
-	if f.server == nil {
-		return errors.New("server is not running")
+	if f.options.ServeMux != nil {
+		f.options.ServeMux.StopHandling(f.path)
 	}
-
-	err := f.server.Close()
-	f.server = nil
-	return err
+	return nil
 }
 
 func (f *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
@@ -170,5 +63,5 @@ func (f *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewWSReadWriter(c), nil
+	return httputil.NewWSReadWriter(c), nil
 }

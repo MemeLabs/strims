@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"reflect"
 	"sync"
 	"time"
@@ -105,7 +104,7 @@ func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host,
 		if listener, ok := iface.(Listener); ok {
 			go func() {
 				if err := listener.Listen(h); err != nil {
-					log.Println(err)
+					logger.Warn("interface listener closed", zap.Error(err))
 				}
 			}()
 		}

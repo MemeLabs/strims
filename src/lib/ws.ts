@@ -1,9 +1,3 @@
-// declare class WSReadWriter {
-//   onMethod: (method: "data", handler: (d: Uint8Array) => void) => void;
-//   onMethod: (method: "foo", handler: EventListener) => void;
-
-// }
-
 type WSReadWriterEventMap = WebSocketEventMap & {
   "data": Uint8Array;
 };
@@ -32,7 +26,9 @@ export class WSReadWriter {
 
     void this.ws.then((ws) => {
       if (method === "data") {
-        ws.addEventListener("message", (e) => _handler(new Uint8Array(e.data)));
+        ws.addEventListener("message", (e: MessageEvent<ArrayBuffer>) =>
+          _handler(new Uint8Array(e.data))
+        );
       } else {
         ws.addEventListener(method, _handler);
       }
@@ -41,5 +37,9 @@ export class WSReadWriter {
 
   public write(data: Uint8Array): void {
     void this.ws.then((ws) => ws.send(data));
+  }
+
+  public close(): void {
+    void this.ws.then((ws) => ws.close());
   }
 }

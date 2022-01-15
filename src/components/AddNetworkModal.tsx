@@ -6,7 +6,7 @@ import { MdClose } from "react-icons/md";
 import { CreateServerResponse } from "../apis/strims/network/v1/network";
 import { ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
-import { useProfile } from "../contexts/Profile";
+import { useSession } from "../contexts/Session";
 
 interface AddNetworkModalProps {
   onCreate: (res: CreateServerResponse) => void;
@@ -19,7 +19,7 @@ interface AddNetworkFormData {
 }
 
 const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) => {
-  const [{ profile }] = useProfile();
+  const [{ profile }] = useSession();
 
   const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {
     onComplete: onCreate,

@@ -25,6 +25,16 @@
     height: 1.3em;
     width: 1.3em;
   }
+
+  &__text {
+    display: block;
+  }
+
+  &__subtext {
+    display: block;
+    color: $gray-100;
+    font-size: 0.8em;
+  }
 }
 
 .landing_page {
@@ -91,11 +101,46 @@
       justify-content: center;
     }
 
+    .input_buttons {
+      justify-content: space-between;
+    }
+
+    .input_button {
+      flex-grow: 0;
+      white-space: nowrap;
+    }
+
     .input_button--borderless {
+      background: unset;
       color: $gray-300;
+
       &:hover {
+        background: unset;
         color: $gray-500;
       }
+    }
+
+    .input_label--toggle {
+      flex-direction: row;
+      justify-content: space-between;
+    }
+  }
+
+  &__accordion {
+    &--enabled {
+      margin: 0 -10px 5px;
+      padding: 5px 10px;
+      border-radius: var(--border-radius-small);
+      box-shadow: 0 1px 2px inset var(--color-opac-b-14);
+      background: var(--color-opac-b-1);
+    }
+
+    &__content {
+      display: none;
+    }
+
+    &--enabled &__content {
+      display: block;
     }
   }
 }

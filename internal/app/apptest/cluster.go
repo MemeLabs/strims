@@ -36,7 +36,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 		return nil, err
 	}
 	profileStore := dao.NewProfileStore(profile.Id, blobStore, storageKey)
-	if err := profileStore.Init(profile); err != nil {
+	if err := profileStore.Init(); err != nil {
 		return nil, err
 	}
 

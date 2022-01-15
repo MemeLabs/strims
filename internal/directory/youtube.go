@@ -52,7 +52,7 @@ func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLo
 		return nil, err
 	}
 
-	channelIDs := set.NewString(len(videos.Items))
+	channelIDs := set.New[string](len(videos.Items))
 	for _, video := range videos.Items {
 		channelIDs.Insert(video.Snippet.ChannelId)
 	}

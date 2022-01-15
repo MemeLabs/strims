@@ -1,0 +1,27 @@
+metrics:
+  address: "0.0.0.0:1971"
+debug:
+  address: "0.0.0.0:6060"
+storage:
+  adapter: "bbolt"
+  bbolt:
+    path: "hack/svc/.strims"
+http:
+  address: "0.0.0.0:8083"
+  tls:
+    cert: "hack/tls/development.crt"
+    key: "hack/tls/development.key"
+session:
+  remote:
+    enabled: true
+  headless:
+    - id: 54506280814903298
+      key: "OLCvvNywIrB1I565PxSyP9y4rVPtjkMQL/GqoPvMmrY="
+vnic:
+  # label: ""
+  webrtc:
+    enabled: true
+    portMin: 0
+    portMax: 0
+  websocket:
+    enabled: true

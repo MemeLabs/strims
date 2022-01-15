@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		notificationv1.RegisterNotificationFrontendService(server, &notificataionService{
 			store: params.Store,
 			app:   params.App,

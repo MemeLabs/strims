@@ -104,7 +104,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
           ["--background-image", `url(${uris[0]})`],
         ];
 
-        e.effects.forEach(({ effect }) => {
+        for (const { effect } of e.effects) {
           switch (effect.case) {
             case EmoteEffect.EffectCase.CUSTOM_CSS:
               break;
@@ -140,7 +140,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
               }
               break;
           }
-        });
+        }
 
         if (e.name in extraEmoteRules) {
           rules = upsertProps(rules, ...extraEmoteRules[e.name]);

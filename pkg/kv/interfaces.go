@@ -11,6 +11,7 @@ var ErrRecordNotFound = errors.New("record not found")
 
 // BlobStore ...
 type BlobStore interface {
+	Close() error
 	CreateStoreIfNotExists(table string) error
 	DeleteStore(table string) error
 	View(table string, fn func(tx BlobTx) error) error

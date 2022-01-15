@@ -74,7 +74,7 @@ func (l *embedLoader) Load(ctx context.Context, sets map[networkv1directory.List
 
 		n := loader.BatchSize()
 		for i := 0; i < len(ids); i += n {
-			batchIDs := ids[i:mathutil.MinInt(i+n, len(ids))]
+			batchIDs := ids[i:mathutil.Min(i+n, len(ids))]
 
 			wg.Add(1)
 			go func() {

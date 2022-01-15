@@ -19,17 +19,17 @@ func TestLRU(t *testing.T) {
 }
 
 func TestLRUTTL(t *testing.T) {
-	l := newMessageIDLRU(64, 3*time.Millisecond)
+	l := newMessageIDLRU(64, 15*time.Millisecond)
 
 	assert.True(t, l.Insert(MessageID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.True(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	assert.False(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.True(t, l.Insert(MessageID{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	assert.True(t, l.Insert(MessageID{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 
@@ -57,8 +57,11 @@ func TestLRUItemFind(t *testing.T) {
 	assert.Nil(t, l.find(MessageID{12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 }
 
+var l *messageIDLRU
+
 func BenchmarkLRU(b *testing.B) {
-	l := newMessageIDLRU(64, time.Millisecond)
+	l = newMessageIDLRU(64, time.Millisecond)
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var id MessageID
 		id[0] = byte(i)

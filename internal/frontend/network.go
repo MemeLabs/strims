@@ -21,7 +21,7 @@ var (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		networkv1.RegisterNetworkServiceService(server, &networkService{
 			profile: params.Profile,
 			store:   params.Store,

@@ -21,13 +21,12 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 	if len(ids) != 1 {
 		return nil, errors.New("expected exactly one id")
 	}
-	res, err := http.Get("https://api.angelthump.com/v2/streams/" + ids[0])
+	res, err := http.Get("https://api.angelthump.com/v3/streams/?username=" + ids[0])
 	if err != nil {
 		return nil, err
 	}
 
-	data := struct {
-		Username     string `json:"username"`
+	streams := []struct {
 		Type         string `json:"type"`
 		ThumbnailURL string `json:"thumbnail_url"`
 		ViewerCount  int    `json:"viewer_count"`
@@ -37,48 +36,46 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 			ProfileLogoURL   string `json:"profile_logo_url"`
 			Title            string `json:"title"`
 			Nsfw             bool   `json:"nsfw"`
+			Username         string `json:"username"`
 		} `json:"user"`
-		Ingest struct {
-			Stats struct {
-				Height int `json:"height,string"`
-				Width  int `json:"width,string"`
-			} `json:"stats"`
-		} `json:"ingest"`
 	}{}
 
-	err = json.NewDecoder(res.Body).Decode(&data)
+	err = json.NewDecoder(res.Body).Decode(&streams)
 	if err != nil {
 		return nil, err
 	}
 
-	embed := &embedLoaderResult{
-		id: data.Username,
-		snippet: &networkv1directory.ListingSnippet{
-			Live:        data.Type == "live",
-			ViewerCount: uint64(data.ViewerCount),
-			Title:       data.User.Title,
-			IsMature:    data.User.Nsfw,
-			ChannelName: data.User.DisplayName,
-			VideoHeight: uint32(data.Ingest.Stats.Height),
-			VideoWidth:  uint32(data.Ingest.Stats.Width),
-			Thumbnail: &networkv1directory.ListingSnippetImage{
-				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
-					Url: fmt.Sprintf("%s?_t=%x", data.ThumbnailURL, timeutil.Now().Unix()),
+	var embeds []*embedLoaderResult
+	for _, stream := range streams {
+		embed := &embedLoaderResult{
+			id: stream.User.Username,
+			snippet: &networkv1directory.ListingSnippet{
+				Live:        stream.Type == "live",
+				ViewerCount: uint64(stream.ViewerCount),
+				Title:       stream.User.Title,
+				IsMature:    stream.User.Nsfw,
+				ChannelName: stream.User.DisplayName,
+				Thumbnail: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+						Url: fmt.Sprintf("%s?_t=%x", stream.ThumbnailURL, timeutil.Now().Unix()),
+					},
 				},
-			},
-			ChannelLogo: &networkv1directory.ListingSnippetImage{
-				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
-					Url: data.User.ProfileLogoURL,
+				ChannelLogo: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+						Url: stream.User.ProfileLogoURL,
+					},
 				},
-			},
-		},
-	}
-	if data.ThumbnailURL == "" {
-		embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
-			SourceOneof: &networkv1directory.ListingSnippetImage_Url{
-				Url: data.User.OfflineBannerURL,
 			},
 		}
+		if stream.ThumbnailURL == "" {
+			embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
+					Url: stream.User.OfflineBannerURL,
+				},
+			}
+		}
+
+		embeds = append(embeds, embed)
 	}
-	return []*embedLoaderResult{embed}, nil
+	return embeds, nil
 }

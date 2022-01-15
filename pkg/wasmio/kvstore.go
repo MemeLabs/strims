@@ -22,6 +22,11 @@ type kvStore struct {
 	bridge js.Value
 }
 
+// Close ...
+func (s *kvStore) Close() error {
+	return nil
+}
+
 // CreateStoreIfNotExists ...
 func (s *kvStore) CreateStoreIfNotExists(table string) error {
 	return s.transact(table, true, true, func(tx kv.BlobTx) error { return nil })

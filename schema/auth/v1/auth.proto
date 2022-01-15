@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package strims.auth.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/auth/v1;authv1";
+option java_package = "gg.strims.auth.v1";
+option swift_prefix = "SAU";
+
+import "profile/v1/profile.proto";
+
+message SessionThing {
+  uint64 profile_id = 1;
+  bytes profile_key = 2;
+}
+
+message TOTPConfig {
+  string secret = 1;
+  repeated string recover_codes = 2;
+}
+
+message ServerUserThing {
+  message Unencrypted {
+    uint64 profile_id = 1;
+    bytes profile_key = 2;
+  }
+
+  message Password {
+    message Secret {
+      uint64 profile_id = 1;
+      bytes profile_key = 2;
+      TOTPConfig totp = 3;
+    }
+
+    strims.profile.v1.StorageKey auth_key = 1;
+    bool totp_required = 2;
+    bytes secret = 3;
+  }
+
+  uint64 id = 1;
+  string name = 2;
+
+  oneof credentials {
+    Unencrypted unencrypted = 1001;
+    Password password = 1002;
+  }
+}
+
+message LinkedProfile {
+  message Unencrypted {}
+
+  message Password {
+    bool totp_required = 1;
+  }
+
+  message Token {
+    uint64 profile_id = 1;
+    bytes token = 2;
+    uint64 eol = 3;
+  }
+
+  message Key {
+    uint64 profile_id = 1;
+    bytes profile_key = 2;
+  }
+
+  uint64 id = 1;
+  string name = 2;
+  string server_address = 3;
+
+  oneof credentials {
+    Unencrypted unencrypted = 1001;
+    Password password = 1002;
+    Token token = 1003;
+    Key key = 1004;
+  }
+}
+
+message SignInRequest {
+  message Password {
+    string name = 1;
+    string password = 2;
+    string totp_passcode = 3;
+    bool persist_session = 4;
+    bool persist_login = 5;
+  }
+
+  message Token {
+    uint64 profile_id = 1;
+    bytes token = 2;
+    uint64 eol = 3;
+  }
+
+  message Key {
+    uint64 profile_id = 1;
+    bytes profile_key = 2;
+  }
+
+  oneof credentials {
+    Password password = 1001;
+    Token token = 1002;
+    Key key = 1003;
+  }
+}
+
+message SignInResponse {
+  LinkedProfile linked_profile = 1;
+  strims.profile.v1.Profile profile = 2;
+}
+
+message SignUpRequest {
+  string name = 1;
+  string password = 2;
+  bool persist_session = 4;
+  bool persist_login = 5;
+}
+
+message SignUpResponse {
+  LinkedProfile linked_profile = 1;
+  strims.profile.v1.Profile profile = 2;
+}
+
+service AuthFrontend {
+  rpc SignIn(SignInRequest) returns (SignInResponse);
+  rpc SignUp(SignUpRequest) returns (SignUpResponse);
+}

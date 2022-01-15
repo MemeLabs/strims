@@ -1,111 +1,130 @@
-import React from "react";
-import { useForm } from "react-hook-form";
-import { FiUser, FiUserPlus } from "react-icons/fi";
+import React, { useEffect } from "react";
+import { FiUser } from "react-icons/fi";
 import { Link, Navigate, useLocation } from "react-router-dom";
 
-import { ILoadProfileRequest, IProfileSummary } from "../apis/strims/profile/v1/profile";
-import { InputError, TextInput } from "../components/Form";
+import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
-import { useCall } from "../contexts/FrontendApi";
-import { useProfile } from "../contexts/Profile";
+// import { useCall } from "../contexts/FrontendApi";
+// import { useClient } from "../contexts/FrontendApi";
+// import { useProfile } from "../contexts/Profile";
+import { useSession } from "../contexts/Session";
 import useQuery from "../hooks/useQuery";
+import useReady from "../hooks/useReady";
 
 const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%&]*$/;
+
+interface LinkedProfileListItemProps {
+  profile: LinkedProfile;
+  onClick: (profile: LinkedProfile) => void;
+}
+
+const LinkedProfileListItem: React.FC<LinkedProfileListItemProps> = ({ profile, onClick }) => {
+  let address = null;
+  if (profile.serverAddress) {
+    const url = new URL(profile.serverAddress);
+    address = <span className="login_profile_list__subtext">{url.hostname}</span>;
+  }
+
+  return (
+    <div
+      className="login_profile_list__item"
+      key={profile.id.toString()}
+      onClick={() => onClick(profile)}
+    >
+      <FiUser className="login_profile_list__icon" />
+      <span className="login_profile_list__label">
+        <span className="login_profile_list__text">{profile.name}</span>
+        {address}
+      </span>
+    </div>
+  );
+};
 
 interface LoginQueryParams {
   next: string;
 }
 
 const LoginPage: React.FC = () => {
-  const [listProfilesRes] = useCall("profile", "list");
-  const [{ profile, error, loading }, profileActions] = useProfile();
-  const [selectedProfile, setSelectedProfile] = React.useState<IProfileSummary | null>(null);
-  const { control, handleSubmit } = useForm<ILoadProfileRequest>({
-    mode: "onBlur",
-  });
+  const [selectedProfile, setSelectedProfile] = React.useState<LinkedProfile | null>(null);
+  const [session, sessionOps] = useSession();
   const { next } = useQuery<LoginQueryParams>(useLocation().search);
 
-  React.useEffect(profileActions.clearError, []);
+  useReady(() => {
+    const { credentials } = selectedProfile;
+    switch (credentials.case) {
+      case LinkedProfile.CredentialsCase.UNENCRYPTED:
+        console.log(">>> UNENCRYPTED");
+        break;
+      case LinkedProfile.CredentialsCase.PASSWORD:
+        console.log(">>> PASSWORD");
+        break;
+      case LinkedProfile.CredentialsCase.TOKEN:
+        void sessionOps.signIn(selectedProfile.serverAddress, {
+          credentials: { token: credentials.token },
+        });
+        break;
+      case LinkedProfile.CredentialsCase.KEY:
+        void sessionOps.signIn(selectedProfile.serverAddress, {
+          credentials: { key: credentials.key },
+        });
+        break;
+      default:
+        console.log(">>> wat case?", credentials.case);
+    }
+  }, [selectedProfile]);
 
-  if (!listProfilesRes.loading && !listProfilesRes.value?.profiles.length) {
-    return <Navigate to="/signup" />;
-  }
-  if (profile) {
+  if (session.profile) {
     return <Navigate to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
   }
 
-  if (!selectedProfile) {
+  if (!selectedProfile && session.linkedProfiles.length) {
     return (
       <LandingPageLayout>
         <div className="login_profile_list">
-          {listProfilesRes.value?.profiles.map((summary) => (
-            <div
-              className="login_profile_list__item"
-              key={summary.id.toString()}
-              onClick={() => setSelectedProfile(summary)}
-            >
-              <FiUser className="login_profile_list__icon" />
-              <span className="login_profile_list__text">{summary.name}</span>
-            </div>
+          {session.linkedProfiles.map((profile) => (
+            <LinkedProfileListItem
+              key={profile.id.toString()}
+              profile={profile}
+              onClick={setSelectedProfile}
+            />
           ))}
-          <Link className="login_profile_list__item" to="/signup">
+          {/* <Link className="login_profile_list__item" to="/signup">
             <FiUserPlus className="login_profile_list__icon" />
             <span className="login_profile_list__text">Create Profile</span>
-          </Link>
+          </Link> */}
+          <Link to="/signup">Create Profile</Link>
+          <button onClick={() => setSelectedProfile(new LinkedProfile())}>New Login</button>
         </div>
       </LandingPageLayout>
     );
   }
 
-  const onSubmit = handleSubmit((data) =>
-    profileActions.loadProfile({
-      id: selectedProfile.id,
-      ...data,
-    })
-  );
+  const handleSubmit = (values: ProfileFormValues) => {
+    void sessionOps.signIn(values.serverAddress, {
+      credentials: {
+        password: {
+          name: values.name,
+          password: values.password,
+          persistLogin: values.persistLogin,
+        },
+      },
+    });
+  };
 
   return (
     <LandingPageLayout>
-      <form onSubmit={onSubmit}>
-        {listProfilesRes.error && (
-          <InputError error={listProfilesRes.error.message || "Error loading profiles"} />
-        )}
-        {error && <InputError error={error.message || "Error logging in"} />}
-        <TextInput
-          control={control}
-          rules={{
-            required: {
-              value: true,
-              message: "Name is required",
-            },
-          }}
-          label="Profile Name"
-          name="name"
-          placeholder="Enter your profile name"
-          defaultValue={selectedProfile.name}
-        />
-        <TextInput
-          control={control}
-          rules={{
-            required: {
-              value: true,
-              message: "Password is required",
-            },
-          }}
-          label="Password"
-          name="password"
-          placeholder="Enter your password"
-          type="password"
-        />
-        <div className="input_buttons">
-          <Link className="input input_button input_button--borderless" to="/signup">
-            Create Profile
-          </Link>
-          <button className="input input_button" disabled={loading}>
-            Load Profile
-          </button>
-        </div>
-      </form>
+      <ProfileForm
+        onSubmit={handleSubmit}
+        // error={error?.message}
+        secondaryUri="/signup"
+        secondaryLabel="Create profile"
+        submitLabel="Log in"
+        defaultValues={{
+          name: selectedProfile?.name,
+          serverAddress: selectedProfile?.serverAddress,
+        }}
+      />
     </LandingPageLayout>
   );
 };

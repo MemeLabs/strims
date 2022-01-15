@@ -392,16 +392,18 @@ export class WindowBridge extends EventEmitter {
           handleDataChannel(peerConnection.createDataChannel(data.label));
           break;
         case EventType.ADD_ICE_CANDIDATE:
-          void peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
+          void peerConnection.addIceCandidate(
+            new RTCIceCandidate(JSON.parse(data.candidate) as RTCIceCandidateInit)
+          );
           break;
         case EventType.SET_LOCAL_DESCRIPTION:
           void peerConnection.setLocalDescription(
-            new RTCSessionDescription(JSON.parse(data.description))
+            new RTCSessionDescription(JSON.parse(data.description) as RTCSessionDescriptionInit)
           );
           break;
         case EventType.SET_REMOTE_DESCRIPTION:
           void peerConnection.setRemoteDescription(
-            new RTCSessionDescription(JSON.parse(data.description))
+            new RTCSessionDescription(JSON.parse(data.description) as RTCSessionDescriptionInit)
           );
           break;
         case EventType.CLOSE:
@@ -939,8 +941,7 @@ export class WorkerBridge {
           .then((tx: IDBTransaction) => {
             tx.oncomplete = () => done(null);
             tx.onerror = (e) => done(String(e));
-            // eslint-disable-next-line
-            (tx as any).commit?.();
+            tx.commit?.();
           })
           .catch((e) => done(String(e)));
       },

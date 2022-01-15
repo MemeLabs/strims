@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		vnicv1.RegisterVNICFrontendService(server, &vnicFrontendService{
 			app: params.App,
 		})

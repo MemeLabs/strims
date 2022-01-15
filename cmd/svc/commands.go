@@ -1,0 +1,80 @@
+package main
+
+import (
+	"errors"
+	"flag"
+)
+
+type Command struct {
+	Name  string
+	Func  CommandFunc
+	Usage string
+	Short string
+	Long  string
+	Flags *flag.FlagSet
+}
+
+type CommandFunc func(Flags) error
+
+var commands = map[string]Command{}
+
+func RegisterCommand(c Command) {
+	commands[c.Name] = c
+}
+
+func noopCmd(fs Flags) error {
+	return errors.New("not implemented")
+}
+
+func init() {
+	RegisterCommand(Command{
+		Name: "help",
+		Func: noopCmd,
+	})
+
+	RegisterCommand(Command{
+		Name:  "run",
+		Func:  runCmd,
+		Usage: "[--config <path>]",
+		Short: `Starts the server`,
+		Flags: func() *flag.FlagSet {
+			fs := flag.NewFlagSet("run", flag.ExitOnError)
+			fs.String("config", "", "Configuration file")
+			return fs
+		}(),
+	})
+
+	RegisterCommand(Command{
+		Name: "list-profiles",
+		Func: noopCmd,
+	})
+
+	RegisterCommand(Command{
+		Name:  "add-profile",
+		Func:  addProfileCmd,
+		Usage: "[--config <path>] --username <string> --password <string>",
+		Short: `Adds a new profile to the db`,
+		Flags: func() *flag.FlagSet {
+			fs := flag.NewFlagSet("run", flag.ExitOnError)
+			fs.String("config", "", "Configuration file")
+			fs.String("username", "", "Profile username")
+			fs.String("password", "", "Profile password")
+			return fs
+		}(),
+	})
+
+	RegisterCommand(Command{
+		Name: "remove-profile",
+		Func: noopCmd,
+	})
+
+	RegisterCommand(Command{
+		Name: "import-profile",
+		Func: noopCmd,
+	})
+
+	RegisterCommand(Command{
+		Name: "export-profile",
+		Func: noopCmd,
+	})
+}

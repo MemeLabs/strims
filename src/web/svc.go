@@ -16,6 +16,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/session"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
@@ -88,24 +89,29 @@ func newLogger(bridge js.Value) *zap.Logger {
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
+	store := wasmio.NewKVStore(bridge)
+
 	broker, err := network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
 	if err != nil {
 		logger.Fatal("broker proxy init failed", zap.Error(err))
 	}
 
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
+		ws := vnic.NewWSInterface(logger, bridge)
+		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
+		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(logger, vnicHost)
+	}
+
+	sessionManager := session.NewManager(logger, store, newVPN, broker)
+
 	srv := frontend.Server{
-		Store:  wasmio.NewKVStore(bridge),
-		Logger: logger,
-		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, bridge)
-			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
-			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
-			if err != nil {
-				return nil, err
-			}
-			return vpn.New(logger, vnicHost)
-		},
-		Broker: broker,
+		Store:          store,
+		Logger:         logger,
+		SessionManager: sessionManager,
 	}
 
 	if err := srv.Listen(context.Background(), bus); err != nil {

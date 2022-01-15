@@ -143,6 +143,7 @@ func (t *control) startClient(client *bootstrap.BootstrapClient) error {
 
 // PublishingEnabled ...
 func (t *control) PublishingEnabled() bool {
+	// TODO: load from db
 	return true
 }
 

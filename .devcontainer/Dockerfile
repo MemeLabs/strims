@@ -9,7 +9,7 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 ARG NODE_VERSION=14.x
-ARG GO_VERSION=1.17.3
+ARG GO_VERSION=1.18beta1
 ARG PROTOC_VERSION=3.19.1
 ARG MEMELABS_PB_VERSION=0.2.3
 
@@ -43,10 +43,11 @@ RUN \
   && ln -s /usr/local/go/bin/go /usr/local/bin \
   && rm "go${GO_VERSION}.linux-amd64.tar.gz" \
   # Build go tools with module support
-  && mkdir -p /tmp/gotools \
+  && mkdir -p /tmp/gotools/temp \
   && cd /tmp/gotools \
-  && GOPATH=/tmp/gotools GO111MODULE=on go get -v golang.org/x/tools/gopls@latest 2>&1 \
-  && GOPATH=/tmp/gotools GO111MODULE=on go get -v \
+  && go mod init gotools \
+  && GOPATH=/tmp/gotools/temp GO111MODULE=on go get -v golang.org/x/tools/gopls@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp GO111MODULE=on go get -v \
     honnef.co/go/tools/...@latest \
     golang.org/x/tools/cmd/gorename@latest \
     golang.org/x/tools/cmd/goimports@latest \
@@ -69,12 +70,12 @@ RUN \
     github.com/go-delve/delve/cmd/dlv@latest \
     github.com/golang/protobuf/protoc-gen-go 2>&1 \
   # Build go tools without module support
-  && GOPATH=/tmp/gotools GO111MODULE=off go get -v github.com/alecthomas/gometalinter 2>&1 \
+  && GOPATH=/tmp/gotools/temp GO111MODULE=off go get -v github.com/alecthomas/gometalinter 2>&1 \
   # Build gocode-gomod
-  && GOPATH=/tmp/gotools GO111MODULE=off go get -x -d github.com/stamblerre/gocode 2>&1 \
-  && GOPATH=/tmp/gotools GO111MODULE=off go build -o gocode-gomod github.com/stamblerre/gocode \
+  && GOPATH=/tmp/gotools/temp GO111MODULE=off go get -x -d github.com/stamblerre/gocode 2>&1 \
+  && GOPATH=/tmp/gotools/temp GO111MODULE=off go build -o gocode-gomod github.com/stamblerre/gocode \
   # Install go tools
-  && mv /tmp/gotools/bin/* /usr/local/bin/ \
+  && mv /tmp/gotools/temp/bin/* /usr/local/bin/ \
   && mv /tmp/gotools/gocode-gomod /usr/local/bin/ \
   # Clean up go path
   && cd ~ \

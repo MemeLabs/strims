@@ -286,7 +286,7 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	client, err := d.dialer.ClientWithHostAddr(d.key.Public, candidate, vnic.SnippetPort)
+	client, err := d.dialer.ClientWithHostAddr(ctx, d.key.Public, candidate, vnic.SnippetPort)
 	if err != nil {
 		return nil
 	}

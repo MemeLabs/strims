@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		networkv1directory.RegisterDirectoryFrontendService(server, &directoryService{
 			app: params.App,
 		})
@@ -66,8 +66,8 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 	return ch, nil
 }
 
-func (s *directoryService) client(networkKey []byte) (*networkv1directory.DirectoryClient, error) {
-	client, err := s.app.Network().Dialer().Client(networkKey, networkKey, directory.AddressSalt)
+func (s *directoryService) client(ctx context.Context, networkKey []byte) (*networkv1directory.DirectoryClient, error) {
+	client, err := s.app.Network().Dialer().Client(ctx, networkKey, networkKey, directory.AddressSalt)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (s *directoryService) client(networkKey []byte) (*networkv1directory.Direct
 
 // Publish ...
 func (s *directoryService) Publish(ctx context.Context, r *networkv1directory.FrontendPublishRequest) (*networkv1directory.FrontendPublishResponse, error) {
-	client, err := s.client(r.NetworkKey)
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *directoryService) Publish(ctx context.Context, r *networkv1directory.Fr
 
 // Unpublish ...
 func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.FrontendUnpublishRequest) (*networkv1directory.FrontendUnpublishResponse, error) {
-	client, err := s.client(r.NetworkKey)
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.
 
 // Join ...
 func (s *directoryService) Join(ctx context.Context, r *networkv1directory.FrontendJoinRequest) (*networkv1directory.FrontendJoinResponse, error) {
-	client, err := s.client(r.NetworkKey)
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (s *directoryService) Join(ctx context.Context, r *networkv1directory.Front
 
 // Part ...
 func (s *directoryService) Part(ctx context.Context, r *networkv1directory.FrontendPartRequest) (*networkv1directory.FrontendPartResponse, error) {
-	client, err := s.client(r.NetworkKey)
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *directoryService) Part(ctx context.Context, r *networkv1directory.Front
 
 // Test ...
 func (s *directoryService) Test(ctx context.Context, r *networkv1directory.FrontendTestRequest) (*networkv1directory.FrontendTestResponse, error) {
-	client, err := s.app.Network().Dialer().Client(r.NetworkKey, r.NetworkKey, directory.AddressSalt)
+	client, err := s.app.Network().Dialer().Client(ctx, r.NetworkKey, r.NetworkKey, directory.AddressSalt)
 	if err != nil {
 		return nil, err
 	}

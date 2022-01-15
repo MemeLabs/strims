@@ -18,6 +18,11 @@ type Store struct {
 	store map[string]map[string][]byte
 }
 
+// Close ...
+func (s *Store) Close() error {
+	return nil
+}
+
 // CreateStoreIfNotExists ...
 func (s *Store) CreateStoreIfNotExists(table string) error {
 	if _, ok := s.store[table]; !ok {

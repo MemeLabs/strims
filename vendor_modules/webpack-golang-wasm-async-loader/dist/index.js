@@ -12,6 +12,7 @@ function loader(contents) {
             GOPATH: process.env.GOPATH,
             GOROOT: process.env.GOROOT,
             GOCACHE: path_1.join(__dirname, "./.gocache"),
+            GOMODCACHE: path_1.join(__dirname, "./.gocache"),
             GOOS: "js",
             GOARCH: "wasm",
         },

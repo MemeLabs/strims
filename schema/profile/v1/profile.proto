@@ -88,8 +88,24 @@ message Profile {
 }
 
 message ProfileSummary {
+  message RemoteAuth {
+    string server_url = 1;
+    bytes token = 2;
+    uint64 token_eol = 3;
+  }
+
+  message LocalAuth {
+    bool is_encrypted = 1;
+    bytes key = 2;
+  }
+
   uint64 id = 1;
   string name = 2;
+
+  oneof auth {
+    RemoteAuth remote = 1001;
+    LocalAuth local = 1002;
+  }
 }
 
 message ProfileID {

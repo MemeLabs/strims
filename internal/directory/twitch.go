@@ -113,7 +113,7 @@ func (t *twitchVODEmbedLoader) Load(ctx context.Context, ids []string) ([]*embed
 		return nil, err
 	}
 
-	userLogins := set.NewString(len(videos.Videos))
+	userLogins := set.New[string](len(videos.Videos))
 	for _, video := range videos.Videos {
 		userLogins.Insert(video.UserLogin)
 	}

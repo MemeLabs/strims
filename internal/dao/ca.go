@@ -146,7 +146,7 @@ func GetCertificateLogBySubject(s kv.Store, networkID uint64, subject string) (v
 		if err != nil {
 			return err
 		}
-		return tx.Get(prefixCertificateLogKey(mathutil.MaxUint64(ids...)), v)
+		return tx.Get(prefixCertificateLogKey(mathutil.Max(ids...)), v)
 	})
 	return
 }

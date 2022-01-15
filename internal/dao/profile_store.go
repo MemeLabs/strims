@@ -33,24 +33,8 @@ type ProfileStore struct {
 }
 
 // Init ...
-func (s *ProfileStore) Init(profile *profilev1.Profile) error {
-	if err := s.store.CreateStoreIfNotExists(s.name); err != nil {
-		return err
-	}
-	return s.store.Update(s.name, func(tx kv.BlobTx) error {
-		b, err := MarshalStorageKey(s.key)
-		if err != nil {
-			return err
-		}
-		if err := tx.Put("key", b); err != nil {
-			return err
-		}
-
-		if err := put(tx, s.key, "profile", profile); err != nil {
-			return err
-		}
-		return nil
-	})
+func (s *ProfileStore) Init() error {
+	return s.store.CreateStoreIfNotExists(s.name)
 }
 
 // Delete ...

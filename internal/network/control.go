@@ -335,7 +335,7 @@ func (t *control) renewCertificate(ctx context.Context, network *networkv1.Netwo
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := dao.NetworkKey(network)
-			client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
+			client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
 			if err != nil {
 				return nil, err
 			}
@@ -404,10 +404,6 @@ func (t *control) startNetworks() {
 	}
 
 	for _, n := range networks {
-		t.networks[n.Id] = &network{network: n}
-		t.certificates.Insert(n)
-		t.dialer.replaceOrInsertNetwork(n)
-
 		cert := dao.CertificateRoot(n.Certificate)
 
 		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
@@ -419,6 +415,10 @@ func (t *control) startNetworks() {
 			)
 			continue
 		}
+
+		t.networks[n.Id] = &network{network: n}
+		t.certificates.Insert(n)
+		t.dialer.replaceOrInsertNetwork(n)
 
 		t.logger.Info(
 			"network started",
@@ -550,6 +550,10 @@ func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 		return errors.New("duplicate network id")
 	}
 
+	if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
+		return err
+	}
+
 	err := t.store.Update(func(tx kv.RWTx) error {
 		for _, l := range certLogs {
 			if err := dao.InsertCertificateLog(tx, l); err != nil {
@@ -566,10 +570,6 @@ func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 		return dao.UpsertNetwork(tx, n)
 	})
 	if err != nil {
-		return err
-	}
-
-	if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
 		return err
 	}
 
@@ -594,6 +594,10 @@ func (t *control) Remove(id uint64) error {
 	}
 	networkKey := dao.NetworkKey(n.network)
 
+	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n.network)); err != nil {
+		return err
+	}
+
 	err := t.store.Update(func(tx kv.RWTx) error {
 		if err := dao.DeleteCertificateLogByNetwork(tx, id); err != nil {
 			return err
@@ -606,10 +610,6 @@ func (t *control) Remove(id uint64) error {
 
 	for _, p := range t.peers {
 		p.closeNetwork(networkKey)
-	}
-
-	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n.network)); err != nil {
-		return err
 	}
 
 	t.dialer.removeNetwork(n.network)

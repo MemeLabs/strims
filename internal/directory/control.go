@@ -165,7 +165,7 @@ func (t *control) ping(ctx context.Context) {
 
 	t.runners.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
 		r := i.(*runner)
-		c, dc, err := t.client(r.key)
+		c, dc, err := t.client(ctx, r.key)
 		if err != nil {
 			r.logger.Debug("directory ping failed", zap.Error(err))
 			return true
@@ -182,8 +182,8 @@ func (t *control) ping(ctx context.Context) {
 	})
 }
 
-func (t *control) client(networkKey []byte) (*network.RPCClient, *networkv1directory.DirectoryClient, error) {
-	client, err := t.network.Dialer().Client(networkKey, networkKey, AddressSalt)
+func (t *control) client(ctx context.Context, networkKey []byte) (*network.RPCClient, *networkv1directory.DirectoryClient, error) {
+	client, err := t.network.Dialer().Client(ctx, networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -203,7 +203,7 @@ func (t *control) DeleteSnippet(swarmID ppspp.SwarmID) {
 
 // Publish ...
 func (t *control) Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error) {
-	c, dc, err := t.client(networkKey)
+	c, dc, err := t.client(ctx, networkKey)
 	if err != nil {
 		return 0, err
 	}
@@ -216,7 +216,7 @@ func (t *control) Publish(ctx context.Context, listing *networkv1directory.Listi
 
 // Unpublish ...
 func (t *control) Unpublish(ctx context.Context, id uint64, networkKey []byte) error {
-	c, dc, err := t.client(networkKey)
+	c, dc, err := t.client(ctx, networkKey)
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (t *control) Unpublish(ctx context.Context, id uint64, networkKey []byte) e
 
 // Join ...
 func (t *control) Join(ctx context.Context, id uint64, networkKey []byte) error {
-	c, dc, err := t.client(networkKey)
+	c, dc, err := t.client(ctx, networkKey)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (t *control) Join(ctx context.Context, id uint64, networkKey []byte) error 
 
 // Part ...
 func (t *control) Part(ctx context.Context, id uint64, networkKey []byte) error {
-	c, dc, err := t.client(networkKey)
+	c, dc, err := t.client(ctx, networkKey)
 	if err != nil {
 		return err
 	}

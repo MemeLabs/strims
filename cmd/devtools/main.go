@@ -14,12 +14,12 @@ import (
 
 	devtoolsv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1"
 	ppsppv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/websocket"
@@ -88,7 +88,7 @@ func (s *devToolsServer) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	server := rpc.NewServer(s.logger, &rpc.RWDialer{
 		Logger:     s.logger,
-		ReadWriter: vnic.NewWSReadWriter(c),
+		ReadWriter: httputil.NewWSReadWriter(c),
 	})
 
 	devtoolsv1.RegisterDevToolsService(server, s.devTools)

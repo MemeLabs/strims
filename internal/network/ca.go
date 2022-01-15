@@ -86,7 +86,7 @@ func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network)
 		logutil.ByteHex("network", config.Key.Public),
 	)
 
-	server, err := t.dialer.Server(config.Key.Public, config.Key, AddressSalt)
+	server, err := t.dialer.Server(ctx, config.Key.Public, config.Key, AddressSalt)
 	if err != nil {
 		t.logger.Error(
 			"starting certificate authority failed",
@@ -113,7 +113,7 @@ func (t *ca) handleNetworkStop(network *networkv1.Network) {
 // ForwardRenewRequest ...
 func (t *ca) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 	networkKey := networkKeyForCertificate(cert)
-	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
+	client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, err
 	}

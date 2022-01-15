@@ -38,7 +38,7 @@ func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
 func (s *snippetServer) start(ctx context.Context, network *networkv1.Network) {
 	networkKey := dao.NetworkKey(network)
 
-	server, err := s.dialer.ServerWithHostAddr(networkKey, vnic.SnippetPort)
+	server, err := s.dialer.ServerWithHostAddr(ctx, networkKey, vnic.SnippetPort)
 	if err != nil {
 		panic(err)
 	}

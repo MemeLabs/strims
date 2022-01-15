@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		videov1.RegisterEgressService(server, &videoEgressService{
 			logger: params.Logger,
 			app:    params.App,

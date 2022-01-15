@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
@@ -22,12 +24,12 @@ import (
 var _ Dialer = &dialer{}
 
 type Dialer interface {
-	ServerDialer(networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error)
-	Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
-	ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server, error)
-	ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error)
-	Client(networkKey, key, salt []byte) (*RPCClient, error)
-	ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error)
+	ServerDialer(ctx context.Context, networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error)
+	Server(ctx context.Context, networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
+	ServerWithHostAddr(ctx context.Context, networkKey []byte, port uint16) (*rpc.Server, error)
+	ClientDialer(ctx context.Context, networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error)
+	Client(ctx context.Context, networkKey, key, salt []byte) (*RPCClient, error)
+	ClientWithHostAddr(ctx context.Context, networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error)
 }
 
 // newDialer ...
@@ -41,11 +43,12 @@ func newDialer(logger *zap.Logger, vpn *vpn.Host, key *key.Key) *dialer {
 
 // dialer ...
 type dialer struct {
-	logger *zap.Logger
-	vpn    *vpn.Host
-	key    *key.Key
-	lock   sync.Mutex
-	certs  llrb.LLRB
+	logger    *zap.Logger
+	vpn       *vpn.Host
+	key       *key.Key
+	lock      sync.Mutex
+	certs     llrb.LLRB
+	certAdded event.Observer
 }
 
 // replaceOrInsertNetwork ...
@@ -68,42 +71,56 @@ func (t *dialer) replaceOrInsertNetwork(network *networkv1.Network) {
 	cert.ParentOneof = &certificate.Certificate_Parent{Parent: network.Certificate}
 
 	t.lock.Lock()
-	defer t.lock.Unlock()
-
 	it := t.certs.Get(&hostCertKey{dao.NetworkKey(network)})
 	if it == nil {
 		t.certs.ReplaceOrInsert(&hostCert{cert: cert})
 	} else {
 		it.(*hostCert).Store(cert)
 	}
+	t.lock.Unlock()
+
+	if it == nil {
+		t.certAdded.Emit(struct{}{})
+	}
 }
 
 // removeNetwork ...
 func (t *dialer) removeNetwork(network *networkv1.Network) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
-
 	t.certs.Delete(&hostCertKey{dao.NetworkKey(network)})
+	t.lock.Unlock()
 }
 
-func (t *dialer) hostCertAndVPNNode(networkKey []byte) (*hostCert, *vpn.Node, error) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+func (t *dialer) hostCertAndVPNNode(ctx context.Context, networkKey []byte) (*hostCert, *vpn.Node, error) {
+	ch := make(chan struct{}, 1)
+	t.certAdded.Notify(ch)
+	defer t.certAdded.StopNotifying(ch)
 
-	cert := t.certs.Get(&hostCertKey{networkKey})
-	if cert == nil {
-		return nil, nil, errors.New("host certificate not found")
+	for {
+		t.lock.Lock()
+		cert := t.certs.Get(&hostCertKey{networkKey})
+		t.lock.Unlock()
+
+		if cert == nil {
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-ch:
+				continue
+			}
+		}
+
+		node, ok := t.vpn.Node(networkKey)
+		if !ok {
+			return nil, nil, errors.New("network not found")
+		}
+		return cert.(*hostCert), node, nil
 	}
-	node, ok := t.vpn.Node(networkKey)
-	if !ok {
-		return nil, nil, errors.New("network not found")
-	}
-	return cert.(*hostCert), node, nil
 }
 
 // ServerDialer ...
-func (t *dialer) ServerDialer(networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error) {
-	cert, node, err := t.hostCertAndVPNNode(networkKey)
+func (t *dialer) ServerDialer(ctx context.Context, networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error) {
+	cert, node, err := t.hostCertAndVPNNode(ctx, networkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +135,8 @@ func (t *dialer) ServerDialer(networkKey []byte, port uint16, publisher HostAddr
 }
 
 // Server ...
-func (t *dialer) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error) {
-	dialer, err := t.ServerDialer(networkKey, 0, &DHTHostAddrPublisher{key, salt})
+func (t *dialer) Server(ctx context.Context, networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error) {
+	dialer, err := t.ServerDialer(ctx, networkKey, 0, &DHTHostAddrPublisher{key, salt})
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +144,8 @@ func (t *dialer) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Serv
 }
 
 // ServerWithHostAddr ...
-func (t *dialer) ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server, error) {
-	dialer, err := t.ServerDialer(networkKey, port, nil)
+func (t *dialer) ServerWithHostAddr(ctx context.Context, networkKey []byte, port uint16) (*rpc.Server, error) {
+	dialer, err := t.ServerDialer(ctx, networkKey, port, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +153,8 @@ func (t *dialer) ServerWithHostAddr(networkKey []byte, port uint16) (*rpc.Server
 }
 
 // ClientDialer ...
-func (t *dialer) ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error) {
-	cert, node, err := t.hostCertAndVPNNode(networkKey)
+func (t *dialer) ClientDialer(ctx context.Context, networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error) {
+	cert, node, err := t.hostCertAndVPNNode(ctx, networkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -151,8 +168,8 @@ func (t *dialer) ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc
 }
 
 // Client ...
-func (t *dialer) Client(networkKey, key, salt []byte) (*RPCClient, error) {
-	dialer, err := t.ClientDialer(networkKey, &DHTHostAddrResolver{key, salt})
+func (t *dialer) Client(ctx context.Context, networkKey, key, salt []byte) (*RPCClient, error) {
+	dialer, err := t.ClientDialer(ctx, networkKey, &DHTHostAddrResolver{key, salt})
 	if err != nil {
 		return nil, err
 	}
@@ -160,8 +177,8 @@ func (t *dialer) Client(networkKey, key, salt []byte) (*RPCClient, error) {
 }
 
 // ClientWithHostAddr ...
-func (t *dialer) ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error) {
-	dialer, err := t.ClientDialer(networkKey, &StaticHostAddrResolver{HostAddr{hostID, port}})
+func (t *dialer) ClientWithHostAddr(ctx context.Context, networkKey []byte, hostID kademlia.ID, port uint16) (*RPCClient, error) {
+	dialer, err := t.ClientDialer(ctx, networkKey, &StaticHostAddrResolver{HostAddr{hostID, port}})
 	if err != nil {
 		return nil, err
 	}

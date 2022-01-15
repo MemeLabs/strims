@@ -7,6 +7,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"reflect"
+	"unsafe"
 )
 
 // constants ...
@@ -110,6 +112,14 @@ func (d ID) Bytes(b []byte) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func (d *ID) Binary() (b []byte) {
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	h.Data = uintptr(unsafe.Pointer(d))
+	h.Len = IDLength
+	h.Cap = IDLength
+	return
 }
 
 // String ...

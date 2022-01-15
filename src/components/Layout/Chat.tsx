@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
+import { BsArrowBarLeft } from "react-icons/bs";
 import { FiMenu } from "react-icons/fi";
 import { useToggle } from "react-use";
 
@@ -65,7 +65,7 @@ const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 }) => (
   <header className="layout_chat__header">
     <button className="layout_chat__toggle_off" onClick={onToggleClick}>
-      <BsArrowBarRight size={22} />
+      <BsArrowBarLeft size={22} />
     </button>
     <RoomDropdown onChange={onRoomChange} defaultSelection={selectedRoom} />
   </header>
