@@ -29,8 +29,12 @@ func (l *lru) Each(it func(i keyer) bool) {
 	})
 }
 
-func (l *lru) PeekRecentlyTouched(eol timeutil.Time) lruIterator {
-	return lruIterator{next: l.head, eol: eol}
+func (l *lru) IterateTouchedAfter(eol timeutil.Time) lruForwardIterator {
+	return lruForwardIterator{next: l.head, eol: eol}
+}
+
+func (l *lru) IterateTouchedBefore(eol timeutil.Time) lruReverseIterator {
+	return lruReverseIterator{next: l.tail, eol: eol}
 }
 
 func (l *lru) GetOrInsert(u keyer) keyer {
@@ -119,13 +123,13 @@ func (i *lruItem) Less(o llrb.Item) bool {
 	return keyerLess(i.item, o)
 }
 
-type lruIterator struct {
+type lruForwardIterator struct {
 	cur  *lruItem
 	next *lruItem
 	eol  timeutil.Time
 }
 
-func (l *lruIterator) Next() bool {
+func (l *lruForwardIterator) Next() bool {
 	l.cur = l.next
 	if l.cur == nil || l.eol.After(l.cur.time) {
 		return false
@@ -135,7 +139,27 @@ func (l *lruIterator) Next() bool {
 	return true
 }
 
-func (l *lruIterator) Value() keyer {
+func (l *lruForwardIterator) Value() keyer {
+	return l.cur.item
+}
+
+type lruReverseIterator struct {
+	cur  *lruItem
+	next *lruItem
+	eol  timeutil.Time
+}
+
+func (l *lruReverseIterator) Next() bool {
+	l.cur = l.next
+	if l.cur == nil || l.eol.Before(l.cur.time) {
+		return false
+	}
+	l.next = l.cur.prev
+
+	return true
+}
+
+func (l *lruReverseIterator) Value() keyer {
 	return l.cur.item
 }
 

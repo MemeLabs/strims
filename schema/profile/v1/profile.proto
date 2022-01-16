@@ -2,21 +2,11 @@ syntax = "proto3";
 
 package strims.profile.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1;profile";
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1;profilev1";
 option java_package = "gg.strims.profile.v1";
 option swift_prefix = "SPF";
 
 import "type/key.proto";
-
-message CreateProfileRequest {
-  string name = 1;
-  string password = 2;
-}
-
-message CreateProfileResponse {
-  string session_id = 1;
-  Profile profile = 2;
-}
 
 message UpdateProfileRequest {
   string name = 1;
@@ -27,43 +17,9 @@ message UpdateProfileResponse {
   Profile profile = 1;
 }
 
-message DeleteProfileRequest {
-  uint64 id = 1;
-}
-
-message DeleteProfileResponse {}
-
-message LoadProfileRequest {
-  uint64 id = 1;
-  string name = 2;
-  string password = 3;
-}
-
-message LoadProfileResponse {
-  string session_id = 1;
-  Profile profile = 2;
-}
-
-message GetProfileRequest {
-  string session_id = 1;
-}
+message GetProfileRequest {}
 
 message GetProfileResponse {
-  Profile profile = 2;
-}
-
-message ListProfilesRequest {}
-
-message ListProfilesResponse {
-  repeated ProfileSummary profiles = 1;
-}
-
-message LoadSessionRequest {
-  string session_id = 1;
-}
-
-message LoadSessionResponse {
-  string session_id = 1;
   Profile profile = 2;
 }
 
@@ -80,6 +36,11 @@ message StorageKey {
   }
 }
 
+enum KDFType {
+  KDF_TYPE_UNDEFINED = 0;
+  KDF_TYPE_PBKDF2_SHA256 = 1;
+}
+
 message Profile {
   uint64 id = 1;
   string name = 2;
@@ -87,42 +48,11 @@ message Profile {
   strims.type.Key key = 4;
 }
 
-message ProfileSummary {
-  message RemoteAuth {
-    string server_url = 1;
-    bytes token = 2;
-    uint64 token_eol = 3;
-  }
-
-  message LocalAuth {
-    bool is_encrypted = 1;
-    bytes key = 2;
-  }
-
-  uint64 id = 1;
-  string name = 2;
-
-  oneof auth {
-    RemoteAuth remote = 1001;
-    LocalAuth local = 1002;
-  }
-}
-
 message ProfileID {
   uint64 next_id = 1;
 }
 
-enum KDFType {
-  KDF_TYPE_UNDEFINED = 0;
-  KDF_TYPE_PBKDF2_SHA256 = 1;
-}
-
-service ProfileService {
-  rpc Create(CreateProfileRequest) returns (CreateProfileResponse);
-  rpc Load(LoadProfileRequest) returns (LoadProfileResponse);
+service ProfileFrontend {
   rpc Get(GetProfileRequest) returns (GetProfileResponse);
   rpc Update(UpdateProfileRequest) returns (UpdateProfileResponse);
-  rpc Delete(DeleteProfileRequest) returns (DeleteProfileResponse);
-  rpc List(ListProfilesRequest) returns (ListProfilesResponse);
-  rpc LoadSession(LoadSessionRequest) returns (LoadSessionResponse);
 }

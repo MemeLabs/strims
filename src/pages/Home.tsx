@@ -7,7 +7,6 @@ import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
-import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
 import { certificateRoot } from "../lib/certificate";
 import * as fmp4 from "../lib/media/fmp4";
@@ -23,7 +22,6 @@ interface PProfDownload {
 
 const HomePage: React.FC = () => {
   const { colorScheme, setColorScheme } = useTheme();
-  // const [{ profile }, { clearProfile }] = useProfile();
 
   const client = useClient();
 

@@ -1,13 +1,10 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { FiUser } from "react-icons/fi";
 import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
-// import { useCall } from "../contexts/FrontendApi";
-// import { useClient } from "../contexts/FrontendApi";
-// import { useProfile } from "../contexts/Profile";
 import { useSession } from "../contexts/Session";
 import useQuery from "../hooks/useQuery";
 import useReady from "../hooks/useReady";
@@ -89,10 +86,6 @@ const LoginPage: React.FC = () => {
               onClick={setSelectedProfile}
             />
           ))}
-          {/* <Link className="login_profile_list__item" to="/signup">
-            <FiUserPlus className="login_profile_list__icon" />
-            <span className="login_profile_list__text">Create Profile</span>
-          </Link> */}
           <Link to="/signup">Create Profile</Link>
           <button onClick={() => setSelectedProfile(new LinkedProfile())}>New Login</button>
         </div>

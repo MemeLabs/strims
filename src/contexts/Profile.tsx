@@ -1,9 +1,7 @@
 import React from "react";
 
-import { FrontendClient } from "../apis/client";
 import { Profile } from "../apis/strims/profile/v1/profile";
-import { CallHookDispatcher } from "./Api";
-import { useLazyCall } from "./FrontendApi";
+import { useCall } from "./FrontendApi";
 
 export interface UseProfileState {
   loading: boolean;
@@ -18,8 +16,6 @@ const initialState: UseProfileState = {
 };
 
 export type UseProfileActions = {
-  createProfile: CallHookDispatcher<FrontendClient, "profile", "create">;
-  loadProfile: CallHookDispatcher<FrontendClient, "profile", "load">;
   clearProfile: () => void;
   clearError: () => void;
 };
@@ -29,37 +25,10 @@ const ProfileContext =
     null
   );
 
-interface LoginResponse {
-  profile?: Profile | null;
-  sessionId?: string | null;
-}
-
 export const useProfile = (): [UseProfileState, UseProfileActions] => {
   const [state, setState] = React.useContext(ProfileContext);
 
-  const onComplete = ({ profile, sessionId }: LoginResponse) => {
-    sessionStorage.setItem("sessionId", sessionId);
-    setState((prev) => ({
-      ...prev,
-      loading: false,
-      error: null,
-      profile,
-    }));
-  };
-
-  const onError = (error: Error) =>
-    setState((prev) => ({
-      ...prev,
-      loading: false,
-      profile: null,
-      error,
-    }));
-
-  const [, createProfile] = useLazyCall("profile", "create", { onComplete, onError });
-  const [, loadProfile] = useLazyCall("profile", "load", { onComplete, onError });
-
   const clearProfile = () => {
-    sessionStorage.removeItem("sessionId");
     setState((prev) => ({
       ...prev,
       profile: null,
@@ -73,8 +42,6 @@ export const useProfile = (): [UseProfileState, UseProfileActions] => {
     }));
 
   const actions = {
-    createProfile,
-    loadProfile,
     clearProfile,
     clearError,
   };
@@ -91,19 +58,10 @@ export const Provider: React.FC = ({ children }) => {
       profile,
     }));
 
-  const [, loadSession] = useLazyCall("profile", "loadSession", {
+  useCall("profile", "get", {
     onComplete: ({ profile }) => handleDone(profile),
     onError: () => handleDone(),
   });
-
-  React.useEffect(() => {
-    const sessionId = sessionStorage.getItem("sessionId");
-    if (sessionId) {
-      void loadSession({ sessionId });
-    } else {
-      handleDone();
-    }
-  }, []);
 
   return <ProfileContext.Provider value={[state, setState]}>{children}</ProfileContext.Provider>;
 };

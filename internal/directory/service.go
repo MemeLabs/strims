@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/set"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -31,6 +32,7 @@ const (
 	minPingInterval   = time.Minute * 10
 	maxPingInterval   = time.Minute * 14
 	embedLoadInterval = time.Second * 15
+	refreshInterval   = time.Minute
 )
 
 // AddressSalt ...
@@ -79,6 +81,7 @@ type directoryService struct {
 	broadcastTicker   timeutil.Ticker
 	embedLoadTicker   timeutil.Ticker
 	lastBroadcastTime timeutil.Time
+	lastRefreshTime   timeutil.Time
 	eventWriter       *protoutil.ChunkStreamWriter
 	embedLoader       *embedLoader
 	lock              sync.Mutex
@@ -113,6 +116,7 @@ func (d *directoryService) Run(ctx context.Context) error {
 func (d *directoryService) Close() {
 	d.closeOnce.Do(func() {
 		d.broadcastTicker.Stop()
+		d.embedLoadTicker.Stop()
 		close(d.done)
 	})
 }
@@ -123,7 +127,28 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 	var events []*networkv1directory.Event
 
-	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
+	if d.lastRefreshTime.Add(refreshInterval).Before(now) {
+		for it := d.listings.IterateTouchedBefore(d.lastBroadcastTime); it.Next(); {
+			l := it.Value().(*listing)
+			events = append(events, &networkv1directory.Event{
+				Body: &networkv1directory.Event_ListingChange_{
+					ListingChange: &networkv1directory.Event_ListingChange{
+						Id:      l.id,
+						Listing: l.listing,
+						Snippet: l.snippet,
+					},
+				},
+			})
+		}
+
+		for it := d.users.IterateTouchedBefore(d.lastBroadcastTime); it.Next(); {
+			events = d.appendUserEvent(events, it.Value().(*user))
+		}
+
+		d.lastRefreshTime = now
+	}
+
+	for it := d.listings.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
 		l := it.Value().(*listing)
 
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
@@ -157,27 +182,8 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		}
 	}
 
-	for it := d.users.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
-		u := it.Value().(*user)
-
-		var ids []uint64
-		u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-			it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-				ids = append(ids, it.(*listing).id)
-				return true
-			})
-			return true
-		})
-
-		events = append(events, &networkv1directory.Event{
-			Body: &networkv1directory.Event_ViewerStateChange_{
-				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
-					Subject:    u.certificate.Subject,
-					Online:     true,
-					ViewingIds: ids,
-				},
-			},
-		})
+	for it := d.users.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
+		events = d.appendUserEvent(events, it.Value().(*user))
 	}
 
 	eol := now.Add(-sessionTimeout)
@@ -222,6 +228,27 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 	d.lastBroadcastTime = now
 	return nil
+}
+
+func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u *user) []*networkv1directory.Event {
+	ids := set.New[uint64](8)
+	u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+		it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+			ids.Insert(it.(*listing).id)
+			return true
+		})
+		return true
+	})
+
+	return append(events, &networkv1directory.Event{
+		Body: &networkv1directory.Event_ViewerStateChange_{
+			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+				Subject:    u.certificate.Subject,
+				Online:     true,
+				ViewingIds: ids.Slice(),
+			},
+		},
+	})
 }
 
 func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) error {

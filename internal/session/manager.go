@@ -7,7 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/peer"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -20,7 +20,7 @@ type VPNFunc func(key *key.Key) (*vpn.Host, error)
 type Session struct {
 	// maybe attached clients? or a count at least?
 
-	Profile *profile.Profile
+	Profile *profilev1.Profile
 	Store   *dao.ProfileStore
 	App     app.Control
 }

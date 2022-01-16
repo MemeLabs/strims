@@ -2,7 +2,7 @@ module github.com/MemeLabs/go-ppspp
 
 go 1.18
 
-replace github.com/MemeLabs/protobuf => ./vendor_modules/protobuf
+// replace github.com/MemeLabs/protobuf => ./vendor_modules/protobuf
 
 require (
 	github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13
@@ -86,7 +86,10 @@ require (
 	mvdan.cc/xurls/v2 v2.3.0
 )
 
-require golang.org/x/exp v0.0.0-20211216164055-b2b84827b756
+require (
+	golang.org/x/exp v0.0.0-20211216164055-b2b84827b756
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+)
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
@@ -134,5 +137,4 @@ require (
 	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa // indirect
 	google.golang.org/grpc v1.43.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

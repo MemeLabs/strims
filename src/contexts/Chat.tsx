@@ -426,7 +426,7 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
       networkKey,
       id: directoryListingId,
     };
-    void client.directory.join(req);
+    void client.directory.join(req, { timeout: 60000 });
     return () => void client.directory.part(req);
   }, [networkKey, directoryListingId]);
 

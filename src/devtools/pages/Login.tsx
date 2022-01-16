@@ -9,7 +9,6 @@ import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc"
 import { registerNetworkServiceService } from "../../apis/strims/network/v1/network_rpc";
 import LandingPageLayout from "../../components/LandingPageLayout";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
-import { Provider as ProfileProvider } from "../../contexts/Profile";
 import { Provider as ThemeProvider } from "../../contexts/Theme";
 import ChatService from "../mocks/chat/service";
 import NetworkService from "../mocks/network/service";
@@ -30,13 +29,11 @@ const LayoutTest: React.FC = () => {
 
   return (
     <ApiProvider value={client}>
-      <ProfileProvider>
-        <ThemeProvider>
-          <LandingPageLayout>
-            <div className="login_profile_list">foo</div>
-          </LandingPageLayout>
-        </ThemeProvider>
-      </ProfileProvider>
+      <ThemeProvider>
+        <LandingPageLayout>
+          <div className="login_profile_list">foo</div>
+        </LandingPageLayout>
+      </ThemeProvider>
     </ApiProvider>
   );
 };

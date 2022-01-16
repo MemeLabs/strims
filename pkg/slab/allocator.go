@@ -47,11 +47,11 @@ func (b *freeList) Alloc() ref {
 		b.head = b.refs[head]
 		b.refs[head] = nilRef
 	}
-	return ref(i)<<6 | ref(ii)
+	return i<<6 | ref(ii)
 }
 
 func (b *freeList) Free(n ref) {
-	i := ref(n >> 6)
+	i := n >> 6
 	ii := n & 0x3f
 	b.bitmaps[i] |= 1 << ii
 	if b.head != i && b.refs[i] == nilRef {

@@ -12,7 +12,7 @@ import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap
 import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
 import { NetworkServiceClient } from "./strims/network/v1/network_rpc";
 import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc";
-import { ProfileServiceClient } from "./strims/profile/v1/profile_rpc";
+import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc";
 import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc";
 import { VideoChannelFrontendClient } from "./strims/video/v1/channel_rpc";
 import { EgressClient as VideoEgressClient } from "./strims/video/v1/egress_rpc";
@@ -28,7 +28,7 @@ export class FrontendClient {
   public directory: DirectoryFrontendClient;
   public network: NetworkServiceClient;
   public notification: NotificationFrontendClient;
-  public profile: ProfileServiceClient;
+  public profile: ProfileFrontendClient;
   public videoCapture: VideoCaptureClient;
   public videoChannel: VideoChannelFrontendClient;
   public videoEgress: VideoEgressClient;
@@ -45,7 +45,7 @@ export class FrontendClient {
     this.directory = new DirectoryFrontendClient(host);
     this.network = new NetworkServiceClient(host);
     this.notification = new NotificationFrontendClient(host);
-    this.profile = new ProfileServiceClient(host);
+    this.profile = new ProfileFrontendClient(host);
     this.videoCapture = new VideoCaptureClient(host);
     this.videoChannel = new VideoChannelFrontendClient(host);
     this.videoEgress = new VideoEgressClient(host);
