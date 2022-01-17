@@ -186,9 +186,11 @@ func (s *chatServer) Sync() {
 	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 }
 
-func (s *chatServer) Readers() (events, assets *protoutil.ChunkStreamReader) {
+func (s *chatServer) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader) {
 	s.eventSwarm.Reader().Unread()
 	s.assetSwarm.Reader().Unread()
+	s.eventSwarm.Reader().SetReadStopper(ctx.Done())
+	s.assetSwarm.Reader().SetReadStopper(ctx.Done())
 	events = protoutil.NewChunkStreamReader(s.eventSwarm.Reader(), eventChunkSize)
 	assets = protoutil.NewChunkStreamReader(s.assetSwarm.Reader(), assetChunkSize)
 	return

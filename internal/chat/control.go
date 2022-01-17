@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -198,7 +199,12 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 					} else if err != nil {
 						return fmt.Errorf("reading event: %w", err)
 					}
-					events <- e
+
+					select {
+					case events <- e:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
 				}
 			})
 
@@ -209,7 +215,14 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 					if err != nil {
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}
-					assets <- b
+
+					log.Printf("have asset bundle will emit... %p", assets)
+					select {
+					case assets <- b:
+						log.Println("emitted asset bundle")
+					case <-ctx.Done():
+						return ctx.Err()
+					}
 				}
 			})
 

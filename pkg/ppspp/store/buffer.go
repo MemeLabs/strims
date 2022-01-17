@@ -6,6 +6,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/byterope"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
@@ -50,6 +51,7 @@ type Buffer struct {
 	readyOnce sync.Once
 	ready     chan struct{}
 	readable  chan error
+	stopper   ioutil.Stopper
 	next      binmap.Bin
 	prev      binmap.Bin
 	off       uint64
@@ -181,12 +183,11 @@ func (s *Buffer) Unread() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.next == binmap.None || s.prev == s.tail() {
+	if s.next == binmap.None {
 		return
 	}
 
-	s.prev = s.bins.FindFilledAfter(s.tail())
-	s.next = s.bins.FindEmptyAfter(s.prev)
+	s.prev = s.tail()
 	s.off = binByte(s.prev, s.chunkSize)
 
 	s.swapReadable(nil)
@@ -206,6 +207,7 @@ func (s *Buffer) Recover() (uint64, error) {
 	s.off = binByte(next, s.chunkSize)
 
 	s.prev = next
+	s.head = next + binmap.Bin(s.size*2)
 	s.bins.FillBefore(next)
 
 	next = s.bins.FindEmptyAfter(next)
@@ -286,14 +288,23 @@ func (s *Buffer) Offset() uint64 {
 	return s.off
 }
 
-// Read ...
+// SetReadStopper ...
+func (s *Buffer) SetReadStopper(ch ioutil.Stopper) {
+	s.stopper = ch
+}
+
 func (s *Buffer) Read(p []byte) (int, error) {
 	s.lock.Lock()
 	for s.next == s.prev {
 		s.lock.Unlock()
 
-		if err := <-s.readable; err != nil {
-			return 0, err
+		select {
+		case err := <-s.readable:
+			if err != nil {
+				return 0, err
+			}
+		case <-s.stopper:
+			return 0, ioutil.ErrStopped
 		}
 
 		s.lock.Lock()

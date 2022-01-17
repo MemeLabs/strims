@@ -104,7 +104,7 @@ func (r *runner) Readers(ctx context.Context) (events, assets *protoutil.ChunkSt
 	}
 
 	if r.server != nil {
-		events, assets = r.server.Readers()
+		events, assets = r.server.Readers(ctx)
 		return
 	}
 

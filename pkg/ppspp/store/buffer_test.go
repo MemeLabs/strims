@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -189,4 +190,15 @@ func TestBufferRecover(t *testing.T) {
 	n, err = b.Read(dst)
 	assert.EqualValues(t, 16, n)
 	assert.NoError(t, err)
+}
+
+func TestBufferReadStop(t *testing.T) {
+	b, _ := NewBuffer(1024, 16)
+
+	ch := make(chan struct{})
+	close(ch)
+
+	b.SetReadStopper(ch)
+	_, err := b.Read(nil)
+	assert.ErrorIs(t, err, ioutil.ErrStopped)
 }
