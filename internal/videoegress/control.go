@@ -18,7 +18,7 @@ import (
 
 // ControlBase ...
 type ControlBase interface {
-	OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error)
+	OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error)
 }
 
 // NewControl ...
@@ -56,21 +56,26 @@ func (t *control) close() {
 
 }
 
-func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, error) {
+func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, bool, error) {
 	uri, err := ppspp.ParseURI(swarmURI)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
+	}
+
+	transferID, swarm, ok := t.transfer.Find(uri.ID, nil)
+	if ok {
+		return transferID, swarm, false, nil
 	}
 
 	opt := uri.Options.SwarmOptions()
 	opt.LiveWindow = (32 * 1024 * 1024) / opt.ChunkSize
 
-	swarm, err := ppspp.NewSwarm(uri.ID, opt)
+	swarm, err = ppspp.NewSwarm(uri.ID, opt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
-	transferID := t.transfer.Add(swarm, []byte{})
+	transferID = t.transfer.Add(swarm, nil)
 	for _, k := range networkKeys {
 		t.logger.Debug(
 			"publishing transfer",
@@ -80,40 +85,48 @@ func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Sw
 		t.transfer.Publish(transferID, k)
 	}
 
-	return transferID, swarm, nil
+	return transferID, swarm, true, nil
 }
 
 // OpenStream ...
-func (t *control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
-	transferID, swarm, err := t.open(swarmURI, networkKeys)
+func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
+	transferID, swarm, created, err := t.open(swarmURI, networkKeys)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	b := swarm.Reader()
+	b.Unread()
+	b.SetReadStopper(ctx.Done())
 
 	r := &VideoReader{
 		logger: t.logger.With(
 			logutil.ByteHex("transfer", transferID),
 			zap.Stringer("swarm", swarm.ID()),
 		),
-		transfer:   t.transfer,
-		transferID: transferID,
-		b:          swarm.Reader(),
+		transfer:      t.transfer,
+		transferID:    transferID,
+		removeOnClose: created,
+		b:             b,
 	}
 	return transferID, r, nil
 }
 
 // VideoReader ...
 type VideoReader struct {
-	logger     *zap.Logger
-	transfer   transfer.Control
-	transferID []byte
-	b          *store.Buffer
-	r          *chunkstream.Reader
+	logger        *zap.Logger
+	transfer      transfer.Control
+	transferID    []byte
+	removeOnClose bool
+	b             *store.Buffer
+	r             *chunkstream.Reader
 }
 
 // Close ...
 func (r *VideoReader) Close() error {
-	r.transfer.Remove(r.transferID)
+	if r.removeOnClose {
+		r.transfer.Remove(r.transferID)
+	}
 	return nil
 }
 

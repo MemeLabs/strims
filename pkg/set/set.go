@@ -20,6 +20,11 @@ func (s *Set[T]) Insert(v T) {
 	}
 }
 
+func (s *Set[T]) Has(v T) bool {
+	_, ok := s.values[v]
+	return ok
+}
+
 func (s *Set[T]) Slice() []T {
 	vs := make([]T, 0, len(s.values))
 	for v := range s.values {

@@ -139,6 +139,14 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 					},
 				},
 			})
+			events = append(events, &networkv1directory.Event{
+				Body: &networkv1directory.Event_ViewerCountChange_{
+					ViewerCountChange: &networkv1directory.Event_ViewerCountChange{
+						Id:    l.id,
+						Count: uint32(l.publishers.Len() + l.viewers.Len()),
+					},
+				},
+			})
 		}
 
 		for it := d.users.IterateTouchedBefore(d.lastBroadcastTime); it.Next(); {
@@ -175,7 +183,7 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 				Body: &networkv1directory.Event_ViewerCountChange_{
 					ViewerCountChange: &networkv1directory.Event_ViewerCountChange{
 						Id:    l.id,
-						Count: uint32(l.viewers.Len()),
+						Count: uint32(l.publishers.Len() + l.viewers.Len()),
 					},
 				},
 			})
@@ -189,13 +197,10 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	eol := now.Add(-sessionTimeout)
 
 	for s, ok := d.sessions.Pop(eol).(*session); ok; s, ok = d.sessions.Pop(eol).(*session) {
-		u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()}).(*user)
-		u.sessions.Delete(s)
-		if u.sessions.Len() != 0 {
+		u, userDeleted := d.deleteSession(s)
+		if !userDeleted {
 			continue
 		}
-
-		d.users.Delete(u)
 
 		events = append(events, &networkv1directory.Event{
 			Body: &networkv1directory.Event_ViewerStateChange_{
@@ -237,6 +242,10 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 			ids.Insert(it.(*listing).id)
 			return true
 		})
+		it.(*session).publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+			ids.Insert(it.(*listing).id)
+			return true
+		})
 		return true
 	})
 
@@ -249,6 +258,28 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 			},
 		},
 	})
+}
+
+func (d *directoryService) deleteSession(s *session) (*user, bool) {
+	u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()}).(*user)
+	u.sessions.Delete(s)
+
+	s.viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+		it.(*listing).viewers.Delete(s)
+		d.listings.Touch(it.(*listing))
+		return true
+	})
+	s.publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+		it.(*listing).publishers.Delete(s)
+		d.listings.Touch(it.(*listing))
+		return true
+	})
+
+	if u.sessions.Len() != 0 {
+		return u, false
+	}
+	d.users.Delete(u)
+	return u, true
 }
 
 func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) error {
@@ -374,6 +405,9 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
 	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
 
+	l.viewers.Delete(s)
+	s.viewedListings.Delete(l)
+
 	l.publishers.ReplaceOrInsert(s)
 	s.publishedListings.ReplaceOrInsert(l)
 	u.sessions.ReplaceOrInsert(s)
@@ -409,6 +443,8 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	}
 	s.publishedListings.Delete(l)
 
+	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+
 	return &networkv1directory.UnpublishResponse{}, nil
 }
 
@@ -423,8 +459,10 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
 	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
 
-	l.viewers.ReplaceOrInsert(s)
-	s.viewedListings.ReplaceOrInsert(l)
+	if !l.publishers.Has(s) {
+		l.viewers.ReplaceOrInsert(s)
+		s.viewedListings.ReplaceOrInsert(l)
+	}
 	u.sessions.ReplaceOrInsert(s)
 
 	return &networkv1directory.JoinResponse{}, nil
@@ -442,12 +480,13 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
 
 	if l.viewers.Delete(s) == nil {
 		return nil, errors.New("not viewing this listing")
 	}
 	s.viewedListings.Delete(l)
+
+	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
 
 	return &networkv1directory.PartResponse{}, nil
 }

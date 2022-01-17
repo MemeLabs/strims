@@ -27,6 +27,7 @@ type Control interface {
 	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
 	RemovePeer(id uint64)
 	Add(swarm *ppspp.Swarm, salt []byte) []byte
+	Find(swarm ppspp.SwarmID, salt []byte) ([]byte, *ppspp.Swarm, bool)
 	Remove(id []byte)
 	List() []*transferv1.Transfer
 	Publish(id []byte, networkKey []byte)
@@ -276,6 +277,22 @@ func (c *control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 	)
 
 	return t.id
+}
+
+// Find ...
+func (c *control) Find(swarmID ppspp.SwarmID, salt []byte) ([]byte, *ppspp.Swarm, bool) {
+	t := &transfer{id: NewID(swarmID, salt)}
+
+	c.lock.Lock()
+	ti := c.transfers.Get(t)
+	c.lock.Unlock()
+
+	if ti == nil {
+		return nil, nil, false
+	}
+
+	t = ti.(*transfer)
+	return t.id, t.swarm, true
 }
 
 // Remove ...

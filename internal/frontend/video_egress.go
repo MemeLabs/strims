@@ -39,7 +39,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 	go func() {
 		defer close(ch)
 
-		transferID, r, err := s.app.VideoEgress().OpenStream(r.SwarmUri, r.NetworkKeys)
+		transferID, r, err := s.app.VideoEgress().OpenStream(ctx, r.SwarmUri, r.NetworkKeys)
 		if err != nil {
 			logger.Debug("opening stream failed", zap.Error(err))
 
