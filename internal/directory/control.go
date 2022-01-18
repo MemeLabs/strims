@@ -27,6 +27,7 @@ var (
 
 type Control interface {
 	Run(ctx context.Context)
+	ReadCachedEvents(ctx context.Context, ch chan interface{})
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
 	DeleteSnippet(swarmID ppspp.SwarmID)
 	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
@@ -57,6 +58,8 @@ func NewControl(logger *zap.Logger,
 		network:   network,
 		transfer:  transfer,
 
+		eventCache: map[uint64]*eventCache{},
+
 		snippets: snippets,
 		snippetServer: &snippetServer{
 			logger:   logger,
@@ -78,8 +81,9 @@ type control struct {
 	network   network.Control
 	transfer  transfer.Control
 
-	lock    sync.Mutex
-	runners llrb.LLRB
+	lock       sync.Mutex
+	runners    llrb.LLRB
+	eventCache map[uint64]*eventCache
 
 	snippets      *snippetMap
 	snippetServer *snippetServer
@@ -116,9 +120,18 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	r := newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, network)
 	t.runners.ReplaceOrInsert(r)
 
+	c := newEventCache(network)
+	t.eventCache[network.Id] = c
+
 	go t.snippetServer.start(ctx, network)
 
 	go func() {
+		defer func() {
+			t.lock.Lock()
+			defer t.lock.Unlock()
+			delete(t.eventCache, network.Id)
+		}()
+
 		for {
 			er, err := r.EventReader(ctx)
 			if err != nil {
@@ -136,6 +149,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 					break
 				}
 
+				c.StoreEvent(b)
 				t.observers.EmitLocal(event.DirectoryEvent{
 					NetworkID:  network.Id,
 					NetworkKey: dao.CertificateRoot(network.Certificate).Key,
@@ -189,6 +203,27 @@ func (t *control) client(ctx context.Context, networkKey []byte) (*network.RPCCl
 	}
 
 	return client, networkv1directory.NewDirectoryClient(client), nil
+}
+
+func (t *control) ReadCachedEvents(ctx context.Context, ch chan interface{}) {
+	var es []event.DirectoryEvent
+	t.lock.Lock()
+	for _, c := range t.eventCache {
+		es = append(es, event.DirectoryEvent{
+			NetworkID:  c.Network.Id,
+			NetworkKey: dao.CertificateRoot(c.Network.Certificate).Key,
+			Broadcast:  c.Events(),
+		})
+	}
+	t.lock.Unlock()
+
+	for _, e := range es {
+		select {
+		case ch <- e:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // PushSnippet ...

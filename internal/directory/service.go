@@ -212,16 +212,6 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		})
 	}
 
-	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
-		events = append(events, &networkv1directory.Event{
-			Body: &networkv1directory.Event_Unpublish_{
-				Unpublish: &networkv1directory.Event_Unpublish{
-					Id: l.id,
-				},
-			},
-		})
-	}
-
 	if events != nil {
 		err := d.eventWriter.Write(&networkv1directory.EventBroadcast{
 			Events: events,
@@ -495,19 +485,10 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
+	ok := d.sessions.Touch(&session{certificate: network.VPNCertificate(ctx)})
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-
-	s.publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-		d.listings.Touch(it.(*listing))
-		return true
-	})
-	s.viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-		d.listings.Touch(it.(*listing))
-		return true
-	})
 
 	return &networkv1directory.PingResponse{}, nil
 }

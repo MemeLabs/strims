@@ -71,11 +71,13 @@ func (l *lru) Pop(eol timeutil.Time) keyer {
 	return i.item
 }
 
-func (l *lru) Touch(u keyer) {
+func (l *lru) Touch(u keyer) bool {
 	if i := l.items.Get(&lruItem{item: u}); i != nil {
 		l.remove(i.(*lruItem))
 		l.push(i.(*lruItem))
+		return true
 	}
+	return false
 }
 
 func (l *lru) remove(i *lruItem) {

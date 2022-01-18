@@ -17,7 +17,7 @@ export interface Conn {
   close(): void;
 }
 
-export interface ConnFactoryThing {
+export interface APIDialer {
   local(): Conn;
   remote(address: string): Conn;
 }
@@ -26,6 +26,8 @@ interface State {
   linkedProfiles: LinkedProfile[];
   profile: Profile;
   loading: boolean;
+  conn?: Conn;
+  client?: FrontendClient;
 }
 
 type Ops = {
@@ -47,7 +49,7 @@ const initialState: State = {
 export const SessionContext = createContext<[State, Ops]>(null);
 
 interface ProviderProps {
-  thing: ConnFactoryThing;
+  apiDialer: APIDialer;
 }
 
 interface LinkedProfilesDBSchema extends DBSchema {
@@ -82,27 +84,27 @@ class LinkedProfilesDB {
     return value;
   }
 
-  async getLogins(): Promise<LinkedProfile[]> {
+  async getAll(): Promise<LinkedProfile[]> {
     const db = await this.db;
     const bs = await db.getAll("data");
     return bs.map((b) => LinkedProfile.decode(b));
   }
 
-  async insertProfile(profile: LinkedProfile): Promise<void> {
+  async put(profile: LinkedProfile): Promise<void> {
     const db = await this.db;
     await db.put("data", LinkedProfile.encode(profile).finish().slice(), profile.id.toString());
   }
 }
 
-export const Provider: React.FC<ProviderProps> = ({ thing, children }) => {
+export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
   const [state, setState] = useState<State>(initialState);
   const [db] = useState(() => new LinkedProfilesDB());
-  const [conn, setConn] = useState<{ conn: Conn; client: FrontendClient }>(null);
-  useEffect(() => () => conn?.conn.close(), [conn]);
+
+  useEffect(() => () => state.conn?.close(), [state.conn]);
 
   // TODO: init state from... default? current? profile
 
-  const insertProfiles = useCallback((...profiles: LinkedProfile[]) => {
+  const mergeProfiles = useCallback((...profiles: LinkedProfile[]) => {
     setState((prev) => ({
       ...prev,
       linkedProfiles: [
@@ -113,12 +115,12 @@ export const Provider: React.FC<ProviderProps> = ({ thing, children }) => {
   }, []);
 
   useEffect(() => {
-    void db.getLogins().then((profiles) => insertProfiles(...profiles));
+    void db.getAll().then((profiles) => mergeProfiles(...profiles));
   }, []);
 
   const createProfile = useCallback(
     async (serverAddress: string, name: string, password: string, persistLogin: boolean) => {
-      const conn = serverAddress ? thing.remote(serverAddress) : thing.local();
+      const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
       const client = await conn.client(FrontendClient);
       const res = await client.auth.signUp({ name, password, persistLogin });
 
@@ -127,21 +129,20 @@ export const Provider: React.FC<ProviderProps> = ({ thing, children }) => {
         id: await db.nextId(),
         serverAddress,
       });
-      await db.insertProfile(profile);
-      insertProfiles(profile);
+      await db.put(profile);
+      mergeProfiles(profile);
 
-      setState((prev) => ({ ...prev, profile: res.profile }));
-      setConn({ conn, client });
+      setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
     },
     []
   );
 
   const signIn = useCallback(async (serverAddress: string, req: ISignInRequest) => {
-    const conn = serverAddress ? thing.remote(serverAddress) : thing.local();
+    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
     const res = await client.auth.signIn(req);
 
-    const prev = (await db.getLogins()).find(
+    const prev = (await db.getAll()).find(
       (p) => p.name === res.linkedProfile.name && p.serverAddress === serverAddress
     );
 
@@ -151,19 +152,18 @@ export const Provider: React.FC<ProviderProps> = ({ thing, children }) => {
         id: prev ? prev.id : await db.nextId(),
         serverAddress,
       });
-      await db.insertProfile(profile);
-      insertProfiles(profile);
+      await db.put(profile);
+      mergeProfiles(profile);
     }
 
-    setState((prev) => ({ ...prev, profile: res.profile }));
-    setConn({ conn, client });
+    setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
   }, []);
 
   const value = useMemo<[State, Ops]>(() => [state, { createProfile, signIn }], [state]);
 
   return (
     <SessionContext.Provider value={value}>
-      <ApiProvider value={conn?.client}>{children}</ApiProvider>
+      <ApiProvider value={state.client}>{children}</ApiProvider>
     </SessionContext.Provider>
   );
 };

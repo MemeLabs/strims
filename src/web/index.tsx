@@ -6,9 +6,10 @@ import { Readable, Writable } from "stream";
 import React from "react";
 import ReactDOM from "react-dom";
 
-import { ClientConstructor, ConnFactoryThing } from "../contexts/Session";
+import { APIDialer, ClientConstructor } from "../contexts/Session";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
+import App from "./App";
 import Worker from "./svc.worker";
 
 class WorkerConn {
@@ -34,19 +35,15 @@ class WorkerConn {
 
 class WSConn extends WSReadWriter {
   client<T>(C: ClientConstructor<T>): Promise<T> {
-    return Promise.resolve(new C(this, this));
+    const ws = this as unknown as Readable & Writable;
+    return Promise.resolve(new C(ws, ws));
   }
 }
 
-class FooFactoryThing implements ConnFactoryThing {
-  static local(): WorkerConn {
-    return new WorkerConn();
-  }
-
-  static remote(address: string): WSConn {
-    return new WSConn(address);
-  }
-}
+const apiDialer: APIDialer = {
+  local: (): WorkerConn => new WorkerConn(),
+  remote: (address: string): WSConn => new WSConn(address),
+};
 
 class Runner {
   root: HTMLDivElement;
@@ -57,9 +54,8 @@ class Runner {
     document.body.appendChild(this.root);
   }
 
-  async start() {
-    const { default: App } = await import(/* webpackPreload: true */ "./App");
-    ReactDOM.render(<App thing={FooFactoryThing} />, this.root);
+  start() {
+    ReactDOM.render(<App apiDialer={apiDialer} />, this.root);
   }
 
   stop() {
@@ -68,12 +64,12 @@ class Runner {
 
   restart() {
     this.stop();
-    void this.start();
+    this.start();
   }
 }
 
 const runner = new Runner();
-void runner.start();
+runner.start();
 
 if (import.meta.webpackHot) {
   import.meta.webpackHot.accept(

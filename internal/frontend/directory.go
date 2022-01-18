@@ -8,6 +8,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,18 +28,27 @@ type directoryService struct {
 
 // Open ...
 func (s *directoryService) Open(ctx context.Context, r *networkv1directory.FrontendOpenRequest) (<-chan *networkv1directory.FrontendOpenResponse, error) {
-	ch := make(chan *networkv1directory.FrontendOpenResponse, 128)
+	ch := make(chan *networkv1directory.FrontendOpenResponse)
 
 	go func() {
-		raw := make(chan interface{}, 8)
+		raw := make(chan interface{})
 		s.app.Events().Notify(raw)
+		go s.app.Directory().ReadCachedEvents(ctx, raw)
+
+		defer func() {
+			s.app.Events().StopNotifying(raw)
+			close(raw)
+			close(ch)
+		}()
 
 		for {
 			select {
 			case e := <-raw:
+				var r *networkv1directory.FrontendOpenResponse
+
 				switch e := e.(type) {
 				case event.DirectoryEvent:
-					ch <- &networkv1directory.FrontendOpenResponse{
+					r = &networkv1directory.FrontendOpenResponse{
 						NetworkId:  e.NetworkID,
 						NetworkKey: e.NetworkKey,
 						Body: &networkv1directory.FrontendOpenResponse_Broadcast{
@@ -46,7 +56,7 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 						},
 					}
 				case event.NetworkStop:
-					ch <- &networkv1directory.FrontendOpenResponse{
+					r = &networkv1directory.FrontendOpenResponse{
 						NetworkId:  e.Network.Id,
 						NetworkKey: dao.CertificateRoot(e.Network.Certificate).Key,
 						Body: &networkv1directory.FrontendOpenResponse_Close_{
@@ -54,10 +64,14 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 						},
 					}
 				}
+
+				select {
+				case ch <- r:
+					debug.PrintJSON(r)
+				case <-ctx.Done():
+					return
+				}
 			case <-ctx.Done():
-				s.app.Events().StopNotifying(raw)
-				close(raw)
-				close(ch)
 				return
 			}
 		}
