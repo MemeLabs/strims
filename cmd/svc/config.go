@@ -66,6 +66,9 @@ type Config struct {
 		BBolt   struct {
 			Path Optional[string] `yaml:"path"`
 		} `yaml:"bbolt"`
+		Postgres struct {
+			ConnStr Optional[string] `yaml:"connStr"`
+		} `yaml:"postgres"`
 	} `yaml:"storage"`
 	HTTP struct {
 		Address Optional[string] `yaml:"address"`

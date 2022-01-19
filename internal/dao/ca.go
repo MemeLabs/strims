@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"strconv"
@@ -8,7 +9,6 @@ import (
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -70,9 +70,12 @@ func InsertCertificateLog(s kv.RWStore, v *networkv1ca.CertificateLog) error {
 			if prev.Certificate.NotBefore >= v.Certificate.NotBefore {
 				return errors.New("newer certificate for subject found in ca log")
 			}
+			if !bytes.Equal(prev.Certificate.Key, v.Certificate.Key) {
+				return errors.New("certificate subject key mismatch")
+			}
 		}
 
-		err = SetSecondaryIndex(tx, certificateLogSubjectIndexPrefix, formatCertificateLogSubjectIndexKey(v.NetworkID, v.Certificate.Subject), v.Id)
+		err = ReplaceOrSetUniqueSecondaryIndex(tx, certificateLogSubjectIndexPrefix, formatCertificateLogSubjectIndexKey(v.NetworkID, v.Certificate.Subject), v.Id)
 		if err != nil {
 			return err
 		}
@@ -142,11 +145,12 @@ func GetCertificateLog(s kv.Store, id uint64) (v *networkv1ca.CertificateLog, er
 func GetCertificateLogBySubject(s kv.Store, networkID uint64, subject string) (v *networkv1ca.CertificateLog, err error) {
 	v = &networkv1ca.CertificateLog{}
 	err = s.View(func(tx kv.Tx) error {
-		ids, err := ScanSecondaryIndex(tx, certificateLogSubjectIndexPrefix, formatCertificateLogSubjectIndexKey(networkID, subject))
+		id, err := GetUniqueSecondaryIndex(tx, certificateLogSubjectIndexPrefix, formatCertificateLogSubjectIndexKey(networkID, subject))
 		if err != nil {
 			return err
 		}
-		return tx.Get(prefixCertificateLogKey(mathutil.Max(ids...)), v)
+
+		return tx.Get(prefixCertificateLogKey(id), v)
 	})
 	return
 }

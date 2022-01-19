@@ -59,6 +59,24 @@ func SetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64)
 	})
 }
 
+// ReplaceOrSetUniqueSecondaryIndex ...
+func ReplaceOrSetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
+	var kb secondaryIndexKeyBuilder
+	if err := kb.WritePrefix(prefix); err != nil {
+		return err
+	}
+	if err := kb.WriteKey(key, s); err != nil {
+		return err
+	}
+
+	return s.Update(func(tx kv.RWTx) error {
+		if err := kb.WriteID(id); err != nil {
+			return err
+		}
+		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
+	})
+}
+
 // DeleteSecondaryIndex ...
 func DeleteSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
 	var kb secondaryIndexKeyBuilder

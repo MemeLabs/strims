@@ -32,7 +32,7 @@ const (
 	minPingInterval   = time.Minute * 10
 	maxPingInterval   = time.Minute * 14
 	embedLoadInterval = time.Second * 15
-	refreshInterval   = time.Minute
+	refreshInterval   = time.Minute * 5
 )
 
 // AddressSalt ...

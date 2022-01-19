@@ -8,7 +8,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"golang.org/x/sync/errgroup"
 )
@@ -67,7 +66,6 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 
 				select {
 				case ch <- r:
-					debug.PrintJSON(r)
 				case <-ctx.Done():
 					return
 				}

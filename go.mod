@@ -40,7 +40,7 @@ require (
 	github.com/hetznercloud/hcloud-go v1.23.1
 	github.com/kat-co/vala v0.0.0-20170210184112-42e1d8b61f12
 	github.com/klauspost/compress v1.13.6
-	github.com/lib/pq v1.10.3
+	github.com/lib/pq v1.10.4
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.10 // indirect
