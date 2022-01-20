@@ -41,7 +41,7 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.Create
 		return nil, err
 	}
 
-	if err := dao.InsertBootstrapClient(s.store, client); err != nil {
+	if err := dao.BootstrapClients.Insert(s.store, client); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +56,7 @@ func (s *bootstrapService) UpdateClient(ctx context.Context, r *bootstrap.Update
 
 // DeleteClient ...
 func (s *bootstrapService) DeleteClient(ctx context.Context, r *bootstrap.DeleteBootstrapClientRequest) (*bootstrap.DeleteBootstrapClientResponse, error) {
-	if err := dao.DeleteBootstrapClient(s.store, r.Id); err != nil {
+	if err := dao.BootstrapClients.Delete(s.store, r.Id); err != nil {
 		return nil, err
 	}
 
@@ -70,7 +70,7 @@ func (s *bootstrapService) GetClient(ctx context.Context, r *bootstrap.GetBootst
 
 // ListClients ...
 func (s *bootstrapService) ListClients(ctx context.Context, r *bootstrap.ListBootstrapClientsRequest) (*bootstrap.ListBootstrapClientsResponse, error) {
-	clients, err := dao.GetBootstrapClients(s.store)
+	clients, err := dao.BootstrapClients.GetAll(s.store)
 	if err != nil {
 		return nil, err
 	}

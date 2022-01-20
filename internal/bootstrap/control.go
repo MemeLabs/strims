@@ -113,7 +113,7 @@ func (t *control) RemovePeer(id uint64) {
 }
 
 func (t *control) startClients() {
-	clients, err := dao.GetBootstrapClients(t.store)
+	clients, err := dao.BootstrapClients.GetAll(t.store)
 	if err != nil {
 		t.logger.Fatal(
 			"loading bootstrap clients failed",

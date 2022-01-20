@@ -6,6 +6,8 @@ import (
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
+	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
@@ -23,60 +25,12 @@ const (
 	networkCertificateLogNetworkNS
 	networkCertificateLogSerialNS
 	networkCertificateLogSubjectNS
+	networkBootstrapClientNS
 )
 
 var Networks = NewTable[networkv1.Network](networkNetworkNS)
 
 var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
-
-var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS)
-
-var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCertificateLog = ManyToOne(
-	networkCertificateLogNetworkNS,
-	CertificateLogs,
-	Networks,
-	(*networkv1ca.CertificateLog).GetNetworkID,
-	&ManyToOneOptions{CascadeDelete: true},
-)
-
-func FormatGetCertificateLogsBySerialNumberKey(networkID uint64, serialNumber []byte) []byte {
-	b := make([]byte, 8, 8+len(serialNumber))
-	binary.BigEndian.PutUint64(b, networkID)
-	return append(b, serialNumber...)
-}
-
-var GetCertificateLogBySerialNumber = UniqueIndex(
-	networkCertificateLogSerialNS,
-	CertificateLogs,
-	func(m *networkv1ca.CertificateLog) []byte {
-		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkID, m.Certificate.SerialNumber)
-	},
-	nil,
-)
-
-func FormatCertificateLogSubjectKey(networkID uint64, subject string) []byte {
-	b := make([]byte, 8, 8+len([]byte(subject)))
-	binary.BigEndian.PutUint64(b, networkID)
-	return append(b, []byte(subject)...)
-}
-
-func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
-	return FormatCertificateLogSubjectKey(m.NetworkID, m.Certificate.Subject)
-}
-
-var GetCertificateLogBySubject = UniqueIndex(
-	networkCertificateLogSubjectNS,
-	CertificateLogs,
-	certificateLogSubjectKey,
-	&UniqueIndexOptions[networkv1ca.CertificateLog]{
-		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
-			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
-				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
-			}
-			return ErrUniqueConstraintViolated
-		},
-	},
-)
 
 // NextNetworkDisplayOrder ...
 func NextNetworkDisplayOrder(s kv.Store) (n uint32, err error) {
@@ -255,6 +209,55 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.In
 	}, nil
 }
 
+var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS)
+
+var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCertificateLog = ManyToOne(
+	networkCertificateLogNetworkNS,
+	CertificateLogs,
+	Networks,
+	(*networkv1ca.CertificateLog).GetNetworkID,
+	&ManyToOneOptions{CascadeDelete: true},
+)
+
+func FormatGetCertificateLogsBySerialNumberKey(networkID uint64, serialNumber []byte) []byte {
+	b := make([]byte, 8, 8+len(serialNumber))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, serialNumber...)
+}
+
+var GetCertificateLogBySerialNumber = UniqueIndex(
+	networkCertificateLogSerialNS,
+	CertificateLogs,
+	func(m *networkv1ca.CertificateLog) []byte {
+		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkID, m.Certificate.SerialNumber)
+	},
+	nil,
+)
+
+func FormatCertificateLogSubjectKey(networkID uint64, subject string) []byte {
+	b := make([]byte, 8, 8+len([]byte(subject)))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, []byte(subject)...)
+}
+
+func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
+	return FormatCertificateLogSubjectKey(m.NetworkID, m.Certificate.Subject)
+}
+
+var GetCertificateLogBySubject = UniqueIndex(
+	networkCertificateLogSubjectNS,
+	CertificateLogs,
+	certificateLogSubjectKey,
+	&UniqueIndexOptions[networkv1ca.CertificateLog]{
+		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
+			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
+				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
+			}
+			return ErrUniqueConstraintViolated
+		},
+	},
+)
+
 // NewCertificateLog ...
 func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certificate) (*networkv1ca.CertificateLog, error) {
 	id, err := s.GenerateID()
@@ -279,4 +282,24 @@ func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certif
 // NetworkKey ...
 func NetworkKey(network *networkv1.Network) []byte {
 	return CertificateRoot(network.Certificate).Key
+}
+
+var BootstrapClients = NewTable[networkv1bootstrap.BootstrapClient](networkBootstrapClientNS)
+
+// NewWebSocketBootstrapClient ...
+func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*bootstrap.BootstrapClient, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	return &bootstrap.BootstrapClient{
+		Id: id,
+		ClientOptions: &bootstrap.BootstrapClient_WebsocketOptions{
+			WebsocketOptions: &bootstrap.BootstrapClientWebSocketOptions{
+				Url:                   url,
+				InsecureSkipVerifyTls: insecureSkipVerifyTLS,
+			},
+		},
+	}, nil
 }
