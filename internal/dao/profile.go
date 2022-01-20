@@ -1,26 +1,23 @@
 package dao
 
 import (
-	"strconv"
-
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-const profileKeyPrefix = "profile:"
+const (
+	_ = iota + profileNS
+	profileProfileNS
+	profileIDNS
+)
 
-func prefixProfileKey(id uint64) string {
-	return profileKeyPrefix + strconv.FormatUint(id, 10)
-}
+var Profile = NewSingleton[profilev1.Profile](profileProfileNS, nil)
 
-// GetProfile ...
-func GetProfile(s kv.Store) (v *profilev1.Profile, err error) {
-	v = &profilev1.Profile{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.Get("profile", v)
-	})
-	return
-}
+var profileID = NewSingleton(
+	profileIDNS,
+	&SingletonOptions[profilev1.ProfileID]{
+		DefaultValue: &profilev1.ProfileID{NextId: 1},
+	},
+)
 
 // NewProfile ...
 func NewProfile(name string) (p *profilev1.Profile, err error) {

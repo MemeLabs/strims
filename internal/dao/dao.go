@@ -3,7 +3,9 @@ package dao
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -70,3 +72,47 @@ func (e Errors) IncludesOnly(err error) bool {
 	}
 	return true
 }
+
+type namespace int
+
+func (n namespace) String() string {
+	return strconv.FormatInt(int64(n), 36)
+}
+
+func (n namespace) Format(ks ...interface{}) string {
+	var b strings.Builder
+	b.WriteString(n.String())
+	for _, k := range ks {
+		b.WriteString(":")
+		switch k := k.(type) {
+		case string:
+			b.WriteString(k)
+		case []byte:
+			b.WriteString(base64.RawStdEncoding.EncodeToString(k))
+		case int64:
+			b.WriteString(strconv.FormatInt(k, 36))
+		case uint64:
+			b.WriteString(strconv.FormatUint(k, 36))
+		default:
+			panic("unsupported key type")
+		}
+	}
+	return b.String()
+}
+
+func (n namespace) FormatPrefix(ks ...interface{}) string {
+	ksc := make([]interface{}, len(ks), len(ks)+1)
+	ksc = append(ksc, "")
+	return n.Format(ksc...)
+}
+
+const (
+	_ namespace = iota * 1000
+	mutexNS
+	profileNS
+	certificateNS
+	networkNS
+	notificationNS
+	chatNS
+	videoNS
+)

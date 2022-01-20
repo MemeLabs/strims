@@ -67,7 +67,7 @@ func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateSe
 
 // UpdateServerConfig ...
 func (s *networkService) UpdateServerConfig(ctx context.Context, r *networkv1.UpdateServerConfigRequest) (*networkv1.UpdateServerConfigResponse, error) {
-	network, err := dao.GetNetwork(s.store, r.NetworkId)
+	network, err := dao.Networks.Get(s.store, r.NetworkId)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *networkService) UpdateServerConfig(ctx context.Context, r *networkv1.Up
 		ServerConfig: r.ServerConfig,
 	}
 
-	if err := dao.UpsertNetwork(s.store, network); err != nil {
+	if err := dao.Networks.Update(s.store, network); err != nil {
 		return nil, err
 	}
 
@@ -100,7 +100,7 @@ func (s *networkService) Delete(ctx context.Context, r *networkv1.DeleteNetworkR
 
 // Get ...
 func (s *networkService) Get(ctx context.Context, r *networkv1.GetNetworkRequest) (*networkv1.GetNetworkResponse, error) {
-	network, err := dao.GetNetwork(s.store, r.Id)
+	network, err := dao.Networks.Get(s.store, r.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *networkService) Get(ctx context.Context, r *networkv1.GetNetworkRequest
 
 // List ...
 func (s *networkService) List(ctx context.Context, r *networkv1.ListNetworksRequest) (*networkv1.ListNetworksResponse, error) {
-	networks, err := dao.GetNetworks(s.store)
+	networks, err := dao.Networks.GetAll(s.store)
 	if err != nil {
 		return nil, err
 	}

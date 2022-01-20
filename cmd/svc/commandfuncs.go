@@ -36,6 +36,8 @@ func runCmd(fs Flags) error {
 		return err
 	}
 
+	dao.Logger = logger
+
 	var eg errgroup.Group
 	var closers []io.Closer
 

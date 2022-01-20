@@ -1,42 +1,18 @@
 package dao
 
 import (
-	"strconv"
 	"time"
 
 	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
-const notificationPrefix = "notification:"
+const (
+	_ namespace = iota + notificationNS
+	notificationNotificationNS
+)
 
-func prefixNotificationKey(id uint64) string {
-	return notificationPrefix + strconv.FormatUint(id, 10)
-}
-
-// UpsertNotification ...
-func UpsertNotification(s kv.RWStore, v *notificationv1.Notification) error {
-	return s.Update(func(tx kv.RWTx) error {
-		return tx.Put(prefixNotificationKey(v.Id), v)
-	})
-}
-
-// DeleteNotification ...
-func DeleteNotification(s kv.RWStore, id uint64) error {
-	return s.Update(func(tx kv.RWTx) error {
-		return tx.Delete(prefixNotificationKey(id))
-	})
-}
-
-// GetNotifications ...
-func GetNotifications(s kv.Store) (v []*notificationv1.Notification, err error) {
-	v = []*notificationv1.Notification{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.ScanPrefix(notificationPrefix, &v)
-	})
-	return
-}
+var Notifications = NewTable[notificationv1.Notification](notificationNotificationNS)
 
 type NewNotificationOptions struct {
 	Message string

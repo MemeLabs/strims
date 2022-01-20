@@ -134,7 +134,7 @@ func (c *control) handleChannelRemove(id uint64) {
 }
 
 func (c *control) loadIngressConfig(ctx context.Context) {
-	config, err := dao.GetVideoIngressConfig(c.store)
+	config, err := dao.VideoIngressConfig.Get(c.store)
 	if err != nil {
 		c.logger.Fatal("loading video ingress config failed", zap.Error(err))
 	}
@@ -271,12 +271,12 @@ func (c *control) startIngressServer(ctx context.Context) {
 
 // GetIngressConfig ...
 func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) {
-	return dao.GetVideoIngressConfig(c.store)
+	return dao.VideoIngressConfig.Get(c.store)
 }
 
 // SetIngressConfig ...
 func (c *control) SetIngressConfig(config *videov1.VideoIngressConfig) error {
-	if err := dao.SetVideoIngressConfig(c.store, config); err != nil {
+	if err := dao.VideoIngressConfig.Set(c.store, config); err != nil {
 		return err
 	}
 

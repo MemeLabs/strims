@@ -398,7 +398,7 @@ func (t *control) startNetworks() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	networks, err := dao.GetNetworks(t.store)
+	networks, err := dao.Networks.GetAll(t.store)
 	if err != nil {
 		t.logger.Fatal("loading networks failed", zap.Error(err))
 	}
@@ -495,7 +495,7 @@ func (t *control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.N
 		return err
 	}
 
-	if err := dao.UpsertNetwork(t.store, clone); err != nil {
+	if err := dao.Networks.Upsert(t.store, clone); err != nil {
 		return err
 	}
 
@@ -556,7 +556,7 @@ func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 
 	err := t.store.Update(func(tx kv.RWTx) error {
 		for _, l := range certLogs {
-			if err := dao.InsertCertificateLog(tx, l); err != nil {
+			if err := dao.CertificateLogs.Insert(tx, l); err != nil {
 				return err
 			}
 		}
@@ -567,7 +567,7 @@ func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateL
 		}
 
 		n.DisplayOrder = order
-		return dao.UpsertNetwork(tx, n)
+		return dao.Networks.Insert(tx, n)
 	})
 	if err != nil {
 		return err
@@ -598,12 +598,7 @@ func (t *control) Remove(id uint64) error {
 		return err
 	}
 
-	err := t.store.Update(func(tx kv.RWTx) error {
-		if err := dao.DeleteCertificateLogByNetwork(tx, id); err != nil {
-			return err
-		}
-		return dao.DeleteNetwork(tx, id)
-	})
+	err := dao.Networks.Delete(t.store, id)
 	if err != nil {
 		return err
 	}
@@ -704,7 +699,7 @@ func (t *control) UpdateDisplayOrder(ids []uint64) error {
 			clone := proto.Clone(n.network).(*networkv1.Network)
 			clone.DisplayOrder = uint32(i)
 
-			if err := dao.UpsertNetwork(tx, clone); err != nil {
+			if err := dao.Networks.Update(tx, clone); err != nil {
 				return err
 			}
 

@@ -79,25 +79,28 @@ message EmoteContributor {
 
 message Emote {
   uint64 id = 1;
-  string name = 2;
-  repeated EmoteImage images = 3;
-  repeated EmoteEffect effects = 4;
-  EmoteContributor contributor = 5;
+  uint64 server_id = 2;
+  string name = 3;
+  repeated EmoteImage images = 4;
+  repeated EmoteEffect effects = 5;
+  EmoteContributor contributor = 6;
 }
 
 message Modifier {
   uint64 id = 1;
-  string name = 2;
-  uint32 priority = 3;
-  bool internal = 4;
-  uint32 extra_wrap_count = 5;
+  uint64 server_id = 2;
+  string name = 3;
+  uint32 priority = 4;
+  bool internal = 5;
+  uint32 extra_wrap_count = 6;
 }
 
 message Tag {
   uint64 id = 1;
-  string name = 2;
-  string color = 3;
-  bool sensitive = 4;
+  uint64 server_id = 2;
+  string name = 3;
+  string color = 4;
+  bool sensitive = 5;
 }
 
 message AssetBundle {

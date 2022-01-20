@@ -65,7 +65,7 @@ func (s *CAService) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) 
 	if err != nil {
 		return nil, err
 	}
-	err = dao.InsertCertificateLog(s.store, log)
+	err = dao.CertificateLogs.Insert(s.store, log)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +82,9 @@ func (s *CAService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*
 	var log *networkv1ca.CertificateLog
 	var err error
 	if req.Subject != "" {
-		log, err = dao.GetCertificateLogBySubject(s.store, s.network.Id, req.Subject)
+		log, err = dao.GetCertificateLogBySubject(s.store, dao.FormatCertificateLogSubjectKey(s.network.Id, req.Subject))
 	} else {
-		log, err = dao.GetCertificateLogBySerialNumber(s.store, s.network.Id, req.SerialNumber)
+		log, err = dao.GetCertificateLogBySerialNumber(s.store, dao.FormatGetCertificateLogsBySerialNumberKey(s.network.Id, req.SerialNumber))
 	}
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *CAService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*
 	if req.FullChain {
 		cert := log.Certificate
 		for cert.GetParentSerialNumber() != nil {
-			parentLog, err := dao.GetCertificateLogBySerialNumber(s.store, s.network.Id, cert.GetParentSerialNumber())
+			parentLog, err := dao.GetCertificateLogBySerialNumber(s.store, dao.FormatGetCertificateLogsBySerialNumberKey(s.network.Id, cert.GetParentSerialNumber()))
 			if err != nil {
 				return nil, err
 			}

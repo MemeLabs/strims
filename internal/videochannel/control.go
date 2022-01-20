@@ -42,13 +42,13 @@ type control struct {
 
 // GetChannel ...
 func (c *control) GetChannel(id uint64) (*videov1.VideoChannel, error) {
-	return dao.GetVideoChannel(c.store, id)
+	return dao.VideoChannels.Get(c.store, id)
 }
 
 // ListChannels ...
 func (c *control) ListChannels() ([]*videov1.VideoChannel, error) {
 	// TODO: enrich channel data with liveness?
-	return dao.GetVideoChannels(c.store)
+	return dao.VideoChannels.GetAll(c.store)
 }
 
 // CreateChannel ...
@@ -62,7 +62,7 @@ func (c *control) CreateChannel(opts ...Option) (*videov1.VideoChannel, error) {
 		return nil, err
 	}
 
-	if err := dao.UpsertVideoChannel(c.store, channel); err != nil {
+	if err := dao.VideoChannels.Insert(c.store, channel); err != nil {
 		return nil, err
 	}
 
@@ -73,7 +73,7 @@ func (c *control) CreateChannel(opts ...Option) (*videov1.VideoChannel, error) {
 func (c *control) UpdateChannel(id uint64, opts ...Option) (*videov1.VideoChannel, error) {
 	var channel *videov1.VideoChannel
 	err := c.store.Update(func(tx kv.RWTx) (err error) {
-		channel, err = dao.GetVideoChannel(tx, id)
+		channel, err = dao.VideoChannels.Get(tx, id)
 		if err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func (c *control) UpdateChannel(id uint64, opts ...Option) (*videov1.VideoChanne
 			return err
 		}
 
-		return dao.UpsertVideoChannel(c.store, channel)
+		return dao.VideoChannels.Update(c.store, channel)
 	})
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func WithRemoteShareOwner(share *videov1.VideoChannel_RemoteShare) Option {
 
 // DeleteChannel ...
 func (c *control) DeleteChannel(id uint64) error {
-	if err := dao.DeleteVideoChannel(c.store, id); err != nil {
+	if err := dao.VideoChannels.Delete(c.store, id); err != nil {
 		return err
 	}
 

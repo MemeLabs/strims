@@ -23,6 +23,11 @@ func (s *Store) Close() error {
 	return nil
 }
 
+// Dump ...
+func (s *Store) Dump() map[string]map[string][]byte {
+	return s.store
+}
+
 // CreateStoreIfNotExists ...
 func (s *Store) CreateStoreIfNotExists(table string) error {
 	if _, ok := s.store[table]; !ok {
@@ -83,12 +88,10 @@ func (t Tx) Get(key string) (value []byte, err error) {
 
 // ScanPrefix ...
 func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
-
 	for key, v := range t.b {
 		if strings.HasPrefix(key, prefix) {
 			values = append(values, append([]byte{}, v...))
 		}
 	}
-
 	return values, nil
 }

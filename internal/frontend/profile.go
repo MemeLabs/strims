@@ -39,7 +39,7 @@ func (s *profileService) Update(ctx context.Context, r *profilev1.UpdateProfileR
 
 // Get ...
 func (s *profileService) Get(ctx context.Context, r *profilev1.GetProfileRequest) (*profilev1.GetProfileResponse, error) {
-	profile, err := dao.GetProfile(s.store)
+	profile, err := dao.Profile.Get(s.store)
 	if err != nil {
 		return nil, err
 	}

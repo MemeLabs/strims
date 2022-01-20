@@ -544,6 +544,7 @@ export class EmoteContributor {
 
 export type IEmote = {
   id?: bigint;
+  serverId?: bigint;
   name?: string;
   images?: IEmoteImage[];
   effects?: IEmoteEffect[];
@@ -552,6 +553,7 @@ export type IEmote = {
 
 export class Emote {
   id: bigint;
+  serverId: bigint;
   name: string;
   images: EmoteImage[];
   effects: EmoteEffect[];
@@ -559,6 +561,7 @@ export class Emote {
 
   constructor(v?: IEmote) {
     this.id = v?.id || BigInt(0);
+    this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
     this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
@@ -568,10 +571,11 @@ export class Emote {
   static encode(m: Emote, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
-    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(34).fork()).ldelim();
-    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(42).fork()).ldelim();
+    if (m.serverId) w.uint32(16).uint64(m.serverId);
+    if (m.name) w.uint32(26).string(m.name);
+    for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
+    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -586,15 +590,18 @@ export class Emote {
         m.id = r.uint64();
         break;
         case 2:
-        m.name = r.string();
+        m.serverId = r.uint64();
         break;
         case 3:
-        m.images.push(EmoteImage.decode(r, r.uint32()));
+        m.name = r.string();
         break;
         case 4:
-        m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        m.images.push(EmoteImage.decode(r, r.uint32()));
         break;
         case 5:
+        m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        break;
+        case 6:
         m.contributor = EmoteContributor.decode(r, r.uint32());
         break;
         default:
@@ -608,6 +615,7 @@ export class Emote {
 
 export type IModifier = {
   id?: bigint;
+  serverId?: bigint;
   name?: string;
   priority?: number;
   internal?: boolean;
@@ -616,6 +624,7 @@ export type IModifier = {
 
 export class Modifier {
   id: bigint;
+  serverId: bigint;
   name: string;
   priority: number;
   internal: boolean;
@@ -623,6 +632,7 @@ export class Modifier {
 
   constructor(v?: IModifier) {
     this.id = v?.id || BigInt(0);
+    this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
@@ -632,10 +642,11 @@ export class Modifier {
   static encode(m: Modifier, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.priority) w.uint32(24).uint32(m.priority);
-    if (m.internal) w.uint32(32).bool(m.internal);
-    if (m.extraWrapCount) w.uint32(40).uint32(m.extraWrapCount);
+    if (m.serverId) w.uint32(16).uint64(m.serverId);
+    if (m.name) w.uint32(26).string(m.name);
+    if (m.priority) w.uint32(32).uint32(m.priority);
+    if (m.internal) w.uint32(40).bool(m.internal);
+    if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
     return w;
   }
 
@@ -650,15 +661,18 @@ export class Modifier {
         m.id = r.uint64();
         break;
         case 2:
-        m.name = r.string();
+        m.serverId = r.uint64();
         break;
         case 3:
-        m.priority = r.uint32();
+        m.name = r.string();
         break;
         case 4:
-        m.internal = r.bool();
+        m.priority = r.uint32();
         break;
         case 5:
+        m.internal = r.bool();
+        break;
+        case 6:
         m.extraWrapCount = r.uint32();
         break;
         default:
@@ -672,6 +686,7 @@ export class Modifier {
 
 export type ITag = {
   id?: bigint;
+  serverId?: bigint;
   name?: string;
   color?: string;
   sensitive?: boolean;
@@ -679,12 +694,14 @@ export type ITag = {
 
 export class Tag {
   id: bigint;
+  serverId: bigint;
   name: string;
   color: string;
   sensitive: boolean;
 
   constructor(v?: ITag) {
     this.id = v?.id || BigInt(0);
+    this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
     this.color = v?.color || "";
     this.sensitive = v?.sensitive || false;
@@ -693,9 +710,10 @@ export class Tag {
   static encode(m: Tag, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.color) w.uint32(26).string(m.color);
-    if (m.sensitive) w.uint32(32).bool(m.sensitive);
+    if (m.serverId) w.uint32(16).uint64(m.serverId);
+    if (m.name) w.uint32(26).string(m.name);
+    if (m.color) w.uint32(34).string(m.color);
+    if (m.sensitive) w.uint32(40).bool(m.sensitive);
     return w;
   }
 
@@ -710,12 +728,15 @@ export class Tag {
         m.id = r.uint64();
         break;
         case 2:
-        m.name = r.string();
+        m.serverId = r.uint64();
         break;
         case 3:
-        m.color = r.string();
+        m.name = r.string();
         break;
         case 4:
+        m.color = r.string();
+        break;
+        case 5:
         m.sensitive = r.bool();
         break;
         default:

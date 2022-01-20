@@ -2,6 +2,7 @@ package dao
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
@@ -10,14 +11,13 @@ import (
 )
 
 const profileIDReservationSize = 100
-const profileIDKey = "id"
 
 // NewProfileStore ...
 func NewProfileStore(profileID uint64, store kv.BlobStore, key *StorageKey) *ProfileStore {
 	return &ProfileStore{
 		store: store,
 		key:   key,
-		name:  prefixProfileKey(profileID),
+		name:  fmt.Sprintf("profile:%d", profileID),
 	}
 }
 
@@ -84,21 +84,20 @@ func (s *ProfileStore) GenerateID() (uint64, error) {
 		return id, nil
 	}
 
-	res := &profilev1.ProfileID{NextId: 1}
-	err := s.Update(func(tx kv.RWTx) error {
-		if err := tx.Get(profileIDKey, res); err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
-			return err
-		}
-		return tx.Put(profileIDKey, &profilev1.ProfileID{NextId: res.NextId + profileIDReservationSize})
+	res, err := profileID.Transform(s, func(v *profilev1.ProfileID) error {
+		v.NextId += profileIDReservationSize
+		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
 
-	s.nextID = res.NextId + 1
-	s.lastReservedID = res.NextId + profileIDReservationSize
+	nextID := res.NextId - profileIDReservationSize
 
-	return res.NextId, nil
+	s.nextID = nextID + 1
+	s.lastReservedID = res.NextId
+
+	return nextID, nil
 }
 
 type profileStoreTx struct {

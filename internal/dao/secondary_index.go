@@ -13,9 +13,9 @@ import (
 )
 
 // SetSecondaryIndex ...
-func SetSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
+func SetSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
 	var kb secondaryIndexKeyBuilder
-	if err := kb.WritePrefix(prefix); err != nil {
+	if err := kb.WriteNS(ns); err != nil {
 		return err
 	}
 	if err := kb.WriteKey(key, s); err != nil {
@@ -31,9 +31,9 @@ func SetSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error
 }
 
 // SetUniqueSecondaryIndex ...
-func SetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
+func SetUniqueSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
 	var kb secondaryIndexKeyBuilder
-	if err := kb.WritePrefix(prefix); err != nil {
+	if err := kb.WriteNS(ns); err != nil {
 		return err
 	}
 	if err := kb.WriteKey(key, s); err != nil {
@@ -59,28 +59,10 @@ func SetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64)
 	})
 }
 
-// ReplaceOrSetUniqueSecondaryIndex ...
-func ReplaceOrSetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
-	var kb secondaryIndexKeyBuilder
-	if err := kb.WritePrefix(prefix); err != nil {
-		return err
-	}
-	if err := kb.WriteKey(key, s); err != nil {
-		return err
-	}
-
-	return s.Update(func(tx kv.RWTx) error {
-		if err := kb.WriteID(id); err != nil {
-			return err
-		}
-		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
-	})
-}
-
 // DeleteSecondaryIndex ...
-func DeleteSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error {
+func DeleteSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
 	var kb secondaryIndexKeyBuilder
-	if err := kb.WritePrefix(prefix); err != nil {
+	if err := kb.WriteNS(ns); err != nil {
 		return err
 	}
 	if err := kb.WriteKey(key, s); err != nil {
@@ -96,8 +78,8 @@ func DeleteSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) er
 }
 
 // GetUniqueSecondaryIndex ...
-func GetUniqueSecondaryIndex(s kv.Store, prefix string, key []byte) (uint64, error) {
-	keys, err := scanSecondaryIndex(s, prefix, key)
+func GetUniqueSecondaryIndex(s kv.Store, ns namespace, key []byte) (uint64, error) {
+	keys, err := scanSecondaryIndex(s, ns, key)
 	if err != nil {
 		return 0, err
 	}
@@ -108,8 +90,8 @@ func GetUniqueSecondaryIndex(s kv.Store, prefix string, key []byte) (uint64, err
 }
 
 // ScanSecondaryIndex ...
-func ScanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]uint64, error) {
-	keys, err := scanSecondaryIndex(s, prefix, key)
+func ScanSecondaryIndex(s kv.Store, ns namespace, key []byte) ([]uint64, error) {
+	keys, err := scanSecondaryIndex(s, ns, key)
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +103,9 @@ func ScanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]uint64, error)
 	return ids, nil
 }
 
-func scanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]*daov1.SecondaryIndexKey, error) {
+func scanSecondaryIndex(s kv.Store, ns namespace, key []byte) ([]*daov1.SecondaryIndexKey, error) {
 	var kb secondaryIndexKeyBuilder
-	if err := kb.WritePrefix(prefix); err != nil {
+	if err := kb.WriteNS(ns); err != nil {
 		return nil, err
 	}
 	if err := kb.WriteKey(key, s); err != nil {
@@ -165,12 +147,45 @@ type secondaryIndexKeyBuilder struct {
 	sb strings.Builder
 }
 
-func (b *secondaryIndexKeyBuilder) WritePrefix(prefix string) error {
-	_, err := b.sb.WriteString(prefix)
+func (b *secondaryIndexKeyBuilder) WriteNS(ns namespace) error {
+	_, err := b.sb.WriteString(ns.String())
+	if err != nil {
+		return err
+	}
+	_, err = b.sb.WriteRune(':')
+	if err != nil {
+		return err
+	}
 	return err
 }
 
 func (b *secondaryIndexKeyBuilder) WriteKey(key []byte, s interface{}) error {
+	h, err := hashSecondaryIndexKey(key, s)
+	if err != nil {
+		return err
+	}
+
+	if _, err := b.sb.WriteString(h); err != nil {
+		return err
+	}
+	if _, err := b.sb.WriteRune(':'); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *secondaryIndexKeyBuilder) WriteID(id uint64) error {
+	_, err := b.sb.WriteString(strconv.FormatUint(id, 36))
+	return err
+}
+
+func (b *secondaryIndexKeyBuilder) String() string {
+	return b.sb.String()
+}
+
+const secondaryIndexKeyHashSize = 8
+
+func hashSecondaryIndexKey(key []byte, s interface{}) (string, error) {
 	var salt []byte
 	if s, ok := s.(Salter); ok {
 		salt = s.Salt()
@@ -181,26 +196,22 @@ func (b *secondaryIndexKeyBuilder) WriteKey(key []byte, s interface{}) error {
 
 	h, err := blake2b.New(blake2b.Size256, salt)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if _, err := h.Write(key); err != nil {
-		return err
+		return "", err
 	}
 
-	if _, err := b.sb.WriteString(base64.RawStdEncoding.EncodeToString(h.Sum(nil))); err != nil {
-		return err
-	}
-	if _, err := b.sb.WriteRune(':'); err != nil {
-		return err
-	}
-	return nil
+	b := h.Sum(nil)[:secondaryIndexKeyHashSize]
+	return base64.RawStdEncoding.EncodeToString(b), nil
 }
 
-func (b *secondaryIndexKeyBuilder) WriteID(id uint64) error {
-	_, err := b.sb.WriteString(strconv.FormatUint(id, 10))
-	return err
+type secondaryKey struct {
+	s   interface{}
+	key []byte
 }
 
-func (b *secondaryIndexKeyBuilder) String() string {
-	return b.sb.String()
+func (f secondaryKey) String() string {
+	h, _ := hashSecondaryIndexKey(f.key, f.s)
+	return h
 }

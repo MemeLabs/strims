@@ -46,19 +46,19 @@ var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptio
 
 func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
 	err = store.View(func(tx kv.Tx) (err error) {
-		config, err = dao.GetChatServer(tx, id)
+		config, err = dao.ChatServers.Get(tx, id)
 		if err != nil {
 			return
 		}
-		emotes, err = dao.GetChatEmotes(tx, id)
+		emotes, err = dao.GetChatEmotesByServerID(tx, id)
 		if err != nil {
 			return
 		}
-		modifiers, err = dao.GetChatModifiers(tx, id)
+		modifiers, err = dao.GetChatModifiersByServerID(tx, id)
 		if err != nil {
 			return
 		}
-		tags, err = dao.GetChatTags(tx, id)
+		tags, err = dao.GetChatTagsByServerID(tx, id)
 		if err != nil {
 			return
 		}

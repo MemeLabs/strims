@@ -83,7 +83,7 @@ func CreateServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byt
 		return 0, nil, err
 	}
 	err = store.Update(func(tx kv.RWTx) error {
-		return tx.Put("profile", profile)
+		return Profile.Set(tx, profile)
 	})
 	if err != nil {
 		return 0, nil, err

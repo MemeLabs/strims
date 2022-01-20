@@ -52,7 +52,7 @@ func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
 }
 
 func (s *Store) transact(table string, fn func(tx kv.BlobTx) error, readOnly bool) error {
-	tx, err := s.db.BeginTx(context.TODO(), &sql.TxOptions{ReadOnly: readOnly})
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: readOnly})
 	if err != nil {
 		return err
 	}
@@ -111,8 +111,4 @@ func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 		values = append(values, v)
 	}
 	return values, nil
-}
-
-func (t Tx) Commit() error {
-	return t.tx.Commit()
 }

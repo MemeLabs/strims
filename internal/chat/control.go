@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -30,7 +29,7 @@ type Control interface {
 	SyncAssets(serverID uint64, forceUnifiedUpdate bool) error
 	SyncServer(s *chatv1.Server)
 	RemoveServer(id uint64)
-	SyncEmote(serverID uint64, e *chatv1.Emote)
+	SyncEmote(e *chatv1.Emote)
 	RemoveEmote(id uint64)
 	ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
 	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
@@ -94,7 +93,7 @@ func (t *control) Run(ctx context.Context) {
 }
 
 func (t *control) startServerRunners(ctx context.Context) error {
-	configs, err := dao.GetChatServers(t.store)
+	configs, err := dao.ChatServers.GetAll(t.store)
 	if err != nil {
 		return err
 	}
@@ -114,7 +113,7 @@ func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
 }
 
 func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
-	server, err := dao.GetChatServer(t.store, serverID)
+	server, err := dao.ChatServers.Get(t.store, serverID)
 	if err != nil {
 		return
 	}
@@ -138,9 +137,9 @@ func (t *control) RemoveServer(id uint64) {
 }
 
 // SyncEmote ...
-func (t *control) SyncEmote(serverID uint64, e *chatv1.Emote) {
+func (t *control) SyncEmote(e *chatv1.Emote) {
 	t.observers.EmitLocal(event.ChatEmoteSync{
-		ServerID: serverID,
+		ServerID: e.ServerId,
 		Emote:    e,
 	})
 }
@@ -216,10 +215,8 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}
 
-					log.Printf("have asset bundle will emit... %p", assets)
 					select {
 					case assets <- b:
-						log.Println("emitted asset bundle")
 					case <-ctx.Done():
 						return ctx.Err()
 					}

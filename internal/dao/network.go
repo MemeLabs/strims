@@ -2,72 +2,85 @@ package dao
 
 import (
 	"bytes"
-	"strconv"
+	"encoding/binary"
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"google.golang.org/protobuf/proto"
 )
 
-const networkPrefix = "network:"
+const (
+	_ = iota + networkNS
+	networkNetworkNS
+	networkNetworkKeyNS
+	networkCertificateLogNS
+	networkCertificateLogNetworkNS
+	networkCertificateLogSerialNS
+	networkCertificateLogSubjectNS
+)
 
-func prefixNetworkKey(id uint64) string {
-	return networkPrefix + strconv.FormatUint(id, 10)
+var Networks = NewTable[networkv1.Network](networkNetworkNS)
+
+var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
+
+var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS)
+
+var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCertificateLog = ManyToOne(
+	networkCertificateLogNetworkNS,
+	CertificateLogs,
+	Networks,
+	(*networkv1ca.CertificateLog).GetNetworkID,
+	&ManyToOneOptions{CascadeDelete: true},
+)
+
+func FormatGetCertificateLogsBySerialNumberKey(networkID uint64, serialNumber []byte) []byte {
+	b := make([]byte, 8, 8+len(serialNumber))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, serialNumber...)
 }
 
-// UpsertNetwork ...
-func UpsertNetwork(s kv.RWStore, v *networkv1.Network) error {
-	return s.Update(func(tx kv.RWTx) error {
-		return tx.Put(prefixNetworkKey(v.Id), v)
-	})
+var GetCertificateLogBySerialNumber = UniqueIndex(
+	networkCertificateLogSerialNS,
+	CertificateLogs,
+	func(m *networkv1ca.CertificateLog) []byte {
+		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkID, m.Certificate.SerialNumber)
+	},
+	nil,
+)
+
+func FormatCertificateLogSubjectKey(networkID uint64, subject string) []byte {
+	b := make([]byte, 8, 8+len([]byte(subject)))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, []byte(subject)...)
 }
 
-// DeleteNetwork ...
-func DeleteNetwork(s kv.RWStore, id uint64) error {
-	return s.Update(func(tx kv.RWTx) error {
-		return tx.Delete(prefixNetworkKey(id))
-	})
+func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
+	return FormatCertificateLogSubjectKey(m.NetworkID, m.Certificate.Subject)
 }
 
-// GetNetwork ...
-func GetNetwork(s kv.Store, id uint64) (v *networkv1.Network, err error) {
-	v = &networkv1.Network{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.Get(prefixNetworkKey(id), v)
-	})
-	return
-}
-
-// GetNetworkByKey ...
-func GetNetworkByKey(s kv.Store, key []byte) (*networkv1.Network, error) {
-	networks, err := GetNetworks(s)
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range networks {
-		if bytes.Equal(CertificateRoot(v.Certificate).Key, key) {
-			return v, nil
-		}
-	}
-	return nil, kv.ErrRecordNotFound
-}
-
-// GetNetworks ...
-func GetNetworks(s kv.Store) (v []*networkv1.Network, err error) {
-	v = []*networkv1.Network{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.ScanPrefix(networkPrefix, &v)
-	})
-	return
-}
+var GetCertificateLogBySubject = UniqueIndex(
+	networkCertificateLogSubjectNS,
+	CertificateLogs,
+	certificateLogSubjectKey,
+	&UniqueIndexOptions[networkv1ca.CertificateLog]{
+		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
+			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
+				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
+			}
+			return ErrUniqueConstraintViolated
+		},
+	},
+)
 
 // NextNetworkDisplayOrder ...
 func NextNetworkDisplayOrder(s kv.Store) (n uint32, err error) {
-	networks, err := GetNetworks(s)
+	networks, err := Networks.GetAll(s)
 	for _, v := range networks {
 		if v.DisplayOrder >= n {
 			n = v.DisplayOrder + 1
@@ -239,6 +252,27 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.In
 	return &networkv1.InvitationV0{
 		Key:         inviteKey,
 		Certificate: inviteCert,
+	}, nil
+}
+
+// NewCertificateLog ...
+func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certificate) (*networkv1ca.CertificateLog, error) {
+	id, err := s.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	c := proto.Clone(cert).(*certificate.Certificate)
+	if p := c.GetParent(); p != nil {
+		c.ParentOneof = &certificate.Certificate_ParentSerialNumber{
+			ParentSerialNumber: p.SerialNumber,
+		}
+	}
+
+	return &networkv1ca.CertificateLog{
+		Id:          id,
+		NetworkID:   networkID,
+		Certificate: c,
 	}, nil
 }
 

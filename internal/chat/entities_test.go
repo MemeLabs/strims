@@ -9,91 +9,91 @@ import (
 	"mvdan.cc/xurls/v2"
 )
 
-type entityTest struct {
-	name     string
-	input    string
-	entities *chatv1.Message_Entities
-}
+func TestParse(t *testing.T) {
+	type entityTest struct {
+		name     string
+		input    string
+		entities *chatv1.Message_Entities
+	}
 
-var cases = []entityTest{
-	{
-		name:     "basic",
-		input:    "aaaaaaaaaa",
-		entities: &chatv1.Message_Entities{},
-	},
-	{
-		name:  "emote",
-		input: "test PEPE test",
-		entities: &chatv1.Message_Entities{
-			Emotes: []*chatv1.Message_Entities_Emote{{Name: "PEPE", Bounds: &chatv1.Message_Entities_Bounds{Start: 5, End: 9}}},
+	var cases = []entityTest{
+		{
+			name:     "basic",
+			input:    "aaaaaaaaaa",
+			entities: &chatv1.Message_Entities{},
 		},
-	},
-	{
-		name:  "link",
-		input: "strims.gg",
-		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 9}}},
-		},
-	},
-	{
-		name:  "link",
-		input: "http://strims.gg",
-		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "http://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 16}}},
-		},
-	},
-	{
-		name:  "spoiler",
-		input: "spoiler ||dumbledore was gay all along||",
-		entities: &chatv1.Message_Entities{
-			Spoilers: []*chatv1.Message_Entities_Spoiler{{Bounds: &chatv1.Message_Entities_Bounds{Start: 8, End: 40}}},
-		},
-	},
-	{
-		name:  "greentext",
-		input: ">implying greentext doesn't work",
-		entities: &chatv1.Message_Entities{
-			GreenText: &chatv1.Message_Entities_GenericEntity{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 32}},
-		},
-	},
-	{
-		name:  "self",
-		input: "/me dies",
-		entities: &chatv1.Message_Entities{
-			SelfMessage: &chatv1.Message_Entities_GenericEntity{Bounds: &chatv1.Message_Entities_Bounds{Start: 4, End: 8}},
-		},
-	},
-	{
-		name:  "tag",
-		input: "nsfw loud weeb nsfl google.com",
-		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "https://google.com", Bounds: &chatv1.Message_Entities_Bounds{Start: 20, End: 30}}},
-			Tags: []*chatv1.Message_Entities_Tag{
-				{Name: "nsfw", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
-				{Name: "loud", Bounds: &chatv1.Message_Entities_Bounds{Start: 5, End: 9}},
-				{Name: "weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 10, End: 14}},
-				{Name: "nsfl", Bounds: &chatv1.Message_Entities_Bounds{Start: 15, End: 19}},
+		{
+			name:  "emote",
+			input: "test PEPE test",
+			entities: &chatv1.Message_Entities{
+				Emotes: []*chatv1.Message_Entities_Emote{{Name: "PEPE", Bounds: &chatv1.Message_Entities_Bounds{Start: 5, End: 9}}},
 			},
 		},
-	},
-	{
-		name:  "code",
-		input: "`hacker mode activated`",
-		entities: &chatv1.Message_Entities{
-			CodeBlocks: []*chatv1.Message_Entities_CodeBlock{{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 23}}},
+		{
+			name:  "link",
+			input: "strims.gg",
+			entities: &chatv1.Message_Entities{
+				Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 9}}},
+			},
 		},
-	},
-	{
-		// should not trigger weeb tag
-		name:  "entity in link",
-		input: "strims.gg/weeb",
-		entities: &chatv1.Message_Entities{
-			Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg/weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 14}}},
+		{
+			name:  "link",
+			input: "http://strims.gg",
+			entities: &chatv1.Message_Entities{
+				Links: []*chatv1.Message_Entities_Link{{Url: "http://strims.gg", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 16}}},
+			},
 		},
-	},
-}
+		{
+			name:  "spoiler",
+			input: "spoiler ||dumbledore was gay all along||",
+			entities: &chatv1.Message_Entities{
+				Spoilers: []*chatv1.Message_Entities_Spoiler{{Bounds: &chatv1.Message_Entities_Bounds{Start: 8, End: 40}}},
+			},
+		},
+		{
+			name:  "greentext",
+			input: ">implying greentext doesn't work",
+			entities: &chatv1.Message_Entities{
+				GreenText: &chatv1.Message_Entities_GenericEntity{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 32}},
+			},
+		},
+		{
+			name:  "self",
+			input: "/me dies",
+			entities: &chatv1.Message_Entities{
+				SelfMessage: &chatv1.Message_Entities_GenericEntity{Bounds: &chatv1.Message_Entities_Bounds{Start: 4, End: 8}},
+			},
+		},
+		{
+			name:  "tag",
+			input: "nsfw loud weeb nsfl google.com",
+			entities: &chatv1.Message_Entities{
+				Links: []*chatv1.Message_Entities_Link{{Url: "https://google.com", Bounds: &chatv1.Message_Entities_Bounds{Start: 20, End: 30}}},
+				Tags: []*chatv1.Message_Entities_Tag{
+					{Name: "nsfw", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
+					{Name: "loud", Bounds: &chatv1.Message_Entities_Bounds{Start: 5, End: 9}},
+					{Name: "weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 10, End: 14}},
+					{Name: "nsfl", Bounds: &chatv1.Message_Entities_Bounds{Start: 15, End: 19}},
+				},
+			},
+		},
+		{
+			name:  "code",
+			input: "`hacker mode activated`",
+			entities: &chatv1.Message_Entities{
+				CodeBlocks: []*chatv1.Message_Entities_CodeBlock{{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 23}}},
+			},
+		},
+		{
+			// should not trigger weeb tag
+			name:  "entity in link",
+			input: "strims.gg/weeb",
+			entities: &chatv1.Message_Entities{
+				Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg/weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 14}}},
+			},
+		},
+	}
 
-func TestParse(t *testing.T) {
 	extractor := xtractor()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

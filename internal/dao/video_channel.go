@@ -7,95 +7,67 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-const videoChannelPrefix = "videoChannel:"
-const videoChannelLocalShareIndexPrefix = "videoChannelLocalShare"
-const videoChannelRemoteShareIndexPrefix = "videoChannelRemoteShare:"
+var VideoChannels = NewTable[videov1.VideoChannel](videoChannelNS)
 
-func prefixVideoChannelKey(id uint64) string {
-	return videoChannelPrefix + strconv.FormatUint(id, 10)
-}
+const (
+	_ byte = iota
+	videoChannelLocalShare
+	videoChannelRemoteShare
+)
 
-// UpsertVideoChannel ...
-func UpsertVideoChannel(s kv.RWStore, v *video.VideoChannel) error {
-	return s.Update(func(tx kv.RWTx) error {
-		if prefix, key, ok := getVideoChannelUniqueKey(v); ok {
-			if err := SetUniqueSecondaryIndex(s, prefix, key, v.Id); err != nil {
-				return err
-			}
-		}
-
-		return tx.Put(prefixVideoChannelKey(v.Id), v)
-	})
-}
-
-// DeleteVideoChannel ...
-func DeleteVideoChannel(s kv.RWStore, id uint64) error {
-	return s.Update(func(tx kv.RWTx) error {
-		v, err := GetVideoChannel(tx, id)
-		if err != nil {
-			return err
-		}
-
-		if prefix, key, ok := getVideoChannelUniqueKey(v); ok {
-			if err := DeleteSecondaryIndex(s, prefix, key, id); err != nil {
-				return err
-			}
-		}
-
-		return tx.Delete(prefixVideoChannelKey(id))
-	})
-}
-
-func getVideoChannelUniqueKey(v *video.VideoChannel) (string, []byte, bool) {
+var getVideoChannelByUniqueIndex = UniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
 	var key []byte
 	switch o := v.Owner.(type) {
-	case *video.VideoChannel_LocalShare_:
+	case *videov1.VideoChannel_LocalShare_:
+		key = append(key, videoChannelLocalShare)
 		key = append(key, CertificateRoot(o.LocalShare.Certificate).Key...)
 		key = append(key, o.LocalShare.Certificate.Key...)
-		return videoChannelLocalShareIndexPrefix, key, true
-	case *video.VideoChannel_RemoteShare_:
+		return key
+	case *videov1.VideoChannel_RemoteShare_:
+		key = append(key, videoChannelRemoteShare)
 		key = append(key, o.RemoteShare.NetworkKey...)
 		key = append(key, o.RemoteShare.ServiceKey...)
-		return videoChannelRemoteShareIndexPrefix, key, true
+		return key
 	default:
-		return "", nil, false
+		return nil
 	}
-}
+}, nil)
 
-// GetVideoChannel ...
-func GetVideoChannel(s kv.Store, id uint64) (v *video.VideoChannel, err error) {
-	v = &video.VideoChannel{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.Get(prefixVideoChannelKey(id), v)
-	})
-	return
+// GetVideoChannelIDByOwnerCert ...
+func GetVideoChannelIDByOwnerCert(s kv.Store, cert *certificate.Certificate) (uint64, error) {
+	var key []byte
+	key = append(key, videoChannelLocalShare)
+	key = append(key, CertificateRoot(cert).Key...)
+	key = append(key, cert.Key...)
+
+	res, err := getVideoChannelByUniqueIndex(s, key)
+	return res.GetId(), err
 }
 
 // GetVideoChannelByStreamKey ...
-func GetVideoChannelByStreamKey(s kv.Store, key string) (*video.VideoChannel, error) {
+func GetVideoChannelByStreamKey(s kv.Store, key string) (*videov1.VideoChannel, error) {
 	id, signature, err := ParseVideoChannelStreamKey(key)
 	if err != nil {
 		return nil, fmt.Errorf("parsing stream key: %w", err)
 	}
 
-	v, err := GetVideoChannel(s, id)
+	v, err := VideoChannels.Get(s, id)
 	if err != nil {
 		return nil, errors.New("channel not found")
 	}
 
 	var ownerKey []byte
 	switch o := v.Owner.(type) {
-	case *video.VideoChannel_Local_:
+	case *videov1.VideoChannel_Local_:
 		ownerKey = o.Local.GetAuthKey()
-	case *video.VideoChannel_LocalShare_:
+	case *videov1.VideoChannel_LocalShare_:
 		ownerKey = o.LocalShare.GetCertificate().GetKey()
 	default:
 		return nil, errors.New("channel not found")
@@ -107,25 +79,8 @@ func GetVideoChannelByStreamKey(s kv.Store, key string) (*video.VideoChannel, er
 	return v, nil
 }
 
-// GetVideoChannelIDByOwnerCert ...
-func GetVideoChannelIDByOwnerCert(s kv.Store, cert *certificate.Certificate) (uint64, error) {
-	var key []byte
-	key = append(key, CertificateRoot(cert).Key...)
-	key = append(key, cert.Key...)
-	return GetUniqueSecondaryIndex(s, videoChannelLocalShareIndexPrefix, key)
-}
-
-// GetVideoChannels ...
-func GetVideoChannels(s kv.Store) (v []*video.VideoChannel, err error) {
-	v = []*video.VideoChannel{}
-	err = s.View(func(tx kv.Tx) error {
-		return tx.ScanPrefix(videoChannelPrefix, &v)
-	})
-	return
-}
-
 // NewVideoChannel ...
-func NewVideoChannel(g IDGenerator) (*video.VideoChannel, error) {
+func NewVideoChannel(g IDGenerator) (*videov1.VideoChannel, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -141,7 +96,7 @@ func NewVideoChannel(g IDGenerator) (*video.VideoChannel, error) {
 		return nil, err
 	}
 
-	return &video.VideoChannel{
+	return &videov1.VideoChannel{
 		Id:    id,
 		Key:   key,
 		Token: token,

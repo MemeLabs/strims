@@ -31,7 +31,7 @@ type control struct {
 }
 
 func (c *control) Dispatch(n *notificationv1.Notification) error {
-	if err := dao.UpsertNotification(c.store, n); err != nil {
+	if err := dao.Notifications.Upsert(c.store, n); err != nil {
 		return err
 	}
 
@@ -40,7 +40,7 @@ func (c *control) Dispatch(n *notificationv1.Notification) error {
 }
 
 func (c *control) Dismiss(id uint64) error {
-	if err := dao.DeleteNotification(c.store, id); err != nil {
+	if err := dao.Notifications.Delete(c.store, id); err != nil {
 		return err
 	}
 
@@ -54,7 +54,7 @@ func (c *control) Watch(ctx context.Context) <-chan *notificationv1.Event {
 	go func() {
 		defer close(ch)
 
-		ns, err := dao.GetNotifications(c.store)
+		ns, err := dao.Notifications.GetAll(c.store)
 		if err != nil {
 			c.logger.Debug("loading notifications failed", zap.Error(err))
 		}
