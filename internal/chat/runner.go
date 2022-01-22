@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"strconv"
 	"sync"
 	"time"
 
@@ -144,7 +143,7 @@ func (r *runner) SyncServer() {
 
 func (r *runner) tryStartServer(ctx context.Context) {
 	for !r.Closed() {
-		mu := dao.NewMutex(r.logger, r.store, strconv.AppendUint([]byte("chat:"), r.config.Id, 10))
+		mu := dao.NewMutex(r.logger, r.store, r.config.Id)
 		muctx, err := mu.Lock(ctx)
 		if err != nil {
 			return

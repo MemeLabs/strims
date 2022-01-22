@@ -31,9 +31,6 @@ func get(tx kv.BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	return proto.Unmarshal(b, m)
 }
 
-var protoMessage proto.Message
-var protoMessageType = reflect.TypeOf(protoMessage)
-
 // read from the tx values from keys matching prefix and append them to the
 // *[]*proto.Message
 func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages interface{}) error {

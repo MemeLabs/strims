@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -93,6 +94,8 @@ func (n namespace) Format(ks ...interface{}) string {
 			b.WriteString(strconv.FormatInt(k, 36))
 		case uint64:
 			b.WriteString(strconv.FormatUint(k, 36))
+		case fmt.Stringer:
+			b.WriteString(k.String())
 		default:
 			panic("unsupported key type")
 		}
@@ -115,4 +118,5 @@ const (
 	notificationNS
 	chatNS
 	videoNS
+	vnicNS
 )

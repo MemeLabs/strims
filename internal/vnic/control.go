@@ -61,7 +61,7 @@ func (c *control) applyConfig(config *vnicv1.Config) {
 }
 
 func (c *control) loadConfig() {
-	config, err := dao.GetVNICConfig(c.store)
+	config, err := dao.VNICConfig.Get(c.store)
 	if err != nil {
 		c.logger.Debug("failed to load vnic config", zap.Error(err))
 		return
@@ -72,12 +72,12 @@ func (c *control) loadConfig() {
 
 // GetConfig ...
 func (c *control) GetConfig() (*vnicv1.Config, error) {
-	return dao.GetVNICConfig(c.store)
+	return dao.VNICConfig.Get(c.store)
 }
 
 // SetConfig ...
 func (c *control) SetConfig(config *vnicv1.Config) error {
-	if err := dao.SetVNICConfig(c.store, config); err != nil {
+	if err := dao.VNICConfig.Set(c.store, config); err != nil {
 		return err
 	}
 

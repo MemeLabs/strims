@@ -2,7 +2,6 @@ package slab
 
 import (
 	"math"
-	"math/bits"
 	"reflect"
 	"unsafe"
 )
@@ -13,51 +12,33 @@ type ref uint16
 
 const nilRef ref = math.MaxUint16
 
-func newFreeList(size int) *freeList {
-	size = (size + 63) / 64
-	bitmaps := make([]uint64, size)
+func newStack(size int) *stack {
 	refs := make([]ref, size)
-	for i := range bitmaps {
-		bitmaps[i] = math.MaxUint64
-		refs[i] = ref(i + 1)
+	for i := 0; i < size; i++ {
+		refs[i] = ref(i)
 	}
-	refs[size-1] = nilRef
-
-	return &freeList{
-		bitmaps: bitmaps,
-		refs:    refs,
+	return &stack{
+		refs: refs,
+		i:    ref(size),
 	}
 }
 
-type freeList struct {
-	head    ref
-	bitmaps []uint64
-	refs    []ref
+type stack struct {
+	refs []ref
+	i    ref
 }
 
-func (b *freeList) Alloc() ref {
-	if b.head == nilRef {
+func (b *stack) Alloc() ref {
+	if b.i == 0 {
 		return nilRef
 	}
-	i := b.head
-	ii := bits.TrailingZeros64(b.bitmaps[i])
-	b.bitmaps[i] &^= 1 << ii
-	for b.head != nilRef && b.bitmaps[b.head] == 0 {
-		head := b.head
-		b.head = b.refs[head]
-		b.refs[head] = nilRef
-	}
-	return i<<6 | ref(ii)
+	b.i--
+	return b.refs[b.i]
 }
 
-func (b *freeList) Free(n ref) {
-	i := n >> 6
-	ii := n & 0x3f
-	b.bitmaps[i] |= 1 << ii
-	if b.head != i && b.refs[i] == nilRef {
-		b.refs[i] = b.head
-		b.head = i
-	}
+func (b *stack) Free(n ref) {
+	b.refs[b.i] = n
+	b.i++
 }
 
 func newSlab[T any](size int) slab[T] {
@@ -67,7 +48,7 @@ func newSlab[T any](size int) slab[T] {
 		offset: (*reflect.SliceHeader)(unsafe.Pointer(&data)).Data,
 		next:   nilRef,
 		data:   data,
-		free:   newFreeList(size),
+		free:   newStack(size),
 	}
 }
 
@@ -75,7 +56,7 @@ type slab[T any] struct {
 	offset uintptr
 	next   ref
 	data   []T
-	free   *freeList
+	free   *stack
 }
 
 func NewWithSize[T any](size int) *Allocator[T] {

@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// var ErrNetworkNotFound = errors.New("network not found")
-
 var _ CA = &ca{}
 
 type CA interface {

@@ -10,7 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
+	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -65,6 +65,8 @@ func (t *control) Run(ctx context.Context) {
 			switch e := e.(type) {
 			case event.PeerAdd:
 				t.handlePeerAdd(ctx, e.ID)
+			case event.NetworkBootstrapClientAdd:
+				go t.startClient(e.Client)
 			}
 		case <-ctx.Done():
 			return
@@ -79,8 +81,8 @@ func (t *control) handlePeerAdd(ctx context.Context, id uint64) {
 	}
 
 	go func() {
-		var res bootstrap.BootstrapPeerGetPublishEnabledResponse
-		if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+		var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
+		if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
 			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
 		}
 
@@ -115,30 +117,27 @@ func (t *control) RemovePeer(id uint64) {
 func (t *control) startClients() {
 	clients, err := dao.BootstrapClients.GetAll(t.store)
 	if err != nil {
-		t.logger.Fatal(
-			"loading bootstrap clients failed",
-			zap.Error(err),
-		)
+		t.logger.Fatal("loading bootstrap clients failed", zap.Error(err))
 	}
 
 	for _, client := range clients {
-		go func(client *bootstrap.BootstrapClient) {
-			if err := t.startClient(client); err != nil {
-				t.logger.Debug("starting bootstrap client failed", zap.Error(err))
-			}
-		}(client)
+		go t.startClient(client)
 	}
 }
 
-func (t *control) startClient(client *bootstrap.BootstrapClient) error {
+func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
+	var err error
 	switch client := client.ClientOptions.(type) {
-	case *bootstrap.BootstrapClient_WebsocketOptions:
-		return t.vpn.VNIC().Dial(vnic.WebSocketAddr{
+	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
+		err = t.vpn.VNIC().Dial(vnic.WebSocketAddr{
 			URL:                   client.WebsocketOptions.Url,
 			InsecureSkipVerifyTLS: client.WebsocketOptions.InsecureSkipVerifyTls,
 		})
 	}
-	return nil
+
+	if err != nil {
+		t.logger.Debug("starting bootstrap client failed", zap.Error(err))
+	}
 }
 
 // PublishingEnabled ...
@@ -178,5 +177,5 @@ func (t *control) Publish(ctx context.Context, peerID uint64, network *network.N
 	}
 	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
 
-	return peer.client.Bootstrap().Publish(ctx, &bootstrap.BootstrapPeerPublishRequest{Certificate: cert}, &bootstrap.BootstrapPeerPublishResponse{})
+	return peer.client.Bootstrap().Publish(ctx, &networkv1bootstrap.BootstrapPeerPublishRequest{Certificate: cert}, &networkv1bootstrap.BootstrapPeerPublishResponse{})
 }

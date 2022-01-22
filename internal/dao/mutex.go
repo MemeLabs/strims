@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -25,17 +24,16 @@ const mutexRefreshInterval = 5 * time.Second
 const mutexRecheckMinInterval = 5 * time.Second
 const mutexRecheckMaxInterval = 15 * time.Second
 
-const mutexPrefix = "mutex:"
-
 // NewMutex ...
-func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
-	token := make([]byte, 8)
-	binary.BigEndian.PutUint64(token, rand.Uint64())
+func NewMutex(logger *zap.Logger, store kv.RWStore, keys ...interface{}) *Mutex {
+	token := make([]byte, 16)
+	binary.BigEndian.PutUint64(token[:8], rand.Uint64())
+	binary.BigEndian.PutUint64(token[8:], rand.Uint64())
 
 	return &Mutex{
 		logger: logger,
 		store:  store,
-		key:    fmt.Sprintf("%s%x", mutexPrefix, key),
+		key:    mutexNS.Format(keys...),
 		token:  token,
 	}
 }
@@ -43,7 +41,7 @@ func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
 // Mutex ...
 type Mutex struct {
 	logger   *zap.Logger
-	store    *ProfileStore
+	store    kv.RWStore
 	key      string
 	token    []byte
 	held     bool

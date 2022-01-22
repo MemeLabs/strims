@@ -20,7 +20,7 @@ func wrapError(method, t string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("dao %s[%s]: %w", method, t, err)
+	return fmt.Errorf("kv %s[%s]: %w", method, t, err)
 }
 
 type SingletonRecord[V any] interface {
@@ -39,16 +39,16 @@ func NewSingleton[V any, T SingletonRecord[V]](ns namespace, opt *SingletonOptio
 
 	var temp V
 	return &Singleton[V, T]{
-		ns:           ns,
-		name:         reflect.TypeOf(temp).String(),
-		defaultValue: opt.DefaultValue,
+		ns:   ns,
+		name: reflect.TypeOf(temp).String(),
+		opt:  opt,
 	}
 }
 
 type Singleton[V any, T SingletonRecord[V]] struct {
-	ns           namespace
-	name         string
-	defaultValue T
+	ns   namespace
+	name string
+	opt  *SingletonOptions[V, T]
 }
 
 func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
@@ -67,8 +67,8 @@ func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(t.ns.String(), v)
 	})
-	if err == kv.ErrRecordNotFound && t.defaultValue != nil {
-		return proto.Clone(t.defaultValue).(T), nil
+	if err == kv.ErrRecordNotFound && t.opt.DefaultValue != nil {
+		return proto.Clone(t.opt.DefaultValue).(T), nil
 	}
 	if err != nil {
 		return nil, wrapError("Singleton.Get", t.name, err)
@@ -466,7 +466,7 @@ func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m
 
 		return s.Update(func(tx kv.RWTx) error {
 			mk := key(m)
-			if p.GetId() != 0 {
+			if p != nil {
 				pk := key(p)
 				if bytes.Equal(mk, pk) {
 					return nil
@@ -538,7 +538,7 @@ func UniqueIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m T)
 			}()
 		}
 
-		if p.GetId() != 0 && bytes.Equal(k, key(p)) {
+		if p != nil && bytes.Equal(k, key(p)) {
 			return nil
 		}
 
@@ -553,11 +553,11 @@ func UniqueIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m T)
 		if opt.OnConflict == nil {
 			return ErrUniqueConstraintViolated
 		}
-		p, err = t.Get(s, ids[0])
+		c, err := t.Get(s, ids[0])
 		if err != nil {
 			return err
 		}
-		return opt.OnConflict(s, t, m, p)
+		return opt.OnConflict(s, t, m, c)
 	})
 
 	get := SecondaryIndex(ns, t, key)

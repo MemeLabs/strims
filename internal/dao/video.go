@@ -3,7 +3,7 @@ package dao
 import videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 
 const (
-	_ namespace = iota + videoNS
+	_ = iota + videoNS
 	videoChannelNS
 	videoChannelKeyNS
 	videoIngressConfigNS

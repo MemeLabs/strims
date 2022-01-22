@@ -17,13 +17,16 @@ type Meme struct {
 }
 
 func TestAlloc(t *testing.T) {
-	s := NewWithSize[Meme](16)
+	s := New[Meme]()
 	var ms []*Meme
-	for i := 0; i < 65000; i++ {
-		ms = append(ms, s.Alloc())
-	}
-	for _, m := range ms {
-		s.Free(m)
+	for i := 0; i < 2; i++ {
+		for j := 0; j < 1000000; j++ {
+			ms = append(ms, s.Alloc())
+		}
+		for _, m := range ms {
+			s.Free(m)
+		}
+		ms = ms[:0]
 	}
 }
 
@@ -92,7 +95,7 @@ func BenchmarkSyncPool(b *testing.B) {
 	}
 }
 
-func TestListGrow(t *testing.T) {
+func TestStackGrow(t *testing.T) {
 	cases := []struct {
 		count int
 	}{
@@ -102,10 +105,10 @@ func TestListGrow(t *testing.T) {
 	}
 	for _, c := range cases {
 		ms := make([]ref, 0, 4096)
-		s := newFreeList(4096)
+		s := newStack(4096)
 
 		for i := 0; i < c.count; i++ {
-			if len(ms) > 0 && rand.Float64() < 0.5 {
+			if len(ms) > 0 && rand.Float64() < float64(i)/float64(c.count) {
 				n := rand.Intn(len(ms))
 				s.Free(ms[n])
 				ms[n] = ms[len(ms)-1]
@@ -119,13 +122,13 @@ func TestListGrow(t *testing.T) {
 		}
 
 		sortutil.Ordered(ms)
-		assert.Equal(t, len(slices.Compact(ms)), len(ms))
+		assert.Equal(t, len(ms), len(slices.Compact(ms)))
 	}
 }
 
-func BenchmarkListSerial(b *testing.B) {
+func BenchmarkStackSerial(b *testing.B) {
 	ms := make([]ref, 0, b.N)
-	s := newFreeList(65000)
+	s := newStack(65000)
 
 	b.ResetTimer()
 
@@ -143,9 +146,9 @@ func BenchmarkListSerial(b *testing.B) {
 	}
 }
 
-func BenchmarkListRandom(b *testing.B) {
+func BenchmarkStackRandom(b *testing.B) {
 	ms := make([]ref, 0, b.N)
-	s := newFreeList(65000)
+	s := newStack(65000)
 
 	n := mathutil.Min(b.N, 65000)
 	is := make([]int, n)

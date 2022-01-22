@@ -6,7 +6,6 @@ import (
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
@@ -287,16 +286,16 @@ func NetworkKey(network *networkv1.Network) []byte {
 var BootstrapClients = NewTable[networkv1bootstrap.BootstrapClient](networkBootstrapClientNS)
 
 // NewWebSocketBootstrapClient ...
-func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*bootstrap.BootstrapClient, error) {
+func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*networkv1bootstrap.BootstrapClient, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}
 
-	return &bootstrap.BootstrapClient{
+	return &networkv1bootstrap.BootstrapClient{
 		Id: id,
-		ClientOptions: &bootstrap.BootstrapClient_WebsocketOptions{
-			WebsocketOptions: &bootstrap.BootstrapClientWebSocketOptions{
+		ClientOptions: &networkv1bootstrap.BootstrapClient_WebsocketOptions{
+			WebsocketOptions: &networkv1bootstrap.BootstrapClientWebSocketOptions{
 				Url:                   url,
 				InsecureSkipVerifyTls: insecureSkipVerifyTLS,
 			},

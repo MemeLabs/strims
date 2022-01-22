@@ -7,6 +7,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
@@ -44,6 +45,8 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.Create
 	if err := dao.BootstrapClients.Insert(s.store, client); err != nil {
 		return nil, err
 	}
+
+	s.app.Events().EmitGlobal(event.NetworkBootstrapClientAdd{Client: client})
 
 	return &bootstrap.CreateBootstrapClientResponse{BootstrapClient: client}, nil
 }

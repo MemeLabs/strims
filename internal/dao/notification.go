@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	_ namespace = iota + notificationNS
+	_ = iota + notificationNS
 	notificationNotificationNS
 )
 

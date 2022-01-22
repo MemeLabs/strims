@@ -47,6 +47,10 @@
   }
 
   .layout_chat__toggle_off {
+    transform: rotate(180deg);
+  }
+
+  &.layout--meme_open .layout_chat__toggle_off {
     transform: rotate(-90deg);
   }
 

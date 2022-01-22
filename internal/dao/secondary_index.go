@@ -3,7 +3,6 @@ package dao
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"strconv"
 	"strings"
 
@@ -30,35 +29,6 @@ func SetSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error 
 	})
 }
 
-// SetUniqueSecondaryIndex ...
-func SetUniqueSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
-	var kb secondaryIndexKeyBuilder
-	if err := kb.WriteNS(ns); err != nil {
-		return err
-	}
-	if err := kb.WriteKey(key, s); err != nil {
-		return err
-	}
-
-	return s.Update(func(tx kv.RWTx) error {
-		keys, err := scanSecondaryIndexWithKey(s, key, kb.String())
-		if err != nil {
-			return err
-		}
-		if len(keys) == 1 {
-			if keys[0].Id != id {
-				return errors.New("duplicate key value violates unique constraint")
-			}
-			return nil
-		}
-
-		if err := kb.WriteID(id); err != nil {
-			return err
-		}
-		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
-	})
-}
-
 // DeleteSecondaryIndex ...
 func DeleteSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
 	var kb secondaryIndexKeyBuilder
@@ -75,18 +45,6 @@ func DeleteSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) err
 	return s.Update(func(tx kv.RWTx) error {
 		return tx.Delete(kb.String())
 	})
-}
-
-// GetUniqueSecondaryIndex ...
-func GetUniqueSecondaryIndex(s kv.Store, ns namespace, key []byte) (uint64, error) {
-	keys, err := scanSecondaryIndex(s, ns, key)
-	if err != nil {
-		return 0, err
-	}
-	if len(keys) == 0 {
-		return 0, kv.ErrRecordNotFound
-	}
-	return keys[0].Id, nil
 }
 
 // ScanSecondaryIndex ...

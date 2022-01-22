@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,7 +208,7 @@ func newIngressStream(
 	s.channel.Store(channel)
 	s.channelUpdates <- struct{}{}
 
-	mu := dao.NewMutex(logger, store, strconv.AppendUint(nil, channel.Id, 10))
+	mu := dao.NewMutex(logger, store, channel.Id)
 	if _, err := mu.TryLock(ctx); err != nil {
 		return nil, fmt.Errorf("acquiring stream lock: %w", err)
 	}

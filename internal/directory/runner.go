@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"strconv"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -127,7 +126,7 @@ func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader,
 
 func (r *runner) tryStartServer(ctx context.Context) {
 	for !r.Closed() {
-		mu := dao.NewMutex(r.logger, r.store, strconv.AppendUint([]byte("directory:"), r.network.Id, 10))
+		mu := dao.NewMutex(r.logger, r.store, r.network.Id)
 		muctx, err := mu.Lock(ctx)
 		if err != nil {
 			return
