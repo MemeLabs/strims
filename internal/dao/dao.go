@@ -86,26 +86,25 @@ func (n namespace) Format(ks ...interface{}) string {
 	for _, k := range ks {
 		b.WriteString(":")
 		switch k := k.(type) {
+		case uint64:
+			b.WriteString(strconv.FormatUint(k, 36))
 		case string:
 			b.WriteString(k)
 		case []byte:
 			b.WriteString(base64.RawStdEncoding.EncodeToString(k))
-		case int64:
-			b.WriteString(strconv.FormatInt(k, 36))
-		case uint64:
-			b.WriteString(strconv.FormatUint(k, 36))
 		case fmt.Stringer:
 			b.WriteString(k.String())
 		default:
-			panic("unsupported key type")
+			panic(fmt.Sprintf("unsupported key type %T", k))
 		}
 	}
 	return b.String()
 }
 
 func (n namespace) FormatPrefix(ks ...interface{}) string {
-	ksc := make([]interface{}, len(ks), len(ks)+1)
-	ksc = append(ksc, "")
+	ksc := make([]interface{}, len(ks)+1)
+	copy(ksc, ks)
+	ksc[len(ks)] = ""
 	return n.Format(ksc...)
 }
 

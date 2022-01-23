@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package strims.network.v1.bootstrap;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap;bootstrap";
+option java_package = "gg.strims.network.v1.bootstrap";
+option swift_prefix = "SNB";
+
+import "network/v1/bootstrap/bootstrap.proto";
+
+message BootstrapClientChange {
+  BootstrapClient bootstrap_client = 1;
+}

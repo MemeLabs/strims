@@ -52,7 +52,7 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 	if err != nil {
 		return nil, err
 	}
-	store := dao.NewProfileStore(profileID, t.store, storageKey)
+	store := dao.NewProfileStore(profileID, storageKey, t.store, nil)
 
 	profile, err := dao.Profile.Get(store)
 	if err != nil {

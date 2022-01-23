@@ -3,7 +3,7 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
   KeyType as strims_type_KeyType,
-} from ".//key";
+} from "./key";
 
 export type ICertificateRequest = {
   key?: Uint8Array;

@@ -1,4 +1,4 @@
-package vnic
+package vnicv1
 
 import (
 	"context"

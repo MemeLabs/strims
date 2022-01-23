@@ -3,47 +3,48 @@ package dao
 import (
 	"bytes"
 	"encoding/base64"
-	"strconv"
-	"strings"
 
 	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"golang.org/x/crypto/blake2b"
 )
 
-// SetSecondaryIndex ...
-func SetSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
-	var kb secondaryIndexKeyBuilder
-	if err := kb.WriteNS(ns); err != nil {
-		return err
-	}
-	if err := kb.WriteKey(key, s); err != nil {
-		return err
-	}
-	if err := kb.WriteID(id); err != nil {
-		return err
+const secondaryIndexKeyHashSize = 8
+
+// Salter ...
+type Salter interface {
+	Salt() []byte
+}
+
+func hashSecondaryIndexKey(key []byte, s interface{}) string {
+	var salt []byte
+	if s, ok := s.(Salter); ok {
+		salt = s.Salt()
+		if len(salt) > blake2b.Size {
+			salt = salt[:blake2b.Size]
+		}
 	}
 
+	h, err := blake2b.New(secondaryIndexKeyHashSize, salt)
+	if err != nil {
+		panic(err)
+	}
+
+	h.Write(key)
+	return base64.RawStdEncoding.EncodeToString(h.Sum(nil))
+}
+
+// SetSecondaryIndex ...
+func SetSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
 	return s.Update(func(tx kv.RWTx) error {
-		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
+		return tx.Put(ns.Format(hashSecondaryIndexKey(key, s), id), &daov1.SecondaryIndexKey{Key: key, Id: id})
 	})
 }
 
 // DeleteSecondaryIndex ...
 func DeleteSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) error {
-	var kb secondaryIndexKeyBuilder
-	if err := kb.WriteNS(ns); err != nil {
-		return err
-	}
-	if err := kb.WriteKey(key, s); err != nil {
-		return err
-	}
-	if err := kb.WriteID(id); err != nil {
-		return err
-	}
-
 	return s.Update(func(tx kv.RWTx) error {
-		return tx.Delete(kb.String())
+		return tx.Delete(ns.Format(hashSecondaryIndexKey(key, s), id))
 	})
 }
 
@@ -62,15 +63,7 @@ func ScanSecondaryIndex(s kv.Store, ns namespace, key []byte) ([]uint64, error) 
 }
 
 func scanSecondaryIndex(s kv.Store, ns namespace, key []byte) ([]*daov1.SecondaryIndexKey, error) {
-	var kb secondaryIndexKeyBuilder
-	if err := kb.WriteNS(ns); err != nil {
-		return nil, err
-	}
-	if err := kb.WriteKey(key, s); err != nil {
-		return nil, err
-	}
-
-	return scanSecondaryIndexWithKey(s, key, kb.String())
+	return scanSecondaryIndexWithKey(s, key, ns.FormatPrefix(hashSecondaryIndexKey(key, s)))
 }
 
 func scanSecondaryIndexWithKey(s kv.Store, key []byte, indexKeyPrefix string) ([]*daov1.SecondaryIndexKey, error) {
@@ -94,82 +87,4 @@ func scanSecondaryIndexWithKey(s kv.Store, key []byte, indexKeyPrefix string) ([
 		i++
 	}
 	return candidates[:n], nil
-}
-
-// Salter ...
-type Salter interface {
-	Salt() []byte
-}
-
-type secondaryIndexKeyBuilder struct {
-	sb strings.Builder
-}
-
-func (b *secondaryIndexKeyBuilder) WriteNS(ns namespace) error {
-	_, err := b.sb.WriteString(ns.String())
-	if err != nil {
-		return err
-	}
-	_, err = b.sb.WriteRune(':')
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-func (b *secondaryIndexKeyBuilder) WriteKey(key []byte, s interface{}) error {
-	h, err := hashSecondaryIndexKey(key, s)
-	if err != nil {
-		return err
-	}
-
-	if _, err := b.sb.WriteString(h); err != nil {
-		return err
-	}
-	if _, err := b.sb.WriteRune(':'); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (b *secondaryIndexKeyBuilder) WriteID(id uint64) error {
-	_, err := b.sb.WriteString(strconv.FormatUint(id, 36))
-	return err
-}
-
-func (b *secondaryIndexKeyBuilder) String() string {
-	return b.sb.String()
-}
-
-const secondaryIndexKeyHashSize = 8
-
-func hashSecondaryIndexKey(key []byte, s interface{}) (string, error) {
-	var salt []byte
-	if s, ok := s.(Salter); ok {
-		salt = s.Salt()
-		if len(salt) > blake2b.Size {
-			salt = salt[:blake2b.Size]
-		}
-	}
-
-	h, err := blake2b.New(blake2b.Size256, salt)
-	if err != nil {
-		return "", err
-	}
-	if _, err := h.Write(key); err != nil {
-		return "", err
-	}
-
-	b := h.Sum(nil)[:secondaryIndexKeyHashSize]
-	return base64.RawStdEncoding.EncodeToString(b), nil
-}
-
-type secondaryKey struct {
-	s   interface{}
-	key []byte
-}
-
-func (f secondaryKey) String() string {
-	h, _ := hashSecondaryIndexKey(f.key, f.s)
-	return h
 }

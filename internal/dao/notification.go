@@ -12,7 +12,7 @@ const (
 	notificationNotificationNS
 )
 
-var Notifications = NewTable[notificationv1.Notification](notificationNotificationNS)
+var Notifications = NewTable[notificationv1.Notification](notificationNotificationNS, nil)
 
 type NewNotificationOptions struct {
 	Message string

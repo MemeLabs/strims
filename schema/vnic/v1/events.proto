@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package strims.vnic.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1;vnicv1";
+option java_package = "gg.strims.vnic.v1";
+option swift_prefix = "SVN";
+
+import "vnic/v1/vnic.proto";
+
+message ConfigChangeEvent {
+  Config config = 1;
+}
+
+message ConfigDeleteEvent {
+  Config config = 1;
+}

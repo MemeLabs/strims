@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package strims.chat.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1;chatv1";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "SCH";
+
+import "chat/v1/chat.proto";
+
+message ServerChangeEvent {
+  Server server = 1;
+}
+
+message ServerDeleteEvent {
+  Server server = 1;
+}
+
+message EmoteChangeEvent {
+  Emote emote = 1;
+}
+
+message EmoteDeleteEvent {
+  Emote emote = 1;
+}
+
+message ModifierChangeEvent {
+  Modifier modifier = 1;
+}
+
+message ModifierDeleteEvent {
+  Modifier modifier = 1;
+}
+
+message TagChangeEvent {
+  Tag tag = 1;
+}
+
+message TagDeleteEvent {
+  Tag tag = 1;
+}
+
+message UIConfigChangeEvent {
+  UIConfig ui_config = 1;
+}

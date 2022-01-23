@@ -12,11 +12,20 @@ import (
 
 const profileIDReservationSize = 100
 
+type ProfileStoreOpt struct {
+	EventEmitter EventEmitter
+}
+
 // NewProfileStore ...
-func NewProfileStore(profileID uint64, store kv.BlobStore, key *StorageKey) *ProfileStore {
+func NewProfileStore(profileID uint64, key *StorageKey, store kv.BlobStore, opt *ProfileStoreOpt) *ProfileStore {
+	if opt == nil {
+		opt = &ProfileStoreOpt{}
+	}
+
 	return &ProfileStore{
 		store: store,
 		key:   key,
+		opt:   opt,
 		name:  fmt.Sprintf("profile:%d", profileID),
 	}
 }
@@ -25,6 +34,7 @@ func NewProfileStore(profileID uint64, store kv.BlobStore, key *StorageKey) *Pro
 type ProfileStore struct {
 	store kv.BlobStore
 	key   *StorageKey
+	opt   *ProfileStoreOpt
 	name  string
 
 	idLock         sync.Mutex
@@ -60,12 +70,27 @@ func (s *ProfileStore) View(fn func(tx kv.Tx) error) error {
 
 // Update ...
 func (s *ProfileStore) Update(fn func(tx kv.RWTx) error) error {
-	return s.store.Update(s.name, func(tx kv.BlobTx) error {
-		return fn(&profileStoreTx{
+	var ptx *profileStoreTx
+
+	err := s.store.Update(s.name, func(tx kv.BlobTx) error {
+		ptx = &profileStoreTx{
 			tx: tx,
 			sk: s.key,
-		})
+		}
+		return fn(ptx)
 	})
+
+	if err != nil {
+		return err
+	}
+
+	if s.opt.EventEmitter != nil {
+		for _, e := range ptx.events {
+			s.opt.EventEmitter.Emit(e)
+		}
+	}
+
+	return nil
 }
 
 // Salt ...
@@ -104,6 +129,7 @@ type profileStoreTx struct {
 	tx       kv.BlobTx
 	sk       *StorageKey
 	readOnly bool
+	events   []proto.Message
 }
 
 func (t *profileStoreTx) View(fn func(tx kv.Tx) error) error {
@@ -135,4 +161,8 @@ func (t *profileStoreTx) ScanPrefix(prefix string, messages interface{}) error {
 
 func (t *profileStoreTx) Salt() []byte {
 	return t.sk.Key()
+}
+
+func (t *profileStoreTx) Emit(m proto.Message) {
+	t.events = append(t.events, m)
 }

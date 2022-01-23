@@ -4,7 +4,7 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 import {
   VideoChannel as strims_video_v1_VideoChannel,
   IVideoChannel as strims_video_v1_IVideoChannel,
-} from ".//channel";
+} from "./channel";
 import {
   ListingSnippet as strims_network_v1_directory_ListingSnippet,
   IListingSnippet as strims_network_v1_directory_IListingSnippet,

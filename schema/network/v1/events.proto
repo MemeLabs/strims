@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package strims.network.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1;networkv1";
+option java_package = "gg.strims.network.v1";
+option swift_prefix = "SNT";
+
+import "network/v1/network.proto";
+
+message NetworkChangeEvent {
+  Network network = 1;
+}
+
+message NetworkDeleteEvent {
+  Network network = 1;
+}

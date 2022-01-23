@@ -1,4 +1,4 @@
-package network
+package networkv1
 
 import (
 	"context"

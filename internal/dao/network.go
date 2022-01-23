@@ -27,7 +27,17 @@ const (
 	networkBootstrapClientNS
 )
 
-var Networks = NewTable[networkv1.Network](networkNetworkNS)
+var Networks = NewTable(
+	networkNetworkNS,
+	&TableOptions[networkv1.Network]{
+		ObserveChange: func(m, p *networkv1.Network) proto.Message {
+			return &networkv1.NetworkChangeEvent{Network: m}
+		},
+		ObserveDelete: func(m *networkv1.Network) proto.Message {
+			return &networkv1.NetworkDeleteEvent{Network: m}
+		},
+	},
+)
 
 var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
 
@@ -208,7 +218,7 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.In
 	}, nil
 }
 
-var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS)
+var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS, nil)
 
 var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCertificateLog = ManyToOne(
 	networkCertificateLogNetworkNS,
@@ -283,7 +293,14 @@ func NetworkKey(network *networkv1.Network) []byte {
 	return CertificateRoot(network.Certificate).Key
 }
 
-var BootstrapClients = NewTable[networkv1bootstrap.BootstrapClient](networkBootstrapClientNS)
+var BootstrapClients = NewTable(
+	networkBootstrapClientNS,
+	&TableOptions[networkv1bootstrap.BootstrapClient]{
+		ObserveChange: func(m, p *networkv1bootstrap.BootstrapClient) proto.Message {
+			return &networkv1bootstrap.BootstrapClientChange{BootstrapClient: m}
+		},
+	},
+)
 
 // NewWebSocketBootstrapClient ...
 func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*networkv1bootstrap.BootstrapClient, error) {

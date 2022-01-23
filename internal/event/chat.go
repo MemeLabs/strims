@@ -1,10 +1,10 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+import chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 
 // ChatServerSync ...
 type ChatServerSync struct {
-	Server *chat.Server
+	Server *chatv1.Server
 }
 
 // ChatServerRemove ...
@@ -15,7 +15,7 @@ type ChatServerRemove struct {
 // ChatEmoteSync ...
 type ChatEmoteSync struct {
 	ServerID uint64
-	Emote    *chat.Emote
+	Emote    *chatv1.Emote
 }
 
 // ChatEmoteRemove ...

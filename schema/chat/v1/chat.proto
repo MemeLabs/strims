@@ -2,12 +2,11 @@ syntax = "proto3";
 
 package strims.chat.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1;chat";
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1;chatv1";
 option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "SCH";
 
 import "type/key.proto";
-
 
 message ServerEvent {
   oneof body {

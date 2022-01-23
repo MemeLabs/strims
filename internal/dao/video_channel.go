@@ -14,7 +14,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-var VideoChannels = NewTable[videov1.VideoChannel](videoChannelNS)
+var VideoChannels = NewTable[videov1.VideoChannel](videoChannelNS, nil)
 
 const (
 	_ byte = iota

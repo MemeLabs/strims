@@ -23,32 +23,72 @@ func wrapError(method, t string, err error) error {
 	return fmt.Errorf("kv %s[%s]: %w", method, t, err)
 }
 
-type SingletonRecord[V any] interface {
+func typeName[T any]() string {
+	var t T
+	return reflect.TypeOf(t).String()
+}
+
+type EventEmitter interface {
+	Emit(e proto.Message)
+}
+
+type changeObserverFunc[V any, T Record[V]] func(m, p T) proto.Message
+type deleteObserverFunc[V any, T Record[V]] func(m T) proto.Message
+
+func changeObserver[V any, T Record[V]](t changeObserverFunc[V, T]) setHook[V, T] {
+	return func(s kv.RWStore, m, p T) error {
+		if e, ok := s.(EventEmitter); ok {
+			e.Emit(t(m, p))
+		}
+		return nil
+	}
+}
+
+func deleteObserver[V any, T Record[V]](t deleteObserverFunc[V, T]) deleteHook[V, T] {
+	return func(s kv.RWStore, m T) error {
+		if e, ok := s.(EventEmitter); ok {
+			e.Emit(t(m))
+		}
+		return nil
+	}
+}
+
+type setHook[V any, T Record[V]] func(s kv.RWStore, m, p T) error
+type deleteHook[V any, T Record[V]] func(s kv.RWStore, m T) error
+
+type Record[V any] interface {
 	proto.Message
 	*V
 }
 
-type SingletonOptions[V any, T SingletonRecord[V]] struct {
-	DefaultValue T
+type SingletonOptions[V any, T Record[V]] struct {
+	DefaultValue  T
+	ObserveChange changeObserverFunc[V, T]
 }
 
-func NewSingleton[V any, T SingletonRecord[V]](ns namespace, opt *SingletonOptions[V, T]) *Singleton[V, T] {
+func NewSingleton[V any, T Record[V]](ns namespace, opt *SingletonOptions[V, T]) *Singleton[V, T] {
 	if opt == nil {
 		opt = &SingletonOptions[V, T]{}
 	}
 
-	var temp V
-	return &Singleton[V, T]{
-		ns:   ns,
-		name: reflect.TypeOf(temp).String(),
-		opt:  opt,
+	t := &Singleton[V, T]{
+		ns:           ns,
+		name:         typeName[V](),
+		defaultValue: opt.DefaultValue,
 	}
+
+	if opt.ObserveChange != nil {
+		t.setHooks = append(t.setHooks, changeObserver[V, T](opt.ObserveChange))
+	}
+
+	return t
 }
 
-type Singleton[V any, T SingletonRecord[V]] struct {
-	ns   namespace
-	name string
-	opt  *SingletonOptions[V, T]
+type Singleton[V any, T Record[V]] struct {
+	ns           namespace
+	name         string
+	defaultValue T
+	setHooks     []setHook[V, T]
 }
 
 func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
@@ -67,8 +107,8 @@ func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(t.ns.String(), v)
 	})
-	if err == kv.ErrRecordNotFound && t.opt.DefaultValue != nil {
-		return proto.Clone(t.opt.DefaultValue).(T), nil
+	if err == kv.ErrRecordNotFound && t.defaultValue != nil {
+		return proto.Clone(t.defaultValue).(T), nil
 	}
 	if err != nil {
 		return nil, wrapError("Singleton.Get", t.name, err)
@@ -89,12 +129,28 @@ func (t *Singleton[V, T]) Set(s kv.RWStore, v T) (err error) {
 	}
 
 	err = s.Update(func(tx kv.RWTx) error {
+		p, err := t.Get(tx)
+		if err != nil {
+			return err
+		}
+		if err := t.runSetHooks(tx, v, p); err != nil {
+			return err
+		}
 		return tx.Put(t.ns.String(), v)
 	})
 	if err != nil {
 		return wrapError("Singleton.Set", t.name, err)
 	}
 	return
+}
+
+func (t *Singleton[V, T]) runSetHooks(tx kv.RWTx, v T, p T) error {
+	for _, h := range t.setHooks {
+		if err := h(tx, v, p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err error) {
@@ -127,25 +183,41 @@ func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err 
 	return
 }
 
-type Record[V any] interface {
-	proto.Message
+type TableRecord[V any] interface {
+	Record[V]
 	GetId() uint64
-	*V
 }
 
-func NewTable[V any, T Record[V]](ns namespace) *Table[V, T] {
-	var temp V
-	return &Table[V, T]{
-		ns:   ns,
-		name: reflect.TypeOf(temp).String(),
+type TableOptions[V any, T TableRecord[V]] struct {
+	ObserveChange changeObserverFunc[V, T]
+	ObserveDelete deleteObserverFunc[V, T]
+}
+
+func NewTable[V any, T TableRecord[V]](ns namespace, opt *TableOptions[V, T]) *Table[V, T] {
+	if opt == nil {
+		opt = &TableOptions[V, T]{}
 	}
+
+	t := &Table[V, T]{
+		ns:   ns,
+		name: typeName[V](),
+	}
+
+	if opt.ObserveChange != nil {
+		t.setHooks = append(t.setHooks, changeObserver[V, T](opt.ObserveChange))
+	}
+	if opt.ObserveDelete != nil {
+		t.deleteHooks = append(t.deleteHooks, deleteObserver[V, T](opt.ObserveDelete))
+	}
+
+	return t
 }
 
-type Table[V any, T Record[V]] struct {
+type Table[V any, T TableRecord[V]] struct {
 	ns          namespace
 	name        string
-	setHooks    []func(s kv.RWStore, m T, p T) error
-	deleteHooks []func(s kv.RWStore, m T) error
+	setHooks    []setHook[V, T]
+	deleteHooks []deleteHook[V, T]
 }
 
 func (t *Table[V, T]) Get(s kv.Store, k uint64) (v T, err error) {
@@ -336,10 +408,6 @@ func (t *Table[V, T]) Delete(s kv.RWStore, k uint64) (err error) {
 }
 
 func (t *Table[V, T]) runSetHooks(tx kv.RWTx, v T, p T) error {
-	if len(t.setHooks) == 0 {
-		return nil
-	}
-
 	for _, h := range t.setHooks {
 		if err := h(tx, v, p); err != nil {
 			return err
@@ -369,7 +437,7 @@ type ManyToOneOptions struct {
 	CascadeDelete bool
 }
 
-func ManyToOne[AV, BV any, AT Record[AV], BT Record[BV]](ns namespace, a *Table[AV, AT], b *Table[BV, BT], key func(m AT) uint64, opt *ManyToOneOptions) (func(s kv.Store, id uint64) ([]AT, error), func(s kv.Store, v BT) ([]AT, error), func(s kv.Store, v AT) (BT, error)) {
+func ManyToOne[AV, BV any, AT TableRecord[AV], BT TableRecord[BV]](ns namespace, a *Table[AV, AT], b *Table[BV, BT], key func(m AT) uint64, opt *ManyToOneOptions) (func(s kv.Store, id uint64) ([]AT, error), func(s kv.Store, v BT) ([]AT, error), func(s kv.Store, v AT) (BT, error)) {
 	if opt == nil {
 		opt = &ManyToOneOptions{}
 	}
@@ -431,7 +499,7 @@ func idKey(id uint64) []byte {
 	return b
 }
 
-func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m T) []byte) func(s kv.Store, k []byte) ([]T, error) {
+func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) func(s kv.Store, k []byte) ([]T, error) {
 	t.deleteHooks = append(t.deleteHooks, func(s kv.RWStore, m T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.DeleteHook"); ce != nil {
 			defer func() {
@@ -439,7 +507,7 @@ func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m
 					zap.String("type", t.name),
 					zap.Uint64("id", m.GetId()),
 					zap.Stringer("ns", ns),
-					zap.Stringer("key", secondaryKey{s, key(m)}),
+					zap.String("key", hashSecondaryIndexKey(key(m), s)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
 				)
@@ -450,14 +518,14 @@ func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m
 			return DeleteSecondaryIndex(tx, ns, key(m), m.GetId())
 		})
 	})
-	t.setHooks = append(t.setHooks, func(s kv.RWStore, m T, p T) (err error) {
+	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.SetHook"); ce != nil {
 			defer func() {
 				ce.Write(
 					zap.String("type", t.name),
 					zap.Uint64("id", m.GetId()),
 					zap.Stringer("ns", ns),
-					zap.Stringer("key", secondaryKey{s, key(m)}),
+					zap.String("key", hashSecondaryIndexKey(key(m), s)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
 				)
@@ -485,7 +553,7 @@ func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m
 				ce.Write(
 					zap.String("type", t.name),
 					zap.Stringer("ns", ns),
-					zap.Stringer("key", secondaryKey{s, k}),
+					zap.String("key", hashSecondaryIndexKey(k, s)),
 					zap.Int("records", len(vs)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
@@ -514,16 +582,16 @@ func SecondaryIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m
 
 var ErrUniqueConstraintViolated = errors.New("unique constraint violated")
 
-type UniqueIndexOptions[V any, T Record[V]] struct {
+type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
-func UniqueIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) func(s kv.Store, k []byte) (T, error) {
+func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) func(s kv.Store, k []byte) (T, error) {
 	if opt == nil {
 		opt = &UniqueIndexOptions[V, T]{}
 	}
 
-	t.setHooks = append(t.setHooks, func(s kv.RWStore, m T, p T) (err error) {
+	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
 		k := key(m)
 
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "UniqueIndex.SetHook"); ce != nil {
@@ -531,7 +599,7 @@ func UniqueIndex[V any, T Record[V]](ns namespace, t *Table[V, T], key func(m T)
 				ce.Write(
 					zap.String("type", t.name),
 					zap.Stringer("ns", ns),
-					zap.Stringer("key", secondaryKey{s, k}),
+					zap.String("key", hashSecondaryIndexKey(k, s)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
 				)

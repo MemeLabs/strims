@@ -78,7 +78,7 @@ func CreateServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byt
 	}
 
 	profileStorageKey, _ := NewStorageKeyFromBytes(profileKey, nil)
-	store := NewProfileStore(profile.Id, s, profileStorageKey)
+	store := NewProfileStore(profile.Id, profileStorageKey, s, nil)
 	if err = store.Init(); err != nil {
 		return 0, nil, err
 	}

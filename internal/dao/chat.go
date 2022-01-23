@@ -2,6 +2,7 @@ package dao
 
 import (
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -16,9 +17,29 @@ const (
 	chatUIConfigNS
 )
 
-var ChatServers = NewTable[chatv1.Server](chatServerNS)
+var ChatServers = NewTable(
+	chatServerNS,
+	&TableOptions[chatv1.Server]{
+		ObserveChange: func(m, p *chatv1.Server) proto.Message {
+			return &chatv1.ServerChangeEvent{Server: m}
+		},
+		ObserveDelete: func(m *chatv1.Server) proto.Message {
+			return &chatv1.ServerDeleteEvent{Server: m}
+		},
+	},
+)
 
-var ChatEmotes = NewTable[chatv1.Emote](chatEmoteNS)
+var ChatEmotes = NewTable(
+	chatEmoteNS,
+	&TableOptions[chatv1.Emote]{
+		ObserveChange: func(m, p *chatv1.Emote) proto.Message {
+			return &chatv1.EmoteChangeEvent{Emote: m}
+		},
+		ObserveDelete: func(m *chatv1.Emote) proto.Message {
+			return &chatv1.EmoteDeleteEvent{Emote: m}
+		},
+	},
+)
 
 var GetChatEmotesByServerID, GetChatEmotesByServer, GetChatServerByEmote = ManyToOne(
 	chatEmoteServerNS,
@@ -28,7 +49,17 @@ var GetChatEmotesByServerID, GetChatEmotesByServer, GetChatServerByEmote = ManyT
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
-var ChatModifiers = NewTable[chatv1.Modifier](chatModifierNS)
+var ChatModifiers = NewTable(
+	chatModifierNS,
+	&TableOptions[chatv1.Modifier]{
+		ObserveChange: func(m, p *chatv1.Modifier) proto.Message {
+			return &chatv1.ModifierChangeEvent{Modifier: m}
+		},
+		ObserveDelete: func(m *chatv1.Modifier) proto.Message {
+			return &chatv1.ModifierDeleteEvent{Modifier: m}
+		},
+	},
+)
 
 var GetChatModifiersByServerID, GetChatModifiersByServer, GetChatServerByModifier = ManyToOne(
 	chatModifierServerNS,
@@ -38,7 +69,17 @@ var GetChatModifiersByServerID, GetChatModifiersByServer, GetChatServerByModifie
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
-var ChatTags = NewTable[chatv1.Tag](chatTagNS)
+var ChatTags = NewTable(
+	chatTagNS,
+	&TableOptions[chatv1.Tag]{
+		ObserveChange: func(m, p *chatv1.Tag) proto.Message {
+			return &chatv1.TagChangeEvent{Tag: m}
+		},
+		ObserveDelete: func(m *chatv1.Tag) proto.Message {
+			return &chatv1.TagDeleteEvent{Tag: m}
+		},
+	},
+)
 
 var GetChatTagsByServerID, GetChatTagsByServer, GetChatServerByTag = ManyToOne(
 	chatTagServerNS,
@@ -48,7 +89,14 @@ var GetChatTagsByServerID, GetChatTagsByServer, GetChatServerByTag = ManyToOne(
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
-var ChatUIConfig = NewSingleton[chatv1.UIConfig](chatUIConfigNS, nil)
+var ChatUIConfig = NewSingleton(
+	chatUIConfigNS,
+	&SingletonOptions[chatv1.UIConfig]{
+		ObserveChange: func(m, p *chatv1.UIConfig) proto.Message {
+			return &chatv1.UIConfigChangeEvent{UiConfig: m}
+		},
+	},
+)
 
 // NewChatServer ...
 func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *chatv1.Room) (*chatv1.Server, error) {

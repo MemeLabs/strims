@@ -8,7 +8,7 @@ import {
 import {
   Network as strims_network_v1_Network,
   INetwork as strims_network_v1_INetwork,
-} from "..//network";
+} from "../network";
 
 export type IBootstrapClient = {
   id?: bigint;
