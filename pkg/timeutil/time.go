@@ -13,6 +13,10 @@ const EpochTime = Time(0)
 
 const TimeLength = 8
 
+func Since(start Time) time.Duration {
+	return time.Duration(Now() - start)
+}
+
 func New(epoch int64) Time {
 	return Time(epoch)
 }

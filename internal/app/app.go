@@ -45,10 +45,9 @@ func NewControl(
 	broker network.Broker,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
+	observers *event.Observers,
 	profile *profilev1.Profile,
 ) Control {
-	observers := &event.Observers{}
-
 	var (
 		notificationControl = notification.NewControl(logger, store, observers)
 		transferControl     = transfer.NewControl(logger, vpn, observers)

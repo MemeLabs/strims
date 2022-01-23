@@ -27,10 +27,6 @@ var (
 type Control interface {
 	Run(ctx context.Context)
 	SyncAssets(serverID uint64, forceUnifiedUpdate bool) error
-	SyncServer(s *chatv1.Server)
-	RemoveServer(id uint64)
-	SyncEmote(e *chatv1.Emote)
-	RemoveEmote(id uint64)
 	ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
 	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
 }
@@ -85,6 +81,22 @@ func (t *control) Run(ctx context.Context) {
 			switch e := e.(type) {
 			case event.ChatSyncAssets:
 				t.syncAssets(e.ServerID, e.ForceUnifiedUpdate)
+			case *chatv1.ServerChangeEvent:
+				t.syncAssets(e.Server.Id, false)
+			case *chatv1.ServerDeleteEvent:
+				// TODO: shut down server
+			case *chatv1.EmoteChangeEvent:
+				t.syncAssets(e.Emote.ServerId, false)
+			case *chatv1.EmoteDeleteEvent:
+				t.syncAssets(e.Emote.ServerId, false)
+			case *chatv1.ModifierChangeEvent:
+				t.syncAssets(e.Modifier.ServerId, false)
+			case *chatv1.ModifierDeleteEvent:
+				t.syncAssets(e.Modifier.ServerId, false)
+			case *chatv1.TagChangeEvent:
+				t.syncAssets(e.Tag.ServerId, false)
+			case *chatv1.TagDeleteEvent:
+				t.syncAssets(e.Tag.ServerId, false)
 			}
 		case <-ctx.Done():
 			return
@@ -105,14 +117,16 @@ func (t *control) startServerRunners(ctx context.Context) error {
 }
 
 func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
-	t.observers.EmitGlobal(event.ChatSyncAssets{
-		ServerID:           serverID,
+	t.observers.EmitGlobal(chatv1.SyncAssetsEvent{
+		ServerId:           serverID,
 		ForceUnifiedUpdate: forceUnifiedUpdate,
 	})
 	return nil
 }
 
 func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
+	t.logger.Debug("syncing assets for chat server", zap.Uint64("serverID", serverID))
+
 	server, err := dao.ChatServers.Get(t.store, serverID)
 	if err != nil {
 		return
@@ -124,29 +138,6 @@ func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
 	}
 
 	runner.SyncServer()
-}
-
-// SyncServer ...
-func (t *control) SyncServer(s *chatv1.Server) {
-	t.observers.EmitLocal(event.ChatServerSync{Server: s})
-}
-
-// RemoveServer ...
-func (t *control) RemoveServer(id uint64) {
-	t.observers.EmitLocal(event.ChatServerRemove{ID: id})
-}
-
-// SyncEmote ...
-func (t *control) SyncEmote(e *chatv1.Emote) {
-	t.observers.EmitLocal(event.ChatEmoteSync{
-		ServerID: e.ServerId,
-		Emote:    e,
-	})
-}
-
-// RemoveEmote ...
-func (t *control) RemoveEmote(id uint64) {
-	t.observers.EmitLocal(event.ChatEmoteRemove{ID: id})
 }
 
 func (t *control) client(ctx context.Context, networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {

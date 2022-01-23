@@ -1,17 +1,17 @@
 import React from "react";
 import { HashRouter } from "react-router-dom";
 
-import { FrontendClient } from "../apis/client";
+import { APIDialer } from "../contexts/Session";
 import Provider from "../root/Provider";
 import RootRouter from "../root/Router";
 
 interface AppProps {
-  client: FrontendClient;
+  apiDialer: APIDialer;
 }
 
-const App: React.FC<AppProps> = ({ client }) => (
+const App: React.FC<AppProps> = ({ apiDialer }) => (
   <HashRouter>
-    <Provider client={client}>
+    <Provider apiDialer={apiDialer}>
       <RootRouter />
     </Provider>
   </HashRouter>

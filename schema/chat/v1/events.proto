@@ -43,3 +43,8 @@ message TagDeleteEvent {
 message UIConfigChangeEvent {
   UIConfig ui_config = 1;
 }
+
+message SyncAssetsEvent {
+  uint64 server_id = 1;
+  bool force_unified_update = 2;
+}

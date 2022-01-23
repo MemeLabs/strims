@@ -2,6 +2,7 @@ package event
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/event"
+	"google.golang.org/protobuf/proto"
 )
 
 // Observers ...
@@ -30,6 +31,10 @@ func (o *Observers) EmitGlobal(v interface{}) {
 // EmitLocal ...
 func (o *Observers) EmitLocal(v interface{}) {
 	o.local.Emit(v)
+}
+
+func (o *Observers) Emit(v proto.Message) {
+	o.global.Emit(v)
 }
 
 // func NewObservers() *Observers {

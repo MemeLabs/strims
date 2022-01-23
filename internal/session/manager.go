@@ -5,6 +5,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/peer"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
@@ -48,11 +49,13 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 		return session, nil
 	}
 
+	observers := &event.Observers{}
+
 	storageKey, err := dao.NewStorageKeyFromBytes(profileKey, nil)
 	if err != nil {
 		return nil, err
 	}
-	store := dao.NewProfileStore(profileID, storageKey, t.store, nil)
+	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: observers})
 
 	profile, err := dao.Profile.Get(store)
 	if err != nil {
@@ -64,7 +67,7 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 		return nil, err
 	}
 
-	app := app.NewControl(t.logger, t.broker, vpn, store, profile)
+	app := app.NewControl(t.logger, t.broker, vpn, store, observers, profile)
 	go app.Run(context.Background())
 
 	qosc := vpn.VNIC().QOS().AddClass(1)

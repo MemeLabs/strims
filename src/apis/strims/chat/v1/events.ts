@@ -338,3 +338,46 @@ export class UIConfigChangeEvent {
   }
 }
 
+export type ISyncAssetsEvent = {
+  serverId?: bigint;
+  forceUnifiedUpdate?: boolean;
+}
+
+export class SyncAssetsEvent {
+  serverId: bigint;
+  forceUnifiedUpdate: boolean;
+
+  constructor(v?: ISyncAssetsEvent) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.forceUnifiedUpdate = v?.forceUnifiedUpdate || false;
+  }
+
+  static encode(m: SyncAssetsEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.forceUnifiedUpdate) w.uint32(16).bool(m.forceUnifiedUpdate);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SyncAssetsEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SyncAssetsEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.forceUnifiedUpdate = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+

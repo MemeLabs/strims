@@ -12,14 +12,14 @@ import (
 
 const profileIDReservationSize = 100
 
-type ProfileStoreOpt struct {
+type ProfileStoreOptions struct {
 	EventEmitter EventEmitter
 }
 
 // NewProfileStore ...
-func NewProfileStore(profileID uint64, key *StorageKey, store kv.BlobStore, opt *ProfileStoreOpt) *ProfileStore {
+func NewProfileStore(profileID uint64, key *StorageKey, store kv.BlobStore, opt *ProfileStoreOptions) *ProfileStore {
 	if opt == nil {
-		opt = &ProfileStoreOpt{}
+		opt = &ProfileStoreOptions{}
 	}
 
 	return &ProfileStore{
@@ -34,7 +34,7 @@ func NewProfileStore(profileID uint64, key *StorageKey, store kv.BlobStore, opt 
 type ProfileStore struct {
 	store kv.BlobStore
 	key   *StorageKey
-	opt   *ProfileStoreOpt
+	opt   *ProfileStoreOptions
 	name  string
 
 	idLock         sync.Mutex
@@ -79,7 +79,6 @@ func (s *ProfileStore) Update(fn func(tx kv.RWTx) error) error {
 		}
 		return fn(ptx)
 	})
-
 	if err != nil {
 		return err
 	}

@@ -9,9 +9,39 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
+)
+
+var (
+	opCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_op_count",
+		Help: "The total number of dao ops",
+	}, []string{"type", "method"})
+	opErrCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_op_err_count",
+		Help: "The total number of dao errors",
+	}, []string{"type", "method"})
+	opDurationMs = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "strims_dao_op_duration_ms",
+		Help: "The run time of dao ops",
+	}, []string{"type", "method"})
+	secondaryIndexGetAllCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_secondary_index_get_all_count",
+		Help: "The total number of dao secondary index scans",
+	}, []string{"type", "namespace"})
+	secondaryIndexGetAllErrCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_secondary_index_get_all_err_count",
+		Help: "The total number of dao secondary index scan errors",
+	}, []string{"type", "namespace"})
+	secondaryIndexGetAllDurationMs = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "strims_dao_secondary_index_get_all_duration_ms",
+		Help: "The run time of dao secondary index scans",
+	}, []string{"type", "namespace"})
 )
 
 var Logger = zap.NewNop()
@@ -26,6 +56,13 @@ func wrapError(method, t string, err error) error {
 func typeName[T any]() string {
 	var t T
 	return reflect.TypeOf(t).String()
+}
+
+func observeDurationMs(obs prometheus.Observer) func() {
+	start := timeutil.Now()
+	return func() {
+		obs.Observe(float64(timeutil.Since(start).Milliseconds()))
+	}
 }
 
 type EventEmitter interface {
@@ -75,10 +112,20 @@ func NewSingleton[V any, T Record[V]](ns namespace, opt *SingletonOptions[V, T])
 		ns:           ns,
 		name:         typeName[V](),
 		defaultValue: opt.DefaultValue,
+
+		getCount:            opCount.WithLabelValues(typeName[V](), "get"),
+		getErrCount:         opErrCount.WithLabelValues(typeName[V](), "get"),
+		getDurationMs:       opDurationMs.WithLabelValues(typeName[V](), "get"),
+		setCount:            opCount.WithLabelValues(typeName[V](), "set"),
+		setErrCount:         opErrCount.WithLabelValues(typeName[V](), "set"),
+		setDurationMs:       opDurationMs.WithLabelValues(typeName[V](), "set"),
+		transformCount:      opCount.WithLabelValues(typeName[V](), "transform"),
+		transformErrCount:   opErrCount.WithLabelValues(typeName[V](), "transform"),
+		transformDurationMs: opDurationMs.WithLabelValues(typeName[V](), "transform"),
 	}
 
 	if opt.ObserveChange != nil {
-		t.setHooks = append(t.setHooks, changeObserver[V, T](opt.ObserveChange))
+		t.setHooks = append(t.setHooks, changeObserver(opt.ObserveChange))
 	}
 
 	return t
@@ -89,6 +136,16 @@ type Singleton[V any, T Record[V]] struct {
 	name         string
 	defaultValue T
 	setHooks     []setHook[V, T]
+
+	getCount            prometheus.Counter
+	getErrCount         prometheus.Counter
+	getDurationMs       prometheus.Observer
+	setCount            prometheus.Counter
+	setErrCount         prometheus.Counter
+	setDurationMs       prometheus.Observer
+	transformCount      prometheus.Counter
+	transformErrCount   prometheus.Counter
+	transformDurationMs prometheus.Observer
 }
 
 func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
@@ -102,6 +159,8 @@ func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
 			)
 		}()
 	}
+	t.getCount.Inc()
+	defer observeDurationMs(t.getDurationMs)()
 
 	v = v.ProtoReflect().New().Interface().(T)
 	err = s.View(func(tx kv.Tx) error {
@@ -111,6 +170,7 @@ func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
 		return proto.Clone(t.defaultValue).(T), nil
 	}
 	if err != nil {
+		t.getErrCount.Inc()
 		return nil, wrapError("Singleton.Get", t.name, err)
 	}
 	return
@@ -127,6 +187,8 @@ func (t *Singleton[V, T]) Set(s kv.RWStore, v T) (err error) {
 			)
 		}()
 	}
+	t.setCount.Inc()
+	defer observeDurationMs(t.setDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx)
@@ -139,6 +201,7 @@ func (t *Singleton[V, T]) Set(s kv.RWStore, v T) (err error) {
 		return tx.Put(t.ns.String(), v)
 	})
 	if err != nil {
+		t.setErrCount.Inc()
 		return wrapError("Singleton.Set", t.name, err)
 	}
 	return
@@ -164,6 +227,8 @@ func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err 
 			)
 		}()
 	}
+	t.transformCount.Inc()
+	defer observeDurationMs(t.transformDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) (err error) {
 		v, err = t.Get(tx)
@@ -178,6 +243,7 @@ func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err 
 		return tx.Put(t.ns.String(), v)
 	})
 	if err != nil {
+		t.transformErrCount.Inc()
 		return nil, wrapError("Singleton.Transform", t.name, err)
 	}
 	return
@@ -201,13 +267,35 @@ func NewTable[V any, T TableRecord[V]](ns namespace, opt *TableOptions[V, T]) *T
 	t := &Table[V, T]{
 		ns:   ns,
 		name: typeName[V](),
+
+		getCount:            opCount.WithLabelValues(typeName[V](), "get"),
+		getErrCount:         opErrCount.WithLabelValues(typeName[V](), "get"),
+		getDurationMs:       opDurationMs.WithLabelValues(typeName[V](), "get"),
+		getAllCount:         opCount.WithLabelValues(typeName[V](), "getAll"),
+		getAllErrCount:      opErrCount.WithLabelValues(typeName[V](), "getAll"),
+		getAllDurationMs:    opDurationMs.WithLabelValues(typeName[V](), "getAll"),
+		insertCount:         opCount.WithLabelValues(typeName[V](), "insert"),
+		insertErrCount:      opErrCount.WithLabelValues(typeName[V](), "insert"),
+		insertDurationMs:    opDurationMs.WithLabelValues(typeName[V](), "insert"),
+		updateCount:         opCount.WithLabelValues(typeName[V](), "update"),
+		updateErrCount:      opErrCount.WithLabelValues(typeName[V](), "update"),
+		updateDurationMs:    opDurationMs.WithLabelValues(typeName[V](), "update"),
+		upsertCount:         opCount.WithLabelValues(typeName[V](), "upsert"),
+		upsertErrCount:      opErrCount.WithLabelValues(typeName[V](), "upsert"),
+		upsertDurationMs:    opDurationMs.WithLabelValues(typeName[V](), "upsert"),
+		transformCount:      opCount.WithLabelValues(typeName[V](), "transform"),
+		transformErrCount:   opErrCount.WithLabelValues(typeName[V](), "transform"),
+		transformDurationMs: opDurationMs.WithLabelValues(typeName[V](), "transform"),
+		deleteCount:         opCount.WithLabelValues(typeName[V](), "delete"),
+		deleteErrCount:      opErrCount.WithLabelValues(typeName[V](), "delete"),
+		deleteDurationMs:    opDurationMs.WithLabelValues(typeName[V](), "delete"),
 	}
 
 	if opt.ObserveChange != nil {
-		t.setHooks = append(t.setHooks, changeObserver[V, T](opt.ObserveChange))
+		t.setHooks = append(t.setHooks, changeObserver(opt.ObserveChange))
 	}
 	if opt.ObserveDelete != nil {
-		t.deleteHooks = append(t.deleteHooks, deleteObserver[V, T](opt.ObserveDelete))
+		t.deleteHooks = append(t.deleteHooks, deleteObserver(opt.ObserveDelete))
 	}
 
 	return t
@@ -218,6 +306,28 @@ type Table[V any, T TableRecord[V]] struct {
 	name        string
 	setHooks    []setHook[V, T]
 	deleteHooks []deleteHook[V, T]
+
+	getCount            prometheus.Counter
+	getErrCount         prometheus.Counter
+	getDurationMs       prometheus.Observer
+	getAllCount         prometheus.Counter
+	getAllErrCount      prometheus.Counter
+	getAllDurationMs    prometheus.Observer
+	insertCount         prometheus.Counter
+	insertErrCount      prometheus.Counter
+	insertDurationMs    prometheus.Observer
+	updateCount         prometheus.Counter
+	updateErrCount      prometheus.Counter
+	updateDurationMs    prometheus.Observer
+	upsertCount         prometheus.Counter
+	upsertErrCount      prometheus.Counter
+	upsertDurationMs    prometheus.Observer
+	transformCount      prometheus.Counter
+	transformErrCount   prometheus.Counter
+	transformDurationMs prometheus.Observer
+	deleteCount         prometheus.Counter
+	deleteErrCount      prometheus.Counter
+	deleteDurationMs    prometheus.Observer
 }
 
 func (t *Table[V, T]) Get(s kv.Store, k uint64) (v T, err error) {
@@ -232,12 +342,15 @@ func (t *Table[V, T]) Get(s kv.Store, k uint64) (v T, err error) {
 			)
 		}()
 	}
+	t.getCount.Inc()
+	defer observeDurationMs(t.getDurationMs)()
 
 	v = new(V)
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(t.ns.Format(k), v)
 	})
 	if err != nil {
+		t.getErrCount.Inc()
 		return nil, wrapError("Table.Get", t.name, err)
 	}
 	return
@@ -255,11 +368,14 @@ func (t *Table[V, T]) GetAll(s kv.Store) (vs []T, err error) {
 			)
 		}()
 	}
+	t.getAllCount.Inc()
+	defer observeDurationMs(t.getAllDurationMs)()
 
 	err = s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(t.ns.FormatPrefix(), &vs)
 	})
 	if err != nil {
+		t.getAllErrCount.Inc()
 		return nil, wrapError("Table.GetAll", t.name, err)
 	}
 	return
@@ -277,6 +393,8 @@ func (t *Table[V, T]) Insert(s kv.RWStore, v T) (err error) {
 			)
 		}()
 	}
+	t.insertCount.Inc()
+	defer observeDurationMs(t.insertDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		var p T
@@ -286,6 +404,7 @@ func (t *Table[V, T]) Insert(s kv.RWStore, v T) (err error) {
 		return tx.Put(t.ns.Format(v.GetId()), v)
 	})
 	if err != nil {
+		t.insertErrCount.Inc()
 		return wrapError("Table.Insert", t.name, err)
 	}
 	return
@@ -303,6 +422,8 @@ func (t *Table[V, T]) Update(s kv.RWStore, v T) (err error) {
 			)
 		}()
 	}
+	t.updateCount.Inc()
+	defer observeDurationMs(t.updateDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, v.GetId())
@@ -315,6 +436,7 @@ func (t *Table[V, T]) Update(s kv.RWStore, v T) (err error) {
 		return tx.Put(t.ns.Format(v.GetId()), v)
 	})
 	if err != nil {
+		t.updateErrCount.Inc()
 		return wrapError("Table.Update", t.name, err)
 	}
 	return
@@ -332,6 +454,8 @@ func (t *Table[V, T]) Upsert(s kv.RWStore, v T) (err error) {
 			)
 		}()
 	}
+	t.upsertCount.Inc()
+	defer observeDurationMs(t.upsertDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, v.GetId())
@@ -344,6 +468,7 @@ func (t *Table[V, T]) Upsert(s kv.RWStore, v T) (err error) {
 		return tx.Put(t.ns.Format(v.GetId()), v)
 	})
 	if err != nil {
+		t.upsertErrCount.Inc()
 		return wrapError("Table.Upsert", t.name, err)
 	}
 	return
@@ -361,6 +486,8 @@ func (t *Table[V, T]) Transform(s kv.RWStore, id uint64, fn func(p T) error) (v 
 			)
 		}()
 	}
+	t.transformCount.Inc()
+	defer observeDurationMs(t.transformDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, id)
@@ -377,6 +504,7 @@ func (t *Table[V, T]) Transform(s kv.RWStore, id uint64, fn func(p T) error) (v 
 		return tx.Put(t.ns.Format(v.GetId()), v)
 	})
 	if err != nil {
+		t.transformErrCount.Inc()
 		return nil, wrapError("Table.Transform", t.name, err)
 	}
 	return
@@ -394,6 +522,8 @@ func (t *Table[V, T]) Delete(s kv.RWStore, k uint64) (err error) {
 			)
 		}()
 	}
+	t.deleteCount.Inc()
+	defer observeDurationMs(t.deleteDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) error {
 		if err := t.runDeleteHooks(tx, k); err != nil {
@@ -402,6 +532,7 @@ func (t *Table[V, T]) Delete(s kv.RWStore, k uint64) (err error) {
 		return tx.Delete(t.ns.Format(k))
 	})
 	if err != nil {
+		t.deleteErrCount.Inc()
 		return wrapError("Table.Delete", t.name, err)
 	}
 	return
@@ -547,6 +678,10 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 		})
 	})
 
+	getAllCount := secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String())
+	getAllErrCount := secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String())
+	getAllDurationMs := secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String())
+
 	return func(s kv.Store, k []byte) (vs []T, err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAll"); ce != nil {
 			defer func() {
@@ -560,6 +695,8 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 				)
 			}()
 		}
+		getAllCount.Inc()
+		defer observeDurationMs(getAllDurationMs)()
 
 		err = s.View(func(tx kv.Tx) error {
 			ids, err := ScanSecondaryIndex(tx, ns, k)
@@ -576,6 +713,9 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 			}
 			return nil
 		})
+		if err != nil {
+			getAllErrCount.Inc()
+		}
 		return
 	}
 }

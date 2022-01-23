@@ -49,9 +49,6 @@ func (s *chatService) CreateServer(ctx context.Context, req *chatv1.CreateServer
 	if err := dao.ChatServers.Insert(s.store, server); err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().SyncServer(server)
-
 	return &chatv1.CreateServerResponse{Server: server}, nil
 }
 
@@ -65,9 +62,6 @@ func (s *chatService) UpdateServer(ctx context.Context, req *chatv1.UpdateServer
 	if err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().SyncServer(server)
-
 	return &chatv1.UpdateServerResponse{Server: server}, nil
 }
 
@@ -76,9 +70,6 @@ func (s *chatService) DeleteServer(ctx context.Context, req *chatv1.DeleteServer
 	if err := dao.ChatServers.Delete(s.store, req.Id); err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().RemoveServer(req.Id)
-
 	return &chatv1.DeleteServerResponse{}, nil
 }
 
@@ -116,9 +107,6 @@ func (s *chatService) CreateEmote(ctx context.Context, req *chatv1.CreateEmoteRe
 	if err := dao.ChatEmotes.Insert(s.store, emote); err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().SyncEmote(emote)
-
 	return &chatv1.CreateEmoteResponse{Emote: emote}, nil
 }
 
@@ -134,9 +122,6 @@ func (s *chatService) UpdateEmote(ctx context.Context, req *chatv1.UpdateEmoteRe
 	if err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().SyncEmote(emote)
-
 	return &chatv1.UpdateEmoteResponse{Emote: emote}, nil
 }
 
@@ -145,9 +130,6 @@ func (s *chatService) DeleteEmote(ctx context.Context, req *chatv1.DeleteEmoteRe
 	if err := dao.ChatEmotes.Delete(s.store, req.Id); err != nil {
 		return nil, err
 	}
-
-	s.app.Chat().RemoveEmote(req.Id)
-
 	return &chatv1.DeleteEmoteResponse{}, nil
 }
 
@@ -184,9 +166,6 @@ func (s *chatService) CreateModifier(ctx context.Context, req *chatv1.CreateModi
 	if err := dao.ChatModifiers.Insert(s.store, modifier); err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().SyncModifier(req.ServerId, modifier)
-
 	return &chatv1.CreateModifierResponse{Modifier: modifier}, nil
 }
 
@@ -201,9 +180,6 @@ func (s *chatService) UpdateModifier(ctx context.Context, req *chatv1.UpdateModi
 	if err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().SyncModifier(req.ServerId, modifier)
-
 	return &chatv1.UpdateModifierResponse{Modifier: modifier}, nil
 }
 
@@ -212,9 +188,6 @@ func (s *chatService) DeleteModifier(ctx context.Context, req *chatv1.DeleteModi
 	if err := dao.ChatModifiers.Delete(s.store, req.Id); err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().RemoveModifier(req.Id)
-
 	return &chatv1.DeleteModifierResponse{}, nil
 }
 
@@ -251,9 +224,6 @@ func (s *chatService) CreateTag(ctx context.Context, req *chatv1.CreateTagReques
 	if err := dao.ChatTags.Insert(s.store, tag); err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().SyncTag(req.ServerId, tag)
-
 	return &chatv1.CreateTagResponse{Tag: tag}, nil
 }
 
@@ -268,9 +238,6 @@ func (s *chatService) UpdateTag(ctx context.Context, req *chatv1.UpdateTagReques
 	if err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().SyncTag(req.ServerId, emote)
-
 	return &chatv1.UpdateTagResponse{Tag: emote}, nil
 }
 
@@ -279,9 +246,6 @@ func (s *chatService) DeleteTag(ctx context.Context, req *chatv1.DeleteTagReques
 	if err := dao.ChatTags.Delete(s.store, req.Id); err != nil {
 		return nil, err
 	}
-
-	// s.app.Chat().RemoveTag(req.Id)
-
 	return &chatv1.DeleteTagResponse{}, nil
 }
 
