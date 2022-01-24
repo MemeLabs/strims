@@ -475,7 +475,6 @@ export type INetwork = {
   certificate?: strims_type_ICertificate;
   icon?: INetworkIcon;
   alias?: string;
-  displayOrder?: number;
   serverConfigOneof?: Network.IServerConfigOneof
 }
 
@@ -484,7 +483,6 @@ export class Network {
   certificate: strims_type_Certificate | undefined;
   icon: NetworkIcon | undefined;
   alias: string;
-  displayOrder: number;
   serverConfigOneof: Network.TServerConfigOneof;
 
   constructor(v?: INetwork) {
@@ -492,7 +490,6 @@ export class Network {
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.icon = v?.icon && new NetworkIcon(v.icon);
     this.alias = v?.alias || "";
-    this.displayOrder = v?.displayOrder || 0;
     this.serverConfigOneof = new Network.ServerConfigOneof(v?.serverConfigOneof);
   }
 
@@ -502,7 +499,6 @@ export class Network {
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
     if (m.alias) w.uint32(34).string(m.alias);
-    if (m.displayOrder) w.uint32(40).uint32(m.displayOrder);
     switch (m.serverConfigOneof.case) {
       case Network.ServerConfigOneofCase.SERVER_CONFIG:
       ServerConfig.encode(m.serverConfigOneof.serverConfig, w.uint32(8010).fork()).ldelim();
@@ -529,9 +525,6 @@ export class Network {
         break;
         case 4:
         m.alias = r.string();
-        break;
-        case 5:
-        m.displayOrder = r.uint32();
         break;
         case 1001:
         m.serverConfigOneof = new Network.ServerConfigOneof({ serverConfig: ServerConfig.decode(r, r.uint32()) });
@@ -935,6 +928,9 @@ export class NetworkEvent {
       case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
       NetworkEvent.NetworkPeerCountUpdate.encode(m.body.networkPeerCountUpdate, w.uint32(8026).fork()).ldelim();
       break;
+      case NetworkEvent.BodyCase.UI_CONFIG_UPDATE:
+      UIConfig.encode(m.body.uiConfigUpdate, w.uint32(8034).fork()).ldelim();
+      break;
     }
     return w;
   }
@@ -955,6 +951,9 @@ export class NetworkEvent {
         case 1003:
         m.body = new NetworkEvent.Body({ networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate.decode(r, r.uint32()) });
         break;
+        case 1004:
+        m.body = new NetworkEvent.Body({ uiConfigUpdate: UIConfig.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -970,6 +969,7 @@ export namespace NetworkEvent {
     NETWORK_START = 1001,
     NETWORK_STOP = 1002,
     NETWORK_PEER_COUNT_UPDATE = 1003,
+    UI_CONFIG_UPDATE = 1004,
   }
 
   export type IBody =
@@ -977,6 +977,7 @@ export namespace NetworkEvent {
   |{ case?: BodyCase.NETWORK_START, networkStart: NetworkEvent.INetworkStart }
   |{ case?: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.INetworkStop }
   |{ case?: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate }
+  |{ case?: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: IUIConfig }
   ;
 
   export type TBody = Readonly<
@@ -984,12 +985,14 @@ export namespace NetworkEvent {
   |{ case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart }
   |{ case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop }
   |{ case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate }
+  |{ case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig }
   >;
 
   class BodyImpl {
     networkStart: NetworkEvent.NetworkStart;
     networkStop: NetworkEvent.NetworkStop;
     networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate;
+    uiConfigUpdate: UIConfig;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
@@ -1004,6 +1007,10 @@ export namespace NetworkEvent {
       if (v && "networkPeerCountUpdate" in v) {
         this.case = BodyCase.NETWORK_PEER_COUNT_UPDATE;
         this.networkPeerCountUpdate = new NetworkEvent.NetworkPeerCountUpdate(v.networkPeerCountUpdate);
+      } else
+      if (v && "uiConfigUpdate" in v) {
+        this.case = BodyCase.UI_CONFIG_UPDATE;
+        this.uiConfigUpdate = new UIConfig(v.uiConfigUpdate);
       }
     }
   }
@@ -1014,6 +1021,7 @@ export namespace NetworkEvent {
     T extends { networkStart: NetworkEvent.INetworkStart } ? { case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart } :
     T extends { networkStop: NetworkEvent.INetworkStop } ? { case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop } :
     T extends { networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate } ? { case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate } :
+    T extends { uiConfigUpdate: IUIConfig } ? { case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig } :
     never
     >;
   };
@@ -1140,6 +1148,42 @@ export namespace NetworkEvent {
     }
   }
 
+}
+
+export type IUIConfig = {
+  networkDisplayOrder?: bigint[];
+}
+
+export class UIConfig {
+  networkDisplayOrder: bigint[];
+
+  constructor(v?: IUIConfig) {
+    this.networkDisplayOrder = v?.networkDisplayOrder ? v.networkDisplayOrder : [];
+  }
+
+  static encode(m: UIConfig, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    m.networkDisplayOrder.reduce((w, v) => w.uint64(v), w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfig {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfig();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.networkDisplayOrder.push(r.uint64());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
 }
 
 export type IWatchNetworksRequest = {
@@ -1323,6 +1367,62 @@ export class UpdateAliasResponse {
       switch (tag >> 3) {
         case 1:
         m.network = Network.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetUIConfigRequest = {
+}
+
+export class GetUIConfigRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IGetUIConfigRequest) {
+  }
+
+  static encode(m: GetUIConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetUIConfigRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new GetUIConfigRequest();
+  }
+}
+
+export type IGetUIConfigResponse = {
+  config?: IUIConfig;
+}
+
+export class GetUIConfigResponse {
+  config: UIConfig | undefined;
+
+  constructor(v?: IGetUIConfigResponse) {
+    this.config = v?.config && new UIConfig(v.config);
+  }
+
+  static encode(m: GetUIConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) UIConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetUIConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetUIConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = UIConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

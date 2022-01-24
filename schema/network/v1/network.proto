@@ -74,7 +74,6 @@ message Network {
   strims.type.Certificate certificate = 2;
   NetworkIcon icon = 3;
   string alias = 4;
-  uint32 display_order = 5;
 
   oneof server_config_oneof {
     ServerConfig server_config = 1001;
@@ -136,7 +135,12 @@ message NetworkEvent {
     NetworkStart network_start = 1001;
     NetworkStop network_stop = 1002;
     NetworkPeerCountUpdate network_peer_count_update = 1003;
+    UIConfig ui_config_update = 1004;
   }
+}
+
+message UIConfig {
+  repeated uint64 network_display_order = 1;
 }
 
 message WatchNetworksRequest {}
@@ -160,6 +164,12 @@ message UpdateAliasResponse {
   Network network = 1;
 }
 
+message GetUIConfigRequest {}
+
+message GetUIConfigResponse {
+  UIConfig config = 1;
+}
+
 service NetworkService {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse);
@@ -171,4 +181,5 @@ service NetworkService {
   rpc Watch(WatchNetworksRequest) returns (stream WatchNetworksResponse);
   rpc UpdateDisplayOrder(UpdateDisplayOrderRequest) returns (UpdateDisplayOrderResponse);
   rpc UpdateAlias(UpdateAliasRequest) returns (UpdateAliasResponse);
+  rpc GetUIConfig(GetUIConfigRequest) returns (GetUIConfigResponse);
 }

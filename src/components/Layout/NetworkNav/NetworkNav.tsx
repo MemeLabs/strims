@@ -2,7 +2,7 @@ import "./NetworkNav.scss";
 
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentProps, useContext } from "react";
+import React, { ComponentProps, useContext, useMemo } from "react";
 import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
@@ -35,13 +35,38 @@ export interface NetworkNavItem {
 const NetworkNav: React.FC = () => {
   const { t } = useTranslation();
   const { expandNav, toggleExpandNav } = useLayout();
-  const [networks, { updateDisplayOrder }] = useContext(NetworkContext);
+  const { items, config, updateDisplayOrder } = useContext(NetworkContext);
 
-  const onDragEnd = React.useCallback((result: DropResult) => {
-    if (result.destination) {
-      updateDisplayOrder(result.source.index, result.destination.index);
-    }
-  }, []);
+  const orderedItems = useMemo(
+    () =>
+      Array.from(items).sort((a, b) => {
+        let ai = config?.networkDisplayOrder.indexOf(a.network.id) ?? -1;
+        let bi = config?.networkDisplayOrder.indexOf(b.network.id) ?? -1;
+        if (ai === -1 && bi === -1) {
+          return Number(a.network.id - b.network.id);
+        }
+        if (ai === -1) {
+          ai = Infinity;
+        } else if (bi === -1) {
+          bi = Infinity;
+        }
+        return ai - bi;
+      }),
+    [items, config]
+  );
+
+  const onDragEnd = React.useCallback(
+    (result: DropResult) => {
+      if (result.destination) {
+        const { source, destination } = result;
+        const ids = orderedItems.map(({ network }) => network.id);
+        const [target] = ids.splice(source.index, 1);
+        ids.splice(destination.index, 0, target);
+        updateDisplayOrder(ids);
+      }
+    },
+    [orderedItems]
+  );
 
   return (
     <aside
@@ -73,7 +98,7 @@ const NetworkNav: React.FC = () => {
             <Droppable droppableId="networks">
               {({ innerRef, droppableProps, placeholder }) => (
                 <div ref={innerRef} {...droppableProps}>
-                  {networks.map(({ network, peerCount }, i) => (
+                  {orderedItems.map(({ network, peerCount }, i) => (
                     <Draggable
                       draggableId={`network-${network.id.toString()}`}
                       index={i}

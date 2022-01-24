@@ -33,6 +33,7 @@ func (o *Observers) EmitLocal(v interface{}) {
 	o.local.Emit(v)
 }
 
+// Emit implements dao.EventEmitter
 func (o *Observers) Emit(v proto.Message) {
 	o.global.Emit(v)
 }

@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -89,17 +87,16 @@ func (h *Host) NotifyPeerNetwork(ch chan PeerNetwork) {
 }
 
 // AddNetwork ...
-func (h *Host) AddNetwork(cert *certificate.Certificate) (*Node, error) {
+func (h *Host) AddNetwork(key []byte) (*Node, error) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
-	key := dao.CertificateRoot(cert).Key
 	if _, ok := h.nodes.Get(key); ok {
 		return nil, ErrDuplicateNetworkKey
 	}
 
 	qosc := h.qosc.AddClass(1)
-	network := newNetwork(h.logger, h.vnic, qosc, cert, h.recentMessageIDs)
+	network := newNetwork(h.logger, h.vnic, qosc, key, h.recentMessageIDs)
 	hashTable := newHashTable(h.logger, network, h.hashTableStore)
 	peerIndex := newPeerIndex(h.logger, network, h.peerIndexStore)
 	peerExchange := newPeerExchange(h.logger, network)

@@ -34,5 +34,9 @@ func (s *bootstrapService) Publish(ctx context.Context, req *bootstrap.Bootstrap
 		return nil, err
 	}
 
-	return nil, s.App.Network().Add(network, nil)
+	if err := s.App.Network().Add(network); err != nil {
+		return nil, err
+	}
+
+	return &bootstrap.BootstrapPeerPublishResponse{}, nil
 }

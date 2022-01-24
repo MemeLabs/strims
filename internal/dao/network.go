@@ -25,6 +25,7 @@ const (
 	networkCertificateLogSerialNS
 	networkCertificateLogSubjectNS
 	networkBootstrapClientNS
+	networkUIConfigNS
 )
 
 var Networks = NewTable(
@@ -40,17 +41,6 @@ var Networks = NewTable(
 )
 
 var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
-
-// NextNetworkDisplayOrder ...
-func NextNetworkDisplayOrder(s kv.Store) (n uint32, err error) {
-	networks, err := Networks.GetAll(s)
-	for _, v := range networks {
-		if v.DisplayOrder >= n {
-			n = v.DisplayOrder + 1
-		}
-	}
-	return
-}
 
 // NewNetworkCertificate ...
 func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
@@ -319,3 +309,15 @@ func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTL
 		},
 	}, nil
 }
+
+var NetworkUIConfig = NewSingleton(
+	networkUIConfigNS,
+	&SingletonOptions[networkv1.UIConfig]{
+		DefaultValue: &networkv1.UIConfig{
+			NetworkDisplayOrder: []uint64{},
+		},
+		ObserveChange: func(m, p *networkv1.UIConfig) proto.Message {
+			return &networkv1.UIConfigChangeEvent{UiConfig: m}
+		},
+	},
+)

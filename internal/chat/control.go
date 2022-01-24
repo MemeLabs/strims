@@ -76,15 +76,14 @@ func (t *control) Run(ctx context.Context) {
 
 	for {
 		select {
-		case <-t.events:
 		case e := <-t.events:
 			switch e := e.(type) {
-			case event.ChatSyncAssets:
-				t.syncAssets(e.ServerID, e.ForceUnifiedUpdate)
+			case *chatv1.SyncAssetsEvent:
+				t.syncAssets(e.ServerId, e.ForceUnifiedUpdate)
 			case *chatv1.ServerChangeEvent:
-				t.syncAssets(e.Server.Id, false)
+				t.handleServerChange(ctx, e.Server)
 			case *chatv1.ServerDeleteEvent:
-				// TODO: shut down server
+				t.handleServerDelete(ctx, e.Server)
 			case *chatv1.EmoteChangeEvent:
 				t.syncAssets(e.Emote.ServerId, false)
 			case *chatv1.EmoteDeleteEvent:
@@ -105,26 +104,49 @@ func (t *control) Run(ctx context.Context) {
 }
 
 func (t *control) startServerRunners(ctx context.Context) error {
-	configs, err := dao.ChatServers.GetAll(t.store)
+	servers, err := dao.ChatServers.GetAll(t.store)
 	if err != nil {
 		return err
 	}
 
-	for _, config := range configs {
-		t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, config.Key.Public, config.NetworkKey, config))
+	for _, server := range servers {
+		t.startServerRunner(ctx, server)
 	}
 	return nil
 }
 
-func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
-	t.observers.EmitGlobal(chatv1.SyncAssetsEvent{
-		ServerId:           serverID,
-		ForceUnifiedUpdate: forceUnifiedUpdate,
-	})
-	return nil
+func (t *control) handleServerChange(ctx context.Context, server *chatv1.Server) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	runner, ok := t.runners.Delete(&runner{key: server.Key.Public}).(*runner)
+	if ok {
+		runner.SyncServer()
+	} else {
+		t.startServerRunner(ctx, server)
+	}
+}
+
+func (t *control) handleServerDelete(ctx context.Context, server *chatv1.Server) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.stopServerRunner(ctx, server)
+}
+
+func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) {
+	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, server.Key.Public, server.NetworkKey, server))
+}
+
+func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
+	runner, ok := t.runners.Delete(&runner{key: server.Key.Public}).(*runner)
+	if !ok {
+		runner.Close()
+	}
 }
 
 func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	t.logger.Debug("syncing assets for chat server", zap.Uint64("serverID", serverID))
 
 	server, err := dao.ChatServers.Get(t.store, serverID)
@@ -138,6 +160,14 @@ func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
 	}
 
 	runner.SyncServer()
+}
+
+func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
+	t.observers.EmitGlobal(&chatv1.SyncAssetsEvent{
+		ServerId:           serverID,
+		ForceUnifiedUpdate: forceUnifiedUpdate,
+	})
+	return nil
 }
 
 func (t *control) client(ctx context.Context, networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {

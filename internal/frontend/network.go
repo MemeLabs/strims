@@ -9,7 +9,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"google.golang.org/protobuf/proto"
@@ -49,16 +48,7 @@ func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateSe
 		return nil, err
 	}
 
-	var logs []*networkv1ca.CertificateLog
-	for c := network.Certificate; c != nil; c = c.GetParent() {
-		log, err := dao.NewCertificateLog(s.store, network.Id, c)
-		if err != nil {
-			return nil, err
-		}
-		logs = append(logs, log)
-	}
-
-	if err := s.app.Network().Add(network, logs); err != nil {
+	if err := s.app.Network().Add(network); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +170,7 @@ func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *net
 		return nil, err
 	}
 
-	if err := s.app.Network().Add(network, nil); err != nil {
+	if err := s.app.Network().Add(network); err != nil {
 		return nil, err
 	}
 
@@ -204,7 +194,11 @@ func (s *networkService) Watch(ctx context.Context, r *networkv1.WatchNetworksRe
 
 // UpdateDisplayOrder ...
 func (s *networkService) UpdateDisplayOrder(ctx context.Context, r *networkv1.UpdateDisplayOrderRequest) (*networkv1.UpdateDisplayOrderResponse, error) {
-	if err := s.app.Network().UpdateDisplayOrder(r.NetworkIds); err != nil {
+	_, err := dao.NetworkUIConfig.Transform(s.store, func(p *networkv1.UIConfig) error {
+		p.NetworkDisplayOrder = r.NetworkIds
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &networkv1.UpdateDisplayOrderResponse{}, nil
@@ -212,5 +206,17 @@ func (s *networkService) UpdateDisplayOrder(ctx context.Context, r *networkv1.Up
 
 // UpdateAlias ...
 func (s *networkService) UpdateAlias(ctx context.Context, r *networkv1.UpdateAliasRequest) (*networkv1.UpdateAliasResponse, error) {
-	return nil, rpc.ErrNotImplemented
+	if err := s.app.Network().SetAlias(r.Id, r.Alias); err != nil {
+		return nil, err
+	}
+	return &networkv1.UpdateAliasResponse{}, nil
+}
+
+// GetUIConfig ...
+func (s *networkService) GetUIConfig(ctx context.Context, r *networkv1.GetUIConfigRequest) (*networkv1.GetUIConfigResponse, error) {
+	c, err := dao.NetworkUIConfig.Get(s.store)
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.GetUIConfigResponse{Config: c}, nil
 }

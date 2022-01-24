@@ -47,10 +47,10 @@ type Control interface {
 	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
 	RemovePeer(id uint64)
 	Certificate(networkKey []byte) (*certificate.Certificate, bool)
-	Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error
+	Add(network *networkv1.Network) error
 	Remove(id uint64) error
+	SetAlias(id uint64, name string) error
 	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
-	UpdateDisplayOrder(ids []uint64) error
 }
 
 // Broker negotiates common networks with peers.
@@ -119,7 +119,7 @@ func (t *control) Dialer() Dialer {
 func (t *control) Run(ctx context.Context) {
 	go t.ca.Run(ctx)
 
-	t.startNetworks()
+	t.startNetworks(ctx)
 	t.scheduleCertRenewal()
 
 	for {
@@ -132,14 +132,14 @@ func (t *control) Run(ctx context.Context) {
 				t.handlePeerAdd(ctx, e.ID)
 			case event.NetworkPeerBindings:
 				t.handlePeerBinding(ctx, e.PeerID, e.NetworkKeys)
-			case event.NetworkCertUpdate:
-				t.handleNetworkCertUpdate(e.Network)
-			case event.NetworkAdd:
-				t.handleNetworkAdd(ctx)
 			case event.NetworkPeerOpen:
 				t.handleNetworkPeerCountUpdate(e.NetworkID, 1)
 			case event.NetworkPeerClose:
 				t.handleNetworkPeerCountUpdate(e.NetworkID, -1)
+			case *networkv1.NetworkChangeEvent:
+				t.handleNetworkChange(ctx, e.Network)
+			case *networkv1.NetworkDeleteEvent:
+				t.handleNetworkRemove(e.Network)
 			}
 		case <-ctx.Done():
 			return
@@ -147,6 +147,51 @@ func (t *control) Run(ctx context.Context) {
 
 		t.scheduleCertRenewal()
 	}
+}
+
+func (t *control) startNetworks(ctx context.Context) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	networks, err := dao.Networks.GetAll(t.store)
+	if err != nil {
+		t.logger.Fatal("loading networks failed", zap.Error(err))
+	}
+
+	for _, n := range networks {
+		if err := t.startNetwork(ctx, n); err != nil {
+			return err
+		}
+	}
+
+	t.certificates.SetLoaded()
+
+	return nil
+}
+
+func (t *control) scheduleCertRenewal() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	minNextTime := timeutil.MaxTime
+
+	for _, n := range t.networks {
+		nextTime := nextCertificateRenewTime(n.network)
+		if nextTime.Before(minNextTime) {
+			minNextTime = nextTime
+		}
+	}
+
+	now := timeutil.Now()
+
+	if minNextTime.Before(now) {
+		minNextTime = now
+	}
+	if minNextTime.Before(t.nextCertRenewTime) {
+		minNextTime = t.nextCertRenewTime
+	}
+
+	t.certRenewTimeout.Reset(minNextTime.Sub(now))
 }
 
 func (t *control) handlePeerAdd(ctx context.Context, peerID uint64) {
@@ -199,33 +244,6 @@ func (t *control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 	}
 }
 
-func (t *control) handleNetworkCertUpdate(network *networkv1.Network) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	networkKey := dao.NetworkKey(network)
-	for _, peer := range t.peers {
-		if peer.hasNetworkBinding(networkKey) {
-			go peer.sendCertificateUpdate(network)
-		}
-	}
-}
-
-func (t *control) handleNetworkAdd(ctx context.Context) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	// TODO: throttle
-	for _, peer := range t.peers {
-		peer := peer
-		go func() {
-			if err := peer.negotiateNetworks(ctx); err != nil {
-				t.logger.Debug("network negotiation failed", zap.Error(err))
-			}
-		}()
-	}
-}
-
 func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 	t.lock.Lock()
 	n, ok := t.networks[networkID]
@@ -242,6 +260,76 @@ func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 		NetworkID: networkID,
 		PeerCount: peerCount,
 	})
+}
+
+func (t *control) handleNetworkChange(ctx context.Context, n *networkv1.Network) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.startNetwork(ctx, n)
+}
+
+func (t *control) handleNetworkRemove(n *networkv1.Network) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.stopNetwork(n)
+}
+
+func (t *control) startNetwork(ctx context.Context, n *networkv1.Network) error {
+	if nn, ok := t.networks[n.Id]; ok {
+		// TODO: if the config changed update directory server
+
+		if !proto.Equal(nn.network.Certificate, n.Certificate) {
+			t.certificates.Insert(n)
+			t.dialer.replaceOrInsertNetwork(n)
+
+			for _, peer := range t.peers {
+				if peer.hasNetworkBinding(dao.NetworkKey(n)) {
+					go peer.sendCertificateUpdate(n)
+				}
+			}
+		}
+		return nil
+	}
+
+	if _, err := t.vpn.AddNetwork(dao.NetworkKey(n)); err != nil {
+		return err
+	}
+
+	t.networks[n.Id] = &network{network: n}
+	t.certificates.Insert(n)
+	t.dialer.replaceOrInsertNetwork(n)
+
+	t.observers.EmitLocal(event.NetworkStart{Network: n})
+
+	// TODO: throttle
+	for _, peer := range t.peers {
+		peer := peer
+		go func() {
+			if err := peer.negotiateNetworks(ctx); err != nil {
+				t.logger.Debug("network negotiation failed", zap.Error(err))
+			}
+		}()
+	}
+
+	return nil
+}
+
+func (t *control) stopNetwork(n *networkv1.Network) error {
+	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n)); err != nil {
+		return err
+	}
+
+	for _, p := range t.peers {
+		p.closeNetwork(dao.NetworkKey(n))
+	}
+
+	t.dialer.removeNetwork(n)
+	t.certificates.Delete(dao.NetworkKey(n))
+	delete(t.networks, n.Id)
+
+	t.observers.EmitLocal(event.NetworkStop{Network: n})
+
+	return nil
 }
 
 func (t *control) dispatchCertificateRenewNotification(network *networkv1.Network, renewErr error) {
@@ -373,6 +461,14 @@ func (t *control) renewCertificateWithPeer(ctx context.Context, network *network
 	)
 }
 
+func (t *control) setCertificate(id uint64, cert *certificate.Certificate) error {
+	_, err := dao.Networks.Transform(t.store, id, func(p *networkv1.Network) error {
+		p.Certificate = cert
+		return nil
+	})
+	return err
+}
+
 // AddPeer ...
 func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
 	p := newPeer(id, vnicPeer, client, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
@@ -392,69 +488,6 @@ func (t *control) RemovePeer(id uint64) {
 
 	t.peers[id].close()
 	delete(t.peers, id)
-}
-
-func (t *control) startNetworks() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	networks, err := dao.Networks.GetAll(t.store)
-	if err != nil {
-		t.logger.Fatal("loading networks failed", zap.Error(err))
-	}
-
-	for _, n := range networks {
-		cert := dao.CertificateRoot(n.Certificate)
-
-		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
-			t.logger.Error(
-				"starting network failed",
-				zap.String("name", cert.Subject),
-				logutil.ByteHex("key", cert.Key),
-				zap.Error(err),
-			)
-			continue
-		}
-
-		t.networks[n.Id] = &network{network: n}
-		t.certificates.Insert(n)
-		t.dialer.replaceOrInsertNetwork(n)
-
-		t.logger.Info(
-			"network started",
-			zap.String("name", cert.Subject),
-			logutil.ByteHex("key", cert.Key),
-		)
-
-		t.observers.EmitLocal(event.NetworkStart{Network: n})
-	}
-
-	t.certificates.SetLoaded()
-}
-
-func (t *control) scheduleCertRenewal() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	minNextTime := timeutil.MaxTime
-
-	for _, n := range t.networks {
-		nextTime := nextCertificateRenewTime(n.network)
-		if nextTime.Before(minNextTime) {
-			minNextTime = nextTime
-		}
-	}
-
-	now := timeutil.Now()
-
-	if minNextTime.Before(now) {
-		minNextTime = now
-	}
-	if minNextTime.Before(t.nextCertRenewTime) {
-		minNextTime = t.nextCertRenewTime
-	}
-
-	t.certRenewTimeout.Reset(minNextTime.Sub(now))
 }
 
 func (t *control) renewExpiredCerts(ctx context.Context) {
@@ -481,56 +514,23 @@ func (t *control) renewExpiredCerts(ctx context.Context) {
 	}
 }
 
-func (t *control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.Network) error, finalize func(*networkv1.Network)) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	n, ok := t.networks[id]
-	if !ok {
-		return ErrNetworkNotFound
-	}
-
-	clone := proto.Clone(n.network).(*networkv1.Network)
-	if err := mutate(clone); err != nil {
-		return err
-	}
-
-	if err := dao.Networks.Upsert(t.store, clone); err != nil {
-		return err
-	}
-
-	t.networks[id].network = clone
-
-	finalize(clone)
-	return nil
-}
-
-func noopMutateNetworkFinalizer(*networkv1.Network) {}
-
-func (t *control) mutateNetwork(id uint64, mutate func(*networkv1.Network) error) error {
-	return t.mutateNetworkWithFinalizer(id, mutate, noopMutateNetworkFinalizer)
-}
-
-func (t *control) setCertificate(id uint64, cert *certificate.Certificate) error {
-	return t.mutateNetworkWithFinalizer(
-		id,
-		func(network *networkv1.Network) error {
-			network.Certificate = cert
-			return nil
-		},
-		func(network *networkv1.Network) {
-			t.certificates.Insert(network)
-			t.dialer.replaceOrInsertNetwork(network)
-			t.observers.EmitGlobal(event.NetworkCertUpdate{Network: proto.Clone(network).(*networkv1.Network)})
-		},
-	)
-}
-
-func (t *control) setNetworkAlias(id uint64, name string) error {
-	return t.mutateNetwork(id, func(network *networkv1.Network) error {
-		network.Alias = name
+func (t *control) SetAlias(id uint64, alias string) error {
+	var aliasChanged bool
+	network, err := dao.Networks.Transform(t.store, id, func(p *networkv1.Network) error {
+		aliasChanged = p.Alias != alias
+		p.Alias = alias
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if aliasChanged {
+		// TODO: defer via renew scheduler...
+		go t.renewCertificate(context.Background(), network)
+	}
+
+	return err
 }
 
 // Certificate ...
@@ -541,80 +541,33 @@ func (t *control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 	return nil, false
 }
 
-// Add ...
-func (t *control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	if _, ok := t.networks[n.Id]; ok {
-		return errors.New("duplicate network id")
+func (t *control) Add(network *networkv1.Network) error {
+	var logs []*networkv1ca.CertificateLog
+	if network.GetServerConfig() != nil {
+		for c := network.Certificate; c != nil; c = c.GetParent() {
+			log, err := dao.NewCertificateLog(t.store, network.Id, c)
+			if err != nil {
+				return err
+			}
+			logs = append(logs, log)
+		}
 	}
 
-	if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
-		return err
-	}
-
-	err := t.store.Update(func(tx kv.RWTx) error {
-		for _, l := range certLogs {
-			if err := dao.CertificateLogs.Insert(tx, l); err != nil {
+	return t.store.Update(func(tx kv.RWTx) error {
+		if err := dao.Networks.Insert(tx, network); err != nil {
+			return err
+		}
+		for _, log := range logs {
+			if err := dao.CertificateLogs.Insert(tx, log); err != nil {
 				return err
 			}
 		}
-
-		order, err := dao.NextNetworkDisplayOrder(tx)
-		if err != nil {
-			return err
-		}
-
-		n.DisplayOrder = order
-		return dao.Networks.Insert(tx, n)
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	t.networks[n.Id] = &network{network: n}
-	t.certificates.Insert(n)
-	t.dialer.replaceOrInsertNetwork(n)
-
-	t.observers.EmitGlobal(event.NetworkAdd{Network: n})
-	t.observers.EmitLocal(event.NetworkStart{Network: n})
-
-	return nil
 }
 
-// Remove ...
 func (t *control) Remove(id uint64) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	n, ok := t.networks[id]
-	if !ok {
-		return ErrNetworkNotFound
-	}
-	networkKey := dao.NetworkKey(n.network)
-
-	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n.network)); err != nil {
-		return err
-	}
-
-	err := dao.Networks.Delete(t.store, id)
-	if err != nil {
-		return err
-	}
-
-	for _, p := range t.peers {
-		p.closeNetwork(networkKey)
-	}
-
-	t.dialer.removeNetwork(n.network)
-	t.certificates.Delete(networkKey)
-	delete(t.networks, id)
-
-	t.observers.EmitLocal(event.NetworkStop{Network: n.network})
-	t.observers.EmitGlobal(event.NetworkRemove{Network: n.network})
-
-	return nil
+	return dao.Networks.Delete(t.store, id)
 }
 
 func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {
@@ -667,6 +620,12 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 							},
 						},
 					}
+				case *networkv1.UIConfigChangeEvent:
+					ch <- &networkv1.NetworkEvent{
+						Body: &networkv1.NetworkEvent_UiConfigUpdate{
+							UiConfigUpdate: e.UiConfig,
+						},
+					}
 				}
 			case <-ctx.Done():
 				return
@@ -675,36 +634,4 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	}()
 
 	return ch
-}
-
-func (t *control) UpdateDisplayOrder(ids []uint64) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	if len(ids) != len(t.networks) {
-		return errors.New("network id list incomplete")
-	}
-
-	return t.store.Update(func(tx kv.RWTx) error {
-		for i, id := range ids {
-			n, ok := t.networks[id]
-			if !ok {
-				return ErrNetworkNotFound
-			}
-
-			if n.network.DisplayOrder == uint32(i) {
-				continue
-			}
-
-			clone := proto.Clone(n.network).(*networkv1.Network)
-			clone.DisplayOrder = uint32(i)
-
-			if err := dao.Networks.Update(tx, clone); err != nil {
-				return err
-			}
-
-			t.networks[id].network = clone
-		}
-		return nil
-	})
 }

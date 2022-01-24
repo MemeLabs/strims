@@ -18,6 +18,7 @@ func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServ
 	host.RegisterMethod("strims.network.v1.NetworkService.Watch", service.Watch)
 	host.RegisterMethod("strims.network.v1.NetworkService.UpdateDisplayOrder", service.UpdateDisplayOrder)
 	host.RegisterMethod("strims.network.v1.NetworkService.UpdateAlias", service.UpdateAlias)
+	host.RegisterMethod("strims.network.v1.NetworkService.GetUIConfig", service.GetUIConfig)
 }
 
 // NetworkServiceService ...
@@ -62,6 +63,10 @@ type NetworkServiceService interface {
 		ctx context.Context,
 		req *UpdateAliasRequest,
 	) (*UpdateAliasResponse, error)
+	GetUIConfig(
+		ctx context.Context,
+		req *GetUIConfigRequest,
+	) (*GetUIConfigResponse, error)
 }
 
 // NetworkServiceClient ...
@@ -162,4 +167,13 @@ func (c *NetworkServiceClient) UpdateAlias(
 	res *UpdateAliasResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateAlias", req, res)
+}
+
+// GetUIConfig ...
+func (c *NetworkServiceClient) GetUIConfig(
+	ctx context.Context,
+	req *GetUIConfigRequest,
+	res *GetUIConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.GetUIConfig", req, res)
 }

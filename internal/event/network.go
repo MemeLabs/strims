@@ -6,21 +6,6 @@ import (
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 )
 
-// NetworkLoad ...
-type NetworkLoad struct {
-	Network *networkv1.Network
-}
-
-// NetworkAdd ...
-type NetworkAdd struct {
-	Network *networkv1.Network
-}
-
-// NetworkRemove ...
-type NetworkRemove struct {
-	Network *networkv1.Network
-}
-
 // NetworkStart ...
 type NetworkStart struct {
 	Network *networkv1.Network
@@ -28,11 +13,6 @@ type NetworkStart struct {
 
 // NetworkStop ...
 type NetworkStop struct {
-	Network *networkv1.Network
-}
-
-// NetworkCertUpdate ...
-type NetworkCertUpdate struct {
 	Network *networkv1.Network
 }
 

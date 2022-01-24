@@ -375,7 +375,7 @@ func (s *chatService) SetUIConfig(ctx context.Context, req *chatv1.SetUIConfigRe
 // GetUIConfig ...
 func (s *chatService) GetUIConfig(ctx context.Context, req *chatv1.GetUIConfigRequest) (*chatv1.GetUIConfigResponse, error) {
 	c, err := dao.ChatUIConfig.Get(s.store)
-	if err == kv.ErrRecordNotFound {
+	if errors.Is(err, kv.ErrRecordNotFound) {
 		return &chatv1.GetUIConfigResponse{}, nil
 	} else if err != nil {
 		return nil, err

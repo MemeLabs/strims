@@ -4,6 +4,8 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 import {
   Network as strims_network_v1_Network,
   INetwork as strims_network_v1_INetwork,
+  UIConfig as strims_network_v1_UIConfig,
+  IUIConfig as strims_network_v1_IUIConfig,
 } from "./network";
 
 export type INetworkChangeEvent = {
@@ -68,6 +70,42 @@ export class NetworkDeleteEvent {
       switch (tag >> 3) {
         case 1:
         m.network = strims_network_v1_Network.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigChangeEvent = {
+  uiConfig?: strims_network_v1_IUIConfig;
+}
+
+export class UIConfigChangeEvent {
+  uiConfig: strims_network_v1_UIConfig | undefined;
+
+  constructor(v?: IUIConfigChangeEvent) {
+    this.uiConfig = v?.uiConfig && new strims_network_v1_UIConfig(v.uiConfig);
+  }
+
+  static encode(m: UIConfigChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfig) strims_network_v1_UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfig = strims_network_v1_UIConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

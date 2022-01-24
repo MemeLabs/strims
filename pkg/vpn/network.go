@@ -7,8 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
@@ -20,12 +18,12 @@ import (
 )
 
 // newNetwork ...
-func newNetwork(logger *zap.Logger, host *vnic.Host, qosc *qos.Class, certificate *certificate.Certificate, recentMessageIDs *messageIDLRU) *Network {
+func newNetwork(logger *zap.Logger, host *vnic.Host, qosc *qos.Class, key []byte, recentMessageIDs *messageIDLRU) *Network {
 	return &Network{
 		logger:           logger,
 		host:             host,
 		qosc:             qosc,
-		certificate:      certificate,
+		key:              key,
 		recentMessageIDs: recentMessageIDs,
 		links:            kademlia.NewKBucket(host.ID(), 20),
 		handlers:         map[uint16]MessageHandler{},
@@ -88,7 +86,7 @@ type Network struct {
 	host             *vnic.Host
 	qosc             *qos.Class
 	seq              uint64
-	certificate      *certificate.Certificate
+	key              []byte
 	recentMessageIDs *messageIDLRU
 	linksLock        sync.Mutex
 	links            *kademlia.KBucket
@@ -175,7 +173,7 @@ func (n *Network) Close() {
 
 // Key ...
 func (n *Network) Key() []byte {
-	return dao.CertificateRoot(n.certificate).Key
+	return n.key
 }
 
 // AddPeer ...

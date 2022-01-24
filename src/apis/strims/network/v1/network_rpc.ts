@@ -34,6 +34,9 @@ import {
   IUpdateAliasRequest,
   UpdateAliasRequest,
   UpdateAliasResponse,
+  IGetUIConfigRequest,
+  GetUIConfigRequest,
+  GetUIConfigResponse,
 } from "./network";
 
 export interface NetworkServiceService {
@@ -47,6 +50,7 @@ export interface NetworkServiceService {
   watch(req: WatchNetworksRequest, call: strims_rpc_Call): GenericReadable<WatchNetworksResponse>;
   updateDisplayOrder(req: UpdateDisplayOrderRequest, call: strims_rpc_Call): Promise<UpdateDisplayOrderResponse> | UpdateDisplayOrderResponse;
   updateAlias(req: UpdateAliasRequest, call: strims_rpc_Call): Promise<UpdateAliasResponse> | UpdateAliasResponse;
+  getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse;
 }
 
 export const registerNetworkServiceService = (host: strims_rpc_Service, service: NetworkServiceService): void => {
@@ -60,6 +64,7 @@ export const registerNetworkServiceService = (host: strims_rpc_Service, service:
   host.registerMethod<WatchNetworksRequest, WatchNetworksResponse>("strims.network.v1.NetworkService.Watch", service.watch.bind(service), WatchNetworksRequest);
   host.registerMethod<UpdateDisplayOrderRequest, UpdateDisplayOrderResponse>("strims.network.v1.NetworkService.UpdateDisplayOrder", service.updateDisplayOrder.bind(service), UpdateDisplayOrderRequest);
   host.registerMethod<UpdateAliasRequest, UpdateAliasResponse>("strims.network.v1.NetworkService.UpdateAlias", service.updateAlias.bind(service), UpdateAliasRequest);
+  host.registerMethod<GetUIConfigRequest, GetUIConfigResponse>("strims.network.v1.NetworkService.GetUIConfig", service.getUIConfig.bind(service), GetUIConfigRequest);
 }
 
 export class NetworkServiceClient {
@@ -103,6 +108,10 @@ export class NetworkServiceClient {
 
   public updateAlias(req?: IUpdateAliasRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateAliasResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.UpdateAlias", new UpdateAliasRequest(req)), UpdateAliasResponse, opts);
+  }
+
+  public getUIConfig(req?: IGetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetUIConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.GetUIConfig", new GetUIConfigRequest(req)), GetUIConfigResponse, opts);
   }
 }
 

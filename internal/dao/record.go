@@ -192,8 +192,11 @@ func (t *Singleton[V, T]) Set(s kv.RWStore, v T) (err error) {
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx)
-		if err != nil {
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
+		}
+		if proto.Equal(p, v) {
+			return nil
 		}
 		if err := t.runSetHooks(tx, v, p); err != nil {
 			return err
@@ -231,13 +234,20 @@ func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err 
 	defer observeDurationMs(t.transformDurationMs)()
 
 	err = s.Update(func(tx kv.RWTx) (err error) {
-		v, err = t.Get(tx)
-		if err == kv.ErrRecordNotFound {
-			v = new(V)
+		p, err := t.Get(tx)
+		if errors.Is(err, kv.ErrRecordNotFound) {
+			p = new(V)
 		} else if err != nil {
 			return err
 		}
+		v = proto.Clone(p).(T)
 		if err := fn(v); err != nil {
+			return err
+		}
+		if proto.Equal(p, v) {
+			return nil
+		}
+		if err := t.runSetHooks(tx, v, p); err != nil {
 			return err
 		}
 		return tx.Put(t.ns.String(), v)
@@ -430,6 +440,9 @@ func (t *Table[V, T]) Update(s kv.RWStore, v T) (err error) {
 		if err != nil {
 			return err
 		}
+		if proto.Equal(p, v) {
+			return nil
+		}
 		if err := t.runSetHooks(tx, v, p); err != nil {
 			return err
 		}
@@ -459,8 +472,11 @@ func (t *Table[V, T]) Upsert(s kv.RWStore, v T) (err error) {
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, v.GetId())
-		if err != nil && err != kv.ErrRecordNotFound {
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
+		}
+		if proto.Equal(p, v) {
+			return nil
 		}
 		if err := t.runSetHooks(tx, v, p); err != nil {
 			return err
@@ -492,11 +508,14 @@ func (t *Table[V, T]) Transform(s kv.RWStore, id uint64, fn func(p T) error) (v 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, id)
 		v = proto.Clone(p).(T)
-		if err != nil && err != kv.ErrRecordNotFound {
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
 		}
 		if err := fn(v); err != nil {
 			return err
+		}
+		if proto.Equal(p, v) {
+			return nil
 		}
 		if err := t.runSetHooks(tx, v, p); err != nil {
 			return err

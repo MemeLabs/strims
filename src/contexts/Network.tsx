@@ -1,36 +1,27 @@
 import React, { createContext, useCallback, useMemo, useState } from "react";
 
-import { NetworkEvent, Network as networkv1_Network } from "../apis/strims/network/v1/network";
+import { Network, NetworkEvent, UIConfig } from "../apis/strims/network/v1/network";
 import { useClient } from "./FrontendApi";
 
-type State = Network[];
+interface Value {
+  items: Item[];
+  config: UIConfig;
+  updateDisplayOrder: (networkIds: bigint[]) => void;
+}
 
-type Ops = {
-  updateDisplayOrder: (srcIndex: number, dstIndex: number) => void;
-};
+export const NetworkContext = createContext<Value>(null);
 
-const initialState: State = [];
-
-export const NetworkContext = createContext<[State, Ops]>(null);
-
-interface Network {
-  network: networkv1_Network;
+interface Item {
+  network: Network;
   peerCount: number;
 }
 
 export const Provider: React.FC = ({ children }) => {
   const client = useClient();
-  const [items, setItems] = useState<State>(initialState);
+  const [items, setItems] = useState<Item[]>([]);
+  const [config, setConfig] = useState<UIConfig>(null);
 
-  const addItem = (item: Network) =>
-    setItems((prev) => {
-      const next = Array.from(prev);
-      const i = next.findIndex(
-        ({ network: { displayOrder } }) => displayOrder > item.network.displayOrder
-      );
-      next.splice(i === -1 ? next.length : i, 0, item);
-      return next;
-    });
+  const addItem = (item: Item) => setItems((prev) => [...prev, item]);
 
   const removeItem = (networkId: bigint) =>
     setItems((prev) => prev.filter((item) => item.network.id !== networkId));
@@ -41,24 +32,25 @@ export const Provider: React.FC = ({ children }) => {
     );
 
   const updateDisplayOrder = useCallback(
-    (srcIndex: number, dstIndex: number) =>
-      setItems((prev) => {
-        const next = Array.from(prev);
-        const [target] = next.splice(srcIndex, 1);
-        next.splice(dstIndex, 0, target);
-        void client.network.updateDisplayOrder({
-          networkIds: next.map(({ network: { id } }) => id),
+    (networkIds: bigint[]) =>
+      setConfig((prev) => {
+        void client.network.updateDisplayOrder({ networkIds });
+        return new UIConfig({
+          ...prev,
+          networkDisplayOrder: networkIds,
         });
-        return next;
       }),
     []
   );
 
   React.useEffect(() => {
+    void client.network.getUIConfig().then(({ config }) => setConfig(config));
+
     const events = client.network.watch();
     events.on("data", ({ event: { body } }) => {
       switch (body.case) {
         case NetworkEvent.BodyCase.NETWORK_START:
+          removeItem(body.networkStart.network.id);
           addItem(body.networkStart);
           break;
         case NetworkEvent.BodyCase.NETWORK_STOP:
@@ -70,15 +62,17 @@ export const Provider: React.FC = ({ children }) => {
             body.networkPeerCountUpdate.peerCount
           );
           break;
+        case NetworkEvent.BodyCase.UI_CONFIG_UPDATE:
+          setConfig(body.uiConfigUpdate);
       }
     });
 
     return () => events.destroy();
   }, []);
 
-  const value = useMemo<[State, Ops]>(
-    () => [items, { updateDisplayOrder }],
-    [items, updateDisplayOrder]
+  const value = useMemo<Value>(
+    () => ({ items: items, config, updateDisplayOrder }),
+    [items, config, updateDisplayOrder]
   );
 
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;

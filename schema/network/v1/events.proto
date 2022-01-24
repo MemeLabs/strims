@@ -15,3 +15,7 @@ message NetworkChangeEvent {
 message NetworkDeleteEvent {
   Network network = 1;
 }
+
+message UIConfigChangeEvent {
+  UIConfig ui_config = 1;
+}
