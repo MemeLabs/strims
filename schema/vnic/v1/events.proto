@@ -11,7 +11,3 @@ import "vnic/v1/vnic.proto";
 message ConfigChangeEvent {
   Config config = 1;
 }
-
-message ConfigDeleteEvent {
-  Config config = 1;
-}

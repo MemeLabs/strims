@@ -2,7 +2,6 @@ package event
 
 import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 )
 
@@ -55,8 +54,4 @@ type DirectoryEvent struct {
 	NetworkID  uint64
 	NetworkKey []byte
 	Broadcast  *networkv1directory.EventBroadcast
-}
-
-type NetworkBootstrapClientAdd struct {
-	Client *networkv1bootstrap.BootstrapClient
 }

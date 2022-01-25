@@ -214,7 +214,7 @@ var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCert
 	networkCertificateLogNetworkNS,
 	CertificateLogs,
 	Networks,
-	(*networkv1ca.CertificateLog).GetNetworkID,
+	(*networkv1ca.CertificateLog).GetNetworkId,
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
@@ -228,7 +228,7 @@ var GetCertificateLogBySerialNumber = UniqueIndex(
 	networkCertificateLogSerialNS,
 	CertificateLogs,
 	func(m *networkv1ca.CertificateLog) []byte {
-		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkID, m.Certificate.SerialNumber)
+		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
 	},
 	nil,
 )
@@ -240,7 +240,7 @@ func FormatCertificateLogSubjectKey(networkID uint64, subject string) []byte {
 }
 
 func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
-	return FormatCertificateLogSubjectKey(m.NetworkID, m.Certificate.Subject)
+	return FormatCertificateLogSubjectKey(m.NetworkId, m.Certificate.Subject)
 }
 
 var GetCertificateLogBySubject = UniqueIndex(
@@ -273,7 +273,7 @@ func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certif
 
 	return &networkv1ca.CertificateLog{
 		Id:          id,
-		NetworkID:   networkID,
+		NetworkId:   networkID,
 		Certificate: c,
 	}, nil
 }

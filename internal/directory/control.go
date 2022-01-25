@@ -102,6 +102,8 @@ func (t *control) Run(ctx context.Context) {
 				t.handleNetworkStart(ctx, e.Network)
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
+			case *networkv1.NetworkChangeEvent:
+				t.handleNetworkChange(e.Network)
 			}
 		case <-pingTimer.C:
 			fuzz := rand.Int63n(int64((maxPingInterval - minPingInterval)))
@@ -117,7 +119,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	r := newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, network)
+	r := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
 	t.runners.ReplaceOrInsert(r)
 
 	c := newEventCache(network)
@@ -152,7 +154,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 				c.StoreEvent(b)
 				t.observers.EmitLocal(event.DirectoryEvent{
 					NetworkID:  network.Id,
-					NetworkKey: dao.CertificateRoot(network.Certificate).Key,
+					NetworkKey: dao.NetworkKey(network),
 					Broadcast:  b,
 				})
 			}
@@ -166,10 +168,14 @@ func (t *control) handleNetworkStop(network *networkv1.Network) {
 
 	t.snippetServer.stop(network.Id)
 
-	key := &runner{key: dao.NetworkKey(network)}
-	if r, ok := t.runners.Get(key).(*runner); ok {
-		t.runners.Delete(key)
+	if r, ok := t.runners.Delete(&runner{key: dao.NetworkKey(network)}).(*runner); ok {
 		r.Close()
+	}
+}
+
+func (t *control) handleNetworkChange(network *networkv1.Network) {
+	if r, ok := t.runners.Get(&runner{key: dao.NetworkKey(network)}).(*runner); ok {
+		r.Sync(network)
 	}
 }
 

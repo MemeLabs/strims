@@ -10,7 +10,7 @@ import "type/certificate.proto";
 
 message CertificateLog {
   uint64 id = 1;
-  uint64 networkID = 2;
+  uint64 network_id = 2;
   strims.type.Certificate certificate = 3;
 }
 

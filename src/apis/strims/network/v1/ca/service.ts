@@ -10,25 +10,25 @@ import {
 
 export type ICertificateLog = {
   id?: bigint;
-  networkID?: bigint;
+  networkId?: bigint;
   certificate?: strims_type_ICertificate;
 }
 
 export class CertificateLog {
   id: bigint;
-  networkID: bigint;
+  networkId: bigint;
   certificate: strims_type_Certificate | undefined;
 
   constructor(v?: ICertificateLog) {
     this.id = v?.id || BigInt(0);
-    this.networkID = v?.networkID || BigInt(0);
+    this.networkId = v?.networkId || BigInt(0);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
   }
 
   static encode(m: CertificateLog, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.networkID) w.uint32(16).uint64(m.networkID);
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -44,7 +44,7 @@ export class CertificateLog {
         m.id = r.uint64();
         break;
         case 2:
-        m.networkID = r.uint64();
+        m.networkId = r.uint64();
         break;
         case 3:
         m.certificate = strims_type_Certificate.decode(r, r.uint32());

@@ -118,4 +118,5 @@ const (
 	chatNS
 	videoNS
 	vnicNS
+	directoryNS
 )

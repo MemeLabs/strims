@@ -7,15 +7,20 @@ import (
 	"github.com/petar/GoLLRB/llrb"
 )
 
-type lru struct {
-	items llrb.LLRB
-	tail  *lruItem
-	head  *lruItem
+type keyerPointer[V any] interface {
+	keyer
+	*V
 }
 
-func (l *lru) Get(u keyer) keyer {
-	if ii := l.items.Get(&lruItem{item: u}); ii != nil {
-		i := ii.(*lruItem)
+type lru[V any, T keyerPointer[V]] struct {
+	items llrb.LLRB
+	tail  *lruItem[V, T]
+	head  *lruItem[V, T]
+}
+
+func (l *lru[V, T]) Get(u T) T {
+	if ii := l.items.Get(&lruItem[V, T]{item: u}); ii != nil {
+		i := ii.(*lruItem[V, T])
 		l.remove(i)
 		l.push(i)
 		return i.item
@@ -23,24 +28,28 @@ func (l *lru) Get(u keyer) keyer {
 	return nil
 }
 
-func (l *lru) Each(it func(i keyer) bool) {
+func (l *lru[V, T]) Has(u T) bool {
+	return l.items.Has(&lruItem[V, T]{item: u})
+}
+
+func (l *lru[V, T]) Each(it func(i T) bool) {
 	l.items.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
-		return it(ii.(*lruItem).item)
+		return it(ii.(*lruItem[V, T]).item)
 	})
 }
 
-func (l *lru) IterateTouchedAfter(eol timeutil.Time) lruForwardIterator {
-	return lruForwardIterator{next: l.head, eol: eol}
+func (l *lru[V, T]) IterateTouchedAfter(eol timeutil.Time) lruForwardIterator[V, T] {
+	return lruForwardIterator[V, T]{next: l.head, eol: eol}
 }
 
-func (l *lru) IterateTouchedBefore(eol timeutil.Time) lruReverseIterator {
-	return lruReverseIterator{next: l.tail, eol: eol}
+func (l *lru[V, T]) IterateTouchedBefore(eol timeutil.Time) lruReverseIterator[V, T] {
+	return lruReverseIterator[V, T]{next: l.tail, eol: eol}
 }
 
-func (l *lru) GetOrInsert(u keyer) keyer {
-	i := &lruItem{item: u}
+func (l *lru[V, T]) GetOrInsert(u T) T {
+	i := &lruItem[V, T]{item: u}
 	if ii := l.items.Get(i); ii != nil {
-		i = ii.(*lruItem)
+		i = ii.(*lruItem[V, T])
 		u = i.item
 		l.remove(i)
 	} else {
@@ -50,18 +59,18 @@ func (l *lru) GetOrInsert(u keyer) keyer {
 	return u
 }
 
-func (l *lru) Delete(u keyer) {
-	ii := l.items.Delete(&lruItem{item: u})
+func (l *lru[V, T]) Delete(u T) {
+	ii := l.items.Delete(&lruItem[V, T]{item: u})
 	if ii == nil {
 		return
 	}
 
-	i := ii.(*lruItem)
+	i := ii.(*lruItem[V, T])
 	l.remove(i)
 	l.head = i.next
 }
 
-func (l *lru) Pop(eol timeutil.Time) keyer {
+func (l *lru[V, T]) Pop(eol timeutil.Time) T {
 	if l.tail == nil || eol.Before(l.tail.time) {
 		return nil
 	}
@@ -71,16 +80,16 @@ func (l *lru) Pop(eol timeutil.Time) keyer {
 	return i.item
 }
 
-func (l *lru) Touch(u keyer) bool {
-	if i := l.items.Get(&lruItem{item: u}); i != nil {
-		l.remove(i.(*lruItem))
-		l.push(i.(*lruItem))
+func (l *lru[V, T]) Touch(u T) bool {
+	if i := l.items.Get(&lruItem[V, T]{item: u}); i != nil {
+		l.remove(i.(*lruItem[V, T]))
+		l.push(i.(*lruItem[V, T]))
 		return true
 	}
 	return false
 }
 
-func (l *lru) remove(i *lruItem) {
+func (l *lru[V, T]) remove(i *lruItem[V, T]) {
 	if l.tail == i {
 		l.tail = i.prev
 	}
@@ -95,7 +104,7 @@ func (l *lru) remove(i *lruItem) {
 	}
 }
 
-func (l *lru) push(i *lruItem) {
+func (l *lru[V, T]) push(i *lruItem[V, T]) {
 	i.time = timeutil.Now()
 	i.next = l.head
 	i.prev = nil
@@ -110,28 +119,28 @@ func (l *lru) push(i *lruItem) {
 	}
 }
 
-type lruItem struct {
-	item keyer
+type lruItem[V any, T keyerPointer[V]] struct {
+	item T
 	time timeutil.Time
-	prev *lruItem
-	next *lruItem
+	prev *lruItem[V, T]
+	next *lruItem[V, T]
 }
 
-func (i *lruItem) Key() []byte {
+func (i *lruItem[V, T]) Key() []byte {
 	return i.item.Key()
 }
 
-func (i *lruItem) Less(o llrb.Item) bool {
+func (i *lruItem[V, T]) Less(o llrb.Item) bool {
 	return keyerLess(i.item, o)
 }
 
-type lruForwardIterator struct {
-	cur  *lruItem
-	next *lruItem
+type lruForwardIterator[V any, T keyerPointer[V]] struct {
+	cur  *lruItem[V, T]
+	next *lruItem[V, T]
 	eol  timeutil.Time
 }
 
-func (l *lruForwardIterator) Next() bool {
+func (l *lruForwardIterator[V, T]) Next() bool {
 	l.cur = l.next
 	if l.cur == nil || l.eol.After(l.cur.time) {
 		return false
@@ -141,17 +150,17 @@ func (l *lruForwardIterator) Next() bool {
 	return true
 }
 
-func (l *lruForwardIterator) Value() keyer {
+func (l *lruForwardIterator[V, T]) Value() T {
 	return l.cur.item
 }
 
-type lruReverseIterator struct {
-	cur  *lruItem
-	next *lruItem
+type lruReverseIterator[V any, T keyerPointer[V]] struct {
+	cur  *lruItem[V, T]
+	next *lruItem[V, T]
 	eol  timeutil.Time
 }
 
-func (l *lruReverseIterator) Next() bool {
+func (l *lruReverseIterator[V, T]) Next() bool {
 	l.cur = l.next
 	if l.cur == nil || l.eol.Before(l.cur.time) {
 		return false
@@ -161,7 +170,7 @@ func (l *lruReverseIterator) Next() bool {
 	return true
 }
 
-func (l *lruReverseIterator) Value() keyer {
+func (l *lruReverseIterator[V, T]) Value() T {
 	return l.cur.item
 }
 
@@ -189,18 +198,28 @@ func keyerLess(h keyer, o llrb.Item) bool {
 	return !o.Less(h)
 }
 
-func newIndexedLRU() indexedLRU {
-	return indexedLRU{
-		index: map[uint64]*lruItem{},
+type indexedLRUKeyer interface {
+	keyer
+	ID() uint64
+}
+
+type indexedLRUKeyerPointer[T any] interface {
+	indexedLRUKeyer
+	*T
+}
+
+func newIndexedLRU[V any, T indexedLRUKeyerPointer[V]]() indexedLRU[V, T] {
+	return indexedLRU[V, T]{
+		index: map[uint64]*lruItem[V, T]{},
 	}
 }
 
-type indexedLRU struct {
-	lru
-	index map[uint64]*lruItem
+type indexedLRU[V any, T indexedLRUKeyerPointer[V]] struct {
+	lru[V, T]
+	index map[uint64]*lruItem[V, T]
 }
 
-func (l *indexedLRU) GetByID(id uint64) keyer {
+func (l *indexedLRU[V, T]) GetByID(id uint64) T {
 	if i, ok := l.index[id]; ok {
 		l.remove(i)
 		l.push(i)
@@ -209,33 +228,27 @@ func (l *indexedLRU) GetByID(id uint64) keyer {
 	return nil
 }
 
-func (l *indexedLRU) GetOrInsert(u indexedLRUKeyer) keyer {
-	i := &lruItem{item: u}
+func (l *indexedLRU[V, T]) GetOrInsert(u T) T {
+	i := &lruItem[V, T]{item: u}
 	if ii := l.items.Get(i); ii != nil {
-		i = ii.(*lruItem)
-		u = i.item.(indexedLRUKeyer)
+		i = ii.(*lruItem[V, T])
 		l.remove(i)
 	} else {
-		l.index[u.ID()] = i
+		l.index[i.item.ID()] = i
 		l.items.ReplaceOrInsert(i)
 	}
 	l.push(i)
-	return u
+	return i.item
 }
 
-func (l *indexedLRU) Delete(u indexedLRUKeyer) {
-	ii := l.items.Delete(&lruItem{item: u})
+func (l *indexedLRU[V, T]) Delete(u T) {
+	ii := l.items.Delete(&lruItem[V, T]{item: u})
 	if ii == nil {
 		return
 	}
 	delete(l.index, u.ID())
 
-	i := ii.(*lruItem)
+	i := ii.(*lruItem[V, T])
 	l.remove(i)
 	l.head = i.next
-}
-
-type indexedLRUKeyer interface {
-	keyer
-	ID() uint64
 }

@@ -7,11 +7,13 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -21,19 +23,21 @@ func newRunner(ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
+	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
 	network *networkv1.Network,
 ) *runner {
 	r := &runner{
 		key:     dao.NetworkKey(network),
-		network: network,
+		network: syncutil.NewPointer(network),
 
-		logger:   logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
-		vpn:      vpn,
-		store:    store,
-		dialer:   dialer,
-		transfer: transfer,
+		logger:    logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
+		vpn:       vpn,
+		store:     store,
+		observers: observers,
+		dialer:    dialer,
+		transfer:  transfer,
 
 		runnable: make(chan struct{}, 1),
 	}
@@ -49,19 +53,24 @@ func newRunner(ctx context.Context,
 
 type runner struct {
 	key     []byte
-	network *networkv1.Network
+	network syncutil.Pointer[networkv1.Network]
 
-	logger   *zap.Logger
-	vpn      *vpn.Host
-	store    *dao.ProfileStore
-	dialer   network.Dialer
-	transfer transfer.Control
+	logger    *zap.Logger
+	vpn       *vpn.Host
+	store     *dao.ProfileStore
+	observers *event.Observers
+	dialer    network.Dialer
+	transfer  transfer.Control
 
 	lock     sync.Mutex
 	closed   bool
 	client   *directoryReader
 	server   *directoryServer
 	runnable chan struct{}
+}
+
+func (r *runner) Sync(network *networkv1.Network) {
+	r.network.Swap(network)
 }
 
 func (r *runner) Less(o llrb.Item) bool {
@@ -126,7 +135,7 @@ func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader,
 
 func (r *runner) tryStartServer(ctx context.Context) {
 	for !r.Closed() {
-		mu := dao.NewMutex(r.logger, r.store, r.network.Id)
+		mu := dao.NewMutex(r.logger, r.store, r.network.Get().Id)
 		muctx, err := mu.Lock(ctx)
 		if err != nil {
 			return
@@ -147,7 +156,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	<-r.runnable
 
 	var err error
-	r.server, err = newDirectoryServer(r.logger, r.dialer, r.network)
+	r.server, err = newDirectoryServer(r.logger, r.store, r.dialer, r.observers, r.network.Get())
 	if err != nil {
 		r.runnable <- struct{}{}
 		r.lock.Unlock()

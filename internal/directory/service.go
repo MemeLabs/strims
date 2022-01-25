@@ -8,15 +8,18 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/set"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -31,8 +34,12 @@ const (
 	pingStartupDelay  = time.Second * 30
 	minPingInterval   = time.Minute * 10
 	maxPingInterval   = time.Minute * 14
-	embedLoadInterval = time.Second * 15
+	embedLoadInterval = time.Minute
 	refreshInterval   = time.Minute * 5
+
+	loadMediaEmbedTimeout = time.Second * 30
+	publishQuota          = 10
+	viewQuota             = 10
 )
 
 // AddressSalt ...
@@ -56,26 +63,28 @@ var swarmOptions = ppspp.SwarmOptions{
 	DeliveryMode: ppspp.BestEffortDeliveryMode,
 }
 
-func newDirectoryService(logger *zap.Logger, dialer network.Dialer, key *key.Key, config *networkv1directory.ServerConfig, ew *protoutil.ChunkStreamWriter) *directoryService {
+func newDirectoryService(logger *zap.Logger, store *dao.ProfileStore, dialer network.Dialer, observers *event.Observers, network *networkv1.Network, ew *protoutil.ChunkStreamWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
+		store:           store,
 		dialer:          dialer,
-		key:             key,
-		config:          config,
+		observers:       observers,
+		network:         syncutil.NewPointer(network),
 		done:            make(chan struct{}),
 		broadcastTicker: timeutil.DefaultTickEmitter.Ticker(broadcastInterval),
 		embedLoadTicker: timeutil.DefaultTickEmitter.Ticker(embedLoadInterval),
 		eventWriter:     ew,
-		embedLoader:     newEmbedLoader(logger, config.Integrations),
-		listings:        newIndexedLRU(),
+		embedLoader:     syncutil.NewPointer(newEmbedLoader(logger, network.GetServerConfig().GetDirectory().GetIntegrations())),
+		listings:        newIndexedLRU[listing](),
 	}
 }
 
 type directoryService struct {
 	logger            *zap.Logger
+	store             *dao.ProfileStore
 	dialer            network.Dialer
-	key               *key.Key
-	config            *networkv1directory.ServerConfig
+	observers         *event.Observers
+	network           syncutil.Pointer[networkv1.Network]
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   timeutil.Ticker
@@ -83,20 +92,31 @@ type directoryService struct {
 	lastBroadcastTime timeutil.Time
 	lastRefreshTime   timeutil.Time
 	eventWriter       *protoutil.ChunkStreamWriter
-	embedLoader       *embedLoader
+	embedLoader       syncutil.Pointer[embedLoader]
 	lock              sync.Mutex
 	nextID            uint64
-	listings          indexedLRU
-	sessions          lru
-	users             lru
+	listings          indexedLRU[listing]
+	sessions          lru[session]
+	users             lru[user]
 	certificate       *certificate.Certificate
 }
 
 func (d *directoryService) Run(ctx context.Context) error {
 	defer d.Close()
 
+	events := make(chan interface{}, 8)
+	d.observers.Notify(events)
+	defer d.observers.StopNotifying(events)
+
 	for {
 		select {
+		case e := <-events:
+			switch e := e.(type) {
+			case *networkv1.NetworkChangeEvent:
+				d.handleNetworkChange(e.Network)
+			case *networkv1directory.ListingRecordChangeEvent:
+				d.handleListingRecordChange(e.Record)
+			}
 		case now := <-d.broadcastTicker.C:
 			if err := d.broadcast(now); err != nil {
 				d.logger.Debug("directory broadcast failed", zap.Error(err))
@@ -121,6 +141,42 @@ func (d *directoryService) Close() {
 	})
 }
 
+func (d *directoryService) handleNetworkChange(network *networkv1.Network) {
+	// TODO: all the timing consts should be configurable
+
+	loader := newEmbedLoader(d.logger, network.GetServerConfig().GetDirectory().GetIntegrations())
+	d.embedLoader.Swap(loader)
+
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.listings.Each(func(l *listing) bool {
+		if e := l.listing.GetEmbed(); e != nil && !loader.IsSupported(e.Service) {
+			l.evicted = true
+			d.listings.Touch(l)
+		}
+		return true
+	})
+}
+
+func (d *directoryService) handleListingRecordChange(r *networkv1directory.ListingRecord) {
+	if r.NetworkId != d.network.Get().Id {
+		return
+	}
+
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.listings.Each(func(l *listing) bool {
+		if dao.DirectoryListingsEqual(r.Listing, l.listing) {
+			l.moderation = r.Moderation
+			l.evicted = r.Moderation.GetIsBanned()
+			d.listings.Touch(l)
+		}
+		return true
+	})
+}
+
 func (d *directoryService) broadcast(now timeutil.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -129,13 +185,14 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 	if d.lastRefreshTime.Add(refreshInterval).Before(now) {
 		for it := d.listings.IterateTouchedBefore(d.lastBroadcastTime); it.Next(); {
-			l := it.Value().(*listing)
+			l := it.Value()
 			events = append(events, &networkv1directory.Event{
 				Body: &networkv1directory.Event_ListingChange_{
 					ListingChange: &networkv1directory.Event_ListingChange{
-						Id:      l.id,
-						Listing: l.listing,
-						Snippet: l.snippet,
+						Id:         l.id,
+						Listing:    l.listing,
+						Snippet:    l.snippet,
+						Moderation: l.moderation,
 					},
 				},
 			})
@@ -150,17 +207,17 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		}
 
 		for it := d.users.IterateTouchedBefore(d.lastBroadcastTime); it.Next(); {
-			events = d.appendUserEvent(events, it.Value().(*user))
+			events = d.appendUserEvent(events, it.Value())
 		}
 
 		d.lastRefreshTime = now
 	}
 
 	for it := d.listings.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
-		l := it.Value().(*listing)
+		l := it.Value()
 
-		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
-			d.listings.Delete(l)
+		if (l.publishers.Len() == 0 && l.viewers.Len() == 0) || l.evicted {
+			d.deleteListing(l)
 			events = append(events, &networkv1directory.Event{
 				Body: &networkv1directory.Event_Unpublish_{
 					Unpublish: &networkv1directory.Event_Unpublish{
@@ -172,9 +229,10 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 			events = append(events, &networkv1directory.Event{
 				Body: &networkv1directory.Event_ListingChange_{
 					ListingChange: &networkv1directory.Event_ListingChange{
-						Id:      l.id,
-						Listing: l.listing,
-						Snippet: l.snippet,
+						Id:         l.id,
+						Listing:    l.listing,
+						Snippet:    l.snippet,
+						Moderation: l.moderation,
 					},
 				},
 			})
@@ -191,12 +249,12 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	}
 
 	for it := d.users.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
-		events = d.appendUserEvent(events, it.Value().(*user))
+		events = d.appendUserEvent(events, it.Value())
 	}
 
 	eol := now.Add(-sessionTimeout)
 
-	for s, ok := d.sessions.Pop(eol).(*session); ok; s, ok = d.sessions.Pop(eol).(*session) {
+	for s := d.sessions.Pop(eol); s != nil; s = d.sessions.Pop(eol) {
 		u, userDeleted := d.deleteSession(s)
 		if !userDeleted {
 			continue
@@ -227,16 +285,13 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u *user) []*networkv1directory.Event {
 	ids := set.New[uint64](8)
-	u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-		it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-			ids.Insert(it.(*listing).id)
-			return true
+	u.EachSession(func(s *session) {
+		s.EachViewed(func(l *listing) {
+			ids.Insert(l.id)
 		})
-		it.(*session).publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-			ids.Insert(it.(*listing).id)
-			return true
+		s.EachPublished(func(l *listing) {
+			ids.Insert(l.id)
 		})
-		return true
 	})
 
 	return append(events, &networkv1directory.Event{
@@ -250,19 +305,30 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 	})
 }
 
+func (d *directoryService) deleteListing(l *listing) {
+	d.listings.Delete(l)
+
+	l.EachViewer(func(s *session) {
+		s.viewedListings.Delete(l)
+		d.users.Touch(&user{certificate: s.certificate.GetParent()})
+	})
+	l.EachPublisher(func(s *session) {
+		s.publishedListings.Delete(l)
+		d.users.Touch(&user{certificate: s.certificate.GetParent()})
+	})
+}
+
 func (d *directoryService) deleteSession(s *session) (*user, bool) {
-	u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()}).(*user)
+	u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()})
 	u.sessions.Delete(s)
 
-	s.viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-		it.(*listing).viewers.Delete(s)
-		d.listings.Touch(it.(*listing))
-		return true
+	s.EachViewed(func(l *listing) {
+		l.viewers.Delete(s)
+		d.listings.Touch(l)
 	})
-	s.publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-		it.(*listing).publishers.Delete(s)
-		d.listings.Touch(it.(*listing))
-		return true
+	s.EachPublished(func(l *listing) {
+		l.publishers.Delete(s)
+		d.listings.Touch(l)
 	})
 
 	if u.sessions.Len() != 0 {
@@ -278,28 +344,27 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 
 	embedIDs := map[networkv1directory.Listing_Embed_Service][]string{}
 
-	d.listings.Each(func(i keyer) bool {
-		if embed := i.(*listing).listing.GetEmbed(); embed != nil {
+	d.listings.Each(func(l *listing) bool {
+		if embed := l.listing.GetEmbed(); embed != nil {
 			embedIDs[embed.Service] = append(embedIDs[embed.Service], embed.Id)
 		}
 		return true
 	})
 
 	go func() {
-		res := d.embedLoader.Load(ctx, embedIDs)
+		res := d.embedLoader.Get().Load(ctx, embedIDs)
 		now := timeutil.Now()
 
 		d.lock.Lock()
 		defer d.lock.Unlock()
 
-		d.listings.Each(func(i keyer) bool {
-			l := i.(*listing)
+		d.listings.Each(func(l *listing) bool {
 			if embed := l.listing.GetEmbed(); embed != nil {
 				if svcSnippets, ok := res[embed.Service]; ok {
 					if snippet, ok := svcSnippets[embed.Id]; ok {
 						l.snippet = snippet
 						l.modifiedTime = now
-						d.listings.Touch(i)
+						d.listings.Touch(l)
 					}
 				}
 			}
@@ -314,8 +379,8 @@ func (d *directoryService) mergeSnippet(listingID uint64, delta *networkv1direct
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.GetByID(listingID).(*listing)
-	if !ok {
+	l := d.listings.GetByID(listingID)
+	if l == nil {
 		return false
 	}
 
@@ -334,7 +399,7 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	client, err := d.dialer.ClientWithHostAddr(ctx, d.key.Public, candidate, vnic.SnippetPort)
+	client, err := d.dialer.ClientWithHostAddr(ctx, d.network.Get().GetServerConfig().GetKey().GetPublic(), candidate, vnic.SnippetPort)
 	if err != nil {
 		return nil
 	}
@@ -367,10 +432,25 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 	return snippetClient.Subscribe(ctx, req, ch)
 }
 
+func (d *directoryService) getOrInsertListingRecord(l *networkv1directory.Listing) (r *networkv1directory.ListingRecord, err error) {
+	err = d.store.Update(func(tx kv.RWTx) (err error) {
+		r, err = dao.GetDirectoryListingRecordByListing(tx, dao.FormatDirectoryListingRecordListingKey(l))
+		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
+		}
+		r, err = dao.NewDirectoryListingRecord(d.store, d.network.Get().Id, l)
+		if err != nil {
+			return err
+		}
+		return dao.DirectoryListingRecords.Insert(tx, r)
+	})
+	return
+}
+
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
 	switch c := req.Listing.Content.(type) {
 	case *networkv1directory.Listing_Embed_:
-		if !d.embedLoader.IsSupported(c.Embed.Service) {
+		if !d.embedLoader.Get().IsSupported(c.Embed.Service) {
 			return nil, errors.New("unsupported embed service")
 		}
 	case *networkv1directory.Listing_Media_:
@@ -378,22 +458,43 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 			return nil, errors.New("invalid swarm uri")
 		}
 	case *networkv1directory.Listing_Service_:
-		// TODO: implement services
+		// TODO: implement service validation
 	}
 
-	// TODO: moderation
-
-	l, err := newListing(atomic.AddUint64(&d.nextID, 1), req.Listing)
+	l, err := newListing(req.Listing)
 	if err != nil {
 		return nil, err
 	}
 
 	d.lock.Lock()
+	ok := d.listings.Has(l)
+	if !ok {
+		d.lock.Unlock()
+
+		r, err := d.getOrInsertListingRecord(req.Listing)
+		if err != nil {
+			return nil, errors.New("error loading moderation metadata")
+		}
+
+		if r.GetModeration().GetIsBanned() {
+			return nil, errors.New("listing banned")
+		}
+
+		l.moderation = r.GetModeration()
+		l.id = atomic.AddUint64(&d.nextID, 1)
+
+		d.lock.Lock()
+	}
 	defer d.lock.Unlock()
 
-	l = d.listings.GetOrInsert(l).(*listing)
-	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
+	l = d.listings.GetOrInsert(l)
+	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)})
+	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+
+	// TODO: peer moderation (publishing restricted?)
+	if u.PublishedListingCount() >= publishQuota {
+		return nil, errors.New("exceeded concurrent publish quota")
+	}
 
 	l.viewers.Delete(s)
 	s.viewedListings.Delete(l)
@@ -419,12 +520,12 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.GetByID(req.Id).(*listing)
-	if !ok {
+	l := d.listings.GetByID(req.Id)
+	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
-	if !ok {
+	s := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)})
+	if s == nil {
 		return nil, ErrSessionNotFound
 	}
 
@@ -442,12 +543,16 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.GetByID(req.Id).(*listing)
-	if !ok {
+	l := d.listings.GetByID(req.Id)
+	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)})
+	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+
+	if u.ViewedListingCount() >= viewQuota {
+		return nil, errors.New("exceeded concurrent view quota")
+	}
 
 	if !l.publishers.Has(s) {
 		l.viewers.ReplaceOrInsert(s)
@@ -462,12 +567,12 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.GetByID(req.Id).(*listing)
-	if !ok {
+	l := d.listings.GetByID(req.Id)
+	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)}).(*session)
-	if !ok {
+	s := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)})
+	if s == nil {
 		return nil, ErrSessionNotFound
 	}
 
@@ -514,14 +619,13 @@ func listingKey(m proto.Message) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func newListing(id uint64, l *networkv1directory.Listing) (*listing, error) {
+func newListing(l *networkv1directory.Listing) (*listing, error) {
 	key, err := listingKey(l)
 	if err != nil {
 		return nil, err
 	}
 
 	return &listing{
-		id:           id,
 		key:          key,
 		listing:      l,
 		nextSnippet:  &networkv1directory.ListingSnippet{},
@@ -536,9 +640,25 @@ type listing struct {
 	listing      *networkv1directory.Listing
 	nextSnippet  *networkv1directory.ListingSnippet
 	snippet      *networkv1directory.ListingSnippet
+	moderation   *networkv1directory.ListingModeration
 	modifiedTime timeutil.Time
 	publishers   llrb.LLRB
 	viewers      llrb.LLRB
+	evicted      bool
+}
+
+func (l *listing) EachViewer(it func(s *session)) {
+	l.viewers.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		it(ii.(*session))
+		return true
+	})
+}
+
+func (l *listing) EachPublisher(it func(s *session)) {
+	l.publishers.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		it(ii.(*session))
+		return true
+	})
 }
 
 func (l *listing) ID() uint64 {
@@ -558,6 +678,20 @@ type session struct {
 	viewedListings    llrb.LLRB
 }
 
+func (s *session) EachViewed(it func(l *listing)) {
+	s.viewedListings.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		it(ii.(*listing))
+		return true
+	})
+}
+
+func (s *session) EachPublished(it func(l *listing)) {
+	s.publishedListings.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		it(ii.(*listing))
+		return true
+	})
+}
+
 func (u *session) Key() []byte {
 	return u.certificate.Key
 }
@@ -569,6 +703,29 @@ func (u *session) Less(o llrb.Item) bool {
 type user struct {
 	certificate *certificate.Certificate
 	sessions    llrb.LLRB
+}
+
+func (u *user) PublishedListingCount() int {
+	var n int
+	u.EachSession(func(s *session) {
+		n += s.publishedListings.Len()
+	})
+	return n
+}
+
+func (u *user) ViewedListingCount() int {
+	var n int
+	u.EachSession(func(s *session) {
+		n += s.viewedListings.Len()
+	})
+	return n
+}
+
+func (u *user) EachSession(it func(s *session)) {
+	u.sessions.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		it(ii.(*session))
+		return true
+	})
 }
 
 func (u *user) Key() []byte {

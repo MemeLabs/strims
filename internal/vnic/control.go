@@ -24,15 +24,15 @@ func NewControl(
 	store *dao.ProfileStore,
 	observers *event.Observers,
 ) Control {
-	// events := make(chan interface{}, 8)
-	// observers.Notify(events)
+	events := make(chan interface{}, 8)
+	observers.Notify(events)
 
 	return &control{
-		logger:    logger,
-		vpn:       vpn,
-		store:     store,
-		observers: observers,
-		// events:        events,
+		logger:        logger,
+		vpn:           vpn,
+		store:         store,
+		observers:     observers,
+		events:        events,
 		ingressConfig: &vnicv1.Config{},
 	}
 }
@@ -43,7 +43,7 @@ type control struct {
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
-	// events    chan interface{}
+	events    chan interface{}
 
 	lock          sync.Mutex
 	ingressConfig *vnicv1.Config
@@ -53,7 +53,17 @@ type control struct {
 func (c *control) Run(ctx context.Context) {
 	go c.loadConfig()
 
-	// TODO: sync reload?
+	for {
+		select {
+		case e := <-c.events:
+			switch e := e.(type) {
+			case *vnicv1.ConfigChangeEvent:
+				c.applyConfig(e.Config)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (c *control) applyConfig(config *vnicv1.Config) {
@@ -77,10 +87,5 @@ func (c *control) GetConfig() (*vnicv1.Config, error) {
 
 // SetConfig ...
 func (c *control) SetConfig(config *vnicv1.Config) error {
-	if err := dao.VNICConfig.Set(c.store, config); err != nil {
-		return err
-	}
-
-	c.applyConfig(config)
-	return nil
+	return dao.VNICConfig.Set(c.store, config)
 }

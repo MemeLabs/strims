@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
@@ -16,7 +19,9 @@ import (
 
 func newDirectoryServer(
 	logger *zap.Logger,
+	store *dao.ProfileStore,
 	dialer network.Dialer,
+	observers *event.Observers,
 	network *networkv1.Network,
 ) (*directoryServer, error) {
 	config := network.GetServerConfig()
@@ -39,9 +44,9 @@ func newDirectoryServer(
 
 	s := &directoryServer{
 		logger:      logger,
-		config:      config,
+		key:         config.Key,
 		swarm:       w.Swarm(),
-		service:     newDirectoryService(logger, dialer, config.Key, config.Directory, ew),
+		service:     newDirectoryService(logger, store, dialer, observers, network, ew),
 		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
 	}
 	return s, nil
@@ -49,7 +54,7 @@ func newDirectoryServer(
 
 type directoryServer struct {
 	logger      *zap.Logger
-	config      *networkv1.ServerConfig
+	key         *key.Key
 	swarm       *ppspp.Swarm
 	service     *directoryService
 	eventReader *protoutil.ChunkStreamReader
@@ -61,9 +66,9 @@ func (s *directoryServer) Run(ctx context.Context, dialer network.Dialer, transf
 	s.cancel = cancel
 
 	transferID := transfer.Add(s.swarm, AddressSalt)
-	transfer.Publish(transferID, s.config.Key.Public)
+	transfer.Publish(transferID, s.key.Public)
 
-	server, err := dialer.Server(ctx, s.config.Key.Public, s.config.Key, AddressSalt)
+	server, err := dialer.Server(ctx, s.key.Public, s.key, AddressSalt)
 	if err != nil {
 		return err
 	}

@@ -1340,17 +1340,20 @@ export namespace Event {
     id?: bigint;
     listing?: IListing;
     snippet?: IListingSnippet;
+    moderation?: IListingModeration;
   }
 
   export class ListingChange {
     id: bigint;
     listing: Listing | undefined;
     snippet: ListingSnippet | undefined;
+    moderation: ListingModeration | undefined;
 
     constructor(v?: IListingChange) {
       this.id = v?.id || BigInt(0);
       this.listing = v?.listing && new Listing(v.listing);
       this.snippet = v?.snippet && new ListingSnippet(v.snippet);
+      this.moderation = v?.moderation && new ListingModeration(v.moderation);
     }
 
     static encode(m: ListingChange, w?: Writer): Writer {
@@ -1358,6 +1361,7 @@ export namespace Event {
       if (m.id) w.uint32(8).uint64(m.id);
       if (m.listing) Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
       if (m.snippet) ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
+      if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
       return w;
     }
 
@@ -1376,6 +1380,9 @@ export namespace Event {
           break;
           case 3:
           m.snippet = ListingSnippet.decode(r, r.uint32());
+          break;
+          case 4:
+          m.moderation = ListingModeration.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -1551,6 +1558,113 @@ export namespace Event {
     }
   }
 
+}
+
+export type IListingModeration = {
+  isMature?: boolean;
+  isBanned?: boolean;
+}
+
+export class ListingModeration {
+  isMature: boolean;
+  isBanned: boolean;
+
+  constructor(v?: IListingModeration) {
+    this.isMature = v?.isMature || false;
+    this.isBanned = v?.isBanned || false;
+  }
+
+  static encode(m: ListingModeration, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.isMature) w.uint32(32).bool(m.isMature);
+    if (m.isBanned) w.uint32(40).bool(m.isBanned);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingModeration {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingModeration();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 4:
+        m.isMature = r.bool();
+        break;
+        case 5:
+        m.isBanned = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListingRecord = {
+  id?: bigint;
+  networkId?: bigint;
+  listing?: IListing;
+  moderation?: IListingModeration;
+  notes?: string;
+}
+
+export class ListingRecord {
+  id: bigint;
+  networkId: bigint;
+  listing: Listing | undefined;
+  moderation: ListingModeration | undefined;
+  notes: string;
+
+  constructor(v?: IListingRecord) {
+    this.id = v?.id || BigInt(0);
+    this.networkId = v?.networkId || BigInt(0);
+    this.listing = v?.listing && new Listing(v.listing);
+    this.moderation = v?.moderation && new ListingModeration(v.moderation);
+    this.notes = v?.notes || "";
+  }
+
+  static encode(m: ListingRecord, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
+    if (m.listing) Listing.encode(m.listing, w.uint32(26).fork()).ldelim();
+    if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    if (m.notes) w.uint32(42).string(m.notes);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingRecord {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingRecord();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.networkId = r.uint64();
+        break;
+        case 3:
+        m.listing = Listing.decode(r, r.uint32());
+        break;
+        case 4:
+        m.moderation = ListingModeration.decode(r, r.uint32());
+        break;
+        case 5:
+        m.notes = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
 }
 
 export type IEventBroadcast = {
@@ -2353,6 +2467,220 @@ export class FrontendTestResponse {
   static decode(r: Reader | Uint8Array, length?: number): FrontendTestResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new FrontendTestResponse();
+  }
+}
+
+export type IFrontendGetListingRecordRequest = {
+  id?: bigint;
+}
+
+export class FrontendGetListingRecordRequest {
+  id: bigint;
+
+  constructor(v?: IFrontendGetListingRecordRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: FrontendGetListingRecordRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingRecordRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingRecordRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendGetListingRecordResponse = {
+  record?: IListingRecord;
+}
+
+export class FrontendGetListingRecordResponse {
+  record: ListingRecord | undefined;
+
+  constructor(v?: IFrontendGetListingRecordResponse) {
+    this.record = v?.record && new ListingRecord(v.record);
+  }
+
+  static encode(m: FrontendGetListingRecordResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.record) ListingRecord.encode(m.record, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingRecordResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingRecordResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.record = ListingRecord.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendListListingRecordsRequest = {
+}
+
+export class FrontendListListingRecordsRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendListListingRecordsRequest) {
+  }
+
+  static encode(m: FrontendListListingRecordsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendListListingRecordsRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendListListingRecordsRequest();
+  }
+}
+
+export type IFrontendListListingRecordsResponse = {
+  records?: IListingRecord[];
+}
+
+export class FrontendListListingRecordsResponse {
+  records: ListingRecord[];
+
+  constructor(v?: IFrontendListListingRecordsResponse) {
+    this.records = v?.records ? v.records.map(v => new ListingRecord(v)) : [];
+  }
+
+  static encode(m: FrontendListListingRecordsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.records) ListingRecord.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendListListingRecordsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendListListingRecordsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.records.push(ListingRecord.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendUpdateListingRecordRequest = {
+  id?: bigint;
+  notes?: string;
+  moderation?: IListingModeration;
+}
+
+export class FrontendUpdateListingRecordRequest {
+  id: bigint;
+  notes: string;
+  moderation: ListingModeration | undefined;
+
+  constructor(v?: IFrontendUpdateListingRecordRequest) {
+    this.id = v?.id || BigInt(0);
+    this.notes = v?.notes || "";
+    this.moderation = v?.moderation && new ListingModeration(v.moderation);
+  }
+
+  static encode(m: FrontendUpdateListingRecordRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.notes) w.uint32(26).string(m.notes);
+    if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendUpdateListingRecordRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendUpdateListingRecordRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 3:
+        m.notes = r.string();
+        break;
+        case 4:
+        m.moderation = ListingModeration.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendUpdateListingRecordResponse = {
+  record?: IListingRecord;
+}
+
+export class FrontendUpdateListingRecordResponse {
+  record: ListingRecord | undefined;
+
+  constructor(v?: IFrontendUpdateListingRecordResponse) {
+    this.record = v?.record && new ListingRecord(v.record);
+  }
+
+  static encode(m: FrontendUpdateListingRecordResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.record) ListingRecord.encode(m.record, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendUpdateListingRecordResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendUpdateListingRecordResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.record = ListingRecord.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
   }
 }
 

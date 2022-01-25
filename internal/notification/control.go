@@ -31,21 +31,11 @@ type control struct {
 }
 
 func (c *control) Dispatch(n *notificationv1.Notification) error {
-	if err := dao.Notifications.Upsert(c.store, n); err != nil {
-		return err
-	}
-
-	c.observers.EmitGlobal(event.Notification{Notification: n})
-	return nil
+	return dao.Notifications.Upsert(c.store, n)
 }
 
 func (c *control) Dismiss(id uint64) error {
-	if err := dao.Notifications.Delete(c.store, id); err != nil {
-		return err
-	}
-
-	c.observers.EmitGlobal(event.NotificationDismiss{ID: id})
-	return nil
+	return dao.Notifications.Delete(c.store, id)
 }
 
 func (c *control) Watch(ctx context.Context) <-chan *notificationv1.Event {
@@ -73,16 +63,16 @@ func (c *control) Watch(ctx context.Context) <-chan *notificationv1.Event {
 			select {
 			case e := <-events:
 				switch e := e.(type) {
-				case event.Notification:
+				case *notificationv1.NotificationChangeEvent:
 					ch <- &notificationv1.Event{
 						Body: &notificationv1.Event_Notification{
 							Notification: e.Notification,
 						},
 					}
-				case event.NotificationDismiss:
+				case *notificationv1.NotificationDeleteEvent:
 					ch <- &notificationv1.Event{
 						Body: &notificationv1.Event_Dismiss{
-							Dismiss: e.ID,
+							Dismiss: e.Notification.Id,
 						},
 					}
 				}

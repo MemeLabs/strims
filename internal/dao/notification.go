@@ -5,6 +5,7 @@ import (
 
 	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -12,7 +13,17 @@ const (
 	notificationNotificationNS
 )
 
-var Notifications = NewTable[notificationv1.Notification](notificationNotificationNS, nil)
+var Notifications = NewTable(
+	notificationNotificationNS,
+	&TableOptions[notificationv1.Notification]{
+		ObserveChange: func(m, p *notificationv1.Notification) proto.Message {
+			return &notificationv1.NotificationChangeEvent{Notification: m}
+		},
+		ObserveDelete: func(m *notificationv1.Notification) proto.Message {
+			return &notificationv1.NotificationDeleteEvent{Notification: m}
+		},
+	},
+)
 
 type NewNotificationOptions struct {
 	Message string

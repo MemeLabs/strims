@@ -37,6 +37,15 @@ import {
   IFrontendTestRequest,
   FrontendTestRequest,
   FrontendTestResponse,
+  IFrontendGetListingRecordRequest,
+  FrontendGetListingRecordRequest,
+  FrontendGetListingRecordResponse,
+  IFrontendListListingRecordsRequest,
+  FrontendListListingRecordsRequest,
+  FrontendListListingRecordsResponse,
+  IFrontendUpdateListingRecordRequest,
+  FrontendUpdateListingRecordRequest,
+  FrontendUpdateListingRecordResponse,
   ISnippetSubscribeRequest,
   SnippetSubscribeRequest,
   SnippetSubscribeResponse,
@@ -89,6 +98,9 @@ export interface DirectoryFrontendService {
   join(req: FrontendJoinRequest, call: strims_rpc_Call): Promise<FrontendJoinResponse> | FrontendJoinResponse;
   part(req: FrontendPartRequest, call: strims_rpc_Call): Promise<FrontendPartResponse> | FrontendPartResponse;
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse;
+  getListingRecord(req: FrontendGetListingRecordRequest, call: strims_rpc_Call): Promise<FrontendGetListingRecordResponse> | FrontendGetListingRecordResponse;
+  listListingRecords(req: FrontendListListingRecordsRequest, call: strims_rpc_Call): Promise<FrontendListListingRecordsResponse> | FrontendListListingRecordsResponse;
+  updateListingRecord(req: FrontendUpdateListingRecordRequest, call: strims_rpc_Call): Promise<FrontendUpdateListingRecordResponse> | FrontendUpdateListingRecordResponse;
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
@@ -98,6 +110,9 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<FrontendJoinRequest, FrontendJoinResponse>("strims.network.v1.directory.DirectoryFrontend.Join", service.join.bind(service), FrontendJoinRequest);
   host.registerMethod<FrontendPartRequest, FrontendPartResponse>("strims.network.v1.directory.DirectoryFrontend.Part", service.part.bind(service), FrontendPartRequest);
   host.registerMethod<FrontendTestRequest, FrontendTestResponse>("strims.network.v1.directory.DirectoryFrontend.Test", service.test.bind(service), FrontendTestRequest);
+  host.registerMethod<FrontendGetListingRecordRequest, FrontendGetListingRecordResponse>("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", service.getListingRecord.bind(service), FrontendGetListingRecordRequest);
+  host.registerMethod<FrontendListListingRecordsRequest, FrontendListListingRecordsResponse>("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", service.listListingRecords.bind(service), FrontendListListingRecordsRequest);
+  host.registerMethod<FrontendUpdateListingRecordRequest, FrontendUpdateListingRecordResponse>("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", service.updateListingRecord.bind(service), FrontendUpdateListingRecordRequest);
 }
 
 export class DirectoryFrontendClient {
@@ -125,6 +140,18 @@ export class DirectoryFrontendClient {
 
   public test(req?: IFrontendTestRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendTestResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Test", new FrontendTestRequest(req)), FrontendTestResponse, opts);
+  }
+
+  public getListingRecord(req?: IFrontendGetListingRecordRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendGetListingRecordResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", new FrontendGetListingRecordRequest(req)), FrontendGetListingRecordResponse, opts);
+  }
+
+  public listListingRecords(req?: IFrontendListListingRecordsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendListListingRecordsResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", new FrontendListListingRecordsRequest(req)), FrontendListListingRecordsResponse, opts);
+  }
+
+  public updateListingRecord(req?: IFrontendUpdateListingRecordRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendUpdateListingRecordResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", new FrontendUpdateListingRecordRequest(req)), FrontendUpdateListingRecordResponse, opts);
   }
 }
 

@@ -925,6 +925,140 @@ func (*Event_ViewerStateChange_) isEvent_Body() {}
 
 func (*Event_Ping_) isEvent_Body() {}
 
+type ListingModeration struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	IsMature bool `protobuf:"varint,4,opt,name=is_mature,json=isMature,proto3" json:"is_mature,omitempty"`
+	IsBanned bool `protobuf:"varint,5,opt,name=is_banned,json=isBanned,proto3" json:"is_banned,omitempty"`
+}
+
+func (x *ListingModeration) Reset() {
+	*x = ListingModeration{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListingModeration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListingModeration) ProtoMessage() {}
+
+func (x *ListingModeration) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListingModeration.ProtoReflect.Descriptor instead.
+func (*ListingModeration) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListingModeration) GetIsMature() bool {
+	if x != nil {
+		return x.IsMature
+	}
+	return false
+}
+
+func (x *ListingModeration) GetIsBanned() bool {
+	if x != nil {
+		return x.IsBanned
+	}
+	return false
+}
+
+type ListingRecord struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id         uint64             `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	NetworkId  uint64             `protobuf:"varint,2,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+	Listing    *Listing           `protobuf:"bytes,3,opt,name=listing,proto3" json:"listing,omitempty"`
+	Moderation *ListingModeration `protobuf:"bytes,4,opt,name=moderation,proto3" json:"moderation,omitempty"`
+	Notes      string             `protobuf:"bytes,5,opt,name=notes,proto3" json:"notes,omitempty"`
+}
+
+func (x *ListingRecord) Reset() {
+	*x = ListingRecord{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListingRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListingRecord) ProtoMessage() {}
+
+func (x *ListingRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListingRecord.ProtoReflect.Descriptor instead.
+func (*ListingRecord) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListingRecord) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ListingRecord) GetNetworkId() uint64 {
+	if x != nil {
+		return x.NetworkId
+	}
+	return 0
+}
+
+func (x *ListingRecord) GetListing() *Listing {
+	if x != nil {
+		return x.Listing
+	}
+	return nil
+}
+
+func (x *ListingRecord) GetModeration() *ListingModeration {
+	if x != nil {
+		return x.Moderation
+	}
+	return nil
+}
+
+func (x *ListingRecord) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
+}
+
 type EventBroadcast struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -936,7 +1070,7 @@ type EventBroadcast struct {
 func (x *EventBroadcast) Reset() {
 	*x = EventBroadcast{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[9]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -949,7 +1083,7 @@ func (x *EventBroadcast) String() string {
 func (*EventBroadcast) ProtoMessage() {}
 
 func (x *EventBroadcast) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[9]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1096,7 @@ func (x *EventBroadcast) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventBroadcast.ProtoReflect.Descriptor instead.
 func (*EventBroadcast) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{9}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EventBroadcast) GetEvents() []*Event {
@@ -983,7 +1117,7 @@ type PublishRequest struct {
 func (x *PublishRequest) Reset() {
 	*x = PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[10]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -996,7 +1130,7 @@ func (x *PublishRequest) String() string {
 func (*PublishRequest) ProtoMessage() {}
 
 func (x *PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[10]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1009,7 +1143,7 @@ func (x *PublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishRequest.ProtoReflect.Descriptor instead.
 func (*PublishRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{10}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PublishRequest) GetListing() *Listing {
@@ -1030,7 +1164,7 @@ type PublishResponse struct {
 func (x *PublishResponse) Reset() {
 	*x = PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[11]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1043,7 +1177,7 @@ func (x *PublishResponse) String() string {
 func (*PublishResponse) ProtoMessage() {}
 
 func (x *PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[11]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1056,7 +1190,7 @@ func (x *PublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishResponse.ProtoReflect.Descriptor instead.
 func (*PublishResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{11}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PublishResponse) GetId() uint64 {
@@ -1077,7 +1211,7 @@ type UnpublishRequest struct {
 func (x *UnpublishRequest) Reset() {
 	*x = UnpublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[12]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1090,7 +1224,7 @@ func (x *UnpublishRequest) String() string {
 func (*UnpublishRequest) ProtoMessage() {}
 
 func (x *UnpublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[12]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1237,7 @@ func (x *UnpublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpublishRequest.ProtoReflect.Descriptor instead.
 func (*UnpublishRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{12}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UnpublishRequest) GetId() uint64 {
@@ -1122,7 +1256,7 @@ type UnpublishResponse struct {
 func (x *UnpublishResponse) Reset() {
 	*x = UnpublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[13]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1135,7 +1269,7 @@ func (x *UnpublishResponse) String() string {
 func (*UnpublishResponse) ProtoMessage() {}
 
 func (x *UnpublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[13]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1282,7 @@ func (x *UnpublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpublishResponse.ProtoReflect.Descriptor instead.
 func (*UnpublishResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{13}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{15}
 }
 
 type JoinRequest struct {
@@ -1162,7 +1296,7 @@ type JoinRequest struct {
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[14]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1175,7 +1309,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[14]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1188,7 +1322,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{14}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *JoinRequest) GetId() uint64 {
@@ -1207,7 +1341,7 @@ type JoinResponse struct {
 func (x *JoinResponse) Reset() {
 	*x = JoinResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[15]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1220,7 +1354,7 @@ func (x *JoinResponse) String() string {
 func (*JoinResponse) ProtoMessage() {}
 
 func (x *JoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[15]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1367,7 @@ func (x *JoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
 func (*JoinResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{15}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{17}
 }
 
 type PartRequest struct {
@@ -1247,7 +1381,7 @@ type PartRequest struct {
 func (x *PartRequest) Reset() {
 	*x = PartRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[16]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1260,7 +1394,7 @@ func (x *PartRequest) String() string {
 func (*PartRequest) ProtoMessage() {}
 
 func (x *PartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[16]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1273,7 +1407,7 @@ func (x *PartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartRequest.ProtoReflect.Descriptor instead.
 func (*PartRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{16}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PartRequest) GetId() uint64 {
@@ -1292,7 +1426,7 @@ type PartResponse struct {
 func (x *PartResponse) Reset() {
 	*x = PartResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[17]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1305,7 +1439,7 @@ func (x *PartResponse) String() string {
 func (*PartResponse) ProtoMessage() {}
 
 func (x *PartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[17]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1318,7 +1452,7 @@ func (x *PartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartResponse.ProtoReflect.Descriptor instead.
 func (*PartResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{17}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{19}
 }
 
 type PingRequest struct {
@@ -1330,7 +1464,7 @@ type PingRequest struct {
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[18]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1343,7 +1477,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[18]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1356,7 +1490,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{18}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{20}
 }
 
 type PingResponse struct {
@@ -1368,7 +1502,7 @@ type PingResponse struct {
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[19]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1381,7 +1515,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[19]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1394,7 +1528,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{19}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{21}
 }
 
 type FrontendOpenRequest struct {
@@ -1406,7 +1540,7 @@ type FrontendOpenRequest struct {
 func (x *FrontendOpenRequest) Reset() {
 	*x = FrontendOpenRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[20]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1419,7 +1553,7 @@ func (x *FrontendOpenRequest) String() string {
 func (*FrontendOpenRequest) ProtoMessage() {}
 
 func (x *FrontendOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[20]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1432,7 +1566,7 @@ func (x *FrontendOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendOpenRequest.ProtoReflect.Descriptor instead.
 func (*FrontendOpenRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{20}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{22}
 }
 
 type FrontendOpenResponse struct {
@@ -1451,7 +1585,7 @@ type FrontendOpenResponse struct {
 func (x *FrontendOpenResponse) Reset() {
 	*x = FrontendOpenResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[21]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1464,7 +1598,7 @@ func (x *FrontendOpenResponse) String() string {
 func (*FrontendOpenResponse) ProtoMessage() {}
 
 func (x *FrontendOpenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[21]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1477,7 +1611,7 @@ func (x *FrontendOpenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendOpenResponse.ProtoReflect.Descriptor instead.
 func (*FrontendOpenResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{21}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *FrontendOpenResponse) GetNetworkId() uint64 {
@@ -1543,7 +1677,7 @@ type FrontendPublishRequest struct {
 func (x *FrontendPublishRequest) Reset() {
 	*x = FrontendPublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[22]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1556,7 +1690,7 @@ func (x *FrontendPublishRequest) String() string {
 func (*FrontendPublishRequest) ProtoMessage() {}
 
 func (x *FrontendPublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[22]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1703,7 @@ func (x *FrontendPublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendPublishRequest.ProtoReflect.Descriptor instead.
 func (*FrontendPublishRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{22}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *FrontendPublishRequest) GetNetworkKey() []byte {
@@ -1597,7 +1731,7 @@ type FrontendPublishResponse struct {
 func (x *FrontendPublishResponse) Reset() {
 	*x = FrontendPublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[23]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1610,7 +1744,7 @@ func (x *FrontendPublishResponse) String() string {
 func (*FrontendPublishResponse) ProtoMessage() {}
 
 func (x *FrontendPublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[23]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1623,7 +1757,7 @@ func (x *FrontendPublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendPublishResponse.ProtoReflect.Descriptor instead.
 func (*FrontendPublishResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{23}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *FrontendPublishResponse) GetId() uint64 {
@@ -1645,7 +1779,7 @@ type FrontendUnpublishRequest struct {
 func (x *FrontendUnpublishRequest) Reset() {
 	*x = FrontendUnpublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[24]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1658,7 +1792,7 @@ func (x *FrontendUnpublishRequest) String() string {
 func (*FrontendUnpublishRequest) ProtoMessage() {}
 
 func (x *FrontendUnpublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[24]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1671,7 +1805,7 @@ func (x *FrontendUnpublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendUnpublishRequest.ProtoReflect.Descriptor instead.
 func (*FrontendUnpublishRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{24}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FrontendUnpublishRequest) GetNetworkKey() []byte {
@@ -1697,7 +1831,7 @@ type FrontendUnpublishResponse struct {
 func (x *FrontendUnpublishResponse) Reset() {
 	*x = FrontendUnpublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[25]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1710,7 +1844,7 @@ func (x *FrontendUnpublishResponse) String() string {
 func (*FrontendUnpublishResponse) ProtoMessage() {}
 
 func (x *FrontendUnpublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[25]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +1857,7 @@ func (x *FrontendUnpublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendUnpublishResponse.ProtoReflect.Descriptor instead.
 func (*FrontendUnpublishResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{25}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{27}
 }
 
 type FrontendJoinRequest struct {
@@ -1738,7 +1872,7 @@ type FrontendJoinRequest struct {
 func (x *FrontendJoinRequest) Reset() {
 	*x = FrontendJoinRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[26]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1751,7 +1885,7 @@ func (x *FrontendJoinRequest) String() string {
 func (*FrontendJoinRequest) ProtoMessage() {}
 
 func (x *FrontendJoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[26]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1764,7 +1898,7 @@ func (x *FrontendJoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendJoinRequest.ProtoReflect.Descriptor instead.
 func (*FrontendJoinRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{26}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *FrontendJoinRequest) GetNetworkKey() []byte {
@@ -1792,7 +1926,7 @@ type FrontendJoinResponse struct {
 func (x *FrontendJoinResponse) Reset() {
 	*x = FrontendJoinResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[27]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1805,7 +1939,7 @@ func (x *FrontendJoinResponse) String() string {
 func (*FrontendJoinResponse) ProtoMessage() {}
 
 func (x *FrontendJoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[27]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1818,7 +1952,7 @@ func (x *FrontendJoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendJoinResponse.ProtoReflect.Descriptor instead.
 func (*FrontendJoinResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{27}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *FrontendJoinResponse) GetId() uint64 {
@@ -1840,7 +1974,7 @@ type FrontendPartRequest struct {
 func (x *FrontendPartRequest) Reset() {
 	*x = FrontendPartRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[28]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1853,7 +1987,7 @@ func (x *FrontendPartRequest) String() string {
 func (*FrontendPartRequest) ProtoMessage() {}
 
 func (x *FrontendPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[28]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1866,7 +2000,7 @@ func (x *FrontendPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendPartRequest.ProtoReflect.Descriptor instead.
 func (*FrontendPartRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{28}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *FrontendPartRequest) GetNetworkKey() []byte {
@@ -1892,7 +2026,7 @@ type FrontendPartResponse struct {
 func (x *FrontendPartResponse) Reset() {
 	*x = FrontendPartResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[29]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1905,7 +2039,7 @@ func (x *FrontendPartResponse) String() string {
 func (*FrontendPartResponse) ProtoMessage() {}
 
 func (x *FrontendPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[29]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1918,7 +2052,7 @@ func (x *FrontendPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendPartResponse.ProtoReflect.Descriptor instead.
 func (*FrontendPartResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{29}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{31}
 }
 
 type FrontendTestRequest struct {
@@ -1932,7 +2066,7 @@ type FrontendTestRequest struct {
 func (x *FrontendTestRequest) Reset() {
 	*x = FrontendTestRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[30]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[32]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1945,7 +2079,7 @@ func (x *FrontendTestRequest) String() string {
 func (*FrontendTestRequest) ProtoMessage() {}
 
 func (x *FrontendTestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[30]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[32]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1958,7 +2092,7 @@ func (x *FrontendTestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendTestRequest.ProtoReflect.Descriptor instead.
 func (*FrontendTestRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{30}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *FrontendTestRequest) GetNetworkKey() []byte {
@@ -1977,7 +2111,7 @@ type FrontendTestResponse struct {
 func (x *FrontendTestResponse) Reset() {
 	*x = FrontendTestResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[31]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[33]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1990,7 +2124,7 @@ func (x *FrontendTestResponse) String() string {
 func (*FrontendTestResponse) ProtoMessage() {}
 
 func (x *FrontendTestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[31]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[33]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2003,7 +2137,296 @@ func (x *FrontendTestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendTestResponse.ProtoReflect.Descriptor instead.
 func (*FrontendTestResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{31}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{33}
+}
+
+type FrontendGetListingRecordRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *FrontendGetListingRecordRequest) Reset() {
+	*x = FrontendGetListingRecordRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[34]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendGetListingRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendGetListingRecordRequest) ProtoMessage() {}
+
+func (x *FrontendGetListingRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[34]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendGetListingRecordRequest.ProtoReflect.Descriptor instead.
+func (*FrontendGetListingRecordRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *FrontendGetListingRecordRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type FrontendGetListingRecordResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Record *ListingRecord `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+}
+
+func (x *FrontendGetListingRecordResponse) Reset() {
+	*x = FrontendGetListingRecordResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[35]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendGetListingRecordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendGetListingRecordResponse) ProtoMessage() {}
+
+func (x *FrontendGetListingRecordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[35]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendGetListingRecordResponse.ProtoReflect.Descriptor instead.
+func (*FrontendGetListingRecordResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *FrontendGetListingRecordResponse) GetRecord() *ListingRecord {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+type FrontendListListingRecordsRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *FrontendListListingRecordsRequest) Reset() {
+	*x = FrontendListListingRecordsRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[36]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendListListingRecordsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendListListingRecordsRequest) ProtoMessage() {}
+
+func (x *FrontendListListingRecordsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[36]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendListListingRecordsRequest.ProtoReflect.Descriptor instead.
+func (*FrontendListListingRecordsRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{36}
+}
+
+type FrontendListListingRecordsResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Records []*ListingRecord `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+}
+
+func (x *FrontendListListingRecordsResponse) Reset() {
+	*x = FrontendListListingRecordsResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[37]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendListListingRecordsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendListListingRecordsResponse) ProtoMessage() {}
+
+func (x *FrontendListListingRecordsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[37]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendListListingRecordsResponse.ProtoReflect.Descriptor instead.
+func (*FrontendListListingRecordsResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *FrontendListListingRecordsResponse) GetRecords() []*ListingRecord {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+type FrontendUpdateListingRecordRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id         uint64             `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Notes      string             `protobuf:"bytes,3,opt,name=notes,proto3" json:"notes,omitempty"`
+	Moderation *ListingModeration `protobuf:"bytes,4,opt,name=moderation,proto3" json:"moderation,omitempty"`
+}
+
+func (x *FrontendUpdateListingRecordRequest) Reset() {
+	*x = FrontendUpdateListingRecordRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[38]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendUpdateListingRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendUpdateListingRecordRequest) ProtoMessage() {}
+
+func (x *FrontendUpdateListingRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[38]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendUpdateListingRecordRequest.ProtoReflect.Descriptor instead.
+func (*FrontendUpdateListingRecordRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *FrontendUpdateListingRecordRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *FrontendUpdateListingRecordRequest) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
+}
+
+func (x *FrontendUpdateListingRecordRequest) GetModeration() *ListingModeration {
+	if x != nil {
+		return x.Moderation
+	}
+	return nil
+}
+
+type FrontendUpdateListingRecordResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Record *ListingRecord `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+}
+
+func (x *FrontendUpdateListingRecordResponse) Reset() {
+	*x = FrontendUpdateListingRecordResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_directory_directory_proto_msgTypes[39]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FrontendUpdateListingRecordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendUpdateListingRecordResponse) ProtoMessage() {}
+
+func (x *FrontendUpdateListingRecordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_directory_directory_proto_msgTypes[39]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendUpdateListingRecordResponse.ProtoReflect.Descriptor instead.
+func (*FrontendUpdateListingRecordResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *FrontendUpdateListingRecordResponse) GetRecord() *ListingRecord {
+	if x != nil {
+		return x.Record
+	}
+	return nil
 }
 
 type SnippetSubscribeRequest struct {
@@ -2017,7 +2440,7 @@ type SnippetSubscribeRequest struct {
 func (x *SnippetSubscribeRequest) Reset() {
 	*x = SnippetSubscribeRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[32]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[40]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2030,7 +2453,7 @@ func (x *SnippetSubscribeRequest) String() string {
 func (*SnippetSubscribeRequest) ProtoMessage() {}
 
 func (x *SnippetSubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[32]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[40]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2043,7 +2466,7 @@ func (x *SnippetSubscribeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnippetSubscribeRequest.ProtoReflect.Descriptor instead.
 func (*SnippetSubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{32}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SnippetSubscribeRequest) GetSwarmId() []byte {
@@ -2064,7 +2487,7 @@ type SnippetSubscribeResponse struct {
 func (x *SnippetSubscribeResponse) Reset() {
 	*x = SnippetSubscribeResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[33]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[41]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2077,7 +2500,7 @@ func (x *SnippetSubscribeResponse) String() string {
 func (*SnippetSubscribeResponse) ProtoMessage() {}
 
 func (x *SnippetSubscribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[33]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[41]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2090,7 +2513,7 @@ func (x *SnippetSubscribeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnippetSubscribeResponse.ProtoReflect.Descriptor instead.
 func (*SnippetSubscribeResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{33}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SnippetSubscribeResponse) GetSnippetDelta() *ListingSnippetDelta {
@@ -2114,7 +2537,7 @@ type ServerConfig_Integrations struct {
 func (x *ServerConfig_Integrations) Reset() {
 	*x = ServerConfig_Integrations{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[34]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[42]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2127,7 +2550,7 @@ func (x *ServerConfig_Integrations) String() string {
 func (*ServerConfig_Integrations) ProtoMessage() {}
 
 func (x *ServerConfig_Integrations) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[34]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[42]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2182,7 +2605,7 @@ type ServerConfig_Integrations_AngelThump struct {
 func (x *ServerConfig_Integrations_AngelThump) Reset() {
 	*x = ServerConfig_Integrations_AngelThump{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[35]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[43]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2195,7 +2618,7 @@ func (x *ServerConfig_Integrations_AngelThump) String() string {
 func (*ServerConfig_Integrations_AngelThump) ProtoMessage() {}
 
 func (x *ServerConfig_Integrations_AngelThump) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[35]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[43]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2231,7 +2654,7 @@ type ServerConfig_Integrations_Twitch struct {
 func (x *ServerConfig_Integrations_Twitch) Reset() {
 	*x = ServerConfig_Integrations_Twitch{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[36]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2244,7 +2667,7 @@ func (x *ServerConfig_Integrations_Twitch) String() string {
 func (*ServerConfig_Integrations_Twitch) ProtoMessage() {}
 
 func (x *ServerConfig_Integrations_Twitch) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[36]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2293,7 +2716,7 @@ type ServerConfig_Integrations_YouTube struct {
 func (x *ServerConfig_Integrations_YouTube) Reset() {
 	*x = ServerConfig_Integrations_YouTube{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[37]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2306,7 +2729,7 @@ func (x *ServerConfig_Integrations_YouTube) String() string {
 func (*ServerConfig_Integrations_YouTube) ProtoMessage() {}
 
 func (x *ServerConfig_Integrations_YouTube) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[37]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2347,7 +2770,7 @@ type ServerConfig_Integrations_Swarm struct {
 func (x *ServerConfig_Integrations_Swarm) Reset() {
 	*x = ServerConfig_Integrations_Swarm{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[38]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2360,7 +2783,7 @@ func (x *ServerConfig_Integrations_Swarm) String() string {
 func (*ServerConfig_Integrations_Swarm) ProtoMessage() {}
 
 func (x *ServerConfig_Integrations_Swarm) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[38]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2395,7 +2818,7 @@ type Listing_Media struct {
 func (x *Listing_Media) Reset() {
 	*x = Listing_Media{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[39]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2408,7 +2831,7 @@ func (x *Listing_Media) String() string {
 func (*Listing_Media) ProtoMessage() {}
 
 func (x *Listing_Media) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[39]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2449,7 +2872,7 @@ type Listing_Service struct {
 func (x *Listing_Service) Reset() {
 	*x = Listing_Service{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[40]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[48]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2462,7 +2885,7 @@ func (x *Listing_Service) String() string {
 func (*Listing_Service) ProtoMessage() {}
 
 func (x *Listing_Service) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[40]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[48]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2498,7 +2921,7 @@ type Listing_Embed struct {
 func (x *Listing_Embed) Reset() {
 	*x = Listing_Embed{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[41]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[49]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2511,7 +2934,7 @@ func (x *Listing_Embed) String() string {
 func (*Listing_Embed) ProtoMessage() {}
 
 func (x *Listing_Embed) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[41]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[49]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2560,7 +2983,7 @@ type Listing_Chat struct {
 func (x *Listing_Chat) Reset() {
 	*x = Listing_Chat{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[42]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2573,7 +2996,7 @@ func (x *Listing_Chat) String() string {
 func (*Listing_Chat) ProtoMessage() {}
 
 func (x *Listing_Chat) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[42]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2614,7 +3037,7 @@ type ListingSnippetDelta_Tags struct {
 func (x *ListingSnippetDelta_Tags) Reset() {
 	*x = ListingSnippetDelta_Tags{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[44]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[52]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2627,7 +3050,7 @@ func (x *ListingSnippetDelta_Tags) String() string {
 func (*ListingSnippetDelta_Tags) ProtoMessage() {}
 
 func (x *ListingSnippetDelta_Tags) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[44]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[52]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2655,15 +3078,16 @@ type Event_ListingChange struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Id      uint64          `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Listing *Listing        `protobuf:"bytes,2,opt,name=listing,proto3" json:"listing,omitempty"`
-	Snippet *ListingSnippet `protobuf:"bytes,3,opt,name=snippet,proto3" json:"snippet,omitempty"`
+	Id         uint64             `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Listing    *Listing           `protobuf:"bytes,2,opt,name=listing,proto3" json:"listing,omitempty"`
+	Snippet    *ListingSnippet    `protobuf:"bytes,3,opt,name=snippet,proto3" json:"snippet,omitempty"`
+	Moderation *ListingModeration `protobuf:"bytes,4,opt,name=moderation,proto3" json:"moderation,omitempty"`
 }
 
 func (x *Event_ListingChange) Reset() {
 	*x = Event_ListingChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[45]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[53]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2676,7 +3100,7 @@ func (x *Event_ListingChange) String() string {
 func (*Event_ListingChange) ProtoMessage() {}
 
 func (x *Event_ListingChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[45]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[53]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2713,6 +3137,13 @@ func (x *Event_ListingChange) GetSnippet() *ListingSnippet {
 	return nil
 }
 
+func (x *Event_ListingChange) GetModeration() *ListingModeration {
+	if x != nil {
+		return x.Moderation
+	}
+	return nil
+}
+
 type Event_Unpublish struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2724,7 +3155,7 @@ type Event_Unpublish struct {
 func (x *Event_Unpublish) Reset() {
 	*x = Event_Unpublish{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[46]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[54]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2737,7 +3168,7 @@ func (x *Event_Unpublish) String() string {
 func (*Event_Unpublish) ProtoMessage() {}
 
 func (x *Event_Unpublish) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[46]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[54]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2772,7 +3203,7 @@ type Event_ViewerCountChange struct {
 func (x *Event_ViewerCountChange) Reset() {
 	*x = Event_ViewerCountChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[47]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[55]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2785,7 +3216,7 @@ func (x *Event_ViewerCountChange) String() string {
 func (*Event_ViewerCountChange) ProtoMessage() {}
 
 func (x *Event_ViewerCountChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[47]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[55]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2828,7 +3259,7 @@ type Event_ViewerStateChange struct {
 func (x *Event_ViewerStateChange) Reset() {
 	*x = Event_ViewerStateChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[48]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[56]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2841,7 +3272,7 @@ func (x *Event_ViewerStateChange) String() string {
 func (*Event_ViewerStateChange) ProtoMessage() {}
 
 func (x *Event_ViewerStateChange) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[48]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[56]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2889,7 +3320,7 @@ type Event_Ping struct {
 func (x *Event_Ping) Reset() {
 	*x = Event_Ping{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[49]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[57]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2902,7 +3333,7 @@ func (x *Event_Ping) String() string {
 func (*Event_Ping) ProtoMessage() {}
 
 func (x *Event_Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[49]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[57]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2934,7 +3365,7 @@ type FrontendOpenResponse_Close struct {
 func (x *FrontendOpenResponse_Close) Reset() {
 	*x = FrontendOpenResponse_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_directory_directory_proto_msgTypes[50]
+		mi := &file_network_v1_directory_directory_proto_msgTypes[58]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2947,7 +3378,7 @@ func (x *FrontendOpenResponse_Close) String() string {
 func (*FrontendOpenResponse_Close) ProtoMessage() {}
 
 func (x *FrontendOpenResponse_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_directory_directory_proto_msgTypes[50]
+	mi := &file_network_v1_directory_directory_proto_msgTypes[58]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2960,7 +3391,7 @@ func (x *FrontendOpenResponse_Close) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FrontendOpenResponse_Close.ProtoReflect.Descriptor instead.
 func (*FrontendOpenResponse_Close) Descriptor() ([]byte, []int) {
-	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{21, 0}
+	return file_network_v1_directory_directory_proto_rawDescGZIP(), []int{23, 0}
 }
 
 var File_network_v1_directory_directory_proto protoreflect.FileDescriptor
@@ -3189,7 +3620,7 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x67, 0x73, 0x5f, 0x6f, 0x6e, 0x65, 0x6f, 0x66, 0x42, 0x11, 0x0a, 0x0f, 0x74, 0x68, 0x75, 0x6d,
 	0x62, 0x6e, 0x61, 0x69, 0x6c, 0x5f, 0x6f, 0x6e, 0x65, 0x6f, 0x66, 0x42, 0x14, 0x0a, 0x12, 0x63,
 	0x68, 0x61, 0x6e, 0x6e, 0x65, 0x6c, 0x5f, 0x6c, 0x6f, 0x67, 0x6f, 0x5f, 0x6f, 0x6e, 0x65, 0x6f,
-	0x66, 0x22, 0xd1, 0x06, 0x0a, 0x05, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x5a, 0x0a, 0x0e, 0x6c,
+	0x66, 0x22, 0xa1, 0x07, 0x0a, 0x05, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x5a, 0x0a, 0x0e, 0x6c,
 	0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x18, 0xe9, 0x07,
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
 	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
@@ -3217,7 +3648,7 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x18, 0xed, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
 	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
 	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x50, 0x69, 0x6e, 0x67,
-	0x48, 0x00, 0x52, 0x04, 0x70, 0x69, 0x6e, 0x67, 0x1a, 0xa6, 0x01, 0x0a, 0x0d, 0x4c, 0x69, 0x73,
+	0x48, 0x00, 0x52, 0x04, 0x70, 0x69, 0x6e, 0x67, 0x1a, 0xf6, 0x01, 0x0a, 0x0d, 0x4c, 0x69, 0x73,
 	0x74, 0x69, 0x6e, 0x67, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x3e, 0x0a, 0x07, 0x6c, 0x69,
 	0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x73, 0x74,
@@ -3228,7 +3659,12 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
 	0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e,
 	0x67, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x52, 0x07, 0x73, 0x6e, 0x69, 0x70, 0x70, 0x65,
-	0x74, 0x1a, 0x1b, 0x0a, 0x09, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x0e,
+	0x74, 0x12, 0x4e, 0x0a, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74,
+	0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x4d, 0x6f, 0x64, 0x65, 0x72,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x1a, 0x1b, 0x0a, 0x09, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x0e,
 	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x1a, 0x39,
 	0x0a, 0x11, 0x56, 0x69, 0x65, 0x77, 0x65, 0x72, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x43, 0x68, 0x61,
 	0x6e, 0x67, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52,
@@ -3242,186 +3678,269 @@ var file_network_v1_directory_directory_proto_rawDesc = []byte{
 	0x03, 0x20, 0x03, 0x28, 0x04, 0x52, 0x0a, 0x76, 0x69, 0x65, 0x77, 0x69, 0x6e, 0x67, 0x49, 0x64,
 	0x73, 0x1a, 0x1a, 0x0a, 0x04, 0x50, 0x69, 0x6e, 0x67, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x69, 0x6d,
 	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x42, 0x06, 0x0a,
-	0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x4c, 0x0a, 0x0e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x42, 0x72,
-	0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x12, 0x3a, 0x0a, 0x06, 0x65, 0x76, 0x65, 0x6e, 0x74,
-	0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
-	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
-	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x52, 0x06, 0x65, 0x76, 0x65,
-	0x6e, 0x74, 0x73, 0x22, 0x50, 0x0a, 0x0e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3e, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x4d, 0x0a, 0x11, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
+	0x4d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x1b, 0x0a, 0x09, 0x69, 0x73,
+	0x5f, 0x6d, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x69,
+	0x73, 0x4d, 0x61, 0x74, 0x75, 0x72, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x69, 0x73, 0x5f, 0x62, 0x61,
+	0x6e, 0x6e, 0x65, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x69, 0x73, 0x42, 0x61,
+	0x6e, 0x6e, 0x65, 0x64, 0x22, 0xe4, 0x01, 0x0a, 0x0d, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
+	0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x49, 0x64, 0x12, 0x3e, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
 	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63,
 	0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x07, 0x6c, 0x69,
-	0x73, 0x74, 0x69, 0x6e, 0x67, 0x22, 0x21, 0x0a, 0x0f, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x22, 0x0a, 0x10, 0x55, 0x6e, 0x70, 0x75,
-	0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02,
-	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x13, 0x0a, 0x11,
-	0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x22, 0x1d, 0x0a, 0x0b, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64,
-	0x22, 0x0e, 0x0a, 0x0c, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x22, 0x1d, 0x0a, 0x0b, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
-	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22,
-	0x0e, 0x0a, 0x0c, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0x0d, 0x0a, 0x0b, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x0e,
-	0x0a, 0x0c, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x15,
-	0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x87, 0x02, 0x0a, 0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65,
-	0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d,
-	0x0a, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x04, 0x52, 0x09, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x49, 0x64, 0x12, 0x1f, 0x0a,
-	0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x50,
-	0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x18, 0xe9, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x37,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
-	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x48, 0x00, 0x52, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65,
-	0x12, 0x4c, 0x0a, 0x09, 0x62, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x18, 0xea, 0x07,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x2b, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
-	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
-	0x72, 0x79, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73,
-	0x74, 0x48, 0x00, 0x52, 0x09, 0x62, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x1a, 0x07,
-	0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22,
-	0x79, 0x0a, 0x16, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c, 0x69,
-	0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a,
-	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x3e, 0x0a, 0x07, 0x6c, 0x69,
-	0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x73, 0x74,
-	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
-	0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e,
-	0x67, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x22, 0x29, 0x0a, 0x17, 0x46, 0x72,
-	0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x4b, 0x0a, 0x18, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
-	0x64, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b,
-	0x65, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02,
-	0x69, 0x64, 0x22, 0x1b, 0x0a, 0x19, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e,
-	0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0x46, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x26, 0x0a, 0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74,
-	0x65, 0x6e, 0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22,
-	0x46, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x61, 0x72, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x16, 0x0a, 0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74,
-	0x65, 0x6e, 0x64, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0x36, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x73, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x22, 0x16, 0x0a, 0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74,
-	0x65, 0x6e, 0x64, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0x34, 0x0a, 0x17, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
-	0x69, 0x62, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x77,
-	0x61, 0x72, 0x6d, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x73, 0x77,
-	0x61, 0x72, 0x6d, 0x49, 0x64, 0x22, 0x71, 0x0a, 0x18, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74,
-	0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x55, 0x0a, 0x0d, 0x73, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x5f, 0x64, 0x65, 0x6c,
-	0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
-	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x53, 0x6e,
-	0x69, 0x70, 0x70, 0x65, 0x74, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x52, 0x0c, 0x73, 0x6e, 0x69, 0x70,
-	0x70, 0x65, 0x74, 0x44, 0x65, 0x6c, 0x74, 0x61, 0x32, 0xf4, 0x03, 0x0a, 0x09, 0x44, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x12, 0x64, 0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73,
-	0x68, 0x12, 0x2b, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
-	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e,
-	0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
-	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x75, 0x62,
-	0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6a, 0x0a, 0x09,
-	0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x73, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x4e, 0x0a, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69,
 	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69,
-	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73,
-	0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
-	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5b, 0x0a, 0x04, 0x4a, 0x6f, 0x69, 0x6e,
-	0x12, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4a,
-	0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x73, 0x74, 0x72,
-	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
-	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5b, 0x0a, 0x04, 0x50, 0x61, 0x72, 0x74, 0x12, 0x28, 0x2e,
+	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x4d,
+	0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x14, 0x0a, 0x05, 0x6e, 0x6f, 0x74, 0x65, 0x73, 0x18, 0x05,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x6e, 0x6f, 0x74, 0x65, 0x73, 0x22, 0x4c, 0x0a, 0x0e, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x12, 0x3a, 0x0a,
+	0x06, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x22, 0x2e,
 	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
-	0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x61, 0x72, 0x74,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
-	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
-	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x5b, 0x0a, 0x04, 0x50, 0x69, 0x6e, 0x67, 0x12, 0x28, 0x2e, 0x73, 0x74, 0x72,
+	0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x45, 0x76, 0x65, 0x6e,
+	0x74, 0x52, 0x06, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x22, 0x50, 0x0a, 0x0e, 0x50, 0x75, 0x62,
+	0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3e, 0x0a, 0x07, 0x6c,
+	0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x24, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31,
+	0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69,
+	0x6e, 0x67, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x22, 0x21, 0x0a, 0x0f, 0x50,
+	0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e,
+	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x22,
+	0x0a, 0x10, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02,
+	0x69, 0x64, 0x22, 0x13, 0x0a, 0x11, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x1d, 0x0a, 0x0b, 0x4a, 0x6f, 0x69, 0x6e, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x0e, 0x0a, 0x0c, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x1d, 0x0a, 0x0b, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x0e, 0x0a, 0x0c, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x0d, 0x0a, 0x0b, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x22, 0x0e, 0x0a, 0x0c, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x15, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64,
+	0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x87, 0x02, 0x0a, 0x14,
+	0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b,
+	0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x4b, 0x65, 0x79, 0x12, 0x50, 0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x18, 0xe9, 0x07,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x37, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
+	0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x48, 0x00, 0x52,
+	0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x12, 0x4c, 0x0a, 0x09, 0x62, 0x72, 0x6f, 0x61, 0x64, 0x63,
+	0x61, 0x73, 0x74, 0x18, 0xea, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2b, 0x2e, 0x73, 0x74, 0x72,
 	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
-	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x42, 0x72,
+	0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x48, 0x00, 0x52, 0x09, 0x62, 0x72, 0x6f, 0x61, 0x64,
+	0x63, 0x61, 0x73, 0x74, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x42, 0x06, 0x0a,
+	0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x79, 0x0a, 0x16, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79,
+	0x12, 0x3e, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e,
+	0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
+	0x22, 0x29, 0x0a, 0x17, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c,
+	0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x4b, 0x0a, 0x18, 0x46,
+	0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x1b, 0x0a, 0x19, 0x46, 0x72, 0x6f, 0x6e,
+	0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x46, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x26, 0x0a,
+	0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x46, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x16, 0x0a,
+	0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x36, 0x0a, 0x13, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x22, 0x16, 0x0a,
+	0x14, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x31, 0x0a, 0x1f, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x47, 0x65, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72,
+	0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x66, 0x0a, 0x20, 0x46, 0x72, 0x6f, 0x6e,
+	0x74, 0x65, 0x6e, 0x64, 0x47, 0x65, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65,
+	0x63, 0x6f, 0x72, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x42, 0x0a, 0x06,
+	0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2a, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31,
+	0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69,
+	0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64,
+	0x22, 0x23, 0x0a, 0x21, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4c, 0x69, 0x73, 0x74,
+	0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x73, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x6a, 0x0a, 0x22, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x4c, 0x69, 0x73, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f,
+	0x72, 0x64, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x07, 0x72,
+	0x65, 0x63, 0x6f, 0x72, 0x64, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x2a, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31,
+	0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69,
+	0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x07, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64,
+	0x73, 0x22, 0x9a, 0x01, 0x0a, 0x22, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72,
+	0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x14, 0x0a, 0x05, 0x6e, 0x6f, 0x74, 0x65,
+	0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x6e, 0x6f, 0x74, 0x65, 0x73, 0x12, 0x4e,
+	0x0a, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x4d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x52, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x69,
+	0x0a, 0x23, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x42, 0x0a, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x2a, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74,
+	0x6f, 0x72, 0x79, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72,
+	0x64, 0x52, 0x06, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x22, 0x34, 0x0a, 0x17, 0x53, 0x6e, 0x69,
+	0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x77, 0x61, 0x72, 0x6d, 0x5f, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x73, 0x77, 0x61, 0x72, 0x6d, 0x49, 0x64, 0x22,
+	0x71, 0x0a, 0x18, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x55, 0x0a, 0x0d, 0x73,
+	0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x5f, 0x64, 0x65, 0x6c, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x2e, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x44,
+	0x65, 0x6c, 0x74, 0x61, 0x52, 0x0c, 0x73, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x44, 0x65, 0x6c,
+	0x74, 0x61, 0x32, 0xf4, 0x03, 0x0a, 0x09, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x12, 0x64, 0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x2b, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
+	0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73,
+	0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72,
+	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6a, 0x0a, 0x09, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c,
+	0x69, 0x73, 0x68, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74,
+	0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72,
+	0x79, 0x2e, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x2e, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x5b, 0x0a, 0x04, 0x4a, 0x6f, 0x69, 0x6e, 0x12, 0x28, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71,
 	0x75, 0x65, 0x73, 0x74, 0x1a, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
 	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
-	0x72, 0x79, 0x2e, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
-	0xbb, 0x05, 0x0a, 0x11, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x46, 0x72, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12, 0x6d, 0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x30, 0x2e,
-	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
-	0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e,
-	0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x31, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
-	0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72,
-	0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x30, 0x01, 0x12, 0x74, 0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12,
-	0x33, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
-	0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72,
-	0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x34, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
-	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
-	0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c, 0x69,
-	0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7a, 0x0a, 0x09, 0x55, 0x6e,
-	0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x35, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
+	0x72, 0x79, 0x2e, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x5b, 0x0a, 0x04, 0x50, 0x61, 0x72, 0x74, 0x12, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
 	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
-	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e,
-	0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x36,
+	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e,
+	0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5b, 0x0a, 0x04,
+	0x50, 0x69, 0x6e, 0x67, 0x12, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
+	0x72, 0x79, 0x2e, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x29,
+	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
+	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x50, 0x69, 0x6e,
+	0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x80, 0x09, 0x0a, 0x11, 0x44, 0x69,
+	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12,
+	0x6d, 0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
+	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
+	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4f, 0x70,
+	0x65, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69,
+	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64,
+	0x4f, 0x70, 0x65, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x30, 0x01, 0x12, 0x74,
+	0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x33, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69,
+	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64,
+	0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x34,
 	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
 	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6b, 0x0a, 0x04, 0x4a, 0x6f, 0x69, 0x6e, 0x12, 0x30,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
-	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f,
-	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46,
-	0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x6b, 0x0a, 0x04, 0x50, 0x61, 0x72, 0x74, 0x12, 0x30, 0x2e, 0x73, 0x74,
-	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
-	0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65,
-	0x6e, 0x64, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e,
-	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
-	0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e,
-	0x74, 0x65, 0x6e, 0x64, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x6b, 0x0a, 0x04, 0x54, 0x65, 0x73, 0x74, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7a, 0x0a, 0x09, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73,
+	0x68, 0x12, 0x35, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e,
+	0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73,
+	0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x36, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
 	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x54,
-	0x65, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72,
+	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x55,
+	0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x6b, 0x0a, 0x04, 0x4a, 0x6f, 0x69, 0x6e, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72,
+	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4a,
+	0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72,
 	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
 	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
-	0x64, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x8e, 0x01,
-	0x0a, 0x10, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x53, 0x6e, 0x69, 0x70, 0x70,
-	0x65, 0x74, 0x12, 0x7a, 0x0a, 0x09, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x12,
-	0x34, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
-	0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x53, 0x6e,
-	0x69, 0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x35, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x64, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6b, 0x0a,
+	0x04, 0x50, 0x61, 0x72, 0x74, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
 	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74,
-	0x6f, 0x72, 0x79, 0x2e, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63,
-	0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x30, 0x01, 0x42, 0x75,
-	0x0a, 0x1e, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x61, 0x72, 0x74,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
+	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65,
+	0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x50, 0x61,
+	0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6b, 0x0a, 0x04, 0x54, 0x65,
+	0x73, 0x74, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
 	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
-	0x5a, 0x4d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d,
-	0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70,
-	0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f,
-	0x76, 0x31, 0x2f, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x3b, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x76, 0x31, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0xba,
-	0x02, 0x03, 0x53, 0x4e, 0x44, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
+	0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x54, 0x65, 0x73, 0x74, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x8f, 0x01, 0x0a, 0x10, 0x47, 0x65, 0x74, 0x4c,
+	0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x3c, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31,
+	0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74,
+	0x65, 0x6e, 0x64, 0x47, 0x65, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63,
+	0x6f, 0x72, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3d, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x47, 0x65, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72,
+	0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x95, 0x01, 0x0a, 0x12, 0x4c, 0x69,
+	0x73, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x73,
+	0x12, 0x3e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46,
+	0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4c, 0x69, 0x73, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69,
+	0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x3f, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46,
+	0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x4c, 0x69, 0x73, 0x74, 0x4c, 0x69, 0x73, 0x74, 0x69,
+	0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x98, 0x01, 0x0a, 0x13, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4c, 0x69, 0x73, 0x74,
+	0x69, 0x6e, 0x67, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x3f, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69,
+	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64,
+	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x63,
+	0x6f, 0x72, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x40, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
+	0x64, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x65,
+	0x63, 0x6f, 0x72, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x8e, 0x01, 0x0a,
+	0x10, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65,
+	0x74, 0x12, 0x7a, 0x0a, 0x09, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x12, 0x34,
+	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
+	0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x2e, 0x53, 0x6e, 0x69,
+	0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72, 0x69, 0x62, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x35, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f,
+	0x72, 0x79, 0x2e, 0x53, 0x6e, 0x69, 0x70, 0x70, 0x65, 0x74, 0x53, 0x75, 0x62, 0x73, 0x63, 0x72,
+	0x69, 0x62, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x30, 0x01, 0x42, 0x75, 0x0a,
+	0x1e, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x5a,
+	0x4d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65,
+	0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b,
+	0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f, 0x76,
+	0x31, 0x2f, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x3b, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x76, 0x31, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0xba, 0x02,
+	0x03, 0x53, 0x4e, 0x44, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -3437,7 +3956,7 @@ func file_network_v1_directory_directory_proto_rawDescGZIP() []byte {
 }
 
 var file_network_v1_directory_directory_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_network_v1_directory_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_network_v1_directory_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_network_v1_directory_directory_proto_goTypes = []interface{}{
 	(Listing_Embed_Service)(0),                   // 0: strims.network.v1.directory.Listing.Embed.Service
 	(*ServerConfig)(nil),                         // 1: strims.network.v1.directory.ServerConfig
@@ -3449,126 +3968,147 @@ var file_network_v1_directory_directory_proto_goTypes = []interface{}{
 	(*ListingSnippet)(nil),                       // 7: strims.network.v1.directory.ListingSnippet
 	(*ListingSnippetDelta)(nil),                  // 8: strims.network.v1.directory.ListingSnippetDelta
 	(*Event)(nil),                                // 9: strims.network.v1.directory.Event
-	(*EventBroadcast)(nil),                       // 10: strims.network.v1.directory.EventBroadcast
-	(*PublishRequest)(nil),                       // 11: strims.network.v1.directory.PublishRequest
-	(*PublishResponse)(nil),                      // 12: strims.network.v1.directory.PublishResponse
-	(*UnpublishRequest)(nil),                     // 13: strims.network.v1.directory.UnpublishRequest
-	(*UnpublishResponse)(nil),                    // 14: strims.network.v1.directory.UnpublishResponse
-	(*JoinRequest)(nil),                          // 15: strims.network.v1.directory.JoinRequest
-	(*JoinResponse)(nil),                         // 16: strims.network.v1.directory.JoinResponse
-	(*PartRequest)(nil),                          // 17: strims.network.v1.directory.PartRequest
-	(*PartResponse)(nil),                         // 18: strims.network.v1.directory.PartResponse
-	(*PingRequest)(nil),                          // 19: strims.network.v1.directory.PingRequest
-	(*PingResponse)(nil),                         // 20: strims.network.v1.directory.PingResponse
-	(*FrontendOpenRequest)(nil),                  // 21: strims.network.v1.directory.FrontendOpenRequest
-	(*FrontendOpenResponse)(nil),                 // 22: strims.network.v1.directory.FrontendOpenResponse
-	(*FrontendPublishRequest)(nil),               // 23: strims.network.v1.directory.FrontendPublishRequest
-	(*FrontendPublishResponse)(nil),              // 24: strims.network.v1.directory.FrontendPublishResponse
-	(*FrontendUnpublishRequest)(nil),             // 25: strims.network.v1.directory.FrontendUnpublishRequest
-	(*FrontendUnpublishResponse)(nil),            // 26: strims.network.v1.directory.FrontendUnpublishResponse
-	(*FrontendJoinRequest)(nil),                  // 27: strims.network.v1.directory.FrontendJoinRequest
-	(*FrontendJoinResponse)(nil),                 // 28: strims.network.v1.directory.FrontendJoinResponse
-	(*FrontendPartRequest)(nil),                  // 29: strims.network.v1.directory.FrontendPartRequest
-	(*FrontendPartResponse)(nil),                 // 30: strims.network.v1.directory.FrontendPartResponse
-	(*FrontendTestRequest)(nil),                  // 31: strims.network.v1.directory.FrontendTestRequest
-	(*FrontendTestResponse)(nil),                 // 32: strims.network.v1.directory.FrontendTestResponse
-	(*SnippetSubscribeRequest)(nil),              // 33: strims.network.v1.directory.SnippetSubscribeRequest
-	(*SnippetSubscribeResponse)(nil),             // 34: strims.network.v1.directory.SnippetSubscribeResponse
-	(*ServerConfig_Integrations)(nil),            // 35: strims.network.v1.directory.ServerConfig.Integrations
-	(*ServerConfig_Integrations_AngelThump)(nil), // 36: strims.network.v1.directory.ServerConfig.Integrations.AngelThump
-	(*ServerConfig_Integrations_Twitch)(nil),     // 37: strims.network.v1.directory.ServerConfig.Integrations.Twitch
-	(*ServerConfig_Integrations_YouTube)(nil),    // 38: strims.network.v1.directory.ServerConfig.Integrations.YouTube
-	(*ServerConfig_Integrations_Swarm)(nil),      // 39: strims.network.v1.directory.ServerConfig.Integrations.Swarm
-	(*Listing_Media)(nil),                        // 40: strims.network.v1.directory.Listing.Media
-	(*Listing_Service)(nil),                      // 41: strims.network.v1.directory.Listing.Service
-	(*Listing_Embed)(nil),                        // 42: strims.network.v1.directory.Listing.Embed
-	(*Listing_Chat)(nil),                         // 43: strims.network.v1.directory.Listing.Chat
-	nil,                                          // 44: strims.network.v1.directory.Listing.Embed.QueryParamsEntry
-	(*ListingSnippetDelta_Tags)(nil),             // 45: strims.network.v1.directory.ListingSnippetDelta.Tags
-	(*Event_ListingChange)(nil),                  // 46: strims.network.v1.directory.Event.ListingChange
-	(*Event_Unpublish)(nil),                      // 47: strims.network.v1.directory.Event.Unpublish
-	(*Event_ViewerCountChange)(nil),              // 48: strims.network.v1.directory.Event.ViewerCountChange
-	(*Event_ViewerStateChange)(nil),              // 49: strims.network.v1.directory.Event.ViewerStateChange
-	(*Event_Ping)(nil),                           // 50: strims.network.v1.directory.Event.Ping
-	(*FrontendOpenResponse_Close)(nil),           // 51: strims.network.v1.directory.FrontendOpenResponse.Close
-	(*image.Image)(nil),                          // 52: strims.type.Image
-	(*wrapperspb.StringValue)(nil),               // 53: google.protobuf.StringValue
-	(*wrapperspb.UInt64Value)(nil),               // 54: google.protobuf.UInt64Value
-	(*wrapperspb.BoolValue)(nil),                 // 55: google.protobuf.BoolValue
-	(*wrapperspb.BytesValue)(nil),                // 56: google.protobuf.BytesValue
-	(*wrapperspb.UInt32Value)(nil),               // 57: google.protobuf.UInt32Value
+	(*ListingModeration)(nil),                    // 10: strims.network.v1.directory.ListingModeration
+	(*ListingRecord)(nil),                        // 11: strims.network.v1.directory.ListingRecord
+	(*EventBroadcast)(nil),                       // 12: strims.network.v1.directory.EventBroadcast
+	(*PublishRequest)(nil),                       // 13: strims.network.v1.directory.PublishRequest
+	(*PublishResponse)(nil),                      // 14: strims.network.v1.directory.PublishResponse
+	(*UnpublishRequest)(nil),                     // 15: strims.network.v1.directory.UnpublishRequest
+	(*UnpublishResponse)(nil),                    // 16: strims.network.v1.directory.UnpublishResponse
+	(*JoinRequest)(nil),                          // 17: strims.network.v1.directory.JoinRequest
+	(*JoinResponse)(nil),                         // 18: strims.network.v1.directory.JoinResponse
+	(*PartRequest)(nil),                          // 19: strims.network.v1.directory.PartRequest
+	(*PartResponse)(nil),                         // 20: strims.network.v1.directory.PartResponse
+	(*PingRequest)(nil),                          // 21: strims.network.v1.directory.PingRequest
+	(*PingResponse)(nil),                         // 22: strims.network.v1.directory.PingResponse
+	(*FrontendOpenRequest)(nil),                  // 23: strims.network.v1.directory.FrontendOpenRequest
+	(*FrontendOpenResponse)(nil),                 // 24: strims.network.v1.directory.FrontendOpenResponse
+	(*FrontendPublishRequest)(nil),               // 25: strims.network.v1.directory.FrontendPublishRequest
+	(*FrontendPublishResponse)(nil),              // 26: strims.network.v1.directory.FrontendPublishResponse
+	(*FrontendUnpublishRequest)(nil),             // 27: strims.network.v1.directory.FrontendUnpublishRequest
+	(*FrontendUnpublishResponse)(nil),            // 28: strims.network.v1.directory.FrontendUnpublishResponse
+	(*FrontendJoinRequest)(nil),                  // 29: strims.network.v1.directory.FrontendJoinRequest
+	(*FrontendJoinResponse)(nil),                 // 30: strims.network.v1.directory.FrontendJoinResponse
+	(*FrontendPartRequest)(nil),                  // 31: strims.network.v1.directory.FrontendPartRequest
+	(*FrontendPartResponse)(nil),                 // 32: strims.network.v1.directory.FrontendPartResponse
+	(*FrontendTestRequest)(nil),                  // 33: strims.network.v1.directory.FrontendTestRequest
+	(*FrontendTestResponse)(nil),                 // 34: strims.network.v1.directory.FrontendTestResponse
+	(*FrontendGetListingRecordRequest)(nil),      // 35: strims.network.v1.directory.FrontendGetListingRecordRequest
+	(*FrontendGetListingRecordResponse)(nil),     // 36: strims.network.v1.directory.FrontendGetListingRecordResponse
+	(*FrontendListListingRecordsRequest)(nil),    // 37: strims.network.v1.directory.FrontendListListingRecordsRequest
+	(*FrontendListListingRecordsResponse)(nil),   // 38: strims.network.v1.directory.FrontendListListingRecordsResponse
+	(*FrontendUpdateListingRecordRequest)(nil),   // 39: strims.network.v1.directory.FrontendUpdateListingRecordRequest
+	(*FrontendUpdateListingRecordResponse)(nil),  // 40: strims.network.v1.directory.FrontendUpdateListingRecordResponse
+	(*SnippetSubscribeRequest)(nil),              // 41: strims.network.v1.directory.SnippetSubscribeRequest
+	(*SnippetSubscribeResponse)(nil),             // 42: strims.network.v1.directory.SnippetSubscribeResponse
+	(*ServerConfig_Integrations)(nil),            // 43: strims.network.v1.directory.ServerConfig.Integrations
+	(*ServerConfig_Integrations_AngelThump)(nil), // 44: strims.network.v1.directory.ServerConfig.Integrations.AngelThump
+	(*ServerConfig_Integrations_Twitch)(nil),     // 45: strims.network.v1.directory.ServerConfig.Integrations.Twitch
+	(*ServerConfig_Integrations_YouTube)(nil),    // 46: strims.network.v1.directory.ServerConfig.Integrations.YouTube
+	(*ServerConfig_Integrations_Swarm)(nil),      // 47: strims.network.v1.directory.ServerConfig.Integrations.Swarm
+	(*Listing_Media)(nil),                        // 48: strims.network.v1.directory.Listing.Media
+	(*Listing_Service)(nil),                      // 49: strims.network.v1.directory.Listing.Service
+	(*Listing_Embed)(nil),                        // 50: strims.network.v1.directory.Listing.Embed
+	(*Listing_Chat)(nil),                         // 51: strims.network.v1.directory.Listing.Chat
+	nil,                                          // 52: strims.network.v1.directory.Listing.Embed.QueryParamsEntry
+	(*ListingSnippetDelta_Tags)(nil),             // 53: strims.network.v1.directory.ListingSnippetDelta.Tags
+	(*Event_ListingChange)(nil),                  // 54: strims.network.v1.directory.Event.ListingChange
+	(*Event_Unpublish)(nil),                      // 55: strims.network.v1.directory.Event.Unpublish
+	(*Event_ViewerCountChange)(nil),              // 56: strims.network.v1.directory.Event.ViewerCountChange
+	(*Event_ViewerStateChange)(nil),              // 57: strims.network.v1.directory.Event.ViewerStateChange
+	(*Event_Ping)(nil),                           // 58: strims.network.v1.directory.Event.Ping
+	(*FrontendOpenResponse_Close)(nil),           // 59: strims.network.v1.directory.FrontendOpenResponse.Close
+	(*image.Image)(nil),                          // 60: strims.type.Image
+	(*wrapperspb.StringValue)(nil),               // 61: google.protobuf.StringValue
+	(*wrapperspb.UInt64Value)(nil),               // 62: google.protobuf.UInt64Value
+	(*wrapperspb.BoolValue)(nil),                 // 63: google.protobuf.BoolValue
+	(*wrapperspb.BytesValue)(nil),                // 64: google.protobuf.BytesValue
+	(*wrapperspb.UInt32Value)(nil),               // 65: google.protobuf.UInt32Value
 }
 var file_network_v1_directory_directory_proto_depIdxs = []int32{
-	35, // 0: strims.network.v1.directory.ServerConfig.integrations:type_name -> strims.network.v1.directory.ServerConfig.Integrations
-	40, // 1: strims.network.v1.directory.Listing.media:type_name -> strims.network.v1.directory.Listing.Media
-	41, // 2: strims.network.v1.directory.Listing.service:type_name -> strims.network.v1.directory.Listing.Service
-	42, // 3: strims.network.v1.directory.Listing.embed:type_name -> strims.network.v1.directory.Listing.Embed
-	43, // 4: strims.network.v1.directory.Listing.chat:type_name -> strims.network.v1.directory.Listing.Chat
-	52, // 5: strims.network.v1.directory.ListingSnippetImage.image:type_name -> strims.type.Image
+	43, // 0: strims.network.v1.directory.ServerConfig.integrations:type_name -> strims.network.v1.directory.ServerConfig.Integrations
+	48, // 1: strims.network.v1.directory.Listing.media:type_name -> strims.network.v1.directory.Listing.Media
+	49, // 2: strims.network.v1.directory.Listing.service:type_name -> strims.network.v1.directory.Listing.Service
+	50, // 3: strims.network.v1.directory.Listing.embed:type_name -> strims.network.v1.directory.Listing.Embed
+	51, // 4: strims.network.v1.directory.Listing.chat:type_name -> strims.network.v1.directory.Listing.Chat
+	60, // 5: strims.network.v1.directory.ListingSnippetImage.image:type_name -> strims.type.Image
 	6,  // 6: strims.network.v1.directory.ListingSnippet.thumbnail:type_name -> strims.network.v1.directory.ListingSnippetImage
 	6,  // 7: strims.network.v1.directory.ListingSnippet.channel_logo:type_name -> strims.network.v1.directory.ListingSnippetImage
-	53, // 8: strims.network.v1.directory.ListingSnippetDelta.title:type_name -> google.protobuf.StringValue
-	53, // 9: strims.network.v1.directory.ListingSnippetDelta.description:type_name -> google.protobuf.StringValue
-	53, // 10: strims.network.v1.directory.ListingSnippetDelta.category:type_name -> google.protobuf.StringValue
-	53, // 11: strims.network.v1.directory.ListingSnippetDelta.channel_name:type_name -> google.protobuf.StringValue
-	54, // 12: strims.network.v1.directory.ListingSnippetDelta.viewer_count:type_name -> google.protobuf.UInt64Value
-	55, // 13: strims.network.v1.directory.ListingSnippetDelta.live:type_name -> google.protobuf.BoolValue
-	55, // 14: strims.network.v1.directory.ListingSnippetDelta.is_mature:type_name -> google.protobuf.BoolValue
-	56, // 15: strims.network.v1.directory.ListingSnippetDelta.key:type_name -> google.protobuf.BytesValue
-	56, // 16: strims.network.v1.directory.ListingSnippetDelta.signature:type_name -> google.protobuf.BytesValue
-	57, // 17: strims.network.v1.directory.ListingSnippetDelta.video_height:type_name -> google.protobuf.UInt32Value
-	57, // 18: strims.network.v1.directory.ListingSnippetDelta.video_width:type_name -> google.protobuf.UInt32Value
-	45, // 19: strims.network.v1.directory.ListingSnippetDelta.tags:type_name -> strims.network.v1.directory.ListingSnippetDelta.Tags
+	61, // 8: strims.network.v1.directory.ListingSnippetDelta.title:type_name -> google.protobuf.StringValue
+	61, // 9: strims.network.v1.directory.ListingSnippetDelta.description:type_name -> google.protobuf.StringValue
+	61, // 10: strims.network.v1.directory.ListingSnippetDelta.category:type_name -> google.protobuf.StringValue
+	61, // 11: strims.network.v1.directory.ListingSnippetDelta.channel_name:type_name -> google.protobuf.StringValue
+	62, // 12: strims.network.v1.directory.ListingSnippetDelta.viewer_count:type_name -> google.protobuf.UInt64Value
+	63, // 13: strims.network.v1.directory.ListingSnippetDelta.live:type_name -> google.protobuf.BoolValue
+	63, // 14: strims.network.v1.directory.ListingSnippetDelta.is_mature:type_name -> google.protobuf.BoolValue
+	64, // 15: strims.network.v1.directory.ListingSnippetDelta.key:type_name -> google.protobuf.BytesValue
+	64, // 16: strims.network.v1.directory.ListingSnippetDelta.signature:type_name -> google.protobuf.BytesValue
+	65, // 17: strims.network.v1.directory.ListingSnippetDelta.video_height:type_name -> google.protobuf.UInt32Value
+	65, // 18: strims.network.v1.directory.ListingSnippetDelta.video_width:type_name -> google.protobuf.UInt32Value
+	53, // 19: strims.network.v1.directory.ListingSnippetDelta.tags:type_name -> strims.network.v1.directory.ListingSnippetDelta.Tags
 	6,  // 20: strims.network.v1.directory.ListingSnippetDelta.thumbnail:type_name -> strims.network.v1.directory.ListingSnippetImage
 	6,  // 21: strims.network.v1.directory.ListingSnippetDelta.channel_logo:type_name -> strims.network.v1.directory.ListingSnippetImage
-	46, // 22: strims.network.v1.directory.Event.listing_change:type_name -> strims.network.v1.directory.Event.ListingChange
-	47, // 23: strims.network.v1.directory.Event.unpublish:type_name -> strims.network.v1.directory.Event.Unpublish
-	48, // 24: strims.network.v1.directory.Event.viewer_count_change:type_name -> strims.network.v1.directory.Event.ViewerCountChange
-	49, // 25: strims.network.v1.directory.Event.viewer_state_change:type_name -> strims.network.v1.directory.Event.ViewerStateChange
-	50, // 26: strims.network.v1.directory.Event.ping:type_name -> strims.network.v1.directory.Event.Ping
-	9,  // 27: strims.network.v1.directory.EventBroadcast.events:type_name -> strims.network.v1.directory.Event
-	5,  // 28: strims.network.v1.directory.PublishRequest.listing:type_name -> strims.network.v1.directory.Listing
-	51, // 29: strims.network.v1.directory.FrontendOpenResponse.close:type_name -> strims.network.v1.directory.FrontendOpenResponse.Close
-	10, // 30: strims.network.v1.directory.FrontendOpenResponse.broadcast:type_name -> strims.network.v1.directory.EventBroadcast
-	5,  // 31: strims.network.v1.directory.FrontendPublishRequest.listing:type_name -> strims.network.v1.directory.Listing
-	8,  // 32: strims.network.v1.directory.SnippetSubscribeResponse.snippet_delta:type_name -> strims.network.v1.directory.ListingSnippetDelta
-	36, // 33: strims.network.v1.directory.ServerConfig.Integrations.angelthump:type_name -> strims.network.v1.directory.ServerConfig.Integrations.AngelThump
-	37, // 34: strims.network.v1.directory.ServerConfig.Integrations.twitch:type_name -> strims.network.v1.directory.ServerConfig.Integrations.Twitch
-	38, // 35: strims.network.v1.directory.ServerConfig.Integrations.youtube:type_name -> strims.network.v1.directory.ServerConfig.Integrations.YouTube
-	39, // 36: strims.network.v1.directory.ServerConfig.Integrations.swarm:type_name -> strims.network.v1.directory.ServerConfig.Integrations.Swarm
-	0,  // 37: strims.network.v1.directory.Listing.Embed.service:type_name -> strims.network.v1.directory.Listing.Embed.Service
-	44, // 38: strims.network.v1.directory.Listing.Embed.query_params:type_name -> strims.network.v1.directory.Listing.Embed.QueryParamsEntry
-	5,  // 39: strims.network.v1.directory.Event.ListingChange.listing:type_name -> strims.network.v1.directory.Listing
-	7,  // 40: strims.network.v1.directory.Event.ListingChange.snippet:type_name -> strims.network.v1.directory.ListingSnippet
-	11, // 41: strims.network.v1.directory.Directory.Publish:input_type -> strims.network.v1.directory.PublishRequest
-	13, // 42: strims.network.v1.directory.Directory.Unpublish:input_type -> strims.network.v1.directory.UnpublishRequest
-	15, // 43: strims.network.v1.directory.Directory.Join:input_type -> strims.network.v1.directory.JoinRequest
-	17, // 44: strims.network.v1.directory.Directory.Part:input_type -> strims.network.v1.directory.PartRequest
-	19, // 45: strims.network.v1.directory.Directory.Ping:input_type -> strims.network.v1.directory.PingRequest
-	21, // 46: strims.network.v1.directory.DirectoryFrontend.Open:input_type -> strims.network.v1.directory.FrontendOpenRequest
-	23, // 47: strims.network.v1.directory.DirectoryFrontend.Publish:input_type -> strims.network.v1.directory.FrontendPublishRequest
-	25, // 48: strims.network.v1.directory.DirectoryFrontend.Unpublish:input_type -> strims.network.v1.directory.FrontendUnpublishRequest
-	27, // 49: strims.network.v1.directory.DirectoryFrontend.Join:input_type -> strims.network.v1.directory.FrontendJoinRequest
-	29, // 50: strims.network.v1.directory.DirectoryFrontend.Part:input_type -> strims.network.v1.directory.FrontendPartRequest
-	31, // 51: strims.network.v1.directory.DirectoryFrontend.Test:input_type -> strims.network.v1.directory.FrontendTestRequest
-	33, // 52: strims.network.v1.directory.DirectorySnippet.Subscribe:input_type -> strims.network.v1.directory.SnippetSubscribeRequest
-	12, // 53: strims.network.v1.directory.Directory.Publish:output_type -> strims.network.v1.directory.PublishResponse
-	14, // 54: strims.network.v1.directory.Directory.Unpublish:output_type -> strims.network.v1.directory.UnpublishResponse
-	16, // 55: strims.network.v1.directory.Directory.Join:output_type -> strims.network.v1.directory.JoinResponse
-	18, // 56: strims.network.v1.directory.Directory.Part:output_type -> strims.network.v1.directory.PartResponse
-	20, // 57: strims.network.v1.directory.Directory.Ping:output_type -> strims.network.v1.directory.PingResponse
-	22, // 58: strims.network.v1.directory.DirectoryFrontend.Open:output_type -> strims.network.v1.directory.FrontendOpenResponse
-	24, // 59: strims.network.v1.directory.DirectoryFrontend.Publish:output_type -> strims.network.v1.directory.FrontendPublishResponse
-	26, // 60: strims.network.v1.directory.DirectoryFrontend.Unpublish:output_type -> strims.network.v1.directory.FrontendUnpublishResponse
-	28, // 61: strims.network.v1.directory.DirectoryFrontend.Join:output_type -> strims.network.v1.directory.FrontendJoinResponse
-	30, // 62: strims.network.v1.directory.DirectoryFrontend.Part:output_type -> strims.network.v1.directory.FrontendPartResponse
-	32, // 63: strims.network.v1.directory.DirectoryFrontend.Test:output_type -> strims.network.v1.directory.FrontendTestResponse
-	34, // 64: strims.network.v1.directory.DirectorySnippet.Subscribe:output_type -> strims.network.v1.directory.SnippetSubscribeResponse
-	53, // [53:65] is the sub-list for method output_type
-	41, // [41:53] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	54, // 22: strims.network.v1.directory.Event.listing_change:type_name -> strims.network.v1.directory.Event.ListingChange
+	55, // 23: strims.network.v1.directory.Event.unpublish:type_name -> strims.network.v1.directory.Event.Unpublish
+	56, // 24: strims.network.v1.directory.Event.viewer_count_change:type_name -> strims.network.v1.directory.Event.ViewerCountChange
+	57, // 25: strims.network.v1.directory.Event.viewer_state_change:type_name -> strims.network.v1.directory.Event.ViewerStateChange
+	58, // 26: strims.network.v1.directory.Event.ping:type_name -> strims.network.v1.directory.Event.Ping
+	5,  // 27: strims.network.v1.directory.ListingRecord.listing:type_name -> strims.network.v1.directory.Listing
+	10, // 28: strims.network.v1.directory.ListingRecord.moderation:type_name -> strims.network.v1.directory.ListingModeration
+	9,  // 29: strims.network.v1.directory.EventBroadcast.events:type_name -> strims.network.v1.directory.Event
+	5,  // 30: strims.network.v1.directory.PublishRequest.listing:type_name -> strims.network.v1.directory.Listing
+	59, // 31: strims.network.v1.directory.FrontendOpenResponse.close:type_name -> strims.network.v1.directory.FrontendOpenResponse.Close
+	12, // 32: strims.network.v1.directory.FrontendOpenResponse.broadcast:type_name -> strims.network.v1.directory.EventBroadcast
+	5,  // 33: strims.network.v1.directory.FrontendPublishRequest.listing:type_name -> strims.network.v1.directory.Listing
+	11, // 34: strims.network.v1.directory.FrontendGetListingRecordResponse.record:type_name -> strims.network.v1.directory.ListingRecord
+	11, // 35: strims.network.v1.directory.FrontendListListingRecordsResponse.records:type_name -> strims.network.v1.directory.ListingRecord
+	10, // 36: strims.network.v1.directory.FrontendUpdateListingRecordRequest.moderation:type_name -> strims.network.v1.directory.ListingModeration
+	11, // 37: strims.network.v1.directory.FrontendUpdateListingRecordResponse.record:type_name -> strims.network.v1.directory.ListingRecord
+	8,  // 38: strims.network.v1.directory.SnippetSubscribeResponse.snippet_delta:type_name -> strims.network.v1.directory.ListingSnippetDelta
+	44, // 39: strims.network.v1.directory.ServerConfig.Integrations.angelthump:type_name -> strims.network.v1.directory.ServerConfig.Integrations.AngelThump
+	45, // 40: strims.network.v1.directory.ServerConfig.Integrations.twitch:type_name -> strims.network.v1.directory.ServerConfig.Integrations.Twitch
+	46, // 41: strims.network.v1.directory.ServerConfig.Integrations.youtube:type_name -> strims.network.v1.directory.ServerConfig.Integrations.YouTube
+	47, // 42: strims.network.v1.directory.ServerConfig.Integrations.swarm:type_name -> strims.network.v1.directory.ServerConfig.Integrations.Swarm
+	0,  // 43: strims.network.v1.directory.Listing.Embed.service:type_name -> strims.network.v1.directory.Listing.Embed.Service
+	52, // 44: strims.network.v1.directory.Listing.Embed.query_params:type_name -> strims.network.v1.directory.Listing.Embed.QueryParamsEntry
+	5,  // 45: strims.network.v1.directory.Event.ListingChange.listing:type_name -> strims.network.v1.directory.Listing
+	7,  // 46: strims.network.v1.directory.Event.ListingChange.snippet:type_name -> strims.network.v1.directory.ListingSnippet
+	10, // 47: strims.network.v1.directory.Event.ListingChange.moderation:type_name -> strims.network.v1.directory.ListingModeration
+	13, // 48: strims.network.v1.directory.Directory.Publish:input_type -> strims.network.v1.directory.PublishRequest
+	15, // 49: strims.network.v1.directory.Directory.Unpublish:input_type -> strims.network.v1.directory.UnpublishRequest
+	17, // 50: strims.network.v1.directory.Directory.Join:input_type -> strims.network.v1.directory.JoinRequest
+	19, // 51: strims.network.v1.directory.Directory.Part:input_type -> strims.network.v1.directory.PartRequest
+	21, // 52: strims.network.v1.directory.Directory.Ping:input_type -> strims.network.v1.directory.PingRequest
+	23, // 53: strims.network.v1.directory.DirectoryFrontend.Open:input_type -> strims.network.v1.directory.FrontendOpenRequest
+	25, // 54: strims.network.v1.directory.DirectoryFrontend.Publish:input_type -> strims.network.v1.directory.FrontendPublishRequest
+	27, // 55: strims.network.v1.directory.DirectoryFrontend.Unpublish:input_type -> strims.network.v1.directory.FrontendUnpublishRequest
+	29, // 56: strims.network.v1.directory.DirectoryFrontend.Join:input_type -> strims.network.v1.directory.FrontendJoinRequest
+	31, // 57: strims.network.v1.directory.DirectoryFrontend.Part:input_type -> strims.network.v1.directory.FrontendPartRequest
+	33, // 58: strims.network.v1.directory.DirectoryFrontend.Test:input_type -> strims.network.v1.directory.FrontendTestRequest
+	35, // 59: strims.network.v1.directory.DirectoryFrontend.GetListingRecord:input_type -> strims.network.v1.directory.FrontendGetListingRecordRequest
+	37, // 60: strims.network.v1.directory.DirectoryFrontend.ListListingRecords:input_type -> strims.network.v1.directory.FrontendListListingRecordsRequest
+	39, // 61: strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord:input_type -> strims.network.v1.directory.FrontendUpdateListingRecordRequest
+	41, // 62: strims.network.v1.directory.DirectorySnippet.Subscribe:input_type -> strims.network.v1.directory.SnippetSubscribeRequest
+	14, // 63: strims.network.v1.directory.Directory.Publish:output_type -> strims.network.v1.directory.PublishResponse
+	16, // 64: strims.network.v1.directory.Directory.Unpublish:output_type -> strims.network.v1.directory.UnpublishResponse
+	18, // 65: strims.network.v1.directory.Directory.Join:output_type -> strims.network.v1.directory.JoinResponse
+	20, // 66: strims.network.v1.directory.Directory.Part:output_type -> strims.network.v1.directory.PartResponse
+	22, // 67: strims.network.v1.directory.Directory.Ping:output_type -> strims.network.v1.directory.PingResponse
+	24, // 68: strims.network.v1.directory.DirectoryFrontend.Open:output_type -> strims.network.v1.directory.FrontendOpenResponse
+	26, // 69: strims.network.v1.directory.DirectoryFrontend.Publish:output_type -> strims.network.v1.directory.FrontendPublishResponse
+	28, // 70: strims.network.v1.directory.DirectoryFrontend.Unpublish:output_type -> strims.network.v1.directory.FrontendUnpublishResponse
+	30, // 71: strims.network.v1.directory.DirectoryFrontend.Join:output_type -> strims.network.v1.directory.FrontendJoinResponse
+	32, // 72: strims.network.v1.directory.DirectoryFrontend.Part:output_type -> strims.network.v1.directory.FrontendPartResponse
+	34, // 73: strims.network.v1.directory.DirectoryFrontend.Test:output_type -> strims.network.v1.directory.FrontendTestResponse
+	36, // 74: strims.network.v1.directory.DirectoryFrontend.GetListingRecord:output_type -> strims.network.v1.directory.FrontendGetListingRecordResponse
+	38, // 75: strims.network.v1.directory.DirectoryFrontend.ListListingRecords:output_type -> strims.network.v1.directory.FrontendListListingRecordsResponse
+	40, // 76: strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord:output_type -> strims.network.v1.directory.FrontendUpdateListingRecordResponse
+	42, // 77: strims.network.v1.directory.DirectorySnippet.Subscribe:output_type -> strims.network.v1.directory.SnippetSubscribeResponse
+	63, // [63:78] is the sub-list for method output_type
+	48, // [48:63] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_network_v1_directory_directory_proto_init() }
@@ -3686,7 +4226,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EventBroadcast); i {
+			switch v := v.(*ListingModeration); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3698,7 +4238,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishRequest); i {
+			switch v := v.(*ListingRecord); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3710,7 +4250,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishResponse); i {
+			switch v := v.(*EventBroadcast); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3722,7 +4262,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnpublishRequest); i {
+			switch v := v.(*PublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3734,7 +4274,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnpublishResponse); i {
+			switch v := v.(*PublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3746,7 +4286,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*JoinRequest); i {
+			switch v := v.(*UnpublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3758,7 +4298,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*JoinResponse); i {
+			switch v := v.(*UnpublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3770,7 +4310,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PartRequest); i {
+			switch v := v.(*JoinRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3782,7 +4322,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PartResponse); i {
+			switch v := v.(*JoinResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3794,7 +4334,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PingRequest); i {
+			switch v := v.(*PartRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3806,7 +4346,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PingResponse); i {
+			switch v := v.(*PartResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3818,7 +4358,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendOpenRequest); i {
+			switch v := v.(*PingRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3830,7 +4370,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendOpenResponse); i {
+			switch v := v.(*PingResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3842,7 +4382,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendPublishRequest); i {
+			switch v := v.(*FrontendOpenRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3854,7 +4394,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendPublishResponse); i {
+			switch v := v.(*FrontendOpenResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3866,7 +4406,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendUnpublishRequest); i {
+			switch v := v.(*FrontendPublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3878,7 +4418,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendUnpublishResponse); i {
+			switch v := v.(*FrontendPublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3890,7 +4430,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendJoinRequest); i {
+			switch v := v.(*FrontendUnpublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3902,7 +4442,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendJoinResponse); i {
+			switch v := v.(*FrontendUnpublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3914,7 +4454,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendPartRequest); i {
+			switch v := v.(*FrontendJoinRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3926,7 +4466,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendPartResponse); i {
+			switch v := v.(*FrontendJoinResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3938,7 +4478,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendTestRequest); i {
+			switch v := v.(*FrontendPartRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3950,7 +4490,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FrontendTestResponse); i {
+			switch v := v.(*FrontendPartResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3962,7 +4502,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SnippetSubscribeRequest); i {
+			switch v := v.(*FrontendTestRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3974,7 +4514,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SnippetSubscribeResponse); i {
+			switch v := v.(*FrontendTestResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3986,7 +4526,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[34].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig_Integrations); i {
+			switch v := v.(*FrontendGetListingRecordRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3998,7 +4538,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[35].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig_Integrations_AngelThump); i {
+			switch v := v.(*FrontendGetListingRecordResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4010,7 +4550,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig_Integrations_Twitch); i {
+			switch v := v.(*FrontendListListingRecordsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4022,7 +4562,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[37].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig_Integrations_YouTube); i {
+			switch v := v.(*FrontendListListingRecordsResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4034,7 +4574,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[38].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig_Integrations_Swarm); i {
+			switch v := v.(*FrontendUpdateListingRecordRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4046,7 +4586,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Listing_Media); i {
+			switch v := v.(*FrontendUpdateListingRecordResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4058,7 +4598,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Listing_Service); i {
+			switch v := v.(*SnippetSubscribeRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4070,7 +4610,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Listing_Embed); i {
+			switch v := v.(*SnippetSubscribeResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4082,7 +4622,19 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Listing_Chat); i {
+			switch v := v.(*ServerConfig_Integrations); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ServerConfig_Integrations_AngelThump); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4094,7 +4646,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListingSnippetDelta_Tags); i {
+			switch v := v.(*ServerConfig_Integrations_Twitch); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4106,7 +4658,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Event_ListingChange); i {
+			switch v := v.(*ServerConfig_Integrations_YouTube); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4118,7 +4670,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Event_Unpublish); i {
+			switch v := v.(*ServerConfig_Integrations_Swarm); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4130,7 +4682,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Event_ViewerCountChange); i {
+			switch v := v.(*Listing_Media); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4142,7 +4694,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Event_ViewerStateChange); i {
+			switch v := v.(*Listing_Service); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4154,7 +4706,7 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Event_Ping); i {
+			switch v := v.(*Listing_Embed); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4166,6 +4718,90 @@ func file_network_v1_directory_directory_proto_init() {
 			}
 		}
 		file_network_v1_directory_directory_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Listing_Chat); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[52].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListingSnippetDelta_Tags); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[53].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Event_ListingChange); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[54].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Event_Unpublish); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[55].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Event_ViewerCountChange); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[56].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Event_ViewerStateChange); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[57].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Event_Ping); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_directory_directory_proto_msgTypes[58].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*FrontendOpenResponse_Close); i {
 			case 0:
 				return &v.state
@@ -4200,7 +4836,7 @@ func file_network_v1_directory_directory_proto_init() {
 		(*Event_ViewerStateChange_)(nil),
 		(*Event_Ping_)(nil),
 	}
-	file_network_v1_directory_directory_proto_msgTypes[21].OneofWrappers = []interface{}{
+	file_network_v1_directory_directory_proto_msgTypes[23].OneofWrappers = []interface{}{
 		(*FrontendOpenResponse_Close_)(nil),
 		(*FrontendOpenResponse_Broadcast)(nil),
 	}
@@ -4210,7 +4846,7 @@ func file_network_v1_directory_directory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_network_v1_directory_directory_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   51,
+			NumMessages:   59,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

@@ -65,8 +65,8 @@ func (t *control) Run(ctx context.Context) {
 			switch e := e.(type) {
 			case event.PeerAdd:
 				t.handlePeerAdd(ctx, e.ID)
-			case event.NetworkBootstrapClientAdd:
-				go t.startClient(e.Client)
+			case *networkv1bootstrap.BootstrapClientChange:
+				go t.startClient(e.BootstrapClient)
 			}
 		case <-ctx.Done():
 			return

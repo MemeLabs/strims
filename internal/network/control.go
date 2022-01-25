@@ -40,6 +40,11 @@ var (
 const certRecheckInterval = time.Minute * 5
 const certRenewScheduleAheadDuration = time.Hour * 24 * 7
 
+type network struct {
+	network   *networkv1.Network
+	peerCount int
+}
+
 type Control interface {
 	CA() CA
 	Dialer() Dialer
@@ -126,6 +131,7 @@ func (t *control) Run(ctx context.Context) {
 		select {
 		case <-t.certRenewTimeout.C:
 			t.renewExpiredCerts(ctx)
+			t.scheduleCertRenewal()
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.PeerAdd:
@@ -138,14 +144,13 @@ func (t *control) Run(ctx context.Context) {
 				t.handleNetworkPeerCountUpdate(e.NetworkID, -1)
 			case *networkv1.NetworkChangeEvent:
 				t.handleNetworkChange(ctx, e.Network)
+				t.scheduleCertRenewal()
 			case *networkv1.NetworkDeleteEvent:
 				t.handleNetworkRemove(e.Network)
 			}
 		case <-ctx.Done():
 			return
 		}
-
-		t.scheduleCertRenewal()
 	}
 }
 
@@ -276,8 +281,6 @@ func (t *control) handleNetworkRemove(n *networkv1.Network) error {
 
 func (t *control) startNetwork(ctx context.Context, n *networkv1.Network) error {
 	if nn, ok := t.networks[n.Id]; ok {
-		// TODO: if the config changed update directory server
-
 		if !proto.Equal(nn.network.Certificate, n.Certificate) {
 			t.certificates.Insert(n)
 			t.dialer.replaceOrInsertNetwork(n)

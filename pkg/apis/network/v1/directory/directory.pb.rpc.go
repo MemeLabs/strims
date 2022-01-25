@@ -102,6 +102,9 @@ func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service Director
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Join", service.Join)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Part", service.Part)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Test", service.Test)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", service.GetListingRecord)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", service.ListListingRecords)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", service.UpdateListingRecord)
 }
 
 // DirectoryFrontendService ...
@@ -130,6 +133,18 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendTestRequest,
 	) (*FrontendTestResponse, error)
+	GetListingRecord(
+		ctx context.Context,
+		req *FrontendGetListingRecordRequest,
+	) (*FrontendGetListingRecordResponse, error)
+	ListListingRecords(
+		ctx context.Context,
+		req *FrontendListListingRecordsRequest,
+	) (*FrontendListListingRecordsResponse, error)
+	UpdateListingRecord(
+		ctx context.Context,
+		req *FrontendUpdateListingRecordRequest,
+	) (*FrontendUpdateListingRecordResponse, error)
 }
 
 // DirectoryFrontendClient ...
@@ -194,6 +209,33 @@ func (c *DirectoryFrontendClient) Test(
 	res *FrontendTestResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Test", req, res)
+}
+
+// GetListingRecord ...
+func (c *DirectoryFrontendClient) GetListingRecord(
+	ctx context.Context,
+	req *FrontendGetListingRecordRequest,
+	res *FrontendGetListingRecordResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.GetListingRecord", req, res)
+}
+
+// ListListingRecords ...
+func (c *DirectoryFrontendClient) ListListingRecords(
+	ctx context.Context,
+	req *FrontendListListingRecordsRequest,
+	res *FrontendListListingRecordsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.ListListingRecords", req, res)
+}
+
+// UpdateListingRecord ...
+func (c *DirectoryFrontendClient) UpdateListingRecord(
+	ctx context.Context,
+	req *FrontendUpdateListingRecordRequest,
+	res *FrontendUpdateListingRecordResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", req, res)
 }
 
 // RegisterDirectorySnippetService ...

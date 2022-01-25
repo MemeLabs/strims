@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package strims.network.v1.directory;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory;networkv1directory";
+option java_package = "gg.strims.network.v1.directory";
+option swift_prefix = "SND";
+
+import "network/v1/directory/directory.proto";
+
+message ListingRecordChangeEvent {
+  ListingRecord record = 1;
+}

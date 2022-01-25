@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package strims.notification.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1;notificationv1";
+option java_package = "gg.strims.notification.v1";
+option swift_prefix = "SNO";
+
+import "notification/v1/notification.proto";
+
+message NotificationChangeEvent {
+  Notification notification = 1;
+}
+
+message NotificationDeleteEvent {
+  Notification notification = 1;
+}
