@@ -1,67 +1,212 @@
-#!/bin/bash
-set -ex
-pushd $(/bin/pwd) > /dev/null
+#!/usr/bin/env bash
 
-# apt update
-# snap install lxd
-# lxd init
-# ufw allow in on lxbr0
-# ufw allow out on lxbr0
+function configure_system() {
+	local hostname="$1"
 
-container_name="strims-k8s"
-container_memory="32768M"
-mount_path=$HOME/data/k8s
+	sudo hostnamectl set-hostname "${hostname}"
 
-mkdir -p $mount_path
+	DEBIAN_FRONTEND=noninteractive
+	sudo apt-get update
+	sudo apt-get upgrade -y
+	sudo apt autoremove -y --purge \
+		snapd
 
-# sudo modprobe br_netfilter
-# sudo sh -c 'echo "br_netfilter" > /etc/modules-load.d/br_netfilter.conf'
+	sudo rm -rf /var/cache/snapd/
+	sudo apt-get clean
+	sudo apt-mark hold snapd
 
-# http://blog.michali.net/category/kubernetes/page/2/
-cores=$(grep -c ^processor /proc/cpuinfo)
-hashsize=$(( "$cores" * 16384 ))
-echo -n "$hashsize" | sudo tee /sys/module/nf_conntrack/parameters/hashsize
+	sudo apt-get install -y \
+		apt-transport-https \
+		ca-certificates \
+		software-properties-common \
+		curl \
+		gnupg2 \
+		pwgen \
+		wireguard
 
-read -r -d '' raw_lxc <<RAW_LXC || true
-lxc.apparmor.profile=unconfined
-lxc.mount.auto=proc:rw sys:rw cgroup:rw
-lxc.cgroup.devices.allow=a
-lxc.cgroup.memory.limit_in_bytes=$container_memory
-lxc.cap.drop=
-lxc.apparmor.allow_incomplete=1
-RAW_LXC
+	# Disable automatic updates
+	sudo sed -i /Update/s/"1"/"0"/ /etc/apt/apt.conf.d/10periodic && sync
+	echo 'APT::Periodic::Unattended-Upgrade "0";' | sudo tee -a /etc/apt/apt.conf.d/10periodic
+	sudo update-ca-certificates
 
-lxc launch  \
-	--config security.privileged=true \
-	--config security.nesting=true \
-	--config linux.kernel_modules=ip_tables,ip6_tables,netlink_diag,nf_nat,overlay,ip_vs,ip_vs_rr,ip_vs_wrr,ip_vs_sh,nf_conntrack \
-	--config raw.lxc="$raw_lxc" \
-ubuntu:20.04 $container_name
-lxc config device add $container_name homedir disk source=$mount_path path=/mnt
-lxc config device add $container_name kmsg unix-char source=/dev/kmsg path=/dev/kmsg
+	# Disable swap
+	sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+	sudo swapoff -a
 
-wait
+	# Wireguard requires this to configure DNS https://superuser.com/a/1544697
+	sudo ln -s /usr/bin/resolvectl /usr/local/bin/resolvconf
+}
 
-set +e
-while :
-do
-	lxc exec strims-k8s -- bash -c 'curl -s google.com' &> /dev/null
-	ret_val=$?
-	if [ $ret_val -eq 0 ]
-	then
-		break
-	fi
-	sleep 1
+function install_tools() {
+	# KUBE_VERSION=1.22.2-00
+	CRIO_VERSION=1.21
+	VERSION_ID=$(grep VERSION_ID </etc/os-release | awk -F'=' '{print $2}' | tr -d \")
+	OS=xUbuntu_$VERSION_ID
+	KEYRINGS_DIR=/usr/share/keyrings
+	DEBIAN_FRONTEND=noninteractive
+
+	echo "deb [signed-by=$KEYRINGS_DIR/google-apt-key.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
+
+	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list >/dev/null
+	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg] http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$CRIO_VERSION.list >/dev/null
+
+	sudo mkdir -p $KEYRINGS_DIR
+	curl -L https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o $KEYRINGS_DIR/google-apt-key.gpg
+	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-archive-keyring.gpg
+	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg
+
+	sudo apt-get update
+	sudo apt-get install -y \
+		buildah \
+		cri-o \
+		cri-o-runc \
+		cri-tools \
+		kubelet \
+		kubeadm
+
+	sudo apt-mark hold kubelet kubeadm cri-o cri-o-runc cri-tools buildah
+
+# According to the cri-o documentation, this is the correct config but this
+# results in coredns never becoming ready because the pods are unable to reach
+# the upstream dns.
+# https://github.com/cri-o/cri-o/blob/c8bbae9858a084f4244cbd3bb38852d29fc0466b/tutorials/kubernetes.md#flannel-network
+#	sudo tee /etc/cni/net.d/10-crio.conf <<EOF
+#{
+#    "cniVersion": "0.4.0",
+#    "name": "crio",
+#    "type": "flannel"
+#}
+#EOF
+
+	sudo tee /etc/cni/net.d/100-crio-bridge.conf <<EOF
+{
+    "cniVersion": "0.4.0",
+    "name": "crio",
+    "type": "bridge",
+    "bridge": "cni0",
+    "isGateway": true,
+    "ipMasq": true,
+    "hairpinMode": true,
+    "ipam": {
+        "type": "host-local",
+        "routes": [
+            { "dst": "0.0.0.0/0" }
+        ],
+        "ranges": [
+            [{ "subnet": "10.244.0.0/24" }]
+        ]
+    }
+}
+EOF
+	sudo tee /etc/modules-load.d/crio.conf <<EOF
+overlay
+br_netfilter
+EOF
+	sudo tee /etc/sysctl.d/kubernetes.conf <<EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+	sudo modprobe overlay
+	sudo modprobe br_netfilter
+	sudo sysctl --system
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now crio.service
+}
+
+function configure_firewall() {
+	sudo ufw default allow outgoing
+	sudo ufw default deny incoming
+	sudo ufw allow ssh
+	sudo ufw allow http
+	sudo ufw allow https
+	sudo ufw allow 1935/tcp comment 'rtmp'
+	sudo ufw allow 50000:60000/udp comment 'webrtc ephemeral ports'
+
+	sudo ufw allow 51820/udp comment 'wireguard'
+	sudo ufw allow in on wg0
+	sudo ufw allow out on wg0
+}
+
+function start_cluster() {
+	local ca_key=$1
+	local wg_ip="10.0.0.1"
+
+	sudo systemctl enable --now kubelet
+
+	tee /tmp/kubeadm.yaml <<EOF
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: ${wg_ip}
+nodeRegistration:
+  name: ${HOSTNAME}
+  kubeletExtraArgs:
+    node-ip: ${wg_ip}
+  ignorePreflightErrors:
+    - Swap
+    - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
+    - SystemVerification
+certificateKey: ${ca_key}
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+controlPlaneEndpoint: ${wg_ip}:6443
+networking:
+  podSubnet: 10.244.0.0/16
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+failSwapOn: false
+EOF
+
+	sudo kubeadm init --v=5 --upload-certs --config /tmp/kubeadm.yaml
+
+	mkdir -p "$HOME"/.kube
+	sudo cp -i /etc/kubernetes/admin.conf "$HOME"/.kube/config
+	sudo chown "$(id -u)":"$(id -g)" "$HOME"/.kube/config
+
+	kubectl taint nodes --all node-role.kubernetes.io/master-
+
+	curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml \
+		| sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' \
+		| kubectl apply -f -
+
+	# curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+	# kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+}
+
+if ! command -v sudo &>/dev/null; then
+	alias sudo=
+fi
+
+options=$(getopt -o nh:c: --long new,hostname:,ca-key: -- "$@")
+eval set -- "$options"
+
+NEW_CLUSTER=false
+HOST_NAME=${HOSTNAME}
+CA_KEY=
+
+while true; do
+  case "$1" in
+    -n | --new ) NEW_CLUSTER=true; shift ;;
+    -h | --hostname ) HOST_NAME="$2"; shift 2 ;;
+    -c | --ca-key ) CA_KEY="$2"; shift 2 ;;
+    * ) break ;;
+  esac
 done
-set -e
 
-cp setup_controller.sh $mount_path
-cp kube-flannel.yaml $mount_path
-lxc exec strims-k8s -- bash /mnt/setup_controller.sh
+set -exo pipefail
+pushd "$(/bin/pwd)" >/dev/null
 
-# install nginx
-# if we don't have an external load balancer, external ip of LoadBalancer svc has to be added manually
-# lxc exec strims-k8s -- bash -c "helm repo add nginx-stable https://helm.nginx.com/stable && helm repo update"
-# lxc exec strims-k8s -- bash -c "helm install --create-namespace -n ingress-nginx nginx nginx-stable/nginx-ingress"
+if [[ "${NEW_CLUSTER}" == true ]]; then
+	start_cluster "${CA_KEY}"
+else
+	configure_system "${HOST_NAME}"
+	install_tools
+	configure_firewall
+fi
 
-popd > /dev/null
+popd >/dev/null

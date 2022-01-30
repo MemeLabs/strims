@@ -224,7 +224,7 @@ func heficedNode(instance *heficedInstance) *Node {
 			V4: v4,
 			V6: v6,
 		},
-		Status: instance.Status,
+		Status: instance.Status == "running" || instance.Status == "pending",
 		SKU:    nil,
 		Region: region,
 	}

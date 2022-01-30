@@ -38,6 +38,7 @@ func PublicFromPrivate(private string) (string, error) {
 type InterfaceConfig struct {
 	PrivateKey string
 	Address    string
+	DNS        string
 	ListenPort uint64
 	SaveConfig bool
 	Peers      []InterfacePeerConfig
@@ -49,26 +50,10 @@ func (c *InterfaceConfig) String() string {
 	t := `[Interface]
 PrivateKey = %s
 Address = %s
+DNS = %s
 ListenPort = %d
 SaveConfig = %t`
-	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.ListenPort, c.SaveConfig))
-
-	for _, p := range c.Peers {
-		b.WriteRune('\n')
-		b.WriteString(p.String())
-	}
-
-	b.WriteRune('\n')
-	return b.String()
-}
-
-func (c *InterfaceConfig) Strip() string {
-	var b strings.Builder
-
-	t := `[Interface]
-PrivateKey = %s
-ListenPort = %d`
-	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.ListenPort))
+	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.DNS, c.ListenPort, c.SaveConfig))
 
 	for _, p := range c.Peers {
 		b.WriteRune('\n')
@@ -85,13 +70,16 @@ type InterfacePeerConfig struct {
 	AllowedIPs          string
 	Endpoint            string
 	PersistentKeepalive int
+	Comment             string
 }
 
 func (c *InterfacePeerConfig) String() string {
-	t := `[Peer]
+	t := `
+[Peer]
+# %s
 PublicKey = %s
 AllowedIPs = %s
 Endpoint = %s
 PersistentKeepalive = %d`
-	return fmt.Sprintf(t, c.PublicKey, c.AllowedIPs, c.Endpoint, c.PersistentKeepalive)
+	return fmt.Sprintf(t, c.Comment, c.PublicKey, c.AllowedIPs, c.Endpoint, c.PersistentKeepalive)
 }
