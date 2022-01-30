@@ -8,8 +8,8 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/dao/daotest"
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
@@ -35,7 +35,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	profileStore := dao.NewProfileStore(profile.Id, blobStore, storageKey)
+	profileStore := dao.NewProfileStore(profile.Id, storageKey, blobStore, nil)
 	if err := profileStore.Init(); err != nil {
 		return nil, err
 	}
@@ -68,12 +68,12 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 // Host ...
 type Host struct {
 	Store    *dao.ProfileStore
-	Profile  *profile.Profile
+	Profile  *profilev1.Profile
 	VNIC     *vnic.Host
 	VPN      *vpn.Host
 	Node     *vpn.Node
 	HostCert *certificate.Certificate
-	Network  *network.Network
+	Network  *networkv1.Network
 
 	profileID kademlia.ID
 	peers     map[string]struct{}
@@ -114,7 +114,7 @@ func (c *Cluster) Run() error {
 	if err != nil {
 		return err
 	}
-	err = dao.UpsertNetwork(c.Hosts[0].Store, network)
+	err = dao.Networks.Upsert(c.Hosts[0].Store, network)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (c *Cluster) Run() error {
 		if err != nil {
 			return err
 		}
-		err = dao.UpsertNetwork(node.Store, node.Network)
+		err = dao.Networks.Upsert(node.Store, node.Network)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (c *Cluster) Run() error {
 
 	// init node network links
 	for _, node := range c.Hosts {
-		node.Node, err = node.VPN.AddNetwork(node.Network.Certificate)
+		node.Node, err = node.VPN.AddNetwork(dao.NetworkKey(node.Network))
 		if err != nil {
 			return err
 		}
