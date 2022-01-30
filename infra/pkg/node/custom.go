@@ -38,7 +38,7 @@ func (d *CustomDriver) Create(ctx context.Context, req *CreateRequest) (*Node, e
 		User:         req.User,
 		Driver:       "custom",
 		ProviderName: "custom",
-		ProviderID:   "",
+		ProviderID:   req.Name,
 		Name:         req.Name,
 		Memory:       0,
 		CPUs:         0,
@@ -46,7 +46,7 @@ func (d *CustomDriver) Create(ctx context.Context, req *CreateRequest) (*Node, e
 		Networks: &Networks{
 			V4: []string{req.IPV4},
 		},
-		Status: "active",
+		Status: true,
 		Region: &Region{
 			Name: req.Name,
 			City: "",

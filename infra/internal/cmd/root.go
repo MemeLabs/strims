@@ -10,7 +10,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/volatiletech/sqlboiler/boil"
 	"go.uber.org/zap"
 )
 
@@ -20,8 +19,10 @@ var (
 	backend *be.Backend
 
 	rootCmd = &cobra.Command{
-		Use:   "infra",
-		Short: "Strims infra management cli",
+		Use:           "infra",
+		Short:         "Strims infrastructure management cli",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 )
 
@@ -69,11 +70,9 @@ func initConfig() {
 	} else {
 		backend = b
 	}
-
-	boil.SetDB(backend.DB)
 }
 
-func providerValidArgsFunc(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func providerValidArgsFunc(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	var a []string
 	for _, d := range backend.NodeDrivers {
 		if strings.HasPrefix(d.Provider(), toComplete) {

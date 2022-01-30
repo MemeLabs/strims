@@ -343,7 +343,7 @@ func dreamHostNode(server *servers.Server, sku *SKU) (*Node, error) {
 		CPUs:       sku.CPUs,
 		Disk:       sku.Disk,
 		Networks:   networks,
-		Status:     server.Status,
+		Status:     server.Status == "ACTIVE" || server.Status == "IN_PROGRESS",
 		Region:     &dreamHostRegion,
 		SKU:        sku,
 	}, nil

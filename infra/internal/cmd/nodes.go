@@ -85,7 +85,7 @@ func formatProviderNodes(ctx context.Context, driver node.Driver) ([][]string, e
 			strconv.Itoa(r.CPUs),
 			strconv.Itoa(r.Disk),
 			fmt.Sprintf("%s", networks),
-			r.Status,
+			fmt.Sprint(r.Status),
 			r.Region.Name,
 			r.SKU.Name,
 		})

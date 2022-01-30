@@ -1,6 +1,8 @@
-`infra.yaml`
+
+### Config file
+
 ```yaml
-LogLevel: 1
+LogLevel: -1
 DB:
   Name: ""
   User: ""
@@ -38,28 +40,41 @@ Providers:
     ClientID: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     ClientSecret: xxxxxxxxxxxx
     TenantID: xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx
-SSH:
-  IdentityFile: /root/.ssh/id_ecdsa_example
+SSHIdentityFile: /root/.ssh/id_ecdsa_example
 ScriptDirectory: /mnt/
-PublicControllerAddress: "51.51.51.2:51820"
-InterfaceConfig:
-  PrivateKey: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX="
-  Address: "10.0.0.1/24"
-  ListenPort: 51820
+CertificateKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### Push scripts into desired location
+### Nodes
+
+#### Create
+
+If no active nodes exist, a new single node cluster will be created
+
 ```
-lxc file push scripts/* strims-k8s/mnt/
+infra node create --provider [provider] --region [region] --sku [sku] --type [type]
 ```
 
-### Port forwarding WireGuard to LXC
+#### Delete
+
 ```
-lxc config device add strims-k8s proxy listen=udp:0.0.0.0:51820 connect=udp:127.0.0.1:51820
+infra node destroy --name [name]
 ```
 
-### Create a new node
+### External Peers
+
+#### Add
+
 ```
-go build ./cmd/cli/main.go
-./main create ovh s1-2 UK1
+infra peer add --name [name] --address [public IPv4]
+```
+
+This will output this peer's specific WireGuard config that can be written to
+`/etc/wireguard/wg0.conf` and started with `sudo systemctl enable --now
+wg-quick@wg0`
+
+#### Remove
+
+```
+infra peer remove --name [name]
 ```

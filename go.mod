@@ -11,6 +11,7 @@ require (
 	github.com/MemeLabs/protobuf v0.2.3
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/aead/ecdh v0.2.0
+	github.com/appleboy/easyssh-proxy v1.3.9
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/bwesterb/go-ristretto v1.2.0
 	github.com/chromedp/cdproto v0.0.0-20211019232255-96776d03ee97
@@ -31,8 +32,7 @@ require (
 	github.com/gobwas/ws v1.1.0 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551
-	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.6
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.15.0
 	github.com/gorilla/mux v1.8.0
@@ -60,13 +60,12 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6
 	github.com/sony/sonyflake v1.0.0
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/cobra v1.3.0
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/viper v1.10.1
 	github.com/stretchr/testify v1.7.0
 	github.com/volatiletech/null/v8 v8.1.1
 	github.com/volatiletech/randomize v0.0.1
-	github.com/volatiletech/sqlboiler v3.7.1+incompatible
 	github.com/volatiletech/sqlboiler/v4 v4.4.0
 	github.com/volatiletech/strmangle v0.0.1
 	github.com/zeebo/blake3 v0.2.1
@@ -74,6 +73,7 @@ require (
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.19.1
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/exp v0.0.0-20211216164055-b2b84827b756
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
@@ -82,23 +82,20 @@ require (
 	google.golang.org/api v0.63.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/ini.v1 v1.66.2 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	lukechampine.com/uint128 v1.1.1
 	mvdan.cc/xurls/v2 v2.3.0
 )
 
 require (
-	github.com/jackc/pgx/v4 v4.14.1
-	golang.org/x/exp v0.0.0-20211216164055-b2b84827b756
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-)
-
-require (
 	cloud.google.com/go v0.99.0 // indirect
+	github.com/ScaleFT/sshkeys v0.0.0-20200327173127-6142f742bca5 // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
-	github.com/cloudflare/cloudflare-go v0.31.0 // indirect
+	github.com/cloudflare/cloudflare-go v0.31.0
+	github.com/dchest/bcrypt_pbkdf v0.0.0-20150205184540-83f37f9c154a // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -109,7 +106,7 @@ require (
 	github.com/hashicorp/go-msgpack v0.5.5 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hashicorp/raft v1.3.3 // indirect
+	github.com/hashicorp/raft v1.3.3
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.10.1 // indirect
@@ -118,6 +115,7 @@ require (
 	github.com/jackc/pgproto3/v2 v2.2.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
 	github.com/jackc/pgtype v1.9.1 // indirect
+	github.com/jackc/pgx/v4 v4.14.1
 	github.com/jackc/puddle v1.2.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect

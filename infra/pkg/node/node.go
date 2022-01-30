@@ -3,6 +3,7 @@ package node
 
 import (
 	"context"
+	"errors"
 
 	"github.com/golang/geo/s2"
 )
@@ -92,6 +93,34 @@ type Price struct {
 	Currency string
 }
 
+type NodeType string
+
+const (
+	TypeWorker     NodeType = "worker"
+	TypeController NodeType = "controller"
+)
+
+// String is used both by fmt.Print and by Cobra in help text
+func (t *NodeType) String() string {
+	return string(*t)
+}
+
+// Set must have pointer receiver so it doesn't change the value of a copy
+func (t *NodeType) Set(v string) error {
+	switch v {
+	case "controller", "worker":
+		*t = NodeType(v)
+		return nil
+	default:
+		return errors.New(`must be one of "foo", "bar", or "moo"`)
+	}
+}
+
+// Type is only used in help text
+func (t *NodeType) Type() string {
+	return "NodeType"
+}
+
 // Node represents a host
 type Node struct {
 	User             string    `json:"user,omitempty"`
@@ -103,13 +132,14 @@ type Node struct {
 	CPUs             int       `json:"vcpus,omitempty"`
 	Disk             int       `json:"disk,omitempty"`
 	Networks         *Networks `json:"networks,omitempty"`
-	Status           string    `json:"status,omitempty"`
+	Status           bool      `json:"status,omitempty"`
 	Region           *Region   `json:"region,omitempty"`
 	SKU              *SKU      `json:"sku,omitempty"`
 	WireguardPrivKey string    `json:"wireguard_priv_key,omitempty"`
 	WireguardIPv4    string    `json:"wireguard_ipv4,omitempty"`
 	StartedAt        int64     `json:"started_at,omitempty"`
 	StoppedAt        int64     `json:"stopped_at,omitempty"`
+	Type             NodeType  `json:"node_type,omitempty"`
 }
 
 // Networks represents the Node's networks.

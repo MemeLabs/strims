@@ -269,7 +269,7 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 		CPUs:       droplet.Vcpus,
 		Disk:       droplet.Disk,
 		Networks:   &Networks{},
-		Status:     droplet.Status,
+		Status:     droplet.Status == "active",
 		SKU:        digitalOceanSKU(droplet.Size),
 	}
 

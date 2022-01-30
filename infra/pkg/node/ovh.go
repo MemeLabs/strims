@@ -273,13 +273,14 @@ func (d *OVHDriver) List(ctx context.Context, req *ListRequest) ([]*Node, error)
 	var eg errgroup.Group
 	skus := map[string]*ovhSKU{}
 	for _, instance := range resp {
-		if _, ok := skus[instance.FlavorID]; ok {
+		i := instance
+		if _, ok := skus[i.FlavorID]; ok {
 			continue
 		}
-		skus[instance.FlavorID] = &ovhSKU{}
+		skus[i.FlavorID] = &ovhSKU{}
 		eg.Go(func() error {
-			path := fmt.Sprintf("/cloud/project/%s/flavor/%s", url.QueryEscape(d.projectID), instance.FlavorID)
-			return d.client.GetWithContext(ctx, path, skus[instance.FlavorID])
+			path := fmt.Sprintf("/cloud/project/%s/flavor/%s", url.QueryEscape(d.projectID), i.FlavorID)
+			return d.client.GetWithContext(ctx, path, skus[i.FlavorID])
 		})
 	}
 	if err := eg.Wait(); err != nil {
@@ -407,6 +408,13 @@ func (d *OVHDriver) ovhNode(instance *ovhInstance, priceMap ovhPriceMap) *Node {
 		}
 	}
 
+	var active bool
+	if instance.Status == "active" {
+		active = true
+	} else {
+		active = false
+	}
+
 	return &Node{
 		ProviderID: instance.ID,
 		Name:       instance.Name,
@@ -414,7 +422,7 @@ func (d *OVHDriver) ovhNode(instance *ovhInstance, priceMap ovhPriceMap) *Node {
 		CPUs:       instance.Flavor.Vcpus,
 		Disk:       instance.Flavor.Disk,
 		Networks:   &networks,
-		Status:     instance.Status,
+		Status:     active,
 		SKU:        d.ovhSKU(&instance.Flavor, priceMap),
 		Region:     region,
 	}

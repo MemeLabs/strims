@@ -19,24 +19,24 @@ import (
 // so force a package dependency in case they don't.
 var _ = queries.Equal
 
-func testNodes(t *testing.T) {
+func testExternalPeers(t *testing.T) {
 	t.Parallel()
 
-	query := Nodes()
+	query := ExternalPeers()
 
 	if query.Query == nil {
 		t.Error("expected a query, got nothing")
 	}
 }
 
-func testNodesDelete(t *testing.T) {
+func testExternalPeersDelete(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -52,7 +52,7 @@ func testNodesDelete(t *testing.T) {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -62,14 +62,14 @@ func testNodesDelete(t *testing.T) {
 	}
 }
 
-func testNodesQueryDeleteAll(t *testing.T) {
+func testExternalPeersQueryDeleteAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -79,13 +79,13 @@ func testNodesQueryDeleteAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	if rowsAff, err := Nodes().DeleteAll(ctx, tx); err != nil {
+	if rowsAff, err := ExternalPeers().DeleteAll(ctx, tx); err != nil {
 		t.Error(err)
 	} else if rowsAff != 1 {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -95,14 +95,14 @@ func testNodesQueryDeleteAll(t *testing.T) {
 	}
 }
 
-func testNodesSliceDeleteAll(t *testing.T) {
+func testExternalPeersSliceDeleteAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -112,7 +112,7 @@ func testNodesSliceDeleteAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice := NodeSlice{o}
+	slice := ExternalPeerSlice{o}
 
 	if rowsAff, err := slice.DeleteAll(ctx, tx); err != nil {
 		t.Error(err)
@@ -120,7 +120,7 @@ func testNodesSliceDeleteAll(t *testing.T) {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -130,14 +130,14 @@ func testNodesSliceDeleteAll(t *testing.T) {
 	}
 }
 
-func testNodesExists(t *testing.T) {
+func testExternalPeersExists(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -147,23 +147,23 @@ func testNodesExists(t *testing.T) {
 		t.Error(err)
 	}
 
-	e, err := NodeExists(ctx, tx, o.ID)
+	e, err := ExternalPeerExists(ctx, tx, o.ID)
 	if err != nil {
-		t.Errorf("Unable to check if Node exists: %s", err)
+		t.Errorf("Unable to check if ExternalPeer exists: %s", err)
 	}
 	if !e {
-		t.Errorf("Expected NodeExists to return true, but got false.")
+		t.Errorf("Expected ExternalPeerExists to return true, but got false.")
 	}
 }
 
-func testNodesFind(t *testing.T) {
+func testExternalPeersFind(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -173,24 +173,24 @@ func testNodesFind(t *testing.T) {
 		t.Error(err)
 	}
 
-	nodeFound, err := FindNode(ctx, tx, o.ID)
+	externalPeerFound, err := FindExternalPeer(ctx, tx, o.ID)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if nodeFound == nil {
+	if externalPeerFound == nil {
 		t.Error("want a record, got nil")
 	}
 }
 
-func testNodesBind(t *testing.T) {
+func testExternalPeersBind(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -200,19 +200,19 @@ func testNodesBind(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err = Nodes().Bind(ctx, tx, o); err != nil {
+	if err = ExternalPeers().Bind(ctx, tx, o); err != nil {
 		t.Error(err)
 	}
 }
 
-func testNodesOne(t *testing.T) {
+func testExternalPeersOne(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -222,38 +222,38 @@ func testNodesOne(t *testing.T) {
 		t.Error(err)
 	}
 
-	if x, err := Nodes().One(ctx, tx); err != nil {
+	if x, err := ExternalPeers().One(ctx, tx); err != nil {
 		t.Error(err)
 	} else if x == nil {
 		t.Error("expected to get a non nil record")
 	}
 }
 
-func testNodesAll(t *testing.T) {
+func testExternalPeersAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	nodeOne := &Node{}
-	nodeTwo := &Node{}
-	if err = randomize.Struct(seed, nodeOne, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	externalPeerOne := &ExternalPeer{}
+	externalPeerTwo := &ExternalPeer{}
+	if err = randomize.Struct(seed, externalPeerOne, externalPeerDBTypes, false, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
-	if err = randomize.Struct(seed, nodeTwo, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, externalPeerTwo, externalPeerDBTypes, false, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = nodeOne.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = externalPeerOne.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
-	if err = nodeTwo.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = externalPeerTwo.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
 
-	slice, err := Nodes().All(ctx, tx)
+	slice, err := ExternalPeers().All(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -263,31 +263,31 @@ func testNodesAll(t *testing.T) {
 	}
 }
 
-func testNodesCount(t *testing.T) {
+func testExternalPeersCount(t *testing.T) {
 	t.Parallel()
 
 	var err error
 	seed := randomize.NewSeed()
-	nodeOne := &Node{}
-	nodeTwo := &Node{}
-	if err = randomize.Struct(seed, nodeOne, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	externalPeerOne := &ExternalPeer{}
+	externalPeerTwo := &ExternalPeer{}
+	if err = randomize.Struct(seed, externalPeerOne, externalPeerDBTypes, false, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
-	if err = randomize.Struct(seed, nodeTwo, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, externalPeerTwo, externalPeerDBTypes, false, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = nodeOne.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = externalPeerOne.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
-	if err = nodeTwo.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = externalPeerTwo.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -297,14 +297,14 @@ func testNodesCount(t *testing.T) {
 	}
 }
 
-func testNodesInsert(t *testing.T) {
+func testExternalPeersInsert(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -314,7 +314,7 @@ func testNodesInsert(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -324,24 +324,24 @@ func testNodesInsert(t *testing.T) {
 	}
 }
 
-func testNodesInsertWhitelist(t *testing.T) {
+func testExternalPeersInsertWhitelist(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = o.Insert(ctx, tx, boil.Whitelist(nodeColumnsWithoutDefault...)); err != nil {
+	if err = o.Insert(ctx, tx, boil.Whitelist(externalPeerColumnsWithoutDefault...)); err != nil {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -351,14 +351,14 @@ func testNodesInsertWhitelist(t *testing.T) {
 	}
 }
 
-func testNodesReload(t *testing.T) {
+func testExternalPeersReload(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -373,14 +373,14 @@ func testNodesReload(t *testing.T) {
 	}
 }
 
-func testNodesReloadAll(t *testing.T) {
+func testExternalPeersReloadAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -390,21 +390,21 @@ func testNodesReloadAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice := NodeSlice{o}
+	slice := ExternalPeerSlice{o}
 
 	if err = slice.ReloadAll(ctx, tx); err != nil {
 		t.Error(err)
 	}
 }
 
-func testNodesSelect(t *testing.T) {
+func testExternalPeersSelect(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -414,7 +414,7 @@ func testNodesSelect(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice, err := Nodes().All(ctx, tx)
+	slice, err := ExternalPeers().All(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -425,25 +425,25 @@ func testNodesSelect(t *testing.T) {
 }
 
 var (
-	nodeDBTypes = map[string]string{`ID`: `bigint`, `Active`: `boolean`, `StartedAt`: `bigint`, `StoppedAt`: `bigint`, `ProviderName`: `text`, `ProviderID`: `text`, `Name`: `text`, `Memory`: `integer`, `CPUs`: `integer`, `Disk`: `integer`, `IPV4`: `text`, `IPV6`: `text`, `RegionName`: `text`, `RegionLat`: `double precision`, `RegionLng`: `double precision`, `SKUName`: `text`, `SKUNetworkCap`: `integer`, `SKUNetworkSpeed`: `integer`, `SKUPriceMonthly`: `real`, `SKUPriceHourly`: `real`, `WireguardKey`: `text`, `WireguardIP`: `text`, `User`: `text`, `Type`: `enum.node_type('controller','worker')`}
-	_           = bytes.MinRead
+	externalPeerDBTypes = map[string]string{`ID`: `bigint`, `Comment`: `text`, `PublicIPV4`: `text`, `WireguardPort`: `integer`, `WireguardPrivateKey`: `text`, `WireguardIP`: `text`}
+	_                   = bytes.MinRead
 )
 
-func testNodesUpdate(t *testing.T) {
+func testExternalPeersUpdate(t *testing.T) {
 	t.Parallel()
 
-	if 0 == len(nodePrimaryKeyColumns) {
+	if 0 == len(externalPeerPrimaryKeyColumns) {
 		t.Skip("Skipping table with no primary key columns")
 	}
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(externalPeerAllColumns) == len(externalPeerPrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -453,7 +453,7 @@ func testNodesUpdate(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -462,8 +462,8 @@ func testNodesUpdate(t *testing.T) {
 		t.Error("want one record, got:", count)
 	}
 
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	if rowsAff, err := o.Update(ctx, tx, boil.Infer()); err != nil {
@@ -473,18 +473,18 @@ func testNodesUpdate(t *testing.T) {
 	}
 }
 
-func testNodesSliceUpdateAll(t *testing.T) {
+func testExternalPeersSliceUpdateAll(t *testing.T) {
 	t.Parallel()
 
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(externalPeerAllColumns) == len(externalPeerPrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &ExternalPeer{}
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -494,7 +494,7 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -503,18 +503,18 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		t.Error("want one record, got:", count)
 	}
 
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, o, externalPeerDBTypes, true, externalPeerPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	// Remove Primary keys and unique columns from what we plan to update
 	var fields []string
-	if strmangle.StringSliceMatch(nodeAllColumns, nodePrimaryKeyColumns) {
-		fields = nodeAllColumns
+	if strmangle.StringSliceMatch(externalPeerAllColumns, externalPeerPrimaryKeyColumns) {
+		fields = externalPeerAllColumns
 	} else {
 		fields = strmangle.SetComplement(
-			nodeAllColumns,
-			nodePrimaryKeyColumns,
+			externalPeerAllColumns,
+			externalPeerPrimaryKeyColumns,
 		)
 	}
 
@@ -532,7 +532,7 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		}
 	}
 
-	slice := NodeSlice{o}
+	slice := ExternalPeerSlice{o}
 	if rowsAff, err := slice.UpdateAll(ctx, tx, updateMap); err != nil {
 		t.Error(err)
 	} else if rowsAff != 1 {
@@ -540,29 +540,29 @@ func testNodesSliceUpdateAll(t *testing.T) {
 	}
 }
 
-func testNodesUpsert(t *testing.T) {
+func testExternalPeersUpsert(t *testing.T) {
 	t.Parallel()
 
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(externalPeerAllColumns) == len(externalPeerPrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
 	// Attempt the INSERT side of an UPSERT
-	o := Node{}
-	if err = randomize.Struct(seed, &o, nodeDBTypes, true); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := ExternalPeer{}
+	if err = randomize.Struct(seed, &o, externalPeerDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
 	if err = o.Upsert(ctx, tx, false, nil, boil.Infer(), boil.Infer()); err != nil {
-		t.Errorf("Unable to upsert Node: %s", err)
+		t.Errorf("Unable to upsert ExternalPeer: %s", err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -571,15 +571,15 @@ func testNodesUpsert(t *testing.T) {
 	}
 
 	// Attempt the UPDATE side of an UPSERT
-	if err = randomize.Struct(seed, &o, nodeDBTypes, false, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, &o, externalPeerDBTypes, false, externalPeerPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize ExternalPeer struct: %s", err)
 	}
 
 	if err = o.Upsert(ctx, tx, true, nil, boil.Infer(), boil.Infer()); err != nil {
-		t.Errorf("Unable to upsert Node: %s", err)
+		t.Errorf("Unable to upsert ExternalPeer: %s", err)
 	}
 
-	count, err = Nodes().Count(ctx, tx)
+	count, err = ExternalPeers().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}

@@ -217,7 +217,7 @@ func hetznerNode(server *hcloud.Server) (*Node, error) {
 			V4: []string{server.PublicNet.IPv4.IP.String()},
 			V6: []string{server.PublicNet.IPv6.IP.String()},
 		},
-		Status: string(server.Status),
+		Status: server.Status == hcloud.ServerStatusInitializing || server.Status == hcloud.ServerStatusStarting || server.Status == hcloud.ServerStatusRunning,
 		Region: hetznerRegion(server.Datacenter.Location),
 	}
 

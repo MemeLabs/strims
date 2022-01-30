@@ -310,7 +310,7 @@ func (d *ScalewayDriver) scalewayNode(ctx context.Context, server *instance.Serv
 		CPUs:       int(serverType.Ncpus),
 		Memory:     int(serverType.RAM / (1 << 20)),
 		Disk:       int(serverType.VolumesConstraint.MinSize / scw.GB),
-		Status:     server.State.String(),
+		Status:     server.State == instance.ServerStateStarting || server.State == instance.ServerStateRunning,
 		SKU:        scalewaySKU(server.CommercialType, serverType),
 		Networks: &Networks{
 			V4: []string{server.PublicIP.Address.String()},
