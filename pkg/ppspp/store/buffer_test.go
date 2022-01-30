@@ -1,7 +1,10 @@
 package store
 
 import (
+	"context"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -111,11 +114,13 @@ func TestBufferWriteRead(t *testing.T) {
 				}
 			}()
 
+			r := NewBufferReader(b)
+
 			byteOffset := binByte(c.inputBin.BaseLeft(), uint64(c.chunkSize))
-			assert.EqualValues(t, int(byteOffset), int(b.Offset()), "read offset mismatch")
+			assert.EqualValues(t, int(byteOffset), int(r.Offset()), "read offset mismatch")
 
 			for i := 0; i < binByteLen/c.readSize; i++ {
-				n, err := b.Read(readData)
+				n, err := r.Read(readData)
 				assert.NoError(t, err, "read failed")
 
 				l := i * c.readSize
@@ -153,12 +158,35 @@ func TestBufferBinOps(t *testing.T) {
 	}()
 
 	byteOffset := binByte(inputBin.BaseLeft(), uint64(chunkSize))
-	assert.EqualValues(t, int(byteOffset), int(b.Offset()), "read offset mismatch")
+	assert.EqualValues(t, int(byteOffset), int(NewBufferReader(b).Offset()), "read offset mismatch")
 
 	assert.Equal(t, false, b.EmptyAt(binmap.NewBin(0, 0)), "EmptyAt returned incorrect value")
 	assert.Equal(t, true, b.FilledAt(binmap.NewBin(0, 0)), "FilledAt returned incorrect value")
 	assert.Equal(t, inputBin, b.Cover(binmap.NewBin(0, 0)), "Cover returned incorrect value")
 	assert.Equal(t, true, b.ReadBin(binmap.NewBin(0, 0), make([]byte, chunkSize)), "ReadBin failed")
+}
+
+func TestMultipleReaders(t *testing.T) {
+	chunkCount := 1024
+	chunkSize := 1024
+	total := chunkSize * chunkCount
+
+	b, err := NewBuffer(chunkCount, chunkSize)
+	assert.NoError(t, err, "buffer constructor failed")
+
+	b.SetOffset(0)
+
+	src := make([]byte, chunkSize)
+	for i := 0; i < chunkCount; i++ {
+		b.Set(binmap.NewBin(0, uint64(i)), src)
+	}
+
+	for i := 0; i < 3; i++ {
+		r := NewBufferReader(b)
+		n, err := io.Copy(io.Discard, io.LimitReader(r, int64(total)))
+		assert.EqualValues(t, total, n)
+		assert.NoError(t, err)
+	}
 }
 
 func TestBufferRecover(t *testing.T) {
@@ -174,20 +202,22 @@ func TestBufferRecover(t *testing.T) {
 		b.Set(i, src)
 	}
 
-	n, err := b.Read(dst)
+	r := NewBufferReader(b)
+
+	n, err := r.Read(dst)
 	assert.EqualValues(t, 128*16, n)
 	assert.NoError(t, err)
 
 	b.Set(4096, src)
 
-	_, err = b.Read(dst)
+	_, err = r.Read(dst)
 	assert.Equal(t, ErrBufferUnderrun, err)
 
-	rn, err := b.Recover()
+	rn, err := r.Recover()
 	assert.EqualValues(t, 1920*16, rn)
 	assert.NoError(t, err)
 
-	n, err = b.Read(dst)
+	n, err = r.Read(dst)
 	assert.EqualValues(t, 16, n)
 	assert.NoError(t, err)
 }
@@ -198,7 +228,50 @@ func TestBufferReadStop(t *testing.T) {
 	ch := make(chan struct{})
 	close(ch)
 
-	b.SetReadStopper(ch)
-	_, err := b.Read(nil)
+	r := NewBufferReader(b)
+	r.SetReadStopper(ch)
+	_, err := r.Read(nil)
 	assert.ErrorIs(t, err, ioutil.ErrStopped)
+}
+
+func TestReaderClose(t *testing.T) {
+	chunkCount := 1024
+	chunkSize := 1024
+	total := chunkSize * chunkCount
+
+	b, err := NewBuffer(chunkCount, chunkSize)
+	assert.NoError(t, err, "buffer constructor failed")
+
+	b.SetOffset(0)
+
+	src := make([]byte, chunkSize)
+	for i := 0; i < chunkCount; i++ {
+		b.Set(binmap.NewBin(0, uint64(i)), src)
+	}
+
+	r := NewBufferReader(b)
+	n, err := io.Copy(io.Discard, io.LimitReader(r, int64(total)))
+	assert.EqualValues(t, total, n)
+	assert.NoError(t, err)
+
+	done := make(chan struct{})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	go func() {
+		r.SetReadStopper(ctx.Done())
+		_, err = r.Read(nil)
+		assert.ErrorIs(t, err, ErrClosed, "blocked reader should return close")
+		close(done)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	err = r.Close()
+	assert.NoError(t, err)
+
+	_, err = r.Read(nil)
+	assert.ErrorIs(t, err, ErrClosed, "read after close should return closed")
+
+	<-done
 }

@@ -576,6 +576,70 @@ export namespace Network {
 
 }
 
+export type IPeer = {
+  id?: bigint;
+  networkId?: bigint;
+  publicKey?: Uint8Array;
+  inviterPeerId?: bigint;
+  inviteQuota?: number;
+}
+
+export class Peer {
+  id: bigint;
+  networkId: bigint;
+  publicKey: Uint8Array;
+  inviterPeerId: bigint;
+  inviteQuota: number;
+
+  constructor(v?: IPeer) {
+    this.id = v?.id || BigInt(0);
+    this.networkId = v?.networkId || BigInt(0);
+    this.publicKey = v?.publicKey || new Uint8Array();
+    this.inviterPeerId = v?.inviterPeerId || BigInt(0);
+    this.inviteQuota = v?.inviteQuota || 0;
+  }
+
+  static encode(m: Peer, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
+    if (m.publicKey) w.uint32(26).bytes(m.publicKey);
+    if (m.inviterPeerId) w.uint32(32).uint64(m.inviterPeerId);
+    if (m.inviteQuota) w.uint32(40).uint32(m.inviteQuota);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Peer {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Peer();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.networkId = r.uint64();
+        break;
+        case 3:
+        m.publicKey = r.bytes();
+        break;
+        case 4:
+        m.inviterPeerId = r.uint64();
+        break;
+        case 5:
+        m.inviteQuota = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type ICreateInvitationRequest = {
   signingKey?: strims_type_IKey;
   signingCert?: strims_type_ICertificate;

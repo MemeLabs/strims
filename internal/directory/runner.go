@@ -156,7 +156,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	<-r.runnable
 
 	var err error
-	r.server, err = newDirectoryServer(r.logger, r.store, r.dialer, r.observers, r.network.Get())
+	r.server, err = newDirectoryServer(r.logger, r.vpn, r.store, r.dialer, r.observers, r.network.Get())
 	if err != nil {
 		r.runnable <- struct{}{}
 		r.lock.Unlock()

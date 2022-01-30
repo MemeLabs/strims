@@ -20,18 +20,54 @@ import {
 
 export type IServerConfig = {
   integrations?: ServerConfig.IIntegrations;
+  publishQuota?: number;
+  viewQuota?: number;
+  broadcastInterval?: number;
+  refreshInterval?: number;
+  sessionTimeout?: number;
+  minPingInterval?: number;
+  maxPingInterval?: number;
+  embedLoadInterval?: number;
+  loadMediaEmbedTimeout?: number;
 }
 
 export class ServerConfig {
   integrations: ServerConfig.Integrations | undefined;
+  publishQuota: number;
+  viewQuota: number;
+  broadcastInterval: number;
+  refreshInterval: number;
+  sessionTimeout: number;
+  minPingInterval: number;
+  maxPingInterval: number;
+  embedLoadInterval: number;
+  loadMediaEmbedTimeout: number;
 
   constructor(v?: IServerConfig) {
     this.integrations = v?.integrations && new ServerConfig.Integrations(v.integrations);
+    this.publishQuota = v?.publishQuota || 0;
+    this.viewQuota = v?.viewQuota || 0;
+    this.broadcastInterval = v?.broadcastInterval || 0;
+    this.refreshInterval = v?.refreshInterval || 0;
+    this.sessionTimeout = v?.sessionTimeout || 0;
+    this.minPingInterval = v?.minPingInterval || 0;
+    this.maxPingInterval = v?.maxPingInterval || 0;
+    this.embedLoadInterval = v?.embedLoadInterval || 0;
+    this.loadMediaEmbedTimeout = v?.loadMediaEmbedTimeout || 0;
   }
 
   static encode(m: ServerConfig, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.integrations) ServerConfig.Integrations.encode(m.integrations, w.uint32(10).fork()).ldelim();
+    if (m.publishQuota) w.uint32(16).uint32(m.publishQuota);
+    if (m.viewQuota) w.uint32(24).uint32(m.viewQuota);
+    if (m.broadcastInterval) w.uint32(32).uint32(m.broadcastInterval);
+    if (m.refreshInterval) w.uint32(40).uint32(m.refreshInterval);
+    if (m.sessionTimeout) w.uint32(48).uint32(m.sessionTimeout);
+    if (m.minPingInterval) w.uint32(56).uint32(m.minPingInterval);
+    if (m.maxPingInterval) w.uint32(64).uint32(m.maxPingInterval);
+    if (m.embedLoadInterval) w.uint32(72).uint32(m.embedLoadInterval);
+    if (m.loadMediaEmbedTimeout) w.uint32(80).uint32(m.loadMediaEmbedTimeout);
     return w;
   }
 
@@ -44,6 +80,33 @@ export class ServerConfig {
       switch (tag >> 3) {
         case 1:
         m.integrations = ServerConfig.Integrations.decode(r, r.uint32());
+        break;
+        case 2:
+        m.publishQuota = r.uint32();
+        break;
+        case 3:
+        m.viewQuota = r.uint32();
+        break;
+        case 4:
+        m.broadcastInterval = r.uint32();
+        break;
+        case 5:
+        m.refreshInterval = r.uint32();
+        break;
+        case 6:
+        m.sessionTimeout = r.uint32();
+        break;
+        case 7:
+        m.minPingInterval = r.uint32();
+        break;
+        case 8:
+        m.maxPingInterval = r.uint32();
+        break;
+        case 9:
+        m.embedLoadInterval = r.uint32();
+        break;
+        case 10:
+        m.loadMediaEmbedTimeout = r.uint32();
         break;
         default:
         r.skipType(tag & 7);
@@ -278,6 +341,130 @@ export namespace ServerConfig {
       }
     }
 
+  }
+
+}
+
+export type IClientConfig = {
+  integrations?: ClientConfig.IIntegrations;
+  publishQuota?: number;
+  viewQuota?: number;
+  minPingInterval?: number;
+  maxPingInterval?: number;
+}
+
+export class ClientConfig {
+  integrations: ClientConfig.Integrations | undefined;
+  publishQuota: number;
+  viewQuota: number;
+  minPingInterval: number;
+  maxPingInterval: number;
+
+  constructor(v?: IClientConfig) {
+    this.integrations = v?.integrations && new ClientConfig.Integrations(v.integrations);
+    this.publishQuota = v?.publishQuota || 0;
+    this.viewQuota = v?.viewQuota || 0;
+    this.minPingInterval = v?.minPingInterval || 0;
+    this.maxPingInterval = v?.maxPingInterval || 0;
+  }
+
+  static encode(m: ClientConfig, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.integrations) ClientConfig.Integrations.encode(m.integrations, w.uint32(10).fork()).ldelim();
+    if (m.publishQuota) w.uint32(16).uint32(m.publishQuota);
+    if (m.viewQuota) w.uint32(24).uint32(m.viewQuota);
+    if (m.minPingInterval) w.uint32(32).uint32(m.minPingInterval);
+    if (m.maxPingInterval) w.uint32(40).uint32(m.maxPingInterval);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientConfig {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientConfig();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.integrations = ClientConfig.Integrations.decode(r, r.uint32());
+        break;
+        case 2:
+        m.publishQuota = r.uint32();
+        break;
+        case 3:
+        m.viewQuota = r.uint32();
+        break;
+        case 4:
+        m.minPingInterval = r.uint32();
+        break;
+        case 5:
+        m.maxPingInterval = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace ClientConfig {
+  export type IIntegrations = {
+    angelthump?: boolean;
+    twitch?: boolean;
+    youtube?: boolean;
+    swarm?: boolean;
+  }
+
+  export class Integrations {
+    angelthump: boolean;
+    twitch: boolean;
+    youtube: boolean;
+    swarm: boolean;
+
+    constructor(v?: IIntegrations) {
+      this.angelthump = v?.angelthump || false;
+      this.twitch = v?.twitch || false;
+      this.youtube = v?.youtube || false;
+      this.swarm = v?.swarm || false;
+    }
+
+    static encode(m: Integrations, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.angelthump) w.uint32(8).bool(m.angelthump);
+      if (m.twitch) w.uint32(16).bool(m.twitch);
+      if (m.youtube) w.uint32(24).bool(m.youtube);
+      if (m.swarm) w.uint32(32).bool(m.swarm);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Integrations {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Integrations();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.angelthump = r.bool();
+          break;
+          case 2:
+          m.twitch = r.bool();
+          break;
+          case 3:
+          m.youtube = r.bool();
+          break;
+          case 4:
+          m.swarm = r.bool();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
   }
 
 }

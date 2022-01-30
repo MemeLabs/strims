@@ -13,12 +13,14 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 func newDirectoryServer(
 	logger *zap.Logger,
+	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	dialer network.Dialer,
 	observers *event.Observers,
@@ -44,9 +46,10 @@ func newDirectoryServer(
 
 	s := &directoryServer{
 		logger:      logger,
+		vpn:         vpn,
 		key:         config.Key,
 		swarm:       w.Swarm(),
-		service:     newDirectoryService(logger, store, dialer, observers, network, ew),
+		service:     newDirectoryService(logger, vpn, store, dialer, observers, network, ew),
 		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
 	}
 	return s, nil
@@ -54,6 +57,7 @@ func newDirectoryServer(
 
 type directoryServer struct {
 	logger      *zap.Logger
+	vpn         *vpn.Host
 	key         *key.Key
 	swarm       *ppspp.Swarm
 	service     *directoryService

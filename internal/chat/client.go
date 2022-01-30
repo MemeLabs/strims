@@ -73,8 +73,12 @@ func (d *chatReader) Close() {
 	d.cancel()
 }
 
-func (d *chatReader) Readers() (events, assets *protoutil.ChunkStreamReader) {
-	events = protoutil.NewChunkStreamReader(d.eventSwarm.Reader(), eventChunkSize)
-	assets = protoutil.NewChunkStreamReader(d.assetSwarm.Reader(), assetChunkSize)
+func (d *chatReader) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader) {
+	eventsReader := d.eventSwarm.Reader()
+	assetsReader := d.assetSwarm.Reader()
+	eventsReader.SetReadStopper(ctx.Done())
+	assetsReader.SetReadStopper(ctx.Done())
+	events = protoutil.NewChunkStreamReader(eventsReader, eventChunkSize)
+	assets = protoutil.NewChunkStreamReader(assetsReader, assetChunkSize)
 	return
 }

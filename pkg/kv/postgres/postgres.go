@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/jackc/pgx/v4"
@@ -10,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
 )
+
+const transactionTimeout = 10 * time.Second
 
 type Config struct {
 	ConnStr string
@@ -68,13 +71,14 @@ func (s *Store) View(table string, fn func(tx kv.BlobTx) error) error {
 // Update ...
 func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
 	return s.transact(table, fn, pgx.TxOptions{
-		IsoLevel:   pgx.Serializable,
 		AccessMode: pgx.ReadWrite,
 	})
 }
 
 func (s *Store) transact(table string, fn func(tx kv.BlobTx) error, opt pgx.TxOptions) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), transactionTimeout)
+	defer cancel()
+
 	tx, err := s.db.BeginTx(ctx, opt)
 	if err != nil {
 		return err

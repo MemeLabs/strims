@@ -489,7 +489,7 @@ func (s *peerSwarmScheduler) gc(t timeutil.Time) {
 		s.binTimes.Prune(s.haveBinMax - s.liveWindow)
 	}
 
-	requestTimesThreshold := s.swarm.Reader().Next()
+	requestTimesThreshold := s.swarm.store.Next()
 	for _, cs := range s.channels {
 		cs.lock.Lock()
 		cs.requestTimes.Prune(requestTimesThreshold)

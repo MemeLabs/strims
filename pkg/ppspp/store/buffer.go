@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"runtime"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -35,7 +36,6 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 		next:      binmap.None,
 		prev:      binmap.None,
 		ready:     make(chan struct{}),
-		readable:  make(chan error, 1),
 	}, nil
 }
 
@@ -50,11 +50,12 @@ type Buffer struct {
 	lock      sync.Mutex
 	readyOnce sync.Once
 	ready     chan struct{}
-	readable  chan error
-	stopper   ioutil.Stopper
 	next      binmap.Bin
 	prev      binmap.Bin
 	off       uint64
+	sem       uint64
+	err       error
+	readers   []chan error
 }
 
 // Consume ...
@@ -74,14 +75,20 @@ func (s *Buffer) setReady() {
 	s.readyOnce.Do(func() { close(s.ready) })
 }
 
-func (s *Buffer) swapReadable(err error) error {
-	var prev error
-	for {
+func (s *Buffer) swapReadable(err error) (prev error) {
+	prev, s.err = s.err, err
+	for _, r := range s.readers {
+		swapChanValue(r, err)
+	}
+	return prev
+}
+
+func (s *Buffer) pushReadable(err error) {
+	s.err = err
+	for _, r := range s.readers {
 		select {
-		case s.readable <- err:
-			return prev
+		case r <- err:
 		default:
-			prev = <-s.readable
 		}
 	}
 }
@@ -118,10 +125,7 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	}
 	s.next = next
 
-	select {
-	case s.readable <- nil:
-	default:
-	}
+	s.pushReadable(nil)
 }
 
 // ReadBin ...
@@ -163,6 +167,8 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	s.sem++
+
 	b = b.BaseLeft()
 	next := s.bins.FindEmptyAfter(b)
 	prev := next
@@ -179,31 +185,13 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.setReady()
 }
 
-func (s *Buffer) Unread() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if s.next == binmap.None {
-		return
-	}
-
-	s.prev = s.tail()
-	s.off = binByte(s.prev, s.chunkSize)
-
-	s.swapReadable(nil)
-}
-
-// Recover ...
-func (s *Buffer) Recover() (uint64, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
+func (s *Buffer) recover() error {
 	next := s.bins.FindFilledAfter(s.tail())
 	if next.IsNone() {
-		return 0, ErrReadOffsetNotFound
+		return ErrReadOffsetNotFound
 	}
 
-	off := s.off
+	s.sem++
 	s.off = binByte(next, s.chunkSize)
 
 	s.prev = next
@@ -218,10 +206,10 @@ func (s *Buffer) Recover() (uint64, error) {
 
 	err := s.swapReadable(nil)
 	if err != nil && err != ErrBufferUnderrun {
-		return 0, err
+		return err
 	}
 
-	return s.off - off, nil
+	return nil
 }
 
 // FilledAt ...
@@ -282,57 +270,168 @@ func (s *Buffer) Next() binmap.Bin {
 	return s.next
 }
 
+func NewBufferReader(buf *Buffer) *BufferReader {
+	r := &BufferReader{
+		buf:      buf,
+		sem:      buf.sem,
+		prev:     buf.prev,
+		off:      buf.off,
+		err:      buf.err,
+		readable: make(chan error, 1),
+	}
+
+	runtime.SetFinalizer(r, bufferReaderFinalizer)
+
+	buf.lock.Lock()
+	buf.readers = append(buf.readers, r.readable)
+	buf.lock.Unlock()
+
+	return r
+}
+
+func bufferReaderFinalizer(b *BufferReader) {
+	b.Close()
+}
+
+type BufferReader struct {
+	buf      *Buffer
+	sem      uint64
+	prev     binmap.Bin
+	off      uint64
+	err      error
+	readable chan error
+	stopper  ioutil.Stopper
+}
+
+func (r *BufferReader) sync() {
+	if r.sem != r.buf.sem {
+		r.sem = r.buf.sem
+		r.prev = r.buf.prev
+		r.off = r.buf.off
+		r.err = r.buf.err
+	}
+}
+
+func (r *BufferReader) Unread() {
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
+	if r.buf.next == binmap.None {
+		return
+	}
+
+	r.prev = r.buf.tail()
+	r.off = binByte(r.prev, r.buf.chunkSize)
+
+	swapChanValue(r.readable, nil)
+}
+
 // Offset ...
-func (s *Buffer) Offset() uint64 {
-	<-s.ready
-	return s.off
+func (r *BufferReader) Offset() uint64 {
+	<-r.buf.ready
+
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
+	r.sync()
+	return r.off
+}
+
+// Recover ...
+func (r *BufferReader) Recover() (uint64, error) {
+	if r.err != nil && r.err != ErrBufferUnderrun {
+		return 0, r.err
+	}
+
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
+	if r.sem == r.buf.sem {
+		if err := r.buf.recover(); err != nil {
+			return 0, err
+		}
+	}
+
+	off := r.off
+	r.sync()
+	return r.off - off, nil
 }
 
 // SetReadStopper ...
-func (s *Buffer) SetReadStopper(ch ioutil.Stopper) {
-	s.stopper = ch
+func (r *BufferReader) SetReadStopper(ch ioutil.Stopper) {
+	r.stopper = ch
 }
 
-func (s *Buffer) Read(p []byte) (int, error) {
-	s.lock.Lock()
-	for s.next == s.prev {
-		s.lock.Unlock()
+func (r *BufferReader) Read(p []byte) (int, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
+	r.buf.lock.Lock()
+	r.sync()
+	for r.buf.next == r.prev {
+		r.buf.lock.Unlock()
 
 		select {
-		case err := <-s.readable:
+		case err := <-r.readable:
 			if err != nil {
+				r.err = err
 				return 0, err
 			}
-		case <-s.stopper:
+		case <-r.stopper:
 			return 0, ioutil.ErrStopped
 		}
 
-		s.lock.Lock()
+		r.buf.lock.Lock()
+		r.sync()
 	}
-	defer s.lock.Unlock()
+	defer r.buf.lock.Unlock()
 
-	// if s.next < s.tail() {
-	// 	return 0, ErrBufferUnderrun
-	// }
+	l := int(r.off - binByte(r.buf.tail(), r.buf.chunkSize))
+	h := int(binByte(r.buf.next-r.buf.tail(), r.buf.chunkSize))
+	i := r.buf.index(r.buf.tail())
 
-	l := int(s.off - binByte(s.tail(), s.chunkSize))
-	h := int(binByte(s.next-s.tail(), s.chunkSize))
-	i := s.index(s.tail())
+	n := byterope.New(p).Copy(byterope.New(r.buf.buf[i:], r.buf.buf[:i]).Slice(l, h)...)
 
-	// defer func() {
-	// 	if err := recover(); err != nil {
-	// 		log.Printf("l %d h %d i %d s.off %d s.next %d s.tail() %d", l, h, i, s.off, s.next, s.tail())
-	// 		log.Println(err)
-	// 		panic("fuck")
-	// 	}
-	// }()
-
-	n := byterope.New(p).Copy(byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h)...)
-
-	s.off += uint64(n)
-	s.prev = byteBin(s.off, s.chunkSize)
+	r.off += uint64(n)
+	r.prev = byteBin(r.off, r.buf.chunkSize)
 
 	return n, nil
+}
+
+func (r *BufferReader) Close() error {
+	if r.err != nil {
+		return r.err
+	}
+
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
+	for i, c := range r.buf.readers {
+		if c == r.readable {
+			l := len(r.buf.readers) - 1
+			r.buf.readers[i] = r.buf.readers[l]
+			r.buf.readers[l] = nil
+			r.buf.readers = r.buf.readers[:l]
+			break
+		}
+	}
+
+	r.err = ErrClosed
+	swapChanValue(r.readable, ErrClosed)
+
+	return nil
+}
+
+func swapChanValue[T any](ch chan T, v T) {
+	for {
+		select {
+		case ch <- v:
+			return
+		default:
+			<-ch
+		}
+	}
 }
 
 func binByte(b binmap.Bin, chunkSize uint64) uint64 {

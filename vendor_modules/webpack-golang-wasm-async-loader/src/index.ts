@@ -2,6 +2,7 @@ import { execFile, execFileSync } from "child_process";
 import * as crypto from "crypto";
 import { readFileSync, unlinkSync } from "fs";
 import { basename, join } from "path";
+import { homedir } from "os";
 
 import * as webpack from "webpack";
 
@@ -14,15 +15,15 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     env: {
       GOPATH: process.env.GOPATH,
       GOROOT: process.env.GOROOT,
-      GOCACHE: join(__dirname, "./.gocache"),
-      GOMODCACHE: join(__dirname, "./.gocache"),
+      GOCACHE: join(homedir(), ".cache", "go-build"),
+      GOMODCACHE: join(process.env.GOPATH, "pkg", "mod", "cache"),
       GOOS: "js",
       GOARCH: "wasm",
     },
   };
 
-  const goBin = `${opts.env.GOROOT}/bin/go`;
-  const outFile = `${this.resourcePath}.wasm`;
+  const goBin = join(opts.env.GOROOT, "bin", "go");
+  const outFile = this.resourcePath + ".wasm";
 
   const args = ["build", "-mod", "readonly"];
   if (this.mode === "production") {

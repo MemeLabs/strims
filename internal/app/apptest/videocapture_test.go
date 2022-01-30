@@ -1,6 +1,7 @@
 package apptest
 
 import (
+	"context"
 	"crypto/rand"
 	"io"
 	"io/ioutil"
@@ -34,7 +35,7 @@ func TestVideoCapture(t *testing.T) {
 
 	go func() {
 		swarmURI := ppspp.NewURI(key.Public, options.SwarmOptions.URIOptions()).String()
-		_, r, err := ctrl[0].VideoEgress().OpenStream(swarmURI, [][]byte{networkKey})
+		_, r, err := ctrl[0].VideoEgress().OpenStream(context.Background(), swarmURI, [][]byte{networkKey})
 		assert.NoError(t, err)
 		assert.NotNil(t, r)
 

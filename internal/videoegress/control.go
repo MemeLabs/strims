@@ -96,7 +96,6 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 	}
 
 	b := swarm.Reader()
-	b.Unread()
 	b.SetReadStopper(ctx.Done())
 
 	r := &VideoReader{
@@ -104,8 +103,9 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 			logutil.ByteHex("transfer", transferID),
 			zap.Stringer("swarm", swarm.ID()),
 		),
-		transfer:      t.transfer,
-		transferID:    transferID,
+		transfer:   t.transfer,
+		transferID: transferID,
+		// TODO: removeOnClose should use reference counting
 		removeOnClose: created,
 		b:             b,
 	}
@@ -118,7 +118,7 @@ type VideoReader struct {
 	transfer      transfer.Control
 	transferID    []byte
 	removeOnClose bool
-	b             *store.Buffer
+	b             *store.BufferReader
 	r             *chunkstream.Reader
 }
 

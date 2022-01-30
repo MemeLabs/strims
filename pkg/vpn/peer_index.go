@@ -132,7 +132,7 @@ func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchRespons
 func (s *peerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) error {
 	s.logger.Debug(
 		"publishing peer index item",
-		logutil.ByteHex("key", key),
+		logutil.ByteHex("host", key),
 		logutil.ByteHex("salt", salt),
 		zap.Uint16("port", port),
 	)
@@ -211,13 +211,13 @@ func newPeerIndexItemRecordRange(peerIndexID uint32, hash []byte, localHostID ka
 }
 
 func newPeerIndexItem(peerIndexID uint32, localHostID kademlia.ID, r *vpnv1.PeerIndexMessage_Record) (*peerIndexItem, error) {
-	hostID, err := kademlia.UnmarshalID(r.HostId)
+	hostID, err := kademlia.UnmarshalID(r.Key)
 	if err != nil {
 		return nil, err
 	}
 
 	return &peerIndexItem{
-		key:    newPeerIndexItemKey(peerIndexID, r.Hash, localHostID, r.HostId),
+		key:    newPeerIndexItemKey(peerIndexID, r.Hash, localHostID, r.Key),
 		hostID: hostID,
 		record: unsafe.Pointer(r),
 	}, nil
@@ -318,8 +318,7 @@ func (p *PeerIndexStore) Insert(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Re
 	if prev.Record().Timestamp < r.Timestamp {
 		p.logger.Debug(
 			"inserting peer index item",
-			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("host", r.HostId),
+			logutil.ByteHex("host", r.Key),
 			zap.Uint32("port", r.Port),
 		)
 		prev.SetRecord(r)
@@ -342,8 +341,7 @@ func (p *PeerIndexStore) Remove(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Re
 	if ok && prev.Record().Timestamp < r.Timestamp {
 		p.logger.Debug(
 			"removing peer index item",
-			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("host", r.HostId),
+			logutil.ByteHex("host", r.Key),
 			zap.Uint32("port", r.Port),
 		)
 		p.records.Delete(item)
@@ -401,7 +399,7 @@ func sendPeerIndexSearchResponse(chans *sync.Map, requestID uint64, r *vpnv1.Pee
 		return false
 	}
 
-	hostID, err := kademlia.UnmarshalID(r.HostId)
+	hostID, err := kademlia.UnmarshalID(r.Key)
 	if err != nil {
 		return false
 	}
@@ -427,9 +425,8 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 	}
 
 	record := &vpnv1.PeerIndexMessage_Record{
-		Hash:   hash,
-		HostId: network.host.ID().Bytes(nil),
-		Port:   uint32(port),
+		Hash: hash,
+		Port: uint32(port),
 	}
 
 	p := &peerIndexPublisher{

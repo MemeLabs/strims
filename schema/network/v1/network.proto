@@ -80,6 +80,14 @@ message Network {
   }
 }
 
+message Peer {
+  uint64 id = 1;
+  uint64 network_id = 2;
+  bytes public_key = 3;
+  uint64 inviter_peer_id = 4;
+  uint32 invite_quota = 5;
+}
+
 message CreateInvitationRequest {
   strims.type.Key signing_key = 1;
   strims.type.Certificate signing_cert = 2;

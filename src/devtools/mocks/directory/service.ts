@@ -79,4 +79,22 @@ export default class DirectoryService implements DirectoryFrontendService {
     console.log("part", req);
     return Promise.resolve(new directoryv1.FrontendPartResponse());
   }
+
+  getListingRecord(
+    req: directoryv1.FrontendGetListingRecordRequest
+  ): Promise<directoryv1.FrontendGetListingRecordResponse> {
+    return Promise.reject("not implemented");
+  }
+
+  listListingRecords(
+    req: directoryv1.FrontendListListingRecordsRequest
+  ): Promise<directoryv1.FrontendListListingRecordsResponse> {
+    return Promise.reject("not implemented");
+  }
+
+  updateListingRecord(
+    req: directoryv1.FrontendUpdateListingRecordRequest
+  ): Promise<directoryv1.FrontendUpdateListingRecordResponse> {
+    return Promise.reject("not implemented");
+  }
 }

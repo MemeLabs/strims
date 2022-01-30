@@ -3,6 +3,7 @@ package dao
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -26,6 +27,10 @@ const (
 	networkCertificateLogSubjectNS
 	networkBootstrapClientNS
 	networkUIConfigNS
+	networkPeerNS
+	networkPeerNetworkNS
+	networkPeerPublicKeyNS
+	networkPeerInviterNS
 )
 
 var Networks = NewTable(
@@ -321,3 +326,73 @@ var NetworkUIConfig = NewSingleton(
 		},
 	},
 )
+
+var NetworkPeers = NewTable[networkv1.Peer](networkPeerNS, nil)
+
+var GetNetworkPeersByNetworkID, GetNetworkPeersByNetwork, GetNetworkByNetworkPeer = ManyToOne(
+	networkPeerNetworkNS,
+	NetworkPeers,
+	Networks,
+	(*networkv1.Peer).GetNetworkId,
+	&ManyToOneOptions{CascadeDelete: true},
+)
+
+var GetNetworkPeersByInviterPeerID, GetNetworkPeersByInviterPeer, GetInviterPeerByNetworkPeer = ManyToOne(
+	networkPeerInviterNS,
+	NetworkPeers,
+	NetworkPeers,
+	(*networkv1.Peer).GetInviterPeerId,
+	nil,
+)
+
+func FormatNetworkPeerPublicKeyKey(networkID uint64, key []byte) []byte {
+	b := make([]byte, 8, 8+len(key))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, key...)
+}
+
+var GetNetworkPeerByPublicKey = UniqueIndex(
+	networkPeerPublicKeyNS,
+	NetworkPeers,
+	func(m *networkv1.Peer) []byte {
+		return FormatNetworkPeerPublicKeyKey(m.NetworkId, m.PublicKey)
+	},
+	nil,
+)
+
+// NewNetworkPeer ...
+func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	return &networkv1.Peer{
+		Id:            id,
+		NetworkId:     networkID,
+		PublicKey:     publicKey,
+		InviterPeerId: inviterPeerID,
+	}, nil
+}
+
+func GetOrCreateNetworkPeer(s *ProfileStore, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
+	for retries := 0; retries < 2; retries++ {
+		p, err := GetNetworkPeerByPublicKey(s, publicKey)
+		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
+			return p, err
+		}
+
+		p, err = NewNetworkPeer(s, networkID, publicKey, inviterPeerID)
+		if err != nil {
+			return nil, err
+		}
+
+		err = NetworkPeers.Insert(s, p)
+		if err == nil {
+			return p, nil
+		} else if !errors.Is(err, ErrUniqueConstraintViolated) {
+			return nil, err
+		}
+	}
+	return nil, errors.New("unexpected error creating peer record")
+}

@@ -40,6 +40,7 @@ type Swarm struct {
 	id       SwarmID
 	options  SwarmOptions
 	store    *store.Buffer
+	reader   *store.BufferReader
 	pubSub   *store.PubSub
 	verifier integrity.SwarmVerifier
 }
@@ -58,8 +59,8 @@ func (s *Swarm) URI() *URI {
 }
 
 // Reader ...
-func (s *Swarm) Reader() *store.Buffer {
-	return s.store
+func (s *Swarm) Reader() *store.BufferReader {
+	return store.NewBufferReader(s.store)
 }
 
 // Close ...

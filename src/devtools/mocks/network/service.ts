@@ -104,7 +104,6 @@ const network = new Network({
   "icon": {
     "type": "image/png",
   },
-  "displayOrder": 0,
 });
 
 export default class NetworkService implements NetworkServiceService {
@@ -150,7 +149,6 @@ export default class NetworkService implements NetworkServiceService {
         i++;
         network.id = BigInt(i);
         network.icon.data = new Uint8Array(buf);
-        network.displayOrder = i;
 
         ch.push(
           new networkv1.WatchNetworksResponse({
@@ -176,5 +174,20 @@ export default class NetworkService implements NetworkServiceService {
 
   public updateAlias(): Promise<networkv1.UpdateAliasResponse> {
     return Promise.resolve(new networkv1.UpdateAliasResponse());
+  }
+
+  getUIConfig(): Promise<networkv1.GetUIConfigResponse> {
+    const networkDisplayOrder: bigint[] = [];
+    for (let i = 0; i < this.limit; i++) {
+      networkDisplayOrder.push(BigInt(i));
+    }
+
+    return Promise.resolve(
+      new networkv1.GetUIConfigResponse({
+        config: {
+          networkDisplayOrder,
+        },
+      })
+    );
   }
 }

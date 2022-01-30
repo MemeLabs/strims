@@ -3,8 +3,8 @@ package directory
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -22,8 +22,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/crypto/blake2b"
 	"google.golang.org/protobuf/proto"
 )
@@ -42,8 +46,10 @@ const (
 	viewQuota             = 10
 )
 
-// AddressSalt ...
-var AddressSalt = []byte("directory")
+var (
+	AddressSalt = []byte("directory")
+	ConfigSalt  = []byte("directory:config")
+)
 
 // errors
 var (
@@ -63,9 +69,21 @@ var swarmOptions = ppspp.SwarmOptions{
 	DeliveryMode: ppspp.BestEffortDeliveryMode,
 }
 
-func newDirectoryService(logger *zap.Logger, store *dao.ProfileStore, dialer network.Dialer, observers *event.Observers, network *networkv1.Network, ew *protoutil.ChunkStreamWriter) *directoryService {
+var (
+	publisherCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "strims_directory_publisher_count",
+		Help: "The number of active publishers for each listing",
+	}, []string{"type", "id"})
+	viewerCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "strims_directory_viewer_count",
+		Help: "The number of active viewers for each listing",
+	}, []string{"type", "id"})
+)
+
+func newDirectoryService(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer network.Dialer, observers *event.Observers, network *networkv1.Network, ew *protoutil.ChunkStreamWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
+		vpn:             vpn,
 		store:           store,
 		dialer:          dialer,
 		observers:       observers,
@@ -81,6 +99,7 @@ func newDirectoryService(logger *zap.Logger, store *dao.ProfileStore, dialer net
 
 type directoryService struct {
 	logger            *zap.Logger
+	vpn               *vpn.Host
 	store             *dao.ProfileStore
 	dialer            network.Dialer
 	observers         *event.Observers
@@ -94,15 +113,19 @@ type directoryService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	embedLoader       syncutil.Pointer[embedLoader]
 	lock              sync.Mutex
-	nextID            uint64
 	listings          indexedLRU[listing]
 	sessions          lru[session]
 	users             lru[user]
 	certificate       *certificate.Certificate
+	configPublisher   *vpn.HashTablePublisher
 }
 
 func (d *directoryService) Run(ctx context.Context) error {
 	defer d.Close()
+
+	if err := d.publishConfig(ctx, d.network.Get()); err != nil {
+		return err
+	}
 
 	events := make(chan interface{}, 8)
 	d.observers.Notify(events)
@@ -114,6 +137,7 @@ func (d *directoryService) Run(ctx context.Context) error {
 			switch e := e.(type) {
 			case *networkv1.NetworkChangeEvent:
 				d.handleNetworkChange(e.Network)
+				d.publishConfig(ctx, e.Network)
 			case *networkv1directory.ListingRecordChangeEvent:
 				d.handleListingRecordChange(e.Record)
 			}
@@ -142,9 +166,9 @@ func (d *directoryService) Close() {
 }
 
 func (d *directoryService) handleNetworkChange(network *networkv1.Network) {
-	// TODO: all the timing consts should be configurable
+	config := network.GetServerConfig().GetDirectory()
 
-	loader := newEmbedLoader(d.logger, network.GetServerConfig().GetDirectory().GetIntegrations())
+	loader := newEmbedLoader(d.logger, config.GetIntegrations())
 	d.embedLoader.Swap(loader)
 
 	d.lock.Lock()
@@ -175,6 +199,38 @@ func (d *directoryService) handleListingRecordChange(r *networkv1directory.Listi
 		}
 		return true
 	})
+}
+
+func (d *directoryService) publishConfig(ctx context.Context, network *networkv1.Network) error {
+	config := network.GetServerConfig().GetDirectory()
+
+	b, err := proto.Marshal(&networkv1directory.ClientConfig{
+		Integrations: &networkv1directory.ClientConfig_Integrations{
+			Angelthump: config.GetIntegrations().GetAngelthump().GetEnable(),
+			Twitch:     config.GetIntegrations().GetTwitch().GetEnable(),
+			Youtube:    config.GetIntegrations().GetYoutube().GetEnable(),
+			Swarm:      config.GetIntegrations().GetSwarm().GetEnable(),
+		},
+		PublishQuota:    config.GetPublishQuota(),
+		ViewQuota:       config.GetViewQuota(),
+		MinPingInterval: config.GetMinPingInterval(),
+		MaxPingInterval: config.GetMaxPingInterval(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if p := d.configPublisher; p != nil {
+		p.Update(b)
+		return nil
+	}
+
+	n, ok := d.vpn.Node(dao.NetworkKey(network))
+	if !ok {
+		return errors.New("network not found")
+	}
+	d.configPublisher, err = n.HashTable.Set(ctx, network.GetServerConfig().GetKey(), ConfigSalt, b)
+	return err
 }
 
 func (d *directoryService) broadcast(now timeutil.Time) error {
@@ -215,7 +271,6 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 	for it := d.listings.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
 		l := it.Value()
-
 		if (l.publishers.Len() == 0 && l.viewers.Len() == 0) || l.evicted {
 			d.deleteListing(l)
 			events = append(events, &networkv1directory.Event{
@@ -316,6 +371,8 @@ func (d *directoryService) deleteListing(l *listing) {
 		s.publishedListings.Delete(l)
 		d.users.Touch(&user{certificate: s.certificate.GetParent()})
 	})
+
+	l.Cleanup()
 }
 
 func (d *directoryService) deleteSession(s *session) (*user, bool) {
@@ -323,11 +380,11 @@ func (d *directoryService) deleteSession(s *session) (*user, bool) {
 	u.sessions.Delete(s)
 
 	s.EachViewed(func(l *listing) {
-		l.viewers.Delete(s)
+		l.RemoveViewer(s)
 		d.listings.Touch(l)
 	})
 	s.EachPublished(func(l *listing) {
-		l.publishers.Delete(s)
+		l.RemovePublisher(s)
 		d.listings.Touch(l)
 	})
 
@@ -433,18 +490,20 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 }
 
 func (d *directoryService) getOrInsertListingRecord(l *networkv1directory.Listing) (r *networkv1directory.ListingRecord, err error) {
-	err = d.store.Update(func(tx kv.RWTx) (err error) {
-		r, err = dao.GetDirectoryListingRecordByListing(tx, dao.FormatDirectoryListingRecordListingKey(l))
-		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
-			return err
-		}
-		r, err = dao.NewDirectoryListingRecord(d.store, d.network.Get().Id, l)
-		if err != nil {
-			return err
-		}
-		return dao.DirectoryListingRecords.Insert(tx, r)
-	})
-	return
+	r, err = dao.GetDirectoryListingRecordByListing(d.store, dao.FormatDirectoryListingRecordListingKey(l))
+	if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
+		return r, err
+	}
+
+	r, err = dao.NewDirectoryListingRecord(d.store, d.network.Get().Id, l)
+	if err != nil {
+		return nil, err
+	}
+	err = dao.DirectoryListingRecords.Insert(d.store, r)
+	if err != nil {
+		return nil, err
+	}
+	return r, err
 }
 
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
@@ -457,8 +516,12 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 		if _, err := ppspp.ParseURI(req.Listing.GetMedia().SwarmUri); err != nil {
 			return nil, errors.New("invalid swarm uri")
 		}
+	case *networkv1directory.Listing_Chat_:
+		// TODO: validation...
 	case *networkv1directory.Listing_Service_:
-		// TODO: implement service validation
+		// TODO: ingress publishing, chat, ca, etc...
+	default:
+		return nil, errors.New("unsupported content type")
 	}
 
 	l, err := newListing(req.Listing)
@@ -467,8 +530,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	}
 
 	d.lock.Lock()
-	ok := d.listings.Has(l)
-	if !ok {
+	if !d.listings.Has(l) {
 		d.lock.Unlock()
 
 		r, err := d.getOrInsertListingRecord(req.Listing)
@@ -480,8 +542,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 			return nil, errors.New("listing banned")
 		}
 
-		l.moderation = r.GetModeration()
-		l.id = atomic.AddUint64(&d.nextID, 1)
+		l.InitFromRecord(r)
 
 		d.lock.Lock()
 	}
@@ -496,10 +557,16 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 		return nil, errors.New("exceeded concurrent publish quota")
 	}
 
-	l.viewers.Delete(s)
+	d.logger.Info(
+		"published",
+		zap.Object("user", u),
+		zap.Object("listing", l),
+	)
+
+	l.RemoveViewer(s)
 	s.viewedListings.Delete(l)
 
-	l.publishers.ReplaceOrInsert(s)
+	l.AddPublisher(s)
 	s.publishedListings.ReplaceOrInsert(l)
 	u.sessions.ReplaceOrInsert(s)
 
@@ -529,7 +596,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 		return nil, ErrSessionNotFound
 	}
 
-	if l.publishers.Delete(s) == nil {
+	if !l.RemovePublisher(s) {
 		return nil, errors.New("not publishing this listing")
 	}
 	s.publishedListings.Delete(l)
@@ -554,8 +621,14 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 		return nil, errors.New("exceeded concurrent view quota")
 	}
 
+	d.logger.Info(
+		"joined",
+		zap.Object("user", u),
+		zap.Object("listing", l),
+	)
+
 	if !l.publishers.Has(s) {
-		l.viewers.ReplaceOrInsert(s)
+		l.AddViewer(s)
 		s.viewedListings.ReplaceOrInsert(l)
 	}
 	u.sessions.ReplaceOrInsert(s)
@@ -576,7 +649,7 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 		return nil, ErrSessionNotFound
 	}
 
-	if l.viewers.Delete(s) == nil {
+	if !l.RemoveViewer(s) {
 		return nil, errors.New("not viewing this listing")
 	}
 	s.viewedListings.Delete(l)
@@ -596,6 +669,21 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 	}
 
 	return &networkv1directory.PingResponse{}, nil
+}
+
+func embedServiceName(s networkv1directory.Listing_Embed_Service) string {
+	switch s {
+	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
+		return "angelthump"
+	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
+		return "twitch"
+	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
+		return "twitch-vod"
+	case networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
+		return "youtube"
+	default:
+		return "unknown"
+	}
 }
 
 func listingKey(m proto.Message) ([]byte, error) {
@@ -635,16 +723,68 @@ func newListing(l *networkv1directory.Listing) (*listing, error) {
 }
 
 type listing struct {
-	id           uint64
-	key          []byte
-	listing      *networkv1directory.Listing
-	nextSnippet  *networkv1directory.ListingSnippet
-	snippet      *networkv1directory.ListingSnippet
-	moderation   *networkv1directory.ListingModeration
-	modifiedTime timeutil.Time
-	publishers   llrb.LLRB
-	viewers      llrb.LLRB
-	evicted      bool
+	id             uint64
+	key            []byte
+	listing        *networkv1directory.Listing
+	nextSnippet    *networkv1directory.ListingSnippet
+	snippet        *networkv1directory.ListingSnippet
+	moderation     *networkv1directory.ListingModeration
+	modifiedTime   timeutil.Time
+	publishers     llrb.LLRB
+	viewers        llrb.LLRB
+	evicted        bool
+	publisherCount prometheus.Gauge
+	viewerCount    prometheus.Gauge
+}
+
+func (l *listing) InitFromRecord(r *networkv1directory.ListingRecord) {
+	l.id = r.Id
+	l.moderation = r.Moderation
+
+	l.publisherCount = publisherCount.WithLabelValues(l.contentType(), strconv.FormatUint(l.id, 10))
+	l.viewerCount = viewerCount.WithLabelValues(l.contentType(), strconv.FormatUint(l.id, 10))
+}
+
+func (l *listing) Cleanup() {
+	publisherCount.DeleteLabelValues(l.contentType(), strconv.FormatUint(l.id, 10))
+	viewerCount.DeleteLabelValues(l.contentType(), strconv.FormatUint(l.id, 10))
+}
+
+func (l *listing) contentType() string {
+	switch c := l.listing.Content.(type) {
+	case *networkv1directory.Listing_Media_:
+		return "media"
+	case *networkv1directory.Listing_Service_:
+		return "service"
+	case *networkv1directory.Listing_Embed_:
+		return embedServiceName(c.Embed.Service)
+	case *networkv1directory.Listing_Chat_:
+		return "chat"
+	default:
+		return "unknown"
+	}
+}
+
+func (l *listing) AddViewer(s *session) {
+	l.viewers.ReplaceOrInsert(s)
+	l.viewerCount.Set(float64(l.viewers.Len()))
+}
+
+func (l *listing) RemoveViewer(s *session) bool {
+	ok := l.viewers.Delete(s) != nil
+	l.viewerCount.Set(float64(l.viewers.Len()))
+	return ok
+}
+
+func (l *listing) AddPublisher(s *session) {
+	l.publishers.ReplaceOrInsert(s)
+	l.publisherCount.Set(float64(l.publishers.Len()))
+}
+
+func (l *listing) RemovePublisher(s *session) bool {
+	ok := l.publishers.Delete(s) != nil
+	l.publisherCount.Set(float64(l.publishers.Len()))
+	return ok
 }
 
 func (l *listing) EachViewer(it func(s *session)) {
@@ -670,6 +810,28 @@ func (l *listing) Key() []byte {
 
 func (l *listing) Less(o llrb.Item) bool {
 	return keyerLess(l, o)
+}
+
+func (l *listing) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", l.id)
+
+	switch c := l.listing.Content.(type) {
+	case *networkv1directory.Listing_Media_:
+		e.AddString("type", "media")
+		e.AddString("uri", c.Media.SwarmUri)
+	case *networkv1directory.Listing_Service_:
+		e.AddString("type", "service")
+		e.AddString("service", c.Service.Type)
+	case *networkv1directory.Listing_Embed_:
+		e.AddString("type", "embed")
+		e.AddString("service", embedServiceName(c.Embed.Service))
+		e.AddString("id", c.Embed.GetId())
+	case *networkv1directory.Listing_Chat_:
+		e.AddString("type", "chat")
+		e.AddBinary("key", c.Chat.Key)
+		e.AddString("name", c.Chat.Name)
+	}
+	return nil
 }
 
 type session struct {
@@ -734,4 +896,10 @@ func (u *user) Key() []byte {
 
 func (u *user) Less(o llrb.Item) bool {
 	return keyerLess(u, o)
+}
+
+func (u *user) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddBinary("key", u.certificate.Key)
+	e.AddString("subject", u.certificate.Subject)
+	return nil
 }

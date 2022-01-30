@@ -45,7 +45,7 @@ var protocolOptions = []struct {
 	},
 }
 
-var uriScheme = "magnet:"
+var uriScheme = "magnet"
 var urnPrefix = "urn:ppspp:"
 
 // URIOptions ...
@@ -83,6 +83,7 @@ type URI struct {
 func (u *URI) String() string {
 	var s strings.Builder
 	s.WriteString(uriScheme)
+	s.WriteRune(':')
 	s.WriteString("?xt=")
 	s.WriteString(urnPrefix)
 	s.WriteString(u.ID.String())
@@ -107,17 +108,15 @@ func ParseURI(s string) (u *URI, err error) {
 		Options: URIOptions{},
 	}
 
-	parts := strings.SplitN(s, "?", 2)
-	if len(parts) != 2 || parts[0] != uriScheme {
+	p, err := url.Parse(s)
+	if err != nil {
+		return nil, err
+	}
+	if p.Scheme != uriScheme {
 		return nil, ErrInvalidURI
 	}
 
-	query, err := url.ParseQuery(parts[1])
-	if err != nil {
-		return
-	}
-
-	xt := query.Get("xt")
+	xt := p.Query().Get("xt")
 	if !strings.HasPrefix(xt, urnPrefix) {
 		return nil, ErrInvalidURI
 	}
@@ -127,11 +126,10 @@ func ParseURI(s string) (u *URI, err error) {
 	}
 
 	for _, opt := range protocolOptions {
-		vs, ok := query[opt.Key]
-		if !ok {
+		if !p.Query().Has(opt.Key) {
 			continue
 		}
-		v, err := strconv.ParseUint(vs[0], 10, 31)
+		v, err := strconv.ParseUint(p.Query().Get(opt.Key), 10, 31)
 		if err != nil {
 			return nil, err
 		}

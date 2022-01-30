@@ -187,12 +187,12 @@ func (s *chatServer) Sync() {
 }
 
 func (s *chatServer) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader) {
-	s.eventSwarm.Reader().Unread()
-	s.assetSwarm.Reader().Unread()
-	s.eventSwarm.Reader().SetReadStopper(ctx.Done())
-	s.assetSwarm.Reader().SetReadStopper(ctx.Done())
-	events = protoutil.NewChunkStreamReader(s.eventSwarm.Reader(), eventChunkSize)
-	assets = protoutil.NewChunkStreamReader(s.assetSwarm.Reader(), assetChunkSize)
+	eventsReader := s.eventSwarm.Reader()
+	assetsReader := s.assetSwarm.Reader()
+	eventsReader.SetReadStopper(ctx.Done())
+	assetsReader.SetReadStopper(ctx.Done())
+	events = protoutil.NewChunkStreamReader(eventsReader, eventChunkSize)
+	assets = protoutil.NewChunkStreamReader(assetsReader, assetChunkSize)
 	return
 }
 

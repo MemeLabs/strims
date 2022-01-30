@@ -125,38 +125,34 @@ export namespace PeerIndexMessage {
 
   export type IRecord = {
     hash?: Uint8Array;
-    key?: Uint8Array;
-    hostId?: Uint8Array;
     port?: number;
     timestamp?: bigint;
+    key?: Uint8Array;
     signature?: Uint8Array;
   }
 
   export class Record {
     hash: Uint8Array;
-    key: Uint8Array;
-    hostId: Uint8Array;
     port: number;
     timestamp: bigint;
+    key: Uint8Array;
     signature: Uint8Array;
 
     constructor(v?: IRecord) {
       this.hash = v?.hash || new Uint8Array();
-      this.key = v?.key || new Uint8Array();
-      this.hostId = v?.hostId || new Uint8Array();
       this.port = v?.port || 0;
       this.timestamp = v?.timestamp || BigInt(0);
+      this.key = v?.key || new Uint8Array();
       this.signature = v?.signature || new Uint8Array();
     }
 
     static encode(m: Record, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.hash) w.uint32(10).bytes(m.hash);
-      if (m.key) w.uint32(18).bytes(m.key);
-      if (m.hostId) w.uint32(26).bytes(m.hostId);
-      if (m.port) w.uint32(32).uint32(m.port);
-      if (m.timestamp) w.uint32(40).int64(m.timestamp);
-      if (m.signature) w.uint32(50).bytes(m.signature);
+      if (m.port) w.uint32(16).uint32(m.port);
+      if (m.timestamp) w.uint32(24).int64(m.timestamp);
+      if (m.key) w.uint32(80010).bytes(m.key);
+      if (m.signature) w.uint32(80018).bytes(m.signature);
       return w;
     }
 
@@ -171,18 +167,15 @@ export namespace PeerIndexMessage {
           m.hash = r.bytes();
           break;
           case 2:
-          m.key = r.bytes();
-          break;
-          case 3:
-          m.hostId = r.bytes();
-          break;
-          case 4:
           m.port = r.uint32();
           break;
-          case 5:
+          case 3:
           m.timestamp = r.int64();
           break;
-          case 6:
+          case 10001:
+          m.key = r.bytes();
+          break;
+          case 10002:
           m.signature = r.bytes();
           break;
           default:

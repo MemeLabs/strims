@@ -6,6 +6,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/peer"
 
@@ -31,6 +32,7 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []app.Control, error) {
 			network.NewBroker(logger),
 			node.VPN,
 			node.Store,
+			&event.Observers{},
 			node.Profile,
 		)
 

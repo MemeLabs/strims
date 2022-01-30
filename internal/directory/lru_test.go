@@ -22,7 +22,7 @@ func (u *testItem) Less(o llrb.Item) bool {
 }
 
 func TestLRUSetGet(t *testing.T) {
-	var l lru
+	var l lru[testItem]
 
 	a := &testItem{[]byte("a")}
 	b := &testItem{[]byte("b")}
@@ -33,13 +33,13 @@ func TestLRUSetGet(t *testing.T) {
 	l.GetOrInsert(c)
 
 	assert.Same(t, a, l.GetOrInsert(a))
-	assert.Same(t, a, l.GetOrInsert(&lruKey{[]byte("a")}))
+	assert.Same(t, a, l.GetOrInsert(&testItem{[]byte("a")}))
 	assert.Same(t, a, l.Get(a))
-	assert.Same(t, a, l.Get(&lruKey{[]byte("a")}))
+	assert.Same(t, a, l.Get(&testItem{[]byte("a")}))
 }
 
 func TestLRUPeekRecentlyTouched(t *testing.T) {
-	var l lru
+	var l lru[testItem]
 
 	start := timeutil.Now()
 
@@ -49,7 +49,7 @@ func TestLRUPeekRecentlyTouched(t *testing.T) {
 
 	keys := []string{}
 	for it := l.IterateTouchedAfter(start); it.Next(); {
-		keys = append(keys, string(it.Value().(*testItem).key))
+		keys = append(keys, string(it.Value().key))
 	}
 	assert.Equal(t, []string{"c", "b", "a"}, keys)
 
@@ -61,7 +61,7 @@ func TestLRUPeekRecentlyTouched(t *testing.T) {
 
 	keys = []string{}
 	for it := l.IterateTouchedAfter(start); it.Next(); {
-		keys = append(keys, string(it.Value().(*testItem).key))
+		keys = append(keys, string(it.Value().key))
 	}
 	assert.Equal(t, []string{"d", "b"}, keys)
 
@@ -73,7 +73,7 @@ func TestLRUPeekRecentlyTouched(t *testing.T) {
 
 	keys = []string{}
 	for it := l.IterateTouchedAfter(start); it.Next(); {
-		keys = append(keys, string(it.Value().(*testItem).key))
+		keys = append(keys, string(it.Value().key))
 	}
 	assert.Equal(t, []string{"c", "a"}, keys)
 }

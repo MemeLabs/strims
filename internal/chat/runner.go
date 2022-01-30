@@ -128,7 +128,7 @@ func (r *runner) Readers(ctx context.Context) (events, assets *protoutil.ChunkSt
 		r.lock.Unlock()
 	}()
 
-	events, assets = r.client.Readers()
+	events, assets = r.client.Readers(ctx)
 	return
 }
 

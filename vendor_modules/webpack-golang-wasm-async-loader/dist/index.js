@@ -4,6 +4,7 @@ const child_process_1 = require("child_process");
 const crypto = require("crypto");
 const fs_1 = require("fs");
 const path_1 = require("path");
+const os_1 = require("os");
 const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 function loader(contents) {
     const cb = this.async();
@@ -11,14 +12,14 @@ function loader(contents) {
         env: {
             GOPATH: process.env.GOPATH,
             GOROOT: process.env.GOROOT,
-            GOCACHE: path_1.join(__dirname, "./.gocache"),
-            GOMODCACHE: path_1.join(__dirname, "./.gocache"),
+            GOCACHE: path_1.join(os_1.homedir(), ".cache", "go-build"),
+            GOMODCACHE: path_1.join(process.env.GOPATH, "pkg", "mod", "cache"),
             GOOS: "js",
             GOARCH: "wasm",
         },
     };
-    const goBin = `${opts.env.GOROOT}/bin/go`;
-    const outFile = `${this.resourcePath}.wasm`;
+    const goBin = path_1.join(opts.env.GOROOT, "bin", "go");
+    const outFile = this.resourcePath + ".wasm";
     const args = ["build", "-mod", "readonly"];
     if (this.mode === "production") {
         const rev = process.env.VERSION || child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);

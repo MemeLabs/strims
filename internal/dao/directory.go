@@ -2,12 +2,14 @@ package dao
 
 import (
 	"bytes"
+	"encoding/base32"
 	"encoding/binary"
+	"net/url"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 )
 
 const (
@@ -42,6 +44,17 @@ const (
 	directoryListingService
 )
 
+func magnetURIID(s string) []byte {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil
+	}
+	xt := u.Query().Get("xt")
+	i := strings.LastIndex(xt, ":")
+	b, _ := base32.StdEncoding.DecodeString(xt[i+1:])
+	return b
+}
+
 func FormatDirectoryListingRecordListingKey(m *networkv1directory.Listing) []byte {
 	b := &bytes.Buffer{}
 	switch c := m.Content.(type) {
@@ -54,8 +67,7 @@ func FormatDirectoryListingRecordListingKey(m *networkv1directory.Listing) []byt
 		b.WriteString(c.Embed.Id)
 	case *networkv1directory.Listing_Media_:
 		b.WriteByte(directoryListingMedia)
-		uri, _ := ppspp.ParseURI(c.Media.SwarmUri)
-		b.Write(uri.ID)
+		b.Write(magnetURIID(c.Media.SwarmUri))
 	case *networkv1directory.Listing_Service_:
 		b.WriteByte(directoryListingService)
 		b.WriteString(c.Service.Type)
@@ -73,11 +85,7 @@ func DirectoryListingsEqual(a, b *networkv1directory.Listing) bool {
 		return ok && ac.Embed.Service == bc.Embed.Service && ac.Embed.Id == bc.Embed.Id
 	case *networkv1directory.Listing_Media_:
 		bc, ok := a.Content.(*networkv1directory.Listing_Media_)
-		if ok {
-			aURI, _ := ppspp.ParseURI(ac.Media.SwarmUri)
-			bURI, _ := ppspp.ParseURI(bc.Media.SwarmUri)
-			return aURI.ID.Equals(bURI.ID)
-		}
+		return ok && bytes.Equal(magnetURIID(ac.Media.SwarmUri), magnetURIID(bc.Media.SwarmUri))
 	case *networkv1directory.Listing_Service_:
 		bc, ok := a.Content.(*networkv1directory.Listing_Service_)
 		return ok && ac.Service.Type == bc.Service.Type

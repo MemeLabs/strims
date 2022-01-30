@@ -37,6 +37,30 @@ message ServerConfig {
   }
 
   Integrations integrations = 1;
+  uint32 publish_quota= 2;
+  uint32 view_quota= 3;
+  uint32 broadcast_interval = 4;
+  uint32 refresh_interval = 5;
+  uint32 session_timeout = 6;
+  uint32 min_ping_interval = 7;
+  uint32 max_ping_interval = 8;
+  uint32 embed_load_interval = 9;
+  uint32 load_media_embed_timeout = 10;
+}
+
+message ClientConfig {
+  message Integrations {
+    bool angelthump = 1;
+    bool twitch = 2;
+    bool youtube = 3;
+    bool swarm = 4;
+  }
+
+  Integrations integrations = 1;
+  uint32 publish_quota= 2;
+  uint32 view_quota= 3;
+  uint32 min_ping_interval = 4;
+  uint32 max_ping_interval = 5;
 }
 
 message GetEventsRequest {

@@ -310,7 +310,7 @@ func (s *PassthruServer) Close() error {
 		return true
 	})
 
-	if len(errs) != 0 {
+	if errs != nil {
 		return multierr.Combine(errs...)
 	}
 	return nil
