@@ -29,3 +29,12 @@ func Max[T constraints.Ordered](ns ...T) (n T) {
 	}
 	return
 }
+
+func Clamp[T constraints.Ordered](v, min, max T) T {
+	if v < min {
+		return min
+	} else if v > max {
+		return max
+	}
+	return v
+}

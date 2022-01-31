@@ -237,9 +237,9 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 		s.checkStreams(t)
 	}
 
-	for _, cs := range s.channels {
-		cs.timeOutRequests()
-	}
+	// for _, cs := range s.channels {
+	// 	cs.timeOutRequests()
+	// }
 
 	// decide which bin ranges we would consider from each peer
 
@@ -1193,8 +1193,6 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 	// }
 
 	now := timeutil.Now()
-
-	c.p.AddReceivedBytes(b.BaseLength()*uint64(c.s.chunkSize), now)
 
 	atomic.StoreUint32(&c.enqueueNow, 1)
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -26,12 +27,12 @@ func GetOs() string {
 	return runtime.GOOS
 }
 
-type androidSideWriter struct {
+type androidSideReadWriter struct {
 	AndroidSide
 	io.Reader
 }
 
-func (a *androidSideWriter) Write(p []byte) (int, error) {
+func (a *androidSideReadWriter) Write(p []byte) (int, error) {
 	a.EmitData(p)
 	return len(p), nil
 }
@@ -42,7 +43,6 @@ type GoSide struct {
 
 // Write ...
 func (g *GoSide) Write(b []byte) error {
-	fmt.Printf("got value %x\n", b)
 	_, err := g.w.Write(b)
 	return err
 }
@@ -54,36 +54,38 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 		return nil, err
 	}
 
-	kv, err := bbolt.NewStore(path.Join(appFileLocation, ".strims"))
+	store, err := bbolt.NewStore(path.Join(appFileLocation, ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
+		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
+		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
+		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(logger, vnicHost)
+	}
+
+	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger))
+
 	srv := frontend.Server{
-		Store:  kv,
-		Logger: logger,
-		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			vnicHost, err := vnic.New(
-				logger,
-				key,
-				vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})),
-				vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))),
-			)
-			if err != nil {
-				return nil, err
-			}
-			return vpn.New(logger, vnicHost)
-		},
-		Broker: network.NewBroker(logger),
+		Store:          store,
+		Logger:         logger,
+		SessionManager: sessionManager,
 	}
 
 	inReader, inWriter := io.Pipe()
 
-	go srv.Listen(context.Background(), &androidSideWriter{s, inReader})
+	go func() {
+		if err := srv.Listen(context.Background(), &androidSideReadWriter{s, inReader}); err != nil {
+			logger.Fatal("frontend server closed with error", zap.Error(err))
+		}
+	}()
 
-	return &GoSide{
-		w: inWriter,
-	}, nil
+	return &GoSide{inWriter}, nil
 }
 
 func init() {

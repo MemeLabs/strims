@@ -455,7 +455,7 @@ func (c *channelMessageHandler) HandleData(m codec.Data) error {
 	c.metrics.DataCount.Inc()
 	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen() - m.Data.ByteLen()))
-	c.metrics.DataBytesCount.Add(float64(m.Data.ByteLen()))
+	c.metrics.AddDataBytesCount(m.Data.ByteLen())
 
 	verified, err := c.verifier.ChunkVerifier(m.Address.Bin()).Verify(m.Address.Bin(), m.Data)
 	if !verified {
@@ -571,14 +571,14 @@ func (c *channelMessageHandler) HandleStreamClose(m codec.StreamClose) error {
 	return c.scheduler.HandleStreamClose(m.Stream)
 }
 
-func newChannelReaderMetrics(s *Swarm, p *peer) channelReaderMetrics {
+func newChannelReaderMetrics(s *Swarm, p *peer, pm *peerChannelMetrics) channelReaderMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 	label := s.options.Label
 	direction := "in"
 
 	return channelReaderMetrics{
-		channelMetrics:    newChannelMetrics(s, p, direction),
+		channelMetrics:    newChannelMetrics(s, p, direction, pm),
 		InvalidDataCount:  channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_data"),
 		InvalidChunkCount: channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_chunk"),
 		InvalidBytesCount: channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_bytes"),
@@ -604,9 +604,9 @@ func deleteChannelReaderMetrics(s *Swarm, p *peer) {
 	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "invalid_bytes")
 }
 
-func newChannelWriterMetrics(s *Swarm, p *peer) channelWriterMetrics {
+func newChannelWriterMetrics(s *Swarm, p *peer, pm *peerChannelMetrics) channelWriterMetrics {
 	return channelWriterMetrics{
-		m: newChannelMetrics(s, p, "out"),
+		m: newChannelMetrics(s, p, "out", pm),
 	}
 }
 
@@ -651,7 +651,7 @@ func (m *channelWriterMetrics) Merge() {
 	m.m.StreamCancelCount.Add(float64(m.StreamCancelCount))
 	m.m.StreamOpenCount.Add(float64(m.StreamOpenCount))
 	m.m.StreamCloseCount.Add(float64(m.StreamCloseCount))
-	m.m.DataBytesCount.Add(float64(m.DataBytesCount))
+	m.m.AddDataBytesCount(m.DataBytesCount)
 	m.m.OverheadBytesCount.Add(float64(m.OverheadBytesCount))
 }
 
@@ -681,7 +681,7 @@ func deleteChannelWriterMetrics(s *Swarm, p *peer) {
 	deleteChannelMetrics(s, p, "out")
 }
 
-func newChannelMetrics(s *Swarm, p *peer, direction string) channelMetrics {
+func newChannelMetrics(s *Swarm, p *peer, direction string, pm *peerChannelMetrics) channelMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 	label := s.options.Label
@@ -706,6 +706,7 @@ func newChannelMetrics(s *Swarm, p *peer, direction string) channelMetrics {
 		StreamCloseCount:     channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "stream_close_message"),
 		DataBytesCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "data_bytes"),
 		OverheadBytesCount:   channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "overhead_bytes"),
+		pm:                   pm,
 	}
 }
 
@@ -729,6 +730,12 @@ type channelMetrics struct {
 	StreamCloseCount     prometheus.Counter
 	DataBytesCount       prometheus.Counter
 	OverheadBytesCount   prometheus.Counter
+	pm                   *peerChannelMetrics
+}
+
+func (m *channelMetrics) AddDataBytesCount(b int) {
+	m.DataBytesCount.Add(float64(b))
+	m.pm.AddDataBytesCount(uint64(b))
 }
 
 func deleteChannelMetrics(s *Swarm, p *peer, direction string) {

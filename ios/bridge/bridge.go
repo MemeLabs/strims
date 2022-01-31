@@ -10,6 +10,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -39,35 +40,36 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to locate home directory: %w", err)
 	}
 
-	kv, err := bbolt.NewStore(path.Join(homeDir, "Documents", ".strims"))
+	store, err := bbolt.NewStore(path.Join(homeDir, "Documents", ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	srv := &frontend.Server{
-		Store:  kv,
-		Logger: logger,
-		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			vnicHost, err := vnic.New(
-				logger,
-				key,
-				vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})),
-				vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))),
-			)
-			if err != nil {
-				return nil, err
-			}
-			return vpn.New(logger, vnicHost)
-		},
-		Broker: network.NewBroker(logger),
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
+		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
+		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
+		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(logger, vnicHost)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("error creating service: %w", err)
+
+	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger))
+
+	srv := frontend.Server{
+		Store:          store,
+		Logger:         logger,
+		SessionManager: sessionManager,
 	}
 
 	inReader, inWriter := io.Pipe()
 
-	go srv.Listen(context.Background(), &swiftSideReadWriter{s, inReader})
+	go func() {
+		if err := srv.Listen(context.Background(), &swiftSideReadWriter{s, inReader}); err != nil {
+			logger.Fatal("frontend server closed with error", zap.Error(err))
+		}
+	}()
 
 	return &GoSide{inWriter}, nil
 }

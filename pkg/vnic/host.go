@@ -181,6 +181,8 @@ func (h *Host) AddLink(c Link) {
 		linksActive.Inc()
 		defer linksActive.Dec()
 
+		defer c.Close()
+
 		cert, err := h.Cert()
 		if err != nil {
 			h.logger.Error("peer init error", zap.Error(err))
@@ -208,7 +210,6 @@ func (h *Host) AddLink(c Link) {
 		h.peersLock.Unlock()
 
 		if found {
-			p.Close()
 			logger.Debug("closed duplicate link")
 			return
 		}

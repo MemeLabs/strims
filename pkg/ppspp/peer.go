@@ -3,11 +3,10 @@ package ppspp
 import (
 	"log"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/stats"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
@@ -36,9 +35,9 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *peer {
 		ready:  make(chan timeutil.Time, 2),
 		ticker: t,
 
-		receivedBytes: stats.NewSMA(60, time.Second),
-
 		wq: newPeerWriterQueue(),
+
+		m: newPeerMetrics(),
 	}
 	go p.run()
 	return p
@@ -53,10 +52,11 @@ type peer struct {
 	lock sync.Mutex
 	w    Conn
 
-	receivedBytes stats.SMA
-
 	wq peerWriterQueue
 	ds [2]peerDataQueue
+
+	m  *peerMetrics
+	sm syncutil.Map[*Swarm, *peerSwarmMetrics]
 }
 
 func (p *peer) ID() []byte {
@@ -74,12 +74,6 @@ func (p *peer) CloseChannel(c peerWriter) {
 	p.wq.Remove(c)
 	p.ds[peerPriorityLow].Remove(c, binmap.All)
 	p.ds[peerPriorityHigh].Remove(c, binmap.All)
-	p.lock.Unlock()
-}
-
-func (p *peer) AddReceivedBytes(n uint64, t timeutil.Time) {
-	p.lock.Lock()
-	p.receivedBytes.AddWithTime(n, t)
 	p.lock.Unlock()
 }
 

@@ -28,3 +28,11 @@ func (m *Map[K, V]) Delete(k K) {
 	delete(m.m, k)
 	m.mu.Unlock()
 }
+
+func (m *Map[K, V]) Each(it func(k K, v V)) {
+	m.mu.Lock()
+	for k, v := range m.m {
+		it(k, v)
+	}
+	m.mu.Unlock()
+}

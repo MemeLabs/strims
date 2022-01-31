@@ -12,6 +12,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -73,25 +74,29 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to open db", zap.Error(err))
 	}
+
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
+		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
+		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
+			logger,
+			&vnic.WebRTCDialerOptions{
+				PortMin: uint16(webRTCPortMin),
+				PortMax: uint16(webRTCPortMax),
+			},
+		))
+		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(logger, vnicHost)
+	}
+
+	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger))
+
 	srv := frontend.Server{
-		Store:  store,
-		Logger: logger,
-		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{ServerAddress: addr})
-			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
-				logger,
-				&vnic.WebRTCDialerOptions{
-					PortMin: uint16(webRTCPortMin),
-					PortMax: uint16(webRTCPortMax),
-				},
-			))
-			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
-			if err != nil {
-				return nil, err
-			}
-			return vpn.New(logger, vnicHost)
-		},
-		Broker: network.NewBroker(logger),
+		Store:          store,
+		Logger:         logger,
+		SessionManager: sessionManager,
 	}
 
 	if err := srv.Listen(context.Background(), stdio{os.Stdin, os.Stdout}); err != nil {

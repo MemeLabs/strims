@@ -35,11 +35,3 @@ func TestDeleteProfileStore(t *testing.T) {
 	_, err := Profile.Get(pfStore)
 	assert.NotNilf(t, err, "bucket not found: %s", pfStore.name)
 }
-
-func TestGetProfile(t *testing.T) {
-	pfStore := createProfileStore(t)
-	profile, err := Profile.Get(pfStore)
-	assert.Nil(t, err, "failed to get profile")
-	assert.Equal(t, profile.GetName(), "testuser")
-	assert.NotNil(t, profile.GetKey())
-}

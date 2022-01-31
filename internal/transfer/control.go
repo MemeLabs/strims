@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"hash"
+	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -68,7 +72,7 @@ type control struct {
 
 // Run ...
 func (c *control) Run(ctx context.Context) {
-	loadPeersTicker := time.NewTicker(10 * time.Second)
+	loadPeersTicker := timeutil.DefaultTickEmitter.Ticker(10 * time.Second)
 	defer loadPeersTicker.Stop()
 
 	for {
@@ -84,8 +88,8 @@ func (c *control) Run(ctx context.Context) {
 			case event.NetworkPeerClose:
 				c.handleNetworkPeerClose(e.PeerID, e.NetworkKey)
 			}
-		case <-loadPeersTicker.C:
-			c.loadPeers(ctx)
+		case t := <-loadPeersTicker.C:
+			c.loadPeers(ctx, t)
 		case <-ctx.Done():
 			return
 		}
@@ -139,9 +143,19 @@ func (c *control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 	// TODO: close peer transfers associated with this network?
 }
 
-func (c *control) loadPeers(ctx context.Context) {
+func (c *control) loadPeers(ctx context.Context, t timeutil.Time) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	var summary strings.Builder
+	for id, p := range c.peers {
+		snap := p.runnerPeer.MetricsSnapshot(t)
+		fmt.Fprintf(&summary, "peer %d read: %d %d/s write: %d %d/s\n", id, snap.Read.Count, snap.Read.Rate, snap.Write.Count, snap.Write.Rate)
+		for swarm, swarmSnap := range snap.Swarms {
+			fmt.Fprintf(&summary, "swarm %s read: %d %d/s write: %d %d/s\n", swarm.ID(), swarmSnap.Read.Count, swarmSnap.Read.Rate, swarmSnap.Write.Count, swarmSnap.Write.Rate)
+		}
+	}
+	log.Println(summary.String())
 
 	c.networks.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
 		c.loadNetworkPeers(ctx, i.(*network))

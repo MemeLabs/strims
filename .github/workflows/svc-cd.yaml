@@ -4,12 +4,11 @@ on:
   push:
     paths:
       - '.github/workflows/svc-cd.yaml'
-      - 'cmd/svc'
       - 'go.mod'
       - 'go.sum'
-      - 'vendor'
-      - 'pkg'
-      - 'internal'
+      - 'cmd/svc/**'
+      - 'pkg/**'
+      - 'internal/**'
     branches: [ master ]
 
 jobs:

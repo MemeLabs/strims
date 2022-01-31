@@ -45,7 +45,6 @@ type channelScheduler interface {
 
 type peerThing interface {
 	ID() []byte
-	AddReceivedBytes(uint64, timeutil.Time)
 	Enqueue(w peerWriter)
 	EnqueueNow(w peerWriter)
 	PushData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)

@@ -7,19 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"sync"
 	"syscall/js"
 	"time"
 )
 
 const iceGatherTimeout = time.Second * 5
-const webRTCMaxMessageLen = 16 * 1024
-
-var webRTCBuffers = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, webRTCMaxMessageLen)
-	},
-}
+const dataChannelMTU = 64 * 1024
 
 // NewWebRTCProxy ...
 func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
@@ -229,8 +222,6 @@ func (p *WebRTCProxy) DataChannelID(label string) (int, error) {
 		}
 	}
 }
-
-const dataChannelMTU = 16 * 1024
 
 // DataChannelProxy ...
 type DataChannelProxy interface {

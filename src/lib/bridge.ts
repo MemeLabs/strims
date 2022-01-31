@@ -138,7 +138,6 @@ type WebRTCDataChannelWindowEvent =
     }
   | {
       type: EventType.DATA_CHANNEL_OPEN;
-      mtu: number;
     }
   | {
       type: EventType.DATA_CHANNEL_CLOSE;
@@ -261,15 +260,7 @@ export class WindowBridge extends EventEmitter {
 
       dataChannel.onopen = () =>
         ready.then(() => {
-          // TODO: get this from pc.sctp once this is resolved: https://bugzilla.mozilla.org/show_bug.cgi?id=1278299
-          const mtuPattern = /a=max-message-size:(\d+)/;
-          const [, localMTU] = mtuPattern.exec(peerConnection.localDescription.sdp);
-          const [, remoteMTU] = mtuPattern.exec(peerConnection.remoteDescription.sdp);
-
-          port1.postMessage({
-            type: EventType.DATA_CHANNEL_OPEN,
-            mtu: Math.min(parseFloat(localMTU), parseFloat(remoteMTU)),
-          });
+          port1.postMessage({ type: EventType.DATA_CHANNEL_OPEN });
         });
 
       dataChannel.onclose = onclose;
@@ -740,7 +731,7 @@ export class WorkerBridge {
               proxy.ondata(data.data.byteLength);
               break;
             case EventType.DATA_CHANNEL_OPEN:
-              proxy.onopen(data.mtu);
+              proxy.onopen();
               break;
             case EventType.DATA_CHANNEL_CLOSE:
               proxy.onclose();

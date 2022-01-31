@@ -208,32 +208,26 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 			return nil, err
 		}
 
-		mtu := pc.SCTP().GetCapabilities().MaxMessageSize
-		if mtu > maxDCMTU {
-			mtu = maxDCMTU
-		}
-		return newDCLink(rwc, int(mtu)), nil
+		return newDCLink(rwc), nil
 	case <-time.After(time.Second * 10):
 		return nil, fmt.Errorf("data channel receive timeout")
 	}
 }
 
-const maxDCMTU = 64 * 1024
+const dcMTU = 64 * 1024
 
-func newDCLink(rwc io.ReadWriteCloser, mtu int) *dcLink {
+func newDCLink(rwc io.ReadWriteCloser) *dcLink {
 	return &dcLink{
-		Reader:      bufio.NewReaderSize(rwc, mtu),
+		Reader:      bufio.NewReaderSize(rwc, dcMTU),
 		WriteCloser: rwc,
-		mtu:         mtu,
 	}
 }
 
 type dcLink struct {
 	io.Reader
 	io.WriteCloser
-	mtu int
 }
 
 func (l dcLink) MTU() int {
-	return l.mtu
+	return dcMTU
 }
