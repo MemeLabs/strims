@@ -1,3 +1,5 @@
+`config.yaml`
+```yaml
 healthCheckers:
   - 127.0.0.1:50051
   - 127.0.0.1:50052
@@ -12,3 +14,4 @@ loadBalancers:
   - http://10.0.0.2/status
   - http://10.0.0.3/status
 checkInterval: 1s
+```

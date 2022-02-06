@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +49,15 @@ func main() {
 	var c config
 	yaml.NewDecoder(f).Decode(&c)
 
+	var urls []*url.URL
+	for _, ru := range c.LoadBalancers {
+		u, err := url.Parse(ru)
+		if err != nil {
+			log.Fatalf("error parsing load balancer URL: %v", err)
+		}
+		urls = append(urls, u)
+	}
+
 	d, err := NewDNSAPI(c.Cloudflare.Token, c.Cloudflare.ZoneID, c.Cloudflare.Domain)
 	if err != nil {
 		log.Fatalf("failed to create dns client: %v", err)
@@ -70,7 +78,9 @@ func main() {
 		select {
 		case <-t.C:
 			if leader {
-				Run(ctx, d, c.LoadBalancers)
+				if err := Run(ctx, d, urls); err != nil {
+					log.Printf("Run: %v", err)
+				}
 			}
 		case leader = <-r.LeaderCh():
 		case <-ctx.Done():
@@ -81,7 +91,7 @@ func main() {
 
 // Run updates the DNS record with the hostname of the first URL to respond
 // successfully if the URL with the record's current value failed.
-func Run(ctx context.Context, d *DNSAPI, urls []string) error {
+func Run(ctx context.Context, d *DNSAPI, urls []*url.URL) error {
 	healthyURLs := checkURLs(urls)
 	if len(healthyURLs) == 0 {
 		return errors.New("checkURLS: all healthchecks failed")
@@ -93,17 +103,12 @@ func Run(ctx context.Context, d *DNSAPI, urls []string) error {
 	}
 
 	for _, u := range healthyURLs {
-		if strings.Contains(u, r.Content) {
+		if u.Hostname() == r.Content {
 			return nil
 		}
 	}
 
-	u, err := url.Parse(healthyURLs[0])
-	if err != nil {
-		return fmt.Errorf("url.Parse: %w", err)
-	}
-
-	r.Content = u.Hostname()
+	r.Content = healthyURLs[0].Hostname()
 	if err := d.UpdateRecord(ctx, r); err != nil {
 		return fmt.Errorf("DNSAPI.UpdateRecord: %w", err)
 	}
@@ -112,9 +117,9 @@ func Run(ctx context.Context, d *DNSAPI, urls []string) error {
 
 // checkURLs returns the subset of the supplied URLs that respond with HTTP
 // status 200.
-func checkURLs(urls []string) []string {
+func checkURLs(urls []*url.URL) []*url.URL {
 	var mu sync.Mutex
-	var healthy []string
+	var healthy []*url.URL
 
 	var wg sync.WaitGroup
 	wg.Add(len(urls))
@@ -122,7 +127,7 @@ func checkURLs(urls []string) []string {
 	for _, u := range urls {
 		u := u
 		go func() {
-			res, err := http.Get(u)
+			res, err := http.Get(u.String())
 			if err == nil && res.StatusCode == http.StatusOK {
 				mu.Lock()
 				healthy = append(healthy, u)
