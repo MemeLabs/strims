@@ -470,7 +470,7 @@ func TestSwarmSim(t *testing.T) {
 	wg.Add(len(clients))
 	for _, c := range clients {
 		c := c
-		go runSafely(func() {
+		go func() {
 			defer wg.Done()
 
 			n := int64(bytesReadGoal)
@@ -487,7 +487,8 @@ func TestSwarmSim(t *testing.T) {
 					log.Panicln(err)
 				}
 			}
-		})
+			log.Println("finished reading")
+		}()
 	}
 
 	go func() {

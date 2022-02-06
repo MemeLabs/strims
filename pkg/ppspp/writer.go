@@ -16,7 +16,8 @@ type WriterOptions struct {
 // NewWriter ...
 func NewWriter(o WriterOptions) (*Writer, error) {
 	so := SwarmOptions{
-		SchedulingMethod: SeedSchedulingMethod,
+		// SchedulingMethod: SeedSchedulingMethod,
+		SchedulingMethod: PeerSchedulingMethod,
 	}
 	so.Assign(o.SwarmOptions)
 

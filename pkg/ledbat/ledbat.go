@@ -93,6 +93,14 @@ type Controller struct {
 	debug bool
 }
 
+// account for scheduled competing flow
+func (l *Controller) HackTest(size int) {
+	l.cwnd -= size
+	if min := minCWND * mss; min > l.cwnd {
+		l.cwnd = min
+	}
+}
+
 // Debug ...
 func (l *Controller) Debug() bool {
 	return l.debug
@@ -230,10 +238,11 @@ func (l *Controller) AddDataLoss(size int, retransmitting bool) {
 	// if timeout < time.Second*2 {
 	// 	timeout = time.Second * 2
 	// }
-	if l.lastDataLoss.IsNil() && timeutil.Now().Sub(l.lastDataLoss) < timeout {
+	now := timeutil.Now()
+	if !l.lastDataLoss.IsNil() && now.Sub(l.lastDataLoss) < timeout {
 		return
 	}
-	l.lastDataLoss = timeutil.Now()
+	l.lastDataLoss = now
 
 	cwnd := l.cwnd / 2
 	if min := minCWND * mss; min > cwnd {

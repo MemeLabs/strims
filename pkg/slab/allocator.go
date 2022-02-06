@@ -60,7 +60,6 @@ type slab[T any] struct {
 }
 
 func NewWithSize[T any](size int) *Allocator[T] {
-	size = (size + 63) / 64 * 64
 	return &Allocator[T]{
 		slabs: []slab[T]{newSlab[T](size)},
 		size:  size,
