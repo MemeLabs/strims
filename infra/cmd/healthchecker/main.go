@@ -163,7 +163,7 @@ type DNSAPI struct {
 }
 
 func (d *DNSAPI) GetRecord(ctx context.Context) (cloudflare.DNSRecord, error) {
-	records, err := d.api.DNSRecords(ctx, d.zoneID, cloudflare.DNSRecord{})
+	records, err := d.api.DNSRecords(ctx, d.zoneID, cloudflare.DNSRecord{Name: d.domain})
 	if err != nil {
 		return cloudflare.DNSRecord{}, err
 	}
