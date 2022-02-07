@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/byterope"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/rope"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
@@ -391,7 +391,7 @@ func (r *BufferReader) Read(p []byte) (int, error) {
 	h := int(binByte(r.buf.next-r.buf.tail(), r.buf.chunkSize))
 	i := r.buf.index(r.buf.tail())
 
-	n := byterope.New(p).Copy(byterope.New(r.buf.buf[i:], r.buf.buf[:i]).Slice(l, h)...)
+	n := rope.New(p).Copy(rope.New(r.buf.buf[i:], r.buf.buf[:i]).Slice(l, h)...)
 
 	r.off += uint64(n)
 	r.prev = byteBin(r.off, r.buf.chunkSize)

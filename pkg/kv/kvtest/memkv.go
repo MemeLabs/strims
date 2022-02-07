@@ -8,9 +8,9 @@ import (
 )
 
 // NewMemStore ...
-func NewMemStore(path string) (kv.BlobStore, error) {
+func NewMemStore() kv.BlobStore {
 	db := make(map[string]map[string][]byte)
-	return &Store{store: db}, nil
+	return &Store{store: db}
 }
 
 // Store ...

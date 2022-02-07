@@ -3,15 +3,16 @@ package driver
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"log"
-	"os"
+	"net/http"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -35,33 +36,36 @@ type nativeDriver struct {
 }
 
 type nativeDriverClient struct {
-	file   string
 	client *rpc.Client
 }
 
 func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
-	file := tempFile()
-	store, err := bbolt.NewStore(file)
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err)
+	store := kvtest.NewMemStore()
+
+	mux := httputil.NewMapServeMux()
+	if o.VPNServerAddr != "" {
+		go func() {
+			err := http.ListenAndServe(o.VPNServerAddr, mux)
+			d.logger.Debug("app server exited", zap.Error(err))
+		}()
 	}
 
-	srv := &frontend.Server{
-		Store:  store,
-		Logger: d.logger,
-		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(d.logger, vnic.WSInterfaceOptions{ServerAddress: o.VPNServerAddr})
-			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(d.logger, nil))
-			vnicHost, err := vnic.New(d.logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
-			if err != nil {
-				return nil, err
-			}
-			return vpn.New(d.logger, vnicHost)
-		},
-		Broker: network.NewBroker(d.logger),
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
+		ws := vnic.NewWSInterface(d.logger, vnic.WSInterfaceOptions{ServeMux: mux})
+		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(d.logger, nil))
+		vnicHost, err := vnic.New(d.logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(d.logger, vnicHost)
 	}
-	if err != nil {
-		log.Fatal(err)
+
+	sessionManager := session.NewManager(d.logger, store, newVPN, network.NewBroker(d.logger))
+
+	srv := &frontend.Server{
+		Store:          store,
+		Logger:         d.logger,
+		SessionManager: sessionManager,
 	}
 
 	hr, hw := io.Pipe()
@@ -76,15 +80,14 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	if err != nil {
 		log.Fatal(err)
 	}
-	d.clients = append(d.clients, nativeDriverClient{file, client})
+	d.clients = append(d.clients, nativeDriverClient{client})
 	return client
 }
 
 func (d *nativeDriver) Close() {
 	d.closeOnce.Do(func() {
 		for _, c := range d.clients {
-			os.RemoveAll(c.file)
-			// c.client.Close()
+			c.client.Close()
 		}
 	})
 }
@@ -92,15 +95,4 @@ func (d *nativeDriver) Close() {
 type readWriter struct {
 	io.Reader
 	io.WriteCloser
-}
-
-func tempFile() string {
-	f, err := ioutil.TempFile("", "strims-")
-	if err != nil {
-		panic(err)
-	}
-	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	return f.Name()
 }

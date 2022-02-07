@@ -27,10 +27,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 		return nil, err
 	}
 
-	blobStore, err := kvtest.NewMemStore("test")
-	if err != nil {
-		return nil, err
-	}
+	blobStore := kvtest.NewMemStore()
 	storageKey, err := dao.NewStorageKey("test")
 	if err != nil {
 		return nil, err

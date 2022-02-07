@@ -32,7 +32,7 @@ require (
 	github.com/gobwas/ws v1.1.0 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gophercloud/gophercloud v0.15.0
 	github.com/gorilla/mux v1.8.0

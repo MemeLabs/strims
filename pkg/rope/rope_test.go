@@ -1,4 +1,4 @@
-package byterope
+package rope
 
 import (
 	"bytes"

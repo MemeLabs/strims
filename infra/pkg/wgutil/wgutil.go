@@ -3,7 +3,7 @@ package wgutil
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/aead/ecdh"
@@ -47,20 +47,33 @@ type InterfaceConfig struct {
 func (c *InterfaceConfig) String() string {
 	var b strings.Builder
 
-	t := `[Interface]
-PrivateKey = %s
-Address = %s
-DNS = %s
-ListenPort = %d
-SaveConfig = %t`
-	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.DNS, c.ListenPort, c.SaveConfig))
+	b.WriteString("[Interface]")
 
-	for _, p := range c.Peers {
-		b.WriteRune('\n')
-		b.WriteString(p.String())
+	b.WriteString("\nPrivateKey = ")
+	b.WriteString(c.PrivateKey)
+
+	b.WriteString("\nAddress = ")
+	b.WriteString(c.Address)
+
+	if c.DNS != "" {
+		b.WriteString("\nDNS = ")
+		b.WriteString(c.DNS)
+	}
+	if c.ListenPort != 0 {
+		b.WriteString("\nListenPort = ")
+		b.WriteString(strconv.FormatUint(c.ListenPort, 10))
+	}
+	if c.SaveConfig {
+		b.WriteString("\nSaveConfig = ")
+		b.WriteString(strconv.FormatBool(c.SaveConfig))
 	}
 
 	b.WriteRune('\n')
+
+	for _, p := range c.Peers {
+		p.WriteToStringsBuilder(&b)
+	}
+
 	return b.String()
 }
 
@@ -74,12 +87,25 @@ type InterfacePeerConfig struct {
 }
 
 func (c *InterfacePeerConfig) String() string {
-	t := `
-[Peer]
-# %s
-PublicKey = %s
-AllowedIPs = %s
-Endpoint = %s
-PersistentKeepalive = %d`
-	return fmt.Sprintf(t, c.Comment, c.PublicKey, c.AllowedIPs, c.Endpoint, c.PersistentKeepalive)
+	var b strings.Builder
+	c.WriteToStringsBuilder(&b)
+	return b.String()
+}
+
+func (c *InterfacePeerConfig) WriteToStringsBuilder(b *strings.Builder) {
+	b.WriteString("[Peer]")
+
+	b.WriteString("\nPublicKey = ")
+	b.WriteString(c.PublicKey)
+
+	b.WriteString("\nAllowedIPs = ")
+	b.WriteString(c.AllowedIPs)
+
+	b.WriteString("\nEndpoint = ")
+	b.WriteString(c.Endpoint)
+
+	b.WriteString("\nPersistentKeepalive = ")
+	b.WriteString(strconv.Itoa(c.PersistentKeepalive))
+
+	b.WriteRune('\n')
 }

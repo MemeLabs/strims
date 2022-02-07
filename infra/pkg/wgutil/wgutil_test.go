@@ -33,7 +33,6 @@ func TestConfig(t *testing.T) {
 PrivateKey = QGlZp+MxF1N+nZ4etcXg2tFkxgdCuooJq86v9wJOxko=
 Address = 10.0.0.1/32
 ListenPort = 51280
-SaveConfig = false
 [Peer]
 PublicKey = oJ+yj94MoLJOsuZyOB+r9u2BrPW+FUiASCqL/+Xpq34=
 AllowedIPs = 10.0.0.2/32

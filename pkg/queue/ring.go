@@ -1,31 +1,47 @@
 package queue
 
-func RingWithSize(n uint64) (r Ring) {
+import (
+	"github.com/MemeLabs/go-ppspp/pkg/rope"
+)
+
+func NewRing[T any](n int) (r Ring[T]) {
 	r.Resize(n)
 	return
 }
 
-// Ring ...
-type Ring struct {
-	size uint64
-	mask uint64
-	low  uint64
-	high uint64
+// Ring[T] ...
+type Ring[T any] struct {
+	size int
+	mask int
+	low  int
+	high int
+	zero T
+	v    []T
 }
 
 // Size ...
-func (r *Ring) Size() uint64 {
+func (r *Ring[T]) Size() int {
 	return r.size
 }
 
 // Resize ...
-func (r *Ring) Resize(size uint64) {
-	if size <= r.size {
+func (r *Ring[T]) Resize(size int) {
+	if size < r.size {
 		return
+	} else if size < 1 {
+		size = 1
 	}
 
+	v := make([]T, size)
+	mask := size - 1
+
+	vi := r.low & mask
+	i := r.low & r.mask
+	rope.New(v[vi:], v[:vi]).Copy(rope.New(r.v[i:], r.v[:i]).Slice(0, r.high-r.low)...)
+
 	r.size = size
-	r.mask = size - 1
+	r.mask = mask
+	r.v = v
 
 	if r.size&r.mask != 0 {
 		panic("ring size should be power of 2")
@@ -33,69 +49,90 @@ func (r *Ring) Resize(size uint64) {
 }
 
 // Len ...
-func (r *Ring) Len() uint64 {
+func (r *Ring[T]) Len() int {
 	return r.high - r.low
 }
 
 // Head ...
-func (r *Ring) Head() (i uint64, ok bool) {
-	i = r.high
-	if r.low < i {
-		return i & r.mask, true
+func (r *Ring[T]) Head() (v T, ok bool) {
+	if r.low < r.high {
+		return r.v[(r.high-1)&r.mask], true
 	}
 	return
 }
 
 // Tail ...
-func (r *Ring) Tail() (i uint64, ok bool) {
-	i = r.low
-	if i < r.high {
-		return i & r.mask, true
+func (r *Ring[T]) Tail() (v T, ok bool) {
+	if r.low < r.high {
+		return r.v[r.low&r.mask], true
 	}
 	return
 }
 
+// PushFront ...
+func (r *Ring[T]) PushFront(v T) {
+	if r.high-r.low == r.size {
+		r.Resize(r.size * 2)
+	}
+	r.low--
+	r.v[r.low&r.mask] = v
+}
+
 // Push ...
-func (r *Ring) Push() (i uint64, ok bool) {
-	i = r.high
-	if r.low+r.size > i {
-		r.high++
-		return i & r.mask, true
+func (r *Ring[T]) Push(v T) {
+	if r.high-r.low == r.size {
+		r.Resize(r.size * 2)
+	}
+	r.v[r.high&r.mask] = v
+	r.high++
+}
+
+// PopFront ...
+func (r *Ring[T]) PopFront() (v T, ok bool) {
+	if ok = r.low < r.high; ok {
+		v = r.v[r.low&r.mask]
+		r.v[r.low&r.mask] = r.zero
+		r.low++
 	}
 	return
 }
 
 // Pop ...
-func (r *Ring) Pop() (i uint64, ok bool) {
-	i = r.low
-	if i < r.high {
-		r.low++
-		return i & r.mask, true
+func (r *Ring[T]) Pop() (v T, ok bool) {
+	if ok = r.low < r.high; ok {
+		r.high--
+		v = r.v[r.high&r.mask]
+		r.v[r.high&r.mask] = r.zero
 	}
 	return
 }
 
 // Iterator ...
-func (r *Ring) Iterator() *RingIterator {
-	return &RingIterator{
-		i:    r.low - 1,
-		end:  r.high,
-		mask: r.mask,
+func (r *Ring[T]) Iterator() *RingIterator[T] {
+	return &RingIterator[T]{
+		i: r.low - 1,
+		r: r,
 	}
 }
 
-// RingIterator ...
-type RingIterator struct {
-	i, end, mask uint64
+// RingIterator[T] ...
+type RingIterator[T any] struct {
+	i int
+	r *Ring[T]
 }
 
 // Next ...
-func (r *RingIterator) Next() bool {
-	r.i++
-	return r.i < r.end
+func (it *RingIterator[T]) Next() bool {
+	it.i++
+	return it.i < it.r.high
 }
 
 // Value ...
-func (r *RingIterator) Value() uint64 {
-	return r.i & r.mask
+func (it *RingIterator[T]) Value() T {
+	return it.r.v[it.i&it.r.mask]
+}
+
+// Ref ...
+func (it *RingIterator[T]) Ref() *T {
+	return &it.r.v[it.i&it.r.mask]
 }

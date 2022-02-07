@@ -5,7 +5,6 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -57,8 +56,6 @@ func TestPeerDataQueueRemove(t *testing.T) {
 
 	q.Remove(w, binmap.Bin(11))
 
-	spew.Dump(q)
-
 	assert.False(t, q.Empty())
 	for i := binmap.Bin(0); i < 8; i += 2 {
 		pw, pb, ts, ok := q.Pop()
@@ -67,8 +64,6 @@ func TestPeerDataQueueRemove(t *testing.T) {
 		assert.Equal(t, timeutil.EpochTime, ts)
 		assert.True(t, ok)
 	}
-
-	spew.Dump(q)
 
 	assert.True(t, q.Empty())
 }
