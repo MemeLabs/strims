@@ -131,6 +131,7 @@ function configure_firewall() {
 
 function start_cluster() {
 	local ca_key=$1
+	local public_ip=$2
 	local wg_ip="10.0.0.1"
 
 	sudo systemctl enable --now kubelet
@@ -144,6 +145,7 @@ nodeRegistration:
   name: ${HOSTNAME}
   kubeletExtraArgs:
     node-ip: ${wg_ip}
+		node-labels: "strims.gg/public-ip=${public_ip}"
   ignorePreflightErrors:
     - Swap
     - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
@@ -188,12 +190,14 @@ eval set -- "$options"
 NEW_CLUSTER=false
 HOST_NAME=${HOSTNAME}
 CA_KEY=
+PUBLIC_IP=
 
 while true; do
   case "$1" in
     -n | --new ) NEW_CLUSTER=true; shift ;;
     -h | --hostname ) HOST_NAME="$2"; shift 2 ;;
     -c | --ca-key ) CA_KEY="$2"; shift 2 ;;
+    -p | --public-ip ) PUBLIC_IP="$2"; shift 2 ;;
     * ) break ;;
   esac
 done
@@ -202,7 +206,7 @@ set -exo pipefail
 pushd "$(/bin/pwd)" >/dev/null
 
 if [[ "${NEW_CLUSTER}" == true ]]; then
-	start_cluster "${CA_KEY}"
+	start_cluster "${CA_KEY}" "${PUBLIC_IP}"
 else
 	configure_system "${HOST_NAME}"
 	install_tools

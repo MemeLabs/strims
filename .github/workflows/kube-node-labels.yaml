@@ -1,0 +1,27 @@
+name: kube-node-labels
+
+on:
+  push:
+    paths:
+      - '.github/workflows/kube-node-labels.yaml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'infra/cmd/kube-node-labels/**'
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Docker login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
+    - name: Build image
+      run: docker build -f infra/cmd/kube-node-labels/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/kube-node-labels:latest
+    - name: Publish image
+      run: docker push docker.pkg.github.com/slugalisk/go-ppspp/kube-node-labels:latest

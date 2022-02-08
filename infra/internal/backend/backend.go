@@ -556,7 +556,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		b.log.Info("Creating a new cluster")
 		if err = b.stream(
 			ssh,
-			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q | tee -a /tmp/setup.log", b.certificateKey),
+			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q --host-ip %q | tee -a /tmp/setup.log", b.certificateKey, n.Networks.V4[0]),
 		); err != nil {
 			return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 		}
@@ -585,6 +585,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			CaKey             string
 			NodeName          string
 			WGIP              string
+			PublicIP          string
 		}{
 			ApiServerEndpoint: k8sEndpoint,
 			Token:             k8sToken,
@@ -592,6 +593,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			CaKey:             b.certificateKey,
 			NodeName:          n.Name,
 			WGIP:              n.WireguardIPv4,
+			PublicIP:          n.Networks.V4[0],
 		}
 
 		kubeadmRaw := &bytes.Buffer{}
@@ -929,7 +931,8 @@ discovery:
 nodeRegistration:
   name: {{ .NodeName }}
   kubeletExtraArgs:
-    node-ip: {{ .WGIP }}`,
+    node-ip: {{ .WGIP }}
+		node-labels: "strims.gg/public-ip={{ .PublicIP }}"`,
 	node.TypeController: `
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: JoinConfiguration
