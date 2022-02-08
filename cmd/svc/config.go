@@ -89,9 +89,13 @@ type Config struct {
 	VNIC struct {
 		Label  Optional[string] `yaml:"label"`
 		WebRTC struct {
-			Enabled Optional[bool] `yaml:"enabled"`
-			PortMin uint16         `yaml:"portMin"`
-			PortMax uint16         `yaml:"portMax"`
+			ICEServers        Optional[[]string] `yaml:"iceServers"`
+			Enabled           Optional[bool]     `yaml:"enabled"`
+			PortMin           uint16             `yaml:"portMin"`
+			PortMax           uint16             `yaml:"portMax"`
+			UDPMuxAddress     Optional[string]   `yaml:"udpMuxAddress"`
+			TCPMuxAddress     Optional[string]   `yaml:"tcpMuxAddress"`
+			TCPReadBufferSize Optional[int]      `yaml:"tcpReadBufferSize"`
 		} `yaml:"webrtc"`
 		WebSocket struct {
 			Enabled Optional[bool] `yaml:"enabled"`

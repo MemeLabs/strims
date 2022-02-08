@@ -71,24 +71,44 @@ func runCmd(fs Flags) error {
 		})
 	}
 
-	mux := httputil.NewMapServeMux()
+	webRTCOpts := &vnic.WebRTCDialerOptions{
+		ICEServers: cfg.VNIC.WebRTC.ICEServers.Get(nil),
+		PortMin:    cfg.VNIC.WebRTC.PortMin,
+		PortMax:    cfg.VNIC.WebRTC.PortMax,
+	}
+	if cfg.VNIC.WebRTC.Enabled.Get(true) {
+		if cfg.VNIC.WebRTC.UDPMuxAddress.Ok() {
+			mux, lis, err := vnic.NewWebRTCUDPMux(cfg.VNIC.WebRTC.UDPMuxAddress.MustGet())
+			if err != nil {
+				return fmt.Errorf("creating webrtc udp mux: %w", err)
+			}
+			logger.Debug("webrtc udp mux started", zap.Stringer("address", lis.LocalAddr()))
+			closers = append(closers, lis)
+			webRTCOpts.UDPMux = mux
+		}
+		if cfg.VNIC.WebRTC.TCPMuxAddress.Ok() {
+			mux, lis, err := vnic.NewWebRTCTCPMux(cfg.VNIC.WebRTC.TCPMuxAddress.MustGet(), cfg.VNIC.WebRTC.TCPReadBufferSize.Get(8))
+			if err != nil {
+				return fmt.Errorf("creating webrtc tcp mux: %w", err)
+			}
+			logger.Debug("webrtc tcp mux started", zap.Stringer("address", lis.Addr()))
+			closers = append(closers, lis)
+			webRTCOpts.TCPMux = mux
+		}
+	}
+
+	httpMux := httputil.NewMapServeMux()
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		var opts []vnic.HostOption
 		if cfg.VNIC.Label.Ok() {
 			opts = append(opts, vnic.WithLabel(cfg.VNIC.Label.MustGet()))
 		}
 		if cfg.VNIC.WebRTC.Enabled.Get(true) {
-			opts = append(opts, vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
-				logger,
-				&vnic.WebRTCDialerOptions{
-					PortMin: cfg.VNIC.WebRTC.PortMin,
-					PortMax: cfg.VNIC.WebRTC.PortMax,
-				},
-			))))
+			opts = append(opts, vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, webRTCOpts))))
 		}
 		if cfg.VNIC.WebSocket.Enabled.Get(true) {
 			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{
-				ServeMux: mux,
+				ServeMux: httpMux,
 			})))
 		}
 		host, err := vnic.New(logger, key, opts...)
@@ -120,7 +140,7 @@ func runCmd(fs Flags) error {
 			SessionManager: sessionManager,
 		}
 
-		mux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
+		httpMux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
 			err := srv.Listen(ctx, httputil.NewWSReadWriter(c))
 			logger.Debug("remote client closed", zap.Error(err))
 		}))
@@ -130,7 +150,7 @@ func runCmd(fs Flags) error {
 		eg.Go(func() (err error) {
 			srv := &http.Server{
 				Addr:    cfg.HTTP.Address.MustGet(),
-				Handler: mux,
+				Handler: httpMux,
 			}
 			closers = append(closers, srv)
 

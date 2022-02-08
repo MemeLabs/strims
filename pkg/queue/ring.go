@@ -15,7 +15,6 @@ type Ring[T any] struct {
 	mask int
 	low  int
 	high int
-	zero T
 	v    []T
 }
 
@@ -91,7 +90,8 @@ func (r *Ring[T]) Push(v T) {
 func (r *Ring[T]) PopFront() (v T, ok bool) {
 	if ok = r.low < r.high; ok {
 		v = r.v[r.low&r.mask]
-		r.v[r.low&r.mask] = r.zero
+		var t T
+		r.v[r.low&r.mask] = t
 		r.low++
 	}
 	return
@@ -102,7 +102,8 @@ func (r *Ring[T]) Pop() (v T, ok bool) {
 	if ok = r.low < r.high; ok {
 		r.high--
 		v = r.v[r.high&r.mask]
-		r.v[r.high&r.mask] = r.zero
+		var t T
+		r.v[r.high&r.mask] = t
 	}
 	return
 }

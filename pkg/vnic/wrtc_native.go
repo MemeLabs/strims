@@ -6,18 +6,80 @@ package vnic
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"time"
 
+	"github.com/pion/ice/v2"
 	"github.com/pion/webrtc/v3"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 // WebRTCDialerOptions ...
 type WebRTCDialerOptions struct {
-	PortMin uint16
-	PortMax uint16
+	ICEServers []string
+	PortMin    uint16
+	PortMax    uint16
+	UDPMux     ice.UDPMux
+	TCPMux     ice.TCPMux
+}
+
+func parseIPPort(addr string) (net.IP, int, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, 0, fmt.Errorf("malformed address: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil, 0, errors.New("malformed ip")
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, 0, fmt.Errorf("malformed port: %w", err)
+	}
+	return ip, p, nil
+}
+
+func NewWebRTCUDPMux(address string) (ice.UDPMux, *net.UDPConn, error) {
+	ip, port, err := parseIPPort(address)
+	if err != nil {
+		return nil, nil, err
+	}
+	lis, err := net.ListenUDP("udp", &net.UDPAddr{
+		IP:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("opening udp listener: %w", err)
+	}
+	return webrtc.NewICEUDPMux(nil, lis), lis, nil
+}
+
+func NewWebRTCTCPMux(address string, readBufferSize int) (ice.TCPMux, *net.TCPListener, error) {
+	ip, port, err := parseIPPort(address)
+	if err != nil {
+		return nil, nil, err
+	}
+	lis, err := net.ListenTCP("tcp", &net.TCPAddr{
+		IP:   ip,
+		Port: port,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("opening tcp listener: %w", err)
+	}
+	return webrtc.NewICETCPMux(nil, lis, readBufferSize), lis, nil
+}
+
+var DefaultWebRTCICEServers = []string{
+	"stun:stun.l.google.com:19302",
+	"stun:stun1.l.google.com:19302",
+	"stun:stun2.l.google.com:19302",
+	"stun:stun3.l.google.com:19302",
+	"stun:stun4.l.google.com:19302",
 }
 
 // NewWebRTCDialer ...
@@ -39,23 +101,30 @@ type WebRTCDialer struct {
 
 // Dial ...
 func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
-	// TODO: load this from app config
+	iceServers := d.options.ICEServers
+	if iceServers == nil {
+		iceServers = slices.Clone(DefaultWebRTCICEServers)
+	}
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
-				URLs: []string{
-					"stun:stun.l.google.com:19302",
-					"stun:stun1.l.google.com:19302",
-					"stun:stun2.l.google.com:19302",
-					"stun:stun3.l.google.com:19302",
-					"stun:stun4.l.google.com:19302",
-				},
+				URLs: iceServers,
 			},
 		},
 	}
 
 	s := webrtc.SettingEngine{}
-	s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
+	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
+	if d.options.UDPMux != nil {
+		s.SetICEUDPMux(d.options.UDPMux)
+	} else {
+		s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
+	}
+	if d.options.TCPMux != nil {
+		s.SetICETCPMux(d.options.TCPMux)
+		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4, webrtc.NetworkTypeTCP6)
+	}
+	s.SetNetworkTypes(networkTypes)
 	s.DetachDataChannels()
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 

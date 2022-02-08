@@ -23,7 +23,7 @@ vnic:
   # label: ""
   webrtc:
     enabled: true
-    portMin: 0
-    portMax: 0
+    tcpMuxAddress: 0.0.0.0:5000
+    udpMuxAddress: 0.0.0.0:5000
   websocket:
     enabled: true
