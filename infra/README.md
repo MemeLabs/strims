@@ -41,7 +41,7 @@ Providers:
     ClientSecret: xxxxxxxxxxxx
     TenantID: xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx
 SSHIdentityFile: /root/.ssh/id_ecdsa_example
-ScriptDirectory: /mnt/
+ScriptDirectory: ./hack/kubernetes
 CertificateKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -78,3 +78,10 @@ wg-quick@wg0`
 ```
 infra peer remove --name [name]
 ```
+
+#### Generate `CertificateKey`
+
+```
+kubeadm certs certificate-key
+```
+SEE: [kubeadm docs](https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-certs/#cmd-certs-certificate-key)

@@ -75,6 +75,7 @@ func runCmd(fs Flags) error {
 		ICEServers: cfg.VNIC.WebRTC.ICEServers.Get(nil),
 		PortMin:    cfg.VNIC.WebRTC.PortMin,
 		PortMax:    cfg.VNIC.WebRTC.PortMax,
+		HostIP:     fs.String("host-ip"),
 	}
 	if cfg.VNIC.WebRTC.Enabled.Get(true) {
 		if cfg.VNIC.WebRTC.UDPMuxAddress.Ok() {

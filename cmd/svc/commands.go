@@ -35,11 +35,12 @@ func init() {
 	RegisterCommand(Command{
 		Name:  "run",
 		Func:  runCmd,
-		Usage: "[--config <path>]",
+		Usage: "[--config <path>] [--host-ip <ip>]",
 		Short: `Starts the server`,
 		Flags: func() *flag.FlagSet {
 			fs := flag.NewFlagSet("run", flag.ExitOnError)
 			fs.String("config", "", "Configuration file")
+			fs.String("host-ip", "", "Public IP address")
 			return fs
 		}(),
 	})

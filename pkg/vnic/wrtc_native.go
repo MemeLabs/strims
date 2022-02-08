@@ -26,6 +26,7 @@ type WebRTCDialerOptions struct {
 	PortMax    uint16
 	UDPMux     ice.UDPMux
 	TCPMux     ice.TCPMux
+	HostIP     string
 }
 
 func parseIPPort(addr string) (net.IP, int, error) {
@@ -114,6 +115,7 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 	}
 
 	s := webrtc.SettingEngine{}
+
 	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
 	if d.options.UDPMux != nil {
 		s.SetICEUDPMux(d.options.UDPMux)
@@ -125,7 +127,13 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4, webrtc.NetworkTypeTCP6)
 	}
 	s.SetNetworkTypes(networkTypes)
+
+	if d.options.HostIP != "" {
+		s.SetNAT1To1IPs([]string{d.options.HostIP}, webrtc.ICECandidateTypeHost)
+	}
+
 	s.DetachDataChannels()
+
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 
 	pc, err := api.NewPeerConnection(config)

@@ -165,7 +165,7 @@ func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *net
 		return nil, err
 	}
 
-	network, err := dao.NewNetworkFromInvitationV0(s.store, &invitation, s.profile)
+	network, err := dao.NewNetworkFromInvitationV0(s.store, &invitation, s.profile, dao.WithAlias(r.Alias))
 	if err != nil {
 		return nil, err
 	}

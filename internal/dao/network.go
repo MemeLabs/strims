@@ -69,6 +69,7 @@ func SignCertificateRequestWithNetwork(csr *certificate.CertificateRequest, conf
 
 type NewNetworkOptions struct {
 	CertificateRequestOptions []CertificateRequestOption
+	Alias                     string
 }
 
 type NewNetworkOption func(o *NewNetworkOptions)
@@ -76,6 +77,15 @@ type NewNetworkOption func(o *NewNetworkOptions)
 func WithCertificateRequestOption(opt CertificateRequestOption) NewNetworkOption {
 	return func(o *NewNetworkOptions) {
 		o.CertificateRequestOptions = append(o.CertificateRequestOptions, opt)
+	}
+}
+
+func WithAlias(alias string) NewNetworkOption {
+	return func(o *NewNetworkOptions) {
+		if alias != "" {
+			o.Alias = alias
+			o.CertificateRequestOptions = append(o.CertificateRequestOptions, WithSubject(alias))
+		}
 	}
 }
 
@@ -168,6 +178,7 @@ func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV
 	return &networkv1.Network{
 		Id:          id,
 		Certificate: peerCert,
+		Alias:       o.Alias,
 	}, nil
 }
 
