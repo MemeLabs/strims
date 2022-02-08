@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -44,14 +44,8 @@ func main() {
 		log.Fatalf("creating client for k8s config: %v", err)
 	}
 
-	nodeClient := clientset.NodeV1()
-	res := nodeClient.RESTClient().Get().Name(nodeName).Do(context.Background())
-	if res.Error() != nil {
-		log.Fatalf("loading node: %v", res.Error())
-	}
-
-	var node corev1.Node
-	if err := res.Into(&node); err != nil {
+	node, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+	if err != nil {
 		log.Fatalf("loading node: %v", err)
 	}
 
