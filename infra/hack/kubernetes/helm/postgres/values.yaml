@@ -1,10 +1,10 @@
-persistence:
-  enabled: true
+global:
   storageClass: local-path
-  size: 10Gi
-postgresqlDatabase: strims
-postgresqlUsername: strims
-postgresqlPassword: strims
+auth:
+  postgresPassword: secret
+  username: strims
+  password: strims
+  database: strims
 initdbScripts:
   db-init.sql: |
     CREATE TABLE IF NOT EXISTS "nodes" (

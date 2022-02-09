@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: strims
+  name: svc-config
+data:
+  config.yaml: |-
+    metrics:
+      address: 0.0.0.0:1971
+    debug:
+      address: 0.0.0.0:6060
+    storage:
+      adapter: postgres
+      bbolt:
+        path: /var/strims/svc.db
+      postgres:
+        connStr: "user=strims password=strims host=svc-db-postgresql.strims.svc.cluster.local sslmode=disable database=strims"
+    http:
+      address: 0.0.0.0:8443
+      tls:
+        cert: /etc/cert/tls.crt
+        key: /etc/cert/tls.key
+    session:
+      remote:
+        enabled: true
+    vnic:
+      webrtc:
+        tcpMuxAddress: 0.0.0.0:50000
+        udpMuxAddress: 0.0.0.0:50000
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: node-reader
+  namespace: strims
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: node-reader
+  namespace: strims
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: node-reader
+subjects:
+  - kind: ServiceAccount
+    name: node-reader
+    namespace: strims
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: node-reader
+  namespace: strims
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: strims
+  name: svc
+spec:
+  selector:
+    matchLabels:
+      app: svc
+  template:
+    metadata:
+      labels:
+        app: svc
+    spec:
+      imagePullSecrets:
+      - name: github-registry
+      serviceAccountName: node-reader
+      containers:
+      - name: strims
+        image: ghcr.io/slugalisk/go-ppspp/svc:latest
+        imagePullPolicy: Always
+        command: ["sh", "-c"]
+        args:
+        - /app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        ports:
+        - name: metrics
+          containerPort: 1971
+        - name: debug
+          containerPort: 6060
+        - name: webrtc-tcp
+          containerPort: 50000
+          hostPort: 50000
+        - name: webrtc-udp
+          containerPort: 50000
+          hostPort: 50000
+          protocol: UDP
+        - name: http
+          containerPort: 8443
+          hostPort: 443
+        volumeMounts:
+        - name: config-vol
+          mountPath: /etc/strims
+        - name: cert-vol
+          mountPath: /etc/cert
+        - name: node-labels-vol
+          mountPath: /node-labels
+      initContainers:
+      - name: init
+        image: bitnami/kubectl:latest
+        command: ["sh", "-c"]
+        args:
+        - kubectl get node $NODE_NAME -o jsonpath='{.metadata.labels.strims\.gg/public-ip}' > /node-labels/public-ip
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: node-labels-vol
+          mountPath: /node-labels
+      volumes:
+      - name: config-vol
+        configMap:
+          name: svc-config
+      - name: cert-vol
+        secret:
+          secretName: blue-strims-gg-tls
+      - name: node-labels-vol
+        emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: In
+                values:
+                - worker

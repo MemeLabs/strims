@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: strims
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: web
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      imagePullSecrets:
+      - name: github-registry
+      containers:
+      - name: strims
+        image: ghcr.io/slugalisk/go-ppspp/web:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: strims
+spec:
+  selector:
+    app: web
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+  namespace: strims
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-strims"
+spec:
+  tls:
+  - hosts:
+    - blue.strims.gg
+    - "*.blue.strims.gg"
+    secretName: blue-strims-gg-tls
+  ingressClassName: nginx
+  rules:
+  - host: blue.strims.gg
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: web
+            port:
+              number: 80
