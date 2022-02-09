@@ -145,7 +145,7 @@ nodeRegistration:
   name: ${HOSTNAME}
   kubeletExtraArgs:
     node-ip: ${wg_ip}
-		node-labels: "strims.gg/public-ip=${public_ip}"
+    node-labels: "strims.gg/public-ip=${public_ip}"
   ignorePreflightErrors:
     - Swap
     - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables

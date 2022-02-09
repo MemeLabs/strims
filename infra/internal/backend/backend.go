@@ -932,7 +932,7 @@ nodeRegistration:
   name: {{ .NodeName }}
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
-		node-labels: "strims.gg/public-ip={{ .PublicIP }}"`,
+    node-labels: "strims.gg/public-ip={{ .PublicIP }}"`,
 	node.TypeController: `
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: JoinConfiguration
@@ -945,6 +945,7 @@ nodeRegistration:
   name: {{ .NodeName }}
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
+    node-labels: "strims.gg/public-ip={{ .PublicIP }}"
 controlPlane:
   certificateKey: {{ .CaKey }}
   localAPIEndpoint:
