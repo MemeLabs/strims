@@ -5,14 +5,19 @@
     position: relative;
 
     &__nav {
-      background: green;
+      background: var(--color-background-settings-nav);
       position: absolute;
       height: 100%;
       box-shadow: var(--shadow-elevation-2);
+      z-index: var(--z-index-default);
 
       &__link {
         white-space: nowrap;
       }
+    }
+
+    &__body {
+      transform: translateZ(0);
     }
   }
 
@@ -31,9 +36,51 @@
   }
 }
 
+.layout {
+  &.layout--max_width_md .settings {
+    .input_label {
+      flex-direction: column;
+
+      &__text {
+        flex: 0 0;
+      }
+
+      &.input_button {
+        flex-direction: row;
+      }
+
+      &.input_label--toggle {
+        flex-direction: row;
+        justify-content: space-between;
+
+        .input_label__text {
+          flex: 1;
+        }
+
+        .input_label__body {
+          flex: 0;
+        }
+      }
+    }
+  }
+
+  &.layout--min_width_md {
+    .settings {
+      .input_label {
+        flex-direction: row;
+
+        &__text {
+          flex: 200px 0;
+        }
+      }
+    }
+  }
+}
+
 .settings {
   display: flex;
   flex-direction: row;
+  flex: 1;
 
   &__nav {
     flex: 0 0 200px;

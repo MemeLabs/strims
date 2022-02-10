@@ -10,19 +10,20 @@ export interface ThemeState {
 const ThemeContext = createContext<ThemeState>(null);
 
 export const Provider: React.FC = ({ children }) => {
-  const [colorScheme, setColorScheme] = useState<ColorScheme>("dark");
+  const savedTheme = useMemo(() => window.localStorage.getItem("theme") as ColorScheme, []);
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(savedTheme || "dark");
 
-  // if (window.matchMedia) {
-  //   useEffect(() => {
-  //     const query = window.matchMedia("(prefers-color-scheme: dark)");
+  if (!savedTheme && window.matchMedia) {
+    useEffect(() => {
+      const query = window.matchMedia("(prefers-color-scheme: dark)");
 
-  //     setColorScheme(query.matches ? "dark" : "light");
+      setColorScheme(query.matches ? "dark" : "light");
 
-  //     const handleChange = (e: MediaQueryListEvent) => setColorScheme(e.matches ? "dark" : "light");
-  //     query.addEventListener("change", handleChange);
-  //     return () => query.removeEventListener("change", handleChange);
-  //   }, []);
-  // }
+      const handleChange = (e: MediaQueryListEvent) => setColorScheme(e.matches ? "dark" : "light");
+      query.addEventListener("change", handleChange);
+      return () => query.removeEventListener("change", handleChange);
+    }, []);
+  }
 
   const value = useMemo(
     () => ({

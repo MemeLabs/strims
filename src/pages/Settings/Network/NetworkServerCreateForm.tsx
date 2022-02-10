@@ -1,17 +1,14 @@
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 
-import { CreateServerResponse } from "../../../apis/strims/network/v1/network";
 import { InputError, TextInput } from "../../../components/Form";
 import { useLazyCall } from "../../../contexts/FrontendApi";
 
-interface CreateFormProps {
-  onCreate?: (res: CreateServerResponse) => void;
-}
-
-const CreateForm: React.FC<CreateFormProps> = ({ onCreate }) => {
+const CreateForm: React.FC = () => {
+  const navigate = useNavigate();
   const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {
-    onComplete: onCreate,
+    onComplete: () => navigate("/settings/networks"),
   });
   const { control, handleSubmit } = useForm<{
     name: string;

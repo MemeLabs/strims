@@ -55,15 +55,15 @@
     top: 0;
     left: 0;
     transform: translateX(
-      calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
+      calc(
+        -100% + min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%)
+      )
     );
   }
 
   &--right.swipable--open.swipable--closing {
     transform: translateX(
-      calc(
-        -100% + min(max(var(--swipable-drag-offset, 0px), var(--swipable-peek-size, 10px)), 100%)
-      )
+      calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
     );
   }
 }

@@ -18,7 +18,7 @@ export interface OverlayState {
 }
 
 export interface LayoutContextProps {
-  root: RefObject<HTMLElement>;
+  root: HTMLElement;
   swapMainPanels: boolean;
   overlayState: OverlayState;
   showChat: boolean;
@@ -46,7 +46,7 @@ export const withLayoutContext = <T,>(
   C: ComponentType<T & WithRootRefProps>
 ): React.FC<Omit<T, keyof WithRootRefProps>> => {
   const Provider: React.FC<T> = (props) => {
-    const root = useRef<HTMLElement>(null);
+    const [root, setRoot] = useState<HTMLElement>(null);
     const [swapMainPanels, toggleSwapMainPanels] = useToggle(false);
     const [overlayState, setOverlayState] = useState<OverlayState>({
       open: false,
@@ -57,8 +57,6 @@ export const withLayoutContext = <T,>(
     const [theaterMode, toggleTheaterMode] = useToggle(false);
     const [expandNav, toggleExpandNav] = useToggle(false);
     const [modalOpen, toggleModalOpen] = useToggle(false);
-
-    const setRoot: RefCallback<HTMLElement> = useCallback((e) => (root.current = e), []);
 
     const toggleOverlayOpen = (open: boolean) =>
       setOverlayState({
@@ -85,7 +83,7 @@ export const withLayoutContext = <T,>(
         toggleExpandNav,
         toggleModalOpen,
       }),
-      [swapMainPanels, overlayState, showChat, showVideo, theaterMode, expandNav, modalOpen]
+      [root, swapMainPanels, overlayState, showChat, showVideo, theaterMode, expandNav, modalOpen]
     );
 
     return (

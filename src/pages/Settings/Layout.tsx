@@ -1,15 +1,16 @@
 import "./Layout.scss";
 
 import clsx from "clsx";
-import React, { ReactElement, Suspense } from "react";
+import React, { ReactElement, Suspense, useCallback } from "react";
+import Scrollbars from "react-custom-scrollbars-2";
 import { NavLink, Outlet } from "react-router-dom";
 
 import SwipablePanel from "../../components/SwipablePanel";
 import LoadingPlaceholder from "../../root/LoadingPlaceholder";
 
-interface NavProps {
+export interface NavProps {
   open?: boolean;
-  onToggle?: (value: boolean) => void;
+  onToggle?: (value?: boolean) => void;
 }
 
 export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
@@ -19,6 +20,8 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       "settings__nav__link--active": isActive,
     });
 
+  const onLinkClick = useCallback(() => onToggle?.(), []);
+
   return (
     <SwipablePanel
       className="settings__nav"
@@ -27,19 +30,19 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       dragThreshold={100}
       direction="right"
     >
-      <NavLink className={linkClassName} to="networks">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="networks">
         Networks
       </NavLink>
-      <NavLink className={linkClassName} to="bootstrap-clients">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="bootstrap-clients">
         Bootstrap Clients
       </NavLink>
-      <NavLink className={linkClassName} to="chat-servers">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="chat-servers">
         Chat Servers
       </NavLink>
-      <NavLink className={linkClassName} to="video-ingress">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="video-ingress">
         Video Ingress
       </NavLink>
-      <NavLink className={linkClassName} to="vnic">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="vnic">
         VNIC
       </NavLink>
     </SwipablePanel>
@@ -55,7 +58,9 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({ nav = <Nav /> }) => (
     {nav}
     <div className="settings__body">
       <Suspense fallback={<LoadingPlaceholder />}>
-        <Outlet />
+        <Scrollbars autoHide={true}>
+          <Outlet />
+        </Scrollbars>
       </Suspense>
     </div>
   </div>

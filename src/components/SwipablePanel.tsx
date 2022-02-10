@@ -3,9 +3,9 @@ import "./SwipablePanel.scss";
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { isEqual } from "lodash";
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import useUpdates from "../hooks/useUpdates";
+import useUpdate from "../hooks/useUpdate";
 import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
 
 const TOGGLE_UPDATE_DELAY = 50;
@@ -56,14 +56,19 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   const toggleDragState = (open: boolean) => setDragState(getDragState(open));
 
   useLayoutEffect(() => {
-    const tid = setTimeout(() => toggleDragState(open), TOGGLE_UPDATE_DELAY);
-    return () => clearTimeout(tid);
+    if (dragState.closed == open) {
+      const tid = setTimeout(() => toggleDragState(open), TOGGLE_UPDATE_DELAY);
+      return () => clearTimeout(tid);
+    }
   }, [open]);
 
-  useUpdates(() => {
+  const [emittedOpen, setEmittedOpen] = useState(open);
+  useUpdate(() => onToggle?.(emittedOpen), [emittedOpen]);
+
+  useUpdate(() => {
     if (!dragState.dragging) {
       const tid = setTimeout(() => {
-        onToggle?.(!dragState.closed);
+        setEmittedOpen(!dragState.closed);
         onDragStateChange?.({ ...dragState, transitioning: false });
       }, TOGGLE_TRANSITION_DURATION);
       return () => clearTimeout(tid);
@@ -93,8 +98,8 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
           s = sx;
           break;
         case "right":
-          m = mx;
-          s = sx;
+          m = -mx;
+          s = -sx;
       }
 
       let next: DragState;

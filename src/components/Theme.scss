@@ -119,16 +119,18 @@
   --network-nav-expanded-width: 200px;
 
   &--dark {
-    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-14), 0 0px 2px var(--color-opac-b-14);
-    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-7), 0 0px 4px var(--color-opac-b-7);
-    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-8), 0 0px 4px var(--color-opac-b-7);
-    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-8), 0 0px 8px var(--color-opac-b-7);
-    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-9), 0 0px 16px var(--color-opac-b-7);
+    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-11), 0 0px 2px var(--color-opac-b-11);
+    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-4), 0 0px 4px var(--color-opac-b-4);
+    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-5), 0 0px 4px var(--color-opac-b-4);
+    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-5), 0 0px 8px var(--color-opac-b-4);
+    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-6), 0 0px 16px var(--color-opac-b-4);
 
     --color-background-input: #{$slate-400};
     --color-background-layout-header: #{$slate-500};
     --color-background-layout-footer: #{$slate-500};
+    --color-background-settings-nav: #{$slate-200};
     --color-background-network-nav: #{$slate-200};
+    --color-background-network-nav-tooltip: var(--color-opac-b-12);
     --color-background-network-nav-link-hover: #{$slate-400};
     --color-text-network-nav-link: #{$gray-100};
 
@@ -150,8 +152,8 @@
     --color-background-error: #{lighten($red-base, 30%)};
     --color-border-error: #{lighten($red-base, 40%)};
 
-    --color-icon-input: #{$slate-500};
-    --color-text-input: #{$slate-500};
+    --color-icon-input: #{$gray-500};
+    --color-text-input: #{$gray-500};
     --color-background-input-toggle: #{$green-200};
 
     // ---
@@ -185,39 +187,71 @@
   }
 
   &--light {
-    box-shadow: rgba(0, 0, 0, 0.25) 0 0 3px;
+    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-14), 0 0px 2px var(--color-opac-b-14);
+    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-7), 0 0px 4px var(--color-opac-b-7);
+    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-8), 0 0px 4px var(--color-opac-b-7);
+    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-8), 0 0px 8px var(--color-opac-b-7);
+    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-9), 0 0px 16px var(--color-opac-b-7);
+
+    --color-background-input: #{$gray-400};
+    --color-background-layout-header: #{$gray-500};
+    --color-background-layout-footer: #{$gray-500};
+    --color-background-settings-nav: #{$gray-200};
+    --color-background-network-nav: #{$gray-200};
+    --color-background-network-nav-tooltip: var(--color-opac-w-12);
+    --color-background-network-nav-link-hover: #{$gray-400};
+    --color-text-network-nav-link: #{$slate-100};
+
+    --color--border-notification: #{gray-500};
+    --color--background-notification: #{$gray-200};
+
+    --color-background-layout-chat: #{$gray-400};
+    --color-background-layout-body: #{$gray-300};
+
+    --color-text-base: #{$slate-500};
+
+    --color-chat-combo-text-shadow: #000;
+    --color-chat-scroller-handle: var(--color-opac-w-8);
+    --color-chat-settings-legend: #{$slate-200};
+
+    --color-icon: var(--color-opac-w-8);
+    --color-icon-hover: var(--color-opac-w-12);
+
+    --color-background-error: #{lighten($red-base, 30%)};
+    --color-border-error: #{lighten($red-base, 40%)};
+
+    --color-icon-input: #{$slate-500};
+    --color-text-input: #{$slate-500};
+    --color-background-input-toggle: #{$green-200};
 
     // ---
 
-    --body-background: #{$gray-500};
+    --body-background: #{$gray-300};
     --body-foreground: #{$gray-400};
-    --body-border-color: #{$gray-600};
-    --body-color: #{$slate-200};
+    --body-border-color: #{$gray-400};
+    --body-color: #{$slate-500};
 
     --card-bg: #{$gray-300};
-    --card-border: #{$gray-500};
+    --card-border: #{$gray-400};
     --card-3d-border-top: #{$gray-500};
     --card-3d-border-right: #{$gray-200};
     --card-3d-border-bottom: #{$gray-200};
     --card-3d-border-left: #{$gray-500};
 
     --input-bg: #{$gray-400};
-    --input-fg: #{$gray-200};
+    --input-fg: #{$gray-500};
     --input-border-color: #{$gray-500};
-    --input-color: #{$slate-200};
+    --input-color: #{$slate-400};
     --input-focus-bg: #{$gray-500};
-    --input-focus-color: #{$slate-100};
-    --input-disabled-bg: #{$gray-500};
-    --input-disabled-color: #{$slate-500};
-    --input-placeholder-color: #{$slate-400};
+    --input-focus-color: #{$slate-500};
+    --input-disabled-bg: #{$gray-300};
+    --input-disabled-color: #{$slate-100};
+    --input-placeholder-color: #{$slate-100};
     --input-button-hover-bg: #{$gray-500};
-    --input-button-hover-color: #{$slate-300};
+    --input-button-hover-color: #{$slate-500};
 
     --link-active-bg: #{$gray-300};
     --link-hover-bg: #{$gray-400};
-
-    --color-icon: rgba($slate-300, 0.5);
-    --color-icon-hover: rgba($slate-300, 0.8);
   }
 
   color: var(--color-text-base);

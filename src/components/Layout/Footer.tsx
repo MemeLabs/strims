@@ -1,5 +1,6 @@
 import "./Footer.scss";
 
+import clsx from "clsx";
 import React, { RefObject, useCallback, useEffect, useRef } from "react";
 import { FiList, FiMenu, FiSearch, FiUser } from "react-icons/fi";
 import { useResolvedPath } from "react-router";
@@ -62,7 +63,22 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   return (
     <Modal title={title} onClose={handleModalClose}>
       <Routes>
-        {createSettingsRoutes(<Layout nav={<Nav open={navOpen} onToggle={toggleNavOpen} />} />)}
+        {createSettingsRoutes(
+          <Layout
+            nav={
+              <>
+                <div
+                  onClick={toggleNavOpen}
+                  className={clsx({
+                    "footer__settings__overlay": true,
+                    "footer__settings__overlay--open": navOpen,
+                  })}
+                />
+                <Nav open={navOpen} onToggle={toggleNavOpen} />
+              </>
+            }
+          />
+        )}
       </Routes>
     </Modal>
   );

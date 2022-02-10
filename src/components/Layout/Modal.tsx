@@ -7,7 +7,7 @@ import { useToggle } from "react-use";
 import usePortal from "use-portal";
 
 import { useLayout } from "../../contexts/Layout";
-import useUpdates from "../../hooks/useUpdates";
+import useUpdate from "../../hooks/useUpdate";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 
 interface ModalProps {
@@ -29,10 +29,10 @@ const Modal: React.FC<ModalProps> = ({
   const header = useRef<HTMLDivElement>(null);
 
   const [modalOpen, toggleModalOpen] = useToggle(open);
-  useUpdates(() => toggleModalOpen(open), [open]);
+  useUpdate(() => toggleModalOpen(open), [open]);
 
   const layout = useLayout();
-  const { Portal } = usePortal({ target: layout.root.current });
+  const { Portal } = usePortal({ target: layout.root });
 
   const handleToggle = (open: boolean) => {
     if (!open) {

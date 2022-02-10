@@ -41,4 +41,16 @@
   &__menu_button {
     padding: 0.5em;
   }
+
+  &__overlay {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    display: none;
+    z-index: var(--z-index-default);
+
+    &--open {
+      display: block;
+    }
+  }
 }

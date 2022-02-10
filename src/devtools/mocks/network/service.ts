@@ -178,7 +178,7 @@ export default class NetworkService implements NetworkServiceService {
 
   getUIConfig(): Promise<networkv1.GetUIConfigResponse> {
     const networkDisplayOrder: bigint[] = [];
-    for (let i = 0; i < this.limit; i++) {
+    for (let i = 0; i < Math.min(images.length, this.limit); i++) {
       networkDisplayOrder.push(BigInt(i));
     }
 

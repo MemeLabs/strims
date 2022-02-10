@@ -33,13 +33,14 @@
   }
 
   &__header {
-    background: black;
+    background: var(--color-background-layout-header);
     flex: 0 0 50px;
     user-select: none;
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
     touch-action: none;
+    z-index: var(--z-index-above);
 
     &__title {
       flex: 1;

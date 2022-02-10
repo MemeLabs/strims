@@ -16,7 +16,7 @@
 
   &__input {
     background: white;
-    color: var(--color-opac-w-14);
+    color: var(--color-text-input);
     background: transparent;
     flex: 1;
   }
@@ -27,7 +27,7 @@
     justify-content: center;
     height: 1em;
     width: 1em;
-    color: var(--color-opac-w-14);
+    color: var(--color-icon-input);
   }
 
   &__menu {
@@ -137,8 +137,9 @@
     &__base {
       display: flex;
       flex-direction: row;
-      margin: 0.5em;
+      padding: 0.5em;
       flex: 0 0 2em;
+      background: var(--color-background-layout-header);
     }
 
     &__box {

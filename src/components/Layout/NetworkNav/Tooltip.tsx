@@ -10,8 +10,8 @@ export interface TooltipOverlayProps {
 }
 
 const TooltipOverlay: React.FC<TooltipOverlayProps> = ({ anchor, children }) => {
-  const { root } = useLayout();
-  const { Portal } = usePortal({ target: root.current });
+  const layout = useLayout();
+  const { Portal } = usePortal({ target: layout.root });
 
   const rect = useMemo(() => anchor.current.getBoundingClientRect(), []);
 

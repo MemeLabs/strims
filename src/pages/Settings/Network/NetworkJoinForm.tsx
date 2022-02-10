@@ -1,17 +1,14 @@
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 
-import { CreateNetworkFromInvitationResponse } from "../../../apis/strims/network/v1/network";
 import { InputError, TextInput } from "../../../components/Form";
 import { useLazyCall } from "../../../contexts/FrontendApi";
 
-interface JoinFormProps {
-  onCreate?: (res: CreateNetworkFromInvitationResponse) => void;
-}
-
-const JoinForm: React.FC<JoinFormProps> = ({ onCreate }) => {
+const JoinForm: React.FC = () => {
+  const navigate = useNavigate();
   const [{ error, loading }, create] = useLazyCall("network", "createNetworkFromInvitation", {
-    onComplete: onCreate,
+    onComplete: () => navigate("/settings/networks"),
   });
   const { control, handleSubmit } = useForm<{
     invitationB64: string;

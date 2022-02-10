@@ -27,6 +27,7 @@
 
 .input_button {
   background: var(--input-bg);
+  align-items: center;
 
   &:hover:not(:disabled) {
     cursor: pointer;

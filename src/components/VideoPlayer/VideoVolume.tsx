@@ -12,7 +12,7 @@ import {
 
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useReady from "../../hooks/useReady";
-import useUpdates from "../../hooks/useUpdates";
+import useUpdate from "../../hooks/useUpdate";
 
 interface HandleProps {
   domain: [number, number];
@@ -71,7 +71,7 @@ const VideoVolume: React.FC<VolumeProps> = ({
   const [dragging, setDragging] = useState(false);
   const [idle, renewIdleTimeout] = useIdleTimeout();
 
-  useUpdates(renewIdleTimeout, [value]);
+  useUpdate(renewIdleTimeout, [value]);
 
   const sliderClassNames = clsx({
     video_volume__slider: true,
