@@ -312,6 +312,10 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 			zap.Uint64("bin", uint64(b)),
 			zap.Uint64("offset", b.BaseOffset()),
 		)
+
+		for p, cs := range s.channels {
+			p.Enqueue(cs)
+		}
 	}
 }
 
@@ -690,6 +694,7 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		haveBins:       s.haveBins.Clone(),
 		cancelBins:     binmap.New(),
 		requestStreams: make([]binmap.Bin, s.streamCount),
+		extraMessages:  []codec.Message{newHandshake(s.swarm)},
 		peerHaveBins:   binmap.New(),
 		sentBinMin:     binmap.None,
 		sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
@@ -720,6 +725,8 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 	}
 
 	s.channels[p] = c
+
+	p.Enqueue(c)
 
 	return c
 }
@@ -797,6 +804,7 @@ type peerChannelScheduler struct {
 
 	lock sync.Mutex
 
+	handshakeSent bool
 	choked        bool
 	streamHaveLag []stats.Welford
 	requestTimes  timeSet
@@ -897,21 +905,6 @@ func (c *peerChannelScheduler) clearRequests() {
 			c.s.requestBins.Reset(ei.Value())
 		}
 	}
-}
-
-func (c *peerChannelScheduler) WriteHandshake() error {
-	if _, err := c.cw.WriteHandshake(newHandshake(c.s.swarm)); err != nil {
-		return err
-	}
-
-	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
-		if errors.Is(err, codec.ErrNotEnoughSpace) {
-			return nil
-		}
-		return err
-	}
-
-	return nil
 }
 
 func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
@@ -1023,17 +1016,11 @@ func (c *peerChannelScheduler) write0() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
-		return err
-	}
-
-	if err := c.writeMapBins(c.cancelBins, c.writeCancel); err != nil {
-		return err
-	}
-
 	for i, m := range c.extraMessages {
 		var err error
 		switch m := m.(type) {
+		case *codec.Handshake:
+			_, err = c.cw.WriteHandshake(*m)
 		case *codec.StreamRequest:
 			_, err = c.cw.WriteStreamRequest(*m)
 		case *codec.StreamCancel:
@@ -1052,6 +1039,14 @@ func (c *peerChannelScheduler) write0() error {
 		}
 	}
 	c.pruneExtraMessages(len(c.extraMessages))
+
+	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
+		return err
+	}
+
+	if err := c.writeMapBins(c.cancelBins, c.writeCancel); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1076,6 +1071,7 @@ func (c *peerChannelScheduler) write1() error {
 	if m := c.s.swarm.store.Next(); min > m {
 		min = m
 	}
+	// TODO: skip reqs until firstChunkSet?
 	if !c.s.firstChunkSet && c.peerMaxHaveBin > min {
 		min = c.peerMaxHaveBin
 	}
@@ -1107,8 +1103,8 @@ func (c *peerChannelScheduler) write1() error {
 
 		for ok := it.NextAfter(min); ok; ok = it.Next() {
 			for b, br := it.Value().Base(); b <= br; b += 2 {
-				stream := c.s.binStream(b)
-				c.candidateBins[c.s.ranks[stream]] = append(c.candidateBins[c.s.ranks[stream]], b)
+				rank := c.s.ranks[c.s.binStream(b)]
+				c.candidateBins[rank] = append(c.candidateBins[rank], b)
 			}
 		}
 

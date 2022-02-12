@@ -42,8 +42,8 @@ var (
 	errIncompatibleLiveSignatureAlgorithm           = errors.New("incompatible LiveSignatureAlgorithm")
 )
 
-func newHandshake(swarm *Swarm) codec.Handshake {
-	return codec.Handshake{
+func newHandshake(swarm *Swarm) *codec.Handshake {
+	return &codec.Handshake{
 		Options: []codec.ProtocolOption{
 			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
 			&codec.VersionProtocolOption{Value: 2},

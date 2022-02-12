@@ -19,7 +19,6 @@ type swarmScheduler interface {
 
 type peerWriter interface {
 	PunchTicket(v uint64) bool
-	WriteHandshake() error
 	Write(maxBytes int) (int, error)
 	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
 }

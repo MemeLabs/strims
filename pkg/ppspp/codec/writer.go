@@ -61,6 +61,10 @@ func (w *Writer) Reset() {
 	w.off = 0
 }
 
+func (w *Writer) Snoop() []byte {
+	return w.buf[:w.off]
+}
+
 // Flush ...
 func (w *Writer) Flush() error {
 	if !w.Dirty() {

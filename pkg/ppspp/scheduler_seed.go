@@ -341,7 +341,7 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 }
 
 func (c *seedChannelScheduler) WriteHandshake() error {
-	if _, err := c.cw.WriteHandshake(newHandshake(c.s.swarm)); err != nil {
+	if _, err := c.cw.WriteHandshake(*newHandshake(c.s.swarm)); err != nil {
 		return err
 	}
 

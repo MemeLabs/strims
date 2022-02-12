@@ -213,6 +213,8 @@ func (s *chatServer) Reader(ctx context.Context) (readers, error) {
 	assetsReader := s.assetSwarm.Reader()
 	eventsReader.SetReadStopper(ctx.Done())
 	assetsReader.SetReadStopper(ctx.Done())
+	eventsReader.Unread()
+	assetsReader.Unread()
 	return readers{
 		events: protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
 		assets: protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),

@@ -81,6 +81,8 @@ func (d *chatReader) Reader(ctx context.Context) (readers, error) {
 	assetsReader := d.assetSwarm.Reader()
 	eventsReader.SetReadStopper(ctx.Done())
 	assetsReader.SetReadStopper(ctx.Done())
+	eventsReader.Unread()
+	assetsReader.Unread()
 	return readers{
 		events: protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
 		assets: protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),
