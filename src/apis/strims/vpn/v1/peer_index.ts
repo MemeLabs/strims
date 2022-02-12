@@ -125,6 +125,7 @@ export namespace PeerIndexMessage {
 
   export type IRecord = {
     hash?: Uint8Array;
+    hostId?: Uint8Array;
     port?: number;
     timestamp?: bigint;
     key?: Uint8Array;
@@ -133,6 +134,7 @@ export namespace PeerIndexMessage {
 
   export class Record {
     hash: Uint8Array;
+    hostId: Uint8Array;
     port: number;
     timestamp: bigint;
     key: Uint8Array;
@@ -140,6 +142,7 @@ export namespace PeerIndexMessage {
 
     constructor(v?: IRecord) {
       this.hash = v?.hash || new Uint8Array();
+      this.hostId = v?.hostId || new Uint8Array();
       this.port = v?.port || 0;
       this.timestamp = v?.timestamp || BigInt(0);
       this.key = v?.key || new Uint8Array();
@@ -149,8 +152,9 @@ export namespace PeerIndexMessage {
     static encode(m: Record, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.hash) w.uint32(10).bytes(m.hash);
-      if (m.port) w.uint32(16).uint32(m.port);
-      if (m.timestamp) w.uint32(24).int64(m.timestamp);
+      if (m.hostId) w.uint32(18).bytes(m.hostId);
+      if (m.port) w.uint32(24).uint32(m.port);
+      if (m.timestamp) w.uint32(32).int64(m.timestamp);
       if (m.key) w.uint32(80010).bytes(m.key);
       if (m.signature) w.uint32(80018).bytes(m.signature);
       return w;
@@ -167,9 +171,12 @@ export namespace PeerIndexMessage {
           m.hash = r.bytes();
           break;
           case 2:
-          m.port = r.uint32();
+          m.hostId = r.bytes();
           break;
           case 3:
+          m.port = r.uint32();
+          break;
+          case 4:
           m.timestamp = r.int64();
           break;
           case 10001:

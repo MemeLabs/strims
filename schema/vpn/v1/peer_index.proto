@@ -9,8 +9,9 @@ option swift_prefix = "SVN";
 message PeerIndexMessage {
   message Record {
     bytes hash = 1;
-    uint32 port = 2;
-    int64 timestamp = 3;
+    bytes host_id = 2;
+    uint32 port = 3;
+    int64 timestamp = 4;
 
     bytes key = 10001;
     bytes signature = 10002;
