@@ -56,7 +56,7 @@ const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M exten
     >
       <Select
         classNamePrefix="input_select"
-        menuPortalTarget={root.current}
+        menuPortalTarget={root}
         menuPlacement="auto"
         {...(inputProps as unknown)}
         {...field}

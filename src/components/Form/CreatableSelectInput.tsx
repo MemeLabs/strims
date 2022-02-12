@@ -51,7 +51,7 @@ const CreatableSelectInput = <T extends FieldValues>({
     >
       <CreatableSelect
         classNamePrefix="input_select"
-        menuPortalTarget={root.current}
+        menuPortalTarget={root}
         menuPlacement="auto"
         {...(inputProps as unknown)}
         {...field}

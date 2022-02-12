@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
@@ -39,6 +40,7 @@ func NewControl(
 	observers *event.Observers,
 	network network.Control,
 	transfer transfer.Control,
+	directory directory.Control,
 ) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
@@ -51,6 +53,7 @@ func NewControl(
 		events:    events,
 		network:   network,
 		transfer:  transfer,
+		directory: directory,
 	}
 }
 
@@ -63,6 +66,7 @@ type control struct {
 	events    chan interface{}
 	network   network.Control
 	transfer  transfer.Control
+	directory directory.Control
 
 	lock    sync.Mutex
 	runners llrb.LLRB
@@ -133,7 +137,7 @@ func (t *control) handleServerDelete(ctx context.Context, server *chatv1.Server)
 }
 
 func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) {
-	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, server.Key.Public, server.NetworkKey, server))
+	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, t.directory, server.Key.Public, server.NetworkKey, server))
 }
 
 func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
@@ -186,7 +190,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 	runner, ok := t.runners.Get(&runner{key: key}).(*runner)
 	if !ok {
-		runner = newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, key, networkKey, nil)
+		runner = newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
 		t.runners.ReplaceOrInsert(runner)
 	}
 
@@ -204,16 +208,17 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 		for {
 			eg, rctx := errgroup.WithContext(ctx)
 
-			eventReader, assetReader, err := runner.Readers(rctx)
+			readers, stop, err := runner.Reader(rctx)
 			if err != nil {
 				logger.Debug("open chat readers failed", zap.Error(err))
 				return
 			}
+			defer stop()
 
 			eg.Go(func() error {
 				for {
 					e := &chatv1.ServerEvent{}
-					err := eventReader.Read(e)
+					err := readers.events.Read(e)
 					if err == protoutil.ErrShortRead {
 						continue
 					} else if err != nil {
@@ -231,7 +236,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			eg.Go(func() error {
 				for {
 					b := &chatv1.AssetBundle{}
-					err := assetReader.Read(b)
+					err := readers.assets.Read(b)
 					if err != nil {
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, error) {
+func newChatReader(logger *zap.Logger, transfer transfer.Control, key, networkKey []byte) (*chatReader, error) {
 	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", key[:8])}
 	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
@@ -27,6 +27,7 @@ func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, err
 
 	return &chatReader{
 		logger:     logger,
+		transfer:   transfer,
 		key:        key,
 		networkKey: networkKey,
 		eventSwarm: eventSwarm,
@@ -36,6 +37,7 @@ func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, err
 
 type chatReader struct {
 	logger      *zap.Logger
+	transfer    transfer.Control
 	key         []byte
 	networkKey  []byte
 	eventSwarm  *ppspp.Swarm
@@ -45,19 +47,19 @@ type chatReader struct {
 	cancel      context.CancelFunc
 }
 
-func (d *chatReader) Run(ctx context.Context, transfer transfer.Control) error {
+func (d *chatReader) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 
-	eventTransferID := transfer.Add(d.eventSwarm, EventsAddressSalt)
-	assetTransferID := transfer.Add(d.assetSwarm, AssetsAddressSalt)
-	transfer.Publish(eventTransferID, d.networkKey)
-	transfer.Publish(assetTransferID, d.networkKey)
+	eventTransferID := d.transfer.Add(d.eventSwarm, EventsAddressSalt)
+	assetTransferID := d.transfer.Add(d.assetSwarm, AssetsAddressSalt)
+	d.transfer.Publish(eventTransferID, d.networkKey)
+	d.transfer.Publish(assetTransferID, d.networkKey)
 
 	<-ctx.Done()
 
-	transfer.Remove(eventTransferID)
-	transfer.Remove(assetTransferID)
+	d.transfer.Remove(eventTransferID)
+	d.transfer.Remove(assetTransferID)
 	d.eventSwarm.Close()
 	d.assetSwarm.Close()
 
@@ -66,19 +68,20 @@ func (d *chatReader) Run(ctx context.Context, transfer transfer.Control) error {
 	return ctx.Err()
 }
 
-func (d *chatReader) Close() {
-	if d == nil || d.cancel == nil {
-		return
+func (d *chatReader) Close() error {
+	if d.cancel != nil {
+		d.cancel()
 	}
-	d.cancel()
+	return nil
 }
 
-func (d *chatReader) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader) {
+func (d *chatReader) Reader(ctx context.Context) (readers, error) {
 	eventsReader := d.eventSwarm.Reader()
 	assetsReader := d.assetSwarm.Reader()
 	eventsReader.SetReadStopper(ctx.Done())
 	assetsReader.SetReadStopper(ctx.Done())
-	events = protoutil.NewChunkStreamReader(eventsReader, eventChunkSize)
-	assets = protoutil.NewChunkStreamReader(assetsReader, assetChunkSize)
-	return
+	return readers{
+		events: protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
+		assets: protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),
+	}, nil
 }

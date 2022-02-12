@@ -115,7 +115,7 @@ const Toast: React.FC<ToastProps> = ({ timeoutMs = 5000, closeDurationMs = 500 }
         <ToastItem key={props.notification.id.toString()} {...props} />
       ))}
     </div>,
-    root.current
+    root
   );
 };
 

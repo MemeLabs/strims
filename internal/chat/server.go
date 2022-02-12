@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -70,6 +72,9 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes [
 func newChatServer(
 	logger *zap.Logger,
 	store kv.Store,
+	dialer network.Dialer,
+	transfer transfer.Control,
+	directory directory.Control,
 	config *chatv1.Server,
 ) (*chatServer, error) {
 	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", config.Key.Public[:8])}
@@ -89,6 +94,9 @@ func newChatServer(
 	s := &chatServer{
 		logger:         logger,
 		store:          store,
+		dialer:         dialer,
+		transfer:       transfer,
+		directory:      directory,
 		config:         config,
 		eventSwarm:     eventSwarm,
 		assetSwarm:     assetSwarm,
@@ -119,28 +127,28 @@ func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.Chu
 type chatServer struct {
 	logger         *zap.Logger
 	store          kv.Store
+	dialer         network.Dialer
+	transfer       transfer.Control
+	directory      directory.Control
 	config         *chatv1.Server
 	eventSwarm     *ppspp.Swarm
 	assetSwarm     *ppspp.Swarm
 	service        *chatService
 	assetPublisher *assetPublisher
-	cancel         context.CancelFunc
+
+	cancel context.CancelFunc
 }
 
-func (s *chatServer) Run(
-	ctx context.Context,
-	dialer network.Dialer,
-	transfer transfer.Control,
-) error {
+func (s *chatServer) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 
-	eventTransferID := transfer.Add(s.eventSwarm, EventsAddressSalt)
-	assetTransferID := transfer.Add(s.assetSwarm, AssetsAddressSalt)
-	transfer.Publish(eventTransferID, s.config.NetworkKey)
-	transfer.Publish(assetTransferID, s.config.NetworkKey)
+	eventTransferID := s.transfer.Add(s.eventSwarm, EventsAddressSalt)
+	assetTransferID := s.transfer.Add(s.assetSwarm, AssetsAddressSalt)
+	s.transfer.Publish(eventTransferID, s.config.NetworkKey)
+	s.transfer.Publish(assetTransferID, s.config.NetworkKey)
 
-	server, err := dialer.Server(ctx, s.config.NetworkKey, s.config.Key, ServiceAddressSalt)
+	server, err := s.dialer.Server(ctx, s.config.NetworkKey, s.config.Key, ServiceAddressSalt)
 	if err != nil {
 		return err
 	}
@@ -154,26 +162,53 @@ func (s *chatServer) Run(
 	s.service.Sync(config, emotes, modifiers, tags)
 	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 
+	var listingID uint64
+
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })
 	eg.Go(func() error { return server.Listen(ctx) })
+	eg.Go(func() (err error) {
+		listingID, err = s.directory.Publish(
+			ctx,
+			&networkv1directory.Listing{
+				Content: &networkv1directory.Listing_Chat_{
+					Chat: &networkv1directory.Listing_Chat{
+						Key:  s.config.Key.Public,
+						Name: s.config.Room.Name,
+					},
+				},
+			},
+			s.config.NetworkKey,
+		)
+		if err != nil {
+			return fmt.Errorf("publishing chat server to directory failed: %w", err)
+		}
+		return nil
+	})
 	err = eg.Wait()
 
-	transfer.Remove(eventTransferID)
-	transfer.Remove(assetTransferID)
+	s.transfer.Remove(eventTransferID)
+	s.transfer.Remove(assetTransferID)
 	s.eventSwarm.Close()
 	s.assetSwarm.Close()
+
+	go func() {
+		err := s.directory.Unpublish(context.Background(), listingID, s.config.NetworkKey)
+		if err != nil {
+			s.logger.Info("unpublishing chat server from directory failed", zap.Error(err))
+		}
+	}()
 
 	s.cancel = nil
 
 	return err
 }
 
-func (s *chatServer) Close() {
-	if s == nil || s.cancel == nil {
-		return
+func (s *chatServer) Close() error {
+	if s.cancel == nil {
+		s.cancel()
 	}
-	s.cancel()
+	return nil
 }
 
 func (s *chatServer) Sync() {
@@ -186,14 +221,15 @@ func (s *chatServer) Sync() {
 	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 }
 
-func (s *chatServer) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader) {
+func (s *chatServer) Reader(ctx context.Context) (readers, error) {
 	eventsReader := s.eventSwarm.Reader()
 	assetsReader := s.assetSwarm.Reader()
 	eventsReader.SetReadStopper(ctx.Done())
 	assetsReader.SetReadStopper(ctx.Done())
-	events = protoutil.NewChunkStreamReader(eventsReader, eventChunkSize)
-	assets = protoutil.NewChunkStreamReader(assetsReader, assetChunkSize)
-	return
+	return readers{
+		events: protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
+		assets: protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),
+	}, nil
 }
 
 func newAssetPublisher(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *assetPublisher {
