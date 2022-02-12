@@ -6,7 +6,9 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
@@ -72,6 +74,7 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes [
 func newChatServer(
 	logger *zap.Logger,
 	store kv.Store,
+	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
 	directory directory.Control,
@@ -94,6 +97,7 @@ func newChatServer(
 	s := &chatServer{
 		logger:         logger,
 		store:          store,
+		observers:      observers,
 		dialer:         dialer,
 		transfer:       transfer,
 		directory:      directory,
@@ -127,6 +131,7 @@ func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.Chu
 type chatServer struct {
 	logger         *zap.Logger
 	store          kv.Store
+	observers      *event.Observers
 	dialer         network.Dialer
 	transfer       transfer.Control
 	directory      directory.Control
@@ -135,13 +140,12 @@ type chatServer struct {
 	assetSwarm     *ppspp.Swarm
 	service        *chatService
 	assetPublisher *assetPublisher
-
-	cancel context.CancelFunc
+	stopper        servicemanager.Stopper
 }
 
 func (s *chatServer) Run(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
+	done, ctx := s.stopper.Start(ctx)
+	defer done()
 
 	eventTransferID := s.transfer.Add(s.eventSwarm, EventsAddressSalt)
 	assetTransferID := s.transfer.Add(s.assetSwarm, AssetsAddressSalt)
@@ -155,12 +159,8 @@ func (s *chatServer) Run(ctx context.Context) error {
 
 	chatv1.RegisterChatService(server, s.service)
 
-	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
-	if err != nil {
-		return err
-	}
-	s.service.Sync(config, emotes, modifiers, tags)
-	s.assetPublisher.Sync(config, emotes, modifiers, tags)
+	go s.watchAssets(ctx)
+	s.syncAssets(true)
 
 	var listingID uint64
 
@@ -192,33 +192,20 @@ func (s *chatServer) Run(ctx context.Context) error {
 	s.eventSwarm.Close()
 	s.assetSwarm.Close()
 
-	go func() {
-		err := s.directory.Unpublish(context.Background(), listingID, s.config.NetworkKey)
-		if err != nil {
-			s.logger.Info("unpublishing chat server from directory failed", zap.Error(err))
-		}
-	}()
-
-	s.cancel = nil
+	if err := s.directory.Unpublish(context.Background(), listingID, s.config.NetworkKey); err != nil {
+		s.logger.Info("unpublishing chat server from directory failed", zap.Error(err))
+	}
 
 	return err
 }
 
-func (s *chatServer) Close() error {
-	if s.cancel == nil {
-		s.cancel()
+func (s *chatServer) Close(ctx context.Context) error {
+	select {
+	case <-s.stopper.Stop():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
-}
-
-func (s *chatServer) Sync() {
-	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
-	if err != nil {
-		return
-	}
-
-	s.service.Sync(config, emotes, modifiers, tags)
-	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 }
 
 func (s *chatServer) Reader(ctx context.Context) (readers, error) {
@@ -230,6 +217,54 @@ func (s *chatServer) Reader(ctx context.Context) (readers, error) {
 		events: protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
 		assets: protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),
 	}, nil
+}
+
+func (s *chatServer) watchAssets(ctx context.Context) {
+	events := make(chan interface{}, 8)
+	s.observers.Notify(events)
+	defer s.observers.StopNotifying(events)
+
+	for {
+		select {
+		case e := <-events:
+			switch e := e.(type) {
+			case *chatv1.SyncAssetsEvent:
+				s.trySyncAssets(e.ServerId, e.ForceUnifiedUpdate)
+			case *chatv1.EmoteChangeEvent:
+				s.trySyncAssets(e.Emote.ServerId, false)
+			case *chatv1.EmoteDeleteEvent:
+				s.trySyncAssets(e.Emote.ServerId, false)
+			case *chatv1.ModifierChangeEvent:
+				s.trySyncAssets(e.Modifier.ServerId, false)
+			case *chatv1.ModifierDeleteEvent:
+				s.trySyncAssets(e.Modifier.ServerId, false)
+			case *chatv1.TagChangeEvent:
+				s.trySyncAssets(e.Tag.ServerId, false)
+			case *chatv1.TagDeleteEvent:
+				s.trySyncAssets(e.Tag.ServerId, false)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *chatServer) trySyncAssets(serverID uint64, unifiedUpdate bool) {
+	if serverID == s.config.Id {
+		go s.syncAssets(unifiedUpdate)
+	}
+}
+
+func (s *chatServer) syncAssets(unifiedUpdate bool) {
+	s.logger.Debug("syncing assets for chat server", zap.Uint64("serverID", s.config.Id))
+
+	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
+	if err != nil {
+		return
+	}
+
+	s.service.Sync(config, emotes, modifiers, tags)
+	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 }
 
 func newAssetPublisher(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *assetPublisher {

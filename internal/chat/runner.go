@@ -6,6 +6,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
@@ -21,42 +22,38 @@ func newRunner(ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
+	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
 	directory directory.Control,
 	key []byte,
 	networkKey []byte,
 	config *chatv1.Server,
-) *runner {
+) (*runner, error) {
 	logger = logger.With(logutil.ByteHex("chat", key))
 
 	s := &runnerService{
 		logger:     logger,
-		transfer:   transfer,
 		store:      store,
+		observers:  observers,
+		dialer:     dialer,
+		transfer:   transfer,
+		directory:  directory,
 		key:        key,
 		networkKey: networkKey,
 		config:     config,
 	}
 
-	if config != nil {
-		server, err := newChatServer(logger, store, dialer, transfer, directory, config)
-		if err != nil {
-			panic(err)
-		}
-		s.server = server
-	}
-
 	m, err := servicemanager.New[readers](logger, context.Background(), s)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &runner{
 		key:     key,
 		service: s,
 		Runner:  m,
-	}
+	}, nil
 }
 
 type runner struct {
@@ -72,24 +69,20 @@ func (r *runner) Less(o llrb.Item) bool {
 	return !o.Less(r)
 }
 
-func (r *runner) SyncServer() {
-	if r.service.server != nil {
-		r.service.server.Sync()
-	}
-}
-
 type readers struct {
 	events, assets *protoutil.ChunkStreamReader
 }
 
 type runnerService struct {
 	logger     *zap.Logger
-	transfer   transfer.Control
 	store      *dao.ProfileStore
+	observers  *event.Observers
+	dialer     network.Dialer
+	transfer   transfer.Control
+	directory  directory.Control
 	key        []byte
 	networkKey []byte
 	config     *chatv1.Server
-	server     *chatServer
 }
 
 func (s *runnerService) Mutex() *dao.Mutex {
@@ -101,5 +94,8 @@ func (s *runnerService) Client() (servicemanager.Readable[readers], error) {
 }
 
 func (s *runnerService) Server() (servicemanager.Readable[readers], error) {
-	return s.server, nil
+	if s.config == nil {
+		return nil, nil
+	}
+	return newChatServer(s.logger, s.store, s.observers, s.dialer, s.transfer, s.directory, s.config)
 }

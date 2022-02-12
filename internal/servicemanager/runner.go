@@ -20,7 +20,7 @@ type Service[R any] interface {
 type Readable[R any] interface {
 	Reader(ctx context.Context) (R, error)
 	Run(context.Context) error
-	Close() error
+	Close(context.Context) error
 }
 
 func New[R any, T Service[R]](
@@ -40,7 +40,7 @@ func New[R any, T Service[R]](
 	if err != nil {
 		return nil, fmt.Errorf("failed to start server: %w", err)
 	}
-	if !reflect.ValueOf(server).IsNil() {
+	if server != nil && !reflect.ValueOf(server).IsNil() {
 		go r.runServer(server)
 	}
 
@@ -65,7 +65,7 @@ func (r *Runner[R, T]) Close() {
 
 	if r.ref != nil {
 		r.ref.closeOnce.Do(func() {
-			if err := r.ref.readable.Close(); err != nil {
+			if err := r.ref.readable.Close(r.ctx); err != nil {
 				r.logger.Debug("error closing source", zap.Error(err), logutil.Type("source", r.ref.readable))
 			}
 		})
@@ -79,7 +79,7 @@ func (r *Runner[R, T]) Reader(ctx context.Context) (R, StopFunc, error) {
 	if r.ref == nil {
 		client, err := r.service.Client()
 		if err != nil {
-			return zero[R](), nil, fmt.Errorf("failed to start client: %w", err)
+			return empty[R](), nil, fmt.Errorf("failed to start client: %w", err)
 		}
 		r.logger.Debug("created new client", logutil.Type("client", client))
 		go r.runClient(client)
@@ -123,7 +123,7 @@ func (r *Runner[R, T]) runClient(c Readable[R]) {
 
 func (r *Runner[R, T]) closeClient(c Readable[R]) {
 	r.logger.Debug("client closing", logutil.Type("client", c))
-	if err := c.Close(); err != nil {
+	if err := c.Close(r.ctx); err != nil {
 		r.logger.Debug("error closing client", zap.Error(err), logutil.Type("client", c))
 	}
 }
@@ -159,7 +159,7 @@ func (r *Runner[R, T]) runServer(s Readable[R]) {
 	}
 }
 
-func zero[T any]() (v T) { return }
+func empty[T any]() (v T) { return }
 
 func newRef[R any](r Readable[R], n int32) *ref[R] {
 	return &ref[R]{readable: r, count: n}

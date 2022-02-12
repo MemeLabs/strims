@@ -119,7 +119,11 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	r := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
+	r, err := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
+	if err != nil {
+		t.logger.Error("failed to start directory runner", zap.Error(err))
+		return
+	}
 	t.runners.ReplaceOrInsert(r)
 
 	c := newEventCache(network)
@@ -135,7 +139,9 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 		}()
 
 		for {
-			er, err := r.EventReader(ctx)
+			er, stop, err := r.Reader(ctx)
+			defer stop()
+
 			if err != nil {
 				t.logger.Debug("error getting directory event reader", zap.Error(err))
 				return
@@ -158,6 +164,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 					Broadcast:  b,
 				})
 			}
+			stop()
 		}
 	}()
 }
@@ -187,14 +194,14 @@ func (t *control) ping(ctx context.Context) {
 		r := i.(*runner)
 		c, dc, err := t.client(ctx, r.key)
 		if err != nil {
-			r.logger.Debug("directory ping failed", zap.Error(err))
+			r.Logger().Debug("directory ping failed", zap.Error(err))
 			return true
 		}
 
 		go func() {
 			err := dc.Ping(ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
 			if err != nil {
-				r.logger.Debug("directory ping failed", zap.Error(err))
+				r.Logger().Debug("directory ping failed", zap.Error(err))
 			}
 			c.Close()
 		}()

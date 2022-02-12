@@ -7,6 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
@@ -23,6 +24,7 @@ func newDirectoryServer(
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	dialer network.Dialer,
+	transfer transfer.Control,
 	observers *event.Observers,
 	network *networkv1.Network,
 ) (*directoryServer, error) {
@@ -45,12 +47,13 @@ func newDirectoryServer(
 	}
 
 	s := &directoryServer{
-		logger:      logger,
-		vpn:         vpn,
-		key:         config.Key,
-		swarm:       w.Swarm(),
-		service:     newDirectoryService(logger, vpn, store, dialer, observers, network, ew),
-		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
+		logger:   logger,
+		vpn:      vpn,
+		dialer:   dialer,
+		transfer: transfer,
+		key:      config.Key,
+		swarm:    w.Swarm(),
+		service:  newDirectoryService(logger, vpn, store, dialer, observers, network, ew),
 	}
 	return s, nil
 }
@@ -58,21 +61,29 @@ func newDirectoryServer(
 type directoryServer struct {
 	logger      *zap.Logger
 	vpn         *vpn.Host
+	dialer      network.Dialer
+	transfer    transfer.Control
 	key         *key.Key
 	swarm       *ppspp.Swarm
 	service     *directoryService
 	eventReader *protoutil.ChunkStreamReader
-	cancel      context.CancelFunc
+	stopper     servicemanager.Stopper
 }
 
-func (s *directoryServer) Run(ctx context.Context, dialer network.Dialer, transfer transfer.Control) error {
-	ctx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
+func (d *directoryServer) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+	reader := d.swarm.Reader()
+	reader.SetReadStopper(ctx.Done())
+	return protoutil.NewChunkStreamReader(reader, chunkSize), nil
+}
 
-	transferID := transfer.Add(s.swarm, AddressSalt)
-	transfer.Publish(transferID, s.key.Public)
+func (s *directoryServer) Run(ctx context.Context) error {
+	done, ctx := s.stopper.Start(ctx)
+	defer done()
 
-	server, err := dialer.Server(ctx, s.key.Public, s.key, AddressSalt)
+	transferID := s.transfer.Add(s.swarm, AddressSalt)
+	s.transfer.Publish(transferID, s.key.Public)
+
+	server, err := s.dialer.Server(ctx, s.key.Public, s.key, AddressSalt)
 	if err != nil {
 		return err
 	}
@@ -84,17 +95,17 @@ func (s *directoryServer) Run(ctx context.Context, dialer network.Dialer, transf
 	eg.Go(func() error { return server.Listen(ctx) })
 	err = eg.Wait()
 
-	transfer.Remove(transferID)
+	s.transfer.Remove(transferID)
 	s.swarm.Close()
-
-	s.cancel = nil
 
 	return err
 }
 
-func (s *directoryServer) Close() {
-	if s == nil || s.cancel == nil {
-		return
+func (s *directoryServer) Close(ctx context.Context) error {
+	select {
+	case <-s.stopper.Stop():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	s.cancel()
 }

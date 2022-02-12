@@ -3,12 +3,11 @@ package directory
 import (
 	"bytes"
 	"context"
-	"errors"
-	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
@@ -19,7 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func newRunner(ctx context.Context,
+func newRunner(
+	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
@@ -27,50 +27,41 @@ func newRunner(ctx context.Context,
 	dialer network.Dialer,
 	transfer transfer.Control,
 	network *networkv1.Network,
-) *runner {
-	r := &runner{
+) (*runner, error) {
+	logger = logger.With(logutil.ByteHex("directory", dao.NetworkKey(network)))
+
+	s := &runnerService{
 		key:     dao.NetworkKey(network),
 		network: syncutil.NewPointer(network),
 
-		logger:    logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
+		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
 		dialer:    dialer,
 		transfer:  transfer,
-
-		runnable: make(chan struct{}, 1),
 	}
 
-	r.runnable <- struct{}{}
-
-	if network.GetServerConfig() != nil {
-		go r.tryStartServer(ctx)
+	m, err := servicemanager.New[*protoutil.ChunkStreamReader](logger, ctx, s)
+	if err != nil {
+		return nil, err
 	}
 
-	return r
+	return &runner{
+		key:     dao.NetworkKey(network),
+		service: s,
+		Runner:  m,
+	}, nil
 }
 
 type runner struct {
 	key     []byte
-	network syncutil.Pointer[networkv1.Network]
-
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	store     *dao.ProfileStore
-	observers *event.Observers
-	dialer    network.Dialer
-	transfer  transfer.Control
-
-	lock     sync.Mutex
-	closed   bool
-	client   *directoryReader
-	server   *directoryServer
-	runnable chan struct{}
+	service *runnerService
+	*servicemanager.Runner[*protoutil.ChunkStreamReader, *runnerService]
 }
 
 func (r *runner) Sync(network *networkv1.Network) {
-	r.network.Swap(network)
+	r.service.network.Swap(network)
 }
 
 func (r *runner) Less(o llrb.Item) bool {
@@ -80,98 +71,33 @@ func (r *runner) Less(o llrb.Item) bool {
 	return !o.Less(r)
 }
 
-func (r *runner) Close() {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.closed = true
-	r.client.Close()
-	r.server.Close()
+func (r *runner) Logger() *zap.Logger {
+	return r.service.logger
 }
 
-func (r *runner) Closed() bool {
-	r.lock.Lock()
-	defer r.lock.Unlock()
+type runnerService struct {
+	key     []byte
+	network syncutil.Pointer[networkv1.Network]
 
-	return r.closed
+	logger    *zap.Logger
+	vpn       *vpn.Host
+	store     *dao.ProfileStore
+	observers *event.Observers
+	dialer    network.Dialer
+	transfer  transfer.Control
 }
 
-func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	if r.closed {
-		return nil, errors.New("cannot read from closed runner")
-	}
-
-	if r.server != nil {
-		return r.server.eventReader, nil
-	}
-
-	r.logger.Info("directory client starting")
-
-	<-r.runnable
-
-	var err error
-	r.client, err = newDirectoryReader(r.logger, r.key)
-	if err != nil {
-		r.runnable <- struct{}{}
-		return nil, err
-	}
-
-	go func() {
-		err := r.client.Run(ctx, r.transfer)
-		r.logger.Debug("directory client closed", zap.Error(err))
-
-		r.runnable <- struct{}{}
-
-		r.lock.Lock()
-		r.client = nil
-		r.lock.Unlock()
-	}()
-
-	return r.client.eventReader, nil
+func (s *runnerService) Mutex() *dao.Mutex {
+	return dao.NewMutex(s.logger, s.store, s.network.Get().Id)
 }
 
-func (r *runner) tryStartServer(ctx context.Context) {
-	for !r.Closed() {
-		mu := dao.NewMutex(r.logger, r.store, r.network.Get().Id)
-		muctx, err := mu.Lock(ctx)
-		if err != nil {
-			return
-		}
-
-		r.logger.Info("directory server starting")
-		err = r.startServer(muctx)
-		r.logger.Info("directory server closed", zap.Error(err))
-
-		mu.Release()
-	}
+func (s *runnerService) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+	return newDirectoryReader(s.logger, s.transfer, s.key)
 }
 
-func (r *runner) startServer(ctx context.Context) error {
-	r.lock.Lock()
-	r.client.Close()
-
-	<-r.runnable
-
-	var err error
-	r.server, err = newDirectoryServer(r.logger, r.vpn, r.store, r.dialer, r.observers, r.network.Get())
-	if err != nil {
-		r.runnable <- struct{}{}
-		r.lock.Unlock()
-		return err
+func (s *runnerService) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+	if s.network.Get().GetServerConfig() == nil {
+		return nil, nil
 	}
-
-	r.lock.Unlock()
-
-	err = r.server.Run(ctx, r.dialer, r.transfer)
-
-	r.lock.Lock()
-	r.server = nil
-	r.lock.Unlock()
-
-	r.runnable <- struct{}{}
-
-	return err
+	return newDirectoryServer(s.logger, s.vpn, s.store, s.dialer, s.transfer, s.observers, s.network.Get())
 }

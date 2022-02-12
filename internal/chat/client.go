@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -44,12 +45,12 @@ type chatReader struct {
 	assetSwarm  *ppspp.Swarm
 	eventReader *protoutil.ChunkStreamReader
 	assetReader *protoutil.ChunkStreamReader
-	cancel      context.CancelFunc
+	stopper     servicemanager.Stopper
 }
 
 func (d *chatReader) Run(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	d.cancel = cancel
+	done, ctx := d.stopper.Start(ctx)
+	defer done()
 
 	eventTransferID := d.transfer.Add(d.eventSwarm, EventsAddressSalt)
 	assetTransferID := d.transfer.Add(d.assetSwarm, AssetsAddressSalt)
@@ -63,16 +64,16 @@ func (d *chatReader) Run(ctx context.Context) error {
 	d.eventSwarm.Close()
 	d.assetSwarm.Close()
 
-	d.cancel = nil
-
 	return ctx.Err()
 }
 
-func (d *chatReader) Close() error {
-	if d.cancel != nil {
-		d.cancel()
+func (d *chatReader) Close(ctx context.Context) error {
+	select {
+	case <-d.stopper.Stop():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
 }
 
 func (d *chatReader) Reader(ctx context.Context) (readers, error) {

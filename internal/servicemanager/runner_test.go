@@ -67,7 +67,7 @@ func (s *MockServer) Run(ctx context.Context) error {
 	}
 }
 
-func (s *MockServer) Close() error {
+func (s *MockServer) Close(ctx context.Context) error {
 	close(s.done)
 	return nil
 }
@@ -89,7 +89,7 @@ func (s *MockClient) Run(ctx context.Context) error {
 	}
 }
 
-func (s *MockClient) Close() error {
+func (s *MockClient) Close(ctx context.Context) error {
 	close(s.done)
 	return nil
 }

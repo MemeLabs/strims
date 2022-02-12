@@ -3,65 +3,62 @@ package directory
 import (
 	"context"
 
+	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
 )
 
-func newDirectoryReader(logger *zap.Logger, key []byte) (*directoryReader, error) {
+func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*directoryReader, error) {
 	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), swarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
 	return &directoryReader{
-		logger:      logger,
-		key:         key,
-		swarm:       s,
-		eventReader: protoutil.NewChunkStreamReader(s.Reader(), chunkSize),
-		close:       make(chan struct{}, 1),
+		logger:   logger,
+		transfer: transfer,
+		key:      key,
+		swarm:    s,
 	}, nil
 }
 
 type directoryReader struct {
 	logger      *zap.Logger
+	transfer    transfer.Control
 	key         []byte
 	swarm       *ppspp.Swarm
 	eventReader *protoutil.ChunkStreamReader
-	cancel      context.CancelFunc
-	close       chan struct{}
+	stopper     servicemanager.Stopper
 }
 
-func (d *directoryReader) Run(ctx context.Context, transfer transfer.Control) error {
-	ctx, cancel := context.WithCancel(ctx)
-	d.cancel = cancel
+func (d *directoryReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+	reader := d.swarm.Reader()
+	reader.SetReadStopper(ctx.Done())
+	return protoutil.NewChunkStreamReader(reader, chunkSize), nil
+}
 
-	transferID := transfer.Add(d.swarm, AddressSalt)
-	transfer.Publish(transferID, d.key)
+func (d *directoryReader) Run(ctx context.Context) error {
+	done, ctx := d.stopper.Start(ctx)
+	defer done()
 
-	select {
-	case <-ctx.Done():
-	case <-d.close:
-		d.cancel()
-	}
+	transferID := d.transfer.Add(d.swarm, AddressSalt)
+	d.transfer.Publish(transferID, d.key)
 
-	transfer.Remove(transferID)
+	<-ctx.Done()
+
+	d.transfer.Remove(transferID)
 	d.swarm.Close()
-
-	d.cancel = nil
 
 	return ctx.Err()
 }
 
-func (d *directoryReader) Close() {
-	if d == nil {
-		return
+func (d *directoryReader) Close(ctx context.Context) error {
+	select {
+	case <-d.stopper.Stop():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	d.close <- struct{}{}
-
-	if d.cancel == nil {
-		return
-	}
-	d.cancel()
 }

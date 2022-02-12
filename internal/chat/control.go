@@ -82,24 +82,10 @@ func (t *control) Run(ctx context.Context) {
 		select {
 		case e := <-t.events:
 			switch e := e.(type) {
-			case *chatv1.SyncAssetsEvent:
-				t.syncAssets(e.ServerId, e.ForceUnifiedUpdate)
 			case *chatv1.ServerChangeEvent:
 				t.handleServerChange(ctx, e.Server)
 			case *chatv1.ServerDeleteEvent:
 				t.handleServerDelete(ctx, e.Server)
-			case *chatv1.EmoteChangeEvent:
-				t.syncAssets(e.Emote.ServerId, false)
-			case *chatv1.EmoteDeleteEvent:
-				t.syncAssets(e.Emote.ServerId, false)
-			case *chatv1.ModifierChangeEvent:
-				t.syncAssets(e.Modifier.ServerId, false)
-			case *chatv1.ModifierDeleteEvent:
-				t.syncAssets(e.Modifier.ServerId, false)
-			case *chatv1.TagChangeEvent:
-				t.syncAssets(e.Tag.ServerId, false)
-			case *chatv1.TagDeleteEvent:
-				t.syncAssets(e.Tag.ServerId, false)
 			}
 		case <-ctx.Done():
 			return
@@ -122,10 +108,7 @@ func (t *control) startServerRunners(ctx context.Context) error {
 func (t *control) handleServerChange(ctx context.Context, server *chatv1.Server) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	runner, ok := t.runners.Delete(&runner{key: server.Key.Public}).(*runner)
-	if ok {
-		runner.SyncServer()
-	} else {
+	if !t.runners.Has(&runner{key: server.Key.Public}) {
 		t.startServerRunner(ctx, server)
 	}
 }
@@ -137,7 +120,17 @@ func (t *control) handleServerDelete(ctx context.Context, server *chatv1.Server)
 }
 
 func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) {
-	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, t.directory, server.Key.Public, server.NetworkKey, server))
+	runner, err := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, server.Key.Public, server.NetworkKey, server)
+	if err != nil {
+		t.logger.Error("failed to start chat runner",
+			logutil.ByteHex("chat", server.Key.Public),
+			logutil.ByteHex("network", server.NetworkKey),
+			zap.Uint64("serverID", server.Id),
+			zap.Error(err),
+		)
+		return
+	}
+	t.runners.ReplaceOrInsert(runner)
 }
 
 func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
@@ -145,25 +138,6 @@ func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
 	if !ok {
 		runner.Close()
 	}
-}
-
-func (t *control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	t.logger.Debug("syncing assets for chat server", zap.Uint64("serverID", serverID))
-
-	server, err := dao.ChatServers.Get(t.store, serverID)
-	if err != nil {
-		return
-	}
-
-	runner, ok := t.runners.Get(&runner{key: server.Key.Public}).(*runner)
-	if !ok {
-		return
-	}
-
-	runner.SyncServer()
 }
 
 func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
@@ -185,12 +159,22 @@ func (t *control) client(ctx context.Context, networkKey, key []byte) (*network.
 
 // ReadServer ...
 func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error) {
+	logger := t.logger.With(
+		logutil.ByteHex("chat", key),
+		logutil.ByteHex("network", networkKey),
+	)
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	runner, ok := t.runners.Get(&runner{key: key}).(*runner)
 	if !ok {
-		runner = newRunner(ctx, t.logger, t.vpn, t.store, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
+		var err error
+		runner, err = newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
+		if err != nil {
+			logger.Error("failed to start chat runner", zap.Error(err))
+			return nil, nil, err
+		}
 		t.runners.ReplaceOrInsert(runner)
 	}
 
@@ -201,10 +185,6 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 		defer close(events)
 		defer close(assets)
 
-		logger := t.logger.With(
-			logutil.ByteHex("chat", key),
-			logutil.ByteHex("network", networkKey),
-		)
 		for {
 			eg, rctx := errgroup.WithContext(ctx)
 
