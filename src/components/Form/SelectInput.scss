@@ -2,15 +2,27 @@
   &-container {
   }
 
+  &__input-container {
+    color: var(--color-text-input);
+  }
+
   &__single-value {
-    color: var(--input-color);
+    color: var(--color-text-input);
+  }
+
+  &__multi-value {
+    background: var(--color-background-select-item);
+
+    &__label {
+      color: var(--color-text-input);
+    }
   }
 
   &__control {
     box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
     border-style: none;
-    background: var(--input-bg);
-    color: var(--input-color);
+    background: var(--color-background-input);
+    color: var(--color-text-input);
   }
 
   &__value-container {
@@ -26,25 +38,25 @@
 
   .input_select {
     &__menu {
-      background: var(--input-bg);
-      color: var(--input-color);
+      background: var(--color-background-input);
+      color: var(--color-text-input);
     }
 
     &__menu-list {
     }
 
     &__option {
-      background: var(--input-bg);
-      color: var(--input-color);
+      background: var(--color-background-input);
+      color: var(--color-text-input);
 
       &--is-disabled {
-        color: var(--input-disabled-color);
+        color: var(--color-text-input-disabled);
       }
 
       &--is-focused,
       &--is-selected {
-        background: var(--input-focus-bg);
-        color: var(--input-focus-color);
+        background: var(--color-background-input-focus);
+        color: var(--color-text-input-focus);
       }
     }
   }

@@ -32,7 +32,7 @@ func newRunner(ctx context.Context,
 ) (*runner, error) {
 	logger = logger.With(logutil.ByteHex("chat", key))
 
-	s := &runnerService{
+	a := &runnerAdapter{
 		logger:     logger,
 		store:      store,
 		observers:  observers,
@@ -44,22 +44,20 @@ func newRunner(ctx context.Context,
 		config:     config,
 	}
 
-	m, err := servicemanager.New[readers](logger, context.Background(), s)
+	m, err := servicemanager.New[readers](logger, context.Background(), a)
 	if err != nil {
 		return nil, err
 	}
 
 	return &runner{
-		key:     key,
-		service: s,
-		Runner:  m,
+		key:    key,
+		Runner: m,
 	}, nil
 }
 
 type runner struct {
-	key     []byte
-	service *runnerService
-	*servicemanager.Runner[readers, *runnerService]
+	key []byte
+	*servicemanager.Runner[readers, *runnerAdapter]
 }
 
 func (r *runner) Less(o llrb.Item) bool {
@@ -73,7 +71,7 @@ type readers struct {
 	events, assets *protoutil.ChunkStreamReader
 }
 
-type runnerService struct {
+type runnerAdapter struct {
 	logger     *zap.Logger
 	store      *dao.ProfileStore
 	observers  *event.Observers
@@ -85,15 +83,15 @@ type runnerService struct {
 	config     *chatv1.Server
 }
 
-func (s *runnerService) Mutex() *dao.Mutex {
+func (s *runnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, s.config.Id)
 }
 
-func (s *runnerService) Client() (servicemanager.Readable[readers], error) {
+func (s *runnerAdapter) Client() (servicemanager.Readable[readers], error) {
 	return newChatReader(s.logger, s.transfer, s.key, s.networkKey)
 }
 
-func (s *runnerService) Server() (servicemanager.Readable[readers], error) {
+func (s *runnerAdapter) Server() (servicemanager.Readable[readers], error) {
 	if s.config == nil {
 		return nil, nil
 	}

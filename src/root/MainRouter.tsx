@@ -8,7 +8,7 @@ import SettingsLayout from "../pages/Settings/Layout";
 const Network = lazy(() => import("../pages/Settings/Network"));
 const BootstrapClients = lazy(() => import("../pages/Settings/BootstrapClients"));
 const Chat = lazy(() => import("../pages/Settings/Chat"));
-const VideoIngress = lazy(() => import("../pages/Settings/VideoIngress"));
+const Video = lazy(() => import("../pages/Settings/Video"));
 const VNIC = lazy(() => import("../pages/Settings/VNIC"));
 
 const Home = lazy(() => import("../pages/Home"));
@@ -22,7 +22,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
     <Route path="networks/*" element={<Network />} />
     <Route path="bootstrap-clients/*" element={<BootstrapClients />} />
     <Route path="chat-servers/*" element={<Chat />} />
-    <Route path="video-ingress/*" element={<VideoIngress />} />
+    <Route path="video/*" element={<Video />} />
     <Route path="vnic/*" element={<VNIC />} />
   </Route>
 );

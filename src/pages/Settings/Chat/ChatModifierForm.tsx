@@ -2,7 +2,7 @@ import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React from "react";
 import { useForm } from "react-hook-form";
 
-import { InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
 import BackLink from "./BackLink";
 
 export interface ChatModifierFormData {
@@ -84,13 +84,9 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
         placeholder="Enter a number of extra wrapper elements to render"
       />
       <ToggleInput control={control} name="internal" label="Internal" />
-      <label className="input_label">
-        <div className="input_label__body">
-          <button className="input input_button" disabled={loading}>
-            {values ? "Update Modifier" : "Create Modifier"}
-          </button>
-        </div>
-      </label>
+      <ButtonSet>
+        <Button disabled={loading}>{values ? "Update Modifier" : "Create Modifier"}</Button>
+      </ButtonSet>
     </form>
   );
 };

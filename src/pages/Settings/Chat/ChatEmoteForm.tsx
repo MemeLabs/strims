@@ -1,9 +1,11 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 
 import { EmoteScale } from "../../../apis/strims/chat/v1/chat";
 import {
+  Button,
+  ButtonSet,
   CreatableSelectInput,
   ImageInput,
   ImageValue,
@@ -15,6 +17,7 @@ import {
   TextInput,
   ToggleInput,
 } from "../../../components/Form";
+import { useCall } from "../../../contexts/FrontendApi";
 import BackLink from "./BackLink";
 
 export interface ChatEmoteFormData {
@@ -79,6 +82,12 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
 
   const animated = watch("animated");
 
+  const [listModifiersRes] = useCall("chatServer", "listModifiers", { args: [{ serverId }] });
+  const modifierOptions: SelectOption<string>[] = useMemo(
+    () => listModifiersRes.value?.modifiers.map(({ name }) => ({ label: name, value: name })),
+    [listModifiersRes.value]
+  );
+
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
@@ -111,7 +120,13 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
       <InputLabel required={true} text="Image" component="div">
         <ImageInput control={control} name="image" maxSize={10485764} />
       </InputLabel>
-      <SelectInput control={control} name="scale" label="Scale" options={scaleOptions} />
+      <SelectInput
+        control={control}
+        name="scale"
+        label="Scale"
+        options={scaleOptions}
+        isSearchable={false}
+      />
       <TextInput control={control} label="contributor" name="contributor" />
       <TextInput control={control} label="contributor link" name="contributorLink" />
       <TextAreaInput control={control} label="css" name="css" />
@@ -161,14 +176,11 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         name="defaultModifiers"
         label="Default modifiers"
         placeholder="Modifiers"
+        options={modifierOptions}
       />
-      <label className="input_label">
-        <div className="input_label__body">
-          <button className="input input_button" disabled={loading}>
-            {values ? "Update Emote" : "Create Emote"}
-          </button>
-        </div>
-      </label>
+      <ButtonSet>
+        <Button disabled={loading}>{values ? "Update Emote" : "Create Emote"}</Button>
+      </ButtonSet>
     </form>
   );
 };

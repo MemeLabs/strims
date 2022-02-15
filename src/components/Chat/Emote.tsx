@@ -33,11 +33,15 @@ const Emote: React.FC<EmoteProps> = ({
 
   const effectiveModifiers = new Set<Modifier>();
   for (const m of style.modifiers) {
-    effectiveModifiers.add(room.styles.modifiers[m]);
+    if (room.styles.modifiers[m] !== undefined) {
+      effectiveModifiers.add(room.styles.modifiers[m]);
+    }
   }
   if (modifiers?.length > 0 && shouldShowModifiers) {
     for (const m of modifiers) {
-      effectiveModifiers.add(room.styles.modifiers[m]);
+      if (room.styles.modifiers[m] !== undefined) {
+        effectiveModifiers.add(room.styles.modifiers[m]);
+      }
     }
   }
 

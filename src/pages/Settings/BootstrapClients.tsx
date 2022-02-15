@@ -5,7 +5,7 @@ import {
   BootstrapClient,
   CreateBootstrapClientResponse,
 } from "../../apis/strims/network/v1/bootstrap/bootstrap";
-import { InputError, TextInput } from "../../components/Form";
+import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import jsonutil from "../../lib/jsonutil";
 
@@ -54,11 +54,9 @@ const BootstrapClientForm = ({
         name="url"
         placeholder="Enter a bootstrap url"
       />
-      <div className="input_buttons">
-        <button className="input input_button" disabled={loading}>
-          Create BootstrapClient
-        </button>
-      </div>
+      <ButtonSet>
+        <Button disabled={loading}>Create Bootstrap Client</Button>
+      </ButtonSet>
     </form>
   );
 };

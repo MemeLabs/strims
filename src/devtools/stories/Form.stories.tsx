@@ -2,6 +2,8 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import {
+  Button,
+  ButtonSet,
   CreatableSelectInput,
   ImageInput,
   ImageValue,
@@ -68,6 +70,9 @@ const InputStory: React.FC = () => {
       <InputLabel text="image" component="div">
         <ImageInput control={control} name="image" />
       </InputLabel>
+      <ButtonSet>
+        <Button>Save</Button>
+      </ButtonSet>
     </form>
   );
 };

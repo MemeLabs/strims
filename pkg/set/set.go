@@ -1,16 +1,12 @@
 package set
 
-import (
-	"constraints"
-)
-
-func New[T constraints.Ordered](size int) *Set[T] {
+func New[T comparable](size int) *Set[T] {
 	return &Set[T]{
 		values: make(map[T]struct{}, size),
 	}
 }
 
-type Set[T constraints.Ordered] struct {
+type Set[T comparable] struct {
 	values map[T]struct{}
 }
 

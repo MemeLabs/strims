@@ -2,7 +2,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic";
-import { InputError, TextInput } from "../../components/Form";
+import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 
 const units: { [key: string]: bigint } = {
@@ -98,11 +98,9 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
         name="maxUploadBytesPerSecond"
         placeholder="ex. 50mbps"
       />
-      <div className="input_buttons">
-        <button className="input input_button" disabled={loading}>
-          Store Config
-        </button>
-      </div>
+      <ButtonSet>
+        <Button disabled={loading}>Store Config</Button>
+      </ButtonSet>
     </form>
   );
 };

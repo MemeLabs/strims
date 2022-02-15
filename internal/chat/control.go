@@ -207,8 +207,8 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 					select {
 					case events <- e:
-					case <-ctx.Done():
-						return ctx.Err()
+					case <-rctx.Done():
+						return rctx.Err()
 					}
 				}
 			})
@@ -223,8 +223,8 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 					select {
 					case assets <- b:
-					case <-ctx.Done():
-						return ctx.Err()
+					case <-rctx.Done():
+						return rctx.Err()
 					}
 				}
 			})

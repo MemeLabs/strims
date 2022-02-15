@@ -4,45 +4,22 @@
   margin: 0.25em 0;
   border-radius: 0.25em;
   box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
-  background: var(--input-bg);
-  color: var(--input-color);
+  color: var(--color-text-input);
+  background: var(--color-background-input);
   flex: 1;
 
   &::placeholder {
-    color: var(--input-placeholder-color);
+    color: var(--color-text-input-placeholder);
   }
 
   &:disabled {
-    background: var(--input-disabled-bg);
-    color: var(--input-disabled-color);
-  }
-}
-
-.input_buttons {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.input_button {
-  background: var(--input-bg);
-  align-items: center;
-
-  &:hover:not(:disabled) {
-    cursor: pointer;
-    background: var(--input-button-hover-bg);
-    color: var(--input-button-hover-color);
+    color: var(--color-text-input-disabled);
+    background: var(--color-background-input-disabled);
   }
 
-  &:disabled {
-    background: var(--input-disabled-bg);
-    color: var(--input-disabled-color);
-  }
-
-  &--borderless {
-    border: none;
-    box-shadow: none;
+  &:focus {
+    color: var(--color-text-input-focus);
+    background: var(--color-background-input-focus);
   }
 }
 
@@ -53,6 +30,7 @@
   flex-direction: column;
 
   .input_label,
+  .input_buttonset,
   .thing_list__item {
     text-align: left;
     border-width: 1px;
@@ -60,8 +38,8 @@
     border-bottom-style: none;
     padding: 10px;
     margin: 0;
-    border-color: var(--card-border);
-    background: var(--card-bg);
+    border-color: var(--color-border-form-label);
+    background: var(--color-background-form-label);
 
     &:first-child {
       border-top-left-radius: 5px;
@@ -74,6 +52,18 @@
       border-bottom-style: solid;
     }
   }
+
+  .input_label--button {
+    align-items: center;
+
+    &:hover {
+      background: var(--color-background-form-label-button-hover);
+    }
+  }
+
+  .input_buttonset {
+    background-color: var(--color-background-form-buttonset);
+  }
 }
 
 .thing_form {
@@ -81,7 +71,8 @@
   display: flex;
   flex-direction: column;
 
-  .input_label {
+  .input_label,
+  .input_buttonset {
     text-align: left;
     border-width: 1px;
     border-style: solid;

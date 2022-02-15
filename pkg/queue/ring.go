@@ -11,45 +11,43 @@ func NewRing[T any](n int) (r Ring[T]) {
 
 // Ring[T] ...
 type Ring[T any] struct {
-	size int
 	mask int
 	low  int
 	high int
 	v    []T
 }
 
-// Size ...
-func (r *Ring[T]) Size() int {
-	return r.size
-}
-
-// Resize ...
-func (r *Ring[T]) Resize(size int) {
-	if size < r.size {
-		return
-	} else if size < 1 {
-		size = 1
-	}
-
-	v := make([]T, size)
-	mask := size - 1
-
-	vi := r.low & mask
-	i := r.low & r.mask
-	rope.New(v[vi:], v[:vi]).Copy(rope.New(r.v[i:], r.v[:i]).Slice(0, r.high-r.low)...)
-
-	r.size = size
-	r.mask = mask
-	r.v = v
-
-	if r.size&r.mask != 0 {
-		panic("ring size should be power of 2")
-	}
+// Cap ...
+func (r *Ring[T]) Cap() int {
+	return len(r.v)
 }
 
 // Len ...
 func (r *Ring[T]) Len() int {
 	return r.high - r.low
+}
+
+// Resize ...
+func (r *Ring[T]) Resize(n int) {
+	if n&(n-1) != 0 {
+		panic("ring size should be power of 2")
+	}
+
+	if n < r.Cap() {
+		return
+	} else if n < 1 {
+		n = 1
+	}
+
+	v := make([]T, n)
+	mask := n - 1
+
+	vi := r.low & mask
+	i := r.low & r.mask
+	rope.New(v[vi:], v[:vi]).Copy(rope.New(r.v[i:], r.v[:i]).Slice(0, r.Len())...)
+
+	r.mask = mask
+	r.v = v
 }
 
 // Head ...
@@ -70,8 +68,8 @@ func (r *Ring[T]) Tail() (v T, ok bool) {
 
 // PushFront ...
 func (r *Ring[T]) PushFront(v T) {
-	if r.high-r.low == r.size {
-		r.Resize(r.size * 2)
+	if r.Len() == r.Cap() {
+		r.Resize(r.Cap() * 2)
 	}
 	r.low--
 	r.v[r.low&r.mask] = v
@@ -79,8 +77,8 @@ func (r *Ring[T]) PushFront(v T) {
 
 // Push ...
 func (r *Ring[T]) Push(v T) {
-	if r.high-r.low == r.size {
-		r.Resize(r.size * 2)
+	if r.Len() == r.Cap() {
+		r.Resize(r.Cap() * 2)
 	}
 	r.v[r.high&r.mask] = v
 	r.high++

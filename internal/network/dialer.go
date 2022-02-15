@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -73,9 +74,9 @@ func (t *dialer) replaceOrInsertNetwork(network *networkv1.Network) {
 	t.lock.Lock()
 	it := t.certs.Get(&hostCertKey{dao.NetworkKey(network)})
 	if it == nil {
-		t.certs.ReplaceOrInsert(&hostCert{cert: cert})
+		t.certs.ReplaceOrInsert(&hostCert{syncutil.NewPointer(cert)})
 	} else {
-		it.(*hostCert).Store(cert)
+		it.(*hostCert).Swap(cert)
 	}
 	t.lock.Unlock()
 
@@ -130,7 +131,7 @@ func (t *dialer) ServerDialer(ctx context.Context, networkKey []byte, port uint1
 		Node:      node,
 		Port:      port,
 		Publisher: publisher,
-		CertFunc:  cert.Load,
+		CertFunc:  cert.Get,
 	}, nil
 }
 
@@ -163,7 +164,7 @@ func (t *dialer) ClientDialer(ctx context.Context, networkKey []byte, resolver H
 		Logger:   t.logger,
 		Node:     node,
 		Resolver: resolver,
-		CertFunc: cert.Load,
+		CertFunc: cert.Get,
 	}, nil
 }
 
@@ -198,26 +199,11 @@ func (h *hostCertKey) Less(o llrb.Item) bool {
 }
 
 type hostCert struct {
-	lock sync.Mutex
-	cert *certificate.Certificate
-}
-
-func (h *hostCert) Store(cert *certificate.Certificate) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	h.cert = cert
-}
-
-func (h *hostCert) Load() *certificate.Certificate {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	return h.cert
+	syncutil.Pointer[certificate.Certificate]
 }
 
 func (h *hostCert) Key() []byte {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	return dao.CertificateRoot(h.cert).Key
+	return dao.CertificateRoot(h.Get()).Key
 }
 
 func (h *hostCert) Less(o llrb.Item) bool {

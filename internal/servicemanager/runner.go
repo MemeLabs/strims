@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Service[R any] interface {
+type Adapter[R any] interface {
 	Mutex() *dao.Mutex
 	Client() (Readable[R], error)
 	Server() (Readable[R], error)
@@ -23,20 +23,20 @@ type Readable[R any] interface {
 	Close(context.Context) error
 }
 
-func New[R any, T Service[R]](
+func New[R any, T Adapter[R]](
 	logger *zap.Logger,
 	ctx context.Context,
-	service T,
+	adapter T,
 ) (*Runner[R, T], error) {
 	ctx, cancel := context.WithCancel(ctx)
 	r := &Runner[R, T]{
 		logger:  logger,
 		ctx:     ctx,
 		cancel:  cancel,
-		service: service,
+		adapter: adapter,
 	}
 
-	server, err := service.Server()
+	server, err := adapter.Server()
 	if err != nil {
 		return nil, fmt.Errorf("failed to start server: %w", err)
 	}
@@ -47,11 +47,11 @@ func New[R any, T Service[R]](
 	return r, nil
 }
 
-type Runner[R any, T Service[R]] struct {
+type Runner[R any, T Adapter[R]] struct {
 	logger  *zap.Logger
 	ctx     context.Context
 	cancel  context.CancelFunc
-	service T
+	adapter T
 
 	lock sync.Mutex
 	ref  *ref[R]
@@ -77,14 +77,14 @@ func (r *Runner[R, T]) Reader(ctx context.Context) (R, StopFunc, error) {
 	defer r.lock.Unlock()
 
 	if r.ref == nil {
-		client, err := r.service.Client()
+		client, err := r.adapter.Client()
 		if err != nil {
 			return empty[R](), nil, fmt.Errorf("failed to start client: %w", err)
 		}
 		r.logger.Debug("created new client", logutil.Type("client", client))
 		go r.runClient(client)
 
-		r.ref = newRef(client, 0)
+		r.ref = &ref[R]{readable: client}
 	}
 
 	r.logger.Debug("creating reader", logutil.Type("source", r.ref.readable))
@@ -130,7 +130,7 @@ func (r *Runner[R, T]) closeClient(c Readable[R]) {
 
 func (r *Runner[R, T]) runServer(s Readable[R]) {
 	for r.ctx.Err() == nil {
-		mu := r.service.Mutex()
+		mu := r.adapter.Mutex()
 		ctx, err := mu.Lock(r.ctx)
 		if err != nil {
 			r.logger.Debug("error acquiring lock", zap.Error(err))
@@ -141,7 +141,7 @@ func (r *Runner[R, T]) runServer(s Readable[R]) {
 		if r.ref != nil {
 			r.ref.closeOnce.Do(func() { r.closeClient(r.ref.readable) })
 		}
-		r.ref = newRef(s, 1)
+		r.ref = &ref[R]{readable: s, count: 1}
 		r.lock.Unlock()
 
 		r.logger.Debug("server starting", logutil.Type("server", s))
@@ -161,10 +161,6 @@ func (r *Runner[R, T]) runServer(s Readable[R]) {
 
 func empty[T any]() (v T) { return }
 
-func newRef[R any](r Readable[R], n int32) *ref[R] {
-	return &ref[R]{readable: r, count: n}
-}
-
 type ref[R any] struct {
 	readable  Readable[R]
 	count     int32
@@ -172,5 +168,3 @@ type ref[R any] struct {
 }
 
 type StopFunc func()
-
-var noopCloseFunc StopFunc = func() {}

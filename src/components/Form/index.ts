@@ -1,3 +1,4 @@
+export * from "./Button";
 export * from "./CreatableSelectInput";
 export * from "./ImageInput";
 export * from "./InputError";
@@ -7,6 +8,7 @@ export * from "./TextAreaInput";
 export * from "./TextInput";
 export * from "./ToggleInput";
 
+import Button from "./Button";
 import CreatableSelectInput from "./CreatableSelectInput";
 import ImageInput from "./ImageInput";
 import InputError from "./InputError";
@@ -25,4 +27,5 @@ export {
   ToggleInput,
   InputError,
   InputLabel,
+  Button,
 };

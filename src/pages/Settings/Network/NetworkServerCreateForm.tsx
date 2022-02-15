@@ -2,7 +2,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 
-import { InputError, TextInput } from "../../../components/Form";
+import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { useLazyCall } from "../../../contexts/FrontendApi";
 
 const CreateForm: React.FC = () => {
@@ -50,11 +50,9 @@ const CreateForm: React.FC = () => {
         name="alias"
         placeholder="Enter an alternate name for this network"
       />
-      <div className="input_buttons">
-        <button className="input input_button" disabled={loading}>
-          Create Network
-        </button>
-      </div>
+      <ButtonSet>
+        <Button disabled={loading}>Create Network</Button>
+      </ButtonSet>
     </form>
   );
 };

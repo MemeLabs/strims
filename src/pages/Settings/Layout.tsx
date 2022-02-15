@@ -39,7 +39,7 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="chat-servers">
         Chat Servers
       </NavLink>
-      <NavLink className={linkClassName} onClick={onLinkClick} to="video-ingress">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="video">
         Video Ingress
       </NavLink>
       <NavLink className={linkClassName} onClick={onLinkClick} to="vnic">

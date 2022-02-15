@@ -9,7 +9,7 @@ interface BackLinkProps {
 }
 
 const BackLink: React.FC<BackLinkProps> = ({ to, title, description }) => (
-  <Link className="input_label input_button" to={to}>
+  <Link className="input_label input_label--button" to={to}>
     <MdChevronLeft size="28" />
     <div className="input_label__body">
       <div>{title}</div>

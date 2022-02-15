@@ -12,7 +12,7 @@ import InputError from "./InputError";
 import InputLabel from "./InputLabel";
 import { SelectOption } from "./SelectInput";
 
-export interface CreatableSelectInputProps<T> extends SelectProps<T, true> {
+export interface CreatableSelectInputProps extends SelectProps<SelectOption<string>, true> {
   label: string;
   description?: string;
 }
@@ -27,7 +27,7 @@ const CreatableSelectInput = <T extends FieldValues>({
   defaultValue,
   control,
   ...inputProps
-}: CreatableSelectInputProps<T> &
+}: CreatableSelectInputProps &
   CompatibleUseControllerProps<T, SelectOption<string>[]>): ReactElement => {
   const {
     field,

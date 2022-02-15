@@ -165,15 +165,6 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 
 	haveBins := s.store.Bins()
 
-	weights := make([]float64, s.options.StreamCount)
-	for i := range weights {
-		if rand.Float64() < 0.5 {
-			weights[i] = 0.95
-		} else {
-			weights[i] = 0.05
-		}
-	}
-
 	ranks := make([]codec.Stream, s.options.StreamCount)
 	for i := range ranks {
 		ranks[i] = codec.Stream(i)
@@ -206,9 +197,6 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		// HAX
 		nextGCTime:          timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
 		nextStreamCheckTime: timeutil.Now().Add(time.Duration(rand.Intn(3000)) * time.Millisecond),
-
-		weights:   weights,
-		sentCount: make([]float64, s.options.StreamCount),
 
 		ranks: ranks,
 	}
@@ -247,10 +235,6 @@ type peerSwarmScheduler struct {
 	nextGCTime          timeutil.Time
 	nextStreamCheckTime timeutil.Time
 
-	nextWeightUpdateTime timeutil.Time
-	weights              []float64
-	sentCount            []float64
-
 	ranks []codec.Stream
 }
 
@@ -266,11 +250,6 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	if t.After(s.nextStreamCheckTime) {
 		s.nextStreamCheckTime = t.Add(schedulerStreamCheckInterval)
 		s.checkStreams(t)
-	}
-
-	if t.After(s.nextWeightUpdateTime) {
-		s.nextWeightUpdateTime = t.Add(time.Millisecond * 500)
-		s.updateWeights(t)
 	}
 
 	for _, cs := range s.channels {
@@ -317,21 +296,6 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 			p.Enqueue(cs)
 		}
 	}
-}
-
-func (s *peerSwarmScheduler) updateWeights(t timeutil.Time) {
-	max := mathutil.Max(s.sentCount...)
-	if max == 0 {
-		return
-	}
-
-	r := 0.1
-	for i, c := range s.sentCount {
-		s.weights[i] = mathutil.Clamp(s.weights[i]*(1+(c/max-0.5)*r), 0, 1)
-		s.sentCount[i] = 0
-	}
-	// log.Printf("%10.6f", d)
-	fmt.Printf("weights %p %d %10.6f\n", s, t.Unix(), s.weights)
 }
 
 func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
@@ -699,8 +663,6 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		sentBinMin:     binmap.None,
 		sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
 
-		weights: make([]float64, s.streamCount),
-
 		// test: qos.NewHLB(math.MaxFloat64),
 
 		// etcp:   etcp.NewControl(),
@@ -714,10 +676,6 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		// pushedData:  binmap.New(),
 
 		candidateBins: make([][]binmap.Bin, s.streamCount),
-	}
-
-	for i := range c.weights {
-		c.weights[i] = rand.Float64()
 	}
 
 	for i := codec.Stream(0); i < s.streamCount; i++ {
@@ -827,8 +785,6 @@ type peerChannelScheduler struct {
 	sentBinTimes timeSet
 	sentBinMin   binmap.Bin
 	sendRTT      stats.SMA
-
-	weights []float64
 
 	// test *qos.HLB
 	// testSkip bool
@@ -960,12 +916,6 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		}
 		return 0, err
 	}
-
-	c.s.lock.Lock()
-	for b, br := b.Base(); b <= br; b += 2 {
-		c.s.sentCount[c.s.binStream(b)]++
-	}
-	c.s.lock.Unlock()
 
 	now := timeutil.Now()
 	c.lock.Lock()

@@ -7,7 +7,14 @@ import { Link } from "react-router-dom";
 import { useAsync } from "react-use";
 
 import { Server } from "../../../apis/strims/chat/v1/chat";
-import { InputError, SelectInput, SelectOption, TextInput } from "../../../components/Form";
+import {
+  Button,
+  ButtonSet,
+  InputError,
+  SelectInput,
+  SelectOption,
+  TextInput,
+} from "../../../components/Form";
 import { useClient } from "../../../contexts/FrontendApi";
 import { certificateRoot } from "../../../lib/certificate";
 import BackLink from "./BackLink";
@@ -110,7 +117,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
       {config && (
         <>
           <Link
-            className="input_label input_button"
+            className="input_label input_label--button"
             to={`/settings/chat-servers/${config.id}/emotes`}
           >
             <div className="input_label__body">
@@ -120,7 +127,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
             <MdChevronRight size="28" />
           </Link>
           <Link
-            className="input_label input_button"
+            className="input_label input_label--button"
             to={`/settings/chat-servers/${config.id}/modifiers`}
           >
             <div className="input_label__body">
@@ -130,7 +137,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
             <MdChevronRight size="28" />
           </Link>
           <Link
-            className="input_label input_button"
+            className="input_label input_label--button"
             to={`/settings/chat-servers/${config.id}/tags`}
           >
             <div className="input_label__body">
@@ -141,13 +148,9 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
           </Link>
         </>
       )}
-      <label className="input_label">
-        <div className="input_label__body">
-          <button className="input input_button" disabled={loading}>
-            {config ? "Update Server" : "Create Server"}
-          </button>
-        </div>
-      </label>
+      <ButtonSet>
+        <Button disabled={loading}>{config ? "Update Server" : "Create Server"}</Button>
+      </ButtonSet>
     </form>
   );
 };

@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Network } from "../../../apis/strims/network/v1/network";
-import { InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
 import BackLink from "./BackLink";
 
 export interface NetworkFormData {
@@ -95,13 +95,9 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
         placeholder="Enter a YouTube public API key"
       />
       <ToggleInput control={control} name="swarmEnable" label="Allow swarm embed" />
-      <label className="input_label">
-        <div className="input_label__body">
-          <button className="input input_button" disabled={loading}>
-            {values ? "Update Network" : "Create Network"}
-          </button>
-        </div>
-      </label>
+      <ButtonSet>
+        <Button disabled={loading}>{values ? "Update Network" : "Create Network"}</Button>
+      </ButtonSet>
     </form>
   );
 };

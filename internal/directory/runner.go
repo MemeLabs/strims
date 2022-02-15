@@ -30,7 +30,7 @@ func newRunner(
 ) (*runner, error) {
 	logger = logger.With(logutil.ByteHex("directory", dao.NetworkKey(network)))
 
-	s := &runnerService{
+	a := &runnerAdapter{
 		key:     dao.NetworkKey(network),
 		network: syncutil.NewPointer(network),
 
@@ -42,26 +42,26 @@ func newRunner(
 		transfer:  transfer,
 	}
 
-	m, err := servicemanager.New[*protoutil.ChunkStreamReader](logger, ctx, s)
+	m, err := servicemanager.New[*protoutil.ChunkStreamReader](logger, ctx, a)
 	if err != nil {
 		return nil, err
 	}
 
 	return &runner{
 		key:     dao.NetworkKey(network),
-		service: s,
+		adapter: a,
 		Runner:  m,
 	}, nil
 }
 
 type runner struct {
 	key     []byte
-	service *runnerService
-	*servicemanager.Runner[*protoutil.ChunkStreamReader, *runnerService]
+	adapter *runnerAdapter
+	*servicemanager.Runner[*protoutil.ChunkStreamReader, *runnerAdapter]
 }
 
 func (r *runner) Sync(network *networkv1.Network) {
-	r.service.network.Swap(network)
+	r.adapter.network.Swap(network)
 }
 
 func (r *runner) Less(o llrb.Item) bool {
@@ -72,10 +72,10 @@ func (r *runner) Less(o llrb.Item) bool {
 }
 
 func (r *runner) Logger() *zap.Logger {
-	return r.service.logger
+	return r.adapter.logger
 }
 
-type runnerService struct {
+type runnerAdapter struct {
 	key     []byte
 	network syncutil.Pointer[networkv1.Network]
 
@@ -87,15 +87,15 @@ type runnerService struct {
 	transfer  transfer.Control
 }
 
-func (s *runnerService) Mutex() *dao.Mutex {
+func (s *runnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, s.network.Get().Id)
 }
 
-func (s *runnerService) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
 	return newDirectoryReader(s.logger, s.transfer, s.key)
 }
 
-func (s *runnerService) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
 	if s.network.Get().GetServerConfig() == nil {
 		return nil, nil
 	}

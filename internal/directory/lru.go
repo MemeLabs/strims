@@ -50,13 +50,12 @@ func (l *lru[V, T]) GetOrInsert(u T) T {
 	i := &lruItem[V, T]{item: u}
 	if ii := l.items.Get(i); ii != nil {
 		i = ii.(*lruItem[V, T])
-		u = i.item
 		l.remove(i)
 	} else {
 		l.items.ReplaceOrInsert(i)
 	}
 	l.push(i)
-	return u
+	return i.item
 }
 
 func (l *lru[V, T]) Delete(u T) {
