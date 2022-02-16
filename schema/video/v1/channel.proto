@@ -45,6 +45,14 @@ message VideoChannelListResponse {
   repeated VideoChannel channels = 1;
 }
 
+message VideoChannelGetRequest {
+  uint64 id = 1;
+}
+
+message VideoChannelGetResponse {
+  VideoChannel channel = 1;
+}
+
 message VideoChannelCreateRequest {
   strims.network.v1.directory.ListingSnippet directory_listing_snippet = 1;
   bytes network_key = 2;
@@ -72,6 +80,7 @@ message VideoChannelDeleteResponse {}
 
 service VideoChannelFrontend {
   rpc List(VideoChannelListRequest) returns (VideoChannelListResponse);
+  rpc Get(VideoChannelGetRequest) returns (VideoChannelGetResponse);
   rpc Create(VideoChannelCreateRequest) returns (VideoChannelCreateResponse);
   rpc Update(VideoChannelUpdateRequest) returns (VideoChannelUpdateResponse);
   rpc Delete(VideoChannelDeleteRequest) returns (VideoChannelDeleteResponse);

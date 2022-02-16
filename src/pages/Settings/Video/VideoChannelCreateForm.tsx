@@ -1,3 +1,4 @@
+import { Base64 } from "js-base64";
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -5,28 +6,29 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
-  const { serverId } = useParams<"serverId">();
-  const [{ value }] = useCall("videoChannel", "list", {
-    args: [{ serverId: BigInt(serverId) }],
-  });
+  const [{ value }] = useCall("videoChannel", "list");
   const navigate = useNavigate();
-  const [{ error, loading }, createChatModifier] = useLazyCall("videoChannel", "create", {
-    onComplete: () => navigate(`/settings/video-ingress/channels`, { replace: true }),
+  const [{ error, loading }, createChannel] = useLazyCall("videoChannel", "create", {
+    onComplete: () => navigate(`/settings/video/channels`, { replace: true }),
   });
 
-  const onSubmit = (data: VideoChannelFormData) =>
-    createChatModifier({
-      serverId: BigInt(serverId),
-      ...data,
+  const onSubmit = React.useCallback(async (data: VideoChannelFormData) => {
+    await createChannel({
+      directoryListingSnippet: {
+        title: data.title,
+        description: data.description,
+        tags: data.tags.map(({ value }) => value),
+      },
+      networkKey: Base64.toUint8Array(data.networkKey),
     });
+  }, []);
 
   return (
     <VideoChannelForm
       onSubmit={onSubmit}
       error={error}
       loading={loading}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={!!value?.modifiers.length}
+      indexLinkVisible={!!value?.channels.length}
     />
   );
 };

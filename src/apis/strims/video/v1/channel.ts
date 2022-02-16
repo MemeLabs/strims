@@ -349,6 +349,78 @@ export class VideoChannelListResponse {
   }
 }
 
+export type IVideoChannelGetRequest = {
+  id?: bigint;
+}
+
+export class VideoChannelGetRequest {
+  id: bigint;
+
+  constructor(v?: IVideoChannelGetRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: VideoChannelGetRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): VideoChannelGetRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new VideoChannelGetRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IVideoChannelGetResponse = {
+  channel?: IVideoChannel;
+}
+
+export class VideoChannelGetResponse {
+  channel: VideoChannel | undefined;
+
+  constructor(v?: IVideoChannelGetResponse) {
+    this.channel = v?.channel && new VideoChannel(v.channel);
+  }
+
+  static encode(m: VideoChannelGetResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.channel) VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): VideoChannelGetResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new VideoChannelGetResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.channel = VideoChannel.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IVideoChannelCreateRequest = {
   directoryListingSnippet?: strims_network_v1_directory_IListingSnippet;
   networkKey?: Uint8Array;

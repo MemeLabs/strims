@@ -1,35 +1,29 @@
 import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
-import { MdChevronRight } from "react-icons/md";
-import { Link } from "react-router-dom";
-import { useAsync } from "react-use";
 
 import { VideoIngressConfig } from "../../../apis/strims/video/v1/ingress";
 import {
   Button,
   ButtonSet,
   InputError,
-  SelectInput,
-  SelectOption,
+  NetworkSelectInput,
   TextInput,
   ToggleInput,
 } from "../../../components/Form";
-import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
-import { certificateRoot } from "../../../lib/certificate";
+import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import hostRegex from "../../../lib/hostRegex";
+import ForwardLink from "../ForwardLink";
 
 interface VideoIngressConfigFormData {
   enabled: boolean;
   serverAddr: string;
   publicServerAddr: string;
-  serviceNetworks: Array<SelectOption<string>>;
+  serviceNetworkKeys: string[];
 }
 
 const VideoIngressConfigForm = () => {
   const [setConfigRes, setConfig] = useLazyCall("videoIngress", "setConfig");
-  const [{ value: config }] = useCall("videoIngress", "getConfig");
-  const client = useClient();
 
   const { handleSubmit, reset, control, formState } = useForm<VideoIngressConfigFormData>({
     mode: "onBlur",
@@ -37,45 +31,25 @@ const VideoIngressConfigForm = () => {
       enabled: false,
       serverAddr: "",
       publicServerAddr: "",
-      serviceNetworks: [],
+      serviceNetworkKeys: [],
     },
   });
 
-  const { value: networkOptions } = useAsync(async () => {
-    const res = await client.network.list();
-    return res.networks.map((n) => {
-      const certRoot = certificateRoot(n.certificate);
-      return {
-        value: Base64.fromUint8Array(certRoot.key),
-        label: certRoot.subject,
-      };
-    });
-  });
-
-  const setValues = ({ config }: { config?: VideoIngressConfig }) => {
-    const configKeys = Object.fromEntries(
-      config.serviceNetworkKeys.map((key) => [Base64.fromUint8Array(key), true])
-    );
-
+  const setValues = ({ config }: { config?: VideoIngressConfig }) =>
     reset(
       {
         enabled: config.enabled,
         serverAddr: config.serverAddr,
         publicServerAddr: config.publicServerAddr,
-        serviceNetworks: networkOptions.filter(({ value }) => configKeys[value]),
+        serviceNetworkKeys: config.serviceNetworkKeys?.map((value) => Base64.fromUint8Array(value)),
       },
       {
         keepDirty: false,
         keepIsValid: false,
       }
     );
-  };
 
-  React.useEffect(() => {
-    if (networkOptions && config) {
-      setValues(config);
-    }
-  }, [networkOptions, config]);
+  useCall("videoIngress", "getConfig", { onComplete: (res) => setValues(res) });
 
   const onSubmit = handleSubmit(async (data) => {
     const res = await setConfig({
@@ -83,7 +57,7 @@ const VideoIngressConfigForm = () => {
         enabled: data.enabled,
         serverAddr: data.serverAddr,
         publicServerAddr: data.publicServerAddr,
-        serviceNetworkKeys: data.serviceNetworks?.map(({ value }) => Base64.toUint8Array(value)),
+        serviceNetworkKeys: data.serviceNetworkKeys?.map((value) => Base64.toUint8Array(value)),
       },
     });
     setValues(res);
@@ -129,25 +103,22 @@ const VideoIngressConfigForm = () => {
           name="publicServerAddr"
           placeholder="ex: ingress.strims.gg"
         />
-        <SelectInput
+        <NetworkSelectInput
           control={control}
-          name="serviceNetworks"
+          name="serviceNetworkKeys"
           label="Sharing"
           description="Enable the creation of streams by peers in selected networks."
           placeholder="Select network"
           isMulti={true}
-          options={networkOptions}
         />
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
         </ButtonSet>
-        <Link className="input_label input_button" to="/settings/video/channels">
-          <div className="input_label__body">
-            <div>Channels</div>
-            <div>Some description of channels...</div>
-          </div>
-          <MdChevronRight size="28" />
-        </Link>
+        <ForwardLink
+          to="/settings/video/channels"
+          title="Channels"
+          description="Some description of channels..."
+        />
       </form>
     </>
   );

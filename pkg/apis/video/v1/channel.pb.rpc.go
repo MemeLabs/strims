@@ -9,6 +9,7 @@ import (
 // RegisterVideoChannelFrontendService ...
 func RegisterVideoChannelFrontendService(host rpc.ServiceRegistry, service VideoChannelFrontendService) {
 	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.List", service.List)
+	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Get", service.Get)
 	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Create", service.Create)
 	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Update", service.Update)
 	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Delete", service.Delete)
@@ -20,6 +21,10 @@ type VideoChannelFrontendService interface {
 		ctx context.Context,
 		req *VideoChannelListRequest,
 	) (*VideoChannelListResponse, error)
+	Get(
+		ctx context.Context,
+		req *VideoChannelGetRequest,
+	) (*VideoChannelGetResponse, error)
 	Create(
 		ctx context.Context,
 		req *VideoChannelCreateRequest,
@@ -51,6 +56,15 @@ func (c *VideoChannelFrontendClient) List(
 	res *VideoChannelListResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.List", req, res)
+}
+
+// Get ...
+func (c *VideoChannelFrontendClient) Get(
+	ctx context.Context,
+	req *VideoChannelGetRequest,
+	res *VideoChannelGetResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.Get", req, res)
 }
 
 // Create ...

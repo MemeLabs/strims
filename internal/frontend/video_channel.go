@@ -25,6 +25,14 @@ type videoChannelService struct {
 	app     app.Control
 }
 
+func (s *videoChannelService) Get(ctx context.Context, r *videov1.VideoChannelGetRequest) (*videov1.VideoChannelGetResponse, error) {
+	channel, err := s.app.VideoChannel().GetChannel(r.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &videov1.VideoChannelGetResponse{Channel: channel}, nil
+}
+
 func (s *videoChannelService) List(ctx context.Context, r *videov1.VideoChannelListRequest) (*videov1.VideoChannelListResponse, error) {
 	channels, err := s.app.VideoChannel().ListChannels()
 	if err != nil {

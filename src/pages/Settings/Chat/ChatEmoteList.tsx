@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Emote, EmoteImage } from "../../../apis/strims/chat/v1/chat";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import BackLink from "./BackLink";
+import BackLink from "../BackLink";
 import { fileTypeToMimeType, scaleToDOMScale } from "./utils";
 
 interface ImageProps {

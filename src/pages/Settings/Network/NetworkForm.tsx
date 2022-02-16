@@ -2,9 +2,8 @@ import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
-import { Network } from "../../../apis/strims/network/v1/network";
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
-import BackLink from "./BackLink";
+import BackLink from "../BackLink";
 
 export interface NetworkFormData {
   angelthumpEnable: boolean;

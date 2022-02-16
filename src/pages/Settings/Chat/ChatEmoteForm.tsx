@@ -1,5 +1,5 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { useForm } from "react-hook-form";
 
 import { EmoteScale } from "../../../apis/strims/chat/v1/chat";
@@ -18,7 +18,7 @@ import {
   ToggleInput,
 } from "../../../components/Form";
 import { useCall } from "../../../contexts/FrontendApi";
-import BackLink from "./BackLink";
+import BackLink from "../BackLink";
 
 export interface ChatEmoteFormData {
   name: string;

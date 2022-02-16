@@ -14,7 +14,7 @@ const ChatServerCreateFormPage: React.FC = () => {
 
   const onSubmit = (data: ChatServerFormData) =>
     createChatServer({
-      networkKey: Base64.toUint8Array(data.networkKey.value),
+      networkKey: Base64.toUint8Array(data.networkKey),
       room: {
         name: data.name,
       },

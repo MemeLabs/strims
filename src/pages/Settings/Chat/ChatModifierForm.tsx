@@ -3,7 +3,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
-import BackLink from "./BackLink";
+import BackLink from "../BackLink";
 
 export interface ChatModifierFormData {
   name: string;

@@ -13,6 +13,7 @@ import CreatableSelectInput from "./CreatableSelectInput";
 import ImageInput from "./ImageInput";
 import InputError from "./InputError";
 import InputLabel from "./InputLabel";
+import NetworkSelectInput from "./NetworkSelectInput";
 import SelectInput from "./SelectInput";
 import TextAreaInput from "./TextAreaInput";
 import TextInput from "./TextInput";
@@ -28,4 +29,5 @@ export {
   InputError,
   InputLabel,
   Button,
+  NetworkSelectInput,
 };

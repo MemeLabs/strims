@@ -1,36 +1,28 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
-import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
-import { MdChevronRight } from "react-icons/md";
-import { Link } from "react-router-dom";
-import { useAsync } from "react-use";
 
-import { Server } from "../../../apis/strims/chat/v1/chat";
 import {
   Button,
   ButtonSet,
   InputError,
-  SelectInput,
-  SelectOption,
+  NetworkSelectInput,
   TextInput,
 } from "../../../components/Form";
-import { useClient } from "../../../contexts/FrontendApi";
-import { certificateRoot } from "../../../lib/certificate";
-import BackLink from "./BackLink";
+import BackLink from "../BackLink";
+import ForwardLink from "../ForwardLink";
 
 export interface ChatServerFormData {
   name: string;
-  networkKey: SelectOption<string>;
-  tags: SelectOption<string>[];
-  modifiers: SelectOption<string>[];
+  networkKey: string;
 }
 
 export interface ChatServerFormProps {
   onSubmit: (data: ChatServerFormData) => void;
   error: Error;
   loading: boolean;
-  config?: Server;
+  id?: bigint;
+  values?: ChatServerFormData;
   indexLinkVisible?: boolean;
 }
 
@@ -38,46 +30,14 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
   onSubmit,
   error,
   loading,
-  config,
+  id,
+  values,
   indexLinkVisible,
 }) => {
-  const client = useClient();
-
-  const { handleSubmit, control, reset } = useForm<ChatServerFormData>({
+  const { handleSubmit, control, formState } = useForm<ChatServerFormData>({
     mode: "onBlur",
+    defaultValues: values,
   });
-
-  const { value: networkOptions } = useAsync(async () => {
-    const res = await client.network.list();
-    return res.networks.map((n) => {
-      const certRoot = certificateRoot(n.certificate);
-      return {
-        value: Base64.fromUint8Array(certRoot.key),
-        label: certRoot.subject,
-      };
-    });
-  });
-
-  const setValues = (config: Server) => {
-    const networkKey = Base64.fromUint8Array(config.networkKey);
-
-    reset(
-      {
-        name: config.room.name,
-        networkKey: networkOptions.find(({ value }) => value === networkKey),
-      },
-      {
-        keepDirty: false,
-        keepIsValid: false,
-      }
-    );
-  };
-
-  React.useEffect(() => {
-    if (networkOptions && config) {
-      setValues(config);
-    }
-  }, [networkOptions, config]);
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
@@ -101,7 +61,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
         label="Name"
         placeholder="Enter a chat room name"
       />
-      <SelectInput
+      <NetworkSelectInput
         control={control}
         rules={{
           required: {
@@ -112,44 +72,30 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
         name="networkKey"
         label="Network"
         placeholder="Select network"
-        options={networkOptions}
       />
-      {config && (
+      {id && (
         <>
-          <Link
-            className="input_label input_label--button"
-            to={`/settings/chat-servers/${config.id}/emotes`}
-          >
-            <div className="input_label__body">
-              <div>Emotes</div>
-              <div>Some description of emotes...</div>
-            </div>
-            <MdChevronRight size="28" />
-          </Link>
-          <Link
-            className="input_label input_label--button"
-            to={`/settings/chat-servers/${config.id}/modifiers`}
-          >
-            <div className="input_label__body">
-              <div>Emote modifiers</div>
-              <div>Some description of emote modifiers...</div>
-            </div>
-            <MdChevronRight size="28" />
-          </Link>
-          <Link
-            className="input_label input_label--button"
-            to={`/settings/chat-servers/${config.id}/tags`}
-          >
-            <div className="input_label__body">
-              <div>Tags</div>
-              <div>Some description of tags...</div>
-            </div>
-            <MdChevronRight size="28" />
-          </Link>
+          <ForwardLink
+            to={`/settings/chat-servers/${id}/emotes`}
+            title="Emotes"
+            description="Some description of emotes..."
+          />
+          <ForwardLink
+            to={`/settings/chat-servers/${id}/modifiers`}
+            title="Emote modifiers"
+            description="Some description of emote modifiers..."
+          />
+          <ForwardLink
+            to={`/settings/chat-servers/${id}/tags`}
+            title="Tags"
+            description="Some description of tags..."
+          />
         </>
       )}
       <ButtonSet>
-        <Button disabled={loading}>{config ? "Update Server" : "Create Server"}</Button>
+        <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
+          {values ? "Update Server" : "Create Server"}
+        </Button>
       </ButtonSet>
     </form>
   );

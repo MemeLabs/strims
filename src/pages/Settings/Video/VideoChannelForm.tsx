@@ -1,68 +1,67 @@
-import { Base64 } from "js-base64";
 import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
-import { MdChevronLeft } from "react-icons/md";
-import { Link } from "react-router-dom";
-import { useAsync } from "react-use";
 
 import {
   Button,
   ButtonSet,
   CreatableSelectInput,
-  SelectInput,
+  InputError,
+  NetworkSelectInput,
   SelectOption,
   TextAreaInput,
   TextInput,
 } from "../../../components/Form";
-import { useClient } from "../../../contexts/FrontendApi";
-import { certificateRoot } from "../../../lib/certificate";
+import BackLink from "../BackLink";
 
 export interface VideoChannelFormData {
   title: string;
   description: string;
   tags: Array<SelectOption<string>>;
-  networkKey: SelectOption<string>;
+  networkKey: string;
 }
 
 export interface VideoChannelFormProps {
-  data?: VideoChannelFormData;
+  values?: VideoChannelFormData;
   onSubmit: SubmitHandler<VideoChannelFormData>;
+  error: Error;
+  loading: boolean;
+  indexLinkVisible: boolean;
 }
 
-const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
-  const client = useClient();
-
+const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
+  values,
+  onSubmit,
+  error,
+  loading,
+  indexLinkVisible,
+}) => {
   const { handleSubmit, control, formState } = useForm<VideoChannelFormData>({
     mode: "onBlur",
     defaultValues: {
       title: "",
       description: "",
       tags: [],
-      networkKey: null,
+      networkKey: "",
+      ...values,
     },
-  });
-
-  const { value: networkOptions } = useAsync(async () => {
-    const res = await client.network.list();
-    return res.networks.map((n) => {
-      const certRoot = certificateRoot(n.certificate);
-      return {
-        value: Base64.fromUint8Array(certRoot.key),
-        label: certRoot.subject,
-      };
-    });
   });
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      <Link className="input_label input_button" to="/settings/video">
-        <MdChevronLeft size="28" />
-        <div className="input_label__body">
-          <div>Channels</div>
-          <div>Some description of channels...</div>
-        </div>
-      </Link>
-
+      {error && <InputError error={error.message || "Error creating channel"} />}
+      {indexLinkVisible ? (
+        <BackLink
+          to="/settings/video/channels"
+          title="Channels"
+          description="Some description of channels..."
+        />
+      ) : (
+        <BackLink
+          to="/settings/video"
+          title="Ingress"
+          description="Some description of ingress..."
+        />
+      )}
       <TextInput
         control={control}
         rules={{
@@ -92,7 +91,7 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
         name="description"
       />
       <CreatableSelectInput control={control} name="tags" label="Tags" placeholder="Tags" />
-      <SelectInput
+      <NetworkSelectInput
         control={control}
         rules={{
           required: {
@@ -103,10 +102,11 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
         name="networkKey"
         label="Network"
         placeholder="Select network"
-        options={networkOptions}
       />
       <ButtonSet>
-        <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
+        <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
+          {values ? "Update Channel" : "Create Channel"}
+        </Button>
       </ButtonSet>
     </form>
   );
