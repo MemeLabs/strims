@@ -108,6 +108,30 @@ export interface ChatServerFrontendService {
   syncAssets(req: SyncAssetsRequest, call: strims_rpc_Call): Promise<SyncAssetsResponse> | SyncAssetsResponse;
 }
 
+export class UnimplementedChatServerFrontendService implements ChatServerFrontendService {
+  createServer(req: CreateServerRequest, call: strims_rpc_Call): Promise<CreateServerResponse> | CreateServerResponse { throw new Error("not implemented"); }
+  updateServer(req: UpdateServerRequest, call: strims_rpc_Call): Promise<UpdateServerResponse> | UpdateServerResponse { throw new Error("not implemented"); }
+  deleteServer(req: DeleteServerRequest, call: strims_rpc_Call): Promise<DeleteServerResponse> | DeleteServerResponse { throw new Error("not implemented"); }
+  getServer(req: GetServerRequest, call: strims_rpc_Call): Promise<GetServerResponse> | GetServerResponse { throw new Error("not implemented"); }
+  listServers(req: ListServersRequest, call: strims_rpc_Call): Promise<ListServersResponse> | ListServersResponse { throw new Error("not implemented"); }
+  createEmote(req: CreateEmoteRequest, call: strims_rpc_Call): Promise<CreateEmoteResponse> | CreateEmoteResponse { throw new Error("not implemented"); }
+  updateEmote(req: UpdateEmoteRequest, call: strims_rpc_Call): Promise<UpdateEmoteResponse> | UpdateEmoteResponse { throw new Error("not implemented"); }
+  deleteEmote(req: DeleteEmoteRequest, call: strims_rpc_Call): Promise<DeleteEmoteResponse> | DeleteEmoteResponse { throw new Error("not implemented"); }
+  getEmote(req: GetEmoteRequest, call: strims_rpc_Call): Promise<GetEmoteResponse> | GetEmoteResponse { throw new Error("not implemented"); }
+  listEmotes(req: ListEmotesRequest, call: strims_rpc_Call): Promise<ListEmotesResponse> | ListEmotesResponse { throw new Error("not implemented"); }
+  createModifier(req: CreateModifierRequest, call: strims_rpc_Call): Promise<CreateModifierResponse> | CreateModifierResponse { throw new Error("not implemented"); }
+  updateModifier(req: UpdateModifierRequest, call: strims_rpc_Call): Promise<UpdateModifierResponse> | UpdateModifierResponse { throw new Error("not implemented"); }
+  deleteModifier(req: DeleteModifierRequest, call: strims_rpc_Call): Promise<DeleteModifierResponse> | DeleteModifierResponse { throw new Error("not implemented"); }
+  getModifier(req: GetModifierRequest, call: strims_rpc_Call): Promise<GetModifierResponse> | GetModifierResponse { throw new Error("not implemented"); }
+  listModifiers(req: ListModifiersRequest, call: strims_rpc_Call): Promise<ListModifiersResponse> | ListModifiersResponse { throw new Error("not implemented"); }
+  createTag(req: CreateTagRequest, call: strims_rpc_Call): Promise<CreateTagResponse> | CreateTagResponse { throw new Error("not implemented"); }
+  updateTag(req: UpdateTagRequest, call: strims_rpc_Call): Promise<UpdateTagResponse> | UpdateTagResponse { throw new Error("not implemented"); }
+  deleteTag(req: DeleteTagRequest, call: strims_rpc_Call): Promise<DeleteTagResponse> | DeleteTagResponse { throw new Error("not implemented"); }
+  getTag(req: GetTagRequest, call: strims_rpc_Call): Promise<GetTagResponse> | GetTagResponse { throw new Error("not implemented"); }
+  listTags(req: ListTagsRequest, call: strims_rpc_Call): Promise<ListTagsResponse> | ListTagsResponse { throw new Error("not implemented"); }
+  syncAssets(req: SyncAssetsRequest, call: strims_rpc_Call): Promise<SyncAssetsResponse> | SyncAssetsResponse { throw new Error("not implemented"); }
+}
+
 export const registerChatServerFrontendService = (host: strims_rpc_Service, service: ChatServerFrontendService): void => {
   host.registerMethod<CreateServerRequest, CreateServerResponse>("strims.chat.v1.ChatServerFrontend.CreateServer", service.createServer.bind(service), CreateServerRequest);
   host.registerMethod<UpdateServerRequest, UpdateServerResponse>("strims.chat.v1.ChatServerFrontend.UpdateServer", service.updateServer.bind(service), UpdateServerRequest);
@@ -227,6 +251,13 @@ export interface ChatFrontendService {
   getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse;
 }
 
+export class UnimplementedChatFrontendService implements ChatFrontendService {
+  openClient(req: OpenClientRequest, call: strims_rpc_Call): GenericReadable<OpenClientResponse> { throw new Error("not implemented"); }
+  clientSendMessage(req: ClientSendMessageRequest, call: strims_rpc_Call): Promise<ClientSendMessageResponse> | ClientSendMessageResponse { throw new Error("not implemented"); }
+  setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse { throw new Error("not implemented"); }
+  getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse { throw new Error("not implemented"); }
+}
+
 export const registerChatFrontendService = (host: strims_rpc_Service, service: ChatFrontendService): void => {
   host.registerMethod<OpenClientRequest, OpenClientResponse>("strims.chat.v1.ChatFrontend.OpenClient", service.openClient.bind(service), OpenClientRequest);
   host.registerMethod<ClientSendMessageRequest, ClientSendMessageResponse>("strims.chat.v1.ChatFrontend.ClientSendMessage", service.clientSendMessage.bind(service), ClientSendMessageRequest);
@@ -256,6 +287,10 @@ export class ChatFrontendClient {
 
 export interface ChatService {
   sendMessage(req: SendMessageRequest, call: strims_rpc_Call): Promise<SendMessageResponse> | SendMessageResponse;
+}
+
+export class UnimplementedChatService implements ChatService {
+  sendMessage(req: SendMessageRequest, call: strims_rpc_Call): Promise<SendMessageResponse> | SendMessageResponse { throw new Error("not implemented"); }
 }
 
 export const registerChatService = (host: strims_rpc_Service, service: ChatService): void => {

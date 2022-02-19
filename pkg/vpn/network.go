@@ -246,6 +246,16 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 	return n.handleMessage(&m)
 }
 
+// Broadcast ...
+func (n *Network) Broadcast(port, srcPort uint16, b []byte) error {
+	return n.BroadcastWithFlags(port, srcPort, b, Mbroadcast)
+}
+
+// BroadcastWithFlags ...
+func (n *Network) BroadcastWithFlags(port, srcPort uint16, b []byte, f uint16) error {
+	return n.SendWithFlags(n.host.ID(), port, srcPort, b, f|Mbroadcast)
+}
+
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 	return n.SendWithFlags(id, port, srcPort, b, MstdFlags)
@@ -287,6 +297,16 @@ func (n *Network) SendWithFlags(id kademlia.ID, port, srcPort uint16, b []byte, 
 	})
 }
 
+// BroadcastProto ...
+func (n *Network) BroadcastProto(port, srcPort uint16, msg proto.Message) error {
+	return n.BroadcastProtoWithFlags(port, srcPort, msg, Mbroadcast)
+}
+
+// BroadcastProtoWithFlags ...
+func (n *Network) BroadcastProtoWithFlags(port, srcPort uint16, msg proto.Message, f uint16) error {
+	return n.SendProtoWithFlags(n.host.ID(), port, srcPort, msg, f|Mbroadcast)
+}
+
 // SendProto ...
 func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
 	return n.SendProtoWithFlags(id, port, srcPort, msg, MstdFlags)
@@ -313,7 +333,7 @@ func (n *Network) handleMessage(m *Message) error {
 	// 	zap.Uint16("dstPort", m.Header.DstPort),
 	// )
 
-	if m.Header.DstPort < reservedPortCount {
+	if m.Header.Flags&Mbroadcast != 0 {
 		if err := n.callHandler(m); err != nil {
 			return err
 		}
@@ -321,10 +341,9 @@ func (n *Network) handleMessage(m *Message) error {
 		return n.callHandler(m)
 	}
 
-	if m.Trailer.Contains(n.host.ID()) {
+	if m.Header.Flags&Mnorelay != 0 && m.Trailer.Hops > 0 {
 		return nil
 	}
-
 	if m.Trailer.Hops >= maxMessageHops {
 		return nil
 	}
@@ -362,19 +381,20 @@ func (n *Network) sendMessage(m *Message) error {
 	ln := n.links.Closest(m.Header.DstID, conns[:])
 	n.linksLock.Unlock()
 
-	if ln != 0 && conns[0].ID().Equals(m.Header.DstID) {
-		ln = 1
-		// log.Println("using direct route")
-	} else if id, ok := n.nextHop.Get(m.Header.DstID); ok {
-		if conn, ok := n.links.Get(id); ok {
-			if ln > 0 {
-				copy(conns[1:], conns[:ln-1])
+	unicast := m.Header.Flags&Mbroadcast == 0
+	if unicast {
+		if ln != 0 && conns[0].ID().Equals(m.Header.DstID) {
+			ln = 1
+			// log.Println("using direct route")
+		} else if id, ok := n.nextHop.Get(m.Header.DstID); ok {
+			if conn, ok := n.links.Get(id); ok {
+				if ln > 0 {
+					copy(conns[1:], conns[:ln-1])
+				}
+				conns[0] = conn
+				// ln = 1
+				// log.Println("using known route", conn.ID().String())
 			}
-			conns[0] = conn
-			// ln = 1
-			// log.Println("using known route", conn.ID().String())
-		} else {
-			// log.Println("no conn for known route")
 		}
 	}
 
@@ -393,7 +413,7 @@ func (n *Network) sendMessage(m *Message) error {
 		}
 		l.writeLock.Unlock()
 
-		if m.Header.DstID.Equals(l.ID()) {
+		if unicast && m.Header.DstID.Equals(l.ID()) {
 			break
 		}
 

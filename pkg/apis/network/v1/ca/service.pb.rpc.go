@@ -24,6 +24,25 @@ type CAService interface {
 	) (*CAFindResponse, error)
 }
 
+// CAService ...
+type UnimplementedCAService struct{}
+
+func (s *UnimplementedCAService) Renew(
+	ctx context.Context,
+	req *CARenewRequest,
+) (*CARenewResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedCAService) Find(
+	ctx context.Context,
+	req *CAFindRequest,
+) (*CAFindResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ CAService = (*UnimplementedCAService)(nil)
+
 // CAClient ...
 type CAClient struct {
 	client rpc.Caller

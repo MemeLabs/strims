@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,12 +30,6 @@ func TestMarshalUnmarshal(t *testing.T) {
 
 	assert.Equal(t, id0, id1)
 	assert.Equal(t, b0, b1)
-}
-
-func TestBinary(t *testing.T) {
-	id := ID{0x0000ffff0000ffff, 0x0000ffff0000ffff, 0x0000ffff0000ffff, 0x0000ffff0000ffff}
-	spew.Dump(id.Binary())
-	spew.Dump(id.Bytes(nil))
 }
 
 var BenchmarkBinaryResult []byte

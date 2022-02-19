@@ -39,6 +39,46 @@ type VideoChannelFrontendService interface {
 	) (*VideoChannelDeleteResponse, error)
 }
 
+// VideoChannelFrontendService ...
+type UnimplementedVideoChannelFrontendService struct{}
+
+func (s *UnimplementedVideoChannelFrontendService) List(
+	ctx context.Context,
+	req *VideoChannelListRequest,
+) (*VideoChannelListResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoChannelFrontendService) Get(
+	ctx context.Context,
+	req *VideoChannelGetRequest,
+) (*VideoChannelGetResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoChannelFrontendService) Create(
+	ctx context.Context,
+	req *VideoChannelCreateRequest,
+) (*VideoChannelCreateResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoChannelFrontendService) Update(
+	ctx context.Context,
+	req *VideoChannelUpdateRequest,
+) (*VideoChannelUpdateResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoChannelFrontendService) Delete(
+	ctx context.Context,
+	req *VideoChannelDeleteRequest,
+) (*VideoChannelDeleteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ VideoChannelFrontendService = (*UnimplementedVideoChannelFrontendService)(nil)
+
 // VideoChannelFrontendClient ...
 type VideoChannelFrontendClient struct {
 	client rpc.Caller

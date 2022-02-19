@@ -59,6 +59,14 @@ export interface DirectoryService {
   ping(req: PingRequest, call: strims_rpc_Call): Promise<PingResponse> | PingResponse;
 }
 
+export class UnimplementedDirectoryService implements DirectoryService {
+  publish(req: PublishRequest, call: strims_rpc_Call): Promise<PublishResponse> | PublishResponse { throw new Error("not implemented"); }
+  unpublish(req: UnpublishRequest, call: strims_rpc_Call): Promise<UnpublishResponse> | UnpublishResponse { throw new Error("not implemented"); }
+  join(req: JoinRequest, call: strims_rpc_Call): Promise<JoinResponse> | JoinResponse { throw new Error("not implemented"); }
+  part(req: PartRequest, call: strims_rpc_Call): Promise<PartResponse> | PartResponse { throw new Error("not implemented"); }
+  ping(req: PingRequest, call: strims_rpc_Call): Promise<PingResponse> | PingResponse { throw new Error("not implemented"); }
+}
+
 export const registerDirectoryService = (host: strims_rpc_Service, service: DirectoryService): void => {
   host.registerMethod<PublishRequest, PublishResponse>("strims.network.v1.directory.Directory.Publish", service.publish.bind(service), PublishRequest);
   host.registerMethod<UnpublishRequest, UnpublishResponse>("strims.network.v1.directory.Directory.Unpublish", service.unpublish.bind(service), UnpublishRequest);
@@ -101,6 +109,18 @@ export interface DirectoryFrontendService {
   getListingRecord(req: FrontendGetListingRecordRequest, call: strims_rpc_Call): Promise<FrontendGetListingRecordResponse> | FrontendGetListingRecordResponse;
   listListingRecords(req: FrontendListListingRecordsRequest, call: strims_rpc_Call): Promise<FrontendListListingRecordsResponse> | FrontendListListingRecordsResponse;
   updateListingRecord(req: FrontendUpdateListingRecordRequest, call: strims_rpc_Call): Promise<FrontendUpdateListingRecordResponse> | FrontendUpdateListingRecordResponse;
+}
+
+export class UnimplementedDirectoryFrontendService implements DirectoryFrontendService {
+  open(req: FrontendOpenRequest, call: strims_rpc_Call): GenericReadable<FrontendOpenResponse> { throw new Error("not implemented"); }
+  publish(req: FrontendPublishRequest, call: strims_rpc_Call): Promise<FrontendPublishResponse> | FrontendPublishResponse { throw new Error("not implemented"); }
+  unpublish(req: FrontendUnpublishRequest, call: strims_rpc_Call): Promise<FrontendUnpublishResponse> | FrontendUnpublishResponse { throw new Error("not implemented"); }
+  join(req: FrontendJoinRequest, call: strims_rpc_Call): Promise<FrontendJoinResponse> | FrontendJoinResponse { throw new Error("not implemented"); }
+  part(req: FrontendPartRequest, call: strims_rpc_Call): Promise<FrontendPartResponse> | FrontendPartResponse { throw new Error("not implemented"); }
+  test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse { throw new Error("not implemented"); }
+  getListingRecord(req: FrontendGetListingRecordRequest, call: strims_rpc_Call): Promise<FrontendGetListingRecordResponse> | FrontendGetListingRecordResponse { throw new Error("not implemented"); }
+  listListingRecords(req: FrontendListListingRecordsRequest, call: strims_rpc_Call): Promise<FrontendListListingRecordsResponse> | FrontendListListingRecordsResponse { throw new Error("not implemented"); }
+  updateListingRecord(req: FrontendUpdateListingRecordRequest, call: strims_rpc_Call): Promise<FrontendUpdateListingRecordResponse> | FrontendUpdateListingRecordResponse { throw new Error("not implemented"); }
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
@@ -157,6 +177,10 @@ export class DirectoryFrontendClient {
 
 export interface DirectorySnippetService {
   subscribe(req: SnippetSubscribeRequest, call: strims_rpc_Call): GenericReadable<SnippetSubscribeResponse>;
+}
+
+export class UnimplementedDirectorySnippetService implements DirectorySnippetService {
+  subscribe(req: SnippetSubscribeRequest, call: strims_rpc_Call): GenericReadable<SnippetSubscribeResponse> { throw new Error("not implemented"); }
 }
 
 export const registerDirectorySnippetService = (host: strims_rpc_Service, service: DirectorySnippetService): void => {

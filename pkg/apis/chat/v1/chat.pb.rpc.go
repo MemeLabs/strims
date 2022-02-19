@@ -119,6 +119,158 @@ type ChatServerFrontendService interface {
 	) (*SyncAssetsResponse, error)
 }
 
+// ChatServerFrontendService ...
+type UnimplementedChatServerFrontendService struct{}
+
+func (s *UnimplementedChatServerFrontendService) CreateServer(
+	ctx context.Context,
+	req *CreateServerRequest,
+) (*CreateServerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateServer(
+	ctx context.Context,
+	req *UpdateServerRequest,
+) (*UpdateServerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) DeleteServer(
+	ctx context.Context,
+	req *DeleteServerRequest,
+) (*DeleteServerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) GetServer(
+	ctx context.Context,
+	req *GetServerRequest,
+) (*GetServerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) ListServers(
+	ctx context.Context,
+	req *ListServersRequest,
+) (*ListServersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) CreateEmote(
+	ctx context.Context,
+	req *CreateEmoteRequest,
+) (*CreateEmoteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateEmote(
+	ctx context.Context,
+	req *UpdateEmoteRequest,
+) (*UpdateEmoteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) DeleteEmote(
+	ctx context.Context,
+	req *DeleteEmoteRequest,
+) (*DeleteEmoteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) GetEmote(
+	ctx context.Context,
+	req *GetEmoteRequest,
+) (*GetEmoteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) ListEmotes(
+	ctx context.Context,
+	req *ListEmotesRequest,
+) (*ListEmotesResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) CreateModifier(
+	ctx context.Context,
+	req *CreateModifierRequest,
+) (*CreateModifierResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateModifier(
+	ctx context.Context,
+	req *UpdateModifierRequest,
+) (*UpdateModifierResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) DeleteModifier(
+	ctx context.Context,
+	req *DeleteModifierRequest,
+) (*DeleteModifierResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) GetModifier(
+	ctx context.Context,
+	req *GetModifierRequest,
+) (*GetModifierResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) ListModifiers(
+	ctx context.Context,
+	req *ListModifiersRequest,
+) (*ListModifiersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) CreateTag(
+	ctx context.Context,
+	req *CreateTagRequest,
+) (*CreateTagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateTag(
+	ctx context.Context,
+	req *UpdateTagRequest,
+) (*UpdateTagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) DeleteTag(
+	ctx context.Context,
+	req *DeleteTagRequest,
+) (*DeleteTagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) GetTag(
+	ctx context.Context,
+	req *GetTagRequest,
+) (*GetTagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) ListTags(
+	ctx context.Context,
+	req *ListTagsRequest,
+) (*ListTagsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) SyncAssets(
+	ctx context.Context,
+	req *SyncAssetsRequest,
+) (*SyncAssetsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ ChatServerFrontendService = (*UnimplementedChatServerFrontendService)(nil)
+
 // ChatServerFrontendClient ...
 type ChatServerFrontendClient struct {
 	client rpc.Caller
@@ -346,6 +498,39 @@ type ChatFrontendService interface {
 	) (*GetUIConfigResponse, error)
 }
 
+// ChatFrontendService ...
+type UnimplementedChatFrontendService struct{}
+
+func (s *UnimplementedChatFrontendService) OpenClient(
+	ctx context.Context,
+	req *OpenClientRequest,
+) (<-chan *OpenClientResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) ClientSendMessage(
+	ctx context.Context,
+	req *ClientSendMessageRequest,
+) (*ClientSendMessageResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) SetUIConfig(
+	ctx context.Context,
+	req *SetUIConfigRequest,
+) (*SetUIConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) GetUIConfig(
+	ctx context.Context,
+	req *GetUIConfigRequest,
+) (*GetUIConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ ChatFrontendService = (*UnimplementedChatFrontendService)(nil)
+
 // ChatFrontendClient ...
 type ChatFrontendClient struct {
 	client rpc.Caller
@@ -404,6 +589,18 @@ type ChatService interface {
 		req *SendMessageRequest,
 	) (*SendMessageResponse, error)
 }
+
+// ChatService ...
+type UnimplementedChatService struct{}
+
+func (s *UnimplementedChatService) SendMessage(
+	ctx context.Context,
+	req *SendMessageRequest,
+) (*SendMessageResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ ChatService = (*UnimplementedChatService)(nil)
 
 // ChatClient ...
 type ChatClient struct {

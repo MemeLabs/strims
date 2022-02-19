@@ -39,6 +39,46 @@ type BrokerProxyService interface {
 	) (*BrokerProxyCloseResponse, error)
 }
 
+// BrokerProxyService ...
+type UnimplementedBrokerProxyService struct{}
+
+func (s *UnimplementedBrokerProxyService) Open(
+	ctx context.Context,
+	req *BrokerProxyRequest,
+) (<-chan *BrokerProxyEvent, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBrokerProxyService) SendKeys(
+	ctx context.Context,
+	req *BrokerProxySendKeysRequest,
+) (*BrokerProxySendKeysResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBrokerProxyService) ReceiveKeys(
+	ctx context.Context,
+	req *BrokerProxyReceiveKeysRequest,
+) (*BrokerProxyReceiveKeysResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBrokerProxyService) Data(
+	ctx context.Context,
+	req *BrokerProxyDataRequest,
+) (*BrokerProxyDataResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBrokerProxyService) Close(
+	ctx context.Context,
+	req *BrokerProxyCloseRequest,
+) (*BrokerProxyCloseResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ BrokerProxyService = (*UnimplementedBrokerProxyService)(nil)
+
 // BrokerProxyClient ...
 type BrokerProxyClient struct {
 	client rpc.Caller

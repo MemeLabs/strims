@@ -24,6 +24,25 @@ type ProfileFrontendService interface {
 	) (*UpdateProfileResponse, error)
 }
 
+// ProfileFrontendService ...
+type UnimplementedProfileFrontendService struct{}
+
+func (s *UnimplementedProfileFrontendService) Get(
+	ctx context.Context,
+	req *GetProfileRequest,
+) (*GetProfileResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedProfileFrontendService) Update(
+	ctx context.Context,
+	req *UpdateProfileRequest,
+) (*UpdateProfileResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ ProfileFrontendService = (*UnimplementedProfileFrontendService)(nil)
+
 // ProfileFrontendClient ...
 type ProfileFrontendClient struct {
 	client rpc.Caller

@@ -69,6 +69,88 @@ type NetworkServiceService interface {
 	) (*GetUIConfigResponse, error)
 }
 
+// NetworkServiceService ...
+type UnimplementedNetworkServiceService struct{}
+
+func (s *UnimplementedNetworkServiceService) CreateServer(
+	ctx context.Context,
+	req *CreateServerRequest,
+) (*CreateServerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) UpdateServerConfig(
+	ctx context.Context,
+	req *UpdateServerConfigRequest,
+) (*UpdateServerConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) Delete(
+	ctx context.Context,
+	req *DeleteNetworkRequest,
+) (*DeleteNetworkResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) Get(
+	ctx context.Context,
+	req *GetNetworkRequest,
+) (*GetNetworkResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) List(
+	ctx context.Context,
+	req *ListNetworksRequest,
+) (*ListNetworksResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) CreateInvitation(
+	ctx context.Context,
+	req *CreateInvitationRequest,
+) (*CreateInvitationResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) CreateNetworkFromInvitation(
+	ctx context.Context,
+	req *CreateNetworkFromInvitationRequest,
+) (*CreateNetworkFromInvitationResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) Watch(
+	ctx context.Context,
+	req *WatchNetworksRequest,
+) (<-chan *WatchNetworksResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) UpdateDisplayOrder(
+	ctx context.Context,
+	req *UpdateDisplayOrderRequest,
+) (*UpdateDisplayOrderResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) UpdateAlias(
+	ctx context.Context,
+	req *UpdateAliasRequest,
+) (*UpdateAliasResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkServiceService) GetUIConfig(
+	ctx context.Context,
+	req *GetUIConfigRequest,
+) (*GetUIConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ NetworkServiceService = (*UnimplementedNetworkServiceService)(nil)
+
 // NetworkServiceClient ...
 type NetworkServiceClient struct {
 	client rpc.Caller

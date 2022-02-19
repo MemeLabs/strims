@@ -29,6 +29,32 @@ type HLSEgressService interface {
 	) (*HLSEgressCloseStreamResponse, error)
 }
 
+// HLSEgressService ...
+type UnimplementedHLSEgressService struct{}
+
+func (s *UnimplementedHLSEgressService) IsSupported(
+	ctx context.Context,
+	req *HLSEgressIsSupportedRequest,
+) (*HLSEgressIsSupportedResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedHLSEgressService) OpenStream(
+	ctx context.Context,
+	req *HLSEgressOpenStreamRequest,
+) (*HLSEgressOpenStreamResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedHLSEgressService) CloseStream(
+	ctx context.Context,
+	req *HLSEgressCloseStreamRequest,
+) (*HLSEgressCloseStreamResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ HLSEgressService = (*UnimplementedHLSEgressService)(nil)
+
 // HLSEgressClient ...
 type HLSEgressClient struct {
 	client rpc.Caller

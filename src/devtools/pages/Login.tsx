@@ -1,5 +1,3 @@
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
@@ -10,6 +8,7 @@ import { registerNetworkServiceService } from "../../apis/strims/network/v1/netw
 import LandingPageLayout from "../../components/LandingPageLayout";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { Provider as ThemeProvider } from "../../contexts/Theme";
+import { AsyncPassThrough } from "../../lib/stream";
 import ChatService from "../mocks/chat/service";
 import NetworkService from "../mocks/network/service";
 
@@ -20,7 +19,7 @@ const LayoutTest: React.FC = () => {
     registerChatFrontendService(svc, chatService);
     registerNetworkServiceService(svc, new NetworkService(8));
 
-    const [a, b] = [new PassThrough(), new PassThrough()];
+    const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
     return [chatService, new FrontendClient(b, a)];
   });

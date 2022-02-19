@@ -17,6 +17,11 @@ export interface CapConnService {
   loadLog(req: CapConnLoadLogRequest, call: strims_rpc_Call): Promise<CapConnLoadLogResponse> | CapConnLoadLogResponse;
 }
 
+export class UnimplementedCapConnService implements CapConnService {
+  watchLogs(req: CapConnWatchLogsRequest, call: strims_rpc_Call): GenericReadable<CapConnWatchLogsResponse> { throw new Error("not implemented"); }
+  loadLog(req: CapConnLoadLogRequest, call: strims_rpc_Call): Promise<CapConnLoadLogResponse> | CapConnLoadLogResponse { throw new Error("not implemented"); }
+}
+
 export const registerCapConnService = (host: strims_rpc_Service, service: CapConnService): void => {
   host.registerMethod<CapConnWatchLogsRequest, CapConnWatchLogsResponse>("strims.devtools.v1.ppspp.CapConn.WatchLogs", service.watchLogs.bind(service), CapConnWatchLogsRequest);
   host.registerMethod<CapConnLoadLogRequest, CapConnLoadLogResponse>("strims.devtools.v1.ppspp.CapConn.LoadLog", service.loadLog.bind(service), CapConnLoadLogRequest);

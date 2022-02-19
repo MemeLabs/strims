@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 
 	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"golang.org/x/crypto/blake2b"
 )
@@ -25,10 +26,7 @@ func hashSecondaryIndexKey(key []byte, s interface{}) string {
 		}
 	}
 
-	h, err := blake2b.New(secondaryIndexKeyHashSize, salt)
-	if err != nil {
-		panic(err)
-	}
+	h := errutil.Must(blake2b.New(secondaryIndexKeyHashSize, salt))
 
 	h.Write(key)
 	return base64.RawStdEncoding.EncodeToString(h.Sum(nil))

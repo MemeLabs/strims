@@ -4,15 +4,22 @@ import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
 
 import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory";
-import { DirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
+import {
+  DirectoryFrontendService,
+  UnimplementedDirectoryFrontendService,
+} from "../../../apis/strims/network/v1/directory/directory_rpc";
 import events from "./events";
 
-export default class DirectoryService implements DirectoryFrontendService {
+export default class DirectoryService
+  extends UnimplementedDirectoryFrontendService
+  implements DirectoryFrontendService
+{
   responses: Readable<directoryv1.FrontendOpenResponse>;
 
   constructor(
     responses: Readable<directoryv1.FrontendOpenResponse> = new PassThrough({ objectMode: true })
   ) {
+    super();
     this.responses = responses;
   }
 
@@ -53,48 +60,28 @@ export default class DirectoryService implements DirectoryFrontendService {
     return ch;
   }
 
-  test(req: directoryv1.FrontendTestRequest): Promise<directoryv1.FrontendTestResponse> {
+  test(req: directoryv1.FrontendTestRequest): directoryv1.FrontendTestResponse {
     console.log("test", req);
-    return Promise.resolve(new directoryv1.FrontendTestResponse());
+    return new directoryv1.FrontendTestResponse();
   }
 
-  publish(req: directoryv1.FrontendPublishRequest): Promise<directoryv1.FrontendPublishResponse> {
+  publish(req: directoryv1.FrontendPublishRequest): directoryv1.FrontendPublishResponse {
     console.log("publish", req);
-    return Promise.resolve(new directoryv1.FrontendPublishResponse());
+    return new directoryv1.FrontendPublishResponse();
   }
 
-  unpublish(
-    req: directoryv1.FrontendUnpublishRequest
-  ): Promise<directoryv1.FrontendUnpublishResponse> {
+  unpublish(req: directoryv1.FrontendUnpublishRequest): directoryv1.FrontendUnpublishResponse {
     console.log("unpublish", req);
-    return Promise.resolve(new directoryv1.FrontendUnpublishResponse());
+    return new directoryv1.FrontendUnpublishResponse();
   }
 
-  join(req: directoryv1.FrontendJoinRequest): Promise<directoryv1.FrontendJoinResponse> {
+  join(req: directoryv1.FrontendJoinRequest): directoryv1.FrontendJoinResponse {
     console.log("join", req);
-    return Promise.resolve(new directoryv1.FrontendJoinResponse());
+    return new directoryv1.FrontendJoinResponse();
   }
 
-  part(req: directoryv1.FrontendPartRequest): Promise<directoryv1.FrontendPartResponse> {
+  part(req: directoryv1.FrontendPartRequest): directoryv1.FrontendPartResponse {
     console.log("part", req);
-    return Promise.resolve(new directoryv1.FrontendPartResponse());
-  }
-
-  getListingRecord(
-    req: directoryv1.FrontendGetListingRecordRequest
-  ): Promise<directoryv1.FrontendGetListingRecordResponse> {
-    return Promise.reject("not implemented");
-  }
-
-  listListingRecords(
-    req: directoryv1.FrontendListListingRecordsRequest
-  ): Promise<directoryv1.FrontendListListingRecordsResponse> {
-    return Promise.reject("not implemented");
-  }
-
-  updateListingRecord(
-    req: directoryv1.FrontendUpdateListingRecordRequest
-  ): Promise<directoryv1.FrontendUpdateListingRecordResponse> {
-    return Promise.reject("not implemented");
+    return new directoryv1.FrontendPartResponse();
   }
 }

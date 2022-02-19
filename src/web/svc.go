@@ -5,11 +5,9 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"log"
-	mrand "math/rand"
+	"math/rand"
 	"runtime"
 	"syscall/js"
 	"time"
@@ -19,7 +17,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/session"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
@@ -30,21 +30,13 @@ import (
 
 func init() {
 	go runGC()
-	seedMathRand()
+	rand.Seed(int64(errutil.Must(randutil.Uint64())))
 }
 
 func runGC() {
 	for range time.NewTicker(10 * time.Second).C {
 		runtime.GC()
 	}
-}
-
-func seedMathRand() {
-	var t [8]byte
-	if _, err := rand.Read(t[:]); err != nil {
-		panic(err)
-	}
-	mrand.Seed(int64(binary.LittleEndian.Uint64(t[:])))
 }
 
 func main() {

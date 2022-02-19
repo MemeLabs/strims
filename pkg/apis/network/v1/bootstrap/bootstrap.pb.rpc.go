@@ -49,6 +49,60 @@ type BootstrapFrontendService interface {
 	) (*PublishNetworkToBootstrapPeerResponse, error)
 }
 
+// BootstrapFrontendService ...
+type UnimplementedBootstrapFrontendService struct{}
+
+func (s *UnimplementedBootstrapFrontendService) CreateClient(
+	ctx context.Context,
+	req *CreateBootstrapClientRequest,
+) (*CreateBootstrapClientResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) UpdateClient(
+	ctx context.Context,
+	req *UpdateBootstrapClientRequest,
+) (*UpdateBootstrapClientResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) DeleteClient(
+	ctx context.Context,
+	req *DeleteBootstrapClientRequest,
+) (*DeleteBootstrapClientResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) GetClient(
+	ctx context.Context,
+	req *GetBootstrapClientRequest,
+) (*GetBootstrapClientResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) ListClients(
+	ctx context.Context,
+	req *ListBootstrapClientsRequest,
+) (*ListBootstrapClientsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) ListPeers(
+	ctx context.Context,
+	req *ListBootstrapPeersRequest,
+) (*ListBootstrapPeersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) PublishNetworkToPeer(
+	ctx context.Context,
+	req *PublishNetworkToBootstrapPeerRequest,
+) (*PublishNetworkToBootstrapPeerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ BootstrapFrontendService = (*UnimplementedBootstrapFrontendService)(nil)
+
 // BootstrapFrontendClient ...
 type BootstrapFrontendClient struct {
 	client rpc.Caller

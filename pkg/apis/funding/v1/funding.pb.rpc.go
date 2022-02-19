@@ -19,6 +19,18 @@ type FundingService interface {
 	) (*FundingTestResponse, error)
 }
 
+// FundingService ...
+type UnimplementedFundingService struct{}
+
+func (s *UnimplementedFundingService) Test(
+	ctx context.Context,
+	req *FundingTestRequest,
+) (*FundingTestResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ FundingService = (*UnimplementedFundingService)(nil)
+
 // FundingClient ...
 type FundingClient struct {
 	client rpc.Caller

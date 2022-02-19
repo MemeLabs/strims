@@ -39,6 +39,46 @@ type VideoIngressService interface {
 	) (*VideoIngressGetChannelURLResponse, error)
 }
 
+// VideoIngressService ...
+type UnimplementedVideoIngressService struct{}
+
+func (s *UnimplementedVideoIngressService) IsSupported(
+	ctx context.Context,
+	req *VideoIngressIsSupportedRequest,
+) (*VideoIngressIsSupportedResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressService) GetConfig(
+	ctx context.Context,
+	req *VideoIngressGetConfigRequest,
+) (*VideoIngressGetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressService) SetConfig(
+	ctx context.Context,
+	req *VideoIngressSetConfigRequest,
+) (*VideoIngressSetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressService) ListStreams(
+	ctx context.Context,
+	req *VideoIngressListStreamsRequest,
+) (*VideoIngressListStreamsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressService) GetChannelURL(
+	ctx context.Context,
+	req *VideoIngressGetChannelURLRequest,
+) (*VideoIngressGetChannelURLResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ VideoIngressService = (*UnimplementedVideoIngressService)(nil)
+
 // VideoIngressClient ...
 type VideoIngressClient struct {
 	client rpc.Caller
@@ -116,6 +156,32 @@ type VideoIngressShareService interface {
 		req *VideoIngressShareDeleteChannelRequest,
 	) (*VideoIngressShareDeleteChannelResponse, error)
 }
+
+// VideoIngressShareService ...
+type UnimplementedVideoIngressShareService struct{}
+
+func (s *UnimplementedVideoIngressShareService) CreateChannel(
+	ctx context.Context,
+	req *VideoIngressShareCreateChannelRequest,
+) (*VideoIngressShareCreateChannelResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressShareService) UpdateChannel(
+	ctx context.Context,
+	req *VideoIngressShareUpdateChannelRequest,
+) (*VideoIngressShareUpdateChannelResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVideoIngressShareService) DeleteChannel(
+	ctx context.Context,
+	req *VideoIngressShareDeleteChannelRequest,
+) (*VideoIngressShareDeleteChannelResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ VideoIngressShareService = (*UnimplementedVideoIngressShareService)(nil)
 
 // VideoIngressShareClient ...
 type VideoIngressShareClient struct {

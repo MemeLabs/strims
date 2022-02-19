@@ -1,5 +1,3 @@
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
@@ -12,6 +10,7 @@ import Search from "../../components/Directory/Search";
 import { Provider as DirectoryProvider } from "../../contexts/Directory";
 import { DirectoryListing } from "../../contexts/Directory";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
+import { AsyncPassThrough } from "../../lib/stream";
 import events from "../mocks/directory/events";
 import DirectoryService from "../mocks/directory/service";
 
@@ -21,7 +20,7 @@ const SearchStory: React.FC = () => {
     const service = new DirectoryService();
     registerDirectoryFrontendService(svc, service);
 
-    const [a, b] = [new PassThrough(), new PassThrough()];
+    const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
     return [service, new FrontendClient(b, a)];
   });

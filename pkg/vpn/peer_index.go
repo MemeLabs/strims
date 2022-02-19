@@ -4,19 +4,17 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -26,12 +24,10 @@ import (
 
 const peerIndexSearchResponseSize = 5
 const peerIndexPublishInterval = 10 * time.Minute
-const peerIndexDiscardInterval = time.Minute
+const peerIndexGCInterval = time.Minute
 const peerIndexMaxRecordAge = 30 * time.Minute
 const peerIndexMaxSize = 5120
-const peerIndexSerchTimeout = time.Minute
-
-var nextPeerIndexID uint32
+const peerIndexSearchTimeout = time.Minute
 
 // PeerIndex ...
 type PeerIndex interface {
@@ -39,16 +35,14 @@ type PeerIndex interface {
 	Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error)
 }
 
-func newPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *peerIndex {
-	id := atomic.AddUint32(&nextPeerIndexID, 1)
-	if id == 0 {
-		panic("peer index id overflow")
-	}
+func newPeerIndex(logger *zap.Logger, n *Network) *peerIndex {
+	store := newPeerIndexStore(logger)
+	stopGC := timeutil.DefaultTickEmitter.Subscribe(peerIndexGCInterval, store.Prune, nil)
 
 	return &peerIndex{
 		logger:  logger,
-		id:      id,
 		store:   store,
+		stopGC:  stopGC,
 		network: n,
 	}
 }
@@ -56,10 +50,14 @@ func newPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *peerIn
 // PeerIndex ...
 type peerIndex struct {
 	logger              *zap.Logger
-	id                  uint32
-	store               *PeerIndexStore
 	network             *Network
-	searchResponseChans sync.Map
+	store               *peerIndexStore
+	stopGC              timeutil.StopFunc
+	searchResponseChans syncutil.Map[uint64, chan *PeerIndexHost]
+}
+
+func (s *peerIndex) Close() {
+	s.stopGC()
 }
 
 // HandleMessage ...
@@ -71,9 +69,9 @@ func (s *peerIndex) HandleMessage(msg *Message) error {
 
 	switch b := m.Body.(type) {
 	case *vpnv1.PeerIndexMessage_Publish_:
-		return s.handlePublish(b.Publish.Record)
+		return s.handlePublish(b.Publish.Record, msg.SrcHostID())
 	case *vpnv1.PeerIndexMessage_Unpublish_:
-		return s.handleUnpublish(b.Unpublish.Record)
+		return s.handleUnpublish(b.Unpublish.Record, msg.SrcHostID())
 	case *vpnv1.PeerIndexMessage_SearchRequest_:
 		return s.handleSearchRequest(b.SearchRequest, msg.SrcHostID())
 	case *vpnv1.PeerIndexMessage_SearchResponse_:
@@ -83,24 +81,36 @@ func (s *peerIndex) HandleMessage(msg *Message) error {
 	}
 }
 
-func (s *peerIndex) handlePublish(r *vpnv1.PeerIndexMessage_Record) error {
+func (s *peerIndex) handlePublish(r *vpnv1.PeerIndexMessage_Record, hostID kademlia.ID) error {
 	if err := dao.VerifyMessage(r); err != nil {
+		log.Println(">>> returned error")
 		return err
 	}
-
-	return s.store.Insert(s.id, r)
-}
-
-func (s *peerIndex) handleUnpublish(r *vpnv1.PeerIndexMessage_Record) error {
-	if err := dao.VerifyMessage(r); err != nil {
-		return err
+	if !bytes.Equal(r.HostId, hostID.Bytes(nil)) {
+		log.Println(">>> returned error")
+		return errors.New("host id mismatch")
 	}
 
-	return s.store.Remove(s.id, r)
+	s.store.Upsert(r, hostID)
+	return nil
 }
 
-func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
-	records := s.store.Closest(s.id, originHostID, m.Hash)
+func (s *peerIndex) handleUnpublish(r *vpnv1.PeerIndexMessage_Record, hostID kademlia.ID) error {
+	if err := dao.VerifyMessage(r); err != nil {
+		log.Println(">>> returned error")
+		return err
+	}
+	if !bytes.Equal(r.HostId, hostID.Bytes(nil)) {
+		log.Println(">>> returned error")
+		return errors.New("host id mismatch")
+	}
+
+	s.store.Remove(r)
+	return nil
+}
+
+func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest, hostID kademlia.ID) error {
+	records := s.store.Get(m.Hash, hostID, s.network.HasPeer)
 	if len(records) == 0 {
 		return nil
 	}
@@ -113,19 +123,30 @@ func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest,
 			},
 		},
 	}
-	return s.network.SendProtoWithFlags(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0)
+	return s.network.SendProto(hostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg)
 }
 
 func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchResponse) error {
+	ch, ok := s.searchResponseChans.Get(m.RequestId)
+	if !ok {
+		return nil
+	}
+
 	for _, r := range m.Records {
 		if dao.VerifyMessage(r) != nil {
 			continue
 		}
-		if !sendPeerIndexSearchResponse(&s.searchResponseChans, m.RequestId, r) {
-			break
+
+		h, err := newPeerIndexHostFromRecord(r)
+		if err != nil {
+			continue
+		}
+
+		select {
+		case ch <- h:
+		default:
 		}
 	}
-
 	return nil
 }
 
@@ -153,7 +174,7 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 	}
 
 	hosts := make(chan *PeerIndexHost, 32)
-	s.searchResponseChans.Store(rid, hosts)
+	s.searchResponseChans.Set(rid, hosts)
 	cleanup := func() {
 		s.searchResponseChans.Delete(rid)
 		close(hosts)
@@ -167,12 +188,12 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 			},
 		},
 	}
-	if err := s.network.SendProtoWithFlags(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
+	if err := s.network.SendProtoWithFlags(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mbroadcast); err != nil {
 		cleanup()
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, peerIndexSerchTimeout)
+	ctx, cancel := context.WithTimeout(ctx, peerIndexSearchTimeout)
 	go func() {
 		<-ctx.Done()
 		cancel()
@@ -182,199 +203,151 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 	return hosts, nil
 }
 
-func newPeerIndexItemKeyRange(peerIndexID uint32, hash []byte, localHostID kademlia.ID) (peerIndexItemKey, peerIndexItemKey) {
-	min := newPeerIndexItemKey(peerIndexID, hash, localHostID, []byte{})
-	max := newPeerIndexItemKey(peerIndexID+1, hash, localHostID, []byte{})
-	return min, max
-}
-
-func newPeerIndexItemKey(peerIndexID uint32, hash []byte, localHostID kademlia.ID, remoteHostID []byte) (k peerIndexItemKey) {
-	localHostID.Bytes(k[:])
-	for i := 0; i < len(k) && i < len(hash); i++ {
-		k[i] ^= hash[i]
-	}
-
-	binary.BigEndian.PutUint32(k[kademlia.IDLength:], peerIndexID)
-	copy(k[kademlia.IDLength+4:], remoteHostID)
-	return k
-}
-
-type peerIndexItemKey [kademlia.IDLength*2 + 4]byte
-
-func (k peerIndexItemKey) Less(o peerIndexItemKey) bool {
-	return bytes.Compare(k[:], o[:]) == -1
-}
-
-func newPeerIndexItemRecordRange(peerIndexID uint32, hash []byte, localHostID kademlia.ID) (*peerIndexItem, *peerIndexItem) {
-	min, max := newPeerIndexItemKeyRange(peerIndexID, hash, localHostID)
-	return &peerIndexItem{key: min}, &peerIndexItem{key: max}
-}
-
-func newPeerIndexItem(peerIndexID uint32, localHostID kademlia.ID, r *vpnv1.PeerIndexMessage_Record) (*peerIndexItem, error) {
-	hostID, err := kademlia.UnmarshalID(r.HostId)
-	if err != nil {
-		return nil, err
-	}
-
-	return &peerIndexItem{
-		key:    newPeerIndexItemKey(peerIndexID, r.Hash, localHostID, r.HostId),
-		hostID: hostID,
-		record: unsafe.Pointer(r),
-	}, nil
-}
-
 type peerIndexItem struct {
-	key    peerIndexItemKey
+	record *vpnv1.PeerIndexMessage_Record
 	hostID kademlia.ID
-	record unsafe.Pointer
+	time   timeutil.Time
+	prev   *peerIndexItem
+	next   *peerIndexItem
 }
 
-func (p *peerIndexItem) HostID() kademlia.ID {
-	return p.hostID
-}
-
-func (p *peerIndexItem) SetRecord(r *vpnv1.PeerIndexMessage_Record) {
-	atomic.SwapPointer(&p.record, unsafe.Pointer(r))
-}
-
-func (p *peerIndexItem) Record() *vpnv1.PeerIndexMessage_Record {
-	return (*vpnv1.PeerIndexMessage_Record)(atomic.LoadPointer(&p.record))
-}
-
-// Less implements llrb.Item
-func (p *peerIndexItem) Less(oi llrb.Item) bool {
-	o, ok := oi.(*peerIndexItem)
-	return ok && p.key.Less(o.key)
-}
-
-// ID implements kademlia.Interface
-func (p *peerIndexItem) ID() kademlia.ID {
-	return p.hostID
-}
-
-// Deadline implements timeoutQueueItem
-func (p *peerIndexItem) Deadline() timeutil.Time {
-	return timeutil.Unix(p.Record().Timestamp, 0).Add(peerIndexMaxRecordAge)
-}
-
-// newPeerIndexStore ...
-func newPeerIndexStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *PeerIndexStore {
-	p := &PeerIndexStore{
-		logger:       logger,
-		hostID:       hostID,
-		records:      llrb.New(),
-		discardQueue: newTimeoutQueue(ctx, peerIndexDiscardInterval, peerIndexMaxRecordAge),
-	}
-
-	p.ticker = timeutil.TickerBFunc(ctx, peerIndexDiscardInterval, p.tick)
-
-	return p
-}
-
-// PeerIndexStore ...
-type PeerIndexStore struct {
-	logger       *zap.Logger
-	hostID       kademlia.ID
-	lock         sync.Mutex
-	records      *llrb.LLRB
-	discardQueue *timeoutQueue
-	ticker       *timeutil.TickerB
-}
-
-func (p *PeerIndexStore) tick(t timeutil.Time) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	for {
-		item, ok := p.discardQueue.Pop().(*peerIndexItem)
-		if !ok {
-			return
+func (i *peerIndexItem) Less(o llrb.Item) bool {
+	if o, ok := o.(*peerIndexItem); ok {
+		if d := bytes.Compare(i.record.Hash, o.record.Hash); d != 0 {
+			return d == -1
 		}
-		p.records.Delete(item)
+		return bytes.Compare(i.record.HostId, o.record.HostId) == -1
+	}
+	return !o.Less(i)
+}
+
+func (i *peerIndexItem) ID() kademlia.ID {
+	return i.hostID
+}
+
+func newPeerIndexStore(logger *zap.Logger) *peerIndexStore {
+	return &peerIndexStore{
+		logger: logger,
+		items:  llrb.New(),
 	}
 }
 
-// Insert ...
-func (p *PeerIndexStore) Insert(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Record) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+type peerIndexStore struct {
+	logger *zap.Logger
+	lock   sync.Mutex
+	items  *llrb.LLRB
+	tail   *peerIndexItem
+	head   *peerIndexItem
+}
 
-	item, err := newPeerIndexItem(peerIndexID, p.hostID, r)
-	if err != nil {
-		return err
-	}
+func (s *peerIndexStore) Upsert(r *vpnv1.PeerIndexMessage_Record, hostID kademlia.ID) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	prev, ok := p.records.Get(item).(*peerIndexItem)
-	if !ok {
-		p.records.ReplaceOrInsert(item)
-		p.discardQueue.Push(item)
+	i := &peerIndexItem{record: r}
+	if ii := s.items.Get(i); ii != nil {
+		i = ii.(*peerIndexItem)
+		s.remove(i)
 
-		if p.records.Len() > peerIndexMaxSize {
-			p.records.Delete(p.records.Max())
-		}
-		return nil
-	}
+		s.logger.Debug(
+			"updating peer index item",
+			logutil.ByteHex("hash", r.Hash),
+			logutil.ByteHex("host", r.HostId),
+			zap.Uint32("port", r.Port),
+		)
+	} else {
+		i.hostID = hostID
+		s.items.ReplaceOrInsert(i)
 
-	if prev.Record().Timestamp < r.Timestamp {
-		p.logger.Debug(
+		s.logger.Debug(
 			"inserting peer index item",
-			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("hash", r.Hash),
 			logutil.ByteHex("host", r.HostId),
 			zap.Uint32("port", r.Port),
 		)
-		prev.SetRecord(r)
 	}
-
-	return nil
+	i.time = timeutil.Now()
+	s.push(i)
 }
 
-// Remove ...
-func (p *PeerIndexStore) Remove(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Record) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+func (s *peerIndexStore) Remove(r *vpnv1.PeerIndexMessage_Record) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	item, err := newPeerIndexItem(peerIndexID, p.hostID, r)
-	if err != nil {
-		return err
-	}
+	if ii := s.items.Delete(&peerIndexItem{record: r}); ii != nil {
+		s.remove(ii.(*peerIndexItem))
 
-	prev, ok := p.records.Get(item).(*peerIndexItem)
-	if ok && prev.Record().Timestamp < r.Timestamp {
-		p.logger.Debug(
+		s.logger.Debug(
 			"removing peer index item",
-			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("hash", r.Hash),
 			logutil.ByteHex("host", r.HostId),
 			zap.Uint32("port", r.Port),
 		)
-		p.records.Delete(item)
 	}
-
-	return nil
 }
 
-// Closest ...
-func (p *PeerIndexStore) Closest(peerIndexID uint32, hostID kademlia.ID, hash []byte) (records []*vpnv1.PeerIndexMessage_Record) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+func (s *peerIndexStore) Get(hash []byte, hostID kademlia.ID, verifyHostID func(kademlia.ID) bool) []*vpnv1.PeerIndexMessage_Record {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	min := &peerIndexItem{record: &vpnv1.PeerIndexMessage_Record{Hash: hash}}
+	max := &peerIndexItem{record: &vpnv1.PeerIndexMessage_Record{Hash: hash, HostId: kademlia.MaxID.Bytes(nil)}}
 
 	f := kademlia.NewFilter(hostID)
 	defer f.Free()
-
-	iter := func(i llrb.Item) bool {
+	s.items.AscendRange(min, max, func(i llrb.Item) bool {
 		f.Push(i.(*peerIndexItem))
 		return true
-	}
-	min, max := newPeerIndexItemRecordRange(peerIndexID, hash, p.hostID)
-	p.records.AscendRange(min, max, iter)
+	})
 
-	for i := 0; i < peerIndexSearchResponseSize; i++ {
-		v, ok := f.Pop()
-		if !ok {
-			return
+	records := make([]*vpnv1.PeerIndexMessage_Record, 0, peerIndexSearchResponseSize)
+	f.Each(func(i kademlia.Interface) bool {
+		if verifyHostID(i.(*peerIndexItem).hostID) {
+			records = append(records, i.(*peerIndexItem).record)
 		}
-		records = append(records, v.(*peerIndexItem).Record())
+		return len(records) < peerIndexSearchResponseSize
+	})
+	return records
+}
+
+func (s *peerIndexStore) Prune(t timeutil.Time) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	for s.head != nil && s.head.time < t {
+		s.items.Delete(s.head)
+		s.remove(s.head)
 	}
-	return
+}
+
+func (s *peerIndexStore) remove(i *peerIndexItem) {
+	if s.tail == i {
+		s.tail = i.prev
+	}
+	if s.head == i {
+		s.head = i.next
+	}
+	if i.prev != nil {
+		i.prev.next = i.next
+	}
+	if i.next != nil {
+		i.next.prev = i.prev
+	}
+}
+
+func (s *peerIndexStore) push(i *peerIndexItem) {
+	i.time = timeutil.Now()
+	i.next = s.head
+	i.prev = nil
+
+	if i.next != nil {
+		i.next.prev = i
+	}
+
+	s.head = i
+	if s.tail == nil {
+		s.tail = i
+	}
 }
 
 func peerIndexRecordHash(key, salt []byte) []byte {
@@ -388,6 +361,18 @@ func peerIndexRecordHash(key, salt []byte) []byte {
 	return hash.Sum(nil)
 }
 
+func newPeerIndexHostFromRecord(r *vpnv1.PeerIndexMessage_Record) (*PeerIndexHost, error) {
+	hostID, err := kademlia.UnmarshalID(r.HostId)
+	if err != nil {
+		return nil, err
+	}
+	return &PeerIndexHost{
+		Timestamp: timeutil.Unix(r.Timestamp, 0),
+		HostID:    hostID,
+		Port:      uint16(r.Port),
+	}, nil
+}
+
 // PeerIndexHost ...
 type PeerIndexHost struct {
 	Timestamp timeutil.Time
@@ -395,36 +380,8 @@ type PeerIndexHost struct {
 	Port      uint16
 }
 
-func sendPeerIndexSearchResponse(chans *sync.Map, requestID uint64, r *vpnv1.PeerIndexMessage_Record) bool {
-	ch, ok := chans.Load(requestID)
-	if !ok {
-		return false
-	}
-
-	hostID, err := kademlia.UnmarshalID(r.HostId)
-	if err != nil {
-		return false
-	}
-	h := &PeerIndexHost{
-		Timestamp: timeutil.Unix(r.Timestamp, 0),
-		HostID:    hostID,
-		Port:      uint16(r.Port),
-	}
-
-	select {
-	case ch.(chan *PeerIndexHost) <- h:
-		return true
-	default:
-		return false
-	}
-}
-
 func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Network, key, salt []byte, port uint16) (*peerIndexPublisher, error) {
 	hash := peerIndexRecordHash(key, salt)
-	target, err := kademlia.UnmarshalID(hash)
-	if err != nil {
-		return nil, err
-	}
 
 	record := &vpnv1.PeerIndexMessage_Record{
 		Hash:   hash,
@@ -435,11 +392,11 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 	p := &peerIndexPublisher{
 		logger:  logger,
 		record:  record,
-		target:  target,
 		network: network,
 	}
 
-	p.ticker = timeutil.TickerBFuncWithCleanup(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
+	go p.publish(timeutil.Now())
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -447,9 +404,7 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 type peerIndexPublisher struct {
 	logger  *zap.Logger
 	record  *vpnv1.PeerIndexMessage_Record
-	target  kademlia.ID
 	network *Network
-	ticker  *timeutil.TickerB
 }
 
 func (p *peerIndexPublisher) update() error {
@@ -472,7 +427,7 @@ func (p *peerIndexPublisher) publish(t timeutil.Time) {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
+	if err := p.network.BroadcastProtoWithFlags(vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mnorelay); err != nil {
 		p.logger.Debug(
 			"error publishing peer index item",
 			zap.Error(err),
@@ -492,7 +447,7 @@ func (p *peerIndexPublisher) unpublish() {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
+	if err := p.network.BroadcastProtoWithFlags(vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mnorelay); err != nil {
 		p.logger.Debug(
 			"error unpublishing peer index item",
 			zap.Error(err),

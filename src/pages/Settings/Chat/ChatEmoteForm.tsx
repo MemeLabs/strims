@@ -88,6 +88,8 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
     [listModifiersRes.value]
   );
 
+  console.log(">>>", listModifiersRes);
+
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating chat server"} />}

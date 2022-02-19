@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -38,10 +39,7 @@ func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
 func (s *snippetServer) start(ctx context.Context, network *networkv1.Network) {
 	networkKey := dao.NetworkKey(network)
 
-	server, err := s.dialer.ServerWithHostAddr(ctx, networkKey, vnic.SnippetPort)
-	if err != nil {
-		panic(err)
-	}
+	server := errutil.Must(s.dialer.ServerWithHostAddr(ctx, networkKey, vnic.SnippetPort))
 
 	networkv1directory.RegisterDirectorySnippetService(server, &snippetService{
 		logger:     s.logger.With(logutil.ByteHex("network", networkKey)),

@@ -21,6 +21,12 @@ export interface DebugService {
   watchMetrics(req: WatchMetricsRequest, call: strims_rpc_Call): GenericReadable<WatchMetricsResponse>;
 }
 
+export class UnimplementedDebugService implements DebugService {
+  pProf(req: PProfRequest, call: strims_rpc_Call): Promise<PProfResponse> | PProfResponse { throw new Error("not implemented"); }
+  readMetrics(req: ReadMetricsRequest, call: strims_rpc_Call): Promise<ReadMetricsResponse> | ReadMetricsResponse { throw new Error("not implemented"); }
+  watchMetrics(req: WatchMetricsRequest, call: strims_rpc_Call): GenericReadable<WatchMetricsResponse> { throw new Error("not implemented"); }
+}
+
 export const registerDebugService = (host: strims_rpc_Service, service: DebugService): void => {
   host.registerMethod<PProfRequest, PProfResponse>("strims.debug.v1.Debug.PProf", service.pProf.bind(service), PProfRequest);
   host.registerMethod<ReadMetricsRequest, ReadMetricsResponse>("strims.debug.v1.Debug.ReadMetrics", service.readMetrics.bind(service), ReadMetricsRequest);

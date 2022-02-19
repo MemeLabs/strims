@@ -37,6 +37,14 @@ export interface VideoIngressService {
   getChannelURL(req: VideoIngressGetChannelURLRequest, call: strims_rpc_Call): Promise<VideoIngressGetChannelURLResponse> | VideoIngressGetChannelURLResponse;
 }
 
+export class UnimplementedVideoIngressService implements VideoIngressService {
+  isSupported(req: VideoIngressIsSupportedRequest, call: strims_rpc_Call): Promise<VideoIngressIsSupportedResponse> | VideoIngressIsSupportedResponse { throw new Error("not implemented"); }
+  getConfig(req: VideoIngressGetConfigRequest, call: strims_rpc_Call): Promise<VideoIngressGetConfigResponse> | VideoIngressGetConfigResponse { throw new Error("not implemented"); }
+  setConfig(req: VideoIngressSetConfigRequest, call: strims_rpc_Call): Promise<VideoIngressSetConfigResponse> | VideoIngressSetConfigResponse { throw new Error("not implemented"); }
+  listStreams(req: VideoIngressListStreamsRequest, call: strims_rpc_Call): Promise<VideoIngressListStreamsResponse> | VideoIngressListStreamsResponse { throw new Error("not implemented"); }
+  getChannelURL(req: VideoIngressGetChannelURLRequest, call: strims_rpc_Call): Promise<VideoIngressGetChannelURLResponse> | VideoIngressGetChannelURLResponse { throw new Error("not implemented"); }
+}
+
 export const registerVideoIngressService = (host: strims_rpc_Service, service: VideoIngressService): void => {
   host.registerMethod<VideoIngressIsSupportedRequest, VideoIngressIsSupportedResponse>("strims.video.v1.VideoIngress.IsSupported", service.isSupported.bind(service), VideoIngressIsSupportedRequest);
   host.registerMethod<VideoIngressGetConfigRequest, VideoIngressGetConfigResponse>("strims.video.v1.VideoIngress.GetConfig", service.getConfig.bind(service), VideoIngressGetConfigRequest);
@@ -73,6 +81,12 @@ export interface VideoIngressShareService {
   createChannel(req: VideoIngressShareCreateChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareCreateChannelResponse> | VideoIngressShareCreateChannelResponse;
   updateChannel(req: VideoIngressShareUpdateChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareUpdateChannelResponse> | VideoIngressShareUpdateChannelResponse;
   deleteChannel(req: VideoIngressShareDeleteChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareDeleteChannelResponse> | VideoIngressShareDeleteChannelResponse;
+}
+
+export class UnimplementedVideoIngressShareService implements VideoIngressShareService {
+  createChannel(req: VideoIngressShareCreateChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareCreateChannelResponse> | VideoIngressShareCreateChannelResponse { throw new Error("not implemented"); }
+  updateChannel(req: VideoIngressShareUpdateChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareUpdateChannelResponse> | VideoIngressShareUpdateChannelResponse { throw new Error("not implemented"); }
+  deleteChannel(req: VideoIngressShareDeleteChannelRequest, call: strims_rpc_Call): Promise<VideoIngressShareDeleteChannelResponse> | VideoIngressShareDeleteChannelResponse { throw new Error("not implemented"); }
 }
 
 export const registerVideoIngressShareService = (host: strims_rpc_Service, service: VideoIngressShareService): void => {

@@ -16,6 +16,11 @@ export interface AuthFrontendService {
   signUp(req: SignUpRequest, call: strims_rpc_Call): Promise<SignUpResponse> | SignUpResponse;
 }
 
+export class UnimplementedAuthFrontendService implements AuthFrontendService {
+  signIn(req: SignInRequest, call: strims_rpc_Call): Promise<SignInResponse> | SignInResponse { throw new Error("not implemented"); }
+  signUp(req: SignUpRequest, call: strims_rpc_Call): Promise<SignUpResponse> | SignUpResponse { throw new Error("not implemented"); }
+}
+
 export const registerAuthFrontendService = (host: strims_rpc_Service, service: AuthFrontendService): void => {
   host.registerMethod<SignInRequest, SignInResponse>("strims.auth.v1.AuthFrontend.SignIn", service.signIn.bind(service), SignInRequest);
   host.registerMethod<SignUpRequest, SignUpResponse>("strims.auth.v1.AuthFrontend.SignUp", service.signUp.bind(service), SignUpRequest);

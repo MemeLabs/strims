@@ -12,6 +12,10 @@ export interface CAPeerService {
   renew(req: CAPeerRenewRequest, call: strims_rpc_Call): Promise<CAPeerRenewResponse> | CAPeerRenewResponse;
 }
 
+export class UnimplementedCAPeerService implements CAPeerService {
+  renew(req: CAPeerRenewRequest, call: strims_rpc_Call): Promise<CAPeerRenewResponse> | CAPeerRenewResponse { throw new Error("not implemented"); }
+}
+
 export const registerCAPeerService = (host: strims_rpc_Service, service: CAPeerService): void => {
   host.registerMethod<CAPeerRenewRequest, CAPeerRenewResponse>("strims.network.v1.ca.CAPeer.Renew", service.renew.bind(service), CAPeerRenewRequest);
 }

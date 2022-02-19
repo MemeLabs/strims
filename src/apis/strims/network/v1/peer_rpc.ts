@@ -24,6 +24,13 @@ export interface NetworkPeerService {
   updateCertificate(req: NetworkPeerUpdateCertificateRequest, call: strims_rpc_Call): Promise<NetworkPeerUpdateCertificateResponse> | NetworkPeerUpdateCertificateResponse;
 }
 
+export class UnimplementedNetworkPeerService implements NetworkPeerService {
+  negotiate(req: NetworkPeerNegotiateRequest, call: strims_rpc_Call): Promise<NetworkPeerNegotiateResponse> | NetworkPeerNegotiateResponse { throw new Error("not implemented"); }
+  open(req: NetworkPeerOpenRequest, call: strims_rpc_Call): Promise<NetworkPeerOpenResponse> | NetworkPeerOpenResponse { throw new Error("not implemented"); }
+  close(req: NetworkPeerCloseRequest, call: strims_rpc_Call): Promise<NetworkPeerCloseResponse> | NetworkPeerCloseResponse { throw new Error("not implemented"); }
+  updateCertificate(req: NetworkPeerUpdateCertificateRequest, call: strims_rpc_Call): Promise<NetworkPeerUpdateCertificateResponse> | NetworkPeerUpdateCertificateResponse { throw new Error("not implemented"); }
+}
+
 export const registerNetworkPeerService = (host: strims_rpc_Service, service: NetworkPeerService): void => {
   host.registerMethod<NetworkPeerNegotiateRequest, NetworkPeerNegotiateResponse>("strims.network.v1.NetworkPeer.Negotiate", service.negotiate.bind(service), NetworkPeerNegotiateRequest);
   host.registerMethod<NetworkPeerOpenRequest, NetworkPeerOpenResponse>("strims.network.v1.NetworkPeer.Open", service.open.bind(service), NetworkPeerOpenRequest);

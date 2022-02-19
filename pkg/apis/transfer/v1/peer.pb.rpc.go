@@ -24,6 +24,25 @@ type TransferPeerService interface {
 	) (*TransferPeerCloseResponse, error)
 }
 
+// TransferPeerService ...
+type UnimplementedTransferPeerService struct{}
+
+func (s *UnimplementedTransferPeerService) Announce(
+	ctx context.Context,
+	req *TransferPeerAnnounceRequest,
+) (*TransferPeerAnnounceResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedTransferPeerService) Close(
+	ctx context.Context,
+	req *TransferPeerCloseRequest,
+) (*TransferPeerCloseResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ TransferPeerService = (*UnimplementedTransferPeerService)(nil)
+
 // TransferPeerClient ...
 type TransferPeerClient struct {
 	client rpc.Caller

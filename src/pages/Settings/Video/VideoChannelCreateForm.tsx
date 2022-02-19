@@ -1,6 +1,6 @@
 import { Base64 } from "js-base64";
 import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";

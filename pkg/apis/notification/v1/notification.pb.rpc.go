@@ -24,6 +24,25 @@ type NotificationFrontendService interface {
 	) (*DismissResponse, error)
 }
 
+// NotificationFrontendService ...
+type UnimplementedNotificationFrontendService struct{}
+
+func (s *UnimplementedNotificationFrontendService) Watch(
+	ctx context.Context,
+	req *WatchRequest,
+) (<-chan *WatchResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNotificationFrontendService) Dismiss(
+	ctx context.Context,
+	req *DismissRequest,
+) (*DismissResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ NotificationFrontendService = (*UnimplementedNotificationFrontendService)(nil)
+
 // NotificationFrontendClient ...
 type NotificationFrontendClient struct {
 	client rpc.Caller

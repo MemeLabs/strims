@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -147,7 +148,7 @@ func (h *Host) Close() {
 
 // ID ...
 func (h *Host) ID() kademlia.ID {
-	return kademlia.MustUnmarshalID(h.key.Public)
+	return errutil.Must(kademlia.UnmarshalID(h.key.Public))
 }
 
 // Key ...

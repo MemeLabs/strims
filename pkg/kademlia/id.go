@@ -7,14 +7,22 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"math"
 	"reflect"
 	"unsafe"
+
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 )
 
 // constants ...
 const (
 	IDLength    = 32
 	idBitLength = IDLength * 8
+)
+
+var (
+	MinID = ID{0, 0, 0, 0}
+	MaxID = ID{math.MaxUint64, math.MaxUint64, math.MaxUint64, math.MaxUint64}
 )
 
 // ID ...
@@ -36,13 +44,12 @@ func UnmarshalID(b []byte) (d ID, err error) {
 	return
 }
 
-// MustUnmarshalID ....
-func MustUnmarshalID(b []byte) ID {
-	id, err := UnmarshalID(b)
-	if err != nil {
-		panic(err)
+func CastID(b []byte) ID {
+	if len(b) != IDLength {
+		panic("incorrect id length")
 	}
-	return id
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	return *(*ID)(unsafe.Pointer(h.Data))
 }
 
 // Unmarshal ...
@@ -108,12 +115,12 @@ func (d ID) Bytes(b []byte) []byte {
 	if b == nil || len(b) < IDLength {
 		b = make([]byte, IDLength)
 	}
-	if _, err := d.Marshal(b); err != nil {
-		panic(err)
-	}
+	errutil.Must(d.Marshal(b))
 	return b
 }
 
+// Binary returns a byte slice that shares the memory of the ID. Unlike Bytes
+// and Marshal the value depends on the system endianness.
 func (d *ID) Binary() (b []byte) {
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	h.Data = uintptr(unsafe.Pointer(d))

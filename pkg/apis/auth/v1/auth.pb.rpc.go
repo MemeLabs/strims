@@ -24,6 +24,25 @@ type AuthFrontendService interface {
 	) (*SignUpResponse, error)
 }
 
+// AuthFrontendService ...
+type UnimplementedAuthFrontendService struct{}
+
+func (s *UnimplementedAuthFrontendService) SignIn(
+	ctx context.Context,
+	req *SignInRequest,
+) (*SignInResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedAuthFrontendService) SignUp(
+	ctx context.Context,
+	req *SignUpRequest,
+) (*SignUpResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ AuthFrontendService = (*UnimplementedAuthFrontendService)(nil)
+
 // AuthFrontendClient ...
 type AuthFrontendClient struct {
 	client rpc.Caller

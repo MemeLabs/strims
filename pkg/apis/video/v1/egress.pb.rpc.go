@@ -19,6 +19,18 @@ type EgressService interface {
 	) (<-chan *EgressOpenStreamResponse, error)
 }
 
+// EgressService ...
+type UnimplementedEgressService struct{}
+
+func (s *UnimplementedEgressService) OpenStream(
+	ctx context.Context,
+	req *EgressOpenStreamRequest,
+) (<-chan *EgressOpenStreamResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ EgressService = (*UnimplementedEgressService)(nil)
+
 // EgressClient ...
 type EgressClient struct {
 	client rpc.Caller

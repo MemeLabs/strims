@@ -83,6 +83,7 @@ interface ComposerProps {
 
 const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
   const { t } = useTranslation();
+  const [{ uiConfig }] = useChat();
 
   const [[matchSources, matchEntries], setMatch] = useState<Match>(defaultMatch);
   const [selectedMatch, setSelectedMatch] = useState<SelectedMatch>(defaultSelectedMatch);
@@ -211,7 +212,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
     setSelectedMatch(defaultSelectedMatch);
   };
 
-  const showSuggestions = search && matchEntries.length > (lastSearch ? 1 : 0);
+  const showSuggestions =
+    uiConfig.autocompleteHelper && search && matchEntries.length > (lastSearch ? 1 : 0);
 
   // console.log(selectedMatch);
   // console.log({
@@ -295,14 +297,18 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
   selectedMatch,
   onClick,
 }) => {
+  const [{ uiConfig }] = useChat();
+
   let content: React.ReactNode;
   switch (entry.type) {
     case "emote":
       content = (
         <>
-          <span className="chat__composer__autocomplete__item__emote">
-            <Emote name={entry.value} shouldAnimateForever />
-          </span>
+          {uiConfig.autocompleteEmotePreview && (
+            <span className="chat__composer__autocomplete__item__emote">
+              <Emote name={entry.value} shouldAnimateForever />
+            </span>
+          )}
           <span className="chat__composer__autocomplete__item__label">{entry.value}</span>
         </>
       );

@@ -1,5 +1,3 @@
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import { Base64 } from "js-base64";
@@ -8,21 +6,16 @@ import { useForm } from "react-hook-form";
 import { useUpdateEffect } from "react-use";
 
 import { FrontendClient } from "../../../apis/client";
-import { AssetBundle, EmoteScale, IEmoteImage, Message } from "../../../apis/strims/chat/v1/chat";
-import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
+import { AssetBundle, EmoteScale, Message } from "../../../apis/strims/chat/v1/chat";
+import {
+  registerChatFrontendService,
+  registerChatServerFrontendService,
+} from "../../../apis/strims/chat/v1/chat_rpc";
 import Emote from "../../../components/Chat/Emote";
 import ChatMessage from "../../../components/Chat/Message";
 import ChatScroller, { MessageProps } from "../../../components/Chat/Scroller";
-import StyleSheet, { ExtraRules } from "../../../components/Chat/StyleSheet";
-import {
-  ImageInput,
-  ImageValue,
-  InputLabel,
-  SelectInput,
-  SelectOption,
-  TextInput,
-  ToggleInput,
-} from "../../../components/Form";
+import StyleSheet from "../../../components/Chat/StyleSheet";
+import { ImageValue, SelectInput, SelectOption, TextInput } from "../../../components/Form";
 import {
   ChatConsumer,
   Provider as ChatProvider,
@@ -32,9 +25,10 @@ import {
   useRoom,
 } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
+import { AsyncPassThrough } from "../../../lib/stream";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
 import { toEmoteProps } from "../../../pages/Settings/Chat/utils";
-import { emotes, modifiers } from "../../mocks/chat/assetBundle";
+import { emoteNames, modifierNames } from "../../mocks/chat/assetBundle";
 import imgBrick from "../../mocks/chat/emotes/static/Brick.png";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
 import ChatService from "../../mocks/chat/service";
@@ -45,8 +39,9 @@ const initChatState = (messages?: MessageEmitter): [ChatService, FrontendClient]
   const svc = new ServiceRegistry();
   const service = new ChatService(messages);
   registerChatFrontendService(svc, service);
+  registerChatServerFrontendService(svc, service);
 
-  const [a, b] = [new PassThrough(), new PassThrough()];
+  const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
   new Host(a, b, svc);
   return [service, new FrontendClient(b, a)];
 };
@@ -88,7 +83,7 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
   );
 };
 
-const modifierOptions = modifiers.map((m) => ({ value: m, label: m }));
+const modifierOptions = modifierNames.map((m) => ({ value: m, label: m }));
 
 const Modifiers: React.FC = () => {
   const { control, watch } = useForm<{
@@ -105,7 +100,7 @@ const Modifiers: React.FC = () => {
     <div className="emotes">
       <div className="emotes__grid">
         <Chat>
-          {emotes.map((emote) => (
+          {emoteNames.map((emote) => (
             <div key={emote} className="emotes__grid__cell">
               <Emote
                 name={emote}
@@ -312,14 +307,16 @@ const EmoteTester: React.FC = () => {
 
   return (
     <div className="emote_tester">
-      <div className="emote_tester__messages chat">
-        <Chat messages={messages} shouldRenderStyleSheet={false}>
+      <Chat messages={messages} shouldRenderStyleSheet={false}>
+        <div className="emote_tester__messages chat">
           <EmoteTesterMessages formData={formData} />
-        </Chat>
-      </div>
-      <div className="emote_tester__form">
-        {formData && <ChatEmoteForm values={formData} onSubmit={(values) => setFormData(values)} />}
-      </div>
+        </div>
+        <div className="emote_tester__form">
+          {formData && (
+            <ChatEmoteForm values={formData} onSubmit={(values) => setFormData(values)} />
+          )}
+        </div>
+      </Chat>
     </div>
   );
 };
@@ -395,7 +392,7 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
   );
 };
 
-const emoteOptions = emotes.map((m) => ({ value: m, label: m }));
+const emoteOptions = emoteNames.map((m) => ({ value: m, label: m }));
 
 interface ComboFormProps {
   emote: SelectOption<string>;

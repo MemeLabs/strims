@@ -24,6 +24,25 @@ type VNICFrontendService interface {
 	) (*SetConfigResponse, error)
 }
 
+// VNICFrontendService ...
+type UnimplementedVNICFrontendService struct{}
+
+func (s *UnimplementedVNICFrontendService) GetConfig(
+	ctx context.Context,
+	req *GetConfigRequest,
+) (*GetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedVNICFrontendService) SetConfig(
+	ctx context.Context,
+	req *SetConfigRequest,
+) (*SetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ VNICFrontendService = (*UnimplementedVNICFrontendService)(nil)
+
 // VNICFrontendClient ...
 type VNICFrontendClient struct {
 	client rpc.Caller

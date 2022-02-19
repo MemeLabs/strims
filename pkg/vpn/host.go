@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/event"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/petar/GoLLRB/llrb"
@@ -44,7 +45,6 @@ func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 			recentMessageIDHistoryTTL,
 		),
 		hashTableStore: newHashTableStore(context.Background(), logger, vnic.ID()),
-		peerIndexStore: newPeerIndexStore(context.Background(), logger, vnic.ID()),
 	}, nil
 }
 
@@ -53,13 +53,12 @@ type Host struct {
 	logger               *zap.Logger
 	vnic                 *vnic.Host
 	qosc                 *qos.Class
-	clientsLock          sync.Mutex
+	nodesLock            sync.Mutex
 	nodes                nodeMap
 	networkObservers     event.Observer
 	peerNetworkObservers event.Observer
 	recentMessageIDs     *messageIDLRU
 	hashTableStore       *HashTableStore
-	peerIndexStore       *PeerIndexStore
 }
 
 // TODO: get networks
@@ -88,18 +87,20 @@ func (h *Host) NotifyPeerNetwork(ch chan PeerNetwork) {
 
 // AddNetwork ...
 func (h *Host) AddNetwork(key []byte) (*Node, error) {
-	h.clientsLock.Lock()
-	defer h.clientsLock.Unlock()
+	h.nodesLock.Lock()
+	defer h.nodesLock.Unlock()
 
 	if _, ok := h.nodes.Get(key); ok {
 		return nil, ErrDuplicateNetworkKey
 	}
 
+	logger := h.logger.With(logutil.ByteHex("network", key))
+
 	qosc := h.qosc.AddClass(1)
-	network := newNetwork(h.logger, h.vnic, qosc, key, h.recentMessageIDs)
-	hashTable := newHashTable(h.logger, network, h.hashTableStore)
-	peerIndex := newPeerIndex(h.logger, network, h.peerIndexStore)
-	peerExchange := newPeerExchange(h.logger, network)
+	network := newNetwork(logger, h.vnic, qosc, key, h.recentMessageIDs)
+	hashTable := newHashTable(logger, network, h.hashTableStore)
+	peerIndex := newPeerIndex(logger, network)
+	peerExchange := newPeerExchange(logger, network)
 
 	if err := network.SetHandler(vnic.HashTablePort, hashTable); err != nil {
 		return nil, err
@@ -127,22 +128,23 @@ func (h *Host) AddNetwork(key []byte) (*Node, error) {
 
 // RemoveNetwork ...
 func (h *Host) RemoveNetwork(key []byte) error {
-	h.clientsLock.Lock()
-	defer h.clientsLock.Unlock()
+	h.nodesLock.Lock()
+	defer h.nodesLock.Unlock()
 
-	client, ok := h.nodes.Delete(key)
+	node, ok := h.nodes.Delete(key)
 	if !ok {
 		return ErrNetworkNotFound
 	}
 
-	client.Network.Close()
+	node.PeerIndex.(*peerIndex).Close()
+	node.Network.Close()
 	return nil
 }
 
 // Node ...
 func (h *Host) Node(key []byte) (*Node, bool) {
-	h.clientsLock.Lock()
-	defer h.clientsLock.Unlock()
+	h.nodesLock.Lock()
+	defer h.nodesLock.Unlock()
 	return h.nodes.Get(key)
 }
 

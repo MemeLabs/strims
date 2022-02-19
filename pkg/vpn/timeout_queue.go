@@ -28,7 +28,7 @@ func newTimeoutQueue(ctx context.Context, interval, lifespan time.Duration) *tim
 		q.windows[i] = list.New()
 	}
 
-	q.ticker = timeutil.TickerBFunc(ctx, interval, q.tick)
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, interval, q.tick, nil)
 
 	return q
 }
@@ -40,7 +40,6 @@ type timeoutQueue struct {
 	interval time.Duration
 	epoch    timeutil.Time
 	now      timeutil.Time
-	ticker   *timeutil.TickerB
 }
 
 func (q *timeoutQueue) windowIndex(t timeutil.Time) int {

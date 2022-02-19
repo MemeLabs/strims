@@ -103,17 +103,6 @@ module.exports = (env, argv) => {
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
       ...htmlWebpackPluginOptions,
     }),
-    new HtmlWebpackPlugin({
-      filename: "test.html",
-      chunks: ["test"],
-      title: "test",
-    }),
-    new HtmlWebpackPlugin({
-      filename: "devtools.html",
-      chunks: ["devtools"],
-      title: "devtools",
-      ...htmlWebpackPluginOptions,
-    }),
     // new HtmlWebpackPlugin({
     //   filename: "funding.html",
     //   chunks: ["funding"],
@@ -159,7 +148,7 @@ module.exports = (env, argv) => {
     }),
   ];
 
-  let devtool, optimization;
+  let devtool, optimization, entries;
 
   if (isProduction) {
     plugins.unshift(new CleanWebpackPlugin());
@@ -189,8 +178,24 @@ module.exports = (env, argv) => {
       new ReactRefreshWebpackPlugin({
         exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx|src\/lib\/i18n\.ts$/,
         overlay: false,
+      }),
+      new HtmlWebpackPlugin({
+        filename: "test.html",
+        chunks: ["test"],
+        title: "test",
+      }),
+      new HtmlWebpackPlugin({
+        filename: "devtools.html",
+        chunks: ["devtools"],
+        title: "devtools",
+        ...htmlWebpackPluginOptions,
       })
     );
+
+    entries = {
+      test: path.join(__dirname, "src", "web", "test.ts"),
+      devtools: path.join(__dirname, "src", "devtools", "index.tsx"),
+    };
 
     styleModuleRule.use.unshift("style-loader");
 
@@ -250,10 +255,9 @@ module.exports = (env, argv) => {
           target: "web",
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
-            test: path.join(__dirname, "src", "web", "test.ts"),
-            devtools: path.join(__dirname, "src", "devtools", "index.tsx"),
             sw: path.join(__dirname, "src", "devtools", "sw.ts"),
             // funding: path.join(__dirname, "src", "funding", "index.tsx"),
+            ...entries,
           },
           devtool,
           output: {

@@ -16,6 +16,11 @@ export interface CAService {
   find(req: CAFindRequest, call: strims_rpc_Call): Promise<CAFindResponse> | CAFindResponse;
 }
 
+export class UnimplementedCAService implements CAService {
+  renew(req: CARenewRequest, call: strims_rpc_Call): Promise<CARenewResponse> | CARenewResponse { throw new Error("not implemented"); }
+  find(req: CAFindRequest, call: strims_rpc_Call): Promise<CAFindResponse> | CAFindResponse { throw new Error("not implemented"); }
+}
+
 export const registerCAService = (host: strims_rpc_Service, service: CAService): void => {
   host.registerMethod<CARenewRequest, CARenewResponse>("strims.network.v1.ca.CA.Renew", service.renew.bind(service), CARenewRequest);
   host.registerMethod<CAFindRequest, CAFindResponse>("strims.network.v1.ca.CA.Find", service.find.bind(service), CAFindRequest);

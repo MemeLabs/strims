@@ -1,7 +1,5 @@
 import "../../../components/Layout/Layout.scss";
 
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
@@ -12,6 +10,7 @@ import NetworkNav from "../../../components/Layout/NetworkNav";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { withLayoutContext } from "../../../contexts/Layout";
 import { Provider as NetworkProvider } from "../../../contexts/Network";
+import { AsyncPassThrough } from "../../../lib/stream";
 import NetworkService from "../../mocks/network/service";
 
 const NavTest = withLayoutContext(({ rootRef }) => (
@@ -34,7 +33,7 @@ const Test: React.FC = () => {
     const service = new NetworkService();
     registerNetworkServiceService(svc, service);
 
-    const [a, b] = [new PassThrough(), new PassThrough()];
+    const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
     return [service, new FrontendClient(b, a)];
   });

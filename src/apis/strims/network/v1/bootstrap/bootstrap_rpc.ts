@@ -36,6 +36,16 @@ export interface BootstrapFrontendService {
   publishNetworkToPeer(req: PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<PublishNetworkToBootstrapPeerResponse> | PublishNetworkToBootstrapPeerResponse;
 }
 
+export class UnimplementedBootstrapFrontendService implements BootstrapFrontendService {
+  createClient(req: CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<CreateBootstrapClientResponse> | CreateBootstrapClientResponse { throw new Error("not implemented"); }
+  updateClient(req: UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<UpdateBootstrapClientResponse> | UpdateBootstrapClientResponse { throw new Error("not implemented"); }
+  deleteClient(req: DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<DeleteBootstrapClientResponse> | DeleteBootstrapClientResponse { throw new Error("not implemented"); }
+  getClient(req: GetBootstrapClientRequest, call: strims_rpc_Call): Promise<GetBootstrapClientResponse> | GetBootstrapClientResponse { throw new Error("not implemented"); }
+  listClients(req: ListBootstrapClientsRequest, call: strims_rpc_Call): Promise<ListBootstrapClientsResponse> | ListBootstrapClientsResponse { throw new Error("not implemented"); }
+  listPeers(req: ListBootstrapPeersRequest, call: strims_rpc_Call): Promise<ListBootstrapPeersResponse> | ListBootstrapPeersResponse { throw new Error("not implemented"); }
+  publishNetworkToPeer(req: PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<PublishNetworkToBootstrapPeerResponse> | PublishNetworkToBootstrapPeerResponse { throw new Error("not implemented"); }
+}
+
 export const registerBootstrapFrontendService = (host: strims_rpc_Service, service: BootstrapFrontendService): void => {
   host.registerMethod<CreateBootstrapClientRequest, CreateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.createClient.bind(service), CreateBootstrapClientRequest);
   host.registerMethod<UpdateBootstrapClientRequest, UpdateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.updateClient.bind(service), UpdateBootstrapClientRequest);

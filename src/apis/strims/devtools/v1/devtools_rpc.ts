@@ -12,6 +12,10 @@ export interface DevToolsService {
   test(req: DevToolsTestRequest, call: strims_rpc_Call): Promise<DevToolsTestResponse> | DevToolsTestResponse;
 }
 
+export class UnimplementedDevToolsService implements DevToolsService {
+  test(req: DevToolsTestRequest, call: strims_rpc_Call): Promise<DevToolsTestResponse> | DevToolsTestResponse { throw new Error("not implemented"); }
+}
+
 export const registerDevToolsService = (host: strims_rpc_Service, service: DevToolsService): void => {
   host.registerMethod<DevToolsTestRequest, DevToolsTestResponse>("strims.devtools.v1.DevTools.Test", service.test.bind(service), DevToolsTestRequest);
 }

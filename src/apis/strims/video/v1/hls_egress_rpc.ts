@@ -20,6 +20,12 @@ export interface HLSEgressService {
   closeStream(req: HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<HLSEgressCloseStreamResponse> | HLSEgressCloseStreamResponse;
 }
 
+export class UnimplementedHLSEgressService implements HLSEgressService {
+  isSupported(req: HLSEgressIsSupportedRequest, call: strims_rpc_Call): Promise<HLSEgressIsSupportedResponse> | HLSEgressIsSupportedResponse { throw new Error("not implemented"); }
+  openStream(req: HLSEgressOpenStreamRequest, call: strims_rpc_Call): Promise<HLSEgressOpenStreamResponse> | HLSEgressOpenStreamResponse { throw new Error("not implemented"); }
+  closeStream(req: HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<HLSEgressCloseStreamResponse> | HLSEgressCloseStreamResponse { throw new Error("not implemented"); }
+}
+
 export const registerHLSEgressService = (host: strims_rpc_Service, service: HLSEgressService): void => {
   host.registerMethod<HLSEgressIsSupportedRequest, HLSEgressIsSupportedResponse>("strims.video.v1.HLSEgress.IsSupported", service.isSupported.bind(service), HLSEgressIsSupportedRequest);
   host.registerMethod<HLSEgressOpenStreamRequest, HLSEgressOpenStreamResponse>("strims.video.v1.HLSEgress.OpenStream", service.openStream.bind(service), HLSEgressOpenStreamRequest);

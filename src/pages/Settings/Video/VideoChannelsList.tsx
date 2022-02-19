@@ -1,6 +1,6 @@
 import React from "react";
 import { MdChevronLeft } from "react-icons/md";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -41,6 +41,13 @@ const VideoChannelsList = () => {
   const [, deleteChannel] = useLazyCall("videoChannel", "delete", {
     onComplete: listChannels,
   });
+
+  if (channelsRes.loading) {
+    return null;
+  }
+  if (!channelsRes.value?.channels.length) {
+    return <Navigate to="/settings/videos/channels/new" />;
+  }
 
   const rows = channelsRes.value?.channels?.map((channel) => {
     return (

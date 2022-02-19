@@ -34,6 +34,39 @@ type CaptureService interface {
 	) (*CaptureCloseResponse, error)
 }
 
+// CaptureService ...
+type UnimplementedCaptureService struct{}
+
+func (s *UnimplementedCaptureService) Open(
+	ctx context.Context,
+	req *CaptureOpenRequest,
+) (*CaptureOpenResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedCaptureService) Update(
+	ctx context.Context,
+	req *CaptureUpdateRequest,
+) (*CaptureUpdateResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedCaptureService) Append(
+	ctx context.Context,
+	req *CaptureAppendRequest,
+) (*CaptureAppendResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedCaptureService) Close(
+	ctx context.Context,
+	req *CaptureCloseRequest,
+) (*CaptureCloseResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ CaptureService = (*UnimplementedCaptureService)(nil)
+
 // CaptureClient ...
 type CaptureClient struct {
 	client rpc.Caller

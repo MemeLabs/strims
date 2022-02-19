@@ -231,6 +231,15 @@ func (s *Filter) Copy(out []Interface) int {
 	return n
 }
 
+// Each ...
+func (s *Filter) Each(it func(Interface) bool) {
+	for i := len(*s.items) - 1; i >= 0; i-- {
+		if !it((*s.items)[i].Interface) {
+			return
+		}
+	}
+}
+
 // Free ...
 func (s *Filter) Free() {
 	filterSlicePool.Put(s.items)

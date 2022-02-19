@@ -5,7 +5,10 @@ import { Base64 } from "js-base64";
 
 import * as networkv1 from "../../../apis/strims/network/v1/network";
 import { Network } from "../../../apis/strims/network/v1/network";
-import { NetworkServiceService } from "../../../apis/strims/network/v1/network_rpc";
+import {
+  NetworkServiceService,
+  UnimplementedNetworkServiceService,
+} from "../../../apis/strims/network/v1/network_rpc";
 import imgAOCFace from "../chat/emotes/static/AOCFace.png";
 import imgBasedGod from "../chat/emotes/static/BasedGod.png";
 import imgBOOMER from "../chat/emotes/static/BOOMER.png";
@@ -106,35 +109,12 @@ const network = new Network({
   },
 });
 
-export default class NetworkService implements NetworkServiceService {
-  constructor(private limit: number = Infinity) {}
-
-  public createServer(): Promise<networkv1.CreateServerResponse> {
-    return Promise.resolve(new networkv1.CreateServerResponse());
-  }
-
-  public updateServerConfig(): Promise<networkv1.UpdateServerConfigResponse> {
-    return Promise.resolve(new networkv1.UpdateServerConfigResponse());
-  }
-
-  public delete(): Promise<networkv1.DeleteNetworkResponse> {
-    return Promise.resolve(new networkv1.DeleteNetworkResponse());
-  }
-
-  public get(): Promise<networkv1.GetNetworkResponse> {
-    return Promise.resolve(new networkv1.GetNetworkResponse());
-  }
-
-  public list(): Promise<networkv1.ListNetworksResponse> {
-    return Promise.resolve(new networkv1.ListNetworksResponse());
-  }
-
-  public createInvitation(): Promise<networkv1.CreateInvitationResponse> {
-    return Promise.resolve(new networkv1.CreateInvitationResponse());
-  }
-
-  public createNetworkFromInvitation(): Promise<networkv1.CreateNetworkFromInvitationResponse> {
-    return Promise.resolve(new networkv1.CreateNetworkFromInvitationResponse());
+export default class NetworkService
+  extends UnimplementedNetworkServiceService
+  implements NetworkServiceService
+{
+  constructor(private limit: number = Infinity) {
+    super();
   }
 
   public watch(): Readable<networkv1.WatchNetworksResponse> {
@@ -168,26 +148,16 @@ export default class NetworkService implements NetworkServiceService {
     return ch;
   }
 
-  public updateDisplayOrder(): Promise<networkv1.UpdateDisplayOrderResponse> {
-    return Promise.resolve(new networkv1.UpdateDisplayOrderResponse());
-  }
-
-  public updateAlias(): Promise<networkv1.UpdateAliasResponse> {
-    return Promise.resolve(new networkv1.UpdateAliasResponse());
-  }
-
-  getUIConfig(): Promise<networkv1.GetUIConfigResponse> {
+  getUIConfig(): networkv1.GetUIConfigResponse {
     const networkDisplayOrder: bigint[] = [];
     for (let i = 0; i < Math.min(images.length, this.limit); i++) {
       networkDisplayOrder.push(BigInt(i));
     }
 
-    return Promise.resolve(
-      new networkv1.GetUIConfigResponse({
-        config: {
-          networkDisplayOrder,
-        },
-      })
-    );
+    return new networkv1.GetUIConfigResponse({
+      config: {
+        networkDisplayOrder,
+      },
+    });
   }
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -21,9 +22,7 @@ func NewRNG(h func() hash.Hash, seed []byte) *RNG {
 // NewDefaultRNG ...
 func NewDefaultRNG() *RNG {
 	seed := make([]byte, 32)
-	if _, err := rand.Read(seed); err != nil {
-		panic(err)
-	}
+	errutil.Must(rand.Read(seed))
 
 	return NewRNG(func() hash.Hash {
 		h, _ := blake2b.New512(nil)
@@ -39,10 +38,7 @@ type RNG struct {
 // Uint32 ...
 func (a *RNG) Uint32() (n uint32) {
 	for i := 0; i < 4; i++ {
-		b, err := a.r.ReadByte()
-		if err != nil {
-			panic(err)
-		}
+		b := errutil.Must(a.r.ReadByte())
 		n |= uint32(b) << (i * 8)
 	}
 	return
@@ -51,10 +47,7 @@ func (a *RNG) Uint32() (n uint32) {
 // Uint64 ...
 func (a *RNG) Uint64() (n uint64) {
 	for i := 0; i < 8; i++ {
-		b, err := a.r.ReadByte()
-		if err != nil {
-			panic(err)
-		}
+		b := errutil.Must(a.r.ReadByte())
 		n |= uint64(b) << (i * 8)
 	}
 	return
@@ -63,9 +56,7 @@ func (a *RNG) Uint64() (n uint64) {
 // BigInt ...
 func (a *RNG) BigInt(size int) *big.Int {
 	b := make([]byte, size)
-	if _, err := a.Read(b); err != nil {
-		panic(err)
-	}
+	errutil.Must(a.Read(b))
 	return big.NewInt(0).SetBytes(b)
 }
 

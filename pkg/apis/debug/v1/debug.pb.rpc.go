@@ -29,6 +29,32 @@ type DebugService interface {
 	) (<-chan *WatchMetricsResponse, error)
 }
 
+// DebugService ...
+type UnimplementedDebugService struct{}
+
+func (s *UnimplementedDebugService) PProf(
+	ctx context.Context,
+	req *PProfRequest,
+) (*PProfResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDebugService) ReadMetrics(
+	ctx context.Context,
+	req *ReadMetricsRequest,
+) (*ReadMetricsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDebugService) WatchMetrics(
+	ctx context.Context,
+	req *WatchMetricsRequest,
+) (<-chan *WatchMetricsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ DebugService = (*UnimplementedDebugService)(nil)
+
 // DebugClient ...
 type DebugClient struct {
 	client rpc.Caller

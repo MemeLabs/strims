@@ -53,6 +53,20 @@ export interface NetworkServiceService {
   getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse;
 }
 
+export class UnimplementedNetworkServiceService implements NetworkServiceService {
+  createServer(req: CreateServerRequest, call: strims_rpc_Call): Promise<CreateServerResponse> | CreateServerResponse { throw new Error("not implemented"); }
+  updateServerConfig(req: UpdateServerConfigRequest, call: strims_rpc_Call): Promise<UpdateServerConfigResponse> | UpdateServerConfigResponse { throw new Error("not implemented"); }
+  delete(req: DeleteNetworkRequest, call: strims_rpc_Call): Promise<DeleteNetworkResponse> | DeleteNetworkResponse { throw new Error("not implemented"); }
+  get(req: GetNetworkRequest, call: strims_rpc_Call): Promise<GetNetworkResponse> | GetNetworkResponse { throw new Error("not implemented"); }
+  list(req: ListNetworksRequest, call: strims_rpc_Call): Promise<ListNetworksResponse> | ListNetworksResponse { throw new Error("not implemented"); }
+  createInvitation(req: CreateInvitationRequest, call: strims_rpc_Call): Promise<CreateInvitationResponse> | CreateInvitationResponse { throw new Error("not implemented"); }
+  createNetworkFromInvitation(req: CreateNetworkFromInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkFromInvitationResponse> | CreateNetworkFromInvitationResponse { throw new Error("not implemented"); }
+  watch(req: WatchNetworksRequest, call: strims_rpc_Call): GenericReadable<WatchNetworksResponse> { throw new Error("not implemented"); }
+  updateDisplayOrder(req: UpdateDisplayOrderRequest, call: strims_rpc_Call): Promise<UpdateDisplayOrderResponse> | UpdateDisplayOrderResponse { throw new Error("not implemented"); }
+  updateAlias(req: UpdateAliasRequest, call: strims_rpc_Call): Promise<UpdateAliasResponse> | UpdateAliasResponse { throw new Error("not implemented"); }
+  getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse { throw new Error("not implemented"); }
+}
+
 export const registerNetworkServiceService = (host: strims_rpc_Service, service: NetworkServiceService): void => {
   host.registerMethod<CreateServerRequest, CreateServerResponse>("strims.network.v1.NetworkService.CreateServer", service.createServer.bind(service), CreateServerRequest);
   host.registerMethod<UpdateServerConfigRequest, UpdateServerConfigResponse>("strims.network.v1.NetworkService.UpdateServerConfig", service.updateServerConfig.bind(service), UpdateServerConfigRequest);

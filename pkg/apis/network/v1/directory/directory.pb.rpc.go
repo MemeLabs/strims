@@ -39,6 +39,46 @@ type DirectoryService interface {
 	) (*PingResponse, error)
 }
 
+// DirectoryService ...
+type UnimplementedDirectoryService struct{}
+
+func (s *UnimplementedDirectoryService) Publish(
+	ctx context.Context,
+	req *PublishRequest,
+) (*PublishResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) Unpublish(
+	ctx context.Context,
+	req *UnpublishRequest,
+) (*UnpublishResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) Join(
+	ctx context.Context,
+	req *JoinRequest,
+) (*JoinResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) Part(
+	ctx context.Context,
+	req *PartRequest,
+) (*PartResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) Ping(
+	ctx context.Context,
+	req *PingRequest,
+) (*PingResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ DirectoryService = (*UnimplementedDirectoryService)(nil)
+
 // DirectoryClient ...
 type DirectoryClient struct {
 	client rpc.Caller
@@ -147,6 +187,74 @@ type DirectoryFrontendService interface {
 	) (*FrontendUpdateListingRecordResponse, error)
 }
 
+// DirectoryFrontendService ...
+type UnimplementedDirectoryFrontendService struct{}
+
+func (s *UnimplementedDirectoryFrontendService) Open(
+	ctx context.Context,
+	req *FrontendOpenRequest,
+) (<-chan *FrontendOpenResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) Publish(
+	ctx context.Context,
+	req *FrontendPublishRequest,
+) (*FrontendPublishResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) Unpublish(
+	ctx context.Context,
+	req *FrontendUnpublishRequest,
+) (*FrontendUnpublishResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) Join(
+	ctx context.Context,
+	req *FrontendJoinRequest,
+) (*FrontendJoinResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) Part(
+	ctx context.Context,
+	req *FrontendPartRequest,
+) (*FrontendPartResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) Test(
+	ctx context.Context,
+	req *FrontendTestRequest,
+) (*FrontendTestResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) GetListingRecord(
+	ctx context.Context,
+	req *FrontendGetListingRecordRequest,
+) (*FrontendGetListingRecordResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) ListListingRecords(
+	ctx context.Context,
+	req *FrontendListListingRecordsRequest,
+) (*FrontendListListingRecordsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) UpdateListingRecord(
+	ctx context.Context,
+	req *FrontendUpdateListingRecordRequest,
+) (*FrontendUpdateListingRecordResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ DirectoryFrontendService = (*UnimplementedDirectoryFrontendService)(nil)
+
 // DirectoryFrontendClient ...
 type DirectoryFrontendClient struct {
 	client rpc.Caller
@@ -250,6 +358,18 @@ type DirectorySnippetService interface {
 		req *SnippetSubscribeRequest,
 	) (<-chan *SnippetSubscribeResponse, error)
 }
+
+// DirectorySnippetService ...
+type UnimplementedDirectorySnippetService struct{}
+
+func (s *UnimplementedDirectorySnippetService) Subscribe(
+	ctx context.Context,
+	req *SnippetSubscribeRequest,
+) (<-chan *SnippetSubscribeResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ DirectorySnippetService = (*UnimplementedDirectorySnippetService)(nil)
 
 // DirectorySnippetClient ...
 type DirectorySnippetClient struct {

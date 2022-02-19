@@ -19,6 +19,18 @@ type DevToolsService interface {
 	) (*DevToolsTestResponse, error)
 }
 
+// DevToolsService ...
+type UnimplementedDevToolsService struct{}
+
+func (s *UnimplementedDevToolsService) Test(
+	ctx context.Context,
+	req *DevToolsTestRequest,
+) (*DevToolsTestResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ DevToolsService = (*UnimplementedDevToolsService)(nil)
+
 // DevToolsClient ...
 type DevToolsClient struct {
 	client rpc.Caller

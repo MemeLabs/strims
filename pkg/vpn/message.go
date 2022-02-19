@@ -30,6 +30,8 @@ type MessageHeader struct {
 const (
 	Mcompress uint16 = 1 << iota
 	Mencrypt
+	Mbroadcast
+	Mnorelay
 	MstdFlags uint16 = Mencrypt
 )
 

@@ -16,6 +16,11 @@ export interface VNICFrontendService {
   setConfig(req: SetConfigRequest, call: strims_rpc_Call): Promise<SetConfigResponse> | SetConfigResponse;
 }
 
+export class UnimplementedVNICFrontendService implements VNICFrontendService {
+  getConfig(req: GetConfigRequest, call: strims_rpc_Call): Promise<GetConfigResponse> | GetConfigResponse { throw new Error("not implemented"); }
+  setConfig(req: SetConfigRequest, call: strims_rpc_Call): Promise<SetConfigResponse> | SetConfigResponse { throw new Error("not implemented"); }
+}
+
 export const registerVNICFrontendService = (host: strims_rpc_Service, service: VNICFrontendService): void => {
   host.registerMethod<GetConfigRequest, GetConfigResponse>("strims.vnic.v1.VNICFrontend.GetConfig", service.getConfig.bind(service), GetConfigRequest);
   host.registerMethod<SetConfigRequest, SetConfigResponse>("strims.vnic.v1.VNICFrontend.SetConfig", service.setConfig.bind(service), SetConfigRequest);

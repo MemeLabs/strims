@@ -38,7 +38,7 @@ func NewRunner(ctx context.Context, logger *zap.Logger) *Runner {
 		swarms: map[*Swarm]*runnerSwarm{},
 		peers:  map[*peer]*ChannelReader{},
 	}
-	timeutil.DefaultTickEmitter.Subscribe(r.updatePeerWeights, peerQOSUpdateInterval)
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, peerQOSUpdateInterval, r.updatePeerWeights, nil)
 	return r
 }
 

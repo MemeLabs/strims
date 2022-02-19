@@ -8,6 +8,7 @@ import (
 	"time"
 
 	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -23,7 +24,7 @@ func init() {
 
 func newWebRTCMediator(hostID kademlia.ID, network *Network) *webRTCMediator {
 	return &webRTCMediator{
-		mediationID:           randutil.MustUint64(),
+		mediationID:           errutil.Must(randutil.Uint64()),
 		id:                    hostID,
 		network:               network,
 		init:                  true,
@@ -40,7 +41,7 @@ func newWebRTCMediatorFromOffer(
 	offer []byte,
 ) *webRTCMediator {
 	return &webRTCMediator{
-		mediationID:           randutil.MustUint64(),
+		mediationID:           errutil.Must(randutil.Uint64()),
 		remoteMediationID:     remoteMediationID,
 		id:                    hostID,
 		network:               network,

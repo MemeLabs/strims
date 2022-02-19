@@ -1,5 +1,3 @@
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
@@ -14,6 +12,7 @@ import {
   Provider as NotificationProvider,
 } from "../../contexts/Notification";
 import jsonutil from "../../lib/jsonutil";
+import { AsyncPassThrough } from "../../lib/stream";
 import NotificationService from "../mocks/notification/service";
 
 let nextId = BigInt(0);
@@ -24,7 +23,7 @@ const Test: React.FC = () => {
     const service = new NotificationService();
     registerNotificationFrontendService(svc, service);
 
-    const [a, b] = [new PassThrough(), new PassThrough()];
+    const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
     return [service, new FrontendClient(b, a)];
   });

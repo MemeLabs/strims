@@ -24,6 +24,25 @@ type CapConnService interface {
 	) (*CapConnLoadLogResponse, error)
 }
 
+// CapConnService ...
+type UnimplementedCapConnService struct{}
+
+func (s *UnimplementedCapConnService) WatchLogs(
+	ctx context.Context,
+	req *CapConnWatchLogsRequest,
+) (<-chan *CapConnWatchLogsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedCapConnService) LoadLog(
+	ctx context.Context,
+	req *CapConnLoadLogRequest,
+) (*CapConnLoadLogResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ CapConnService = (*UnimplementedCapConnService)(nil)
+
 // CapConnClient ...
 type CapConnClient struct {
 	client rpc.Caller

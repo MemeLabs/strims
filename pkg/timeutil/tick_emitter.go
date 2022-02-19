@@ -1,14 +1,23 @@
 package timeutil
 
 import (
+	"context"
 	"sync"
 	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 )
+
+const maxTickerFuzz = 60 * time.Minute
 
 var DefaultTickEmitter = NewTickEmitter(100 * time.Millisecond)
 
 func NewTickEmitter(ivl time.Duration) *TickEmitter {
-	t := &TickEmitter{ivl: ivl}
+	t := &TickEmitter{
+		ivl: ivl,
+		i:   errutil.Must(randutil.Int63n(int64(maxTickerFuzz / ivl))),
+	}
 	t.t = newFuncTicker(ivl, t.run)
 	return t
 }
@@ -39,15 +48,42 @@ func (r *TickEmitter) Stop() {
 }
 
 func (r *TickEmitter) DefaultSubscribe(fn func(t Time)) StopFunc {
-	return r.Subscribe(fn, r.ivl)
+	return r.Subscribe(r.ivl, fn, nil)
 }
 
-func (r *TickEmitter) Subscribe(fn func(t Time), ivl time.Duration) StopFunc {
+func (r *TickEmitter) Subscribe(ivl time.Duration, fn func(t Time), done func()) StopFunc {
 	ch, stop := r.Chan(ivl)
 	go func() {
 		for t := range ch {
 			fn(t)
 		}
+		if done != nil {
+			done()
+		}
+	}()
+
+	return stop
+}
+
+func (r *TickEmitter) SubscribeCtx(ctx context.Context, ivl time.Duration, fn func(t Time), done func()) StopFunc {
+	ch, stop := r.Chan(ivl)
+	go func() {
+	TickLoop:
+		for {
+			select {
+			case t, ok := <-ch:
+				if !ok {
+					break TickLoop
+				}
+				fn(t)
+			case <-ctx.Done():
+				stop()
+			}
+		}
+		if done != nil {
+			done()
+		}
+		stop()
 	}()
 
 	return stop
@@ -69,9 +105,12 @@ func (r *TickEmitter) DefaultChan() (<-chan Time, StopFunc) {
 
 func (r *TickEmitter) Chan(ivl time.Duration) (<-chan Time, StopFunc) {
 	ch := make(chan Time, 1)
+	var stopOnce sync.Once
 	stop := func() {
-		r.unsubscribe(ch)
-		close(ch)
+		stopOnce.Do(func() {
+			r.unsubscribe(ch)
+			close(ch)
+		})
 	}
 
 	n := int64(1)

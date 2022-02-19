@@ -29,6 +29,32 @@ type PeerServiceService interface {
 	) (*BootstrapPeerPublishResponse, error)
 }
 
+// PeerServiceService ...
+type UnimplementedPeerServiceService struct{}
+
+func (s *UnimplementedPeerServiceService) GetPublishEnabled(
+	ctx context.Context,
+	req *BootstrapPeerGetPublishEnabledRequest,
+) (*BootstrapPeerGetPublishEnabledResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedPeerServiceService) ListNetworks(
+	ctx context.Context,
+	req *BootstrapPeerListNetworksRequest,
+) (*BootstrapPeerListNetworksResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedPeerServiceService) Publish(
+	ctx context.Context,
+	req *BootstrapPeerPublishRequest,
+) (*BootstrapPeerPublishResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ PeerServiceService = (*UnimplementedPeerServiceService)(nil)
+
 // PeerServiceClient ...
 type PeerServiceClient struct {
 	client rpc.Caller

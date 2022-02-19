@@ -29,6 +29,14 @@ export interface BrokerProxyService {
   close(req: BrokerProxyCloseRequest, call: strims_rpc_Call): Promise<BrokerProxyCloseResponse> | BrokerProxyCloseResponse;
 }
 
+export class UnimplementedBrokerProxyService implements BrokerProxyService {
+  open(req: BrokerProxyRequest, call: strims_rpc_Call): GenericReadable<BrokerProxyEvent> { throw new Error("not implemented"); }
+  sendKeys(req: BrokerProxySendKeysRequest, call: strims_rpc_Call): Promise<BrokerProxySendKeysResponse> | BrokerProxySendKeysResponse { throw new Error("not implemented"); }
+  receiveKeys(req: BrokerProxyReceiveKeysRequest, call: strims_rpc_Call): Promise<BrokerProxyReceiveKeysResponse> | BrokerProxyReceiveKeysResponse { throw new Error("not implemented"); }
+  data(req: BrokerProxyDataRequest, call: strims_rpc_Call): Promise<BrokerProxyDataResponse> | BrokerProxyDataResponse { throw new Error("not implemented"); }
+  close(req: BrokerProxyCloseRequest, call: strims_rpc_Call): Promise<BrokerProxyCloseResponse> | BrokerProxyCloseResponse { throw new Error("not implemented"); }
+}
+
 export const registerBrokerProxyService = (host: strims_rpc_Service, service: BrokerProxyService): void => {
   host.registerMethod<BrokerProxyRequest, BrokerProxyEvent>("strims.network.v1.BrokerProxy.Open", service.open.bind(service), BrokerProxyRequest);
   host.registerMethod<BrokerProxySendKeysRequest, BrokerProxySendKeysResponse>("strims.network.v1.BrokerProxy.SendKeys", service.sendKeys.bind(service), BrokerProxySendKeysRequest);

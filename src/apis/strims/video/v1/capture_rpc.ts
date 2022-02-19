@@ -24,6 +24,13 @@ export interface CaptureService {
   close(req: CaptureCloseRequest, call: strims_rpc_Call): Promise<CaptureCloseResponse> | CaptureCloseResponse;
 }
 
+export class UnimplementedCaptureService implements CaptureService {
+  open(req: CaptureOpenRequest, call: strims_rpc_Call): Promise<CaptureOpenResponse> | CaptureOpenResponse { throw new Error("not implemented"); }
+  update(req: CaptureUpdateRequest, call: strims_rpc_Call): Promise<CaptureUpdateResponse> | CaptureUpdateResponse { throw new Error("not implemented"); }
+  append(req: CaptureAppendRequest, call: strims_rpc_Call): Promise<CaptureAppendResponse> | CaptureAppendResponse { throw new Error("not implemented"); }
+  close(req: CaptureCloseRequest, call: strims_rpc_Call): Promise<CaptureCloseResponse> | CaptureCloseResponse { throw new Error("not implemented"); }
+}
+
 export const registerCaptureService = (host: strims_rpc_Service, service: CaptureService): void => {
   host.registerMethod<CaptureOpenRequest, CaptureOpenResponse>("strims.video.v1.Capture.Open", service.open.bind(service), CaptureOpenRequest);
   host.registerMethod<CaptureUpdateRequest, CaptureUpdateResponse>("strims.video.v1.Capture.Update", service.update.bind(service), CaptureUpdateRequest);

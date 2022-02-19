@@ -16,6 +16,11 @@ export interface ProfileFrontendService {
   update(req: UpdateProfileRequest, call: strims_rpc_Call): Promise<UpdateProfileResponse> | UpdateProfileResponse;
 }
 
+export class UnimplementedProfileFrontendService implements ProfileFrontendService {
+  get(req: GetProfileRequest, call: strims_rpc_Call): Promise<GetProfileResponse> | GetProfileResponse { throw new Error("not implemented"); }
+  update(req: UpdateProfileRequest, call: strims_rpc_Call): Promise<UpdateProfileResponse> | UpdateProfileResponse { throw new Error("not implemented"); }
+}
+
 export const registerProfileFrontendService = (host: strims_rpc_Service, service: ProfileFrontendService): void => {
   host.registerMethod<GetProfileRequest, GetProfileResponse>("strims.profile.v1.ProfileFrontend.Get", service.get.bind(service), GetProfileRequest);
   host.registerMethod<UpdateProfileRequest, UpdateProfileResponse>("strims.profile.v1.ProfileFrontend.Update", service.update.bind(service), UpdateProfileRequest);

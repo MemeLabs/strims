@@ -3,11 +3,16 @@ import { PassThrough } from "stream";
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import * as chatv1 from "../../../apis/strims/chat/v1/chat";
-import { ChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
-import assetBundle from "../../mocks/chat/assetBundle";
+import {
+  ChatFrontendService,
+  ChatServerFrontendService,
+  UnimplementedChatFrontendService,
+  UnimplementedChatServerFrontendService,
+} from "../../../apis/strims/chat/v1/chat_rpc";
+import assetBundle, { modifiers } from "../../mocks/chat/assetBundle";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
 
-export default class ChatService implements ChatFrontendService {
+class ChatService {
   messages: Readable<chatv1.Message>;
   assetBundles: Readable<chatv1.AssetBundle>;
 
@@ -65,9 +70,7 @@ export default class ChatService implements ChatFrontendService {
     return ch;
   }
 
-  clientSendMessage(
-    req: chatv1.ClientSendMessageRequest
-  ): Promise<chatv1.ClientSendMessageResponse> {
+  clientSendMessage(req: chatv1.ClientSendMessageRequest): chatv1.ClientSendMessageResponse {
     this.messages.push(
       new chatv1.Message({
         nick: "test_user",
@@ -76,14 +79,30 @@ export default class ChatService implements ChatFrontendService {
         entities: new chatv1.Message.Entities(),
       })
     );
-    return Promise.resolve(new chatv1.ClientSendMessageResponse());
+    return new chatv1.ClientSendMessageResponse();
   }
 
-  setUIConfig(): Promise<chatv1.SetUIConfigResponse> {
-    return Promise.resolve(new chatv1.SetUIConfigResponse());
+  setUIConfig(): chatv1.SetUIConfigResponse {
+    return new chatv1.SetUIConfigResponse();
   }
 
-  getUIConfig(): Promise<chatv1.GetUIConfigResponse> {
-    return Promise.resolve(new chatv1.GetUIConfigResponse());
+  getUIConfig(): chatv1.GetUIConfigResponse {
+    return new chatv1.GetUIConfigResponse();
+  }
+
+  // ChatServerFrontendService
+
+  listModifiers(): chatv1.ListModifiersResponse {
+    return new chatv1.ListModifiersResponse({ modifiers });
   }
 }
+
+interface ChatService extends ChatFrontendService, ChatServerFrontendService {}
+
+Object.defineProperties(ChatService.prototype, {
+  ...Object.getOwnPropertyDescriptors(UnimplementedChatFrontendService.prototype),
+  ...Object.getOwnPropertyDescriptors(UnimplementedChatServerFrontendService.prototype),
+  ...Object.getOwnPropertyDescriptors(ChatService.prototype),
+});
+
+export default ChatService;

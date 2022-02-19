@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/gorilla/mux"
@@ -210,9 +211,7 @@ func relayStdio(cmd *exec.Cmd) error {
 	}
 
 	copy := func(w io.Writer, r io.Reader) {
-		if _, err := io.Copy(w, r); err != nil {
-			panic(err)
-		}
+		errutil.Must(io.Copy(w, r))
 	}
 
 	go copy(os.Stderr, stderr)

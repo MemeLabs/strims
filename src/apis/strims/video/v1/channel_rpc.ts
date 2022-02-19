@@ -28,6 +28,14 @@ export interface VideoChannelFrontendService {
   delete(req: VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<VideoChannelDeleteResponse> | VideoChannelDeleteResponse;
 }
 
+export class UnimplementedVideoChannelFrontendService implements VideoChannelFrontendService {
+  list(req: VideoChannelListRequest, call: strims_rpc_Call): Promise<VideoChannelListResponse> | VideoChannelListResponse { throw new Error("not implemented"); }
+  get(req: VideoChannelGetRequest, call: strims_rpc_Call): Promise<VideoChannelGetResponse> | VideoChannelGetResponse { throw new Error("not implemented"); }
+  create(req: VideoChannelCreateRequest, call: strims_rpc_Call): Promise<VideoChannelCreateResponse> | VideoChannelCreateResponse { throw new Error("not implemented"); }
+  update(req: VideoChannelUpdateRequest, call: strims_rpc_Call): Promise<VideoChannelUpdateResponse> | VideoChannelUpdateResponse { throw new Error("not implemented"); }
+  delete(req: VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<VideoChannelDeleteResponse> | VideoChannelDeleteResponse { throw new Error("not implemented"); }
+}
+
 export const registerVideoChannelFrontendService = (host: strims_rpc_Service, service: VideoChannelFrontendService): void => {
   host.registerMethod<VideoChannelListRequest, VideoChannelListResponse>("strims.video.v1.VideoChannelFrontend.List", service.list.bind(service), VideoChannelListRequest);
   host.registerMethod<VideoChannelGetRequest, VideoChannelGetResponse>("strims.video.v1.VideoChannelFrontend.Get", service.get.bind(service), VideoChannelGetRequest);

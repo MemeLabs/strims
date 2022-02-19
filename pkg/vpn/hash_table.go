@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -18,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -50,7 +50,7 @@ type hashTable struct {
 	logger              *zap.Logger
 	store               *hashTableStoreAccesstor
 	network             *Network
-	searchResponseChans sync.Map
+	searchResponseChans syncutil.Map[uint64, chan []byte]
 }
 
 // HandleMessage ...
@@ -125,9 +125,9 @@ func (s *hashTable) handleGetResponse(m *vpnv1.HashTableMessage_GetResponse, tar
 		return nil
 	}
 
-	if ch, ok := s.searchResponseChans.Load(m.RequestId); ok {
+	if ch, ok := s.searchResponseChans.Get(m.RequestId); ok {
 		select {
-		case ch.(chan []byte) <- m.Record.Value:
+		case ch <- m.Record.Value:
 		default:
 		}
 	}
@@ -193,7 +193,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 		}
 	}
 
-	s.searchResponseChans.Store(rid, values)
+	s.searchResponseChans.Set(rid, values)
 	cleanup := func() {
 		s.searchResponseChans.Delete(rid)
 		close(values)
@@ -245,21 +245,21 @@ func newHashTableItem(hashTableID uint32, localHostID kademlia.ID, r *vpnv1.Hash
 	hash := hashTableRecordHash(r.Key, r.Salt)
 	return &hashTableItem{
 		key:    newHashTableItemKey(hashTableID, hash, localHostID),
-		record: unsafe.Pointer(r),
+		record: syncutil.NewPointer(r),
 	}
 }
 
 type hashTableItem struct {
 	key    hashTableItemKey
-	record unsafe.Pointer
+	record syncutil.Pointer[vpnv1.HashTableMessage_Record]
 }
 
 func (p *hashTableItem) SetRecord(r *vpnv1.HashTableMessage_Record) {
-	atomic.SwapPointer(&p.record, unsafe.Pointer(r))
+	p.record.Swap(r)
 }
 
 func (p *hashTableItem) Record() *vpnv1.HashTableMessage_Record {
-	return (*vpnv1.HashTableMessage_Record)(atomic.LoadPointer(&p.record))
+	return p.record.Get()
 }
 
 // Less implements llrb.Item
@@ -282,7 +282,7 @@ func newHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 		discardQueue: newTimeoutQueue(ctx, hashTableDiscardInterval, hashTableMaxRecordAge),
 	}
 
-	p.ticker = timeutil.TickerBFunc(ctx, hashTableDiscardInterval, p.tick)
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, hashTableDiscardInterval, p.tick, nil)
 
 	return p
 }
@@ -294,7 +294,6 @@ type HashTableStore struct {
 	lock           sync.Mutex
 	records        *llrb.LLRB
 	discardQueue   *timeoutQueue
-	ticker         *timeutil.TickerB
 	nextAccessorID uint32
 }
 
@@ -469,7 +468,8 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 		close:   cancel,
 	}
 
-	p.ticker = timeutil.TickerBFuncWithCleanup(ctx, hashTableSetInterval, p.publish, p.unpublish)
+	go p.publish(timeutil.Now())
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, hashTableSetInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -484,7 +484,6 @@ type HashTablePublisher struct {
 	network *Network
 	store   *hashTableStoreAccesstor
 	close   context.CancelFunc
-	ticker  *timeutil.TickerB
 }
 
 // Update ...
@@ -521,7 +520,7 @@ func (p *HashTablePublisher) publish(t timeutil.Time) {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, 0); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mbroadcast); err != nil {
 		p.logger.Debug(
 			"error publishing hash table item",
 			zap.Error(err),
@@ -544,7 +543,7 @@ func (p *HashTablePublisher) unpublish() {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, 0); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mbroadcast); err != nil {
 		p.logger.Debug(
 			"error unpublishing hash table item",
 			zap.Error(err),

@@ -12,6 +12,10 @@ export interface FundingService {
   test(req: FundingTestRequest, call: strims_rpc_Call): Promise<FundingTestResponse> | FundingTestResponse;
 }
 
+export class UnimplementedFundingService implements FundingService {
+  test(req: FundingTestRequest, call: strims_rpc_Call): Promise<FundingTestResponse> | FundingTestResponse { throw new Error("not implemented"); }
+}
+
 export const registerFundingService = (host: strims_rpc_Service, service: FundingService): void => {
   host.registerMethod<FundingTestRequest, FundingTestResponse>("strims.funding.v1.Funding.Test", service.test.bind(service), FundingTestRequest);
 }

@@ -16,6 +16,11 @@ export interface TransferPeerService {
   close(req: TransferPeerCloseRequest, call: strims_rpc_Call): Promise<TransferPeerCloseResponse> | TransferPeerCloseResponse;
 }
 
+export class UnimplementedTransferPeerService implements TransferPeerService {
+  announce(req: TransferPeerAnnounceRequest, call: strims_rpc_Call): Promise<TransferPeerAnnounceResponse> | TransferPeerAnnounceResponse { throw new Error("not implemented"); }
+  close(req: TransferPeerCloseRequest, call: strims_rpc_Call): Promise<TransferPeerCloseResponse> | TransferPeerCloseResponse { throw new Error("not implemented"); }
+}
+
 export const registerTransferPeerService = (host: strims_rpc_Service, service: TransferPeerService): void => {
   host.registerMethod<TransferPeerAnnounceRequest, TransferPeerAnnounceResponse>("strims.transfer.v1.TransferPeer.Announce", service.announce.bind(service), TransferPeerAnnounceRequest);
   host.registerMethod<TransferPeerCloseRequest, TransferPeerCloseResponse>("strims.transfer.v1.TransferPeer.Close", service.close.bind(service), TransferPeerCloseRequest);

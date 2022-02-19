@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -65,10 +66,7 @@ func main() {
 		}()
 	}
 
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := errutil.Must(zap.NewDevelopment())
 
 	store, err := bbolt.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {

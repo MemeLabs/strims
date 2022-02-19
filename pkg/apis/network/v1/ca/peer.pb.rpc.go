@@ -19,6 +19,18 @@ type CAPeerService interface {
 	) (*CAPeerRenewResponse, error)
 }
 
+// CAPeerService ...
+type UnimplementedCAPeerService struct{}
+
+func (s *UnimplementedCAPeerService) Renew(
+	ctx context.Context,
+	req *CAPeerRenewRequest,
+) (*CAPeerRenewResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ CAPeerService = (*UnimplementedCAPeerService)(nil)
+
 // CAPeerClient ...
 type CAPeerClient struct {
 	client rpc.Caller

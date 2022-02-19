@@ -20,6 +20,12 @@ export interface PeerServiceService {
   publish(req: BootstrapPeerPublishRequest, call: strims_rpc_Call): Promise<BootstrapPeerPublishResponse> | BootstrapPeerPublishResponse;
 }
 
+export class UnimplementedPeerServiceService implements PeerServiceService {
+  getPublishEnabled(req: BootstrapPeerGetPublishEnabledRequest, call: strims_rpc_Call): Promise<BootstrapPeerGetPublishEnabledResponse> | BootstrapPeerGetPublishEnabledResponse { throw new Error("not implemented"); }
+  listNetworks(req: BootstrapPeerListNetworksRequest, call: strims_rpc_Call): Promise<BootstrapPeerListNetworksResponse> | BootstrapPeerListNetworksResponse { throw new Error("not implemented"); }
+  publish(req: BootstrapPeerPublishRequest, call: strims_rpc_Call): Promise<BootstrapPeerPublishResponse> | BootstrapPeerPublishResponse { throw new Error("not implemented"); }
+}
+
 export const registerPeerServiceService = (host: strims_rpc_Service, service: PeerServiceService): void => {
   host.registerMethod<BootstrapPeerGetPublishEnabledRequest, BootstrapPeerGetPublishEnabledResponse>("strims.network.v1.bootstrap.PeerService.GetPublishEnabled", service.getPublishEnabled.bind(service), BootstrapPeerGetPublishEnabledRequest);
   host.registerMethod<BootstrapPeerListNetworksRequest, BootstrapPeerListNetworksResponse>("strims.network.v1.bootstrap.PeerService.ListNetworks", service.listNetworks.bind(service), BootstrapPeerListNetworksRequest);

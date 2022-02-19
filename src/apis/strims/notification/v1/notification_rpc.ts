@@ -17,6 +17,11 @@ export interface NotificationFrontendService {
   dismiss(req: DismissRequest, call: strims_rpc_Call): Promise<DismissResponse> | DismissResponse;
 }
 
+export class UnimplementedNotificationFrontendService implements NotificationFrontendService {
+  watch(req: WatchRequest, call: strims_rpc_Call): GenericReadable<WatchResponse> { throw new Error("not implemented"); }
+  dismiss(req: DismissRequest, call: strims_rpc_Call): Promise<DismissResponse> | DismissResponse { throw new Error("not implemented"); }
+}
+
 export const registerNotificationFrontendService = (host: strims_rpc_Service, service: NotificationFrontendService): void => {
   host.registerMethod<WatchRequest, WatchResponse>("strims.notification.v1.NotificationFrontend.Watch", service.watch.bind(service), WatchRequest);
   host.registerMethod<DismissRequest, DismissResponse>("strims.notification.v1.NotificationFrontend.Dismiss", service.dismiss.bind(service), DismissRequest);

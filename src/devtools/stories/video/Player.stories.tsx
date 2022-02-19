@@ -1,5 +1,3 @@
-import { PassThrough } from "stream";
-
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
@@ -8,6 +6,7 @@ import { FrontendClient } from "../../../apis/client";
 import { registerEgressService } from "../../../apis/strims/video/v1/egress_rpc";
 import VideoPlayer from "../../../components/VideoPlayer";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
+import { AsyncPassThrough } from "../../../lib/stream";
 import VideoService from "../../mocks/video/service";
 
 const Test: React.FC = () => {
@@ -16,7 +15,7 @@ const Test: React.FC = () => {
     const service = new VideoService();
     registerEgressService(svc, service);
 
-    const [a, b] = [new PassThrough(), new PassThrough()];
+    const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
     return [service, new FrontendClient(b, a)];
   });

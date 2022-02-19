@@ -13,6 +13,10 @@ export interface EgressService {
   openStream(req: EgressOpenStreamRequest, call: strims_rpc_Call): GenericReadable<EgressOpenStreamResponse>;
 }
 
+export class UnimplementedEgressService implements EgressService {
+  openStream(req: EgressOpenStreamRequest, call: strims_rpc_Call): GenericReadable<EgressOpenStreamResponse> { throw new Error("not implemented"); }
+}
+
 export const registerEgressService = (host: strims_rpc_Service, service: EgressService): void => {
   host.registerMethod<EgressOpenStreamRequest, EgressOpenStreamResponse>("strims.video.v1.Egress.OpenStream", service.openStream.bind(service), EgressOpenStreamRequest);
 }

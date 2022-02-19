@@ -21,6 +21,7 @@
     "dev:funding": "run-p funding web:webpack",
     "devtools": "go run -mod=readonly ./cmd/devtools",
     "dev:devtools": "nodemon --watch pkg --watch internal --watch cmd/devtools -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/devtools || exit 1'",
+    "dev:build": "webpack --mode development",
     "build": "webpack --mode production"
   },
   "devDependencies": {

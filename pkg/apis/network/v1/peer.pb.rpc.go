@@ -34,6 +34,39 @@ type NetworkPeerService interface {
 	) (*NetworkPeerUpdateCertificateResponse, error)
 }
 
+// NetworkPeerService ...
+type UnimplementedNetworkPeerService struct{}
+
+func (s *UnimplementedNetworkPeerService) Negotiate(
+	ctx context.Context,
+	req *NetworkPeerNegotiateRequest,
+) (*NetworkPeerNegotiateResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkPeerService) Open(
+	ctx context.Context,
+	req *NetworkPeerOpenRequest,
+) (*NetworkPeerOpenResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkPeerService) Close(
+	ctx context.Context,
+	req *NetworkPeerCloseRequest,
+) (*NetworkPeerCloseResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkPeerService) UpdateCertificate(
+	ctx context.Context,
+	req *NetworkPeerUpdateCertificateRequest,
+) (*NetworkPeerUpdateCertificateResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ NetworkPeerService = (*UnimplementedNetworkPeerService)(nil)
+
 // NetworkPeerClient ...
 type NetworkPeerClient struct {
 	client rpc.Caller
