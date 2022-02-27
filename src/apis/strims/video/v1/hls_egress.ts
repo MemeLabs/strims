@@ -71,7 +71,7 @@ export class HLSEgressOpenStreamRequest {
 
   static encode(m: HLSEgressOpenStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.swarmUri) w.uint32(10).string(m.swarmUri);
+    if (m.swarmUri.length) w.uint32(10).string(m.swarmUri);
     return w;
   }
 
@@ -107,7 +107,7 @@ export class HLSEgressOpenStreamResponse {
 
   static encode(m: HLSEgressOpenStreamResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.playlistUrl) w.uint32(10).string(m.playlistUrl);
+    if (m.playlistUrl.length) w.uint32(10).string(m.playlistUrl);
     return w;
   }
 
@@ -143,7 +143,7 @@ export class HLSEgressCloseStreamRequest {
 
   static encode(m: HLSEgressCloseStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.transferId) w.uint32(10).bytes(m.transferId);
+    if (m.transferId.length) w.uint32(10).bytes(m.transferId);
     return w;
   }
 

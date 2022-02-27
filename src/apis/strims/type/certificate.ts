@@ -30,11 +30,11 @@ export class CertificateRequest {
 
   static encode(m: CertificateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.key) w.uint32(10).bytes(m.key);
+    if (m.key.length) w.uint32(10).bytes(m.key);
     if (m.keyType) w.uint32(16).uint32(m.keyType);
     if (m.keyUsage) w.uint32(24).uint32(m.keyUsage);
-    if (m.subject) w.uint32(42).string(m.subject);
-    if (m.signature) w.uint32(34).bytes(m.signature);
+    if (m.subject.length) w.uint32(42).string(m.subject);
+    if (m.signature.length) w.uint32(34).bytes(m.signature);
     return w;
   }
 
@@ -106,14 +106,14 @@ export class Certificate {
 
   static encode(m: Certificate, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.key) w.uint32(10).bytes(m.key);
+    if (m.key.length) w.uint32(10).bytes(m.key);
     if (m.keyType) w.uint32(16).uint32(m.keyType);
     if (m.keyUsage) w.uint32(24).uint32(m.keyUsage);
-    if (m.subject) w.uint32(34).string(m.subject);
+    if (m.subject.length) w.uint32(34).string(m.subject);
     if (m.notBefore) w.uint32(40).uint64(m.notBefore);
     if (m.notAfter) w.uint32(48).uint64(m.notAfter);
-    if (m.serialNumber) w.uint32(58).bytes(m.serialNumber);
-    if (m.signature) w.uint32(66).bytes(m.signature);
+    if (m.serialNumber.length) w.uint32(58).bytes(m.serialNumber);
+    if (m.signature.length) w.uint32(66).bytes(m.signature);
     switch (m.parentOneof.case) {
       case Certificate.ParentOneofCase.PARENT:
       Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();

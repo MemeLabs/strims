@@ -21,7 +21,7 @@ export class PProfRequest {
 
   static encode(m: PProfRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
+    if (m.name.length) w.uint32(10).string(m.name);
     if (m.debug) w.uint32(16).bool(m.debug);
     if (m.gc) w.uint32(24).bool(m.gc);
     return w;
@@ -68,8 +68,8 @@ export class PProfResponse {
 
   static encode(m: PProfResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
-    if (m.data) w.uint32(18).bytes(m.data);
+    if (m.name.length) w.uint32(10).string(m.name);
+    if (m.data.length) w.uint32(18).bytes(m.data);
     return w;
   }
 
@@ -144,7 +144,7 @@ export class ReadMetricsResponse {
 
   static encode(m: ReadMetricsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data) w.uint32(10).bytes(m.data);
+    if (m.data.length) w.uint32(10).bytes(m.data);
     return w;
   }
 
@@ -223,7 +223,7 @@ export class WatchMetricsResponse {
 
   static encode(m: WatchMetricsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data) w.uint32(10).bytes(m.data);
+    if (m.data.length) w.uint32(10).bytes(m.data);
     return w;
   }
 

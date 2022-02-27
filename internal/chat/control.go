@@ -12,10 +12,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -54,6 +54,7 @@ func NewControl(
 		network:   network,
 		transfer:  transfer,
 		directory: directory,
+		runners:   hashmap.New[[]byte, *runner](hashmap.NewByteInterface()),
 	}
 }
 
@@ -69,7 +70,7 @@ type control struct {
 	directory directory.Control
 
 	lock    sync.Mutex
-	runners llrb.LLRB
+	runners hashmap.Map[[]byte, *runner]
 }
 
 // Run ...
@@ -108,7 +109,7 @@ func (t *control) startServerRunners(ctx context.Context) error {
 func (t *control) handleServerChange(ctx context.Context, server *chatv1.Server) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	if !t.runners.Has(&runner{key: server.Key.Public}) {
+	if !t.runners.Has(server.Key.Public) {
 		t.startServerRunner(ctx, server)
 	}
 }
@@ -130,12 +131,12 @@ func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) 
 		)
 		return
 	}
-	t.runners.ReplaceOrInsert(runner)
+	t.runners.Set(server.Key.Public, runner)
 }
 
 func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
-	runner, ok := t.runners.Delete(&runner{key: server.Key.Public}).(*runner)
-	if !ok {
+	runner, ok := t.runners.Delete(server.Key.Public)
+	if ok {
 		runner.Close()
 	}
 }
@@ -167,7 +168,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	runner, ok := t.runners.Get(&runner{key: key}).(*runner)
+	runner, ok := t.runners.Get(key)
 	if !ok {
 		var err error
 		runner, err = newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
@@ -175,7 +176,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			logger.Error("failed to start chat runner", zap.Error(err))
 			return nil, nil, err
 		}
-		t.runners.ReplaceOrInsert(runner)
+		t.runners.Set(key, runner)
 	}
 
 	events := make(chan *chatv1.ServerEvent)

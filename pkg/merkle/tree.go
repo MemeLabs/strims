@@ -121,12 +121,12 @@ func (t *Tree) get(b binmap.Bin, p *Tree) []byte {
 // setOrVerify updates the hash of b. If the node b of the parent tree is
 // verified their hashes are compared
 func (t *Tree) setOrVerify(b binmap.Bin, p *Tree) (ok, verified bool) {
-	d := t.get(b, p)
+	d := t.get(b, nil)
 	t.hash.Sum(d[:0])
 	t.hash.Reset()
 
 	if p != nil && p.isVerified(b) {
-		return bytes.Equal(d, p.get(b, p)), true
+		return bytes.Equal(d, p.get(b, nil)), true
 	}
 
 	t.setVerified(b)
@@ -182,14 +182,9 @@ func (t *Tree) fill(b binmap.Bin, d []byte, p *Tree) (bool, error) {
 	return false, nil
 }
 
-// Verify checks the integrity of the data d at bin b.
-func (t *Tree) Verify(b binmap.Bin, d []byte) (bool, error) {
-	return t.VerifyWithParent(b, d, nil)
-}
-
-// VerifyWithParent checks the integrity of the data d at bin b using the new
-// hashes in t and the previously verified hashes in p.
-func (t *Tree) VerifyWithParent(b binmap.Bin, d []byte, p *Tree) (bool, error) {
+// Verify checks the integrity of the data d at bin b using the new hashes in t
+// and the previously verified hashes in p.
+func (t *Tree) Verify(b binmap.Bin, d []byte, p *Tree) (bool, error) {
 	if verified, err := t.fill(b, d, p); err != nil {
 		return false, err
 	} else if verified {

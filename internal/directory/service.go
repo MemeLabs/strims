@@ -484,7 +484,7 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 	}()
 
 	req := &networkv1directory.SnippetSubscribeRequest{
-		SwarmId: swarmID.Binary(),
+		SwarmId: swarmID,
 	}
 	return snippetClient.Subscribe(ctx, req, ch)
 }

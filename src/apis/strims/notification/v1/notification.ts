@@ -33,8 +33,8 @@ export class Notification {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.createdAt) w.uint32(16).int64(m.createdAt);
     if (m.status) w.uint32(24).uint32(m.status);
-    if (m.title) w.uint32(34).string(m.title);
-    if (m.message) w.uint32(42).string(m.message);
+    if (m.title.length) w.uint32(34).string(m.title);
+    if (m.message.length) w.uint32(42).string(m.message);
     if (m.subject) Notification.Subject.encode(m.subject, w.uint32(50).fork()).ldelim();
     return w;
   }

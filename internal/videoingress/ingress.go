@@ -259,7 +259,7 @@ type ingressStream struct {
 	conn           io.Closer
 
 	swarm      *ppspp.Swarm
-	transferID []byte
+	transferID transfer.ID
 	w          *ioutil.WriteFlushSampler
 }
 
@@ -293,7 +293,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, e
 			ChunkSize:          1024,
 			ChunksPerSignature: 32,
 			StreamCount:        16,
-			LiveWindow:         32 * 1024,
+			LiveWindow:         16 * 1024,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod:       integrity.ProtectionMethodMerkleTree,
 				MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionBLAKE2B256,

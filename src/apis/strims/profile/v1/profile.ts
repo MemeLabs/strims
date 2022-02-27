@@ -22,8 +22,8 @@ export class UpdateProfileRequest {
 
   static encode(m: UpdateProfileRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
-    if (m.password) w.uint32(18).string(m.password);
+    if (m.name.length) w.uint32(10).string(m.name);
+    if (m.password.length) w.uint32(18).string(m.password);
     return w;
   }
 
@@ -245,7 +245,7 @@ export namespace StorageKey {
       if (!w) w = new Writer();
       if (m.iterations) w.uint32(8).uint32(m.iterations);
       if (m.keySize) w.uint32(16).uint32(m.keySize);
-      if (m.salt) w.uint32(26).bytes(m.salt);
+      if (m.salt.length) w.uint32(26).bytes(m.salt);
       return w;
     }
 
@@ -299,8 +299,8 @@ export class Profile {
   static encode(m: Profile, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.secret) w.uint32(26).bytes(m.secret);
+    if (m.name.length) w.uint32(18).string(m.name);
+    if (m.secret.length) w.uint32(26).bytes(m.secret);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(34).fork()).ldelim();
     return w;
   }

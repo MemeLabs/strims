@@ -26,7 +26,7 @@ export class CaptureOpenRequest {
   static encode(m: CaptureOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(10).fork()).ldelim();
-    if (m.mimeType) w.uint32(18).string(m.mimeType);
+    if (m.mimeType.length) w.uint32(18).string(m.mimeType);
     for (const v of m.networkKeys) w.uint32(26).bytes(v);
     return w;
   }
@@ -69,7 +69,7 @@ export class CaptureOpenResponse {
 
   static encode(m: CaptureOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     return w;
   }
 
@@ -108,7 +108,7 @@ export class CaptureUpdateRequest {
 
   static encode(m: CaptureUpdateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(18).fork()).ldelim();
     return w;
   }
@@ -174,8 +174,8 @@ export class CaptureAppendRequest {
 
   static encode(m: CaptureAppendRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
-    if (m.data) w.uint32(18).bytes(m.data);
+    if (m.id.length) w.uint32(10).bytes(m.id);
+    if (m.data.length) w.uint32(18).bytes(m.data);
     if (m.segmentEnd) w.uint32(24).bool(m.segmentEnd);
     return w;
   }
@@ -238,7 +238,7 @@ export class CaptureCloseRequest {
 
   static encode(m: CaptureCloseRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     return w;
   }
 

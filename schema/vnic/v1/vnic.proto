@@ -17,6 +17,7 @@ message PeerInit {
 
 message Config {
   uint64 max_upload_bytes_per_second = 1;
+  uint32 max_peers = 2;
 }
 
 message GetConfigRequest {}

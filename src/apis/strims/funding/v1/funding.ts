@@ -15,7 +15,7 @@ export class FundingTestRequest {
 
   static encode(m: FundingTestRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
+    if (m.name.length) w.uint32(10).string(m.name);
     return w;
   }
 
@@ -51,7 +51,7 @@ export class FundingTestResponse {
 
   static encode(m: FundingTestResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.message) w.uint32(10).string(m.message);
+    if (m.message.length) w.uint32(10).string(m.message);
     return w;
   }
 

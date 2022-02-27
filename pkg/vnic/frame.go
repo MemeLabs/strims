@@ -168,13 +168,13 @@ func (b *FrameReader) Close() error {
 // NewFrameWriter ...
 func NewFrameWriter(w Link, port uint16, qc *qos.Class) *FrameWriter {
 	return &FrameWriter{
-		w:           w,
-		port:        port,
-		size:        w.MTU(),
-		writeBuffer: make([]byte, w.MTU()),
-		off:         frameHeaderLen,
-		close:       make(chan struct{}),
-		qs:          qc.AddSession(1),
+		w:     w,
+		port:  port,
+		size:  w.MTU(),
+		buf:   make([]byte, w.MTU()),
+		off:   frameHeaderLen,
+		close: make(chan struct{}),
+		qs:    qc.AddSession(1),
 		qp: frameWriterPacket{
 			ch: make(chan struct{}, 1),
 		},
@@ -183,16 +183,16 @@ func NewFrameWriter(w Link, port uint16, qc *qos.Class) *FrameWriter {
 
 // FrameWriter ...
 type FrameWriter struct {
-	w           io.Writer
-	port        uint16
-	size        int
-	writeBuffer []byte
-	off         int
-	closed      bool
-	close       chan struct{}
-	closeOnce   sync.Once
-	qs          *qos.Session
-	qp          frameWriterPacket
+	w         io.Writer
+	port      uint16
+	size      int
+	buf       []byte
+	off       int
+	closed    bool
+	close     chan struct{}
+	closeOnce sync.Once
+	qs        *qos.Session
+	qp        frameWriterPacket
 }
 
 // MTU ...
@@ -225,11 +225,11 @@ func (b *FrameWriter) Write(p []byte) (int, error) {
 
 	n := len(p)
 	for {
-		l := copy(b.writeBuffer[b.off:], p)
+		l := copy(b.buf[b.off:], p)
 		p = p[l:]
 		b.off += l
 
-		if b.off < len(b.writeBuffer) {
+		if b.off < len(b.buf) {
 			return n, nil
 		}
 
@@ -249,7 +249,7 @@ func (b *FrameWriter) Flush() error {
 		Port:   b.port,
 		Length: uint16(b.off) - frameHeaderLen,
 	}
-	h.Marshal(b.writeBuffer)
+	h.Marshal(b.buf)
 
 	b.qp.size = uint64(b.off)
 	b.qs.Enqueue(&b.qp)
@@ -259,7 +259,7 @@ func (b *FrameWriter) Flush() error {
 		return errClosedFrameWriter
 	}
 
-	_, err := b.w.Write(b.writeBuffer[:b.off])
+	_, err := b.w.Write(b.buf[:b.off])
 	if err == nil {
 		b.off = frameHeaderLen
 	}

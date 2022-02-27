@@ -1,7 +1,6 @@
 package videocapture
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -28,11 +26,11 @@ var (
 )
 
 type Control interface {
-	Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error)
-	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
-	Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error
-	Append(id []byte, b []byte, segmentEnd bool) error
-	Close(id []byte) error
+	Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) (transfer.ID, error)
+	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) (transfer.ID, error)
+	Update(id transfer.ID, directorySnippet *networkv1directory.ListingSnippet) error
+	Append(id transfer.ID, b []byte, segmentEnd bool) error
+	Close(id transfer.ID) error
 }
 
 // NewControl ...
@@ -58,14 +56,14 @@ type control struct {
 	transfer  transfer.Control
 
 	lock    sync.Mutex
-	streams llrb.LLRB
+	streams map[transfer.ID]*stream
 }
 
 // Open ...
-func (c *control) Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error) {
+func (c *control) Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) (transfer.ID, error) {
 	key, err := dao.GenerateKey()
 	if err != nil {
-		return nil, err
+		return transfer.ID{}, err
 	}
 
 	options := ppspp.WriterOptions{
@@ -86,15 +84,15 @@ func (c *control) Open(mimeType string, directorySnippet *networkv1directory.Lis
 }
 
 // OpenWithSwarmWriterOptions ...
-func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
+func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) (transfer.ID, error) {
 	w, err := ppspp.NewWriter(options)
 	if err != nil {
-		return nil, err
+		return transfer.ID{}, err
 	}
 
 	cw, err := chunkstream.NewWriterSize(w, chunkstream.DefaultSize)
 	if err != nil {
-		return nil, err
+		return transfer.ID{}, err
 	}
 
 	transferID := c.transfer.Add(w.Swarm(), []byte{})
@@ -102,7 +100,7 @@ func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 		c.transfer.Publish(transferID, k)
 		c.logger.Debug(
 			"publishing transfer",
-			logutil.ByteHex("transfer", transferID),
+			logutil.ByteHex("transfer", transferID[:]),
 			logutil.ByteHex("network", k),
 		)
 	}
@@ -122,17 +120,17 @@ func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.streams.ReplaceOrInsert(s)
+	c.streams[transferID] = s
 
 	return transferID, nil
 }
 
 // Update ...
-func (c *control) Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error {
+func (c *control) Update(id transfer.ID, directorySnippet *networkv1directory.ListingSnippet) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	s, ok := c.streams.Get(&stream{transferID: id}).(*stream)
+	s, ok := c.streams[id]
 	if !ok {
 		return ErrIDNotFound
 	}
@@ -145,11 +143,11 @@ func (c *control) Update(id []byte, directorySnippet *networkv1directory.Listing
 }
 
 // Append ...
-func (c *control) Append(id []byte, b []byte, segmentEnd bool) error {
+func (c *control) Append(id transfer.ID, b []byte, segmentEnd bool) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	s, ok := c.streams.Get(&stream{transferID: id}).(*stream)
+	s, ok := c.streams[id]
 	if !ok {
 		return ErrIDNotFound
 	}
@@ -166,15 +164,16 @@ func (c *control) Append(id []byte, b []byte, segmentEnd bool) error {
 }
 
 // Close ...
-func (c *control) Close(id []byte) error {
+func (c *control) Close(id transfer.ID) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	s, ok := c.streams.Delete(&stream{transferID: id}).(*stream)
+	s, ok := c.streams[id]
 	if !ok {
 		return ErrIDNotFound
 	}
 
+	delete(c.streams, id)
 	c.transfer.Remove(s.transferID)
 
 	return nil
@@ -216,7 +215,7 @@ func (c *control) unpublishDirectoryListing(networkKey []byte, s *stream) error 
 }
 
 type stream struct {
-	transferID       []byte
+	transferID       transfer.ID
 	startTime        timeutil.Time
 	directoryID      uint64
 	directorySnippet *networkv1directory.ListingSnippet
@@ -225,11 +224,4 @@ type stream struct {
 	key              *key.Key
 	swarm            *ppspp.Swarm
 	w                ioutil.WriteFlusher
-}
-
-func (s *stream) Less(o llrb.Item) bool {
-	if o, ok := o.(*stream); ok {
-		return bytes.Compare(s.transferID, o.transferID) == -1
-	}
-	return !o.Less(s)
 }

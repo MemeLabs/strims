@@ -40,7 +40,7 @@ const (
 	maxRequestTimeout = 500 * time.Millisecond
 )
 
-var debugHackCounter int32
+// var debugHackCounter int32
 
 func newPeerSchedulerStreamSubscription(n int) []peerSchedulerStream {
 	s := make([]peerSchedulerStream, n)
@@ -155,8 +155,8 @@ func (s *peerSchedulerStream) removeSubscriber(cs *peerChannelScheduler) {
 }
 
 func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
-	debugHack := atomic.AddInt32(&debugHackCounter, 1)
-	logger.Debug("started", zap.Int32("debugHack", debugHack))
+	// debugHack := atomic.AddInt32(&debugHackCounter, 1)
+	// logger.Debug("started", zap.Int32("debugHack", debugHack))
 
 	var signatureLayer int
 	if s.options.Integrity.ProtectionMethod == integrity.ProtectionMethodMerkleTree {
@@ -192,7 +192,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		chunkSize:         int(s.options.ChunkSize),
 		liveWindow:        binmap.Bin(s.options.LiveWindow * 2),
 
-		debugHack: debugHack == 2,
+		// debugHack: debugHack == 2,
 
 		// HAX
 		nextGCTime:          timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
@@ -229,7 +229,7 @@ type peerSwarmScheduler struct {
 	chunkSize         int
 	liveWindow        binmap.Bin
 
-	debugHack     bool
+	// debugHack     bool
 	firstChunkSet bool
 
 	nextGCTime          timeutil.Time
@@ -582,19 +582,19 @@ func (s *peerSwarmScheduler) gc(t timeutil.Time) {
 		cs.lock.Lock()
 		cs.requestTimes.Prune(requestTimesThreshold)
 
-		if !cs.sentBinMin.IsNone() {
-			n0 := cs.sentBinTimes.Size()
-			cs.sentBinTimes.Prune(cs.sentBinMin)
-			n1 := cs.sentBinTimes.Size()
-			cs.logger.Debug(
-				"pruned sent bin times",
-				zap.Uint64("threshold", uint64(cs.sentBinMin)),
-				zap.Int("removed", n0-n1),
-				zap.Int("remaining", n1),
-				zap.Duration("rtt", time.Duration(cs.sendRTT.Value()).Round(time.Millisecond)),
-			)
-			cs.sentBinMin = binmap.None
-		}
+		// if !cs.sentBinMin.IsNone() {
+		// 	n0 := cs.sentBinTimes.Size()
+		// 	cs.sentBinTimes.Prune(cs.sentBinMin)
+		// 	n1 := cs.sentBinTimes.Size()
+		// 	cs.logger.Debug(
+		// 		"pruned sent bin times",
+		// 		zap.Uint64("threshold", uint64(cs.sentBinMin)),
+		// 		zap.Int("removed", n0-n1),
+		// 		zap.Int("remaining", n1),
+		// 		zap.Duration("rtt", time.Duration(cs.sendRTT.Value()).Round(time.Millisecond)),
+		// 	)
+		// 	cs.sentBinMin = binmap.None
+		// }
 		cs.lock.Unlock()
 	}
 }
@@ -660,8 +660,8 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		requestStreams: make([]binmap.Bin, s.streamCount),
 		extraMessages:  []codec.Message{newHandshake(s.swarm)},
 		peerHaveBins:   binmap.New(),
-		sentBinMin:     binmap.None,
-		sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
+		// sentBinMin:     binmap.None,
+		// sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
 
 		// test: qos.NewHLB(math.MaxFloat64),
 
@@ -782,9 +782,9 @@ type peerChannelScheduler struct {
 	peerMaxHaveBin binmap.Bin
 	peerHaveBins   *binmap.Map // bins the peer claims to have
 
-	sentBinTimes timeSet
-	sentBinMin   binmap.Bin
-	sendRTT      stats.SMA
+	// sentBinTimes timeSet
+	// sentBinMin   binmap.Bin
+	// sendRTT      stats.SMA
 
 	// test *qos.HLB
 	// testSkip bool
@@ -917,14 +917,14 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		return 0, err
 	}
 
-	now := timeutil.Now()
-	c.lock.Lock()
-	c.sentBinTimes.Set(b, now)
+	// now := timeutil.Now()
+	// c.lock.Lock()
+	// c.sentBinTimes.Set(b, now)
 
-	if bl := b.BaseLeft(); c.sentBinMin > bl {
-		c.sentBinMin = bl
-	}
-	c.lock.Unlock()
+	// if bl := b.BaseLeft(); c.sentBinMin > bl {
+	// 	c.sentBinMin = bl
+	// }
+	// c.lock.Unlock()
 
 	return c.flushWrites()
 }
@@ -1387,11 +1387,11 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 		c.streamHaveLag[stream].Update(float64(t.Sub(first)))
 		c.s.streams[stream].updatePeerHaveMax(it.Value())
 
-		sb, st, ok := c.sentBinTimes.Get(it.Value())
-		if ok {
-			c.sendRTT.AddNWithTime(sb.BaseLength(), uint64(t-st), t)
-			c.sentBinTimes.Unset(sb)
-		}
+		// sb, st, ok := c.sentBinTimes.Get(it.Value())
+		// if ok {
+		// 	c.sendRTT.AddNWithTime(sb.BaseLength(), uint64(t-st), t)
+		// 	c.sentBinTimes.Unset(sb)
+		// }
 	}
 
 	// c.s.peerHaveBins.Set(b)

@@ -18,7 +18,7 @@ import (
 
 // ControlBase ...
 type ControlBase interface {
-	OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error)
+	OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) (transfer.ID, io.ReadCloser, error)
 }
 
 // NewControl ...
@@ -56,10 +56,10 @@ func (t *control) close() {
 
 }
 
-func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, bool, error) {
+func (t *control) open(swarmURI string, networkKeys [][]byte) (transfer.ID, *ppspp.Swarm, bool, error) {
 	uri, err := ppspp.ParseURI(swarmURI)
 	if err != nil {
-		return nil, nil, false, err
+		return transfer.ID{}, nil, false, err
 	}
 
 	transferID, swarm, ok := t.transfer.Find(uri.ID, nil)
@@ -72,14 +72,14 @@ func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Sw
 
 	swarm, err = ppspp.NewSwarm(uri.ID, opt)
 	if err != nil {
-		return nil, nil, false, err
+		return transfer.ID{}, nil, false, err
 	}
 
 	transferID = t.transfer.Add(swarm, nil)
 	for _, k := range networkKeys {
 		t.logger.Debug(
 			"publishing transfer",
-			logutil.ByteHex("transfer", transferID),
+			logutil.ByteHex("transfer", transferID[:]),
 			logutil.ByteHex("network", k),
 		)
 		t.transfer.Publish(transferID, k)
@@ -89,10 +89,10 @@ func (t *control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Sw
 }
 
 // OpenStream ...
-func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
+func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) (transfer.ID, io.ReadCloser, error) {
 	transferID, swarm, created, err := t.open(swarmURI, networkKeys)
 	if err != nil {
-		return nil, nil, err
+		return transfer.ID{}, nil, err
 	}
 
 	b := swarm.Reader()
@@ -100,7 +100,7 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 
 	r := &VideoReader{
 		logger: t.logger.With(
-			logutil.ByteHex("transfer", transferID),
+			logutil.ByteHex("transfer", transferID[:]),
 			zap.Stringer("swarm", swarm.ID()),
 		),
 		transfer:   t.transfer,
@@ -116,7 +116,7 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 type VideoReader struct {
 	logger        *zap.Logger
 	transfer      transfer.Control
-	transferID    []byte
+	transferID    transfer.ID
 	removeOnClose bool
 	b             *store.BufferReader
 	r             *chunkstream.Reader

@@ -118,3 +118,22 @@ func TestZeroPadReader(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroPadOverhead(t *testing.T) {
+	w, err := NewZeroPadWriterSize(io.Discard, 128)
+	assert.NoError(t, err)
+
+	cases := []struct {
+		size, overhead int
+	}{
+		{128, 0},
+		{256, 0},
+		{512, 0},
+		{5, 123},
+		{64, 64},
+		{200, 56},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.overhead, w.Overhead(c.size))
+	}
+}

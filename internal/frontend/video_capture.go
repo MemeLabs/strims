@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -27,12 +28,17 @@ func (s *videoCaptureService) Open(ctx context.Context, r *videov1.CaptureOpenRe
 	if err != nil {
 		return nil, err
 	}
-	return &videov1.CaptureOpenResponse{Id: id}, nil
+	return &videov1.CaptureOpenResponse{Id: id[:]}, nil
 }
 
 // Update ...
 func (s *videoCaptureService) Update(ctx context.Context, r *videov1.CaptureUpdateRequest) (*videov1.CaptureUpdateResponse, error) {
-	err := s.app.VideoCapture().Update(r.Id, r.DirectorySnippet)
+	id, err := transfer.ParseID(r.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.app.VideoCapture().Update(id, r.DirectorySnippet)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +47,12 @@ func (s *videoCaptureService) Update(ctx context.Context, r *videov1.CaptureUpda
 
 // Append ...
 func (s *videoCaptureService) Append(ctx context.Context, r *videov1.CaptureAppendRequest) (*videov1.CaptureAppendResponse, error) {
-	err := s.app.VideoCapture().Append(r.Id, r.Data, r.SegmentEnd)
+	id, err := transfer.ParseID(r.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.app.VideoCapture().Append(id, r.Data, r.SegmentEnd)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +61,12 @@ func (s *videoCaptureService) Append(ctx context.Context, r *videov1.CaptureAppe
 
 // Close ...
 func (s *videoCaptureService) Close(ctx context.Context, r *videov1.CaptureCloseRequest) (*videov1.CaptureCloseResponse, error) {
-	err := s.app.VideoCapture().Close(r.Id)
+	id, err := transfer.ParseID(r.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.app.VideoCapture().Close(id)
 	if err != nil {
 		return nil, err
 	}

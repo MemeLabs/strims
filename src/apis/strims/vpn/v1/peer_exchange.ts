@@ -16,23 +16,20 @@ export class PeerExchangeMessage {
   static encode(m: PeerExchangeMessage, w?: Writer): Writer {
     if (!w) w = new Writer();
     switch (m.body.case) {
-      case PeerExchangeMessage.BodyCase.REQUEST:
-      PeerExchangeMessage.Request.encode(m.body.request, w.uint32(10).fork()).ldelim();
+      case PeerExchangeMessage.BodyCase.HANDSHAKE:
+      PeerExchangeMessage.Handshake.encode(m.body.handshake, w.uint32(8010).fork()).ldelim();
       break;
-      case PeerExchangeMessage.BodyCase.RESPONSE:
-      PeerExchangeMessage.Response.encode(m.body.response, w.uint32(18).fork()).ldelim();
+      case PeerExchangeMessage.BodyCase.MEDIATION_OFFER:
+      PeerExchangeMessage.MediationOffer.encode(m.body.mediationOffer, w.uint32(8018).fork()).ldelim();
       break;
-      case PeerExchangeMessage.BodyCase.OFFER:
-      PeerExchangeMessage.Offer.encode(m.body.offer, w.uint32(26).fork()).ldelim();
+      case PeerExchangeMessage.BodyCase.MEDIATION_ANSWER:
+      PeerExchangeMessage.MediationAnswer.encode(m.body.mediationAnswer, w.uint32(8026).fork()).ldelim();
       break;
-      case PeerExchangeMessage.BodyCase.ANSWER:
-      PeerExchangeMessage.Answer.encode(m.body.answer, w.uint32(34).fork()).ldelim();
-      break;
-      case PeerExchangeMessage.BodyCase.ICE_CANDIDATE:
-      PeerExchangeMessage.IceCandidate.encode(m.body.iceCandidate, w.uint32(42).fork()).ldelim();
+      case PeerExchangeMessage.BodyCase.MEDIATION_ICE_CANDIDATE:
+      PeerExchangeMessage.MediationIceCandidate.encode(m.body.mediationIceCandidate, w.uint32(8034).fork()).ldelim();
       break;
       case PeerExchangeMessage.BodyCase.CALLBACK_REQUEST:
-      PeerExchangeMessage.CallbackRequest.encode(m.body.callbackRequest, w.uint32(50).fork()).ldelim();
+      PeerExchangeMessage.CallbackRequest.encode(m.body.callbackRequest, w.uint32(8042).fork()).ldelim();
       break;
     }
     return w;
@@ -45,22 +42,19 @@ export class PeerExchangeMessage {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 1:
-        m.body = new PeerExchangeMessage.Body({ request: PeerExchangeMessage.Request.decode(r, r.uint32()) });
+        case 1001:
+        m.body = new PeerExchangeMessage.Body({ handshake: PeerExchangeMessage.Handshake.decode(r, r.uint32()) });
         break;
-        case 2:
-        m.body = new PeerExchangeMessage.Body({ response: PeerExchangeMessage.Response.decode(r, r.uint32()) });
+        case 1002:
+        m.body = new PeerExchangeMessage.Body({ mediationOffer: PeerExchangeMessage.MediationOffer.decode(r, r.uint32()) });
         break;
-        case 3:
-        m.body = new PeerExchangeMessage.Body({ offer: PeerExchangeMessage.Offer.decode(r, r.uint32()) });
+        case 1003:
+        m.body = new PeerExchangeMessage.Body({ mediationAnswer: PeerExchangeMessage.MediationAnswer.decode(r, r.uint32()) });
         break;
-        case 4:
-        m.body = new PeerExchangeMessage.Body({ answer: PeerExchangeMessage.Answer.decode(r, r.uint32()) });
+        case 1004:
+        m.body = new PeerExchangeMessage.Body({ mediationIceCandidate: PeerExchangeMessage.MediationIceCandidate.decode(r, r.uint32()) });
         break;
-        case 5:
-        m.body = new PeerExchangeMessage.Body({ iceCandidate: PeerExchangeMessage.IceCandidate.decode(r, r.uint32()) });
-        break;
-        case 6:
+        case 1005:
         m.body = new PeerExchangeMessage.Body({ callbackRequest: PeerExchangeMessage.CallbackRequest.decode(r, r.uint32()) });
         break;
         default:
@@ -75,63 +69,55 @@ export class PeerExchangeMessage {
 export namespace PeerExchangeMessage {
   export enum BodyCase {
     NOT_SET = 0,
-    REQUEST = 1,
-    RESPONSE = 2,
-    OFFER = 3,
-    ANSWER = 4,
-    ICE_CANDIDATE = 5,
-    CALLBACK_REQUEST = 6,
+    HANDSHAKE = 1001,
+    MEDIATION_OFFER = 1002,
+    MEDIATION_ANSWER = 1003,
+    MEDIATION_ICE_CANDIDATE = 1004,
+    CALLBACK_REQUEST = 1005,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.REQUEST, request: PeerExchangeMessage.IRequest }
-  |{ case?: BodyCase.RESPONSE, response: PeerExchangeMessage.IResponse }
-  |{ case?: BodyCase.OFFER, offer: PeerExchangeMessage.IOffer }
-  |{ case?: BodyCase.ANSWER, answer: PeerExchangeMessage.IAnswer }
-  |{ case?: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IIceCandidate }
+  |{ case?: BodyCase.HANDSHAKE, handshake: PeerExchangeMessage.IHandshake }
+  |{ case?: BodyCase.MEDIATION_OFFER, mediationOffer: PeerExchangeMessage.IMediationOffer }
+  |{ case?: BodyCase.MEDIATION_ANSWER, mediationAnswer: PeerExchangeMessage.IMediationAnswer }
+  |{ case?: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: PeerExchangeMessage.IMediationIceCandidate }
   |{ case?: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.ICallbackRequest }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.REQUEST, request: PeerExchangeMessage.Request }
-  |{ case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response }
-  |{ case: BodyCase.OFFER, offer: PeerExchangeMessage.Offer }
-  |{ case: BodyCase.ANSWER, answer: PeerExchangeMessage.Answer }
-  |{ case: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IceCandidate }
+  |{ case: BodyCase.HANDSHAKE, handshake: PeerExchangeMessage.Handshake }
+  |{ case: BodyCase.MEDIATION_OFFER, mediationOffer: PeerExchangeMessage.MediationOffer }
+  |{ case: BodyCase.MEDIATION_ANSWER, mediationAnswer: PeerExchangeMessage.MediationAnswer }
+  |{ case: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: PeerExchangeMessage.MediationIceCandidate }
   |{ case: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.CallbackRequest }
   >;
 
   class BodyImpl {
-    request: PeerExchangeMessage.Request;
-    response: PeerExchangeMessage.Response;
-    offer: PeerExchangeMessage.Offer;
-    answer: PeerExchangeMessage.Answer;
-    iceCandidate: PeerExchangeMessage.IceCandidate;
+    handshake: PeerExchangeMessage.Handshake;
+    mediationOffer: PeerExchangeMessage.MediationOffer;
+    mediationAnswer: PeerExchangeMessage.MediationAnswer;
+    mediationIceCandidate: PeerExchangeMessage.MediationIceCandidate;
     callbackRequest: PeerExchangeMessage.CallbackRequest;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
-      if (v && "request" in v) {
-        this.case = BodyCase.REQUEST;
-        this.request = new PeerExchangeMessage.Request(v.request);
+      if (v && "handshake" in v) {
+        this.case = BodyCase.HANDSHAKE;
+        this.handshake = new PeerExchangeMessage.Handshake(v.handshake);
       } else
-      if (v && "response" in v) {
-        this.case = BodyCase.RESPONSE;
-        this.response = new PeerExchangeMessage.Response(v.response);
+      if (v && "mediationOffer" in v) {
+        this.case = BodyCase.MEDIATION_OFFER;
+        this.mediationOffer = new PeerExchangeMessage.MediationOffer(v.mediationOffer);
       } else
-      if (v && "offer" in v) {
-        this.case = BodyCase.OFFER;
-        this.offer = new PeerExchangeMessage.Offer(v.offer);
+      if (v && "mediationAnswer" in v) {
+        this.case = BodyCase.MEDIATION_ANSWER;
+        this.mediationAnswer = new PeerExchangeMessage.MediationAnswer(v.mediationAnswer);
       } else
-      if (v && "answer" in v) {
-        this.case = BodyCase.ANSWER;
-        this.answer = new PeerExchangeMessage.Answer(v.answer);
-      } else
-      if (v && "iceCandidate" in v) {
-        this.case = BodyCase.ICE_CANDIDATE;
-        this.iceCandidate = new PeerExchangeMessage.IceCandidate(v.iceCandidate);
+      if (v && "mediationIceCandidate" in v) {
+        this.case = BodyCase.MEDIATION_ICE_CANDIDATE;
+        this.mediationIceCandidate = new PeerExchangeMessage.MediationIceCandidate(v.mediationIceCandidate);
       } else
       if (v && "callbackRequest" in v) {
         this.case = BodyCase.CALLBACK_REQUEST;
@@ -143,113 +129,60 @@ export namespace PeerExchangeMessage {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { request: PeerExchangeMessage.IRequest } ? { case: BodyCase.REQUEST, request: PeerExchangeMessage.Request } :
-    T extends { response: PeerExchangeMessage.IResponse } ? { case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response } :
-    T extends { offer: PeerExchangeMessage.IOffer } ? { case: BodyCase.OFFER, offer: PeerExchangeMessage.Offer } :
-    T extends { answer: PeerExchangeMessage.IAnswer } ? { case: BodyCase.ANSWER, answer: PeerExchangeMessage.Answer } :
-    T extends { iceCandidate: PeerExchangeMessage.IIceCandidate } ? { case: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IceCandidate } :
+    T extends { handshake: PeerExchangeMessage.IHandshake } ? { case: BodyCase.HANDSHAKE, handshake: PeerExchangeMessage.Handshake } :
+    T extends { mediationOffer: PeerExchangeMessage.IMediationOffer } ? { case: BodyCase.MEDIATION_OFFER, mediationOffer: PeerExchangeMessage.MediationOffer } :
+    T extends { mediationAnswer: PeerExchangeMessage.IMediationAnswer } ? { case: BodyCase.MEDIATION_ANSWER, mediationAnswer: PeerExchangeMessage.MediationAnswer } :
+    T extends { mediationIceCandidate: PeerExchangeMessage.IMediationIceCandidate } ? { case: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: PeerExchangeMessage.MediationIceCandidate } :
     T extends { callbackRequest: PeerExchangeMessage.ICallbackRequest } ? { case: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.CallbackRequest } :
     never
     >;
   };
 
-  export type IRequest = {
-    count?: number;
+  export type IHandshake = {
   }
 
-  export class Request {
-    count: number;
+  export class Handshake {
 
-    constructor(v?: IRequest) {
-      this.count = v?.count || 0;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+    constructor(v?: IHandshake) {
     }
 
-    static encode(m: Request, w?: Writer): Writer {
+    static encode(m: Handshake, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.count) w.uint32(8).uint32(m.count);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Request {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Request();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.count = r.uint32();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
+    static decode(r: Reader | Uint8Array, length?: number): Handshake {
+      if (r instanceof Reader && length) r.skip(length);
+      return new Handshake();
     }
   }
 
-  export type IResponse = {
-    ids?: Uint8Array[];
-  }
-
-  export class Response {
-    ids: Uint8Array[];
-
-    constructor(v?: IResponse) {
-      this.ids = v?.ids ? v.ids : [];
-    }
-
-    static encode(m: Response, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      for (const v of m.ids) w.uint32(10).bytes(v);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Response {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Response();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.ids.push(r.bytes())
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IOffer = {
+  export type IMediationOffer = {
     mediationId?: bigint;
     data?: Uint8Array;
   }
 
-  export class Offer {
+  export class MediationOffer {
     mediationId: bigint;
     data: Uint8Array;
 
-    constructor(v?: IOffer) {
+    constructor(v?: IMediationOffer) {
       this.mediationId = v?.mediationId || BigInt(0);
       this.data = v?.data || new Uint8Array();
     }
 
-    static encode(m: Offer, w?: Writer): Writer {
+    static encode(m: MediationOffer, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.mediationId) w.uint32(8).uint64(m.mediationId);
-      if (m.data) w.uint32(18).bytes(m.data);
+      if (m.data.length) w.uint32(18).bytes(m.data);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Offer {
+    static decode(r: Reader | Uint8Array, length?: number): MediationOffer {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Offer();
+      const m = new MediationOffer();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -268,31 +201,31 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export type IAnswer = {
+  export type IMediationAnswer = {
     mediationId?: bigint;
     data?: Uint8Array;
   }
 
-  export class Answer {
+  export class MediationAnswer {
     mediationId: bigint;
     data: Uint8Array;
 
-    constructor(v?: IAnswer) {
+    constructor(v?: IMediationAnswer) {
       this.mediationId = v?.mediationId || BigInt(0);
       this.data = v?.data || new Uint8Array();
     }
 
-    static encode(m: Answer, w?: Writer): Writer {
+    static encode(m: MediationAnswer, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.mediationId) w.uint32(8).uint64(m.mediationId);
-      if (m.data) w.uint32(18).bytes(m.data);
+      if (m.data.length) w.uint32(18).bytes(m.data);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Answer {
+    static decode(r: Reader | Uint8Array, length?: number): MediationAnswer {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Answer();
+      const m = new MediationAnswer();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -311,35 +244,35 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export type IIceCandidate = {
+  export type IMediationIceCandidate = {
     mediationId?: bigint;
     index?: bigint;
     data?: Uint8Array;
   }
 
-  export class IceCandidate {
+  export class MediationIceCandidate {
     mediationId: bigint;
     index: bigint;
     data: Uint8Array;
 
-    constructor(v?: IIceCandidate) {
+    constructor(v?: IMediationIceCandidate) {
       this.mediationId = v?.mediationId || BigInt(0);
       this.index = v?.index || BigInt(0);
       this.data = v?.data || new Uint8Array();
     }
 
-    static encode(m: IceCandidate, w?: Writer): Writer {
+    static encode(m: MediationIceCandidate, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.mediationId) w.uint32(8).uint64(m.mediationId);
       if (m.index) w.uint32(16).uint64(m.index);
-      if (m.data) w.uint32(26).bytes(m.data);
+      if (m.data.length) w.uint32(26).bytes(m.data);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): IceCandidate {
+    static decode(r: Reader | Uint8Array, length?: number): MediationIceCandidate {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new IceCandidate();
+      const m = new MediationIceCandidate();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {

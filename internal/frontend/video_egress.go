@@ -61,7 +61,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 		ch <- &videov1.EgressOpenStreamResponse{
 			Body: &videov1.EgressOpenStreamResponse_Open_{
 				Open: &videov1.EgressOpenStreamResponse_Open{
-					TransferId: transferID,
+					TransferId: transferID[:],
 				},
 			},
 		}

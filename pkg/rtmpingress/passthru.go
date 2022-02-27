@@ -180,6 +180,9 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 			}
 
 			for i := range track {
+				if len(track[i]) == 0 {
+					continue
+				}
 				sidx := &mp4.SidxBox{
 					Version:                  1,
 					ReferenceID:              uint32(i + 1),

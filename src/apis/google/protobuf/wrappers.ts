@@ -267,7 +267,7 @@ export class StringValue {
 
   static encode(m: StringValue, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.value) w.uint32(10).string(m.value);
+    if (m.value.length) w.uint32(10).string(m.value);
     return w;
   }
 
@@ -303,7 +303,7 @@ export class BytesValue {
 
   static encode(m: BytesValue, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.value) w.uint32(10).bytes(m.value);
+    if (m.value.length) w.uint32(10).bytes(m.value);
     return w;
   }
 

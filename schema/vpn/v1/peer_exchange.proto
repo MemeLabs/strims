@@ -7,25 +7,19 @@ option java_package = "gg.strims.vpn.v1";
 option swift_prefix = "SVN";
 
 message PeerExchangeMessage {
-  message Request {
-    uint32 count = 1;
-  }
+  message Handshake {}
 
-  message Response {
-    repeated bytes ids = 1;
-  }
-
-  message Offer {
+  message MediationOffer {
     uint64 mediation_id = 1;
     bytes data = 2;
   }
 
-  message Answer {
+  message MediationAnswer {
     uint64 mediation_id = 1;
     bytes data = 2;
   }
 
-  message IceCandidate {
+  message MediationIceCandidate {
     uint64 mediation_id = 1;
     uint64 index = 2;
     bytes data = 3;
@@ -34,11 +28,10 @@ message PeerExchangeMessage {
   message CallbackRequest {}
 
   oneof body {
-    Request request = 1;
-    Response response = 2;
-    Offer offer = 3;
-    Answer answer = 4;
-    IceCandidate ice_candidate = 5;
-    CallbackRequest callback_request = 6;
+    Handshake handshake = 1001;
+    MediationOffer mediation_offer = 1002;
+    MediationAnswer mediation_answer = 1003;
+    MediationIceCandidate mediation_ice_candidate = 1004;
+    CallbackRequest callback_request = 1005;
   }
 }

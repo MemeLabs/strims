@@ -28,11 +28,6 @@ func (s SwarmID) String() string {
 	return idEncoding.EncodeToString(s)
 }
 
-// Binary ...
-func (s SwarmID) Binary() []byte {
-	return s
-}
-
 // Equals ...
 func (s SwarmID) Equals(o SwarmID) bool {
 	return s.Compare(o) == 0

@@ -41,7 +41,7 @@ export class VideoChannel {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(18).fork()).ldelim();
-    if (m.token) w.uint32(26).bytes(m.token);
+    if (m.token.length) w.uint32(26).bytes(m.token);
     if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(34).fork()).ldelim();
     switch (m.owner.case) {
       case VideoChannel.OwnerCase.LOCAL:
@@ -164,8 +164,8 @@ export namespace VideoChannel {
 
     static encode(m: Local, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.authKey) w.uint32(10).bytes(m.authKey);
-      if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+      if (m.authKey.length) w.uint32(10).bytes(m.authKey);
+      if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
       return w;
     }
 
@@ -253,10 +253,10 @@ export namespace VideoChannel {
     static encode(m: RemoteShare, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
-      if (m.networkKey) w.uint32(18).bytes(m.networkKey);
-      if (m.serviceKey) w.uint32(26).bytes(m.serviceKey);
-      if (m.serviceSalt) w.uint32(34).bytes(m.serviceSalt);
-      if (m.serverAddr) w.uint32(42).string(m.serverAddr);
+      if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
+      if (m.serviceKey.length) w.uint32(26).bytes(m.serviceKey);
+      if (m.serviceSalt.length) w.uint32(34).bytes(m.serviceSalt);
+      if (m.serverAddr.length) w.uint32(42).string(m.serverAddr);
       return w;
     }
 
@@ -438,7 +438,7 @@ export class VideoChannelCreateRequest {
   static encode(m: VideoChannelCreateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
-    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     return w;
   }
 
@@ -521,7 +521,7 @@ export class VideoChannelUpdateRequest {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(18).fork()).ldelim();
-    if (m.networkKey) w.uint32(26).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(26).bytes(m.networkKey);
     return w;
   }
 

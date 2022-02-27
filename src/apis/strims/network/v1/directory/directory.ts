@@ -232,8 +232,8 @@ export namespace ServerConfig {
       static encode(m: Twitch, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.enable) w.uint32(8).bool(m.enable);
-        if (m.clientId) w.uint32(18).string(m.clientId);
-        if (m.clientSecret) w.uint32(26).string(m.clientSecret);
+        if (m.clientId.length) w.uint32(18).string(m.clientId);
+        if (m.clientSecret.length) w.uint32(26).string(m.clientSecret);
         return w;
       }
 
@@ -279,7 +279,7 @@ export namespace ServerConfig {
       static encode(m: YouTube, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.enable) w.uint32(8).bool(m.enable);
-        if (m.publicApiKey) w.uint32(18).string(m.publicApiKey);
+        if (m.publicApiKey.length) w.uint32(18).string(m.publicApiKey);
         return w;
       }
 
@@ -482,7 +482,7 @@ export class GetEventsRequest {
 
   static encode(m: GetEventsRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     return w;
   }
 
@@ -518,7 +518,7 @@ export class TestPublishRequest {
 
   static encode(m: TestPublishRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     return w;
   }
 
@@ -698,8 +698,8 @@ export namespace Listing {
 
     static encode(m: Media, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.mimeType) w.uint32(10).string(m.mimeType);
-      if (m.swarmUri) w.uint32(18).string(m.swarmUri);
+      if (m.mimeType.length) w.uint32(10).string(m.mimeType);
+      if (m.swarmUri.length) w.uint32(18).string(m.swarmUri);
       return w;
     }
 
@@ -738,7 +738,7 @@ export namespace Listing {
 
     static encode(m: Service, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.type) w.uint32(10).string(m.type);
+      if (m.type.length) w.uint32(10).string(m.type);
       return w;
     }
 
@@ -782,7 +782,7 @@ export namespace Listing {
     static encode(m: Embed, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.service) w.uint32(8).uint32(m.service);
-      if (m.id) w.uint32(18).string(m.id);
+      if (m.id.length) w.uint32(18).string(m.id);
       for (const [k, v] of m.queryParams) w.uint32(26).fork().uint32(10).string(k).uint32(18).string(v).ldelim();
       return w;
     }
@@ -855,8 +855,8 @@ export namespace Listing {
 
     static encode(m: Chat, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.key) w.uint32(10).bytes(m.key);
-      if (m.name) w.uint32(18).string(m.name);
+      if (m.key.length) w.uint32(10).bytes(m.key);
+      if (m.name.length) w.uint32(18).string(m.name);
       return w;
     }
 
@@ -990,6 +990,7 @@ export type IListingSnippet = {
   channelLogo?: IListingSnippetImage;
   videoHeight?: number;
   videoWidth?: number;
+  themeColor?: number;
   key?: Uint8Array;
   signature?: Uint8Array;
 }
@@ -1007,6 +1008,7 @@ export class ListingSnippet {
   channelLogo: ListingSnippetImage | undefined;
   videoHeight: number;
   videoWidth: number;
+  themeColor: number;
   key: Uint8Array;
   signature: Uint8Array;
 
@@ -1023,17 +1025,18 @@ export class ListingSnippet {
     this.channelLogo = v?.channelLogo && new ListingSnippetImage(v.channelLogo);
     this.videoHeight = v?.videoHeight || 0;
     this.videoWidth = v?.videoWidth || 0;
+    this.themeColor = v?.themeColor || 0;
     this.key = v?.key || new Uint8Array();
     this.signature = v?.signature || new Uint8Array();
   }
 
   static encode(m: ListingSnippet, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.title) w.uint32(10).string(m.title);
-    if (m.description) w.uint32(18).string(m.description);
+    if (m.title.length) w.uint32(10).string(m.title);
+    if (m.description.length) w.uint32(18).string(m.description);
     for (const v of m.tags) w.uint32(26).string(v);
-    if (m.category) w.uint32(34).string(m.category);
-    if (m.channelName) w.uint32(42).string(m.channelName);
+    if (m.category.length) w.uint32(34).string(m.category);
+    if (m.channelName.length) w.uint32(42).string(m.channelName);
     if (m.viewerCount) w.uint32(48).uint64(m.viewerCount);
     if (m.live) w.uint32(56).bool(m.live);
     if (m.isMature) w.uint32(64).bool(m.isMature);
@@ -1041,8 +1044,9 @@ export class ListingSnippet {
     if (m.channelLogo) ListingSnippetImage.encode(m.channelLogo, w.uint32(82).fork()).ldelim();
     if (m.videoHeight) w.uint32(88).uint32(m.videoHeight);
     if (m.videoWidth) w.uint32(96).uint32(m.videoWidth);
-    if (m.key) w.uint32(80010).bytes(m.key);
-    if (m.signature) w.uint32(80018).bytes(m.signature);
+    if (m.themeColor) w.uint32(109).fixed32(m.themeColor);
+    if (m.key.length) w.uint32(80010).bytes(m.key);
+    if (m.signature.length) w.uint32(80018).bytes(m.signature);
     return w;
   }
 
@@ -1089,6 +1093,9 @@ export class ListingSnippet {
         case 12:
         m.videoWidth = r.uint32();
         break;
+        case 13:
+        m.themeColor = r.fixed32();
+        break;
         case 10001:
         m.key = r.bytes();
         break;
@@ -1116,6 +1123,7 @@ export type IListingSnippetDelta = {
   signature?: google_protobuf_IBytesValue;
   videoHeight?: google_protobuf_IUInt32Value;
   videoWidth?: google_protobuf_IUInt32Value;
+  themeColor?: google_protobuf_IUInt32Value;
   tagsOneof?: ListingSnippetDelta.ITagsOneof
   thumbnailOneof?: ListingSnippetDelta.IThumbnailOneof
   channelLogoOneof?: ListingSnippetDelta.IChannelLogoOneof
@@ -1133,6 +1141,7 @@ export class ListingSnippetDelta {
   signature: google_protobuf_BytesValue | undefined;
   videoHeight: google_protobuf_UInt32Value | undefined;
   videoWidth: google_protobuf_UInt32Value | undefined;
+  themeColor: google_protobuf_UInt32Value | undefined;
   tagsOneof: ListingSnippetDelta.TTagsOneof;
   thumbnailOneof: ListingSnippetDelta.TThumbnailOneof;
   channelLogoOneof: ListingSnippetDelta.TChannelLogoOneof;
@@ -1149,6 +1158,7 @@ export class ListingSnippetDelta {
     this.signature = v?.signature && new google_protobuf_BytesValue(v.signature);
     this.videoHeight = v?.videoHeight && new google_protobuf_UInt32Value(v.videoHeight);
     this.videoWidth = v?.videoWidth && new google_protobuf_UInt32Value(v.videoWidth);
+    this.themeColor = v?.themeColor && new google_protobuf_UInt32Value(v.themeColor);
     this.tagsOneof = new ListingSnippetDelta.TagsOneof(v?.tagsOneof);
     this.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof(v?.thumbnailOneof);
     this.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof(v?.channelLogoOneof);
@@ -1167,6 +1177,7 @@ export class ListingSnippetDelta {
     if (m.signature) google_protobuf_BytesValue.encode(m.signature, w.uint32(74).fork()).ldelim();
     if (m.videoHeight) google_protobuf_UInt32Value.encode(m.videoHeight, w.uint32(82).fork()).ldelim();
     if (m.videoWidth) google_protobuf_UInt32Value.encode(m.videoWidth, w.uint32(90).fork()).ldelim();
+    if (m.themeColor) google_protobuf_UInt32Value.encode(m.themeColor, w.uint32(98).fork()).ldelim();
     switch (m.tagsOneof.case) {
       case ListingSnippetDelta.TagsOneofCase.TAGS:
       ListingSnippetDelta.Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
@@ -1224,6 +1235,9 @@ export class ListingSnippetDelta {
         break;
         case 11:
         m.videoWidth = google_protobuf_UInt32Value.decode(r, r.uint32());
+        break;
+        case 12:
+        m.themeColor = google_protobuf_UInt32Value.decode(r, r.uint32());
         break;
         case 1001:
         m.tagsOneof = new ListingSnippetDelta.TagsOneof({ tags: ListingSnippetDelta.Tags.decode(r, r.uint32()) });
@@ -1678,7 +1692,7 @@ export namespace Event {
 
     static encode(m: ViewerStateChange, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.subject) w.uint32(10).string(m.subject);
+      if (m.subject.length) w.uint32(10).string(m.subject);
       if (m.online) w.uint32(16).bool(m.online);
       m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(26).fork()).ldelim();
       return w;
@@ -1819,7 +1833,7 @@ export class ListingRecord {
     if (m.networkId) w.uint32(16).uint64(m.networkId);
     if (m.listing) Listing.encode(m.listing, w.uint32(26).fork()).ldelim();
     if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
-    if (m.notes) w.uint32(42).string(m.notes);
+    if (m.notes.length) w.uint32(42).string(m.notes);
     return w;
   }
 
@@ -2210,7 +2224,7 @@ export class FrontendOpenResponse {
   static encode(m: FrontendOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkId) w.uint32(8).uint64(m.networkId);
-    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     switch (m.body.case) {
       case FrontendOpenResponse.BodyCase.CLOSE:
       FrontendOpenResponse.Close.encode(m.body.close, w.uint32(8010).fork()).ldelim();
@@ -2333,7 +2347,7 @@ export class FrontendPublishRequest {
 
   static encode(m: FrontendPublishRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     if (m.listing) Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
     return w;
   }
@@ -2412,7 +2426,7 @@ export class FrontendUnpublishRequest {
 
   static encode(m: FrontendUnpublishRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     if (m.id) w.uint32(16).uint64(m.id);
     return w;
   }
@@ -2475,7 +2489,7 @@ export class FrontendJoinRequest {
 
   static encode(m: FrontendJoinRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     if (m.id) w.uint32(16).uint64(m.id);
     return w;
   }
@@ -2554,7 +2568,7 @@ export class FrontendPartRequest {
 
   static encode(m: FrontendPartRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     if (m.id) w.uint32(16).uint64(m.id);
     return w;
   }
@@ -2614,7 +2628,7 @@ export class FrontendTestRequest {
 
   static encode(m: FrontendTestRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     return w;
   }
 
@@ -2805,7 +2819,7 @@ export class FrontendUpdateListingRecordRequest {
   static encode(m: FrontendUpdateListingRecordRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.notes) w.uint32(26).string(m.notes);
+    if (m.notes.length) w.uint32(26).string(m.notes);
     if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
     return w;
   }
@@ -2884,7 +2898,7 @@ export class SnippetSubscribeRequest {
 
   static encode(m: SnippetSubscribeRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.swarmId) w.uint32(10).bytes(m.swarmId);
+    if (m.swarmId.length) w.uint32(10).bytes(m.swarmId);
     return w;
   }
 

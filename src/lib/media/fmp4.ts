@@ -51,7 +51,6 @@ export class Relay {
   public write(b: Uint8Array): void {
     if (!this.headerRead) {
       this.initLength = (b[0] << 8) | b[1];
-      console.log("init length >>>", this.initLength);
       b = b.slice(2);
       this.headerRead = true;
     }
@@ -59,7 +58,7 @@ export class Relay {
     this.buffer.push(b);
   }
 
-  private readInit(): ArrayBuffer[] {
+  public flush(): void {
     const initBuffer: ArrayBuffer[] = [];
     for (let n = this.initLength; n > 0; ) {
       const b = this.buffer[0];
@@ -74,19 +73,10 @@ export class Relay {
       this.buffer[0] = b.slice(n);
       break;
     }
-    return initBuffer;
-  }
 
-  private flushInit(): void {
-    this.playlist.setInitSegment("mp4", new Blob(this.readInit(), { type: "video/mp4" }));
-  }
-
-  public flush(): void {
     if (!this.initWritten) {
-      this.flushInit();
+      this.playlist.setInitSegment("mp4", new Blob(initBuffer, { type: "video/mp4" }));
       this.initWritten = true;
-    } else {
-      this.readInit();
     }
     this.headerRead = false;
 

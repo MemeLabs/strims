@@ -31,47 +31,45 @@ func TestAlloc(t *testing.T) {
 }
 
 func BenchmarkAlloc(b *testing.B) {
-	ms := make([]*Meme, 0, b.N)
+	ms := make([]*Meme, b.N)
 
 	b.ResetTimer()
-	s := NewWithSize[Meme](1024)
+	s := NewWithSize[Meme](32768)
 
-	for i := 0; i < b.N; i += 65000 {
-		n := mathutil.Min(b.N-i, 65000)
+	for i := 0; i < b.N; i += 50000 {
+		n := mathutil.Min(b.N-i, 50000)
 
 		for j := 0; j < n; j++ {
-			ms = append(ms, s.Alloc())
+			ms[j] = s.Alloc()
 		}
 
 		for j := 0; j < n; j++ {
 			s.Free(ms[j])
 			ms[j] = nil
 		}
-		ms = ms[:0]
 	}
 }
 
 func BenchmarkNativeAlloc(b *testing.B) {
-	ms := make([]*Meme, 0, b.N)
+	ms := make([]*Meme, b.N)
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i += 65000 {
-		n := mathutil.Min(b.N-i, 65000)
+	for i := 0; i < b.N; i += 50000 {
+		n := mathutil.Min(b.N-i, 50000)
 
 		for j := 0; j < n; j++ {
-			ms = append(ms, &Meme{})
+			ms[j] = &Meme{}
 		}
 
 		for j := 0; j < n; j++ {
 			ms[j] = nil
 		}
-		ms = ms[:0]
 	}
 }
 
 func BenchmarkSyncPool(b *testing.B) {
-	ms := make([]*Meme, 0, b.N)
+	ms := make([]*Meme, b.N)
 
 	b.ResetTimer()
 	p := sync.Pool{
@@ -80,18 +78,17 @@ func BenchmarkSyncPool(b *testing.B) {
 		},
 	}
 
-	for i := 0; i < b.N; i += 65000 {
-		n := mathutil.Min(b.N-i, 65000)
+	for i := 0; i < b.N; i += 50000 {
+		n := mathutil.Min(b.N-i, 50000)
 
 		for j := 0; j < n; j++ {
-			ms = append(ms, p.Get().(*Meme))
+			ms[j] = p.Get().(*Meme)
 		}
 
 		for j := 0; j < n; j++ {
 			p.Put(ms[j])
 			ms[j] = nil
 		}
-		ms = ms[:0]
 	}
 }
 

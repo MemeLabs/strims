@@ -83,11 +83,9 @@ func (s *peerIndex) HandleMessage(msg *Message) error {
 
 func (s *peerIndex) handlePublish(r *vpnv1.PeerIndexMessage_Record, hostID kademlia.ID) error {
 	if err := dao.VerifyMessage(r); err != nil {
-		log.Println(">>> returned error")
 		return err
 	}
 	if !bytes.Equal(r.HostId, hostID.Bytes(nil)) {
-		log.Println(">>> returned error")
 		return errors.New("host id mismatch")
 	}
 
@@ -97,11 +95,9 @@ func (s *peerIndex) handlePublish(r *vpnv1.PeerIndexMessage_Record, hostID kadem
 
 func (s *peerIndex) handleUnpublish(r *vpnv1.PeerIndexMessage_Record, hostID kademlia.ID) error {
 	if err := dao.VerifyMessage(r); err != nil {
-		log.Println(">>> returned error")
 		return err
 	}
 	if !bytes.Equal(r.HostId, hostID.Bytes(nil)) {
-		log.Println(">>> returned error")
 		return errors.New("host id mismatch")
 	}
 
@@ -136,6 +132,9 @@ func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchRespons
 		if dao.VerifyMessage(r) != nil {
 			continue
 		}
+
+		// TODO: check hash
+		// TODO: check timestamp
 
 		h, err := newPeerIndexHostFromRecord(r)
 		if err != nil {
@@ -266,7 +265,6 @@ func (s *peerIndexStore) Upsert(r *vpnv1.PeerIndexMessage_Record, hostID kademli
 			zap.Uint32("port", r.Port),
 		)
 	}
-	i.time = timeutil.Now()
 	s.push(i)
 }
 
@@ -301,9 +299,10 @@ func (s *peerIndexStore) Get(hash []byte, hostID kademlia.ID, verifyHostID func(
 	})
 
 	records := make([]*vpnv1.PeerIndexMessage_Record, 0, peerIndexSearchResponseSize)
-	f.Each(func(i kademlia.Interface) bool {
-		if verifyHostID(i.(*peerIndexItem).hostID) {
-			records = append(records, i.(*peerIndexItem).record)
+	f.Each(func(ii kademlia.Interface) bool {
+		i := ii.(*peerIndexItem)
+		if !hostID.Equals(i.hostID) && verifyHostID(i.hostID) {
+			records = append(records, i.record)
 		}
 		return len(records) < peerIndexSearchResponseSize
 	})
@@ -314,7 +313,8 @@ func (s *peerIndexStore) Prune(t timeutil.Time) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	for s.head != nil && s.head.time < t {
+	eol := t.Add(-peerIndexMaxRecordAge)
+	for s.head != nil && s.head.time < eol {
 		s.items.Delete(s.head)
 		s.remove(s.head)
 	}

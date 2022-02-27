@@ -129,6 +129,7 @@ message ListingSnippet {
   ListingSnippetImage channel_logo = 10;
   uint32 video_height = 11;
   uint32 video_width = 12;
+  fixed32 theme_color = 13;
 
   bytes key = 10001;
   bytes signature = 10002;
@@ -150,6 +151,7 @@ message ListingSnippetDelta {
   google.protobuf.BytesValue signature = 9;
   google.protobuf.UInt32Value video_height = 10;
   google.protobuf.UInt32Value video_width = 11;
+  google.protobuf.UInt32Value theme_color = 12;
 
   oneof tags_oneof {
     Tags tags = 1001;

@@ -18,7 +18,7 @@ export class EgressOpenStreamRequest {
 
   static encode(m: EgressOpenStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.swarmUri) w.uint32(10).string(m.swarmUri);
+    if (m.swarmUri.length) w.uint32(10).string(m.swarmUri);
     for (const v of m.networkKeys) w.uint32(18).bytes(v);
     return w;
   }
@@ -164,7 +164,7 @@ export namespace EgressOpenStreamResponse {
 
     static encode(m: Open, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.transferId) w.uint32(10).bytes(m.transferId);
+      if (m.transferId.length) w.uint32(10).bytes(m.transferId);
       return w;
     }
 
@@ -206,7 +206,7 @@ export namespace EgressOpenStreamResponse {
 
     static encode(m: Data, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.data) w.uint32(10).bytes(m.data);
+      if (m.data.length) w.uint32(10).bytes(m.data);
       if (m.segmentEnd) w.uint32(16).bool(m.segmentEnd);
       if (m.bufferUnderrun) w.uint32(24).bool(m.bufferUnderrun);
       return w;
@@ -250,7 +250,7 @@ export namespace EgressOpenStreamResponse {
 
     static encode(m: Error, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.message) w.uint32(10).string(m.message);
+      if (m.message.length) w.uint32(10).string(m.message);
       return w;
     }
 

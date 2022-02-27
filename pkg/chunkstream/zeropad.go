@@ -2,6 +2,9 @@ package chunkstream
 
 import (
 	"io"
+
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
 )
 
 func NewZeroPadWriter(w io.Writer) (*ZeroPadWriter, error) {
@@ -16,18 +19,16 @@ func NewZeroPadWriterSize(w io.Writer, size int) (*ZeroPadWriter, error) {
 
 	return &ZeroPadWriter{
 		Writer: *c,
-		pad:    make([]byte, size),
 	}, nil
 }
 
 type ZeroPadWriter struct {
 	Writer
-	pad []byte
 }
 
 func (c *ZeroPadWriter) Overhead(n int) int {
-	if d := n % len(c.pad); d != 0 {
-		return len(c.pad) - d
+	if d := n % len(c.buf); d != 0 {
+		return len(c.buf) - d
 	}
 	return 0
 }
@@ -38,7 +39,7 @@ func (c *ZeroPadWriter) Flush() (err error) {
 	}
 
 	if c.woff != 0 {
-		_, err = c.Write(c.pad[:len(c.pad)-c.off])
+		_, err = ioutil.WriteZerosN(c, int64(len(c.buf)-c.off))
 	}
 	return err
 }
@@ -55,21 +56,23 @@ func NewZeroPadReaderSize(r io.Reader, offset int64, size int) (*ZeroPadReader, 
 
 	return &ZeroPadReader{
 		Reader: *c,
-		pad:    make([]byte, size),
+		buf:    make([]byte, mathutil.Min(size, 4*1024)),
 	}, nil
 }
 
 type ZeroPadReader struct {
 	Reader
-	pad []byte
+	buf []byte
 }
 
 func (c *ZeroPadReader) Read(p []byte) (int, error) {
 	n, err := c.Reader.Read(p)
 	if err == io.EOF && c.off != 0 {
-		if _, err := c.Reader.Read(c.pad[:len(c.pad)-c.off]); err != nil {
+		r := io.LimitReader(&c.Reader, int64(c.size-c.off))
+		if _, err := io.CopyBuffer(io.Discard, r, c.buf); err != nil {
 			return n, err
 		}
 	}
+
 	return n, err
 }

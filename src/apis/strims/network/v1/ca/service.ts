@@ -156,8 +156,8 @@ export class CAFindRequest {
 
   static encode(m: CAFindRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.subject) w.uint32(10).string(m.subject);
-    if (m.serialNumber) w.uint32(18).bytes(m.serialNumber);
+    if (m.subject.length) w.uint32(10).string(m.subject);
+    if (m.serialNumber.length) w.uint32(18).bytes(m.serialNumber);
     if (m.fullChain) w.uint32(24).bool(m.fullChain);
     return w;
   }

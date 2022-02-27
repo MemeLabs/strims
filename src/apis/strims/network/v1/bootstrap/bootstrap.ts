@@ -111,7 +111,7 @@ export class BootstrapClientWebSocketOptions {
 
   static encode(m: BootstrapClientWebSocketOptions, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.url) w.uint32(10).string(m.url);
+    if (m.url.length) w.uint32(10).string(m.url);
     if (m.insecureSkipVerifyTls) w.uint32(16).bool(m.insecureSkipVerifyTls);
     return w;
   }
@@ -630,7 +630,7 @@ export class BootstrapPeer {
   static encode(m: BootstrapPeer, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.peerId) w.uint32(8).uint64(m.peerId);
-    if (m.label) w.uint32(18).string(m.label);
+    if (m.label.length) w.uint32(18).string(m.label);
     return w;
   }
 
@@ -798,7 +798,7 @@ export namespace BootstrapServiceMessage {
 
     static encode(m: PublishRequest, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.name) w.uint32(10).string(m.name);
+      if (m.name.length) w.uint32(10).string(m.name);
       if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
       return w;
     }

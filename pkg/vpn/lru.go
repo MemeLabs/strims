@@ -74,7 +74,7 @@ func (l *messageIDLRU) index(id MessageID) uint {
 
 func (l *messageIDLRU) alloc() (e *messageIDLRUItem) {
 	l.len++
-	if l.len*3/4 > len(l.v) {
+	if l.len > len(l.v)*3/4 {
 		l.grow()
 	}
 	return l.allocator.Alloc()

@@ -51,7 +51,7 @@ func TestVerify(t *testing.T) {
 			initRootHash(r0, r.Get(c.bin))
 
 			r1 := NewTree(c.bin, c.chunkSize, sha256.New)
-			verified, err := r1.VerifyWithParent(c.bin, data, r0)
+			verified, err := r1.Verify(c.bin, data, r0)
 			assert.Nil(t, err, "unexpected error")
 			assert.True(t, verified, "expected successful validation")
 
@@ -78,23 +78,32 @@ func TestVerifyMerge(t *testing.T) {
 			dst.Set(b.Sibling(), src.Get(b.Sibling()))
 		}
 
-		verified, err := dst.VerifyWithParent(fillBin, fillBytes, parent)
+		verified, err := dst.Verify(fillBin, fillBytes, parent)
 		assert.Nil(t, err, "unexpected error")
 
 		return verified
 	}
 
-	r00 := NewTree(bin, chunkSize, sha256.New)
-	initRootHash(r00, r.Get(bin))
-	r01 := NewTree(bin, chunkSize, sha256.New)
-	assert.True(t, copyAndVerify(r01, r, r00), "expected successful validation")
+	vt := NewTree(bin, chunkSize, sha256.New)
+	// copy/verify root hash to verified tree (ex. received signed munro)
+	initRootHash(vt, r.Get(bin))
+	tt0 := NewTree(bin, chunkSize, sha256.New)
+	// copy unverified sibling hashes to temp tree (ex. received sibling hashes)
+	for b := fillBin; b != bin; b = b.Parent() {
+		tt0.Set(b.Sibling(), r.Get(b.Sibling()))
+	}
+	verified, err := tt0.Verify(fillBin, fillBytes, vt)
+	assert.Nil(t, err, "unexpected error")
+	assert.True(t, copyAndVerify(tt0, r, vt), "expected successful validation")
 
-	r00.Merge(r01)
+	// copy verified hashes from temp to verified tree
+	vt.Merge(tt0)
 
-	r10 := NewTree(bin, chunkSize, sha256.New)
-	initRootHash(r10, r10.Get(bin))
-	r11 := NewTree(bin, chunkSize, sha256.New)
-	assert.True(t, copyAndVerify(r11, r00, r10), "expected successful validation")
+	// confirm all the hashes that verify fillBytes are in the veriifed tree
+	tt1 := NewTree(bin, chunkSize, sha256.New)
+	verified, err = tt1.Verify(fillBin, fillBytes, vt)
+	assert.Nil(t, err, "unexpected error")
+	assert.True(t, verified, "expected successful validation")
 }
 
 func BenchmarkMerge(b *testing.B) {
@@ -157,7 +166,7 @@ func TestVerifyForward(t *testing.T) {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
-	verified, err := r1.VerifyWithParent(17, data[8*chunkSize:10*chunkSize], r0)
+	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize], r0)
 	assert.Nil(t, err, "unexpected error")
 	assert.True(t, verified)
 }
@@ -184,7 +193,7 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 	}
 
 	// should return false since r0 has no hashes to verify against
-	verified, err := r1.VerifyWithParent(17, data[8*chunkSize:10*chunkSize], r0)
+	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize], r0)
 	assert.Nil(t, err, "unexpected error")
 	assert.False(t, verified)
 }

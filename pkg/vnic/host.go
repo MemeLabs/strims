@@ -27,10 +27,9 @@ const hostCertValidDuration = time.Hour
 const (
 	HashTablePort uint16 = iota + 10
 	PeerIndexPort
-
-	PeerExchangePort uint16 = 1001
-	TransferPort     uint16 = 1002
-	SnippetPort      uint16 = 1003
+	PeerExchangePort
+	TransferPort
+	SnippetPort
 )
 
 // peer link ports
@@ -263,6 +262,13 @@ func (h *Host) Peers() []*Peer {
 		peers = append(peers, p)
 	}
 	return peers
+}
+
+// PeerCount ...
+func (h *Host) PeerCount() int {
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+	return len(h.peers)
 }
 
 // QOS ...

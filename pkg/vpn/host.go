@@ -1,17 +1,16 @@
 package vpn
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/event"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +39,7 @@ func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 		logger: logger,
 		vnic:   vnic,
 		qosc:   vnic.QOS().AddClass(qosClassWeight),
+		nodes:  hashmap.New[[]byte, *Node](hashmap.NewByteInterface()),
 		recentMessageIDs: newMessageIDLRU(
 			recentMessageIDHistoryDefaultSize,
 			recentMessageIDHistoryTTL,
@@ -54,7 +54,7 @@ type Host struct {
 	vnic                 *vnic.Host
 	qosc                 *qos.Class
 	nodesLock            sync.Mutex
-	nodes                nodeMap
+	nodes                hashmap.Map[[]byte, *Node]
 	networkObservers     event.Observer
 	peerNetworkObservers event.Observer
 	recentMessageIDs     *messageIDLRU
@@ -119,7 +119,7 @@ func (h *Host) AddNetwork(key []byte) (*Node, error) {
 		PeerIndex:    peerIndex,
 		PeerExchange: peerExchange,
 	}
-	h.nodes.Insert(node)
+	h.nodes.Set(key, node)
 
 	h.networkObservers.Emit(network)
 
@@ -148,48 +148,11 @@ func (h *Host) Node(key []byte) (*Node, bool) {
 	return h.nodes.Get(key)
 }
 
-type nodeMap struct {
-	m llrb.LLRB
-}
-
-func (m *nodeMap) Insert(c *Node) {
-	m.m.InsertNoReplace(&nodeMapItem{c.Network.Key(), c})
-}
-
-func (m *nodeMap) Delete(k []byte) (*Node, bool) {
-	if i := m.m.Delete(&nodeMapItem{k: k}); i != nil {
-		return i.(*nodeMapItem).v, true
-	}
-	return nil, false
-}
-
-func (m *nodeMap) Get(k []byte) (*Node, bool) {
-	if i := m.m.Get(&nodeMapItem{k: k}); i != nil {
-		return i.(*nodeMapItem).v, true
-	}
-	return nil, false
-}
-
-func (m *nodeMap) Len() int {
-	return m.m.Len()
-}
-
-func (m *nodeMap) Each(f func(v *Node) bool) {
-	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(*nodeMapItem).v)
-	})
-}
-
-type nodeMapItem struct {
-	k []byte
-	v *Node
-}
-
-func (t *nodeMapItem) Less(oi llrb.Item) bool {
-	if o, ok := oi.(*nodeMapItem); ok {
-		return bytes.Compare(t.k, o.k) == -1
-	}
-	return !oi.Less(t)
+// Nodes ...
+func (h *Host) Nodes() []*Node {
+	h.nodesLock.Lock()
+	defer h.nodesLock.Unlock()
+	return h.nodes.Values()
 }
 
 // Node ...

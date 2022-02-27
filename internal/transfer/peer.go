@@ -1,7 +1,6 @@
 package transfer
 
 import (
-	"bytes"
 	"context"
 	"sync"
 
@@ -10,14 +9,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
 type Peer interface {
-	AssignPort(id []byte, peerChannel uint64) (uint64, bool)
-	Close(id []byte)
+	AssignPort(id ID, peerChannel uint64) (uint64, bool)
+	Close(id ID)
 	Announce(t *transfer)
 	Remove(t *transfer)
 }
@@ -28,18 +25,17 @@ var _ Peer = &peer{}
 type peer struct {
 	logger     *zap.Logger
 	ctx        context.Context
-	vnicPeer   *vnic.Peer
 	runnerPeer *ppspp.RunnerPeer
 	client     api.PeerClient
 
 	lock        sync.Mutex
-	transfers   llrb.LLRB
+	transfers   map[ID]*peerTransfer
 	nextChannel uint64
 }
 
 // AssignPort starts a peer transfer when it exists in response to announce from
 // peer
-func (p *peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
+func (p *peer) AssignPort(id ID, peerChannel uint64) (uint64, bool) {
 	pt, ok := p.getPeerTransfer(id)
 	if !ok {
 		return 0, false
@@ -54,7 +50,7 @@ func (p *peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 }
 
 // Close stops a peer transfer when it exists in response to close from peer
-func (p *peer) Close(id []byte) {
+func (p *peer) Close(id ID) {
 	if pt, ok := p.getPeerTransfer(id); ok {
 		p.stopPeerTransfer(pt, false)
 	}
@@ -68,7 +64,7 @@ func (p *peer) Announce(t *transfer) {
 
 	go func() {
 		req := &transferv1.TransferPeerAnnounceRequest{
-			Id:      t.id,
+			Id:      t.id[:],
 			Channel: pt.channel,
 		}
 		res := &transferv1.TransferPeerAnnounceResponse{}
@@ -87,7 +83,10 @@ func (p *peer) Announce(t *transfer) {
 // Remove cleans up the peer transfer for the removed transfer t
 func (p *peer) Remove(t *transfer) {
 	p.lock.Lock()
-	pt, ok := p.transfers.Delete(&peerTransfer{transfer: t}).(*peerTransfer)
+	pt, ok := p.transfers[t.id]
+	if ok {
+		delete(p.transfers, t.id)
+	}
 	p.lock.Unlock()
 
 	if ok {
@@ -96,11 +95,11 @@ func (p *peer) Remove(t *transfer) {
 	}
 }
 
-func (p *peer) getPeerTransfer(id []byte) (*peerTransfer, bool) {
+func (p *peer) getPeerTransfer(id ID) (*peerTransfer, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	pt, ok := p.transfers.Get(&peerTransfer{transfer: &transfer{id: id}}).(*peerTransfer)
+	pt, ok := p.transfers[id]
 	return pt, ok
 }
 
@@ -108,7 +107,7 @@ func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	pt, ok := p.transfers.Get(&peerTransfer{transfer: t}).(*peerTransfer)
+	pt, ok := p.transfers[t.id]
 	if ok {
 		pt.logger.Debug("reused peer transfer")
 		return pt
@@ -118,7 +117,7 @@ func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 
 	pt = &peerTransfer{
 		logger: p.logger.With(
-			logutil.ByteHex("id", t.id),
+			logutil.ByteHex("id", t.id[:]),
 			zap.Stringer("swarm", t.swarm.ID()),
 			zap.Uint64("localChannel", p.nextChannel),
 		),
@@ -126,7 +125,7 @@ func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 		channel:  p.nextChannel,
 		stop:     make(chan struct{}),
 	}
-	p.transfers.ReplaceOrInsert(pt)
+	p.transfers[t.id] = pt
 
 	pt.logger.Debug("created peer transfer")
 
@@ -185,7 +184,7 @@ func (p *peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
 	}
 
 	if notifyPeer {
-		req := &transferv1.TransferPeerCloseRequest{Id: pt.id}
+		req := &transferv1.TransferPeerCloseRequest{Id: pt.id[:]}
 		res := &transferv1.TransferPeerCloseResponse{}
 		err := p.client.Transfer().Close(context.Background(), req, res)
 		if err != nil {
@@ -201,8 +200,4 @@ type peerTransfer struct {
 	stop    chan struct{}
 	open    bool
 	*transfer
-}
-
-func (t *peerTransfer) Less(o llrb.Item) bool {
-	return bytes.Compare(t.id, o.(*peerTransfer).id) == -1
 }

@@ -151,12 +151,12 @@ export namespace PeerIndexMessage {
 
     static encode(m: Record, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.hash) w.uint32(10).bytes(m.hash);
-      if (m.hostId) w.uint32(18).bytes(m.hostId);
+      if (m.hash.length) w.uint32(10).bytes(m.hash);
+      if (m.hostId.length) w.uint32(18).bytes(m.hostId);
       if (m.port) w.uint32(24).uint32(m.port);
       if (m.timestamp) w.uint32(32).int64(m.timestamp);
-      if (m.key) w.uint32(80010).bytes(m.key);
-      if (m.signature) w.uint32(80018).bytes(m.signature);
+      if (m.key.length) w.uint32(80010).bytes(m.key);
+      if (m.signature.length) w.uint32(80018).bytes(m.signature);
       return w;
     }
 
@@ -283,7 +283,7 @@ export namespace PeerIndexMessage {
     static encode(m: SearchRequest, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.requestId) w.uint32(8).uint64(m.requestId);
-      if (m.hash) w.uint32(18).bytes(m.hash);
+      if (m.hash.length) w.uint32(18).bytes(m.hash);
       return w;
     }
 

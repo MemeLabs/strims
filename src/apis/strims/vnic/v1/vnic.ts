@@ -30,8 +30,8 @@ export class PeerInit {
     if (!w) w = new Writer();
     if (m.protocolVersion) w.uint32(8).uint32(m.protocolVersion);
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
-    if (m.nodePlatform) w.uint32(26).string(m.nodePlatform);
-    if (m.nodeVersion) w.uint32(34).string(m.nodeVersion);
+    if (m.nodePlatform.length) w.uint32(26).string(m.nodePlatform);
+    if (m.nodeVersion.length) w.uint32(34).string(m.nodeVersion);
     return w;
   }
 
@@ -65,18 +65,22 @@ export class PeerInit {
 
 export type IConfig = {
   maxUploadBytesPerSecond?: bigint;
+  maxPeers?: number;
 }
 
 export class Config {
   maxUploadBytesPerSecond: bigint;
+  maxPeers: number;
 
   constructor(v?: IConfig) {
     this.maxUploadBytesPerSecond = v?.maxUploadBytesPerSecond || BigInt(0);
+    this.maxPeers = v?.maxPeers || 0;
   }
 
   static encode(m: Config, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.maxUploadBytesPerSecond) w.uint32(8).uint64(m.maxUploadBytesPerSecond);
+    if (m.maxPeers) w.uint32(16).uint32(m.maxPeers);
     return w;
   }
 
@@ -89,6 +93,9 @@ export class Config {
       switch (tag >> 3) {
         case 1:
         m.maxUploadBytesPerSecond = r.uint64();
+        break;
+        case 2:
+        m.maxPeers = r.uint32();
         break;
         default:
         r.skipType(tag & 7);

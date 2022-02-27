@@ -18,7 +18,7 @@ export class NetworkAddress {
 
   static encode(m: NetworkAddress, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.hostId) w.uint32(10).bytes(m.hostId);
+    if (m.hostId.length) w.uint32(10).bytes(m.hostId);
     if (m.port) w.uint32(16).uint32(m.port);
     return w;
   }

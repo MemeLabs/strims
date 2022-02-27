@@ -18,7 +18,7 @@ export class TransferPeerAnnounceRequest {
 
   static encode(m: TransferPeerAnnounceRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     if (m.channel) w.uint32(16).uint64(m.channel);
     return w;
   }
@@ -136,7 +136,7 @@ export class TransferPeerCloseRequest {
 
   static encode(m: TransferPeerCloseRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     return w;
   }
 

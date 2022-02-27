@@ -159,10 +159,10 @@ func (r *TickEmitter) run(t Time) {
 	defer r.lock.Unlock()
 
 	r.i++
-	for i, ch := range r.chans {
-		if r.i%r.ivls[i] == 0 {
+	for i, ivl := range r.ivls {
+		if r.i%ivl == 0 {
 			select {
-			case ch <- t:
+			case r.chans[i] <- t:
 			default:
 			}
 		}

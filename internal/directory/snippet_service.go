@@ -140,9 +140,9 @@ func (m *snippetMap) Update(swarmID ppspp.SwarmID, snippet *networkv1directory.L
 	m.snippetsLock.Lock()
 	defer m.snippetsLock.Unlock()
 
-	it, ok := m.snippets.Get(&snippetItem{id: swarmID.Binary()}).(*snippetItem)
+	it, ok := m.snippets.Get(&snippetItem{id: swarmID}).(*snippetItem)
 	if !ok {
-		it = newSnippetItem(swarmID.Binary())
+		it = newSnippetItem(swarmID)
 		m.snippets.ReplaceOrInsert(it)
 	}
 
@@ -153,7 +153,7 @@ func (m *snippetMap) Delete(swarmID ppspp.SwarmID) {
 	m.snippetsLock.Lock()
 	defer m.snippetsLock.Unlock()
 
-	it, ok := m.snippets.Delete(&snippetItem{id: swarmID.Binary()}).(*snippetItem)
+	it, ok := m.snippets.Delete(&snippetItem{id: swarmID}).(*snippetItem)
 	if ok {
 		it.Destroy()
 	}
@@ -166,7 +166,7 @@ func (m *snippetMap) Get(swarmID ppspp.SwarmID) (*snippetItem, bool) {
 
 func newSnippetItem(swarmID ppspp.SwarmID) *snippetItem {
 	return &snippetItem{
-		id:      swarmID.Binary(),
+		id:      swarmID,
 		snippet: &networkv1directory.ListingSnippet{},
 	}
 }

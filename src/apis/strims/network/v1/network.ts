@@ -30,8 +30,8 @@ export class NetworkIcon {
 
   static encode(m: NetworkIcon, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data) w.uint32(10).bytes(m.data);
-    if (m.type) w.uint32(18).string(m.type);
+    if (m.data.length) w.uint32(10).bytes(m.data);
+    if (m.type.length) w.uint32(18).string(m.type);
     return w;
   }
 
@@ -76,9 +76,9 @@ export class CreateServerRequest {
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
+    if (m.name.length) w.uint32(10).string(m.name);
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
-    if (m.alias) w.uint32(26).string(m.alias);
+    if (m.alias.length) w.uint32(26).string(m.alias);
     return w;
   }
 
@@ -431,7 +431,7 @@ export class ServerConfig {
 
   static encode(m: ServerConfig, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.name.length) w.uint32(18).string(m.name);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
     if (m.rootCertTtlSecs) w.uint32(32).uint64(m.rootCertTtlSecs);
     if (m.peerCertTtlSecs) w.uint32(40).uint64(m.peerCertTtlSecs);
@@ -498,7 +498,7 @@ export class Network {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
-    if (m.alias) w.uint32(34).string(m.alias);
+    if (m.alias.length) w.uint32(34).string(m.alias);
     switch (m.serverConfigOneof.case) {
       case Network.ServerConfigOneofCase.SERVER_CONFIG:
       ServerConfig.encode(m.serverConfigOneof.serverConfig, w.uint32(8010).fork()).ldelim();
@@ -603,7 +603,7 @@ export class Peer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkId) w.uint32(16).uint64(m.networkId);
-    if (m.publicKey) w.uint32(26).bytes(m.publicKey);
+    if (m.publicKey.length) w.uint32(26).bytes(m.publicKey);
     if (m.inviterPeerId) w.uint32(32).uint64(m.inviterPeerId);
     if (m.inviteQuota) w.uint32(40).uint32(m.inviteQuota);
     return w;
@@ -661,7 +661,7 @@ export class CreateInvitationRequest {
     if (!w) w = new Writer();
     if (m.signingKey) strims_type_Key.encode(m.signingKey, w.uint32(10).fork()).ldelim();
     if (m.signingCert) strims_type_Certificate.encode(m.signingCert, w.uint32(18).fork()).ldelim();
-    if (m.networkName) w.uint32(26).string(m.networkName);
+    if (m.networkName.length) w.uint32(26).string(m.networkName);
     return w;
   }
 
@@ -710,8 +710,8 @@ export class CreateInvitationResponse {
   static encode(m: CreateInvitationResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.invitation) Invitation.encode(m.invitation, w.uint32(10).fork()).ldelim();
-    if (m.invitationB64) w.uint32(18).string(m.invitationB64);
-    if (m.invitationBytes) w.uint32(26).bytes(m.invitationBytes);
+    if (m.invitationB64.length) w.uint32(18).string(m.invitationB64);
+    if (m.invitationBytes.length) w.uint32(26).bytes(m.invitationBytes);
     return w;
   }
 
@@ -757,7 +757,7 @@ export class Invitation {
   static encode(m: Invitation, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.version) w.uint32(8).uint32(m.version);
-    if (m.data) w.uint32(18).bytes(m.data);
+    if (m.data.length) w.uint32(18).bytes(m.data);
     return w;
   }
 
@@ -804,7 +804,7 @@ export class InvitationV0 {
     if (!w) w = new Writer();
     if (m.key) strims_type_Key.encode(m.key, w.uint32(10).fork()).ldelim();
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
-    if (m.networkName) w.uint32(34).string(m.networkName);
+    if (m.networkName.length) w.uint32(34).string(m.networkName);
     return w;
   }
 
@@ -849,7 +849,7 @@ export class CreateNetworkFromInvitationRequest {
 
   static encode(m: CreateNetworkFromInvitationRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.alias) w.uint32(10).string(m.alias);
+    if (m.alias.length) w.uint32(10).string(m.alias);
     switch (m.invitation.case) {
       case CreateNetworkFromInvitationRequest.InvitationCase.INVITATION_B64:
       w.uint32(8010).string(m.invitation.invitationB64);
@@ -1379,7 +1379,7 @@ export class UpdateAliasRequest {
   static encode(m: UpdateAliasRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.alias) w.uint32(18).string(m.alias);
+    if (m.alias.length) w.uint32(18).string(m.alias);
     return w;
   }
 

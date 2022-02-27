@@ -6,7 +6,10 @@ import (
 	"unsafe"
 )
 
-const DefaultSize = 128
+const (
+	DefaultSize = 128
+	MaxSize     = math.MaxUint16 >> 1
+)
 
 type ref uint16
 
@@ -60,6 +63,9 @@ type slab[T any] struct {
 }
 
 func NewWithSize[T any](size int) *Allocator[T] {
+	if size > MaxSize {
+		size = MaxSize
+	}
 	return &Allocator[T]{
 		slabs: []slab[T]{newSlab[T](size)},
 		size:  size,

@@ -21,7 +21,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		return nil, err
 	}
 
-	v, err := integrity.NewVerifier(id.Binary(), o.IntegrityVerifierOptions())
+	v, err := integrity.NewVerifier(id, o.IntegrityVerifierOptions())
 	if err != nil {
 		return nil, err
 	}

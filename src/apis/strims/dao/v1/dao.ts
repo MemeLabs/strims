@@ -18,7 +18,7 @@ export class SecondaryIndexKey {
 
   static encode(m: SecondaryIndexKey, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.key) w.uint32(10).bytes(m.key);
+    if (m.key.length) w.uint32(10).bytes(m.key);
     if (m.id) w.uint32(16).uint64(m.id);
     return w;
   }
@@ -62,7 +62,7 @@ export class Mutex {
   static encode(m: Mutex, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.eol) w.uint32(8).int64(m.eol);
-    if (m.token) w.uint32(18).bytes(m.token);
+    if (m.token.length) w.uint32(18).bytes(m.token);
     return w;
   }
 

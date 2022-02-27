@@ -7,10 +7,7 @@ self.addEventListener("fetch", (event: FetchEvent) => {
 
   event.respondWith(
     caches.open(match[1]).then((cache) => {
-      return cache.match(event.request).then((res) => {
-        console.log("serving", event.request.url);
-        return res;
-      });
+      return cache.match(event.request);
     })
   );
 });

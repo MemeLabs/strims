@@ -22,8 +22,8 @@ export class Key {
   static encode(m: Key, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.type) w.uint32(8).uint32(m.type);
-    if (m.private) w.uint32(18).bytes(m.private);
-    if (m.public) w.uint32(26).bytes(m.public);
+    if (m.private.length) w.uint32(18).bytes(m.private);
+    if (m.public.length) w.uint32(26).bytes(m.public);
     return w;
   }
 

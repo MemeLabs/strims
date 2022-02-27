@@ -25,7 +25,7 @@ export class SessionThing {
   static encode(m: SessionThing, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.profileId) w.uint32(8).uint64(m.profileId);
-    if (m.profileKey) w.uint32(18).bytes(m.profileKey);
+    if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
     return w;
   }
 
@@ -67,7 +67,7 @@ export class TOTPConfig {
 
   static encode(m: TOTPConfig, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.secret) w.uint32(10).string(m.secret);
+    if (m.secret.length) w.uint32(10).string(m.secret);
     for (const v of m.recoverCodes) w.uint32(18).string(v);
     return w;
   }
@@ -114,7 +114,7 @@ export class ServerUserThing {
   static encode(m: ServerUserThing, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.name.length) w.uint32(18).string(m.name);
     switch (m.credentials.case) {
       case ServerUserThing.CredentialsCase.UNENCRYPTED:
       ServerUserThing.Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
@@ -216,7 +216,7 @@ export namespace ServerUserThing {
     static encode(m: Unencrypted, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.profileId) w.uint32(8).uint64(m.profileId);
-      if (m.profileKey) w.uint32(18).bytes(m.profileKey);
+      if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
       return w;
     }
 
@@ -263,7 +263,7 @@ export namespace ServerUserThing {
       if (!w) w = new Writer();
       if (m.authKey) strims_profile_v1_StorageKey.encode(m.authKey, w.uint32(10).fork()).ldelim();
       if (m.totpRequired) w.uint32(16).bool(m.totpRequired);
-      if (m.secret) w.uint32(26).bytes(m.secret);
+      if (m.secret.length) w.uint32(26).bytes(m.secret);
       return w;
     }
 
@@ -313,7 +313,7 @@ export namespace ServerUserThing {
       static encode(m: Secret, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.profileId) w.uint32(8).uint64(m.profileId);
-        if (m.profileKey) w.uint32(18).bytes(m.profileKey);
+        if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
         if (m.totp) TOTPConfig.encode(m.totp, w.uint32(26).fork()).ldelim();
         return w;
       }
@@ -370,8 +370,8 @@ export class LinkedProfile {
   static encode(m: LinkedProfile, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.serverAddress) w.uint32(26).string(m.serverAddress);
+    if (m.name.length) w.uint32(18).string(m.name);
+    if (m.serverAddress.length) w.uint32(26).string(m.serverAddress);
     switch (m.credentials.case) {
       case LinkedProfile.CredentialsCase.UNENCRYPTED:
       LinkedProfile.Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
@@ -565,7 +565,7 @@ export namespace LinkedProfile {
     static encode(m: Token, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.profileId) w.uint32(8).uint64(m.profileId);
-      if (m.token) w.uint32(18).bytes(m.token);
+      if (m.token.length) w.uint32(18).bytes(m.token);
       if (m.eol) w.uint32(24).uint64(m.eol);
       return w;
     }
@@ -612,7 +612,7 @@ export namespace LinkedProfile {
     static encode(m: Key, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.profileId) w.uint32(8).uint64(m.profileId);
-      if (m.profileKey) w.uint32(18).bytes(m.profileKey);
+      if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
       return w;
     }
 
@@ -771,9 +771,9 @@ export namespace SignInRequest {
 
     static encode(m: Password, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.name) w.uint32(10).string(m.name);
-      if (m.password) w.uint32(18).string(m.password);
-      if (m.totpPasscode) w.uint32(26).string(m.totpPasscode);
+      if (m.name.length) w.uint32(10).string(m.name);
+      if (m.password.length) w.uint32(18).string(m.password);
+      if (m.totpPasscode.length) w.uint32(26).string(m.totpPasscode);
       if (m.persistSession) w.uint32(32).bool(m.persistSession);
       if (m.persistLogin) w.uint32(40).bool(m.persistLogin);
       return w;
@@ -830,7 +830,7 @@ export namespace SignInRequest {
     static encode(m: Token, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.profileId) w.uint32(8).uint64(m.profileId);
-      if (m.token) w.uint32(18).bytes(m.token);
+      if (m.token.length) w.uint32(18).bytes(m.token);
       if (m.eol) w.uint32(24).uint64(m.eol);
       return w;
     }
@@ -877,7 +877,7 @@ export namespace SignInRequest {
     static encode(m: Key, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.profileId) w.uint32(8).uint64(m.profileId);
-      if (m.profileKey) w.uint32(18).bytes(m.profileKey);
+      if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
       return w;
     }
 
@@ -970,8 +970,8 @@ export class SignUpRequest {
 
   static encode(m: SignUpRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
-    if (m.password) w.uint32(18).string(m.password);
+    if (m.name.length) w.uint32(10).string(m.name);
+    if (m.password.length) w.uint32(18).string(m.password);
     if (m.persistSession) w.uint32(32).bool(m.persistSession);
     if (m.persistLogin) w.uint32(40).bool(m.persistLogin);
     return w;

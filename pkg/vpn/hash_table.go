@@ -184,7 +184,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 	}
 
 	var timestamp int64
-	values := make(chan []byte, 32)
+	values := make(chan []byte, 1)
 
 	if !opts.disableCache {
 		if record := s.store.get(hash); record != nil {
@@ -209,7 +209,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 				},
 			},
 		}
-		if err := s.network.SendProtoWithFlags(target, vnic.HashTablePort, vnic.HashTablePort, msg, 0); err != nil {
+		if err := s.network.SendProtoWithFlags(target, vnic.HashTablePort, vnic.HashTablePort, msg, Mbroadcast); err != nil {
 			cleanup()
 			return nil, err
 		}

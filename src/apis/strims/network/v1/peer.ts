@@ -206,7 +206,7 @@ export class NetworkPeerCloseRequest {
 
   static encode(m: NetworkPeerCloseRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.key) w.uint32(10).bytes(m.key);
+    if (m.key.length) w.uint32(10).bytes(m.key);
     return w;
   }
 

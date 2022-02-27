@@ -193,7 +193,7 @@ export namespace BrokerProxyEvent {
 
     static encode(m: Data, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.data) w.uint32(10).bytes(m.data);
+      if (m.data.length) w.uint32(10).bytes(m.data);
       return w;
     }
 
@@ -397,7 +397,7 @@ export class BrokerProxyDataRequest {
   static encode(m: BrokerProxyDataRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.proxyId) w.uint32(8).uint64(m.proxyId);
-    if (m.data) w.uint32(18).bytes(m.data);
+    if (m.data.length) w.uint32(18).bytes(m.data);
     return w;
   }
 

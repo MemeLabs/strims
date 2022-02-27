@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -14,7 +13,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -58,13 +56,6 @@ func newRunner(ctx context.Context,
 type runner struct {
 	key []byte
 	*servicemanager.Runner[readers, *runnerAdapter]
-}
-
-func (r *runner) Less(o llrb.Item) bool {
-	if o, ok := o.(*runner); ok {
-		return bytes.Compare(r.key, o.key) == -1
-	}
-	return !o.Less(r)
 }
 
 type readers struct {

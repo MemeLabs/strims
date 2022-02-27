@@ -15,7 +15,7 @@ export class Transfer {
 
   static encode(m: Transfer, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.id.length) w.uint32(10).bytes(m.id);
     return w;
   }
 

@@ -100,8 +100,8 @@ export class Room {
 
   static encode(m: Room, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
-    if (m.css) w.uint32(18).string(m.css);
+    if (m.name.length) w.uint32(10).string(m.name);
+    if (m.css.length) w.uint32(18).string(m.css);
     return w;
   }
 
@@ -150,7 +150,7 @@ export class Server {
   static encode(m: Server, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
     if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
     return w;
@@ -209,7 +209,7 @@ export class EmoteImage {
 
   static encode(m: EmoteImage, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data) w.uint32(26).bytes(m.data);
+    if (m.data.length) w.uint32(26).bytes(m.data);
     if (m.fileType) w.uint32(32).uint32(m.fileType);
     if (m.height) w.uint32(40).uint32(m.height);
     if (m.width) w.uint32(48).uint32(m.width);
@@ -367,7 +367,7 @@ export namespace EmoteEffect {
 
     static encode(m: CustomCSS, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.css) w.uint32(10).string(m.css);
+      if (m.css.length) w.uint32(10).string(m.css);
       return w;
     }
 
@@ -515,8 +515,8 @@ export class EmoteContributor {
 
   static encode(m: EmoteContributor, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
-    if (m.link) w.uint32(18).string(m.link);
+    if (m.name.length) w.uint32(10).string(m.name);
+    if (m.link.length) w.uint32(18).string(m.link);
     return w;
   }
 
@@ -572,7 +572,7 @@ export class Emote {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.serverId) w.uint32(16).uint64(m.serverId);
-    if (m.name) w.uint32(26).string(m.name);
+    if (m.name.length) w.uint32(26).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
     for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
     if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
@@ -643,7 +643,7 @@ export class Modifier {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.serverId) w.uint32(16).uint64(m.serverId);
-    if (m.name) w.uint32(26).string(m.name);
+    if (m.name.length) w.uint32(26).string(m.name);
     if (m.priority) w.uint32(32).uint32(m.priority);
     if (m.internal) w.uint32(40).bool(m.internal);
     if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
@@ -711,8 +711,8 @@ export class Tag {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.serverId) w.uint32(16).uint64(m.serverId);
-    if (m.name) w.uint32(26).string(m.name);
-    if (m.color) w.uint32(34).string(m.color);
+    if (m.name.length) w.uint32(26).string(m.name);
+    if (m.color.length) w.uint32(34).string(m.color);
     if (m.sensitive) w.uint32(40).bool(m.sensitive);
     return w;
   }
@@ -845,9 +845,9 @@ export class Message {
   static encode(m: Message, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverTime) w.uint32(8).int64(m.serverTime);
-    if (m.hostId) w.uint32(18).bytes(m.hostId);
-    if (m.nick) w.uint32(26).string(m.nick);
-    if (m.body) w.uint32(34).string(m.body);
+    if (m.hostId.length) w.uint32(18).bytes(m.hostId);
+    if (m.nick.length) w.uint32(26).string(m.nick);
+    if (m.body.length) w.uint32(34).string(m.body);
     if (m.entities) Message.Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
     return w;
   }
@@ -1030,7 +1030,7 @@ export namespace Message {
       static encode(m: Link, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-        if (m.url) w.uint32(18).string(m.url);
+        if (m.url.length) w.uint32(18).string(m.url);
         return w;
       }
 
@@ -1079,7 +1079,7 @@ export namespace Message {
       static encode(m: Emote, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-        if (m.name) w.uint32(18).string(m.name);
+        if (m.name.length) w.uint32(18).string(m.name);
         for (const v of m.modifiers) w.uint32(26).string(v);
         if (m.combo) w.uint32(32).uint32(m.combo);
         return w;
@@ -1130,7 +1130,7 @@ export namespace Message {
       static encode(m: Nick, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-        if (m.nick) w.uint32(18).string(m.nick);
+        if (m.nick.length) w.uint32(18).string(m.nick);
         return w;
       }
 
@@ -1173,7 +1173,7 @@ export namespace Message {
       static encode(m: Tag, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-        if (m.name) w.uint32(18).string(m.name);
+        if (m.name.length) w.uint32(18).string(m.name);
         return w;
       }
 
@@ -1422,7 +1422,7 @@ export class UIConfig {
     if (!w) w = new Writer();
     if (m.showTime) w.uint32(8).bool(m.showTime);
     if (m.showFlairIcons) w.uint32(16).bool(m.showFlairIcons);
-    if (m.timestampFormat) w.uint32(26).string(m.timestampFormat);
+    if (m.timestampFormat.length) w.uint32(26).string(m.timestampFormat);
     if (m.maxLines) w.uint32(32).uint32(m.maxLines);
     if (m.notificationWhisper) w.uint32(40).bool(m.notificationWhisper);
     if (m.soundNotificationWhisper) w.uint32(48).bool(m.soundNotificationWhisper);
@@ -1430,7 +1430,7 @@ export class UIConfig {
     if (m.soundNotificationHighlight) w.uint32(64).bool(m.soundNotificationHighlight);
     if (m.notificationSoundFile) UIConfig.SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
     if (m.highlight) w.uint32(80).bool(m.highlight);
-    if (m.customHighlight) w.uint32(90).string(m.customHighlight);
+    if (m.customHighlight.length) w.uint32(90).string(m.customHighlight);
     for (const v of m.highlightNicks) w.uint32(98).string(v);
     for (const v of m.taggedNicks) w.uint32(106).string(v);
     if (m.showRemoved) w.uint32(112).uint32(m.showRemoved);
@@ -1588,8 +1588,8 @@ export namespace UIConfig {
 
     static encode(m: SoundFile, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.fileType) w.uint32(10).string(m.fileType);
-      if (m.data) w.uint32(18).bytes(m.data);
+      if (m.fileType.length) w.uint32(10).string(m.fileType);
+      if (m.data.length) w.uint32(18).bytes(m.data);
       return w;
     }
 
@@ -1644,7 +1644,7 @@ export class CreateServerRequest {
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -1727,7 +1727,7 @@ export class UpdateServerRequest {
   static encode(m: UpdateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -2006,9 +2006,9 @@ export class CreateEmoteRequest {
   static encode(m: CreateEmoteRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.name.length) w.uint32(18).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
-    if (m.css) w.uint32(34).string(m.css);
+    if (m.css.length) w.uint32(34).string(m.css);
     for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
     if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
     return w;
@@ -2117,9 +2117,9 @@ export class UpdateEmoteRequest {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     if (m.id) w.uint32(16).uint64(m.id);
-    if (m.name) w.uint32(26).string(m.name);
+    if (m.name.length) w.uint32(26).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
-    if (m.css) w.uint32(42).string(m.css);
+    if (m.css.length) w.uint32(42).string(m.css);
     for (const v of m.effects) EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
     if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(58).fork()).ldelim();
     return w;
@@ -2428,7 +2428,7 @@ export class CreateModifierRequest {
   static encode(m: CreateModifierRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.name.length) w.uint32(18).string(m.name);
     if (m.priority) w.uint32(24).uint32(m.priority);
     if (m.internal) w.uint32(32).bool(m.internal);
     return w;
@@ -2525,7 +2525,7 @@ export class UpdateModifierRequest {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     if (m.id) w.uint32(16).uint64(m.id);
-    if (m.name) w.uint32(26).string(m.name);
+    if (m.name.length) w.uint32(26).string(m.name);
     if (m.priority) w.uint32(32).uint32(m.priority);
     if (m.internal) w.uint32(40).bool(m.internal);
     return w;
@@ -2828,8 +2828,8 @@ export class CreateTagRequest {
   static encode(m: CreateTagRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.color) w.uint32(26).string(m.color);
+    if (m.name.length) w.uint32(18).string(m.name);
+    if (m.color.length) w.uint32(26).string(m.color);
     if (m.sensitive) w.uint32(32).bool(m.sensitive);
     return w;
   }
@@ -2925,8 +2925,8 @@ export class UpdateTagRequest {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     if (m.id) w.uint32(16).uint64(m.id);
-    if (m.name) w.uint32(26).string(m.name);
-    if (m.color) w.uint32(34).string(m.color);
+    if (m.name.length) w.uint32(26).string(m.name);
+    if (m.color.length) w.uint32(34).string(m.color);
     if (m.sensitive) w.uint32(40).bool(m.sensitive);
     return w;
   }
@@ -3307,8 +3307,8 @@ export class OpenClientRequest {
 
   static encode(m: OpenClientRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
-    if (m.serverKey) w.uint32(18).bytes(m.serverKey);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
     return w;
   }
 
@@ -3495,7 +3495,7 @@ export class ClientSendMessageRequest {
   static encode(m: ClientSendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.clientId) w.uint32(8).uint64(m.clientId);
-    if (m.body) w.uint32(18).string(m.body);
+    if (m.body.length) w.uint32(18).string(m.body);
     return w;
   }
 
@@ -3686,7 +3686,7 @@ export class SendMessageRequest {
 
   static encode(m: SendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.body) w.uint32(10).string(m.body);
+    if (m.body.length) w.uint32(10).string(m.body);
     return w;
   }
 

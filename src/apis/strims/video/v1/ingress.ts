@@ -33,8 +33,8 @@ export class VideoIngressConfig {
   static encode(m: VideoIngressConfig, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.enabled) w.uint32(8).bool(m.enabled);
-    if (m.serverAddr) w.uint32(18).string(m.serverAddr);
-    if (m.publicServerAddr) w.uint32(26).string(m.publicServerAddr);
+    if (m.serverAddr.length) w.uint32(18).string(m.serverAddr);
+    if (m.publicServerAddr.length) w.uint32(26).string(m.publicServerAddr);
     for (const v of m.serviceNetworkKeys) w.uint32(34).bytes(v);
     return w;
   }
@@ -419,9 +419,9 @@ export class VideoIngressGetChannelURLResponse {
 
   static encode(m: VideoIngressGetChannelURLResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.url) w.uint32(10).string(m.url);
-    if (m.serverAddr) w.uint32(18).string(m.serverAddr);
-    if (m.streamKey) w.uint32(26).string(m.streamKey);
+    if (m.url.length) w.uint32(10).string(m.url);
+    if (m.serverAddr.length) w.uint32(18).string(m.serverAddr);
+    if (m.streamKey.length) w.uint32(26).string(m.streamKey);
     return w;
   }
 

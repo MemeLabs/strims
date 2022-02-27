@@ -163,8 +163,8 @@ func (m *webRTCMediator) GetICECandidates() <-chan []byte {
 
 func (m *webRTCMediator) SendOffer(offer []byte) error {
 	msg := &vpnv1.PeerExchangeMessage{
-		Body: &vpnv1.PeerExchangeMessage_Offer_{
-			Offer: &vpnv1.PeerExchangeMessage_Offer{
+		Body: &vpnv1.PeerExchangeMessage_MediationOffer_{
+			MediationOffer: &vpnv1.PeerExchangeMessage_MediationOffer{
 				MediationId: m.mediationID,
 				Data:        offer,
 			},
@@ -175,8 +175,8 @@ func (m *webRTCMediator) SendOffer(offer []byte) error {
 
 func (m *webRTCMediator) SendAnswer(answer []byte) error {
 	msg := &vpnv1.PeerExchangeMessage{
-		Body: &vpnv1.PeerExchangeMessage_Answer_{
-			Answer: &vpnv1.PeerExchangeMessage_Answer{
+		Body: &vpnv1.PeerExchangeMessage_MediationAnswer_{
+			MediationAnswer: &vpnv1.PeerExchangeMessage_MediationAnswer{
 				MediationId: m.mediationID,
 				Data:        answer,
 			},
@@ -193,8 +193,8 @@ func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
 	}
 
 	msg := &vpnv1.PeerExchangeMessage{
-		Body: &vpnv1.PeerExchangeMessage_IceCandidate_{
-			IceCandidate: &vpnv1.PeerExchangeMessage_IceCandidate{
+		Body: &vpnv1.PeerExchangeMessage_MediationIceCandidate_{
+			MediationIceCandidate: &vpnv1.PeerExchangeMessage_MediationIceCandidate{
 				MediationId: m.mediationID,
 				Index:       index,
 				Data:        candidate,
@@ -236,12 +236,14 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 	defer s.mediatorsLock.Unlock()
 
 	switch b := m.Body.(type) {
-	case *vpnv1.PeerExchangeMessage_Offer_:
-		return s.handleOffer(b.Offer, msg)
-	case *vpnv1.PeerExchangeMessage_Answer_:
-		return s.handleAnswer(b.Answer, msg)
-	case *vpnv1.PeerExchangeMessage_IceCandidate_:
-		return s.handleICECandidate(b.IceCandidate, msg)
+	case *vpnv1.PeerExchangeMessage_Handshake_:
+		return s.handleHandshake(b.Handshake, msg)
+	case *vpnv1.PeerExchangeMessage_MediationOffer_:
+		return s.handleMediationOffer(b.MediationOffer, msg)
+	case *vpnv1.PeerExchangeMessage_MediationAnswer_:
+		return s.handleMediationAnswer(b.MediationAnswer, msg)
+	case *vpnv1.PeerExchangeMessage_MediationIceCandidate_:
+		return s.handleMediationICECandidate(b.MediationIceCandidate, msg)
 	case *vpnv1.PeerExchangeMessage_CallbackRequest_:
 		return s.handleCallbackRequest(b.CallbackRequest, msg)
 	default:
@@ -251,7 +253,7 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 
 // Connect create mediator to negotiate connection with peer
 func (s *peerExchange) Connect(hostID kademlia.ID) error {
-	if s.network.VNIC().HasPeer(hostID) {
+	if s.network.VNIC().HasPeer(hostID) || s.network.VNIC().ID().Equals(hostID) {
 		return nil
 	}
 
@@ -302,7 +304,13 @@ func (s *peerExchange) handleCallbackRequest(m *vpnv1.PeerExchangeMessage_Callba
 	return nil
 }
 
-func (s *peerExchange) handleOffer(m *vpnv1.PeerExchangeMessage_Offer, msg *Message) error {
+func (s *peerExchange) handleHandshake(m *vpnv1.PeerExchangeMessage_Handshake, msg *Message) error {
+	s.network.VNIC().PeerCount()
+
+	return nil
+}
+
+func (s *peerExchange) handleMediationOffer(m *vpnv1.PeerExchangeMessage_MediationOffer, msg *Message) error {
 	s.logger.Debug(
 		"handling offer",
 		zap.Stringer("host", msg.SrcHostID()),
@@ -360,7 +368,7 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 	return err
 }
 
-func (s *peerExchange) handleAnswer(m *vpnv1.PeerExchangeMessage_Answer, msg *Message) error {
+func (s *peerExchange) handleMediationAnswer(m *vpnv1.PeerExchangeMessage_MediationAnswer, msg *Message) error {
 	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok {
 		return fmt.Errorf("no mediator to handle answer from %s", msg.SrcHostID())
@@ -369,7 +377,7 @@ func (s *peerExchange) handleAnswer(m *vpnv1.PeerExchangeMessage_Answer, msg *Me
 	return t.SetAnswer(m.MediationId, m.Data)
 }
 
-func (s *peerExchange) handleICECandidate(m *vpnv1.PeerExchangeMessage_IceCandidate, msg *Message) error {
+func (s *peerExchange) handleMediationICECandidate(m *vpnv1.PeerExchangeMessage_MediationIceCandidate, msg *Message) error {
 	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok || t.remoteMediationID != m.MediationId {
 		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.SrcHostID())

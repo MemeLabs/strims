@@ -55,7 +55,7 @@ export namespace CapConnLog {
 
     static encode(m: PeerLog, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.label) w.uint32(10).string(m.label);
+      if (m.label.length) w.uint32(10).string(m.label);
       for (const v of m.events) CapConnLog.PeerLog.Event.encode(v, w.uint32(18).fork()).ldelim();
       return w;
     }
@@ -212,7 +212,7 @@ export class CapConnWatchLogsResponse {
   static encode(m: CapConnWatchLogsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.op) w.uint32(8).uint32(m.op);
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.name.length) w.uint32(18).string(m.name);
     return w;
   }
 
@@ -258,7 +258,7 @@ export class CapConnLoadLogRequest {
 
   static encode(m: CapConnLoadLogRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.name) w.uint32(10).string(m.name);
+    if (m.name.length) w.uint32(10).string(m.name);
     return w;
   }
 

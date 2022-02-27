@@ -27,7 +27,7 @@ export class Image {
     if (m.type) w.uint32(8).uint32(m.type);
     if (m.height) w.uint32(16).uint32(m.height);
     if (m.width) w.uint32(24).uint32(m.width);
-    if (m.data) w.uint32(34).bytes(m.data);
+    if (m.data.length) w.uint32(34).bytes(m.data);
     return w;
   }
 

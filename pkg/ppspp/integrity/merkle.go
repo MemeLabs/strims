@@ -282,7 +282,7 @@ func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 		t = s.Tree
 	}
 
-	if verified, err := v.tree.VerifyWithParent(b, d, t); err != nil {
+	if verified, err := v.tree.Verify(b, d, t); err != nil {
 		return false, err
 	} else if verified {
 		return true, nil

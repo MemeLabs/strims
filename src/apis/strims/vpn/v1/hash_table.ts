@@ -148,11 +148,11 @@ export namespace HashTableMessage {
 
     static encode(m: Record, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.key) w.uint32(10).bytes(m.key);
-      if (m.salt) w.uint32(18).bytes(m.salt);
-      if (m.value) w.uint32(26).bytes(m.value);
+      if (m.key.length) w.uint32(10).bytes(m.key);
+      if (m.salt.length) w.uint32(18).bytes(m.salt);
+      if (m.value.length) w.uint32(26).bytes(m.value);
       if (m.timestamp) w.uint32(32).int64(m.timestamp);
-      if (m.signature) w.uint32(42).bytes(m.signature);
+      if (m.signature.length) w.uint32(42).bytes(m.signature);
       return w;
     }
 
@@ -279,7 +279,7 @@ export namespace HashTableMessage {
     static encode(m: GetRequest, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.requestId) w.uint32(8).uint64(m.requestId);
-      if (m.hash) w.uint32(18).bytes(m.hash);
+      if (m.hash.length) w.uint32(18).bytes(m.hash);
       if (m.ifModifiedSince) w.uint32(24).int64(m.ifModifiedSince);
       return w;
     }

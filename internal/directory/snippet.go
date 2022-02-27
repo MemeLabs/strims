@@ -45,6 +45,9 @@ func diffSnippets(a, b *networkv1directory.ListingSnippet) *networkv1directory.L
 	if a.VideoWidth != b.VideoWidth {
 		delta.VideoWidth = &wrapperspb.UInt32Value{Value: b.VideoWidth}
 	}
+	if a.ThemeColor != b.ThemeColor {
+		delta.ThemeColor = &wrapperspb.UInt32Value{Value: b.ThemeColor}
+	}
 	if !proto.Equal(a.ChannelLogo, b.ChannelLogo) {
 		delta.ChannelLogoOneof = &networkv1directory.ListingSnippetDelta_ChannelLogo{ChannelLogo: b.ChannelLogo}
 	}
@@ -95,6 +98,9 @@ func mergeSnippet(snippet *networkv1directory.ListingSnippet, delta *networkv1di
 	}
 	if delta.VideoWidth != nil {
 		snippet.VideoWidth = delta.VideoWidth.Value
+	}
+	if delta.ThemeColor != nil {
+		snippet.ThemeColor = delta.ThemeColor.Value
 	}
 	if delta.ThumbnailOneof != nil {
 		snippet.Thumbnail = delta.GetThumbnail()
