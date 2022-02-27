@@ -1,20 +1,32 @@
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
+import { format } from "d3-format";
+import { timeFormat } from "d3-time-format";
 import React, { ReactElement, useEffect } from "react";
-import { useInterval } from "react-use";
 import {
   AreaSeries,
   AreaSeriesPoint,
   HeatmapSeries,
   HeatmapSeriesPoint,
+  HorizontalGridLines,
   LineSeries,
   LineSeriesPoint,
   XYPlot,
+  YAxis,
 } from "react-vis";
 
 import { Counter, LabelPair, Metric, MetricFamily } from "../../apis/io/prometheus/client/metrics";
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient } from "../../contexts/FrontendApi";
 import { usePortletSize } from "./Portlet";
+
+const PLOT_MARGIN_LARGE = {
+  top: 5,
+  left: 50,
+  bottom: 5,
+  right: 5,
+};
+
+const PLOT_MARGIN_SMALL = { ...PLOT_MARGIN_LARGE, left: 5 };
 
 interface MetricSeries {
   name: string;
@@ -144,31 +156,46 @@ interface AbstractGraphProps {
   label: string;
   height: number;
   width: number;
+  showAxes: boolean;
 }
 
 interface LineGraphProps extends AbstractGraphProps {
   values: LineSeriesPoint[][];
 }
 
-const LineGraph: React.FC<LineGraphProps> = ({ label, values, height, width }) => (
-  <>
-    <div style={{ "margin": "0 5px" }}>{label}</div>
-    <XYPlot width={width - 10} height={height} margin={5}>
+const LineGraph: React.FC<LineGraphProps> = ({ label, values, height, width, showAxes }) => (
+  <div className="debugger_graph">
+    <div className="debugger_graph__label">{label}</div>
+    <XYPlot
+      className="debugger_graph__plot"
+      width={width - 10}
+      height={height}
+      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
+    >
+      {showAxes && <HorizontalGridLines />}
+      {showAxes && <YAxis tickFormat={format("~s")} />}
       {values.map((data, i) => (
         <LineSeries key={i} data={data} xDomain={seriesDomain(data)} style={{ fill: "none" }} />
       ))}
     </XYPlot>
-  </>
+  </div>
 );
 
 interface SummaryGraphProps extends AbstractGraphProps {
   values: SummarySeries;
 }
 
-const SummaryGraph: React.FC<SummaryGraphProps> = ({ label, values, height, width }) => (
-  <>
-    <div style={{ "margin": "0 5px" }}>{label}</div>
-    <XYPlot width={width - 10} height={height} margin={5}>
+const SummaryGraph: React.FC<SummaryGraphProps> = ({ label, values, height, width, showAxes }) => (
+  <div className="debugger_graph">
+    <div className="debugger_graph__label">{label}</div>
+    <XYPlot
+      className="debugger_graph__plot"
+      width={width - 10}
+      height={height}
+      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
+    >
+      {showAxes && <HorizontalGridLines />}
+      {showAxes && <YAxis tickFormat={format("~s")} />}
       <AreaSeries data={values.range} xDomain={seriesDomain(values.range)} />
       <AreaSeries data={values.iqr} xDomain={seriesDomain(values.iqr)} />
       <LineSeries
@@ -177,20 +204,27 @@ const SummaryGraph: React.FC<SummaryGraphProps> = ({ label, values, height, widt
         style={{ fill: "none" }}
       />
     </XYPlot>
-  </>
+  </div>
 );
 
 interface HeatmapGraphProps extends AbstractGraphProps {
   values: HeatmapSeriesPoint[];
 }
 
-const HeatmapGraph: React.FC<HeatmapGraphProps> = ({ label, values, height, width }) => (
-  <>
-    <div style={{ "margin": "0 5px" }}>{label}</div>
-    <XYPlot width={width - 10} height={height} margin={5}>
+const HeatmapGraph: React.FC<HeatmapGraphProps> = ({ label, values, height, width, showAxes }) => (
+  <div className="debugger_graph">
+    <div className="debugger_graph__label">{label}</div>
+    <XYPlot
+      className="debugger_graph__plot"
+      width={width - 10}
+      height={height}
+      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
+    >
+      {showAxes && <HorizontalGridLines />}
+      {showAxes && <YAxis tickFormat={format("~s")} />}
       <HeatmapSeries data={values} xDomain={seriesDomain(values)} />
     </XYPlot>
-  </>
+  </div>
 );
 
 interface GraphProps extends AbstractGraphProps {
@@ -235,14 +269,15 @@ const useMetrics = (dispatch: (families: MetricFamily[]) => void) => {
 
     return () => events.destroy();
   }, []);
-}
+};
 
 export const ActivityChart: React.FC = () => {
   const [metrics, dispatch] = React.useReducer(metricsReducer, {});
   useMetrics(dispatch);
 
   const { width, height } = usePortletSize();
-  const graphHeight = height > 600 ? 60 : 20;
+  const large = height > 600;
+  const graphHeight = large ? 60 : 20;
 
   return (
     <div style={{ height: "40px" }}>
@@ -251,48 +286,56 @@ export const ActivityChart: React.FC = () => {
         series={metrics["go_gc_duration_seconds"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="go_goroutines"
         series={metrics["go_goroutines"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="go_memstats_heap_objects"
         series={metrics["go_memstats_heap_objects"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="go_memstats_alloc_bytes"
         series={metrics["go_memstats_alloc_bytes"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="go_memstats_alloc_bytes_total"
         series={metrics["go_memstats_alloc_bytes_total"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="go_memstats_mallocs_total"
         series={metrics["go_memstats_mallocs_total"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="strims_vnic_link_read_bytes"
         series={metrics["strims_vnic_link_read_bytes"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
       <Graph
         label="strims_vnic_link_write_bytes"
         series={metrics["strims_vnic_link_write_bytes"]}
         height={graphHeight}
         width={width}
+        showAxes={large}
       />
     </div>
   );
@@ -364,10 +407,17 @@ interface SwarmGraphProps extends AbstractGraphProps {
   values: SwarmSeries;
 }
 
-const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width }) => (
-  <>
-    <div style={{ "margin": "0 5px" }}>{label}</div>
-    <XYPlot width={width - 10} height={height} margin={5}>
+const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width, showAxes }) => (
+  <div className="debugger_graph">
+    <div className="debugger_graph__label">{label}</div>
+    <XYPlot
+      className="debugger_graph__plot"
+      width={width - 10}
+      height={height}
+      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
+    >
+      {showAxes && <HorizontalGridLines />}
+      {showAxes && <YAxis tickFormat={format("~s")} />}
       <AreaSeries data={values.in} xDomain={seriesDomain(values.in)} />
       <AreaSeries data={values.out} xDomain={seriesDomain(values.out)} />
       <LineSeries
@@ -379,7 +429,7 @@ const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width })
         style={{ fill: "none" }}
       />
     </XYPlot>
-  </>
+  </div>
 );
 
 type M<T> = { [key: string]: T };
@@ -451,7 +501,8 @@ export const SwarmChart: React.FC = () => {
   useMetrics(dispatch);
 
   const { width, height } = usePortletSize();
-  const graphHeight = height > 600 ? 60 : 20;
+  const large = height > 600;
+  const graphHeight = large ? 80 : 20;
 
   return (
     <div style={{ height: "40px" }}>
@@ -462,6 +513,7 @@ export const SwarmChart: React.FC = () => {
           values={swarmGraphValues(metrics["data_bytes"])}
           height={graphHeight}
           width={width}
+          showAxes={large}
         />
       ))}
     </div>

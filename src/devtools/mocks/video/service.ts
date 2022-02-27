@@ -44,8 +44,8 @@ export default class VideoService implements EgressService {
             .then((res) => res.arrayBuffer())
             .then((b) => new Uint8Array(b));
           const seg = new Uint8Array(2 + init.length + b.length);
-          seg[0] = init.length & 0xff;
-          seg[1] = (init.length >> 8) & 0xff;
+          seg[0] = (init.length >> 8) & 0xff;
+          seg[1] = init.length & 0xff;
           seg.set(init, 2);
           seg.set(b, 2 + init.length);
           return seg;
@@ -61,7 +61,7 @@ export default class VideoService implements EgressService {
               data: new videov1.EgressOpenStreamResponse.Data({
                 data: segments[i],
                 segmentEnd: true,
-                bufferUnderrun: skip[i],
+                // bufferUnderrun: skip[i],
               }),
             }),
           })

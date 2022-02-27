@@ -39,3 +39,19 @@
     }
   }
 }
+
+.debugger_graph {
+  &__label {
+    margin: 0 5px;
+  }
+
+  &__plot {
+    text {
+      font-size: 0.5em;
+    }
+
+    line {
+      stroke: #eee;
+    }
+  }
+}

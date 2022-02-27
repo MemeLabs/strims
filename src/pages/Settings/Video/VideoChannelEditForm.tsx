@@ -2,9 +2,10 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { ListingSnippet } from "../../../apis/strims/network/v1/directory/directory";
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";
+import VideoChannelForm, { VideoChannelFormData, themeColorOptions } from "./VideoChannelForm";
 
 const VideoChannelEditForm: React.FC = () => {
   const { channelId } = useParams<"channelId">();
@@ -24,6 +25,7 @@ const VideoChannelEditForm: React.FC = () => {
         title: data.title,
         description: data.description,
         tags: data.tags.map(({ value }) => value),
+        themeColor: data.themeColor?.value,
       },
       networkKey: Base64.toUint8Array(data.networkKey),
     });
@@ -39,6 +41,9 @@ const VideoChannelEditForm: React.FC = () => {
     description: channel.directoryListingSnippet.description,
     tags: channel.directoryListingSnippet.tags.map((value) => ({ label: value, value })),
     networkKey: "",
+    themeColor: themeColorOptions.find(
+      ({ value }) => value === channel.directoryListingSnippet.themeColor
+    ),
   };
 
   switch (channel.owner.case) {

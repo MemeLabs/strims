@@ -4,6 +4,7 @@ import useFullscreen from "use-fullscreen";
 
 import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
+import useMediaRelay from "../../hooks/useMediaRelay";
 import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
 import useReady from "../../hooks/useReady";
 import useVideo from "../../hooks/useVideo";
@@ -30,17 +31,23 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const { theaterMode, toggleTheaterMode } = useLayout();
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
-  const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
+
+  if (window.MediaSource) {
+    const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
+
+    useReady(() => {
+      const src = URL.createObjectURL(mediaSource);
+      videoControls.setSrc(src);
+      return () => URL.revokeObjectURL(src);
+    }, [mediaSource]);
+  } else {
+    const src = useMediaRelay({ networkKey, swarmUri, mimeType, videoRef });
+    useReady(() => videoControls.setSrc(src), [src]);
+  }
 
   useEffect(() => {
     console.log(">>>", videoState.error);
   }, [videoState.error]);
-
-  useReady(() => {
-    const src = URL.createObjectURL(mediaSource);
-    videoControls.setSrc(src);
-    return () => URL.revokeObjectURL(src);
-  }, [mediaSource]);
 
   const waitingSpinner =
     videoState.waiting && videoState.loaded ? (
@@ -76,7 +83,12 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       ref={rootRef}
       style={{ aspectRatio }}
     >
-      <video onClick={(e) => e.preventDefault()} className="video_player__video" {...videoProps} />
+      <video
+        onClick={(e) => e.preventDefault()}
+        className="video_player__video"
+        autoPlay
+        {...videoProps}
+      />
       {waitingSpinner}
       <VideoControls
         videoState={videoState}

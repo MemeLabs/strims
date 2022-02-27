@@ -5,12 +5,17 @@ import { Readable, Writable } from "stream";
 
 import React from "react";
 import ReactDOM from "react-dom";
+import registerServiceWorker from "service-worker-loader!./sw";
 
 import { APIDialer, ClientConstructor } from "../contexts/Session";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "./App";
 import Worker from "./svc.worker";
+
+void registerServiceWorker({ scope: "/" })
+  .then(() => console.log("service worker registered"))
+  .catch((e) => console.log("error registering service worker", e));
 
 class WorkerConn {
   bridge: WindowBridge;

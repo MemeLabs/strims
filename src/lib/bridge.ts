@@ -951,6 +951,7 @@ export class WorkerBridge {
     };
     // eslint-disable-next-line
     console.log(
+      new Date().toISOString().padEnd(30),
       level.toUpperCase().padEnd(10),
       caller.padEnd(30),
       msg,

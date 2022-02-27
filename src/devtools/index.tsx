@@ -1,26 +1,29 @@
 import "./styles/main.scss";
 import "../lib/i18n";
 
+import { Readable, Writable } from "stream";
+
 import React from "react";
 import ReactDOM from "react-dom";
+import registerServiceWorker, {
+  ServiceWorkerNoSupportError,
+} from "service-worker-loader!../web/sw";
 
 import { DevToolsClient } from "../apis/client";
 import { WSReadWriter } from "../lib/ws";
 import App from "./root/App";
 
-// import registerServiceWorker, { ServiceWorkerNoSupportError } from "service-worker-loader!./sw";
-
-// void registerServiceWorker({ scope: "/" })
-//   .then((registration) => {
-//     console.log(registration);
-//   })
-//   .catch((e) => {
-//     if (e instanceof ServiceWorkerNoSupportError) {
-//       console.log("service worker not supported");
-//     } else {
-//       console.log("some service worker bullshit", e);
-//     }
-//   });
+void registerServiceWorker({ scope: "/" })
+  .then((registration) => {
+    console.log("service worker registered", registration);
+  })
+  .catch((e) => {
+    if (e instanceof ServiceWorkerNoSupportError) {
+      console.log("service worker not supported");
+    } else {
+      console.log("some service worker bullshit", e);
+    }
+  });
 
 // (() => {
 //   console.log("installing beforeinstallprompt handler");
@@ -55,7 +58,7 @@ import App from "./root/App";
 // })();
 
 (() => {
-  const ws: any = new WSReadWriter(`wss://${location.host}/api`);
+  const ws = new WSReadWriter(`wss://${location.host}/api`) as unknown as Readable & Writable;
   const client = new DevToolsClient(ws, ws);
 
   const root = document.createElement("div");

@@ -1,6 +1,7 @@
 /* eslint-disable */
 import muxjs from "mux.js";
 
+import { Playlist } from "./hls";
 import { Source } from "./source";
 
 const MIME_TYPE = "video/mp4;codecs=mp4a.40.5,avc1.64001F";
@@ -44,5 +45,28 @@ export class Decoder {
     } else {
       console.warn("unhandled event", event.type);
     }
+  }
+}
+
+export class Relay {
+  public playlist: Playlist;
+  private buffer: Uint8Array[] = [];
+
+  public constructor() {
+    this.playlist = new Playlist();
+  }
+
+  public reset() {
+    this.buffer = [];
+    this.playlist.reset();
+  }
+
+  public write(b: Uint8Array): void {
+    this.buffer.push(b);
+  }
+
+  public flush(): void {
+    this.playlist.appendSegment("ts", new Blob(this.buffer, { type: "video/mp2t" }));
+    this.buffer = [];
   }
 }

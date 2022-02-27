@@ -66,7 +66,7 @@ module.exports = (env, argv) => {
     scriptModuleRule,
     styleModuleRule,
     {
-      test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s)$/i,
+      test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s|m3u8)$/i,
       type: "asset/resource",
     },
     {
@@ -255,7 +255,7 @@ module.exports = (env, argv) => {
           target: "web",
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
-            sw: path.join(__dirname, "src", "devtools", "sw.ts"),
+            sw: path.join(__dirname, "src", "web", "sw.ts"),
             // funding: path.join(__dirname, "src", "funding", "index.tsx"),
             ...entries,
           },

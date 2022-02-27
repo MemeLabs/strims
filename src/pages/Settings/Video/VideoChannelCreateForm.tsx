@@ -18,6 +18,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
         title: data.title,
         description: data.description,
         tags: data.tags.map(({ value }) => value),
+        themeColor: data.themeColor?.value,
       },
       networkKey: Base64.toUint8Array(data.networkKey),
     });

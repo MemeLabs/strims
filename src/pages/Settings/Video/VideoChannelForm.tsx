@@ -7,6 +7,7 @@ import {
   CreatableSelectInput,
   InputError,
   NetworkSelectInput,
+  SelectInput,
   SelectOption,
   TextAreaInput,
   TextInput,
@@ -18,6 +19,7 @@ export interface VideoChannelFormData {
   description: string;
   tags: Array<SelectOption<string>>;
   networkKey: string;
+  themeColor: SelectOption<number>;
 }
 
 export interface VideoChannelFormProps {
@@ -27,6 +29,25 @@ export interface VideoChannelFormProps {
   loading: boolean;
   indexLinkVisible: boolean;
 }
+
+export const themeColorOptions = [
+  {
+    value: 0x000000,
+    label: "black",
+  },
+  {
+    value: 0xff0000,
+    label: "red",
+  },
+  {
+    value: 0x00ff00,
+    label: "green",
+  },
+  {
+    value: 0x0000ff,
+    label: "blue",
+  },
+];
 
 const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
   values,
@@ -89,6 +110,12 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
         label="Description"
         placeholder="Description"
         name="description"
+      />
+      <SelectInput
+        control={control}
+        options={themeColorOptions}
+        name="themeColor"
+        label="Theme Color"
       />
       <CreatableSelectInput control={control} name="tags" label="Tags" placeholder="Tags" />
       <NetworkSelectInput
