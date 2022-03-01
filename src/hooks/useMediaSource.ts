@@ -1,5 +1,5 @@
 import { Base64 } from "js-base64";
-import { MutableRefObject, useEffect, useMemo, useState } from "react";
+import { MutableRefObject, useEffect, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/FrontendApi";

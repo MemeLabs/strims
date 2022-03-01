@@ -26,17 +26,13 @@ export class Playlist {
   public reset(): void {
     this.close();
     this.writer = new Writer(this.options);
-    this.writer.onReset = (src: string) => this.onReset?.(src);
+    this.writer.onReset = (src) => this.onReset?.(src);
   }
 
   public close(): void {
     if (this.writer) {
       this.writer.close();
     }
-  }
-
-  public getUrl(): string {
-    return this.writer.getUrl();
   }
 
   public setInitSegment(ext: string, b: Blob): void {
@@ -58,12 +54,23 @@ const enum WriterState {
   CLOSED,
 }
 
+export type MessageData =
+  | {
+      type: "REQUEST";
+      url: string;
+    }
+  | {
+      type: "RESPONSE";
+      url: string;
+      body: Blob;
+    };
+
 class Writer {
   public onReset: (src: string) => void;
   private state: WriterState = WriterState.NEW;
   private cacheName: string;
-  private cache: Cache;
-  private tasks: Promise<any>;
+  private cache: { [key: string]: Blob } = {};
+  private ch: BroadcastChannel;
   private sequence: number = 0;
   private initSegment: string;
   private segments: string[] = [];
@@ -72,24 +79,31 @@ class Writer {
     const cacheId = ((Math.random() * 999) >> 0).toString().padStart(3, "0");
     this.cacheName = `${Date.now()}-${cacheId}`;
 
-    this.tasks = (async () => {
-      this.cache = await caches.open(this.cacheName);
-    })();
+    this.ch = new BroadcastChannel(this.cacheName);
+    this.ch.onmessage = (e: MessageEvent<MessageData>) => this.handleWorkerMessage(e);
+
     this.initSegment = "";
     this.segments = [];
   }
 
   public close() {
-    void this.tasks.then(() => caches.delete(this.cacheName));
+    this.ch.close();
+    URL.revokeObjectURL(this.initSegment);
     this.state = WriterState.CLOSED;
   }
 
-  public getUrl(): string {
-    return this.formatUrl("playlist.m3u8");
+  private handleWorkerMessage(e: MessageEvent<MessageData>) {
+    if (e.data.type === "REQUEST") {
+      this.ch.postMessage({
+        type: "RESPONSE",
+        url: e.data.url,
+        body: this.cache[e.data.url],
+      });
+    }
   }
 
-  private formatUrl(file: string): string {
-    return `/_cache/${this.cacheName}/${file}`;
+  private formatUrl(file: string) {
+    return `/_hls-relay/${this.cacheName}/${file}`;
   }
 
   private formatPlaylist() {
@@ -111,35 +125,24 @@ class Writer {
     return playlist.join("\n");
   }
 
-  private insertTask(fn: () => any) {
-    this.tasks = this.tasks.then(fn);
-  }
-
   public setInitSegment(ext: string, b: Blob): void {
     const url = this.formatUrl(`init.${ext}`);
-
-    this.insertTask(async () => {
-      await this.cache.put(new Request(url), new Response(b));
-      this.initSegment = url;
-    });
+    this.cache[url] = b;
+    this.initSegment = url;
   }
 
   public appendSegment(ext: string, b: Blob): void {
     const sequence = this.sequence++;
     const url = this.formatUrl(`${sequence}.${ext}`);
-
-    this.insertTask(async () => {
-      await this.cache.put(new Request(url), new Response(b));
-      this.segments.push(url);
-      this.prune();
-      this.updatePlaylist();
-    });
+    this.cache[url] = b;
+    this.segments.push(url);
+    this.prune();
+    this.updatePlaylist();
   }
 
   private prune(): void {
     while (this.segments.length > this.options.length) {
-      const url = this.segments.shift();
-      this.insertTask(() => this.cache.delete(new Request(url)));
+      delete this.cache[this.segments.shift()];
     }
   }
 
@@ -148,14 +151,12 @@ class Writer {
       return;
     }
 
-    this.insertTask(async () => {
-      const playlist = new TextEncoder().encode(this.formatPlaylist());
-      const b = new Blob([playlist], { type: "application/vnd.apple.mpegurl" });
-      await this.cache.put(new Request(this.getUrl()), new Response(b));
-    });
+    const url = this.formatUrl("playlist.m3u8");
+    const playlist = new TextEncoder().encode(this.formatPlaylist());
+    this.cache[url] = new Blob([playlist], { type: "application/vnd.apple.mpegurl" });
 
     if (this.state === WriterState.NEW) {
-      this.insertTask(() => this.onReset(this.getUrl()));
+      this.onReset(url);
       this.state = WriterState.READABLE;
     }
   }

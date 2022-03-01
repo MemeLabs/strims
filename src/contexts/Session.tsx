@@ -8,6 +8,8 @@ import { ISignInRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 
+const API_TIMEOUT = 60 * 1000 * 1000;
+
 export interface ClientConstructor<T> {
   new (w: Writable, r: Readable): T;
 }
@@ -122,7 +124,10 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     async (serverAddress: string, name: string, password: string, persistLogin: boolean) => {
       const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
       const client = await conn.client(FrontendClient);
-      const res = await client.auth.signUp({ name, password, persistLogin });
+      const res = await client.auth.signUp(
+        { name, password, persistLogin },
+        { timeout: API_TIMEOUT }
+      );
 
       const profile = new LinkedProfile({
         ...res.linkedProfile,
@@ -140,7 +145,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
   const signIn = useCallback(async (serverAddress: string, req: ISignInRequest) => {
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
-    const res = await client.auth.signIn(req);
+    const res = await client.auth.signIn(req, { timeout: API_TIMEOUT });
 
     const prev = (await db.getAll()).find(
       (p) => p.name === res.linkedProfile.name && p.serverAddress === serverAddress

@@ -87,6 +87,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         onClick={(e) => e.preventDefault()}
         className="video_player__video"
         autoPlay
+        playsInline
         {...videoProps}
       />
       {waitingSpinner}

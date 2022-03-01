@@ -61,7 +61,7 @@ export default class VideoService implements EgressService {
               data: new videov1.EgressOpenStreamResponse.Data({
                 data: segments[i],
                 segmentEnd: true,
-                // bufferUnderrun: skip[i],
+                bufferUnderrun: skip[i],
               }),
             }),
           })

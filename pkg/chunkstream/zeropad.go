@@ -65,11 +65,26 @@ type ZeroPadReader struct {
 	buf []byte
 }
 
+func (c *ZeroPadReader) discard(n int) error {
+	for n > 0 {
+		buf := c.buf
+		if n < len(buf) {
+			buf = buf[:n]
+		}
+
+		nn, err := c.Reader.Read(buf)
+		n -= nn
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *ZeroPadReader) Read(p []byte) (int, error) {
 	n, err := c.Reader.Read(p)
 	if err == io.EOF && c.off != 0 {
-		r := io.LimitReader(&c.Reader, int64(c.size-c.off))
-		if _, err := io.CopyBuffer(io.Discard, r, c.buf); err != nil {
+		if err := c.discard(c.size - c.off); err != nil {
 			return n, err
 		}
 	}

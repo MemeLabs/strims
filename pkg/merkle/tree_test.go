@@ -99,7 +99,7 @@ func TestVerifyMerge(t *testing.T) {
 	// copy verified hashes from temp to verified tree
 	vt.Merge(tt0)
 
-	// confirm all the hashes that verify fillBytes are in the veriifed tree
+	// confirm all the hashes that verify fillBytes are in the verified tree
 	tt1 := NewTree(bin, chunkSize, sha256.New)
 	verified, err = tt1.Verify(fillBin, fillBytes, vt)
 	assert.Nil(t, err, "unexpected error")

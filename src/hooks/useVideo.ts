@@ -191,7 +191,7 @@ const useVideo = (
     ref.current?.pause();
   };
 
-  const setVolume = (volume) => {
+  const setVolume = (volume: number) => {
     if (ref.current) {
       const clampedVolume = Math.max(0, Math.min(1, volume));
       unsafelySetVolume(clampedVolume);

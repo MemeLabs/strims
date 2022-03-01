@@ -45,6 +45,7 @@ func NewControl(
 		directory: directory,
 		network:   network,
 		transfer:  transfer,
+		streams:   transferStreamMap{},
 	}
 }
 
@@ -56,7 +57,7 @@ type control struct {
 	transfer  transfer.Control
 
 	lock    sync.Mutex
-	streams map[transfer.ID]*stream
+	streams transferStreamMap
 }
 
 // Open ...
@@ -225,3 +226,5 @@ type stream struct {
 	swarm            *ppspp.Swarm
 	w                ioutil.WriteFlusher
 }
+
+type transferStreamMap map[transfer.ID]*stream
