@@ -1,0 +1,9 @@
+.loading_placeholder {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  background-color: var(--color-background-layout-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -73,7 +73,7 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes [
 
 func newChatServer(
 	logger *zap.Logger,
-	store kv.Store,
+	store *dao.ProfileStore,
 	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
@@ -130,7 +130,7 @@ func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.Chu
 
 type chatServer struct {
 	logger         *zap.Logger
-	store          kv.Store
+	store          *dao.ProfileStore
 	observers      *event.Observers
 	dialer         network.Dialer
 	transfer       transfer.Control

@@ -5,7 +5,7 @@ import { useToggle } from "react-use";
 
 import NetworkNav from "../../components/Layout/NetworkNav";
 import { useLayout } from "../../contexts/Layout";
-import LoadingPlaceholder from "../../root/LoadingPlaceholder";
+import LoadingPlaceholder from "../LoadingPlaceholder";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 import Chat from "./Chat";
 import Player from "./Player";

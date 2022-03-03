@@ -19,6 +19,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -98,7 +99,10 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 		return vpn.New(logger, vnicHost)
 	}
 
-	sessionManager := session.NewManager(logger, store, newVPN, broker)
+	// TODO: expose via service worker
+	httpmux := httputil.NewMapServeMux()
+
+	sessionManager := session.NewManager(logger, store, newVPN, httpmux, broker)
 
 	srv := frontend.Server{
 		Store:          store,

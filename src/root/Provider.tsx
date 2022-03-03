@@ -1,9 +1,9 @@
 import React, { Suspense } from "react";
 
+import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { Provider as BackgroundRouteProvider } from "../contexts/BackgroundRoute";
 import { APIDialer, Provider as SessionProvider } from "../contexts/Session";
 import { Provider as ThemeProvider } from "../contexts/Theme";
-import LoadingPlaceholder from "./LoadingPlaceholder";
 
 export interface ProviderProps {
   apiDialer: APIDialer;

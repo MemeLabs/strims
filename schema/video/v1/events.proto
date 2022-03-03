@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+import "video/v1/ingress.proto";
+import "video/v1/channel.proto";
+
+message VideoIngressConfigChangeEvent {
+  VideoIngressConfig ingress_config = 1;
+}
+
+message VideoChannelChangeEvent {
+  VideoChannel video_channel = 1;
+}
+
+message VideoChannelDeleteEvent {
+  VideoChannel video_channel = 1;
+}

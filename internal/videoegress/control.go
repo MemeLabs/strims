@@ -1,59 +1,77 @@
 package videoegress
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/hls"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
-// ControlBase ...
-type ControlBase interface {
+// Control ...
+type Control interface {
+	Run()
 	OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) (transfer.ID, io.ReadCloser, error)
+	OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error)
+	CloseHLSStream(swarmURI string) error
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer transfer.Control) Control {
-	// events := make(chan interface{}, 8)
-	// observers.Notify(events)
+func NewControl(
+	ctx context.Context,
+	logger *zap.Logger,
+	httpmux *httputil.MapServeMux,
+	profile *profilev1.Profile,
+	transfer transfer.Control,
+) Control {
+	hlsPath := fmt.Sprintf("/hls/%x", profile.Key.Public)
 
 	return &control{
-		logger:    logger,
-		vpn:       vpn,
-		observers: observers,
-		// events:    events,
+		ctx:      ctx,
+		logger:   logger,
+		httpmux:  httpmux,
 		transfer: transfer,
+
+		hlsPath:    hlsPath,
+		hlsService: hls.NewService(hlsPath),
 	}
 }
 
 // Control ...
 type control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	observers *event.Observers
-	// events    chan interface{}
+	ctx      context.Context
+	logger   *zap.Logger
+	httpmux  *httputil.MapServeMux
 	transfer transfer.Control
 
-	lock sync.Mutex
+	lock       sync.Mutex
+	hlsPath    string
+	hlsService *hls.Service
 }
 
 // Run ...
-func (t *control) Run(ctx context.Context) {
-	<-ctx.Done()
-	t.close()
-}
+func (t *control) Run() {
+	path := t.hlsPath + "/*"
 
-func (t *control) close() {
+	t.logger.Debug("registering hls service", zap.String("path", path))
+	t.httpmux.Handle(path, t.hlsService.Handler())
 
+	<-t.ctx.Done()
+
+	t.logger.Debug("removing hls service", zap.String("path", path))
+	t.httpmux.StopHandling(path)
 }
 
 func (t *control) open(swarmURI string, networkKeys [][]byte) (transfer.ID, *ppspp.Swarm, bool, error) {
@@ -110,6 +128,75 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 		b:             b,
 	}
 	return transferID, r, nil
+}
+
+// OpenHLSStream ...
+func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error) {
+	transferID, swarm, created, err := t.open(swarmURI, networkKeys)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO: prevent opening more than once
+
+	c := &hls.Channel{
+		Name:   hex.EncodeToString(transferID[:]),
+		Stream: hls.NewDefaultStream(),
+	}
+	uri := t.hlsService.InsertChannel(c)
+
+	r := &VideoReader{
+		logger: t.logger.With(
+			logutil.ByteHex("transfer", transferID[:]),
+			zap.Stringer("swarm", swarm.ID()),
+		),
+		transfer:      t.transfer,
+		transferID:    transferID,
+		removeOnClose: created,
+		b:             swarm.Reader(),
+	}
+
+	r.logger.Debug("hls stream starting", zap.String("uri", uri))
+
+	go func() {
+		defer t.hlsService.RemoveChannel(c)
+		defer r.Close()
+
+		var initWritten bool
+
+		var buf bytes.Buffer
+		for {
+			buf.Reset()
+
+			_, err := io.Copy(&buf, r)
+			switch err {
+			case nil:
+				init := buf.Next(int(binary.BigEndian.Uint16(buf.Next(2))))
+				if !initWritten {
+					initWritten = true
+					w := c.Stream.InitWriter()
+					w.Write(init)
+					w.Close()
+				}
+
+				w := c.Stream.NextWriter()
+				buf.WriteTo(w)
+				w.Close()
+			case store.ErrBufferUnderrun:
+				c.Stream.MarkDiscontinuity()
+			default:
+				t.logger.Debug("stream closed", zap.Error(err))
+				return
+			}
+		}
+	}()
+
+	return uri, nil
+}
+
+// CloseHLSStream ...
+func (t *control) CloseHLSStream(swarmURI string) error {
+	return nil
 }
 
 // VideoReader ...

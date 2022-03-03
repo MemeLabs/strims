@@ -34,11 +34,12 @@ type server interface {
 
 // NewControl ...
 func NewControl(
+	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
-	profile *profilev1.Profile,
 	observers *event.Observers,
+	profile *profilev1.Profile,
 	transfer transfer.Control,
 	network network.Control,
 	directory directory.Control,
@@ -47,15 +48,17 @@ func NewControl(
 	observers.Notify(events)
 
 	return &control{
-		logger:        logger,
-		vpn:           vpn,
-		store:         store,
-		profile:       profile,
-		observers:     observers,
+		ctx:     ctx,
+		logger:  logger,
+		vpn:     vpn,
+		store:   store,
+		profile: profile,
+
 		events:        events,
 		ingressConfig: &videov1.VideoIngressConfig{},
 		network:       network,
 		ingressService: newIngressService(
+			ctx,
 			logger,
 			store,
 			transfer,
@@ -67,14 +70,14 @@ func NewControl(
 
 // Control ...
 type control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	store     *dao.ProfileStore
-	profile   *profilev1.Profile
-	observers *event.Observers
-	events    chan interface{}
-	network   network.Control
+	ctx     context.Context
+	logger  *zap.Logger
+	vpn     *vpn.Host
+	store   *dao.ProfileStore
+	profile *profilev1.Profile
+	network network.Control
 
+	events         chan interface{}
 	ingressService *ingressService
 	lock           sync.Mutex
 	ingressConfig  *videov1.VideoIngressConfig
@@ -83,32 +86,32 @@ type control struct {
 }
 
 // Run ...
-func (c *control) Run(ctx context.Context) {
-	go c.loadIngressConfig(ctx)
+func (c *control) Run() {
+	go c.loadIngressConfig()
 
 	for {
 		select {
 		case e := <-c.events:
 			switch e := e.(type) {
 			case event.NetworkStart:
-				c.handleNetworkStart(ctx, e.Network)
+				c.handleNetworkStart(e.Network)
 			case event.NetworkStop:
 				c.handleNetworkStop(e.Network)
-			case event.VideoIngressConfigUpdate:
-				c.reinitIngress(ctx, e.Config)
-			case event.VideoChannelUpdate:
-				c.handleChannelUpdate(e.Channel)
-			case event.VideoChannelRemove:
-				c.handleChannelRemove(e.ID)
+			case *videov1.VideoIngressConfigChangeEvent:
+				c.reinitIngress(e.IngressConfig)
+			case *videov1.VideoChannelChangeEvent:
+				c.handleChannelChange(e.VideoChannel)
+			case *videov1.VideoChannelDeleteEvent:
+				c.handleChannelDelete(e.VideoChannel.Id)
 			}
-		case <-ctx.Done():
+		case <-c.ctx.Done():
 			c.stopIngressServer()
 			return
 		}
 	}
 }
 
-func (c *control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
+func (c *control) handleNetworkStart(network *networkv1.Network) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -125,23 +128,23 @@ func (c *control) handleNetworkStop(network *networkv1.Network) {
 	c.tryStopIngressShareServer(dao.NetworkKey(network))
 }
 
-func (c *control) handleChannelUpdate(channel *videov1.VideoChannel) {
+func (c *control) handleChannelChange(channel *videov1.VideoChannel) {
 	c.ingressService.UpdateChannel(channel)
 }
 
-func (c *control) handleChannelRemove(id uint64) {
+func (c *control) handleChannelDelete(id uint64) {
 	c.ingressService.RemoveChannel(id)
 }
 
-func (c *control) loadIngressConfig(ctx context.Context) {
+func (c *control) loadIngressConfig() {
 	config, err := dao.VideoIngressConfig.Get(c.store)
 	if err != nil {
 		c.logger.Fatal("loading video ingress config failed", zap.Error(err))
 	}
-	c.reinitIngress(ctx, config)
+	c.reinitIngress(config)
 }
 
-func (c *control) reinitIngress(ctx context.Context, next *videov1.VideoIngressConfig) {
+func (c *control) reinitIngress(next *videov1.VideoIngressConfig) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -170,10 +173,10 @@ func (c *control) reinitIngress(ctx context.Context, next *videov1.VideoIngressC
 	if shutdown {
 		c.stopIngressServer()
 	} else if startup {
-		c.startIngressServer(ctx)
+		c.startIngressServer()
 	} else if next.Enabled && prev.ServerAddr != next.ServerAddr {
 		c.stopIngressServer()
-		c.startIngressServer(ctx)
+		c.startIngressServer()
 	}
 }
 
@@ -184,7 +187,7 @@ func (c *control) tryStopIngressShareServer(networkKey []byte) {
 }
 
 func (c *control) tryStartIngressShareServer(networkKey []byte) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(c.ctx)
 	c.shareServers.InsertNoReplace(&videoIngressServersItem{networkKey, cancel})
 
 	go func() {
@@ -236,28 +239,28 @@ func (c *control) stopIngressServer() {
 	}
 }
 
-func (c *control) createServer(ctx context.Context) server {
+func (c *control) createServer() server {
 	return &rtmpingress.Server{
 		Addr:         c.ingressConfig.ServerAddr,
 		HandleStream: c.ingressService.HandleStream,
-		BaseContext:  func(net.Conn) context.Context { return ctx },
+		BaseContext:  func(net.Conn) context.Context { return c.ctx },
 		Logger:       c.logger,
 	}
 }
 
-func (c *control) createPassthruServer(ctx context.Context) server {
+func (c *control) createPassthruServer() server {
 	return &rtmpingress.PassthruServer{
 		Addr:         c.ingressConfig.ServerAddr,
 		HandleStream: c.ingressService.HandlePassthruStream,
-		BaseContext:  func(net.Conn) context.Context { return ctx },
+		BaseContext:  func(net.Conn) context.Context { return c.ctx },
 		Logger:       c.logger,
 	}
 }
 
-func (c *control) startIngressServer(ctx context.Context) {
+func (c *control) startIngressServer() {
 	// TODO: allow configuring server mode?
-	c.ingressServer = c.createPassthruServer(ctx)
-	// c.ingressServer = c.createServer(ctx)
+	c.ingressServer = c.createPassthruServer()
+	// c.ingressServer = c.createServer()
 
 	go func() {
 		c.logger.Debug(
@@ -276,12 +279,7 @@ func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) {
 
 // SetIngressConfig ...
 func (c *control) SetIngressConfig(config *videov1.VideoIngressConfig) error {
-	if err := dao.VideoIngressConfig.Set(c.store, config); err != nil {
-		return err
-	}
-
-	c.observers.EmitGlobal(event.VideoIngressConfigUpdate{Config: config})
-	return nil
+	return dao.VideoIngressConfig.Set(c.store, config)
 }
 
 type videoIngressServersItem struct {

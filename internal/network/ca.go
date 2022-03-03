@@ -11,7 +11,6 @@ import (
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
@@ -22,8 +21,9 @@ type CA interface {
 }
 
 // newCA ...
-func newCA(logger *zap.Logger,
-	vpn *vpn.Host,
+func newCA(
+	ctx context.Context,
+	logger *zap.Logger,
 	store *dao.ProfileStore,
 	observers *event.Observers,
 	dialer Dialer,
@@ -32,48 +32,47 @@ func newCA(logger *zap.Logger,
 	observers.Notify(events)
 
 	return &ca{
-		logger:    logger,
-		vpn:       vpn,
-		store:     store,
-		observers: observers,
-		events:    events,
-		dialer:    dialer,
-		servers:   map[uint64]context.CancelFunc{},
+		ctx:     ctx,
+		logger:  logger,
+		store:   store,
+		dialer:  dialer,
+		events:  events,
+		servers: map[uint64]context.CancelFunc{},
 	}
 }
 
 // CA ...
 type ca struct {
-	logger            *zap.Logger
-	vpn               *vpn.Host
-	store             *dao.ProfileStore
-	observers         *event.Observers
+	ctx    context.Context
+	logger *zap.Logger
+	store  *dao.ProfileStore
+	dialer Dialer
+
+	events            chan interface{}
 	lock              sync.Mutex
 	servers           map[uint64]context.CancelFunc
-	events            chan interface{}
-	dialer            Dialer
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 }
 
 // Run ...
-func (t *ca) Run(ctx context.Context) {
+func (t *ca) Run() {
 	for {
 		select {
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.NetworkStart:
-				t.handleNetworkStart(ctx, e.Network)
+				t.handleNetworkStart(e.Network)
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
 			}
-		case <-ctx.Done():
+		case <-t.ctx.Done():
 			return
 		}
 	}
 }
 
-func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
+func (t *ca) handleNetworkStart(network *networkv1.Network) {
 	config := network.GetServerConfig()
 	if config == nil {
 		return
@@ -84,7 +83,7 @@ func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network)
 		logutil.ByteHex("network", config.Key.Public),
 	)
 
-	server, err := t.dialer.Server(ctx, config.Key.Public, config.Key, AddressSalt)
+	server, err := t.dialer.Server(t.ctx, config.Key.Public, config.Key, AddressSalt)
 	if err != nil {
 		t.logger.Error(
 			"starting certificate authority failed",
@@ -95,7 +94,7 @@ func (t *ca) handleNetworkStart(ctx context.Context, network *networkv1.Network)
 	}
 
 	networkv1ca.RegisterCAService(server, newCAService(t.logger, t.store, network))
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(t.ctx)
 	go server.Listen(ctx)
 
 	t.servers[network.Id] = cancel

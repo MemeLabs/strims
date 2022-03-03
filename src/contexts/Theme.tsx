@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Helmet } from "react-helmet";
 
 type ColorScheme = "dark" | "light";
 
@@ -25,15 +26,28 @@ export const Provider: React.FC = ({ children }) => {
     }, []);
   }
 
+  // TODO: load from... config? webpack?
+  const themeColor = colorScheme === "dark" ? "#222933" : "#d5d5d5";
+
   const value = useMemo(
     () => ({
       colorScheme,
-      setColorScheme,
+      setColorScheme: (v: ColorScheme) => {
+        window.localStorage.setItem("theme", v);
+        setColorScheme(v);
+      },
     }),
     [colorScheme]
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <Helmet>
+        <meta name="theme-color" content={themeColor} />
+      </Helmet>
+      {children}
+    </ThemeContext.Provider>
+  );
 };
 
 Provider.displayName = "Theme.Provider";

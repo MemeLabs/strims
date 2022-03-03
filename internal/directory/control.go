@@ -26,7 +26,7 @@ var (
 )
 
 type Control interface {
-	Run(ctx context.Context)
+	Run()
 	ReadCachedEvents(ctx context.Context, ch chan interface{})
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
 	DeleteSnippet(swarmID ppspp.SwarmID)
@@ -37,7 +37,9 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger,
+func NewControl(
+	ctx context.Context,
+	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
@@ -50,13 +52,14 @@ func NewControl(logger *zap.Logger,
 	snippets := &snippetMap{}
 
 	return &control{
+		ctx:       ctx,
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
-		events:    events,
 		network:   network,
 		transfer:  transfer,
+		events:    events,
 
 		eventCache: map[uint64]*eventCache{},
 
@@ -73,14 +76,15 @@ func NewControl(logger *zap.Logger,
 
 // Control ...
 type control struct {
+	ctx       context.Context
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
-	events    chan interface{}
 	network   network.Control
 	transfer  transfer.Control
 
+	events     chan interface{}
 	lock       sync.Mutex
 	runners    llrb.LLRB
 	eventCache map[uint64]*eventCache
@@ -90,7 +94,7 @@ type control struct {
 }
 
 // Run ...
-func (t *control) Run(ctx context.Context) {
+func (t *control) Run() {
 	pingTimer := time.NewTimer(pingStartupDelay)
 	defer pingTimer.Stop()
 
@@ -99,7 +103,7 @@ func (t *control) Run(ctx context.Context) {
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.NetworkStart:
-				t.handleNetworkStart(ctx, e.Network)
+				t.handleNetworkStart(e.Network)
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
 			case *networkv1.NetworkChangeEvent:
@@ -108,18 +112,18 @@ func (t *control) Run(ctx context.Context) {
 		case <-pingTimer.C:
 			fuzz := rand.Int63n(int64((maxPingInterval - minPingInterval)))
 			pingTimer.Reset(minPingInterval + time.Duration(fuzz))
-			t.ping(ctx)
-		case <-ctx.Done():
+			t.ping()
+		case <-t.ctx.Done():
 			return
 		}
 	}
 }
 
-func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
+func (t *control) handleNetworkStart(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	r, err := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
+	r, err := newRunner(t.ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
 	if err != nil {
 		t.logger.Error("failed to start directory runner", zap.Error(err))
 		return
@@ -129,7 +133,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	c := newEventCache(network)
 	t.eventCache[network.Id] = c
 
-	go t.snippetServer.start(ctx, network)
+	go t.snippetServer.start(t.ctx, network)
 
 	go func() {
 		defer func() {
@@ -139,9 +143,7 @@ func (t *control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 		}()
 
 		for {
-			er, stop, err := r.Reader(ctx)
-			defer stop()
-
+			er, stop, err := r.Reader(t.ctx)
 			if err != nil {
 				t.logger.Debug("error getting directory event reader", zap.Error(err))
 				return
@@ -186,20 +188,20 @@ func (t *control) handleNetworkChange(network *networkv1.Network) {
 	}
 }
 
-func (t *control) ping(ctx context.Context) {
+func (t *control) ping() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.runners.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
 		r := i.(*runner)
-		c, dc, err := t.client(ctx, r.key)
+		c, dc, err := t.client(t.ctx, r.key)
 		if err != nil {
 			r.Logger().Debug("directory ping failed", zap.Error(err))
 			return true
 		}
 
 		go func() {
-			err := dc.Ping(ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
+			err := dc.Ping(t.ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
 			if err != nil {
 				r.Logger().Debug("directory ping failed", zap.Error(err))
 			}

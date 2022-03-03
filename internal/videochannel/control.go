@@ -2,13 +2,9 @@ package videochannel
 
 import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"go.uber.org/zap"
 )
 
 // Option ...
@@ -23,21 +19,15 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) Control {
+func NewControl(store *dao.ProfileStore) Control {
 	return &control{
-		logger:    logger,
-		vpn:       vpn,
-		store:     store,
-		observers: observers,
+		store: store,
 	}
 }
 
 // Control ...
 type control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	store     *dao.ProfileStore
-	observers *event.Observers
+	store *dao.ProfileStore
 }
 
 // GetChannel ...
@@ -71,26 +61,13 @@ func (c *control) CreateChannel(opts ...Option) (*videov1.VideoChannel, error) {
 
 // UpdateChannel ...
 func (c *control) UpdateChannel(id uint64, opts ...Option) (*videov1.VideoChannel, error) {
-	var channel *videov1.VideoChannel
-	err := c.store.Update(func(tx kv.RWTx) (err error) {
-		channel, err = dao.VideoChannels.Get(tx, id)
-		if err != nil {
+	return dao.VideoChannels.Transform(c.store, id, func(p *videov1.VideoChannel) error {
+		if err := channelOptionSlice(opts).Apply(p); err != nil {
 			return err
 		}
 
-		if err := channelOptionSlice(opts).Apply(channel); err != nil {
-			return err
-		}
-
-		return dao.VideoChannels.Update(c.store, channel)
+		return dao.VideoChannels.Update(c.store, p)
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	c.observers.EmitGlobal(event.VideoChannelUpdate{Channel: channel})
-
-	return channel, err
 }
 
 type channelOptionSlice []Option
@@ -149,11 +126,5 @@ func WithRemoteShareOwner(share *videov1.VideoChannel_RemoteShare) Option {
 
 // DeleteChannel ...
 func (c *control) DeleteChannel(id uint64) error {
-	if err := dao.VideoChannels.Delete(c.store, id); err != nil {
-		return err
-	}
-
-	c.observers.EmitGlobal(event.VideoChannelRemove{ID: id})
-
-	return nil
+	return dao.VideoChannels.Delete(c.store, id)
 }

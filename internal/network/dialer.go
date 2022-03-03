@@ -34,7 +34,11 @@ type Dialer interface {
 }
 
 // newDialer ...
-func newDialer(logger *zap.Logger, vpn *vpn.Host, key *key.Key) *dialer {
+func newDialer(
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	key *key.Key,
+) *dialer {
 	return &dialer{
 		logger: logger,
 		vpn:    vpn,

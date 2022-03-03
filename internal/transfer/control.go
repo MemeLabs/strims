@@ -31,7 +31,7 @@ const (
 )
 
 type Control interface {
-	Run(ctx context.Context)
+	Run()
 	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
 	RemovePeer(id uint64)
 	Add(swarm *ppspp.Swarm, salt []byte) ID
@@ -43,32 +43,39 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) Control {
+func NewControl(
+	ctx context.Context,
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	observers *event.Observers,
+) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &control{
-		logger:    logger,
-		vpn:       vpn,
-		qosc:      vpn.VNIC().QOS().AddClass(1),
-		observers: observers,
+		ctx:    ctx,
+		logger: logger,
+		vpn:    vpn,
+		qosc:   vpn.VNIC().QOS().AddClass(1),
+
 		events:    events,
 		transfers: map[ID]*transfer{},
 		peers:     map[uint64]*peer{},
 		// candidates:  newCandidatePool(logger, vpn),
 		searchQueue: newSearchQueue(int(peerSearchInterval / peerSearchTickRate)),
 		networks:    hashmap.New[[]byte, *network](hashmap.NewByteInterface()),
-		runner:      ppspp.NewRunner(context.Background(), logger),
+		runner:      ppspp.NewRunner(ctx, logger),
 	}
 }
 
 // Control ...
 type control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	qosc      *qos.Class
+	ctx    context.Context
+	logger *zap.Logger
+	vpn    *vpn.Host
+	qosc   *qos.Class
+
 	lock      sync.Mutex
-	observers *event.Observers
 	events    chan interface{}
 	transfers map[ID]*transfer
 	peers     map[uint64]*peer
@@ -79,7 +86,7 @@ type control struct {
 }
 
 // Run ...
-func (c *control) Run(ctx context.Context) {
+func (c *control) Run() {
 	peerSerachTicker := timeutil.DefaultTickEmitter.Ticker(peerSearchTickRate)
 	defer peerSerachTicker.Stop()
 
@@ -100,16 +107,17 @@ func (c *control) Run(ctx context.Context) {
 				c.handleNetworkPeerClose(e.PeerID, e.NetworkKey)
 			}
 		case t := <-peerSerachTicker.C:
-			c.runPeerSearch(ctx, t)
+			c.runPeerSearch(t)
 		case t := <-debugTicker.C:
 			c.debug(t)
-		case <-ctx.Done():
+		case <-c.ctx.Done():
 			return
 		}
 	}
 }
 
 func (c *control) debug(t timeutil.Time) {
+	return
 	var summary strings.Builder
 	for id, p := range c.peers {
 		snap := p.runnerPeer.MetricsSnapshot(t)
@@ -121,7 +129,7 @@ func (c *control) debug(t timeutil.Time) {
 	log.Println(summary.String())
 }
 
-func (c *control) runPeerSearch(ctx context.Context, t timeutil.Time) {
+func (c *control) runPeerSearch(t timeutil.Time) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	for _, it := range c.searchQueue.Next() {

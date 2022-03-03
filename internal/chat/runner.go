@@ -12,13 +12,12 @@ import (
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
-func newRunner(ctx context.Context,
+func newRunner(
+	ctx context.Context,
 	logger *zap.Logger,
-	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
 	dialer network.Dialer,
@@ -31,18 +30,19 @@ func newRunner(ctx context.Context,
 	logger = logger.With(logutil.ByteHex("chat", key))
 
 	a := &runnerAdapter{
-		logger:     logger,
-		store:      store,
-		observers:  observers,
-		dialer:     dialer,
-		transfer:   transfer,
-		directory:  directory,
+		logger:    logger,
+		store:     store,
+		observers: observers,
+		dialer:    dialer,
+		transfer:  transfer,
+		directory: directory,
+
 		key:        key,
 		networkKey: networkKey,
 		config:     config,
 	}
 
-	m, err := servicemanager.New[readers](logger, context.Background(), a)
+	m, err := servicemanager.New[readers](logger, ctx, a)
 	if err != nil {
 		return nil, err
 	}
@@ -63,12 +63,13 @@ type readers struct {
 }
 
 type runnerAdapter struct {
-	logger     *zap.Logger
-	store      *dao.ProfileStore
-	observers  *event.Observers
-	dialer     network.Dialer
-	transfer   transfer.Control
-	directory  directory.Control
+	logger    *zap.Logger
+	store     *dao.ProfileStore
+	observers *event.Observers
+	dialer    network.Dialer
+	transfer  transfer.Control
+	directory directory.Control
+
 	key        []byte
 	networkKey []byte
 	config     *chatv1.Server

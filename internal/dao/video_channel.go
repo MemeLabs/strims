@@ -12,9 +12,20 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"google.golang.org/protobuf/proto"
 )
 
-var VideoChannels = NewTable[videov1.VideoChannel](videoChannelNS, nil)
+var VideoChannels = NewTable[videov1.VideoChannel](
+	videoChannelNS,
+	&TableOptions[videov1.VideoChannel]{
+		ObserveChange: func(m, p *videov1.VideoChannel) proto.Message {
+			return &videov1.VideoChannelChangeEvent{VideoChannel: m}
+		},
+		ObserveDelete: func(m *videov1.VideoChannel) proto.Message {
+			return &videov1.VideoChannelDeleteEvent{VideoChannel: m}
+		},
+	},
+)
 
 const (
 	_ byte = iota

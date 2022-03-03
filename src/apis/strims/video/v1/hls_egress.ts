@@ -60,18 +60,22 @@ export class HLSEgressIsSupportedResponse {
 
 export type IHLSEgressOpenStreamRequest = {
   swarmUri?: string;
+  networkKeys?: Uint8Array[];
 }
 
 export class HLSEgressOpenStreamRequest {
   swarmUri: string;
+  networkKeys: Uint8Array[];
 
   constructor(v?: IHLSEgressOpenStreamRequest) {
     this.swarmUri = v?.swarmUri || "";
+    this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
   static encode(m: HLSEgressOpenStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.swarmUri.length) w.uint32(10).string(m.swarmUri);
+    for (const v of m.networkKeys) w.uint32(18).bytes(v);
     return w;
   }
 
@@ -84,6 +88,9 @@ export class HLSEgressOpenStreamRequest {
       switch (tag >> 3) {
         case 1:
         m.swarmUri = r.string();
+        break;
+        case 2:
+        m.networkKeys.push(r.bytes())
         break;
         default:
         r.skipType(tag & 7);

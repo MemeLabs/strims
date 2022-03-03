@@ -376,6 +376,8 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 		return lag[s.ranks[i]].Mean() > lag[s.ranks[j]].Mean()
 	})
 
+	return
+
 	fmt.Printf(">>> ranks %d\n", s.ranks)
 
 	var sb0, sb1, sb2, sb3 strings.Builder

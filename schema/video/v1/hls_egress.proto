@@ -14,6 +14,7 @@ message HLSEgressIsSupportedResponse {
 
 message HLSEgressOpenStreamRequest {
   string swarm_uri = 1;
+  repeated bytes network_keys = 2;
 }
 
 message HLSEgressOpenStreamResponse {

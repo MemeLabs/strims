@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -27,16 +28,10 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []app.Control, error) {
 
 	ctrl := make([]app.Control, len(cluster.Hosts))
 	for i, node := range cluster.Hosts {
-		ctrl[i] = app.NewControl(
-			logger,
-			network.NewBroker(logger),
-			node.VPN,
-			node.Store,
-			&event.Observers{},
-			node.Profile,
-		)
+		ioctx := api.NewIOContext(context.Background(), logger, node.VPN, node.Store, &event.Observers{}, nil)
+		ctrl[i] = app.NewControl(ioctx, network.NewBroker(logger), node.Profile)
 
-		go ctrl[i].Run(context.Background())
+		go ctrl[i].Run()
 
 		qosc := node.VPN.VNIC().QOS().AddClass(1)
 		h := peer.NewPeerHandler(logger, ctrl[i], node.Store, qosc)

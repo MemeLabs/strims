@@ -23,9 +23,9 @@ func newDirectoryServer(
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
+	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
-	observers *event.Observers,
 	network *networkv1.Network,
 ) (*directoryServer, error) {
 	config := network.GetServerConfig()
@@ -47,20 +47,16 @@ func newDirectoryServer(
 	}
 
 	s := &directoryServer{
-		logger:   logger,
-		vpn:      vpn,
 		dialer:   dialer,
 		transfer: transfer,
 		key:      config.Key,
 		swarm:    w.Swarm(),
-		service:  newDirectoryService(logger, vpn, store, dialer, observers, network, ew),
+		service:  newDirectoryService(logger, vpn, store, observers, dialer, network, ew),
 	}
 	return s, nil
 }
 
 type directoryServer struct {
-	logger      *zap.Logger
-	vpn         *vpn.Host
 	dialer      network.Dialer
 	transfer    transfer.Control
 	key         *key.Key

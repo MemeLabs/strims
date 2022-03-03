@@ -18,23 +18,27 @@ type Channel struct {
 }
 
 // NewService ...
-func NewService() (s *Service) {
+func NewService(prefix string) (s *Service) {
 	return &Service{
+		prefix:   prefix,
 		channels: map[string]*Channel{},
 	}
 }
 
 // Service ...
 type Service struct {
+	prefix   string
 	mu       sync.RWMutex
 	channels map[string]*Channel
 }
 
 // InsertChannel ...
-func (s *Service) InsertChannel(c *Channel) {
+func (s *Service) InsertChannel(c *Channel) string {
 	s.mu.Lock()
 	s.channels[c.Name] = c
 	s.mu.Unlock()
+
+	return fmt.Sprintf("%s/%s/index.m3u8", s.prefix, c.Name)
 }
 
 // RemoveChannel ...
@@ -47,9 +51,9 @@ func (s *Service) RemoveChannel(c *Channel) {
 // Handler ...
 func (s *Service) Handler() http.Handler {
 	r := mux.NewRouter()
-	r.HandleFunc("/hls/{name:[a-z0-9]+}/{segment:[0-9]{0,9}}.m4s", s.handleSegment)
-	r.HandleFunc("/hls/{name:[a-z0-9]+}/init.mp4", s.handleInit)
-	r.HandleFunc("/hls/{name:[a-z0-9]+}/index.m3u8", s.handlePlaylist)
+	r.HandleFunc(s.prefix+"/{name:[a-z0-9]+}/{segment:[0-9]{0,9}}.m4s", s.handleSegment)
+	r.HandleFunc(s.prefix+"/{name:[a-z0-9]+}/init.mp4", s.handleInit)
+	r.HandleFunc(s.prefix+"/{name:[a-z0-9]+}/index.m3u8", s.handlePlaylist)
 	return r
 }
 
@@ -118,18 +122,22 @@ func (s *Service) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	// TODO: low segment reads may exit early if the buffer gets recycled before
 	// all the reads finish... truncate the playlist to avoid advertising
 	// segments that expire soon
-	low, high := ch.Stream.Range()
+	low, high, dm := ch.Stream.Range()
 
 	var b bytes.Buffer
 	b.WriteString("#EXTM3U\n")
 	b.WriteString("#EXT-X-VERSION:7\n")
 	b.WriteString("#EXT-X-TARGETDURATION:1\n")
 	b.WriteString(fmt.Sprintf("#EXT-X-MEDIA-SEQUENCE:%s\n", strconv.FormatUint(low, 10)))
-	b.WriteString(fmt.Sprintf("#EXT-X-MAP:URI=\"/hls/%s/init.mp4\"\n", params["name"]))
+	b.WriteString(fmt.Sprintf("#EXT-X-MAP:URI=\"%s/%s/init.mp4\"\n", s.prefix, params["name"]))
 
 	for i := low; i < high; i++ {
-		b.WriteString(fmt.Sprintf("#EXTINF:1,\n"))
-		b.WriteString(fmt.Sprintf("/hls/%s/%s.m4s\n", params["name"], strconv.FormatUint(i, 10)))
+		if dm.Get(i, high) {
+			b.WriteString("#EXT-X-DISCONTINUITY\n")
+		} else {
+			b.WriteString(fmt.Sprintf("#EXTINF:1,\n"))
+			b.WriteString(fmt.Sprintf("%s/%s/%s.m4s\n", s.prefix, params["name"], strconv.FormatUint(i, 10)))
+		}
 	}
 
 	io.Copy(w, &b)

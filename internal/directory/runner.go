@@ -31,15 +31,15 @@ func newRunner(
 	logger = logger.With(logutil.ByteHex("directory", dao.NetworkKey(network)))
 
 	a := &runnerAdapter{
-		key:     dao.NetworkKey(network),
-		network: syncutil.NewPointer(network),
-
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
 		dialer:    dialer,
 		transfer:  transfer,
+
+		key:     dao.NetworkKey(network),
+		network: syncutil.NewPointer(network),
 	}
 
 	m, err := servicemanager.New[*protoutil.ChunkStreamReader](logger, ctx, a)
@@ -76,15 +76,15 @@ func (r *runner) Logger() *zap.Logger {
 }
 
 type runnerAdapter struct {
-	key     []byte
-	network syncutil.Pointer[networkv1.Network]
-
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
 	dialer    network.Dialer
 	transfer  transfer.Control
+
+	key     []byte
+	network syncutil.Pointer[networkv1.Network]
 }
 
 func (s *runnerAdapter) Mutex() *dao.Mutex {
@@ -99,5 +99,5 @@ func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStream
 	if s.network.Get().GetServerConfig() == nil {
 		return nil, nil
 	}
-	return newDirectoryServer(s.logger, s.vpn, s.store, s.dialer, s.transfer, s.observers, s.network.Get())
+	return newDirectoryServer(s.logger, s.vpn, s.store, s.observers, s.dialer, s.transfer, s.network.Get())
 }

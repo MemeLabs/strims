@@ -12,13 +12,14 @@ import (
 )
 
 type Control interface {
-	Run(ctx context.Context)
+	Run()
 	GetConfig() (*vnicv1.Config, error)
 	SetConfig(config *vnicv1.Config) error
 }
 
 // NewControl ...
 func NewControl(
+	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
@@ -28,10 +29,11 @@ func NewControl(
 	observers.Notify(events)
 
 	return &control{
-		logger:        logger,
-		vpn:           vpn,
-		store:         store,
-		observers:     observers,
+		ctx:    ctx,
+		logger: logger,
+		vpn:    vpn,
+		store:  store,
+
 		events:        events,
 		ingressConfig: &vnicv1.Config{},
 	}
@@ -39,18 +41,18 @@ func NewControl(
 
 // Control ...
 type control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	store     *dao.ProfileStore
-	observers *event.Observers
-	events    chan interface{}
+	ctx    context.Context
+	logger *zap.Logger
+	vpn    *vpn.Host
+	store  *dao.ProfileStore
 
+	events        chan interface{}
 	lock          sync.Mutex
 	ingressConfig *vnicv1.Config
 }
 
 // Run ...
-func (c *control) Run(ctx context.Context) {
+func (c *control) Run() {
 	go c.loadConfig()
 
 	for {
@@ -60,7 +62,7 @@ func (c *control) Run(ctx context.Context) {
 			case *vnicv1.ConfigChangeEvent:
 				c.applyConfig(e.Config)
 			}
-		case <-ctx.Done():
+		case <-c.ctx.Done():
 			return
 		}
 	}

@@ -10,8 +10,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-
-	"go.uber.org/zap"
 )
 
 type PeerControl interface {
@@ -22,9 +20,13 @@ type PeerControl interface {
 }
 
 // NewPeerControl ...
-func NewPeerControl(logger *zap.Logger, observers *event.Observers, network network.Control, transfer transfer.Control, bootstrap bootstrap.Control) PeerControl {
+func NewPeerControl(
+	observers *event.Observers,
+	network network.Control,
+	transfer transfer.Control,
+	bootstrap bootstrap.Control,
+) PeerControl {
 	return &peerControl{
-		logger:    logger,
 		observers: observers,
 		network:   network,
 		transfer:  transfer,
@@ -35,7 +37,6 @@ func NewPeerControl(logger *zap.Logger, observers *event.Observers, network netw
 
 // PeerControl ...
 type peerControl struct {
-	logger    *zap.Logger
 	observers *event.Observers
 	network   network.Control
 	transfer  transfer.Control

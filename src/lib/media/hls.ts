@@ -54,23 +54,21 @@ const enum WriterState {
   CLOSED,
 }
 
-export type MessageData =
-  | {
-      type: "REQUEST";
-      url: string;
-    }
-  | {
-      type: "RESPONSE";
-      url: string;
-      body: Blob;
-    };
+export interface RequestMessage {
+  type: "HLS_RELAY_REQUEST";
+  url: string;
+  port: MessagePort;
+}
+
+export interface ResponseMessage {
+  body: Blob;
+}
 
 class Writer {
   public onReset: (src: string) => void;
   private state: WriterState = WriterState.NEW;
   private cacheName: string;
   private cache: { [key: string]: Blob } = {};
-  private ch: BroadcastChannel;
   private sequence: number = 0;
   private initSegment: string;
   private segments: string[] = [];
@@ -79,28 +77,24 @@ class Writer {
     const cacheId = ((Math.random() * 999) >> 0).toString().padStart(3, "0");
     this.cacheName = `${Date.now()}-${cacheId}`;
 
-    this.ch = new BroadcastChannel(this.cacheName);
-    this.ch.onmessage = (e: MessageEvent<MessageData>) => this.handleWorkerMessage(e);
+    navigator.serviceWorker.addEventListener("message", this.handleWorkerMessage);
 
     this.initSegment = "";
     this.segments = [];
   }
 
   public close() {
-    this.ch.close();
-    URL.revokeObjectURL(this.initSegment);
+    navigator.serviceWorker.removeEventListener("message", this.handleWorkerMessage);
     this.state = WriterState.CLOSED;
   }
 
-  private handleWorkerMessage(e: MessageEvent<MessageData>) {
-    if (e.data.type === "REQUEST") {
-      this.ch.postMessage({
-        type: "RESPONSE",
-        url: e.data.url,
-        body: this.cache[e.data.url],
-      });
+  private handleWorkerMessage = (e: MessageEvent<RequestMessage>) => {
+    const body = this.cache[e.data.url];
+    if (e.data?.type === "HLS_RELAY_REQUEST" && body !== undefined) {
+      e.data.port.postMessage({ body });
+      e.data.port.close();
     }
-  }
+  };
 
   private formatUrl(file: string) {
     return `/_hls-relay/${this.cacheName}/${file}`;

@@ -35,12 +35,14 @@ type Control interface {
 
 // NewControl ...
 func NewControl(
+	ctx context.Context,
 	logger *zap.Logger,
 	transfer transfer.Control,
 	directory directory.Control,
 	network network.Control,
 ) Control {
 	return &control{
+		ctx:       ctx,
 		logger:    logger,
 		directory: directory,
 		network:   network,
@@ -51,6 +53,7 @@ func NewControl(
 
 // Control ...
 type control struct {
+	ctx       context.Context
 	logger    *zap.Logger
 	directory directory.Control
 	network   network.Control
@@ -208,11 +211,11 @@ func (c *control) publishDirectoryListing(networkKey []byte, s *stream) (uint64,
 		},
 	}
 
-	return c.directory.Publish(context.Background(), listing, networkKey)
+	return c.directory.Publish(c.ctx, listing, networkKey)
 }
 
 func (c *control) unpublishDirectoryListing(networkKey []byte, s *stream) error {
-	return c.directory.Unpublish(context.Background(), s.directoryID, networkKey)
+	return c.directory.Unpublish(c.ctx, s.directoryID, networkKey)
 }
 
 type stream struct {

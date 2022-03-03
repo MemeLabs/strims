@@ -123,6 +123,7 @@ type Stream struct {
 	init     *Segment
 	segments []*Segment
 	index    uint64
+	dm       discontinuityMap
 }
 
 // NewStream ...
@@ -146,7 +147,7 @@ func NewDefaultStream() *Stream {
 }
 
 // Range ...
-func (l *Stream) Range() (low uint64, high uint64) {
+func (l *Stream) Range() (low, high uint64, dm discontinuityMap) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -154,7 +155,7 @@ func (l *Stream) Range() (low uint64, high uint64) {
 	if high >= uint64(l.opt.HistorySize) {
 		low = high - uint64(l.opt.HistorySize)
 	}
-	return
+	return low, high, l.dm
 }
 
 // InitWriter ...
@@ -167,25 +168,48 @@ func (l *Stream) InitReader() io.Reader {
 	return &SegmentReader{src: l.init}
 }
 
+func (l *Stream) MarkDiscontinuity() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	l.index++
+	l.dm.Advance()
+	l.dm.Set()
+}
+
 // NextWriter ...
-func (l *Stream) NextWriter() io.WriteCloser {
+func (l *Stream) NextWriter() *Segment {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	i := l.index % uint64(l.opt.HistorySize)
 	l.index++
+	l.dm.Advance()
 
 	l.segments[i].Reset()
 	return l.segments[i]
 }
 
 // SegmentReader ...
-func (l *Stream) SegmentReader(i uint64) (r io.Reader, err error) {
-	min, max := l.Range()
-	if i < min || i >= max {
+func (l *Stream) SegmentReader(i uint64) (io.Reader, error) {
+	min, max, dm := l.Range()
+	if i < min || i >= max || dm.Get(i, max) {
 		return nil, ErrNotFound
 	}
 
-	r = &SegmentReader{src: l.segments[i%uint64(l.opt.HistorySize)]}
-	return
+	return &SegmentReader{src: l.segments[i%uint64(l.opt.HistorySize)]}, nil
+}
+
+type discontinuityMap uint64
+
+func (m *discontinuityMap) Advance() {
+	*m <<= 1
+}
+
+func (m *discontinuityMap) Set() {
+	*m |= 1
+}
+
+func (m *discontinuityMap) Get(i, max uint64) bool {
+	return *m&(1<<(max-i)) != 0
 }

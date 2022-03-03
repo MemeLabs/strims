@@ -16,7 +16,11 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, store *dao.ProfileStore, observers *event.Observers) Control {
+func NewControl(
+	logger *zap.Logger,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+) Control {
 	return &control{
 		logger:    logger,
 		store:     store,

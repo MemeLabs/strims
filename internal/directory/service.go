@@ -80,13 +80,21 @@ var (
 	}, []string{"type", "id"})
 )
 
-func newDirectoryService(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer network.Dialer, observers *event.Observers, network *networkv1.Network, ew *protoutil.ChunkStreamWriter) *directoryService {
+func newDirectoryService(
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+	dialer network.Dialer,
+	network *networkv1.Network,
+	ew *protoutil.ChunkStreamWriter,
+) *directoryService {
 	return &directoryService{
 		logger:          logger,
 		vpn:             vpn,
 		store:           store,
-		dialer:          dialer,
 		observers:       observers,
+		dialer:          dialer,
 		network:         syncutil.NewPointer(network),
 		done:            make(chan struct{}),
 		broadcastTicker: timeutil.DefaultTickEmitter.Ticker(broadcastInterval),
@@ -98,11 +106,12 @@ func newDirectoryService(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileSt
 }
 
 type directoryService struct {
-	logger            *zap.Logger
-	vpn               *vpn.Host
-	store             *dao.ProfileStore
-	dialer            network.Dialer
-	observers         *event.Observers
+	logger    *zap.Logger
+	vpn       *vpn.Host
+	store     *dao.ProfileStore
+	observers *event.Observers
+	dialer    network.Dialer
+
 	network           syncutil.Pointer[networkv1.Network]
 	closeOnce         sync.Once
 	done              chan struct{}

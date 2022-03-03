@@ -9,7 +9,7 @@ export interface WithThemeProps {
   className: string;
 }
 
-export const withTheme = <T extends any>(
+export const withTheme = <T,>(
   C: ComponentType<T & WithThemeProps>
 ): React.FC<Omit<T, keyof WithThemeProps>> => {
   const Theme: React.FC<T> = (props) => {

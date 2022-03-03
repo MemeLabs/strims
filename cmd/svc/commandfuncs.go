@@ -98,7 +98,7 @@ func runCmd(fs Flags) error {
 		}
 	}
 
-	httpMux := httputil.NewMapServeMux()
+	httpmux := httputil.NewMapServeMux()
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		var opts []vnic.HostOption
 		if cfg.VNIC.Label.Ok() {
@@ -109,7 +109,7 @@ func runCmd(fs Flags) error {
 		}
 		if cfg.VNIC.WebSocket.Enabled.Get(true) {
 			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{
-				ServeMux: httpMux,
+				ServeMux: httpmux,
 			})))
 		}
 		host, err := vnic.New(logger, key, opts...)
@@ -125,7 +125,7 @@ func runCmd(fs Flags) error {
 	}
 	closers = append(closers, store)
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger))
+	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
 
 	for _, s := range cfg.Session.Headless {
 		_, err := sessionManager.GetOrCreateSession(s.ID, s.Key)
@@ -141,7 +141,7 @@ func runCmd(fs Flags) error {
 			SessionManager: sessionManager,
 		}
 
-		httpMux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
+		httpmux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
 			err := srv.Listen(ctx, httputil.NewWSReadWriter(c))
 			logger.Debug("remote client closed", zap.Error(err))
 		}))
@@ -151,7 +151,7 @@ func runCmd(fs Flags) error {
 		eg.Go(func() (err error) {
 			srv := &http.Server{
 				Addr:    cfg.HTTP.Address.MustGet(),
-				Handler: httpMux,
+				Handler: httpmux,
 			}
 			closers = append(closers, srv)
 

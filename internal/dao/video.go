@@ -1,6 +1,9 @@
 package dao
 
-import videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+import (
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	"google.golang.org/protobuf/proto"
+)
 
 const (
 	_ = iota + videoNS
@@ -14,6 +17,9 @@ var VideoIngressConfig = NewSingleton(
 	&SingletonOptions[videov1.VideoIngressConfig]{
 		DefaultValue: &videov1.VideoIngressConfig{
 			ServerAddr: "127.0.0.1:1935",
+		},
+		ObserveChange: func(m, p *videov1.VideoIngressConfig) proto.Message {
+			return &videov1.VideoIngressConfigChangeEvent{IngressConfig: m}
 		},
 	},
 )

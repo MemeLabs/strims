@@ -18,7 +18,7 @@ import (
 )
 
 type Control interface {
-	Run(ctx context.Context)
+	Run()
 	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
 	RemovePeer(id uint64)
 	PublishingEnabled() bool
@@ -26,29 +26,36 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) Control {
+func NewControl(
+	ctx context.Context,
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+) Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &control{
-		logger:    logger,
-		vpn:       vpn,
-		store:     store,
-		observers: observers,
-		events:    events,
-		peers:     map[uint64]*peer{},
+		ctx:    ctx,
+		logger: logger,
+		vpn:    vpn,
+		store:  store,
+
+		events: events,
+		peers:  map[uint64]*peer{},
 	}
 }
 
 // Control ...
 type control struct {
+	ctx    context.Context
 	logger *zap.Logger
 	vpn    *vpn.Host
 	store  *dao.ProfileStore
 
-	lock              sync.Mutex
-	observers         *event.Observers
 	events            chan interface{}
+	lock              sync.Mutex
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 	nextID            uint64
@@ -56,7 +63,7 @@ type control struct {
 }
 
 // Run ...
-func (t *control) Run(ctx context.Context) {
+func (t *control) Run() {
 	go t.startClients()
 
 	for {
@@ -64,17 +71,17 @@ func (t *control) Run(ctx context.Context) {
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.PeerAdd:
-				t.handlePeerAdd(ctx, e.ID)
+				t.handlePeerAdd(e.ID)
 			case *networkv1bootstrap.BootstrapClientChange:
 				go t.startClient(e.BootstrapClient)
 			}
-		case <-ctx.Done():
+		case <-t.ctx.Done():
 			return
 		}
 	}
 }
 
-func (t *control) handlePeerAdd(ctx context.Context, id uint64) {
+func (t *control) handlePeerAdd(id uint64) {
 	peer, ok := t.peers[id]
 	if !ok {
 		return
@@ -82,7 +89,7 @@ func (t *control) handlePeerAdd(ctx context.Context, id uint64) {
 
 	go func() {
 		var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
-		if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+		if err := peer.client.Bootstrap().GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
 			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
 		}
 

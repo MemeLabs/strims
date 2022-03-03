@@ -15,7 +15,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -26,7 +25,7 @@ var (
 )
 
 type Control interface {
-	Run(ctx context.Context)
+	Run()
 	SyncAssets(serverID uint64, forceUnifiedUpdate bool) error
 	ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
 	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
@@ -34,8 +33,8 @@ type Control interface {
 
 // NewControl ...
 func NewControl(
+	ctx context.Context,
 	logger *zap.Logger,
-	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
 	network network.Control,
@@ -46,36 +45,37 @@ func NewControl(
 	observers.Notify(events)
 
 	return &control{
+		ctx:       ctx,
 		logger:    logger,
-		vpn:       vpn,
 		store:     store,
 		observers: observers,
-		events:    events,
 		network:   network,
 		transfer:  transfer,
 		directory: directory,
-		runners:   hashmap.New[[]byte, *runner](hashmap.NewByteInterface()),
+
+		events:  events,
+		runners: hashmap.New[[]byte, *runner](hashmap.NewByteInterface()),
 	}
 }
 
 // Control ...
 type control struct {
+	ctx       context.Context
 	logger    *zap.Logger
-	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
-	events    chan interface{}
 	network   network.Control
 	transfer  transfer.Control
 	directory directory.Control
 
+	events  chan interface{}
 	lock    sync.Mutex
 	runners hashmap.Map[[]byte, *runner]
 }
 
 // Run ...
-func (t *control) Run(ctx context.Context) {
-	if err := t.startServerRunners(ctx); err != nil {
+func (t *control) Run() {
+	if err := t.startServerRunners(); err != nil {
 		t.logger.Debug("starting chat server runners failed", zap.Error(err))
 	}
 
@@ -84,44 +84,44 @@ func (t *control) Run(ctx context.Context) {
 		case e := <-t.events:
 			switch e := e.(type) {
 			case *chatv1.ServerChangeEvent:
-				t.handleServerChange(ctx, e.Server)
+				t.handleServerChange(e.Server)
 			case *chatv1.ServerDeleteEvent:
-				t.handleServerDelete(ctx, e.Server)
+				t.handleServerDelete(e.Server)
 			}
-		case <-ctx.Done():
+		case <-t.ctx.Done():
 			return
 		}
 	}
 }
 
-func (t *control) startServerRunners(ctx context.Context) error {
+func (t *control) startServerRunners() error {
 	servers, err := dao.ChatServers.GetAll(t.store)
 	if err != nil {
 		return err
 	}
 
 	for _, server := range servers {
-		t.startServerRunner(ctx, server)
+		t.startServerRunner(server)
 	}
 	return nil
 }
 
-func (t *control) handleServerChange(ctx context.Context, server *chatv1.Server) {
+func (t *control) handleServerChange(server *chatv1.Server) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	if !t.runners.Has(server.Key.Public) {
-		t.startServerRunner(ctx, server)
+		t.startServerRunner(server)
 	}
 }
 
-func (t *control) handleServerDelete(ctx context.Context, server *chatv1.Server) {
+func (t *control) handleServerDelete(server *chatv1.Server) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	t.stopServerRunner(ctx, server)
+	t.stopServerRunner(server)
 }
 
-func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) {
-	runner, err := newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, server.Key.Public, server.NetworkKey, server)
+func (t *control) startServerRunner(server *chatv1.Server) {
+	runner, err := newRunner(t.ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, server.Key.Public, server.NetworkKey, server)
 	if err != nil {
 		t.logger.Error("failed to start chat runner",
 			logutil.ByteHex("chat", server.Key.Public),
@@ -134,7 +134,7 @@ func (t *control) startServerRunner(ctx context.Context, server *chatv1.Server) 
 	t.runners.Set(server.Key.Public, runner)
 }
 
-func (t *control) stopServerRunner(ctx context.Context, server *chatv1.Server) {
+func (t *control) stopServerRunner(server *chatv1.Server) {
 	runner, ok := t.runners.Delete(server.Key.Public)
 	if ok {
 		runner.Close()
@@ -171,7 +171,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 	runner, ok := t.runners.Get(key)
 	if !ok {
 		var err error
-		runner, err = newRunner(ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
+		runner, err = newRunner(ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
 		if err != nil {
 			logger.Error("failed to start chat runner", zap.Error(err))
 			return nil, nil, err

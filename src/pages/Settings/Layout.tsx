@@ -5,8 +5,8 @@ import React, { ReactElement, Suspense, useCallback } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { NavLink, Outlet } from "react-router-dom";
 
+import LoadingPlaceholder from "../../components/LoadingPlaceholder";
 import SwipablePanel from "../../components/SwipablePanel";
-import LoadingPlaceholder from "../../root/LoadingPlaceholder";
 
 export interface NavProps {
   open?: boolean;

@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/peer"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -26,12 +27,19 @@ type Session struct {
 	App     app.Control
 }
 
-func NewManager(logger *zap.Logger, store kv.BlobStore, newVPN VPNFunc, broker network.Broker) *Manager {
+func NewManager(
+	logger *zap.Logger,
+	store kv.BlobStore,
+	newVPN VPNFunc,
+	broker network.Broker,
+	httpmux *httputil.MapServeMux,
+) *Manager {
 	return &Manager{
 		logger:   logger,
 		store:    store,
 		newVPN:   newVPN,
 		broker:   broker,
+		httpmux:  httpmux,
 		sessions: map[uint64]*Session{},
 	}
 }
@@ -41,6 +49,7 @@ type Manager struct {
 	store    kv.BlobStore
 	newVPN   VPNFunc
 	broker   network.Broker
+	httpmux  *httputil.MapServeMux
 	sessions map[uint64]*Session
 }
 
@@ -67,9 +76,7 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 		return nil, err
 	}
 
-	app := app.NewControl(t.logger, t.broker, vpn, store, observers, profile)
-	go app.Run(context.Background())
-
+	app := app.NewControl(context.Background(), t.logger, vpn, store, observers, t.httpmux, t.broker, profile)
 	qosc := vpn.VNIC().QOS().AddClass(1)
 	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(t.logger, app, store, qosc))
 

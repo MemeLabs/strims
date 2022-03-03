@@ -11,7 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func newChatReader(logger *zap.Logger, transfer transfer.Control, key, networkKey []byte) (*chatReader, error) {
+func newChatReader(
+	logger *zap.Logger,
+	transfer transfer.Control,
+	key []byte,
+	networkKey []byte,
+) (*chatReader, error) {
 	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", key[:8])}
 	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)

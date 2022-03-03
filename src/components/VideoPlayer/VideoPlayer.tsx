@@ -1,7 +1,9 @@
+import { Base64 } from "js-base64";
 import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
+import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useMediaRelay from "../../hooks/useMediaRelay";
@@ -43,6 +45,15 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   } else {
     const src = useMediaRelay({ networkKey, swarmUri, mimeType, videoRef });
     useReady(() => videoControls.setSrc(src), [src]);
+
+    // const client = useClient();
+    // useEffect(() => {
+    //   void client.hlsEgress
+    //     .openStream({ swarmUri, networkKeys: [Base64.toUint8Array(networkKey)] })
+    //     .then(({ playlistUrl }) => {
+    //       videoRef.current.src = "https://192.168.0.107:8083" + playlistUrl;
+    //     });
+    // }, [networkKey, swarmUri]);
   }
 
   useEffect(() => {

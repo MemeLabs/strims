@@ -30,7 +30,7 @@
         var(--color-background-input-toggle) 50%,
         var(--color-background-input) 50%
       );
-      transform: translateX(-2em);
+      transform: translateZ(0) translateX(-2em);
       width: 4em;
     }
 
@@ -41,17 +41,17 @@
         background: var(--color-foreground-toggle);
         border-radius: 0.5em;
         box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
-        transform: translateX(0);
+        transform: translateZ(0) translateX(0);
         width: 1em;
       }
     }
   }
 
   :checked + &__switch:before {
-    transform: translateX(-0.5em);
+    transform: translateZ(0) translateX(-0.5em);
   }
   :checked + &__switch &__switch__track:after {
-    transform: translateX(1em);
+    transform: translateZ(0) translateX(1em);
   }
 
   :disabled + &__switch:before {

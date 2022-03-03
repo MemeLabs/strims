@@ -72,9 +72,13 @@ func (r *Runner[R, T]) Close() {
 	}
 }
 
-func (r *Runner[R, T]) Reader(ctx context.Context) (R, StopFunc, error) {
+func (r *Runner[R, T]) Reader(ctx context.Context) (reader R, stop StopFunc, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	if err = r.ctx.Err(); err != nil {
+		return
+	}
 
 	if r.ref == nil {
 		client, err := r.adapter.Client()
@@ -88,7 +92,7 @@ func (r *Runner[R, T]) Reader(ctx context.Context) (R, StopFunc, error) {
 	}
 
 	r.logger.Debug("creating reader", logutil.Type("source", r.ref.readable))
-	reader, err := r.ref.readable.Reader(ctx)
+	reader, err = r.ref.readable.Reader(ctx)
 	if err != nil {
 		return reader, nil, err
 	}
@@ -97,7 +101,7 @@ func (r *Runner[R, T]) Reader(ctx context.Context) (R, StopFunc, error) {
 	ref.count++
 
 	var stopOnce sync.Once
-	stop := func() {
+	stop = func() {
 		stopOnce.Do(func() {
 			r.lock.Lock()
 			defer r.lock.Unlock()

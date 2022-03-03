@@ -19,6 +19,7 @@ import (
 
 // NewControl ...
 func NewControl(
+	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
@@ -35,7 +36,7 @@ func NewControl(
 type control struct{}
 
 // Run ...
-func (c *control) Run(ctx context.Context) {}
+func (c *control) Run() {}
 
 // GetIngressConfig ...
 func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) { return nil, nil }

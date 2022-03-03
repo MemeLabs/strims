@@ -81,18 +81,7 @@ module.exports = (env, argv) => {
     meta: {
       viewport:
         "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, shrink-to-fit=no",
-      "theme:light": {
-        name: "theme-color",
-        content: "#d5d5d5",
-        media: "(prefers-color-scheme: light)",
-      },
-      "theme:dark": {
-        name: "theme-color",
-        content: "#222933",
-        media: "(prefers-color-scheme: dark)",
-      },
       "apple-mobile-web-app-capable": "yes",
-      "apple-mobile-web-app-status-bar-style": "black",
     },
   };
 

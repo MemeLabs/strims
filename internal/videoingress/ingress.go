@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -26,6 +25,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -35,6 +35,7 @@ import (
 const streamUpdateInterval = time.Minute
 
 func newIngressService(
+	ctx context.Context,
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	transfer transfer.Control,
@@ -42,6 +43,7 @@ func newIngressService(
 	directory directory.Control,
 ) *ingressService {
 	return &ingressService{
+		ctx:        ctx,
 		logger:     logger,
 		store:      store,
 		transfer:   transfer,
@@ -53,6 +55,7 @@ func newIngressService(
 }
 
 type ingressService struct {
+	ctx        context.Context
 	logger     *zap.Logger
 	store      *dao.ProfileStore
 	transfer   transfer.Control
@@ -86,6 +89,7 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 	defer c.Close()
 
 	stream, err := newIngressStream(
+		s.ctx,
 		s.logger,
 		s.store,
 		s.transfer,
@@ -136,6 +140,7 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 
 func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) (ioutil.WriteFlusher, error) {
 	stream, err := newIngressStream(
+		s.ctx,
 		s.logger,
 		s.store,
 		s.transfer,
@@ -174,6 +179,7 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 }
 
 func newIngressStream(
+	ctx context.Context,
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	transfer transfer.Control,
@@ -187,7 +193,7 @@ func newIngressStream(
 		return nil, fmt.Errorf("getting channel: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	s = &ingressStream{
 		logger:    logger.With(zap.Uint64("channel", channel.Id)),
@@ -201,11 +207,11 @@ func newIngressStream(
 
 		startTime:      timeutil.Now(),
 		channelID:      channel.Id,
+		channel:        syncutil.NewPointer(channel),
 		channelUpdates: make(chan struct{}, 1),
 		conn:           conn,
 	}
 
-	s.channel.Store(channel)
 	s.channelUpdates <- struct{}{}
 
 	mu := dao.NewMutex(logger, store, channel.Id)
@@ -253,7 +259,7 @@ type ingressStream struct {
 
 	startTime      timeutil.Time
 	channelID      uint64
-	channel        atomic.Value
+	channel        syncutil.Pointer[videov1.VideoChannel]
 	channelUpdates chan struct{}
 	directoryID    uint64
 	conn           io.Closer
@@ -274,17 +280,13 @@ func (s *ingressStream) Close() {
 }
 
 func (s *ingressStream) UpdateChannel(channel *videov1.VideoChannel) {
-	s.channel.Store(channel)
+	s.channel.Swap(channel)
 
 	select {
 	case s.channelUpdates <- struct{}{}:
 	case <-s.ctx.Done():
 	default:
 	}
-}
-
-func (s *ingressStream) loadChannel() *videov1.VideoChannel {
-	return s.channel.Load().(*videov1.VideoChannel)
 }
 
 func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, error) {
@@ -300,7 +302,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, e
 				LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 			},
 		},
-		Key: s.loadChannel().Key,
+		Key: s.channel.Get().Key,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -315,7 +317,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, e
 }
 
 func (s *ingressStream) channelNetworkKey() []byte {
-	switch o := s.loadChannel().Owner.(type) {
+	switch o := s.channel.Get().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
 	case *videov1.VideoChannel_LocalShare_:
@@ -326,7 +328,7 @@ func (s *ingressStream) channelNetworkKey() []byte {
 }
 
 func (s *ingressStream) channelCreatorCert() (*certificate.Certificate, error) {
-	switch o := s.loadChannel().Owner.(type) {
+	switch o := s.channel.Get().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
@@ -369,7 +371,7 @@ func (s *ingressStream) syncDirectorySnippet() {
 	for {
 		select {
 		case <-s.channelUpdates:
-			channelSnippet := s.loadChannel().DirectoryListingSnippet
+			channelSnippet := s.channel.Get().DirectoryListingSnippet
 			snippet.Title = channelSnippet.Title
 			snippet.Description = channelSnippet.Description
 			snippet.Tags = channelSnippet.Tags
@@ -409,7 +411,7 @@ func (s *ingressStream) syncDirectorySnippet() {
 			},
 		}
 
-		if err := dao.SignMessage(snippet, s.loadChannel().Key); err != nil {
+		if err := dao.SignMessage(snippet, s.channel.Get().Key); err != nil {
 			s.logger.Debug("signing listing snippet failed", zap.Error(err))
 			continue
 		}
