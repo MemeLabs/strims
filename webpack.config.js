@@ -242,6 +242,10 @@ module.exports = (env, argv) => {
       return [
         {
           target: "web",
+          stats: {
+            children: true,
+            errorDetails: true,
+          },
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
             sw: path.join(__dirname, "src", "web", "sw.ts"),

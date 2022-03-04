@@ -102,7 +102,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	// TODO: expose via service worker
 	httpmux := httputil.NewMapServeMux()
 
-	sessionManager := session.NewManager(logger, store, newVPN, httpmux, broker)
+	sessionManager := session.NewManager(logger, store, newVPN, broker, httpmux)
 
 	srv := frontend.Server{
 		Store:          store,

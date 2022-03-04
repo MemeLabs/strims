@@ -366,17 +366,21 @@ const Search: React.FC<SearchProps> = ({
 
   let box = (
     <div className="search__box">
-      <input
-        ref={inputRef}
-        className="search__input"
-        autoCapitalize="off"
-        spellCheck="false"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onFocus={() => toggleIsFocused(true)}
-        placeholder={t("directory.Search")}
-      />
+      <form action="." className="search__form">
+        <input
+          ref={inputRef}
+          type="search"
+          className="search__input"
+          autoCapitalize="off"
+          autoComplete="off"
+          spellCheck="false"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => toggleIsFocused(true)}
+          placeholder={t("directory.Search")}
+        />
+      </form>
       <FiSearch className="search__icon" />
     </div>
   );

@@ -12,7 +12,7 @@ import InputLabel from "./InputLabel";
 export interface TextInputProps extends ComponentProps<"input"> {
   label: string;
   description?: string;
-  type?: "text" | "password" | "number";
+  type?: "text" | "password" | "number" | "search";
   format?: "text";
 }
 

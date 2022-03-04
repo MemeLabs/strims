@@ -69,9 +69,9 @@ const HLSEgressConfigForm = () => {
             },
           }}
           label="Public address"
-          description="Public address where peers can reach the RTMP server."
+          description="Public address where clients can reach the HLS server."
           name="publicServerAddr"
-          placeholder="ex: ingress.strims.gg"
+          placeholder="ex: https://cdn.strims.gg"
         />
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>

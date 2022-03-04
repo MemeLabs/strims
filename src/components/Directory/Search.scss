@@ -14,11 +14,13 @@
     background-color: var(--color-background-input);
   }
 
+  &__form,
   &__input {
-    background: white;
     color: var(--color-text-input);
     background: transparent;
+    display: flex;
     flex: 1;
+    -webkit-appearance: none;
   }
 
   &__icon {

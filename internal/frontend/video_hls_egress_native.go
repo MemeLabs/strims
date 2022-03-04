@@ -32,7 +32,7 @@ type videoHLSEgressService struct {
 
 // IsSupported ...
 func (s *videoHLSEgressService) IsSupported(ctx context.Context, r *videov1.HLSEgressIsSupportedRequest) (*videov1.HLSEgressIsSupportedResponse, error) {
-	return &videov1.HLSEgressIsSupportedResponse{Supported: s.app.VideoEgress().HLSEgressEnabled()}, nil
+	return &videov1.HLSEgressIsSupportedResponse{Supported: true}, nil
 }
 
 func (s *videoHLSEgressService) GetConfig(ctx context.Context, r *videov1.HLSEgressGetConfigRequest) (*videov1.HLSEgressGetConfigResponse, error) {

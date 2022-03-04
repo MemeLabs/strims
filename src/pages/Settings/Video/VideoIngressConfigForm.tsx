@@ -99,7 +99,7 @@ const VideoIngressConfigForm = () => {
             },
           }}
           label="Public address"
-          description="Public address where peers can reach the RTMP server."
+          description="Public address where broadcasters can reach the RTMP server."
           name="publicServerAddr"
           placeholder="ex: ingress.strims.gg"
         />

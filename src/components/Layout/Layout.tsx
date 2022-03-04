@@ -25,7 +25,7 @@ const getViewportShape = (prev?: ViewportShape): ViewportShape => {
   let width = window.visualViewport?.width ?? window.innerWidth;
   const orientation = window.orientation ?? 0;
 
-  // in ios if the on screen keyboard was opened while the app was in pwa
+  // in ios if the on screen keyboard was opened and closed with the app in pwa
   // fullscreen mode with landscape orientation the VisualViewport api returns
   // erronious small heights in portrait mode. this bug clears after the next
   // resize event in portrait mode.
@@ -33,7 +33,7 @@ const getViewportShape = (prev?: ViewportShape): ViewportShape => {
   let useFixedSize = true;
   if (IS_PWA && OS === "iOS") {
     if (prev?.orientation !== 0 && orientation !== 0 && prev?.height !== height) {
-      safariViewportBug = true;
+      safariViewportBug = prev?.height > height;
     }
     if (prev?.orientation === 0 && orientation === 0 && prev?.height !== height) {
       safariViewportBug = false;
