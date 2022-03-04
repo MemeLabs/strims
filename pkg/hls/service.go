@@ -11,41 +11,43 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Channel ...
-type Channel struct {
-	Name   string
-	Stream *Stream
-}
-
 // NewService ...
 func NewService(prefix string) (s *Service) {
 	return &Service{
-		prefix:   prefix,
-		channels: map[string]*Channel{},
+		prefix:  prefix,
+		streams: map[string]*Stream{},
 	}
 }
 
 // Service ...
 type Service struct {
-	prefix   string
-	mu       sync.RWMutex
-	channels map[string]*Channel
+	prefix  string
+	mu      sync.RWMutex
+	streams map[string]*Stream
 }
 
-// InsertChannel ...
-func (s *Service) InsertChannel(c *Channel) string {
+// InsertStream ...
+func (s *Service) InsertStream(name string, stream *Stream) bool {
 	s.mu.Lock()
-	s.channels[c.Name] = c
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
-	return fmt.Sprintf("%s/%s/index.m3u8", s.prefix, c.Name)
+	ok := s.streams[name] == nil
+	if ok {
+		s.streams[name] = stream
+	}
+	return ok
 }
 
-// RemoveChannel ...
-func (s *Service) RemoveChannel(c *Channel) {
+// RemoveStream ...
+func (s *Service) RemoveStream(name string) {
 	s.mu.Lock()
-	delete(s.channels, c.Name)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+
+	delete(s.streams, name)
+}
+
+func (s *Service) PlaylistRoute(name string) string {
+	return fmt.Sprintf("%s/%s/index.m3u8", s.prefix, name)
 }
 
 // Handler ...
@@ -61,10 +63,10 @@ func (s *Service) handleSegment(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	s.mu.RLock()
-	ch := s.channels[params["name"]]
+	stream := s.streams[params["name"]]
 	s.mu.RUnlock()
 
-	if ch == nil {
+	if stream == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -75,7 +77,7 @@ func (s *Service) handleSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cr, err := ch.Stream.SegmentReader(segment)
+	cr, err := stream.SegmentReader(segment)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -91,27 +93,27 @@ func (s *Service) handleInit(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	s.mu.RLock()
-	ch := s.channels[params["name"]]
+	stream := s.streams[params["name"]]
 	s.mu.RUnlock()
 
-	if ch == nil {
+	if stream == nil {
 		http.NotFound(w, r)
 		return
 	}
 
 	w.Header().Set("Content-Type", "video/mp4")
 	w.WriteHeader(200)
-	io.Copy(w, ch.Stream.InitReader())
+	io.Copy(w, stream.InitReader())
 }
 
 func (s *Service) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	s.mu.RLock()
-	ch := s.channels[params["name"]]
+	stream := s.streams[params["name"]]
 	s.mu.RUnlock()
 
-	if ch == nil {
+	if stream == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -122,7 +124,7 @@ func (s *Service) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	// TODO: low segment reads may exit early if the buffer gets recycled before
 	// all the reads finish... truncate the playlist to avoid advertising
 	// segments that expire soon
-	low, high, dm := ch.Stream.Range()
+	low, high, dm := stream.Range()
 
 	var b bytes.Buffer
 	b.WriteString("#EXTM3U\n")

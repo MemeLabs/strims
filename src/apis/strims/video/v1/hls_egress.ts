@@ -2,6 +2,49 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
+export type IHLSEgressConfig = {
+  enabled?: boolean;
+  publicServerAddr?: string;
+}
+
+export class HLSEgressConfig {
+  enabled: boolean;
+  publicServerAddr: string;
+
+  constructor(v?: IHLSEgressConfig) {
+    this.enabled = v?.enabled || false;
+    this.publicServerAddr = v?.publicServerAddr || "";
+  }
+
+  static encode(m: HLSEgressConfig, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.enabled) w.uint32(8).bool(m.enabled);
+    if (m.publicServerAddr.length) w.uint32(18).string(m.publicServerAddr);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressConfig {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HLSEgressConfig();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.enabled = r.bool();
+        break;
+        case 2:
+        m.publicServerAddr = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IHLSEgressIsSupportedRequest = {
 }
 
@@ -48,6 +91,134 @@ export class HLSEgressIsSupportedResponse {
       switch (tag >> 3) {
         case 1:
         m.supported = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IHLSEgressGetConfigRequest = {
+}
+
+export class HLSEgressGetConfigRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IHLSEgressGetConfigRequest) {
+  }
+
+  static encode(m: HLSEgressGetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressGetConfigRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new HLSEgressGetConfigRequest();
+  }
+}
+
+export type IHLSEgressGetConfigResponse = {
+  config?: IHLSEgressConfig;
+}
+
+export class HLSEgressGetConfigResponse {
+  config: HLSEgressConfig | undefined;
+
+  constructor(v?: IHLSEgressGetConfigResponse) {
+    this.config = v?.config && new HLSEgressConfig(v.config);
+  }
+
+  static encode(m: HLSEgressGetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressGetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HLSEgressGetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = HLSEgressConfig.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IHLSEgressSetConfigRequest = {
+  config?: IHLSEgressConfig;
+}
+
+export class HLSEgressSetConfigRequest {
+  config: HLSEgressConfig | undefined;
+
+  constructor(v?: IHLSEgressSetConfigRequest) {
+    this.config = v?.config && new HLSEgressConfig(v.config);
+  }
+
+  static encode(m: HLSEgressSetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressSetConfigRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HLSEgressSetConfigRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = HLSEgressConfig.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IHLSEgressSetConfigResponse = {
+  config?: IHLSEgressConfig;
+}
+
+export class HLSEgressSetConfigResponse {
+  config: HLSEgressConfig | undefined;
+
+  constructor(v?: IHLSEgressSetConfigResponse) {
+    this.config = v?.config && new HLSEgressConfig(v.config);
+  }
+
+  static encode(m: HLSEgressSetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressSetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HLSEgressSetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = HLSEgressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

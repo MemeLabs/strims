@@ -12,6 +12,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/session"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -55,7 +56,9 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		return vpn.New(logger, vnicHost)
 	}
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger))
+	httpmux := httputil.NewMapServeMux()
+
+	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
 
 	srv := frontend.Server{
 		Store:          store,

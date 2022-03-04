@@ -6,10 +6,29 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
 option java_package = "gg.strims.video.v1";
 option swift_prefix = "SVO";
 
+message HLSEgressConfig {
+  bool enabled = 1;
+  string public_server_addr = 2;
+}
+
 message HLSEgressIsSupportedRequest {}
 
 message HLSEgressIsSupportedResponse {
   bool supported = 1;
+}
+
+message HLSEgressGetConfigRequest {}
+
+message HLSEgressGetConfigResponse {
+  HLSEgressConfig config = 1;
+}
+
+message HLSEgressSetConfigRequest {
+  HLSEgressConfig config = 1;
+}
+
+message HLSEgressSetConfigResponse {
+  HLSEgressConfig config = 1;
 }
 
 message HLSEgressOpenStreamRequest {
@@ -29,6 +48,8 @@ message HLSEgressCloseStreamResponse {}
 
 service HLSEgress {
   rpc IsSupported(HLSEgressIsSupportedRequest) returns (HLSEgressIsSupportedResponse);
+  rpc GetConfig(HLSEgressGetConfigRequest) returns (HLSEgressGetConfigResponse);
+  rpc SetConfig(HLSEgressSetConfigRequest) returns (HLSEgressSetConfigResponse);
   rpc OpenStream(HLSEgressOpenStreamRequest) returns (HLSEgressOpenStreamResponse);
   rpc CloseStream(HLSEgressCloseStreamRequest) returns (HLSEgressCloseStreamResponse);
 }

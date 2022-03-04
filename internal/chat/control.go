@@ -41,9 +41,6 @@ func NewControl(
 	transfer transfer.Control,
 	directory directory.Control,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	return &control{
 		ctx:       ctx,
 		logger:    logger,
@@ -53,7 +50,7 @@ func NewControl(
 		transfer:  transfer,
 		directory: directory,
 
-		events:  events,
+		events:  observers.Chan(),
 		runners: hashmap.New[[]byte, *runner](hashmap.NewByteInterface()),
 	}
 }

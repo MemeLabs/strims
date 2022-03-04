@@ -11,6 +11,12 @@ type Observers struct {
 	local  event.Observer
 }
 
+func (o *Observers) Chan() chan interface{} {
+	ch := make(chan interface{}, 8)
+	o.Notify(ch)
+	return ch
+}
+
 // Notify ...
 func (o *Observers) Notify(ch interface{}) {
 	o.global.Notify(ch)

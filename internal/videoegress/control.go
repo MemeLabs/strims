@@ -5,12 +5,16 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/hls"
 	"github.com/MemeLabs/go-ppspp/pkg/httputil"
@@ -24,6 +28,7 @@ import (
 type Control interface {
 	Run()
 	OpenStream(ctx context.Context, swarmURI string, networkKeys [][]byte) (transfer.ID, io.ReadCloser, error)
+	HLSEgressEnabled() bool
 	OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error)
 	CloseHLSStream(swarmURI string) error
 }
@@ -32,20 +37,21 @@ type Control interface {
 func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
+	store *dao.ProfileStore,
+	observers *event.Observers,
 	httpmux *httputil.MapServeMux,
 	profile *profilev1.Profile,
 	transfer transfer.Control,
 ) Control {
-	hlsPath := fmt.Sprintf("/hls/%x", profile.Key.Public)
-
 	return &control{
 		ctx:      ctx,
 		logger:   logger,
+		store:    store,
 		httpmux:  httpmux,
 		transfer: transfer,
 
-		hlsPath:    hlsPath,
-		hlsService: hls.NewService(hlsPath),
+		events:      observers.Chan(),
+		routePrefix: fmt.Sprintf("/hls/%x", profile.Key.Public),
 	}
 }
 
@@ -53,25 +59,81 @@ func NewControl(
 type control struct {
 	ctx      context.Context
 	logger   *zap.Logger
+	store    *dao.ProfileStore
 	httpmux  *httputil.MapServeMux
 	transfer transfer.Control
+	profile  *profilev1.Profile
 
-	lock       sync.Mutex
-	hlsPath    string
-	hlsService *hls.Service
+	events      chan interface{}
+	routePrefix string
+	mu          sync.Mutex
+	config      *videov1.HLSEgressConfig
+	service     *hls.Service
+	stop        chan struct{}
 }
 
 // Run ...
 func (t *control) Run() {
-	path := t.hlsPath + "/*"
+	go t.loadConfig()
 
-	t.logger.Debug("registering hls service", zap.String("path", path))
-	t.httpmux.Handle(path, t.hlsService.Handler())
+	for {
+		select {
+		case e := <-t.events:
+			switch e := e.(type) {
+			case *videov1.HLSEgressConfigChangeEvent:
+				t.handleConfigChange(e.EgressConfig)
+			}
+		case <-t.ctx.Done():
+			t.stopService()
+			return
+		}
+	}
+}
 
-	<-t.ctx.Done()
+func (t *control) loadConfig() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	t.logger.Debug("removing hls service", zap.String("path", path))
-	t.httpmux.StopHandling(path)
+	config, err := dao.HLSEgressConfig.Get(t.store)
+	if err != nil {
+		t.logger.Debug("error loading hls egress config", zap.Error(err))
+		return
+	}
+	t.syncConfig(config)
+}
+
+func (t *control) handleConfigChange(config *videov1.HLSEgressConfig) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.syncConfig(config)
+}
+
+func (t *control) syncConfig(config *videov1.HLSEgressConfig) {
+	t.config = config
+
+	if config.Enabled {
+		t.startService(config)
+	} else {
+		t.stopService()
+	}
+}
+
+func (t *control) startService(config *videov1.HLSEgressConfig) {
+	t.logger.Debug("starting hls egress", zap.String("path", t.routePrefix))
+
+	t.service = hls.NewService(t.routePrefix)
+	t.httpmux.Handle(t.routePrefix+"/*", t.service.Handler())
+	t.stop = make(chan struct{})
+}
+
+func (t *control) stopService() {
+	if t.service != nil {
+		t.logger.Debug("stopping hls egress")
+
+		t.service = nil
+		t.httpmux.StopHandling(t.routePrefix + "/*")
+		close(t.stop)
+	}
 }
 
 func (t *control) open(swarmURI string, networkKeys [][]byte) (transfer.ID, *ppspp.Swarm, bool, error) {
@@ -130,6 +192,12 @@ func (t *control) OpenStream(ctx context.Context, swarmURI string, networkKeys [
 	return transferID, r, nil
 }
 
+func (t *control) HLSEgressEnabled() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.config != nil && t.config.Enabled
+}
+
 // OpenHLSStream ...
 func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error) {
 	transferID, swarm, created, err := t.open(swarmURI, networkKeys)
@@ -137,13 +205,25 @@ func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, 
 		return "", err
 	}
 
-	// TODO: prevent opening more than once
+	t.mu.Lock()
+	config := t.config
+	svc := t.service
+	t.mu.Unlock()
 
-	c := &hls.Channel{
-		Name:   hex.EncodeToString(transferID[:]),
-		Stream: hls.NewDefaultStream(),
+	if config != nil && svc == nil {
+		return "", errors.New("cannot add stream while hls service stopped")
 	}
-	uri := t.hlsService.InsertChannel(c)
+
+	name := hex.EncodeToString(transferID[:])
+	stream := hls.NewDefaultStream()
+	uri := config.PublicServerAddr + svc.PlaylistRoute(name)
+
+	if !svc.InsertStream(name, stream) {
+		return uri, nil
+	}
+
+	b := swarm.Reader()
+	b.SetReadStopper(t.stop)
 
 	r := &VideoReader{
 		logger: t.logger.With(
@@ -153,13 +233,13 @@ func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, 
 		transfer:      t.transfer,
 		transferID:    transferID,
 		removeOnClose: created,
-		b:             swarm.Reader(),
+		b:             b,
 	}
 
 	r.logger.Debug("hls stream starting", zap.String("uri", uri))
 
 	go func() {
-		defer t.hlsService.RemoveChannel(c)
+		defer svc.RemoveStream(name)
 		defer r.Close()
 
 		var initWritten bool
@@ -174,16 +254,16 @@ func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, 
 				init := buf.Next(int(binary.BigEndian.Uint16(buf.Next(2))))
 				if !initWritten {
 					initWritten = true
-					w := c.Stream.InitWriter()
+					w := stream.InitWriter()
 					w.Write(init)
 					w.Close()
 				}
 
-				w := c.Stream.NextWriter()
+				w := stream.NextWriter()
 				buf.WriteTo(w)
 				w.Close()
 			case store.ErrBufferUnderrun:
-				c.Stream.MarkDiscontinuity()
+				stream.MarkDiscontinuity()
 			default:
 				t.logger.Debug("stream closed", zap.Error(err))
 				return

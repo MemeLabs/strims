@@ -9,6 +9,8 @@ import (
 // RegisterHLSEgressService ...
 func RegisterHLSEgressService(host rpc.ServiceRegistry, service HLSEgressService) {
 	host.RegisterMethod("strims.video.v1.HLSEgress.IsSupported", service.IsSupported)
+	host.RegisterMethod("strims.video.v1.HLSEgress.GetConfig", service.GetConfig)
+	host.RegisterMethod("strims.video.v1.HLSEgress.SetConfig", service.SetConfig)
 	host.RegisterMethod("strims.video.v1.HLSEgress.OpenStream", service.OpenStream)
 	host.RegisterMethod("strims.video.v1.HLSEgress.CloseStream", service.CloseStream)
 }
@@ -19,6 +21,14 @@ type HLSEgressService interface {
 		ctx context.Context,
 		req *HLSEgressIsSupportedRequest,
 	) (*HLSEgressIsSupportedResponse, error)
+	GetConfig(
+		ctx context.Context,
+		req *HLSEgressGetConfigRequest,
+	) (*HLSEgressGetConfigResponse, error)
+	SetConfig(
+		ctx context.Context,
+		req *HLSEgressSetConfigRequest,
+	) (*HLSEgressSetConfigResponse, error)
 	OpenStream(
 		ctx context.Context,
 		req *HLSEgressOpenStreamRequest,
@@ -36,6 +46,20 @@ func (s *UnimplementedHLSEgressService) IsSupported(
 	ctx context.Context,
 	req *HLSEgressIsSupportedRequest,
 ) (*HLSEgressIsSupportedResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedHLSEgressService) GetConfig(
+	ctx context.Context,
+	req *HLSEgressGetConfigRequest,
+) (*HLSEgressGetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedHLSEgressService) SetConfig(
+	ctx context.Context,
+	req *HLSEgressSetConfigRequest,
+) (*HLSEgressSetConfigResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -72,6 +96,24 @@ func (c *HLSEgressClient) IsSupported(
 	res *HLSEgressIsSupportedResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.video.v1.HLSEgress.IsSupported", req, res)
+}
+
+// GetConfig ...
+func (c *HLSEgressClient) GetConfig(
+	ctx context.Context,
+	req *HLSEgressGetConfigRequest,
+	res *HLSEgressGetConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.video.v1.HLSEgress.GetConfig", req, res)
+}
+
+// SetConfig ...
+func (c *HLSEgressClient) SetConfig(
+	ctx context.Context,
+	req *HLSEgressSetConfigRequest,
+	res *HLSEgressSetConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.video.v1.HLSEgress.SetConfig", req, res)
 }
 
 // OpenStream ...

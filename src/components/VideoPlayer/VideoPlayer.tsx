@@ -34,7 +34,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
 
-  if (window.MediaSource) {
+  if (window.MediaSource && false) {
     const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
 
     useReady(() => {
@@ -51,7 +51,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     //   void client.hlsEgress
     //     .openStream({ swarmUri, networkKeys: [Base64.toUint8Array(networkKey)] })
     //     .then(({ playlistUrl }) => {
-    //       videoRef.current.src = "https://192.168.0.107:8083" + playlistUrl;
+    //       videoRef.current.src = playlistUrl;
     //     });
     // }, [networkKey, swarmUri]);
   }

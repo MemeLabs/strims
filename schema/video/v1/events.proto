@@ -7,10 +7,15 @@ option java_package = "gg.strims.video.v1";
 option swift_prefix = "SVO";
 
 import "video/v1/ingress.proto";
+import "video/v1/hls_egress.proto";
 import "video/v1/channel.proto";
 
 message VideoIngressConfigChangeEvent {
   VideoIngressConfig ingress_config = 1;
+}
+
+message HLSEgressConfigChangeEvent {
+  HLSEgressConfig egress_config = 1;
 }
 
 message VideoChannelChangeEvent {

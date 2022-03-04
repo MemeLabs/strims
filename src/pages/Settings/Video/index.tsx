@@ -1,6 +1,7 @@
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 
+import HLSEgressConfigForm from "./HLSEgressConfigForm";
 import VideoChannelCreateForm from "./VideoChannelCreateForm";
 import VideoChannelEditForm from "./VideoChannelEditForm";
 import VideoChannelsList from "./VideoChannelsList";
@@ -10,7 +11,8 @@ const Router: React.FC = () => {
   return (
     <main className="network_page">
       <Routes>
-        <Route index element={<VideoIngressConfigForm />} />
+        <Route path="egress" element={<HLSEgressConfigForm />} />
+        <Route path="ingress" element={<VideoIngressConfigForm />} />
         <Route path="channels" element={<VideoChannelsList />} />
         <Route path="channels/new" element={<VideoChannelCreateForm />} />
         <Route path="channels/:channelId" element={<VideoChannelEditForm />} />

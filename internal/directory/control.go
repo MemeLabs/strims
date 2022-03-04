@@ -46,9 +46,6 @@ func NewControl(
 	network network.Control,
 	transfer transfer.Control,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	snippets := &snippetMap{}
 
 	return &control{
@@ -59,7 +56,7 @@ func NewControl(
 		observers: observers,
 		network:   network,
 		transfer:  transfer,
-		events:    events,
+		events:    observers.Chan(),
 
 		eventCache: map[uint64]*eventCache{},
 

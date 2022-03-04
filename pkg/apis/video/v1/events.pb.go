@@ -67,6 +67,53 @@ func (x *VideoIngressConfigChangeEvent) GetIngressConfig() *VideoIngressConfig {
 	return nil
 }
 
+type HLSEgressConfigChangeEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	EgressConfig *HLSEgressConfig `protobuf:"bytes,1,opt,name=egress_config,json=egressConfig,proto3" json:"egress_config,omitempty"`
+}
+
+func (x *HLSEgressConfigChangeEvent) Reset() {
+	*x = HLSEgressConfigChangeEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_video_v1_events_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *HLSEgressConfigChangeEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HLSEgressConfigChangeEvent) ProtoMessage() {}
+
+func (x *HLSEgressConfigChangeEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_events_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HLSEgressConfigChangeEvent.ProtoReflect.Descriptor instead.
+func (*HLSEgressConfigChangeEvent) Descriptor() ([]byte, []int) {
+	return file_video_v1_events_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HLSEgressConfigChangeEvent) GetEgressConfig() *HLSEgressConfig {
+	if x != nil {
+		return x.EgressConfig
+	}
+	return nil
+}
+
 type VideoChannelChangeEvent struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -78,7 +125,7 @@ type VideoChannelChangeEvent struct {
 func (x *VideoChannelChangeEvent) Reset() {
 	*x = VideoChannelChangeEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_video_v1_events_proto_msgTypes[1]
+		mi := &file_video_v1_events_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -91,7 +138,7 @@ func (x *VideoChannelChangeEvent) String() string {
 func (*VideoChannelChangeEvent) ProtoMessage() {}
 
 func (x *VideoChannelChangeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_video_v1_events_proto_msgTypes[1]
+	mi := &file_video_v1_events_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -104,7 +151,7 @@ func (x *VideoChannelChangeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VideoChannelChangeEvent.ProtoReflect.Descriptor instead.
 func (*VideoChannelChangeEvent) Descriptor() ([]byte, []int) {
-	return file_video_v1_events_proto_rawDescGZIP(), []int{1}
+	return file_video_v1_events_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *VideoChannelChangeEvent) GetVideoChannel() *VideoChannel {
@@ -125,7 +172,7 @@ type VideoChannelDeleteEvent struct {
 func (x *VideoChannelDeleteEvent) Reset() {
 	*x = VideoChannelDeleteEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_video_v1_events_proto_msgTypes[2]
+		mi := &file_video_v1_events_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -138,7 +185,7 @@ func (x *VideoChannelDeleteEvent) String() string {
 func (*VideoChannelDeleteEvent) ProtoMessage() {}
 
 func (x *VideoChannelDeleteEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_video_v1_events_proto_msgTypes[2]
+	mi := &file_video_v1_events_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +198,7 @@ func (x *VideoChannelDeleteEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VideoChannelDeleteEvent.ProtoReflect.Descriptor instead.
 func (*VideoChannelDeleteEvent) Descriptor() ([]byte, []int) {
-	return file_video_v1_events_proto_rawDescGZIP(), []int{2}
+	return file_video_v1_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *VideoChannelDeleteEvent) GetVideoChannel() *VideoChannel {
@@ -168,14 +215,22 @@ var file_video_v1_events_proto_rawDesc = []byte{
 	0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x0f, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
 	0x76, 0x69, 0x64, 0x65, 0x6f, 0x2e, 0x76, 0x31, 0x1a, 0x16, 0x76, 0x69, 0x64, 0x65, 0x6f, 0x2f,
 	0x76, 0x31, 0x2f, 0x69, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x1a, 0x16, 0x76, 0x69, 0x64, 0x65, 0x6f, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x68, 0x61, 0x6e, 0x6e,
-	0x65, 0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x6b, 0x0a, 0x1d, 0x56, 0x69, 0x64, 0x65,
-	0x6f, 0x49, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x43, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x4a, 0x0a, 0x0e, 0x69, 0x6e, 0x67,
-	0x72, 0x65, 0x73, 0x73, 0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x76, 0x69, 0x64, 0x65, 0x6f,
-	0x2e, 0x76, 0x31, 0x2e, 0x56, 0x69, 0x64, 0x65, 0x6f, 0x49, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73,
-	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x0d, 0x69, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43,
+	0x1a, 0x19, 0x76, 0x69, 0x64, 0x65, 0x6f, 0x2f, 0x76, 0x31, 0x2f, 0x68, 0x6c, 0x73, 0x5f, 0x65,
+	0x67, 0x72, 0x65, 0x73, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x16, 0x76, 0x69, 0x64,
+	0x65, 0x6f, 0x2f, 0x76, 0x31, 0x2f, 0x63, 0x68, 0x61, 0x6e, 0x6e, 0x65, 0x6c, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x22, 0x6b, 0x0a, 0x1d, 0x56, 0x69, 0x64, 0x65, 0x6f, 0x49, 0x6e, 0x67, 0x72,
+	0x65, 0x73, 0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x12, 0x4a, 0x0a, 0x0e, 0x69, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x5f,
+	0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x76, 0x69, 0x64, 0x65, 0x6f, 0x2e, 0x76, 0x31, 0x2e, 0x56,
+	0x69, 0x64, 0x65, 0x6f, 0x49, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x52, 0x0d, 0x69, 0x6e, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x22, 0x63, 0x0a, 0x1a, 0x48, 0x4c, 0x53, 0x45, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43, 0x6f, 0x6e,
+	0x66, 0x69, 0x67, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x45,
+	0x0a, 0x0d, 0x65, 0x67, 0x72, 0x65, 0x73, 0x73, 0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x76,
+	0x69, 0x64, 0x65, 0x6f, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x4c, 0x53, 0x45, 0x67, 0x72, 0x65, 0x73,
+	0x73, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x0c, 0x65, 0x67, 0x72, 0x65, 0x73, 0x73, 0x43,
 	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x5d, 0x0a, 0x17, 0x56, 0x69, 0x64, 0x65, 0x6f, 0x43, 0x68,
 	0x61, 0x6e, 0x6e, 0x65, 0x6c, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74,
 	0x12, 0x42, 0x0a, 0x0d, 0x76, 0x69, 0x64, 0x65, 0x6f, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x6e, 0x65,
@@ -208,23 +263,26 @@ func file_video_v1_events_proto_rawDescGZIP() []byte {
 	return file_video_v1_events_proto_rawDescData
 }
 
-var file_video_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_video_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_video_v1_events_proto_goTypes = []interface{}{
 	(*VideoIngressConfigChangeEvent)(nil), // 0: strims.video.v1.VideoIngressConfigChangeEvent
-	(*VideoChannelChangeEvent)(nil),       // 1: strims.video.v1.VideoChannelChangeEvent
-	(*VideoChannelDeleteEvent)(nil),       // 2: strims.video.v1.VideoChannelDeleteEvent
-	(*VideoIngressConfig)(nil),            // 3: strims.video.v1.VideoIngressConfig
-	(*VideoChannel)(nil),                  // 4: strims.video.v1.VideoChannel
+	(*HLSEgressConfigChangeEvent)(nil),    // 1: strims.video.v1.HLSEgressConfigChangeEvent
+	(*VideoChannelChangeEvent)(nil),       // 2: strims.video.v1.VideoChannelChangeEvent
+	(*VideoChannelDeleteEvent)(nil),       // 3: strims.video.v1.VideoChannelDeleteEvent
+	(*VideoIngressConfig)(nil),            // 4: strims.video.v1.VideoIngressConfig
+	(*HLSEgressConfig)(nil),               // 5: strims.video.v1.HLSEgressConfig
+	(*VideoChannel)(nil),                  // 6: strims.video.v1.VideoChannel
 }
 var file_video_v1_events_proto_depIdxs = []int32{
-	3, // 0: strims.video.v1.VideoIngressConfigChangeEvent.ingress_config:type_name -> strims.video.v1.VideoIngressConfig
-	4, // 1: strims.video.v1.VideoChannelChangeEvent.video_channel:type_name -> strims.video.v1.VideoChannel
-	4, // 2: strims.video.v1.VideoChannelDeleteEvent.video_channel:type_name -> strims.video.v1.VideoChannel
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 0: strims.video.v1.VideoIngressConfigChangeEvent.ingress_config:type_name -> strims.video.v1.VideoIngressConfig
+	5, // 1: strims.video.v1.HLSEgressConfigChangeEvent.egress_config:type_name -> strims.video.v1.HLSEgressConfig
+	6, // 2: strims.video.v1.VideoChannelChangeEvent.video_channel:type_name -> strims.video.v1.VideoChannel
+	6, // 3: strims.video.v1.VideoChannelDeleteEvent.video_channel:type_name -> strims.video.v1.VideoChannel
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_video_v1_events_proto_init() }
@@ -233,6 +291,7 @@ func file_video_v1_events_proto_init() {
 		return
 	}
 	file_video_v1_ingress_proto_init()
+	file_video_v1_hls_egress_proto_init()
 	file_video_v1_channel_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_video_v1_events_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
@@ -248,7 +307,7 @@ func file_video_v1_events_proto_init() {
 			}
 		}
 		file_video_v1_events_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*VideoChannelChangeEvent); i {
+			switch v := v.(*HLSEgressConfigChangeEvent); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -260,6 +319,18 @@ func file_video_v1_events_proto_init() {
 			}
 		}
 		file_video_v1_events_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*VideoChannelChangeEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_video_v1_events_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*VideoChannelDeleteEvent); i {
 			case 0:
 				return &v.state
@@ -278,7 +349,7 @@ func file_video_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_video_v1_events_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

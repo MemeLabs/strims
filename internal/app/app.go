@@ -60,7 +60,7 @@ func NewControl(
 		videocaptureControl = videocapture.NewControl(ctx, logger, transferControl, directoryControl, networkControl)
 		videoingressControl = videoingress.NewControl(ctx, logger, vpn, store, observers, profile, transferControl, networkControl, directoryControl)
 		videochannelControl = videochannel.NewControl(store)
-		videoegressControl  = videoegress.NewControl(ctx, logger, httpmux, profile, transferControl)
+		videoegressControl  = videoegress.NewControl(ctx, logger, store, observers, httpmux, profile, transferControl)
 		vnicControl         = vnic.NewControl(ctx, logger, vpn, store, observers)
 		peerControl         = NewPeerControl(observers, networkControl, transferControl, bootstrapControl)
 	)

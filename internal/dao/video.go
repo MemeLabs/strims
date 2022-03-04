@@ -10,6 +10,7 @@ const (
 	videoChannelNS
 	videoChannelKeyNS
 	videoIngressConfigNS
+	videoHLSEgressConfigNS
 )
 
 var VideoIngressConfig = NewSingleton(
@@ -20,6 +21,16 @@ var VideoIngressConfig = NewSingleton(
 		},
 		ObserveChange: func(m, p *videov1.VideoIngressConfig) proto.Message {
 			return &videov1.VideoIngressConfigChangeEvent{IngressConfig: m}
+		},
+	},
+)
+
+var HLSEgressConfig = NewSingleton(
+	videoHLSEgressConfigNS,
+	&SingletonOptions[videov1.HLSEgressConfig]{
+		DefaultValue: &videov1.HLSEgressConfig{},
+		ObserveChange: func(m, p *videov1.HLSEgressConfig) proto.Message {
+			return &videov1.HLSEgressConfigChangeEvent{EgressConfig: m}
 		},
 	},
 )

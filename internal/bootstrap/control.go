@@ -33,16 +33,13 @@ func NewControl(
 	store *dao.ProfileStore,
 	observers *event.Observers,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	return &control{
 		ctx:    ctx,
 		logger: logger,
 		vpn:    vpn,
 		store:  store,
 
-		events: events,
+		events: observers.Chan(),
 		peers:  map[uint64]*peer{},
 	}
 }

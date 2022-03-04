@@ -75,9 +75,6 @@ func NewControl(
 	profile *profilev1.Profile,
 	notification notification.Control,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	dialer := newDialer(logger, vpn, profile.Key)
 
 	return &control{
@@ -90,7 +87,7 @@ func NewControl(
 		profile:      profile,
 		notification: notification,
 
-		events:           events,
+		events:           observers.Chan(),
 		qosc:             vpn.VNIC().QOS().AddClass(1),
 		ca:               newCA(ctx, logger, store, observers, dialer),
 		dialer:           dialer,

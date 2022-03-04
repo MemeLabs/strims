@@ -37,9 +37,3 @@ type control struct{}
 
 // Run ...
 func (c *control) Run() {}
-
-// GetIngressConfig ...
-func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) { return nil, nil }
-
-// SetIngressConfig ...
-func (c *control) SetIngressConfig(config *videov1.VideoIngressConfig) error { return nil }

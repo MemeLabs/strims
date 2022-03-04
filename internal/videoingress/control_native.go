@@ -4,7 +4,6 @@
 package videoingress
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -18,11 +17,11 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,9 +43,6 @@ func NewControl(
 	network network.Control,
 	directory directory.Control,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	return &control{
 		ctx:     ctx,
 		logger:  logger,
@@ -54,9 +50,10 @@ func NewControl(
 		store:   store,
 		profile: profile,
 
-		events:        events,
-		ingressConfig: &videov1.VideoIngressConfig{},
-		network:       network,
+		events:                observers.Chan(),
+		ingressConfig:         &videov1.VideoIngressConfig{},
+		network:               network,
+		shareServerCloseFuncs: hashmap.New[[]byte, context.CancelFunc](hashmap.NewByteInterface()),
 		ingressService: newIngressService(
 			ctx,
 			logger,
@@ -77,12 +74,12 @@ type control struct {
 	profile *profilev1.Profile
 	network network.Control
 
-	events         chan interface{}
-	ingressService *ingressService
-	lock           sync.Mutex
-	ingressConfig  *videov1.VideoIngressConfig
-	shareServers   llrb.LLRB
-	ingressServer  server
+	events                chan interface{}
+	ingressService        *ingressService
+	lock                  sync.Mutex
+	ingressConfig         *videov1.VideoIngressConfig
+	shareServerCloseFuncs hashmap.Map[[]byte, context.CancelFunc]
+	ingressServer         server
 }
 
 // Run ...
@@ -181,14 +178,14 @@ func (c *control) reinitIngress(next *videov1.VideoIngressConfig) {
 }
 
 func (c *control) tryStopIngressShareServer(networkKey []byte) {
-	if it := c.shareServers.Delete(&videoIngressServersItem{networkKey: networkKey}); it != nil {
-		it.(*videoIngressServersItem).close()
+	if close, ok := c.shareServerCloseFuncs.Delete(networkKey); ok {
+		close()
 	}
 }
 
 func (c *control) tryStartIngressShareServer(networkKey []byte) {
 	ctx, cancel := context.WithCancel(c.ctx)
-	c.shareServers.InsertNoReplace(&videoIngressServersItem{networkKey, cancel})
+	c.shareServerCloseFuncs.Set(networkKey, cancel)
 
 	go func() {
 		c.logger.Info(
@@ -270,26 +267,4 @@ func (c *control) startIngressServer() {
 		err := c.ingressServer.Listen()
 		c.logger.Debug("ingress server closed", zap.Error(err))
 	}()
-}
-
-// GetIngressConfig ...
-func (c *control) GetIngressConfig() (*videov1.VideoIngressConfig, error) {
-	return dao.VideoIngressConfig.Get(c.store)
-}
-
-// SetIngressConfig ...
-func (c *control) SetIngressConfig(config *videov1.VideoIngressConfig) error {
-	return dao.VideoIngressConfig.Set(c.store, config)
-}
-
-type videoIngressServersItem struct {
-	networkKey []byte
-	close      context.CancelFunc
-}
-
-func (e *videoIngressServersItem) Less(o llrb.Item) bool {
-	if o, ok := o.(*videoIngressServersItem); ok {
-		return bytes.Compare(e.networkKey, o.networkKey) == -1
-	}
-	return !o.Less(e)
 }

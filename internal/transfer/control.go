@@ -49,16 +49,13 @@ func NewControl(
 	vpn *vpn.Host,
 	observers *event.Observers,
 ) Control {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	return &control{
 		ctx:    ctx,
 		logger: logger,
 		vpn:    vpn,
 		qosc:   vpn.VNIC().QOS().AddClass(1),
 
-		events:    events,
+		events:    observers.Chan(),
 		transfers: map[ID]*transfer{},
 		peers:     map[uint64]*peer{},
 		// candidates:  newCandidatePool(logger, vpn),

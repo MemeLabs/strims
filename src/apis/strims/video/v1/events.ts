@@ -6,6 +6,10 @@ import {
   IVideoIngressConfig as strims_video_v1_IVideoIngressConfig,
 } from "./ingress";
 import {
+  HLSEgressConfig as strims_video_v1_HLSEgressConfig,
+  IHLSEgressConfig as strims_video_v1_IHLSEgressConfig,
+} from "./hls_egress";
+import {
   VideoChannel as strims_video_v1_VideoChannel,
   IVideoChannel as strims_video_v1_IVideoChannel,
 } from "./channel";
@@ -36,6 +40,42 @@ export class VideoIngressConfigChangeEvent {
       switch (tag >> 3) {
         case 1:
         m.ingressConfig = strims_video_v1_VideoIngressConfig.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IHLSEgressConfigChangeEvent = {
+  egressConfig?: strims_video_v1_IHLSEgressConfig;
+}
+
+export class HLSEgressConfigChangeEvent {
+  egressConfig: strims_video_v1_HLSEgressConfig | undefined;
+
+  constructor(v?: IHLSEgressConfigChangeEvent) {
+    this.egressConfig = v?.egressConfig && new strims_video_v1_HLSEgressConfig(v.egressConfig);
+  }
+
+  static encode(m: HLSEgressConfigChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.egressConfig) strims_video_v1_HLSEgressConfig.encode(m.egressConfig, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HLSEgressConfigChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HLSEgressConfigChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.egressConfig = strims_video_v1_HLSEgressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

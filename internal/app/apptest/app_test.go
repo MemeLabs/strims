@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/peer"
+	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 
 	"go.uber.org/zap"
 )
@@ -28,10 +28,7 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []app.Control, error) {
 
 	ctrl := make([]app.Control, len(cluster.Hosts))
 	for i, node := range cluster.Hosts {
-		ioctx := api.NewIOContext(context.Background(), logger, node.VPN, node.Store, &event.Observers{}, nil)
-		ctrl[i] = app.NewControl(ioctx, network.NewBroker(logger), node.Profile)
-
-		go ctrl[i].Run()
+		ctrl[i] = app.NewControl(context.Background(), logger, node.VPN, node.Store, &event.Observers{}, httputil.NewMapServeMux(), network.NewBroker(logger), node.Profile)
 
 		qosc := node.VPN.VNIC().QOS().AddClass(1)
 		h := peer.NewPeerHandler(logger, ctrl[i], node.Store, qosc)

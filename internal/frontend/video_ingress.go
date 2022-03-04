@@ -20,6 +20,7 @@ func init() {
 		videov1.RegisterVideoIngressService(server, &videoIngressService{
 			profile: params.Profile,
 			app:     params.App,
+			store:   params.Store,
 		})
 	})
 }
@@ -28,6 +29,7 @@ func init() {
 type videoIngressService struct {
 	profile *profilev1.Profile
 	app     app.Control
+	store   *dao.ProfileStore
 }
 
 func (s *videoIngressService) IsSupported(ctx context.Context, r *videov1.VideoIngressIsSupportedRequest) (*videov1.VideoIngressIsSupportedResponse, error) {
@@ -35,7 +37,7 @@ func (s *videoIngressService) IsSupported(ctx context.Context, r *videov1.VideoI
 }
 
 func (s *videoIngressService) GetConfig(ctx context.Context, r *videov1.VideoIngressGetConfigRequest) (*videov1.VideoIngressGetConfigResponse, error) {
-	config, err := s.app.VideoIngress().GetIngressConfig()
+	config, err := dao.VideoIngressConfig.Get(s.store)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +45,7 @@ func (s *videoIngressService) GetConfig(ctx context.Context, r *videov1.VideoIng
 }
 
 func (s *videoIngressService) SetConfig(ctx context.Context, r *videov1.VideoIngressSetConfigRequest) (*videov1.VideoIngressSetConfigResponse, error) {
-	if err := s.app.VideoIngress().SetIngressConfig(r.Config); err != nil {
+	if err := dao.VideoIngressConfig.Set(s.store, r.Config); err != nil {
 		return nil, err
 	}
 	return &videov1.VideoIngressSetConfigResponse{Config: r.Config}, nil
@@ -64,7 +66,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *videov1.Vide
 
 	switch o := channel.Owner.(type) {
 	case *videov1.VideoChannel_Local_:
-		config, err := s.app.VideoIngress().GetIngressConfig()
+		config, err := dao.VideoIngressConfig.Get(s.store)
 		if err != nil {
 			return nil, err
 		}

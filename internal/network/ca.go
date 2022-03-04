@@ -28,15 +28,12 @@ func newCA(
 	observers *event.Observers,
 	dialer Dialer,
 ) *ca {
-	events := make(chan interface{}, 8)
-	observers.Notify(events)
-
 	return &ca{
 		ctx:     ctx,
 		logger:  logger,
 		store:   store,
 		dialer:  dialer,
-		events:  events,
+		events:  observers.Chan(),
 		servers: map[uint64]context.CancelFunc{},
 	}
 }
