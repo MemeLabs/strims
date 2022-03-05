@@ -14,7 +14,6 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -148,10 +147,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 
 			for {
 				b := &networkv1directory.EventBroadcast{}
-				err := er.Read(b)
-				if err == protoutil.ErrShortRead {
-					continue
-				} else if err != nil {
+				if err := er.Read(b); err != nil {
 					t.logger.Debug("error reading directory event", zap.Error(err))
 					break
 				}

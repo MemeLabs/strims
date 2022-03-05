@@ -3,7 +3,7 @@ import "./Search.scss";
 import clsx from "clsx";
 import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
-import React, { RefObject, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { RefObject, useContext, useEffect, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
@@ -203,7 +203,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
   onMouseLeave,
 }) => {
   let body = (
-    <>
+    <div className="search__menu__items">
       {results.map((result, i) => {
         switch (result.type) {
           case "EMBED":
@@ -226,7 +226,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             );
         }
       })}
-    </>
+    </div>
   );
 
   if (scroll) {

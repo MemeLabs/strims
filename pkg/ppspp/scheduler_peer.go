@@ -193,6 +193,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		liveWindow:        binmap.Bin(s.options.LiveWindow * 2),
 
 		// debugHack: debugHack == 2,
+		firstChunkSet: s.options.SchedulingMethod == SeedSchedulingMethod,
 
 		// HAX
 		nextGCTime:          timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
@@ -289,7 +290,7 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 		s.logger.Debug(
 			"set request offset",
 			zap.Uint64("bin", uint64(b)),
-			zap.Uint64("offset", b.BaseOffset()),
+			zap.Uint64("offset", b.BaseOffset()*uint64(s.chunkSize)),
 		)
 
 		for p, cs := range s.channels {

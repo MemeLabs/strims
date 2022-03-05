@@ -34,7 +34,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
 
-  if (window.MediaSource && false) {
+  if (window.MediaSource) {
     const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
 
     useReady(() => {

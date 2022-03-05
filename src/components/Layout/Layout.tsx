@@ -70,7 +70,7 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
   const [viewportShape, setViewportShape] = useState(getViewportShape);
 
   useEffect(() => {
-    if (DEVICE_TYPE !== DeviceType.Portable || IS_PWA) {
+    if (DEVICE_TYPE !== DeviceType.Portable) {
       return;
     }
 
@@ -200,7 +200,6 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
       })}
     >
       <NotificationToast />
-      <div className="deadzone"></div>
       {DEVICE_TYPE !== DeviceType.Portable && (
         <div className="layout__header">
           <Header />

@@ -1,5 +1,6 @@
 @import "colors.scss";
 @import "mixins.scss";
+@import "reset.scss";
 
 html,
 body {
@@ -11,19 +12,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-* {
-  background: none;
-  border: none;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  list-style: none;
-  margin: 0;
-  outline: none;
-  padding: 0;
-  text-decoration: none;
-}
+// TODO: clean up legacy app root styles
 
 .app {
   display: flex;

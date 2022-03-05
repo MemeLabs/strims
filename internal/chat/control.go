@@ -14,7 +14,6 @@ import (
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -196,10 +195,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			eg.Go(func() error {
 				for {
 					e := &chatv1.ServerEvent{}
-					err := readers.events.Read(e)
-					if err == protoutil.ErrShortRead {
-						continue
-					} else if err != nil {
+					if err := readers.events.Read(e); err != nil {
 						return fmt.Errorf("reading event: %w", err)
 					}
 
@@ -214,8 +210,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			eg.Go(func() error {
 				for {
 					b := &chatv1.AssetBundle{}
-					err := readers.assets.Read(b)
-					if err != nil {
+					if err := readers.assets.Read(b); err != nil {
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}
 

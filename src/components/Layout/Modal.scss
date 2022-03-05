@@ -11,27 +11,6 @@
   top: var(--layout-height);
   --swipable-peek-size: 0px;
 
-  @at-root {
-    .layout--portrait &,
-    .layout--landscape_cw &,
-    .layout--landscape_ccw & {
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-
-    .layout--portrait.layout--min_aspect_ratio_0_6 & {
-      padding-bottom: 0;
-    }
-
-    .layout--landscape_cw & {
-      padding-right: env(safe-area-inset-right);
-    }
-
-    .layout--landscape_ccw & {
-      padding-left: env(safe-area-inset-left);
-      padding-right: 10px;
-    }
-  }
-
   &__header {
     background: var(--color-background-layout-header);
     flex: 0 0 50px;
@@ -65,13 +44,10 @@
 
     @at-root {
       .layout--landscape_cw & {
-        margin-right: calc(-1 * env(safe-area-inset-right));
         padding-right: env(safe-area-inset-right);
       }
       .layout--landscape_ccw & {
-        margin-left: calc(-1 * env(safe-area-inset-left));
         padding-left: env(safe-area-inset-left);
-        margin-right: -10px;
         padding-right: 10px;
       }
     }

@@ -9,20 +9,6 @@ body {
   background: black;
 }
 
-// * {
-//   background: none;
-//   border: none;
-//   color: inherit;
-//   font-family: inherit;
-//   font-size: inherit;
-//   font-weight: inherit;
-//   list-style: none;
-//   margin: 0;
-//   outline: none;
-//   padding: 0;
-//   text-decoration: none;
-// }
-
 $chat-width-lg: 420px;
 $chat-width-sm: 260px;
 
@@ -31,21 +17,6 @@ $chat-width-sm: 260px;
   width: var(--layout-width);
   display: flex;
   flex-direction: column;
-}
-
-.layout--portable:not(.layout--pwa) .deadzone {
-  opacity: 0.25;
-  border-style: solid;
-  border-color: black;
-  border-width: 0 0 0 34px;
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 100%;
-  pointer-events: none;
-  box-sizing: border-box;
-  z-index: 1000;
 }
 
 .layout {
@@ -59,7 +30,7 @@ $chat-width-sm: 260px;
   left: 0;
   display: flex;
   flex-direction: column;
-  background: green;
+  background: var(--color-background-layout-body);
   box-sizing: border-box;
 
   &--landscape_cw {

@@ -78,14 +78,17 @@ type channelWriterThing interface {
 type SchedulingMethod int
 
 func (m SchedulingMethod) swarmScheduler(logger *zap.Logger, s *Swarm) swarmScheduler {
-	switch m {
-	case SeedSchedulingMethod:
-		return newSeedSwarmScheduler(logger, s)
-	case PeerSchedulingMethod:
-		return newPeerSwarmScheduler(logger, s)
-	default:
-		panic("invalid sheduling method")
-	}
+	return newPeerSwarmScheduler(logger, s)
+
+	// TODO: do we need this?
+	// switch m {
+	// case SeedSchedulingMethod:
+	// 	return newSeedSwarmScheduler(logger, s)
+	// case PeerSchedulingMethod:
+	// 	return newPeerSwarmScheduler(logger, s)
+	// default:
+	// 	panic("invalid sheduling method")
+	// }
 }
 
 const (

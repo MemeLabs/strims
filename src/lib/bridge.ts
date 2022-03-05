@@ -946,7 +946,6 @@ export class WorkerBridge {
   }
 
   public syncLogs(data: Uint8Array): void {
-    return;
     const { level, caller, msg, ...args } = JSON.parse(new TextDecoder().decode(data)) as {
       [key: string]: string;
     };

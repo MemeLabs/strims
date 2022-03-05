@@ -16,7 +16,6 @@ import (
 const maxChunkStreamSize = 10 * 1024 * 1024
 
 var ErrMaxChunkStreamSize = errors.New("message exceeds max segment size")
-var ErrShortRead = errors.New("read fewer bytes than expected")
 
 type OffsetReader interface {
 	io.Reader
@@ -47,21 +46,22 @@ func (r *ChunkStreamReader) Read(m protoreflect.ProtoMessage) error {
 		}
 	}
 
-	r.buf.Reset()
-	_, err := r.buf.ReadFrom(io.LimitReader(r.zpr, maxChunkStreamSize))
-	if err != nil {
-		return err
-	}
+	for {
+		r.buf.Reset()
+		_, err := r.buf.ReadFrom(io.LimitReader(r.zpr, maxChunkStreamSize))
+		if err != nil {
+			return err
+		}
 
-	size, err := binary.ReadUvarint(ioutil.NewByteReader(&r.buf))
-	if err != nil {
-		return err
-	}
-	if int(size) > r.buf.Len() {
-		return ErrShortRead
-	}
+		size, err := binary.ReadUvarint(ioutil.NewByteReader(&r.buf))
+		if err != nil {
+			return err
+		}
 
-	return proto.Unmarshal(r.buf.Bytes(), m)
+		if int(size) == r.buf.Len() {
+			return proto.Unmarshal(r.buf.Bytes(), m)
+		}
+	}
 }
 
 func NewChunkStreamWriter(w ioutil.WriteFlusher, size int) (*ChunkStreamWriter, error) {

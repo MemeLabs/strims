@@ -25,21 +25,23 @@
   }
 }
 
-.layout--landscape_cw {
-  .footer__search {
-    padding-left: 10px;
-  }
-}
-
 .footer__settings {
   &__title {
     display: flex;
     flex-direction: row;
     align-items: center;
+
+    @at-root {
+      .layout--landscape_cw &,
+      .layout--landscape_ccw & {
+        margin-left: 10px;
+      }
+    }
   }
 
   &__menu_button {
     padding: 0.5em;
+    line-height: 0;
   }
 
   &__overlay {
