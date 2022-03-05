@@ -1,3 +1,4 @@
+//go:build !web
 // +build !web
 
 package frontend

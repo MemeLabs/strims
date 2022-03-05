@@ -203,7 +203,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
   onMouseLeave,
 }) => {
   let body = (
-    <div className="search__menu__items">
+    <>
       {results.map((result, i) => {
         switch (result.type) {
           case "EMBED":
@@ -226,7 +226,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             );
         }
       })}
-    </div>
+    </>
   );
 
   if (scroll) {

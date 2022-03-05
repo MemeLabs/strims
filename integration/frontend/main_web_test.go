@@ -1,4 +1,4 @@
-// +build web
+//go:build js
 
 package frontend
 

@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package network
 
@@ -210,7 +209,7 @@ func (r *brokerProxyServiceReadWriter) Close() error {
 }
 
 // NewBrokerProxyClient ....
-func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) (*BrokerProxyClient, error) {
+func NewBrokerProxyClient(logger *zap.Logger, bus wasmio.Bus) (*BrokerProxyClient, error) {
 	client, err := rpc.NewClient(logger, &rpc.RWDialer{
 		Logger:     logger,
 		ReadWriter: bus,

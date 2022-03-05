@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package main
 
@@ -47,7 +46,7 @@ func main() {
 		service := args[0].String()
 		bridge := args[1]
 
-		init, ok := map[string]func(js.Value, *wasmio.Bus){
+		init, ok := map[string]func(js.Value, wasmio.Bus){
 			"default": initDefault,
 			"broker":  initBroker,
 		}[service]
@@ -79,7 +78,7 @@ func newLogger(bridge js.Value) *zap.Logger {
 	return zap.New(core, zap.WithCaller(true))
 }
 
-func initDefault(bridge js.Value, bus *wasmio.Bus) {
+func initDefault(bridge js.Value, bus wasmio.Bus) {
 	logger := newLogger(bridge)
 
 	store := wasmio.NewKVStore(bridge)
@@ -115,7 +114,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	}
 }
 
-func initBroker(bridge js.Value, bus *wasmio.Bus) {
+func initBroker(bridge js.Value, bus wasmio.Bus) {
 	logger := newLogger(bridge)
 
 	server := rpc.NewServer(logger, &rpc.RWDialer{

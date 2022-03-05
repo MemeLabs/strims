@@ -1,5 +1,4 @@
 //go:build js
-// +build js
 
 package wasmio
 
@@ -15,8 +14,9 @@ const maxChannelMTU = 64 * 1024
 // newChannel ...
 func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*channel, error) {
 	p := &channel{
-		mtu: mtu,
-		q:   make(chan *[]byte, 16),
+		pool: pool.DefaultPool,
+		mtu:  mtu,
+		q:    make(chan *[]byte, 16),
 	}
 
 	onOpen := func(this js.Value, args []js.Value) interface{} {
@@ -45,9 +45,10 @@ func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*
 
 func newChannelFromProxy(mtu int, id int) (*channel, js.Value) {
 	p := &channel{
-		mtu: mtu,
-		id:  id,
-		q:   make(chan *[]byte, 16),
+		pool: pool.DefaultPool,
+		mtu:  mtu,
+		id:   id,
+		q:    make(chan *[]byte, 16),
 	}
 
 	proxy := jsObject.New()
@@ -58,8 +59,14 @@ func newChannelFromProxy(mtu int, id int) (*channel, js.Value) {
 	return p, proxy
 }
 
+type bufferPool interface {
+	Get(n int) *[]byte
+	Put(b *[]byte)
+}
+
 // channel ...
 type channel struct {
+	pool   bufferPool
 	mtu    int
 	id     int
 	funcs  Funcs
@@ -94,7 +101,7 @@ func (p *channel) Write(b []byte) (int, error) {
 func (p *channel) Read(b []byte) (n int, err error) {
 	if p.b == nil || p.off == len(*p.b) {
 		if p.b != nil {
-			pool.Put(p.b)
+			p.pool.Put(p.b)
 		}
 
 		b, ok := <-p.q
@@ -133,7 +140,7 @@ func (p *channel) closeWithError(err error) {
 }
 
 func (p *channel) onData(this js.Value, args []js.Value) interface{} {
-	b := pool.Get(args[0].Int())
+	b := p.pool.Get(args[0].Int())
 	t, ok := channelRead(p.id, *b)
 	if !ok {
 		p.closeWithError(ErrClosed)
