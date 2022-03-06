@@ -132,6 +132,14 @@ const MessageGreenText: React.FC<MessageGreenTextProps> = ({ children }) => (
   <span className="chat__message__greentext">{children}</span>
 );
 
+interface MessageSelfProps {
+  entity: chatv1_Message.Entities.GenericEntity;
+}
+
+const MessageSelf: React.FC<MessageSelfProps> = ({ children }) => (
+  <span className="chat__message__self">{children}</span>
+);
+
 type EntityComponent =
   | typeof MessageLink
   | typeof MessageEmote
@@ -139,7 +147,8 @@ type EntityComponent =
   | typeof MessageTag
   | typeof MessageSpoiler
   | typeof MessageCodeBlock
-  | typeof MessageGreenText;
+  | typeof MessageGreenText
+  | typeof MessageSelf;
 
 class MessageFormatter {
   private bounds: number[];
@@ -310,6 +319,9 @@ const StandardMessage: React.FC<MessageProps> = ({
   }
   if (uiConfig.formatterGreen && entities.greenText) {
     formatter.insertEntity(MessageGreenText, entities.greenText);
+  }
+  if (entities.selfMessage) {
+    formatter.insertEntity(MessageSelf, entities.selfMessage);
   }
 
   const classNames = clsx([

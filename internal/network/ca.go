@@ -18,6 +18,7 @@ var _ CA = &ca{}
 
 type CA interface {
 	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
+	FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error)
 }
 
 // newCA ...
@@ -111,16 +112,35 @@ func (t *ca) ForwardRenewRequest(ctx context.Context, cert *certificate.Certific
 	if err != nil {
 		return nil, err
 	}
-	caClient := networkv1ca.NewCAClient(client)
+	defer client.Close()
 
 	renewReq := &networkv1ca.CARenewRequest{
 		Certificate:        cert,
 		CertificateRequest: csr,
 	}
 	renewRes := &networkv1ca.CARenewResponse{}
-	if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
+	if err := networkv1ca.NewCAClient(client).Renew(ctx, renewReq, renewRes); err != nil {
 		return nil, err
 	}
 
 	return renewRes.Certificate, nil
+}
+
+func (t *ca) find(ctx context.Context, networkKey []byte, req *networkv1ca.CAFindRequest) (*certificate.Certificate, error) {
+	client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	res := &networkv1ca.CAFindResponse{}
+	if err := networkv1ca.NewCAClient(client).Find(ctx, req, res); err != nil {
+		return nil, err
+	}
+
+	return res.Certificate, nil
+}
+
+func (t *ca) FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error) {
+	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Subject: subject})
 }

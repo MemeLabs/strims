@@ -240,8 +240,7 @@ func NewRPCClient(logger *zap.Logger, dialer rpc.Dialer) (*RPCClient, error) {
 	}
 
 	rc := rpc.Caller(rpcutil.NewClientRetrier(c, RPCClientRetries, RPCClientBackoff, RPCClientDelay, RPCClientTimeout))
-	if l := logger.Check(zap.DebugLevel, "enabling client logging"); l != nil {
-		l.Write()
+	if logger.Core().Enabled(zap.DebugLevel) {
 		rc = rpcutil.NewClientLogger(rc, logger)
 	}
 

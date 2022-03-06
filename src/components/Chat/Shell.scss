@@ -3,8 +3,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  font-size: 0.8em;
-  line-height: 1.6em;
+  font-size: 0.8rem;
+  line-height: 1.6rem;
   position: relative;
   overflow: hidden;
 
@@ -45,6 +45,21 @@
       &--active {
         color: var(--color-icon-hover);
       }
+    }
+  }
+}
+
+.layout--portable {
+  .chat__nav__icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  &.layout--portrait.layout--min_aspect_ratio_0_6,
+  &.layout--landscape_cw.layout--min_aspect_ratio_4,
+  &.layout--landscape_ccw.layout--min_aspect_ratio_4 {
+    .chat__nav {
+      display: none;
     }
   }
 }

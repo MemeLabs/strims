@@ -1323,11 +1323,11 @@ export type IUIConfig = {
   notificationSoundFile?: UIConfig.ISoundFile;
   highlight?: boolean;
   customHighlight?: string;
-  highlightNicks?: string[];
-  taggedNicks?: string[];
+  highlights?: UIConfig.IHighlight[];
+  tags?: UIConfig.ITag[];
   showRemoved?: UIConfig.ShowRemoved;
   showWhispersInChat?: boolean;
-  ignoreNicks?: string[];
+  ignores?: UIConfig.IIgnore[];
   focusMentioned?: boolean;
   notificationTimeout?: boolean;
   ignoreMentions?: boolean;
@@ -1359,11 +1359,11 @@ export class UIConfig {
   notificationSoundFile: UIConfig.SoundFile | undefined;
   highlight: boolean;
   customHighlight: string;
-  highlightNicks: string[];
-  taggedNicks: string[];
+  highlights: UIConfig.Highlight[];
+  tags: UIConfig.Tag[];
   showRemoved: UIConfig.ShowRemoved;
   showWhispersInChat: boolean;
-  ignoreNicks: string[];
+  ignores: UIConfig.Ignore[];
   focusMentioned: boolean;
   notificationTimeout: boolean;
   ignoreMentions: boolean;
@@ -1394,11 +1394,11 @@ export class UIConfig {
     this.notificationSoundFile = v?.notificationSoundFile && new UIConfig.SoundFile(v.notificationSoundFile);
     this.highlight = v?.highlight || false;
     this.customHighlight = v?.customHighlight || "";
-    this.highlightNicks = v?.highlightNicks ? v.highlightNicks : [];
-    this.taggedNicks = v?.taggedNicks ? v.taggedNicks : [];
+    this.highlights = v?.highlights ? v.highlights.map(v => new UIConfig.Highlight(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new UIConfig.Tag(v)) : [];
     this.showRemoved = v?.showRemoved || 0;
     this.showWhispersInChat = v?.showWhispersInChat || false;
-    this.ignoreNicks = v?.ignoreNicks ? v.ignoreNicks : [];
+    this.ignores = v?.ignores ? v.ignores.map(v => new UIConfig.Ignore(v)) : [];
     this.focusMentioned = v?.focusMentioned || false;
     this.notificationTimeout = v?.notificationTimeout || false;
     this.ignoreMentions = v?.ignoreMentions || false;
@@ -1431,11 +1431,11 @@ export class UIConfig {
     if (m.notificationSoundFile) UIConfig.SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
     if (m.highlight) w.uint32(80).bool(m.highlight);
     if (m.customHighlight.length) w.uint32(90).string(m.customHighlight);
-    for (const v of m.highlightNicks) w.uint32(98).string(v);
-    for (const v of m.taggedNicks) w.uint32(106).string(v);
+    for (const v of m.highlights) UIConfig.Highlight.encode(v, w.uint32(98).fork()).ldelim();
+    for (const v of m.tags) UIConfig.Tag.encode(v, w.uint32(106).fork()).ldelim();
     if (m.showRemoved) w.uint32(112).uint32(m.showRemoved);
     if (m.showWhispersInChat) w.uint32(120).bool(m.showWhispersInChat);
-    for (const v of m.ignoreNicks) w.uint32(130).string(v);
+    for (const v of m.ignores) UIConfig.Ignore.encode(v, w.uint32(130).fork()).ldelim();
     if (m.focusMentioned) w.uint32(136).bool(m.focusMentioned);
     if (m.notificationTimeout) w.uint32(144).bool(m.notificationTimeout);
     if (m.ignoreMentions) w.uint32(152).bool(m.ignoreMentions);
@@ -1497,10 +1497,10 @@ export class UIConfig {
         m.customHighlight = r.string();
         break;
         case 12:
-        m.highlightNicks.push(r.string())
+        m.highlights.push(UIConfig.Highlight.decode(r, r.uint32()));
         break;
         case 13:
-        m.taggedNicks.push(r.string())
+        m.tags.push(UIConfig.Tag.decode(r, r.uint32()));
         break;
         case 14:
         m.showRemoved = r.uint32();
@@ -1509,7 +1509,7 @@ export class UIConfig {
         m.showWhispersInChat = r.bool();
         break;
         case 16:
-        m.ignoreNicks.push(r.string())
+        m.ignores.push(UIConfig.Ignore.decode(r, r.uint32()));
         break;
         case 17:
         m.focusMentioned = r.bool();
@@ -1605,6 +1605,149 @@ export namespace UIConfig {
           break;
           case 2:
           m.data = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IHighlight = {
+    alias?: string;
+    peerKey?: Uint8Array;
+  }
+
+  export class Highlight {
+    alias: string;
+    peerKey: Uint8Array;
+
+    constructor(v?: IHighlight) {
+      this.alias = v?.alias || "";
+      this.peerKey = v?.peerKey || new Uint8Array();
+    }
+
+    static encode(m: Highlight, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.alias.length) w.uint32(10).string(m.alias);
+      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Highlight {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Highlight();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.alias = r.string();
+          break;
+          case 2:
+          m.peerKey = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type ITag = {
+    alias?: string;
+    peerKey?: Uint8Array;
+    color?: string;
+  }
+
+  export class Tag {
+    alias: string;
+    peerKey: Uint8Array;
+    color: string;
+
+    constructor(v?: ITag) {
+      this.alias = v?.alias || "";
+      this.peerKey = v?.peerKey || new Uint8Array();
+      this.color = v?.color || "";
+    }
+
+    static encode(m: Tag, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.alias.length) w.uint32(10).string(m.alias);
+      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+      if (m.color.length) w.uint32(26).string(m.color);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Tag {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Tag();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.alias = r.string();
+          break;
+          case 2:
+          m.peerKey = r.bytes();
+          break;
+          case 3:
+          m.color = r.string();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IIgnore = {
+    alias?: string;
+    peerKey?: Uint8Array;
+    deadline?: bigint;
+  }
+
+  export class Ignore {
+    alias: string;
+    peerKey: Uint8Array;
+    deadline: bigint;
+
+    constructor(v?: IIgnore) {
+      this.alias = v?.alias || "";
+      this.peerKey = v?.peerKey || new Uint8Array();
+      this.deadline = v?.deadline || BigInt(0);
+    }
+
+    static encode(m: Ignore, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.alias.length) w.uint32(10).string(m.alias);
+      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+      if (m.deadline) w.uint32(24).int64(m.deadline);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Ignore {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Ignore();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.alias = r.string();
+          break;
+          case 2:
+          m.peerKey = r.bytes();
+          break;
+          case 3:
+          m.deadline = r.int64();
           break;
           default:
           r.skipType(tag & 7);
@@ -3479,23 +3622,27 @@ export namespace OpenClientResponse {
 }
 
 export type IClientSendMessageRequest = {
-  clientId?: bigint;
+  networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
   body?: string;
 }
 
 export class ClientSendMessageRequest {
-  clientId: bigint;
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
   body: string;
 
   constructor(v?: IClientSendMessageRequest) {
-    this.clientId = v?.clientId || BigInt(0);
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
     this.body = v?.body || "";
   }
 
   static encode(m: ClientSendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.clientId) w.uint32(8).uint64(m.clientId);
-    if (m.body.length) w.uint32(18).string(m.body);
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
+    if (m.body.length) w.uint32(26).string(m.body);
     return w;
   }
 
@@ -3507,9 +3654,12 @@ export class ClientSendMessageRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.clientId = r.uint64();
+        m.networkKey = r.bytes();
         break;
         case 2:
+        m.serverKey = r.bytes();
+        break;
+        case 3:
         m.body = r.string();
         break;
         default:
@@ -3541,23 +3691,313 @@ export class ClientSendMessageResponse {
   }
 }
 
-export type ICallClientResponse = {
+export type IClientMuteRequest = {
+  networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
+  alias?: string;
+  duration?: string;
+  message?: string;
 }
 
-export class CallClientResponse {
+export class ClientMuteRequest {
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+  alias: string;
+  duration: string;
+  message: string;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: ICallClientResponse) {
+  constructor(v?: IClientMuteRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.duration = v?.duration || "";
+    this.message = v?.message || "";
   }
 
-  static encode(m: CallClientResponse, w?: Writer): Writer {
+  static encode(m: ClientMuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
+    if (m.alias.length) w.uint32(26).string(m.alias);
+    if (m.duration.length) w.uint32(34).string(m.duration);
+    if (m.message.length) w.uint32(42).string(m.message);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientMuteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientMuteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.serverKey = r.bytes();
+        break;
+        case 3:
+        m.alias = r.string();
+        break;
+        case 4:
+        m.duration = r.string();
+        break;
+        case 5:
+        m.message = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IClientMuteResponse = {
+}
+
+export class ClientMuteResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IClientMuteResponse) {
+  }
+
+  static encode(m: ClientMuteResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallClientResponse {
+  static decode(r: Reader | Uint8Array, length?: number): ClientMuteResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new CallClientResponse();
+    return new ClientMuteResponse();
+  }
+}
+
+export type IClientUnmuteRequest = {
+  networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
+  alias?: string;
+}
+
+export class ClientUnmuteRequest {
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+  alias: string;
+
+  constructor(v?: IClientUnmuteRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
+    this.alias = v?.alias || "";
+  }
+
+  static encode(m: ClientUnmuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
+    if (m.alias.length) w.uint32(26).string(m.alias);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientUnmuteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientUnmuteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.serverKey = r.bytes();
+        break;
+        case 3:
+        m.alias = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IClientUnmuteResponse = {
+}
+
+export class ClientUnmuteResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IClientUnmuteResponse) {
+  }
+
+  static encode(m: ClientUnmuteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientUnmuteResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ClientUnmuteResponse();
+  }
+}
+
+export type IClientGetMuteRequest = {
+  networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
+}
+
+export class ClientGetMuteRequest {
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+
+  constructor(v?: IClientGetMuteRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
+  }
+
+  static encode(m: ClientGetMuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientGetMuteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientGetMuteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.serverKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IClientGetMuteResponse = {
+  endTime?: bigint;
+  message?: string;
+}
+
+export class ClientGetMuteResponse {
+  endTime: bigint;
+  message: string;
+
+  constructor(v?: IClientGetMuteResponse) {
+    this.endTime = v?.endTime || BigInt(0);
+    this.message = v?.message || "";
+  }
+
+  static encode(m: ClientGetMuteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.endTime) w.uint32(8).int64(m.endTime);
+    if (m.message.length) w.uint32(18).string(m.message);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientGetMuteResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientGetMuteResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.endTime = r.int64();
+        break;
+        case 2:
+        m.message = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  body?: string;
+}
+
+export class WhisperRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  body: string;
+
+  constructor(v?: IWhisperRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.body = v?.body || "";
+  }
+
+  static encode(m: WhisperRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.body.length) w.uint32(26).string(m.body);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.body = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperResponse = {
+}
+
+export class WhisperResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IWhisperResponse) {
+  }
+
+  static encode(m: WhisperResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new WhisperResponse();
   }
 }
 
@@ -3617,47 +4057,47 @@ export class SetUIConfigResponse {
   }
 }
 
-export type IGetUIConfigRequest = {
+export type IWatchUIConfigRequest = {
 }
 
-export class GetUIConfigRequest {
+export class WatchUIConfigRequest {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IGetUIConfigRequest) {
+  constructor(v?: IWatchUIConfigRequest) {
   }
 
-  static encode(m: GetUIConfigRequest, w?: Writer): Writer {
+  static encode(m: WatchUIConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): GetUIConfigRequest {
+  static decode(r: Reader | Uint8Array, length?: number): WatchUIConfigRequest {
     if (r instanceof Reader && length) r.skip(length);
-    return new GetUIConfigRequest();
+    return new WatchUIConfigRequest();
   }
 }
 
-export type IGetUIConfigResponse = {
+export type IWatchUIConfigResponse = {
   uiConfig?: IUIConfig;
 }
 
-export class GetUIConfigResponse {
+export class WatchUIConfigResponse {
   uiConfig: UIConfig | undefined;
 
-  constructor(v?: IGetUIConfigResponse) {
+  constructor(v?: IWatchUIConfigResponse) {
     this.uiConfig = v?.uiConfig && new UIConfig(v.uiConfig);
   }
 
-  static encode(m: GetUIConfigResponse, w?: Writer): Writer {
+  static encode(m: WatchUIConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.uiConfig) UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): GetUIConfigResponse {
+  static decode(r: Reader | Uint8Array, length?: number): WatchUIConfigResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new GetUIConfigResponse();
+    const m = new WatchUIConfigResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -3670,6 +4110,419 @@ export class GetUIConfigResponse {
       }
     }
     return m;
+  }
+}
+
+export type IIgnoreRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  duration?: string;
+}
+
+export class IgnoreRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  duration: string;
+
+  constructor(v?: IIgnoreRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.duration = v?.duration || "";
+  }
+
+  static encode(m: IgnoreRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.duration.length) w.uint32(26).string(m.duration);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): IgnoreRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new IgnoreRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.duration = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IIgnoreResponse = {
+}
+
+export class IgnoreResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IIgnoreResponse) {
+  }
+
+  static encode(m: IgnoreResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): IgnoreResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new IgnoreResponse();
+  }
+}
+
+export type IUnignoreRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  peerKey?: Uint8Array;
+}
+
+export class UnignoreRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  peerKey: Uint8Array;
+
+  constructor(v?: IUnignoreRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: UnignoreRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnignoreRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UnignoreRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUnignoreResponse = {
+}
+
+export class UnignoreResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IUnignoreResponse) {
+  }
+
+  static encode(m: UnignoreResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnignoreResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new UnignoreResponse();
+  }
+}
+
+export type IHighlightRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+}
+
+export class HighlightRequest {
+  networkKey: Uint8Array;
+  alias: string;
+
+  constructor(v?: IHighlightRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+  }
+
+  static encode(m: HighlightRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HighlightRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new HighlightRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IHighlightResponse = {
+}
+
+export class HighlightResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IHighlightResponse) {
+  }
+
+  static encode(m: HighlightResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): HighlightResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new HighlightResponse();
+  }
+}
+
+export type IUnhighlightRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  peerKey?: Uint8Array;
+}
+
+export class UnhighlightRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  peerKey: Uint8Array;
+
+  constructor(v?: IUnhighlightRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: UnhighlightRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnhighlightRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UnhighlightRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUnhighlightResponse = {
+}
+
+export class UnhighlightResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IUnhighlightResponse) {
+  }
+
+  static encode(m: UnhighlightResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnhighlightResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new UnhighlightResponse();
+  }
+}
+
+export type ITagRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  color?: string;
+}
+
+export class TagRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  color: string;
+
+  constructor(v?: ITagRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.color = v?.color || "";
+  }
+
+  static encode(m: TagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.color.length) w.uint32(26).string(m.color);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.color = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ITagResponse = {
+}
+
+export class TagResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: ITagResponse) {
+  }
+
+  static encode(m: TagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TagResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new TagResponse();
+  }
+}
+
+export type IUntagRequest = {
+  networkKey?: Uint8Array;
+  alias?: string;
+  peerKey?: Uint8Array;
+}
+
+export class UntagRequest {
+  networkKey: Uint8Array;
+  alias: string;
+  peerKey: Uint8Array;
+
+  constructor(v?: IUntagRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: UntagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UntagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UntagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUntagResponse = {
+}
+
+export class UntagResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IUntagResponse) {
+  }
+
+  static encode(m: UntagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UntagResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new UntagResponse();
   }
 }
 
@@ -3726,6 +4579,195 @@ export class SendMessageResponse {
   static decode(r: Reader | Uint8Array, length?: number): SendMessageResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new SendMessageResponse();
+  }
+}
+
+export type IMuteRequest = {
+  peerKey?: Uint8Array;
+  durationSecs?: number;
+  message?: string;
+}
+
+export class MuteRequest {
+  peerKey: Uint8Array;
+  durationSecs: number;
+  message: string;
+
+  constructor(v?: IMuteRequest) {
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.durationSecs = v?.durationSecs || 0;
+    this.message = v?.message || "";
+  }
+
+  static encode(m: MuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
+    if (m.durationSecs) w.uint32(16).uint32(m.durationSecs);
+    if (m.message.length) w.uint32(26).string(m.message);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): MuteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new MuteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peerKey = r.bytes();
+        break;
+        case 2:
+        m.durationSecs = r.uint32();
+        break;
+        case 3:
+        m.message = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IMuteResponse = {
+}
+
+export class MuteResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IMuteResponse) {
+  }
+
+  static encode(m: MuteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): MuteResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new MuteResponse();
+  }
+}
+
+export type IUnmuteRequest = {
+  peerKey?: Uint8Array;
+}
+
+export class UnmuteRequest {
+  peerKey: Uint8Array;
+
+  constructor(v?: IUnmuteRequest) {
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: UnmuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnmuteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UnmuteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUnmuteResponse = {
+}
+
+export class UnmuteResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IUnmuteResponse) {
+  }
+
+  static encode(m: UnmuteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UnmuteResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new UnmuteResponse();
+  }
+}
+
+export type IGetMuteRequest = {
+}
+
+export class GetMuteRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IGetMuteRequest) {
+  }
+
+  static encode(m: GetMuteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetMuteRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new GetMuteRequest();
+  }
+}
+
+export type IGetMuteResponse = {
+  endTime?: bigint;
+  message?: string;
+}
+
+export class GetMuteResponse {
+  endTime: bigint;
+  message: string;
+
+  constructor(v?: IGetMuteResponse) {
+    this.endTime = v?.endTime || BigInt(0);
+    this.message = v?.message || "";
+  }
+
+  static encode(m: GetMuteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.endTime) w.uint32(8).int64(m.endTime);
+    if (m.message.length) w.uint32(18).string(m.message);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetMuteResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetMuteResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.endTime = r.int64();
+        break;
+        case 2:
+        m.message = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
   }
 }
 

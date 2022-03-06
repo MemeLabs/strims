@@ -1,7 +1,7 @@
 .chat {
   &__message {
     box-sizing: border-box;
-    line-height: 1.4em;
+    line-height: 1.4rem;
     overflow-wrap: break-word;
     padding: 3px 7px;
 
@@ -94,6 +94,16 @@
     &__greentext {
       color: #6ca528;
     }
+
+    &--self {
+      .chat__message__body {
+        font-size: 0;
+      }
+
+      .chat__message__self {
+        font-size: 0.8rem;
+      }
+    }
   }
 
   &__combo_message {
@@ -131,26 +141,26 @@
       font-style: italic;
       text-transform: uppercase;
       margin-left: 0;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.05rem;
       display: inline-block;
     }
 
     &__count {
-      font-size: 1.2em;
-      letter-spacing: -0.05em;
+      font-size: 1.2rem;
+      letter-spacing: -0.05rem;
       font-weight: bold;
     }
 
     &--scale_5 {
       .chat__combo_message__count {
-        font-size: 1.5em;
+        font-size: 1.5rem;
       }
     }
 
     &--scale_10,
     &--scale_15 {
       .chat__combo_message__count {
-        font-size: 2em;
+        font-size: 2rem;
       }
       .chat__combo_message__combo {
         font-weight: bold;
@@ -160,7 +170,7 @@
     &--scale_20,
     &--scale_25 {
       .chat__combo_message__count {
-        font-size: 3em;
+        font-size: 3rem;
       }
       .chat__combo_message__combo {
         font-weight: bold;
@@ -171,10 +181,10 @@
     &--scale_35,
     &--scale_40,
     &--scale_45 {
-      padding-bottom: 0.5em;
+      padding-bottom: 0.5rem;
 
       .chat__combo_message__count {
-        font-size: 4em;
+        font-size: 4rem;
       }
       .chat__combo_message__combo {
         font-weight: bold;
@@ -182,10 +192,10 @@
     }
 
     &--scale_50 {
-      padding-bottom: 0.7em;
+      padding-bottom: 0.7rem;
 
       .chat__combo_message__count {
-        font-size: 5em;
+        font-size: 5rem;
       }
       .chat__combo_message__combo {
         font-weight: bold;

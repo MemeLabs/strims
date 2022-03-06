@@ -10,6 +10,7 @@ import (
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
@@ -137,4 +138,19 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 	}
 
 	return &chatv1.SendMessageResponse{}, nil
+}
+
+func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv1.MuteResponse, error) {
+	debug.PrintJSON(req)
+	return &chatv1.MuteResponse{}, nil
+}
+
+func (d *chatService) Unmute(ctx context.Context, req *chatv1.UnmuteRequest) (*chatv1.UnmuteResponse, error) {
+	debug.PrintJSON(req)
+	return &chatv1.UnmuteResponse{}, nil
+}
+
+func (d *chatService) GetMute(ctx context.Context, req *chatv1.GetMuteRequest) (*chatv1.GetMuteResponse, error) {
+	debug.PrintJSON(req)
+	return &chatv1.GetMuteResponse{}, nil
 }

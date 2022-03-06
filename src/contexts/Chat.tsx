@@ -1,6 +1,6 @@
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
-import React, { ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
 
 import {
@@ -21,7 +21,9 @@ import { useClient } from "./FrontendApi";
 type RoomAction =
   | {
       type: "INIT";
-      chatClient: Readable<OpenClientResponse>;
+      serverEvents: Readable<OpenClientResponse>;
+      networkKey: Uint8Array;
+      serverKey: Uint8Array;
     }
   | {
       type: "TOGGLE_MESSAGE_GC";
@@ -72,7 +74,9 @@ const enum RoomInitState {
 }
 
 export interface RoomState {
-  chatClient: Readable<OpenClientResponse>;
+  serverEvents: Readable<OpenClientResponse>;
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
   id: number;
   clientId?: bigint;
   messages: Message[];
@@ -102,7 +106,9 @@ export interface State {
 type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
 
 const initialRoomState: RoomState = {
-  chatClient: null,
+  serverEvents: null,
+  networkKey: null,
+  serverKey: null,
   id: 0,
   messages: [],
   messageGCEnabled: true,
@@ -125,10 +131,14 @@ const initialRoomState: RoomState = {
 let nextId = 0;
 const initializeRoomState = (
   state: RoomState,
-  chatClient: Readable<OpenClientResponse>
+  serverEvents: Readable<OpenClientResponse>,
+  networkKey: Uint8Array,
+  serverKey: Uint8Array
 ): RoomState => ({
   ...state,
-  chatClient,
+  serverEvents,
+  networkKey,
+  serverKey,
   id: nextId++,
   messageSizeCache: new ChatCellMeasurerCache(),
   state: RoomInitState.INITIALIZED,
@@ -198,6 +208,7 @@ const useRoomStateReducer = (setState: StateDispatcher, key: string) => (action:
   }));
 
 const stateReducer = (state: State, action: Action): State => {
+  console.log({ state, action });
   switch (action.type) {
     case "SET_UI_CONFIG":
       return {
@@ -212,9 +223,9 @@ const stateReducer = (state: State, action: Action): State => {
 const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomState => {
   switch (action.type) {
     case "INIT":
-      return initializeRoomState(room, action.chatClient);
+      return initializeRoomState(room, action.serverEvents, action.networkKey, action.serverKey);
     case "CLIENT_DATA":
-      return chatClientDataReducer(state, room, action.data);
+      return serverEventsDataReducer(state, room, action.data);
     case "CLIENT_ERROR":
       return {
         ...room,
@@ -235,7 +246,7 @@ const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomSta
   }
 };
 
-const chatClientDataReducer = (
+const serverEventsDataReducer = (
   state: State,
   room: RoomState,
   event: OpenClientResponse
@@ -348,23 +359,19 @@ export const Provider: React.FC = ({ children }) => {
   const client = useClient();
 
   useEffect(() => {
-    let unmounted = false;
-    void client.chat.getUIConfig().then(({ uiConfig }) => {
-      if (!unmounted && uiConfig) {
-        dispatch({ type: "SET_UI_CONFIG", uiConfig });
-      }
-    });
-    return () => (unmounted = true);
+    const events = client.chat.watchUIConfig();
+    events.on("data", ({ uiConfig }) => dispatch({ type: "SET_UI_CONFIG", uiConfig }));
+    return () => events.destroy();
   }, []);
 
   const mergeUIConfig = useCallback(
     (values: Partial<IUIConfig>) => {
-      const uiConfig = new UIConfig({
-        ...state.uiConfig,
-        ...values,
+      void client.chat.setUIConfig({
+        uiConfig: {
+          ...state.uiConfig,
+          ...values,
+        },
       });
-      dispatch({ type: "SET_UI_CONFIG", uiConfig });
-      void client.chat.setUIConfig({ uiConfig });
     },
     [client, state.uiConfig]
   );
@@ -399,7 +406,7 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
     [networkKey, serverKey]
   );
 
-  const [state, , setState] = React.useContext(ChatContext);
+  const [state, { mergeUIConfig }, setState] = React.useContext(ChatContext);
   const dispatch = useRoomStateReducer(setState, key);
 
   const client = useClient();
@@ -410,11 +417,11 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
       return;
     }
 
-    const chatClient = client.chat.openClient({ networkKey, serverKey });
-    chatClient.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
-    chatClient.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
-    chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    dispatch({ type: "INIT", chatClient });
+    const serverEvents = client.chat.openClient({ networkKey, serverKey });
+    serverEvents.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
+    serverEvents.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
+    serverEvents.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
+    dispatch({ type: "INIT", serverEvents, networkKey, serverKey });
   }, [networkKey, serverKey]);
 
   useEffect(() => {
@@ -430,14 +437,86 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
     return () => void client.directory.part(req);
   }, [networkKey, directoryListingId]);
 
-  const sendMessage = useCallback(
-    (body: string) =>
-      client.chat.clientSendMessage({
-        clientId: room.clientId,
-        body,
-      }),
-    [client, room.clientId]
-  );
+  const sendMessage = useMemo(() => {
+    const commandFuncs: { [key: string]: (...args: string[]) => void } = {
+      help: () => {
+        console.log("help");
+      },
+      ignore: (alias: string, duration: string) => {
+        void client.chat.ignore({ networkKey, alias, duration });
+      },
+      unignore: (alias: string) => {
+        void client.chat.unignore({ networkKey, alias });
+      },
+      highlight: (alias: string) => {
+        void client.chat.highlight({ networkKey, alias });
+      },
+      unhighlight: (alias: string) => {
+        void client.chat.unhighlight({ networkKey, alias });
+      },
+      maxlines: (n: string) => {
+        console.log("maxlines", { n });
+      },
+      mute: (alias: string, duration: string, message: string) => {
+        void client.chat.clientMute({ networkKey, alias, duration, message });
+      },
+      unmute: (alias: string) => {
+        void client.chat.clientUnmute({ networkKey, alias });
+      },
+      timestampformat: (format: string) => {
+        console.log("timestampformat", { format });
+      },
+      tag: (alias: string, color: string) => {
+        void client.chat.tag({ networkKey, alias, color });
+      },
+      untag: (alias: string) => {
+        void client.chat.untag({ networkKey, alias });
+      },
+      whisper: (alias: string, body: string) => {
+        void client.chat.whisper({ networkKey, alias, body });
+      },
+      exit: () => {
+        console.log("exit");
+      },
+      hideemote: (name: string) => {
+        console.log("hideemote", { name });
+      },
+      unhideemote: (name: string) => {
+        console.log("unhideemote", { name });
+      },
+      me: (body: string) => {
+        void client.chat.clientSendMessage({
+          networkKey,
+          serverKey,
+          body: `/me ${body}`,
+        });
+      },
+    };
+
+    const commandAliases: { [key: string]: string } = {
+      "w": "whisper",
+      "message": "whisper",
+      "msg": "whisper",
+      "tell": "whisper",
+      "t": "whisper",
+      "notify": "whisper",
+    };
+
+    return (body: string) => {
+      if (body.startsWith("/")) {
+        const command = body.split(" ", 1).pop().toLowerCase().substring(1);
+        const func = commandFuncs[commandAliases[command] ?? command];
+        if (func) {
+          const args = body.split(" ", func.length);
+          func(...[...args.slice(1), body.substring(args.reduce((n, a) => n + a.length + 1, 0))]);
+        } else {
+          // invalid command
+        }
+      } else {
+        void client.chat.clientSendMessage({ networkKey, serverKey, body });
+      }
+    };
+  }, [client, room.clientId]);
 
   const messages = useRef<Message[]>();
   messages.current = room.messages;

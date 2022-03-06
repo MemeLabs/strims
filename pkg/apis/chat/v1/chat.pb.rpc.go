@@ -474,8 +474,18 @@ func (c *ChatServerFrontendClient) SyncAssets(
 func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendService) {
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientMute", service.ClientMute)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientUnmute", service.ClientUnmute)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientGetMute", service.ClientGetMute)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Whisper", service.Whisper)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetUIConfig", service.GetUIConfig)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchUIConfig", service.WatchUIConfig)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Ignore", service.Ignore)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Unignore", service.Unignore)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Highlight", service.Highlight)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Unhighlight", service.Unhighlight)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Tag", service.Tag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.Untag", service.Untag)
 }
 
 // ChatFrontendService ...
@@ -488,14 +498,54 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *ClientSendMessageRequest,
 	) (*ClientSendMessageResponse, error)
+	ClientMute(
+		ctx context.Context,
+		req *ClientMuteRequest,
+	) (*ClientMuteResponse, error)
+	ClientUnmute(
+		ctx context.Context,
+		req *ClientUnmuteRequest,
+	) (*ClientUnmuteResponse, error)
+	ClientGetMute(
+		ctx context.Context,
+		req *ClientGetMuteRequest,
+	) (*ClientGetMuteResponse, error)
+	Whisper(
+		ctx context.Context,
+		req *WhisperRequest,
+	) (*WhisperResponse, error)
 	SetUIConfig(
 		ctx context.Context,
 		req *SetUIConfigRequest,
 	) (*SetUIConfigResponse, error)
-	GetUIConfig(
+	WatchUIConfig(
 		ctx context.Context,
-		req *GetUIConfigRequest,
-	) (*GetUIConfigResponse, error)
+		req *WatchUIConfigRequest,
+	) (<-chan *WatchUIConfigResponse, error)
+	Ignore(
+		ctx context.Context,
+		req *IgnoreRequest,
+	) (*IgnoreResponse, error)
+	Unignore(
+		ctx context.Context,
+		req *UnignoreRequest,
+	) (*UnignoreResponse, error)
+	Highlight(
+		ctx context.Context,
+		req *HighlightRequest,
+	) (*HighlightResponse, error)
+	Unhighlight(
+		ctx context.Context,
+		req *UnhighlightRequest,
+	) (*UnhighlightResponse, error)
+	Tag(
+		ctx context.Context,
+		req *TagRequest,
+	) (*TagResponse, error)
+	Untag(
+		ctx context.Context,
+		req *UntagRequest,
+	) (*UntagResponse, error)
 }
 
 // ChatFrontendService ...
@@ -515,6 +565,34 @@ func (s *UnimplementedChatFrontendService) ClientSendMessage(
 	return nil, rpc.ErrNotImplemented
 }
 
+func (s *UnimplementedChatFrontendService) ClientMute(
+	ctx context.Context,
+	req *ClientMuteRequest,
+) (*ClientMuteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) ClientUnmute(
+	ctx context.Context,
+	req *ClientUnmuteRequest,
+) (*ClientUnmuteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) ClientGetMute(
+	ctx context.Context,
+	req *ClientGetMuteRequest,
+) (*ClientGetMuteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Whisper(
+	ctx context.Context,
+	req *WhisperRequest,
+) (*WhisperResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
 func (s *UnimplementedChatFrontendService) SetUIConfig(
 	ctx context.Context,
 	req *SetUIConfigRequest,
@@ -522,10 +600,52 @@ func (s *UnimplementedChatFrontendService) SetUIConfig(
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedChatFrontendService) GetUIConfig(
+func (s *UnimplementedChatFrontendService) WatchUIConfig(
 	ctx context.Context,
-	req *GetUIConfigRequest,
-) (*GetUIConfigResponse, error) {
+	req *WatchUIConfigRequest,
+) (<-chan *WatchUIConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Ignore(
+	ctx context.Context,
+	req *IgnoreRequest,
+) (*IgnoreResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Unignore(
+	ctx context.Context,
+	req *UnignoreRequest,
+) (*UnignoreResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Highlight(
+	ctx context.Context,
+	req *HighlightRequest,
+) (*HighlightResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Unhighlight(
+	ctx context.Context,
+	req *UnhighlightRequest,
+) (*UnhighlightResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Tag(
+	ctx context.Context,
+	req *TagRequest,
+) (*TagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) Untag(
+	ctx context.Context,
+	req *UntagRequest,
+) (*UntagResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -559,6 +679,42 @@ func (c *ChatFrontendClient) ClientSendMessage(
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ClientSendMessage", req, res)
 }
 
+// ClientMute ...
+func (c *ChatFrontendClient) ClientMute(
+	ctx context.Context,
+	req *ClientMuteRequest,
+	res *ClientMuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ClientMute", req, res)
+}
+
+// ClientUnmute ...
+func (c *ChatFrontendClient) ClientUnmute(
+	ctx context.Context,
+	req *ClientUnmuteRequest,
+	res *ClientUnmuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ClientUnmute", req, res)
+}
+
+// ClientGetMute ...
+func (c *ChatFrontendClient) ClientGetMute(
+	ctx context.Context,
+	req *ClientGetMuteRequest,
+	res *ClientGetMuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ClientGetMute", req, res)
+}
+
+// Whisper ...
+func (c *ChatFrontendClient) Whisper(
+	ctx context.Context,
+	req *WhisperRequest,
+	res *WhisperResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Whisper", req, res)
+}
+
 // SetUIConfig ...
 func (c *ChatFrontendClient) SetUIConfig(
 	ctx context.Context,
@@ -568,18 +724,75 @@ func (c *ChatFrontendClient) SetUIConfig(
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.SetUIConfig", req, res)
 }
 
-// GetUIConfig ...
-func (c *ChatFrontendClient) GetUIConfig(
+// WatchUIConfig ...
+func (c *ChatFrontendClient) WatchUIConfig(
 	ctx context.Context,
-	req *GetUIConfigRequest,
-	res *GetUIConfigResponse,
+	req *WatchUIConfigRequest,
+	res chan *WatchUIConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetUIConfig", req, res)
+	return c.client.CallStreaming(ctx, "strims.chat.v1.ChatFrontend.WatchUIConfig", req, res)
+}
+
+// Ignore ...
+func (c *ChatFrontendClient) Ignore(
+	ctx context.Context,
+	req *IgnoreRequest,
+	res *IgnoreResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Ignore", req, res)
+}
+
+// Unignore ...
+func (c *ChatFrontendClient) Unignore(
+	ctx context.Context,
+	req *UnignoreRequest,
+	res *UnignoreResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Unignore", req, res)
+}
+
+// Highlight ...
+func (c *ChatFrontendClient) Highlight(
+	ctx context.Context,
+	req *HighlightRequest,
+	res *HighlightResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Highlight", req, res)
+}
+
+// Unhighlight ...
+func (c *ChatFrontendClient) Unhighlight(
+	ctx context.Context,
+	req *UnhighlightRequest,
+	res *UnhighlightResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Unhighlight", req, res)
+}
+
+// Tag ...
+func (c *ChatFrontendClient) Tag(
+	ctx context.Context,
+	req *TagRequest,
+	res *TagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Tag", req, res)
+}
+
+// Untag ...
+func (c *ChatFrontendClient) Untag(
+	ctx context.Context,
+	req *UntagRequest,
+	res *UntagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Untag", req, res)
 }
 
 // RegisterChatService ...
 func RegisterChatService(host rpc.ServiceRegistry, service ChatService) {
 	host.RegisterMethod("strims.chat.v1.Chat.SendMessage", service.SendMessage)
+	host.RegisterMethod("strims.chat.v1.Chat.Mute", service.Mute)
+	host.RegisterMethod("strims.chat.v1.Chat.Unmute", service.Unmute)
+	host.RegisterMethod("strims.chat.v1.Chat.GetMute", service.GetMute)
 }
 
 // ChatService ...
@@ -588,6 +801,18 @@ type ChatService interface {
 		ctx context.Context,
 		req *SendMessageRequest,
 	) (*SendMessageResponse, error)
+	Mute(
+		ctx context.Context,
+		req *MuteRequest,
+	) (*MuteResponse, error)
+	Unmute(
+		ctx context.Context,
+		req *UnmuteRequest,
+	) (*UnmuteResponse, error)
+	GetMute(
+		ctx context.Context,
+		req *GetMuteRequest,
+	) (*GetMuteResponse, error)
 }
 
 // ChatService ...
@@ -597,6 +822,27 @@ func (s *UnimplementedChatService) SendMessage(
 	ctx context.Context,
 	req *SendMessageRequest,
 ) (*SendMessageResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatService) Mute(
+	ctx context.Context,
+	req *MuteRequest,
+) (*MuteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatService) Unmute(
+	ctx context.Context,
+	req *UnmuteRequest,
+) (*UnmuteResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatService) GetMute(
+	ctx context.Context,
+	req *GetMuteRequest,
+) (*GetMuteResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -619,4 +865,31 @@ func (c *ChatClient) SendMessage(
 	res *SendMessageResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.SendMessage", req, res)
+}
+
+// Mute ...
+func (c *ChatClient) Mute(
+	ctx context.Context,
+	req *MuteRequest,
+	res *MuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.Mute", req, res)
+}
+
+// Unmute ...
+func (c *ChatClient) Unmute(
+	ctx context.Context,
+	req *UnmuteRequest,
+	res *UnmuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.Unmute", req, res)
+}
+
+// GetMute ...
+func (c *ChatClient) GetMute(
+	ctx context.Context,
+	req *GetMuteRequest,
+	res *GetMuteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.GetMute", req, res)
 }

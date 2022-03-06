@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
@@ -26,8 +27,11 @@ var (
 type Control interface {
 	Run()
 	SyncAssets(serverID uint64, forceUnifiedUpdate bool) error
-	ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
-	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
+	ReadServer(ctx context.Context, networkKey, serverKey []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error)
+	SendMessage(ctx context.Context, networkKey, serverKey []byte, m string) error
+	Mute(ctx context.Context, networkKey, serverKey, peerKey []byte, duration time.Duration, message string) error
+	Unmute(ctx context.Context, networkKey, serverKey, peerKey []byte) error
+	GetMute(ctx context.Context, networkKey, serverKey []byte) (*chatv1.GetMuteResponse, error)
 }
 
 // NewControl ...
@@ -145,15 +149,6 @@ func (t *control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
 	return nil
 }
 
-func (t *control) client(ctx context.Context, networkKey, key []byte) (*network.RPCClient, *chatv1.ChatClient, error) {
-	client, err := t.network.Dialer().Client(ctx, networkKey, key, ServiceAddressSalt)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return client, chatv1.NewChatClient(client), nil
-}
-
 // ReadServer ...
 func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error) {
 	logger := t.logger.With(
@@ -240,12 +235,51 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 }
 
 // SendMessage ...
-func (t *control) SendMessage(ctx context.Context, networkKey, key []byte, m string) error {
-	c, cc, err := t.client(ctx, networkKey, key)
+func (t *control) SendMessage(ctx context.Context, networkKey, serverKey []byte, m string) error {
+	client, err := t.network.Dialer().Client(ctx, networkKey, serverKey, ServiceAddressSalt)
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer client.Close()
 
-	return cc.SendMessage(ctx, &chatv1.SendMessageRequest{Body: m}, &chatv1.SendMessageResponse{})
+	return chatv1.NewChatClient(client).SendMessage(ctx, &chatv1.SendMessageRequest{Body: m}, &chatv1.SendMessageResponse{})
+}
+
+func (t *control) Mute(ctx context.Context, networkKey, serverKey, peerKey []byte, duration time.Duration, message string) error {
+	client, err := t.network.Dialer().Client(ctx, networkKey, serverKey, ServiceAddressSalt)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	req := &chatv1.MuteRequest{
+		PeerKey:      peerKey,
+		DurationSecs: uint32(duration / time.Second),
+		Message:      message,
+	}
+	return chatv1.NewChatClient(client).Mute(ctx, req, &chatv1.MuteResponse{})
+}
+
+func (t *control) Unmute(ctx context.Context, networkKey, serverKey, peerKey []byte) error {
+	client, err := t.network.Dialer().Client(ctx, networkKey, serverKey, ServiceAddressSalt)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	return chatv1.NewChatClient(client).Unmute(ctx, &chatv1.UnmuteRequest{PeerKey: peerKey}, &chatv1.UnmuteResponse{})
+}
+
+func (t *control) GetMute(ctx context.Context, networkKey, serverKey []byte) (*chatv1.GetMuteResponse, error) {
+	client, err := t.network.Dialer().Client(ctx, networkKey, serverKey, ServiceAddressSalt)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	res := &chatv1.GetMuteResponse{}
+	if err := chatv1.NewChatClient(client).GetMute(ctx, &chatv1.GetMuteRequest{}, res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }

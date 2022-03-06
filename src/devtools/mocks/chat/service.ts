@@ -86,8 +86,8 @@ class ChatService {
     return new chatv1.SetUIConfigResponse();
   }
 
-  getUIConfig(): chatv1.GetUIConfigResponse {
-    return new chatv1.GetUIConfigResponse();
+  watchUIConfig(): Readable<chatv1.WatchUIConfigResponse> {
+    return new PassThrough({ objectMode: true });
   }
 
   // ChatServerFrontendService

@@ -1,15 +1,21 @@
 package frontend
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"golang.org/x/exp/slices"
 )
 
 func init() {
@@ -347,20 +353,75 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 	return ch, nil
 }
 
-// ClientSendMessage ...
-func (s *chatService) ClientSendMessage(ctx context.Context, req *chatv1.ClientSendMessageRequest) (*chatv1.ClientSendMessageResponse, error) {
+func (s *chatService) clientRef(id uint64) (chatClientRef, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	ref, ok := s.clients[req.ClientId]
+	ref, ok := s.clients[id]
 	if !ok {
-		return nil, errors.New("client id not found")
+		return chatClientRef{}, errors.New("client id not found")
 	}
+	return ref, nil
+}
 
-	if err := s.app.Chat().SendMessage(ctx, ref.networkKey, ref.serverKey, req.Body); err != nil {
+// ClientSendMessage ...
+func (s *chatService) ClientSendMessage(ctx context.Context, req *chatv1.ClientSendMessageRequest) (*chatv1.ClientSendMessageResponse, error) {
+	if err := s.app.Chat().SendMessage(ctx, req.NetworkKey, req.ServerKey, req.Body); err != nil {
 		return nil, err
 	}
 	return &chatv1.ClientSendMessageResponse{}, nil
+}
+
+// ClientMute ...
+func (s *chatService) ClientMute(ctx context.Context, req *chatv1.ClientMuteRequest) (*chatv1.ClientMuteResponse, error) {
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	duration, err := time.ParseDuration(req.Duration)
+	if err != nil {
+		return nil, fmt.Errorf("parsing duration failed: %w", err)
+	}
+
+	if err := s.app.Chat().Mute(ctx, req.NetworkKey, req.ServerKey, cert.Key, duration, req.Message); err != nil {
+		return nil, err
+	}
+	return &chatv1.ClientMuteResponse{}, nil
+}
+
+// ClientUnmute ...
+func (s *chatService) ClientUnmute(ctx context.Context, req *chatv1.ClientUnmuteRequest) (*chatv1.ClientUnmuteResponse, error) {
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	if err := s.app.Chat().Unmute(ctx, req.NetworkKey, req.ServerKey, cert.Key); err != nil {
+		return nil, err
+	}
+	return &chatv1.ClientUnmuteResponse{}, nil
+}
+
+// ClientGetMute ...
+func (s *chatService) ClientGetMute(ctx context.Context, req *chatv1.ClientGetMuteRequest) (*chatv1.ClientGetMuteResponse, error) {
+	res, err := s.app.Chat().GetMute(ctx, req.NetworkKey, req.ServerKey)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.ClientGetMuteResponse{
+		EndTime: res.EndTime,
+		Message: res.Message,
+	}, nil
+}
+
+// Whisper ...
+func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (*chatv1.WhisperResponse, error) {
+	// res, err := s.app.Chat().Whisper(ctx, req.NetworkKey, req.ServerKey)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	return &chatv1.WhisperResponse{}, rpc.ErrNotImplemented
 }
 
 // SetUIConfig ...
@@ -372,13 +433,176 @@ func (s *chatService) SetUIConfig(ctx context.Context, req *chatv1.SetUIConfigRe
 	return &chatv1.SetUIConfigResponse{}, nil
 }
 
-// GetUIConfig ...
-func (s *chatService) GetUIConfig(ctx context.Context, req *chatv1.GetUIConfigRequest) (*chatv1.GetUIConfigResponse, error) {
+// WatchUIConfig ...
+func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConfigRequest) (<-chan *chatv1.WatchUIConfigResponse, error) {
+	ch := make(chan *chatv1.WatchUIConfigResponse, 1)
+
 	c, err := dao.ChatUIConfig.Get(s.store)
-	if errors.Is(err, kv.ErrRecordNotFound) {
-		return &chatv1.GetUIConfigResponse{}, nil
-	} else if err != nil {
+	if err == nil {
+		ch <- &chatv1.WatchUIConfigResponse{UiConfig: c}
+	} else if !errors.Is(err, kv.ErrRecordNotFound) {
 		return nil, err
 	}
-	return &chatv1.GetUIConfigResponse{UiConfig: c}, nil
+
+	go func() {
+		events := make(chan interface{}, 1)
+		s.app.Events().Notify(events)
+		defer s.app.Events().StopNotifying(events)
+
+		for {
+			select {
+			case e := <-events:
+				switch e := e.(type) {
+				case *chatv1.UIConfigChangeEvent:
+					ch <- &chatv1.WatchUIConfigResponse{UiConfig: e.UiConfig}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
+// Ignore ...
+func (s *chatService) Ignore(ctx context.Context, req *chatv1.IgnoreRequest) (*chatv1.IgnoreResponse, error) {
+	debug.PrintJSON(req)
+	var deadline int64
+	if req.Duration != "" {
+		duration, err := time.ParseDuration(req.Duration)
+		if err != nil {
+			return nil, fmt.Errorf("parsing duration failed: %w", err)
+		}
+		deadline = timeutil.Now().Add(duration).Unix()
+	}
+
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](cert.Key)); i != -1 {
+			p.Ignores = slices.Delete(p.Ignores, i, i+1)
+		}
+		p.Ignores = append(p.Ignores, &chatv1.UIConfig_Ignore{
+			Alias:    cert.Subject,
+			PeerKey:  cert.Key,
+			Deadline: deadline,
+		})
+		return nil
+	})
+	return &chatv1.IgnoreResponse{}, err
+}
+
+// Unignore ...
+func (s *chatService) Unignore(ctx context.Context, req *chatv1.UnignoreRequest) (*chatv1.UnignoreResponse, error) {
+	peerKey := req.PeerKey
+	if len(peerKey) == 0 {
+		cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+		if err != nil {
+			return nil, fmt.Errorf("finding peer cert failed: %w", err)
+		}
+		peerKey = cert.Key
+	}
+
+	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](peerKey)); i != -1 {
+			p.Ignores = slices.Delete(p.Ignores, i, i+1)
+		}
+		return nil
+	})
+	return &chatv1.UnignoreResponse{}, err
+}
+
+// Highlight ...
+func (s *chatService) Highlight(ctx context.Context, req *chatv1.HighlightRequest) (*chatv1.HighlightResponse, error) {
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Highlights, peerKeyFilter[*chatv1.UIConfig_Highlight](cert.Key)); i != -1 {
+			p.Highlights = slices.Delete(p.Highlights, i, i+1)
+		}
+		p.Highlights = append(p.Highlights, &chatv1.UIConfig_Highlight{
+			Alias:   cert.Subject,
+			PeerKey: cert.Key,
+		})
+		return nil
+	})
+	return &chatv1.HighlightResponse{}, err
+}
+
+// Unhighlight ...
+func (s *chatService) Unhighlight(ctx context.Context, req *chatv1.UnhighlightRequest) (*chatv1.UnhighlightResponse, error) {
+	peerKey := req.PeerKey
+	if len(peerKey) == 0 {
+		cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+		if err != nil {
+			return nil, fmt.Errorf("finding peer cert failed: %w", err)
+		}
+		peerKey = cert.Key
+	}
+
+	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Highlights, peerKeyFilter[*chatv1.UIConfig_Highlight](peerKey)); i != -1 {
+			p.Highlights = slices.Delete(p.Highlights, i, i+1)
+		}
+		return nil
+	})
+	return &chatv1.UnhighlightResponse{}, err
+}
+
+// Tag ...
+func (s *chatService) Tag(ctx context.Context, req *chatv1.TagRequest) (*chatv1.TagResponse, error) {
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Tags, peerKeyFilter[*chatv1.UIConfig_Tag](cert.Key)); i != -1 {
+			p.Tags = slices.Delete(p.Tags, i, i+1)
+		}
+		p.Tags = append(p.Tags, &chatv1.UIConfig_Tag{
+			Alias:   cert.Subject,
+			PeerKey: cert.Key,
+			Color:   req.Color,
+		})
+		return nil
+	})
+	return &chatv1.TagResponse{}, err
+}
+
+type peerKeyGetter interface {
+	GetPeerKey() []byte
+}
+
+func peerKeyFilter[T peerKeyGetter](peerKey []byte) func(e T) bool {
+	return func(e T) bool {
+		return bytes.Equal(peerKey, e.GetPeerKey())
+	}
+}
+
+// Untag ...
+func (s *chatService) Untag(ctx context.Context, req *chatv1.UntagRequest) (*chatv1.UntagResponse, error) {
+	peerKey := req.PeerKey
+	if len(peerKey) == 0 {
+		cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+		if err != nil {
+			return nil, fmt.Errorf("finding peer cert failed: %w", err)
+		}
+		peerKey = cert.Key
+	}
+
+	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
+		if i := slices.IndexFunc(p.Tags, peerKeyFilter[*chatv1.UIConfig_Tag](peerKey)); i != -1 {
+			p.Tags = slices.Delete(p.Tags, i, i+1)
+		}
+		return nil
+	})
+	return &chatv1.UntagResponse{}, err
 }

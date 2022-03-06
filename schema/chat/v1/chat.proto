@@ -188,6 +188,23 @@ message UIConfig {
     bytes data = 2;
   }
 
+  message Highlight {
+    string alias = 1;
+    bytes peer_key = 2;
+  }
+
+  message Tag {
+    string alias = 1;
+    bytes peer_key = 2;
+    string color = 3;
+  }
+
+  message Ignore {
+    string alias = 1;
+    bytes peer_key = 2;
+    int64 deadline = 3;
+  }
+
   bool show_time = 1;
   bool show_flair_icons = 2;
   string timestamp_format = 3;
@@ -199,11 +216,11 @@ message UIConfig {
   SoundFile notification_sound_file = 9;
   bool highlight = 10;
   string custom_highlight = 11;
-  repeated string highlight_nicks = 12;
-  repeated string tagged_nicks = 13;
+  repeated Highlight highlights = 12;
+  repeated Tag tags = 13;
   ShowRemoved show_removed = 14;
   bool show_whispers_in_chat = 15;
-  repeated string ignore_nicks = 16;
+  repeated Ignore ignores = 16;
   bool focus_mentioned = 17;
   bool notification_timeout = 18;
   bool ignore_mentions = 19;
@@ -395,23 +412,93 @@ message OpenClientResponse {
 }
 
 message ClientSendMessageRequest {
-  uint64 client_id = 1;
-  string body = 2;
+  bytes network_key = 1;
+  bytes server_key = 2;
+  string body = 3;
 }
 
 message ClientSendMessageResponse {}
 
-message CallClientResponse {}
+message ClientMuteRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+  string alias = 3;
+  string duration = 4;
+  string message = 5;
+}
+
+message ClientMuteResponse {}
+
+message ClientUnmuteRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+  string alias = 3;
+}
+
+message ClientUnmuteResponse {}
+
+message ClientGetMuteRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+}
+
+message ClientGetMuteResponse {
+  int64 end_time = 1;
+  string message = 2;
+}
+
+message WhisperRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  string body = 3;
+}
+message WhisperResponse {}
 
 message SetUIConfigRequest {
   UIConfig ui_config = 1;
 }
 message SetUIConfigResponse {}
 
-message GetUIConfigRequest {}
-message GetUIConfigResponse {
+message WatchUIConfigRequest {}
+message WatchUIConfigResponse {
   UIConfig ui_config = 1;
 }
+
+message IgnoreRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  string duration = 3;
+}
+message IgnoreResponse {}
+message UnignoreRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+}
+message UnignoreResponse {}
+message HighlightRequest {
+  bytes network_key = 1;
+  string alias = 2;
+}
+message HighlightResponse {}
+message UnhighlightRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+}
+message UnhighlightResponse {}
+message TagRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  string color = 3;
+}
+message TagResponse {}
+message UntagRequest {
+  bytes network_key = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+}
+message UntagResponse {}
 
 service ChatServerFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
@@ -444,16 +531,52 @@ service ChatServerFrontend {
 service ChatFrontend {
   rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);
   rpc ClientSendMessage(ClientSendMessageRequest) returns (ClientSendMessageResponse);
+  rpc ClientMute(ClientMuteRequest) returns (ClientMuteResponse);
+  rpc ClientUnmute(ClientUnmuteRequest) returns (ClientUnmuteResponse);
+  rpc ClientGetMute(ClientGetMuteRequest) returns (ClientGetMuteResponse);
+
+  rpc Whisper(WhisperRequest) returns (WhisperResponse);
 
   rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
-  rpc GetUIConfig(GetUIConfigRequest) returns (GetUIConfigResponse);
+  rpc WatchUIConfig(WatchUIConfigRequest) returns (stream WatchUIConfigResponse);
+  rpc Ignore(IgnoreRequest) returns (IgnoreResponse);
+  rpc Unignore(UnignoreRequest) returns (UnignoreResponse);
+  rpc Highlight(HighlightRequest) returns (HighlightResponse);
+  rpc Unhighlight(UnhighlightRequest) returns (UnhighlightResponse);
+  rpc Tag(TagRequest) returns (TagResponse);
+  rpc Untag(UntagRequest) returns (UntagResponse);
 }
 
 message SendMessageRequest {
   string body = 1;
 }
+
 message SendMessageResponse {}
+
+message MuteRequest {
+  bytes peer_key = 1;
+  uint32 duration_secs = 2;
+  string message = 3;
+}
+
+message MuteResponse {}
+
+message UnmuteRequest {
+  bytes peer_key = 1;
+}
+
+message UnmuteResponse {}
+
+message GetMuteRequest {}
+
+message GetMuteResponse {
+  int64 end_time = 1;
+  string message = 2;
+}
 
 service Chat {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc Mute(MuteRequest) returns (MuteResponse);
+  rpc Unmute(UnmuteRequest) returns (UnmuteResponse);
+  rpc GetMute(GetMuteRequest) returns (GetMuteResponse);
 }
