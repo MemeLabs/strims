@@ -1,8 +1,9 @@
 package sortutil
 
 import (
-	"constraints"
 	"sort"
+
+	"golang.org/x/exp/constraints"
 )
 
 // Ordered ...

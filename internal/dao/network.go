@@ -13,6 +13,7 @@ import (
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
@@ -234,18 +235,20 @@ var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCert
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
-func FormatGetCertificateLogsBySerialNumberKey(networkID uint64, serialNumber []byte) []byte {
+func FormatCertificateLogsSerialNumberKey(networkID uint64, serialNumber []byte) []byte {
 	b := make([]byte, 8, 8+len(serialNumber))
 	binary.BigEndian.PutUint64(b, networkID)
 	return append(b, serialNumber...)
 }
 
+func certificateLogSerialNumberKey(m *networkv1ca.CertificateLog) []byte {
+	return FormatCertificateLogsSerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
+}
+
 var GetCertificateLogBySerialNumber = UniqueIndex(
 	networkCertificateLogSerialNS,
 	CertificateLogs,
-	func(m *networkv1ca.CertificateLog) []byte {
-		return FormatGetCertificateLogsBySerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
-	},
+	certificateLogSerialNumberKey,
 	nil,
 )
 
@@ -292,6 +295,30 @@ func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certif
 		NetworkId:   networkID,
 		Certificate: c,
 	}, nil
+}
+
+func NewCertificateLogCache(s kv.RWStore, opt *CacheStoreOptions) (c CertificateLogCache) {
+	c.CacheStore, c.ByID = newCacheStore[networkv1ca.CertificateLog](s, CertificateLogs, opt)
+	c.BySerialNumber = NewCacheIndex(
+		c.CacheStore,
+		GetCertificateLogBySerialNumber,
+		certificateLogSerialNumberKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	c.BySubject = NewCacheIndex(
+		c.CacheStore,
+		GetCertificateLogBySubject,
+		certificateLogSubjectKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	return
+}
+
+type CertificateLogCache struct {
+	*CacheStore[networkv1ca.CertificateLog]
+	ByID           CacheAccessor[uint64, networkv1ca.CertificateLog]
+	BySerialNumber CacheAccessor[[]byte, networkv1ca.CertificateLog]
+	BySubject      CacheAccessor[[]byte, networkv1ca.CertificateLog]
 }
 
 // NetworkKey ...

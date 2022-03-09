@@ -24,6 +24,7 @@ message Server {
   bytes network_key = 2;
   strims.type.Key key = 3;
   Room room = 4;
+  repeated bytes admin_peer_keys = 5;
 }
 
 enum EmoteFileType {
@@ -163,10 +164,26 @@ message Message {
   }
 
   int64 server_time = 1;
-  bytes host_id = 2;
+  bytes peer_key = 2;
   string nick = 3;
   string body = 4;
   Entities entities = 5;
+}
+
+message Profile {
+  message Mute {
+    int64 created_at = 1;
+    uint32 duration_secs  = 2;
+    string message = 3;
+    bytes moderator_peer_key = 4;
+  }
+
+  uint64 id = 1;
+  uint64 server_id = 2;
+  bytes peer_key = 3;
+  string alias = 4;
+  repeated Mute mutes = 5;
+  int64 mute_deadline = 6;
 }
 
 message UIConfig {

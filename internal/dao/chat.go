@@ -1,7 +1,11 @@
 package dao
 
 import (
+	"encoding/binary"
+
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -15,6 +19,9 @@ const (
 	chatTagNS
 	chatTagServerNS
 	chatUIConfigNS
+	chatProfileNS
+	chatProfileServerNS
+	chatProfilePeerKeyNS
 )
 
 var ChatServers = NewTable(
@@ -88,6 +95,45 @@ var GetChatTagsByServerID, GetChatTagsByServer, GetChatServerByTag = ManyToOne(
 	(*chatv1.Tag).GetServerId,
 	&ManyToOneOptions{CascadeDelete: true},
 )
+
+var ChatProfiles = NewTable[chatv1.Profile](chatProfileNS, nil)
+
+var GetChatProfilesByServerID, GetChatProfilesByServer, GetChatServerByProfile = ManyToOne(
+	chatProfileServerNS,
+	ChatProfiles,
+	ChatServers,
+	(*chatv1.Profile).GetServerId,
+	&ManyToOneOptions{CascadeDelete: true},
+)
+
+func FormatChatProfilePeerKey(serverID uint64, peerKey []byte) []byte {
+	b := make([]byte, 8, 8+len([]byte(peerKey)))
+	binary.BigEndian.PutUint64(b, serverID)
+	return append(b, peerKey...)
+}
+
+func chatProfilePeerKey(m *chatv1.Profile) []byte {
+	return FormatChatProfilePeerKey(m.ServerId, m.PeerKey)
+}
+
+var GetChatProfileByPeerKey = UniqueIndex(chatProfilePeerKeyNS, ChatProfiles, chatProfilePeerKey, nil)
+
+func NewChatProfileCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatProfileCache) {
+	c.CacheStore, c.ByID = newCacheStore[chatv1.Profile](s, ChatProfiles, opt)
+	c.ByPeerKey = NewCacheIndex(
+		c.CacheStore,
+		GetChatProfileByPeerKey,
+		chatProfilePeerKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	return
+}
+
+type ChatProfileCache struct {
+	*CacheStore[chatv1.Profile]
+	ByID      CacheAccessor[uint64, chatv1.Profile]
+	ByPeerKey CacheAccessor[[]byte, chatv1.Profile]
+}
 
 var ChatUIConfig = NewSingleton(
 	chatUIConfigNS,
@@ -186,6 +232,27 @@ func NewChatTag(
 		Name:      name,
 		Color:     color,
 		Sensitive: sensitive,
+	}
+	return v, nil
+}
+
+// NewChatProfile ...
+func NewChatProfile(
+	g IDGenerator,
+	serverID uint64,
+	peerKey []byte,
+	alias string,
+) (*chatv1.Profile, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.Profile{
+		Id:       id,
+		ServerId: serverID,
+		PeerKey:  peerKey,
+		Alias:    alias,
 	}
 	return v, nil
 }

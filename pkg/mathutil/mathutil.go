@@ -1,8 +1,9 @@
 package mathutil
 
 import (
-	"constraints"
 	"math"
+
+	"golang.org/x/exp/constraints"
 )
 
 // LogisticFunc

@@ -132,6 +132,7 @@ export type IServer = {
   networkKey?: Uint8Array;
   key?: strims_type_IKey;
   room?: IRoom;
+  adminPeerKeys?: Uint8Array[];
 }
 
 export class Server {
@@ -139,12 +140,14 @@ export class Server {
   networkKey: Uint8Array;
   key: strims_type_Key | undefined;
   room: Room | undefined;
+  adminPeerKeys: Uint8Array[];
 
   constructor(v?: IServer) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.key = v?.key && new strims_type_Key(v.key);
     this.room = v?.room && new Room(v.room);
+    this.adminPeerKeys = v?.adminPeerKeys ? v.adminPeerKeys : [];
   }
 
   static encode(m: Server, w?: Writer): Writer {
@@ -153,6 +156,7 @@ export class Server {
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
     if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
+    for (const v of m.adminPeerKeys) w.uint32(42).bytes(v);
     return w;
   }
 
@@ -174,6 +178,9 @@ export class Server {
         break;
         case 4:
         m.room = Room.decode(r, r.uint32());
+        break;
+        case 5:
+        m.adminPeerKeys.push(r.bytes())
         break;
         default:
         r.skipType(tag & 7);
@@ -821,7 +828,7 @@ export class AssetBundle {
 
 export type IMessage = {
   serverTime?: bigint;
-  hostId?: Uint8Array;
+  peerKey?: Uint8Array;
   nick?: string;
   body?: string;
   entities?: Message.IEntities;
@@ -829,14 +836,14 @@ export type IMessage = {
 
 export class Message {
   serverTime: bigint;
-  hostId: Uint8Array;
+  peerKey: Uint8Array;
   nick: string;
   body: string;
   entities: Message.Entities | undefined;
 
   constructor(v?: IMessage) {
     this.serverTime = v?.serverTime || BigInt(0);
-    this.hostId = v?.hostId || new Uint8Array();
+    this.peerKey = v?.peerKey || new Uint8Array();
     this.nick = v?.nick || "";
     this.body = v?.body || "";
     this.entities = v?.entities && new Message.Entities(v.entities);
@@ -845,7 +852,7 @@ export class Message {
   static encode(m: Message, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverTime) w.uint32(8).int64(m.serverTime);
-    if (m.hostId.length) w.uint32(18).bytes(m.hostId);
+    if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
     if (m.nick.length) w.uint32(26).string(m.nick);
     if (m.body.length) w.uint32(34).string(m.body);
     if (m.entities) Message.Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
@@ -863,7 +870,7 @@ export class Message {
         m.serverTime = r.int64();
         break;
         case 2:
-        m.hostId = r.bytes();
+        m.peerKey = r.bytes();
         break;
         case 3:
         m.nick = r.string();
@@ -1307,6 +1314,137 @@ export namespace Message {
       }
     }
 
+  }
+
+}
+
+export type IProfile = {
+  id?: bigint;
+  serverId?: bigint;
+  peerKey?: Uint8Array;
+  alias?: string;
+  mutes?: Profile.IMute[];
+  muteDeadline?: bigint;
+}
+
+export class Profile {
+  id: bigint;
+  serverId: bigint;
+  peerKey: Uint8Array;
+  alias: string;
+  mutes: Profile.Mute[];
+  muteDeadline: bigint;
+
+  constructor(v?: IProfile) {
+    this.id = v?.id || BigInt(0);
+    this.serverId = v?.serverId || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.mutes = v?.mutes ? v.mutes.map(v => new Profile.Mute(v)) : [];
+    this.muteDeadline = v?.muteDeadline || BigInt(0);
+  }
+
+  static encode(m: Profile, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.serverId) w.uint32(16).uint64(m.serverId);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    if (m.alias.length) w.uint32(34).string(m.alias);
+    for (const v of m.mutes) Profile.Mute.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.muteDeadline) w.uint32(48).int64(m.muteDeadline);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Profile {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Profile();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.serverId = r.uint64();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        case 4:
+        m.alias = r.string();
+        break;
+        case 5:
+        m.mutes.push(Profile.Mute.decode(r, r.uint32()));
+        break;
+        case 6:
+        m.muteDeadline = r.int64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace Profile {
+  export type IMute = {
+    createdAt?: bigint;
+    durationSecs?: number;
+    message?: string;
+    moderatorPeerKey?: Uint8Array;
+  }
+
+  export class Mute {
+    createdAt: bigint;
+    durationSecs: number;
+    message: string;
+    moderatorPeerKey: Uint8Array;
+
+    constructor(v?: IMute) {
+      this.createdAt = v?.createdAt || BigInt(0);
+      this.durationSecs = v?.durationSecs || 0;
+      this.message = v?.message || "";
+      this.moderatorPeerKey = v?.moderatorPeerKey || new Uint8Array();
+    }
+
+    static encode(m: Mute, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.createdAt) w.uint32(8).int64(m.createdAt);
+      if (m.durationSecs) w.uint32(16).uint32(m.durationSecs);
+      if (m.message.length) w.uint32(26).string(m.message);
+      if (m.moderatorPeerKey.length) w.uint32(34).bytes(m.moderatorPeerKey);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Mute {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Mute();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.createdAt = r.int64();
+          break;
+          case 2:
+          m.durationSecs = r.uint32();
+          break;
+          case 3:
+          m.message = r.string();
+          break;
+          case 4:
+          m.moderatorPeerKey = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
   }
 
 }

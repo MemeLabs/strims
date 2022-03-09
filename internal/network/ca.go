@@ -91,9 +91,13 @@ func (t *ca) handleNetworkStart(network *networkv1.Network) {
 		return
 	}
 
-	networkv1ca.RegisterCAService(server, newCAService(t.logger, t.store, network))
+	svc := newCAService(t.logger, t.store, network)
+	networkv1ca.RegisterCAService(server, svc)
 	ctx, cancel := context.WithCancel(t.ctx)
-	go server.Listen(ctx)
+	go func() {
+		server.Listen(ctx)
+		svc.Close()
+	}()
 
 	t.servers[network.Id] = cancel
 }

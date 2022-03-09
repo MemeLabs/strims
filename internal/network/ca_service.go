@@ -18,30 +18,29 @@ var AddressSalt = []byte("ca")
 // New ...
 func newCAService(logger *zap.Logger, store *dao.ProfileStore, network *networkv1.Network) *CAService {
 	return &CAService{
-		logger:  logger,
-		store:   store,
-		network: network,
+		logger:   logger,
+		store:    store,
+		logCache: dao.NewCertificateLogCache(store, nil),
+		network:  network,
 	}
 }
 
 // CAService ...
 type CAService struct {
-	logger  *zap.Logger
-	store   *dao.ProfileStore
-	lock    sync.Mutex
-	network *networkv1.Network
-	cancel  context.CancelFunc
+	logger   *zap.Logger
+	store    *dao.ProfileStore
+	logCache dao.CertificateLogCache
+	lock     sync.Mutex
+	network  *networkv1.Network
 
 	// invite policy
 	// certificate revocation stream
 	// certificate transparency list?
 }
 
-// UpdateNetwork ...
-func (s *CAService) UpdateNetwork(network *networkv1.Network) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.network = network
+// Close ...
+func (s *CAService) Close() {
+	s.logCache.Close()
 }
 
 // Renew ...
@@ -69,6 +68,7 @@ func (s *CAService) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) 
 	if err != nil {
 		return nil, err
 	}
+	s.logCache.Store(log)
 
 	return &networkv1ca.CARenewResponse{Certificate: cert}, nil
 }
@@ -82,9 +82,9 @@ func (s *CAService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*
 	var log *networkv1ca.CertificateLog
 	var err error
 	if req.Subject != "" {
-		log, err = dao.GetCertificateLogBySubject(s.store, dao.FormatCertificateLogSubjectKey(s.network.Id, req.Subject))
+		log, err = s.logCache.BySubject.Get(dao.FormatCertificateLogSubjectKey(s.network.Id, req.Subject))
 	} else {
-		log, err = dao.GetCertificateLogBySerialNumber(s.store, dao.FormatGetCertificateLogsBySerialNumberKey(s.network.Id, req.SerialNumber))
+		log, err = s.logCache.BySerialNumber.Get(dao.FormatCertificateLogsSerialNumberKey(s.network.Id, req.SerialNumber))
 	}
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *CAService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*
 	if req.FullChain {
 		cert := log.Certificate
 		for cert.GetParentSerialNumber() != nil {
-			parentLog, err := dao.GetCertificateLogBySerialNumber(s.store, dao.FormatGetCertificateLogsBySerialNumberKey(s.network.Id, cert.GetParentSerialNumber()))
+			parentLog, err := s.logCache.BySerialNumber.Get(dao.FormatCertificateLogsSerialNumberKey(s.network.Id, cert.GetParentSerialNumber()))
 			if err != nil {
 				return nil, err
 			}

@@ -1,17 +1,21 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
@@ -25,28 +29,39 @@ var (
 
 const broadcastInterval = 15 * time.Second
 
-func newChatService(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *chatService {
+func newChatService(
+	logger *zap.Logger,
+	ew *protoutil.ChunkStreamWriter,
+	store *dao.ProfileStore,
+	config *chatv1.Server,
+) *chatService {
 	return &chatService{
 		logger:          logger,
+		eventWriter:     ew,
+		store:           store,
+		config:          syncutil.NewPointer(config),
 		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
-		eventWriter:     ew,
 		entityExtractor: newEntityExtractor(),
 		combos:          newComboTransformer(),
+		profileCache:    dao.NewChatProfileCache(store, nil),
 	}
 }
 
 type chatService struct {
 	logger            *zap.Logger
+	eventWriter       *protoutil.ChunkStreamWriter
+	store             *dao.ProfileStore
+	config            syncutil.Pointer[chatv1.Server]
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime timeutil.Time
-	eventWriter       *protoutil.ChunkStreamWriter
 	lock              sync.Mutex
 	certificate       *certificate.Certificate
 	entityExtractor   *entityExtractor
 	combos            *comboTransformer
+	profileCache      dao.ChatProfileCache
 }
 
 func (d *chatService) Run(ctx context.Context) error {
@@ -58,6 +73,7 @@ func (d *chatService) Run(ctx context.Context) error {
 			if err := d.broadcast(timeutil.NewFromTime(now)); err != nil {
 				return err
 			}
+		// TODO: profiles.GC
 		case <-d.done:
 			return errors.New("closed")
 		case <-ctx.Done():
@@ -66,7 +82,13 @@ func (d *chatService) Run(ctx context.Context) error {
 	}
 }
 
+func (d *chatService) SyncConfig(config *chatv1.Server) {
+	d.config.Swap(config)
+}
+
 func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag) error {
+	d.config.Swap(config)
+
 	var emoteNames, modifierNames, tagNames [][]rune
 	for _, emote := range emotes {
 		emoteNames = append(emoteNames, []rune(emote.Name))
@@ -113,13 +135,41 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 	return nil
 }
 
+func (d *chatService) getOrInsertProfile(peerKey []byte, alias string) (p *chatv1.Profile, err error) {
+	p, _, err = d.profileCache.ByPeerKey.GetOrInsert(
+		dao.FormatChatProfilePeerKey(d.config.Get().Id, peerKey),
+		func() (*chatv1.Profile, error) {
+			return dao.NewChatProfile(d.store, d.config.Get().Id, peerKey, alias)
+		},
+	)
+	return
+}
+
+func (d *chatService) isModerator(peerKey []byte) bool {
+	for _, k := range d.config.Get().AdminPeerKeys {
+		if bytes.Equal(k, peerKey) {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRequest) (*chatv1.SendMessageResponse, error) {
-	hostCert := network.VPNCertificate(ctx)
+	peerCert := network.VPNCertificate(ctx).GetParent()
+	p, err := d.getOrInsertProfile(peerCert.Key, peerCert.Subject)
+	if err != nil {
+		return nil, fmt.Errorf("loading profile failed: %w", err)
+	}
+
+	muteDeadline := timeutil.Unix(p.MuteDeadline, 0)
+	if muteDeadline.After(timeutil.Now()) {
+		return nil, fmt.Errorf("cannot send mesasges while muted. mute expires: %s", muteDeadline)
+	}
 
 	m := &chatv1.Message{
 		ServerTime: time.Now().UnixNano() / int64(time.Millisecond),
-		HostId:     hostCert.Key,
-		Nick:       hostCert.GetParent().Subject,
+		PeerKey:    peerCert.Key,
+		Nick:       peerCert.Subject,
 		Body:       req.Body,
 		Entities:   d.entityExtractor.Extract(req.Body),
 	}
@@ -128,7 +178,7 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 		return nil, err
 	}
 
-	err := d.eventWriter.Write(&chatv1.ServerEvent{
+	err = d.eventWriter.Write(&chatv1.ServerEvent{
 		Body: &chatv1.ServerEvent_Message{
 			Message: m,
 		},
@@ -141,12 +191,54 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 }
 
 func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv1.MuteResponse, error) {
-	debug.PrintJSON(req)
+	peerCert := network.VPNCertificate(ctx).GetParent()
+
+	if !d.isModerator(peerCert.Key) {
+		return nil, errors.New("operation requires moderator role")
+	}
+
+	_, err := d.profileCache.ByPeerKey.Transform(
+		dao.FormatChatProfilePeerKey(d.config.Get().Id, req.PeerKey),
+		func(m *chatv1.Profile) error {
+			m.MuteDeadline = timeutil.Now().Add(time.Duration(req.DurationSecs) * time.Second).Unix()
+			if req.Message != "" {
+				m.Mutes = append(m.Mutes, &chatv1.Profile_Mute{
+					CreatedAt:        timeutil.Now().Unix(),
+					DurationSecs:     req.DurationSecs,
+					Message:          req.Message,
+					ModeratorPeerKey: peerCert.Key,
+				})
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		d.logger.Debug("transform failed", zap.Error(err))
+		return nil, fmt.Errorf("updating profile failed: %w", err)
+	}
+
 	return &chatv1.MuteResponse{}, nil
 }
 
 func (d *chatService) Unmute(ctx context.Context, req *chatv1.UnmuteRequest) (*chatv1.UnmuteResponse, error) {
-	debug.PrintJSON(req)
+	peerCert := network.VPNCertificate(ctx).GetParent()
+
+	if !d.isModerator(peerCert.Key) {
+		return nil, errors.New("operation requires moderator role")
+	}
+
+	_, err := d.profileCache.ByPeerKey.Transform(
+		dao.FormatChatProfilePeerKey(d.config.Get().Id, req.PeerKey),
+		func(m *chatv1.Profile) error {
+			m.MuteDeadline = timeutil.Now().Unix()
+			return nil
+		},
+	)
+	if err != nil {
+		d.logger.Debug("transform failed", zap.Error(err))
+		return nil, fmt.Errorf("updating profile failed: %w", err)
+	}
+
 	return &chatv1.UnmuteResponse{}, nil
 }
 

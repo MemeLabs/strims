@@ -458,10 +458,10 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
         console.log("maxlines", { n });
       },
       mute: (alias: string, duration: string, message: string) => {
-        void client.chat.clientMute({ networkKey, alias, duration, message });
+        void client.chat.clientMute({ networkKey, serverKey, alias, duration, message });
       },
       unmute: (alias: string) => {
-        void client.chat.clientUnmute({ networkKey, alias });
+        void client.chat.clientUnmute({ networkKey, serverKey, alias });
       },
       timestampformat: (format: string) => {
         console.log("timestampformat", { format });

@@ -374,14 +374,14 @@ func (s *chatService) ClientSendMessage(ctx context.Context, req *chatv1.ClientS
 
 // ClientMute ...
 func (s *chatService) ClientMute(ctx context.Context, req *chatv1.ClientMuteRequest) (*chatv1.ClientMuteResponse, error) {
-	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
-	if err != nil {
-		return nil, fmt.Errorf("finding peer cert failed: %w", err)
-	}
-
 	duration, err := time.ParseDuration(req.Duration)
 	if err != nil {
 		return nil, fmt.Errorf("parsing duration failed: %w", err)
+	}
+
+	cert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
 
 	if err := s.app.Chat().Mute(ctx, req.NetworkKey, req.ServerKey, cert.Key, duration, req.Message); err != nil {

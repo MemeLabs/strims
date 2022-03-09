@@ -2,6 +2,7 @@ package hashmap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"hash/maphash"
 
 	"github.com/MemeLabs/go-ppspp/pkg/slab"
@@ -40,13 +41,35 @@ func (m *byteInterface[T]) Equal(a, b T) bool {
 	return bytes.Equal([]byte(a), []byte(b))
 }
 
+func NewUint64Interface[T ~uint64]() Interface[T] {
+	m := &uint64Interface[T]{}
+	m.h.SetSeed(maphash.MakeSeed())
+	return m
+}
+
+type uint64Interface[T ~uint64] struct {
+	h maphash.Hash
+	b [8]byte
+}
+
+func (m *uint64Interface[T]) Hash(k T) uint64 {
+	binary.BigEndian.PutUint64(m.b[:], uint64(k))
+	m.h.Reset()
+	m.h.Write(m.b[:])
+	return m.h.Sum64()
+}
+
+func (m *uint64Interface[T]) Equal(a, b T) bool {
+	return a == b
+}
+
 func New[K, V any](iface Interface[K]) Map[K, V] {
 	return Map[K, V]{
 		lenBounds: computeLendBounds(minSize),
 		mask:      uint64(minSize - 1),
-		v:         make([]*hashMapItem[K, V], minSize),
+		v:         make([]*mapItem[K, V], minSize),
 		iface:     iface,
-		allocator: slab.New[hashMapItem[K, V]](),
+		allocator: slab.New[mapItem[K, V]](),
 	}
 }
 
@@ -65,19 +88,19 @@ type Map[K, V any] struct {
 	len       int
 	lenBounds lenBounds
 	mask      uint64
-	v         []*hashMapItem[K, V]
+	v         []*mapItem[K, V]
 	iface     Interface[K]
-	allocator *slab.Allocator[hashMapItem[K, V]]
+	allocator *slab.Allocator[mapItem[K, V]]
 }
 
-type hashMapItem[K, V any] struct {
+type mapItem[K, V any] struct {
 	i    uint
-	list *hashMapItem[K, V]
+	list *mapItem[K, V]
 	k    K
 	v    V
 }
 
-func (e *hashMapItem[K, V]) find(k K, iface Interface[K]) *hashMapItem[K, V] {
+func (e *mapItem[K, V]) find(k K, iface Interface[K]) *mapItem[K, V] {
 	if e == nil {
 		return nil
 	}
@@ -87,7 +110,7 @@ func (e *hashMapItem[K, V]) find(k K, iface Interface[K]) *hashMapItem[K, V] {
 	return e.list.find(k, iface)
 }
 
-func (e *hashMapItem[K, V]) delete(k K, iface Interface[K]) *hashMapItem[K, V] {
+func (e *mapItem[K, V]) delete(k K, iface Interface[K]) *mapItem[K, V] {
 	if e == nil {
 		return nil
 	}
@@ -106,7 +129,7 @@ func (l *Map[K, V]) index(k K) uint {
 	return uint(l.iface.Hash(k) & l.mask)
 }
 
-func (l *Map[K, V]) alloc() (e *hashMapItem[K, V]) {
+func (l *Map[K, V]) alloc() (e *mapItem[K, V]) {
 	l.len++
 	if l.len > l.lenBounds.max {
 		l.resize(len(l.v) * resizeRate)
@@ -114,8 +137,8 @@ func (l *Map[K, V]) alloc() (e *hashMapItem[K, V]) {
 	return l.allocator.Alloc()
 }
 
-func (l *Map[K, V]) free(e *hashMapItem[K, V]) {
-	*e = hashMapItem[K, V]{}
+func (l *Map[K, V]) free(e *mapItem[K, V]) {
+	*e = mapItem[K, V]{}
 	l.allocator.Free(e)
 	l.len--
 	if l.len < l.lenBounds.min {
@@ -128,7 +151,7 @@ func (l *Map[K, V]) resize(size int) {
 
 	l.lenBounds = computeLendBounds(size)
 	l.mask = uint64(size - 1)
-	l.v = make([]*hashMapItem[K, V], size)
+	l.v = make([]*mapItem[K, V], size)
 
 	for _, e := range v {
 		for e != nil {
@@ -144,6 +167,42 @@ func (l *Map[K, V]) resize(size int) {
 	}
 }
 
+func (l *Map[K, V]) set(k K, v V) *mapItem[K, V] {
+	i := l.index(k)
+	if e := l.v[i].find(k, l.iface); e != nil {
+		e.v = v
+		return e
+	}
+
+	e := l.alloc()
+	e.k = k
+	e.v = v
+	e.i = i
+	e.list = l.v[i]
+	l.v[i] = e
+	return e
+}
+
+func (l *Map[K, V]) get(k K) (v *mapItem[K, V], ok bool) {
+	if e := l.v[l.index(k)].find(k, l.iface); e != nil {
+		return e, true
+	}
+	return
+}
+
+// delete removes the item at k if it exists and returns it. the caller must
+// free the item or it will leak.
+func (l *Map[K, V]) delete(k K) (ed *mapItem[K, V], ok bool) {
+	i := l.index(k)
+	ed = l.v[i].delete(k, l.iface)
+	if ok = ed != nil; ok {
+		if ed == l.v[i] {
+			l.v[i] = ed.list
+		}
+	}
+	return
+}
+
 func (l *Map[K, V]) Len() int {
 	return l.len
 }
@@ -157,18 +216,7 @@ func (l *Map[K, V]) Has(k K) bool {
 }
 
 func (l *Map[K, V]) Set(k K, v V) {
-	i := l.index(k)
-	if e := l.v[i].find(k, l.iface); e != nil {
-		e.v = v
-		return
-	}
-
-	e := l.alloc()
-	e.k = k
-	e.v = v
-	e.i = i
-	e.list = l.v[i]
-	l.v[i] = e
+	l.set(k, v)
 }
 
 func (l *Map[K, V]) Get(k K) (v V, ok bool) {
@@ -179,14 +227,9 @@ func (l *Map[K, V]) Get(k K) (v V, ok bool) {
 }
 
 func (l *Map[K, V]) Delete(k K) (v V, ok bool) {
-	i := l.index(k)
-	ed := l.v[i].delete(k, l.iface)
-	if ok = ed != nil; ok {
-		v = ed.v
-		if ed == l.v[i] {
-			l.v[i] = ed.list
-		}
-		l.free(ed)
+	if ed, ok := l.delete(k); ok {
+		defer l.free(ed)
+		return ed.v, true
 	}
 	return
 }
@@ -214,15 +257,14 @@ func (l *Map[K, V]) Values() []V {
 }
 
 type Iterator[K, V any] struct {
-	m       *Map[K, V]
-	i       int
-	v, next *hashMapItem[K, V]
+	m *Map[K, V]
+	i int
+	v *mapItem[K, V]
 }
 
 func (it *Iterator[K, V]) Next() bool {
-	if it.next != nil {
-		it.v = it.next
-		it.next = it.v.list
+	if it.v != nil && it.v.list != nil {
+		it.v = it.v.list
 		return true
 	}
 
@@ -230,7 +272,6 @@ func (it *Iterator[K, V]) Next() bool {
 		if v := it.m.v[i]; v != nil {
 			it.i = i + 1
 			it.v = v
-			it.next = v.list
 			return true
 		}
 	}

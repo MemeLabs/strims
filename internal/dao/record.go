@@ -42,6 +42,10 @@ var (
 		Name: "strims_dao_secondary_index_get_all_duration_ms",
 		Help: "The run time of dao secondary index scans",
 	}, []string{"type", "namespace"})
+	writeThroughCacheReadCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_write_through_cache_read_count",
+		Help: "The total number of dao write through cache reads",
+	}, []string{"type", "status"})
 )
 
 var Logger = zap.NewNop()

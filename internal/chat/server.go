@@ -104,7 +104,7 @@ func newChatServer(
 		config:         config,
 		eventSwarm:     eventSwarm,
 		assetSwarm:     assetSwarm,
-		service:        newChatService(logger, eventWriter),
+		service:        newChatService(logger, eventWriter, store, config),
 		assetPublisher: newAssetPublisher(logger, assetWriter),
 	}
 
@@ -230,6 +230,8 @@ func (s *chatServer) watchAssets(ctx context.Context) {
 		select {
 		case e := <-events:
 			switch e := e.(type) {
+			case *chatv1.ServerChangeEvent:
+				s.service.SyncConfig(e.Server)
 			case *chatv1.SyncAssetsEvent:
 				s.trySyncAssets(e.ServerId, e.ForceUnifiedUpdate)
 			case *chatv1.EmoteChangeEvent:
