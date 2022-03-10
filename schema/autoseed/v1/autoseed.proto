@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package strims.autoseed.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/autoseed/v1;autoseedv1";
+option java_package = "gg.strims.autoseed.v1";
+option swift_prefix = "SAS";
+
+message Config {
+  bool enable = 1;
+}
+
+message Rule {
+  uint64 id = 1;
+  bytes network_key = 2;
+  bytes swarm_id = 3;
+  bytes salt = 4;
+}
+
+message GetConfigRequest {}
+message GetConfigResponse {
+  Config config = 1;
+}
+
+message SetConfigRequest {
+  Config config = 1;
+}
+message SetConfigResponse {
+  Config config = 1;
+}
+
+message CreateRuleRequest {
+  Rule rule = 1;
+}
+
+message CreateRuleResponse {
+  Rule rule = 1;
+}
+
+message UpdateRuleRequest {
+  uint64 id = 1;
+  Rule rule = 2;
+}
+
+message UpdateRuleResponse {
+  Rule rule = 1;
+}
+
+message DeleteRuleRequest {
+  uint64 id = 1;
+}
+
+message DeleteRuleResponse {}
+
+message GetRuleRequest {
+  uint64 id = 1;
+}
+
+message GetRuleResponse {
+  Rule rule = 1;
+}
+
+message ListRulesRequest {}
+
+message ListRulesResponse {
+  repeated Rule rules = 1;
+}
+
+service AutoseedFrontend {
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  rpc GetRule(GetRuleRequest) returns (GetRuleResponse);
+  rpc CreateRule(CreateRuleRequest) returns (CreateRuleResponse);
+  rpc UpdateRule(UpdateRuleRequest) returns (UpdateRuleResponse);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+}

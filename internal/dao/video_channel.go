@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var VideoChannels = NewTable[videov1.VideoChannel](
+var VideoChannels = NewTable(
 	videoChannelNS,
 	&TableOptions[videov1.VideoChannel]{
 		ObserveChange: func(m, p *videov1.VideoChannel) proto.Message {

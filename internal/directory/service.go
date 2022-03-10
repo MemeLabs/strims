@@ -499,7 +499,7 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 }
 
 func (d *directoryService) getOrInsertListingRecord(l *networkv1directory.Listing) (r *networkv1directory.ListingRecord, err error) {
-	r, err = dao.GetDirectoryListingRecordByListing(d.store, dao.FormatDirectoryListingRecordListingKey(l))
+	r, err = dao.GetDirectoryListingRecordByListing(d.store, dao.FormatDirectoryListingRecordListingKey(d.network.Get().Id, l))
 	if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
 		return r, err
 	}

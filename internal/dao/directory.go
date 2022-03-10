@@ -55,8 +55,9 @@ func magnetURIID(s string) []byte {
 	return b
 }
 
-func FormatDirectoryListingRecordListingKey(m *networkv1directory.Listing) []byte {
+func FormatDirectoryListingRecordListingKey(networkID uint64, m *networkv1directory.Listing) []byte {
 	b := &bytes.Buffer{}
+	binary.Write(b, binary.LittleEndian, networkID)
 	switch c := m.Content.(type) {
 	case *networkv1directory.Listing_Chat_:
 		b.WriteByte(directoryListingChat)
@@ -97,7 +98,7 @@ var GetDirectoryListingRecordByListing = UniqueIndex(
 	directoryListingRecordListingNS,
 	DirectoryListingRecords,
 	func(m *networkv1directory.ListingRecord) []byte {
-		return FormatDirectoryListingRecordListingKey(m.Listing)
+		return FormatDirectoryListingRecordListingKey(m.NetworkId, m.Listing)
 	},
 	nil,
 )

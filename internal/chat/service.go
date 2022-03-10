@@ -73,7 +73,6 @@ func (d *chatService) Run(ctx context.Context) error {
 			if err := d.broadcast(timeutil.NewFromTime(now)); err != nil {
 				return err
 			}
-		// TODO: profiles.GC
 		case <-d.done:
 			return errors.New("closed")
 		case <-ctx.Done():
@@ -111,6 +110,7 @@ func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifi
 
 func (d *chatService) Close() {
 	d.closeOnce.Do(func() {
+		d.profileCache.Close()
 		d.broadcastTicker.Stop()
 		close(d.done)
 	})

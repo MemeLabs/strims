@@ -10,7 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
-// TODO: maybe configurable fill ratio/growth rate
+// TODO: use hashmap/lru (blocked by github.com/golang/go/issues/48849)
 
 func newMessageIDLRU(size int, ttl time.Duration) *messageIDLRU {
 	size = 1 << bits.Len(uint(size))

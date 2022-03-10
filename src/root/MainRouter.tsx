@@ -10,6 +10,7 @@ const BootstrapClients = lazy(() => import("../pages/Settings/BootstrapClients")
 const Chat = lazy(() => import("../pages/Settings/Chat"));
 const Video = lazy(() => import("../pages/Settings/Video"));
 const VNIC = lazy(() => import("../pages/Settings/VNIC"));
+const Autoseed = lazy(() => import("../pages/Settings/Autoseed"));
 
 const Home = lazy(() => import("../pages/Home"));
 const Directory = lazy(() => import("../pages/Directory"));
@@ -24,6 +25,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
     <Route path="chat-servers/*" element={<Chat />} />
     <Route path="video/*" element={<Video />} />
     <Route path="vnic/*" element={<VNIC />} />
+    <Route path="autoseed/*" element={<Autoseed />} />
   </Route>
 );
 

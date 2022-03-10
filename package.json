@@ -56,6 +56,8 @@
     "@typescript-eslint/parser": "^5.4.0",
     "@use-gesture/react": "^10.1.5",
     "autoprefixer": "^10.4.0",
+    "base32-decode": "^1.0.0",
+    "base32-encode": "^2.0.0",
     "buffer": "^6.0.3",
     "classnames": "^2.3.1",
     "clean-webpack-plugin": "^4.0.0",

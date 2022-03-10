@@ -45,6 +45,9 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="video/egress">
         Video Egress
       </NavLink>
+      <NavLink className={linkClassName} onClick={onLinkClick} to="autoseed/config">
+        Autoseed
+      </NavLink>
       <NavLink className={linkClassName} onClick={onLinkClick} to="vnic">
         VNIC
       </NavLink>

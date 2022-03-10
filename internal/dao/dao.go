@@ -119,4 +119,5 @@ const (
 	videoNS
 	vnicNS
 	directoryNS
+	autoseedNS
 )

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package strims.autoseed.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/autoseed/v1;autoseedv1";
+option java_package = "gg.strims.autoseed.v1";
+option swift_prefix = "SAS";
+
+import "autoseed/v1/autoseed.proto";
+
+message ConfigChangeEvent {
+  Config config = 1;
+}
+
+message RuleChangeEvent {
+  Rule rule = 1;
+}
+
+message RuleDeleteEvent {
+  Rule rule = 1;
+}
