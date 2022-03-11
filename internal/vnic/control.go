@@ -13,8 +13,6 @@ import (
 
 type Control interface {
 	Run()
-	GetConfig() (*vnicv1.Config, error)
-	SetConfig(config *vnicv1.Config) error
 }
 
 // NewControl ...
@@ -77,14 +75,4 @@ func (c *control) loadConfig() {
 	}
 
 	c.applyConfig(config)
-}
-
-// GetConfig ...
-func (c *control) GetConfig() (*vnicv1.Config, error) {
-	return dao.VNICConfig.Get(c.store)
-}
-
-// SetConfig ...
-func (c *control) SetConfig(config *vnicv1.Config) error {
-	return dao.VNICConfig.Set(c.store, config)
 }

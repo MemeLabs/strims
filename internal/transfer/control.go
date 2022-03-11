@@ -362,14 +362,18 @@ func (c *control) List() []*transferv1.Transfer {
 // Publish ...
 func (c *control) Publish(id ID, networkKey []byte) {
 	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	t, ok := c.transfers[id]
 	if !ok {
-		c.lock.Unlock()
 		return
 	}
 
 	n := c.getOrInsertNetwork(networkKey)
+
+	if _, ok := n.transfers[id]; ok {
+		return
+	}
 	n.transfers[id] = t
 
 	for _, p := range n.peers {
@@ -378,19 +382,19 @@ func (c *control) Publish(id ID, networkKey []byte) {
 
 	c.searchQueue.Insert(t, n)
 
-	c.lock.Unlock()
+	go func() {
+		node, ok := c.vpn.Node(networkKey)
+		if !ok {
+			return
+		}
 
-	node, ok := c.vpn.Node(networkKey)
-	if !ok {
-		return
-	}
+		err := node.PeerIndex.Publish(t.ctx, t.swarm.ID(), t.salt, 0)
+		if err != nil {
+			return
+		}
 
-	err := node.PeerIndex.Publish(t.ctx, t.swarm.ID(), t.salt, 0)
-	if err != nil {
-		return
-	}
-
-	go c.loadNetworkPeers(t, n)
+		c.loadNetworkPeers(t, n)
+	}()
 }
 
 func (c *control) IsPublished(id ID, networkKey []byte) bool {
@@ -436,6 +440,12 @@ var idHashPool = &sync.Pool{
 }
 
 type ID [sha256.Size]byte
+
+var NilID = ID{}
+
+func (i ID) IsNil() bool {
+	return i == NilID
+}
 
 func NewID(swarmID []byte, salt []byte) ID {
 	h := idHashPool.Get().(hash.Hash)

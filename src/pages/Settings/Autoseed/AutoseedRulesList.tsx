@@ -1,11 +1,11 @@
 import base32Encode from "base32-encode";
 import React from "react";
-import { MdChevronLeft } from "react-icons/md";
 import { Link, Navigate } from "react-router-dom";
 
 import { Rule } from "../../../apis/strims/autoseed/v1/autoseed";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import jsonutil from "../../../lib/jsonutil";
+import BackLink from "../BackLink";
 
 interface AutoseedRuleTableItemProps {
   rule: Rule;
@@ -55,13 +55,11 @@ const AutoseedRulesList = () => {
     <>
       <Link to="/settings/autoseed/rules/new">Create rule</Link>
       <div className="thing_list">
-        <Link className="input_label input_label--button" to="/settings/autoseed">
-          <MdChevronLeft size="28" />
-          <div className="input_label__body">
-            <div>Autoseed</div>
-            <div>Some description of autoseed...</div>
-          </div>
-        </Link>
+        <BackLink
+          to={`/settings/autoseed/config`}
+          title="Autoseed"
+          description="Some description of autoseed..."
+        />
         {rows}
       </div>
     </>

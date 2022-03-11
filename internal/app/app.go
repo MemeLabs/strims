@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	"github.com/MemeLabs/go-ppspp/internal/autoseed"
 	"github.com/MemeLabs/go-ppspp/internal/bootstrap"
 	"github.com/MemeLabs/go-ppspp/internal/chat"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -62,6 +63,7 @@ func NewControl(
 		videochannelControl = videochannel.NewControl(store)
 		videoegressControl  = videoegress.NewControl(ctx, logger, store, observers, httpmux, profile, transferControl)
 		vnicControl         = vnic.NewControl(ctx, logger, vpn, store, observers)
+		autoseedControl     = autoseed.NewControl(ctx, logger, store, observers, transferControl)
 		peerControl         = NewPeerControl(observers, networkControl, transferControl, bootstrapControl)
 	)
 
@@ -72,6 +74,7 @@ func NewControl(
 	go bootstrapControl.Run()
 	go videoingressControl.Run()
 	go videoegressControl.Run()
+	go autoseedControl.Run()
 	go vnicControl.Run()
 
 	return &control{
@@ -87,6 +90,7 @@ func NewControl(
 		videoingress: videoingressControl,
 		videochannel: videochannelControl,
 		videoegress:  videoegressControl,
+		autoseed:     autoseedControl,
 		vnic:         vnicControl,
 	}
 }
@@ -105,6 +109,7 @@ type control struct {
 	videochannel videochannel.Control
 	videoegress  videoegress.Control
 	videoingress videoingress.Control
+	autoseed     autoseed.Control
 	vnic         vnic.Control
 }
 

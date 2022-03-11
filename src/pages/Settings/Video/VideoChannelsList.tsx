@@ -1,10 +1,10 @@
 import React from "react";
-import { MdChevronLeft } from "react-icons/md";
 import { Link, Navigate } from "react-router-dom";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import jsonutil from "../../../lib/jsonutil";
+import BackLink from "../BackLink";
 
 interface VideoChannelTableItemProps {
   channel: VideoChannel;
@@ -63,13 +63,11 @@ const VideoChannelsList = () => {
     <>
       <Link to="/settings/video/channels/new">Create channel</Link>
       <div className="thing_list">
-        <Link className="input_label input_label--button" to="/settings/video">
-          <MdChevronLeft size="28" />
-          <div className="input_label__body">
-            <div>Ingress</div>
-            <div>Some description of ingress...</div>
-          </div>
-        </Link>
+        <BackLink
+          to={`/settings/video/ingress`}
+          title="Ingress"
+          description="Some description of ingress..."
+        />
         {rows}
       </div>
     </>

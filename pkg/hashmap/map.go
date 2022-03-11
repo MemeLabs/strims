@@ -94,7 +94,6 @@ type Map[K, V any] struct {
 }
 
 type mapItem[K, V any] struct {
-	i    uint
 	list *mapItem[K, V]
 	k    K
 	v    V
@@ -158,7 +157,6 @@ func (l *Map[K, V]) resize(size int) {
 			el := e.list
 
 			i := l.index(e.k)
-			e.i = i
 			e.list = l.v[i]
 			l.v[i] = e
 
@@ -177,7 +175,6 @@ func (l *Map[K, V]) set(k K, v V) *mapItem[K, V] {
 	e := l.alloc()
 	e.k = k
 	e.v = v
-	e.i = i
 	e.list = l.v[i]
 	l.v[i] = e
 	return e
