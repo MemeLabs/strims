@@ -177,6 +177,10 @@ func (c *control) applyRule(rule *autoseedv1.Rule) {
 }
 
 func (c *control) tryStartSwarm(networkKey []byte, listingID uint64, l *networkv1directory.Listing) {
+	if !c.config.Enable {
+		return
+	}
+
 	m := l.GetMedia()
 	if m == nil {
 		return

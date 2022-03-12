@@ -63,7 +63,7 @@ func (t *peerControl) Add(vnicPeer *vnic.Peer, client api.PeerClient) Peer {
 	t.peers[p.id] = p
 	t.lock.Unlock()
 
-	t.observers.EmitLocal(event.PeerAdd{ID: id, VNIC: vnicPeer})
+	t.observers.EmitLocal(event.PeerAdd{ID: id})
 
 	return p
 }

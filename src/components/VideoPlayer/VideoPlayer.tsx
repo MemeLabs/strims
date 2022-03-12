@@ -1,3 +1,5 @@
+import "./VideoPlayer.scss";
+
 import { Base64 } from "js-base64";
 import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
@@ -10,6 +12,7 @@ import useMediaRelay from "../../hooks/useMediaRelay";
 import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
 import useReady from "../../hooks/useReady";
 import useVideo from "../../hooks/useVideo";
+import { DEVICE_TYPE, DeviceType, OS } from "../../lib/userAgent";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
@@ -17,6 +20,7 @@ interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmU
   defaultControlsVisible?: boolean;
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
+  handleClose: () => void;
 }
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
@@ -26,6 +30,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   defaultControlsVisible,
   disableControls = false,
   defaultAspectRatio = "16/9",
+  handleClose,
 }) => {
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
@@ -76,7 +81,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       />
     );
 
-  const handleToggleFullscreen = () => toggleFullscreen(rootRef.current);
+  const handleToggleFullscreen = () => {
+    if (typeof videoRef.current.webkitSetPresentationMode === "function") {
+      videoRef.current.webkitSetPresentationMode("fullscreen");
+    } else {
+      void toggleFullscreen(rootRef.current);
+    }
+  };
 
   useEffect(renewControlsTimeout, [videoState.volume]);
 
@@ -84,6 +95,22 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   if (videoState.videoWidth && videoState.videoHeight) {
     aspectRatio = `${videoState.videoWidth}/${videoState.videoHeight}`;
   }
+
+  const controls =
+    DEVICE_TYPE === DeviceType.Portable
+      ? {
+          showPlayButton: true,
+          showVolume: true,
+          showFullscreenButton: true,
+          showCloseButton: true,
+        }
+      : {
+          showPlayButton: true,
+          showVolume: true,
+          showPiPButton: true,
+          showTheaterButton: true,
+          showFullscreenButton: true,
+        };
 
   return (
     <div
@@ -110,6 +137,8 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         toggleFullscreen={handleToggleFullscreen}
         theaterMode={theaterMode}
         toggleTheaterMode={toggleTheaterMode}
+        close={handleClose}
+        {...controls}
       />
     </div>
   );

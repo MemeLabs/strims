@@ -11,7 +11,8 @@
     "Unmute": "Unmute",
     "Pause": "Pause",
     "Play": "Play",
-    "Miniplayer": "Miniplayer"
+    "Miniplayer": "Miniplayer",
+    "Close": "Close"
   },
 
   "layout": {

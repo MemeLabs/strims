@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"github.com/MemeLabs/go-ppspp/internal/api"
+	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
 
@@ -13,5 +14,5 @@ var _ Peer = &peer{}
 type peer struct {
 	vnicPeer       *vnic.Peer
 	client         api.PeerClient
-	PublishEnabled bool
+	PublishEnabled syncutil.Bool
 }

@@ -90,8 +90,7 @@ func (t *control) handlePeerAdd(id uint64) {
 			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
 		}
 
-		// TODO: locking...
-		peer.PublishEnabled = res.Enabled
+		peer.PublishEnabled.Set(res.Enabled)
 	}()
 }
 
@@ -157,7 +156,7 @@ func (t *control) Publish(ctx context.Context, peerID uint64, network *network.N
 		return errors.New("peer id not found")
 	}
 
-	if !peer.PublishEnabled {
+	if !peer.PublishEnabled.Get() {
 		return errors.New("peer does not support network bootstrapping")
 	}
 

@@ -1,11 +1,8 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/vnic"
-
 // PeerAdd ...
 type PeerAdd struct {
-	ID   uint64
-	VNIC *vnic.Peer
+	ID uint64
 }
 
 // PeerRemove ...

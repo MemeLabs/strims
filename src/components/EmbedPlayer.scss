@@ -1,0 +1,9 @@
+.embed_player {
+  &__frame {
+    aspect-ratio: 16 / 9;
+
+    @at-root .layout--max_aspect_ratio_1_2 & {
+      max-height: 40vh;
+    }
+  }
+}

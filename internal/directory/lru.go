@@ -64,9 +64,7 @@ func (l *lru[V, T]) Delete(u T) {
 		return
 	}
 
-	i := ii.(*lruItem[V, T])
-	l.remove(i)
-	l.head = i.next
+	l.remove(ii.(*lruItem[V, T]))
 }
 
 func (l *lru[V, T]) Pop(eol timeutil.Time) T {
@@ -249,5 +247,4 @@ func (l *indexedLRU[V, T]) Delete(u T) {
 
 	i := ii.(*lruItem[V, T])
 	l.remove(i)
-	l.head = i.next
 }

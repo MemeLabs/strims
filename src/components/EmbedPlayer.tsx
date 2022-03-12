@@ -1,3 +1,5 @@
+import "./EmbedPlayer.scss";
+
 import { Base64 } from "js-base64";
 import qs from "qs";
 import React, { useEffect } from "react";

@@ -1,8 +1,11 @@
+import "./VideoControls.scss";
+
 import clsx from "clsx";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconType } from "react-icons/lib";
 import {
+  MdClose,
   MdFullscreen,
   MdFullscreenExit,
   MdPause,
@@ -16,6 +19,7 @@ import {
 import { RiLayout6Line, RiLayoutRightLine } from "react-icons/ri";
 import { useDebounce } from "react-use";
 
+import useClickAway from "../../hooks/useClickAway";
 import { VideoControls, VideoState } from "../../hooks/useVideo";
 import VideoProgressBar from "./VideoProgressBar";
 import VideoVolume from "./VideoVolume";
@@ -70,14 +74,13 @@ const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => {
 };
 
 interface FullscreenButtonProps {
-  supported: boolean;
   enabled: boolean;
   toggle: () => void;
 }
 
-const FullscreenButton: React.FC<FullscreenButtonProps> = ({ supported, enabled, toggle }) => {
+const FullscreenButton: React.FC<FullscreenButtonProps> = ({ enabled, toggle }) => {
   const { t } = useTranslation();
-  return !supported ? null : (
+  return (
     <Button
       className="fullscreen"
       tooltip={enabled ? t("player.Exit full screen") : t("player.Full screen")}
@@ -85,6 +88,15 @@ const FullscreenButton: React.FC<FullscreenButtonProps> = ({ supported, enabled,
       icon={enabled ? MdFullscreenExit : MdFullscreen}
     />
   );
+};
+
+interface CloseButtonProps {
+  onClick: () => void;
+}
+
+const CloseButton: React.FC<CloseButtonProps> = ({ onClick }) => {
+  const { t } = useTranslation();
+  return <Button className="close" tooltip={t("player.Close")} onClick={onClick} icon={MdClose} />;
 };
 
 interface VolumeControlProps {
@@ -133,6 +145,15 @@ interface VideoControlsProps {
   toggleTheaterMode: (state: boolean) => void;
   videoState: VideoState;
   videoControls: VideoControls;
+  close: () => void;
+
+  showPlayButton?: boolean;
+  showVolume?: boolean;
+  showProgressBar?: boolean;
+  showPiPButton?: boolean;
+  showTheaterButton?: boolean;
+  showFullscreenButton?: boolean;
+  showCloseButton?: boolean;
 }
 
 const VideoControls: React.FC<VideoControlsProps> = (props) => {
@@ -145,6 +166,9 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
   const [visible500, setVisible500] = useState(false);
   useDebounce(() => setVisible100(visible), 100, [visible]);
   useDebounce(() => setVisible500(visible), 500, [visible]);
+
+  const ref = useRef<HTMLDivElement>(null);
+  useClickAway(ref, () => setActive(false));
 
   if (!visible && !visible500) {
     return null;
@@ -166,32 +190,42 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
       className={controlsClassName}
       onMouseMove={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
+      ref={ref}
     >
       <div className="controls_group left">
-        <Button
-          className="play"
-          tooltip={playing ? t("player.Pause") : t("player.Play")}
-          onClick={playing ? videoControls.pause : videoControls.play}
-          icon={playing ? MdPause : MdPlayArrow}
-        />
-        <VolumeControl
-          volume={videoState.volume}
-          videoControls={videoControls}
-          onUpdateStart={() => setActive(true)}
-          onUpdateEnd={() => setActive(false)}
-        />
+        {props.showPlayButton && (
+          <Button
+            className="play"
+            tooltip={playing ? t("player.Pause") : t("player.Play")}
+            onClick={playing ? videoControls.pause : videoControls.play}
+            icon={playing ? MdPause : MdPlayArrow}
+          />
+        )}
+        {props.showVolume && (
+          <VolumeControl
+            volume={videoState.volume}
+            videoControls={videoControls}
+            onUpdateStart={() => setActive(true)}
+            onUpdateEnd={() => setActive(false)}
+          />
+        )}
       </div>
       <div className="progress_bar">
-        <VideoProgressBar videoState={videoState} videoControls={videoControls} />
+        {props.showProgressBar && (
+          <VideoProgressBar videoState={videoState} videoControls={videoControls} />
+        )}
       </div>
       <div className="controls_group right">
-        <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />
-        <TheaterButton enabled={props.theaterMode} toggle={props.toggleTheaterMode} />
-        <FullscreenButton
-          supported={document.fullscreenEnabled}
-          enabled={props.fullscreen}
-          toggle={props.toggleFullscreen}
-        />
+        {props.showPiPButton && (
+          <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />
+        )}
+        {props.showTheaterButton && (
+          <TheaterButton enabled={props.theaterMode} toggle={props.toggleTheaterMode} />
+        )}
+        {props.showFullscreenButton && (
+          <FullscreenButton enabled={props.fullscreen} toggle={props.toggleFullscreen} />
+        )}
+        {props.showCloseButton && <CloseButton onClick={props.close} />}
       </div>
     </div>
   );

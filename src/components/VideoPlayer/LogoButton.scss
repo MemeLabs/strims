@@ -4,7 +4,7 @@
   transition: 200ms filter ease-in-out, 300ms opacity ease-in-out;
 
   .background {
-    fill: #000
+    fill: #000;
   }
 
   .network {
@@ -30,7 +30,8 @@
   }
 
   &.flicker {
-    &, &:hover {
+    &,
+    &:hover {
       filter: blur(5px);
     }
 
@@ -131,6 +132,7 @@
   }
 }
 
+/* prettier-ignore */
 @keyframes flicker {
   /*
   we could do this with sass but it would probably break cache...
@@ -155,6 +157,7 @@
   }
 }
 
+/* prettier-ignore */
 @keyframes shake-yes {
   10%, 90% {
     transform: translate(0,-1px);
@@ -173,6 +176,7 @@
   }
 }
 
+/* prettier-ignore */
 @keyframes shake-no {
   10%, 90% {
     transform: translate(0,-1px);

@@ -31,6 +31,7 @@ const Test: React.FC = () => {
             swarmUri="magnet:?xt=urn:ppspp:G43L6ZOLE6AODIYUJ57PALGMITCG26P46SINQRVQFSSLKWRDDR2Q&x.im=2&x.hf=4&x.sa=1&x.cs=1024&x.ps=32&x.sc=16"
             mimeType="video/mp4;codecs=mp4a.40.5,avc1.64001F"
             defaultControlsVisible={true}
+            handleClose={() => undefined}
           />
         </div>
       </ApiProvider>

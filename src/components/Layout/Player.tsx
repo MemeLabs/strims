@@ -1,7 +1,7 @@
 import "./Player.scss";
 
 import clsx from "clsx";
-import React, { CSSProperties, useCallback, useContext, useEffect, useRef } from "react";
+import React, { useCallback, useContext, useEffect, useRef } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { BsBoxArrowUpRight } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
@@ -25,6 +25,9 @@ const Player: React.FC = ({ children }) => {
 
   const playerEmbedClass = clsx(
     "player_embed",
+    {
+      "player_embed--no_meta": children ?? true,
+    },
     theaterMode
       ? "player_embed--theater"
       : {
@@ -38,27 +41,28 @@ const Player: React.FC = ({ children }) => {
   const embedRef = useRef<HTMLDivElement>(null);
   const [, height] = useResizeObserver(embedRef);
 
-  const containerStyle: CSSProperties = {
-    marginTop: mode === PlayerMode.LARGE ? `${height}px` : 0,
-  };
-
   const scrollbarRef = useRef<Scrollbars>(null);
   useEffect(() => {
     scrollbarRef.current.scrollToTop();
   }, [theaterMode]);
 
   return (
-    <Scrollbars ref={scrollbarRef} autoHide={true}>
-      <div className="player_embed__container" style={containerStyle}>
-        {children}
-      </div>
-      <div className={playerEmbedClass} ref={embedRef}>
+    <Scrollbars
+      ref={scrollbarRef}
+      autoHide={false}
+      className={playerEmbedClass}
+      style={{ "--video-height": `${height}px`, "height": undefined }}
+      renderView={(props) => <div className="player_embed__view" {...props} />}
+    >
+      <div className="player_embed__meta">{children}</div>
+      <div className="player_embed__media" ref={embedRef}>
         {source?.type === "swarm" && (
           <VideoPlayer
             networkKey={source.networkKey}
             swarmUri={source.swarmUri}
             mimeType={source.mimeType}
             disableControls={mode === PlayerMode.PIP}
+            handleClose={handleClose}
           />
         )}
         {source?.type === "embed" && (
