@@ -88,9 +88,14 @@ $chat-width-sm: 260px;
 }
 
 .layout__video {
+  flex: 1;
   max-height: unset;
   background: black;
   width: 100%;
+
+  @at-root .layout--show_chat & {
+    flex: unset;
+  }
 }
 
 .layout__chat {

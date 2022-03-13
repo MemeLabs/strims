@@ -5,7 +5,7 @@
   width: 100%;
   overflow: hidden;
 
-  @at-root .layout--max_aspect_ratio_1_2 & {
+  @at-root .layout--max_aspect_ratio_1_2.layout--show_chat & {
     max-height: 40vh;
   }
 }

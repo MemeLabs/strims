@@ -64,15 +64,10 @@ func (c *cacheItemList[V, T]) push(e *cacheItem[V, T]) {
 }
 
 func (c *cacheItemList[V, T]) pop() *cacheItem[V, T] {
-	if c.tail == nil {
-		return nil
-	}
-
 	e := c.tail
-	if e.prev != nil {
-		e.prev.next = nil
+	if e != nil {
+		c.delete(e)
 	}
-	c.tail = e.prev
 	return e
 }
 

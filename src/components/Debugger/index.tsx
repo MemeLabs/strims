@@ -16,7 +16,7 @@ type DebuggerProps = PortletProps;
 
 const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
   const client = useClient();
-  const [selectedTab, setSelectedTab] = useState<Tab>("swarms");
+  const [selectedTab, setSelectedTab] = useState<Tab>();
 
   const [, pprof] = useLazyCall("debug", "pProf", {
     onComplete: ({ data, name }) => {

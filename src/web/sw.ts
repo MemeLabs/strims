@@ -2,13 +2,7 @@ declare let self: ServiceWorkerGlobalScope;
 
 import { ResponseMessage } from "../lib/media/hls";
 
-self.addEventListener("fetch", (event: FetchEvent) => {
-  const url = new URL(event.request.url);
-  const match = url.pathname.match(/_hls-relay\/([^/]+)/);
-  if (!match) {
-    return;
-  }
-
+const handleHLSRelayRequest = (event: FetchEvent, url: URL) => {
   event.respondWith(
     new Promise<Response>((resolve) => {
       const { port1, port2 } = new MessageChannel();
@@ -36,18 +30,39 @@ self.addEventListener("fetch", (event: FetchEvent) => {
       });
     })
   );
+};
+
+const handleSVCWorkerRequest = (event: FetchEvent) => {
+  event.respondWith(
+    caches.match(event.request).then(async (res) => {
+      if (!res) {
+        res = await fetch(event.request.clone());
+        const cache = await caches.open(`${GIT_HASH}_svc`);
+        await cache.put(event.request, res.clone());
+      }
+      return res;
+    })
+  );
+};
+
+const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
+  [/_hls-relay\/([^/]+)/, handleHLSRelayRequest],
+  [/svc\.([a-f0-9]+)\.wasm/, handleSVCWorkerRequest],
+];
+
+self.addEventListener("fetch", (event: FetchEvent) => {
+  const url = new URL(event.request.url);
+  for (const [route, handler] of routes) {
+    if (url.pathname.match(route)) {
+      return handler(event, url);
+    }
+  }
 });
 
-// self.addEventListener("fetch", (event: FetchEvent) => {
-//   const url = new URL(event.request.url);
-//   const match = url.pathname.match(/_cache\/([^/]+)/);
-//   if (!match) {
-//     return;
-//   }
-
-//   event.respondWith(
-//     caches.open(match[1]).then((cache) => {
-//       return cache.match(event.request);
-//     })
-//   );
-// });
+self.addEventListener("activate", (event) => {
+  event.waitUntil(async () => {
+    const keys = await caches.keys();
+    const expired = keys.filter((k) => !k.startsWith(GIT_HASH));
+    await Promise.all(expired.map((k) => caches.delete(k)));
+  });
+});

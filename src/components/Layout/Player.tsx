@@ -23,10 +23,10 @@ const Player: React.FC = ({ children }) => {
     toggleShowVideo(false);
   }, []);
 
-  const playerEmbedClass = clsx(
+  const className = clsx(
     "player_embed",
     {
-      "player_embed--no_meta": children ?? true,
+      "player_embed--no_meta": !children,
     },
     theaterMode
       ? "player_embed--theater"
@@ -50,11 +50,11 @@ const Player: React.FC = ({ children }) => {
     <Scrollbars
       ref={scrollbarRef}
       autoHide={false}
-      className={playerEmbedClass}
+      className={className}
       style={{ "--video-height": `${height}px`, "height": undefined }}
       renderView={(props) => <div className="player_embed__view" {...props} />}
     >
-      <div className="player_embed__meta">{children}</div>
+      {children && <div className="player_embed__meta">{children}</div>}
       <div className="player_embed__media" ref={embedRef}>
         {source?.type === "swarm" && (
           <VideoPlayer

@@ -159,7 +159,7 @@ func (s *directoryService) Test(ctx context.Context, r *networkv1directory.Front
 	}{
 		{
 			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
-			[]string{"DDTGlyJVNVI", "SocSlBubzwA", "c5Z-0hkyxgo", "-IO6fpjDJY8", "nKrznsPB5t8", "PMesD2l6viA", "GTYJd2qfx5g", "i6zaVYWLTkU", "9VE7afYWzYo", "JQ4Jx8XfP_w", "oEgZeTr3Vs4", "pRpeEdMmmQ0"},
+			[]string{"DDTGlyJVNVI", "SocSlBubzwA", "-IO6fpjDJY8", "nKrznsPB5t8", "PMesD2l6viA", "GTYJd2qfx5g", "i6zaVYWLTkU", "9VE7afYWzYo", "JQ4Jx8XfP_w", "oEgZeTr3Vs4", "pRpeEdMmmQ0"},
 		},
 		{
 			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
@@ -171,7 +171,7 @@ func (s *directoryService) Test(ctx context.Context, r *networkv1directory.Front
 		},
 		{
 			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
-			[]string{"1159927987", "1157956746", "1160400711"},
+			[]string{"1157956746", "1160400711"},
 		},
 		// {
 		// 	networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,

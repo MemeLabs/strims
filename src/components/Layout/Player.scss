@@ -15,7 +15,12 @@
   &__media {
     position: absolute;
     background: #000;
+    height: 100%;
     max-height: calc(100vh - 100px);
+
+    @at-root .layout--show_chat & {
+      height: unset;
+    }
   }
 
   &--full &__media,
@@ -91,7 +96,7 @@
   }
 }
 
-.layout--max_aspect_ratio_1_2 .player_embed {
+.layout--max_aspect_ratio_1_2.layout--show_chat .player_embed {
   height: var(--video-height);
 
   &__view {
