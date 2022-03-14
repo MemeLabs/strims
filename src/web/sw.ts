@@ -56,9 +56,12 @@ const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
 
 self.addEventListener("fetch", (event: FetchEvent) => {
   const url = new URL(event.request.url);
-  const referrer = new URL(event.request.referrer);
-  if (url.origin !== referrer.origin) {
-    return;
+
+  if (event.request.referrer) {
+    const referrer = new URL(event.request.referrer);
+    if (url.origin !== referrer.origin) {
+      return;
+    }
   }
 
   for (const [route, handler] of routes) {
