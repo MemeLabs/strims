@@ -434,6 +434,8 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
   };
 };
 
+type Grammar = ReturnType<typeof getGrammar>;
+
 const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
   const ranges: Range[] = [];
 
@@ -559,7 +561,7 @@ interface SearchState {
 
 const getSearchState = (
   editor: Editor,
-  grammar: Prism.Grammar,
+  grammar: Grammar,
   searchSources: SearchSources
 ): SearchState => {
   const { selection } = editor;

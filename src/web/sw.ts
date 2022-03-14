@@ -32,12 +32,16 @@ const handleHLSRelayRequest = (event: FetchEvent, url: URL) => {
   );
 };
 
-const handleSVCWorkerRequest = (event: FetchEvent) => {
+const handleStaticRequest = (event: FetchEvent) => {
+  if (!IS_PRODUCTION) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(async (res) => {
       if (!res) {
-        res = await fetch(event.request.clone());
-        const cache = await caches.open(`${GIT_HASH}_svc`);
+        res = await fetch(event.request);
+        const cache = await caches.open(`${GIT_HASH}_static`);
         await cache.put(event.request, res.clone());
       }
       return res;
@@ -47,11 +51,16 @@ const handleSVCWorkerRequest = (event: FetchEvent) => {
 
 const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
   [/_hls-relay\/([^/]+)/, handleHLSRelayRequest],
-  [/svc\.([a-f0-9]+)\.wasm/, handleSVCWorkerRequest],
+  [/\.(css|js|json|png|svg|wasm)$/, handleStaticRequest],
 ];
 
 self.addEventListener("fetch", (event: FetchEvent) => {
   const url = new URL(event.request.url);
+  const referrer = new URL(event.request.referrer);
+  if (url.origin !== referrer.origin) {
+    return;
+  }
+
   for (const [route, handler] of routes) {
     if (url.pathname.match(route)) {
       return handler(event, url);

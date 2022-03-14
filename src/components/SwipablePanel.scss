@@ -66,4 +66,12 @@
       calc(-1 * min(var(--swipable-drag-offset, 0px), 100% - var(--swipable-peek-size, 10px)))
     );
   }
+
+  & > * {
+    pointer-events: none;
+  }
+
+  &--open:not(.swipable--dragging) > * {
+    pointer-events: unset;
+  }
 }

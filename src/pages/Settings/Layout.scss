@@ -10,6 +10,7 @@
       height: 100%;
       box-shadow: var(--shadow-elevation-2);
       z-index: var(--z-index-default);
+      --swipable-peek-size: 10px;
 
       &__link {
         white-space: nowrap;
@@ -19,10 +20,6 @@
     &__body {
       transform: translateZ(0);
     }
-  }
-
-  .settings__nav {
-    --swipable-peek-size: 10px;
   }
 
   &.layout--landscape_cw .settings {
