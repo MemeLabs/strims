@@ -8,7 +8,7 @@ import (
 )
 
 func TestSetGetDelete(t *testing.T) {
-	m := New[[]byte, uint64](NewByteInterface())
+	m := New[[]byte, uint64](NewByteInterface[[]byte]())
 	m.Set([]byte("test"), 1234)
 
 	v, ok := m.Get([]byte("test"))
@@ -25,7 +25,7 @@ func TestSetGetDelete(t *testing.T) {
 
 func TestIterate(t *testing.T) {
 	n := 500
-	m := New[[]byte, int](NewByteInterface())
+	m := New[[]byte, int](NewByteInterface[[]byte]())
 	for i := 0; i < n; i++ {
 		b := make([]byte, 4)
 		binary.LittleEndian.PutUint32(b, uint32(i))
@@ -54,7 +54,7 @@ type testType struct {
 }
 
 func BenchmarkMap(b *testing.B) {
-	m := New[uint64, testType](NewUint64Interface())
+	m := New[uint64, testType](NewUint64Interface[uint64]())
 
 	for i := 0; i < b.N; i++ {
 		m.Set(uint64(i), testType{})

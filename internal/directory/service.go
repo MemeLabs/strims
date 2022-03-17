@@ -122,9 +122,9 @@ type directoryService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	embedLoader       syncutil.Pointer[embedLoader]
 	lock              sync.Mutex
-	listings          indexedLRU[listing]
-	sessions          lru[session]
-	users             lru[user]
+	listings          indexedLRU[listing, *listing]
+	sessions          lru[session, *session]
+	users             lru[user, *user]
 	certificate       *certificate.Certificate
 	configPublisher   *vpn.HashTablePublisher
 }

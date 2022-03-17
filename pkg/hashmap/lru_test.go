@@ -9,7 +9,7 @@ import (
 )
 
 func TestLRUInsertGetDelete(t *testing.T) {
-	m := NewLRU[[]byte, uint64](NewByteInterface())
+	m := NewLRU[[]byte, uint64](NewByteInterface[[]byte]())
 	v, _ := m.GetOrInsert([]byte("test"), 1234)
 	assert.EqualValues(t, 1234, v)
 
@@ -27,7 +27,7 @@ func TestLRUInsertGetDelete(t *testing.T) {
 
 func TestLRUIterate(t *testing.T) {
 	n := 500
-	m := NewLRU[[]byte, int](NewByteInterface())
+	m := NewLRU[[]byte, int](NewByteInterface[[]byte]())
 	for i := 0; i < n; i++ {
 		b := make([]byte, 4)
 		binary.LittleEndian.PutUint32(b, uint32(i))
@@ -78,7 +78,7 @@ func TestLRUIterate(t *testing.T) {
 
 func TestLRUPop(t *testing.T) {
 	n := 10
-	m := NewLRU[[]byte, int](NewByteInterface())
+	m := NewLRU[[]byte, int](NewByteInterface[[]byte]())
 	for i := 0; i < n; i++ {
 		b := make([]byte, 4)
 		binary.LittleEndian.PutUint32(b, uint32(i))

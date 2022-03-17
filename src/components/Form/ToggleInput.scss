@@ -3,22 +3,22 @@
 
   &__switch,
   &__switch__track {
-    border-radius: 0.5em;
-    height: 1em;
+    border-radius: 0.5rem;
+    height: 1rem;
     overflow: hidden;
     position: relative;
-    width: 2em;
+    width: 2rem;
     transform: translateZ(0);
   }
 
   &__switch {
-    margin-top: 0.2em;
+    margin-top: 0.2rem;
 
     &:before,
     &__track:after {
       content: "";
       display: block;
-      height: 1em;
+      height: 1rem;
       position: absolute;
       transition: transform var(--timing-medium) ease-in-out;
     }
@@ -30,8 +30,8 @@
         var(--color-background-input-toggle) 50%,
         var(--color-background-input) 50%
       );
-      transform: translateZ(0) translateX(-2em);
-      width: 4em;
+      transform: translateZ(0) translateX(-2rem);
+      width: 4rem;
     }
 
     &__track {
@@ -39,19 +39,19 @@
 
       &:after {
         background: var(--color-foreground-toggle);
-        border-radius: 0.5em;
+        border-radius: 0.5rem;
         box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
         transform: translateZ(0) translateX(0);
-        width: 1em;
+        width: 1rem;
       }
     }
   }
 
   :checked + &__switch:before {
-    transform: translateZ(0) translateX(-0.5em);
+    transform: translateZ(0) translateX(-0.5rem);
   }
   :checked + &__switch &__switch__track:after {
-    transform: translateZ(0) translateX(1em);
+    transform: translateZ(0) translateX(1rem);
   }
 
   :disabled + &__switch:before {

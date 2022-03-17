@@ -267,6 +267,14 @@ func (b *FrameWriter) Flush() error {
 	return err
 }
 
+func (b *FrameWriter) Available() int {
+	return b.size - b.off
+}
+
+func (b *FrameWriter) AvailableBuffer() []byte {
+	return b.buf[b.off:][:0]
+}
+
 // Close ...
 func (b *FrameWriter) Close() error {
 	b.closeOnce.Do(func() {

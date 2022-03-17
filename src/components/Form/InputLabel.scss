@@ -7,12 +7,12 @@
   &--required > :first-child::after {
     content: "*";
     color: red;
-    padding-left: 0.2em;
+    padding-left: 0.2rem;
   }
 
   &__text {
     display: block;
-    font-size: 1em;
+    font-size: 1rem;
     text-transform: uppercase;
   }
 

@@ -62,7 +62,15 @@ class ChatService {
     this.messages.on("data", (message) =>
       ch.push(
         new chatv1.OpenClientResponse({
-          body: new chatv1.OpenClientResponse.Body({ message }),
+          body: {
+            serverEvents: {
+              events: [
+                {
+                  body: { message },
+                },
+              ],
+            },
+          },
         })
       )
     );

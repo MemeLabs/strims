@@ -421,9 +421,13 @@ message OpenClientResponse {
     uint64 client_id = 1;
   }
 
+  message ServerEvents {
+    repeated ServerEvent events = 1;
+  }
+
   oneof body {
     Open open = 1001;
-    Message message = 1002;
+    ServerEvents server_events = 1002;
     AssetBundle asset_bundle = 1003;
   }
 }

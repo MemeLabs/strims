@@ -21,8 +21,7 @@ const minPeerQOSWeight = 50
 
 // Conn ...
 type Conn interface {
-	ioutil.WriteFlushCloser
-	MTU() int
+	ioutil.BufferedWriteFlusher
 	SetQOSWeight(w uint64)
 }
 

@@ -52,7 +52,7 @@ func NewControl(
 		events:                observers.Chan(),
 		ingressConfig:         &videov1.VideoIngressConfig{},
 		network:               network,
-		shareServerCloseFuncs: hashmap.New[[]byte, context.CancelFunc](hashmap.NewByteInterface()),
+		shareServerCloseFuncs: hashmap.New[[]byte, context.CancelFunc](hashmap.NewByteInterface[[]byte]()),
 		ingressService: newIngressService(
 			ctx,
 			logger,

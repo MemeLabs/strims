@@ -14,7 +14,7 @@
     "web:test:integration": "nodemon --watch pkg --watch internal --watch integration --watch src -e go,js,jsx,ts,tsx --delay 0.1 --signal SIGINT --exec 'go test -mod=readonly ./integration/frontend -tags web -count 1 -v 1 || exit 1'",
     "dev:web": "run-p web:go web:webpack",
     "test:web": "run-p dev:web web:test:integration",
-    "svc": "nodemon --watch pkg --watch internal --watch cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly -ldflags \"-X github.com/MemeLabs/go-ppspp/pkg/version.Platform=svc\" ./cmd/svc run -config ./hack/svc/config.yaml || exit 1'",
+    "svc": "nodemon --watch pkg --watch internal --watch cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'GOAMD64=v3 go run -mod=readonly -ldflags \"-X github.com/MemeLabs/go-ppspp/pkg/version.Platform=svc\" ./cmd/svc run -config ./hack/svc/config.yaml || exit 1'",
     "test:native": "nodemon --watch pkg --watch internal --watch integration -e go --delay 0.1 --signal SIGINT --exec 'go test -mod=readonly ./integration/frontend -tags native -count 1 -v 1 || exit 1'",
     "dev:svc": "run-p svc",
     "funding": "nodemon --watch pkg --watch internal --watch cmd/funding -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/funding || exit 1'",

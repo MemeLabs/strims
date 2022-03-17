@@ -8,8 +8,8 @@ import (
 
 func TestPeerWriterQueuePushPop(t *testing.T) {
 	n := 10
-	writers := make([]peerWriter, n)
-	q := newPeerWriterQueue()
+	writers := make([]peerTaskRunner, n)
+	q := newPeerTaskRunnerQueue()
 
 	for i := 0; i < 10; i++ {
 		w := &mockPeerWriter{ID: i}
@@ -29,8 +29,8 @@ func TestPeerWriterQueuePushPop(t *testing.T) {
 
 func TestPeerWriterQueueDeduplicate(t *testing.T) {
 	n := 10
-	writers := make([]peerWriter, n)
-	q := newPeerWriterQueue()
+	writers := make([]peerTaskRunner, n)
+	q := newPeerTaskRunnerQueue()
 
 	for i := 0; i < 10; i++ {
 		w := &mockPeerWriter{ID: i}
@@ -51,8 +51,8 @@ func TestPeerWriterQueueDeduplicate(t *testing.T) {
 
 func TestPeerWriterQueueRemove(t *testing.T) {
 	n := 10
-	writers := make([]peerWriter, n)
-	q := newPeerWriterQueue()
+	writers := make([]peerTaskRunner, n)
+	q := newPeerTaskRunnerQueue()
 
 	for i := 0; i < 10; i++ {
 		w := &mockPeerWriter{ID: i}
@@ -77,8 +77,8 @@ var BenchmarkPeerWriterQueueResult bool
 
 func BenchmarkPeerWriterQueue(b *testing.B) {
 	n := 10
-	writers := make([]peerWriter, n)
-	q := newPeerWriterQueue()
+	writers := make([]peerTaskRunner, n)
+	q := newPeerTaskRunnerQueue()
 
 	for i := 0; i < 10; i++ {
 		writers[i] = &mockPeerWriter{ID: i}

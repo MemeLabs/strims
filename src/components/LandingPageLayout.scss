@@ -3,13 +3,13 @@
 .login_profile_list {
   &__item {
     background: $slate-400;
-    border-radius: 0.5em;
+    border-radius: 0.5rem;
     border: 1px solid $slate-500;
     box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
     color: $gray-400;
     cursor: pointer;
-    padding: 1em;
-    margin: 0.75em 0;
+    padding: 1rem;
+    margin: 0.75rem 0;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -21,9 +21,9 @@
 
   &__icon {
     display: block;
-    padding-right: 0.5em;
-    height: 1.3em;
-    width: 1.3em;
+    padding-right: 0.5rem;
+    height: 1.3rem;
+    width: 1.3rem;
   }
 
   &__text {
@@ -33,7 +33,7 @@
   &__subtext {
     display: block;
     color: $gray-100;
-    font-size: 0.8em;
+    font-size: 0.8rem;
   }
 }
 
@@ -70,7 +70,7 @@
     justify-content: center;
     display: flex;
     max-height: 200px;
-    padding: 2em;
+    padding: 2rem;
 
     @include respond-to("small") {
       max-height: unset;
@@ -78,13 +78,13 @@
 
     &__title {
       display: block;
-      font-size: 2.2em;
-      margin: 0.1em 0;
+      font-size: 2.2rem;
+      margin: 0.1rem 0;
       color: $gray-500;
     }
 
     &__tagline {
-      margin: 0.1em 0;
+      margin: 0.1rem 0;
       color: $gray-300;
     }
   }
@@ -95,7 +95,7 @@
     flex-direction: column;
     justify-content: flex-start;
     display: flex;
-    padding: 2em;
+    padding: 2rem;
 
     @include respond-to("small") {
       justify-content: center;

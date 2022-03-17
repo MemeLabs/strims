@@ -12,7 +12,7 @@ const (
 
 var VNICConfig = NewSingleton(
 	vnicConfigNS,
-	&SingletonOptions[vnicv1.Config]{
+	&SingletonOptions[vnicv1.Config, *vnicv1.Config]{
 		DefaultValue: &vnicv1.Config{
 			MaxUploadBytesPerSecond: 1 << 40,
 		},

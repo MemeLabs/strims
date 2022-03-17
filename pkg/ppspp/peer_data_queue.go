@@ -7,7 +7,7 @@ import (
 )
 
 type peerDataQueueItem struct {
-	cs peerWriter
+	cs peerTaskRunner
 	b  binmap.Bin
 	ts timeutil.Time
 }
@@ -17,17 +17,17 @@ type peerDataQueue struct {
 	len int
 }
 
-func (q *peerDataQueue) Push(cs peerWriter, b binmap.Bin, ts timeutil.Time) {
+func (q *peerDataQueue) Push(cs peerTaskRunner, b binmap.Bin, ts timeutil.Time) {
 	q.r.Push(peerDataQueueItem{cs, b, ts})
 	q.len++
 }
 
-func (q *peerDataQueue) PushFront(cs peerWriter, b binmap.Bin, ts timeutil.Time) {
+func (q *peerDataQueue) PushFront(cs peerTaskRunner, b binmap.Bin, ts timeutil.Time) {
 	q.r.PushFront(peerDataQueueItem{cs, b, ts})
 	q.len++
 }
 
-func (q *peerDataQueue) Remove(cs peerWriter, b binmap.Bin) {
+func (q *peerDataQueue) Remove(cs peerTaskRunner, b binmap.Bin) {
 	for it := q.r.Iterator(); it.Next(); {
 		i := it.Ref()
 		if i.cs == cs && b.Contains(i.b) {
@@ -37,7 +37,7 @@ func (q *peerDataQueue) Remove(cs peerWriter, b binmap.Bin) {
 	}
 }
 
-func (q *peerDataQueue) Pop() (peerWriter, binmap.Bin, timeutil.Time, bool) {
+func (q *peerDataQueue) Pop() (peerTaskRunner, binmap.Bin, timeutil.Time, bool) {
 	for {
 		i, ok := q.r.PopFront()
 		if !ok {

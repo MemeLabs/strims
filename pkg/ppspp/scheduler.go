@@ -12,19 +12,19 @@ import (
 
 type swarmScheduler interface {
 	store.Subscriber
-	ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler
-	CloseChannel(p peerThing)
+	ChannelScheduler(p peerTaskQueue, cw codecMessageWriter) channelScheduler
+	CloseChannel(p peerTaskQueue)
 	Run(t timeutil.Time)
 }
 
-type peerWriter interface {
+type peerTaskRunner interface {
 	PunchTicket(v uint64) bool
-	Write(maxBytes int) (int, error)
-	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
+	Write() (int, error)
+	WriteData(b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
 }
 
 type channelScheduler interface {
-	peerWriter
+	peerTaskRunner
 	HandleHandshake(liveWindow uint32) error
 	HandleAck(b binmap.Bin, delaySample time.Duration) error
 	HandleData(b binmap.Bin, t timeutil.Time, valid bool) error
@@ -42,18 +42,18 @@ type channelScheduler interface {
 	HandleMessageEnd() error
 }
 
-type peerThing interface {
+type peerTaskQueue interface {
 	ID() []byte
-	Enqueue(w peerWriter)
-	EnqueueNow(w peerWriter)
-	PushData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	PushFrontData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	RemoveData(w peerWriter, b binmap.Bin, pri peerPriority)
-	CloseChannel(w peerWriter)
+	Enqueue(w peerTaskRunner)
+	EnqueueNow(w peerTaskRunner)
+	PushData(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	PushFrontData(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	RemoveData(w peerTaskRunner, b binmap.Bin, pri peerPriority)
+	RemoveRunner(w peerTaskRunner)
 }
 
-type channelWriterThing interface {
-	Resize(int) error
+type codecMessageWriter interface {
+	Available() int
 	Len() int
 	Flush() error
 	Reset()

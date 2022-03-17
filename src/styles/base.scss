@@ -27,13 +27,13 @@ body {
 .app__menu {
   background: var(--body-foreground);
   flex: 300px 0;
-  padding: 1em;
+  padding: 1rem;
 }
 
 .app__body {
   background: var(--body-background);
   flex: 1 1;
-  padding: 1em;
+  padding: 1rem;
 }
 
 .app--dark {

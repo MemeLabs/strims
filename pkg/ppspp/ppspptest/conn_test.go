@@ -70,3 +70,27 @@ func TestUnbufferedConnParallel(t *testing.T) {
 
 	<-done
 }
+
+func TestConnBufferBorrow(t *testing.T) {
+	a, b := NewConnPair()
+
+	assert.Equal(t, connMTU, a.Available())
+	assert.Equal(t, connMTU, b.Available())
+	assert.Equal(t, 0, len(a.AvailableBuffer()))
+	assert.LessOrEqual(t, connMTU, cap(a.AvailableBuffer()))
+	assert.Equal(t, 0, len(b.AvailableBuffer()))
+	assert.LessOrEqual(t, connMTU, cap(b.AvailableBuffer()))
+
+	a.Write(make([]byte, 32))
+
+	assert.Equal(t, connMTU-32, a.Available())
+	assert.Equal(t, 0, len(a.AvailableBuffer()))
+	assert.LessOrEqual(t, connMTU-32, cap(a.AvailableBuffer()))
+
+	err := a.Flush()
+	assert.NoError(t, err)
+
+	assert.Equal(t, connMTU, a.Available())
+	assert.Equal(t, 0, len(a.AvailableBuffer()))
+	assert.LessOrEqual(t, connMTU, cap(a.AvailableBuffer()))
+}

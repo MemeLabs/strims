@@ -9,7 +9,7 @@
     border-radius: var(--border-radius-small);
     overflow: hidden;
     align-items: center;
-    padding: 0 0.5em;
+    padding: 0 0.5rem;
     box-shadow: 0 1px 2px var(--color-opac-b-14) inset;
     background-color: var(--color-background-input);
   }
@@ -26,8 +26,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 1em;
-    width: 1em;
+    height: 1rem;
+    width: 1rem;
     color: var(--color-icon-input);
   }
 
@@ -50,11 +50,11 @@
 
     &__channel {
       &__logo {
-        height: 2em;
-        width: 2em;
+        height: 2rem;
+        width: 2rem;
         object-fit: cover;
-        border-radius: 2em;
-        margin-right: 0.5em;
+        border-radius: 2rem;
+        margin-right: 0.5rem;
       }
 
       &__label {
@@ -63,10 +63,10 @@
         flex-direction: column;
         justify-content: center;
         min-width: 0;
-        font-size: 0.9em;
+        font-size: 0.9rem;
 
         & span:nth-child(2) {
-          margin-top: 0.4em;
+          margin-top: 0.4rem;
         }
       }
 
@@ -81,9 +81,9 @@
 
     &__embed {
       &__logo {
-        height: 2em;
-        width: 2em;
-        margin-right: 0.5em;
+        height: 2rem;
+        width: 2rem;
+        margin-right: 0.5rem;
         object-fit: scale-down;
       }
     }
@@ -113,7 +113,7 @@
     &__box {
       width: 300px;
       box-sizing: border-box;
-      height: 2em;
+      height: 2rem;
     }
 
     &__menu {
@@ -138,14 +138,14 @@
     &__base {
       display: flex;
       flex-direction: row;
-      padding: 0.5em;
-      flex: 0 0 2em;
+      padding: 0.5rem;
+      flex: 0 0 2rem;
       background: var(--color-background-layout-header);
     }
 
     &__box {
       flex: 1;
-      margin-right: 0.5em;
+      margin-right: 0.5rem;
     }
 
     &__menu {

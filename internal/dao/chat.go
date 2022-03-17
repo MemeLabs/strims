@@ -26,7 +26,7 @@ const (
 
 var ChatServers = NewTable(
 	chatServerNS,
-	&TableOptions[chatv1.Server]{
+	&TableOptions[chatv1.Server, *chatv1.Server]{
 		ObserveChange: func(m, p *chatv1.Server) proto.Message {
 			return &chatv1.ServerChangeEvent{Server: m}
 		},
@@ -38,7 +38,7 @@ var ChatServers = NewTable(
 
 var ChatEmotes = NewTable(
 	chatEmoteNS,
-	&TableOptions[chatv1.Emote]{
+	&TableOptions[chatv1.Emote, *chatv1.Emote]{
 		ObserveChange: func(m, p *chatv1.Emote) proto.Message {
 			return &chatv1.EmoteChangeEvent{Emote: m}
 		},
@@ -58,7 +58,7 @@ var GetChatEmotesByServerID, GetChatEmotesByServer, GetChatServerByEmote = ManyT
 
 var ChatModifiers = NewTable(
 	chatModifierNS,
-	&TableOptions[chatv1.Modifier]{
+	&TableOptions[chatv1.Modifier, *chatv1.Modifier]{
 		ObserveChange: func(m, p *chatv1.Modifier) proto.Message {
 			return &chatv1.ModifierChangeEvent{Modifier: m}
 		},
@@ -78,7 +78,7 @@ var GetChatModifiersByServerID, GetChatModifiersByServer, GetChatServerByModifie
 
 var ChatTags = NewTable(
 	chatTagNS,
-	&TableOptions[chatv1.Tag]{
+	&TableOptions[chatv1.Tag, *chatv1.Tag]{
 		ObserveChange: func(m, p *chatv1.Tag) proto.Message {
 			return &chatv1.TagChangeEvent{Tag: m}
 		},
@@ -130,14 +130,14 @@ func NewChatProfileCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatProfileCac
 }
 
 type ChatProfileCache struct {
-	*CacheStore[chatv1.Profile]
-	ByID      CacheAccessor[uint64, chatv1.Profile]
-	ByPeerKey CacheAccessor[[]byte, chatv1.Profile]
+	*CacheStore[chatv1.Profile, *chatv1.Profile]
+	ByID      CacheAccessor[uint64, chatv1.Profile, *chatv1.Profile]
+	ByPeerKey CacheAccessor[[]byte, chatv1.Profile, *chatv1.Profile]
 }
 
 var ChatUIConfig = NewSingleton(
 	chatUIConfigNS,
-	&SingletonOptions[chatv1.UIConfig]{
+	&SingletonOptions[chatv1.UIConfig, *chatv1.UIConfig]{
 		ObserveChange: func(m, p *chatv1.UIConfig) proto.Message {
 			return &chatv1.UIConfigChangeEvent{UiConfig: m}
 		},

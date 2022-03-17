@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/chanutil"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
@@ -326,13 +327,12 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 					return
 				}
 
-				switch b := e.Body.(type) {
-				case *chatv1.ServerEvent_Message:
-					ch <- &chatv1.OpenClientResponse{
-						Body: &chatv1.OpenClientResponse_Message{
-							Message: b.Message,
+				ch <- &chatv1.OpenClientResponse{
+					Body: &chatv1.OpenClientResponse_ServerEvents_{
+						ServerEvents: &chatv1.OpenClientResponse_ServerEvents{
+							Events: chanutil.AppendAll([]*chatv1.ServerEvent{e}, events),
 						},
-					}
+					},
 				}
 			case b, ok := <-assets:
 				if !ok {

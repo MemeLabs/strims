@@ -22,23 +22,23 @@ func newTestPeerSwarmScheduler() *peerSwarmScheduler {
 func TestPeerSwarmSchedulerStartStopChannel(t *testing.T) {
 	swarmScheduler := newTestPeerSwarmScheduler()
 
-	var closeChannelCalled bool
-	peer := &mockPeerThing{
-		closeChannelFunc: func(w peerWriter) {
-			closeChannelCalled = true
+	var removeRunnerCalled bool
+	peer := &mockPeerTaskQueue{
+		removeRunnerFunc: func(w peerTaskRunner) {
+			removeRunnerCalled = true
 		},
 	}
 
-	channelScheduler := swarmScheduler.ChannelScheduler(peer, &mockChannelWriterThing{}).(*peerChannelScheduler)
+	channelScheduler := swarmScheduler.ChannelScheduler(peer, &mockCodecMessageWriter{}).(*peerChannelScheduler)
 	assert.NotNil(t, channelScheduler)
 
 	swarmScheduler.CloseChannel(peer)
-	assert.True(t, closeChannelCalled, "expected peer closeChannel to be called")
+	assert.True(t, removeRunnerCalled, "expected peer removeRunner to be called")
 }
 
 func TestPeerChannelSchedulerStreamSubImplicitRequests(t *testing.T) {
 	swarmScheduler := newTestPeerSwarmScheduler()
-	channelScheduler := swarmScheduler.ChannelScheduler(&mockPeerThing{}, &mockChannelWriterThing{}).(*peerChannelScheduler)
+	channelScheduler := swarmScheduler.ChannelScheduler(&mockPeerTaskQueue{}, &mockCodecMessageWriter{}).(*peerChannelScheduler)
 
 	peerHaveBin := binmap.NewBin(6, 0)
 	requestBin := binmap.NewBin(5, 0)
@@ -75,12 +75,12 @@ func TestPeerChannelSchedulerFoo(t *testing.T) {
 	var enqueueCalled, writeRequestCalled bool
 	var writeRequestBin binmap.Bin
 
-	p := &mockPeerThing{
-		enqueueFunc: func(w peerWriter) {
+	p := &mockPeerTaskQueue{
+		enqueueFunc: func(w peerTaskRunner) {
 			enqueueCalled = true
 		},
 	}
-	w := &mockChannelWriterThing{
+	w := &mockCodecMessageWriter{
 		cap: mtu,
 		WriteRequestFunc: func(m codec.Request) error {
 			writeRequestCalled = true
@@ -100,7 +100,7 @@ func TestPeerChannelSchedulerFoo(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, enqueueCalled)
 
-	_, err = channelScheduler.Write(mtu)
+	_, err = channelScheduler.Write()
 	assert.NoError(t, err)
 	assert.True(t, writeRequestCalled)
 	assert.True(t, haveBin.Contains(writeRequestBin))

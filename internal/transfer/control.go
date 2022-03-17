@@ -60,7 +60,7 @@ func NewControl(
 		peers:     map[uint64]*peer{},
 		// candidates:  newCandidatePool(logger, vpn),
 		searchQueue: newSearchQueue(int(peerSearchInterval / peerSearchTickRate)),
-		networks:    hashmap.New[[]byte, *network](hashmap.NewByteInterface()),
+		networks:    hashmap.New[[]byte, *network](hashmap.NewByteInterface[[]byte]()),
 		runner:      ppspp.NewRunner(ctx, logger),
 	}
 }

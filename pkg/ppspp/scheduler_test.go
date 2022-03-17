@@ -1,68 +1,66 @@
 package ppspp
 
 import (
-	"errors"
-
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
-type mockPeerThing struct {
+type mockPeerTaskQueue struct {
 	id                   []byte
 	addReceivedBytesFunc func(n uint64, t timeutil.Time)
-	enqueueFunc          func(w peerWriter)
-	enqueueNowFunc       func(w peerWriter)
-	pushDataFunc         func(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	pushFrontDataFunc    func(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	removeDataFunc       func(w peerWriter, b binmap.Bin, pri peerPriority)
-	closeChannelFunc     func(w peerWriter)
+	enqueueFunc          func(w peerTaskRunner)
+	enqueueNowFunc       func(w peerTaskRunner)
+	pushDataFunc         func(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	pushFrontDataFunc    func(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	removeDataFunc       func(w peerTaskRunner, b binmap.Bin, pri peerPriority)
+	removeRunnerFunc     func(w peerTaskRunner)
 }
 
-func (p *mockPeerThing) ID() []byte {
+func (p *mockPeerTaskQueue) ID() []byte {
 	return p.id
 }
-func (p *mockPeerThing) AddReceivedBytes(n uint64, t timeutil.Time) {
+func (p *mockPeerTaskQueue) AddReceivedBytes(n uint64, t timeutil.Time) {
 	if p.addReceivedBytesFunc != nil {
 		p.addReceivedBytesFunc(n, t)
 	}
 }
-func (p *mockPeerThing) Enqueue(w peerWriter) {
+func (p *mockPeerTaskQueue) Enqueue(w peerTaskRunner) {
 	if p.enqueueFunc != nil {
 		p.enqueueFunc(w)
 	}
 }
-func (p *mockPeerThing) EnqueueNow(w peerWriter) {
+func (p *mockPeerTaskQueue) EnqueueNow(w peerTaskRunner) {
 	if p.enqueueNowFunc != nil {
 		p.enqueueNowFunc(w)
 	}
 }
-func (p *mockPeerThing) PushData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *mockPeerTaskQueue) PushData(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushDataFunc != nil {
 		p.pushDataFunc(w, b, t, pri)
 	}
 }
-func (p *mockPeerThing) PushFrontData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *mockPeerTaskQueue) PushFrontData(w peerTaskRunner, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushFrontDataFunc != nil {
 		p.pushFrontDataFunc(w, b, t, pri)
 	}
 }
-func (p *mockPeerThing) RemoveData(w peerWriter, b binmap.Bin, pri peerPriority) {
+func (p *mockPeerTaskQueue) RemoveData(w peerTaskRunner, b binmap.Bin, pri peerPriority) {
 	if p.removeDataFunc != nil {
 		p.removeDataFunc(w, b, pri)
 	}
 }
-func (p *mockPeerThing) CloseChannel(w peerWriter) {
-	if p.closeChannelFunc != nil {
-		p.closeChannelFunc(w)
+func (p *mockPeerTaskQueue) RemoveRunner(w peerTaskRunner) {
+	if p.removeRunnerFunc != nil {
+		p.removeRunnerFunc(w)
 	}
 }
 
-type mockChannelWriterThing struct {
-	peerWriterQueueTicket
+type mockCodecMessageWriter struct {
+	peerTaskRunnerQueueTicket
 	cap, size                int
-	ResizeFunc               func(n int) error
-	LenFunc                  func()
+	LenFunc                  func() int
+	AvailableFunc            func() int
 	FlushFunc                func() error
 	ResetFunc                func()
 	WriteHandshakeFunc       func(m codec.Handshake) error
@@ -83,24 +81,19 @@ type mockChannelWriterThing struct {
 	WriteStreamCloseFunc     func(m codec.StreamClose) error
 }
 
-func (w *mockChannelWriterThing) Resize(n int) error {
-	var err error
-	if w.ResizeFunc != nil {
-		err = w.ResizeFunc(n)
-	}
-	if w.size > w.cap {
-		return errors.New("not enough space")
-	}
-	w.size = n
-	return err
-}
-func (w *mockChannelWriterThing) Len() int {
+func (w *mockCodecMessageWriter) Len() int {
 	if w.LenFunc != nil {
 		w.LenFunc()
 	}
 	return w.size
 }
-func (w *mockChannelWriterThing) Flush() error {
+func (w *mockCodecMessageWriter) Available() int {
+	if w.AvailableFunc != nil {
+		w.AvailableFunc()
+	}
+	return w.size
+}
+func (w *mockCodecMessageWriter) Flush() error {
 	var err error
 	if w.FlushFunc != nil {
 		err = w.FlushFunc()
@@ -108,19 +101,19 @@ func (w *mockChannelWriterThing) Flush() error {
 	w.size = w.cap
 	return err
 }
-func (w *mockChannelWriterThing) Reset() {
+func (w *mockCodecMessageWriter) Reset() {
 	if w.ResetFunc != nil {
 		w.ResetFunc()
 	}
 }
-func (w *mockChannelWriterThing) WriteHandshake(m codec.Handshake) (int, error) {
+func (w *mockCodecMessageWriter) WriteHandshake(m codec.Handshake) (int, error) {
 	var err error
 	if w.WriteHandshakeFunc != nil {
 		err = w.WriteHandshakeFunc(m)
 	}
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteAck(m codec.Ack) (int, error) {
+func (w *mockCodecMessageWriter) WriteAck(m codec.Ack) (int, error) {
 	var err error
 	if w.WriteAckFunc != nil {
 		err = w.WriteAckFunc(m)
@@ -128,7 +121,7 @@ func (w *mockChannelWriterThing) WriteAck(m codec.Ack) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteHave(m codec.Have) (int, error) {
+func (w *mockCodecMessageWriter) WriteHave(m codec.Have) (int, error) {
 	var err error
 	if w.WriteHaveFunc != nil {
 		err = w.WriteHaveFunc(m)
@@ -136,7 +129,7 @@ func (w *mockChannelWriterThing) WriteHave(m codec.Have) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteData(m codec.Data) (int, error) {
+func (w *mockCodecMessageWriter) WriteData(m codec.Data) (int, error) {
 	var err error
 	if w.WriteDataFunc != nil {
 		err = w.WriteDataFunc(m)
@@ -144,7 +137,7 @@ func (w *mockChannelWriterThing) WriteData(m codec.Data) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteIntegrity(m codec.Integrity) (int, error) {
+func (w *mockCodecMessageWriter) WriteIntegrity(m codec.Integrity) (int, error) {
 	var err error
 	if w.WriteIntegrityFunc != nil {
 		err = w.WriteIntegrityFunc(m)
@@ -152,7 +145,7 @@ func (w *mockChannelWriterThing) WriteIntegrity(m codec.Integrity) (int, error) 
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
+func (w *mockCodecMessageWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
 	var err error
 	if w.WriteSignedIntegrityFunc != nil {
 		err = w.WriteSignedIntegrityFunc(m)
@@ -160,7 +153,7 @@ func (w *mockChannelWriterThing) WriteSignedIntegrity(m codec.SignedIntegrity) (
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteRequest(m codec.Request) (int, error) {
+func (w *mockCodecMessageWriter) WriteRequest(m codec.Request) (int, error) {
 	var err error
 	if w.WriteRequestFunc != nil {
 		err = w.WriteRequestFunc(m)
@@ -168,7 +161,7 @@ func (w *mockChannelWriterThing) WriteRequest(m codec.Request) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WritePing(m codec.Ping) (int, error) {
+func (w *mockCodecMessageWriter) WritePing(m codec.Ping) (int, error) {
 	var err error
 	if w.WritePingFunc != nil {
 		err = w.WritePingFunc(m)
@@ -176,7 +169,7 @@ func (w *mockChannelWriterThing) WritePing(m codec.Ping) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WritePong(m codec.Pong) (int, error) {
+func (w *mockCodecMessageWriter) WritePong(m codec.Pong) (int, error) {
 	var err error
 	if w.WritePongFunc != nil {
 		err = w.WritePongFunc(m)
@@ -184,7 +177,7 @@ func (w *mockChannelWriterThing) WritePong(m codec.Pong) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteCancel(m codec.Cancel) (int, error) {
+func (w *mockCodecMessageWriter) WriteCancel(m codec.Cancel) (int, error) {
 	var err error
 	if w.WriteCancelFunc != nil {
 		err = w.WriteCancelFunc(m)
@@ -192,7 +185,7 @@ func (w *mockChannelWriterThing) WriteCancel(m codec.Cancel) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteChoke(m codec.Choke) (int, error) {
+func (w *mockCodecMessageWriter) WriteChoke(m codec.Choke) (int, error) {
 	var err error
 	if w.WriteChokeFunc != nil {
 		err = w.WriteChokeFunc(m)
@@ -200,7 +193,7 @@ func (w *mockChannelWriterThing) WriteChoke(m codec.Choke) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteUnchoke(m codec.Unchoke) (int, error) {
+func (w *mockCodecMessageWriter) WriteUnchoke(m codec.Unchoke) (int, error) {
 	var err error
 	if w.WriteUnchokeFunc != nil {
 		err = w.WriteUnchokeFunc(m)
@@ -208,7 +201,7 @@ func (w *mockChannelWriterThing) WriteUnchoke(m codec.Unchoke) (int, error) {
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteStreamRequest(m codec.StreamRequest) (int, error) {
+func (w *mockCodecMessageWriter) WriteStreamRequest(m codec.StreamRequest) (int, error) {
 	var err error
 	if w.WriteStreamRequestFunc != nil {
 		err = w.WriteStreamRequestFunc(m)
@@ -216,7 +209,7 @@ func (w *mockChannelWriterThing) WriteStreamRequest(m codec.StreamRequest) (int,
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteStreamCancel(m codec.StreamCancel) (int, error) {
+func (w *mockCodecMessageWriter) WriteStreamCancel(m codec.StreamCancel) (int, error) {
 	var err error
 	if w.WriteStreamCancelFunc != nil {
 		err = w.WriteStreamCancelFunc(m)
@@ -224,7 +217,7 @@ func (w *mockChannelWriterThing) WriteStreamCancel(m codec.StreamCancel) (int, e
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteStreamOpen(m codec.StreamOpen) (int, error) {
+func (w *mockCodecMessageWriter) WriteStreamOpen(m codec.StreamOpen) (int, error) {
 	var err error
 	if w.WriteStreamOpenFunc != nil {
 		err = w.WriteStreamOpenFunc(m)
@@ -232,7 +225,7 @@ func (w *mockChannelWriterThing) WriteStreamOpen(m codec.StreamOpen) (int, error
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err
 }
-func (w *mockChannelWriterThing) WriteStreamClose(m codec.StreamClose) (int, error) {
+func (w *mockCodecMessageWriter) WriteStreamClose(m codec.StreamClose) (int, error) {
 	var err error
 	if w.WriteStreamCloseFunc != nil {
 		err = w.WriteStreamCloseFunc(m)

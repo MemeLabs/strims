@@ -27,7 +27,7 @@ var AssetsAddressSalt = []byte("chat:assets")
 
 var defaultEventSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          256,
-	LiveWindow:         16 * 1024,
+	LiveWindow:         1024, // 256kb
 	ChunksPerSignature: 1,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,

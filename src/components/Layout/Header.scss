@@ -48,7 +48,7 @@
       overflow: hidden;
       position: relative;
       white-space: nowrap;
-      padding: 0 0.5em;
+      padding: 0 0.5rem;
 
       &:after {
         display: block;
@@ -90,9 +90,9 @@
       border: none;
       display: block;
       flex: 1 1;
-      height: 2em;
+      height: 2rem;
       outline: none;
-      padding: 0 0.5em;
+      padding: 0 0.5rem;
       width: 100px;
       width: auto;
       background: var(--color-background-input);
@@ -101,8 +101,8 @@
     &__button {
       border: none;
       display: flex;
-      flex: 0 1 1.5em;
-      height: 2em;
+      flex: 0 1 1.5rem;
+      height: 2rem;
       align-items: center;
       outline: none;
       background: var(--color-background-input);
@@ -119,7 +119,7 @@
       display: flex;
       flex-direction: row;
       align-items: center;
-      padding: 0 0.5em;
+      padding: 0 0.5rem;
       cursor: pointer;
       transition: all var(--timing-short) ease-in-out;
       filter: drop-shadow(0 1px 2px var(--color-opac-b-14));

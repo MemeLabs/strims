@@ -12,6 +12,7 @@ import {
   Modifier,
   OpenClientResponse,
   Room,
+  ServerEvent,
   Tag,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
@@ -258,13 +259,25 @@ const serverEventsDataReducer = (
         clientId: event.body.open.clientId,
         state: RoomInitState.OPEN,
       };
-    case OpenClientResponse.BodyCase.MESSAGE:
-      return messageReducer(state, room, event.body.message);
+    case OpenClientResponse.BodyCase.SERVER_EVENTS:
+      return serverEventsReducer(state, room, event.body.serverEvents.events);
     case OpenClientResponse.BodyCase.ASSET_BUNDLE:
       return assetBundleReducer(room, event.body.assetBundle);
     default:
       return room;
   }
+};
+
+const serverEventsReducer = (state: State, room: RoomState, events: ServerEvent[]): RoomState => {
+  for (const event of events) {
+    switch (event.body.case) {
+      case ServerEvent.BodyCase.MESSAGE:
+        room = messageReducer(state, room, event.body.message);
+        break;
+    }
+  }
+
+  return room;
 };
 
 const messageReducer = (state: State, room: RoomState, message: Message): RoomState => {

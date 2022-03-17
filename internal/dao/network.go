@@ -36,7 +36,7 @@ const (
 
 var Networks = NewTable(
 	networkNetworkNS,
-	&TableOptions[networkv1.Network]{
+	&TableOptions[networkv1.Network, *networkv1.Network]{
 		ObserveChange: func(m, p *networkv1.Network) proto.Message {
 			return &networkv1.NetworkChangeEvent{Network: m}
 		},
@@ -266,7 +266,7 @@ var GetCertificateLogBySubject = UniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
 	certificateLogSubjectKey,
-	&UniqueIndexOptions[networkv1ca.CertificateLog]{
+	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
 			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
 				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
@@ -315,10 +315,10 @@ func NewCertificateLogCache(s kv.RWStore, opt *CacheStoreOptions) (c Certificate
 }
 
 type CertificateLogCache struct {
-	*CacheStore[networkv1ca.CertificateLog]
-	ByID           CacheAccessor[uint64, networkv1ca.CertificateLog]
-	BySerialNumber CacheAccessor[[]byte, networkv1ca.CertificateLog]
-	BySubject      CacheAccessor[[]byte, networkv1ca.CertificateLog]
+	*CacheStore[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
+	ByID           CacheAccessor[uint64, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
+	BySerialNumber CacheAccessor[[]byte, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
+	BySubject      CacheAccessor[[]byte, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
 }
 
 // NetworkKey ...
@@ -328,7 +328,7 @@ func NetworkKey(network *networkv1.Network) []byte {
 
 var BootstrapClients = NewTable(
 	networkBootstrapClientNS,
-	&TableOptions[networkv1bootstrap.BootstrapClient]{
+	&TableOptions[networkv1bootstrap.BootstrapClient, *networkv1bootstrap.BootstrapClient]{
 		ObserveChange: func(m, p *networkv1bootstrap.BootstrapClient) proto.Message {
 			return &networkv1bootstrap.BootstrapClientChange{BootstrapClient: m}
 		},
@@ -355,7 +355,7 @@ func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTL
 
 var NetworkUIConfig = NewSingleton(
 	networkUIConfigNS,
-	&SingletonOptions[networkv1.UIConfig]{
+	&SingletonOptions[networkv1.UIConfig, *networkv1.UIConfig]{
 		DefaultValue: &networkv1.UIConfig{
 			NetworkDisplayOrder: []uint64{},
 		},

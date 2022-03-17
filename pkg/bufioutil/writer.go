@@ -1,6 +1,8 @@
 package bufioutil
 
-import "io"
+import (
+	"io"
+)
 
 func NewWriter(w io.Writer, size int) *Writer {
 	return &Writer{
@@ -51,4 +53,12 @@ func (w *Writer) Flush() error {
 	_, err := w.w.Write(w.buf[:w.n])
 	w.n = 0
 	return err
+}
+
+func (w *Writer) Available() int {
+	return len(w.buf) - w.n
+}
+
+func (w *Writer) AvailableBuffer() []byte {
+	return w.buf[w.n:][:0]
 }

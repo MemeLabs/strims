@@ -39,7 +39,7 @@ func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 		logger: logger,
 		vnic:   vnic,
 		qosc:   vnic.QOS().AddClass(qosClassWeight),
-		nodes:  hashmap.New[[]byte, *Node](hashmap.NewByteInterface()),
+		nodes:  hashmap.New[[]byte, *Node](hashmap.NewByteInterface[[]byte]()),
 		recentMessageIDs: newMessageIDLRU(
 			recentMessageIDHistoryDefaultSize,
 			recentMessageIDHistoryTTL,

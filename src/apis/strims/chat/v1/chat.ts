@@ -3632,8 +3632,8 @@ export class OpenClientResponse {
       case OpenClientResponse.BodyCase.OPEN:
       OpenClientResponse.Open.encode(m.body.open, w.uint32(8010).fork()).ldelim();
       break;
-      case OpenClientResponse.BodyCase.MESSAGE:
-      Message.encode(m.body.message, w.uint32(8018).fork()).ldelim();
+      case OpenClientResponse.BodyCase.SERVER_EVENTS:
+      OpenClientResponse.ServerEvents.encode(m.body.serverEvents, w.uint32(8018).fork()).ldelim();
       break;
       case OpenClientResponse.BodyCase.ASSET_BUNDLE:
       AssetBundle.encode(m.body.assetBundle, w.uint32(8026).fork()).ldelim();
@@ -3653,7 +3653,7 @@ export class OpenClientResponse {
         m.body = new OpenClientResponse.Body({ open: OpenClientResponse.Open.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.body = new OpenClientResponse.Body({ message: Message.decode(r, r.uint32()) });
+        m.body = new OpenClientResponse.Body({ serverEvents: OpenClientResponse.ServerEvents.decode(r, r.uint32()) });
         break;
         case 1003:
         m.body = new OpenClientResponse.Body({ assetBundle: AssetBundle.decode(r, r.uint32()) });
@@ -3671,27 +3671,27 @@ export namespace OpenClientResponse {
   export enum BodyCase {
     NOT_SET = 0,
     OPEN = 1001,
-    MESSAGE = 1002,
+    SERVER_EVENTS = 1002,
     ASSET_BUNDLE = 1003,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.OPEN, open: OpenClientResponse.IOpen }
-  |{ case?: BodyCase.MESSAGE, message: IMessage }
+  |{ case?: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.IServerEvents }
   |{ case?: BodyCase.ASSET_BUNDLE, assetBundle: IAssetBundle }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.OPEN, open: OpenClientResponse.Open }
-  |{ case: BodyCase.MESSAGE, message: Message }
+  |{ case: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.ServerEvents }
   |{ case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle }
   >;
 
   class BodyImpl {
     open: OpenClientResponse.Open;
-    message: Message;
+    serverEvents: OpenClientResponse.ServerEvents;
     assetBundle: AssetBundle;
     case: BodyCase = BodyCase.NOT_SET;
 
@@ -3700,9 +3700,9 @@ export namespace OpenClientResponse {
         this.case = BodyCase.OPEN;
         this.open = new OpenClientResponse.Open(v.open);
       } else
-      if (v && "message" in v) {
-        this.case = BodyCase.MESSAGE;
-        this.message = new Message(v.message);
+      if (v && "serverEvents" in v) {
+        this.case = BodyCase.SERVER_EVENTS;
+        this.serverEvents = new OpenClientResponse.ServerEvents(v.serverEvents);
       } else
       if (v && "assetBundle" in v) {
         this.case = BodyCase.ASSET_BUNDLE;
@@ -3715,7 +3715,7 @@ export namespace OpenClientResponse {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
     T extends { open: OpenClientResponse.IOpen } ? { case: BodyCase.OPEN, open: OpenClientResponse.Open } :
-    T extends { message: IMessage } ? { case: BodyCase.MESSAGE, message: Message } :
+    T extends { serverEvents: OpenClientResponse.IServerEvents } ? { case: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.ServerEvents } :
     T extends { assetBundle: IAssetBundle } ? { case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle } :
     never
     >;
@@ -3747,6 +3747,42 @@ export namespace OpenClientResponse {
         switch (tag >> 3) {
           case 1:
           m.clientId = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IServerEvents = {
+    events?: IServerEvent[];
+  }
+
+  export class ServerEvents {
+    events: ServerEvent[];
+
+    constructor(v?: IServerEvents) {
+      this.events = v?.events ? v.events.map(v => new ServerEvent(v)) : [];
+    }
+
+    static encode(m: ServerEvents, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      for (const v of m.events) ServerEvent.encode(v, w.uint32(10).fork()).ldelim();
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): ServerEvents {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new ServerEvents();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.events.push(ServerEvent.decode(r, r.uint32()));
           break;
           default:
           r.skipType(tag & 7);

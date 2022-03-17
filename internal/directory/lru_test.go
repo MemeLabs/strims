@@ -22,7 +22,7 @@ func (u *testItem) Less(o llrb.Item) bool {
 }
 
 func TestLRUSetGet(t *testing.T) {
-	var l lru[testItem]
+	var l lru[testItem, *testItem]
 
 	a := &testItem{[]byte("a")}
 	b := &testItem{[]byte("b")}
@@ -39,7 +39,7 @@ func TestLRUSetGet(t *testing.T) {
 }
 
 func TestLRUPeekRecentlyTouched(t *testing.T) {
-	var l lru[testItem]
+	var l lru[testItem, *testItem]
 
 	start := timeutil.Now()
 

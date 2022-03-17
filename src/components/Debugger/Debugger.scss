@@ -12,7 +12,7 @@
     border-bottom: #ccc;
     font-size: 10px;
     background: #ccc;
-    padding: 0.5em;
+    padding: 0.5rem;
     cursor: pointer;
     align-items: center;
 
@@ -22,13 +22,13 @@
     }
 
     svg {
-      margin-left: 0.2em;
+      margin-left: 0.2rem;
     }
   }
 }
 
 .debugger__downloads {
-  margin: 0.2em;
+  margin: 0.2rem;
 
   a {
     color: lighten(blue, 10%);
@@ -47,7 +47,7 @@
 
   &__plot {
     text {
-      font-size: 0.5em;
+      font-size: 0.5rem;
     }
 
     line {

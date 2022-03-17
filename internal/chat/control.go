@@ -54,7 +54,7 @@ func NewControl(
 		directory: directory,
 
 		events:  observers.Chan(),
-		runners: hashmap.New[[]byte, *runner](hashmap.NewByteInterface()),
+		runners: hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
 	}
 }
 
@@ -170,7 +170,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 		t.runners.Set(key, runner)
 	}
 
-	events := make(chan *chatv1.ServerEvent)
+	events := make(chan *chatv1.ServerEvent, 256)
 	assets := make(chan *chatv1.AssetBundle)
 
 	go func() {

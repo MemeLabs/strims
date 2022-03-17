@@ -4,28 +4,28 @@ import (
 	"sync"
 )
 
-var peerWriterQueueItemPool = sync.Pool{
+var peerTaskRunnerQueueItemPool = sync.Pool{
 	New: func() interface{} {
-		return &peerWriterQueueItem{}
+		return &peerTaskRunnerQueueItem{}
 	},
 }
 
-func putPeerWriterQueueItemPool(i *peerWriterQueueItem) {
+func putPeerWriterQueueItemPool(i *peerTaskRunnerQueueItem) {
 	i.next = nil
 	i.c = nil
-	peerWriterQueueItemPool.Put(i)
+	peerTaskRunnerQueueItemPool.Put(i)
 }
 
-type peerWriterQueueItem struct {
-	next *peerWriterQueueItem
-	c    peerWriter
+type peerTaskRunnerQueueItem struct {
+	next *peerTaskRunnerQueueItem
+	c    peerTaskRunner
 }
 
-type peerWriterQueueTicket struct {
+type peerTaskRunnerQueueTicket struct {
 	v uint64
 }
 
-func (t *peerWriterQueueTicket) PunchTicket(v uint64) bool {
+func (t *peerTaskRunnerQueueTicket) PunchTicket(v uint64) bool {
 	if t.v == v {
 		return false
 	}
@@ -33,23 +33,23 @@ func (t *peerWriterQueueTicket) PunchTicket(v uint64) bool {
 	return true
 }
 
-func newPeerWriterQueue() peerWriterQueue {
-	return peerWriterQueue{
+func newPeerTaskRunnerQueue() peerTaskRunnerQueue {
+	return peerTaskRunnerQueue{
 		v: 1,
 	}
 }
 
-type peerWriterQueue struct {
-	head, tail *peerWriterQueueItem
+type peerTaskRunnerQueue struct {
+	head, tail *peerTaskRunnerQueueItem
 	v          uint64
 }
 
-func (q *peerWriterQueue) Push(c peerWriter) bool {
+func (q *peerTaskRunnerQueue) Push(c peerTaskRunner) bool {
 	if !c.PunchTicket(q.v) {
 		return false
 	}
 
-	i := peerWriterQueueItemPool.Get().(*peerWriterQueueItem)
+	i := peerTaskRunnerQueueItemPool.Get().(*peerTaskRunnerQueueItem)
 	i.next = nil
 	i.c = c
 
@@ -57,7 +57,7 @@ func (q *peerWriterQueue) Push(c peerWriter) bool {
 	return true
 }
 
-func (q *peerWriterQueue) push(i *peerWriterQueueItem) {
+func (q *peerTaskRunnerQueue) push(i *peerTaskRunnerQueueItem) {
 	if q.head == nil {
 		q.head = i
 	}
@@ -68,8 +68,8 @@ func (q *peerWriterQueue) push(i *peerWriterQueueItem) {
 	q.tail = i
 }
 
-func (q *peerWriterQueue) Remove(c peerWriter) {
-	var prev *peerWriterQueueItem
+func (q *peerTaskRunnerQueue) Remove(c peerTaskRunner) {
+	var prev *peerTaskRunnerQueueItem
 	for i := q.head; i != nil; i = i.next {
 		if i.c == c {
 			if prev != nil {
@@ -90,7 +90,7 @@ func (q *peerWriterQueue) Remove(c peerWriter) {
 	}
 }
 
-func (q *peerWriterQueue) Detach() detachedPeerWriterQueue {
+func (q *peerTaskRunnerQueue) Detach() detachedPeerWriterQueue {
 	c := detachedPeerWriterQueue{
 		head: q.head,
 	}
@@ -102,7 +102,7 @@ func (q *peerWriterQueue) Detach() detachedPeerWriterQueue {
 	return c
 }
 
-func (q *peerWriterQueue) Reattach(dq detachedPeerWriterQueue) {
+func (q *peerTaskRunnerQueue) Reattach(dq detachedPeerWriterQueue) {
 	for dq.head != nil {
 		i := dq.head
 		dq.head = i.next
@@ -115,15 +115,15 @@ func (q *peerWriterQueue) Reattach(dq detachedPeerWriterQueue) {
 	}
 }
 
-func (q *peerWriterQueue) Empty() bool {
+func (q *peerTaskRunnerQueue) Empty() bool {
 	return q.head == nil
 }
 
 type detachedPeerWriterQueue struct {
-	head *peerWriterQueueItem
+	head *peerTaskRunnerQueueItem
 }
 
-func (q *detachedPeerWriterQueue) Pop() (peerWriter, bool) {
+func (q *detachedPeerWriterQueue) Pop() (peerTaskRunner, bool) {
 	if q.head == nil {
 		return nil, false
 	}

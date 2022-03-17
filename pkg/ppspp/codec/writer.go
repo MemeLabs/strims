@@ -2,7 +2,8 @@ package codec
 
 import (
 	"errors"
-	"io"
+
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 )
 
 var (
@@ -14,26 +15,36 @@ var (
 const MessageTypeLen = 1
 
 // NewWriter ...
-func NewWriter(w io.Writer, size int) Writer {
+func NewWriter(w ioutil.BufferedWriteFlusher) Writer {
 	return Writer{
-		w:   w,
-		buf: make([]byte, size),
+		w: w,
 	}
 }
 
 // Writer ...
 type Writer struct {
-	w   io.Writer
+	w   ioutil.BufferedWriteFlusher
 	off int
 	buf []byte
 }
 
 // ensureSpace ...
 func (w *Writer) ensureSpace(n int) error {
+	if w.off == 0 {
+		w.buf = w.w.AvailableBuffer()[:w.w.Available()]
+	}
+
 	if w.off+n > len(w.buf) {
 		return ErrNotEnoughSpace
 	}
 	return nil
+}
+
+func (w *Writer) Available() int {
+	if w.off == 0 {
+		return w.w.Available()
+	}
+	return len(w.buf) - w.off
 }
 
 // Dirty ...
@@ -46,34 +57,16 @@ func (w *Writer) Len() int {
 	return w.off
 }
 
-func (w *Writer) Resize(n int) error {
-	if n < w.off {
-		return ErrTooSmall
-	}
-	if n > cap(w.buf) {
-		return ErrBufferTooSmall
-	}
-	w.buf = w.buf[:n]
-	return nil
-}
-
 func (w *Writer) Reset() {
 	w.off = 0
 }
 
 // Flush ...
 func (w *Writer) Flush() error {
-	if !w.Dirty() {
-		return nil
-	}
+	defer w.Reset()
 
-	if _, err := w.w.Write(w.buf[:w.off]); err != nil {
-		return err
-	}
-
-	w.off = 0
-
-	return nil
+	_, err := w.w.Write(w.buf[:w.off])
+	return err
 }
 
 // Write ...

@@ -14,7 +14,7 @@ var Profile = NewSingleton[profilev1.Profile](profileProfileNS, nil)
 
 var profileID = NewSingleton(
 	profileIDNS,
-	&SingletonOptions[profilev1.ProfileID]{
+	&SingletonOptions[profilev1.ProfileID, *profilev1.ProfileID]{
 		DefaultValue: &profilev1.ProfileID{NextId: 1},
 	},
 )

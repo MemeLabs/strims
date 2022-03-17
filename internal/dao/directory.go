@@ -21,7 +21,7 @@ const (
 
 var DirectoryListingRecords = NewTable(
 	directoryListingRecordNS,
-	&TableOptions[networkv1directory.ListingRecord]{
+	&TableOptions[networkv1directory.ListingRecord, *networkv1directory.ListingRecord]{
 		ObserveChange: func(m, p *networkv1directory.ListingRecord) proto.Message {
 			return &networkv1directory.ListingRecordChangeEvent{Record: m}
 		},

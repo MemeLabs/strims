@@ -24,3 +24,9 @@ type ReadWriteFlusher interface {
 	io.ReadWriter
 	Flusher
 }
+
+type BufferedWriteFlusher interface {
+	WriteFlusher
+	Available() int
+	AvailableBuffer() []byte
+}

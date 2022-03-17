@@ -21,6 +21,28 @@ type bufPipe struct {
 	buf    bytes.Buffer
 }
 
+func (b *bufPipe) Grow(n int) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+	b.buf.Grow(n)
+}
+
+func (b *bufPipe) Available() int {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	buf := b.buf.Bytes()
+	return cap(buf) - len(buf)
+}
+
+func (b *bufPipe) AvailableBuffer() []byte {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	buf := b.buf.Bytes()
+	return buf[len(buf):]
+}
+
 func (b *bufPipe) Write(p []byte) (int, error) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -64,6 +86,18 @@ type BufPipeWriter struct {
 	ch  chan int
 	n   int
 	buf *bufPipe
+}
+
+func (w *BufPipeWriter) Grow(n int) {
+	w.buf.Grow(n - w.n)
+}
+
+func (w *BufPipeWriter) Available() int {
+	return w.buf.Available()
+}
+
+func (w *BufPipeWriter) AvailableBuffer() []byte {
+	return w.buf.AvailableBuffer()
 }
 
 func (w *BufPipeWriter) Buffered() int {

@@ -186,7 +186,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 
 		requestBins: haveBins.Clone(),
 		streams:     newPeerSchedulerStreamSubscription(s.options.StreamCount),
-		channels:    map[peerThing]*peerChannelScheduler{},
+		channels:    map[peerTaskQueue]*peerChannelScheduler{},
 
 		integrityOverhead: s.options.IntegrityVerifierOptions().MaxMessageBytes(),
 		chunkSize:         int(s.options.ChunkSize),
@@ -224,7 +224,7 @@ type peerSwarmScheduler struct {
 
 	requestBins *binmap.Map
 	streams     []peerSchedulerStream
-	channels    map[peerThing]*peerChannelScheduler
+	channels    map[peerTaskQueue]*peerChannelScheduler
 
 	integrityOverhead int
 	chunkSize         int
@@ -644,7 +644,7 @@ func (s *peerSwarmScheduler) Consume(c store.Chunk) {
 	s.requestBins.Set(c.Bin)
 }
 
-func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler {
+func (s *peerSwarmScheduler) ChannelScheduler(p peerTaskQueue, cw codecMessageWriter) channelScheduler {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -692,7 +692,7 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 	return c
 }
 
-func (s *peerSwarmScheduler) CloseChannel(p peerThing) {
+func (s *peerSwarmScheduler) CloseChannel(p peerTaskQueue) {
 	s.lock.Lock()
 	cs, ok := s.channels[p]
 	if !ok {
@@ -716,7 +716,7 @@ func (s *peerSwarmScheduler) CloseChannel(p peerThing) {
 	cs.lock.Unlock()
 	s.lock.Unlock()
 
-	p.CloseChannel(cs)
+	p.RemoveRunner(cs)
 }
 
 func (s *peerSwarmScheduler) binStreamOffset(b binmap.Bin) uint64 {
@@ -757,11 +757,11 @@ func (s *peerSwarmScheduler) binStream(b binmap.Bin) codec.Stream {
 
 type peerChannelScheduler struct {
 	logger *zap.Logger
-	p      peerThing
-	cw     channelWriterThing
+	p      peerTaskQueue
+	cw     codecMessageWriter
 	s      *peerSwarmScheduler
 
-	peerWriterQueueTicket
+	peerTaskRunnerQueueTicket
 
 	lock sync.Mutex
 
@@ -866,17 +866,8 @@ func (c *peerChannelScheduler) clearRequests() {
 	}
 }
 
-func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
-	if err := c.cw.Resize(maxBytes); err != nil {
-		c.p.PushFrontData(c, b, t, pri)
-		return 0, err
-	}
-
-	for {
-		if maxBytes >= int(b.BaseLength())*c.s.chunkSize+c.s.integrityOverhead {
-			break
-		}
-
+func (c *peerChannelScheduler) WriteData(b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
+	for n := c.cw.Available(); n < int(b.BaseLength())*c.s.chunkSize+c.s.integrityOverhead; {
 		if b.IsBase() {
 			c.p.PushFrontData(c, b, t, pri)
 			return 0, codec.ErrNotEnoughSpace
@@ -932,11 +923,7 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 	return c.flushWrites()
 }
 
-func (c *peerChannelScheduler) Write(maxBytes int) (int, error) {
-	if err := c.cw.Resize(maxBytes); err != nil {
-		return 0, err
-	}
-
+func (c *peerChannelScheduler) Write() (int, error) {
 	if now := timeutil.Now(); now.After(c.nextPingTime) {
 		_, err := c.cw.WritePing(codec.Ping{
 			Nonce: codec.Nonce{

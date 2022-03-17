@@ -13,7 +13,7 @@ const (
 
 var AutoseedConfig = NewSingleton(
 	autoseedConfigNS,
-	&SingletonOptions[autoseedv1.Config]{
+	&SingletonOptions[autoseedv1.Config, *autoseedv1.Config]{
 		DefaultValue: &autoseedv1.Config{},
 		ObserveChange: func(m, p *autoseedv1.Config) proto.Message {
 			return &autoseedv1.ConfigChangeEvent{Config: m}
@@ -21,14 +21,17 @@ var AutoseedConfig = NewSingleton(
 	},
 )
 
-var AutoseedRules = NewTable(autoseedRuleNS, &TableOptions[autoseedv1.Rule]{
-	ObserveChange: func(m, p *autoseedv1.Rule) proto.Message {
-		return &autoseedv1.RuleChangeEvent{Rule: m}
+var AutoseedRules = NewTable(
+	autoseedRuleNS,
+	&TableOptions[autoseedv1.Rule, *autoseedv1.Rule]{
+		ObserveChange: func(m, p *autoseedv1.Rule) proto.Message {
+			return &autoseedv1.RuleChangeEvent{Rule: m}
+		},
+		ObserveDelete: func(m *autoseedv1.Rule) proto.Message {
+			return &autoseedv1.RuleDeleteEvent{Rule: m}
+		},
 	},
-	ObserveDelete: func(m *autoseedv1.Rule) proto.Message {
-		return &autoseedv1.RuleDeleteEvent{Rule: m}
-	},
-})
+)
 
 // NewAutoseedRule ...
 func NewAutoseedRule(g IDGenerator, networkKey, swarmID, salt []byte) (*autoseedv1.Rule, error) {

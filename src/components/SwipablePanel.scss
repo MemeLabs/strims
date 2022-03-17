@@ -71,7 +71,7 @@
     pointer-events: none;
   }
 
-  &--open:not(.swipable--dragging) > * {
-    pointer-events: unset;
+  &--open > * {
+    pointer-events: initial;
   }
 }

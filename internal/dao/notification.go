@@ -15,7 +15,7 @@ const (
 
 var Notifications = NewTable(
 	notificationNotificationNS,
-	&TableOptions[notificationv1.Notification]{
+	&TableOptions[notificationv1.Notification, *notificationv1.Notification]{
 		ObserveChange: func(m, p *notificationv1.Notification) proto.Message {
 			return &notificationv1.NotificationChangeEvent{Notification: m}
 		},

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -59,37 +60,57 @@ func newHandshake(swarm *Swarm) *codec.Handshake {
 	}
 }
 
-func newChannelWriter(metrics channelWriterMetrics, w Conn, channel codec.Channel) *channelWriter {
+type channelBufferedWriter struct {
+	ioutil.BufferedWriteFlusher
+	overhead int
+	buf      []byte
+}
+
+func (b *channelBufferedWriter) Available() int {
+	return b.BufferedWriteFlusher.Available() - b.overhead
+}
+
+func (b *channelBufferedWriter) AvailableBuffer() []byte {
+	buf := b.BufferedWriteFlusher.AvailableBuffer()
+	if cap(buf) < b.overhead {
+		b.buf = nil
+		return nil
+	}
+
+	b.buf = buf[:b.overhead]
+	return b.buf[b.overhead:][:0]
+}
+
+func newChannelWriter(metrics channelWriterMetrics, w ioutil.BufferedWriteFlusher, channel codec.Channel) *channelWriter {
 	head := codec.ChannelHeader{Channel: channel}
+	bw := &channelBufferedWriter{
+		BufferedWriteFlusher: w,
+		overhead:             head.ByteLen(),
+	}
 	return &channelWriter{
-		w:       w,
-		cw:      codec.NewWriter(w, w.MTU()-head.ByteLen()),
-		metrics: metrics,
 		head:    head,
-		buf:     make([]byte, head.ByteLen()),
+		bw:      bw,
+		cw:      codec.NewWriter(bw),
+		metrics: metrics,
 	}
 }
 
 type channelWriter struct {
-	w       Conn
+	head    codec.ChannelHeader
+	bw      *channelBufferedWriter
 	cw      codec.Writer
 	metrics channelWriterMetrics
-	head    codec.ChannelHeader
-	buf     []byte
 }
 
 func (c *channelWriter) Len() int {
 	if !c.cw.Dirty() {
 		return 0
 	}
-	return len(c.buf) + c.cw.Len()
+	return c.bw.overhead + c.cw.Len()
 }
 
-func (c *channelWriter) Resize(n int) error {
-	if n < len(c.buf) {
-		return codec.ErrNotEnoughSpace
-	}
-	return c.cw.Resize(n - len(c.buf))
+func (c *channelWriter) Available() int {
+	return c.cw.Available()
 }
 
 func (c *channelWriter) Reset() {
@@ -105,8 +126,8 @@ func (c *channelWriter) Flush() error {
 	}
 
 	c.head.Length = uint16(c.cw.Len())
-	c.head.Marshal(c.buf)
-	if _, err := c.w.Write(c.buf); err != nil {
+	c.head.Marshal(c.bw.buf)
+	if _, err := c.bw.Write(c.bw.buf); err != nil {
 		return err
 	}
 

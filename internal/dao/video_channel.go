@@ -17,7 +17,7 @@ import (
 
 var VideoChannels = NewTable(
 	videoChannelNS,
-	&TableOptions[videov1.VideoChannel]{
+	&TableOptions[videov1.VideoChannel, *videov1.VideoChannel]{
 		ObserveChange: func(m, p *videov1.VideoChannel) proto.Message {
 			return &videov1.VideoChannelChangeEvent{VideoChannel: m}
 		},
