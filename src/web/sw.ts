@@ -75,10 +75,17 @@ self.addEventListener("fetch", (event: FetchEvent) => {
   }
 });
 
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
 self.addEventListener("activate", (event) => {
-  event.waitUntil(async () => {
-    const keys = await caches.keys();
-    const expired = keys.filter((k) => !k.startsWith(GIT_HASH));
-    await Promise.all(expired.map((k) => caches.delete(k)));
-  });
+  event.waitUntil(
+    caches.keys().then(async (keys) => {
+      const expired = keys.filter((k) => !k.startsWith(GIT_HASH));
+      await Promise.all(expired.map((k) => caches.delete(k)));
+    })
+  );
+
+  event.waitUntil(self.clients.claim());
 });

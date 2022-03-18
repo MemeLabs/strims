@@ -37,10 +37,10 @@ export default function(wasmPath: string) {
     // behavior varies across devices...
     for (let i = 0; i < 10; i ++) {
       try {
-        const go = Object.assign(new g.Go(), {wasmio});
+        const go = Object.assign(new g.Go(), { wasmio });
         const instance = await WebAssembly.instantiate(mod, go.importObject);
         await Promise.race([
-          new Promise<void>((resolve) => {bridge.__markLive__ = resolve}),
+          new Promise<void>((resolve) => { bridge.__markLive__ = resolve; }),
           go.run(instance),
         ]);
         break;
