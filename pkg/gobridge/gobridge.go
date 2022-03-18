@@ -37,6 +37,10 @@ func RegisterCallback(name string, callback func(this js.Value, args []js.Value)
 	bridgeRoot.Set(name, js.FuncOf(registrationWrapper(callback)))
 }
 
+func MarkLive() {
+	bridgeRoot.Get("__markLive__").Invoke()
+}
+
 func init() {
 	global := js.Global()
 

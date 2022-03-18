@@ -59,6 +59,8 @@ func main() {
 		return nil, nil
 	})
 
+	gobridge.MarkLive()
+
 	select {}
 }
 

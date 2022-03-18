@@ -57,6 +57,10 @@ const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
 self.addEventListener("fetch", (event: FetchEvent) => {
   const url = new URL(event.request.url);
 
+  if (url.protocol !== "https:") {
+    return;
+  }
+
   if (event.request.referrer) {
     const referrer = new URL(event.request.referrer);
     if (url.origin !== referrer.origin) {

@@ -21,12 +21,33 @@ const caller = (name: string) => (...args: any) => new Promise((resolve, reject)
 
 export default function(wasmPath: string) {
   return async (baseURI: string, wasmio: unknown) => {
-    const go = new g.Go();
-    go.wasmio = wasmio;
+    const res = await fetch(`${baseURI}/${wasmPath}`);
+    const mod = await WebAssembly.compileStreaming(res);
 
-    const bytes = await fetch(`${baseURI}/${wasmPath}`).then(res => res.arrayBuffer());
-    const result = await WebAssembly.instantiate(bytes, go.importObject);
-    go.run(result.instance);
+    // we need to run wasm startup in a retry loop because in ios wasm's stack
+    // size is not predictable (https://bugs.webkit.org/show_bug.cgi?id=201028).
+    // this bug manifests nondeterministically. the bug comments suggest adding
+    // a delay before running the instance but this doesn't work reliably.
+
+    // when startup fails the process exits resolving go.run(). because the bug
+    // only seems to affect init functions we can mark the process live in the
+    // main function to exit the loop as soon as we have a viable instance.
+
+    // in testing this resolved within 5 retries but the bug report suggests the
+    // behavior varies across devices...
+    for (let i = 0; i < 10; i ++) {
+      try {
+        const go = Object.assign(new g.Go(), {wasmio});
+        const instance = await WebAssembly.instantiate(mod, go.importObject);
+        await Promise.race([
+          new Promise<void>((resolve) => {bridge.__markLive__ = resolve}),
+          go.run(instance),
+        ]);
+        break;
+      } catch(e) {
+        console.error(e);
+      }
+    }
 
     return Object.fromEntries(Object.keys(bridge).map((k) => [ k, caller(k) ]));
   };

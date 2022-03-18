@@ -181,10 +181,9 @@ export class WindowBridge extends EventEmitter {
 
   constructor(private workerConstructor: new () => Worker) {
     super();
-    this.createWorker("default");
   }
 
-  private createWorker(service: string, ...args: any[]): Worker {
+  public createWorker(service: string, ...args: any[]): Worker {
     const worker = new this.workerConstructor();
     worker.onmessage = ({ data }: MessageEvent<WorkerEvent>) => {
       switch (data.type) {
@@ -202,6 +201,7 @@ export class WindowBridge extends EventEmitter {
           break;
       }
     };
+    worker.onerror = (e) => console.log("error starting worker", service, e);
     worker.postMessage({
       service,
       baseURI: location.origin,
@@ -421,8 +421,8 @@ export class WindowBridge extends EventEmitter {
   }
 
   private openWorker(port: WorkerMessagePort, service: string) {
-    const worker = this.createWorker(service);
     this.once(`busport:${service}`, (p: MessagePort) => port.postMessage({ port: p }, [p]));
+    const worker = this.createWorker(service);
 
     port.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {

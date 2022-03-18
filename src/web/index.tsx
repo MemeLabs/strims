@@ -26,6 +26,7 @@ class WorkerConn {
     this.bus = new Promise<Readable & Writable>((resolve) => {
       this.bridge.once("busopen:default", (b: Readable & Writable) => resolve(b));
     });
+    this.bridge.createWorker("default");
   }
 
   async client<T>(C: ClientConstructor<T>): Promise<T> {
