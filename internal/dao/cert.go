@@ -191,6 +191,11 @@ func CertificateRoot(cert *certificate.Certificate) *certificate.Certificate {
 	return cert
 }
 
+// CertificateNetworkKey returns the key from the certificate's root
+func CertificateNetworkKey(cert *certificate.Certificate) []byte {
+	return CertificateRoot(cert).GetKey()
+}
+
 // CertIsExpired returns true if the cert NotBefore or NotAfter dates are violated
 func CertIsExpired(cert *certificate.Certificate) bool {
 	now := uint64(timeutil.Now().Unix())

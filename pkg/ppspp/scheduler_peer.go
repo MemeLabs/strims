@@ -26,8 +26,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var _ swarmScheduler = &peerSwarmScheduler{}
-var _ channelScheduler = &peerChannelScheduler{}
+var _ swarmScheduler = (*peerSwarmScheduler)(nil)
+var _ channelScheduler = (*peerChannelScheduler)(nil)
 
 const (
 	schedulerGCInterval          = 5 * time.Second

@@ -36,7 +36,7 @@ type directoryReader struct {
 func (d *directoryReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	reader := d.swarm.Reader()
 	reader.SetReadStopper(ctx.Done())
-	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunksPerSignature), nil
+	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunkSize), nil
 }
 
 func (d *directoryReader) Run(ctx context.Context) error {

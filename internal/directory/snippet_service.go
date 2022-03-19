@@ -75,7 +75,7 @@ func (s *snippetServer) stop(id uint64) {
 	}
 }
 
-var _ networkv1directory.DirectorySnippetService = &snippetService{}
+var _ networkv1directory.DirectorySnippetService = (*snippetService)(nil)
 
 type snippetService struct {
 	logger     *zap.Logger

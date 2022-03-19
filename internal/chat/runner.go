@@ -76,7 +76,7 @@ type runnerAdapter struct {
 }
 
 func (s *runnerAdapter) Mutex() *dao.Mutex {
-	return dao.NewMutex(s.logger, s.store, s.config.Id)
+	return dao.NewMutex(s.logger, s.store, "chat", s.config.Id)
 }
 
 func (s *runnerAdapter) Client() (servicemanager.Readable[readers], error) {

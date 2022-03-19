@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ swarmScheduler = &seedSwarmScheduler{}
-var _ channelScheduler = &seedChannelScheduler{}
+var _ swarmScheduler = (*seedSwarmScheduler)(nil)
+var _ channelScheduler = (*seedChannelScheduler)(nil)
 
 func newSeedSwarmScheduler(logger *zap.Logger, s *Swarm) *seedSwarmScheduler {
 	var signatureLayer int

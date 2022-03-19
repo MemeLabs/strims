@@ -29,7 +29,7 @@ type Peer interface {
 	HandlePeerUpdateCertificate(cert *certificate.Certificate) error
 }
 
-var _ Peer = &peer{}
+var _ Peer = (*peer)(nil)
 
 // NewPeer ...
 func newPeer(
@@ -125,7 +125,7 @@ func (p *peer) HandlePeerUpdateCertificate(cert *certificate.Certificate) error 
 		return ErrProvisionalCertificate
 	}
 
-	li := p.links.Get(&networkBinding{networkKey: networkKeyForCertificate(cert)})
+	li := p.links.Get(&networkBinding{networkKey: dao.CertificateNetworkKey(cert)})
 	if li == nil {
 		return ErrNetworkBindingNotFound
 	}
@@ -140,7 +140,7 @@ func (p *peer) sendCertificateUpdate(network *networkv1.Network) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	li := p.links.Get(&networkBinding{networkKey: networkKeyForCertificate(network.Certificate)})
+	li := p.links.Get(&networkBinding{networkKey: dao.CertificateNetworkKey(network.Certificate)})
 	if li == nil {
 		return ErrNetworkBindingNotFound
 	}
@@ -360,7 +360,7 @@ func (p *peer) verifyNetworkBindings(bindings []*networkv1.NetworkPeerBinding) (
 		if err, ok := dao.VerifyCertificate(b.Certificate).(dao.Errors); ok && !err.IncludesOnly(dao.ErrNotAfterRange) {
 			return nil, err
 		}
-		keys[i] = networkKeyForCertificate(b.Certificate)
+		keys[i] = dao.CertificateNetworkKey(b.Certificate)
 	}
 	return keys, nil
 }
@@ -371,12 +371,12 @@ func (p *peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*net
 
 	for i, peerBinding := range peerNetworkBindings {
 		binding := networkBindings[i]
-		networkKey := networkKeyForCertificate(peerBinding.Certificate)
+		networkKey := dao.CertificateNetworkKey(peerBinding.Certificate)
 
 		if !isPeerCertificateOwner(p.vnicPeer, peerBinding.Certificate) {
 			return ErrCertificateOwnerMismatch
 		}
-		if !bytes.Equal(networkKeyForCertificate(binding.Certificate), networkKey) {
+		if !bytes.Equal(dao.CertificateNetworkKey(binding.Certificate), networkKey) {
 			return ErrNetworkAuthorityMismatch
 		}
 		if peerBinding.Port > uint32(math.MaxUint16) {

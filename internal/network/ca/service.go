@@ -1,4 +1,4 @@
-package network
+package ca
 
 import (
 	"bytes"
@@ -37,8 +37,8 @@ func newCAService(
 	observers *event.Observers,
 	network *networkv1.Network,
 	ew *protoutil.ChunkStreamWriter,
-) *caService {
-	return &caService{
+) *service {
+	return &service{
 		logger:    logger,
 		store:     store,
 		observers: observers,
@@ -50,8 +50,8 @@ func newCAService(
 	}
 }
 
-// caService ...
-type caService struct {
+// service ...
+type service struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
 	observers *event.Observers
@@ -67,7 +67,7 @@ type caService struct {
 	// certificate transparency list?
 }
 
-func (s *caService) Run(ctx context.Context) error {
+func (s *service) Run(ctx context.Context) error {
 	defer s.Close()
 
 	events := make(chan interface{}, 8)
@@ -90,7 +90,7 @@ func (s *caService) Run(ctx context.Context) error {
 }
 
 // Close ...
-func (s *caService) Close() {
+func (s *service) Close() {
 	s.closeOnce.Do(func() {
 		s.logCache.Close()
 		close(s.done)
@@ -98,11 +98,11 @@ func (s *caService) Close() {
 }
 
 // Renew ...
-func (s *caService) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*networkv1ca.CARenewResponse, error) {
+func (s *service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*networkv1ca.CARenewResponse, error) {
 	if err := dao.VerifyCertificate(req.Certificate); err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(networkKeyForCertificate(req.Certificate), dao.NetworkKey(s.network.Get())) {
+	if !bytes.Equal(dao.CertificateNetworkKey(req.Certificate), dao.NetworkKey(s.network.Get())) {
 		return nil, errors.New("signing certificate network key mismatch")
 	}
 	if !bytes.Equal(req.Certificate.GetKey(), req.CertificateRequest.GetKey()) {
@@ -137,7 +137,7 @@ func (s *caService) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) 
 }
 
 // Find ...
-func (s *caService) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*networkv1ca.CAFindResponse, error) {
+func (s *service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*networkv1ca.CAFindResponse, error) {
 	if req.Subject == "" && req.SerialNumber == nil {
 		return nil, errors.New("find request must specify subject or serial number")
 	}

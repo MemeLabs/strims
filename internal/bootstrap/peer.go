@@ -8,7 +8,7 @@ import (
 
 type Peer interface{}
 
-var _ Peer = &peer{}
+var _ Peer = (*peer)(nil)
 
 // Peer ...
 type peer struct {

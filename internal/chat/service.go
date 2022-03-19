@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -155,7 +155,7 @@ func (d *chatService) isModerator(peerKey []byte) bool {
 }
 
 func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRequest) (*chatv1.SendMessageResponse, error) {
-	peerCert := network.VPNCertificate(ctx).GetParent()
+	peerCert := dialer.VPNCertificate(ctx).GetParent()
 	p, err := d.getOrInsertProfile(peerCert.Key, peerCert.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("loading profile failed: %w", err)
@@ -191,7 +191,7 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 }
 
 func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv1.MuteResponse, error) {
-	peerCert := network.VPNCertificate(ctx).GetParent()
+	peerCert := dialer.VPNCertificate(ctx).GetParent()
 
 	if !d.isModerator(peerCert.Key) {
 		return nil, errors.New("operation requires moderator role")
@@ -221,7 +221,7 @@ func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv
 }
 
 func (d *chatService) Unmute(ctx context.Context, req *chatv1.UnmuteRequest) (*chatv1.UnmuteResponse, error) {
-	peerCert := network.VPNCertificate(ctx).GetParent()
+	peerCert := dialer.VPNCertificate(ctx).GetParent()
 
 	if !d.isModerator(peerCert.Key) {
 		return nil, errors.New("operation requires moderator role")

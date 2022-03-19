@@ -1,4 +1,4 @@
-package network
+package ca
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func newCAReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*caReader, error) {
+func newCAReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*reader, error) {
 	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), caSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	return &caReader{
+	return &reader{
 		logger:   logger,
 		transfer: transfer,
 		key:      key,
@@ -24,7 +24,7 @@ func newCAReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*ca
 	}, nil
 }
 
-type caReader struct {
+type reader struct {
 	logger      *zap.Logger
 	transfer    transfer.Control
 	key         []byte
@@ -33,13 +33,13 @@ type caReader struct {
 	stopper     servicemanager.Stopper
 }
 
-func (d *caReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+func (d *reader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	reader := d.swarm.Reader()
 	reader.SetReadStopper(ctx.Done())
 	return protoutil.NewChunkStreamReader(reader, caSwarmOptions.ChunkSize), nil
 }
 
-func (d *caReader) Run(ctx context.Context) error {
+func (d *reader) Run(ctx context.Context) error {
 	done, ctx := d.stopper.Start(ctx)
 	defer done()
 
@@ -54,7 +54,7 @@ func (d *caReader) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (d *caReader) Close(ctx context.Context) error {
+func (d *reader) Close(ctx context.Context) error {
 	select {
 	case <-d.stopper.Stop():
 		return nil

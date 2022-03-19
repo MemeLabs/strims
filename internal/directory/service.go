@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -558,8 +559,8 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	defer d.lock.Unlock()
 
 	l = d.listings.GetOrInsert(l)
-	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	// TODO: peer moderation (publishing restricted?)
 	if u.PublishedListingCount() >= publishQuota {
@@ -581,7 +582,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 
 	// HAX
 	if media := req.Listing.GetMedia(); media != nil {
-		candidate, err := kademlia.UnmarshalID(network.VPNCertificate(ctx).GetKey())
+		candidate, err := kademlia.UnmarshalID(dialer.VPNCertificate(ctx).GetKey())
 		if err != nil {
 			return nil, err
 		}
@@ -600,7 +601,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)})
+	s := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)})
 	if s == nil {
 		return nil, ErrSessionNotFound
 	}
@@ -610,7 +611,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	}
 	s.publishedListings.Delete(l)
 
-	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+	d.users.Touch(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	return &networkv1directory.UnpublishResponse{}, nil
 }
@@ -623,8 +624,8 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.GetOrInsert(&session{certificate: network.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	if u.ViewedListingCount() >= viewQuota {
 		return nil, errors.New("exceeded concurrent view quota")
@@ -653,7 +654,7 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 	if l == nil {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.Get(&session{certificate: network.VPNCertificate(ctx)})
+	s := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)})
 	if s == nil {
 		return nil, ErrSessionNotFound
 	}
@@ -663,7 +664,7 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 	}
 	s.viewedListings.Delete(l)
 
-	d.users.Touch(&user{certificate: network.VPNCertificate(ctx).GetParent()})
+	d.users.Touch(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	return &networkv1directory.PartResponse{}, nil
 }
@@ -672,7 +673,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	ok := d.sessions.Touch(&session{certificate: network.VPNCertificate(ctx)})
+	ok := d.sessions.Touch(&session{certificate: dialer.VPNCertificate(ctx)})
 	if !ok {
 		return nil, ErrSessionNotFound
 	}

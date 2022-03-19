@@ -9,6 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/network/ca"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/notification"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -16,13 +18,16 @@ import (
 	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -65,6 +70,24 @@ type Broker interface {
 	ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error)
 }
 
+var _ CA = (*ca.CA)(nil)
+
+type CA interface {
+	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
+	FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error)
+}
+
+var _ Dialer = (*dialer.Dialer)(nil)
+
+type Dialer interface {
+	ServerDialer(ctx context.Context, networkKey []byte, port uint16, publisher dialer.HostAddrPublisher) (rpc.Dialer, error)
+	Server(ctx context.Context, networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
+	ServerWithHostAddr(ctx context.Context, networkKey []byte, port uint16) (*rpc.Server, error)
+	ClientDialer(ctx context.Context, networkKey []byte, resolver dialer.HostAddrResolver) (rpc.Dialer, error)
+	Client(ctx context.Context, networkKey, key, salt []byte) (*dialer.RPCClient, error)
+	ClientWithHostAddr(ctx context.Context, networkKey []byte, hostID kademlia.ID, port uint16) (*dialer.RPCClient, error)
+}
+
 // NewControl ...
 func NewControl(
 	ctx context.Context,
@@ -77,7 +100,7 @@ func NewControl(
 	profile *profilev1.Profile,
 	notification notification.Control,
 ) Control {
-	dialer := newDialer(logger, vpn, profile.Key)
+	d := dialer.NewDialer(logger, vpn, profile.Key)
 
 	return &control{
 		ctx:          ctx,
@@ -91,8 +114,8 @@ func NewControl(
 
 		events:           observers.Chan(),
 		qosc:             vpn.VNIC().QOS().AddClass(1),
-		ca:               newCA(ctx, logger, store, observers, dialer, transfer),
-		dialer:           dialer,
+		ca:               ca.NewCA(ctx, logger, store, observers, d, transfer),
+		dialer:           d,
 		certRenewTimeout: time.NewTimer(0),
 		networks:         map[uint64]*network{},
 		peers:            map[uint64]*peer{},
@@ -114,8 +137,8 @@ type control struct {
 	events            chan interface{}
 	qosc              *qos.Class
 	lock              sync.Mutex
-	ca                *ca
-	dialer            *dialer
+	ca                *ca.CA
+	dialer            *dialer.Dialer
 	certRenewTimeout  *time.Timer
 	nextCertRenewTime timeutil.Time
 	networks          map[uint64]*network
@@ -294,7 +317,7 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 	if nn, ok := t.networks[n.Id]; ok {
 		if !proto.Equal(nn.network.Certificate, n.Certificate) {
 			t.certificates.Insert(n)
-			t.dialer.replaceOrInsertNetwork(n)
+			t.dialer.ReplaceOrInsertNetwork(n)
 
 			for _, peer := range t.peers {
 				if peer.hasNetworkBinding(dao.NetworkKey(n)) {
@@ -311,7 +334,7 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 
 	t.networks[n.Id] = &network{network: n}
 	t.certificates.Insert(n)
-	t.dialer.replaceOrInsertNetwork(n)
+	t.dialer.ReplaceOrInsertNetwork(n)
 
 	t.observers.EmitLocal(event.NetworkStart{Network: n})
 
@@ -337,7 +360,7 @@ func (t *control) stopNetwork(n *networkv1.Network) error {
 		p.closeNetwork(dao.NetworkKey(n))
 	}
 
-	t.dialer.removeNetwork(n)
+	t.dialer.RemoveNetwork(n)
 	t.certificates.Delete(dao.NetworkKey(n))
 	delete(t.networks, n.Id)
 
@@ -437,7 +460,7 @@ func (t *control) renewCertificate(ctx context.Context, network *networkv1.Netwo
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := dao.NetworkKey(network)
-			client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
+			client, err := t.dialer.Client(ctx, networkKey, networkKey, ca.AddressSalt)
 			if err != nil {
 				return nil, err
 			}

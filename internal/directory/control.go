@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
@@ -208,7 +209,7 @@ func (t *control) ping() {
 	}
 }
 
-func (t *control) client(ctx context.Context, networkKey []byte) (*network.RPCClient, *networkv1directory.DirectoryClient, error) {
+func (t *control) client(ctx context.Context, networkKey []byte) (*dialer.RPCClient, *networkv1directory.DirectoryClient, error) {
 	client, err := t.network.Dialer().Client(ctx, networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, nil, err

@@ -79,7 +79,7 @@ type runnerAdapter struct {
 }
 
 func (s *runnerAdapter) Mutex() *dao.Mutex {
-	return dao.NewMutex(s.logger, s.store, s.network.Get().Id)
+	return dao.NewMutex(s.logger, s.store, "directory", s.network.Get().Id)
 }
 
 func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {

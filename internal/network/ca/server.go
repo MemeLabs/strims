@@ -1,4 +1,4 @@
-package network
+package ca
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -17,14 +18,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func newCAServer(
+func newServer(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-	dialer Dialer,
+	dialer *dialer.Dialer,
 	transfer transfer.Control,
 	network *networkv1.Network,
-) (*caServer, error) {
+) (*server, error) {
 	config := network.GetServerConfig()
 	if config == nil {
 		return nil, errors.New("ca server requires network root key")
@@ -43,7 +44,7 @@ func newCAServer(
 		return nil, err
 	}
 
-	s := &caServer{
+	s := &server{
 		dialer:   dialer,
 		transfer: transfer,
 		key:      config.Key,
@@ -53,23 +54,23 @@ func newCAServer(
 	return s, nil
 }
 
-type caServer struct {
-	dialer      Dialer
+type server struct {
+	dialer      *dialer.Dialer
 	transfer    transfer.Control
 	key         *key.Key
 	swarm       *ppspp.Swarm
-	service     *caService
+	service     *service
 	eventReader *protoutil.ChunkStreamReader
 	stopper     servicemanager.Stopper
 }
 
-func (d *caServer) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+func (d *server) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	reader := d.swarm.Reader()
 	reader.SetReadStopper(ctx.Done())
 	return protoutil.NewChunkStreamReader(reader, caSwarmOptions.ChunkSize), nil
 }
 
-func (s *caServer) Run(ctx context.Context) error {
+func (s *server) Run(ctx context.Context) error {
 	done, ctx := s.stopper.Start(ctx)
 	defer done()
 
@@ -94,7 +95,7 @@ func (s *caServer) Run(ctx context.Context) error {
 	return err
 }
 
-func (s *caServer) Close(ctx context.Context) error {
+func (s *server) Close(ctx context.Context) error {
 	select {
 	case <-s.stopper.Stop():
 		return nil

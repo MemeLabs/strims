@@ -1,4 +1,4 @@
-package network
+package ca
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
@@ -14,23 +15,16 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ CA = &ca{}
-
-type CA interface {
-	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
-	FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error)
-}
-
-// newCA ...
-func newCA(
+// NewCA ...
+func NewCA(
 	ctx context.Context,
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-	dialer Dialer,
+	dialer *dialer.Dialer,
 	transfer transfer.Control,
-) *ca {
-	return &ca{
+) *CA {
+	return &CA{
 		ctx:       ctx,
 		logger:    logger,
 		store:     store,
@@ -43,12 +37,12 @@ func newCA(
 }
 
 // CA ...
-type ca struct {
+type CA struct {
 	ctx       context.Context
 	logger    *zap.Logger
 	store     *dao.ProfileStore
 	observers *event.Observers
-	dialer    Dialer
+	dialer    *dialer.Dialer
 	transfer  transfer.Control
 	events    chan interface{}
 
@@ -57,7 +51,7 @@ type ca struct {
 }
 
 // Run ...
-func (t *ca) Run() {
+func (t *CA) Run() {
 	for {
 		select {
 		case e := <-t.events:
@@ -75,7 +69,7 @@ func (t *ca) Run() {
 	}
 }
 
-func (t *ca) handleNetworkStart(network *networkv1.Network) {
+func (t *CA) handleNetworkStart(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -87,7 +81,7 @@ func (t *ca) handleNetworkStart(network *networkv1.Network) {
 	t.runners.Set(dao.NetworkKey(network), r)
 }
 
-func (t *ca) handleNetworkStop(network *networkv1.Network) {
+func (t *CA) handleNetworkStop(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -96,7 +90,7 @@ func (t *ca) handleNetworkStop(network *networkv1.Network) {
 	}
 }
 
-func (t *ca) handleNetworkChange(network *networkv1.Network) {
+func (t *CA) handleNetworkChange(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -106,8 +100,8 @@ func (t *ca) handleNetworkChange(network *networkv1.Network) {
 }
 
 // ForwardRenewRequest ...
-func (t *ca) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-	networkKey := networkKeyForCertificate(cert)
+func (t *CA) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+	networkKey := dao.CertificateNetworkKey(cert)
 	client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, err
@@ -126,7 +120,7 @@ func (t *ca) ForwardRenewRequest(ctx context.Context, cert *certificate.Certific
 	return renewRes.Certificate, nil
 }
 
-func (t *ca) find(ctx context.Context, networkKey []byte, req *networkv1ca.CAFindRequest) (*certificate.Certificate, error) {
+func (t *CA) find(ctx context.Context, networkKey []byte, req *networkv1ca.CAFindRequest) (*certificate.Certificate, error) {
 	client, err := t.dialer.Client(ctx, networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, err
@@ -141,6 +135,6 @@ func (t *ca) find(ctx context.Context, networkKey []byte, req *networkv1ca.CAFin
 	return res.Certificate, nil
 }
 
-func (t *ca) FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error) {
+func (t *CA) FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error) {
 	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Subject: subject})
 }
