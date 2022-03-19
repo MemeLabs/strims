@@ -53,8 +53,8 @@ func NewControl(
 ) Control {
 	var (
 		notificationControl = notification.NewControl(logger, store, observers)
-		transferControl     = transfer.NewControl(ctx, logger, vpn, observers)
-		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, broker, profile, notificationControl)
+		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
+		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, transferControl, broker, profile, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)
 		chatControl         = chat.NewControl(ctx, logger, store, observers, networkControl, transferControl, directoryControl)
 		bootstrapControl    = bootstrap.NewControl(ctx, logger, vpn, store, observers)

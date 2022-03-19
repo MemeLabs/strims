@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sync"
 	"time"
@@ -124,6 +125,7 @@ type Host struct {
 	peerHandlers     []PeerHandler
 	peersLock        sync.Mutex
 	peers            map[kademlia.ID]*Peer
+	maxPeers         int
 	qos              *qos.Control
 }
 
@@ -269,6 +271,24 @@ func (h *Host) PeerCount() int {
 	h.peersLock.Lock()
 	defer h.peersLock.Unlock()
 	return len(h.peers)
+}
+
+// SetMaxPeers ...
+func (h *Host) SetMaxPeers(n int) {
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+
+	if n <= 0 {
+		n = math.MaxInt
+	}
+	h.maxPeers = n
+}
+
+// MaxPeers ...
+func (h *Host) MaxPeers() int {
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+	return h.maxPeers
 }
 
 // QOS ...

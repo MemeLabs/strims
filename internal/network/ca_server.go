@@ -1,4 +1,4 @@
-package directory
+package network
 
 import (
 	"context"
@@ -6,73 +6,70 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-func newDirectoryServer(
+func newCAServer(
 	logger *zap.Logger,
-	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
-	dialer network.Dialer,
+	dialer Dialer,
 	transfer transfer.Control,
 	network *networkv1.Network,
-) (*directoryServer, error) {
+) (*caServer, error) {
 	config := network.GetServerConfig()
 	if config == nil {
-		return nil, errors.New("directory server requires network root key")
+		return nil, errors.New("ca server requires network root key")
 	}
 
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
-		SwarmOptions: swarmOptions,
+		SwarmOptions: caSwarmOptions,
 		Key:          config.Key,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	ew, err := protoutil.NewChunkStreamWriter(w, swarmOptions.ChunkSize)
+	ew, err := protoutil.NewChunkStreamWriter(w, caSwarmOptions.ChunkSize)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &directoryServer{
+	s := &caServer{
 		dialer:   dialer,
 		transfer: transfer,
 		key:      config.Key,
 		swarm:    w.Swarm(),
-		service:  newDirectoryService(logger, vpn, store, observers, dialer, network, ew),
+		service:  newCAService(logger, store, observers, network, ew),
 	}
 	return s, nil
 }
 
-type directoryServer struct {
-	dialer      network.Dialer
+type caServer struct {
+	dialer      Dialer
 	transfer    transfer.Control
 	key         *key.Key
 	swarm       *ppspp.Swarm
-	service     *directoryService
+	service     *caService
 	eventReader *protoutil.ChunkStreamReader
 	stopper     servicemanager.Stopper
 }
 
-func (d *directoryServer) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+func (d *caServer) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	reader := d.swarm.Reader()
 	reader.SetReadStopper(ctx.Done())
-	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunkSize), nil
+	return protoutil.NewChunkStreamReader(reader, caSwarmOptions.ChunkSize), nil
 }
 
-func (s *directoryServer) Run(ctx context.Context) error {
+func (s *caServer) Run(ctx context.Context) error {
 	done, ctx := s.stopper.Start(ctx)
 	defer done()
 
@@ -84,7 +81,7 @@ func (s *directoryServer) Run(ctx context.Context) error {
 		return err
 	}
 
-	networkv1directory.RegisterDirectoryService(server, s.service)
+	networkv1ca.RegisterCAService(server, s.service)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })
@@ -97,7 +94,7 @@ func (s *directoryServer) Run(ctx context.Context) error {
 	return err
 }
 
-func (s *directoryServer) Close(ctx context.Context) error {
+func (s *caServer) Close(ctx context.Context) error {
 	select {
 	case <-s.stopper.Stop():
 		return nil

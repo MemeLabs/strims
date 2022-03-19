@@ -1,4 +1,4 @@
-package directory
+package network
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*directoryReader, error) {
-	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), swarmOptions)
+func newCAReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*caReader, error) {
+	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), caSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	return &directoryReader{
+	return &caReader{
 		logger:   logger,
 		transfer: transfer,
 		key:      key,
@@ -24,7 +24,7 @@ func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byt
 	}, nil
 }
 
-type directoryReader struct {
+type caReader struct {
 	logger      *zap.Logger
 	transfer    transfer.Control
 	key         []byte
@@ -33,13 +33,13 @@ type directoryReader struct {
 	stopper     servicemanager.Stopper
 }
 
-func (d *directoryReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+func (d *caReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	reader := d.swarm.Reader()
 	reader.SetReadStopper(ctx.Done())
-	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunksPerSignature), nil
+	return protoutil.NewChunkStreamReader(reader, caSwarmOptions.ChunkSize), nil
 }
 
-func (d *directoryReader) Run(ctx context.Context) error {
+func (d *caReader) Run(ctx context.Context) error {
 	done, ctx := d.stopper.Start(ctx)
 	defer done()
 
@@ -54,7 +54,7 @@ func (d *directoryReader) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (d *directoryReader) Close(ctx context.Context) error {
+func (d *caReader) Close(ctx context.Context) error {
 	select {
 	case <-d.stopper.Stop():
 		return nil

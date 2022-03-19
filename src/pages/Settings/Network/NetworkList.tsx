@@ -102,9 +102,9 @@ const ChatServerList: React.FC = () => {
   if (loading) {
     return null;
   }
-  if (!value?.networks.length) {
-    return <Navigate to="/settings/networks/new" replace />;
-  }
+  // if (!value?.networks.length) {
+  //   return <Navigate to="/settings/networks/new" replace />;
+  // }
   return (
     <>
       <div className="thing_table__menu">

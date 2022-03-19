@@ -15,6 +15,7 @@ var VNICConfig = NewSingleton(
 	&SingletonOptions[vnicv1.Config, *vnicv1.Config]{
 		DefaultValue: &vnicv1.Config{
 			MaxUploadBytesPerSecond: 1 << 40,
+			MaxPeers:                25,
 		},
 		ObserveChange: func(m, p *vnicv1.Config) proto.Message {
 			return &vnicv1.ConfigChangeEvent{Config: m}

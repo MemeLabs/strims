@@ -64,10 +64,12 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
   });
   const { control, handleSubmit } = useForm<{
     maxUploadBytesPerSecond: string;
+    maxPeers: number;
   }>({
     mode: "onBlur",
     defaultValues: {
       maxUploadBytesPerSecond: formatUnits(config.maxUploadBytesPerSecond),
+      maxPeers: config.maxPeers,
     },
   });
 
@@ -75,6 +77,7 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
     setConfig({
       config: {
         maxUploadBytesPerSecond: parseUnits(data.maxUploadBytesPerSecond),
+        maxPeers: data.maxPeers,
       },
     })
   );
@@ -97,6 +100,23 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
         label="Max Upload Rate"
         name="maxUploadBytesPerSecond"
         placeholder="ex. 50mbps"
+      />
+      <TextInput
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "Value is required",
+          },
+          pattern: {
+            value: ratePattern,
+            message: "Invalid format",
+          },
+        }}
+        label="Max Peers"
+        name="maxPeers"
+        type="number"
+        placeholder="ex. 25"
       />
       <ButtonSet>
         <Button disabled={loading}>Store Config</Button>

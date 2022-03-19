@@ -58,10 +58,8 @@ var (
 	ErrUserNotFound    = errors.New("user not found")
 )
 
-const chunkSize = 1024
-
 var swarmOptions = ppspp.SwarmOptions{
-	ChunkSize:  chunkSize,
+	ChunkSize:  1024,
 	LiveWindow: 2 * 1024,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,
@@ -175,6 +173,8 @@ func (d *directoryService) Close() {
 }
 
 func (d *directoryService) handleNetworkChange(network *networkv1.Network) {
+	d.network.Swap(network)
+
 	config := network.GetServerConfig().GetDirectory()
 
 	loader := newEmbedLoader(d.logger, config.GetIntegrations())

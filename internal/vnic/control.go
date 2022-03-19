@@ -65,6 +65,7 @@ func (c *control) Run() {
 
 func (c *control) applyConfig(config *vnicv1.Config) {
 	c.vpn.VNIC().QOS().SetRateLimit(config.MaxUploadBytesPerSecond)
+	c.vpn.VNIC().SetMaxPeers(int(config.MaxPeers))
 }
 
 func (c *control) loadConfig() {

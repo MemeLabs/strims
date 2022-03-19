@@ -13,9 +13,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -57,6 +57,7 @@ func NewControl(
 		transfer:  transfer,
 		events:    observers.Chan(),
 
+		runners:    hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
 		eventCache: map[uint64]*eventCache{},
 
 		snippets: snippets,
@@ -82,7 +83,7 @@ type control struct {
 
 	events     chan interface{}
 	lock       sync.Mutex
-	runners    llrb.LLRB
+	runners    hashmap.Map[[]byte, *runner]
 	eventCache map[uint64]*eventCache
 
 	snippets      *snippetMap
@@ -124,7 +125,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 		t.logger.Error("failed to start directory runner", zap.Error(err))
 		return
 	}
-	t.runners.ReplaceOrInsert(r)
+	t.runners.Set(dao.NetworkKey(network), r)
 
 	c := newEventCache(network)
 	t.eventCache[network.Id] = c
@@ -170,13 +171,16 @@ func (t *control) handleNetworkStop(network *networkv1.Network) {
 
 	t.snippetServer.stop(network.Id)
 
-	if r, ok := t.runners.Delete(&runner{key: dao.NetworkKey(network)}).(*runner); ok {
+	if r, ok := t.runners.Delete(dao.NetworkKey(network)); ok {
 		r.Close()
 	}
 }
 
 func (t *control) handleNetworkChange(network *networkv1.Network) {
-	if r, ok := t.runners.Get(&runner{key: dao.NetworkKey(network)}).(*runner); ok {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if r, ok := t.runners.Get(dao.NetworkKey(network)); ok {
 		r.Sync(network)
 	}
 }
@@ -185,12 +189,13 @@ func (t *control) ping() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.runners.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
-		r := i.(*runner)
-		c, dc, err := t.client(t.ctx, r.key)
+	for it := t.runners.Iterate(); it.Next(); {
+		r := it.Value()
+
+		c, dc, err := t.client(t.ctx, r.NetworkKey())
 		if err != nil {
 			r.Logger().Debug("directory ping failed", zap.Error(err))
-			return true
+			continue
 		}
 
 		go func() {
@@ -200,8 +205,7 @@ func (t *control) ping() {
 			}
 			c.Close()
 		}()
-		return true
-	})
+	}
 }
 
 func (t *control) client(ctx context.Context, networkKey []byte) (*network.RPCClient, *networkv1directory.DirectoryClient, error) {

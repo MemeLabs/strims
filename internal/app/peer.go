@@ -123,20 +123,9 @@ type peer struct {
 	bootstrap bootstrap.Peer
 }
 
-// ID ...
-func (p *peer) ID() uint64 { return p.id }
-
-// Client ...
-func (p *peer) Client() api.PeerClient { return p.client }
-
-// VNIC ...
-func (p *peer) VNIC() *vnic.Peer { return p.vnic }
-
-// Network ...
-func (p *peer) Network() network.Peer { return p.network }
-
-// Transfer ...
-func (p *peer) Transfer() transfer.Peer { return p.transfer }
-
-// Bootstrap ...
+func (p *peer) ID() uint64                { return p.id }
+func (p *peer) Client() api.PeerClient    { return p.client }
+func (p *peer) VNIC() *vnic.Peer          { return p.vnic }
+func (p *peer) Network() network.Peer     { return p.network }
+func (p *peer) Transfer() transfer.Peer   { return p.transfer }
 func (p *peer) Bootstrap() bootstrap.Peer { return p.bootstrap }

@@ -24,6 +24,7 @@ module.exports = {
     "@typescript-eslint/no-namespace": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/no-misused-promises": "warn",
     "prefer-arrow/prefer-arrow-functions": "error",
     "max-classes-per-file": "off",
     "max-len": ["warn", { "code": 100, "ignoreComments": true }],

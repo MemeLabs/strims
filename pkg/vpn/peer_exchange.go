@@ -236,8 +236,6 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 	defer s.mediatorsLock.Unlock()
 
 	switch b := m.Body.(type) {
-	case *vpnv1.PeerExchangeMessage_Handshake_:
-		return s.handleHandshake(b.Handshake, msg)
 	case *vpnv1.PeerExchangeMessage_MediationOffer_:
 		return s.handleMediationOffer(b.MediationOffer, msg)
 	case *vpnv1.PeerExchangeMessage_MediationAnswer_:
@@ -246,9 +244,21 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 		return s.handleMediationICECandidate(b.MediationIceCandidate, msg)
 	case *vpnv1.PeerExchangeMessage_CallbackRequest_:
 		return s.handleCallbackRequest(b.CallbackRequest, msg)
+	case *vpnv1.PeerExchangeMessage_Rejection_:
+		return s.handleRejection(b.Rejection, msg)
 	default:
 		return errors.New("unexpected message type")
 	}
+}
+
+func (s *peerExchange) mediatorCount() int {
+	s.mediatorsLock.Lock()
+	defer s.mediatorsLock.Unlock()
+	return len(s.mediators)
+}
+
+func (s *peerExchange) allowNewPeer() bool {
+	return s.network.VNIC().PeerCount()+s.mediatorCount() < s.network.VNIC().MaxPeers()
 }
 
 // Connect create mediator to negotiate connection with peer
@@ -293,6 +303,10 @@ func (s *peerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 }
 
 func (s *peerExchange) handleCallbackRequest(m *vpnv1.PeerExchangeMessage_CallbackRequest, msg *Message) error {
+	if !s.allowNewPeer() {
+		return nil
+	}
+
 	go func() {
 		if err := s.dial(newWebRTCMediator(msg.SrcHostID(), s.network)); err != nil {
 			s.logger.Debug(
@@ -304,20 +318,50 @@ func (s *peerExchange) handleCallbackRequest(m *vpnv1.PeerExchangeMessage_Callba
 	return nil
 }
 
-func (s *peerExchange) handleHandshake(m *vpnv1.PeerExchangeMessage_Handshake, msg *Message) error {
-	s.network.VNIC().PeerCount()
+func (s *peerExchange) sendRejection(hostID kademlia.ID, mediationID uint64) error {
+	msg := &vpnv1.PeerExchangeMessage{
+		Body: &vpnv1.PeerExchangeMessage_Rejection_{
+			Rejection: &vpnv1.PeerExchangeMessage_Rejection{
+				MediationId: mediationID,
+			},
+		},
+	}
+	return s.network.SendProto(hostID, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
+}
+
+func (s *peerExchange) handleRejection(m *vpnv1.PeerExchangeMessage_Rejection, msg *Message) error {
+	s.mediatorsLock.Lock()
+	defer s.mediatorsLock.Unlock()
+
+	t, ok := s.mediators[msg.SrcHostID()]
+	if !ok || t.mediationID != m.MediationId {
+		return nil
+	}
+
+	s.logger.Debug(
+		"cancelling rejected connection",
+		zap.Stringer("host", t.id),
+		zap.Uint64("mediationId", t.mediationID),
+	)
+	t.close(errors.New("remote host rejected offer"))
+	delete(s.mediators, msg.SrcHostID())
 
 	return nil
 }
 
 func (s *peerExchange) handleMediationOffer(m *vpnv1.PeerExchangeMessage_MediationOffer, msg *Message) error {
-	s.logger.Debug(
-		"handling offer",
-		zap.Stringer("host", msg.SrcHostID()),
-	)
 	go func() {
+		logger := s.logger.With(zap.Stringer("host", msg.SrcHostID()))
+
+		if !s.allowNewPeer() {
+			logger.Debug("rejecting offer")
+			s.sendRejection(msg.SrcHostID(), m.MediationId)
+			return
+		}
+
+		logger.Debug("handling offer")
 		if err := s.dial(newWebRTCMediatorFromOffer(msg.SrcHostID(), s.network, m.MediationId, m.Data)); err != nil {
-			s.logger.Debug(
+			logger.Debug(
 				"dial failed for newMediatorFromOffer",
 				zap.Error(err),
 			)
@@ -345,6 +389,7 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 	s.logger.Debug(
 		"creating connection",
 		zap.Stringer("host", t.id),
+		zap.Uint64("mediationId", t.mediationID),
 	)
 
 	errs := make(chan error, 1)

@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -123,7 +122,6 @@ func (p *peer) HandlePeerUpdateCertificate(cert *certificate.Certificate) error 
 		return ErrCertificateOwnerMismatch
 	}
 	if !isCertificateTrusted(cert) {
-		debug.PrintJSON(cert)
 		return ErrProvisionalCertificate
 	}
 

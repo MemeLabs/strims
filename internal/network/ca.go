@@ -3,14 +3,14 @@ package network
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"go.uber.org/zap"
 )
 
@@ -28,29 +28,32 @@ func newCA(
 	store *dao.ProfileStore,
 	observers *event.Observers,
 	dialer Dialer,
+	transfer transfer.Control,
 ) *ca {
 	return &ca{
-		ctx:     ctx,
-		logger:  logger,
-		store:   store,
-		dialer:  dialer,
-		events:  observers.Chan(),
-		servers: map[uint64]context.CancelFunc{},
+		ctx:       ctx,
+		logger:    logger,
+		store:     store,
+		observers: observers,
+		dialer:    dialer,
+		transfer:  transfer,
+		events:    observers.Chan(),
+		runners:   hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
 	}
 }
 
 // CA ...
 type ca struct {
-	ctx    context.Context
-	logger *zap.Logger
-	store  *dao.ProfileStore
-	dialer Dialer
+	ctx       context.Context
+	logger    *zap.Logger
+	store     *dao.ProfileStore
+	observers *event.Observers
+	dialer    Dialer
+	transfer  transfer.Control
+	events    chan interface{}
 
-	events            chan interface{}
-	lock              sync.Mutex
-	servers           map[uint64]context.CancelFunc
-	certRenewTimeout  <-chan time.Time
-	lastCertRenewTime time.Time
+	lock    sync.Mutex
+	runners hashmap.Map[[]byte, *runner]
 }
 
 // Run ...
@@ -63,6 +66,8 @@ func (t *ca) Run() {
 				t.handleNetworkStart(e.Network)
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
+			case *networkv1.NetworkChangeEvent:
+				t.handleNetworkChange(e.Network)
 			}
 		case <-t.ctx.Done():
 			return
@@ -71,41 +76,32 @@ func (t *ca) Run() {
 }
 
 func (t *ca) handleNetworkStart(network *networkv1.Network) {
-	config := network.GetServerConfig()
-	if config == nil {
-		return
-	}
+	t.lock.Lock()
+	defer t.lock.Unlock()
 
-	t.logger.Info(
-		"starting certificate authority",
-		logutil.ByteHex("network", config.Key.Public),
-	)
-
-	server, err := t.dialer.Server(t.ctx, config.Key.Public, config.Key, AddressSalt)
+	r, err := newRunner(t.ctx, t.logger, t.store, t.observers, t.dialer, t.transfer, network)
 	if err != nil {
-		t.logger.Error(
-			"starting certificate authority failed",
-			logutil.ByteHex("network", config.Key.Public),
-			zap.Error(err),
-		)
+		t.logger.Error("failed to start directory runner", zap.Error(err))
 		return
 	}
-
-	svc := newCAService(t.logger, t.store, network)
-	networkv1ca.RegisterCAService(server, svc)
-	ctx, cancel := context.WithCancel(t.ctx)
-	go func() {
-		server.Listen(ctx)
-		svc.Close()
-	}()
-
-	t.servers[network.Id] = cancel
+	t.runners.Set(dao.NetworkKey(network), r)
 }
 
 func (t *ca) handleNetworkStop(network *networkv1.Network) {
-	if server, ok := t.servers[network.Id]; ok {
-		server()
-		delete(t.servers, network.Id)
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if r, ok := t.runners.Delete(dao.NetworkKey(network)); ok {
+		r.Close()
+	}
+}
+
+func (t *ca) handleNetworkChange(network *networkv1.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if r, ok := t.runners.Get(dao.NetworkKey(network)); ok {
+		r.Sync(network)
 	}
 }
 

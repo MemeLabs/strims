@@ -266,7 +266,7 @@ export class WindowBridge extends EventEmitter {
       dataChannel.onclose = onclose;
 
       port1.onmessage = ({ data }: MessageEvent<WebRTCDataChannelWorkerEvent>) =>
-        ready.then(() => {
+        void ready.then(() => {
           // console.log("window data channel event", data);
           switch (data.type) {
             case EventType.DATA_CHANNEL_DATA:

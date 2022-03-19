@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/notification"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
@@ -71,6 +72,7 @@ func NewControl(
 	vpn *vpn.Host,
 	store *dao.ProfileStore,
 	observers *event.Observers,
+	transfer transfer.Control,
 	broker Broker,
 	profile *profilev1.Profile,
 	notification notification.Control,
@@ -89,7 +91,7 @@ func NewControl(
 
 		events:           observers.Chan(),
 		qosc:             vpn.VNIC().QOS().AddClass(1),
-		ca:               newCA(ctx, logger, store, observers, dialer),
+		ca:               newCA(ctx, logger, store, observers, dialer, transfer),
 		dialer:           dialer,
 		certRenewTimeout: time.NewTimer(0),
 		networks:         map[uint64]*network{},

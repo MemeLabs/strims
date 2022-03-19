@@ -136,7 +136,7 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
     // disable scroll events
     const handleScroll = (event: Event) => {
-      window.scrollTo(0, 0);
+      window.scroll(0, 0);
       event.preventDefault();
       event.stopPropagation();
     };
@@ -144,11 +144,13 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
     window.addEventListener("orientationchange", handleViewportChange);
     window.visualViewport.addEventListener("resize", handleViewportChange);
     window.visualViewport.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll);
 
     return () => {
       window.removeEventListener("orientationchange", handleViewportChange);
       window.visualViewport.removeEventListener("resize", handleViewportChange);
       window.visualViewport.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
     };
   }, []);
 

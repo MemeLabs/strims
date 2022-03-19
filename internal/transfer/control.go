@@ -47,12 +47,14 @@ func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
+	store *dao.ProfileStore,
 	observers *event.Observers,
 ) Control {
 	return &control{
 		ctx:    ctx,
 		logger: logger,
 		vpn:    vpn,
+		store:  store,
 		qosc:   vpn.VNIC().QOS().AddClass(1),
 
 		events:    observers.Chan(),
@@ -70,6 +72,7 @@ type control struct {
 	ctx    context.Context
 	logger *zap.Logger
 	vpn    *vpn.Host
+	store  *dao.ProfileStore
 	qosc   *qos.Class
 
 	lock      sync.Mutex
