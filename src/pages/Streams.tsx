@@ -1,6 +1,6 @@
 import React from "react";
 
-const HomePage: React.FC = () => {
+const StreamsPage: React.FC = () => {
   return (
     <>
       <header className="home_page__subheader"></header>
@@ -9,4 +9,4 @@ const HomePage: React.FC = () => {
   );
 };
 
-export default HomePage;
+export default StreamsPage;

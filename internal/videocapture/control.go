@@ -110,15 +110,17 @@ func (c *control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 	}
 
 	s := &stream{
-		transferID:       transferID,
-		startTime:        timeutil.Now(),
-		mimeType:         mimeType,
-		directorySnippet: directorySnippet,
-		networkKeys:      networkKeys,
-		key:              options.Key,
-		swarm:            w.Swarm(),
-		w:                cw,
+		transferID:  transferID,
+		startTime:   timeutil.Now(),
+		mimeType:    mimeType,
+		networkKeys: networkKeys,
+		key:         options.Key,
+		swarm:       w.Swarm(),
+		w:           cw,
 	}
+
+	dao.SignMessage(directorySnippet, s.key)
+	c.directory.PushSnippet(s.swarm.ID(), directorySnippet)
 
 	c.publishStream(s)
 
@@ -139,9 +141,8 @@ func (c *control) Update(id transfer.ID, directorySnippet *networkv1directory.Li
 		return ErrIDNotFound
 	}
 
-	s.directorySnippet = directorySnippet
-	c.publishStream(s)
-	// TODO: publish snippet to directory... snippet stream... need api
+	dao.SignMessage(directorySnippet, s.key)
+	c.directory.PushSnippet(s.swarm.ID(), directorySnippet)
 
 	return nil
 }
@@ -180,6 +181,12 @@ func (c *control) Close(id transfer.ID) error {
 	delete(c.streams, id)
 	c.transfer.Remove(s.transferID)
 
+	c.directory.DeleteSnippet(s.swarm.ID())
+
+	for _, k := range s.networkKeys {
+		go c.unpublishDirectoryListing(k, s)
+	}
+
 	return nil
 }
 
@@ -195,8 +202,7 @@ func (c *control) publishStream(s *stream) {
 				)
 			}
 
-			// TODO: store id in stream directoryID
-			_ = id
+			s.directoryID = id
 		}(k)
 	}
 }
@@ -219,15 +225,14 @@ func (c *control) unpublishDirectoryListing(networkKey []byte, s *stream) error 
 }
 
 type stream struct {
-	transferID       transfer.ID
-	startTime        timeutil.Time
-	directoryID      uint64
-	directorySnippet *networkv1directory.ListingSnippet
-	mimeType         string
-	networkKeys      [][]byte
-	key              *key.Key
-	swarm            *ppspp.Swarm
-	w                ioutil.WriteFlusher
+	transferID  transfer.ID
+	startTime   timeutil.Time
+	directoryID uint64
+	mimeType    string
+	networkKeys [][]byte
+	key         *key.Key
+	swarm       *ppspp.Swarm
+	w           ioutil.WriteFlusher
 }
 
 type transferStreamMap map[transfer.ID]*stream

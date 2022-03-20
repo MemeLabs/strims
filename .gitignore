@@ -2,8 +2,7 @@ node_modules
 dist
 *.out
 *.test
-*.g_*
-*.t_*
+*_
 *.wasm
 **/infra.yaml
 **/*.sqlite

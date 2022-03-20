@@ -47,10 +47,10 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         <Link to="/" className="layout_header__primary_nav__logo">
           <Trans>layout.header.Home</Trans>
         </Link>
-        <NavLink to="/settings" className={linkClassName}>
+        <NavLink to="/categories" className={linkClassName}>
           <Trans>layout.header.Categories</Trans>
         </NavLink>
-        <NavLink to="/" className={linkClassName}>
+        <NavLink to="/streams" className={linkClassName}>
           <Trans>layout.header.Streams</Trans>
         </NavLink>
         <NavLink to="/broadcast" className={linkClassName}>

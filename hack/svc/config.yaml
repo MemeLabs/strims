@@ -7,7 +7,7 @@ storage:
   bbolt:
     path: "hack/svc/.strims"
   postgres:
-    connStr: "user=postgres password=supersecret host=172.17.0.2 sslmode=disable database=strims"
+    connStr: "user=postgres password=supersecret host=172.17.0.3 sslmode=disable database=strims"
 http:
   address: "0.0.0.0:8083"
   tls:

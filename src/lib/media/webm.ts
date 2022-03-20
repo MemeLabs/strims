@@ -39,7 +39,7 @@ export class Encoder {
     // this.mediaRecorder.onstart = (e) => console.log(new Date(), "onstart", e);
     // this.mediaRecorder.onstop = (e) => console.log(new Date(), "onstop", e);
 
-    this.flushInterval = setInterval(() => this.mediaRecorder.requestData(), 50);
+    this.flushInterval = setInterval(() => this.mediaRecorder.requestData(), 500);
 
     this.mediaRecorder.start();
   }

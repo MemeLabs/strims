@@ -12,10 +12,13 @@ const Video = lazy(() => import("../pages/Settings/Video"));
 const VNIC = lazy(() => import("../pages/Settings/VNIC"));
 const Autoseed = lazy(() => import("../pages/Settings/Autoseed"));
 
-const Home = lazy(() => import("../pages/Home"));
+const Broadcast = lazy(() => import("../pages/Broadcast"));
+const Categories = lazy(() => import("../pages/Categories"));
 const Directory = lazy(() => import("../pages/Directory"));
-const PlayerTest = lazy(() => import("../pages/PlayerTest"));
 const Embed = lazy(() => import("../pages/Embed"));
+const Home = lazy(() => import("../pages/Home"));
+const PlayerTest = lazy(() => import("../pages/PlayerTest"));
+const Streams = lazy(() => import("../pages/Streams"));
 
 export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings/*" element={layout}>
@@ -37,6 +40,9 @@ const mainRoutes = (
     <Route path="directory/:networkKey" element={<Directory />} />
     <Route path="player/:networkKey" element={<PlayerTest />} />
     <Route path="embed/:service/:id" element={<Embed />} />
+    <Route path="categories" element={<Categories />} />
+    <Route path="broadcast" element={<Broadcast />} />
+    <Route path="streams" element={<Streams />} />
     <Route path="*" element={<Navigate to="/404" />} />
   </Route>
 );
