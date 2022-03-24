@@ -445,7 +445,7 @@ func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConf
 	}
 
 	go func() {
-		events := make(chan interface{}, 1)
+		events := make(chan any, 1)
 		s.app.Events().Notify(events)
 		defer s.app.Events().StopNotifying(events)
 

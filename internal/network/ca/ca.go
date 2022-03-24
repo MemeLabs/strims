@@ -44,7 +44,7 @@ type CA struct {
 	observers *event.Observers
 	dialer    *dialer.Dialer
 	transfer  transfer.Control
-	events    chan interface{}
+	events    chan any
 
 	lock    sync.Mutex
 	runners hashmap.Map[[]byte, *runner]

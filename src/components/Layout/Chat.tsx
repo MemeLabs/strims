@@ -1,7 +1,6 @@
 import "./Chat.scss";
 
 import clsx from "clsx";
-import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { BsArrowBarLeft } from "react-icons/bs";
@@ -65,7 +64,7 @@ const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 }) => (
   <header className="layout_chat__header">
     <button className="layout_chat__toggle_off" onClick={onToggleClick}>
-      <BsArrowBarLeft size={22} />
+      <BsArrowBarLeft />
     </button>
     <RoomDropdown onChange={onRoomChange} defaultSelection={selectedRoom} />
   </header>
@@ -74,11 +73,7 @@ const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 const Chat: React.FC = () => {
   const { showChat, toggleShowChat } = useLayout();
 
-  const [chatRoom, setChatRoom] = useState<RoomMenuItem>({
-    networkKey: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
-    serverKey: Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q="),
-    name: "test",
-  });
+  const [chatRoom, setChatRoom] = useState<RoomMenuItem>(null);
 
   return (
     <div
@@ -88,7 +83,7 @@ const Chat: React.FC = () => {
       })}
     >
       <button className="layout_chat__toggle_on" onClick={() => toggleShowChat()}>
-        <BsArrowBarLeft size={22} />
+        <BsArrowBarLeft />
       </button>
       <div className="layout_chat__body">
         {DEVICE_TYPE === DeviceType.Portable ? (
@@ -100,9 +95,11 @@ const Chat: React.FC = () => {
             selectedRoom={chatRoom}
           />
         )}
-        <RoomProvider {...chatRoom}>
-          <ChatShell className="home_page__chat" shouldHide={closed} />
-        </RoomProvider>
+        {chatRoom && (
+          <RoomProvider {...chatRoom}>
+            <ChatShell className="home_page__chat" shouldHide={closed} />
+          </RoomProvider>
+        )}
       </div>
     </div>
   );

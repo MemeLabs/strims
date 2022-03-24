@@ -101,6 +101,9 @@ func newDirectoryService(
 		eventWriter:     ew,
 		embedLoader:     syncutil.NewPointer(newEmbedLoader(logger, network.GetServerConfig().GetDirectory().GetIntegrations())),
 		listings:        newIndexedLRU[listing](),
+		users:           newIndexedLRU[user](),
+		listingRecords:  dao.NewDirectoryListingRecordCache(store, nil),
+		userRecords:     dao.NewDirectoryUserRecordCache(store, nil),
 	}
 }
 
@@ -121,11 +124,14 @@ type directoryService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	embedLoader       syncutil.Pointer[embedLoader]
 	lock              sync.Mutex
+	nextID            uint64
 	listings          indexedLRU[listing, *listing]
 	sessions          lru[session, *session]
-	users             lru[user, *user]
+	users             indexedLRU[user, *user]
 	certificate       *certificate.Certificate
 	configPublisher   *vpn.HashTablePublisher
+	listingRecords    dao.DirectoryListingRecordCache
+	userRecords       dao.DirectoryUserRecordCache
 }
 
 func (d *directoryService) Run(ctx context.Context) error {
@@ -135,7 +141,7 @@ func (d *directoryService) Run(ctx context.Context) error {
 		return err
 	}
 
-	events := make(chan interface{}, 8)
+	events := make(chan any, 8)
 	d.observers.Notify(events)
 	defer d.observers.StopNotifying(events)
 
@@ -146,8 +152,6 @@ func (d *directoryService) Run(ctx context.Context) error {
 			case *networkv1.NetworkChangeEvent:
 				d.handleNetworkChange(e.Network)
 				d.publishConfig(ctx, e.Network)
-			case *networkv1directory.ListingRecordChangeEvent:
-				d.handleListingRecordChange(e.Record)
 			}
 		case now := <-d.broadcastTicker.C:
 			if err := d.broadcast(now); err != nil {
@@ -187,24 +191,6 @@ func (d *directoryService) handleNetworkChange(network *networkv1.Network) {
 	d.listings.Each(func(l *listing) bool {
 		if e := l.listing.GetEmbed(); e != nil && !loader.IsSupported(e.Service) {
 			l.evicted = true
-			d.listings.Touch(l)
-		}
-		return true
-	})
-}
-
-func (d *directoryService) handleListingRecordChange(r *networkv1directory.ListingRecord) {
-	if r.NetworkId != d.network.Get().Id {
-		return
-	}
-
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.listings.Each(func(l *listing) bool {
-		if dao.DirectoryListingsEqual(r.Listing, l.listing) {
-			l.moderation = r.Moderation
-			l.evicted = r.Moderation.GetIsBanned()
 			d.listings.Touch(l)
 		}
 		return true
@@ -328,6 +314,7 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		events = append(events, &networkv1directory.Event{
 			Body: &networkv1directory.Event_ViewerStateChange_{
 				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+					Id:      u.id,
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
@@ -362,6 +349,7 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 	return append(events, &networkv1directory.Event{
 		Body: &networkv1directory.Event_ViewerStateChange_{
 			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+				Id:         u.id,
 				Subject:    u.certificate.Subject,
 				Online:     true,
 				ViewingIds: ids.Slice(),
@@ -499,31 +487,14 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 	return snippetClient.Subscribe(ctx, req, ch)
 }
 
-func (d *directoryService) getOrInsertListingRecord(l *networkv1directory.Listing) (r *networkv1directory.ListingRecord, err error) {
-	r, err = dao.GetDirectoryListingRecordByListing(d.store, dao.FormatDirectoryListingRecordListingKey(d.network.Get().Id, l))
-	if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
-		return r, err
-	}
-
-	r, err = dao.NewDirectoryListingRecord(d.store, d.network.Get().Id, l)
-	if err != nil {
-		return nil, err
-	}
-	err = dao.DirectoryListingRecords.Insert(d.store, r)
-	if err != nil {
-		return nil, err
-	}
-	return r, err
-}
-
-func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
-	switch c := req.Listing.Content.(type) {
+func (d *directoryService) getOrInsertListingRecord(l *networkv1directory.Listing) (*networkv1directory.ListingRecord, error) {
+	switch c := l.Content.(type) {
 	case *networkv1directory.Listing_Embed_:
 		if !d.embedLoader.Get().IsSupported(c.Embed.Service) {
 			return nil, errors.New("unsupported embed service")
 		}
 	case *networkv1directory.Listing_Media_:
-		if _, err := ppspp.ParseURI(req.Listing.GetMedia().SwarmUri); err != nil {
+		if _, err := ppspp.ParseURI(l.GetMedia().SwarmUri); err != nil {
 			return nil, errors.New("invalid swarm uri")
 		}
 	case *networkv1directory.Listing_Chat_:
@@ -534,38 +505,68 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 		return nil, errors.New("unsupported content type")
 	}
 
+	r, _, err := d.listingRecords.ByListing.GetOrInsert(
+		dao.FormatDirectoryListingRecordListingKey(d.network.Get().Id, l),
+		func() (*networkv1directory.ListingRecord, error) {
+			return dao.NewDirectoryListingRecord(d.store, d.network.Get().Id, l)
+		},
+	)
+	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+		return nil, errors.New("error loading moderation metadata")
+	}
+
+	return r, nil
+}
+
+func (d *directoryService) getOrInsertUserRecord(ctx context.Context) (*networkv1directory.UserRecord, error) {
+	peerKey := dialer.VPNCertificate(ctx).GetParent().GetKey()
+	ur, _, err := d.userRecords.ByPeerKey.GetOrInsert(
+		dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Get().Id, peerKey),
+		func() (*networkv1directory.UserRecord, error) {
+			return dao.NewDirectoryUserRecord(d.store, d.network.Get().Id, peerKey)
+		},
+	)
+	return ur, err
+}
+
+func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
+	ur, err := d.getOrInsertUserRecord(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ur.GetModeration().GetDisablePublish().GetValue() {
+		return nil, errors.New("publishing from this account is disabled")
+	}
+
+	lr, err := d.getOrInsertListingRecord(req.Listing)
+	if err != nil {
+		return nil, err
+	}
+	if lr.GetModeration().GetIsBanned().GetValue() {
+		return nil, errors.New("listing banned")
+	}
+
 	l, err := newListing(req.Listing)
 	if err != nil {
 		return nil, err
 	}
 
 	d.lock.Lock()
-	if !d.listings.Has(l) {
-		d.lock.Unlock()
-
-		r, err := d.getOrInsertListingRecord(req.Listing)
-		if err != nil {
-			return nil, errors.New("error loading moderation metadata")
-		}
-
-		if r.GetModeration().GetIsBanned() {
-			return nil, errors.New("listing banned")
-		}
-
-		l.InitFromRecord(r)
-
-		d.lock.Lock()
-	}
 	defer d.lock.Unlock()
 
-	l = d.listings.GetOrInsert(l)
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
-
-	// TODO: peer moderation (publishing restricted?)
+	u := d.users.GetOrInsert(&user{
+		id:          ur.Id,
+		certificate: dialer.VPNCertificate(ctx).GetParent(),
+	})
 	if u.PublishedListingCount() >= publishQuota {
 		return nil, errors.New("exceeded concurrent publish quota")
 	}
+
+	if !d.listings.Has(l) {
+		l.InitFromRecord(lr)
+	}
+	l = d.listings.GetOrInsert(l)
 
 	d.logger.Info(
 		"published",
@@ -617,18 +618,29 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 }
 
 func (d *directoryService) Join(ctx context.Context, req *networkv1directory.JoinRequest) (*networkv1directory.JoinResponse, error) {
+	ur, err := d.getOrInsertUserRecord(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ur.GetModeration().GetDisableJoin().GetValue() {
+		return nil, errors.New("joining from this account is disabled")
+	}
+
 	d.lock.Lock()
 	defer d.lock.Unlock()
+
+	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
+	u := d.users.GetOrInsert(&user{
+		id:          ur.Id,
+		certificate: dialer.VPNCertificate(ctx).GetParent(),
+	})
+	if u.ViewedListingCount() >= viewQuota {
+		return nil, errors.New("exceeded concurrent view quota")
+	}
 
 	l := d.listings.GetByID(req.Id)
 	if l == nil {
 		return nil, ErrListingNotFound
-	}
-	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
-
-	if u.ViewedListingCount() >= viewQuota {
-		return nil, errors.New("exceeded concurrent view quota")
 	}
 
 	d.logger.Info(
@@ -679,6 +691,95 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 	}
 
 	return &networkv1directory.PingResponse{}, nil
+}
+
+func (d *directoryService) ModerateListing(ctx context.Context, req *networkv1directory.ModerateListingRequest) (*networkv1directory.ModerateListingResponse, error) {
+	ur, err := d.getOrInsertUserRecord(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !ur.GetModeration().GetIsModerator().GetValue() {
+		return nil, errors.New("permission denied")
+	}
+
+	lr, err := d.listingRecords.ByID.Transform(req.Id, func(m *networkv1directory.ListingRecord) error {
+		if v := req.Moderation.GetIsMature(); v != nil {
+			m.Moderation.IsMature = v
+		}
+		if v := req.Moderation.GetIsBanned(); v != nil {
+			m.Moderation.IsBanned = v
+		}
+		if v := req.Moderation.GetCategory(); v != nil {
+			m.Moderation.Category = v
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	d.lock.Lock()
+	d.lock.Unlock()
+
+	l := d.listings.GetByID(req.Id)
+	if l != nil {
+		l.moderation = lr.Moderation
+		l.evicted = lr.Moderation.GetIsBanned().GetValue()
+	}
+
+	return &networkv1directory.ModerateListingResponse{}, nil
+}
+
+func (d *directoryService) ModerateUser(ctx context.Context, req *networkv1directory.ModerateUserRequest) (*networkv1directory.ModerateUserResponse, error) {
+	ur, err := d.getOrInsertUserRecord(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !ur.GetModeration().GetIsModerator().GetValue() {
+		return nil, errors.New("permission denied")
+	}
+
+	uur, err := d.userRecords.ByID.Transform(req.Id, func(m *networkv1directory.UserRecord) error {
+		if v := req.Moderation.GetDisableJoin(); v != nil {
+			m.Moderation.DisableJoin = v
+		}
+		if v := req.Moderation.GetDisablePublish(); v != nil {
+			m.Moderation.DisablePublish = v
+		}
+
+		if ur.Moderation.GetIsAdmin().GetValue() {
+			if v := req.Moderation.GetIsModerator(); v != nil {
+				m.Moderation.IsModerator = v
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	d.lock.Lock()
+	d.lock.Unlock()
+
+	l := d.users.GetByID(req.Id)
+	if l != nil {
+		l.EachSession(func(s *session) {
+			if uur.GetModeration().GetDisableJoin().GetValue() {
+				s.EachViewed(func(l *listing) {
+					l.RemoveViewer(s)
+					d.listings.Touch(l)
+				})
+			}
+			if uur.GetModeration().GetDisablePublish().GetValue() {
+				s.EachPublished(func(l *listing) {
+					l.RemovePublisher(s)
+					d.listings.Touch(l)
+				})
+			}
+		})
+	}
+
+	return &networkv1directory.ModerateUserResponse{}, nil
 }
 
 func embedServiceName(s networkv1directory.Listing_Embed_Service) string {
@@ -873,6 +974,7 @@ func (u *session) Less(o llrb.Item) bool {
 }
 
 type user struct {
+	id          uint64
 	certificate *certificate.Certificate
 	sessions    llrb.LLRB
 }
@@ -898,6 +1000,10 @@ func (u *user) EachSession(it func(s *session)) {
 		it(ii.(*session))
 		return true
 	})
+}
+
+func (u *user) ID() uint64 {
+	return u.id
 }
 
 func (u *user) Key() []byte {

@@ -93,7 +93,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
             label="Server address"
             name="serverAddress"
             placeholder="wss://next.strims.gg"
-            defaultValue={`wss://${location.host}/api`}
+            // defaultValue={`wss://${location.host}/api`}
             // defaultValue={`wss://${location.host}/manage`}
           />
           <ToggleInput control={control} label="Stay logged in" name="persistLogin" />

@@ -61,6 +61,6 @@ func (c *ClientRetrier) CallUnary(ctx context.Context, method string, req proto.
 	}
 }
 
-func (c *ClientRetrier) CallStreaming(ctx context.Context, method string, req proto.Message, res interface{}) error {
+func (c *ClientRetrier) CallStreaming(ctx context.Context, method string, req proto.Message, res any) error {
 	return c.c.CallStreaming(ctx, method, req, res)
 }

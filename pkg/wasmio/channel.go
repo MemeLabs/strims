@@ -12,14 +12,14 @@ import (
 const maxChannelMTU = 64 * 1024
 
 // newChannel ...
-func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*channel, error) {
+func newChannel(mtu int, bridge js.Value, method string, args ...any) (*channel, error) {
 	p := &channel{
 		pool: pool.DefaultPool,
 		mtu:  mtu,
 		q:    make(chan *[]byte, 16),
 	}
 
-	onOpen := func(this js.Value, args []js.Value) interface{} {
+	onOpen := func(this js.Value, args []js.Value) any {
 		if len(args) == 1 {
 			p.mtu = args[0].Int()
 			if p.mtu > maxChannelMTU {
@@ -139,7 +139,7 @@ func (p *channel) closeWithError(err error) {
 	}
 }
 
-func (p *channel) onData(this js.Value, args []js.Value) interface{} {
+func (p *channel) onData(this js.Value, args []js.Value) any {
 	b := p.pool.Get(args[0].Int())
 	t, ok := channelRead(p.id, *b)
 	if !ok {
@@ -152,12 +152,12 @@ func (p *channel) onData(this js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func (p *channel) onClose(this js.Value, args []js.Value) interface{} {
+func (p *channel) onClose(this js.Value, args []js.Value) any {
 	p.closeWithError(ErrClosed)
 	return nil
 }
 
-func (p *channel) onError(this js.Value, args []js.Value) interface{} {
+func (p *channel) onError(this js.Value, args []js.Value) any {
 	p.closeWithError(errors.New(args[0].String()))
 	return nil
 }

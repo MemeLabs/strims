@@ -4,7 +4,7 @@ import { DBSchema, IDBPDatabase, openDB } from "idb";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
-import { ISignInRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
+import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 
@@ -33,12 +33,7 @@ interface State {
 }
 
 type Ops = {
-  createProfile: (
-    serverAddress: string,
-    name: string,
-    password: string,
-    persistLogin: boolean
-  ) => Promise<void>;
+  createProfile: (serverAddress: string, req: ISignUpRequest) => Promise<void>;
   signIn: (serverAddress: string, req: ISignInRequest) => Promise<void>;
 };
 
@@ -120,27 +115,21 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     void db.getAll().then((profiles) => mergeProfiles(...profiles));
   }, []);
 
-  const createProfile = useCallback(
-    async (serverAddress: string, name: string, password: string, persistLogin: boolean) => {
-      const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
-      const client = await conn.client(FrontendClient);
-      const res = await client.auth.signUp(
-        { name, password, persistLogin },
-        { timeout: API_TIMEOUT }
-      );
+  const createProfile = useCallback(async (serverAddress: string, req: ISignUpRequest) => {
+    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
+    const client = await conn.client(FrontendClient);
+    const res = await client.auth.signUp(req, { timeout: API_TIMEOUT });
 
-      const profile = new LinkedProfile({
-        ...res.linkedProfile,
-        id: await db.nextId(),
-        serverAddress,
-      });
-      await db.put(profile);
-      mergeProfiles(profile);
+    const profile = new LinkedProfile({
+      ...res.linkedProfile,
+      id: await db.nextId(),
+      serverAddress,
+    });
+    await db.put(profile);
+    mergeProfiles(profile);
 
-      setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
-    },
-    []
-  );
+    setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
+  }, []);
 
   const signIn = useCallback(async (serverAddress: string, req: ISignInRequest) => {
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();

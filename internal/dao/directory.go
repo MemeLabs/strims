@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
-
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
 const (
@@ -17,16 +17,11 @@ const (
 	directoryListingRecordNS
 	directoryListingRecordNetworkNS
 	directoryListingRecordListingNS
+	directoryUserRecordNS
+	directoryUserRecordPeerKeyNS
 )
 
-var DirectoryListingRecords = NewTable(
-	directoryListingRecordNS,
-	&TableOptions[networkv1directory.ListingRecord, *networkv1directory.ListingRecord]{
-		ObserveChange: func(m, p *networkv1directory.ListingRecord) proto.Message {
-			return &networkv1directory.ListingRecordChangeEvent{Record: m}
-		},
-	},
-)
+var DirectoryListingRecords = NewTable[networkv1directory.ListingRecord](directoryListingRecordNS, nil)
 
 var GetDirectoryListingRecordsByNetworkID, GetDirectoryListingRecordsByNetwork, GetNetworkByDirectoryListingRecord = ManyToOne(
 	directoryListingRecordNetworkNS,
@@ -94,14 +89,70 @@ func DirectoryListingsEqual(a, b *networkv1directory.Listing) bool {
 	return false
 }
 
+func directoryListingKey(m *networkv1directory.ListingRecord) []byte {
+	return FormatDirectoryListingRecordListingKey(m.NetworkId, m.Listing)
+}
+
 var GetDirectoryListingRecordByListing = UniqueIndex(
 	directoryListingRecordListingNS,
 	DirectoryListingRecords,
-	func(m *networkv1directory.ListingRecord) []byte {
-		return FormatDirectoryListingRecordListingKey(m.NetworkId, m.Listing)
-	},
+	directoryListingKey,
 	nil,
 )
+
+func NewDirectoryListingRecordCache(s kv.RWStore, opt *CacheStoreOptions) (c DirectoryListingRecordCache) {
+	c.CacheStore, c.ByID = newCacheStore[networkv1directory.ListingRecord](s, DirectoryListingRecords, opt)
+	c.ByListing = NewCacheIndex(
+		c.CacheStore,
+		GetDirectoryListingRecordByListing,
+		directoryListingKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	return
+}
+
+type DirectoryListingRecordCache struct {
+	*CacheStore[networkv1directory.ListingRecord, *networkv1directory.ListingRecord]
+	ByID      CacheAccessor[uint64, networkv1directory.ListingRecord, *networkv1directory.ListingRecord]
+	ByListing CacheAccessor[[]byte, networkv1directory.ListingRecord, *networkv1directory.ListingRecord]
+}
+
+var DirectoryUserRecords = NewTable[networkv1directory.UserRecord](directoryUserRecordNS, nil)
+
+func FormatDirectoryUserRecordPeerKeyKey(networkID uint64, peerKey []byte) []byte {
+	b := make([]byte, 8+len(peerKey))
+	binary.BigEndian.PutUint64(b, networkID)
+	copy(b[8:], peerKey)
+	return b
+}
+
+func directoryUserRecordPeerKeyKey(m *networkv1directory.UserRecord) []byte {
+	return FormatDirectoryUserRecordPeerKeyKey(m.NetworkId, m.PeerKey)
+}
+
+var GetDirectoryUserRecordByPeerKey = UniqueIndex(
+	directoryUserRecordPeerKeyNS,
+	DirectoryUserRecords,
+	directoryUserRecordPeerKeyKey,
+	nil,
+)
+
+func NewDirectoryUserRecordCache(s kv.RWStore, opt *CacheStoreOptions) (c DirectoryUserRecordCache) {
+	c.CacheStore, c.ByID = newCacheStore[networkv1directory.UserRecord](s, DirectoryUserRecords, opt)
+	c.ByPeerKey = NewCacheIndex(
+		c.CacheStore,
+		GetDirectoryUserRecordByPeerKey,
+		directoryUserRecordPeerKeyKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	return
+}
+
+type DirectoryUserRecordCache struct {
+	*CacheStore[networkv1directory.UserRecord, *networkv1directory.UserRecord]
+	ByID      CacheAccessor[uint64, networkv1directory.UserRecord, *networkv1directory.UserRecord]
+	ByPeerKey CacheAccessor[[]byte, networkv1directory.UserRecord, *networkv1directory.UserRecord]
+}
 
 func NewDirectoryListingRecord(s IDGenerator, networkID uint64, listing *networkv1directory.Listing) (*networkv1directory.ListingRecord, error) {
 	id, err := s.GenerateID()
@@ -112,5 +163,17 @@ func NewDirectoryListingRecord(s IDGenerator, networkID uint64, listing *network
 		Id:        id,
 		NetworkId: networkID,
 		Listing:   listing,
+	}, nil
+}
+
+func NewDirectoryUserRecord(s IDGenerator, networkID uint64, peerKey []byte) (*networkv1directory.UserRecord, error) {
+	id, err := s.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1directory.UserRecord{
+		Id:        id,
+		NetworkId: networkID,
+		PeerKey:   peerKey,
 	}, nil
 }

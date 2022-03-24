@@ -18,6 +18,7 @@ import Message from "./Message";
 import Scroller, { MessageProps } from "./Scroller";
 import SettingsDrawer from "./SettingsDrawer";
 import StyleSheet from "./StyleSheet";
+import UsersDrawer from "./UsersDrawer";
 
 enum ChatDrawerRole {
   None = "none",
@@ -137,7 +138,7 @@ const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
           active={activePanel === ChatDrawerRole.Users}
           onClose={closePanel}
         >
-          <TestContent />
+          <UsersDrawer />
         </ChatDrawer>
         {!shouldHide && (
           // TODO: scroller is super fucking sketchy... this should probably be

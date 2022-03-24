@@ -154,7 +154,7 @@ func (t *profileStoreTx) Delete(key string) error {
 	return t.tx.Delete(key)
 }
 
-func (t *profileStoreTx) ScanPrefix(prefix string, messages interface{}) error {
+func (t *profileStoreTx) ScanPrefix(prefix string, messages any) error {
 	return scanPrefix(t.tx, t.sk, prefix, messages)
 }
 

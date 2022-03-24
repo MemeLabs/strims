@@ -15,7 +15,7 @@ func ByteHex(key string, val []byte) zapcore.Field {
 }
 
 // Type constructs a field with the given key and the name of the type of v
-func Type(key string, v interface{}) zapcore.Field {
+func Type(key string, v any) zapcore.Field {
 	return zap.String(key, reflect.TypeOf(v).String())
 }
 

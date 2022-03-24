@@ -23,7 +23,7 @@ implement a helper to pass the time to the tick function
 */
 
 // func newFuncTicker(ivl time.Duration, fn func(t Time)) *funcTicker {
-// 	jsfn := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+// 	jsfn := js.FuncOf(func(this js.Value, args []js.Value) any {
 // 		fn(Time(args[0].Float()) * Time(time.Millisecond))
 // 		return nil
 // 	})

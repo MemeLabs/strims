@@ -11,7 +11,7 @@ import (
 )
 
 // PrintJSON ...
-func PrintJSON(i interface{}) {
+func PrintJSON(i any) {
 	_, file, line, _ := runtime.Caller(1)
 	fmt.Printf(
 		"%s %s:%d: %s\n",

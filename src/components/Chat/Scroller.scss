@@ -4,7 +4,7 @@
       border-radius: 3px;
       opacity: 0;
       transition: opacity 0.2s ease-in-out 1s;
-      background: var(--color-chat-scroller-handle);
+      background: var(--color-background-chat-scroll-handle);
 
       &--scrolling {
         transition-delay: 0.1s;
@@ -14,7 +14,7 @@
 
     &__resume_autoscroll {
       position: absolute;
-      background: var(--body-background);
+      background: var(--color-background-chat-scroll-resume);
       width: calc(100% - 20px);
       padding: 5px;
       margin: 0 5px;

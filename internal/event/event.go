@@ -11,31 +11,31 @@ type Observers struct {
 	local  event.Observer
 }
 
-func (o *Observers) Chan() chan interface{} {
-	ch := make(chan interface{}, 8)
+func (o *Observers) Chan() chan any {
+	ch := make(chan any, 8)
 	o.Notify(ch)
 	return ch
 }
 
 // Notify ...
-func (o *Observers) Notify(ch interface{}) {
+func (o *Observers) Notify(ch any) {
 	o.global.Notify(ch)
 	o.local.Notify(ch)
 }
 
 // StopNotifying ...
-func (o *Observers) StopNotifying(ch interface{}) {
+func (o *Observers) StopNotifying(ch any) {
 	o.global.StopNotifying(ch)
 	o.local.StopNotifying(ch)
 }
 
 // EmitGlobal ...
-func (o *Observers) EmitGlobal(v interface{}) {
+func (o *Observers) EmitGlobal(v any) {
 	o.global.Emit(v)
 }
 
 // EmitLocal ...
-func (o *Observers) EmitLocal(v interface{}) {
+func (o *Observers) EmitLocal(v any) {
 	o.local.Emit(v)
 }
 
@@ -56,25 +56,25 @@ func (o *Observers) Emit(v proto.Message) {
 // 	local  *event.Emitter
 // }
 
-// func (o *Observers) AddHandlerWithPriority(priority int, h interface{}) {
+// func (o *Observers) AddHandlerWithPriority(priority int, h any) {
 // 	o.global.AddHandlerWithPriority(priority, h)
 // 	o.local.AddHandlerWithPriority(priority, h)
 // }
 
-// func (o *Observers) AddHandler(h interface{}) {
+// func (o *Observers) AddHandler(h any) {
 // 	o.global.AddHandler(h)
 // 	o.local.AddHandler(h)
 // }
 
-// func (o *Observers) RemvoeHandler(h interface{}) {
+// func (o *Observers) RemvoeHandler(h any) {
 // 	o.global.RemoveHandler(h)
 // 	o.local.RemoveHandler(h)
 // }
 
-// func (o *Observers) EmitGlobal(v interface{}) {
+// func (o *Observers) EmitGlobal(v any) {
 // 	o.global.Emit(v)
 // }
 
-// func (o *Observers) EmitLocal(v interface{}) {
+// func (o *Observers) EmitLocal(v any) {
 // 	o.local.Emit(v)
 // }

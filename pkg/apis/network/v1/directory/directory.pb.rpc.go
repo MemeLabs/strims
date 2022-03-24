@@ -13,6 +13,8 @@ func RegisterDirectoryService(host rpc.ServiceRegistry, service DirectoryService
 	host.RegisterMethod("strims.network.v1.directory.Directory.Join", service.Join)
 	host.RegisterMethod("strims.network.v1.directory.Directory.Part", service.Part)
 	host.RegisterMethod("strims.network.v1.directory.Directory.Ping", service.Ping)
+	host.RegisterMethod("strims.network.v1.directory.Directory.ModerateListing", service.ModerateListing)
+	host.RegisterMethod("strims.network.v1.directory.Directory.ModerateUser", service.ModerateUser)
 }
 
 // DirectoryService ...
@@ -37,6 +39,14 @@ type DirectoryService interface {
 		ctx context.Context,
 		req *PingRequest,
 	) (*PingResponse, error)
+	ModerateListing(
+		ctx context.Context,
+		req *ModerateListingRequest,
+	) (*ModerateListingResponse, error)
+	ModerateUser(
+		ctx context.Context,
+		req *ModerateUserRequest,
+	) (*ModerateUserResponse, error)
 }
 
 // DirectoryService ...
@@ -74,6 +84,20 @@ func (s *UnimplementedDirectoryService) Ping(
 	ctx context.Context,
 	req *PingRequest,
 ) (*PingResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) ModerateListing(
+	ctx context.Context,
+	req *ModerateListingRequest,
+) (*ModerateListingResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryService) ModerateUser(
+	ctx context.Context,
+	req *ModerateUserRequest,
+) (*ModerateUserResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -134,6 +158,24 @@ func (c *DirectoryClient) Ping(
 	return c.client.CallUnary(ctx, "strims.network.v1.directory.Directory.Ping", req, res)
 }
 
+// ModerateListing ...
+func (c *DirectoryClient) ModerateListing(
+	ctx context.Context,
+	req *ModerateListingRequest,
+	res *ModerateListingResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.Directory.ModerateListing", req, res)
+}
+
+// ModerateUser ...
+func (c *DirectoryClient) ModerateUser(
+	ctx context.Context,
+	req *ModerateUserRequest,
+	res *ModerateUserResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.Directory.ModerateUser", req, res)
+}
+
 // RegisterDirectoryFrontendService ...
 func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service DirectoryFrontendService) {
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Open", service.Open)
@@ -142,9 +184,8 @@ func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service Director
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Join", service.Join)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Part", service.Part)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Test", service.Test)
-	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", service.GetListingRecord)
-	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", service.ListListingRecords)
-	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", service.UpdateListingRecord)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.ModerateListing)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.ModerateUser)
 }
 
 // DirectoryFrontendService ...
@@ -173,18 +214,14 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendTestRequest,
 	) (*FrontendTestResponse, error)
-	GetListingRecord(
+	ModerateListing(
 		ctx context.Context,
-		req *FrontendGetListingRecordRequest,
-	) (*FrontendGetListingRecordResponse, error)
-	ListListingRecords(
+		req *FrontendModerateListingRequest,
+	) (*FrontendModerateListingResponse, error)
+	ModerateUser(
 		ctx context.Context,
-		req *FrontendListListingRecordsRequest,
-	) (*FrontendListListingRecordsResponse, error)
-	UpdateListingRecord(
-		ctx context.Context,
-		req *FrontendUpdateListingRecordRequest,
-	) (*FrontendUpdateListingRecordResponse, error)
+		req *FrontendModerateUserRequest,
+	) (*FrontendModerateUserResponse, error)
 }
 
 // DirectoryFrontendService ...
@@ -232,24 +269,17 @@ func (s *UnimplementedDirectoryFrontendService) Test(
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedDirectoryFrontendService) GetListingRecord(
+func (s *UnimplementedDirectoryFrontendService) ModerateListing(
 	ctx context.Context,
-	req *FrontendGetListingRecordRequest,
-) (*FrontendGetListingRecordResponse, error) {
+	req *FrontendModerateListingRequest,
+) (*FrontendModerateListingResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedDirectoryFrontendService) ListListingRecords(
+func (s *UnimplementedDirectoryFrontendService) ModerateUser(
 	ctx context.Context,
-	req *FrontendListListingRecordsRequest,
-) (*FrontendListListingRecordsResponse, error) {
-	return nil, rpc.ErrNotImplemented
-}
-
-func (s *UnimplementedDirectoryFrontendService) UpdateListingRecord(
-	ctx context.Context,
-	req *FrontendUpdateListingRecordRequest,
-) (*FrontendUpdateListingRecordResponse, error) {
+	req *FrontendModerateUserRequest,
+) (*FrontendModerateUserResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -319,31 +349,22 @@ func (c *DirectoryFrontendClient) Test(
 	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.Test", req, res)
 }
 
-// GetListingRecord ...
-func (c *DirectoryFrontendClient) GetListingRecord(
+// ModerateListing ...
+func (c *DirectoryFrontendClient) ModerateListing(
 	ctx context.Context,
-	req *FrontendGetListingRecordRequest,
-	res *FrontendGetListingRecordResponse,
+	req *FrontendModerateListingRequest,
+	res *FrontendModerateListingResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.GetListingRecord", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.ModerateListing", req, res)
 }
 
-// ListListingRecords ...
-func (c *DirectoryFrontendClient) ListListingRecords(
+// ModerateUser ...
+func (c *DirectoryFrontendClient) ModerateUser(
 	ctx context.Context,
-	req *FrontendListListingRecordsRequest,
-	res *FrontendListListingRecordsResponse,
+	req *FrontendModerateUserRequest,
+	res *FrontendModerateUserResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.ListListingRecords", req, res)
-}
-
-// UpdateListingRecord ...
-func (c *DirectoryFrontendClient) UpdateListingRecord(
-	ctx context.Context,
-	req *FrontendUpdateListingRecordRequest,
-	res *FrontendUpdateListingRecordResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.ModerateUser", req, res)
 }
 
 // RegisterDirectorySnippetService ...

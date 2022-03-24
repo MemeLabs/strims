@@ -73,7 +73,7 @@ type control struct {
 	profile *profilev1.Profile
 	network network.Control
 
-	events                chan interface{}
+	events                chan any
 	ingressService        *ingressService
 	lock                  sync.Mutex
 	ingressConfig         *videov1.VideoIngressConfig

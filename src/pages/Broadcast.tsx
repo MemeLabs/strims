@@ -56,6 +56,7 @@ const BroadcastPage: React.FC = () => {
     const encoder = new webm.Encoder(mediaStream);
 
     videoRef.current.srcObject = mediaStream;
+    videoRef.current.muted = true;
 
     encoder.ondata = (data) => void client.videoCapture.append({ id, data });
     encoder.onend = (data) => void client.videoCapture.append({ id, data, segmentEnd: true });
@@ -81,7 +82,7 @@ const BroadcastPage: React.FC = () => {
       const ctx = canvas.getContext("2d");
       ctx.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight, 0, 0, width, height);
 
-      const res = await fetch(canvas.toDataURL("image/jpeg", 5));
+      const res = await fetch(canvas.toDataURL("image/jpeg", 3));
       const data = await res.arrayBuffer();
 
       await client.videoCapture.update({

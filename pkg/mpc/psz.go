@@ -222,7 +222,7 @@ func (p *PSZReceiver) performOPRFS(
 	return c, oprfOutputs, nil
 }
 
-func bytesComparator(a, b interface{}) int {
+func bytesComparator(a, b any) int {
 	return bytes.Compare(a.([]byte), b.([]byte))
 }
 

@@ -41,7 +41,7 @@ type control struct {
 	vpn    *vpn.Host
 	store  *dao.ProfileStore
 
-	events        chan interface{}
+	events        chan any
 	lock          sync.Mutex
 	ingressConfig *vnicv1.Config
 }

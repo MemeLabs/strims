@@ -33,7 +33,7 @@ func (s *kvStore) CreateStoreIfNotExists(table string) error {
 
 // DeleteStore ...
 func (s *kvStore) DeleteStore(table string) error {
-	return callProxy(s.bridge, "deleteKVStore", []interface{}{table})
+	return callProxy(s.bridge, "deleteKVStore", []any{table})
 }
 
 // View ...
@@ -68,12 +68,12 @@ func (t *kvTx) Put(key string, value []byte) error {
 	b := jsUint8Array.New(len(value))
 	js.CopyBytesToJS(b, value)
 
-	return callProxy(t.proxy, "put", []interface{}{key, b})
+	return callProxy(t.proxy, "put", []any{key, b})
 }
 
 // Delete ...
 func (t *kvTx) Delete(key string) error {
-	return callProxy(t.proxy, "delete", []interface{}{key})
+	return callProxy(t.proxy, "delete", []any{key})
 }
 
 // Get ...
@@ -86,7 +86,7 @@ func (t *kvTx) Get(key string) (value []byte, err error) {
 		js.CopyBytesToGo(value, arg)
 		return nil
 	}
-	err = callProxy(t.proxy, "get", []interface{}{key}, readValue)
+	err = callProxy(t.proxy, "get", []any{key}, readValue)
 	return
 }
 
@@ -102,23 +102,23 @@ func (t *kvTx) ScanPrefix(prefix string) (values [][]byte, err error) {
 		}
 		return nil
 	}
-	err = callProxy(t.proxy, "scanPrefix", []interface{}{prefix}, readValue)
+	err = callProxy(t.proxy, "scanPrefix", []any{prefix}, readValue)
 	return
 }
 
 // Rollback ...
 func (t *kvTx) Rollback() error {
-	return callProxy(t.proxy, "rollback", []interface{}{})
+	return callProxy(t.proxy, "rollback", []any{})
 }
 
 // Commit ...
 func (t *kvTx) Commit() error {
-	return callProxy(t.proxy, "commit", []interface{}{})
+	return callProxy(t.proxy, "commit", []any{})
 }
 
-func callProxy(proxy js.Value, method string, args []interface{}, valueReaders ...func(js.Value) error) error {
+func callProxy(proxy js.Value, method string, args []any, valueReaders ...func(js.Value) error) error {
 	done := make(chan error)
-	callback := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	callback := js.FuncOf(func(this js.Value, args []js.Value) any {
 		defer close(done)
 		if !args[0].IsNull() {
 			done <- errors.New(args[0].String())

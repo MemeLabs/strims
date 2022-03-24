@@ -47,7 +47,7 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 	return nil
 }
 
-func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req proto.Message, res interface{}) error {
+func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req proto.Message, res any) error {
 	errs := make(chan error, 0)
 	resIn := reflect.MakeChan(reflect.TypeOf(res), 0)
 	resOut := reflect.ValueOf(res)

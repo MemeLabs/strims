@@ -47,7 +47,7 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         <Link to="/" className="layout_header__primary_nav__logo">
           <Trans>layout.header.Home</Trans>
         </Link>
-        <NavLink to="/categories" className={linkClassName}>
+        {/* <NavLink to="/categories" className={linkClassName}>
           <Trans>layout.header.Categories</Trans>
         </NavLink>
         <NavLink to="/streams" className={linkClassName}>
@@ -55,7 +55,7 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         </NavLink>
         <NavLink to="/broadcast" className={linkClassName}>
           <Trans>layout.header.Broadcast</Trans>
-        </NavLink>
+        </NavLink> */}
       </div>
       <div className="layout_header__search">{search}</div>
       <div className="layout_header__user_nav">
@@ -73,12 +73,12 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         >
           <FiActivity />
         </button>
-        <button className="layout_header__user_nav__link">
+        {/* <button className="layout_header__user_nav__link">
           <FiCloud />
         </button>
         <button onClick={handleAlertsClick} className="layout_header__user_nav__link">
           <FiBell />
-        </button>
+        </button> */}
         <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
         <Link
           className="layout_header__user_nav__link"

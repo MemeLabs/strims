@@ -14,17 +14,17 @@ export const Provider: React.FC = ({ children }) => {
   const savedTheme = useMemo(() => window.localStorage.getItem("theme") as ColorScheme, []);
   const [colorScheme, setColorScheme] = useState<ColorScheme>(savedTheme || "dark");
 
-  if (!savedTheme && window.matchMedia) {
-    useEffect(() => {
-      const query = window.matchMedia("(prefers-color-scheme: dark)");
+  // if (!savedTheme && window.matchMedia) {
+  //   useEffect(() => {
+  //     const query = window.matchMedia("(prefers-color-scheme: dark)");
 
-      setColorScheme(query.matches ? "dark" : "light");
+  //     setColorScheme(query.matches ? "dark" : "light");
 
-      const handleChange = (e: MediaQueryListEvent) => setColorScheme(e.matches ? "dark" : "light");
-      query.addEventListener("change", handleChange);
-      return () => query.removeEventListener("change", handleChange);
-    }, []);
-  }
+  //     const handleChange = (e: MediaQueryListEvent) => setColorScheme(e.matches ? "dark" : "light");
+  //     query.addEventListener("change", handleChange);
+  //     return () => query.removeEventListener("change", handleChange);
+  //   }, []);
+  // }
 
   // TODO: load from... config? webpack?
   const themeColor = colorScheme === "dark" ? "#222933" : "#d5d5d5";

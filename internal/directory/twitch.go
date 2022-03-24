@@ -61,7 +61,7 @@ func (t *twitchAPI) getAccessToken() (string, error) {
 	return t.accessToken, nil
 }
 
-func (t *twitchAPI) getAPIData(path string, data interface{}) error {
+func (t *twitchAPI) getAPIData(path string, data any) error {
 	accessToken, err := t.getAccessToken()
 	if err != nil {
 		return err

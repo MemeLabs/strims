@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func printLog(color string, vs []interface{}) {
+func printLog(color string, vs []any) {
 	_, f, l, _ := runtime.Caller(2)
 	_, file := path.Split(f)
 
@@ -29,37 +29,37 @@ func printLog(color string, vs []interface{}) {
 }
 
 // Black ...
-func Black(v ...interface{}) {
+func Black(v ...any) {
 	printLog("\u001b[40m", v)
 }
 
 // Red ...
-func Red(v ...interface{}) {
+func Red(v ...any) {
 	printLog("\u001b[41m", v)
 }
 
 // Green ...
-func Green(v ...interface{}) {
+func Green(v ...any) {
 	printLog("\u001b[42m", v)
 }
 
 // Yellow ...
-func Yellow(v ...interface{}) {
+func Yellow(v ...any) {
 	printLog("\u001b[43m", v)
 }
 
 // Blue ...
-func Blue(v ...interface{}) {
+func Blue(v ...any) {
 	printLog("\u001b[44m", v)
 }
 
 // Magenta ...
-func Magenta(v ...interface{}) {
+func Magenta(v ...any) {
 	printLog("\u001b[45m", v)
 }
 
 // Cyan ...
-func Cyan(v ...interface{}) {
+func Cyan(v ...any) {
 	printLog("\u001b[46m", v)
 }
 
@@ -78,11 +78,11 @@ func RunEveryN(n int, fn func()) {
 }
 
 // LogEveryN ...
-func LogEveryN(n int, msg ...interface{}) {
+func LogEveryN(n int, msg ...any) {
 	RunEveryNWithStackSkip(n, 1, func() { log.Println(msg...) })
 }
 
 // LogfEveryN ...
-func LogfEveryN(n int, format string, a ...interface{}) {
+func LogfEveryN(n int, format string, a ...any) {
 	RunEveryNWithStackSkip(n, 1, func() { log.Printf(format, a...) })
 }

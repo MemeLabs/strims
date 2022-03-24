@@ -45,7 +45,7 @@ type control struct {
 	store    *dao.ProfileStore
 	transfer transfer.Control
 
-	events  chan interface{}
+	events  chan any
 	lock    sync.Mutex
 	config  *autoseedv1.Config
 	runners map[uint64]*runner

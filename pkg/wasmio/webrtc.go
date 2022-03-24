@@ -16,8 +16,8 @@ const dataChannelMTU = 64 * 1024
 // NewWebRTCProxy ...
 func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 	p := &WebRTCProxy{
-		answers:        make(chan interface{}, 1),
-		offers:         make(chan interface{}, 1),
+		answers:        make(chan any, 1),
+		offers:         make(chan any, 1),
 		iceCandidates:  make(chan *ICECandidateInit, 32),
 		dataChannelIDs: make(map[string]int),
 		dataChannelChs: make([]chan struct{}, 0),
@@ -40,8 +40,8 @@ func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 type WebRTCProxy struct {
 	proxy             js.Value
 	funcs             Funcs
-	answers           chan interface{}
-	offers            chan interface{}
+	answers           chan any
+	offers            chan any
 	iceCandidates     chan *ICECandidateInit
 	connectionState   string
 	iceGatheringState string
@@ -62,7 +62,7 @@ func (p *WebRTCProxy) CreateAnswer() (*RTCSessionDescription, error) {
 	return selectRTCSessionDescription(p.answers)
 }
 
-func selectRTCSessionDescription(ch chan interface{}) (*RTCSessionDescription, error) {
+func selectRTCSessionDescription(ch chan any) (*RTCSessionDescription, error) {
 	select {
 	case ri := <-ch:
 		switch r := ri.(type) {
@@ -129,7 +129,7 @@ func (p *WebRTCProxy) Close() {
 	p.funcs.Release()
 }
 
-func (p *WebRTCProxy) onICECandidate(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onICECandidate(this js.Value, args []js.Value) any {
 	// log.Println("ice candidate", args[0].String())
 	cs := args[0].String()
 	if cs == "null" {
@@ -146,35 +146,35 @@ func (p *WebRTCProxy) onICECandidate(this js.Value, args []js.Value) interface{}
 	return nil
 }
 
-func (p *WebRTCProxy) onConnectionStateChange(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onConnectionStateChange(this js.Value, args []js.Value) any {
 	// log.Println("connection state", args[0].String())
 	p.connectionState = args[0].String()
 	return nil
 }
 
-func (p *WebRTCProxy) onICEGatheringStateChange(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onICEGatheringStateChange(this js.Value, args []js.Value) any {
 	// log.Println("ice gather state", args[0].String())
 	p.iceGatheringState = args[0].String()
 	return nil
 }
 
-func (p *WebRTCProxy) onSignalingStateChange(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onSignalingStateChange(this js.Value, args []js.Value) any {
 	// log.Println("signaling state", args[0].String())
 	p.signalingState = args[0].String()
 	return nil
 }
 
-func (p *WebRTCProxy) onCreateOffer(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onCreateOffer(this js.Value, args []js.Value) any {
 	sendRTCSessionDescription(p.offers, args)
 	return nil
 }
 
-func (p *WebRTCProxy) onCreateAnswer(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onCreateAnswer(this js.Value, args []js.Value) any {
 	sendRTCSessionDescription(p.answers, args)
 	return nil
 }
 
-func sendRTCSessionDescription(ch chan interface{}, args []js.Value) {
+func sendRTCSessionDescription(ch chan any, args []js.Value) {
 	if err := args[0]; !err.IsUndefined() {
 		ch <- errors.New(err.String())
 		return
@@ -188,7 +188,7 @@ func sendRTCSessionDescription(ch chan interface{}, args []js.Value) {
 	ch <- c
 }
 
-func (p *WebRTCProxy) onDataChannel(this js.Value, args []js.Value) interface{} {
+func (p *WebRTCProxy) onDataChannel(this js.Value, args []js.Value) any {
 	// log.Println("data channel", args[0].Int(), args[1].String())
 	p.dataChannelIDs[args[1].String()] = args[0].Int()
 

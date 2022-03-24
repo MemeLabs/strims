@@ -19,6 +19,12 @@ import {
   IPingRequest,
   PingRequest,
   PingResponse,
+  IModerateListingRequest,
+  ModerateListingRequest,
+  ModerateListingResponse,
+  IModerateUserRequest,
+  ModerateUserRequest,
+  ModerateUserResponse,
   IFrontendOpenRequest,
   FrontendOpenRequest,
   FrontendOpenResponse,
@@ -37,15 +43,12 @@ import {
   IFrontendTestRequest,
   FrontendTestRequest,
   FrontendTestResponse,
-  IFrontendGetListingRecordRequest,
-  FrontendGetListingRecordRequest,
-  FrontendGetListingRecordResponse,
-  IFrontendListListingRecordsRequest,
-  FrontendListListingRecordsRequest,
-  FrontendListListingRecordsResponse,
-  IFrontendUpdateListingRecordRequest,
-  FrontendUpdateListingRecordRequest,
-  FrontendUpdateListingRecordResponse,
+  IFrontendModerateListingRequest,
+  FrontendModerateListingRequest,
+  FrontendModerateListingResponse,
+  IFrontendModerateUserRequest,
+  FrontendModerateUserRequest,
+  FrontendModerateUserResponse,
   ISnippetSubscribeRequest,
   SnippetSubscribeRequest,
   SnippetSubscribeResponse,
@@ -57,6 +60,8 @@ export interface DirectoryService {
   join(req: JoinRequest, call: strims_rpc_Call): Promise<JoinResponse> | JoinResponse;
   part(req: PartRequest, call: strims_rpc_Call): Promise<PartResponse> | PartResponse;
   ping(req: PingRequest, call: strims_rpc_Call): Promise<PingResponse> | PingResponse;
+  moderateListing(req: ModerateListingRequest, call: strims_rpc_Call): Promise<ModerateListingResponse> | ModerateListingResponse;
+  moderateUser(req: ModerateUserRequest, call: strims_rpc_Call): Promise<ModerateUserResponse> | ModerateUserResponse;
 }
 
 export class UnimplementedDirectoryService implements DirectoryService {
@@ -65,6 +70,8 @@ export class UnimplementedDirectoryService implements DirectoryService {
   join(req: JoinRequest, call: strims_rpc_Call): Promise<JoinResponse> | JoinResponse { throw new Error("not implemented"); }
   part(req: PartRequest, call: strims_rpc_Call): Promise<PartResponse> | PartResponse { throw new Error("not implemented"); }
   ping(req: PingRequest, call: strims_rpc_Call): Promise<PingResponse> | PingResponse { throw new Error("not implemented"); }
+  moderateListing(req: ModerateListingRequest, call: strims_rpc_Call): Promise<ModerateListingResponse> | ModerateListingResponse { throw new Error("not implemented"); }
+  moderateUser(req: ModerateUserRequest, call: strims_rpc_Call): Promise<ModerateUserResponse> | ModerateUserResponse { throw new Error("not implemented"); }
 }
 
 export const registerDirectoryService = (host: strims_rpc_Service, service: DirectoryService): void => {
@@ -73,6 +80,8 @@ export const registerDirectoryService = (host: strims_rpc_Service, service: Dire
   host.registerMethod<JoinRequest, JoinResponse>("strims.network.v1.directory.Directory.Join", service.join.bind(service), JoinRequest);
   host.registerMethod<PartRequest, PartResponse>("strims.network.v1.directory.Directory.Part", service.part.bind(service), PartRequest);
   host.registerMethod<PingRequest, PingResponse>("strims.network.v1.directory.Directory.Ping", service.ping.bind(service), PingRequest);
+  host.registerMethod<ModerateListingRequest, ModerateListingResponse>("strims.network.v1.directory.Directory.ModerateListing", service.moderateListing.bind(service), ModerateListingRequest);
+  host.registerMethod<ModerateUserRequest, ModerateUserResponse>("strims.network.v1.directory.Directory.ModerateUser", service.moderateUser.bind(service), ModerateUserRequest);
 }
 
 export class DirectoryClient {
@@ -97,6 +106,14 @@ export class DirectoryClient {
   public ping(req?: IPingRequest, opts?: strims_rpc_UnaryCallOptions): Promise<PingResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.Directory.Ping", new PingRequest(req)), PingResponse, opts);
   }
+
+  public moderateListing(req?: IModerateListingRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ModerateListingResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.Directory.ModerateListing", new ModerateListingRequest(req)), ModerateListingResponse, opts);
+  }
+
+  public moderateUser(req?: IModerateUserRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ModerateUserResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.Directory.ModerateUser", new ModerateUserRequest(req)), ModerateUserResponse, opts);
+  }
 }
 
 export interface DirectoryFrontendService {
@@ -106,9 +123,8 @@ export interface DirectoryFrontendService {
   join(req: FrontendJoinRequest, call: strims_rpc_Call): Promise<FrontendJoinResponse> | FrontendJoinResponse;
   part(req: FrontendPartRequest, call: strims_rpc_Call): Promise<FrontendPartResponse> | FrontendPartResponse;
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse;
-  getListingRecord(req: FrontendGetListingRecordRequest, call: strims_rpc_Call): Promise<FrontendGetListingRecordResponse> | FrontendGetListingRecordResponse;
-  listListingRecords(req: FrontendListListingRecordsRequest, call: strims_rpc_Call): Promise<FrontendListListingRecordsResponse> | FrontendListListingRecordsResponse;
-  updateListingRecord(req: FrontendUpdateListingRecordRequest, call: strims_rpc_Call): Promise<FrontendUpdateListingRecordResponse> | FrontendUpdateListingRecordResponse;
+  moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse;
+  moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse;
 }
 
 export class UnimplementedDirectoryFrontendService implements DirectoryFrontendService {
@@ -118,9 +134,8 @@ export class UnimplementedDirectoryFrontendService implements DirectoryFrontendS
   join(req: FrontendJoinRequest, call: strims_rpc_Call): Promise<FrontendJoinResponse> | FrontendJoinResponse { throw new Error("not implemented"); }
   part(req: FrontendPartRequest, call: strims_rpc_Call): Promise<FrontendPartResponse> | FrontendPartResponse { throw new Error("not implemented"); }
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse { throw new Error("not implemented"); }
-  getListingRecord(req: FrontendGetListingRecordRequest, call: strims_rpc_Call): Promise<FrontendGetListingRecordResponse> | FrontendGetListingRecordResponse { throw new Error("not implemented"); }
-  listListingRecords(req: FrontendListListingRecordsRequest, call: strims_rpc_Call): Promise<FrontendListListingRecordsResponse> | FrontendListListingRecordsResponse { throw new Error("not implemented"); }
-  updateListingRecord(req: FrontendUpdateListingRecordRequest, call: strims_rpc_Call): Promise<FrontendUpdateListingRecordResponse> | FrontendUpdateListingRecordResponse { throw new Error("not implemented"); }
+  moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse { throw new Error("not implemented"); }
+  moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse { throw new Error("not implemented"); }
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
@@ -130,9 +145,8 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<FrontendJoinRequest, FrontendJoinResponse>("strims.network.v1.directory.DirectoryFrontend.Join", service.join.bind(service), FrontendJoinRequest);
   host.registerMethod<FrontendPartRequest, FrontendPartResponse>("strims.network.v1.directory.DirectoryFrontend.Part", service.part.bind(service), FrontendPartRequest);
   host.registerMethod<FrontendTestRequest, FrontendTestResponse>("strims.network.v1.directory.DirectoryFrontend.Test", service.test.bind(service), FrontendTestRequest);
-  host.registerMethod<FrontendGetListingRecordRequest, FrontendGetListingRecordResponse>("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", service.getListingRecord.bind(service), FrontendGetListingRecordRequest);
-  host.registerMethod<FrontendListListingRecordsRequest, FrontendListListingRecordsResponse>("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", service.listListingRecords.bind(service), FrontendListListingRecordsRequest);
-  host.registerMethod<FrontendUpdateListingRecordRequest, FrontendUpdateListingRecordResponse>("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", service.updateListingRecord.bind(service), FrontendUpdateListingRecordRequest);
+  host.registerMethod<FrontendModerateListingRequest, FrontendModerateListingResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.moderateListing.bind(service), FrontendModerateListingRequest);
+  host.registerMethod<FrontendModerateUserRequest, FrontendModerateUserResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.moderateUser.bind(service), FrontendModerateUserRequest);
 }
 
 export class DirectoryFrontendClient {
@@ -162,16 +176,12 @@ export class DirectoryFrontendClient {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.Test", new FrontendTestRequest(req)), FrontendTestResponse, opts);
   }
 
-  public getListingRecord(req?: IFrontendGetListingRecordRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendGetListingRecordResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetListingRecord", new FrontendGetListingRecordRequest(req)), FrontendGetListingRecordResponse, opts);
+  public moderateListing(req?: IFrontendModerateListingRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendModerateListingResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.ModerateListing", new FrontendModerateListingRequest(req)), FrontendModerateListingResponse, opts);
   }
 
-  public listListingRecords(req?: IFrontendListListingRecordsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendListListingRecordsResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.ListListingRecords", new FrontendListListingRecordsRequest(req)), FrontendListListingRecordsResponse, opts);
-  }
-
-  public updateListingRecord(req?: IFrontendUpdateListingRecordRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendUpdateListingRecordResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.UpdateListingRecord", new FrontendUpdateListingRecordRequest(req)), FrontendUpdateListingRecordResponse, opts);
+  public moderateUser(req?: IFrontendModerateUserRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendModerateUserResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.ModerateUser", new FrontendModerateUserRequest(req)), FrontendModerateUserResponse, opts);
   }
 }
 

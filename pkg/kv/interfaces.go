@@ -41,7 +41,7 @@ type RWStore interface {
 type Tx interface {
 	Store
 	Get(key string, m proto.Message) error
-	ScanPrefix(prefix string, messages interface{}) error
+	ScanPrefix(prefix string, messages any) error
 }
 
 // RWTx ...
@@ -50,5 +50,5 @@ type RWTx interface {
 	Delete(key string) error
 	Get(key string, m proto.Message) error
 	Put(key string, m proto.Message) error
-	ScanPrefix(prefix string, messages interface{}) error
+	ScanPrefix(prefix string, messages any) error
 }

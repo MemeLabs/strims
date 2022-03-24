@@ -42,7 +42,7 @@ func runGC() {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 
-	gobridge.RegisterCallback("init", func(this js.Value, args []js.Value) (interface{}, error) {
+	gobridge.RegisterCallback("init", func(this js.Value, args []js.Value) (any, error) {
 		service := args[0].String()
 		bridge := args[1]
 

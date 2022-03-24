@@ -16,8 +16,8 @@ const (
 	bridgeJavaScriptName = "__gobridge__"
 )
 
-func registrationWrapper(fn func(this js.Value, args []js.Value) (interface{}, error)) func(this js.Value, args []js.Value) interface{} {
-	return func(this js.Value, args []js.Value) interface{} {
+func registrationWrapper(fn func(this js.Value, args []js.Value) (any, error)) func(this js.Value, args []js.Value) any {
+	return func(this js.Value, args []js.Value) any {
 		cb := args[len(args)-1]
 
 		ret, err := fn(this, args[:len(args)-1])
@@ -33,7 +33,7 @@ func registrationWrapper(fn func(this js.Value, args []js.Value) (interface{}, e
 }
 
 // RegisterCallback registers a Go function to be a callback used in JavaScript
-func RegisterCallback(name string, callback func(this js.Value, args []js.Value) (interface{}, error)) {
+func RegisterCallback(name string, callback func(this js.Value, args []js.Value) (any, error)) {
 	bridgeRoot.Set(name, js.FuncOf(registrationWrapper(callback)))
 }
 

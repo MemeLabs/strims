@@ -246,7 +246,7 @@ func (s *Filter) Free() {
 }
 
 var filterSlicePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &filterSlice{}
 	},
 }

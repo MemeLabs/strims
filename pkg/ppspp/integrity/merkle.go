@@ -170,7 +170,7 @@ func (v *MerkleSwarmVerifier) ChannelVerifier() ChannelVerifier {
 }
 
 var segmentPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &merkleTreeSegment{}
 	},
 }

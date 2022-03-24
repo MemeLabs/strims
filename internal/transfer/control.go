@@ -76,7 +76,7 @@ type control struct {
 	qosc   *qos.Class
 
 	lock      sync.Mutex
-	events    chan interface{}
+	events    chan any
 	transfers map[ID]*transfer
 	peers     map[uint64]*peer
 	// candidates  *candidatePool
@@ -437,7 +437,7 @@ type network struct {
 }
 
 var idHashPool = &sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return sha256.New()
 	},
 }

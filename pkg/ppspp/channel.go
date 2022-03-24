@@ -60,33 +60,9 @@ func newHandshake(swarm *Swarm) *codec.Handshake {
 	}
 }
 
-type channelBufferedWriter struct {
-	ioutil.BufferedWriteFlusher
-	overhead int
-	buf      []byte
-}
-
-func (b *channelBufferedWriter) Available() int {
-	return b.BufferedWriteFlusher.Available() - b.overhead
-}
-
-func (b *channelBufferedWriter) AvailableBuffer() []byte {
-	buf := b.BufferedWriteFlusher.AvailableBuffer()
-	if cap(buf) < b.overhead {
-		b.buf = nil
-		return nil
-	}
-
-	b.buf = buf[:b.overhead]
-	return b.buf[b.overhead:][:0]
-}
-
 func newChannelWriter(metrics channelWriterMetrics, w ioutil.BufferedWriteFlusher, channel codec.Channel) *channelWriter {
 	head := codec.ChannelHeader{Channel: channel}
-	bw := &channelBufferedWriter{
-		BufferedWriteFlusher: w,
-		overhead:             head.ByteLen(),
-	}
+	bw := ioutil.NewPrefixBufferWriter(w, head.ByteLen())
 	return &channelWriter{
 		head:    head,
 		bw:      bw,
@@ -97,7 +73,7 @@ func newChannelWriter(metrics channelWriterMetrics, w ioutil.BufferedWriteFlushe
 
 type channelWriter struct {
 	head    codec.ChannelHeader
-	bw      *channelBufferedWriter
+	bw      *ioutil.PrefixBufferWriter
 	cw      codec.Writer
 	metrics channelWriterMetrics
 }
@@ -106,7 +82,7 @@ func (c *channelWriter) Len() int {
 	if !c.cw.Dirty() {
 		return 0
 	}
-	return c.bw.overhead + c.cw.Len()
+	return c.bw.Size() + c.cw.Len()
 }
 
 func (c *channelWriter) Available() int {
@@ -126,8 +102,8 @@ func (c *channelWriter) Flush() error {
 	}
 
 	c.head.Length = uint16(c.cw.Len())
-	c.head.Marshal(c.bw.buf)
-	if _, err := c.bw.Write(c.bw.buf); err != nil {
+	c.head.Marshal(c.bw.PrefixBuffer())
+	if _, err := c.bw.Write(c.bw.PrefixBuffer()); err != nil {
 		return err
 	}
 

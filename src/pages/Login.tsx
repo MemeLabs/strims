@@ -51,10 +51,10 @@ const LoginPage: React.FC = () => {
     const { credentials } = selectedProfile;
     switch (credentials.case) {
       case LinkedProfile.CredentialsCase.UNENCRYPTED:
-        console.log(">>> UNENCRYPTED");
+        // TODO
         break;
       case LinkedProfile.CredentialsCase.PASSWORD:
-        console.log(">>> PASSWORD");
+        // TODO
         break;
       case LinkedProfile.CredentialsCase.TOKEN:
         void sessionOps.signIn(selectedProfile.serverAddress, {
@@ -66,8 +66,6 @@ const LoginPage: React.FC = () => {
           credentials: { key: credentials.key },
         });
         break;
-      default:
-        console.log(">>> wat case?", credentials.case);
     }
   }, [selectedProfile]);
 
@@ -86,8 +84,15 @@ const LoginPage: React.FC = () => {
               onClick={setSelectedProfile}
             />
           ))}
-          <Link to="/signup">Create Profile</Link>
-          <button onClick={() => setSelectedProfile(new LinkedProfile())}>New Login</button>
+          <Link className="input input_button" to="/signup">
+            Create Profile
+          </Link>
+          <button
+            className="input input_button"
+            onClick={() => setSelectedProfile(new LinkedProfile())}
+          >
+            New Login
+          </button>
         </div>
       </LandingPageLayout>
     );

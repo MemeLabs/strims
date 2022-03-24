@@ -22,11 +22,11 @@ const LandingPageLayout: React.FC<LandingPageLayoutProps> = ({ className, childr
         </div>
         <div className="landing_page__form_container">
           {children}
-          <button
+          {/* <button
             onClick={() => theme.setColorScheme(theme.colorScheme === "dark" ? "light" : "dark")}
           >
             theme
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

@@ -205,7 +205,7 @@ func (s *stream) addSub(close <-chan bool, w av.PacketWriter) {
 }
 
 func (s *stream) notifySub() {
-	s.sub.Range(func(key, value interface{}) bool {
+	s.sub.Range(func(key, value any) bool {
 		ss := key.(*streamSub)
 		select {
 		case ss.notify <- struct{}{}:

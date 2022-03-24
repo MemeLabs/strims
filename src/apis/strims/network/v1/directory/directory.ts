@@ -1674,17 +1674,20 @@ export namespace Event {
   }
 
   export type IViewerStateChange = {
+    id?: bigint;
     subject?: string;
     online?: boolean;
     viewingIds?: bigint[];
   }
 
   export class ViewerStateChange {
+    id: bigint;
     subject: string;
     online: boolean;
     viewingIds: bigint[];
 
     constructor(v?: IViewerStateChange) {
+      this.id = v?.id || BigInt(0);
       this.subject = v?.subject || "";
       this.online = v?.online || false;
       this.viewingIds = v?.viewingIds ? v.viewingIds : [];
@@ -1692,9 +1695,10 @@ export namespace Event {
 
     static encode(m: ViewerStateChange, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.subject.length) w.uint32(10).string(m.subject);
-      if (m.online) w.uint32(16).bool(m.online);
-      m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(26).fork()).ldelim();
+      if (m.id) w.uint32(8).uint64(m.id);
+      if (m.subject.length) w.uint32(18).string(m.subject);
+      if (m.online) w.uint32(24).bool(m.online);
+      m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
       return w;
     }
 
@@ -1706,12 +1710,15 @@ export namespace Event {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.subject = r.string();
+          m.id = r.uint64();
           break;
           case 2:
-          m.online = r.bool();
+          m.subject = r.string();
           break;
           case 3:
+          m.online = r.bool();
+          break;
+          case 4:
           for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.viewingIds.push(r.uint64());
           break;
           default:
@@ -1762,23 +1769,27 @@ export namespace Event {
 }
 
 export type IListingModeration = {
-  isMature?: boolean;
-  isBanned?: boolean;
+  isMature?: google_protobuf_IBoolValue;
+  isBanned?: google_protobuf_IBoolValue;
+  category?: google_protobuf_IStringValue;
 }
 
 export class ListingModeration {
-  isMature: boolean;
-  isBanned: boolean;
+  isMature: google_protobuf_BoolValue | undefined;
+  isBanned: google_protobuf_BoolValue | undefined;
+  category: google_protobuf_StringValue | undefined;
 
   constructor(v?: IListingModeration) {
-    this.isMature = v?.isMature || false;
-    this.isBanned = v?.isBanned || false;
+    this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
+    this.isBanned = v?.isBanned && new google_protobuf_BoolValue(v.isBanned);
+    this.category = v?.category && new google_protobuf_StringValue(v.category);
   }
 
   static encode(m: ListingModeration, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.isMature) w.uint32(32).bool(m.isMature);
-    if (m.isBanned) w.uint32(40).bool(m.isBanned);
+    if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(18).fork()).ldelim();
+    if (m.isBanned) google_protobuf_BoolValue.encode(m.isBanned, w.uint32(26).fork()).ldelim();
+    if (m.category) google_protobuf_StringValue.encode(m.category, w.uint32(34).fork()).ldelim();
     return w;
   }
 
@@ -1789,11 +1800,14 @@ export class ListingModeration {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 4:
-        m.isMature = r.bool();
+        case 2:
+        m.isMature = google_protobuf_BoolValue.decode(r, r.uint32());
         break;
-        case 5:
-        m.isBanned = r.bool();
+        case 3:
+        m.isBanned = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 4:
+        m.category = google_protobuf_StringValue.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1858,6 +1872,120 @@ export class ListingRecord {
         break;
         case 5:
         m.notes = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUserModeration = {
+  disableJoin?: google_protobuf_IBoolValue;
+  disablePublish?: google_protobuf_IBoolValue;
+  isModerator?: google_protobuf_IBoolValue;
+  isAdmin?: google_protobuf_IBoolValue;
+}
+
+export class UserModeration {
+  disableJoin: google_protobuf_BoolValue | undefined;
+  disablePublish: google_protobuf_BoolValue | undefined;
+  isModerator: google_protobuf_BoolValue | undefined;
+  isAdmin: google_protobuf_BoolValue | undefined;
+
+  constructor(v?: IUserModeration) {
+    this.disableJoin = v?.disableJoin && new google_protobuf_BoolValue(v.disableJoin);
+    this.disablePublish = v?.disablePublish && new google_protobuf_BoolValue(v.disablePublish);
+    this.isModerator = v?.isModerator && new google_protobuf_BoolValue(v.isModerator);
+    this.isAdmin = v?.isAdmin && new google_protobuf_BoolValue(v.isAdmin);
+  }
+
+  static encode(m: UserModeration, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.disableJoin) google_protobuf_BoolValue.encode(m.disableJoin, w.uint32(10).fork()).ldelim();
+    if (m.disablePublish) google_protobuf_BoolValue.encode(m.disablePublish, w.uint32(18).fork()).ldelim();
+    if (m.isModerator) google_protobuf_BoolValue.encode(m.isModerator, w.uint32(26).fork()).ldelim();
+    if (m.isAdmin) google_protobuf_BoolValue.encode(m.isAdmin, w.uint32(34).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UserModeration {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UserModeration();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.disableJoin = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 2:
+        m.disablePublish = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 3:
+        m.isModerator = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 4:
+        m.isAdmin = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUserRecord = {
+  id?: bigint;
+  networkId?: bigint;
+  peerKey?: Uint8Array;
+  moderation?: IUserModeration;
+}
+
+export class UserRecord {
+  id: bigint;
+  networkId: bigint;
+  peerKey: Uint8Array;
+  moderation: UserModeration | undefined;
+
+  constructor(v?: IUserRecord) {
+    this.id = v?.id || BigInt(0);
+    this.networkId = v?.networkId || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.moderation = v?.moderation && new UserModeration(v.moderation);
+  }
+
+  static encode(m: UserRecord, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    if (m.moderation) UserModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UserRecord {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UserRecord();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.networkId = r.uint64();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        case 4:
+        m.moderation = UserModeration.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2181,6 +2309,132 @@ export class PingResponse {
   static decode(r: Reader | Uint8Array, length?: number): PingResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new PingResponse();
+  }
+}
+
+export type IModerateListingRequest = {
+  id?: bigint;
+  moderation?: IListingModeration;
+}
+
+export class ModerateListingRequest {
+  id: bigint;
+  moderation: ListingModeration | undefined;
+
+  constructor(v?: IModerateListingRequest) {
+    this.id = v?.id || BigInt(0);
+    this.moderation = v?.moderation && new ListingModeration(v.moderation);
+  }
+
+  static encode(m: ModerateListingRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ModerateListingRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ModerateListingRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.moderation = ListingModeration.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IModerateListingResponse = {
+}
+
+export class ModerateListingResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IModerateListingResponse) {
+  }
+
+  static encode(m: ModerateListingResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ModerateListingResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ModerateListingResponse();
+  }
+}
+
+export type IModerateUserRequest = {
+  id?: bigint;
+  moderation?: IUserModeration;
+}
+
+export class ModerateUserRequest {
+  id: bigint;
+  moderation: UserModeration | undefined;
+
+  constructor(v?: IModerateUserRequest) {
+    this.id = v?.id || BigInt(0);
+    this.moderation = v?.moderation && new UserModeration(v.moderation);
+  }
+
+  static encode(m: ModerateUserRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.moderation) UserModeration.encode(m.moderation, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ModerateUserRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ModerateUserRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.moderation = UserModeration.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IModerateUserResponse = {
+}
+
+export class ModerateUserResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IModerateUserResponse) {
+  }
+
+  static encode(m: ModerateUserResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ModerateUserResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ModerateUserResponse();
   }
 }
 
@@ -2671,173 +2925,45 @@ export class FrontendTestResponse {
   }
 }
 
-export type IFrontendGetListingRecordRequest = {
+export type IFrontendModerateListingRequest = {
+  networkKey?: Uint8Array;
   id?: bigint;
-}
-
-export class FrontendGetListingRecordRequest {
-  id: bigint;
-
-  constructor(v?: IFrontendGetListingRecordRequest) {
-    this.id = v?.id || BigInt(0);
-  }
-
-  static encode(m: FrontendGetListingRecordRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingRecordRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendGetListingRecordRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.id = r.uint64();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IFrontendGetListingRecordResponse = {
-  record?: IListingRecord;
-}
-
-export class FrontendGetListingRecordResponse {
-  record: ListingRecord | undefined;
-
-  constructor(v?: IFrontendGetListingRecordResponse) {
-    this.record = v?.record && new ListingRecord(v.record);
-  }
-
-  static encode(m: FrontendGetListingRecordResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.record) ListingRecord.encode(m.record, w.uint32(10).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingRecordResponse {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendGetListingRecordResponse();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.record = ListingRecord.decode(r, r.uint32());
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IFrontendListListingRecordsRequest = {
-}
-
-export class FrontendListListingRecordsRequest {
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IFrontendListListingRecordsRequest) {
-  }
-
-  static encode(m: FrontendListListingRecordsRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): FrontendListListingRecordsRequest {
-    if (r instanceof Reader && length) r.skip(length);
-    return new FrontendListListingRecordsRequest();
-  }
-}
-
-export type IFrontendListListingRecordsResponse = {
-  records?: IListingRecord[];
-}
-
-export class FrontendListListingRecordsResponse {
-  records: ListingRecord[];
-
-  constructor(v?: IFrontendListListingRecordsResponse) {
-    this.records = v?.records ? v.records.map(v => new ListingRecord(v)) : [];
-  }
-
-  static encode(m: FrontendListListingRecordsResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    for (const v of m.records) ListingRecord.encode(v, w.uint32(10).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): FrontendListListingRecordsResponse {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendListListingRecordsResponse();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.records.push(ListingRecord.decode(r, r.uint32()));
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IFrontendUpdateListingRecordRequest = {
-  id?: bigint;
-  notes?: string;
   moderation?: IListingModeration;
 }
 
-export class FrontendUpdateListingRecordRequest {
+export class FrontendModerateListingRequest {
+  networkKey: Uint8Array;
   id: bigint;
-  notes: string;
   moderation: ListingModeration | undefined;
 
-  constructor(v?: IFrontendUpdateListingRecordRequest) {
+  constructor(v?: IFrontendModerateListingRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
     this.id = v?.id || BigInt(0);
-    this.notes = v?.notes || "";
     this.moderation = v?.moderation && new ListingModeration(v.moderation);
   }
 
-  static encode(m: FrontendUpdateListingRecordRequest, w?: Writer): Writer {
+  static encode(m: FrontendModerateListingRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
-    if (m.notes.length) w.uint32(26).string(m.notes);
-    if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(26).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): FrontendUpdateListingRecordRequest {
+  static decode(r: Reader | Uint8Array, length?: number): FrontendModerateListingRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendUpdateListingRecordRequest();
+    const m = new FrontendModerateListingRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
         m.id = r.uint64();
         break;
         case 3:
-        m.notes = r.string();
-        break;
-        case 4:
         m.moderation = ListingModeration.decode(r, r.uint32());
         break;
         default:
@@ -2849,32 +2975,66 @@ export class FrontendUpdateListingRecordRequest {
   }
 }
 
-export type IFrontendUpdateListingRecordResponse = {
-  record?: IListingRecord;
+export type IFrontendModerateListingResponse = {
 }
 
-export class FrontendUpdateListingRecordResponse {
-  record: ListingRecord | undefined;
+export class FrontendModerateListingResponse {
 
-  constructor(v?: IFrontendUpdateListingRecordResponse) {
-    this.record = v?.record && new ListingRecord(v.record);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendModerateListingResponse) {
   }
 
-  static encode(m: FrontendUpdateListingRecordResponse, w?: Writer): Writer {
+  static encode(m: FrontendModerateListingResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.record) ListingRecord.encode(m.record, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): FrontendUpdateListingRecordResponse {
+  static decode(r: Reader | Uint8Array, length?: number): FrontendModerateListingResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendModerateListingResponse();
+  }
+}
+
+export type IFrontendModerateUserRequest = {
+  networkKey?: Uint8Array;
+  id?: bigint;
+  moderation?: IUserModeration;
+}
+
+export class FrontendModerateUserRequest {
+  networkKey: Uint8Array;
+  id: bigint;
+  moderation: UserModeration | undefined;
+
+  constructor(v?: IFrontendModerateUserRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.id = v?.id || BigInt(0);
+    this.moderation = v?.moderation && new UserModeration(v.moderation);
+  }
+
+  static encode(m: FrontendModerateUserRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.moderation) UserModeration.encode(m.moderation, w.uint32(26).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendModerateUserRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendUpdateListingRecordResponse();
+    const m = new FrontendModerateUserRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.record = ListingRecord.decode(r, r.uint32());
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        case 3:
+        m.moderation = UserModeration.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2882,6 +3042,26 @@ export class FrontendUpdateListingRecordResponse {
       }
     }
     return m;
+  }
+}
+
+export type IFrontendModerateUserResponse = {
+}
+
+export class FrontendModerateUserResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendModerateUserResponse) {
+  }
+
+  static encode(m: FrontendModerateUserResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendModerateUserResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendModerateUserResponse();
   }
 }
 

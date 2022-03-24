@@ -17,7 +17,7 @@ type Salter interface {
 	Salt() []byte
 }
 
-func hashSecondaryIndexKey(key []byte, s interface{}) string {
+func hashSecondaryIndexKey(key []byte, s any) string {
 	var salt []byte
 	if s, ok := s.(Salter); ok {
 		salt = s.Salt()

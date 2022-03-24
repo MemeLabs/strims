@@ -51,7 +51,7 @@ type control struct {
 	vpn    *vpn.Host
 	store  *dao.ProfileStore
 
-	events            chan interface{}
+	events            chan any
 	lock              sync.Mutex
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time

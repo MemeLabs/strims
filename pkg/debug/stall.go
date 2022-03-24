@@ -6,17 +6,17 @@ import (
 )
 
 // Print print message to log if stalled
-func Print(v ...interface{}) func() {
+func Print(v ...any) func() {
 	return func() { log.Println(v...) }
 }
 
 // Printf print formatted message to log if stalled
-func Printf(format string, v ...interface{}) func() {
+func Printf(format string, v ...any) func() {
 	return func() { log.Printf(format, v...) }
 }
 
 // Panic print message and panic if stalled
-func Panic(v ...interface{}) func() {
+func Panic(v ...any) func() {
 	return func() { log.Panicln(v...) }
 }
 

@@ -10,7 +10,7 @@ import (
 
 var busBuffers = busBufferPool{
 	sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			b := make([]byte, 1024)
 			return &b
 		},

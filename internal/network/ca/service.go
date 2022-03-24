@@ -70,7 +70,7 @@ type service struct {
 func (s *service) Run(ctx context.Context) error {
 	defer s.Close()
 
-	events := make(chan interface{}, 8)
+	events := make(chan any, 8)
 	s.observers.Notify(events)
 	defer s.observers.StopNotifying(events)
 

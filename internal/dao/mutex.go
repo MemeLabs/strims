@@ -25,7 +25,7 @@ const mutexRecheckMinInterval = 5 * time.Second
 const mutexRecheckMaxInterval = 15 * time.Second
 
 // NewMutex ...
-func NewMutex(logger *zap.Logger, store kv.RWStore, keys ...interface{}) *Mutex {
+func NewMutex(logger *zap.Logger, store kv.RWStore, keys ...any) *Mutex {
 	token := make([]byte, 16)
 	binary.BigEndian.PutUint64(token[:8], rand.Uint64())
 	binary.BigEndian.PutUint64(token[8:], rand.Uint64())

@@ -89,6 +89,7 @@ export const Provider: React.FC = ({ children }) => {
             break;
           }
           case Event.BodyCase.VIEWER_STATE_CHANGE:
+            console.log({ viewerStateChange: event.viewerStateChange });
             // TODO
             break;
           default:

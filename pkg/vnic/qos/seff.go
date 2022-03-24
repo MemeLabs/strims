@@ -13,7 +13,7 @@ import (
 //  http://www.cs.berkeley.edu/~istoica/papers/eevdf-tr-95.pdf
 
 var seffSessionPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &seffSession{}
 	},
 }

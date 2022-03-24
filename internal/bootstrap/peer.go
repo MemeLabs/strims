@@ -6,7 +6,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
 
-type Peer interface{}
+type Peer any
 
 var _ Peer = (*peer)(nil)
 

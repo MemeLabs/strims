@@ -222,7 +222,7 @@ func (s *chatServer) Reader(ctx context.Context) (readers, error) {
 }
 
 func (s *chatServer) watchAssets(ctx context.Context) {
-	events := make(chan interface{}, 8)
+	events := make(chan any, 8)
 	s.observers.Notify(events)
 	defer s.observers.StopNotifying(events)
 

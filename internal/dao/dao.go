@@ -80,7 +80,7 @@ func (n namespace) String() string {
 	return strconv.FormatInt(int64(n), 36)
 }
 
-func (n namespace) Format(ks ...interface{}) string {
+func (n namespace) Format(ks ...any) string {
 	var b strings.Builder
 	b.WriteString(n.String())
 	for _, k := range ks {
@@ -101,8 +101,8 @@ func (n namespace) Format(ks ...interface{}) string {
 	return b.String()
 }
 
-func (n namespace) FormatPrefix(ks ...interface{}) string {
-	ksc := make([]interface{}, len(ks)+1)
+func (n namespace) FormatPrefix(ks ...any) string {
+	ksc := make([]any, len(ks)+1)
 	copy(ksc, ks)
 	ksc[len(ks)] = ""
 	return n.Format(ksc...)

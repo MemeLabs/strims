@@ -387,7 +387,7 @@ type mtuConn interface {
 	MTU() int
 }
 
-func connMTU(ci interface{}) int {
+func connMTU(ci any) int {
 	if c, ok := ci.(mtuConn); ok {
 		return c.MTU()
 	}

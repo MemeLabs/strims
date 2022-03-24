@@ -45,7 +45,7 @@ func (t *binQueueIterator) Value() binmap.Bin {
 }
 
 var binQueueHeapItemPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &binQueueHeapItem{}
 	},
 }
@@ -67,12 +67,12 @@ func (h binQueueHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *binQueueHeap) Push(x interface{}) {
+func (h *binQueueHeap) Push(x any) {
 	item := x.(*binQueueHeapItem)
 	*h = append(*h, item)
 }
 
-func (h *binQueueHeap) Pop() interface{} {
+func (h *binQueueHeap) Pop() any {
 	old := *h
 	n := len(old)
 	item := old[n-1]

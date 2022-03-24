@@ -21,7 +21,7 @@ type youTubeEmbedLoader struct {
 	PublicAPIKey string
 }
 
-func (t *youTubeEmbedLoader) getAPIData(path string, data interface{}) error {
+func (t *youTubeEmbedLoader) getAPIData(path string, data any) error {
 	res, err := http.Get(fmt.Sprintf("https://www.googleapis.com/%s&key=%s&maxResults=%d", path, t.PublicAPIKey, youTubeAPIMaxResults))
 	if err != nil {
 		return err

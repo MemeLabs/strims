@@ -319,7 +319,7 @@ func (c *CacheAccessor[K, V, T]) GetOrInsert(k K, ctor func() (T, error)) (v T, 
 		e, found, err := c.get(k)
 		if err == nil {
 			return e.load(), found, nil
-		} else if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+		} else if !errors.Is(err, kv.ErrRecordNotFound) {
 			return nil, false, err
 		}
 
@@ -332,7 +332,7 @@ func (c *CacheAccessor[K, V, T]) GetOrInsert(k K, ctor func() (T, error)) (v T, 
 		if err == nil {
 			c.store.newCount.Inc()
 			return c.store.set(v).load(), false, nil
-		} else if err != nil && !errors.Is(err, ErrUniqueConstraintViolated) {
+		} else if !errors.Is(err, ErrUniqueConstraintViolated) {
 			c.store.errCount.Inc()
 			return nil, false, err
 		}

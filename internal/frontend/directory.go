@@ -32,7 +32,7 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 	ch := make(chan *networkv1directory.FrontendOpenResponse)
 
 	go func() {
-		raw := make(chan interface{})
+		raw := make(chan any)
 		s.app.Events().Notify(raw)
 		go s.app.Directory().ReadCachedEvents(ctx, raw)
 
@@ -244,31 +244,36 @@ func (s *directoryService) Test(ctx context.Context, r *networkv1directory.Front
 	return &networkv1directory.FrontendTestResponse{}, nil
 }
 
-func (s *directoryService) GetListingRecord(ctx context.Context, req *networkv1directory.FrontendGetListingRecordRequest) (*networkv1directory.FrontendGetListingRecordResponse, error) {
-	r, err := dao.DirectoryListingRecords.Get(s.store, req.Id)
+func (s *directoryService) ModerateListing(ctx context.Context, r *networkv1directory.FrontendModerateListingRequest) (*networkv1directory.FrontendModerateListingResponse, error) {
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
-	return &networkv1directory.FrontendGetListingRecordResponse{Record: r}, nil
+
+	req := &networkv1directory.ModerateListingRequest{
+		Id:         r.Id,
+		Moderation: r.Moderation,
+	}
+	err = client.ModerateListing(ctx, req, &networkv1directory.ModerateListingResponse{})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1directory.FrontendModerateListingResponse{}, nil
 }
 
-func (s *directoryService) ListListingRecords(ctx context.Context, req *networkv1directory.FrontendListListingRecordsRequest) (*networkv1directory.FrontendListListingRecordsResponse, error) {
-	// TODO: pagination...
-	rs, err := dao.DirectoryListingRecords.GetAll(s.store)
+func (s *directoryService) ModerateUser(ctx context.Context, r *networkv1directory.FrontendModerateUserRequest) (*networkv1directory.FrontendModerateUserResponse, error) {
+	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
-	return &networkv1directory.FrontendListListingRecordsResponse{Records: rs}, nil
-}
 
-func (s *directoryService) UpdateListingRecord(ctx context.Context, req *networkv1directory.FrontendUpdateListingRecordRequest) (*networkv1directory.FrontendUpdateListingRecordResponse, error) {
-	r, err := dao.DirectoryListingRecords.Transform(s.store, req.Id, func(m *networkv1directory.ListingRecord) error {
-		m.Notes = req.Notes
-		m.Moderation = req.Moderation
-		return nil
-	})
+	req := &networkv1directory.ModerateUserRequest{
+		Id:         r.Id,
+		Moderation: r.Moderation,
+	}
+	err = client.ModerateUser(ctx, req, &networkv1directory.ModerateUserResponse{})
 	if err != nil {
 		return nil, err
 	}
-	return &networkv1directory.FrontendUpdateListingRecordResponse{Record: r}, nil
+	return &networkv1directory.FrontendModerateUserResponse{}, nil
 }

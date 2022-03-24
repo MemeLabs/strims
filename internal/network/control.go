@@ -134,7 +134,7 @@ type control struct {
 	profile      *profilev1.Profile
 	notification notification.Control
 
-	events            chan interface{}
+	events            chan any
 	qosc              *qos.Class
 	lock              sync.Mutex
 	ca                *ca.CA
@@ -624,7 +624,7 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 		}
 		t.lock.Unlock()
 
-		events := make(chan interface{}, 8)
+		events := make(chan any, 8)
 		t.observers.Notify(events)
 		defer t.observers.StopNotifying(events)
 

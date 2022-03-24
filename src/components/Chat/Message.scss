@@ -121,10 +121,10 @@
       font-style: normal;
       display: inline-block;
       vertical-align: middle;
-      text-shadow: -1px -1px 0 var(--color-chat-combo-text-shadow),
-        1px -1px 0 var(--color-chat-combo-text-shadow),
-        -1px 1px 0 var(--color-chat-combo-text-shadow),
-        1px 1px 0 var(--color-chat-combo-text-shadow);
+      text-shadow: -1px -1px 0 var(--color-text-shadow-chat-combo),
+        1px -1px 0 var(--color-text-shadow-chat-combo),
+        -1px 1px 0 var(--color-text-shadow-chat-combo),
+        1px 1px 0 var(--color-text-shadow-chat-combo);
     }
 
     &__combo {

@@ -1,14 +1,6 @@
 @use "sass:math";
 @import "../../styles/main.scss";
 
-html,
-body {
-  text-size-adjust: 100%;
-  touch-action: none;
-  overscroll-behavior-x: contain;
-  background: black;
-}
-
 $chat-width-lg: 420px;
 $chat-width-sm: 260px;
 
@@ -40,10 +32,6 @@ $chat-width-sm: 260px;
 
 .scroll_content_test {
   width: 100%;
-}
-
-.test_active_link {
-  color: red;
 }
 
 .layout__header {

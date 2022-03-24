@@ -64,7 +64,7 @@ type control struct {
 	transfer transfer.Control
 	profile  *profilev1.Profile
 
-	events      chan interface{}
+	events      chan any
 	routePrefix string
 	mu          sync.Mutex
 	config      *videov1.HLSEgressConfig

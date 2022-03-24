@@ -26,8 +26,8 @@ func channelWrite(cid int, src []byte) (int, bool)
 func channelRead(cid int, dst []byte) (int, bool)
 func channelClose(cid int) bool
 
-func interfacesFromStrings(ss []string) []interface{} {
-	ifs := make([]interface{}, len(ss))
+func interfacesFromStrings(ss []string) []any {
+	ifs := make([]any, len(ss))
 	for i, s := range ss {
 		ifs[i] = s
 	}

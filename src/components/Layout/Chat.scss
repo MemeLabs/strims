@@ -13,13 +13,23 @@
 
   &__toggle_on,
   &__toggle_off {
-    margin: 14px 10px;
+    margin: 7px;
     display: block;
     cursor: pointer;
+
+    svg {
+      border-radius: 3px;
+      display: block;
+      padding: 10px;
+    }
   }
 
   &__toggle_on {
     display: none;
+  }
+
+  &__toggle_off:hover svg {
+    background: var(--color-background-chat-toggle-hover);
   }
 
   &__header {
@@ -75,6 +85,7 @@
 
   .layout_chat__header {
     border-bottom: 1px solid var(--color-opac-w-2);
+    padding-right: 10px;
   }
 }
 

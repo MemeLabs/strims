@@ -13,12 +13,11 @@ const SignUpPage: React.FC = () => {
   }
 
   const handleSubmit = (values: ProfileFormValues) => {
-    void sessionOps.createProfile(
-      values.serverAddress,
-      values.name,
-      values.password,
-      values.persistLogin
-    );
+    void sessionOps.createProfile(values.serverAddress, {
+      name: values.name,
+      password: values.password,
+      persistLogin: values.persistLogin,
+    });
   };
 
   return (
@@ -29,6 +28,9 @@ const SignUpPage: React.FC = () => {
         secondaryUri="/login"
         secondaryLabel="Log in"
         submitLabel="Create Profile"
+        defaultValues={{
+          persistLogin: true,
+        }}
       />
     </LandingPageLayout>
   );

@@ -16,7 +16,7 @@ func New(n int) *Pool {
 	for i := 0; i < n; i++ {
 		size := 1 << (16 - i)
 		p.zones[i] = &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				b := make([]byte, size)
 				return &b
 			},

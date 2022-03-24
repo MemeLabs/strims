@@ -6,10 +6,14 @@
       margin-top: 10px;
 
       legend {
-        color: var(--color-chat-settings-legend);
+        color: var(--color-text-chat-settings-legend);
         text-transform: uppercase;
         font-size: 1.1rem;
       }
+    }
+
+    .input_label {
+      font-size: 0.8rem;
     }
 
     .input_label--toggle {

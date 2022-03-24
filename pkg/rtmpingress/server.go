@@ -90,7 +90,7 @@ func (s *Server) Close() error {
 		errs = append(errs, err)
 	}
 
-	s.conns.Range(func(key, _ interface{}) bool {
+	s.conns.Range(func(key, _ any) bool {
 		if err := key.(net.Conn).Close(); err != nil {
 			errs = append(errs, err)
 		}

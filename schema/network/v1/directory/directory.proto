@@ -184,9 +184,10 @@ message Event {
   }
 
   message ViewerStateChange {
-    string subject = 1;
-    bool online = 2;
-    repeated uint64 viewing_ids = 3;
+    uint64 id = 1;
+    string subject = 2;
+    bool online = 3;
+    repeated uint64 viewing_ids = 4;
   }
 
   message Ping {
@@ -203,8 +204,9 @@ message Event {
 }
 
 message ListingModeration {
-  bool is_mature = 4;
-  bool is_banned = 5;
+  google.protobuf.BoolValue is_mature = 2;
+  google.protobuf.BoolValue is_banned = 3;
+  google.protobuf.StringValue category = 4;
 }
 
 message ListingRecord {
@@ -213,6 +215,20 @@ message ListingRecord {
   Listing listing = 3;
   ListingModeration moderation = 4;
   string notes = 5;
+}
+
+message UserModeration {
+  google.protobuf.BoolValue disable_join = 1;
+  google.protobuf.BoolValue disable_publish = 2;
+  google.protobuf.BoolValue is_moderator = 3;
+  google.protobuf.BoolValue is_admin = 4;
+}
+
+message UserRecord {
+  uint64 id = 1;
+  uint64 network_id = 2;
+  bytes peer_key = 3;
+  UserModeration moderation = 4;
 }
 
 message EventBroadcast {
@@ -249,12 +265,33 @@ message PingRequest {}
 
 message PingResponse {}
 
+message ModerateListingRequest {
+  uint64 id = 1;
+  ListingModeration moderation = 2;
+}
+
+message ModerateListingResponse {
+
+}
+
+message ModerateUserRequest {
+  uint64 id = 1;
+  UserModeration moderation = 2;
+}
+
+message ModerateUserResponse {
+
+}
+
 service Directory {
   rpc Publish(PublishRequest) returns (PublishResponse);
   rpc Unpublish(UnpublishRequest) returns (UnpublishResponse);
   rpc Join(JoinRequest) returns (JoinResponse);
   rpc Part(PartRequest) returns (PartResponse);
   rpc Ping(PingRequest) returns (PingResponse);
+
+  rpc ModerateListing(ModerateListingRequest) returns (ModerateListingResponse);
+  rpc ModerateUser(ModerateUserRequest) returns (ModerateUserResponse);
 }
 
 message FrontendOpenRequest {}
@@ -308,28 +345,24 @@ message FrontendTestRequest {
 
 message FrontendTestResponse {}
 
-message FrontendGetListingRecordRequest {
-  uint64 id = 1;
+message FrontendModerateListingRequest {
+  bytes network_key = 1;
+  uint64 id = 2;
+  ListingModeration moderation = 3;
 }
 
-message FrontendGetListingRecordResponse {
-  ListingRecord record = 1;
+message FrontendModerateListingResponse {
+
 }
 
-message FrontendListListingRecordsRequest {}
-
-message FrontendListListingRecordsResponse {
-  repeated ListingRecord records = 1;
+message FrontendModerateUserRequest {
+  bytes network_key = 1;
+  uint64 id = 2;
+  UserModeration moderation = 3;
 }
 
-message FrontendUpdateListingRecordRequest {
-  uint64 id = 1;
-  string notes = 3;
-  ListingModeration moderation = 4;
-}
+message FrontendModerateUserResponse {
 
-message FrontendUpdateListingRecordResponse {
-  ListingRecord record = 1;
 }
 
 service DirectoryFrontend {
@@ -340,9 +373,8 @@ service DirectoryFrontend {
   rpc Part(FrontendPartRequest) returns (FrontendPartResponse);
   rpc Test(FrontendTestRequest) returns (FrontendTestResponse);
 
-  rpc GetListingRecord(FrontendGetListingRecordRequest) returns (FrontendGetListingRecordResponse);
-  rpc ListListingRecords(FrontendListListingRecordsRequest) returns (FrontendListListingRecordsResponse);
-  rpc UpdateListingRecord(FrontendUpdateListingRecordRequest) returns (FrontendUpdateListingRecordResponse);
+  rpc ModerateListing(FrontendModerateListingRequest) returns (FrontendModerateListingResponse);
+  rpc ModerateUser(FrontendModerateUserRequest) returns (FrontendModerateUserResponse);
 }
 
 message SnippetSubscribeRequest {

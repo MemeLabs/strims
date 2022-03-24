@@ -33,7 +33,7 @@ func get(tx kv.BlobTx, sk *StorageKey, key string, m proto.Message) error {
 
 // read from the tx values from keys matching prefix and append them to the
 // *[]*proto.Message
-func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages interface{}) error {
+func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages any) error {
 	bs, err := tx.ScanPrefix(prefix)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages interface{
 
 // unmarshalMessages appends proto.Message elements unmarshalled from the
 // supplied byte slices
-func appendUnmarshalled(messages interface{}, bufs ...[]byte) (interface{}, error) {
+func appendUnmarshalled(messages any, bufs ...[]byte) (any, error) {
 	mt := reflect.TypeOf(messages).Elem().Elem()
 	mv := reflect.ValueOf(messages)
 	for _, b := range bufs {

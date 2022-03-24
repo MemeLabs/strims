@@ -2,7 +2,7 @@ package errutil
 
 import "errors"
 
-func RecoverError(v interface{}) error {
+func RecoverError(v any) error {
 	switch err := v.(type) {
 	case nil:
 		return nil

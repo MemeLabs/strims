@@ -205,9 +205,11 @@
 
     --color-text-base: #{$gray-500};
 
-    --color-chat-combo-text-shadow: #000;
-    --color-chat-scroller-handle: var(--color-opac-w-8);
-    --color-chat-settings-legend: #{$gray-200};
+    --color-text-shadow-chat-combo: #000;
+    --color-background-chat-scroll-handle: var(--color-opac-w-8);
+    --color-background-chat-scroll-resume: #{$slate-300};
+    --color-text-chat-settings-legend: #{$gray-200};
+    --color-background-chat-toggle-hover: #{$slate-500};
 
     --color-icon: var(--color-opac-w-8);
     --color-icon-hover: var(--color-opac-w-12);
@@ -292,7 +294,7 @@
 
     --color-text-base: #{$slate-500};
 
-    --color-chat-combo-text-shadow: #000;
+    --color-text-shadow-chat-combo: #000;
     --color-chat-scroller-handle: var(--color-opac-w-8);
     --color-chat-settings-legend: #{$slate-200};
 

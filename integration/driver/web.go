@@ -328,7 +328,7 @@ func (b *devServerClient) Run(url string) error {
 
 	done := make(chan error)
 
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
+	chromedp.ListenTarget(ctx, func(ev any) {
 		switch ev := ev.(type) {
 		case *network.EventWebSocketCreated:
 			log.Printf("WEBSOCKET: %q", ev.URL)

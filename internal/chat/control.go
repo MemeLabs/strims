@@ -68,7 +68,7 @@ type control struct {
 	transfer  transfer.Control
 	directory directory.Control
 
-	events  chan interface{}
+	events  chan any
 	lock    sync.Mutex
 	runners hashmap.Map[[]byte, *runner]
 }

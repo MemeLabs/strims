@@ -27,7 +27,7 @@ var (
 
 type Control interface {
 	Run()
-	ReadCachedEvents(ctx context.Context, ch chan interface{})
+	ReadCachedEvents(ctx context.Context, ch chan any)
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
 	DeleteSnippet(swarmID ppspp.SwarmID)
 	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
@@ -82,7 +82,7 @@ type control struct {
 	network   network.Control
 	transfer  transfer.Control
 
-	events     chan interface{}
+	events     chan any
 	lock       sync.Mutex
 	runners    hashmap.Map[[]byte, *runner]
 	eventCache map[uint64]*eventCache
@@ -218,7 +218,7 @@ func (t *control) client(ctx context.Context, networkKey []byte) (*dialer.RPCCli
 	return client, networkv1directory.NewDirectoryClient(client), nil
 }
 
-func (t *control) ReadCachedEvents(ctx context.Context, ch chan interface{}) {
+func (t *control) ReadCachedEvents(ctx context.Context, ch chan any) {
 	var es []event.DirectoryEvent
 	t.lock.Lock()
 	for _, c := range t.eventCache {

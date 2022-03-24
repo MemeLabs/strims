@@ -5,7 +5,7 @@ import (
 )
 
 var peerTaskRunnerQueueItemPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &peerTaskRunnerQueueItem{}
 	},
 }
