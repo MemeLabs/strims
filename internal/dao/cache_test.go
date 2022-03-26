@@ -6,6 +6,7 @@ import (
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 )
@@ -26,12 +27,17 @@ func TestCacheInsertGet(t *testing.T) {
 	serverID := uint64(2222)
 	peerKey := errutil.Must(GenerateKey()).Public
 
+	profile, err := c.ByPeerKey.Get(FormatChatProfilePeerKey(serverID, peerKey))
+	assert.Nil(t, profile)
+	assert.ErrorIs(t, err, kv.ErrRecordNotFound)
+
 	profile, found, err := c.ByPeerKey.GetOrInsert(
 		FormatChatProfilePeerKey(serverID, peerKey),
 		func() (*chatv1.Profile, error) {
 			return NewChatProfile(profileStore, serverID, peerKey, "alias")
 		},
 	)
+	assert.NotNil(t, profile)
 	assert.False(t, found)
 	assert.NoError(t, err)
 

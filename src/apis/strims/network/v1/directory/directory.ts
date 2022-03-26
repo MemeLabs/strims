@@ -2376,22 +2376,22 @@ export class ModerateListingResponse {
 }
 
 export type IModerateUserRequest = {
-  id?: bigint;
+  peerKey?: Uint8Array;
   moderation?: IUserModeration;
 }
 
 export class ModerateUserRequest {
-  id: bigint;
+  peerKey: Uint8Array;
   moderation: UserModeration | undefined;
 
   constructor(v?: IModerateUserRequest) {
-    this.id = v?.id || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
     this.moderation = v?.moderation && new UserModeration(v.moderation);
   }
 
   static encode(m: ModerateUserRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
     if (m.moderation) UserModeration.encode(m.moderation, w.uint32(18).fork()).ldelim();
     return w;
   }
@@ -2404,7 +2404,7 @@ export class ModerateUserRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.id = r.uint64();
+        m.peerKey = r.bytes();
         break;
         case 2:
         m.moderation = UserModeration.decode(r, r.uint32());
@@ -2997,25 +2997,25 @@ export class FrontendModerateListingResponse {
 
 export type IFrontendModerateUserRequest = {
   networkKey?: Uint8Array;
-  id?: bigint;
+  alias?: string;
   moderation?: IUserModeration;
 }
 
 export class FrontendModerateUserRequest {
   networkKey: Uint8Array;
-  id: bigint;
+  alias: string;
   moderation: UserModeration | undefined;
 
   constructor(v?: IFrontendModerateUserRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.id = v?.id || BigInt(0);
+    this.alias = v?.alias || "";
     this.moderation = v?.moderation && new UserModeration(v.moderation);
   }
 
   static encode(m: FrontendModerateUserRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
-    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.alias.length) w.uint32(18).string(m.alias);
     if (m.moderation) UserModeration.encode(m.moderation, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -3031,7 +3031,7 @@ export class FrontendModerateUserRequest {
         m.networkKey = r.bytes();
         break;
         case 2:
-        m.id = r.uint64();
+        m.alias = r.string();
         break;
         case 3:
         m.moderation = UserModeration.decode(r, r.uint32());

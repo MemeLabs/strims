@@ -19,13 +19,11 @@ type lru[V any, T keyerPointer[V]] struct {
 }
 
 func (l *lru[V, T]) Get(u T) T {
-	if ii := l.items.Get(&lruItem[V, T]{item: u}); ii != nil {
-		i := ii.(*lruItem[V, T])
-		l.remove(i)
-		l.push(i)
-		return i.item
-	}
-	return nil
+	return l.get(u)
+}
+
+func (l *lru[V, T]) GetByKey(k []byte) T {
+	return l.get(&lruKey{k})
 }
 
 func (l *lru[V, T]) Has(u T) bool {
@@ -84,6 +82,16 @@ func (l *lru[V, T]) Touch(u T) bool {
 		return true
 	}
 	return false
+}
+
+func (l *lru[V, T]) get(k keyer) T {
+	if ii := l.items.Get(k); ii != nil {
+		i := ii.(*lruItem[V, T])
+		l.remove(i)
+		l.push(i)
+		return i.item
+	}
+	return nil
 }
 
 func (l *lru[V, T]) remove(i *lruItem[V, T]) {

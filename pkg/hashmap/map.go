@@ -165,18 +165,24 @@ func (l *Map[K, V]) resize(size int) {
 	}
 }
 
-func (l *Map[K, V]) set(k K, v V) *mapItem[K, V] {
+func (l *Map[K, V]) swap(k K, v V) (e *mapItem[K, V], p V) {
 	i := l.index(k)
-	if e := l.v[i].find(k, l.iface); e != nil {
+	if e = l.v[i].find(k, l.iface); e != nil {
+		p = e.v
 		e.v = v
-		return e
+		return
 	}
 
-	e := l.alloc()
+	e = l.alloc()
 	e.k = k
 	e.v = v
 	e.list = l.v[i]
 	l.v[i] = e
+	return
+}
+
+func (l *Map[K, V]) set(k K, v V) *mapItem[K, V] {
+	e, _ := l.swap(k, v)
 	return e
 }
 
@@ -214,6 +220,11 @@ func (l *Map[K, V]) Has(k K) bool {
 
 func (l *Map[K, V]) Set(k K, v V) {
 	l.set(k, v)
+}
+
+func (l *Map[K, V]) Swap(k K, v V) V {
+	_, p := l.swap(k, v)
+	return p
 }
 
 func (l *Map[K, V]) Get(k K) (v V, ok bool) {

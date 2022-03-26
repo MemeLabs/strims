@@ -262,13 +262,18 @@ func (s *directoryService) ModerateListing(ctx context.Context, r *networkv1dire
 }
 
 func (s *directoryService) ModerateUser(ctx context.Context, r *networkv1directory.FrontendModerateUserRequest) (*networkv1directory.FrontendModerateUserResponse, error) {
+	cert, err := s.app.Network().CA().FindBySubject(ctx, r.NetworkKey, r.Alias)
+	if err != nil {
+		return nil, err
+	}
+
 	client, err := s.client(ctx, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
 
 	req := &networkv1directory.ModerateUserRequest{
-		Id:         r.Id,
+		PeerKey:    cert.Key,
 		Moderation: r.Moderation,
 	}
 	err = client.ModerateUser(ctx, req, &networkv1directory.ModerateUserResponse{})

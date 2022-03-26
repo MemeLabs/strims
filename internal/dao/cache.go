@@ -15,19 +15,54 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+type cacheItemKind int
+
+var cacheItemKindFound cacheItemKind = -1
+
 type cacheItem[V any, T TableRecord[V]] struct {
 	p          unsafe.Pointer
+	i          cacheItemKind
 	mu         sync.Mutex
 	time       timeutil.Time
 	next, prev *cacheItem[V, T]
 }
 
+func (e *cacheItem[V, T]) reset() {
+	e.next = nil
+	e.prev = nil
+	e.p = nil
+}
+
 func (e *cacheItem[V, T]) load() T {
+	if e.i != cacheItemKindFound {
+		panic("invalid access of negative cache entry")
+	}
 	return (T)(atomic.LoadPointer(&e.p))
+}
+
+func (e *cacheItem[V, T]) store(v T) {
+	e.i = cacheItemKindFound
+	atomic.StorePointer(&e.p, unsafe.Pointer(v))
 }
 
 func (e *cacheItem[V, T]) swap(v T) T {
 	return (T)(atomic.SwapPointer(&e.p, unsafe.Pointer(v)))
+}
+
+func (e *cacheItem[V, T]) notFound() bool {
+	return e.i != cacheItemKindFound
+}
+
+func (e *cacheItem[V, T]) storeNotFound(i int, k unsafe.Pointer) {
+	e.i = cacheItemKind(i)
+	e.p = k
+}
+
+func (e *cacheItem[V, T]) loadNotFound() (int, unsafe.Pointer) {
+	if e.i == cacheItemKindFound {
+		panic("invalid access of positive cache entry")
+	}
+	return int(e.i), e.p
 }
 
 type cacheItemList[V any, T TableRecord[V]] struct {
@@ -144,8 +179,10 @@ type CacheStore[V any, T TableRecord[V]] struct {
 
 	primaryKey *cacheIndex[uint64, V, T]
 	indices    []interface {
-		set(v, p T, e *cacheItem[V, T])
+		set(v, p T, e *cacheItem[V, T]) *cacheItem[V, T]
 		delete(v T)
+		getOrSetNotFound(k unsafe.Pointer, e *cacheItem[V, T]) (*cacheItem[V, T], bool)
+		deleteNotFound(k unsafe.Pointer)
 	}
 
 	Close timeutil.StopFunc
@@ -175,15 +212,18 @@ func (c *CacheStore[V, T]) gc(t timeutil.Time) {
 func (c *CacheStore[V, T]) pop() {
 	e := c.list.pop()
 
-	v := e.load()
-	c.primaryKey.delete(v)
-	for _, i := range c.indices {
-		i.delete(v)
+	if e.notFound() {
+		i, k := e.loadNotFound()
+		c.indices[i].deleteNotFound(k)
+	} else {
+		v := e.load()
+		c.primaryKey.delete(v)
+		for _, i := range c.indices {
+			i.delete(v)
+		}
 	}
 
-	e.next = nil
-	e.prev = nil
-	e.p = nil
+	e.reset()
 	c.alloc.Free(e)
 }
 
@@ -199,6 +239,7 @@ func (c *CacheStore[V, T]) set(v T) *cacheItem[V, T] {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	var p T
 	e, ok := c.primaryKey.get(v.GetId())
 	if !ok {
 		if c.primaryKey.len() >= c.cap {
@@ -206,15 +247,36 @@ func (c *CacheStore[V, T]) set(v T) *cacheItem[V, T] {
 		}
 
 		e = c.alloc.Alloc()
-		c.primaryKey.set(v, nil, e)
-		c.list.push(e)
+		e.store(v)
+	} else {
+		p = e.swap(v)
 	}
-	p := e.swap(v)
 	c.touch(e)
 
 	for _, i := range c.indices {
-		i.set(v, p, e)
+		if pe := i.set(v, p, e); pe != nil {
+			c.list.delete(pe)
+			pe.reset()
+			c.alloc.Free(pe)
+		}
 	}
+
+	return e
+}
+
+func (c *CacheStore[V, T]) setNotFound(i int, k unsafe.Pointer) *cacheItem[V, T] {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	e := c.alloc.Alloc()
+
+	if pe, ok := c.indices[i].getOrSetNotFound(k, e); ok {
+		c.alloc.Free(e)
+		return pe
+	}
+
+	e.storeNotFound(i, k)
+	c.touch(e)
 
 	return e
 }
@@ -233,6 +295,7 @@ func NewCacheIndex[K, V any, T TableRecord[V]](s *CacheStore[V, T], getByKey fun
 	index := newCacheIndex(key, ifctor)
 	s.indices = append(s.indices, index)
 	return CacheAccessor[K, V, T]{
+		i:        len(s.indices) - 1,
 		getByKey: getByKey,
 		store:    s,
 		index:    index,
@@ -262,25 +325,38 @@ func (c *cacheIndex[K, V, T]) get(k K) (*cacheItem[V, T], bool) {
 	return c.cache.Get(k)
 }
 
-func (c *cacheIndex[K, V, T]) set(v, p T, e *cacheItem[V, T]) {
+func (c *cacheIndex[K, V, T]) set(v, p T, e *cacheItem[V, T]) *cacheItem[V, T] {
 	vk := c.key(v)
 
 	if p != nil {
 		pk := c.key(p)
 		if c.keyEqual(vk, pk) {
-			return
+			return nil
 		}
 		c.cache.Delete(pk)
 	}
 
-	c.cache.Set(vk, e)
+	return c.cache.Swap(vk, e)
+}
+
+func (c *cacheIndex[K, V, T]) getOrSetNotFound(k unsafe.Pointer, e *cacheItem[V, T]) (*cacheItem[V, T], bool) {
+	if pe, ok := c.cache.Get(*(*K)(k)); ok {
+		return pe, true
+	}
+	c.cache.Set(*(*K)(k), e)
+	return e, false
 }
 
 func (c *cacheIndex[K, V, T]) delete(v T) {
 	c.cache.Delete(c.key(v))
 }
 
+func (c *cacheIndex[K, V, T]) deleteNotFound(k unsafe.Pointer) {
+	c.cache.Delete(*(*K)(k))
+}
+
 type CacheAccessor[K, V any, T TableRecord[V]] struct {
+	i        int
 	getByKey func(store kv.Store, k K) (T, error)
 	store    *CacheStore[V, T]
 	index    *cacheIndex[K, V, T]
@@ -293,17 +369,23 @@ func (c *CacheAccessor[K, V, T]) get(k K) (*cacheItem[V, T], bool, error) {
 	c.store.mu.Unlock()
 	if ok {
 		c.store.hitCount.Inc()
+		if e.notFound() {
+			return nil, true, kv.ErrRecordNotFound
+		}
 		return e, true, nil
 	}
 
 	v, err := c.getByKey(c.store.store, k)
-	if err != nil {
-		c.store.errCount.Inc()
-		return nil, false, err
+	if err == nil {
+		c.store.missCount.Inc()
+		return c.store.set(v), false, nil
+	} else if errors.Is(err, kv.ErrRecordNotFound) {
+		c.store.missCount.Inc()
+		return c.store.setNotFound(c.i, unsafe.Pointer(&k)), false, err
 	}
 
-	c.store.missCount.Inc()
-	return c.store.set(v), false, nil
+	c.store.errCount.Inc()
+	return nil, false, err
 }
 
 func (c *CacheAccessor[K, V, T]) Get(k K) (v T, err error) {

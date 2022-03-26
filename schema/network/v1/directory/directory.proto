@@ -275,7 +275,7 @@ message ModerateListingResponse {
 }
 
 message ModerateUserRequest {
-  uint64 id = 1;
+  bytes peer_key = 1;
   UserModeration moderation = 2;
 }
 
@@ -357,7 +357,7 @@ message FrontendModerateListingResponse {
 
 message FrontendModerateUserRequest {
   bytes network_key = 1;
-  uint64 id = 2;
+  string alias = 2;
   UserModeration moderation = 3;
 }
 
