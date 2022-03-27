@@ -316,7 +316,7 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		events = append(events, &networkv1directory.Event{
 			Body: &networkv1directory.Event_ViewerStateChange_{
 				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
-					Id:      u.id,
+					PeerKey: u.certificate.Key,
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
@@ -351,7 +351,7 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 	return append(events, &networkv1directory.Event{
 		Body: &networkv1directory.Event_ViewerStateChange_{
 			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
-				Id:         u.id,
+				PeerKey:    u.certificate.Key,
 				Subject:    u.certificate.Subject,
 				Online:     true,
 				ViewingIds: ids.Slice(),
@@ -497,7 +497,7 @@ func (d *directoryService) getListingRecord(l *networkv1directory.Listing) (*net
 	return r, nil
 }
 
-func (d *directoryService) gettUserRecord(ctx context.Context) (*networkv1directory.UserRecord, error) {
+func (d *directoryService) getUserRecord(ctx context.Context) (*networkv1directory.UserRecord, error) {
 	peerKey := dialer.VPNCertificate(ctx).GetParent().GetKey()
 	ur, err := d.userRecords.ByPeerKey.Get(dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Get().Id, peerKey))
 	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
@@ -507,7 +507,7 @@ func (d *directoryService) gettUserRecord(ctx context.Context) (*networkv1direct
 }
 
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
-	ur, err := d.gettUserRecord(ctx)
+	ur, err := d.getUserRecord(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -549,10 +549,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	defer d.lock.Unlock()
 
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{
-		id:          ur.Id,
-		certificate: dialer.VPNCertificate(ctx).GetParent(),
-	})
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 	if u.PublishedListingCount() >= publishQuota {
 		return nil, errors.New("exceeded concurrent publish quota")
 	}
@@ -613,7 +610,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 }
 
 func (d *directoryService) Join(ctx context.Context, req *networkv1directory.JoinRequest) (*networkv1directory.JoinResponse, error) {
-	ur, err := d.gettUserRecord(ctx)
+	ur, err := d.getUserRecord(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -625,10 +622,7 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	defer d.lock.Unlock()
 
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{
-		id:          ur.Id,
-		certificate: dialer.VPNCertificate(ctx).GetParent(),
-	})
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 	if u.ViewedListingCount() >= viewQuota {
 		return nil, errors.New("exceeded concurrent view quota")
 	}
@@ -689,7 +683,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 }
 
 func (d *directoryService) ModerateListing(ctx context.Context, req *networkv1directory.ModerateListingRequest) (*networkv1directory.ModerateListingResponse, error) {
-	ur, err := d.gettUserRecord(ctx)
+	ur, err := d.getUserRecord(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +726,7 @@ func (d *directoryService) ModerateListing(ctx context.Context, req *networkv1di
 	}
 
 	d.lock.Lock()
-	d.lock.Unlock()
+	defer d.lock.Unlock()
 
 	l.moderation = lr.Moderation
 	l.evicted = lr.Moderation.GetIsBanned().GetValue()
@@ -741,7 +735,7 @@ func (d *directoryService) ModerateListing(ctx context.Context, req *networkv1di
 }
 
 func (d *directoryService) ModerateUser(ctx context.Context, req *networkv1directory.ModerateUserRequest) (*networkv1directory.ModerateUserResponse, error) {
-	ur, err := d.gettUserRecord(ctx)
+	ur, err := d.getUserRecord(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -780,7 +774,7 @@ func (d *directoryService) ModerateUser(ctx context.Context, req *networkv1direc
 	}
 
 	d.lock.Lock()
-	d.lock.Unlock()
+	defer d.lock.Unlock()
 
 	l := d.users.GetByKey(req.PeerKey)
 	if l != nil {
@@ -995,7 +989,6 @@ func (u *session) Less(o llrb.Item) bool {
 }
 
 type user struct {
-	id          uint64
 	certificate *certificate.Certificate
 	sessions    llrb.LLRB
 }
@@ -1021,10 +1014,6 @@ func (u *user) EachSession(it func(s *session)) {
 		it(ii.(*session))
 		return true
 	})
-}
-
-func (u *user) ID() uint64 {
-	return u.id
 }
 
 func (u *user) Key() []byte {

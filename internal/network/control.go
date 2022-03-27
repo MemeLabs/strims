@@ -590,6 +590,11 @@ func (t *control) Add(network *networkv1.Network) error {
 		}
 	}
 
+	adminRecord, err := dao.NewDirectoryUserRecord(t.store, network.Id, t.profile.Key.Public)
+	if err != nil {
+		return err
+	}
+
 	return t.store.Update(func(tx kv.RWTx) error {
 		if err := dao.Networks.Insert(tx, network); err != nil {
 			return err
@@ -599,7 +604,7 @@ func (t *control) Add(network *networkv1.Network) error {
 				return err
 			}
 		}
-		return nil
+		return dao.DirectoryUserRecords.Insert(tx, adminRecord)
 	})
 }
 

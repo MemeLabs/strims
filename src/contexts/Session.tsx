@@ -30,6 +30,7 @@ interface State {
   loading: boolean;
   conn?: Conn;
   client?: FrontendClient;
+  error?: Error;
 }
 
 type Ops = {
@@ -116,9 +117,22 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
   }, []);
 
   const createProfile = useCallback(async (serverAddress: string, req: ISignUpRequest) => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
-    const res = await client.auth.signUp(req, { timeout: API_TIMEOUT });
+    const res = await client.auth.signUp(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error,
+      }));
+    });
+    if (!res) return;
 
     const profile = new LinkedProfile({
       ...res.linkedProfile,
@@ -128,13 +142,32 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     await db.put(profile);
     mergeProfiles(profile);
 
-    setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
+    setState((prev) => ({
+      ...prev,
+      loading: false,
+      profile: res.profile,
+      conn,
+      client,
+    }));
   }, []);
 
   const signIn = useCallback(async (serverAddress: string, req: ISignInRequest) => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
-    const res = await client.auth.signIn(req, { timeout: API_TIMEOUT });
+    const res = await client.auth.signIn(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error,
+      }));
+    });
+    if (!res) return;
 
     const prev = (await db.getAll()).find(
       (p) => p.name === res.linkedProfile.name && p.serverAddress === serverAddress
@@ -150,7 +183,13 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       mergeProfiles(profile);
     }
 
-    setState((prev) => ({ ...prev, profile: res.profile, conn, client }));
+    setState((prev) => ({
+      ...prev,
+      loading: false,
+      profile: res.profile,
+      conn,
+      client,
+    }));
   }, []);
 
   const value = useMemo<[State, Ops]>(() => [state, { createProfile, signIn }], [state]);

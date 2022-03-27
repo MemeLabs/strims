@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 
 type ColorScheme = "dark" | "light";
@@ -44,6 +44,7 @@ export const Provider: React.FC = ({ children }) => {
     <ThemeContext.Provider value={value}>
       <Helmet>
         <meta name="theme-color" content={themeColor} />
+        <style type="text/css">{`html, body { background: ${themeColor}; }`}</style>
       </Helmet>
       {children}
     </ThemeContext.Provider>

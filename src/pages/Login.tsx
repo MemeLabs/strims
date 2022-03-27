@@ -5,6 +5,7 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
+import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
 import useQuery from "../hooks/useQuery";
 import useReady from "../hooks/useReady";
@@ -69,6 +70,9 @@ const LoginPage: React.FC = () => {
     }
   }, [selectedProfile]);
 
+  if (session.loading) {
+    return <LoadingPlaceholder />;
+  }
   if (session.profile) {
     return <Navigate to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
   }
@@ -84,11 +88,11 @@ const LoginPage: React.FC = () => {
               onClick={setSelectedProfile}
             />
           ))}
-          <Link className="input input_button" to="/signup">
+          <Link className="input input_button input_button--borderless" to="/signup">
             Create Profile
           </Link>
           <button
-            className="input input_button"
+            className="input input_button input_button--borderless"
             onClick={() => setSelectedProfile(new LinkedProfile())}
           >
             New Login
@@ -114,7 +118,7 @@ const LoginPage: React.FC = () => {
     <LandingPageLayout>
       <ProfileForm
         onSubmit={handleSubmit}
-        // error={error?.message}
+        error={session.error?.message}
         secondaryUri="/signup"
         secondaryLabel="Create profile"
         submitLabel="Log in"
