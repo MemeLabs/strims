@@ -65,7 +65,7 @@ func (m *uint64Interface[T]) Equal(a, b T) bool {
 
 func New[K, V any](iface Interface[K]) Map[K, V] {
 	return Map[K, V]{
-		lenBounds: computeLendBounds(minSize),
+		lenBounds: computeLenBounds(minSize),
 		mask:      uint64(minSize - 1),
 		v:         make([]*mapItem[K, V], minSize),
 		iface:     iface,
@@ -73,7 +73,7 @@ func New[K, V any](iface Interface[K]) Map[K, V] {
 	}
 }
 
-func computeLendBounds(size int) lenBounds {
+func computeLenBounds(size int) lenBounds {
 	min := float64(size) * minFillFactor
 	max := float64(size) * maxFillFactor
 	if min < minSize {
@@ -148,7 +148,7 @@ func (l *Map[K, V]) free(e *mapItem[K, V]) {
 func (l *Map[K, V]) resize(size int) {
 	v := l.v
 
-	l.lenBounds = computeLendBounds(size)
+	l.lenBounds = computeLenBounds(size)
 	l.mask = uint64(size - 1)
 	l.v = make([]*mapItem[K, V], size)
 

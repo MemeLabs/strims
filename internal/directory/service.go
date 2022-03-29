@@ -102,6 +102,7 @@ func newDirectoryService(
 		eventWriter:     ew,
 		embedLoader:     syncutil.NewPointer(newEmbedLoader(logger, network.GetServerConfig().GetDirectory().GetIntegrations())),
 		listings:        newIndexedLRU[listing](),
+		users:           newIndexedLRU[user](),
 		listingRecords:  dao.NewDirectoryListingRecordCache(store, nil),
 		userRecords:     dao.NewDirectoryUserRecordCache(store, nil),
 	}
@@ -127,7 +128,7 @@ type directoryService struct {
 	nextID            uint64
 	listings          indexedLRU[listing, *listing]
 	sessions          lru[session, *session]
-	users             lru[user, *user]
+	users             indexedLRU[user, *user]
 	certificate       *certificate.Certificate
 	configPublisher   *vpn.HashTablePublisher
 	listingRecords    dao.DirectoryListingRecordCache
@@ -316,9 +317,9 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		events = append(events, &networkv1directory.Event{
 			Body: &networkv1directory.Event_ViewerStateChange_{
 				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
-					PeerKey: u.certificate.Key,
-					Subject: u.certificate.Subject,
-					Online:  false,
+					Id:     u.id,
+					Alias:  u.certificate.Subject,
+					Online: false,
 				},
 			},
 		})
@@ -351,8 +352,8 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 	return append(events, &networkv1directory.Event{
 		Body: &networkv1directory.Event_ViewerStateChange_{
 			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
-				PeerKey:    u.certificate.Key,
-				Subject:    u.certificate.Subject,
+				Id:         u.id,
+				Alias:      u.certificate.Subject,
 				Online:     true,
 				ViewingIds: ids.Slice(),
 			},
@@ -540,7 +541,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 		return nil, errors.New("listing banned")
 	}
 
-	l, err := newListing(req.Listing)
+	l, err := newListing(req.Listing, lr)
 	if err != nil {
 		return nil, err
 	}
@@ -554,10 +555,6 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 		return nil, errors.New("exceeded concurrent publish quota")
 	}
 
-	if !d.listings.Has(l) {
-		d.nextID++
-		l.Init(d.nextID, lr)
-	}
 	l = d.listings.GetOrInsert(l)
 
 	d.logger.Info(
@@ -833,7 +830,7 @@ func listingKey(m proto.Message) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func newListing(l *networkv1directory.Listing) (*listing, error) {
+func newListing(l *networkv1directory.Listing, r *networkv1directory.ListingRecord) (*listing, error) {
 	key, err := listingKey(l)
 	if err != nil {
 		return nil, err
@@ -844,6 +841,7 @@ func newListing(l *networkv1directory.Listing) (*listing, error) {
 		listing:      l,
 		nextSnippet:  &networkv1directory.ListingSnippet{},
 		snippet:      &networkv1directory.ListingSnippet{},
+		moderation:   r.GetModeration(),
 		modifiedTime: timeutil.Now(),
 	}, nil
 }
@@ -864,9 +862,8 @@ type listing struct {
 	viewerCount    prometheus.Gauge
 }
 
-func (l *listing) Init(id uint64, r *networkv1directory.ListingRecord) {
+func (l *listing) InitID(id uint64) {
 	l.id = id
-	l.moderation = r.GetModeration()
 	l.publisherCount = publisherCount.WithLabelValues(listingContentType(l.listing), strconv.FormatUint(id, 10))
 	l.viewerCount = viewerCount.WithLabelValues(listingContentType(l.listing), strconv.FormatUint(id, 10))
 }
@@ -930,6 +927,7 @@ func (l *listing) EachPublisher(it func(s *session)) {
 func (l *listing) ID() uint64 {
 	return l.id
 }
+
 func (l *listing) Key() []byte {
 	return l.key
 }
@@ -989,8 +987,13 @@ func (u *session) Less(o llrb.Item) bool {
 }
 
 type user struct {
+	id          uint64
 	certificate *certificate.Certificate
 	sessions    llrb.LLRB
+}
+
+func (u *user) InitID(id uint64) {
+	u.id = id
 }
 
 func (u *user) PublishedListingCount() int {
@@ -1016,6 +1019,10 @@ func (u *user) EachSession(it func(s *session)) {
 	})
 }
 
+func (u *user) ID() uint64 {
+	return u.id
+}
+
 func (u *user) Key() []byte {
 	return u.certificate.Key
 }
@@ -1026,6 +1033,6 @@ func (u *user) Less(o llrb.Item) bool {
 
 func (u *user) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	e.AddBinary("key", u.certificate.Key)
-	e.AddString("subject", u.certificate.Subject)
+	e.AddString("alias", u.certificate.Subject)
 	return nil
 }

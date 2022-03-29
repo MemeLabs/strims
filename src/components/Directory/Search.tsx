@@ -296,7 +296,7 @@ const Search: React.FC<SearchProps> = ({
     const pattern = new RegExp(escapeStringRegexp(query), "i");
 
     for (const { networkKey, listings } of Object.values(directory)) {
-      for (const listing of listings) {
+      for (const listing of listings.values()) {
         if (
           pattern.exec(listing.snippet?.title) !== null ||
           pattern.exec(listing.snippet?.channelName) !== null

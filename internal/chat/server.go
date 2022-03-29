@@ -104,7 +104,7 @@ func newChatServer(
 		config:         config,
 		eventSwarm:     eventSwarm,
 		assetSwarm:     assetSwarm,
-		service:        newChatService(logger, eventWriter, store, config),
+		service:        newChatService(logger, eventWriter, observers, store, config),
 		assetPublisher: newAssetPublisher(logger, assetWriter),
 	}
 
@@ -162,29 +162,27 @@ func (s *chatServer) Run(ctx context.Context) error {
 	go s.watchAssets(ctx)
 	s.syncAssets(true)
 
-	var listingID uint64
+	listingID, err := s.directory.Publish(
+		ctx,
+		&networkv1directory.Listing{
+			Content: &networkv1directory.Listing_Chat_{
+				Chat: &networkv1directory.Listing_Chat{
+					Key:  s.config.Key.Public,
+					Name: s.config.Room.Name,
+				},
+			},
+		},
+		s.config.NetworkKey,
+	)
+	if err != nil {
+		return fmt.Errorf("publishing chat server to directory failed: %w", err)
+	}
+
+	s.service.SetListingID(listingID)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })
 	eg.Go(func() error { return server.Listen(ctx) })
-	eg.Go(func() (err error) {
-		listingID, err = s.directory.Publish(
-			ctx,
-			&networkv1directory.Listing{
-				Content: &networkv1directory.Listing_Chat_{
-					Chat: &networkv1directory.Listing_Chat{
-						Key:  s.config.Key.Public,
-						Name: s.config.Room.Name,
-					},
-				},
-			},
-			s.config.NetworkKey,
-		)
-		if err != nil {
-			return fmt.Errorf("publishing chat server to directory failed: %w", err)
-		}
-		return nil
-	})
 	err = eg.Wait()
 
 	s.transfer.Remove(eventTransferID)

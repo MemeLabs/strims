@@ -1674,29 +1674,29 @@ export namespace Event {
   }
 
   export type IViewerStateChange = {
-    peerKey?: Uint8Array;
-    subject?: string;
+    id?: bigint;
+    alias?: string;
     online?: boolean;
     viewingIds?: bigint[];
   }
 
   export class ViewerStateChange {
-    peerKey: Uint8Array;
-    subject: string;
+    id: bigint;
+    alias: string;
     online: boolean;
     viewingIds: bigint[];
 
     constructor(v?: IViewerStateChange) {
-      this.peerKey = v?.peerKey || new Uint8Array();
-      this.subject = v?.subject || "";
+      this.id = v?.id || BigInt(0);
+      this.alias = v?.alias || "";
       this.online = v?.online || false;
       this.viewingIds = v?.viewingIds ? v.viewingIds : [];
     }
 
     static encode(m: ViewerStateChange, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
-      if (m.subject.length) w.uint32(18).string(m.subject);
+      if (m.id) w.uint32(8).uint64(m.id);
+      if (m.alias.length) w.uint32(18).string(m.alias);
       if (m.online) w.uint32(24).bool(m.online);
       m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
       return w;
@@ -1710,10 +1710,10 @@ export namespace Event {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.peerKey = r.bytes();
+          m.id = r.uint64();
           break;
           case 2:
-          m.subject = r.string();
+          m.alias = r.string();
           break;
           case 3:
           m.online = r.bool();

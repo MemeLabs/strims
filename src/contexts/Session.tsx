@@ -126,6 +126,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
     const res = await client.auth.signUp(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
+      conn.close();
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -161,6 +162,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
     const client = await conn.client(FrontendClient);
     const res = await client.auth.signIn(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
+      conn.close();
       setState((prev) => ({
         ...prev,
         loading: false,

@@ -13,7 +13,7 @@ func newEventCache(network *networkv1.Network) *eventCache {
 
 		listingChangeEvents:     map[uint64]*networkv1directory.Event_ListingChange{},
 		viewerCountChangeEvents: map[uint64]*networkv1directory.Event_ViewerCountChange{},
-		viewerStateChangeEvents: map[string]*networkv1directory.Event_ViewerStateChange{},
+		viewerStateChangeEvents: map[uint64]*networkv1directory.Event_ViewerStateChange{},
 	}
 }
 
@@ -23,7 +23,7 @@ type eventCache struct {
 	mu                      sync.Mutex
 	listingChangeEvents     map[uint64]*networkv1directory.Event_ListingChange
 	viewerCountChangeEvents map[uint64]*networkv1directory.Event_ViewerCountChange
-	viewerStateChangeEvents map[string]*networkv1directory.Event_ViewerStateChange
+	viewerStateChangeEvents map[uint64]*networkv1directory.Event_ViewerStateChange
 }
 
 func (d *eventCache) Events() *networkv1directory.EventBroadcast {
@@ -88,8 +88,8 @@ func (d *eventCache) handleViewerCountChange(e *networkv1directory.Event_ViewerC
 
 func (d *eventCache) handleViewerStateChange(e *networkv1directory.Event_ViewerStateChange) {
 	if e.Online {
-		d.viewerStateChangeEvents[e.Subject] = e
+		d.viewerStateChangeEvents[e.Id] = e
 	} else {
-		delete(d.viewerStateChangeEvents, e.Subject)
+		delete(d.viewerStateChangeEvents, e.Id)
 	}
 }

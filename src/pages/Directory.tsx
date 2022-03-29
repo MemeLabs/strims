@@ -14,7 +14,7 @@ const Directory: React.FC = () => {
 
   // console.log(directories);
 
-  const listings = directories[params.networkKey]?.listings ?? [];
+  const listings = Array.from(directories[params.networkKey]?.listings.values() ?? []);
 
   // React.useEffect(() => {
   //   const networkKey = Base64.toUint8Array(params.networkKey);

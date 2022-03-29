@@ -205,6 +205,7 @@ func keyerLess(h keyer, o llrb.Item) bool {
 
 type indexedLRUKeyer interface {
 	keyer
+	InitID(id uint64)
 	ID() uint64
 }
 
@@ -220,6 +221,7 @@ func newIndexedLRU[V any, T indexedLRUKeyerPointer[V]]() indexedLRU[V, T] {
 }
 
 type indexedLRU[V any, T indexedLRUKeyerPointer[V]] struct {
+	nextID uint64
 	lru[V, T]
 	index map[uint64]*lruItem[V, T]
 }
@@ -239,6 +241,8 @@ func (l *indexedLRU[V, T]) GetOrInsert(u T) T {
 		i = ii.(*lruItem[V, T])
 		l.remove(i)
 	} else {
+		l.nextID++
+		u.InitID(l.nextID)
 		l.index[i.item.ID()] = i
 		l.items.ReplaceOrInsert(i)
 	}

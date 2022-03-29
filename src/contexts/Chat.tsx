@@ -17,6 +17,7 @@ import {
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
+import { useDirectoryListing } from "./Directory";
 import { useClient } from "./FrontendApi";
 
 type RoomAction =
@@ -209,7 +210,6 @@ const useRoomStateReducer = (setState: StateDispatcher, key: string) => (action:
   }));
 
 const stateReducer = (state: State, action: Action): State => {
-  console.log({ state, action });
   switch (action.type) {
     case "SET_UI_CONFIG":
       return {
@@ -436,6 +436,9 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
     serverEvents.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
     dispatch({ type: "INIT", serverEvents, networkKey, serverKey });
   }, [networkKey, serverKey]);
+
+  const listing = useDirectoryListing(networkKey, directoryListingId)
+  console.log({listing});
 
   useEffect(() => {
     if (directoryListingId === BigInt(0)) {

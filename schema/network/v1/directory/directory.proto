@@ -184,8 +184,8 @@ message Event {
   }
 
   message ViewerStateChange {
-    bytes peer_key = 1;
-    string subject = 2;
+    uint64 id = 1;
+    string alias = 2;
     bool online = 3;
     repeated uint64 viewing_ids = 4;
   }

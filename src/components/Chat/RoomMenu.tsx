@@ -25,7 +25,7 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange }) => {
   const chats = useMemo(() => {
     const chats: RoomMenuItem[] = [];
     for (const { networkKey, listings } of Object.values(directories)) {
-      for (const { id, listing } of listings) {
+      for (const { id, listing } of listings.values()) {
         if (listing?.content?.case === directoryv1.Listing.ContentCase.CHAT) {
           const { key, name } = listing.content.chat;
           chats.push({

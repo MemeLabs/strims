@@ -46,6 +46,7 @@ const GridStory: React.FC = () => {
       listing: new Listing(e.listing),
       snippet: new ListingSnippet(e.snippet),
       viewerCount: 0,
+      viewers: new Map(),
     });
   }
 

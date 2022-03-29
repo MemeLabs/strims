@@ -9,15 +9,16 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/event"
 	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 // errors
@@ -32,12 +33,14 @@ const broadcastInterval = 15 * time.Second
 func newChatService(
 	logger *zap.Logger,
 	ew *protoutil.ChunkStreamWriter,
+	observers *event.Observers,
 	store *dao.ProfileStore,
 	config *chatv1.Server,
 ) *chatService {
 	return &chatService{
 		logger:          logger,
 		eventWriter:     ew,
+		observers:       observers,
 		store:           store,
 		config:          syncutil.NewPointer(config),
 		done:            make(chan struct{}),
@@ -51,14 +54,15 @@ func newChatService(
 type chatService struct {
 	logger            *zap.Logger
 	eventWriter       *protoutil.ChunkStreamWriter
+	observers         *event.Observers
 	store             *dao.ProfileStore
 	config            syncutil.Pointer[chatv1.Server]
+	listingID         uint64
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime timeutil.Time
 	lock              sync.Mutex
-	certificate       *certificate.Certificate
 	entityExtractor   *entityExtractor
 	combos            *comboTransformer
 	profileCache      dao.ChatProfileCache
@@ -67,11 +71,18 @@ type chatService struct {
 func (d *chatService) Run(ctx context.Context) error {
 	defer d.Close()
 
+	events := d.observers.Chan()
+	defer d.observers.StopNotifying(events)
+
 	for {
 		select {
 		case now := <-d.broadcastTicker.C:
 			if err := d.broadcast(timeutil.NewFromTime(now)); err != nil {
 				return err
+			}
+		case e := <-events:
+			if e, ok := e.(event.DirectoryEvent); ok {
+				d.handleDirectoryEvent(e)
 			}
 		case <-d.done:
 			return errors.New("closed")
@@ -83,6 +94,10 @@ func (d *chatService) Run(ctx context.Context) error {
 
 func (d *chatService) SyncConfig(config *chatv1.Server) {
 	d.config.Swap(config)
+}
+
+func (d *chatService) SetListingID(id uint64) {
+	d.listingID = id
 }
 
 func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag) error {
@@ -133,6 +148,20 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 
 	d.lastBroadcastTime = now
 	return nil
+}
+
+func (d *chatService) handleDirectoryEvent(e event.DirectoryEvent) {
+	if bytes.Equal(e.NetworkKey, d.config.Get().NetworkKey) {
+		for _, e := range e.Broadcast.Events {
+			if e := e.GetViewerStateChange(); e != nil {
+				if e.Online && slices.Contains(e.ViewingIds, d.listingID) {
+					d.entityExtractor.AddNick(e.Alias)
+				} else {
+					d.entityExtractor.RemoveNick(e.Alias)
+				}
+			}
+		}
+	}
 }
 
 func (d *chatService) getOrInsertProfile(peerKey []byte, alias string) (p *chatv1.Profile, err error) {

@@ -1,6 +1,6 @@
 import { Base64 } from "js-base64";
 import { omit } from "lodash/fp";
-import React, { createContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 
 import {
   Event,
@@ -16,87 +16,116 @@ export interface DirectoryListing {
   listing: directory_Listing;
   snippet: ListingSnippet;
   viewerCount: number;
+  viewers: Map<bigint, DirectoryUser>;
 }
 
-export interface DirectoryListings {
+export interface DirectoryUser {
+  id: bigint;
+  alias: string;
+  viewingIds: bigint[];
+}
+
+export interface Directory {
   networkKey: Uint8Array;
-  listings: DirectoryListing[];
+  listings: Map<bigint, DirectoryListing>;
+  users: Map<bigint, DirectoryUser>;
 }
 
 export type State = {
-  [key: string]: DirectoryListings;
+  [key: string]: Directory;
 };
 
 const initialState: State = {};
 
 export const DirectoryContext = createContext<[State]>(null);
 
+export const useDirectory = (networkKey: Uint8Array) => {
+  const [state] = useContext(DirectoryContext);
+  const key = useMemo(() => Base64.fromUint8Array(networkKey, true), [networkKey]);
+  return state[key];
+};
+
+export const useDirectoryListing = (networkKey: Uint8Array, id: bigint) => {
+  return useDirectory(networkKey)?.listings.get(id);
+};
+
 export const Provider: React.FC = ({ children }) => {
   const client = useClient();
   const [directories, setDirectories] = useState<State>(initialState);
 
-  const setDirectoryListings = (
-    key: string,
-    set: (listings: DirectoryListings) => DirectoryListings
-  ) =>
+  const setDirectoryListings = (key: string, set: (listings: Directory) => Directory) =>
     setDirectories((prev) => ({
       ...prev,
       [key]: set(
         prev[key] || {
           networkKey: Base64.toUint8Array(key),
-          listings: [],
+          listings: new Map(),
+          users: new Map(),
         }
       ),
     }));
 
   const dispatchDirectoryEvent = (key: string, { events }: EventBroadcast) =>
-    setDirectoryListings(key, ({ networkKey, listings }) => {
-      const next = listings.slice();
+    setDirectoryListings(key, ({ networkKey, listings: prevListings, users: prevUsers }) => {
+      const listings = new Map(prevListings);
+      const users = new Map(prevUsers);
       for (const { body: event } of events) {
         switch (event.case) {
           case Event.BodyCase.LISTING_CHANGE: {
-            const listing: DirectoryListing = {
-              id: event.listingChange.id,
-              listing: event.listingChange.listing,
-              snippet: event.listingChange.snippet,
+            const { id, listing, snippet } = event.listingChange;
+            listings.set(id, {
+              id,
               viewerCount: 0,
-            };
-
-            const i = next.findIndex((l) => l.id === event.listingChange.id);
-            if (i !== -1) {
-              listing.viewerCount = next[i].viewerCount;
-              next[i] = listing;
-            } else {
-              next.push(listing);
-            }
+              viewers: new Map(),
+              ...listings.get(id),
+              listing,
+              snippet,
+            });
             break;
           }
           case Event.BodyCase.UNPUBLISH: {
-            const i = next.findIndex((l) => l.id === event.unpublish.id);
-            if (i !== -1) {
-              next.splice(i, 1);
-            }
+            listings.delete(event.unpublish.id);
             break;
           }
           case Event.BodyCase.VIEWER_COUNT_CHANGE: {
-            const i = listings.findIndex((l) => l.id === event.viewerCountChange.id);
-            if (i !== -1) {
-              next[i] = {
-                ...next[i],
-                viewerCount: event.viewerCountChange.count,
-              };
+            const { id, count } = event.viewerCountChange;
+            const prevListing = listings.get(id);
+            if (prevListing) {
+              listings.set(id, {
+                ...prevListing,
+                viewerCount: count,
+              });
             }
             break;
           }
-          case Event.BodyCase.VIEWER_STATE_CHANGE:
-            console.log({ viewerStateChange: event.viewerStateChange });
-            // TODO
+          case Event.BodyCase.VIEWER_STATE_CHANGE: {
+            const user: DirectoryUser = { ...event.viewerStateChange };
+            const prevViewingIds = users.get(user.id)?.viewingIds ?? [];
+            users.set(user.id, user);
+
+            for (const id of user.viewingIds) {
+              const listing = listings.get(id);
+              if (listing) {
+                const viewers = new Map(listing.viewers);
+                viewers.set(user.id, user);
+                listings.set(id, { ...listing, viewers });
+              }
+            }
+
+            const removedViewingIds = prevViewingIds.filter((id) => !user.viewingIds.includes(id));
+            for (const id of removedViewingIds) {
+              const listing = listings.get(id);
+              if (listing) {
+                const viewers = new Map(listing.viewers);
+                viewers.delete(user.id);
+                listings.set(id, { ...listing, viewers });
+              }
+            }
             break;
-          default:
-            break;
+          }
         }
       }
-      return { networkKey, listings: next };
+      return { networkKey, listings, users };
     });
 
   const deleteDirectory = (key: string) => setDirectories((prev) => omit(key, prev));
