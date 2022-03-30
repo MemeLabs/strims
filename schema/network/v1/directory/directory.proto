@@ -186,8 +186,9 @@ message Event {
   message ViewerStateChange {
     uint64 id = 1;
     string alias = 2;
-    bool online = 3;
-    repeated uint64 viewing_ids = 4;
+    bytes peer_key = 3;
+    bool online = 4;
+    repeated uint64 viewing_ids = 5;
   }
 
   message Ping {

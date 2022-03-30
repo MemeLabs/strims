@@ -118,11 +118,12 @@ func TestNicks(t *testing.T) {
 
 	result := extractor.Extract(message)
 	assert.Empty(t, result.Nicks)
-	extractor.AddNick("bob")
+	extractor.AddNick("bob", []byte("test"))
 
 	result = extractor.Extract(message)
 	assert.Equal(t, 1, len(result.Nicks))
 	assert.Equal(t, "bob", result.Nicks[0].Nick)
+	assert.EqualValues(t, []byte("test"), result.Nicks[0].PeerKey)
 	assert.Equal(t, &chatv1.Message_Entities_Bounds{Start: 4, End: 7}, result.Nicks[0].Bounds)
 
 	extractor.RemoveNick("bob")

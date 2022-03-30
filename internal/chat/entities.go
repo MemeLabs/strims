@@ -24,8 +24,8 @@ type entityExtractor struct {
 }
 
 // AddNick adds a nick to the EntityExtractor
-func (x *entityExtractor) AddNick(nick string) {
-	x.parserCtx.Nicks.Insert([]rune(nick))
+func (x *entityExtractor) AddNick(nick string, peerKey []byte) {
+	x.parserCtx.Nicks.InsertWithMeta([]rune(nick), peerKey)
 }
 
 // RemoveNick removes a nick from the EntityExtractor
@@ -102,8 +102,9 @@ func addEntitiesFromNode(e *chatv1.Message_Entities, node parser.Node) {
 		})
 	case *parser.Nick:
 		e.Nicks = append(e.Nicks, &chatv1.Message_Entities_Nick{
-			Nick:   n.Nick,
-			Bounds: &chatv1.Message_Entities_Bounds{Start: uint32(n.Pos()), End: uint32(n.End())},
+			Nick:    n.Nick,
+			Bounds:  &chatv1.Message_Entities_Bounds{Start: uint32(n.Pos()), End: uint32(n.End())},
+			PeerKey: n.Meta.([]byte),
 		})
 	case *parser.Tag:
 		e.Tags = append(e.Tags, &chatv1.Message_Entities_Tag{

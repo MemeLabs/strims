@@ -1,6 +1,7 @@
 import "./SettingsDrawer.scss";
 
 import { Base64 } from "js-base64";
+import { pick } from "lodash";
 import React, { useEffect } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
@@ -44,11 +45,41 @@ interface SettingsFormData {
   disableSpoilers: boolean;
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
+  normalizeAliasCase: boolean;
   viewerStateIndicator: {
     value: UIConfig.ViewerStateIndicator;
     label: string;
   };
 }
+
+const primitivePropNames = [
+  "showTime",
+  "showFlairIcons",
+  "maxLines",
+  "notificationWhisper",
+  "soundNotificationWhisper",
+  "notificationHighlight",
+  "soundNotificationHighlight",
+  "highlight",
+  "customHighlight",
+  "showWhispersInChat",
+  "focusMentioned",
+  "notificationTimeout",
+  "ignoreMentions",
+  "autocompleteHelper",
+  "autocompleteEmotePreview",
+  "taggedVisibility",
+  "hideNsfw",
+  "animateForever",
+  "formatterGreen",
+  "formatterEmote",
+  "formatterCombo",
+  "emoteModifiers",
+  "disableSpoilers",
+  "shortenLinks",
+  "compactEmoteSpacing",
+  "normalizeAliasCase",
+] as const;
 
 const SettingsDrawer: React.FC = () => {
   const { t } = useTranslation();
@@ -114,8 +145,8 @@ const SettingsDrawer: React.FC = () => {
       showRemoved: { value: showRemoved },
       viewerStateIndicator: { value: viewerStateIndicator },
       notificationSoundFile,
-      ...values
     } = getValues();
+    const values = pick(getValues(), primitivePropNames);
 
     mergeUIConfig({
       showRemoved,
@@ -184,6 +215,12 @@ const SettingsDrawer: React.FC = () => {
             control={control}
             label={t("chat.settings.Compact emote spacing")}
             name="compactEmoteSpacing"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label={t("chat.settings.Normalize alias capitalization")}
+            name="normalizeAliasCase"
             onChange={handleChange}
           />
           <TextInput

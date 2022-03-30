@@ -1676,6 +1676,7 @@ export namespace Event {
   export type IViewerStateChange = {
     id?: bigint;
     alias?: string;
+    peerKey?: Uint8Array;
     online?: boolean;
     viewingIds?: bigint[];
   }
@@ -1683,12 +1684,14 @@ export namespace Event {
   export class ViewerStateChange {
     id: bigint;
     alias: string;
+    peerKey: Uint8Array;
     online: boolean;
     viewingIds: bigint[];
 
     constructor(v?: IViewerStateChange) {
       this.id = v?.id || BigInt(0);
       this.alias = v?.alias || "";
+      this.peerKey = v?.peerKey || new Uint8Array();
       this.online = v?.online || false;
       this.viewingIds = v?.viewingIds ? v.viewingIds : [];
     }
@@ -1697,8 +1700,9 @@ export namespace Event {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
       if (m.alias.length) w.uint32(18).string(m.alias);
-      if (m.online) w.uint32(24).bool(m.online);
-      m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
+      if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+      if (m.online) w.uint32(32).bool(m.online);
+      m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(42).fork()).ldelim();
       return w;
     }
 
@@ -1716,9 +1720,12 @@ export namespace Event {
           m.alias = r.string();
           break;
           case 3:
-          m.online = r.bool();
+          m.peerKey = r.bytes();
           break;
           case 4:
+          m.online = r.bool();
+          break;
+          case 5:
           for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.viewingIds.push(r.uint64());
           break;
           default:

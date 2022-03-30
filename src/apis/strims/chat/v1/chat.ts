@@ -1123,21 +1123,25 @@ export namespace Message {
     export type INick = {
       bounds?: Message.Entities.IBounds;
       nick?: string;
+      peerKey?: Uint8Array;
     }
 
     export class Nick {
       bounds: Message.Entities.Bounds | undefined;
       nick: string;
+      peerKey: Uint8Array;
 
       constructor(v?: INick) {
         this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
         this.nick = v?.nick || "";
+        this.peerKey = v?.peerKey || new Uint8Array();
       }
 
       static encode(m: Nick, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.nick.length) w.uint32(18).string(m.nick);
+        if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
         return w;
       }
 
@@ -1153,6 +1157,9 @@ export namespace Message {
             break;
             case 2:
             m.nick = r.string();
+            break;
+            case 3:
+            m.peerKey = r.bytes();
             break;
             default:
             r.skipType(tag & 7);
@@ -1483,6 +1490,7 @@ export type IUIConfig = {
   hiddenEmotes?: string[];
   shortenLinks?: boolean;
   compactEmoteSpacing?: boolean;
+  normalizeAliasCase?: boolean;
 }
 
 export class UIConfig {
@@ -1519,6 +1527,7 @@ export class UIConfig {
   hiddenEmotes: string[];
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
+  normalizeAliasCase: boolean;
 
   constructor(v?: IUIConfig) {
     this.showTime = v?.showTime || false;
@@ -1554,6 +1563,7 @@ export class UIConfig {
     this.hiddenEmotes = v?.hiddenEmotes ? v.hiddenEmotes : [];
     this.shortenLinks = v?.shortenLinks || false;
     this.compactEmoteSpacing = v?.compactEmoteSpacing || false;
+    this.normalizeAliasCase = v?.normalizeAliasCase || false;
   }
 
   static encode(m: UIConfig, w?: Writer): Writer {
@@ -1591,6 +1601,7 @@ export class UIConfig {
     for (const v of m.hiddenEmotes) w.uint32(250).string(v);
     if (m.shortenLinks) w.uint32(256).bool(m.shortenLinks);
     if (m.compactEmoteSpacing) w.uint32(264).bool(m.compactEmoteSpacing);
+    if (m.normalizeAliasCase) w.uint32(272).bool(m.normalizeAliasCase);
     return w;
   }
 
@@ -1699,6 +1710,9 @@ export class UIConfig {
         break;
         case 33:
         m.compactEmoteSpacing = r.bool();
+        break;
+        case 34:
+        m.normalizeAliasCase = r.bool();
         break;
         default:
         r.skipType(tag & 7);

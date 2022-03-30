@@ -7,7 +7,7 @@ go 1.18
 require (
 	github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
-	github.com/MemeLabs/chat-parser v1.0.3
+	github.com/MemeLabs/chat-parser v1.0.5
 	github.com/MemeLabs/protobuf v0.2.3
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/aead/ecdh v0.2.0

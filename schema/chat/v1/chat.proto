@@ -134,6 +134,7 @@ message Message {
     message Nick {
       Bounds bounds = 1;
       string nick = 2;
+      bytes peer_key = 3;
     }
 
     message Tag {
@@ -255,6 +256,7 @@ message UIConfig {
   repeated string hidden_emotes = 31;
   bool shorten_links = 32;
   bool compact_emote_spacing = 33;
+  bool normalize_alias_case = 34;
 }
 
 message CreateServerRequest {

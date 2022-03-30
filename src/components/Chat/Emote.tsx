@@ -25,7 +25,7 @@ const Emote: React.FC<EmoteProps> = ({
   ...props
 }) => {
   const [room] = useRoom();
-  const style = room.styles.emotes[name];
+  const style = room.styles.emotes.get(name);
 
   if (style === undefined) {
     return null;
@@ -33,14 +33,14 @@ const Emote: React.FC<EmoteProps> = ({
 
   const effectiveModifiers = new Set<Modifier>();
   for (const m of style.modifiers) {
-    if (room.styles.modifiers[m] !== undefined) {
-      effectiveModifiers.add(room.styles.modifiers[m]);
+    if (room.styles.modifiers.has(m)) {
+      effectiveModifiers.add(room.styles.modifiers.get(m));
     }
   }
   if (modifiers?.length > 0 && shouldShowModifiers) {
     for (const m of modifiers) {
-      if (room.styles.modifiers[m] !== undefined) {
-        effectiveModifiers.add(room.styles.modifiers[m]);
+      if (room.styles.modifiers.has(m)) {
+        effectiveModifiers.add(room.styles.modifiers.get(m));
       }
     }
   }

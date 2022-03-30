@@ -1,12 +1,12 @@
 import React, { useContext } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 
+import { useRoom } from "../../contexts/Chat";
 import { DirectoryContext } from "../../contexts/Directory";
 
 const EmotesDrawer: React.FC = () => {
-  const [directory] = useContext(DirectoryContext);
-
-  console.log(directory);
+  const [room] = useRoom();
+  console.log({ room });
 
   return (
     <Scrollbars autoHide={true}>

@@ -68,6 +68,10 @@ github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
 github.com/MemeLabs/chat-parser v1.0.3 h1:7FFOHpOJervDpz977bzQsupD4fOgV0MW1YScungAje8=
 github.com/MemeLabs/chat-parser v1.0.3/go.mod h1:1xVMDiVKluR+50Xq15d6GblNiu5Qot9NnZfaBRfrOE0=
+github.com/MemeLabs/chat-parser v1.0.4 h1:2gKyno5kova/pQplqZO8LpsJASPFdvc1flCby7CvMIk=
+github.com/MemeLabs/chat-parser v1.0.4/go.mod h1:1xVMDiVKluR+50Xq15d6GblNiu5Qot9NnZfaBRfrOE0=
+github.com/MemeLabs/chat-parser v1.0.5 h1:XwbAicgQ78ZIo/PTFHUTjfVziPLDu/PZnGG8iNnJA0A=
+github.com/MemeLabs/chat-parser v1.0.5/go.mod h1:8AtJL7KlAt2u4DkoGI+Bu1PyFscRf5UtA4wdCnxsfxU=
 github.com/MemeLabs/protobuf v0.2.3 h1:4HvxTcOQ0Xxu+K3GRK2NX1OPPmtiGnHR2w7nzkeSeUU=
 github.com/MemeLabs/protobuf v0.2.3/go.mod h1:aYp020/gWjw2u2JrTQPvdDRi1I6miZ1THkAthDjynDs=
 github.com/Microsoft/go-winio v0.5.1 h1:aPJp2QD7OOrhO5tQXqQoGSJc+DjDtWTGLOmNyAm6FgY=

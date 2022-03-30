@@ -1,3 +1,4 @@
+import { Base64 } from "js-base64";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
@@ -74,20 +75,22 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
   useLayoutEffect(() => {
     setEmotes((prev) => {
-      const next = new Map(Array.from(prev.entries()));
+      const next = new Map(prev);
       const added = liveEmotes.filter((e) => !prev.has(e));
       const removed = Array.from(prev.entries()).filter(([e]) => !liveEmotes.includes(e));
 
-      removed.forEach(([e, { name, uris }]) => {
-        uris.forEach((uri) => URL.revokeObjectURL(uri));
+      for (const [e, { name, uris }] of removed) {
+        for (const uri of uris) {
+          URL.revokeObjectURL(uri);
+        }
         next.delete(e);
         deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes(name));
-      });
-      added.forEach((e) => {
+      }
+      for (const e of added) {
         const uris = e.images.map(({ data, fileType }) =>
           URL.createObjectURL(new Blob([data], { type: toMimeType(fileType) }))
         );
-        const { name } = styles.emotes[e.name];
+        const { name } = styles.emotes.get(e.name);
         const imageSet = e.images.map(({ scale }, i) => `url(${uris[i]}) ${toCSSScale(scale)}x`);
         const sample = e.images[0];
         const sampleScale = toCSSScale(sample.scale);
@@ -157,7 +160,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         );
 
         next.set(e, { name, uris });
-      });
+      }
 
       return next;
     });
@@ -166,7 +169,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
   useLayoutEffect(() => {
     deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--tag_"));
 
-    styles.tags.forEach(({ name, color, sensitive }) => {
+    for (const { name, color, sensitive } of styles.tags) {
       let rules: PropList = [["--tag-color", color]];
       if (sensitive && uiConfig.hideNsfw) {
         rules = upsertProps(rules, ["display", "none"]);
@@ -175,15 +178,52 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       ref.current.sheet.insertRule(
         `.chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
       );
-    });
+    }
+
+    deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--author_"));
+
+    const props = new Map<string, PropList>();
+
+    for (const { peerKey } of uiConfig.highlights) {
+      const key = Base64.fromUint8Array(peerKey, true);
+      props.set(key, [["--author-highlight-color", "var(--chat-highlight-color)"]]);
+    }
+
+    for (const { peerKey, color } of uiConfig.tags) {
+      const key = Base64.fromUint8Array(peerKey, true);
+      props.set(key, [...(props.get(key) ?? []), ["--author-tag-color", color]]);
+    }
+
+    for (const { peerKey } of uiConfig.ignores) {
+      const key = Base64.fromUint8Array(peerKey, true);
+      props.set(key, [...(props.get(key) ?? []), ["display", "none"]]);
+    }
+
+    for (const [key, rules] of props) {
+      ref.current.sheet.insertRule(
+        `.chat__message--author_${key} {${rules.map((r) => r.join(":")).join(";")}}`
+      );
+    }
+
+    deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--mention_"));
+
+    if (uiConfig.ignoreMentions) {
+      for (const { peerKey } of uiConfig.ignores) {
+        ref.current.sheet.insertRule(
+          `.chat__message--mention_${Base64.fromUint8Array(peerKey, true)} { display: none; }`
+        );
+      }
+    }
   }, [styles, uiConfig]);
 
   useEffect(() => {
     return () =>
       setEmotes((prev) => {
-        Array.from(prev.values()).forEach(({ uris }) =>
-          uris.forEach((uri) => URL.revokeObjectURL(uri))
-        );
+        for (const { uris } of prev.values()) {
+          for (const uri of uris) {
+            URL.revokeObjectURL(uri);
+          }
+        }
         return prev;
       });
   }, []);

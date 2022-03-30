@@ -17,6 +17,7 @@ export interface DirectoryListing {
   snippet: ListingSnippet;
   viewerCount: number;
   viewers: Map<bigint, DirectoryUser>;
+  viewersByName: Map<string, DirectoryUser>;
 }
 
 export interface DirectoryUser {
@@ -77,6 +78,7 @@ export const Provider: React.FC = ({ children }) => {
               id,
               viewerCount: 0,
               viewers: new Map(),
+              viewersByName: new Map(),
               ...listings.get(id),
               listing,
               snippet,
@@ -99,16 +101,18 @@ export const Provider: React.FC = ({ children }) => {
             break;
           }
           case Event.BodyCase.VIEWER_STATE_CHANGE: {
-            const user: DirectoryUser = { ...event.viewerStateChange };
+            const { id, alias, viewingIds, online } = event.viewerStateChange;
+            const user: DirectoryUser = { id, alias, viewingIds };
             const prevViewingIds = users.get(user.id)?.viewingIds ?? [];
-            users.set(user.id, user);
 
             for (const id of user.viewingIds) {
               const listing = listings.get(id);
               if (listing) {
                 const viewers = new Map(listing.viewers);
+                const viewersByName = new Map(listing.viewersByName);
                 viewers.set(user.id, user);
-                listings.set(id, { ...listing, viewers });
+                viewersByName.set(user.alias, user);
+                listings.set(id, { ...listing, viewers, viewersByName });
               }
             }
 
@@ -117,9 +121,17 @@ export const Provider: React.FC = ({ children }) => {
               const listing = listings.get(id);
               if (listing) {
                 const viewers = new Map(listing.viewers);
+                const viewersByName = new Map(listing.viewersByName);
                 viewers.delete(user.id);
-                listings.set(id, { ...listing, viewers });
+                viewersByName.delete(user.alias);
+                listings.set(id, { ...listing, viewers, viewersByName });
               }
+            }
+
+            if (online) {
+              users.set(user.id, user);
+            } else {
+              users.delete(user.id);
             }
             break;
           }

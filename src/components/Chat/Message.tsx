@@ -2,6 +2,7 @@ import "./Message.scss";
 
 import clsx from "clsx";
 import date from "date-and-time";
+import { Base64 } from "js-base64";
 import React, { ReactNode, useEffect, useRef } from "react";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
@@ -65,10 +66,11 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
 
 interface MessageNickProps {
   entity: chatv1_Message.Entities.Nick;
+  normalizeCase: boolean;
 }
 
-const MessageNick: React.FC<MessageNickProps> = ({ children }) => (
-  <span className="chat__message__nick">{children}</span>
+const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase }) => (
+  <span className="chat__message__nick">{normalizeCase ? entity.nick : children}</span>
 );
 
 interface MessageTagProps {
@@ -292,7 +294,7 @@ const ComboMessage: React.FC<MessageProps> = ({
 
 const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
-  message: { nick, serverTime, body, entities },
+  message: { nick, peerKey, serverTime, body, entities },
   className,
   ...props
 }) => {
@@ -312,7 +314,11 @@ const StandardMessage: React.FC<MessageProps> = ({
       })
     );
   }
-  entities.nicks.forEach((entity) => formatter.insertEntity(MessageNick, entity));
+  entities.nicks.forEach((entity) =>
+    formatter.insertEntity(MessageNick, entity, {
+      normalizeCase: uiConfig.normalizeAliasCase,
+    })
+  );
   entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
   if (!uiConfig.disableSpoilers) {
     entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
@@ -326,11 +332,15 @@ const StandardMessage: React.FC<MessageProps> = ({
 
   const classNames = clsx([
     "chat__message",
+    `chat__message--author_${Base64.fromUint8Array(peerKey, true)}`,
     {
       "chat__message--self": entities.selfMessage,
       "chat__message--tagged": entities.tags.length > 0,
     },
-    ...entities.tags.map(({ name }) => `chat__message--tag_${name}`),
+    entities.tags.map(({ name }) => `chat__message--tag_${name}`),
+    entities.nicks.map(
+      ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+    ),
     className,
   ]);
 

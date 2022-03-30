@@ -482,6 +482,8 @@ func (s *chatService) Ignore(ctx context.Context, req *chatv1.IgnoreRequest) (*c
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
 
+	debug.PrintJSON(cert)
+
 	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
 		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](cert.Key)); i != -1 {
 			p.Ignores = slices.Delete(p.Ignores, i, i+1)

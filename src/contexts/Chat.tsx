@@ -16,6 +16,7 @@ import {
   Tag,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
+import { Listing } from "../apis/strims/network/v1/directory/directory";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { useDirectoryListing } from "./Directory";
 import { useClient } from "./FrontendApi";
@@ -30,6 +31,10 @@ type RoomAction =
   | {
       type: "TOGGLE_MESSAGE_GC";
       state: boolean;
+    }
+  | {
+      type: "SYNC_NICKS";
+      nicks: string[];
     }
   | {
       type: "CLIENT_DATA";
@@ -54,18 +59,19 @@ export interface Style {
   modifiers: string[];
 }
 
-export type EmoteStyleMap = {
-  [key: string]: Style;
-};
-
-export type ModifierMap = {
-  [key: string]: Modifier;
-};
-
 export interface ChatStyles {
-  emotes: EmoteStyleMap;
-  modifiers: ModifierMap;
+  emotes: Map<string, Style>;
+  modifiers: Map<string, Modifier>;
   tags: Tag[];
+}
+
+export interface UserMeta {
+  alias: string;
+  tagColor: string;
+  stream: {
+    listing: Listing;
+    color: string;
+  };
 }
 
 const enum RoomInitState {
@@ -118,8 +124,8 @@ const initialRoomState: RoomState = {
   assetBundles: [],
   liveEmotes: [],
   styles: {
-    emotes: {},
-    modifiers: {},
+    emotes: new Map(),
+    modifiers: new Map(),
     tags: [],
   },
   emotes: [],
@@ -174,6 +180,7 @@ const initialState: State = {
     disableSpoilers: false,
     shortenLinks: true,
     compactEmoteSpacing: false,
+    normalizeAliasCase: true,
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
   config: {
@@ -241,6 +248,11 @@ const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomSta
       return {
         ...room,
         messageGCEnabled: action.state,
+      };
+    case "SYNC_NICKS":
+      return {
+        ...room,
+        nicks: action.nicks,
       };
     default:
       return room;
@@ -327,7 +339,7 @@ const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState =>
     room = b.room ?? room;
   }
   const liveEmotes = Array.from(liveEmoteMap.values());
-  const emoteStyles = Object.fromEntries(
+  const emoteStyles = new Map(
     liveEmotes.map(({ id, name, effects }) => {
       const style: Style = {
         name: `e_${name}_${state.id}_${id}`,
@@ -356,7 +368,7 @@ const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState =>
     liveEmotes,
     styles: {
       emotes: emoteStyles,
-      modifiers: Object.fromEntries(liveModifiers.map((m) => [m.name, m])),
+      modifiers: new Map(liveModifiers.map((m) => [m.name, m])),
       tags: liveTags,
     },
     emotes: toNames(liveEmotes),
@@ -437,8 +449,21 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
     dispatch({ type: "INIT", serverEvents, networkKey, serverKey });
   }, [networkKey, serverKey]);
 
-  const listing = useDirectoryListing(networkKey, directoryListingId)
-  console.log({listing});
+  const listing = useDirectoryListing(networkKey, directoryListingId);
+  useEffect(() => {
+    if (!listing) {
+      return;
+    }
+
+    const nicks: string[] = [];
+    const metas = new Map<string, UserMeta>();
+    for (const { alias } of listing.viewers.values()) {
+      nicks.push(alias);
+
+      const meta = { alias };
+    }
+    dispatch({ type: "SYNC_NICKS", nicks });
+  }, [listing]);
 
   useEffect(() => {
     if (directoryListingId === BigInt(0)) {
@@ -459,7 +484,11 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
         console.log("help");
       },
       ignore: (alias: string, duration: string) => {
-        void client.chat.ignore({ networkKey, alias, duration });
+        if (alias) {
+          void client.chat.ignore({ networkKey, alias, duration });
+        } else {
+          console.log("ignore");
+        }
       },
       unignore: (alias: string) => {
         void client.chat.unignore({ networkKey, alias });
