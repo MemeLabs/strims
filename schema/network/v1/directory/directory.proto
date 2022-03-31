@@ -329,9 +329,7 @@ message FrontendJoinRequest {
   uint64 id = 2;
 }
 
-message FrontendJoinResponse {
-  uint64 id = 1;
-}
+message FrontendJoinResponse {}
 
 message FrontendPartRequest {
   bytes network_key = 1;

@@ -1,11 +1,9 @@
 import "./EmbedPlayer.scss";
 
-import { Base64 } from "js-base64";
 import qs from "qs";
-import React, { useEffect } from "react";
+import React from "react";
 
-import { useClient } from "../contexts/FrontendApi";
-import { ServiceSlug, slugToService } from "../lib/directory";
+import { ServiceSlug } from "../lib/directory";
 
 export interface EmbedPlayerProps {
   service: ServiceSlug;
@@ -33,35 +31,8 @@ const getEmbedUrl = (
   }
 };
 
-const EmbedPlayer: React.FC<EmbedPlayerProps> = ({
-  service,
-  id,
-  queryParams,
-  networkKey: networkKeyString,
-}) => {
-  const client = useClient();
+const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id, queryParams }) => {
   const url = getEmbedUrl(service, id, queryParams);
-
-  useEffect(() => {
-    if (!networkKeyString) {
-      return;
-    }
-
-    const networkKey = Base64.toUint8Array(networkKeyString);
-    const res = client.directory.publish({
-      networkKey,
-      listing: {
-        content: {
-          embed: {
-            service: slugToService(service),
-            id,
-            queryParams,
-          },
-        },
-      },
-    });
-    return () => void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
-  }, [service, id, networkKeyString]);
 
   if (!url) {
     return null;

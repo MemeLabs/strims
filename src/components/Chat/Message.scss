@@ -75,14 +75,16 @@
     &__spoiler {
       cursor: pointer;
       padding: 0 3px;
-      transition: color 0.2s ease-in-out;
+      transition: color var(--timing-medium) ease-in-out;
       background: var(--chat-spoiler-color, black);
 
       & > .chat__emote,
       & > .chat__emote_container,
       & > .chat__message__code,
       & > .chat__message__link {
-        transition: opacity 0.2s ease-in-out;
+        transform: scale(1);
+        transition: opacity var(--timing-medium) ease-in-out,
+          transform var(--timing-medium) ease-in-out;
       }
 
       &--hidden {
@@ -93,6 +95,10 @@
         & > .chat__message__code,
         & > .chat__message__link {
           opacity: 0;
+        }
+
+        & > .chat__emote {
+          transform: scale(0);
         }
       }
     }

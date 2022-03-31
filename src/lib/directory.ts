@@ -19,26 +19,29 @@ export const serviceToSlug = (t: Listing.Embed.Service): ServiceSlug =>
 export const slugToService = (t: ServiceSlug): Listing.Embed.Service =>
   serviceSlugs.find(([k]) => k === t)[1];
 
-export const formatUri = (networkKey: string, { content }: Listing): string => {
+export const formatUri = (networkKey: string, { content }: Listing, listingId?: bigint): string => {
   switch (content.case) {
     case Listing.ContentCase.EMBED: {
-      let search = "?k=" + networkKey;
-      if (!isEmpty(content.embed.queryParams)) {
-        search += "&" + qs.stringify(Object.fromEntries(content.embed.queryParams));
-      }
-      return `/embed/${serviceToSlug(content.embed.service)}/${content.embed.id}${search}`;
+      const search = qs.stringify({
+        k: networkKey,
+        ...Object.fromEntries(content.embed.queryParams),
+      });
+      return `/embed/${serviceToSlug(content.embed.service)}/${content.embed.id}?${search}`;
     }
     case Listing.ContentCase.MEDIA: {
-      const mimeType = encodeURIComponent(content.media.mimeType);
-      const swarmUri = encodeURIComponent(content.media.swarmUri);
-      return `/player/${networkKey}?mimeType=${mimeType}&swarmUri=${swarmUri}`;
+      const { mimeType, swarmUri } = content.media;
+      return `/player/${networkKey}?${qs.stringify({ mimeType, swarmUri, listingId })}`;
     }
     default:
       return "";
   }
 };
 
-export const getListingPlayerSource = (networkKey: string, { content }: Listing): PlayerSource => {
+export const getListingPlayerSource = (
+  networkKey: string,
+  { content }: Listing,
+  listingId?: bigint
+): PlayerSource => {
   switch (content.case) {
     case Listing.ContentCase.EMBED:
       return {
@@ -54,6 +57,7 @@ export const getListingPlayerSource = (networkKey: string, { content }: Listing)
         mimeType: content.media.mimeType,
         swarmUri: content.media.swarmUri,
         networkKey,
+        listingId,
       };
     default:
       return null;

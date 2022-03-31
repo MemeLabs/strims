@@ -17,7 +17,7 @@ const Categories = lazy(() => import("../pages/Categories"));
 const Directory = lazy(() => import("../pages/Directory"));
 const Embed = lazy(() => import("../pages/Embed"));
 const Home = lazy(() => import("../pages/Home"));
-const PlayerTest = lazy(() => import("../pages/PlayerTest"));
+const Player = lazy(() => import("../pages/Player"));
 const Streams = lazy(() => import("../pages/Streams"));
 
 export const createSettingsRoutes = (layout: ReactElement) => (
@@ -38,7 +38,7 @@ const mainRoutes = (
   <Route path="*" element={<LayoutBody />}>
     <Route index element={<Home />} />
     <Route path="directory/:networkKey" element={<Directory />} />
-    <Route path="player/:networkKey" element={<PlayerTest />} />
+    <Route path="player/:networkKey" element={<Player />} />
     <Route path="embed/:service/:id" element={<Embed />} />
     <Route path="categories" element={<Categories />} />
     <Route path="broadcast" element={<Broadcast />} />

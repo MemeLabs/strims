@@ -1,6 +1,9 @@
-import React, { createContext, useMemo, useState } from "react";
+import { Base64 } from "js-base64";
+import { isEqual } from "lodash";
+import React, { createContext, useCallback, useMemo, useState } from "react";
 
-import { ServiceSlug } from "../lib/directory";
+import { ServiceSlug, slugToService } from "../lib/directory";
+import { useClient } from "./FrontendApi";
 
 export const enum PlayerMode {
   FULL,
@@ -9,20 +12,23 @@ export const enum PlayerMode {
   CLOSED,
 }
 
-export type PlayerSource =
-  | {
-      type: "embed";
-      service: ServiceSlug;
-      id: string;
-      queryParams?: Map<string, string>;
-      networkKey?: string;
-    }
-  | {
-      type: "swarm";
-      swarmUri: string;
-      networkKey: string;
-      mimeType: string;
-    };
+export interface EmbedSource {
+  type: "embed";
+  service: ServiceSlug;
+  id: string;
+  queryParams?: Map<string, string>;
+  networkKey?: string;
+}
+
+export interface SwarmSource {
+  type: "swarm";
+  swarmUri: string;
+  networkKey: string;
+  mimeType: string;
+  listingId: bigint;
+}
+
+export type PlayerSource = EmbedSource | SwarmSource;
 
 interface PlayerValue {
   path: string;
@@ -36,10 +42,63 @@ interface PlayerValue {
 export const PlayerContext = createContext<PlayerValue>(null);
 
 export const Provider: React.FC = ({ children }) => {
+  const client = useClient();
   const [path, setPath] = useState<string>("");
-  const [source, setSource] = useState<PlayerSource>(null);
+  const [source, setSourceState] = useState<PlayerSource>(null);
   const [mode, setMode] = useState<PlayerMode>(PlayerMode.PIP);
-  // const { theaterMode } = useLayout();
+  const [, setListingCleanup] = useState<() => void>();
+
+  const publishEmbedListing = ({
+    networkKey: networkKeyString,
+    service,
+    id,
+    queryParams,
+  }: EmbedSource) => {
+    const networkKey = Base64.toUint8Array(networkKeyString);
+    const res = client.directory.publish({
+      networkKey,
+      listing: {
+        content: {
+          embed: {
+            service: slugToService(service),
+            id,
+            queryParams,
+          },
+        },
+      },
+    });
+    return () => void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
+  };
+
+  const joinSwarmListing = ({ networkKey: networkKeyString, listingId: id }: SwarmSource) => {
+    const networkKey = Base64.toUint8Array(networkKeyString);
+    const res = client.directory.join({ networkKey, id });
+    return () => void res.then(() => client.directory.part({ networkKey, id }));
+  };
+
+  const setSource = useCallback(
+    (next: PlayerSource) => {
+      if (isEqual(next, source)) {
+        return;
+      }
+
+      setSourceState(next);
+      setListingCleanup((prev) => {
+        prev?.();
+
+        if (!next?.networkKey) {
+          return () => null;
+        }
+        switch (next.type) {
+          case "embed":
+            return publishEmbedListing(next);
+          case "swarm":
+            return joinSwarmListing(next);
+        }
+      });
+    },
+    [source]
+  );
 
   const value = useMemo<PlayerValue>(
     () => ({
@@ -52,35 +111,6 @@ export const Provider: React.FC = ({ children }) => {
     }),
     [source, mode]
   );
-
-  // const handleClose = useCallback(() => {
-  //   setMode(PlayerMode.CLOSED);
-  //   setSource(null);
-  // }, []);
-
-  // const playerEmbedClass = clsx(
-  //   "player_embed",
-  //   theaterMode
-  //     ? "player_embed--theater"
-  //     : {
-  //         "player_embed--full": mode === PlayerMode.FULL,
-  //         "player_embed--large": mode === PlayerMode.LARGE,
-  //         "player_embed--pip": mode === PlayerMode.PIP,
-  //         "player_embed--closed": mode === PlayerMode.CLOSED,
-  //       }
-  // );
-
-  // const embedRef = useRef<HTMLDivElement>(null);
-  // const [, height] = useResizeObserver(embedRef);
-
-  // const containerStyle: CSSProperties = {
-  //   marginTop: mode === PlayerMode.LARGE ? `${height}px` : 0,
-  // };
-
-  // const scrollbarRef = useRef<Scrollbars>(null);
-  // useEffect(() => {
-  //   scrollbarRef.current.scrollToTop();
-  // }, [theaterMode]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 };

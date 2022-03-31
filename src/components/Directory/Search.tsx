@@ -23,10 +23,10 @@ import { formatUri, getListingPlayerSource } from "../../lib/directory";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import SnippetImage from "../Directory/SnippetImage";
 
-const EMBED_COMMON_ID = "([\\w-]{1,30})";
+const EMBED_ID = "([\\w-]{1,30})";
 const EMBED_URLS = [
   {
-    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
+    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
       id: v[1],
@@ -34,28 +34,28 @@ const EMBED_URLS = [
     }),
   },
   {
-    pattern: new RegExp(`twitch\\.tv/${EMBED_COMMON_ID}/?$`),
+    pattern: new RegExp(`twitch\\.tv/${EMBED_ID}/?$`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
       id: v[1],
     }),
   },
   {
-    pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_COMMON_ID}$`),
+    pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_ID}$`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
       id: v[1],
     }),
   },
   {
-    pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_COMMON_ID}`),
+    pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_ID}`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
       id: v[1],
     }),
   },
   {
-    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
+    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_ID}(?:.*&t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
@@ -63,7 +63,7 @@ const EMBED_URLS = [
     }),
   },
   {
-    pattern: new RegExp(`youtu\\.be/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
+    pattern: new RegExp(`youtu\\.be/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
@@ -71,7 +71,7 @@ const EMBED_URLS = [
     }),
   },
   {
-    pattern: new RegExp(`youtube\\.com/embed/${EMBED_COMMON_ID}(?:.*&t=([^&$]+))`),
+    pattern: new RegExp(`youtube\\.com/embed/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
       service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
@@ -304,7 +304,7 @@ const Search: React.FC<SearchProps> = ({
           results.push({
             type: "LISTING",
             listing,
-            onSelect: () => selectListing(networkKey, listing.listing),
+            onSelect: () => selectListing(networkKey, listing.listing, listing.id),
           });
         }
       }
@@ -349,13 +349,13 @@ const Search: React.FC<SearchProps> = ({
   };
 
   // TODO: DRY with grid (useDirectory?)
-  const selectListing = (networkKey: Uint8Array, listing: Listing) => {
+  const selectListing = (networkKey: Uint8Array, listing: Listing, id?: bigint) => {
     layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey, true), listing));
+    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey, true), listing, id));
     if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(Base64.fromUint8Array(networkKey, true), listing);
+      const path = formatUri(Base64.fromUint8Array(networkKey, true), listing, id);
       player.setPath(path);
       navigate(path);
     }

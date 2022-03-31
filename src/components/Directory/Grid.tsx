@@ -21,6 +21,7 @@ interface DirectoryGridItemProps extends DirectoryListing {
 const EMPTY_SNIPPET = new ListingSnippet();
 
 const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
+  id,
   listing,
   snippet,
   viewerCount,
@@ -49,9 +50,9 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
     layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(networkKey, listing));
+    player.setSource(getListingPlayerSource(networkKey, listing, id));
     if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(networkKey, listing);
+      const path = formatUri(networkKey, listing, id);
       player.setPath(path);
 
       navigate(path);

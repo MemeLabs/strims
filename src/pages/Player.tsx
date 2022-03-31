@@ -8,6 +8,7 @@ import useQuery from "../hooks/useQuery";
 interface PlayerTestQueryParams {
   swarmUri: string;
   mimeType: string;
+  listingId: string;
 }
 
 const PlayerTest: React.FC = () => {
@@ -26,15 +27,17 @@ const PlayerTest: React.FC = () => {
       networkKey: params.networkKey,
       swarmUri: query.swarmUri,
       mimeType: query.mimeType,
+      listingId: BigInt(query.listingId),
     });
     setPath(location.pathname + location.search);
     return () => {
       toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };
-  }, [params.networkKey, query.swarmUri, query.mimeType]);
+  }, [params.networkKey, query.swarmUri, query.mimeType, query.listingId]);
 
-  // TODO: stream metadata... title/description/links/viewers/stream metrics/etc
+  // TODO: stream metadata - title, description, links, viewers, metrics,
+  // schedule, etc...
   // directory api
   return <div style={{ height: "1000px" }} />;
 };

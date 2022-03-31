@@ -2778,38 +2778,22 @@ export class FrontendJoinRequest {
 }
 
 export type IFrontendJoinResponse = {
-  id?: bigint;
 }
 
 export class FrontendJoinResponse {
-  id: bigint;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IFrontendJoinResponse) {
-    this.id = v?.id || BigInt(0);
   }
 
   static encode(m: FrontendJoinResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): FrontendJoinResponse {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendJoinResponse();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.id = r.uint64();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendJoinResponse();
   }
 }
 

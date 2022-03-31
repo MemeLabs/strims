@@ -4,6 +4,6 @@
   circle,
   rect {
     fill: var(--fill-color, #333);
-    transition: fill ease-in-out var(--timing-medium);
+    transition: fill var(--timing-medium) ease-in-out;
   }
 }
