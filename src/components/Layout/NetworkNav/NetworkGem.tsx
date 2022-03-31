@@ -31,7 +31,7 @@ const NetworkGem: React.FC<NetworkGemProps> = ({ network, peerCount }) => {
   const backgroundColor = "green";
   return (
     <div className={gemClassName} style={{ backgroundColor }}>
-      {certificateRoot(network.certificate).subject.substr(0, 1)}
+      {certificateRoot(network.certificate).subject.substring(0, 1)}
       <Badge count={peerCount} max={500} />
     </div>
   );

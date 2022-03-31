@@ -17,7 +17,18 @@
         var(--card-outset-border-bottom) var(--card-outset-border-left);
       display: inline-block;
       margin: -1px 0;
-      padding: 1px 8px 1px 3px;
+      height: 1.4rem;
+
+      &__text {
+        padding: 1px 8px 1px 3px;
+      }
+
+      .chat__viewer_state_indicator {
+        height: 1.4rem;
+        vertical-align: top;
+        display: inline-block;
+        border-radius: 3px 0 0 3px;
+      }
     }
 
     &__colon {

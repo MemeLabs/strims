@@ -20,7 +20,7 @@ void i18n
     },
 
     backend: {
-      queryStringParams: { "_v": GIT_HASH.substr(0, 7) },
+      queryStringParams: { "_v": GIT_HASH.substring(0, 7) },
     },
   });
 

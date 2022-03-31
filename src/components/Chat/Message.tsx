@@ -3,10 +3,13 @@ import "./Message.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
+import { uniq } from "lodash";
 import React, { ReactNode, useEffect, useRef } from "react";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
+import { useRoom } from "../../contexts/Chat";
 import Emote from "./Emote";
+import { ViewerStateIndicator } from "./ViewerStateIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
 const LINK_SHORTEN_AFFIX_LENGTH = 35;
@@ -185,7 +188,7 @@ class MessageFormatter {
     }
 
     const splitOffset = offset - this.bounds[i];
-    this.body.splice(i, 1, span.substr(0, splitOffset), span.substr(splitOffset));
+    this.body.splice(i, 1, span.substring(0, splitOffset), span.substring(splitOffset));
     this.bounds.splice(i + 1, 0, offset);
     return i + 1;
   }
@@ -262,7 +265,7 @@ const ComboMessage: React.FC<MessageProps> = ({
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
-  const className = clsx([baseClassName, "chat__combo_message"], {
+  const className = clsx(baseClassName, "chat__combo_message", {
     [`chat__combo_message--scale_${scale}`]: scale > 0,
     "chat__combo_message--complete": !isMostRecent,
   });
@@ -295,9 +298,11 @@ const ComboMessage: React.FC<MessageProps> = ({
 const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
   message: { nick, peerKey, serverTime, body, entities },
-  className,
+  className: baseClassName,
   ...props
 }) => {
+  const [{ users }] = useRoom();
+
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
   entities.links.forEach((entity) =>
@@ -330,26 +335,38 @@ const StandardMessage: React.FC<MessageProps> = ({
     formatter.insertEntity(MessageSelf, entities.selfMessage);
   }
 
-  const classNames = clsx([
+  const authorKey = Base64.fromUint8Array(peerKey, true);
+
+  const classNames = clsx(
+    baseClassName,
     "chat__message",
-    `chat__message--author_${Base64.fromUint8Array(peerKey, true)}`,
+    `chat__message--author_${authorKey}`,
     {
       "chat__message--self": entities.selfMessage,
       "chat__message--tagged": entities.tags.length > 0,
     },
-    entities.tags.map(({ name }) => `chat__message--tag_${name}`),
-    entities.nicks.map(
-      ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
-    ),
-    className,
-  ]);
+    uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
+    uniq(
+      entities.nicks.map(
+        ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+      )
+    )
+  );
 
   return (
     <div {...props} className={classNames}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__message__author">{nick}</span>
+      <span className="chat__message__author">
+        {!!uiConfig.viewerStateIndicator && (
+          <ViewerStateIndicator
+            style={uiConfig.viewerStateIndicator}
+            listing={users.get(authorKey)?.listing}
+          />
+        )}
+        <span className="chat__message__author__text">{nick}</span>
+      </span>
       <span className="chat__message__colon">{": "}</span>
       <span className="chat__message__body">{formatter.body}</span>
     </div>

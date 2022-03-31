@@ -17,5 +17,7 @@ declare module "csstype" {
     "--chat-height"?: string | number;
 
     "--video-height"?: string | number;
+
+    "--fill-color"?: string;
   }
 }

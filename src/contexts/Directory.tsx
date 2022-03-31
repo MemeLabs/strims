@@ -6,6 +6,7 @@ import {
   Event,
   EventBroadcast,
   FrontendOpenResponse,
+  Listing,
   ListingSnippet,
   Listing as directory_Listing,
 } from "../apis/strims/network/v1/directory/directory";
@@ -23,6 +24,7 @@ export interface DirectoryListing {
 export interface DirectoryUser {
   id: bigint;
   alias: string;
+  peerKey: Uint8Array;
   viewingIds: bigint[];
 }
 
@@ -31,6 +33,20 @@ export interface Directory {
   listings: Map<bigint, DirectoryListing>;
   users: Map<bigint, DirectoryUser>;
 }
+
+export const findUserMediaListing = (
+  directory: Directory,
+  user: DirectoryUser
+): DirectoryListing => {
+  for (const id of user.viewingIds) {
+    const listing = directory.listings.get(id);
+    switch (listing.listing.content.case) {
+      case Listing.ContentCase.EMBED:
+      case Listing.ContentCase.MEDIA:
+        return listing;
+    }
+  }
+};
 
 export type State = {
   [key: string]: Directory;
@@ -101,8 +117,8 @@ export const Provider: React.FC = ({ children }) => {
             break;
           }
           case Event.BodyCase.VIEWER_STATE_CHANGE: {
-            const { id, alias, viewingIds, online } = event.viewerStateChange;
-            const user: DirectoryUser = { id, alias, viewingIds };
+            const { id, alias, peerKey, viewingIds, online } = event.viewerStateChange;
+            const user: DirectoryUser = { id, alias, peerKey, viewingIds };
             const prevViewingIds = users.get(user.id)?.viewingIds ?? [];
 
             for (const id of user.viewingIds) {

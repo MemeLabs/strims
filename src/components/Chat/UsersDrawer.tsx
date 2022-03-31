@@ -1,22 +1,25 @@
-import React, { useContext } from "react";
+import "./UsersDrawer.scss";
+
+import React from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 
-import { useRoom } from "../../contexts/Chat";
-import { DirectoryContext } from "../../contexts/Directory";
+import { useChat, useRoom } from "../../contexts/Chat";
+import { ViewerStateIndicator } from "./ViewerStateIndicator";
 
 const EmotesDrawer: React.FC = () => {
+  const [{ uiConfig }] = useChat();
   const [room] = useRoom();
-  console.log({ room });
 
   return (
     <Scrollbars autoHide={true}>
-      <div className="chat__user_list">
-        {/* {room.emotes.map((name) => (
-          <div key={name} className="chat__user_list__user">
-            <Emote name={name} shouldAnimateForever />
-          </div>
-        ))} */}
-      </div>
+      <ul className="chat__users_list">
+        {Array.from(room.users.values()).map(({ alias, listing }) => (
+          <li key={alias} className="chat__users_list__item">
+            <ViewerStateIndicator style={uiConfig.viewerStateIndicator} listing={listing} />
+            <span>{alias}</span>
+          </li>
+        ))}
+      </ul>
     </Scrollbars>
   );
 };

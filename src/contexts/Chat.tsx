@@ -17,8 +17,14 @@ import {
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
 import { Listing } from "../apis/strims/network/v1/directory/directory";
+import useReady from "../hooks/useReady";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
-import { useDirectoryListing } from "./Directory";
+import {
+  DirectoryListing,
+  findUserMediaListing,
+  useDirectory,
+  useDirectoryListing,
+} from "./Directory";
 import { useClient } from "./FrontendApi";
 
 type RoomAction =
@@ -33,8 +39,9 @@ type RoomAction =
       state: boolean;
     }
   | {
-      type: "SYNC_NICKS";
+      type: "SYNC_USERS";
       nicks: string[];
+      users: Map<string, UserMeta>;
     }
   | {
       type: "CLIENT_DATA";
@@ -67,11 +74,7 @@ export interface ChatStyles {
 
 export interface UserMeta {
   alias: string;
-  tagColor: string;
-  stream: {
-    listing: Listing;
-    color: string;
-  };
+  listing: DirectoryListing;
 }
 
 const enum RoomInitState {
@@ -97,6 +100,7 @@ export interface RoomState {
   modifiers: string[];
   nicks: string[];
   tags: string[];
+  users: Map<string, UserMeta>;
   errors: Error[];
   state: RoomInitState;
 }
@@ -132,6 +136,7 @@ const initialRoomState: RoomState = {
   modifiers: [],
   nicks: [],
   tags: [],
+  users: new Map(),
   errors: [],
   state: RoomInitState.NEW,
 };
@@ -249,10 +254,11 @@ const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomSta
         ...room,
         messageGCEnabled: action.state,
       };
-    case "SYNC_NICKS":
+    case "SYNC_USERS":
       return {
         ...room,
         nicks: action.nicks,
+        users: action.users,
       };
     default:
       return room;
@@ -450,20 +456,19 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({
   }, [networkKey, serverKey]);
 
   const listing = useDirectoryListing(networkKey, directoryListingId);
-  useEffect(() => {
-    if (!listing) {
-      return;
-    }
-
+  const directory = useDirectory(networkKey);
+  useReady(() => {
     const nicks: string[] = [];
-    const metas = new Map<string, UserMeta>();
-    for (const { alias } of listing.viewers.values()) {
-      nicks.push(alias);
-
-      const meta = { alias };
+    const users = new Map<string, UserMeta>();
+    for (const user of listing.viewers.values()) {
+      nicks.push(user.alias);
+      users.set(Base64.fromUint8Array(user.peerKey, true), {
+        alias: user.alias,
+        listing: findUserMediaListing(directory, user),
+      });
     }
-    dispatch({ type: "SYNC_NICKS", nicks });
-  }, [listing]);
+    dispatch({ type: "SYNC_USERS", nicks, users });
+  }, [listing, directory]);
 
   useEffect(() => {
     if (directoryListingId === BigInt(0)) {

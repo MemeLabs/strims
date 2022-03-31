@@ -15,10 +15,12 @@ import MessageEmitter from "../../mocks/chat/MessageEmitter";
 class ChatService {
   messages: Readable<chatv1.Message>;
   assetBundles: Readable<chatv1.AssetBundle>;
+  uiConfigs: Readable<chatv1.UIConfig>;
 
   constructor(messages = new MessageEmitter(1000)) {
     this.messages = messages;
     this.assetBundles = new PassThrough({ objectMode: true });
+    this.uiConfigs = new PassThrough({ objectMode: true });
   }
 
   destroy(): void {
@@ -90,12 +92,19 @@ class ChatService {
     return new chatv1.ClientSendMessageResponse();
   }
 
-  setUIConfig(): chatv1.SetUIConfigResponse {
+  setUIConfig(req: chatv1.SetUIConfigRequest): chatv1.SetUIConfigResponse {
+    this.uiConfigs.push(req.uiConfig);
     return new chatv1.SetUIConfigResponse();
   }
 
   watchUIConfig(): Readable<chatv1.WatchUIConfigResponse> {
-    return new PassThrough({ objectMode: true });
+    const ch = new PassThrough({ objectMode: true });
+
+    this.uiConfigs.on("data", (uiConfig) =>
+      ch.push(new chatv1.WatchUIConfigResponse({ uiConfig }))
+    );
+
+    return ch;
   }
 
   // ChatServerFrontendService

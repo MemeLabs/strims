@@ -268,7 +268,7 @@ type LegacyMessage = {
 };
 
 const historyMessages = history
-  .map((v) => JSON.parse(v.substr(4)) as unknown as LegacyMessage)
+  .map((v) => JSON.parse(v.substring(4)) as unknown as LegacyMessage)
   .map(
     ({ nick, timestamp, data, entities }) =>
       new Message({

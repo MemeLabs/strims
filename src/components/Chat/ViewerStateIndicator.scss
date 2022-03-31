@@ -1,0 +1,9 @@
+.chat__viewer_state_indicator {
+  height: 1rem;
+
+  circle,
+  rect {
+    fill: var(--fill-color, #333);
+    transition: fill ease-in-out var(--timing-medium);
+  }
+}

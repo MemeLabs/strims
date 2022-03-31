@@ -45,7 +45,7 @@ const formatUnits = (n: bigint) => {
 
 const parseUnits = (s: string): bigint => {
   const unit = Object.keys(units).find((unit) => s.endsWith(unit));
-  const [n, k] = unit ? [s.substr(0, s.length - unit.length), units[unit]] : [s, BigInt(1)];
+  const [n, k] = unit ? [s.substring(0, s.length - unit.length), units[unit]] : [s, BigInt(1)];
   try {
     return BigInt(n.trim()) * k;
   } catch {
