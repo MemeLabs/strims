@@ -1,18 +1,15 @@
 import "./Grid.scss";
 
 import clsx from "clsx";
-import React, { useContext, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useState } from "react";
 
 import monkey from "../../../assets/directory/monkey.png";
 import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
 import SnippetImage from "../../components/Directory/SnippetImage";
 import { DirectoryListing } from "../../contexts/Directory";
 import { useLayout } from "../../contexts/Layout";
-import { PlayerContext, PlayerMode } from "../../contexts/Player";
-import { formatUri, getListingPlayerSource } from "../../lib/directory";
+import { useOpenListing } from "../../hooks/directory";
 import { formatNumber } from "../../lib/number";
-import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 
 interface DirectoryGridItemProps extends DirectoryListing {
   networkKey: string;
@@ -27,8 +24,6 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   viewerCount,
   networkKey,
 }) => {
-  const navigate = useNavigate();
-  const player = useContext(PlayerContext);
   const layout = useLayout();
 
   // on mobile while the directory grid is obstructed by the content panel we
@@ -46,18 +41,11 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
     snippet = EMPTY_SNIPPET;
   }
 
-  const handleClick = () => {
-    layout.toggleOverlayOpen(true);
-    layout.toggleShowVideo(true);
-    player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(networkKey, listing, id));
-    if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(networkKey, listing, id);
-      player.setPath(path);
-
-      navigate(path);
-    }
-  };
+  const openListing = useOpenListing();
+  const handleClick = useCallback(
+    () => openListing(networkKey, listing, id),
+    [networkKey, listing, id]
+  );
 
   const title = snippet.title.trim();
 

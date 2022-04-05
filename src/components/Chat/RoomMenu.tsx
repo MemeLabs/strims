@@ -21,7 +21,7 @@ export interface RoomMenuProps {
 }
 
 export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange }) => {
-  const [directories] = useContext(DirectoryContext);
+  const { directories } = useContext(DirectoryContext);
   const chats = useMemo(() => {
     const chats: RoomMenuItem[] = [];
     for (const { networkKey, listings } of Object.values(directories)) {

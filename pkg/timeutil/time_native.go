@@ -8,5 +8,5 @@ import (
 
 // Now ...
 func Now() Time {
-	return NewFromTime(time.Now()).Truncate(time.Millisecond)
+	return NewFromTime(time.Now()).Truncate(Precision)
 }

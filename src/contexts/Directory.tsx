@@ -25,7 +25,7 @@ export interface DirectoryUser {
   id: bigint;
   alias: string;
   peerKey: Uint8Array;
-  viewingIds: bigint[];
+  listingIds: bigint[];
 }
 
 export interface Directory {
@@ -38,7 +38,7 @@ export const findUserMediaListing = (
   directory: Directory,
   user: DirectoryUser
 ): DirectoryListing => {
-  for (const id of user.viewingIds) {
+  for (const id of user.listingIds) {
     const listing = directory.listings.get(id);
     switch (listing.listing.content.case) {
       case Listing.ContentCase.EMBED:
@@ -54,12 +54,16 @@ export type State = {
 
 const initialState: State = {};
 
-export const DirectoryContext = createContext<[State]>(null);
+export interface ContextValues {
+  directories: State;
+}
+
+export const DirectoryContext = createContext<ContextValues>(null);
 
 export const useDirectory = (networkKey: Uint8Array) => {
-  const [state] = useContext(DirectoryContext);
+  const { directories } = useContext(DirectoryContext);
   const key = useMemo(() => Base64.fromUint8Array(networkKey, true), [networkKey]);
-  return state[key];
+  return directories[key];
 };
 
 export const useDirectoryListing = (networkKey: Uint8Array, id: bigint) => {
@@ -117,11 +121,11 @@ export const Provider: React.FC = ({ children }) => {
             break;
           }
           case Event.BodyCase.VIEWER_STATE_CHANGE: {
-            const { id, alias, peerKey, viewingIds, online } = event.viewerStateChange;
-            const user: DirectoryUser = { id, alias, peerKey, viewingIds };
-            const prevViewingIds = users.get(user.id)?.viewingIds ?? [];
+            const { id, alias, peerKey, listingIds, online } = event.viewerStateChange;
+            const user: DirectoryUser = { id, alias, peerKey, listingIds };
+            const prevListingIds = users.get(user.id)?.listingIds ?? [];
 
-            for (const id of user.viewingIds) {
+            for (const id of user.listingIds) {
               const listing = listings.get(id);
               if (listing) {
                 const viewers = new Map(listing.viewers);
@@ -132,8 +136,8 @@ export const Provider: React.FC = ({ children }) => {
               }
             }
 
-            const removedViewingIds = prevViewingIds.filter((id) => !user.viewingIds.includes(id));
-            for (const id of removedViewingIds) {
+            const removedListingIds = prevListingIds.filter((id) => !user.listingIds.includes(id));
+            for (const id of removedListingIds) {
               const listing = listings.get(id);
               if (listing) {
                 const viewers = new Map(listing.viewers);
@@ -174,7 +178,7 @@ export const Provider: React.FC = ({ children }) => {
     return () => events.destroy();
   }, []);
 
-  const value = useMemo<[State]>(() => [directories], [directories]);
+  const value = useMemo<ContextValues>(() => ({ directories }), [directories]);
 
   return <DirectoryContext.Provider value={value}>{children}</DirectoryContext.Provider>;
 };

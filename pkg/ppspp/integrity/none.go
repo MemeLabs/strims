@@ -1,6 +1,7 @@
 package integrity
 
 import (
+	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
@@ -19,6 +20,14 @@ func (v *NoneSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer
 // ChannelVerifier ...
 func (v *NoneSwarmVerifier) ChannelVerifier() ChannelVerifier {
 	return noneChannelVerifier
+}
+
+func (v *NoneSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
+	return nil
+}
+
+func (v *NoneSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
+	return &swarmpb.Cache_Integrity{}
 }
 
 // NoneChannelVerifier ...

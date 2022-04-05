@@ -209,6 +209,8 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}
 
+					readers.CheckpointCache()
+
 					select {
 					case assets <- b:
 					case <-rctx.Done():

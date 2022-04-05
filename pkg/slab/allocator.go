@@ -67,9 +67,9 @@ func NewWithSize[T any](size int) *Allocator[T] {
 		size = MaxSize
 	}
 	return &Allocator[T]{
-		slabs: []slab[T]{newSlab[T](size)},
-		size:  size,
-		tsize: unsafe.Sizeof(*new(T)),
+		// slabs: []slab[T]{newSlab[T](size)},
+		// size:  size,
+		// tsize: unsafe.Sizeof(*new(T)),
 	}
 }
 
@@ -103,40 +103,41 @@ func (a *Allocator[T]) grow() {
 }
 
 func (a *Allocator[T]) Alloc() *T {
-	ii := a.slabs[a.head].free.Alloc()
-	for ii == nilRef {
-		if a.slabs[a.head].next == nilRef {
-			a.grow()
-		} else {
-			a.head = a.slabs[a.head].next
-			a.slabs[a.head].next = nilRef
-		}
-		ii = a.slabs[a.head].free.Alloc()
-	}
+	return new(T)
+	// ii := a.slabs[a.head].free.Alloc()
+	// for ii == nilRef {
+	// 	if a.slabs[a.head].next == nilRef {
+	// 		a.grow()
+	// 	} else {
+	// 		a.head = a.slabs[a.head].next
+	// 		a.slabs[a.head].next = nilRef
+	// 	}
+	// 	ii = a.slabs[a.head].free.Alloc()
+	// }
 
-	return &a.slabs[a.head].data[ii]
+	// return &a.slabs[a.head].data[ii]
 }
 
 func (a *Allocator[T]) Free(t *T) {
-	p := uintptr(unsafe.Pointer(t))
+	// p := uintptr(unsafe.Pointer(t))
 
-	l := 0
-	r := len(a.slabs)
-	for l != r {
-		m := (r + l) >> 1
-		if a.slabs[m].offset <= p {
-			l = m + 1
-		} else {
-			r = m
-		}
-	}
+	// l := 0
+	// r := len(a.slabs)
+	// for l != r {
+	// 	m := (r + l) >> 1
+	// 	if a.slabs[m].offset <= p {
+	// 		l = m + 1
+	// 	} else {
+	// 		r = m
+	// 	}
+	// }
 
-	i := ref(l - 1)
-	ii := (p - a.slabs[i].offset) / a.tsize
-	a.slabs[i].free.Free(ref(ii))
+	// i := ref(l - 1)
+	// ii := (p - a.slabs[i].offset) / a.tsize
+	// a.slabs[i].free.Free(ref(ii))
 
-	if a.head != i && a.slabs[i].next == nilRef {
-		a.slabs[i].next = a.head
-		a.head = i
-	}
+	// if a.head != i && a.slabs[i].next == nilRef {
+	// 	a.slabs[i].next = a.head
+	// 	a.head = i
+	// }
 }

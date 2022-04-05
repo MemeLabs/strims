@@ -19,6 +19,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
       GOMODCACHE: join(process.env.GOPATH, "pkg", "mod", "cache"),
       GOOS: "js",
       GOARCH: "wasm",
+      GOWASM: "satconv,signext",
     },
   };
 

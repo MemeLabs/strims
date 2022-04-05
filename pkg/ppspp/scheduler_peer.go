@@ -193,7 +193,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		liveWindow:        binmap.Bin(s.options.LiveWindow * 2),
 
 		// debugHack: debugHack == 2,
-		firstChunkSet: s.options.SchedulingMethod == SeedSchedulingMethod,
+		firstChunkSet: s.options.SchedulingMethod == SeedSchedulingMethod || !s.store.Empty(),
 
 		// HAX
 		nextGCTime:          timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),

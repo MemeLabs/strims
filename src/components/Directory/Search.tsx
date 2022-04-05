@@ -7,7 +7,6 @@ import React, { RefObject, useContext, useEffect, useRef, useState } from "react
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
-import { useNavigate } from "react-router";
 import { useToggle } from "react-use";
 import { Key } from "ts-key-enum";
 
@@ -16,11 +15,8 @@ import imgTwitch from "../../../assets/directory/twitch.png";
 import imgYouTube from "../../../assets/directory/youtube.png";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
 import { DirectoryContext, DirectoryListing } from "../../contexts/Directory";
-import { useLayout } from "../../contexts/Layout";
-import { PlayerContext, PlayerMode } from "../../contexts/Player";
+import { useOpenListing } from "../../hooks/directory";
 import useClickAway from "../../hooks/useClickAway";
-import { formatUri, getListingPlayerSource } from "../../lib/directory";
-import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import SnippetImage from "../Directory/SnippetImage";
 
 const EMBED_ID = "([\\w-]{1,30})";
@@ -261,7 +257,7 @@ const Search: React.FC<SearchProps> = ({
 
   const ref = useRef<HTMLDivElement>(null);
   const [isFocused, toggleIsFocused] = useToggle(false);
-  const [directory] = useContext(DirectoryContext);
+  const { directories } = useContext(DirectoryContext);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -295,7 +291,7 @@ const Search: React.FC<SearchProps> = ({
 
     const pattern = new RegExp(escapeStringRegexp(query), "i");
 
-    for (const { networkKey, listings } of Object.values(directory)) {
+    for (const { networkKey, listings } of Object.values(directories)) {
       for (const listing of listings.values()) {
         if (
           pattern.exec(listing.snippet?.title) !== null ||
@@ -311,7 +307,7 @@ const Search: React.FC<SearchProps> = ({
     }
 
     setResults(results.slice(0, maxResults));
-  }, [query, directory]);
+  }, [query, directories]);
 
   useEffect(() => setSelectedIndex(-1), [results.length, query]);
 
@@ -337,28 +333,16 @@ const Search: React.FC<SearchProps> = ({
     }
   };
 
-  const navigate = useNavigate();
-  const player = useContext(PlayerContext);
-  const layout = useLayout();
-
   const selectEmbed = (embed: Listing.IEmbed) => {
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
-    const [{ networkKey }] = Object.values(directory);
+    const [{ networkKey }] = Object.values(directories);
     selectListing(networkKey, new Listing({ content: { embed } }));
     onDone?.();
   };
 
-  // TODO: DRY with grid (useDirectory?)
+  const openListing = useOpenListing();
   const selectListing = (networkKey: Uint8Array, listing: Listing, id?: bigint) => {
-    layout.toggleOverlayOpen(true);
-    layout.toggleShowVideo(true);
-    player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(Base64.fromUint8Array(networkKey, true), listing, id));
-    if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(Base64.fromUint8Array(networkKey, true), listing, id);
-      player.setPath(path);
-      navigate(path);
-    }
+    openListing(Base64.fromUint8Array(networkKey, true), listing, id);
 
     setQuery("");
     onDone?.();

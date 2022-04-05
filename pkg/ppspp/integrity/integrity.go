@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
 
+	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
@@ -280,6 +281,8 @@ func NewWriter(key []byte, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWrit
 type SwarmVerifier interface {
 	WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer) (int, error)
 	ChannelVerifier() ChannelVerifier
+	ImportCache(c *swarmpb.Cache) error
+	ExportCache() *swarmpb.Cache_Integrity
 }
 
 // ChannelVerifier ...

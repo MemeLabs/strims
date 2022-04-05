@@ -20,7 +20,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/set"
+	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
 	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/crypto/blake2b"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -340,16 +341,6 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 }
 
 func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u *user) []*networkv1directory.Event {
-	ids := set.New[uint64](8)
-	u.EachSession(func(s *session) {
-		s.EachViewed(func(l *listing) {
-			ids.Insert(l.id)
-		})
-		s.EachPublished(func(l *listing) {
-			ids.Insert(l.id)
-		})
-	})
-
 	return append(events, &networkv1directory.Event{
 		Body: &networkv1directory.Event_ViewerStateChange_{
 			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
@@ -357,7 +348,7 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 				Alias:      u.certificate.Subject,
 				PeerKey:    u.certificate.Key,
 				Online:     true,
-				ViewingIds: ids.Slice(),
+				ListingIds: u.ListingIDs(),
 			},
 		},
 	})
@@ -1012,6 +1003,30 @@ func (u *user) ViewedListingCount() int {
 		n += s.viewedListings.Len()
 	})
 	return n
+}
+
+func (u *user) ListingCount() int {
+	var n int
+	u.EachSession(func(s *session) {
+		n += s.publishedListings.Len()
+		n += s.viewedListings.Len()
+	})
+	return n
+}
+
+func (u *user) ListingIDs() []uint64 {
+	ids := make([]uint64, 0, u.ListingCount())
+	u.EachSession(func(s *session) {
+		s.EachViewed(func(l *listing) {
+			ids = append(ids, l.id)
+		})
+		s.EachPublished(func(l *listing) {
+			ids = append(ids, l.id)
+		})
+	})
+
+	sortutil.Uint64(ids)
+	return slices.Compact(ids)
 }
 
 func (u *user) EachSession(it func(s *session)) {

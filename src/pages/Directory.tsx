@@ -9,8 +9,8 @@ import { useClient } from "../contexts/FrontendApi";
 const Directory: React.FC = () => {
   const params = useParams<"networkKey">();
   // const [listings, dispatch] = React.useReducer(directoryReducer, []);
-  const [directories] = useContext(DirectoryContext);
-  // const client = useClient();
+  const { directories } = useContext(DirectoryContext);
+  const client = useClient();
 
   // console.log(directories);
 
@@ -24,17 +24,17 @@ const Directory: React.FC = () => {
   //   return () => events.destroy();
   // }, [params.networkKey]);
 
-  // const handleTestClick = async () => {
-  //   const networkKey = Base64.toUint8Array(params.networkKey);
-  //   const res = await client.directory.test({ networkKey });
-  //   console.log(res);
-  // };
+  const handleTestClick = async () => {
+    const networkKey = Base64.toUint8Array(params.networkKey);
+    const res = await client.directory.test({ networkKey });
+    console.log(res);
+  };
 
   return (
     <div>
-      {/* <button onClick={handleTestClick} className="input input_button">
+      <button onClick={handleTestClick} className="input input_button">
         test
-      </button> */}
+      </button>
       <DirectoryGrid listings={listings} networkKey={params.networkKey} />
     </div>
   );

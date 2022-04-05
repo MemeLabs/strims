@@ -1,6 +1,5 @@
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
 import { format } from "d3-format";
-import { timeFormat } from "d3-time-format";
 import React, { ReactElement, useEffect } from "react";
 import {
   AreaSeries,

@@ -1,6 +1,6 @@
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
-import React, { createContext, useCallback, useMemo, useState } from "react";
+import React, { createContext, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ServiceSlug, slugToService } from "../lib/directory";
 import { useClient } from "./FrontendApi";
@@ -46,7 +46,7 @@ export const Provider: React.FC = ({ children }) => {
   const [path, setPath] = useState<string>("");
   const [source, setSourceState] = useState<PlayerSource>(null);
   const [mode, setMode] = useState<PlayerMode>(PlayerMode.PIP);
-  const [, setListingCleanup] = useState<() => void>();
+  const [listingCleanup, setListingCleanup] = useState<() => void>();
 
   const publishEmbedListing = ({
     networkKey: networkKeyString,
@@ -76,29 +76,31 @@ export const Provider: React.FC = ({ children }) => {
     return () => void res.then(() => client.directory.part({ networkKey, id }));
   };
 
-  const setSource = useCallback(
-    (next: PlayerSource) => {
-      if (isEqual(next, source)) {
-        return;
+  const updateListing = (source: PlayerSource) => {
+    setListingCleanup(() => {
+      if (!source?.networkKey) {
+        return () => null;
+      }
+      switch (source.type) {
+        case "embed":
+          return publishEmbedListing(source);
+        case "swarm":
+          return joinSwarmListing(source);
+      }
+    });
+  };
+  useEffect(() => () => listingCleanup?.(), [listingCleanup]);
+
+  const setSource = (next: PlayerSource) => {
+    setSourceState((prev) => {
+      if (isEqual(next, prev)) {
+        return prev;
       }
 
-      setSourceState(next);
-      setListingCleanup((prev) => {
-        prev?.();
-
-        if (!next?.networkKey) {
-          return () => null;
-        }
-        switch (next.type) {
-          case "embed":
-            return publishEmbedListing(next);
-          case "swarm":
-            return joinSwarmListing(next);
-        }
-      });
-    },
-    [source]
-  );
+      updateListing(next);
+      return next;
+    });
+  };
 
   const value = useMemo<PlayerValue>(
     () => ({

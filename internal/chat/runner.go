@@ -59,7 +59,15 @@ type runner struct {
 }
 
 type readers struct {
-	events, assets *protoutil.ChunkStreamReader
+	events, assets  *protoutil.ChunkStreamReader
+	checkpointCache chan struct{}
+}
+
+func (r readers) CheckpointCache() {
+	select {
+	case r.checkpointCache <- struct{}{}:
+	default:
+	}
 }
 
 type runnerAdapter struct {
@@ -80,7 +88,7 @@ func (s *runnerAdapter) Mutex() *dao.Mutex {
 }
 
 func (s *runnerAdapter) Client() (servicemanager.Readable[readers], error) {
-	return newChatReader(s.logger, s.transfer, s.key, s.networkKey)
+	return newChatReader(s.logger, s.store, s.transfer, s.key, s.networkKey)
 }
 
 func (s *runnerAdapter) Server() (servicemanager.Readable[readers], error) {

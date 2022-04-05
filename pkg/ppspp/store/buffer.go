@@ -226,6 +226,13 @@ func (s *Buffer) EmptyAt(b binmap.Bin) bool {
 	return s.bins.EmptyAt(b)
 }
 
+// Empty ...
+func (s *Buffer) Empty() bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.bins.Empty()
+}
+
 // Cover ...
 func (s *Buffer) Cover(b binmap.Bin) binmap.Bin {
 	s.lock.Lock()
@@ -268,6 +275,33 @@ func (s *Buffer) Next() binmap.Bin {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.next
+}
+
+func (s *Buffer) ImportCache(b []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	copy(s.buf, b)
+
+	s.next = byteBin(uint64(len(b)), s.chunkSize)
+	s.prev = 0
+
+	s.bins.FillBefore(s.next)
+	s.setReady()
+	return nil
+}
+
+func (s *Buffer) ExportCache() ([]byte, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.tail() != 0 || s.off != 0 {
+		return nil, errors.New("cannot cache truncated swarm buffer")
+	}
+
+	b := make([]byte, binByte(s.next, s.chunkSize))
+	copy(b, s.buf)
+	return b, nil
 }
 
 func NewBufferReader(buf *Buffer) *BufferReader {
@@ -438,6 +472,6 @@ func binByte(b binmap.Bin, chunkSize uint64) uint64 {
 	return uint64(b/2) * chunkSize
 }
 
-func byteBin(b, chunkSize uint64) binmap.Bin {
-	return binmap.Bin(b*2) / binmap.Bin(chunkSize)
+func byteBin(n, chunkSize uint64) binmap.Bin {
+	return binmap.Bin(n*2) / binmap.Bin(chunkSize)
 }

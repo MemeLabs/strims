@@ -13,6 +13,8 @@ const EpochTime = Time(0)
 
 const TimeLength = 8
 
+const Precision = time.Millisecond
+
 func Since(start Time) time.Duration {
 	return time.Duration(Now() - start)
 }

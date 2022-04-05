@@ -4,8 +4,8 @@ import (
 	"errors"
 	"io"
 	"sync"
-	"time"
 
+	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -103,6 +103,49 @@ func (v *SignAllSwarmVerifier) ChannelVerifier() ChannelVerifier {
 	return newSignAllChannelVerifier(v)
 }
 
+func (v *SignAllSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	ic := c.Integrity.SignAllIntegrity
+	if ic == nil {
+		return errors.New("no supported integrity cache found")
+	}
+
+	for i, t := range ic.Timestamps {
+		chunk := c.Data[i*v.chunkSize : (i+1)*v.chunkSize]
+		sig := ic.Signatures[i*v.signatureVerifier.Size() : (i+1)*v.signatureVerifier.Size()]
+
+		if !v.signatureVerifier.Verify(timeutil.Time(t), chunk, sig) {
+			return ErrInvalidChunkSignature
+		}
+	}
+
+	for i, t := range ic.Timestamps {
+		v.timestamps[i] = timeutil.Time(t)
+	}
+	copy(v.signatures, ic.Signatures)
+
+	return nil
+}
+
+func (v *SignAllSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	c := &swarmpb.Cache_SignAllIntegrity{}
+
+	for _, t := range v.timestamps {
+		if t == 0 {
+			break
+		}
+		c.Timestamps = append(c.Timestamps, int64(t))
+	}
+	c.Signatures = v.signatures[:len(c.Timestamps)*v.signatureVerifier.Size()]
+
+	return &swarmpb.Cache_Integrity{SignAllIntegrity: c}
+}
+
 func newSignAllChannelVerifier(v *SignAllSwarmVerifier) *SignAllChannelVerifier {
 	return &SignAllChannelVerifier{
 		chunkVerifier: SignAllChunkVerifier{
@@ -189,7 +232,6 @@ type SignAllWriterOptions struct {
 // NewSignAllWriter ...
 func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
 	sw := &signAllWriter{
-		epochNanos:      time.Duration(timeutil.Now().UnixNano()),
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
@@ -215,7 +257,6 @@ func (w *SignAllWriter) Flush() error {
 }
 
 type signAllWriter struct {
-	epochNanos      time.Duration
 	b               binmap.Bin
 	swarmVerifier   *SignAllSwarmVerifier
 	signatureSigner SignatureSigner
@@ -223,7 +264,7 @@ type signAllWriter struct {
 }
 
 func (w *signAllWriter) Write(p []byte) (int, error) {
-	ts := timeutil.Now().Add(-w.epochNanos)
+	ts := timeutil.Now()
 	sig := w.signatureSigner.Sign(ts, p)
 	w.swarmVerifier.storeSignature(w.b, ts, sig)
 

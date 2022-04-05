@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package strims.type;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm;swarm";
+option java_package = "gg.strims.type";
+option swift_prefix = "STP";
+
+message CacheMeta {
+  uint64 id = 1;
+  bytes swarm_id = 2;
+  bytes swarm_salt = 3;
+  uint32 checksum = 4;
+}
+
+message Cache {
+  message SignAllIntegrity {
+    repeated int64 timestamps = 1;
+    bytes signatures = 2;
+  }
+
+  message MerkleIntegrity {
+    repeated int64 timestamps = 1;
+    repeated bytes signatures = 2;
+  }
+
+  message Integrity {
+    SignAllIntegrity sign_all_integrity = 1001;
+    MerkleIntegrity merkle_integrity = 1002;
+  }
+
+  uint64 id = 1;
+  string uri = 2;
+  Integrity integrity = 3;
+  bytes data = 4;
+}

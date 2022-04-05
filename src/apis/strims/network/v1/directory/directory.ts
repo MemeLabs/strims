@@ -1678,7 +1678,7 @@ export namespace Event {
     alias?: string;
     peerKey?: Uint8Array;
     online?: boolean;
-    viewingIds?: bigint[];
+    listingIds?: bigint[];
   }
 
   export class ViewerStateChange {
@@ -1686,14 +1686,14 @@ export namespace Event {
     alias: string;
     peerKey: Uint8Array;
     online: boolean;
-    viewingIds: bigint[];
+    listingIds: bigint[];
 
     constructor(v?: IViewerStateChange) {
       this.id = v?.id || BigInt(0);
       this.alias = v?.alias || "";
       this.peerKey = v?.peerKey || new Uint8Array();
       this.online = v?.online || false;
-      this.viewingIds = v?.viewingIds ? v.viewingIds : [];
+      this.listingIds = v?.listingIds ? v.listingIds : [];
     }
 
     static encode(m: ViewerStateChange, w?: Writer): Writer {
@@ -1702,7 +1702,7 @@ export namespace Event {
       if (m.alias.length) w.uint32(18).string(m.alias);
       if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
       if (m.online) w.uint32(32).bool(m.online);
-      m.viewingIds.reduce((w, v) => w.uint64(v), w.uint32(42).fork()).ldelim();
+      m.listingIds.reduce((w, v) => w.uint64(v), w.uint32(42).fork()).ldelim();
       return w;
     }
 
@@ -1726,7 +1726,7 @@ export namespace Event {
           m.online = r.bool();
           break;
           case 5:
-          for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.viewingIds.push(r.uint64());
+          for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.listingIds.push(r.uint64());
           break;
           default:
           r.skipType(tag & 7);

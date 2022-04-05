@@ -557,18 +557,18 @@ type Timestamp struct {
 // Unmarshal ...
 func (v *Timestamp) Unmarshal(b []byte) (int, error) {
 	vi, n := binary.Varint(b)
-	v.Time = timeutil.New(vi * timeGranularity)
+	v.Time = timeutil.New(vi * int64(timeutil.Precision))
 	return n, nil
 }
 
 // Marshal ...
 func (v Timestamp) Marshal(b []byte) int {
-	return binary.PutVarint(b, v.Time.UnixNano()/timeGranularity)
+	return binary.PutVarint(b, v.Time.UnixNano()/int64(timeutil.Precision))
 }
 
 // ByteLen ...
 func (v Timestamp) ByteLen() int {
-	return binaryutil.VarintLen(v.Time.UnixNano() / timeGranularity)
+	return binaryutil.VarintLen(v.Time.UnixNano() / int64(timeutil.Precision))
 }
 
 // DelaySample ...
@@ -579,18 +579,18 @@ type DelaySample struct {
 // Unmarshal ...
 func (v *DelaySample) Unmarshal(b []byte) (int, error) {
 	vi, n := binary.Varint(b)
-	v.Duration = time.Duration(vi * timeGranularity)
+	v.Duration = time.Duration(vi * int64(timeutil.Precision))
 	return n, nil
 }
 
 // Marshal ...
 func (v DelaySample) Marshal(b []byte) int {
-	return binary.PutVarint(b, int64(v.Duration)/timeGranularity)
+	return binary.PutVarint(b, int64(v.Duration)/int64(timeutil.Precision))
 }
 
 // ByteLen ...
 func (v DelaySample) ByteLen() int {
-	return binaryutil.VarintLen(int64(v.Duration) / timeGranularity)
+	return binaryutil.VarintLen(int64(v.Duration) / int64(timeutil.Precision))
 }
 
 // Ack ...

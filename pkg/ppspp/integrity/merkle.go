@@ -5,8 +5,8 @@ import (
 	"io"
 	"math/bits"
 	"sync"
-	"time"
 
+	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -169,6 +169,47 @@ func (v *MerkleSwarmVerifier) ChannelVerifier() ChannelVerifier {
 	return newMerkleChannelVerifier(v)
 }
 
+func (v *MerkleSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
+	ic := c.Integrity.MerkleIntegrity
+	if ic == nil {
+		return errors.New("no supported integrity cache found")
+	}
+
+	for i, t := range ic.Timestamps {
+		ts := timeutil.Time(t)
+		b := binmap.NewBin(v.treeHeight-1, uint64(i))
+		tree := v.tree(b)
+
+		l := b.BaseOffset() * uint64(v.chunkSize)
+		r := (b.BaseOffset() + b.BaseLength()) * uint64(v.chunkSize)
+		tree.Fill(b, c.Data[l:r])
+
+		if !v.signatureVerifier.Verify(ts, tree.Get(tree.RootBin()), ic.Signatures[i]) {
+			return ErrInvalidSignature
+		}
+		v.storeSegment(ts, tree, ic.Signatures[i])
+	}
+
+	return nil
+}
+
+func (v *MerkleSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	c := &swarmpb.Cache_MerkleIntegrity{}
+
+	for _, s := range v.segments {
+		if s == nil {
+			break
+		}
+		c.Timestamps = append(c.Timestamps, int64(s.Timestamp))
+		c.Signatures = append(c.Signatures, s.Signature)
+	}
+
+	return &swarmpb.Cache_Integrity{MerkleIntegrity: c}
+}
+
 var segmentPool = sync.Pool{
 	New: func() any {
 		return &merkleTreeSegment{}
@@ -195,9 +236,9 @@ func (s *merkleTreeSegment) Free() *merkle.Tree {
 	s.Lock()
 	defer s.Unlock()
 
-	t := s.Tree
+	tree := s.Tree
 	s.Tree = nil
-	return t
+	return tree
 }
 
 func (s *merkleTreeSegment) LockIf(b binmap.Bin) bool {
@@ -273,16 +314,16 @@ func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 		return false, ErrBinOutOfBounds
 	}
 
-	var t *merkle.Tree
+	var tree *merkle.Tree
 	if s := v.swarmVerifier.segment(b); s != nil {
 		if !s.LockIf(b) {
 			return false, ErrMissingHashSubtree
 		}
 		defer s.Unlock()
-		t = s.Tree
+		tree = s.Tree
 	}
 
-	if verified, err := v.tree.Verify(b, d, t); err != nil {
+	if verified, err := v.tree.Verify(b, d, tree); err != nil {
 		return false, err
 	} else if verified {
 		return true, nil
@@ -323,7 +364,6 @@ type MerkleWriterOptions struct {
 // NewMerkleWriter ...
 func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 	mw := &merkleWriter{
-		epochNanos:      time.Duration(timeutil.Now().UnixNano()),
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
@@ -350,7 +390,6 @@ func (w *MerkleWriter) Flush() error {
 }
 
 type merkleWriter struct {
-	epochNanos      time.Duration
 	munroLayer      uint64
 	n               uint64
 	swarmVerifier   *MerkleSwarmVerifier
@@ -363,7 +402,7 @@ func (w *merkleWriter) Write(p []byte) (int, error) {
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 
-	ts := timeutil.Now().Add(-w.epochNanos)
+	ts := timeutil.Now()
 	tree := w.swarmVerifier.tree(b)
 	tree.Fill(b, p)
 	sig := w.signatureSigner.Sign(ts, tree.Get(b))

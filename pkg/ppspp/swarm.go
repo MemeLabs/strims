@@ -1,6 +1,10 @@
 package ppspp
 
 import (
+	"errors"
+	"fmt"
+
+	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
@@ -61,6 +65,32 @@ func (s *Swarm) URI() *URI {
 // Reader ...
 func (s *Swarm) Reader() *store.BufferReader {
 	return store.NewBufferReader(s.store)
+}
+
+func (s *Swarm) ImportCache(c *swarmpb.Cache) error {
+	if c.Uri != s.URI().String() {
+		return errors.New("cache import failed: incompatible swarm options")
+	}
+	if err := s.verifier.ImportCache(c); err != nil {
+		return fmt.Errorf("cache import failed: %w", err)
+	}
+	if err := s.store.ImportCache(c.Data); err != nil {
+		return fmt.Errorf("cache import failed: %w", err)
+	}
+	return nil
+}
+
+func (s *Swarm) ExportCache() (*swarmpb.Cache, error) {
+	data, err := s.store.ExportCache()
+	if err != nil {
+		return nil, fmt.Errorf("cache export failed: %w", err)
+	}
+
+	return &swarmpb.Cache{
+		Uri:       s.URI().String(),
+		Integrity: s.verifier.ExportCache(),
+		Data:      data,
+	}, nil
 }
 
 // Close ...

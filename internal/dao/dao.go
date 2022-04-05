@@ -120,4 +120,5 @@ const (
 	vnicNS
 	directoryNS
 	autoseedNS
+	swarmNS
 )

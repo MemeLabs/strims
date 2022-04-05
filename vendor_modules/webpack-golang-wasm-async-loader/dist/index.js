@@ -16,6 +16,7 @@ function loader(contents) {
             GOMODCACHE: path_1.join(process.env.GOPATH, "pkg", "mod", "cache"),
             GOOS: "js",
             GOARCH: "wasm",
+            GOWASM: "satconv,signext",
         },
     };
     const goBin = path_1.join(opts.env.GOROOT, "bin", "go");

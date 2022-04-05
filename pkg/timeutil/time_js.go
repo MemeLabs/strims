@@ -6,20 +6,20 @@ import (
 	"time"
 )
 
-var now int64
+var now Time
 
 func init() {
-	now = time.Now().UnixNano()
+	now = NewFromTime(time.Now()).Truncate(Precision)
 }
 
 // SyncNow ...
-func SyncNow(t int64) {
-	if t > now {
+func SyncNow(nanos int64) {
+	if t := New(nanos).Truncate(Precision); t > now {
 		now = t
 	}
 }
 
 // Now ...
 func Now() Time {
-	return New(now)
+	return now
 }
