@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"hash/maphash"
-
-	"github.com/MemeLabs/go-ppspp/pkg/slab"
 )
 
 const (
@@ -69,7 +67,6 @@ func New[K, V any](iface Interface[K]) Map[K, V] {
 		mask:      uint64(minSize - 1),
 		v:         make([]*mapItem[K, V], minSize),
 		iface:     iface,
-		allocator: slab.New[mapItem[K, V]](),
 	}
 }
 
@@ -90,7 +87,6 @@ type Map[K, V any] struct {
 	mask      uint64
 	v         []*mapItem[K, V]
 	iface     Interface[K]
-	allocator *slab.Allocator[mapItem[K, V]]
 }
 
 type mapItem[K, V any] struct {
@@ -133,12 +129,11 @@ func (l *Map[K, V]) alloc() (e *mapItem[K, V]) {
 	if l.len > l.lenBounds.max {
 		l.resize(len(l.v) * resizeRate)
 	}
-	return l.allocator.Alloc()
+	return &mapItem[K, V]{}
 }
 
 func (l *Map[K, V]) free(e *mapItem[K, V]) {
 	*e = mapItem[K, V]{}
-	l.allocator.Free(e)
 	l.len--
 	if l.len < l.lenBounds.min {
 		l.resize(len(l.v) / resizeRate)

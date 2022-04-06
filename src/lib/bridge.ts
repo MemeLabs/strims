@@ -514,7 +514,13 @@ interface KVStoreProxy {
   put: (key: string, value: Uint8Array, done: (error: string | null) => void) => void;
   delete: (key: string, done: (error: string | null) => void) => void;
   get: (key: string, done: (error: string | null, value?: Uint8Array) => void) => void;
-  scanPrefix: (prefix: string, done: (error: string | null, value?: any[]) => void) => void;
+  scanCursor: (
+    after: string,
+    before: string,
+    first: number,
+    last: number,
+    done: (error: string | null, value?: any[]) => void
+  ) => void;
   rollback: (done: (error: string | null) => void) => void;
   commit: (done: (error: string | null) => void) => void;
 }
@@ -914,9 +920,36 @@ export class WorkerBridge {
       get: (key: string, done: (error: string | null, value?: Uint8Array) => void) => {
         transact((s) => s.get(key), done);
       },
-      scanPrefix: (prefix: string, done: (error: string | null, value?: any[]) => void) => {
-        const range = IDBKeyRange.bound(prefix, prefix + "\uffff", false, false);
-        transact((s) => s.getAll(range), done);
+      scanCursor: (
+        after: string,
+        before: string,
+        first: number,
+        last: number,
+        done: (error: string | null, value?: any[]) => void
+      ) => {
+        txReady
+          .then((tx: IDBTransaction) => {
+            const ascending = last == 0;
+            const limit = first || last || Infinity;
+            const range = ascending
+              ? IDBKeyRange.bound(after, before + "\uffff", true, false)
+              : IDBKeyRange.bound(after, before, false, true);
+            const req = tx.objectStore("data").openCursor(range, ascending ? "next" : "prev");
+
+            const values = [];
+            req.onsuccess = () => {
+              if (req.result) {
+                values.push(req.result.value);
+                if (values.length < limit) {
+                  req.result.continue();
+                  return;
+                }
+              }
+              done(null, values);
+            };
+            req.onerror = (e) => done(String(e));
+          })
+          .catch((e: Error) => done(String(e.message || "unknown storage error")));
       },
       rollback: (done: (error: string | null) => void) => {
         txReady

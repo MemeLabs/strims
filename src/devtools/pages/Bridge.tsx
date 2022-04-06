@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 
 import { WindowBridge, WorkerBridge } from "../../lib/bridge";
 import Nav from "../components/Nav";
@@ -41,7 +41,7 @@ import Nav from "../components/Nav";
 // }
 
 const BridgePage: React.FC = () => {
-  useEffect(() => {
+  const handleSetGetClick = useCallback(() => {
     const workerBridge = new WorkerBridge();
     const kv = workerBridge.openKVStore("test", true, false);
 
@@ -62,10 +62,43 @@ const BridgePage: React.FC = () => {
     })();
   }, []);
 
+  const handleScanPrefixClick = useCallback(async () => {
+    await new Promise((resolve, reject) => {
+      const req = indexedDB.deleteDatabase("test");
+      req.onsuccess = resolve;
+      req.onerror = resolve;
+      req.onblocked = reject;
+    });
+
+    const workerBridge = new WorkerBridge();
+    const kv = workerBridge.openKVStore("test", true, false);
+
+    await Promise.all(
+      new Array(100).fill(0).map((_, i) => {
+        return new Promise((resolve, reject) =>
+          kv.put("foo:" + String(i).padStart(5, "0"), new Uint8Array([i]), (error: string) =>
+            error ? reject(error) : resolve(undefined)
+          )
+        );
+      })
+    );
+
+    const t1 = await new Promise<Uint8Array[]>((resolve, reject) =>
+      kv.scanCursor("foo:", "foo:00038", 5, 0, (error: string, value: Uint8Array[]) =>
+        error ? reject(error) : resolve(value)
+      )
+    );
+
+    console.log(t1.map((a) => a[0]));
+  }, []);
+
   return (
     <div>
       <Nav />
-      <div>test</div>
+      <div className="bridge_page">
+        <button onClick={handleSetGetClick}>get/set</button>
+        <button onClick={handleScanPrefixClick}>scanPrefix</button>
+      </div>
     </div>
   );
 };

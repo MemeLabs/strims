@@ -158,6 +158,10 @@ func (t *profileStoreTx) ScanPrefix(prefix string, messages any) error {
 	return scanPrefix(t.tx, t.sk, prefix, messages)
 }
 
+func (t *profileStoreTx) ScanCursor(cursor kv.Cursor, messages any) error {
+	return scanCursor(t.tx, t.sk, cursor, messages)
+}
+
 func (t *profileStoreTx) Salt() []byte {
 	return t.sk.Key()
 }

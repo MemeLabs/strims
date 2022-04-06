@@ -199,3 +199,16 @@ body {
   height: 100%;
   width: 360px;
 }
+
+// ---
+.bridge_page {
+  background: #ccc;
+  height: calc(100vh - 35px);
+
+  button {
+    margin: 10px;
+    padding: 5px;
+    background: #eee;
+    border: 1px solid #333;
+  }
+}

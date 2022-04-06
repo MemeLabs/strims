@@ -10,7 +10,6 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/slab"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -143,7 +142,6 @@ func newCacheStore[K, V any, T TableRecord[V]](store kv.RWStore, table *Table[V,
 	s := &CacheStore[V, T]{
 		store: store,
 		table: table,
-		alloc: slab.New[cacheItem[V, T]](),
 
 		time: timeutil.Now(),
 		ttl:  o.TTL,
@@ -170,7 +168,6 @@ type CacheStore[V any, T TableRecord[V]] struct {
 	store kv.RWStore
 	table *Table[V, T]
 	mu    sync.Mutex
-	alloc *slab.Allocator[cacheItem[V, T]]
 
 	list cacheItemList[V, T]
 	time timeutil.Time
@@ -224,7 +221,6 @@ func (c *CacheStore[V, T]) pop() {
 	}
 
 	e.reset()
-	c.alloc.Free(e)
 }
 
 func (c *CacheStore[V, T]) touch(e *cacheItem[V, T]) {
@@ -246,7 +242,7 @@ func (c *CacheStore[V, T]) set(v T) *cacheItem[V, T] {
 			c.pop()
 		}
 
-		e = c.alloc.Alloc()
+		e = &cacheItem[V, T]{}
 		e.store(v)
 	} else {
 		p = e.swap(v)
@@ -257,7 +253,6 @@ func (c *CacheStore[V, T]) set(v T) *cacheItem[V, T] {
 		if pe := i.set(v, p, e); pe != nil {
 			c.list.delete(pe)
 			pe.reset()
-			c.alloc.Free(pe)
 		}
 	}
 
@@ -268,10 +263,9 @@ func (c *CacheStore[V, T]) setNotFound(i int, k unsafe.Pointer) *cacheItem[V, T]
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	e := c.alloc.Alloc()
-
+	e := &cacheItem[V, T]{}
 	if pe, ok := c.indices[i].getOrSetNotFound(k, e); ok {
-		c.alloc.Free(e)
+
 		return pe
 	}
 

@@ -24,6 +24,7 @@ type BlobTx interface {
 	Get(key string) ([]byte, error)
 	Delete(key string) error
 	ScanPrefix(prefix string) ([][]byte, error)
+	ScanCursor(cursor Cursor) ([][]byte, error)
 }
 
 // Store ...
@@ -42,6 +43,7 @@ type Tx interface {
 	Store
 	Get(key string, m proto.Message) error
 	ScanPrefix(prefix string, messages any) error
+	ScanCursor(cursor Cursor, messages any) error
 }
 
 // RWTx ...
@@ -51,4 +53,12 @@ type RWTx interface {
 	Get(key string, m proto.Message) error
 	Put(key string, m proto.Message) error
 	ScanPrefix(prefix string, messages any) error
+	ScanCursor(cursor Cursor, messages any) error
+}
+
+type Cursor struct {
+	After  string
+	Before string
+	First  int
+	Last   int
 }

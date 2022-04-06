@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -123,7 +124,23 @@ func (t Tx) Get(key string) (value []byte, err error) {
 
 // ScanPrefix ...
 func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
-	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" LIKE $1`, t.table), prefix+`%`)
+	return t.ScanCursor(kv.Cursor{After: prefix, Before: prefix + "\uffff"})
+}
+
+// ScanCursor ...
+func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
+	order := "DESC"
+	limit := "ALL"
+	if cursor.Last == 0 {
+		order = "ASC"
+		if cursor.First != 0 {
+			limit = strconv.Itoa(cursor.First)
+		}
+	} else {
+		limit = strconv.Itoa(cursor.Last)
+	}
+
+	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" > $1 AND "key" < $2 ORDER BY "key" %s LIMIT %s`, t.table, order, limit), cursor.After, cursor.Before)
 	if err != nil {
 		return nil, err
 	}

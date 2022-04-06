@@ -92,6 +92,11 @@ func (t *kvTx) Get(key string) (value []byte, err error) {
 
 // ScanPrefix ...
 func (t *kvTx) ScanPrefix(prefix string) (values [][]byte, err error) {
+	return t.ScanCursor(kv.Cursor{After: prefix, Before: prefix})
+}
+
+// ScanCursor ...
+func (t *kvTx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	readValue := func(arg js.Value) error {
 		l := arg.Get("length").Int()
 		values = make([][]byte, l)
@@ -102,7 +107,7 @@ func (t *kvTx) ScanPrefix(prefix string) (values [][]byte, err error) {
 		}
 		return nil
 	}
-	err = callProxy(t.proxy, "scanPrefix", []any{prefix}, readValue)
+	err = callProxy(t.proxy, "scanCursor", []any{cursor.After, cursor.Before, cursor.First, cursor.Last}, readValue)
 	return
 }
 

@@ -271,7 +271,7 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 	for it := d.listings.IterateTouchedAfter(d.lastBroadcastTime); it.Next(); {
 		l := it.Value()
-		if (l.publishers.Len() == 0 && l.viewers.Len() == 0) || l.evicted {
+		if l.publishers.Len() == 0 || l.evicted {
 			d.deleteListing(l)
 			events = append(events, &networkv1directory.Event{
 				Body: &networkv1directory.Event_Unpublish_{

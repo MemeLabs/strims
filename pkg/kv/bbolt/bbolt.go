@@ -3,6 +3,7 @@ package bbolt
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	bboltlib "go.etcd.io/bbolt"
@@ -92,13 +93,46 @@ func (t Tx) Get(key string) (value []byte, err error) {
 
 // ScanPrefix ...
 func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
+	return t.ScanCursor(kv.Cursor{After: prefix, Before: prefix})
+}
+
+// ScanCursor ...
+func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	c := t.b.Cursor()
 
-	p := []byte(prefix)
-	for k, v := c.Seek(p); k != nil && bytes.HasPrefix(k, p); k, v = c.Next() {
+	var limit int
+	var k, v []byte
+	var continueFunc func(*bboltlib.Cursor) (k, v []byte)
+	var boundFunc func([]byte) bool
+	if cursor.Last == 0 {
+		c.Seek([]byte(cursor.After))
+		limit = cursor.First
+		continueFunc = (*bboltlib.Cursor).Next
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) > 0 }
+	} else {
+		c.Seek([]byte(cursor.Before))
+		limit = cursor.Last
+		continueFunc = (*bboltlib.Cursor).Prev
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) < 0 }
+	}
+
+	if limit == 0 {
+		limit = math.MaxInt
+	}
+
+	for {
+		k, v = continueFunc(c)
+		if k == nil || boundFunc(k) {
+			break
+		}
+
 		value := make([]byte, len(v))
 		copy(value, v)
 		values = append(values, value)
+
+		if len(values) >= limit {
+			break
+		}
 	}
 
 	return values, nil

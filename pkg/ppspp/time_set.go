@@ -18,11 +18,11 @@ func (t *timeSet) Size() int {
 func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 	if t.root == nil {
 		t.allocator = slab.New[timeSetNode]()
-		t.root = t.allocNode(bin, 0)
+		t.root = &timeSetNode{bin: bin}
 	}
 
 	for !t.root.bin.Contains(bin) {
-		r := t.allocNode(t.root.bin.Parent(), t.root.count)
+		r := &timeSetNode{bin: t.root.bin.Parent(), count: t.root.count}
 
 		if r.bin < t.root.bin {
 			r.right = t.root
@@ -32,11 +32,11 @@ func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 		t.root = r
 	}
 
-	return t.root.set(bin, time, t).time
+	return t.root.set(bin, time).time
 }
 
 func (t *timeSet) Unset(bin binmap.Bin) {
-	if _, deleted := t.root.unset(bin, t); deleted {
+	if _, deleted := t.root.unset(bin); deleted {
 		t.root = nil
 	}
 }
@@ -52,29 +52,10 @@ func (t *timeSet) Get(bin binmap.Bin) (binmap.Bin, timeutil.Time, bool) {
 func (t *timeSet) Prune(bin binmap.Bin) {
 	for t.root != nil && t.root.bin < bin {
 		r := t.root
-		r.left.delete(t)
+		r.left.delete()
 		t.root = r.right
 	}
-	t.root.prune(bin, t)
-}
-
-func (t *timeSet) allocNode(b binmap.Bin, c uint64) *timeSetNode {
-	r := t.allocator.Alloc()
-	r.bin = b
-	r.count = c
-	return r
-}
-
-func (t *timeSet) freeNode(r *timeSetNode) {
-	r.left = nil
-	r.right = nil
-	r.time = 0
-	t.allocator.Free(r)
-}
-
-type timeSetNodeAllocator interface {
-	allocNode(b binmap.Bin, c uint64) *timeSetNode
-	freeNode(r *timeSetNode)
+	t.root.prune(bin)
 }
 
 type timeSetNode struct {
@@ -92,7 +73,7 @@ func (r *timeSetNode) size() int {
 	return r.left.size() + r.right.size() + 1
 }
 
-func (r *timeSetNode) set(b binmap.Bin, t timeutil.Time, a timeSetNodeAllocator) *timeSetNode {
+func (r *timeSetNode) set(b binmap.Bin, t timeutil.Time) *timeSetNode {
 	if r.bin == b {
 		if r.time == 0 {
 			r.count = r.bin.BaseLength()
@@ -108,37 +89,37 @@ func (r *timeSetNode) set(b binmap.Bin, t timeutil.Time, a timeSetNodeAllocator)
 	var n *timeSetNode
 	if r.bin < b {
 		if r.right == nil {
-			r.right = a.allocNode(r.bin.Right(), 0)
+			r.right = &timeSetNode{bin: r.bin.Right()}
 		} else {
 			r.count -= r.right.count
 		}
-		n = r.right.set(b, t, a)
+		n = r.right.set(b, t)
 		r.count += r.right.count
 	} else {
 		if r.left == nil {
-			r.left = a.allocNode(r.bin.Left(), 0)
+			r.left = &timeSetNode{bin: r.bin.Left()}
 		} else {
 			r.count -= r.left.count
 		}
-		n = r.left.set(b, t, a)
+		n = r.left.set(b, t)
 		r.count += r.left.count
 	}
 	return n
 }
 
-func (r *timeSetNode) unset(b binmap.Bin, a timeSetNodeAllocator) (bool, bool) {
+func (r *timeSetNode) unset(b binmap.Bin) (bool, bool) {
 	if r == nil {
 		return false, false
 	}
 
 	var ok, deleted bool
 	if r.bin < b {
-		ok, deleted = r.right.unset(b, a)
+		ok, deleted = r.right.unset(b)
 		if deleted {
 			r.right = nil
 		}
 	} else {
-		ok, deleted = r.left.unset(b, a)
+		ok, deleted = r.left.unset(b)
 		if deleted {
 			r.left = nil
 		}
@@ -148,7 +129,7 @@ func (r *timeSetNode) unset(b binmap.Bin, a timeSetNodeAllocator) (bool, bool) {
 	if ok {
 		r.count -= b.BaseLength()
 		if r.count == 0 {
-			r.delete(a)
+			r.delete()
 			return true, true
 		}
 	}
@@ -176,27 +157,25 @@ func (r *timeSetNode) get(b binmap.Bin) *timeSetNode {
 	return n
 }
 
-func (r *timeSetNode) prune(b binmap.Bin, a timeSetNodeAllocator) {
+func (r *timeSetNode) prune(b binmap.Bin) {
 	if r == nil {
 		return
 	}
 
 	if r.bin < b {
-		r.left.delete(a)
+		r.left.delete()
 		r.left = nil
-		r.right.prune(b, a)
+		r.right.prune(b)
 	} else {
-		r.left.prune(b, a)
+		r.left.prune(b)
 	}
 }
 
-func (r *timeSetNode) delete(a timeSetNodeAllocator) {
+func (r *timeSetNode) delete() {
 	if r == nil {
 		return
 	}
 
-	r.left.delete(a)
-	r.right.delete(a)
-
-	a.freeNode(r)
+	r.left.delete()
+	r.right.delete()
 }

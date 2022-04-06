@@ -34,7 +34,13 @@ func get(tx kv.BlobTx, sk *StorageKey, key string, m proto.Message) error {
 // read from the tx values from keys matching prefix and append them to the
 // *[]*proto.Message
 func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages any) error {
-	bs, err := tx.ScanPrefix(prefix)
+	return scanCursor(tx, sk, kv.Cursor{After: prefix, Before: prefix + "\uffff"}, messages)
+}
+
+// read from the tx values from keys in cursor and append them to the
+// *[]*proto.Message
+func scanCursor(tx kv.BlobTx, sk *StorageKey, cursor kv.Cursor, messages any) error {
+	bs, err := tx.ScanCursor(cursor)
 	if err != nil {
 		return err
 	}
