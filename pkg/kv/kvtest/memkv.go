@@ -129,8 +129,6 @@ func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 	return t.ScanCursor(kv.Cursor{After: prefix, Before: prefix + "\uffff"})
 }
 
-var big1 = big.NewInt(1)
-
 // ScanCursor ...
 func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	t.s.mu.Lock()
@@ -162,7 +160,7 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 		t.b.AscendGreaterOrEqual(storeItem{key: cursor.After + "\u0000"}, iter)
 	} else {
 		before := big.NewInt(0).SetBytes([]byte(cursor.Before))
-		before.Sub(before, big1)
+		before.Sub(before, big.NewInt(1))
 		t.b.DescendLessOrEqual(storeItem{key: string(before.Bytes())}, iter)
 	}
 

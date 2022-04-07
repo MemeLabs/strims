@@ -56,7 +56,7 @@ func NewControl(
 		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
 		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, transferControl, broker, profile, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)
-		chatControl         = chat.NewControl(ctx, logger, store, observers, networkControl, transferControl, directoryControl)
+		chatControl         = chat.NewControl(ctx, logger, store, observers, profile, networkControl, transferControl, directoryControl)
 		bootstrapControl    = bootstrap.NewControl(ctx, logger, vpn, store, observers)
 		videocaptureControl = videocapture.NewControl(ctx, logger, transferControl, directoryControl, networkControl)
 		videoingressControl = videoingress.NewControl(ctx, logger, vpn, store, observers, profile, transferControl, networkControl, directoryControl)

@@ -101,31 +101,30 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	c := t.b.Cursor()
 
 	var limit int
-	var k, v []byte
+	var k, v, pivot []byte
 	var continueFunc func(*bboltlib.Cursor) (k, v []byte)
 	var boundFunc func([]byte) bool
 	if cursor.Last == 0 {
-		c.Seek([]byte(cursor.After))
 		limit = cursor.First
+		pivot = []byte(cursor.After)
 		continueFunc = (*bboltlib.Cursor).Next
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) > 0 }
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) <= 0 }
 	} else {
-		c.Seek([]byte(cursor.Before))
 		limit = cursor.Last
+		pivot = []byte(cursor.Before)
 		continueFunc = (*bboltlib.Cursor).Prev
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) < 0 }
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) >= 0 }
 	}
 
+	k, v = c.Seek(pivot)
+	if bytes.Equal(k, pivot) {
+		k, v = continueFunc(c)
+	}
 	if limit == 0 {
 		limit = math.MaxInt
 	}
 
-	for {
-		k, v = continueFunc(c)
-		if k == nil || boundFunc(k) {
-			break
-		}
-
+	for ; k != nil && boundFunc(k); k, v = continueFunc(c) {
 		value := make([]byte, len(v))
 		copy(value, v)
 		values = append(values, value)

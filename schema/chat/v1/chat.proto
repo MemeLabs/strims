@@ -419,9 +419,7 @@ message OpenClientRequest {
 }
 
 message OpenClientResponse {
-  message Open {
-    uint64 client_id = 1;
-  }
+  message Open {}
 
   message ServerEvents {
     repeated ServerEvent events = 1;
@@ -602,4 +600,14 @@ service Chat {
   rpc Mute(MuteRequest) returns (MuteResponse);
   rpc Unmute(UnmuteRequest) returns (UnmuteResponse);
   rpc GetMute(GetMuteRequest) returns (GetMuteResponse);
+}
+
+message WhisperSendMessageRequest {
+  string body = 1;
+}
+
+message WhisperSendMessageResponse {}
+
+service Whisper {
+  rpc SendMessage(WhisperSendMessageRequest) returns (WhisperSendMessageResponse);
 }

@@ -132,13 +132,13 @@ func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.
 }
 
 type snippetMap struct {
-	snippetsLock sync.Mutex
-	snippets     llrb.LLRB
+	lock     sync.Mutex
+	snippets llrb.LLRB
 }
 
 func (m *snippetMap) Update(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
-	m.snippetsLock.Lock()
-	defer m.snippetsLock.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	it, ok := m.snippets.Get(&snippetItem{id: swarmID}).(*snippetItem)
 	if !ok {
@@ -150,8 +150,8 @@ func (m *snippetMap) Update(swarmID ppspp.SwarmID, snippet *networkv1directory.L
 }
 
 func (m *snippetMap) Delete(swarmID ppspp.SwarmID) {
-	m.snippetsLock.Lock()
-	defer m.snippetsLock.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	it, ok := m.snippets.Delete(&snippetItem{id: swarmID}).(*snippetItem)
 	if ok {

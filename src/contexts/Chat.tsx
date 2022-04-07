@@ -274,7 +274,6 @@ const serverEventsDataReducer = (
     case OpenClientResponse.BodyCase.OPEN:
       return {
         ...room,
-        clientId: event.body.open.clientId,
         state: RoomInitState.OPEN,
       };
     case OpenClientResponse.BodyCase.SERVER_EVENTS:

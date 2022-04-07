@@ -893,3 +893,47 @@ func (c *ChatClient) GetMute(
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.GetMute", req, res)
 }
+
+// RegisterWhisperService ...
+func RegisterWhisperService(host rpc.ServiceRegistry, service WhisperService) {
+	host.RegisterMethod("strims.chat.v1.Whisper.SendMessage", service.SendMessage)
+}
+
+// WhisperService ...
+type WhisperService interface {
+	SendMessage(
+		ctx context.Context,
+		req *WhisperSendMessageRequest,
+	) (*WhisperSendMessageResponse, error)
+}
+
+// WhisperService ...
+type UnimplementedWhisperService struct{}
+
+func (s *UnimplementedWhisperService) SendMessage(
+	ctx context.Context,
+	req *WhisperSendMessageRequest,
+) (*WhisperSendMessageResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+var _ WhisperService = (*UnimplementedWhisperService)(nil)
+
+// WhisperClient ...
+type WhisperClient struct {
+	client rpc.Caller
+}
+
+// NewWhisperClient ...
+func NewWhisperClient(client rpc.Caller) *WhisperClient {
+	return &WhisperClient{client}
+}
+
+// SendMessage ...
+func (c *WhisperClient) SendMessage(
+	ctx context.Context,
+	req *WhisperSendMessageRequest,
+	res *WhisperSendMessageResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Whisper.SendMessage", req, res)
+}

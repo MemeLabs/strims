@@ -121,6 +121,9 @@ import {
   IGetMuteRequest,
   GetMuteRequest,
   GetMuteResponse,
+  IWhisperSendMessageRequest,
+  WhisperSendMessageRequest,
+  WhisperSendMessageResponse,
 } from "./chat";
 
 export interface ChatServerFrontendService {
@@ -432,6 +435,26 @@ export class ChatClient {
 
   public getMute(req?: IGetMuteRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetMuteResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.GetMute", new GetMuteRequest(req)), GetMuteResponse, opts);
+  }
+}
+
+export interface WhisperService {
+  sendMessage(req: WhisperSendMessageRequest, call: strims_rpc_Call): Promise<WhisperSendMessageResponse> | WhisperSendMessageResponse;
+}
+
+export class UnimplementedWhisperService implements WhisperService {
+  sendMessage(req: WhisperSendMessageRequest, call: strims_rpc_Call): Promise<WhisperSendMessageResponse> | WhisperSendMessageResponse { throw new Error("not implemented"); }
+}
+
+export const registerWhisperService = (host: strims_rpc_Service, service: WhisperService): void => {
+  host.registerMethod<WhisperSendMessageRequest, WhisperSendMessageResponse>("strims.chat.v1.Whisper.SendMessage", service.sendMessage.bind(service), WhisperSendMessageRequest);
+}
+
+export class WhisperClient {
+  constructor(private readonly host: strims_rpc_Host) {}
+
+  public sendMessage(req?: IWhisperSendMessageRequest, opts?: strims_rpc_UnaryCallOptions): Promise<WhisperSendMessageResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.Whisper.SendMessage", new WhisperSendMessageRequest(req)), WhisperSendMessageResponse, opts);
   }
 }
 

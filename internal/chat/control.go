@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"go.uber.org/zap"
@@ -40,6 +41,7 @@ func NewControl(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	observers *event.Observers,
+	profile *profilev1.Profile,
 	network network.Control,
 	transfer transfer.Control,
 	directory directory.Control,
@@ -49,6 +51,7 @@ func NewControl(
 		logger:    logger,
 		store:     store,
 		observers: observers,
+		profile:   profile,
 		network:   network,
 		transfer:  transfer,
 		directory: directory,
@@ -64,6 +67,7 @@ type control struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
 	observers *event.Observers
+	profile   *profilev1.Profile
 	network   network.Control
 	transfer  transfer.Control
 	directory directory.Control
@@ -75,6 +79,8 @@ type control struct {
 
 // Run ...
 func (t *control) Run() {
+	t.startWhisperServerRunner()
+
 	if err := t.startServerRunners(); err != nil {
 		t.logger.Debug("starting chat server runners failed", zap.Error(err))
 	}
@@ -91,6 +97,13 @@ func (t *control) Run() {
 		case <-t.ctx.Done():
 			return
 		}
+	}
+}
+
+func (t *control) startWhisperServerRunner() {
+	_, err := newWhisperRunner(t.ctx, t.logger, t.store, t.observers, t.profile, t.network.Dialer())
+	if err != nil {
+		t.logger.Error("failed to start chat whisper runner", zap.Error(err))
 	}
 }
 

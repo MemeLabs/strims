@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/app"
@@ -24,8 +23,6 @@ func init() {
 		svc := &chatService{
 			app:   params.App,
 			store: params.Store,
-
-			clients: map[uint64]chatClientRef{},
 		}
 		chatv1.RegisterChatServerFrontendService(server, svc)
 		chatv1.RegisterChatFrontendService(server, svc)
@@ -36,15 +33,6 @@ func init() {
 type chatService struct {
 	app   app.Control
 	store *dao.ProfileStore
-
-	lock         sync.Mutex
-	nextClientID uint64
-	clients      map[uint64]chatClientRef
-}
-
-type chatClientRef struct {
-	networkKey []byte
-	serverKey  []byte
 }
 
 // CreateServer ...
@@ -294,29 +282,9 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 			return
 		}
 
-		s.lock.Lock()
-		s.nextClientID++
-		clientID := s.nextClientID
-
-		s.clients[clientID] = chatClientRef{
-			networkKey: req.NetworkKey,
-			serverKey:  req.ServerKey,
-		}
-		s.lock.Unlock()
-
-		defer func() {
-			close(ch)
-
-			s.lock.Lock()
-			delete(s.clients, clientID)
-			s.lock.Unlock()
-		}()
-
 		ch <- &chatv1.OpenClientResponse{
 			Body: &chatv1.OpenClientResponse_Open_{
-				Open: &chatv1.OpenClientResponse_Open{
-					ClientId: clientID,
-				},
+				Open: &chatv1.OpenClientResponse_Open{},
 			},
 		}
 
@@ -351,17 +319,6 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 	}()
 
 	return ch, nil
-}
-
-func (s *chatService) clientRef(id uint64) (chatClientRef, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	ref, ok := s.clients[id]
-	if !ok {
-		return chatClientRef{}, errors.New("client id not found")
-	}
-	return ref, nil
 }
 
 // ClientSendMessage ...

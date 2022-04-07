@@ -13,7 +13,8 @@ type Observers struct {
 
 func (o *Observers) Chan() chan any {
 	ch := make(chan any, 8)
-	o.Notify(ch)
+	o.global.Notify(ch)
+	o.local.Notify(ch)
 	return ch
 }
 

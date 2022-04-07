@@ -3736,38 +3736,22 @@ export namespace OpenClientResponse {
   };
 
   export type IOpen = {
-    clientId?: bigint;
   }
 
   export class Open {
-    clientId: bigint;
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IOpen) {
-      this.clientId = v?.clientId || BigInt(0);
     }
 
     static encode(m: Open, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.clientId) w.uint32(8).uint64(m.clientId);
       return w;
     }
 
     static decode(r: Reader | Uint8Array, length?: number): Open {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Open();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.clientId = r.uint64();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
+      if (r instanceof Reader && length) r.skip(length);
+      return new Open();
     }
   }
 
@@ -4956,6 +4940,62 @@ export class GetMuteResponse {
       }
     }
     return m;
+  }
+}
+
+export type IWhisperSendMessageRequest = {
+  body?: string;
+}
+
+export class WhisperSendMessageRequest {
+  body: string;
+
+  constructor(v?: IWhisperSendMessageRequest) {
+    this.body = v?.body || "";
+  }
+
+  static encode(m: WhisperSendMessageRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.body.length) w.uint32(10).string(m.body);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperSendMessageRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperSendMessageRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.body = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperSendMessageResponse = {
+}
+
+export class WhisperSendMessageResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IWhisperSendMessageResponse) {
+  }
+
+  static encode(m: WhisperSendMessageResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperSendMessageResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new WhisperSendMessageResponse();
   }
 }
 
