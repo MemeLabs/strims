@@ -43,7 +43,6 @@ func newChatService(
 		observers:       observers,
 		store:           store,
 		config:          syncutil.NewPointer(config),
-		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
 		entityExtractor: newEntityExtractor(),
 		combos:          newComboTransformer(),
@@ -58,8 +57,6 @@ type chatService struct {
 	store             *dao.ProfileStore
 	config            syncutil.Pointer[chatv1.Server]
 	listingID         uint64
-	closeOnce         sync.Once
-	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime timeutil.Time
 	lock              sync.Mutex
@@ -71,8 +68,8 @@ type chatService struct {
 func (d *chatService) Run(ctx context.Context) error {
 	defer d.Close()
 
-	events := d.observers.Chan()
-	defer d.observers.StopNotifying(events)
+	events, done := d.observers.Events()
+	defer done()
 
 	for {
 		select {
@@ -84,12 +81,15 @@ func (d *chatService) Run(ctx context.Context) error {
 			if e, ok := e.(event.DirectoryEvent); ok {
 				d.handleDirectoryEvent(e)
 			}
-		case <-d.done:
-			return errors.New("closed")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+func (d *chatService) Close() {
+	d.profileCache.Close()
+	d.broadcastTicker.Stop()
 }
 
 func (d *chatService) SyncConfig(config *chatv1.Server) {
@@ -121,14 +121,6 @@ func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifi
 	d.entityExtractor.parserCtx.Tags.Replace(tagNames)
 
 	return nil
-}
-
-func (d *chatService) Close() {
-	d.closeOnce.Do(func() {
-		d.profileCache.Close()
-		d.broadcastTicker.Stop()
-		close(d.done)
-	})
 }
 
 func (d *chatService) broadcast(now timeutil.Time) error {

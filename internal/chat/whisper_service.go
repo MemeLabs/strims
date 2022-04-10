@@ -1,16 +1,30 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
+)
+
+const (
+	whisperRateLimitMaxCount = 15
+	whisperRateLimitPeriod   = 30 * time.Second
+)
+
+var (
+	errWhisperRateLimit     = errors.New("whisper rate limit exceeded")
+	errWhisperInternalError = errors.New("unable to receive whisper")
 )
 
 func newWhisperService(
@@ -40,22 +54,69 @@ func (d *whisperService) SyncConfig(config *chatv1.UIConfig) {
 }
 
 func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSendMessageRequest) (*chatv1.WhisperSendMessageResponse, error) {
+	now := timeutil.Now()
 	peerCert := dialer.VPNCertificate(ctx).GetParent()
 
-	// check last received messages for rate limiting
-	// check chat config for blocked peer id
-
-	// whisper message or conversation for network/chat server room context
-	m := &chatv1.Message{
-		ServerTime: time.Now().UnixNano() / int64(time.Millisecond),
-		PeerKey:    peerCert.Key,
-		Nick:       peerCert.Subject,
-		Body:       req.Body,
+	ignoreIndex := slices.IndexFunc(d.config.Get().Ignores, func(e *chatv1.UIConfig_Ignore) bool {
+		return bytes.Equal(e.PeerKey, peerCert.Key) && (e.Deadline == 0 || e.Deadline > now.Unix())
+	})
+	if ignoreIndex != -1 {
+		return &chatv1.WhisperSendMessageResponse{}, nil
 	}
 
-	debug.PrintJSON(m)
+	record, err := dao.NewChatWhisperRecord(
+		d.store,
+		dao.CertificateNetworkKey(peerCert),
+		req.ServerKey,
+		peerCert,
+		req.Body,
+		true, // received
+	)
+	if err != nil {
+		return nil, errWhisperInternalError
+	}
 
-	// dao store message
+	err = d.store.Update(func(tx kv.RWTx) error {
+		thread, err := dao.GetChatWhisperThreadByPeerKey(tx, peerCert.Key)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
+		}
+		if thread == nil {
+			thread, err = dao.NewChatWhisperThread(d.store, peerCert)
+			if err != nil {
+				return err
+			}
+		}
+
+		thread.Alias = peerCert.Subject
+		thread.UnreadCount++
+		thread.LastReceiveTimes = updateWhisperLastReceiveTimes(thread.LastReceiveTimes, now)
+		thread.LastMessageTime = now.UnixNano() / int64(timeutil.Precision)
+		thread.LastMessageId = record.Id
+
+		if len(thread.LastReceiveTimes) > whisperRateLimitMaxCount {
+			return errWhisperRateLimit
+		}
+
+		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
+			return err
+		}
+		return dao.ChatWhisperThreads.Upsert(tx, thread)
+	})
+	if err != nil {
+		return nil, errWhisperInternalError
+	}
 
 	return &chatv1.WhisperSendMessageResponse{}, nil
+}
+
+func updateWhisperLastReceiveTimes(src []int64, now timeutil.Time) []int64 {
+	threshold := now.Add(-whisperRateLimitPeriod).UnixNano() / int64(timeutil.Precision)
+	dst := make([]int64, 0, len(src)+1)
+	for _, t := range src {
+		if t > threshold {
+			dst = append(dst, t)
+		}
+	}
+	return append(dst, now.UnixNano()/int64(timeutil.Precision))
 }

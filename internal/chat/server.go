@@ -220,9 +220,8 @@ func (s *chatServer) Reader(ctx context.Context) (readers, error) {
 }
 
 func (s *chatServer) watchAssets(ctx context.Context) {
-	events := make(chan any, 8)
-	s.observers.Notify(events)
-	defer s.observers.StopNotifying(events)
+	events, done := s.observers.Events()
+	defer done()
 
 	for {
 		select {

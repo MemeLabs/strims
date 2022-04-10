@@ -33,6 +33,7 @@ type Control interface {
 	Mute(ctx context.Context, networkKey, serverKey, peerKey []byte, duration time.Duration, message string) error
 	Unmute(ctx context.Context, networkKey, serverKey, peerKey []byte) error
 	GetMute(ctx context.Context, networkKey, serverKey []byte) (*chatv1.GetMuteResponse, error)
+	Whisper(ctx context.Context, networkKey, serverKey, peerKey []byte, m string) error
 }
 
 // NewControl ...
@@ -297,4 +298,14 @@ func (t *control) GetMute(ctx context.Context, networkKey, serverKey []byte) (*c
 		return nil, err
 	}
 	return res, nil
+}
+
+func (t *control) Whisper(ctx context.Context, networkKey, serverKey, peerKey []byte, m string) error {
+	client, err := t.network.Dialer().Client(ctx, networkKey, peerKey, WhisperAddressSalt)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	return chatv1.NewWhisperClient(client).SendMessage(ctx, &chatv1.WhisperSendMessageRequest{Body: m}, &chatv1.WhisperSendMessageResponse{})
 }

@@ -629,9 +629,8 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 		}
 		t.lock.Unlock()
 
-		events := make(chan any, 8)
-		t.observers.Notify(events)
-		defer t.observers.StopNotifying(events)
+		events, done := t.observers.Events()
+		defer done()
 
 		for {
 			select {

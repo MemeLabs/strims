@@ -177,7 +177,7 @@ func (c *control) loadNetworkPeers(t *transfer, n *network) error {
 		count++
 	}
 
-	c.logger.Info(
+	c.logger.Debug(
 		"finished searching for peers",
 		zap.Stringer("swarm", t.swarm.ID()),
 		logutil.ByteHex("salt", t.salt),

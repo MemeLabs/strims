@@ -48,3 +48,15 @@ message SyncAssetsEvent {
   uint64 server_id = 1;
   bool force_unified_update = 2;
 }
+
+message WhisperThreadChangeEvent {
+  WhisperThread whisper_thread = 1;
+}
+
+message WhisperRecordChangeEvent {
+  WhisperRecord whisper_record = 1;
+}
+
+message WhisperRecordDeleteEvent {
+  WhisperRecord whisper_record = 1;
+}

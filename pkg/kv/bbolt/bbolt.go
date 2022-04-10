@@ -108,12 +108,12 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 		limit = cursor.First
 		pivot = []byte(cursor.After)
 		continueFunc = (*bboltlib.Cursor).Next
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) <= 0 }
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) > 0 }
 	} else {
 		limit = cursor.Last
 		pivot = []byte(cursor.Before)
 		continueFunc = (*bboltlib.Cursor).Prev
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) >= 0 }
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) < 0 }
 	}
 
 	k, v = c.Seek(pivot)
@@ -124,7 +124,7 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 		limit = math.MaxInt
 	}
 
-	for ; k != nil && boundFunc(k); k, v = continueFunc(c) {
+	for ; k != nil && !boundFunc(k); k, v = continueFunc(c) {
 		value := make([]byte, len(v))
 		copy(value, v)
 		values = append(values, value)

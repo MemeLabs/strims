@@ -12,6 +12,10 @@ import {
   ITag as strims_chat_v1_ITag,
   UIConfig as strims_chat_v1_UIConfig,
   IUIConfig as strims_chat_v1_IUIConfig,
+  WhisperRecord as strims_chat_v1_WhisperRecord,
+  IWhisperRecord as strims_chat_v1_IWhisperRecord,
+  WhisperThread as strims_chat_v1_WhisperThread,
+  IWhisperThread as strims_chat_v1_IWhisperThread,
 } from "./chat";
 
 export type IServerChangeEvent = {
@@ -371,6 +375,114 @@ export class SyncAssetsEvent {
         break;
         case 2:
         m.forceUnifiedUpdate = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperThreadChangeEvent = {
+  whisperThread?: strims_chat_v1_IWhisperThread;
+}
+
+export class WhisperThreadChangeEvent {
+  whisperThread: strims_chat_v1_WhisperThread | undefined;
+
+  constructor(v?: IWhisperThreadChangeEvent) {
+    this.whisperThread = v?.whisperThread && new strims_chat_v1_WhisperThread(v.whisperThread);
+  }
+
+  static encode(m: WhisperThreadChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.whisperThread) strims_chat_v1_WhisperThread.encode(m.whisperThread, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperThreadChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperThreadChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.whisperThread = strims_chat_v1_WhisperThread.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperRecordChangeEvent = {
+  whisperRecord?: strims_chat_v1_IWhisperRecord;
+}
+
+export class WhisperRecordChangeEvent {
+  whisperRecord: strims_chat_v1_WhisperRecord | undefined;
+
+  constructor(v?: IWhisperRecordChangeEvent) {
+    this.whisperRecord = v?.whisperRecord && new strims_chat_v1_WhisperRecord(v.whisperRecord);
+  }
+
+  static encode(m: WhisperRecordChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.whisperRecord) strims_chat_v1_WhisperRecord.encode(m.whisperRecord, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperRecordChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperRecordChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.whisperRecord = strims_chat_v1_WhisperRecord.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperRecordDeleteEvent = {
+  whisperRecord?: strims_chat_v1_IWhisperRecord;
+}
+
+export class WhisperRecordDeleteEvent {
+  whisperRecord: strims_chat_v1_WhisperRecord | undefined;
+
+  constructor(v?: IWhisperRecordDeleteEvent) {
+    this.whisperRecord = v?.whisperRecord && new strims_chat_v1_WhisperRecord(v.whisperRecord);
+  }
+
+  static encode(m: WhisperRecordDeleteEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.whisperRecord) strims_chat_v1_WhisperRecord.encode(m.whisperRecord, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperRecordDeleteEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperRecordDeleteEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.whisperRecord = strims_chat_v1_WhisperRecord.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

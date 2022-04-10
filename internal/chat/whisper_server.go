@@ -37,7 +37,9 @@ func newWhisperServer(
 		observers: observers,
 		profile:   profile,
 		dialer:    dialer,
-		service:   newWhisperService(logger, store, config),
+
+		service:         newWhisperService(logger, store, config),
+		deliveryService: newWhisperDeliveryService(logger, store, dialer),
 
 		serverClosers: map[uint64]context.CancelFunc{},
 	}
@@ -50,8 +52,10 @@ type whisperServer struct {
 	observers *event.Observers
 	profile   *profilev1.Profile
 	dialer    network.Dialer
-	service   *whisperService
-	stopper   servicemanager.Stopper
+
+	service         *whisperService
+	deliveryService *whisperDeliveryService
+	stopper         servicemanager.Stopper
 
 	lock          sync.Mutex
 	serverClosers map[uint64]context.CancelFunc
@@ -62,10 +66,11 @@ func (s *whisperServer) Run(ctx context.Context) error {
 	defer done()
 
 	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error { return s.deliveryService.Run(ctx) })
 	eg.Go(func() error { return s.startServers(ctx, eg) })
 
-	events := s.observers.Chan()
-	defer s.observers.StopNotifying(events)
+	events, done := s.observers.Events()
+	defer done()
 
 	for {
 		select {
@@ -73,6 +78,8 @@ func (s *whisperServer) Run(ctx context.Context) error {
 			switch e := e.(type) {
 			case *chatv1.UIConfigChangeEvent:
 				s.service.SyncConfig(e.UiConfig)
+			case *chatv1.WhisperRecordChangeEvent:
+				s.deliveryService.HandleWhisper(e.WhisperRecord)
 			case event.NetworkStart:
 				eg.Go(func() error { return s.startServer(ctx, e.Network) })
 			case event.NetworkStop:

@@ -97,7 +97,6 @@ func newDirectoryService(
 		observers:       observers,
 		dialer:          dialer,
 		network:         syncutil.NewPointer(network),
-		done:            make(chan struct{}),
 		broadcastTicker: timeutil.DefaultTickEmitter.Ticker(broadcastInterval),
 		embedLoadTicker: timeutil.DefaultTickEmitter.Ticker(embedLoadInterval),
 		eventWriter:     ew,
@@ -117,8 +116,6 @@ type directoryService struct {
 	dialer    network.Dialer
 
 	network           syncutil.Pointer[networkv1.Network]
-	closeOnce         sync.Once
-	done              chan struct{}
 	broadcastTicker   timeutil.Ticker
 	embedLoadTicker   timeutil.Ticker
 	lastBroadcastTime timeutil.Time
@@ -143,9 +140,8 @@ func (d *directoryService) Run(ctx context.Context) error {
 		return err
 	}
 
-	events := make(chan any, 8)
-	d.observers.Notify(events)
-	defer d.observers.StopNotifying(events)
+	events, done := d.observers.Events()
+	defer done()
 
 	for {
 		select {
@@ -163,8 +159,6 @@ func (d *directoryService) Run(ctx context.Context) error {
 			if err := d.loadEmbeds(ctx, now); err != nil {
 				d.logger.Debug("directory embed loading failed", zap.Error(err))
 			}
-		case <-d.done:
-			return errors.New("closed")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -172,13 +166,10 @@ func (d *directoryService) Run(ctx context.Context) error {
 }
 
 func (d *directoryService) Close() {
-	d.closeOnce.Do(func() {
-		d.broadcastTicker.Stop()
-		d.embedLoadTicker.Stop()
-		close(d.done)
-		d.userRecords.Close()
-		d.listingRecords.Close()
-	})
+	d.broadcastTicker.Stop()
+	d.embedLoadTicker.Stop()
+	d.userRecords.Close()
+	d.listingRecords.Close()
 }
 
 func (d *directoryService) handleNetworkChange(network *networkv1.Network) {

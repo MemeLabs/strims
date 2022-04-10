@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -45,7 +44,6 @@ func newCAService(
 
 		logCache:    dao.NewCertificateLogCache(store, nil),
 		network:     syncutil.NewPointer(network),
-		done:        make(chan struct{}),
 		eventWriter: ew,
 	}
 }
@@ -58,8 +56,6 @@ type service struct {
 
 	logCache    dao.CertificateLogCache
 	network     syncutil.Pointer[networkv1.Network]
-	closeOnce   sync.Once
-	done        chan struct{}
 	eventWriter *protoutil.ChunkStreamWriter
 
 	// invite policy
@@ -70,9 +66,8 @@ type service struct {
 func (s *service) Run(ctx context.Context) error {
 	defer s.Close()
 
-	events := make(chan any, 8)
-	s.observers.Notify(events)
-	defer s.observers.StopNotifying(events)
+	events, done := s.observers.Events()
+	defer done()
 
 	for {
 		select {
@@ -81,8 +76,6 @@ func (s *service) Run(ctx context.Context) error {
 			case *networkv1.NetworkChangeEvent:
 				s.network.Swap(e.Network)
 			}
-		case <-s.done:
-			return errors.New("closed")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -91,10 +84,7 @@ func (s *service) Run(ctx context.Context) error {
 
 // Close ...
 func (s *service) Close() {
-	s.closeOnce.Do(func() {
-		s.logCache.Close()
-		close(s.done)
-	})
+	s.logCache.Close()
 }
 
 // Renew ...

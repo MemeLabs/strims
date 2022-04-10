@@ -18,6 +18,13 @@ func (o *Observers) Chan() chan any {
 	return ch
 }
 
+func (o *Observers) Events() (chan any, func()) {
+	ch := make(chan any, 8)
+	o.global.Notify(ch)
+	o.local.Notify(ch)
+	return ch, func() { o.StopNotifying(ch) }
+}
+
 // Notify ...
 func (o *Observers) Notify(ch any) {
 	o.global.Notify(ch)

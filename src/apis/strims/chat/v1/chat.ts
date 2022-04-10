@@ -4105,17 +4105,20 @@ export class ClientGetMuteResponse {
 
 export type IWhisperRequest = {
   networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
   alias?: string;
   body?: string;
 }
 
 export class WhisperRequest {
   networkKey: Uint8Array;
+  serverKey: Uint8Array;
   alias: string;
   body: string;
 
   constructor(v?: IWhisperRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
     this.alias = v?.alias || "";
     this.body = v?.body || "";
   }
@@ -4123,8 +4126,9 @@ export class WhisperRequest {
   static encode(m: WhisperRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
-    if (m.alias.length) w.uint32(18).string(m.alias);
-    if (m.body.length) w.uint32(26).string(m.body);
+    if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
+    if (m.alias.length) w.uint32(26).string(m.alias);
+    if (m.body.length) w.uint32(34).string(m.body);
     return w;
   }
 
@@ -4139,9 +4143,12 @@ export class WhisperRequest {
         m.networkKey = r.bytes();
         break;
         case 2:
-        m.alias = r.string();
+        m.serverKey = r.bytes();
         break;
         case 3:
+        m.alias = r.string();
+        break;
+        case 4:
         m.body = r.string();
         break;
         default:
@@ -4943,20 +4950,175 @@ export class GetMuteResponse {
   }
 }
 
+export type IWhisperThread = {
+  id?: bigint;
+  peerKey?: Uint8Array;
+  alias?: string;
+  unreadCount?: number;
+  lastReceiveTimes?: bigint[];
+  lastMessageTime?: bigint;
+  lastMessageId?: bigint;
+}
+
+export class WhisperThread {
+  id: bigint;
+  peerKey: Uint8Array;
+  alias: string;
+  unreadCount: number;
+  lastReceiveTimes: bigint[];
+  lastMessageTime: bigint;
+  lastMessageId: bigint;
+
+  constructor(v?: IWhisperThread) {
+    this.id = v?.id || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.alias = v?.alias || "";
+    this.unreadCount = v?.unreadCount || 0;
+    this.lastReceiveTimes = v?.lastReceiveTimes ? v.lastReceiveTimes : [];
+    this.lastMessageTime = v?.lastMessageTime || BigInt(0);
+    this.lastMessageId = v?.lastMessageId || BigInt(0);
+  }
+
+  static encode(m: WhisperThread, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+    if (m.alias.length) w.uint32(26).string(m.alias);
+    if (m.unreadCount) w.uint32(32).uint32(m.unreadCount);
+    m.lastReceiveTimes.reduce((w, v) => w.int64(v), w.uint32(42).fork()).ldelim();
+    if (m.lastMessageTime) w.uint32(48).int64(m.lastMessageTime);
+    if (m.lastMessageId) w.uint32(56).uint64(m.lastMessageId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperThread {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperThread();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.peerKey = r.bytes();
+        break;
+        case 3:
+        m.alias = r.string();
+        break;
+        case 4:
+        m.unreadCount = r.uint32();
+        break;
+        case 5:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.lastReceiveTimes.push(r.int64());
+        break;
+        case 6:
+        m.lastMessageTime = r.int64();
+        break;
+        case 7:
+        m.lastMessageId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWhisperRecord = {
+  id?: bigint;
+  networkKey?: Uint8Array;
+  serverKey?: Uint8Array;
+  state?: WhisperRecord.State;
+  message?: IMessage;
+}
+
+export class WhisperRecord {
+  id: bigint;
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+  state: WhisperRecord.State;
+  message: Message | undefined;
+
+  constructor(v?: IWhisperRecord) {
+    this.id = v?.id || BigInt(0);
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.serverKey = v?.serverKey || new Uint8Array();
+    this.state = v?.state || 0;
+    this.message = v?.message && new Message(v.message);
+  }
+
+  static encode(m: WhisperRecord, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(26).bytes(m.serverKey);
+    if (m.state) w.uint32(32).uint32(m.state);
+    if (m.message) Message.encode(m.message, w.uint32(42).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperRecord {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperRecord();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.networkKey = r.bytes();
+        break;
+        case 3:
+        m.serverKey = r.bytes();
+        break;
+        case 4:
+        m.state = r.uint32();
+        break;
+        case 5:
+        m.message = Message.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace WhisperRecord {
+  export enum State {
+    WHISPER_STATE_RECEIVED = 0,
+    WHISPER_STATE_ENQUEUED = 1,
+    WHISPER_STATE_DELIVERED = 2,
+    WHISPER_STATE_FAILED = 3,
+  }
+}
+
 export type IWhisperSendMessageRequest = {
+  serverKey?: Uint8Array;
   body?: string;
 }
 
 export class WhisperSendMessageRequest {
+  serverKey: Uint8Array;
   body: string;
 
   constructor(v?: IWhisperSendMessageRequest) {
+    this.serverKey = v?.serverKey || new Uint8Array();
     this.body = v?.body || "";
   }
 
   static encode(m: WhisperSendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.body.length) w.uint32(10).string(m.body);
+    if (m.serverKey.length) w.uint32(10).bytes(m.serverKey);
+    if (m.body.length) w.uint32(18).string(m.body);
     return w;
   }
 
@@ -4968,6 +5130,9 @@ export class WhisperSendMessageRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
+        m.serverKey = r.bytes();
+        break;
+        case 2:
         m.body = r.string();
         break;
         default:

@@ -59,9 +59,8 @@ func (c *control) Watch(ctx context.Context) <-chan *notificationv1.Event {
 			}
 		}
 
-		events := make(chan any, 8)
-		c.observers.Notify(events)
-		defer c.observers.StopNotifying(events)
+		events, done := c.observers.Events()
+		defer done()
 
 		for {
 			select {

@@ -374,11 +374,50 @@ func (s *chatService) ClientGetMute(ctx context.Context, req *chatv1.ClientGetMu
 
 // Whisper ...
 func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (*chatv1.WhisperResponse, error) {
-	// res, err := s.app.Chat().Whisper(ctx, req.NetworkKey, req.ServerKey)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	return &chatv1.WhisperResponse{}, rpc.ErrNotImplemented
+	cert, ok := s.app.Network().Certificate(req.NetworkKey)
+	if !ok {
+		return nil, errors.New("no certificate found for network key")
+	}
+
+	peerCert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	if err != nil {
+		return nil, fmt.Errorf("finding peer cert failed: %w", err)
+	}
+
+	record, err := dao.NewChatWhisperRecord(
+		s.store,
+		req.NetworkKey,
+		req.ServerKey,
+		cert,
+		req.Body,
+		false, // received
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.store.Update(func(tx kv.RWTx) error {
+		thread, err := dao.GetChatWhisperThreadByPeerKey(tx, peerCert.Key)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
+		}
+		if thread == nil {
+			thread, err = dao.NewChatWhisperThread(s.store, peerCert)
+			if err != nil {
+				return err
+			}
+		}
+
+		thread.Alias = peerCert.Subject
+		thread.LastMessageTime = timeutil.Now().UnixNano() / int64(timeutil.Precision)
+		thread.LastMessageId = record.Id
+
+		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
+			return err
+		}
+		return dao.ChatWhisperThreads.Upsert(tx, thread)
+	})
+	return &chatv1.WhisperResponse{}, err
 }
 
 // SetUIConfig ...
@@ -402,9 +441,8 @@ func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConf
 	}
 
 	go func() {
-		events := make(chan any, 1)
-		s.app.Events().Notify(events)
-		defer s.app.Events().StopNotifying(events)
+		events, done := s.app.Events().Events()
+		defer done()
 
 		for {
 			select {

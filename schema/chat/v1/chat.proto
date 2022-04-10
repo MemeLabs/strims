@@ -470,8 +470,9 @@ message ClientGetMuteResponse {
 
 message WhisperRequest {
   bytes network_key = 1;
-  string alias = 2;
-  string body = 3;
+  bytes server_key = 2;
+  string alias = 3;
+  string body = 4;
 }
 message WhisperResponse {}
 
@@ -602,8 +603,34 @@ service Chat {
   rpc GetMute(GetMuteRequest) returns (GetMuteResponse);
 }
 
+message WhisperThread {
+  uint64 id = 1;
+  bytes peer_key = 2;
+  string alias = 3;
+  uint32 unread_count = 4;
+  repeated int64 last_receive_times = 5;
+  int64 last_message_time = 6;
+  uint64 last_message_id = 7;
+}
+
+message WhisperRecord {
+  enum State {
+    WHISPER_STATE_RECEIVED = 0;
+    WHISPER_STATE_ENQUEUED = 1;
+    WHISPER_STATE_DELIVERED = 2;
+    WHISPER_STATE_FAILED = 3;
+  }
+
+  uint64 id = 1;
+  bytes network_key = 2;
+  bytes server_key = 3;
+  State state = 4;
+  Message message = 5;
+}
+
 message WhisperSendMessageRequest {
-  string body = 1;
+  bytes server_key = 1;
+  string body = 2;
 }
 
 message WhisperSendMessageResponse {}

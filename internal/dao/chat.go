@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -22,6 +24,11 @@ const (
 	chatProfileNS
 	chatProfileServerNS
 	chatProfilePeerKeyNS
+	chatWhisperRecordNS
+	chatWhisperRecordPeerKeyNS
+	chatWhisperRecordStateNS
+	chatWhisperThreadNS
+	chatWhisperThreadPeerKeyNS
 )
 
 var ChatServers = NewTable(
@@ -144,6 +151,69 @@ var ChatUIConfig = NewSingleton(
 	},
 )
 
+var ChatWhisperThreads = NewTable(
+	chatWhisperThreadNS,
+	&TableOptions[chatv1.WhisperThread, *chatv1.WhisperThread]{
+		ObserveChange: func(m, p *chatv1.WhisperThread) proto.Message {
+			return &chatv1.WhisperThreadChangeEvent{WhisperThread: m}
+		},
+	},
+)
+
+var GetChatWhisperThreadByPeerKey = UniqueIndex(
+	chatWhisperThreadPeerKeyNS,
+	ChatWhisperThreads,
+	(*chatv1.WhisperThread).GetPeerKey,
+	nil,
+)
+
+func NewChatWhisperThreadCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatWhisperThreadCache) {
+	c.CacheStore, c.ByID = newCacheStore[chatv1.WhisperThread](s, ChatWhisperThreads, opt)
+	c.ByPeerKey = NewCacheIndex(
+		c.CacheStore,
+		GetChatWhisperThreadByPeerKey,
+		(*chatv1.WhisperThread).GetPeerKey,
+		hashmap.NewByteInterface[[]byte],
+	)
+	return
+}
+
+type ChatWhisperThreadCache struct {
+	*CacheStore[chatv1.WhisperThread, *chatv1.WhisperThread]
+	ByID      CacheAccessor[uint64, chatv1.WhisperThread, *chatv1.WhisperThread]
+	ByPeerKey CacheAccessor[[]byte, chatv1.WhisperThread, *chatv1.WhisperThread]
+}
+
+var ChatWhisperRecords = NewTable(
+	chatWhisperRecordNS,
+	&TableOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
+		ObserveChange: func(m, p *chatv1.WhisperRecord) proto.Message {
+			return &chatv1.WhisperRecordChangeEvent{WhisperRecord: m}
+		},
+		ObserveDelete: func(m *chatv1.WhisperRecord) proto.Message {
+			return &chatv1.WhisperRecordDeleteEvent{WhisperRecord: m}
+		},
+	},
+)
+
+var GetChatWhisperRecordsByPeerKey = SecondaryIndex(
+	chatWhisperRecordPeerKeyNS,
+	ChatWhisperRecords,
+	func(m *chatv1.WhisperRecord) []byte { return m.Message.PeerKey },
+)
+
+func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, uint32(s))
+	return b
+}
+
+var GetChatWhisperRecordsByState = SecondaryIndex(
+	chatWhisperRecordStateNS,
+	ChatWhisperRecords,
+	func(m *chatv1.WhisperRecord) []byte { return FormatChatWhisperRecordStateKey(m.State) },
+)
+
 // NewChatServer ...
 func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *chatv1.Room) (*chatv1.Server, error) {
 	id, err := g.GenerateID()
@@ -254,5 +324,57 @@ func NewChatProfile(
 		PeerKey:  peerKey,
 		Alias:    alias,
 	}
+	return v, nil
+}
+
+// NewChatWhisperThread ...
+func NewChatWhisperThread(
+	g IDGenerator,
+	peerCert *certificate.Certificate,
+) (*chatv1.WhisperThread, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.WhisperThread{
+		Id:      id,
+		PeerKey: peerCert.Key,
+		Alias:   peerCert.Subject,
+	}
+	return v, nil
+}
+
+// NewChatWhisperRecord ...
+func NewChatWhisperRecord(
+	g IDGenerator,
+	networkKey []byte,
+	serverKey []byte,
+	peerCert *certificate.Certificate,
+	body string,
+	received bool,
+) (*chatv1.WhisperRecord, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.WhisperRecord{
+		Id:         id,
+		NetworkKey: networkKey,
+		ServerKey:  serverKey,
+		State:      chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED,
+		Message: &chatv1.Message{
+			ServerTime: timeutil.Now().UnixNano() / int64(timeutil.Precision),
+			PeerKey:    peerCert.Key,
+			Nick:       peerCert.Subject,
+			Body:       body,
+		},
+	}
+
+	if received {
+		v.State = chatv1.WhisperRecord_WHISPER_STATE_RECEIVED
+	}
+
 	return v, nil
 }
