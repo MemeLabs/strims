@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
@@ -20,14 +21,20 @@ const ChatModifierCreateFormPage: React.FC = () => {
       ...data,
     });
 
+  const backLink = value?.modifiers.length
+    ? `/settings/chat-servers/${serverId}/modifiers`
+    : `/settings/chat-servers/${serverId}`;
+
   return (
-    <ChatModifierForm
-      onSubmit={onSubmit}
-      error={error}
-      loading={loading}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={!!value?.modifiers.length}
-    />
+    <>
+      <TableTitleBar label="Create Modifier" backLink={backLink} />
+      <ChatModifierForm
+        onSubmit={onSubmit}
+        error={error}
+        loading={loading}
+        submitLabel="Create Modifier"
+      />
+    </>
   );
 };
 

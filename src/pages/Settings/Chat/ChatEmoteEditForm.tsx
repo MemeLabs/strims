@@ -3,6 +3,7 @@ import React from "react";
 import { useParams } from "react-router-dom";
 
 import { EmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
 import { fileTypeToMimeType, scaleToDOMScale, toEmoteProps } from "./utils";
@@ -76,14 +77,17 @@ const ChatEmoteEditFormPage: React.FC = () => {
   });
 
   return (
-    <ChatEmoteForm
-      onSubmit={onSubmit}
-      error={getRes.error || updateRes.error}
-      loading={getRes.loading || updateRes.loading}
-      values={data}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={true}
-    />
+    <>
+      <TableTitleBar label="Edit Emote" backLink={`/settings/chat-servers/${serverId}/emotes`} />
+      <ChatEmoteForm
+        onSubmit={onSubmit}
+        error={getRes.error || updateRes.error}
+        loading={getRes.loading || updateRes.loading}
+        values={data}
+        serverId={BigInt(serverId)}
+        submitLabel={"Update Emote"}
+      />
+    </>
   );
 };
 

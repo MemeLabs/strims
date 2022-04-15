@@ -43,6 +43,7 @@ export type IRule = {
   networkKey?: Uint8Array;
   swarmId?: Uint8Array;
   salt?: Uint8Array;
+  label?: string;
 }
 
 export class Rule {
@@ -50,12 +51,14 @@ export class Rule {
   networkKey: Uint8Array;
   swarmId: Uint8Array;
   salt: Uint8Array;
+  label: string;
 
   constructor(v?: IRule) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.swarmId = v?.swarmId || new Uint8Array();
     this.salt = v?.salt || new Uint8Array();
+    this.label = v?.label || "";
   }
 
   static encode(m: Rule, w?: Writer): Writer {
@@ -64,6 +67,7 @@ export class Rule {
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.swarmId.length) w.uint32(26).bytes(m.swarmId);
     if (m.salt.length) w.uint32(34).bytes(m.salt);
+    if (m.label.length) w.uint32(42).string(m.label);
     return w;
   }
 
@@ -85,6 +89,9 @@ export class Rule {
         break;
         case 4:
         m.salt = r.bytes();
+        break;
+        case 5:
+        m.label = r.string();
         break;
         default:
         r.skipType(tag & 7);

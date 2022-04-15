@@ -2,8 +2,15 @@ import React from "react";
 import { Link, Navigate } from "react-router-dom";
 
 import { Server } from "../../../apis/strims/chat/v1/chat";
+import {
+  MenuCell,
+  MenuItem,
+  MenuLink,
+  Table,
+  TableMenu,
+  TableTitleBar,
+} from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import jsonutil from "../../../lib/jsonutil";
 
 interface ChatServerTableProps {
   servers: Server[];
@@ -23,16 +30,27 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
     const handleDelete = () => deleteChatServer({ id: server.id });
 
     return (
-      <div className="thing_list__item" key={server.id.toString()}>
-        <Link to={`/settings/chat-servers/${server.id}`}>{server.room.name || "no title"}</Link>
-        <button className="input input_button" onClick={handleDelete}>
-          delete
-        </button>
-        <pre>{jsonutil.stringify(server)}</pre>
-      </div>
+      <tr key={server.id.toString()}>
+        <td>
+          <Link to={`/settings/chat-servers/${server.id}`}>{server.room.name || "no title"}</Link>
+        </td>
+        <MenuCell>
+          <MenuItem label="Delete" onClick={handleDelete} />
+        </MenuCell>
+      </tr>
     );
   });
-  return <div className="thing_list">{rows}</div>;
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>{rows}</tbody>
+    </Table>
+  );
 };
 
 const ChatServerList: React.FC = () => {
@@ -46,8 +64,12 @@ const ChatServerList: React.FC = () => {
   }
   return (
     <>
+      <TableTitleBar label="Chat Servers">
+        <TableMenu label="Create">
+          <MenuLink label="Create Server" to="/settings/chat-servers/new" />
+        </TableMenu>
+      </TableTitleBar>
       <ChatServerTable servers={value.servers} onDelete={() => getServers()} />
-      <Link to="/settings/chat-servers/new">Create Server</Link>
     </>
   );
 };

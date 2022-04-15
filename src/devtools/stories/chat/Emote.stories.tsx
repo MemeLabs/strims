@@ -11,6 +11,7 @@ import {
   registerChatFrontendService,
   registerChatServerFrontendService,
 } from "../../../apis/strims/chat/v1/chat_rpc";
+import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import Emote from "../../../components/Chat/Emote";
 import ChatMessage from "../../../components/Chat/Message";
 import ChatScroller, { MessageProps } from "../../../components/Chat/Scroller";
@@ -24,6 +25,7 @@ import {
   useChat,
   useRoom,
 } from "../../../contexts/Chat";
+import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
@@ -32,18 +34,21 @@ import { emoteNames, modifierNames } from "../../mocks/chat/assetBundle";
 import imgBrick from "../../mocks/chat/emotes/static/Brick.png";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
 import ChatService from "../../mocks/chat/service";
+import DirectoryService from "../../mocks/directory/service";
 
 const MockChatContext = createContext<ChatService>(null);
 
 const initChatState = (messages?: MessageEmitter): [ChatService, FrontendClient] => {
   const svc = new ServiceRegistry();
-  const service = new ChatService(messages);
-  registerChatFrontendService(svc, service);
-  registerChatServerFrontendService(svc, service);
+  const chatService = new ChatService(messages);
+  const directoryService = new DirectoryService();
+  registerChatFrontendService(svc, chatService);
+  registerChatServerFrontendService(svc, chatService);
+  registerDirectoryFrontendService(svc, directoryService);
 
   const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
   new Host(a, b, svc);
-  return [service, new FrontendClient(b, a)];
+  return [chatService, new FrontendClient(b, a)];
 };
 
 interface ChatProps {
@@ -59,26 +64,28 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
 
   return (
     <ApiProvider value={client}>
-      <ChatProvider>
-        <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
-          {shouldRenderStyleSheet && (
-            <ChatConsumer>
-              {([{ uiConfig }]) => (
-                <RoomConsumer>
-                  {([room]) => (
-                    <StyleSheet
-                      liveEmotes={room.liveEmotes}
-                      styles={room.styles}
-                      uiConfig={uiConfig}
-                    />
-                  )}
-                </RoomConsumer>
-              )}
-            </ChatConsumer>
-          )}
-          <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
-        </RoomProvider>
-      </ChatProvider>
+      <DirectoryProvider>
+        <ChatProvider>
+          <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
+            {shouldRenderStyleSheet && (
+              <ChatConsumer>
+                {([{ uiConfig }]) => (
+                  <RoomConsumer>
+                    {([room]) => (
+                      <StyleSheet
+                        liveEmotes={room.liveEmotes}
+                        styles={room.styles}
+                        uiConfig={uiConfig}
+                      />
+                    )}
+                  </RoomConsumer>
+                )}
+              </ChatConsumer>
+            )}
+            <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
+          </RoomProvider>
+        </ChatProvider>
+      </DirectoryProvider>
     </ApiProvider>
   );
 };
@@ -313,7 +320,11 @@ const EmoteTester: React.FC = () => {
         </div>
         <div className="emote_tester__form">
           {formData && (
-            <ChatEmoteForm values={formData} onSubmit={(values) => setFormData(values)} />
+            <ChatEmoteForm
+              values={formData}
+              onSubmit={(values) => setFormData(values)}
+              submitLabel="Update Emote"
+            />
           )}
         </div>
       </Chat>

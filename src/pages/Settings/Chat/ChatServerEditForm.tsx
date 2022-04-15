@@ -2,6 +2,7 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useParams } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
 
@@ -33,14 +34,17 @@ const ChatServerEditForm: React.FC = () => {
   };
 
   return (
-    <ChatServerForm
-      onSubmit={onSubmit}
-      error={getRes.error || updateRes.error}
-      loading={getRes.loading || updateRes.loading}
-      id={BigInt(serverId)}
-      values={data}
-      indexLinkVisible={true}
-    />
+    <>
+      <TableTitleBar label="Edit Server" backLink="/settings/chat-servers" />
+      <ChatServerForm
+        onSubmit={onSubmit}
+        error={getRes.error || updateRes.error}
+        loading={getRes.loading || updateRes.loading}
+        id={BigInt(serverId)}
+        values={data}
+        submitLabel="Create Server"
+      />
+    </>
   );
 };
 

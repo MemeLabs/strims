@@ -2,6 +2,7 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";
 
@@ -24,13 +25,18 @@ const ChatModifierCreateFormPage: React.FC = () => {
     });
   }, []);
 
+  const backLink = value?.channels.length ? `/settings/video/channels` : `/settings/video/ingress`;
+
   return (
-    <VideoChannelForm
-      onSubmit={onSubmit}
-      error={error}
-      loading={loading}
-      indexLinkVisible={!!value?.channels.length}
-    />
+    <>
+      <TableTitleBar label="Create Channel" backLink={backLink} />
+      <VideoChannelForm
+        onSubmit={onSubmit}
+        error={error}
+        loading={loading}
+        submitLabel="Create Channel"
+      />
+    </>
   );
 };
 

@@ -167,23 +167,6 @@ var GetChatWhisperThreadByPeerKey = UniqueIndex(
 	nil,
 )
 
-func NewChatWhisperThreadCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatWhisperThreadCache) {
-	c.CacheStore, c.ByID = newCacheStore[chatv1.WhisperThread](s, ChatWhisperThreads, opt)
-	c.ByPeerKey = NewCacheIndex(
-		c.CacheStore,
-		GetChatWhisperThreadByPeerKey,
-		(*chatv1.WhisperThread).GetPeerKey,
-		hashmap.NewByteInterface[[]byte],
-	)
-	return
-}
-
-type ChatWhisperThreadCache struct {
-	*CacheStore[chatv1.WhisperThread, *chatv1.WhisperThread]
-	ByID      CacheAccessor[uint64, chatv1.WhisperThread, *chatv1.WhisperThread]
-	ByPeerKey CacheAccessor[[]byte, chatv1.WhisperThread, *chatv1.WhisperThread]
-}
-
 var ChatWhisperRecords = NewTable(
 	chatWhisperRecordNS,
 	&TableOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
@@ -359,11 +342,16 @@ func NewChatWhisperRecord(
 		return nil, err
 	}
 
+	state := chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED
+	if received {
+		state = chatv1.WhisperRecord_WHISPER_STATE_RECEIVED
+	}
+
 	v := &chatv1.WhisperRecord{
 		Id:         id,
 		NetworkKey: networkKey,
 		ServerKey:  serverKey,
-		State:      chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED,
+		State:      state,
 		Message: &chatv1.Message{
 			ServerTime: timeutil.Now().UnixNano() / int64(timeutil.Precision),
 			PeerKey:    peerCert.Key,
@@ -371,10 +359,5 @@ func NewChatWhisperRecord(
 			Body:       body,
 		},
 	}
-
-	if received {
-		v.State = chatv1.WhisperRecord_WHISPER_STATE_RECEIVED
-	}
-
 	return v, nil
 }

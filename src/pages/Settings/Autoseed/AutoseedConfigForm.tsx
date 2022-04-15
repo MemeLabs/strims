@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 
 import { Config } from "../../../apis/strims/autoseed/v1/autoseed";
 import { Button, ButtonSet, InputError, ToggleInput } from "../../../components/Form";
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ForwardLink from "../ForwardLink";
 
@@ -44,6 +45,7 @@ const AutoseedConfigForm = () => {
 
   return (
     <>
+      <TableTitleBar label="Autoseed" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
           <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />

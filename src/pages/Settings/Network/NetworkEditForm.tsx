@@ -2,6 +2,7 @@ import React from "react";
 import { useParams } from "react-router-dom";
 
 import { Network } from "../../../apis/strims/network/v1/network";
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkForm, { NetworkFormData } from "./NetworkForm";
 
@@ -61,13 +62,15 @@ const NetworkEditForm: React.FC = () => {
   };
 
   return (
-    <NetworkForm
-      onSubmit={onSubmit}
-      error={getRes.error || updateRes.error}
-      loading={getRes.loading || updateRes.loading}
-      values={data}
-      indexLinkVisible={true}
-    />
+    <>
+      <TableTitleBar label="Edit Network" backLink="/settings/networks" />
+      <NetworkForm
+        onSubmit={onSubmit}
+        error={getRes.error || updateRes.error}
+        loading={getRes.loading || updateRes.loading}
+        values={data}
+      />
+    </>
   );
 };
 

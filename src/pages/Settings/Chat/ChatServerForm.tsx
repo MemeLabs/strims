@@ -9,7 +9,6 @@ import {
   NetworkSelectInput,
   TextInput,
 } from "../../../components/Form";
-import BackLink from "../BackLink";
 import ForwardLink from "../ForwardLink";
 
 export interface ChatServerFormData {
@@ -23,7 +22,7 @@ export interface ChatServerFormProps {
   loading: boolean;
   id?: bigint;
   values?: ChatServerFormData;
-  indexLinkVisible?: boolean;
+  submitLabel: string;
 }
 
 const ChatServerForm: React.FC<ChatServerFormProps> = ({
@@ -32,7 +31,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
   loading,
   id,
   values,
-  indexLinkVisible,
+  submitLabel,
 }) => {
   const { handleSubmit, control, formState } = useForm<ChatServerFormData>({
     mode: "onBlur",
@@ -42,13 +41,6 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
-      {indexLinkVisible && (
-        <BackLink
-          to="/settings/chat-servers"
-          title="Servers"
-          description="Some description of servers..."
-        />
-      )}
       <TextInput
         control={control}
         rules={{
@@ -94,7 +86,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
       )}
       <ButtonSet>
         <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
-          {values ? "Update Server" : "Create Server"}
+          {submitLabel}
         </Button>
       </ButtonSet>
     </form>

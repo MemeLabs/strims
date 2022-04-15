@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 
 import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic";
 import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
+import { TableTitleBar } from "../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 
 const units: { [key: string]: bigint } = {
@@ -130,6 +131,7 @@ const VNICsPage: React.FC = () => {
 
   return (
     <main className="network_page">
+      <TableTitleBar label="VNIC" />
       {value && <VNICForm config={value.config} onCreate={() => getConfig()} />}
     </main>
   );

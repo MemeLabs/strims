@@ -3,6 +3,7 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import AutoseedRuleForm, { AutoseedRuleFormData } from "./AutoseedRuleForm";
 
@@ -16,6 +17,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
   const onSubmit = React.useCallback(async (data: AutoseedRuleFormData) => {
     await createRule({
       rule: {
+        label: data.label,
         networkKey: Base64.toUint8Array(data.networkKey),
         swarmId: new Uint8Array(base32Decode(data.swarmId, "RFC4648")),
         salt: new TextEncoder().encode(data.salt),
@@ -23,13 +25,18 @@ const ChatModifierCreateFormPage: React.FC = () => {
     });
   }, []);
 
+  const backLink = value?.rules.length ? "/settings/autoseed/rules" : "/settings/autoseed/config";
+
   return (
-    <AutoseedRuleForm
-      onSubmit={onSubmit}
-      error={error}
-      loading={loading}
-      indexLinkVisible={!!value?.rules.length}
-    />
+    <>
+      <TableTitleBar label="Create Rule" backLink={backLink} />
+      <AutoseedRuleForm
+        onSubmit={onSubmit}
+        error={error}
+        loading={loading}
+        submitLabel={"Create Rule"}
+      />
+    </>
   );
 };
 

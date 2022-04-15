@@ -55,7 +55,7 @@ func (s *autoseedService) GetRule(ctx context.Context, r *autoseedv1.GetRuleRequ
 }
 
 func (s *autoseedService) CreateRule(ctx context.Context, r *autoseedv1.CreateRuleRequest) (*autoseedv1.CreateRuleResponse, error) {
-	rule, err := dao.NewAutoseedRule(s.store, r.Rule.NetworkKey, r.Rule.SwarmId, r.Rule.Salt)
+	rule, err := dao.NewAutoseedRule(s.store, r.Rule.Label, r.Rule.NetworkKey, r.Rule.SwarmId, r.Rule.Salt)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +69,7 @@ func (s *autoseedService) CreateRule(ctx context.Context, r *autoseedv1.CreateRu
 
 func (s *autoseedService) UpdateRule(ctx context.Context, r *autoseedv1.UpdateRuleRequest) (*autoseedv1.UpdateRuleResponse, error) {
 	rule, err := dao.AutoseedRules.Transform(s.store, r.Id, func(p *autoseedv1.Rule) error {
+		p.Label = r.Rule.Label
 		p.NetworkKey = r.Rule.NetworkKey
 		p.SwarmId = r.Rule.SwarmId
 		p.Salt = r.Rule.Salt

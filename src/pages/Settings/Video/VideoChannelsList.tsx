@@ -1,10 +1,17 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Link, Navigate } from "react-router-dom";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
+import {
+  MenuCell,
+  MenuItem,
+  MenuLink,
+  Table,
+  TableCell,
+  TableMenu,
+  TableTitleBar,
+} from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import jsonutil from "../../../lib/jsonutil";
-import BackLink from "../BackLink";
 
 interface VideoChannelTableItemProps {
   channel: VideoChannel;
@@ -13,34 +20,35 @@ interface VideoChannelTableItemProps {
 
 const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps) => {
   const [channelURLRes] = useCall("videoIngress", "getChannelURL", { args: [{ id: channel.id }] });
+  const [, deleteChannel] = useLazyCall("videoChannel", "delete", {
+    onComplete: onDelete,
+  });
+
+  const handleDelete = useCallback(() => deleteChannel({ id: channel.id }), [channel]);
+
+  const handleCopyKey = () => {
+    void navigator.clipboard.writeText(channelURLRes.value.streamKey);
+    console.log("copied stream key to clipboard");
+  };
 
   return (
-    <div className="thing_list__item">
-      <div>
+    <tr>
+      <td>
         <Link to={`/settings/video/channels/${channel.id}`}>
           {channel.directoryListingSnippet?.title}
         </Link>
-        <div>{channel.directoryListingSnippet?.description}</div>
-        <div>{channelURLRes.value?.url}</div>
-        <div>
-          {channel.directoryListingSnippet?.tags.map((tag, i) => (
-            <span key={i}>{tag}</span>
-          ))}
-        </div>
-      </div>
-      <button className="input input_button" onClick={onDelete}>
-        delete
-      </button>
-      <pre>{jsonutil.stringify(channel)}</pre>
-    </div>
+      </td>
+      <TableCell truncate>{channelURLRes.value?.url}</TableCell>
+      <MenuCell>
+        <MenuItem label="Copy Stream Key" onClick={handleCopyKey} />
+        <MenuItem label="Delete" onClick={handleDelete} />
+      </MenuCell>
+    </tr>
   );
 };
 
 const VideoChannelsList = () => {
   const [channelsRes, listChannels] = useCall("videoChannel", "list");
-  const [, deleteChannel] = useLazyCall("videoChannel", "delete", {
-    onComplete: listChannels,
-  });
 
   if (channelsRes.loading) {
     return null;
@@ -54,22 +62,28 @@ const VideoChannelsList = () => {
       <VideoChannelTableItem
         key={channel.id.toString()}
         channel={channel}
-        onDelete={() => deleteChannel({ id: channel.id })}
+        onDelete={listChannels}
       />
     );
   });
 
   return (
     <>
-      <Link to="/settings/video/channels/new">Create channel</Link>
-      <div className="thing_list">
-        <BackLink
-          to={`/settings/video/ingress`}
-          title="Ingress"
-          description="Some description of ingress..."
-        />
-        {rows}
-      </div>
+      <TableTitleBar label="Channels" backLink="/settings/video/ingress">
+        <TableMenu label="Create">
+          <MenuLink label="Create channel" to="/settings/video/channels/new" />
+        </TableMenu>
+      </TableTitleBar>
+      <Table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>URL</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
     </>
   );
 };

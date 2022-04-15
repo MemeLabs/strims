@@ -1,6 +1,7 @@
 import React from "react";
 import { useParams } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatTagForm, { ChatTagFormData } from "./ChatTagForm";
 
@@ -22,14 +23,16 @@ const ChatTagEditForm: React.FC = () => {
   }
 
   return (
-    <ChatTagForm
-      onSubmit={onSubmit}
-      error={getRes.error || updateRes.error}
-      loading={getRes.loading || updateRes.loading}
-      values={getRes.value?.tag}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={true}
-    />
+    <>
+      <TableTitleBar label="Edit Tag" backLink={`/settings/chat-servers/${serverId}/tags`} />
+      <ChatTagForm
+        onSubmit={onSubmit}
+        error={getRes.error || updateRes.error}
+        loading={getRes.loading || updateRes.loading}
+        values={getRes.value?.tag}
+        submitLabel="Update Tag"
+      />
+    </>
   );
 };
 

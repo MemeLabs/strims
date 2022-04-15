@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,6 +37,8 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.Create
 	switch v := r.GetClientOptions().(type) {
 	case *bootstrap.CreateBootstrapClientRequest_WebsocketOptions:
 		client, err = dao.NewWebSocketBootstrapClient(s.store, v.WebsocketOptions.Url, v.WebsocketOptions.InsecureSkipVerifyTls)
+	default:
+		return nil, errors.New("unexpected client options type")
 	}
 	if err != nil {
 		return nil, err
@@ -50,8 +53,24 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.Create
 
 // UpdateClient ...
 func (s *bootstrapService) UpdateClient(ctx context.Context, r *bootstrap.UpdateBootstrapClientRequest) (*bootstrap.UpdateBootstrapClientResponse, error) {
+	client, err := dao.BootstrapClients.Transform(s.store, r.Id, func(p *bootstrap.BootstrapClient) error {
+		switch v := r.GetClientOptions().(type) {
+		case *bootstrap.UpdateBootstrapClientRequest_WebsocketOptions:
+			p.ClientOptions = &bootstrap.BootstrapClient_WebsocketOptions{
+				WebsocketOptions: &bootstrap.BootstrapClientWebSocketOptions{
+					Url: v.WebsocketOptions.Url,
+				},
+			}
+		default:
+			return errors.New("unexpected client options type")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	return &bootstrap.UpdateBootstrapClientResponse{BootstrapClient: nil}, nil
+	return &bootstrap.UpdateBootstrapClientResponse{BootstrapClient: client}, nil
 }
 
 // DeleteClient ...
@@ -65,7 +84,12 @@ func (s *bootstrapService) DeleteClient(ctx context.Context, r *bootstrap.Delete
 
 // GetClient ...
 func (s *bootstrapService) GetClient(ctx context.Context, r *bootstrap.GetBootstrapClientRequest) (*bootstrap.GetBootstrapClientResponse, error) {
-	return &bootstrap.GetBootstrapClientResponse{BootstrapClient: nil}, nil
+	client, err := dao.BootstrapClients.Get(s.store, r.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &bootstrap.GetBootstrapClientResponse{BootstrapClient: client}, nil
 }
 
 // ListClients ...

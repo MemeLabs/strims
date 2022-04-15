@@ -27,7 +27,7 @@ export interface VideoChannelFormProps {
   onSubmit: SubmitHandler<VideoChannelFormData>;
   error: Error;
   loading: boolean;
-  indexLinkVisible: boolean;
+  submitLabel: string;
 }
 
 export const themeColorOptions = [
@@ -54,7 +54,7 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
   onSubmit,
   error,
   loading,
-  indexLinkVisible,
+  submitLabel,
 }) => {
   const { handleSubmit, control, formState } = useForm<VideoChannelFormData>({
     mode: "onBlur",
@@ -70,19 +70,6 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating channel"} />}
-      {indexLinkVisible ? (
-        <BackLink
-          to="/settings/video/channels"
-          title="Channels"
-          description="Some description of channels..."
-        />
-      ) : (
-        <BackLink
-          to="/settings/video"
-          title="Ingress"
-          description="Some description of ingress..."
-        />
-      )}
       <TextInput
         control={control}
         rules={{
@@ -132,7 +119,7 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
       />
       <ButtonSet>
         <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
-          {values ? "Update Channel" : "Create Channel"}
+          {submitLabel}
         </Button>
       </ButtonSet>
     </form>

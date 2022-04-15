@@ -6,7 +6,7 @@ import { useBackgroundRoute } from "../contexts/BackgroundRoute";
 import SettingsLayout from "../pages/Settings/Layout";
 
 const Network = lazy(() => import("../pages/Settings/Network"));
-const BootstrapClients = lazy(() => import("../pages/Settings/BootstrapClients"));
+const Bootstrap = lazy(() => import("../pages/Settings/Bootstrap"));
 const Chat = lazy(() => import("../pages/Settings/Chat"));
 const Video = lazy(() => import("../pages/Settings/Video"));
 const VNIC = lazy(() => import("../pages/Settings/VNIC"));
@@ -24,7 +24,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings/*" element={layout}>
     <Route index element={<Navigate replace to="networks" />} />
     <Route path="networks/*" element={<Network />} />
-    <Route path="bootstrap-clients/*" element={<BootstrapClients />} />
+    <Route path="bootstraps/*" element={<Bootstrap />} />
     <Route path="chat-servers/*" element={<Chat />} />
     <Route path="video/*" element={<Video />} />
     <Route path="vnic/*" element={<VNIC />} />

@@ -8,9 +8,9 @@ import {
   NetworkSelectInput,
   TextInput,
 } from "../../../components/Form";
-import BackLink from "../BackLink";
 
 export interface AutoseedRuleFormData {
+  label: string;
   networkKey: string;
   swarmId: string;
   salt: string;
@@ -21,7 +21,7 @@ export interface AutoseedRuleFormProps {
   onSubmit: SubmitHandler<AutoseedRuleFormData>;
   error: Error;
   loading: boolean;
-  indexLinkVisible: boolean;
+  submitLabel: string;
 }
 
 const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
@@ -29,11 +29,12 @@ const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
   onSubmit,
   error,
   loading,
-  indexLinkVisible,
+  submitLabel,
 }) => {
   const { handleSubmit, control, formState } = useForm<AutoseedRuleFormData>({
     mode: "onBlur",
     defaultValues: {
+      label: "",
       networkKey: "",
       swarmId: "",
       salt: "",
@@ -44,19 +45,18 @@ const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating channel"} />}
-      {indexLinkVisible ? (
-        <BackLink
-          to="/settings/autoseed/rules"
-          title="Rules"
-          description="Some description of rules..."
-        />
-      ) : (
-        <BackLink
-          to="/settings/autoseed/config"
-          title="Autoseed"
-          description="Some description of autoseed..."
-        />
-      )}
+      <TextInput
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "Label is required",
+          },
+        }}
+        label="Label"
+        placeholder="Label"
+        name="label"
+      />
       <NetworkSelectInput
         control={control}
         rules={{
@@ -84,7 +84,7 @@ const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
       <TextInput control={control} label="Salt" placeholder="Salt" name="salt" />
       <ButtonSet>
         <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
-          {values ? "Update Rule" : "Create Rule"}
+          {submitLabel}
         </Button>
       </ButtonSet>
     </form>

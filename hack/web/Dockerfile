@@ -3,7 +3,7 @@ FROM ubuntu:focal AS build
 ARG VERSION=development
 
 ARG NODE_VERSION=14.x
-ARG GO_VERSION=1.18
+ARG GO_VERSION=1.18.1
 
 ENV GOROOT=/usr/local/go
 ENV GOPATH="/tmp/go"

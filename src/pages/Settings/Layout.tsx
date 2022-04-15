@@ -7,6 +7,7 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import LoadingPlaceholder from "../../components/LoadingPlaceholder";
 import SwipablePanel from "../../components/SwipablePanel";
+import { useCall } from "../../contexts/FrontendApi";
 
 export interface NavProps {
   open?: boolean;
@@ -14,6 +15,9 @@ export interface NavProps {
 }
 
 export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
+  const [videoIngressIsSupported] = useCall("videoIngress", "isSupported");
+  const [hlsEgressIsSupported] = useCall("hlsEgress", "isSupported");
+
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     clsx({
       "settings__nav__link": true,
@@ -21,6 +25,10 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
     });
 
   const onLinkClick = useCallback(() => onToggle?.(), []);
+
+  if (videoIngressIsSupported.loading || hlsEgressIsSupported.loading) {
+    return null;
+  }
 
   return (
     <SwipablePanel
@@ -33,18 +41,22 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="networks">
         Networks
       </NavLink>
-      <NavLink className={linkClassName} onClick={onLinkClick} to="bootstrap-clients">
-        Bootstrap Clients
+      <NavLink className={linkClassName} onClick={onLinkClick} to="bootstraps">
+        Bootstraps
       </NavLink>
       <NavLink className={linkClassName} onClick={onLinkClick} to="chat-servers">
         Chat Servers
       </NavLink>
-      <NavLink className={linkClassName} onClick={onLinkClick} to="video/ingress">
-        Video Ingress
-      </NavLink>
-      <NavLink className={linkClassName} onClick={onLinkClick} to="video/egress">
-        Video Egress
-      </NavLink>
+      {videoIngressIsSupported.value.supported && (
+        <NavLink className={linkClassName} onClick={onLinkClick} to="video/ingress">
+          Video Ingress
+        </NavLink>
+      )}
+      {hlsEgressIsSupported.value.supported && (
+        <NavLink className={linkClassName} onClick={onLinkClick} to="video/egress">
+          Video Egress
+        </NavLink>
+      )}
       <NavLink className={linkClassName} onClick={onLinkClick} to="autoseed/config">
         Autoseed
       </NavLink>

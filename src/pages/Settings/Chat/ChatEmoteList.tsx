@@ -2,8 +2,15 @@ import React, { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Emote, EmoteImage } from "../../../apis/strims/chat/v1/chat";
+import {
+  MenuCell,
+  MenuItem,
+  MenuLink,
+  Table,
+  TableMenu,
+  TableTitleBar,
+} from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import BackLink from "../BackLink";
 import { fileTypeToMimeType, scaleToDOMScale } from "./utils";
 
 interface ImageProps {
@@ -36,24 +43,26 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDel
     const handleDelete = () => deleteChatEmote({ serverId, id: emote.id });
 
     return (
-      <div className="thing_list__item" key={emote.id.toString()}>
-        <Image src={emote.images[0]} />
-        <Link to={`/settings/chat-servers/${serverId}/emotes/${emote.id}`}>{emote.name}</Link>
-        <button className="input input_button" onClick={handleDelete}>
-          delete
-        </button>
-      </div>
+      <tr key={emote.id.toString()}>
+        <td>
+          <Link to={`/settings/chat-servers/${serverId}/emotes/${emote.id}`}>{emote.name}</Link>
+        </td>
+        <MenuCell>
+          <MenuItem label="Delete" onClick={handleDelete} />
+        </MenuCell>
+      </tr>
     );
   });
   return (
-    <div className="thing_list">
-      <BackLink
-        to={`/settings/chat-servers/${serverId}`}
-        title="Server"
-        description="Some description of server..."
-      />
-      {rows}
-    </div>
+    <Table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>{rows}</tbody>
+    </Table>
   );
 };
 
@@ -71,12 +80,16 @@ const ChatEmoteList: React.FC = () => {
   }
   return (
     <>
+      <TableTitleBar label="Emotes" backLink={`/settings/chat-servers/${serverId}`}>
+        <TableMenu label="Create">
+          <MenuLink label="Create Emote" to={`/settings/chat-servers/${serverId}/emotes/new`} />
+        </TableMenu>
+      </TableTitleBar>
       <ChatEmoteTable
         serverId={BigInt(serverId)}
         emotes={value.emotes}
         onDelete={() => getEmotes()}
       />
-      <Link to={`/settings/chat-servers/${serverId}/emotes/new`}>Create Emote</Link>
     </>
   );
 };

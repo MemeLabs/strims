@@ -15,6 +15,7 @@ message Rule {
   bytes network_key = 2;
   bytes swarm_id = 3;
   bytes salt = 4;
+  string label = 5;
 }
 
 message GetConfigRequest {}

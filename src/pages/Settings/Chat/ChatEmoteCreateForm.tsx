@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
 import { toEmoteProps } from "./utils";
@@ -21,14 +22,21 @@ const ChatEmoteCreateFormPage: React.FC = () => {
       ...toEmoteProps(data),
     });
 
+  const backLink = value?.emotes.length
+    ? `/settings/chat-servers/${serverId}/emotes`
+    : `/settings/chat-servers/${serverId}`;
+
   return (
-    <ChatEmoteForm
-      onSubmit={onSubmit}
-      error={error}
-      loading={loading}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={!!value?.emotes.length}
-    />
+    <>
+      <TableTitleBar label="Create Emote" backLink={backLink} />
+      <ChatEmoteForm
+        onSubmit={onSubmit}
+        error={error}
+        loading={loading}
+        serverId={BigInt(serverId)}
+        submitLabel="Create Emote"
+      />
+    </>
   );
 };
 

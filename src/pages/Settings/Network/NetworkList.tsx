@@ -1,11 +1,15 @@
-import "./ThingTable.scss";
-
 import React from "react";
-import { BsThreeDots } from "react-icons/bs";
 import { Link, Navigate } from "react-router-dom";
 
 import { Network } from "../../../apis/strims/network/v1/network";
-import Dropdown from "../../../components/Dropdown";
+import {
+  MenuCell,
+  MenuItem,
+  MenuLink,
+  Table,
+  TableMenu,
+  TableTitleBar,
+} from "../../../components/Settings/Table";
 import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
 import { useSession } from "../../../contexts/Session";
 import { certificateRoot } from "../../../lib/certificate";
@@ -45,32 +49,18 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
     const handlePublish = () => setPublishNetwork(network);
 
     return (
-      <tr className="thing_list__item" key={network.id.toString()}>
+      <tr key={network.id.toString()}>
         <td>
           <Link to={network.id.toString()}>
             {certificateRoot(network.certificate).subject || "unknown"}
           </Link>
         </td>
         <td>{new Date(Number(network.certificate.notAfter) * 1000).toLocaleString()}</td>
-        <td className="thing_table__controls">
-          <Dropdown
-            baseClassName="thing_table_item_dropdown"
-            anchor={<BsThreeDots />}
-            items={
-              <>
-                <button className="thing_table_item_dropdown__button" onClick={handleDelete}>
-                  delete
-                </button>
-                <button onClick={handleCreateInvite} className="thing_table_item_dropdown__button">
-                  create invite
-                </button>
-                <button onClick={handlePublish} className="thing_table_item_dropdown__button">
-                  publish
-                </button>
-              </>
-            }
-          />
-        </td>
+        <MenuCell>
+          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Create Invite" onClick={handleCreateInvite} />
+          <MenuItem label="Publish" onClick={handlePublish} />
+        </MenuCell>
       </tr>
     );
   });
@@ -82,7 +72,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
   return (
     <>
       {modal}
-      <table className="thing_table">
+      <Table>
         <thead>
           <tr>
             <th>Name</th>
@@ -91,7 +81,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
           </tr>
         </thead>
         <tbody>{rows}</tbody>
-      </table>
+      </Table>
     </>
   );
 };
@@ -107,22 +97,12 @@ const ChatServerList: React.FC = () => {
   // }
   return (
     <>
-      <div className="thing_table__menu">
-        <Dropdown
-          baseClassName="thing_table_dropdown"
-          anchor={"Add network"}
-          items={
-            <>
-              <Link to="/settings/networks/new" className="thing_table_dropdown__button">
-                Create new network
-              </Link>
-              <Link to="/settings/networks/join" className="thing_table_dropdown__button">
-                Add invitation code
-              </Link>
-            </>
-          }
-        />
-      </div>
+      <TableTitleBar label="Networks">
+        <TableMenu label="Add Network">
+          <MenuLink label="Create new network" to="/settings/networks/new" />
+          <MenuLink label="Add invite code" to="/settings/networks/join" />
+        </TableMenu>
+      </TableTitleBar>
       <ChatServerTable networks={value.networks} onDelete={() => getServers()} />
     </>
   );

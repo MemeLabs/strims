@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatTagForm, { ChatTagFormData } from "./ChatTagForm";
 
@@ -20,14 +21,15 @@ const ChatTagCreateFormPage: React.FC = () => {
       ...data,
     });
 
+  const backLink = value?.tags.length
+    ? `/settings/chat-servers/${serverId}/tags`
+    : `/settings/chat-servers/${serverId}`;
+
   return (
-    <ChatTagForm
-      onSubmit={onSubmit}
-      error={error}
-      loading={loading}
-      serverId={BigInt(serverId)}
-      indexLinkVisible={!!value?.tags.length}
-    />
+    <>
+      <TableTitleBar label="Create Tag" backLink={backLink} />
+      <ChatTagForm onSubmit={onSubmit} error={error} loading={loading} submitLabel="Create Tag" />
+    </>
   );
 };
 

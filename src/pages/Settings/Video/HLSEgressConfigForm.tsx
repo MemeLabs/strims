@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 
 import { HLSEgressConfig } from "../../../apis/strims/video/v1/hls_egress";
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import hostRegex from "../../../lib/hostRegex";
 
@@ -52,6 +53,7 @@ const HLSEgressConfigForm = () => {
 
   return (
     <>
+      <TableTitleBar label="Video Egress" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
           <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />

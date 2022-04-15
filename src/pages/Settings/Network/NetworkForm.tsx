@@ -20,16 +20,9 @@ export interface NetworkFormProps {
   error: Error;
   loading: boolean;
   values?: NetworkFormData;
-  indexLinkVisible?: boolean;
 }
 
-const NetworkForm: React.FC<NetworkFormProps> = ({
-  onSubmit,
-  error,
-  loading,
-  values = {},
-  indexLinkVisible,
-}) => {
+const NetworkForm: React.FC<NetworkFormProps> = ({ onSubmit, error, loading, values = {} }) => {
   const { handleSubmit, control, watch, clearErrors } = useForm<NetworkFormData>({
     mode: "onBlur",
     defaultValues: values,
@@ -42,13 +35,6 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating tag"} />}
-      {indexLinkVisible && (
-        <BackLink
-          to="/settings/networks"
-          title="Networks"
-          description="Some description of networks..."
-        />
-      )}
       <ToggleInput control={control} name="angelthumpEnable" label="Allow AngelThump embed" />
       <ToggleInput control={control} name="twitchEnable" label="Allow Twitch embed" />
       <TextInput

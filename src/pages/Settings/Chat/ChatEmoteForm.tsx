@@ -18,7 +18,6 @@ import {
   ToggleInput,
 } from "../../../components/Form";
 import { useCall } from "../../../contexts/FrontendApi";
-import BackLink from "../BackLink";
 
 export interface ChatEmoteFormData {
   name: string;
@@ -61,7 +60,7 @@ export interface ChatEmoteFormProps {
   loading?: boolean;
   serverId?: bigint;
   values?: ChatEmoteFormData;
-  indexLinkVisible?: boolean;
+  submitLabel: string;
 }
 
 const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
@@ -70,7 +69,7 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   loading = false,
   serverId = BigInt(0),
   values = {},
-  indexLinkVisible = false,
+  submitLabel,
 }) => {
   const { handleSubmit, control, watch } = useForm<ChatEmoteFormData>({
     mode: "onBlur",
@@ -91,20 +90,6 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
-      {serverId &&
-        (indexLinkVisible ? (
-          <BackLink
-            to={`/settings/chat-servers/${serverId}/emotes`}
-            title="Emotes"
-            description="Some description of emotes..."
-          />
-        ) : (
-          <BackLink
-            to={`/settings/chat-servers/${serverId}`}
-            title="Server"
-            description="Some description of server..."
-          />
-        ))}
       <TextInput
         control={control}
         rules={{
@@ -179,7 +164,7 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         options={modifierOptions}
       />
       <ButtonSet>
-        <Button disabled={loading}>{values ? "Update Emote" : "Create Emote"}</Button>
+        <Button disabled={loading}>{submitLabel}</Button>
       </ButtonSet>
     </form>
   );

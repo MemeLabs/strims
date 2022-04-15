@@ -34,7 +34,7 @@ var AutoseedRules = NewTable(
 )
 
 // NewAutoseedRule ...
-func NewAutoseedRule(g IDGenerator, networkKey, swarmID, salt []byte) (*autoseedv1.Rule, error) {
+func NewAutoseedRule(g IDGenerator, label string, networkKey, swarmID, salt []byte) (*autoseedv1.Rule, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -42,6 +42,7 @@ func NewAutoseedRule(g IDGenerator, networkKey, swarmID, salt []byte) (*autoseed
 
 	return &autoseedv1.Rule{
 		Id:         id,
+		Label:      label,
 		NetworkKey: networkKey,
 		SwarmId:    swarmID,
 		Salt:       salt,

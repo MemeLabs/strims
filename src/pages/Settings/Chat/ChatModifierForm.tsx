@@ -3,7 +3,6 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
-import BackLink from "../BackLink";
 
 export interface ChatModifierFormData {
   name: string;
@@ -16,9 +15,8 @@ export interface ChatModifierFormProps {
   onSubmit: (data: ChatModifierFormData) => void;
   error: Error;
   loading: boolean;
-  serverId: bigint;
   values?: ChatModifierFormData;
-  indexLinkVisible?: boolean;
+  submitLabel: string;
 }
 
 const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
@@ -26,8 +24,7 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
   error,
   loading,
   values = {},
-  serverId,
-  indexLinkVisible,
+  submitLabel,
 }) => {
   const { handleSubmit, control } = useForm<ChatModifierFormData>({
     mode: "onBlur",
@@ -37,19 +34,6 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating modifier"} />}
-      {indexLinkVisible ? (
-        <BackLink
-          to={`/settings/chat-servers/${serverId}/modifiers`}
-          title="Modifiers"
-          description="Some description of modifiers..."
-        />
-      ) : (
-        <BackLink
-          to={`/settings/chat-servers/${serverId}`}
-          title="Server"
-          description="Some description of server..."
-        />
-      )}
       <TextInput
         control={control}
         rules={{
@@ -85,7 +69,7 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
       />
       <ToggleInput control={control} name="internal" label="Internal" />
       <ButtonSet>
-        <Button disabled={loading}>{values ? "Update Modifier" : "Create Modifier"}</Button>
+        <Button disabled={loading}>{submitLabel}</Button>
       </ButtonSet>
     </form>
   );

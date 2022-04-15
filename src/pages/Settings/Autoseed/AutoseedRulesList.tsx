@@ -1,11 +1,18 @@
 import base32Encode from "base32-encode";
-import React from "react";
+import React, { useCallback } from "react";
 import { Link, Navigate } from "react-router-dom";
 
 import { Rule } from "../../../apis/strims/autoseed/v1/autoseed";
+import {
+  MenuCell,
+  MenuItem,
+  MenuLink,
+  Table,
+  TableCell,
+  TableMenu,
+  TableTitleBar,
+} from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import jsonutil from "../../../lib/jsonutil";
-import BackLink from "../BackLink";
 
 interface AutoseedRuleTableItemProps {
   rule: Rule;
@@ -13,26 +20,27 @@ interface AutoseedRuleTableItemProps {
 }
 
 const AutoseedRuleTableItem = ({ rule, onDelete }: AutoseedRuleTableItemProps) => {
+  const [, deleteRule] = useLazyCall("autoseed", "deleteRule", {
+    onComplete: onDelete,
+  });
+
+  const handleDelete = useCallback(() => deleteRule({ id: rule.id }), [rule]);
+
   return (
-    <div className="thing_list__item">
-      <div>
-        <Link to={`/settings/autoseed/rules/${rule.id}`}>
-          {base32Encode(rule.swarmId, "RFC4648", { padding: false })}
-        </Link>
-      </div>
-      <button className="input input_button" onClick={onDelete}>
-        delete
-      </button>
-      <pre>{jsonutil.stringify(rule)}</pre>
-    </div>
+    <tr>
+      <td>
+        <Link to={`/settings/autoseed/rules/${rule.id}`}>{rule.label}</Link>
+      </td>
+      <TableCell truncate>{base32Encode(rule.swarmId, "RFC4648", { padding: false })}</TableCell>
+      <MenuCell>
+        <MenuItem label="Delete" onClick={handleDelete} />
+      </MenuCell>
+    </tr>
   );
 };
 
 const AutoseedRulesList = () => {
   const [rulesRes, listRules] = useCall("autoseed", "listRules");
-  const [, deleteRule] = useLazyCall("autoseed", "deleteRule", {
-    onComplete: listRules,
-  });
 
   if (rulesRes.loading) {
     return null;
@@ -42,26 +50,26 @@ const AutoseedRulesList = () => {
   }
 
   const rows = rulesRes.value?.rules?.map((rule) => {
-    return (
-      <AutoseedRuleTableItem
-        key={rule.id.toString()}
-        rule={rule}
-        onDelete={() => deleteRule({ id: rule.id })}
-      />
-    );
+    return <AutoseedRuleTableItem key={rule.id.toString()} rule={rule} onDelete={listRules} />;
   });
 
   return (
     <>
-      <Link to="/settings/autoseed/rules/new">Create rule</Link>
-      <div className="thing_list">
-        <BackLink
-          to={`/settings/autoseed/config`}
-          title="Autoseed"
-          description="Some description of autoseed..."
-        />
-        {rows}
-      </div>
+      <TableTitleBar label="Autoseed Rules" backLink="/settings/autoseed/config">
+        <TableMenu label="Create">
+          <MenuLink label="Create Rule" to="/settings/autoseed/rules/new" />
+        </TableMenu>
+      </TableTitleBar>
+      <Table>
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>ID</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
     </>
   );
 };

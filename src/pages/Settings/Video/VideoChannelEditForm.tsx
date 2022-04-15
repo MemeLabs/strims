@@ -2,8 +2,8 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { ListingSnippet } from "../../../apis/strims/network/v1/directory/directory";
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
+import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData, themeColorOptions } from "./VideoChannelForm";
 
@@ -57,13 +57,16 @@ const VideoChannelEditForm: React.FC = () => {
   }
 
   return (
-    <VideoChannelForm
-      onSubmit={onSubmit}
-      error={getRes.error || updateRes.error}
-      loading={getRes.loading || updateRes.loading}
-      values={data}
-      indexLinkVisible={true}
-    />
+    <>
+      <TableTitleBar label="Edit Channel" backLink="/settings/video/channels" />
+      <VideoChannelForm
+        onSubmit={onSubmit}
+        error={getRes.error || updateRes.error}
+        loading={getRes.loading || updateRes.loading}
+        values={data}
+        submitLabel="Update Channel"
+      />
+    </>
   );
 };
 
