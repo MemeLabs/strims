@@ -28,7 +28,12 @@ const ChatModifierCreateFormPage: React.FC = () => {
         label="Create Bootstrap"
         backLink={!!value?.bootstrapClients.values.length && "/settings/bootstraps"}
       />
-      <BootstrapForm onSubmit={onSubmit} error={error} loading={loading} />
+      <BootstrapForm
+        onSubmit={onSubmit}
+        error={error}
+        loading={loading}
+        submitLabel="Create Bootstrap"
+      />
     </>
   );
 };

@@ -52,6 +52,7 @@ const BootstrapEditForm: React.FC = () => {
         error={getRes.error || updateRes.error}
         loading={getRes.loading || updateRes.loading}
         values={data}
+        submitLabel="Update Bootstrap"
       />
     </>
   );

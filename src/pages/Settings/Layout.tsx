@@ -77,7 +77,9 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({ nav = <Nav /> }) => (
     <div className="settings__body">
       <Suspense fallback={<LoadingPlaceholder />}>
         <Scrollbars autoHide={true}>
-          <Outlet />
+          <main className="settings__content">
+            <Outlet />
+          </main>
         </Scrollbars>
       </Suspense>
     </div>

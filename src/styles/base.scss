@@ -1,25 +1,2 @@
 @import "colors.scss";
 @import "mixins.scss";
-@import "reset.scss";
-
-html,
-body {
-  text-size-adjust: 100%;
-  touch-action: none;
-  overscroll-behavior-x: contain;
-  background: black;
-  margin: 0;
-  padding: 0;
-  font-family: Verdana, Geneva, Tahoma, sans-serif;
-  overflow: hidden;
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
-}
-
-* {
-  scrollbar-color: transparent;
-}
-
-::-webkit-scrollbar {
-  background-color: transparent;
-}

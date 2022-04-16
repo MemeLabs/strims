@@ -130,10 +130,10 @@ const VNICsPage: React.FC = () => {
   const [{ value }, getConfig] = useCall("vnic", "getConfig");
 
   return (
-    <main className="network_page">
+    <>
       <TableTitleBar label="VNIC" />
       {value && <VNICForm config={value.config} onCreate={() => getConfig()} />}
-    </main>
+    </>
   );
 };
 

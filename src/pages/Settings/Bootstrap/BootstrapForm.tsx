@@ -12,9 +12,16 @@ export interface BootstrapFormProps {
   onSubmit: SubmitHandler<BootstrapFormData>;
   error: Error;
   loading: boolean;
+  submitLabel: string;
 }
 
-const BootstrapForm: React.FC<BootstrapFormProps> = ({ values, onSubmit, error, loading }) => {
+const BootstrapForm: React.FC<BootstrapFormProps> = ({
+  values,
+  onSubmit,
+  error,
+  loading,
+  submitLabel,
+}) => {
   const { handleSubmit, control } = useForm<BootstrapFormData>({
     mode: "onBlur",
     defaultValues: {
@@ -45,7 +52,7 @@ const BootstrapForm: React.FC<BootstrapFormProps> = ({ values, onSubmit, error, 
         placeholder="Enter a bootstrap url"
       />
       <ButtonSet>
-        <Button disabled={loading}>{values ? "Update Bootstrap" : "Create Bootstrap"}</Button>
+        <Button disabled={loading}>{submitLabel}</Button>
       </ButtonSet>
     </form>
   );

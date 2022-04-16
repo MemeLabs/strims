@@ -8,14 +8,12 @@ import AutoseedRulesList from "./AutoseedRulesList";
 
 const Router: React.FC = () => {
   return (
-    <main className="network_page">
-      <Routes>
-        <Route path="config" element={<AutoseedConfigForm />} />
-        <Route path="rules" element={<AutoseedRulesList />} />
-        <Route path="rules/new" element={<AutoseedRuleCreateForm />} />
-        <Route path="rules/:ruleId" element={<AutoseedRuleEditForm />} />
-      </Routes>
-    </main>
+    <Routes>
+      <Route path="config" element={<AutoseedConfigForm />} />
+      <Route path="rules" element={<AutoseedRulesList />} />
+      <Route path="rules/new" element={<AutoseedRuleCreateForm />} />
+      <Route path="rules/:ruleId" element={<AutoseedRuleEditForm />} />
+    </Routes>
   );
 };
 

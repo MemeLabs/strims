@@ -12,53 +12,20 @@ const NetworkEditForm: React.FC = () => {
 
   const network = value?.network;
 
-  const [updateRes, updateServerConfig] = useLazyCall("network", "updateServerConfig");
+  const [updateRes, updateAlias] = useLazyCall("network", "updateAlias");
 
   if (getRes.loading) {
     return null;
   }
-  if (network?.serverConfigOneof?.case !== Network.ServerConfigOneofCase.SERVER_CONFIG) {
-    // TODO: error message
-    return null;
-  }
-
-  const { serverConfig } = network.serverConfigOneof;
 
   const onSubmit = (data: NetworkFormData) =>
-    updateServerConfig({
-      networkId: BigInt(networkId),
-      serverConfig: {
-        ...serverConfig,
-        directory: {
-          integrations: {
-            angelthump: {
-              enable: data.angelthumpEnable,
-            },
-            twitch: {
-              enable: data.twitchEnable,
-              clientId: data.twitchClientId,
-              clientSecret: data.twitchClientSecret,
-            },
-            youtube: {
-              enable: data.youtubeEnable,
-              publicApiKey: data.youtubePublicApiKey,
-            },
-            swarm: {
-              enable: data.swarmEnable,
-            },
-          },
-        },
-      },
+    updateAlias({
+      id: network.id,
+      alias: data.alias,
     });
 
   const data: NetworkFormData = {
-    angelthumpEnable: serverConfig.directory?.integrations?.angelthump?.enable,
-    twitchEnable: serverConfig.directory?.integrations?.twitch?.enable,
-    twitchClientId: serverConfig.directory?.integrations?.twitch?.clientId,
-    twitchClientSecret: serverConfig.directory?.integrations?.twitch?.clientSecret,
-    youtubeEnable: serverConfig.directory?.integrations?.youtube?.enable,
-    youtubePublicApiKey: serverConfig.directory?.integrations?.youtube?.publicApiKey,
-    swarmEnable: serverConfig.directory?.integrations?.swarm?.enable,
+    alias: network.alias,
   };
 
   return (
@@ -68,6 +35,10 @@ const NetworkEditForm: React.FC = () => {
         onSubmit={onSubmit}
         error={getRes.error || updateRes.error}
         loading={getRes.loading || updateRes.loading}
+        networkId={network.id}
+        showDirectoryFormLink={
+          network.serverConfigOneof?.case === Network.ServerConfigOneofCase.SERVER_CONFIG
+        }
         values={data}
       />
     </>

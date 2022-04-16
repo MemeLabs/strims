@@ -1,7 +1,13 @@
 $breakpoints: (
-  'small':  ( min-width:  767px ),
-  'medium': ( min-width:  992px ),
-  'large':  ( min-width: 1200px )
+  "small": (
+    min-width: 767px,
+  ),
+  "medium": (
+    min-width: 992px,
+  ),
+  "large": (
+    min-width: 1200px,
+  ),
 ) !default;
 
 /// Mixin to manage responsive breakpoints
@@ -24,24 +30,6 @@ $breakpoints: (
   }
 }
 
-/// Block Element
-/// @access public
-/// @param {String} $element - Element's name
-@mixin element($element) {
-  &__#{$element} {
-      @content;
-  }
-}
-
-/// Block Modifier
-/// @access public
-/// @param {String} $modifier - Modifier's name
-@mixin modifier($modifier) {
-  &--#{$modifier} {
-      @content;
-  }
-}
-
 /// Slightly lighten a color
 /// @access public
 /// @param {Color} $color - color to tint
@@ -58,17 +46,4 @@ $breakpoints: (
 /// @return {Color}
 @function shade($color, $percentage) {
   @return mix(black, $color, $percentage);
-}
-
-$color-schemes: ('dark', 'light');
-
-@mixin color-scheme($name) {
-  @if index($color-schemes, $name) == null {
-    @error "`#{$name}` is not a known color scheme. "
-        + "Supported color schemes are: #{$color-schemes}.";
-  }
-
-  @at-root .app--#{$name} & {
-    @content
-  }
 }

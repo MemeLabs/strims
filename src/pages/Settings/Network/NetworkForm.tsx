@@ -1,88 +1,65 @@
-import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
-import React, { useEffect } from "react";
+import React from "react";
 import { useForm } from "react-hook-form";
 
-import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
-import BackLink from "../BackLink";
+import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
+import ForwardLink from "../ForwardLink";
 
 export interface NetworkFormData {
-  angelthumpEnable: boolean;
-  twitchEnable: boolean;
-  twitchClientId: string;
-  twitchClientSecret: string;
-  youtubeEnable: boolean;
-  youtubePublicApiKey: string;
-  swarmEnable: boolean;
+  alias: string;
 }
 
 export interface NetworkFormProps {
   onSubmit: (data: NetworkFormData) => void;
   error: Error;
   loading: boolean;
+  networkId: bigint;
+  showDirectoryFormLink: boolean;
   values?: NetworkFormData;
 }
 
-const NetworkForm: React.FC<NetworkFormProps> = ({ onSubmit, error, loading, values = {} }) => {
-  const { handleSubmit, control, watch, clearErrors } = useForm<NetworkFormData>({
+const NetworkForm: React.FC<NetworkFormProps> = ({
+  onSubmit,
+  error,
+  loading,
+  networkId,
+  showDirectoryFormLink,
+  values,
+}) => {
+  const { control, handleSubmit } = useForm<{
+    alias: string;
+  }>({
     mode: "onBlur",
-    defaultValues: values,
+    defaultValues: {
+      alias: "",
+      ...values,
+    },
   });
-
-  const { twitchEnable, youtubeEnable } = watch();
-  useEffect(() => clearErrors(["twitchClientId", "twitchClientSecret"]), [twitchEnable]);
-  useEffect(() => clearErrors(["youtubePublicApiKey"]), [youtubeEnable]);
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating tag"} />}
-      <ToggleInput control={control} name="angelthumpEnable" label="Allow AngelThump embed" />
-      <ToggleInput control={control} name="twitchEnable" label="Allow Twitch embed" />
+      {error && <InputError error={error.message || "Error creating membership"} />}
       <TextInput
         control={control}
         rules={{
-          required: {
-            value: twitchEnable,
-            message: "Twitch client ID",
+          pattern: {
+            value: /^\S+$/i,
+            message: "Name contains invalid characters",
           },
         }}
-        name="twitchClientId"
-        autoComplete="off"
-        label="Twitch client ID"
-        placeholder="Enter a Twitch client ID"
+        label="Alternate Name"
+        name="alias"
+        placeholder="Enter an alternate name for this network"
       />
-      <TextInput
-        control={control}
-        rules={{
-          required: {
-            value: twitchEnable,
-            message: "Twitch client secret",
-          },
-        }}
-        name="twitchClientSecret"
-        autoComplete="off"
-        type="password"
-        label="Twitch client Secret"
-        placeholder="Enter a Twitch client secret"
-      />
-      <ToggleInput control={control} name="youtubeEnable" label="Allow YouTube embed" />
-      <TextInput
-        control={control}
-        rules={{
-          required: {
-            value: youtubeEnable,
-            message: "YouTube public API key required",
-          },
-        }}
-        name="youtubePublicApiKey"
-        autoComplete="off"
-        type="password"
-        label="YouTube public API key"
-        placeholder="Enter a YouTube public API key"
-      />
-      <ToggleInput control={control} name="swarmEnable" label="Allow swarm embed" />
       <ButtonSet>
-        <Button disabled={loading}>{values ? "Update Network" : "Create Network"}</Button>
+        <Button disabled={loading}>Update Network</Button>
       </ButtonSet>
+      {showDirectoryFormLink && (
+        <ForwardLink
+          to={`/settings/networks/${networkId}/directory`}
+          title="Directory"
+          description="Directory embed settings..."
+        />
+      )}
     </form>
   );
 };
