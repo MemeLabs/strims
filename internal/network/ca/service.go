@@ -9,11 +9,13 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	networkv1errors "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/errors"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 
@@ -119,6 +121,9 @@ func (s *service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*
 	}
 	err = dao.CertificateLogs.Insert(s.store, log)
 	if err != nil {
+		if errors.Is(err, dao.ErrCertificateSubjectInUse) {
+			return nil, rpc.WrapError(err, networkv1errors.ErrorCode_CERTIFICATE_SUBJECT_IN_USE)
+		}
 		return nil, err
 	}
 	s.logCache.Store(log)

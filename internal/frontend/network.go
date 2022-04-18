@@ -57,23 +57,18 @@ func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateSe
 
 // UpdateServerConfig ...
 func (s *networkService) UpdateServerConfig(ctx context.Context, r *networkv1.UpdateServerConfigRequest) (*networkv1.UpdateServerConfigResponse, error) {
-	network, err := dao.Networks.Get(s.store, r.NetworkId)
-	if err != nil {
-		return nil, err
-	}
-
-	if network.GetServerConfig() == nil {
-		return nil, errors.New("network server config not set")
-	}
 	if r.ServerConfig == nil {
-		return nil, errors.New("network server config not set")
+		return nil, errors.New("null server config received")
 	}
 
-	network.ServerConfigOneof = &networkv1.Network_ServerConfig{
-		ServerConfig: r.ServerConfig,
-	}
-
-	if err := dao.Networks.Update(s.store, network); err != nil {
+	network, err := dao.Networks.Transform(s.store, r.NetworkId, func(p *networkv1.Network) error {
+		if p.ServerConfig == nil {
+			return errors.New("previous network server config not found")
+		}
+		p.ServerConfig = r.ServerConfig
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 

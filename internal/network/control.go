@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	networkv1errors "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/errors"
 	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -409,6 +410,26 @@ type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificat
 
 // renewCertificateWithRenewFunc ...
 func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *networkv1.Network, fn certificateRenewFunc) error {
+	cert, err := t.renewCertificateWithRenewFunc1(ctx, network, fn)
+
+	errCode := networkv1errors.ErrorCode(rpc.ErrorCode(err))
+	if err != nil && errCode == networkv1errors.ErrorCode_UNDEFINED {
+		errCode = networkv1errors.ErrorCode_UNKNOWN
+	}
+
+	go t.dispatchCertificateRenewNotification(network, err)
+
+	_, err = dao.Networks.Transform(t.store, network.Id, func(p *networkv1.Network) error {
+		p.CertificateRenewalError = errCode
+		if cert != nil {
+			p.Certificate = cert
+		}
+		return nil
+	})
+	return err
+}
+
+func (t *control) renewCertificateWithRenewFunc1(ctx context.Context, network *networkv1.Network, fn certificateRenewFunc) (*certificate.Certificate, error) {
 	subject := t.profile.Name
 	if network.Alias != "" {
 		subject = network.Alias
@@ -420,41 +441,22 @@ func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *ne
 		dao.WithSubject(subject),
 	)
 	if err != nil {
-		go t.dispatchCertificateRenewNotification(network, err)
-		return err
+		return nil, err
 	}
 
 	cert, err := fn(ctx, network.Certificate, csr)
 	if err != nil {
-		go t.dispatchCertificateRenewNotification(network, err)
-		return err
+		return nil, err
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {
-		go t.dispatchCertificateRenewNotification(network, err)
-		return err
+		return nil, err
 	}
 
-	if err := t.setCertificate(network.Id, cert); err != nil {
-		go t.dispatchCertificateRenewNotification(network, err)
-		return err
-	}
-
-	go t.dispatchCertificateRenewNotification(network, nil)
-	return nil
+	return cert, nil
 }
 
 // renewCertificate ...
 func (t *control) renewCertificate(ctx context.Context, network *networkv1.Network) error {
-	if config := network.GetServerConfig(); config != nil {
-		return t.renewCertificateWithRenewFunc(
-			ctx,
-			network,
-			func(ctx context.Context, _ *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-				return dao.SignCertificateRequestWithNetwork(csr, config)
-			},
-		)
-	}
-
 	return t.renewCertificateWithRenewFunc(
 		ctx,
 		network,
@@ -496,14 +498,6 @@ func (t *control) renewCertificateWithPeer(ctx context.Context, network *network
 			return res.Certificate, nil
 		},
 	)
-}
-
-func (t *control) setCertificate(id uint64, cert *certificate.Certificate) error {
-	_, err := dao.Networks.Transform(t.store, id, func(p *networkv1.Network) error {
-		p.Certificate = cert
-		return nil
-	})
-	return err
 }
 
 // AddPeer ...
@@ -665,6 +659,12 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 					ch <- &networkv1.NetworkEvent{
 						Body: &networkv1.NetworkEvent_UiConfigUpdate{
 							UiConfigUpdate: e.UiConfig,
+						},
+					}
+				case *networkv1.NetworkChangeEvent:
+					ch <- &networkv1.NetworkEvent{
+						Body: &networkv1.NetworkEvent_NetworkUpdate{
+							NetworkUpdate: e.Network,
 						},
 					}
 				}

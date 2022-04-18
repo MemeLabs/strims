@@ -25,7 +25,7 @@
     "build": "webpack --mode production"
   },
   "devDependencies": {
-    "@memelabs/protobuf": "^0.2.2",
+    "@memelabs/protobuf": "^0.3.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.4",
     "@react-hook/resize-observer": "^1.2.5",
     "@types/d3-format": "^3.0.1",

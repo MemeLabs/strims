@@ -16,7 +16,6 @@ import {
   Tag,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
-import { Listing } from "../apis/strims/network/v1/directory/directory";
 import useReady from "../hooks/useReady";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import {

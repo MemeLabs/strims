@@ -1,7 +1,6 @@
 import React from "react";
 import { useParams } from "react-router-dom";
 
-import { Network } from "../../../apis/strims/network/v1/network";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkForm, { NetworkFormData } from "./NetworkForm";
@@ -36,9 +35,7 @@ const NetworkEditForm: React.FC = () => {
         error={getRes.error || updateRes.error}
         loading={getRes.loading || updateRes.loading}
         networkId={network.id}
-        showDirectoryFormLink={
-          network.serverConfigOneof?.case === Network.ServerConfigOneofCase.SERVER_CONFIG
-        }
+        showDirectoryFormLink={!!network.serverConfig}
         values={data}
       />
     </>

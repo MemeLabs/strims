@@ -13,6 +13,9 @@ import {
   ServerConfig as strims_network_v1_directory_ServerConfig,
   IServerConfig as strims_network_v1_directory_IServerConfig,
 } from "./directory/directory";
+import {
+  ErrorCode as strims_network_v1_errors_ErrorCode,
+} from "./errors/errors";
 
 export type INetworkIcon = {
   data?: Uint8Array;
@@ -475,7 +478,8 @@ export type INetwork = {
   certificate?: strims_type_ICertificate;
   icon?: INetworkIcon;
   alias?: string;
-  serverConfigOneof?: Network.IServerConfigOneof
+  serverConfig?: IServerConfig;
+  certificateRenewalError?: strims_network_v1_errors_ErrorCode;
 }
 
 export class Network {
@@ -483,14 +487,16 @@ export class Network {
   certificate: strims_type_Certificate | undefined;
   icon: NetworkIcon | undefined;
   alias: string;
-  serverConfigOneof: Network.TServerConfigOneof;
+  serverConfig: ServerConfig | undefined;
+  certificateRenewalError: strims_network_v1_errors_ErrorCode;
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.icon = v?.icon && new NetworkIcon(v.icon);
     this.alias = v?.alias || "";
-    this.serverConfigOneof = new Network.ServerConfigOneof(v?.serverConfigOneof);
+    this.serverConfig = v?.serverConfig && new ServerConfig(v.serverConfig);
+    this.certificateRenewalError = v?.certificateRenewalError || 0;
   }
 
   static encode(m: Network, w?: Writer): Writer {
@@ -499,11 +505,8 @@ export class Network {
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
     if (m.alias.length) w.uint32(34).string(m.alias);
-    switch (m.serverConfigOneof.case) {
-      case Network.ServerConfigOneofCase.SERVER_CONFIG:
-      ServerConfig.encode(m.serverConfigOneof.serverConfig, w.uint32(8010).fork()).ldelim();
-      break;
-    }
+    if (m.serverConfig) ServerConfig.encode(m.serverConfig, w.uint32(42).fork()).ldelim();
+    if (m.certificateRenewalError) w.uint32(48).uint32(m.certificateRenewalError);
     return w;
   }
 
@@ -526,8 +529,11 @@ export class Network {
         case 4:
         m.alias = r.string();
         break;
-        case 1001:
-        m.serverConfigOneof = new Network.ServerConfigOneof({ serverConfig: ServerConfig.decode(r, r.uint32()) });
+        case 5:
+        m.serverConfig = ServerConfig.decode(r, r.uint32());
+        break;
+        case 6:
+        m.certificateRenewalError = r.uint32();
         break;
         default:
         r.skipType(tag & 7);
@@ -536,44 +542,6 @@ export class Network {
     }
     return m;
   }
-}
-
-export namespace Network {
-  export enum ServerConfigOneofCase {
-    NOT_SET = 0,
-    SERVER_CONFIG = 1001,
-  }
-
-  export type IServerConfigOneof =
-  { case?: ServerConfigOneofCase.NOT_SET }
-  |{ case?: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: IServerConfig }
-  ;
-
-  export type TServerConfigOneof = Readonly<
-  { case: ServerConfigOneofCase.NOT_SET }
-  |{ case: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: ServerConfig }
-  >;
-
-  class ServerConfigOneofImpl {
-    serverConfig: ServerConfig;
-    case: ServerConfigOneofCase = ServerConfigOneofCase.NOT_SET;
-
-    constructor(v?: IServerConfigOneof) {
-      if (v && "serverConfig" in v) {
-        this.case = ServerConfigOneofCase.SERVER_CONFIG;
-        this.serverConfig = new ServerConfig(v.serverConfig);
-      }
-    }
-  }
-
-  export const ServerConfigOneof = ServerConfigOneofImpl as {
-    new (): Readonly<{ case: ServerConfigOneofCase.NOT_SET }>;
-    new <T extends IServerConfigOneof>(v: T): Readonly<
-    T extends { serverConfig: IServerConfig } ? { case: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: ServerConfig } :
-    never
-    >;
-  };
-
 }
 
 export type IPeer = {
@@ -995,6 +963,9 @@ export class NetworkEvent {
       case NetworkEvent.BodyCase.UI_CONFIG_UPDATE:
       UIConfig.encode(m.body.uiConfigUpdate, w.uint32(8034).fork()).ldelim();
       break;
+      case NetworkEvent.BodyCase.NETWORK_UPDATE:
+      Network.encode(m.body.networkUpdate, w.uint32(8042).fork()).ldelim();
+      break;
     }
     return w;
   }
@@ -1018,6 +989,9 @@ export class NetworkEvent {
         case 1004:
         m.body = new NetworkEvent.Body({ uiConfigUpdate: UIConfig.decode(r, r.uint32()) });
         break;
+        case 1005:
+        m.body = new NetworkEvent.Body({ networkUpdate: Network.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -1034,6 +1008,7 @@ export namespace NetworkEvent {
     NETWORK_STOP = 1002,
     NETWORK_PEER_COUNT_UPDATE = 1003,
     UI_CONFIG_UPDATE = 1004,
+    NETWORK_UPDATE = 1005,
   }
 
   export type IBody =
@@ -1042,6 +1017,7 @@ export namespace NetworkEvent {
   |{ case?: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.INetworkStop }
   |{ case?: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate }
   |{ case?: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: IUIConfig }
+  |{ case?: BodyCase.NETWORK_UPDATE, networkUpdate: INetwork }
   ;
 
   export type TBody = Readonly<
@@ -1050,6 +1026,7 @@ export namespace NetworkEvent {
   |{ case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop }
   |{ case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate }
   |{ case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig }
+  |{ case: BodyCase.NETWORK_UPDATE, networkUpdate: Network }
   >;
 
   class BodyImpl {
@@ -1057,6 +1034,7 @@ export namespace NetworkEvent {
     networkStop: NetworkEvent.NetworkStop;
     networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate;
     uiConfigUpdate: UIConfig;
+    networkUpdate: Network;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
@@ -1075,6 +1053,10 @@ export namespace NetworkEvent {
       if (v && "uiConfigUpdate" in v) {
         this.case = BodyCase.UI_CONFIG_UPDATE;
         this.uiConfigUpdate = new UIConfig(v.uiConfigUpdate);
+      } else
+      if (v && "networkUpdate" in v) {
+        this.case = BodyCase.NETWORK_UPDATE;
+        this.networkUpdate = new Network(v.networkUpdate);
       }
     }
   }
@@ -1086,6 +1068,7 @@ export namespace NetworkEvent {
     T extends { networkStop: NetworkEvent.INetworkStop } ? { case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop } :
     T extends { networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate } ? { case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate } :
     T extends { uiConfigUpdate: IUIConfig } ? { case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig } :
+    T extends { networkUpdate: INetwork } ? { case: BodyCase.NETWORK_UPDATE, networkUpdate: Network } :
     never
     >;
   };

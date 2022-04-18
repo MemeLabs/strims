@@ -1,3 +1,4 @@
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React from "react";
 import { useForm } from "react-hook-form";
 

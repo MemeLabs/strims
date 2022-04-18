@@ -114,15 +114,13 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	network := &networkv1.Network{
 		Id:   id,
 		Icon: icon,
-		ServerConfigOneof: &networkv1.Network_ServerConfig{
-			ServerConfig: &networkv1.ServerConfig{
-				Name: name,
-				Key:  key,
-				Directory: &networkv1directory.ServerConfig{
-					Integrations: &networkv1directory.ServerConfig_Integrations{
-						Swarm: &networkv1directory.ServerConfig_Integrations_Swarm{
-							Enable: true,
-						},
+		ServerConfig: &networkv1.ServerConfig{
+			Name: name,
+			Key:  key,
+			Directory: &networkv1directory.ServerConfig{
+				Integrations: &networkv1directory.ServerConfig_Integrations{
+					Swarm: &networkv1directory.ServerConfig_Integrations_Swarm{
+						Enable: true,
 					},
 				},
 			},
@@ -262,6 +260,8 @@ func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
 	return FormatCertificateLogSubjectKey(m.NetworkId, m.Certificate.Subject)
 }
 
+var ErrCertificateSubjectInUse = errors.New("certificate subject in use")
+
 var GetCertificateLogBySubject = UniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
@@ -271,7 +271,7 @@ var GetCertificateLogBySubject = UniqueIndex(
 			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
 				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
 			}
-			return ErrUniqueConstraintViolated
+			return ErrCertificateSubjectInUse
 		},
 	},
 )

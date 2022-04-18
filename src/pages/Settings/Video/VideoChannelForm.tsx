@@ -1,3 +1,4 @@
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 
@@ -12,7 +13,6 @@ import {
   TextAreaInput,
   TextInput,
 } from "../../../components/Form";
-import BackLink from "../BackLink";
 
 export interface VideoChannelFormData {
   title: string;

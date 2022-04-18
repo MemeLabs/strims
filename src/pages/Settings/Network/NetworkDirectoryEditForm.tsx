@@ -6,7 +6,7 @@ import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkDirectoryForm, { NetworkDirectoryFormData } from "./NetworkDirectoryForm";
 
-const NetworkEditForm: React.FC = () => {
+const NetworkDirectoryEditForm: React.FC = () => {
   const { networkId } = useParams<"networkId">();
   const [{ value, ...getRes }] = useCall("network", "get", { args: [{ id: BigInt(networkId) }] });
 
@@ -14,15 +14,11 @@ const NetworkEditForm: React.FC = () => {
 
   const [updateRes, updateServerConfig] = useLazyCall("network", "updateServerConfig");
 
-  if (getRes.loading) {
-    return null;
-  }
-  if (network?.serverConfigOneof?.case !== Network.ServerConfigOneofCase.SERVER_CONFIG) {
-    // TODO: error message
+  if (getRes.loading || !network.serverConfig) {
     return null;
   }
 
-  const { serverConfig } = network.serverConfigOneof;
+  const { serverConfig } = network;
 
   const onSubmit = (data: NetworkDirectoryFormData) =>
     updateServerConfig({
@@ -74,4 +70,4 @@ const NetworkEditForm: React.FC = () => {
   );
 };
 
-export default NetworkEditForm;
+export default NetworkDirectoryEditForm;

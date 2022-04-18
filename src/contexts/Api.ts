@@ -1,3 +1,4 @@
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
 
 import type { Client } from "../apis/client";
@@ -114,7 +115,9 @@ const create = <C extends Client>(): Api<C> => {
       const service = client[serviceName];
       const method = service?.[methodName];
       if (method === undefined) {
-        throw new Error(`undefined api method ${serviceName as string}.${methodName as string}`);
+        throw new Error({
+          message: `undefined api method ${serviceName as string}.${methodName as string}`,
+        });
       }
 
       // eslint-disable-next-line

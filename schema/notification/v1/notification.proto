@@ -29,6 +29,7 @@ message Notification {
   string title = 4;
   string message = 5;
   Subject subject = 6;
+  int32 error_code = 7;
 }
 
 message Event {

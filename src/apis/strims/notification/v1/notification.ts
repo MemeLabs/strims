@@ -9,6 +9,7 @@ export type INotification = {
   title?: string;
   message?: string;
   subject?: Notification.ISubject;
+  errorCode?: number;
 }
 
 export class Notification {
@@ -18,6 +19,7 @@ export class Notification {
   title: string;
   message: string;
   subject: Notification.Subject | undefined;
+  errorCode: number;
 
   constructor(v?: INotification) {
     this.id = v?.id || BigInt(0);
@@ -26,6 +28,7 @@ export class Notification {
     this.title = v?.title || "";
     this.message = v?.message || "";
     this.subject = v?.subject && new Notification.Subject(v.subject);
+    this.errorCode = v?.errorCode || 0;
   }
 
   static encode(m: Notification, w?: Writer): Writer {
@@ -36,6 +39,7 @@ export class Notification {
     if (m.title.length) w.uint32(34).string(m.title);
     if (m.message.length) w.uint32(42).string(m.message);
     if (m.subject) Notification.Subject.encode(m.subject, w.uint32(50).fork()).ldelim();
+    if (m.errorCode) w.uint32(56).int32(m.errorCode);
     return w;
   }
 
@@ -63,6 +67,9 @@ export class Notification {
         break;
         case 6:
         m.subject = Notification.Subject.decode(r, r.uint32());
+        break;
+        case 7:
+        m.errorCode = r.int32();
         break;
         default:
         r.skipType(tag & 7);

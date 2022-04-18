@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package strims.network.v1.errors;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/errors;networkv1errors";
+option java_package = "gg.strims.network.v1.errors";
+option swift_prefix = "SNE";
+
+enum ErrorCode {
+  UNDEFINED = 0;
+  UNKNOWN = 1;
+
+  CERTIFICATE_SUBJECT_IN_USE = 2;
+  // TODO: invalid/expired invite, inviter quota, etc...
+}

@@ -2,7 +2,8 @@ import "./Table.scss";
 
 import clsx from "clsx";
 import React from "react";
-import { BsChevronLeft, BsThreeDots } from "react-icons/bs";
+import { BsThreeDots } from "react-icons/bs";
+import { MdChevronLeft } from "react-icons/md";
 import { Link } from "react-router-dom";
 
 import Dropdown from "../Dropdown";
@@ -25,7 +26,7 @@ export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, c
     <div className="thing_table__title_bar__header">
       {backLink && (
         <Link to={backLink} className="thing_table__title_bar__back">
-          <BsChevronLeft />
+          <MdChevronLeft size={24} />
         </Link>
       )}
       <h2 className="thing_table__title_bar__title">{label}</h2>

@@ -9,6 +9,7 @@ option swift_prefix = "SNT";
 import "type/key.proto";
 import "type/certificate.proto";
 import "network/v1/directory/directory.proto";
+import "network/v1/errors/errors.proto";
 
 message NetworkIcon {
   bytes data = 1;
@@ -61,7 +62,7 @@ message ServerConfig {
   uint64 root_cert_ttl_secs = 4;
   uint64 peer_cert_ttl_secs = 5;
 
-  strims.network.v1.directory.ServerConfig directory = 6;
+  directory.ServerConfig directory = 6;
 
   // per user invite limit
   // per group invite limit
@@ -74,10 +75,8 @@ message Network {
   strims.type.Certificate certificate = 2;
   NetworkIcon icon = 3;
   string alias = 4;
-
-  oneof server_config_oneof {
-    ServerConfig server_config = 1001;
-  }
+  ServerConfig server_config = 5;
+  errors.ErrorCode certificate_renewal_error = 6;
 }
 
 message Peer {
@@ -144,6 +143,7 @@ message NetworkEvent {
     NetworkStop network_stop = 1002;
     NetworkPeerCountUpdate network_peer_count_update = 1003;
     UIConfig ui_config_update = 1004;
+    Network network_update = 1005;
   }
 }
 

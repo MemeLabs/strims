@@ -8,7 +8,7 @@ require (
 	github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/MemeLabs/chat-parser v1.0.5
-	github.com/MemeLabs/protobuf v0.2.3
+	github.com/MemeLabs/protobuf v0.3.0
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/appleboy/easyssh-proxy v1.3.9
@@ -123,7 +123,7 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.2 // indirect
 	github.com/pion/dtls/v2 v2.1.2 // indirect
-	github.com/pion/ice/v2 v2.1.20 // indirect
+	github.com/pion/ice/v2 v2.1.20
 	github.com/pion/interceptor v0.1.7 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.5 // indirect
@@ -156,7 +156,10 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-require k8s.io/client-go v0.23.3
+require (
+	k8s.io/apimachinery v0.23.3
+	k8s.io/client-go v0.23.3
+)
 
 require (
 	github.com/go-logr/logr v1.2.0 // indirect
@@ -170,7 +173,6 @@ require (
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.23.3 // indirect
-	k8s.io/apimachinery v0.23.3 // indirect
 	k8s.io/klog/v2 v2.30.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	k8s.io/utils v0.0.0-20211116205334-6203023598ed // indirect
