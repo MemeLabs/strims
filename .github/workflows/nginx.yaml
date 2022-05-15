@@ -20,8 +20,8 @@ jobs:
       env:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
+      run: docker login https://ghcr.io -u ${username} -p ${password}
     - name: Build image
-      run: docker build -f modules/Dockerfile.alpine --build-arg ENABLED_MODULES="brotli" -t docker.pkg.github.com/memelabs/strims/nginx:latest .
+      run: docker build -f modules/Dockerfile.alpine --build-arg ENABLED_MODULES="brotli" -t ghcr.io/memelabs/strims/nginx:latest .
     - name: Publish image
-      run: docker push docker.pkg.github.com/memelabs/strims/nginx:latest
+      run: docker push ghcr.io/memelabs/strims/nginx:latest

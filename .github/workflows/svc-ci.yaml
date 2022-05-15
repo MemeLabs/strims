@@ -18,4 +18,4 @@ jobs:
       with:
         submodules: true
     - name: Build image
-      run: docker build -f cmd/svc/Dockerfile . -t docker.pkg.github.com/memelabs/strims/svc:latest
+      run: docker build -f cmd/svc/Dockerfile . -t ghcr.io/memelabs/strims/svc:latest
