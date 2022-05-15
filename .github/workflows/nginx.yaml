@@ -14,8 +14,8 @@ jobs:
     - uses: actions/checkout@v2
       with:
         repository: nginxinc/docker-nginx
-        # TODO: use latest stable version once module spport is released
-        ref: main
+        # TODO: use latest stable version once module support is released
+        ref: master
     - name: Docker login
       env:
         username: ${{ github.actor }}
