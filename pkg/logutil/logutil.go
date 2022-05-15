@@ -20,7 +20,7 @@ func Type(key string, v any) zapcore.Field {
 }
 
 func CheckWithTimer(logger *zap.Logger, lvl zapcore.Level, msg string) (*zapcore.CheckedEntry, *debug.Timer) {
-	ce := logger.Check(lvl, msg)
+	ce := logger.WithOptions(zap.AddCallerSkip(1)).Check(lvl, msg)
 	if ce != nil {
 		return ce, debug.StartTimer()
 	}

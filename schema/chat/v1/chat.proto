@@ -472,9 +472,35 @@ message WhisperRequest {
   bytes network_key = 1;
   bytes server_key = 2;
   string alias = 3;
-  string body = 4;
+  bytes peer_key = 4;
+  string body = 5;
 }
 message WhisperResponse {}
+
+message ListWhispersRequest {
+  bytes peer_key = 1;
+}
+
+message ListWhispersResponse {
+  WhisperThread thread = 1;
+  repeated WhisperRecord whispers = 2;
+}
+
+message WatchWhispersRequest {}
+
+message WatchWhispersResponse {
+  message WhisperDelete {
+    uint64 record_id = 1;
+    uint64 thread_id = 2;
+  }
+
+  bytes peer_key = 1;
+  oneof body {
+    WhisperThread thread_update = 1001;
+    WhisperRecord whisper_update = 1002;
+    WhisperDelete whisper_delete = 1003;
+  }
+}
 
 message SetUIConfigRequest {
   UIConfig ui_config = 1;
@@ -558,6 +584,8 @@ service ChatFrontend {
   rpc ClientGetMute(ClientGetMuteRequest) returns (ClientGetMuteResponse);
 
   rpc Whisper(WhisperRequest) returns (WhisperResponse);
+  rpc ListWhispers(ListWhispersRequest) returns (ListWhispersResponse);
+  rpc WatchWhispers(WatchWhispersRequest) returns (stream WatchWhispersResponse);
 
   rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
   rpc WatchUIConfig(WatchUIConfigRequest) returns (stream WatchUIConfigResponse);
@@ -622,10 +650,12 @@ message WhisperRecord {
   }
 
   uint64 id = 1;
-  bytes network_key = 2;
-  bytes server_key = 3;
-  State state = 4;
-  Message message = 5;
+  uint64 thread_id = 2;
+  bytes network_key = 3;
+  bytes server_key = 4;
+  bytes peer_key = 5;
+  State state = 6;
+  Message message = 7;
 }
 
 message WhisperSendMessageRequest {

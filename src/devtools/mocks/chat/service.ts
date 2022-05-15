@@ -107,6 +107,10 @@ class ChatService {
     return ch;
   }
 
+  watchWhispers(): Readable<chatv1.WatchWhispersResponse> {
+    return new PassThrough({ objectMode: true });
+  }
+
   // ChatServerFrontendService
 
   listModifiers(): chatv1.ListModifiersResponse {

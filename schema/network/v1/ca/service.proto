@@ -24,9 +24,12 @@ message CARenewResponse {
 }
 
 message CAFindRequest {
-  string subject = 1;
-  bytes serial_number = 2;
-  bool full_chain = 3;
+  oneof query {
+    string subject = 1001;
+    bytes serial_number = 1002;
+    bytes key = 1003;
+  }
+  bool full_chain = 4;
 }
 
 message CAFindResponse {

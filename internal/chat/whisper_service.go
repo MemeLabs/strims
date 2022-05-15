@@ -68,9 +68,9 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 		d.store,
 		dao.CertificateNetworkKey(peerCert),
 		req.ServerKey,
+		peerCert.Key,
 		peerCert,
 		req.Body,
-		true, // received
 	)
 	if err != nil {
 		return nil, errWhisperInternalError
@@ -98,6 +98,7 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 			return errWhisperRateLimit
 		}
 
+		record.ThreadId = thread.Id
 		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
 			return err
 		}

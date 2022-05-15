@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -112,9 +113,9 @@ func (s *whisperDeliveryService) send1(r *chatv1.WhisperRecord) error {
 	ctx, cancel := context.WithTimeout(context.Background(), whisperDeliveryTimeout)
 	defer cancel()
 
-	client, err := s.dialer.Client(ctx, r.NetworkKey, r.Message.PeerKey, WhisperAddressSalt)
+	client, err := s.dialer.Client(ctx, r.NetworkKey, r.PeerKey, WhisperAddressSalt)
 	if err != nil {
-		return err
+		return fmt.Errorf("opening client: %w", err)
 	}
 	defer client.Close()
 

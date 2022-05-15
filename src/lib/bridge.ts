@@ -982,10 +982,23 @@ export class WorkerBridge {
     const { level, caller, msg, ...args } = JSON.parse(new TextDecoder().decode(data)) as {
       [key: string]: string;
     };
+
+    const STYLES = {
+      "debug": "color: gray",
+      "info": "background: yellow",
+      "warn": "background: orange; color: white",
+      "error": "background: red; color: white",
+      "panic": "background: red; color: white",
+      "fatal": "background: red; color: white",
+    };
+
     // eslint-disable-next-line
     console.log(
-      new Date().toISOString().padEnd(30),
-      level.toUpperCase().padEnd(10),
+      "%s%c%s",
+      new Date().toISOString().padEnd(29),
+      STYLES[level],
+      ` ${level.toUpperCase()} `,
+      " ".repeat(9 - level.length),
       caller.padEnd(30),
       msg,
       Object.keys(args).length === 0 ? "" : args

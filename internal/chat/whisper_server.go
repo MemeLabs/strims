@@ -12,6 +12,7 @@ import (
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -28,7 +29,10 @@ func newWhisperServer(
 ) (*whisperServer, error) {
 	config, err := dao.ChatUIConfig.Get(store)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, kv.ErrRecordNotFound) {
+			return nil, err
+		}
+		config = &chatv1.UIConfig{}
 	}
 
 	s := &whisperServer{

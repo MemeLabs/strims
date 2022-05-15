@@ -201,6 +201,7 @@
     --color--background-notification: #{$slate-200};
 
     --color-background-layout-chat: #{$slate-400};
+    --color-background-layout-chat-menu: var(--color-slate-9);
     --color-background-layout-body: #{$slate-300};
 
     --color-text-base: #{$gray-500};
@@ -210,6 +211,11 @@
     --color-background-chat-scroll-resume: #{$slate-300};
     --color-text-chat-settings-legend: #{$gray-200};
     --color-background-chat-toggle-hover: #{$slate-500};
+    --color-border-chat-tab: var(--color-opac-w-5);
+    --color-border-chat-tab-hover: var(--color-opac-w-3);
+    --color-text-chat-tab: var(--color-grey-6);
+    --color-text-chat-tab-hover: var(--color-grey-8);
+    --color-text-chat-tab-active: var(--color-grey-12);
 
     --color-icon: var(--color-opac-w-8);
     --color-icon-hover: var(--color-opac-w-12);

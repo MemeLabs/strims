@@ -6,9 +6,10 @@ import React, { useState } from "react";
 import { FrontendClient } from "../../apis/client";
 import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
 import ChatShell from "../../components/Chat/Shell";
-import { Provider as ChatProvider, RoomProvider } from "../../contexts/Chat";
+import { Provider as ChatProvider } from "../../contexts/Chat";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../lib/stream";
+import { RoomProvider } from "../contexts/Chat";
 import ChatService from "../mocks/chat/service";
 
 const TestChat: React.FC = () => {

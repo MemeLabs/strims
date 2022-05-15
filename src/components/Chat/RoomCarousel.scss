@@ -1,0 +1,34 @@
+.room_carousel {
+  font-size: 1rem;
+
+  &__item {
+    margin: 8px 4px;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--border-radius-rounded);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    text-shadow: rgba(0, 0, 0, 1) 0 0 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    user-select: none;
+
+    &--red {
+      background-color: red;
+    }
+    &--blue {
+      background-color: blue;
+    }
+    &--green {
+      background-color: green;
+    }
+    &--teal {
+      background-color: teal;
+    }
+    &--orange {
+      background-color: orange;
+    }
+  }
+}

@@ -7,10 +7,11 @@ import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import ChatPanel from "../../../components/Chat/Shell";
-import { Provider as ChatProvider, RoomProvider } from "../../../contexts/Chat";
+import { Provider as ChatProvider } from "../../../contexts/Chat";
 import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
+import { RoomProvider } from "../../contexts/Chat";
 import ChatService from "../../mocks/chat/service";
 import DirectoryService from "../../mocks/directory/service";
 

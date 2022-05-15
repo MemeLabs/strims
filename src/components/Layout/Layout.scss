@@ -1,5 +1,3 @@
-@use "sass:math";
-
 $chat-width-lg: 420px;
 $chat-width-sm: 260px;
 
@@ -27,6 +25,12 @@ $chat-width-sm: 260px;
   &--landscape_cw {
     padding-right: env(safe-area-inset-right);
   }
+
+  --layout-chat-width: #{$chat-width-sm};
+
+  &.layout--min_width_xl {
+    --layout-chat-width: #{$chat-width-lg};
+  }
 }
 
 .scroll_content_test {
@@ -51,6 +55,7 @@ $chat-width-sm: 260px;
   flex-direction: row;
   flex: 1;
   height: 100%;
+  position: relative;
 }
 
 .foo_2 {
@@ -94,6 +99,15 @@ $chat-width-sm: 260px;
   @at-root .layout--show_chat & {
     display: flex;
   }
+}
+
+.layout__chat_bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  pointer-events: none;
 }
 
 .layout__footer {
@@ -270,6 +284,20 @@ $chat-width-sm: 260px;
     &.layout--show_chat .layout__chat {
       flex-grow: 1;
     }
+
+    &.layout--min_aspect_ratio_1_2.layout--show_chat .layout__chat_bar {
+      display: block;
+    }
+
+    &.layout--show_chat {
+      .layout__chat_bar {
+        right: var(--layout-chat-width);
+      }
+
+      .layout__chat_bar {
+        right: var(--layout-chat-width);
+      }
+    }
   }
 
   &:not(.layout--meme_open) {
@@ -282,8 +310,8 @@ $chat-width-sm: 260px;
       position: fixed;
       bottom: 10px;
       right: 10px;
-      height: $chat-width-sm * math.div(9, 16);
-      width: $chat-width-sm;
+      height: calc(var(--layout-chat-width) * 9 / 16);
+      width: var(--layout-chat-width);
     }
 
     .content_panel {
@@ -292,18 +320,7 @@ $chat-width-sm: 260px;
     }
 
     .scroll_content_test {
-      padding-bottom: $chat-width-sm * math.div(9, 16) + 10;
-    }
-
-    &.layout--min_width_xl {
-      .layout__video {
-        width: $chat-width-lg;
-        height: $chat-width-lg * math.div(9, 16);
-      }
-
-      .scroll_content_test {
-        padding-bottom: $chat-width-lg * math.div(9, 16) + 10;
-      }
+      padding-bottom: calc(var(--layout-chat-width) * 9 / 16 + 10px);
     }
 
     &.layout--show_chat {
@@ -311,13 +328,13 @@ $chat-width-sm: 260px;
         .foo_2 {
           display: flex;
           flex-direction: column;
-          flex: $chat-width-sm 0 0;
+          flex: var(--layout-chat-width) 0 0;
           background: maroon;
         }
 
         .layout__video {
           flex: 1;
-          max-height: $chat-width-sm * math.div(9, 16);
+          max-height: calc(var(--layout-chat-width) * 9 / 16);
 
           position: unset;
           bottom: unset;
@@ -336,16 +353,6 @@ $chat-width-sm: 260px;
 
         &.layout--swap .foo_1 {
           flex-direction: row-reverse;
-        }
-      }
-
-      &.layout--min_width_xl {
-        .foo_2 {
-          flex: $chat-width-lg 0 0;
-        }
-
-        .layout__video {
-          max-height: calc(#{$chat-width-lg} * 9 / 16);
         }
       }
     }
@@ -374,15 +381,11 @@ $chat-width-sm: 260px;
 
   &.layout--show_chat.layout--meme_open {
     .layout__chat {
-      flex: $chat-width-sm 1 0;
+      flex: var(--layout-chat-width) 1 0;
     }
 
     &.layout--show_video .layout__chat {
       flex-grow: 0;
-    }
-
-    &.layout--min_width_xl .layout__chat {
-      flex-basis: $chat-width-lg;
     }
   }
 
@@ -396,7 +399,5 @@ $chat-width-sm: 260px;
 
 // mobile landscape with keyboard
 .layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
-  .layout__chat {
-    flex-basis: $chat-width-lg;
-  }
+  --layout-chat-width: #{$chat-width-lg};
 }

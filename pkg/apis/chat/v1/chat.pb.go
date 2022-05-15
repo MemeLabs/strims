@@ -269,7 +269,7 @@ func (x WhisperRecord_State) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WhisperRecord_State.Descriptor instead.
 func (WhisperRecord_State) EnumDescriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{92, 0}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{96, 0}
 }
 
 type ServerEvent struct {
@@ -4296,7 +4296,8 @@ type WhisperRequest struct {
 	NetworkKey []byte `protobuf:"bytes,1,opt,name=network_key,json=networkKey,proto3" json:"network_key,omitempty"`
 	ServerKey  []byte `protobuf:"bytes,2,opt,name=server_key,json=serverKey,proto3" json:"server_key,omitempty"`
 	Alias      string `protobuf:"bytes,3,opt,name=alias,proto3" json:"alias,omitempty"`
-	Body       string `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	PeerKey    []byte `protobuf:"bytes,4,opt,name=peer_key,json=peerKey,proto3" json:"peer_key,omitempty"`
+	Body       string `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
 }
 
 func (x *WhisperRequest) Reset() {
@@ -4352,6 +4353,13 @@ func (x *WhisperRequest) GetAlias() string {
 	return ""
 }
 
+func (x *WhisperRequest) GetPeerKey() []byte {
+	if x != nil {
+		return x.PeerKey
+	}
+	return nil
+}
+
 func (x *WhisperRequest) GetBody() string {
 	if x != nil {
 		return x.Body
@@ -4397,6 +4405,248 @@ func (*WhisperResponse) Descriptor() ([]byte, []int) {
 	return file_chat_v1_chat_proto_rawDescGZIP(), []int{66}
 }
 
+type ListWhispersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PeerKey []byte `protobuf:"bytes,1,opt,name=peer_key,json=peerKey,proto3" json:"peer_key,omitempty"`
+}
+
+func (x *ListWhispersRequest) Reset() {
+	*x = ListWhispersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_chat_proto_msgTypes[67]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListWhispersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWhispersRequest) ProtoMessage() {}
+
+func (x *ListWhispersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[67]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWhispersRequest.ProtoReflect.Descriptor instead.
+func (*ListWhispersRequest) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *ListWhispersRequest) GetPeerKey() []byte {
+	if x != nil {
+		return x.PeerKey
+	}
+	return nil
+}
+
+type ListWhispersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Thread   *WhisperThread   `protobuf:"bytes,1,opt,name=thread,proto3" json:"thread,omitempty"`
+	Whispers []*WhisperRecord `protobuf:"bytes,2,rep,name=whispers,proto3" json:"whispers,omitempty"`
+}
+
+func (x *ListWhispersResponse) Reset() {
+	*x = ListWhispersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_chat_proto_msgTypes[68]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListWhispersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWhispersResponse) ProtoMessage() {}
+
+func (x *ListWhispersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[68]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWhispersResponse.ProtoReflect.Descriptor instead.
+func (*ListWhispersResponse) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *ListWhispersResponse) GetThread() *WhisperThread {
+	if x != nil {
+		return x.Thread
+	}
+	return nil
+}
+
+func (x *ListWhispersResponse) GetWhispers() []*WhisperRecord {
+	if x != nil {
+		return x.Whispers
+	}
+	return nil
+}
+
+type WatchWhispersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *WatchWhispersRequest) Reset() {
+	*x = WatchWhispersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_chat_proto_msgTypes[69]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WatchWhispersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchWhispersRequest) ProtoMessage() {}
+
+func (x *WatchWhispersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[69]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchWhispersRequest.ProtoReflect.Descriptor instead.
+func (*WatchWhispersRequest) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{69}
+}
+
+type WatchWhispersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PeerKey []byte `protobuf:"bytes,1,opt,name=peer_key,json=peerKey,proto3" json:"peer_key,omitempty"`
+	// Types that are assignable to Body:
+	//	*WatchWhispersResponse_ThreadUpdate
+	//	*WatchWhispersResponse_WhisperUpdate
+	//	*WatchWhispersResponse_WhisperDelete_
+	Body isWatchWhispersResponse_Body `protobuf_oneof:"body"`
+}
+
+func (x *WatchWhispersResponse) Reset() {
+	*x = WatchWhispersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_chat_proto_msgTypes[70]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WatchWhispersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchWhispersResponse) ProtoMessage() {}
+
+func (x *WatchWhispersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[70]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchWhispersResponse.ProtoReflect.Descriptor instead.
+func (*WatchWhispersResponse) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *WatchWhispersResponse) GetPeerKey() []byte {
+	if x != nil {
+		return x.PeerKey
+	}
+	return nil
+}
+
+func (m *WatchWhispersResponse) GetBody() isWatchWhispersResponse_Body {
+	if m != nil {
+		return m.Body
+	}
+	return nil
+}
+
+func (x *WatchWhispersResponse) GetThreadUpdate() *WhisperThread {
+	if x, ok := x.GetBody().(*WatchWhispersResponse_ThreadUpdate); ok {
+		return x.ThreadUpdate
+	}
+	return nil
+}
+
+func (x *WatchWhispersResponse) GetWhisperUpdate() *WhisperRecord {
+	if x, ok := x.GetBody().(*WatchWhispersResponse_WhisperUpdate); ok {
+		return x.WhisperUpdate
+	}
+	return nil
+}
+
+func (x *WatchWhispersResponse) GetWhisperDelete() *WatchWhispersResponse_WhisperDelete {
+	if x, ok := x.GetBody().(*WatchWhispersResponse_WhisperDelete_); ok {
+		return x.WhisperDelete
+	}
+	return nil
+}
+
+type isWatchWhispersResponse_Body interface {
+	isWatchWhispersResponse_Body()
+}
+
+type WatchWhispersResponse_ThreadUpdate struct {
+	ThreadUpdate *WhisperThread `protobuf:"bytes,1001,opt,name=thread_update,json=threadUpdate,proto3,oneof"`
+}
+
+type WatchWhispersResponse_WhisperUpdate struct {
+	WhisperUpdate *WhisperRecord `protobuf:"bytes,1002,opt,name=whisper_update,json=whisperUpdate,proto3,oneof"`
+}
+
+type WatchWhispersResponse_WhisperDelete_ struct {
+	WhisperDelete *WatchWhispersResponse_WhisperDelete `protobuf:"bytes,1003,opt,name=whisper_delete,json=whisperDelete,proto3,oneof"`
+}
+
+func (*WatchWhispersResponse_ThreadUpdate) isWatchWhispersResponse_Body() {}
+
+func (*WatchWhispersResponse_WhisperUpdate) isWatchWhispersResponse_Body() {}
+
+func (*WatchWhispersResponse_WhisperDelete_) isWatchWhispersResponse_Body() {}
+
 type SetUIConfigRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -4408,7 +4658,7 @@ type SetUIConfigRequest struct {
 func (x *SetUIConfigRequest) Reset() {
 	*x = SetUIConfigRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[67]
+		mi := &file_chat_v1_chat_proto_msgTypes[71]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4421,7 +4671,7 @@ func (x *SetUIConfigRequest) String() string {
 func (*SetUIConfigRequest) ProtoMessage() {}
 
 func (x *SetUIConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[67]
+	mi := &file_chat_v1_chat_proto_msgTypes[71]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4434,7 +4684,7 @@ func (x *SetUIConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUIConfigRequest.ProtoReflect.Descriptor instead.
 func (*SetUIConfigRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{67}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *SetUIConfigRequest) GetUiConfig() *UIConfig {
@@ -4453,7 +4703,7 @@ type SetUIConfigResponse struct {
 func (x *SetUIConfigResponse) Reset() {
 	*x = SetUIConfigResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[68]
+		mi := &file_chat_v1_chat_proto_msgTypes[72]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4466,7 +4716,7 @@ func (x *SetUIConfigResponse) String() string {
 func (*SetUIConfigResponse) ProtoMessage() {}
 
 func (x *SetUIConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[68]
+	mi := &file_chat_v1_chat_proto_msgTypes[72]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4479,7 +4729,7 @@ func (x *SetUIConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUIConfigResponse.ProtoReflect.Descriptor instead.
 func (*SetUIConfigResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{68}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{72}
 }
 
 type WatchUIConfigRequest struct {
@@ -4491,7 +4741,7 @@ type WatchUIConfigRequest struct {
 func (x *WatchUIConfigRequest) Reset() {
 	*x = WatchUIConfigRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[69]
+		mi := &file_chat_v1_chat_proto_msgTypes[73]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4504,7 +4754,7 @@ func (x *WatchUIConfigRequest) String() string {
 func (*WatchUIConfigRequest) ProtoMessage() {}
 
 func (x *WatchUIConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[69]
+	mi := &file_chat_v1_chat_proto_msgTypes[73]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4517,7 +4767,7 @@ func (x *WatchUIConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchUIConfigRequest.ProtoReflect.Descriptor instead.
 func (*WatchUIConfigRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{69}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{73}
 }
 
 type WatchUIConfigResponse struct {
@@ -4531,7 +4781,7 @@ type WatchUIConfigResponse struct {
 func (x *WatchUIConfigResponse) Reset() {
 	*x = WatchUIConfigResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[70]
+		mi := &file_chat_v1_chat_proto_msgTypes[74]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4544,7 +4794,7 @@ func (x *WatchUIConfigResponse) String() string {
 func (*WatchUIConfigResponse) ProtoMessage() {}
 
 func (x *WatchUIConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[70]
+	mi := &file_chat_v1_chat_proto_msgTypes[74]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4557,7 +4807,7 @@ func (x *WatchUIConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchUIConfigResponse.ProtoReflect.Descriptor instead.
 func (*WatchUIConfigResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{70}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *WatchUIConfigResponse) GetUiConfig() *UIConfig {
@@ -4580,7 +4830,7 @@ type IgnoreRequest struct {
 func (x *IgnoreRequest) Reset() {
 	*x = IgnoreRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[71]
+		mi := &file_chat_v1_chat_proto_msgTypes[75]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4593,7 +4843,7 @@ func (x *IgnoreRequest) String() string {
 func (*IgnoreRequest) ProtoMessage() {}
 
 func (x *IgnoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[71]
+	mi := &file_chat_v1_chat_proto_msgTypes[75]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4606,7 +4856,7 @@ func (x *IgnoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IgnoreRequest.ProtoReflect.Descriptor instead.
 func (*IgnoreRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{71}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *IgnoreRequest) GetNetworkKey() []byte {
@@ -4639,7 +4889,7 @@ type IgnoreResponse struct {
 func (x *IgnoreResponse) Reset() {
 	*x = IgnoreResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[72]
+		mi := &file_chat_v1_chat_proto_msgTypes[76]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4652,7 +4902,7 @@ func (x *IgnoreResponse) String() string {
 func (*IgnoreResponse) ProtoMessage() {}
 
 func (x *IgnoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[72]
+	mi := &file_chat_v1_chat_proto_msgTypes[76]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4665,7 +4915,7 @@ func (x *IgnoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IgnoreResponse.ProtoReflect.Descriptor instead.
 func (*IgnoreResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{72}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{76}
 }
 
 type UnignoreRequest struct {
@@ -4681,7 +4931,7 @@ type UnignoreRequest struct {
 func (x *UnignoreRequest) Reset() {
 	*x = UnignoreRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[73]
+		mi := &file_chat_v1_chat_proto_msgTypes[77]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4694,7 +4944,7 @@ func (x *UnignoreRequest) String() string {
 func (*UnignoreRequest) ProtoMessage() {}
 
 func (x *UnignoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[73]
+	mi := &file_chat_v1_chat_proto_msgTypes[77]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4707,7 +4957,7 @@ func (x *UnignoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnignoreRequest.ProtoReflect.Descriptor instead.
 func (*UnignoreRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{73}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *UnignoreRequest) GetNetworkKey() []byte {
@@ -4740,7 +4990,7 @@ type UnignoreResponse struct {
 func (x *UnignoreResponse) Reset() {
 	*x = UnignoreResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[74]
+		mi := &file_chat_v1_chat_proto_msgTypes[78]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4753,7 +5003,7 @@ func (x *UnignoreResponse) String() string {
 func (*UnignoreResponse) ProtoMessage() {}
 
 func (x *UnignoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[74]
+	mi := &file_chat_v1_chat_proto_msgTypes[78]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4766,7 +5016,7 @@ func (x *UnignoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnignoreResponse.ProtoReflect.Descriptor instead.
 func (*UnignoreResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{74}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{78}
 }
 
 type HighlightRequest struct {
@@ -4781,7 +5031,7 @@ type HighlightRequest struct {
 func (x *HighlightRequest) Reset() {
 	*x = HighlightRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[75]
+		mi := &file_chat_v1_chat_proto_msgTypes[79]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4794,7 +5044,7 @@ func (x *HighlightRequest) String() string {
 func (*HighlightRequest) ProtoMessage() {}
 
 func (x *HighlightRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[75]
+	mi := &file_chat_v1_chat_proto_msgTypes[79]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4807,7 +5057,7 @@ func (x *HighlightRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HighlightRequest.ProtoReflect.Descriptor instead.
 func (*HighlightRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{75}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *HighlightRequest) GetNetworkKey() []byte {
@@ -4833,7 +5083,7 @@ type HighlightResponse struct {
 func (x *HighlightResponse) Reset() {
 	*x = HighlightResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[76]
+		mi := &file_chat_v1_chat_proto_msgTypes[80]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4846,7 +5096,7 @@ func (x *HighlightResponse) String() string {
 func (*HighlightResponse) ProtoMessage() {}
 
 func (x *HighlightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[76]
+	mi := &file_chat_v1_chat_proto_msgTypes[80]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4859,7 +5109,7 @@ func (x *HighlightResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HighlightResponse.ProtoReflect.Descriptor instead.
 func (*HighlightResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{76}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{80}
 }
 
 type UnhighlightRequest struct {
@@ -4875,7 +5125,7 @@ type UnhighlightRequest struct {
 func (x *UnhighlightRequest) Reset() {
 	*x = UnhighlightRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[77]
+		mi := &file_chat_v1_chat_proto_msgTypes[81]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4888,7 +5138,7 @@ func (x *UnhighlightRequest) String() string {
 func (*UnhighlightRequest) ProtoMessage() {}
 
 func (x *UnhighlightRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[77]
+	mi := &file_chat_v1_chat_proto_msgTypes[81]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4901,7 +5151,7 @@ func (x *UnhighlightRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnhighlightRequest.ProtoReflect.Descriptor instead.
 func (*UnhighlightRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{77}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *UnhighlightRequest) GetNetworkKey() []byte {
@@ -4934,7 +5184,7 @@ type UnhighlightResponse struct {
 func (x *UnhighlightResponse) Reset() {
 	*x = UnhighlightResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[78]
+		mi := &file_chat_v1_chat_proto_msgTypes[82]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4947,7 +5197,7 @@ func (x *UnhighlightResponse) String() string {
 func (*UnhighlightResponse) ProtoMessage() {}
 
 func (x *UnhighlightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[78]
+	mi := &file_chat_v1_chat_proto_msgTypes[82]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4960,7 +5210,7 @@ func (x *UnhighlightResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnhighlightResponse.ProtoReflect.Descriptor instead.
 func (*UnhighlightResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{78}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{82}
 }
 
 type TagRequest struct {
@@ -4976,7 +5226,7 @@ type TagRequest struct {
 func (x *TagRequest) Reset() {
 	*x = TagRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[79]
+		mi := &file_chat_v1_chat_proto_msgTypes[83]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4989,7 +5239,7 @@ func (x *TagRequest) String() string {
 func (*TagRequest) ProtoMessage() {}
 
 func (x *TagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[79]
+	mi := &file_chat_v1_chat_proto_msgTypes[83]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5002,7 +5252,7 @@ func (x *TagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagRequest.ProtoReflect.Descriptor instead.
 func (*TagRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{79}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *TagRequest) GetNetworkKey() []byte {
@@ -5035,7 +5285,7 @@ type TagResponse struct {
 func (x *TagResponse) Reset() {
 	*x = TagResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[80]
+		mi := &file_chat_v1_chat_proto_msgTypes[84]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5048,7 +5298,7 @@ func (x *TagResponse) String() string {
 func (*TagResponse) ProtoMessage() {}
 
 func (x *TagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[80]
+	mi := &file_chat_v1_chat_proto_msgTypes[84]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5061,7 +5311,7 @@ func (x *TagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagResponse.ProtoReflect.Descriptor instead.
 func (*TagResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{80}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{84}
 }
 
 type UntagRequest struct {
@@ -5077,7 +5327,7 @@ type UntagRequest struct {
 func (x *UntagRequest) Reset() {
 	*x = UntagRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[81]
+		mi := &file_chat_v1_chat_proto_msgTypes[85]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5090,7 +5340,7 @@ func (x *UntagRequest) String() string {
 func (*UntagRequest) ProtoMessage() {}
 
 func (x *UntagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[81]
+	mi := &file_chat_v1_chat_proto_msgTypes[85]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5103,7 +5353,7 @@ func (x *UntagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UntagRequest.ProtoReflect.Descriptor instead.
 func (*UntagRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{81}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *UntagRequest) GetNetworkKey() []byte {
@@ -5136,7 +5386,7 @@ type UntagResponse struct {
 func (x *UntagResponse) Reset() {
 	*x = UntagResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[82]
+		mi := &file_chat_v1_chat_proto_msgTypes[86]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5149,7 +5399,7 @@ func (x *UntagResponse) String() string {
 func (*UntagResponse) ProtoMessage() {}
 
 func (x *UntagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[82]
+	mi := &file_chat_v1_chat_proto_msgTypes[86]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5162,7 +5412,7 @@ func (x *UntagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UntagResponse.ProtoReflect.Descriptor instead.
 func (*UntagResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{82}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{86}
 }
 
 type SendMessageRequest struct {
@@ -5176,7 +5426,7 @@ type SendMessageRequest struct {
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[83]
+		mi := &file_chat_v1_chat_proto_msgTypes[87]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5189,7 +5439,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[83]
+	mi := &file_chat_v1_chat_proto_msgTypes[87]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5202,7 +5452,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{83}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *SendMessageRequest) GetBody() string {
@@ -5221,7 +5471,7 @@ type SendMessageResponse struct {
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[84]
+		mi := &file_chat_v1_chat_proto_msgTypes[88]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5234,7 +5484,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[84]
+	mi := &file_chat_v1_chat_proto_msgTypes[88]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5247,7 +5497,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{84}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{88}
 }
 
 type MuteRequest struct {
@@ -5263,7 +5513,7 @@ type MuteRequest struct {
 func (x *MuteRequest) Reset() {
 	*x = MuteRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[85]
+		mi := &file_chat_v1_chat_proto_msgTypes[89]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5276,7 +5526,7 @@ func (x *MuteRequest) String() string {
 func (*MuteRequest) ProtoMessage() {}
 
 func (x *MuteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[85]
+	mi := &file_chat_v1_chat_proto_msgTypes[89]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5289,7 +5539,7 @@ func (x *MuteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuteRequest.ProtoReflect.Descriptor instead.
 func (*MuteRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{85}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *MuteRequest) GetPeerKey() []byte {
@@ -5322,7 +5572,7 @@ type MuteResponse struct {
 func (x *MuteResponse) Reset() {
 	*x = MuteResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[86]
+		mi := &file_chat_v1_chat_proto_msgTypes[90]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5335,7 +5585,7 @@ func (x *MuteResponse) String() string {
 func (*MuteResponse) ProtoMessage() {}
 
 func (x *MuteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[86]
+	mi := &file_chat_v1_chat_proto_msgTypes[90]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5348,7 +5598,7 @@ func (x *MuteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuteResponse.ProtoReflect.Descriptor instead.
 func (*MuteResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{86}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{90}
 }
 
 type UnmuteRequest struct {
@@ -5362,7 +5612,7 @@ type UnmuteRequest struct {
 func (x *UnmuteRequest) Reset() {
 	*x = UnmuteRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[87]
+		mi := &file_chat_v1_chat_proto_msgTypes[91]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5375,7 +5625,7 @@ func (x *UnmuteRequest) String() string {
 func (*UnmuteRequest) ProtoMessage() {}
 
 func (x *UnmuteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[87]
+	mi := &file_chat_v1_chat_proto_msgTypes[91]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5388,7 +5638,7 @@ func (x *UnmuteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmuteRequest.ProtoReflect.Descriptor instead.
 func (*UnmuteRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{87}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *UnmuteRequest) GetPeerKey() []byte {
@@ -5407,7 +5657,7 @@ type UnmuteResponse struct {
 func (x *UnmuteResponse) Reset() {
 	*x = UnmuteResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[88]
+		mi := &file_chat_v1_chat_proto_msgTypes[92]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5420,7 +5670,7 @@ func (x *UnmuteResponse) String() string {
 func (*UnmuteResponse) ProtoMessage() {}
 
 func (x *UnmuteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[88]
+	mi := &file_chat_v1_chat_proto_msgTypes[92]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5433,7 +5683,7 @@ func (x *UnmuteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnmuteResponse.ProtoReflect.Descriptor instead.
 func (*UnmuteResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{88}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{92}
 }
 
 type GetMuteRequest struct {
@@ -5445,7 +5695,7 @@ type GetMuteRequest struct {
 func (x *GetMuteRequest) Reset() {
 	*x = GetMuteRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[89]
+		mi := &file_chat_v1_chat_proto_msgTypes[93]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5458,7 +5708,7 @@ func (x *GetMuteRequest) String() string {
 func (*GetMuteRequest) ProtoMessage() {}
 
 func (x *GetMuteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[89]
+	mi := &file_chat_v1_chat_proto_msgTypes[93]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5471,7 +5721,7 @@ func (x *GetMuteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMuteRequest.ProtoReflect.Descriptor instead.
 func (*GetMuteRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{89}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{93}
 }
 
 type GetMuteResponse struct {
@@ -5486,7 +5736,7 @@ type GetMuteResponse struct {
 func (x *GetMuteResponse) Reset() {
 	*x = GetMuteResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[90]
+		mi := &file_chat_v1_chat_proto_msgTypes[94]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5499,7 +5749,7 @@ func (x *GetMuteResponse) String() string {
 func (*GetMuteResponse) ProtoMessage() {}
 
 func (x *GetMuteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[90]
+	mi := &file_chat_v1_chat_proto_msgTypes[94]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5512,7 +5762,7 @@ func (x *GetMuteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMuteResponse.ProtoReflect.Descriptor instead.
 func (*GetMuteResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{90}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *GetMuteResponse) GetEndTime() int64 {
@@ -5546,7 +5796,7 @@ type WhisperThread struct {
 func (x *WhisperThread) Reset() {
 	*x = WhisperThread{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[91]
+		mi := &file_chat_v1_chat_proto_msgTypes[95]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5559,7 +5809,7 @@ func (x *WhisperThread) String() string {
 func (*WhisperThread) ProtoMessage() {}
 
 func (x *WhisperThread) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[91]
+	mi := &file_chat_v1_chat_proto_msgTypes[95]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5822,7 @@ func (x *WhisperThread) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperThread.ProtoReflect.Descriptor instead.
 func (*WhisperThread) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{91}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *WhisperThread) GetId() uint64 {
@@ -5630,16 +5880,18 @@ type WhisperRecord struct {
 	unknownFields protoimpl.UnknownFields
 
 	Id         uint64              `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	NetworkKey []byte              `protobuf:"bytes,2,opt,name=network_key,json=networkKey,proto3" json:"network_key,omitempty"`
-	ServerKey  []byte              `protobuf:"bytes,3,opt,name=server_key,json=serverKey,proto3" json:"server_key,omitempty"`
-	State      WhisperRecord_State `protobuf:"varint,4,opt,name=state,proto3,enum=strims.chat.v1.WhisperRecord_State" json:"state,omitempty"`
-	Message    *Message            `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	ThreadId   uint64              `protobuf:"varint,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	NetworkKey []byte              `protobuf:"bytes,3,opt,name=network_key,json=networkKey,proto3" json:"network_key,omitempty"`
+	ServerKey  []byte              `protobuf:"bytes,4,opt,name=server_key,json=serverKey,proto3" json:"server_key,omitempty"`
+	PeerKey    []byte              `protobuf:"bytes,5,opt,name=peer_key,json=peerKey,proto3" json:"peer_key,omitempty"`
+	State      WhisperRecord_State `protobuf:"varint,6,opt,name=state,proto3,enum=strims.chat.v1.WhisperRecord_State" json:"state,omitempty"`
+	Message    *Message            `protobuf:"bytes,7,opt,name=message,proto3" json:"message,omitempty"`
 }
 
 func (x *WhisperRecord) Reset() {
 	*x = WhisperRecord{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[92]
+		mi := &file_chat_v1_chat_proto_msgTypes[96]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5652,7 +5904,7 @@ func (x *WhisperRecord) String() string {
 func (*WhisperRecord) ProtoMessage() {}
 
 func (x *WhisperRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[92]
+	mi := &file_chat_v1_chat_proto_msgTypes[96]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5665,12 +5917,19 @@ func (x *WhisperRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperRecord.ProtoReflect.Descriptor instead.
 func (*WhisperRecord) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{92}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *WhisperRecord) GetId() uint64 {
 	if x != nil {
 		return x.Id
+	}
+	return 0
+}
+
+func (x *WhisperRecord) GetThreadId() uint64 {
+	if x != nil {
+		return x.ThreadId
 	}
 	return 0
 }
@@ -5685,6 +5944,13 @@ func (x *WhisperRecord) GetNetworkKey() []byte {
 func (x *WhisperRecord) GetServerKey() []byte {
 	if x != nil {
 		return x.ServerKey
+	}
+	return nil
+}
+
+func (x *WhisperRecord) GetPeerKey() []byte {
+	if x != nil {
+		return x.PeerKey
 	}
 	return nil
 }
@@ -5715,7 +5981,7 @@ type WhisperSendMessageRequest struct {
 func (x *WhisperSendMessageRequest) Reset() {
 	*x = WhisperSendMessageRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[93]
+		mi := &file_chat_v1_chat_proto_msgTypes[97]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5728,7 +5994,7 @@ func (x *WhisperSendMessageRequest) String() string {
 func (*WhisperSendMessageRequest) ProtoMessage() {}
 
 func (x *WhisperSendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[93]
+	mi := &file_chat_v1_chat_proto_msgTypes[97]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5741,7 +6007,7 @@ func (x *WhisperSendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperSendMessageRequest.ProtoReflect.Descriptor instead.
 func (*WhisperSendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{93}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *WhisperSendMessageRequest) GetServerKey() []byte {
@@ -5767,7 +6033,7 @@ type WhisperSendMessageResponse struct {
 func (x *WhisperSendMessageResponse) Reset() {
 	*x = WhisperSendMessageResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[94]
+		mi := &file_chat_v1_chat_proto_msgTypes[98]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5780,7 +6046,7 @@ func (x *WhisperSendMessageResponse) String() string {
 func (*WhisperSendMessageResponse) ProtoMessage() {}
 
 func (x *WhisperSendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[94]
+	mi := &file_chat_v1_chat_proto_msgTypes[98]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5793,7 +6059,7 @@ func (x *WhisperSendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperSendMessageResponse.ProtoReflect.Descriptor instead.
 func (*WhisperSendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_chat_v1_chat_proto_rawDescGZIP(), []int{94}
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{98}
 }
 
 type EmoteEffect_CustomCSS struct {
@@ -5807,7 +6073,7 @@ type EmoteEffect_CustomCSS struct {
 func (x *EmoteEffect_CustomCSS) Reset() {
 	*x = EmoteEffect_CustomCSS{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[95]
+		mi := &file_chat_v1_chat_proto_msgTypes[99]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5820,7 +6086,7 @@ func (x *EmoteEffect_CustomCSS) String() string {
 func (*EmoteEffect_CustomCSS) ProtoMessage() {}
 
 func (x *EmoteEffect_CustomCSS) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[95]
+	mi := &file_chat_v1_chat_proto_msgTypes[99]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5859,7 +6125,7 @@ type EmoteEffect_SpriteAnimation struct {
 func (x *EmoteEffect_SpriteAnimation) Reset() {
 	*x = EmoteEffect_SpriteAnimation{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[96]
+		mi := &file_chat_v1_chat_proto_msgTypes[100]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5872,7 +6138,7 @@ func (x *EmoteEffect_SpriteAnimation) String() string {
 func (*EmoteEffect_SpriteAnimation) ProtoMessage() {}
 
 func (x *EmoteEffect_SpriteAnimation) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[96]
+	mi := &file_chat_v1_chat_proto_msgTypes[100]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5941,7 +6207,7 @@ type EmoteEffect_DefaultModifiers struct {
 func (x *EmoteEffect_DefaultModifiers) Reset() {
 	*x = EmoteEffect_DefaultModifiers{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[97]
+		mi := &file_chat_v1_chat_proto_msgTypes[101]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -5954,7 +6220,7 @@ func (x *EmoteEffect_DefaultModifiers) String() string {
 func (*EmoteEffect_DefaultModifiers) ProtoMessage() {}
 
 func (x *EmoteEffect_DefaultModifiers) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[97]
+	mi := &file_chat_v1_chat_proto_msgTypes[101]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5995,7 +6261,7 @@ type Message_Entities struct {
 func (x *Message_Entities) Reset() {
 	*x = Message_Entities{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[98]
+		mi := &file_chat_v1_chat_proto_msgTypes[102]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6008,7 +6274,7 @@ func (x *Message_Entities) String() string {
 func (*Message_Entities) ProtoMessage() {}
 
 func (x *Message_Entities) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[98]
+	mi := &file_chat_v1_chat_proto_msgTypes[102]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6092,7 +6358,7 @@ type Message_Entities_Bounds struct {
 func (x *Message_Entities_Bounds) Reset() {
 	*x = Message_Entities_Bounds{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[99]
+		mi := &file_chat_v1_chat_proto_msgTypes[103]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6105,7 +6371,7 @@ func (x *Message_Entities_Bounds) String() string {
 func (*Message_Entities_Bounds) ProtoMessage() {}
 
 func (x *Message_Entities_Bounds) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[99]
+	mi := &file_chat_v1_chat_proto_msgTypes[103]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6147,7 +6413,7 @@ type Message_Entities_Link struct {
 func (x *Message_Entities_Link) Reset() {
 	*x = Message_Entities_Link{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[100]
+		mi := &file_chat_v1_chat_proto_msgTypes[104]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6160,7 +6426,7 @@ func (x *Message_Entities_Link) String() string {
 func (*Message_Entities_Link) ProtoMessage() {}
 
 func (x *Message_Entities_Link) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[100]
+	mi := &file_chat_v1_chat_proto_msgTypes[104]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6204,7 +6470,7 @@ type Message_Entities_Emote struct {
 func (x *Message_Entities_Emote) Reset() {
 	*x = Message_Entities_Emote{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[101]
+		mi := &file_chat_v1_chat_proto_msgTypes[105]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6217,7 +6483,7 @@ func (x *Message_Entities_Emote) String() string {
 func (*Message_Entities_Emote) ProtoMessage() {}
 
 func (x *Message_Entities_Emote) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[101]
+	mi := &file_chat_v1_chat_proto_msgTypes[105]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6274,7 +6540,7 @@ type Message_Entities_Nick struct {
 func (x *Message_Entities_Nick) Reset() {
 	*x = Message_Entities_Nick{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[102]
+		mi := &file_chat_v1_chat_proto_msgTypes[106]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6287,7 +6553,7 @@ func (x *Message_Entities_Nick) String() string {
 func (*Message_Entities_Nick) ProtoMessage() {}
 
 func (x *Message_Entities_Nick) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[102]
+	mi := &file_chat_v1_chat_proto_msgTypes[106]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6336,7 +6602,7 @@ type Message_Entities_Tag struct {
 func (x *Message_Entities_Tag) Reset() {
 	*x = Message_Entities_Tag{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[103]
+		mi := &file_chat_v1_chat_proto_msgTypes[107]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6349,7 +6615,7 @@ func (x *Message_Entities_Tag) String() string {
 func (*Message_Entities_Tag) ProtoMessage() {}
 
 func (x *Message_Entities_Tag) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[103]
+	mi := &file_chat_v1_chat_proto_msgTypes[107]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6390,7 +6656,7 @@ type Message_Entities_CodeBlock struct {
 func (x *Message_Entities_CodeBlock) Reset() {
 	*x = Message_Entities_CodeBlock{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[104]
+		mi := &file_chat_v1_chat_proto_msgTypes[108]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6403,7 +6669,7 @@ func (x *Message_Entities_CodeBlock) String() string {
 func (*Message_Entities_CodeBlock) ProtoMessage() {}
 
 func (x *Message_Entities_CodeBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[104]
+	mi := &file_chat_v1_chat_proto_msgTypes[108]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6437,7 +6703,7 @@ type Message_Entities_Spoiler struct {
 func (x *Message_Entities_Spoiler) Reset() {
 	*x = Message_Entities_Spoiler{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[105]
+		mi := &file_chat_v1_chat_proto_msgTypes[109]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6450,7 +6716,7 @@ func (x *Message_Entities_Spoiler) String() string {
 func (*Message_Entities_Spoiler) ProtoMessage() {}
 
 func (x *Message_Entities_Spoiler) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[105]
+	mi := &file_chat_v1_chat_proto_msgTypes[109]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6484,7 +6750,7 @@ type Message_Entities_GenericEntity struct {
 func (x *Message_Entities_GenericEntity) Reset() {
 	*x = Message_Entities_GenericEntity{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[106]
+		mi := &file_chat_v1_chat_proto_msgTypes[110]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6497,7 +6763,7 @@ func (x *Message_Entities_GenericEntity) String() string {
 func (*Message_Entities_GenericEntity) ProtoMessage() {}
 
 func (x *Message_Entities_GenericEntity) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[106]
+	mi := &file_chat_v1_chat_proto_msgTypes[110]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6534,7 +6800,7 @@ type Profile_Mute struct {
 func (x *Profile_Mute) Reset() {
 	*x = Profile_Mute{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[107]
+		mi := &file_chat_v1_chat_proto_msgTypes[111]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6547,7 +6813,7 @@ func (x *Profile_Mute) String() string {
 func (*Profile_Mute) ProtoMessage() {}
 
 func (x *Profile_Mute) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[107]
+	mi := &file_chat_v1_chat_proto_msgTypes[111]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6603,7 +6869,7 @@ type UIConfig_SoundFile struct {
 func (x *UIConfig_SoundFile) Reset() {
 	*x = UIConfig_SoundFile{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[108]
+		mi := &file_chat_v1_chat_proto_msgTypes[112]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6616,7 +6882,7 @@ func (x *UIConfig_SoundFile) String() string {
 func (*UIConfig_SoundFile) ProtoMessage() {}
 
 func (x *UIConfig_SoundFile) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[108]
+	mi := &file_chat_v1_chat_proto_msgTypes[112]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6658,7 +6924,7 @@ type UIConfig_Highlight struct {
 func (x *UIConfig_Highlight) Reset() {
 	*x = UIConfig_Highlight{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[109]
+		mi := &file_chat_v1_chat_proto_msgTypes[113]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6671,7 +6937,7 @@ func (x *UIConfig_Highlight) String() string {
 func (*UIConfig_Highlight) ProtoMessage() {}
 
 func (x *UIConfig_Highlight) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[109]
+	mi := &file_chat_v1_chat_proto_msgTypes[113]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6714,7 +6980,7 @@ type UIConfig_Tag struct {
 func (x *UIConfig_Tag) Reset() {
 	*x = UIConfig_Tag{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[110]
+		mi := &file_chat_v1_chat_proto_msgTypes[114]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6727,7 +6993,7 @@ func (x *UIConfig_Tag) String() string {
 func (*UIConfig_Tag) ProtoMessage() {}
 
 func (x *UIConfig_Tag) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[110]
+	mi := &file_chat_v1_chat_proto_msgTypes[114]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6777,7 +7043,7 @@ type UIConfig_Ignore struct {
 func (x *UIConfig_Ignore) Reset() {
 	*x = UIConfig_Ignore{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[111]
+		mi := &file_chat_v1_chat_proto_msgTypes[115]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6790,7 +7056,7 @@ func (x *UIConfig_Ignore) String() string {
 func (*UIConfig_Ignore) ProtoMessage() {}
 
 func (x *UIConfig_Ignore) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[111]
+	mi := &file_chat_v1_chat_proto_msgTypes[115]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6836,7 +7102,7 @@ type OpenClientResponse_Open struct {
 func (x *OpenClientResponse_Open) Reset() {
 	*x = OpenClientResponse_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[112]
+		mi := &file_chat_v1_chat_proto_msgTypes[116]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6849,7 +7115,7 @@ func (x *OpenClientResponse_Open) String() string {
 func (*OpenClientResponse_Open) ProtoMessage() {}
 
 func (x *OpenClientResponse_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[112]
+	mi := &file_chat_v1_chat_proto_msgTypes[116]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6876,7 +7142,7 @@ type OpenClientResponse_ServerEvents struct {
 func (x *OpenClientResponse_ServerEvents) Reset() {
 	*x = OpenClientResponse_ServerEvents{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_chat_proto_msgTypes[113]
+		mi := &file_chat_v1_chat_proto_msgTypes[117]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -6889,7 +7155,7 @@ func (x *OpenClientResponse_ServerEvents) String() string {
 func (*OpenClientResponse_ServerEvents) ProtoMessage() {}
 
 func (x *OpenClientResponse_ServerEvents) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_chat_proto_msgTypes[113]
+	mi := &file_chat_v1_chat_proto_msgTypes[117]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6910,6 +7176,61 @@ func (x *OpenClientResponse_ServerEvents) GetEvents() []*ServerEvent {
 		return x.Events
 	}
 	return nil
+}
+
+type WatchWhispersResponse_WhisperDelete struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	RecordId uint64 `protobuf:"varint,1,opt,name=record_id,json=recordId,proto3" json:"record_id,omitempty"`
+	ThreadId uint64 `protobuf:"varint,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+}
+
+func (x *WatchWhispersResponse_WhisperDelete) Reset() {
+	*x = WatchWhispersResponse_WhisperDelete{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_chat_proto_msgTypes[118]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WatchWhispersResponse_WhisperDelete) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchWhispersResponse_WhisperDelete) ProtoMessage() {}
+
+func (x *WatchWhispersResponse_WhisperDelete) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_chat_proto_msgTypes[118]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchWhispersResponse_WhisperDelete.ProtoReflect.Descriptor instead.
+func (*WatchWhispersResponse_WhisperDelete) Descriptor() ([]byte, []int) {
+	return file_chat_v1_chat_proto_rawDescGZIP(), []int{70, 0}
+}
+
+func (x *WatchWhispersResponse_WhisperDelete) GetRecordId() uint64 {
+	if x != nil {
+		return x.RecordId
+	}
+	return 0
+}
+
+func (x *WatchWhispersResponse_WhisperDelete) GetThreadId() uint64 {
+	if x != nil {
+		return x.ThreadId
+	}
+	return 0
 }
 
 var File_chat_v1_chat_proto protoreflect.FileDescriptor
@@ -7562,119 +7883,161 @@ var file_chat_v1_chat_proto_rawDesc = []byte{
 	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19, 0x0a, 0x08, 0x65, 0x6e, 0x64, 0x5f, 0x74, 0x69,
 	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x6e, 0x64, 0x54, 0x69, 0x6d,
 	0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x7a, 0x0a, 0x0e, 0x57,
-	0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a,
-	0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x1d,
-	0x0a, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a,
-	0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c,
-	0x69, 0x61, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x04, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x11, 0x0a, 0x0f, 0x57, 0x68, 0x69, 0x73, 0x70,
-	0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x4b, 0x0a, 0x12, 0x53, 0x65,
-	0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x35, 0x0a, 0x09, 0x75, 0x69, 0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x08, 0x75,
-	0x69, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x15, 0x0a, 0x13, 0x53, 0x65, 0x74, 0x55, 0x49,
-	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x16,
-	0x0a, 0x14, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x4e, 0x0a, 0x15, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55,
-	0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x35, 0x0a, 0x09, 0x75, 0x69, 0x5f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x08, 0x75, 0x69,
-	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x62, 0x0a, 0x0d, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f,
-	0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65,
-	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61,
-	0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x1a,
-	0x0a, 0x08, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x08, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x10, 0x0a, 0x0e, 0x49, 0x67,
-	0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x63, 0x0a, 0x0f,
-	0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x95, 0x01, 0x0a, 0x0e,
+	0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f,
+	0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12,
+	0x1d, 0x0a, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x14,
+	0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61,
+	0x6c, 0x69, 0x61, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12,
+	0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x62,
+	0x6f, 0x64, 0x79, 0x22, 0x11, 0x0a, 0x0f, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x30, 0x0a, 0x13, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x68,
+	0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a,
+	0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x88, 0x01, 0x0a, 0x14, 0x4c, 0x69, 0x73,
+	0x74, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x35, 0x0a, 0x06, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e,
+	0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64,
+	0x52, 0x06, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x12, 0x39, 0x0a, 0x08, 0x77, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x08, 0x77, 0x68, 0x69, 0x73, 0x70,
+	0x65, 0x72, 0x73, 0x22, 0x16, 0x0a, 0x14, 0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0xf4, 0x02, 0x0a, 0x15,
+	0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65,
+	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79,
+	0x12, 0x45, 0x0a, 0x0d, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x75, 0x70, 0x64, 0x61, 0x74,
+	0x65, 0x18, 0xe9, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65,
+	0x72, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x48, 0x00, 0x52, 0x0c, 0x74, 0x68, 0x72, 0x65, 0x61,
+	0x64, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x47, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70,
+	0x65, 0x72, 0x5f, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x18, 0xea, 0x07, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76,
+	0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x48,
+	0x00, 0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x12, 0x5d, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x5f, 0x64, 0x65, 0x6c, 0x65,
+	0x74, 0x65, 0x18, 0xeb, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x33, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74, 0x63, 0x68,
+	0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x48, 0x00,
+	0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x1a,
+	0x49, 0x0a, 0x0d, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65,
+	0x12, 0x1b, 0x0a, 0x09, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x04, 0x52, 0x08, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x49, 0x64, 0x12, 0x1b, 0x0a,
+	0x09, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x08, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x49, 0x64, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f,
+	0x64, 0x79, 0x22, 0x4b, 0x0a, 0x12, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x35, 0x0a, 0x09, 0x75, 0x69, 0x5f, 0x63,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x49, 0x43,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x08, 0x75, 0x69, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22,
+	0x15, 0x0a, 0x13, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x16, 0x0a, 0x14, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55,
+	0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x4e,
+	0x0a, 0x15, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x35, 0x0a, 0x09, 0x75, 0x69, 0x5f, 0x63, 0x6f,
+	0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x49, 0x43, 0x6f,
+	0x6e, 0x66, 0x69, 0x67, 0x52, 0x08, 0x75, 0x69, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x62,
+	0x0a, 0x0d, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
 	0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79,
 	0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b,
-	0x65, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65,
-	0x79, 0x22, 0x12, 0x0a, 0x10, 0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x49, 0x0a, 0x10, 0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67,
-	0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a,
-	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c,
-	0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73,
-	0x22, 0x13, 0x0a, 0x11, 0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x66, 0x0a, 0x12, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c,
-	0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e,
-	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c,
-	0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05,
-	0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69,
-	0x61, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x15, 0x0a,
-	0x13, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x59, 0x0a, 0x0a, 0x54, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65,
-	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
-	0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x14, 0x0a, 0x05, 0x63, 0x6f, 0x6c,
-	0x6f, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x22,
-	0x0d, 0x0a, 0x0b, 0x54, 0x61, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x60,
-	0x0a, 0x0c, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f,
-	0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12,
-	0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05,
-	0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65,
-	0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79,
-	0x22, 0x0f, 0x0a, 0x0d, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x22, 0x28, 0x0a, 0x12, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x15, 0x0a, 0x13, 0x53,
-	0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x67, 0x0a, 0x0b, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x23, 0x0a, 0x0d,
-	0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x65, 0x63, 0x73, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x0d, 0x52, 0x0c, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x65, 0x63,
-	0x73, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x0e, 0x0a, 0x0c, 0x4d,
-	0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x2a, 0x0a, 0x0d, 0x55,
-	0x6e, 0x6d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08,
-	0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07,
-	0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x10, 0x0a, 0x0e, 0x55, 0x6e, 0x6d, 0x75, 0x74,
-	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x10, 0x0a, 0x0e, 0x47, 0x65, 0x74,
-	0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x46, 0x0a, 0x0f, 0x47,
-	0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19,
-	0x0a, 0x08, 0x65, 0x6e, 0x64, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03,
-	0x52, 0x07, 0x65, 0x6e, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73,
-	0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x22, 0xf5, 0x01, 0x0a, 0x0d, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54,
-	0x68, 0x72, 0x65, 0x61, 0x64, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65,
-	0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79,
-	0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x21, 0x0a, 0x0c, 0x75, 0x6e, 0x72, 0x65, 0x61, 0x64,
-	0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b, 0x75, 0x6e,
-	0x72, 0x65, 0x61, 0x64, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x2c, 0x0a, 0x12, 0x6c, 0x61, 0x73,
-	0x74, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x76, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x18,
-	0x05, 0x20, 0x03, 0x28, 0x03, 0x52, 0x10, 0x6c, 0x61, 0x73, 0x74, 0x52, 0x65, 0x63, 0x65, 0x69,
-	0x76, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x12, 0x2a, 0x0a, 0x11, 0x6c, 0x61, 0x73, 0x74, 0x5f,
-	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x06, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x0f, 0x6c, 0x61, 0x73, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54,
-	0x69, 0x6d, 0x65, 0x12, 0x26, 0x0a, 0x0f, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x07, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0d, 0x6c, 0x61,
-	0x73, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x49, 0x64, 0x22, 0xc5, 0x02, 0x0a, 0x0d,
-	0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x0e, 0x0a,
-	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1f, 0x0a,
-	0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x1d,
-	0x0a, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x39, 0x0a,
-	0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x23, 0x2e, 0x73,
+	0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x1a, 0x0a, 0x08, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x22, 0x10, 0x0a, 0x0e, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x63, 0x0a, 0x0f, 0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61,
+	0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x19,
+	0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x12, 0x0a, 0x10, 0x55, 0x6e, 0x69,
+	0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x49, 0x0a,
+	0x10, 0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b,
+	0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x22, 0x13, 0x0a, 0x11, 0x48, 0x69, 0x67, 0x68,
+	0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x66, 0x0a,
+	0x12, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b,
+	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65,
+	0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65,
+	0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x15, 0x0a, 0x13, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c,
+	0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x59, 0x0a, 0x0a,
+	0x54, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65,
+	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61,
+	0x6c, 0x69, 0x61, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61,
+	0x73, 0x12, 0x14, 0x0a, 0x05, 0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x05, 0x63, 0x6f, 0x6c, 0x6f, 0x72, 0x22, 0x0d, 0x0a, 0x0b, 0x54, 0x61, 0x67, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x60, 0x0a, 0x0c, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74,
+	0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x19, 0x0a,
+	0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0x0f, 0x0a, 0x0d, 0x55, 0x6e, 0x74, 0x61,
+	0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x28, 0x0a, 0x12, 0x53, 0x65, 0x6e,
+	0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x62,
+	0x6f, 0x64, 0x79, 0x22, 0x15, 0x0a, 0x13, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x67, 0x0a, 0x0b, 0x4d, 0x75,
+	0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65,
+	0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65,
+	0x72, 0x4b, 0x65, 0x79, 0x12, 0x23, 0x0a, 0x0d, 0x64, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e,
+	0x5f, 0x73, 0x65, 0x63, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0c, 0x64, 0x75, 0x72,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x65, 0x63, 0x73, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x22, 0x0e, 0x0a, 0x0c, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x22, 0x2a, 0x0a, 0x0d, 0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22,
+	0x10, 0x0a, 0x0e, 0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x10, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x22, 0x46, 0x0a, 0x0f, 0x47, 0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x19, 0x0a, 0x08, 0x65, 0x6e, 0x64, 0x5f, 0x74, 0x69,
+	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x65, 0x6e, 0x64, 0x54, 0x69, 0x6d,
+	0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0xf5, 0x01, 0x0a, 0x0d,
+	0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x19, 0x0a,
+	0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52,
+	0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x6c, 0x69, 0x61,
+	0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x61, 0x6c, 0x69, 0x61, 0x73, 0x12, 0x21,
+	0x0a, 0x0c, 0x75, 0x6e, 0x72, 0x65, 0x61, 0x64, 0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b, 0x75, 0x6e, 0x72, 0x65, 0x61, 0x64, 0x43, 0x6f, 0x75, 0x6e,
+	0x74, 0x12, 0x2c, 0x0a, 0x12, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x72, 0x65, 0x63, 0x65, 0x69, 0x76,
+	0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x18, 0x05, 0x20, 0x03, 0x28, 0x03, 0x52, 0x10, 0x6c,
+	0x61, 0x73, 0x74, 0x52, 0x65, 0x63, 0x65, 0x69, 0x76, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x12,
+	0x2a, 0x0a, 0x11, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f,
+	0x74, 0x69, 0x6d, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0f, 0x6c, 0x61, 0x73, 0x74,
+	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x26, 0x0a, 0x0f, 0x6c,
+	0x61, 0x73, 0x74, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x07,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x0d, 0x6c, 0x61, 0x73, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x49, 0x64, 0x22, 0xfd, 0x02, 0x0a, 0x0d, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52,
+	0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1b, 0x0a, 0x09, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64, 0x5f,
+	0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x74, 0x68, 0x72, 0x65, 0x61, 0x64,
+	0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65,
+	0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
+	0x4b, 0x65, 0x79, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65,
+	0x79, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b,
+	0x65, 0x79, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x05,
+	0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x12, 0x39, 0x0a,
+	0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x23, 0x2e, 0x73,
 	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68,
 	0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x2e, 0x53, 0x74, 0x61, 0x74,
 	0x65, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x12, 0x31, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x61, 0x67, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x74, 0x72, 0x69,
 	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61,
 	0x67, 0x65, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x76, 0x0a, 0x05, 0x53,
 	0x74, 0x61, 0x74, 0x65, 0x12, 0x1a, 0x0a, 0x16, 0x57, 0x48, 0x49, 0x53, 0x50, 0x45, 0x52, 0x5f,
@@ -7816,7 +8179,7 @@ var file_chat_v1_chat_proto_rawDesc = []byte{
 	0x53, 0x79, 0x6e, 0x63, 0x41, 0x73, 0x73, 0x65, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x1a, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e,
 	0x76, 0x31, 0x2e, 0x53, 0x79, 0x6e, 0x63, 0x41, 0x73, 0x73, 0x65, 0x74, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xa9, 0x09, 0x0a, 0x0c, 0x43, 0x68, 0x61, 0x74, 0x46, 0x72,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xe4, 0x0a, 0x0a, 0x0c, 0x43, 0x68, 0x61, 0x74, 0x46, 0x72,
 	0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12, 0x55, 0x0a, 0x0a, 0x4f, 0x70, 0x65, 0x6e, 0x43, 0x6c,
 	0x69, 0x65, 0x6e, 0x74, 0x12, 0x21, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
 	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74,
@@ -7851,79 +8214,91 @@ var file_chat_v1_chat_proto_rawDesc = []byte{
 	0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
 	0x1a, 0x1f, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76,
 	0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x56, 0x0a, 0x0b, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
-	0x12, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
-	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69,
-	0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x0d, 0x57, 0x61, 0x74,
-	0x63, 0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x24, 0x2e, 0x73, 0x74, 0x72,
-	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74, 0x63,
-	0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x30, 0x01, 0x12, 0x47, 0x0a, 0x06, 0x49, 0x67, 0x6e,
-	0x6f, 0x72, 0x65, 0x12, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61,
-	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x4d, 0x0a, 0x08, 0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x12, 0x1f,
+	0x65, 0x12, 0x59, 0x0a, 0x0c, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72,
+	0x73, 0x12, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e,
+	0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x57, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x0d,
+	0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x12, 0x24, 0x2e,
+	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57,
+	0x61, 0x74, 0x63, 0x68, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61,
+	0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74, 0x63, 0x68, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65,
+	0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x30, 0x01, 0x12, 0x56, 0x0a, 0x0b,
+	0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x22, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74,
+	0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
+	0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
+	0x2e, 0x53, 0x65, 0x74, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x0d, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55, 0x49, 0x43,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63,
+	0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74, 0x63, 0x68, 0x55, 0x49, 0x43, 0x6f,
+	0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74,
+	0x63, 0x68, 0x55, 0x49, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x30, 0x01, 0x12, 0x47, 0x0a, 0x06, 0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x12, 0x1d,
 	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x20, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x50, 0x0a, 0x09, 0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x12, 0x20,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x1a, 0x21, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76,
-	0x31, 0x2e, 0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x56, 0x0a, 0x0b, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67,
-	0x68, 0x74, 0x12, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
-	0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69,
-	0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3e, 0x0a, 0x03, 0x54,
-	0x61, 0x67, 0x12, 0x1a, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x54, 0x61, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x05, 0x55,
-	0x6e, 0x74, 0x61, 0x67, 0x12, 0x1c, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
-	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
-	0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x32, 0xb6, 0x02, 0x0a, 0x04, 0x43, 0x68, 0x61, 0x74, 0x12, 0x56, 0x0a, 0x0b, 0x53, 0x65,
-	0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69,
-	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x4d,
-	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e,
-	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53,
-	0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x41, 0x0a, 0x04, 0x4d, 0x75, 0x74, 0x65, 0x12, 0x1b, 0x2e, 0x73, 0x74, 0x72,
-	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x75, 0x74, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
-	0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x06, 0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x12,
-	0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
-	0x2e, 0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e,
-	0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4a,
-	0x0a, 0x07, 0x47, 0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x12, 0x1e, 0x2e, 0x73, 0x74, 0x72, 0x69,
-	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x75,
-	0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x73, 0x74, 0x72, 0x69,
-	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x75,
-	0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x6f, 0x0a, 0x07, 0x57, 0x68,
-	0x69, 0x73, 0x70, 0x65, 0x72, 0x12, 0x64, 0x0a, 0x0b, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73,
-	0x73, 0x61, 0x67, 0x65, 0x12, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
-	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x53, 0x65, 0x6e,
-	0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x2a, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
+	0x49, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e,
+	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x49,
+	0x67, 0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4d, 0x0a,
+	0x08, 0x55, 0x6e, 0x69, 0x67, 0x6e, 0x6f, 0x72, 0x65, 0x12, 0x1f, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x69, 0x67, 0x6e,
+	0x6f, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x20, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x69, 0x67,
+	0x6e, 0x6f, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x50, 0x0a, 0x09,
+	0x48, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x12, 0x20, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x67, 0x68, 0x6c,
+	0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x48, 0x69, 0x67,
+	0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x56,
+	0x0a, 0x0b, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x12, 0x22, 0x2e,
+	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55,
+	0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e,
+	0x76, 0x31, 0x2e, 0x55, 0x6e, 0x68, 0x69, 0x67, 0x68, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3e, 0x0a, 0x03, 0x54, 0x61, 0x67, 0x12, 0x1a, 0x2e,
+	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x54,
+	0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1b, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x61, 0x67, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x05, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x12,
+	0x1c, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
+	0x2e, 0x55, 0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e,
+	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55,
+	0x6e, 0x74, 0x61, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xb6, 0x02, 0x0a,
+	0x04, 0x43, 0x68, 0x61, 0x74, 0x12, 0x56, 0x0a, 0x0b, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x12, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
+	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x41, 0x0a,
+	0x04, 0x4d, 0x75, 0x74, 0x65, 0x12, 0x1b, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63,
+	0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74,
+	0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x47, 0x0a, 0x06, 0x55, 0x6e, 0x6d, 0x75, 0x74, 0x65, 0x12, 0x1d, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x6d, 0x75,
+	0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x6d, 0x75, 0x74,
+	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4a, 0x0a, 0x07, 0x47, 0x65, 0x74,
+	0x4d, 0x75, 0x74, 0x65, 0x12, 0x1e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
+	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68,
+	0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x75, 0x74, 0x65, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x6f, 0x0a, 0x07, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72,
+	0x12, 0x64, 0x0a, 0x0b, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12,
+	0x29, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31,
 	0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x53, 0x0a, 0x15, 0x67,
-	0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73,
-	0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x63, 0x68, 0x61, 0x74,
-	0x2f, 0x76, 0x31, 0x3b, 0x63, 0x68, 0x61, 0x74, 0x76, 0x31, 0xba, 0x02, 0x03, 0x53, 0x43, 0x48,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2a, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x53, 0x65, 0x6e, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x53, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a,
+	0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65,
+	0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b,
+	0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f, 0x76, 0x31, 0x3b, 0x63,
+	0x68, 0x61, 0x74, 0x76, 0x31, 0xba, 0x02, 0x03, 0x53, 0x43, 0x48, 0x62, 0x06, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x33,
 }
 
 var (
@@ -7939,138 +8314,143 @@ func file_chat_v1_chat_proto_rawDescGZIP() []byte {
 }
 
 var file_chat_v1_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_chat_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 114)
+var file_chat_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 119)
 var file_chat_v1_chat_proto_goTypes = []interface{}{
-	(EmoteFileType)(0),                      // 0: strims.chat.v1.EmoteFileType
-	(EmoteScale)(0),                         // 1: strims.chat.v1.EmoteScale
-	(UIConfig_ShowRemoved)(0),               // 2: strims.chat.v1.UIConfig.ShowRemoved
-	(UIConfig_ViewerStateIndicator)(0),      // 3: strims.chat.v1.UIConfig.ViewerStateIndicator
-	(WhisperRecord_State)(0),                // 4: strims.chat.v1.WhisperRecord.State
-	(*ServerEvent)(nil),                     // 5: strims.chat.v1.ServerEvent
-	(*Room)(nil),                            // 6: strims.chat.v1.Room
-	(*Server)(nil),                          // 7: strims.chat.v1.Server
-	(*EmoteImage)(nil),                      // 8: strims.chat.v1.EmoteImage
-	(*EmoteEffect)(nil),                     // 9: strims.chat.v1.EmoteEffect
-	(*EmoteContributor)(nil),                // 10: strims.chat.v1.EmoteContributor
-	(*Emote)(nil),                           // 11: strims.chat.v1.Emote
-	(*Modifier)(nil),                        // 12: strims.chat.v1.Modifier
-	(*Tag)(nil),                             // 13: strims.chat.v1.Tag
-	(*AssetBundle)(nil),                     // 14: strims.chat.v1.AssetBundle
-	(*Message)(nil),                         // 15: strims.chat.v1.Message
-	(*Profile)(nil),                         // 16: strims.chat.v1.Profile
-	(*UIConfig)(nil),                        // 17: strims.chat.v1.UIConfig
-	(*CreateServerRequest)(nil),             // 18: strims.chat.v1.CreateServerRequest
-	(*CreateServerResponse)(nil),            // 19: strims.chat.v1.CreateServerResponse
-	(*UpdateServerRequest)(nil),             // 20: strims.chat.v1.UpdateServerRequest
-	(*UpdateServerResponse)(nil),            // 21: strims.chat.v1.UpdateServerResponse
-	(*DeleteServerRequest)(nil),             // 22: strims.chat.v1.DeleteServerRequest
-	(*DeleteServerResponse)(nil),            // 23: strims.chat.v1.DeleteServerResponse
-	(*GetServerRequest)(nil),                // 24: strims.chat.v1.GetServerRequest
-	(*GetServerResponse)(nil),               // 25: strims.chat.v1.GetServerResponse
-	(*ListServersRequest)(nil),              // 26: strims.chat.v1.ListServersRequest
-	(*ListServersResponse)(nil),             // 27: strims.chat.v1.ListServersResponse
-	(*CreateEmoteRequest)(nil),              // 28: strims.chat.v1.CreateEmoteRequest
-	(*CreateEmoteResponse)(nil),             // 29: strims.chat.v1.CreateEmoteResponse
-	(*UpdateEmoteRequest)(nil),              // 30: strims.chat.v1.UpdateEmoteRequest
-	(*UpdateEmoteResponse)(nil),             // 31: strims.chat.v1.UpdateEmoteResponse
-	(*DeleteEmoteRequest)(nil),              // 32: strims.chat.v1.DeleteEmoteRequest
-	(*DeleteEmoteResponse)(nil),             // 33: strims.chat.v1.DeleteEmoteResponse
-	(*GetEmoteRequest)(nil),                 // 34: strims.chat.v1.GetEmoteRequest
-	(*GetEmoteResponse)(nil),                // 35: strims.chat.v1.GetEmoteResponse
-	(*ListEmotesRequest)(nil),               // 36: strims.chat.v1.ListEmotesRequest
-	(*ListEmotesResponse)(nil),              // 37: strims.chat.v1.ListEmotesResponse
-	(*CreateModifierRequest)(nil),           // 38: strims.chat.v1.CreateModifierRequest
-	(*CreateModifierResponse)(nil),          // 39: strims.chat.v1.CreateModifierResponse
-	(*UpdateModifierRequest)(nil),           // 40: strims.chat.v1.UpdateModifierRequest
-	(*UpdateModifierResponse)(nil),          // 41: strims.chat.v1.UpdateModifierResponse
-	(*DeleteModifierRequest)(nil),           // 42: strims.chat.v1.DeleteModifierRequest
-	(*DeleteModifierResponse)(nil),          // 43: strims.chat.v1.DeleteModifierResponse
-	(*GetModifierRequest)(nil),              // 44: strims.chat.v1.GetModifierRequest
-	(*GetModifierResponse)(nil),             // 45: strims.chat.v1.GetModifierResponse
-	(*ListModifiersRequest)(nil),            // 46: strims.chat.v1.ListModifiersRequest
-	(*ListModifiersResponse)(nil),           // 47: strims.chat.v1.ListModifiersResponse
-	(*CreateTagRequest)(nil),                // 48: strims.chat.v1.CreateTagRequest
-	(*CreateTagResponse)(nil),               // 49: strims.chat.v1.CreateTagResponse
-	(*UpdateTagRequest)(nil),                // 50: strims.chat.v1.UpdateTagRequest
-	(*UpdateTagResponse)(nil),               // 51: strims.chat.v1.UpdateTagResponse
-	(*DeleteTagRequest)(nil),                // 52: strims.chat.v1.DeleteTagRequest
-	(*DeleteTagResponse)(nil),               // 53: strims.chat.v1.DeleteTagResponse
-	(*GetTagRequest)(nil),                   // 54: strims.chat.v1.GetTagRequest
-	(*GetTagResponse)(nil),                  // 55: strims.chat.v1.GetTagResponse
-	(*ListTagsRequest)(nil),                 // 56: strims.chat.v1.ListTagsRequest
-	(*ListTagsResponse)(nil),                // 57: strims.chat.v1.ListTagsResponse
-	(*SyncAssetsRequest)(nil),               // 58: strims.chat.v1.SyncAssetsRequest
-	(*SyncAssetsResponse)(nil),              // 59: strims.chat.v1.SyncAssetsResponse
-	(*OpenClientRequest)(nil),               // 60: strims.chat.v1.OpenClientRequest
-	(*OpenClientResponse)(nil),              // 61: strims.chat.v1.OpenClientResponse
-	(*ClientSendMessageRequest)(nil),        // 62: strims.chat.v1.ClientSendMessageRequest
-	(*ClientSendMessageResponse)(nil),       // 63: strims.chat.v1.ClientSendMessageResponse
-	(*ClientMuteRequest)(nil),               // 64: strims.chat.v1.ClientMuteRequest
-	(*ClientMuteResponse)(nil),              // 65: strims.chat.v1.ClientMuteResponse
-	(*ClientUnmuteRequest)(nil),             // 66: strims.chat.v1.ClientUnmuteRequest
-	(*ClientUnmuteResponse)(nil),            // 67: strims.chat.v1.ClientUnmuteResponse
-	(*ClientGetMuteRequest)(nil),            // 68: strims.chat.v1.ClientGetMuteRequest
-	(*ClientGetMuteResponse)(nil),           // 69: strims.chat.v1.ClientGetMuteResponse
-	(*WhisperRequest)(nil),                  // 70: strims.chat.v1.WhisperRequest
-	(*WhisperResponse)(nil),                 // 71: strims.chat.v1.WhisperResponse
-	(*SetUIConfigRequest)(nil),              // 72: strims.chat.v1.SetUIConfigRequest
-	(*SetUIConfigResponse)(nil),             // 73: strims.chat.v1.SetUIConfigResponse
-	(*WatchUIConfigRequest)(nil),            // 74: strims.chat.v1.WatchUIConfigRequest
-	(*WatchUIConfigResponse)(nil),           // 75: strims.chat.v1.WatchUIConfigResponse
-	(*IgnoreRequest)(nil),                   // 76: strims.chat.v1.IgnoreRequest
-	(*IgnoreResponse)(nil),                  // 77: strims.chat.v1.IgnoreResponse
-	(*UnignoreRequest)(nil),                 // 78: strims.chat.v1.UnignoreRequest
-	(*UnignoreResponse)(nil),                // 79: strims.chat.v1.UnignoreResponse
-	(*HighlightRequest)(nil),                // 80: strims.chat.v1.HighlightRequest
-	(*HighlightResponse)(nil),               // 81: strims.chat.v1.HighlightResponse
-	(*UnhighlightRequest)(nil),              // 82: strims.chat.v1.UnhighlightRequest
-	(*UnhighlightResponse)(nil),             // 83: strims.chat.v1.UnhighlightResponse
-	(*TagRequest)(nil),                      // 84: strims.chat.v1.TagRequest
-	(*TagResponse)(nil),                     // 85: strims.chat.v1.TagResponse
-	(*UntagRequest)(nil),                    // 86: strims.chat.v1.UntagRequest
-	(*UntagResponse)(nil),                   // 87: strims.chat.v1.UntagResponse
-	(*SendMessageRequest)(nil),              // 88: strims.chat.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),             // 89: strims.chat.v1.SendMessageResponse
-	(*MuteRequest)(nil),                     // 90: strims.chat.v1.MuteRequest
-	(*MuteResponse)(nil),                    // 91: strims.chat.v1.MuteResponse
-	(*UnmuteRequest)(nil),                   // 92: strims.chat.v1.UnmuteRequest
-	(*UnmuteResponse)(nil),                  // 93: strims.chat.v1.UnmuteResponse
-	(*GetMuteRequest)(nil),                  // 94: strims.chat.v1.GetMuteRequest
-	(*GetMuteResponse)(nil),                 // 95: strims.chat.v1.GetMuteResponse
-	(*WhisperThread)(nil),                   // 96: strims.chat.v1.WhisperThread
-	(*WhisperRecord)(nil),                   // 97: strims.chat.v1.WhisperRecord
-	(*WhisperSendMessageRequest)(nil),       // 98: strims.chat.v1.WhisperSendMessageRequest
-	(*WhisperSendMessageResponse)(nil),      // 99: strims.chat.v1.WhisperSendMessageResponse
-	(*EmoteEffect_CustomCSS)(nil),           // 100: strims.chat.v1.EmoteEffect.CustomCSS
-	(*EmoteEffect_SpriteAnimation)(nil),     // 101: strims.chat.v1.EmoteEffect.SpriteAnimation
-	(*EmoteEffect_DefaultModifiers)(nil),    // 102: strims.chat.v1.EmoteEffect.DefaultModifiers
-	(*Message_Entities)(nil),                // 103: strims.chat.v1.Message.Entities
-	(*Message_Entities_Bounds)(nil),         // 104: strims.chat.v1.Message.Entities.Bounds
-	(*Message_Entities_Link)(nil),           // 105: strims.chat.v1.Message.Entities.Link
-	(*Message_Entities_Emote)(nil),          // 106: strims.chat.v1.Message.Entities.Emote
-	(*Message_Entities_Nick)(nil),           // 107: strims.chat.v1.Message.Entities.Nick
-	(*Message_Entities_Tag)(nil),            // 108: strims.chat.v1.Message.Entities.Tag
-	(*Message_Entities_CodeBlock)(nil),      // 109: strims.chat.v1.Message.Entities.CodeBlock
-	(*Message_Entities_Spoiler)(nil),        // 110: strims.chat.v1.Message.Entities.Spoiler
-	(*Message_Entities_GenericEntity)(nil),  // 111: strims.chat.v1.Message.Entities.GenericEntity
-	(*Profile_Mute)(nil),                    // 112: strims.chat.v1.Profile.Mute
-	(*UIConfig_SoundFile)(nil),              // 113: strims.chat.v1.UIConfig.SoundFile
-	(*UIConfig_Highlight)(nil),              // 114: strims.chat.v1.UIConfig.Highlight
-	(*UIConfig_Tag)(nil),                    // 115: strims.chat.v1.UIConfig.Tag
-	(*UIConfig_Ignore)(nil),                 // 116: strims.chat.v1.UIConfig.Ignore
-	(*OpenClientResponse_Open)(nil),         // 117: strims.chat.v1.OpenClientResponse.Open
-	(*OpenClientResponse_ServerEvents)(nil), // 118: strims.chat.v1.OpenClientResponse.ServerEvents
-	(*key.Key)(nil),                         // 119: strims.type.Key
+	(EmoteFileType)(0),                          // 0: strims.chat.v1.EmoteFileType
+	(EmoteScale)(0),                             // 1: strims.chat.v1.EmoteScale
+	(UIConfig_ShowRemoved)(0),                   // 2: strims.chat.v1.UIConfig.ShowRemoved
+	(UIConfig_ViewerStateIndicator)(0),          // 3: strims.chat.v1.UIConfig.ViewerStateIndicator
+	(WhisperRecord_State)(0),                    // 4: strims.chat.v1.WhisperRecord.State
+	(*ServerEvent)(nil),                         // 5: strims.chat.v1.ServerEvent
+	(*Room)(nil),                                // 6: strims.chat.v1.Room
+	(*Server)(nil),                              // 7: strims.chat.v1.Server
+	(*EmoteImage)(nil),                          // 8: strims.chat.v1.EmoteImage
+	(*EmoteEffect)(nil),                         // 9: strims.chat.v1.EmoteEffect
+	(*EmoteContributor)(nil),                    // 10: strims.chat.v1.EmoteContributor
+	(*Emote)(nil),                               // 11: strims.chat.v1.Emote
+	(*Modifier)(nil),                            // 12: strims.chat.v1.Modifier
+	(*Tag)(nil),                                 // 13: strims.chat.v1.Tag
+	(*AssetBundle)(nil),                         // 14: strims.chat.v1.AssetBundle
+	(*Message)(nil),                             // 15: strims.chat.v1.Message
+	(*Profile)(nil),                             // 16: strims.chat.v1.Profile
+	(*UIConfig)(nil),                            // 17: strims.chat.v1.UIConfig
+	(*CreateServerRequest)(nil),                 // 18: strims.chat.v1.CreateServerRequest
+	(*CreateServerResponse)(nil),                // 19: strims.chat.v1.CreateServerResponse
+	(*UpdateServerRequest)(nil),                 // 20: strims.chat.v1.UpdateServerRequest
+	(*UpdateServerResponse)(nil),                // 21: strims.chat.v1.UpdateServerResponse
+	(*DeleteServerRequest)(nil),                 // 22: strims.chat.v1.DeleteServerRequest
+	(*DeleteServerResponse)(nil),                // 23: strims.chat.v1.DeleteServerResponse
+	(*GetServerRequest)(nil),                    // 24: strims.chat.v1.GetServerRequest
+	(*GetServerResponse)(nil),                   // 25: strims.chat.v1.GetServerResponse
+	(*ListServersRequest)(nil),                  // 26: strims.chat.v1.ListServersRequest
+	(*ListServersResponse)(nil),                 // 27: strims.chat.v1.ListServersResponse
+	(*CreateEmoteRequest)(nil),                  // 28: strims.chat.v1.CreateEmoteRequest
+	(*CreateEmoteResponse)(nil),                 // 29: strims.chat.v1.CreateEmoteResponse
+	(*UpdateEmoteRequest)(nil),                  // 30: strims.chat.v1.UpdateEmoteRequest
+	(*UpdateEmoteResponse)(nil),                 // 31: strims.chat.v1.UpdateEmoteResponse
+	(*DeleteEmoteRequest)(nil),                  // 32: strims.chat.v1.DeleteEmoteRequest
+	(*DeleteEmoteResponse)(nil),                 // 33: strims.chat.v1.DeleteEmoteResponse
+	(*GetEmoteRequest)(nil),                     // 34: strims.chat.v1.GetEmoteRequest
+	(*GetEmoteResponse)(nil),                    // 35: strims.chat.v1.GetEmoteResponse
+	(*ListEmotesRequest)(nil),                   // 36: strims.chat.v1.ListEmotesRequest
+	(*ListEmotesResponse)(nil),                  // 37: strims.chat.v1.ListEmotesResponse
+	(*CreateModifierRequest)(nil),               // 38: strims.chat.v1.CreateModifierRequest
+	(*CreateModifierResponse)(nil),              // 39: strims.chat.v1.CreateModifierResponse
+	(*UpdateModifierRequest)(nil),               // 40: strims.chat.v1.UpdateModifierRequest
+	(*UpdateModifierResponse)(nil),              // 41: strims.chat.v1.UpdateModifierResponse
+	(*DeleteModifierRequest)(nil),               // 42: strims.chat.v1.DeleteModifierRequest
+	(*DeleteModifierResponse)(nil),              // 43: strims.chat.v1.DeleteModifierResponse
+	(*GetModifierRequest)(nil),                  // 44: strims.chat.v1.GetModifierRequest
+	(*GetModifierResponse)(nil),                 // 45: strims.chat.v1.GetModifierResponse
+	(*ListModifiersRequest)(nil),                // 46: strims.chat.v1.ListModifiersRequest
+	(*ListModifiersResponse)(nil),               // 47: strims.chat.v1.ListModifiersResponse
+	(*CreateTagRequest)(nil),                    // 48: strims.chat.v1.CreateTagRequest
+	(*CreateTagResponse)(nil),                   // 49: strims.chat.v1.CreateTagResponse
+	(*UpdateTagRequest)(nil),                    // 50: strims.chat.v1.UpdateTagRequest
+	(*UpdateTagResponse)(nil),                   // 51: strims.chat.v1.UpdateTagResponse
+	(*DeleteTagRequest)(nil),                    // 52: strims.chat.v1.DeleteTagRequest
+	(*DeleteTagResponse)(nil),                   // 53: strims.chat.v1.DeleteTagResponse
+	(*GetTagRequest)(nil),                       // 54: strims.chat.v1.GetTagRequest
+	(*GetTagResponse)(nil),                      // 55: strims.chat.v1.GetTagResponse
+	(*ListTagsRequest)(nil),                     // 56: strims.chat.v1.ListTagsRequest
+	(*ListTagsResponse)(nil),                    // 57: strims.chat.v1.ListTagsResponse
+	(*SyncAssetsRequest)(nil),                   // 58: strims.chat.v1.SyncAssetsRequest
+	(*SyncAssetsResponse)(nil),                  // 59: strims.chat.v1.SyncAssetsResponse
+	(*OpenClientRequest)(nil),                   // 60: strims.chat.v1.OpenClientRequest
+	(*OpenClientResponse)(nil),                  // 61: strims.chat.v1.OpenClientResponse
+	(*ClientSendMessageRequest)(nil),            // 62: strims.chat.v1.ClientSendMessageRequest
+	(*ClientSendMessageResponse)(nil),           // 63: strims.chat.v1.ClientSendMessageResponse
+	(*ClientMuteRequest)(nil),                   // 64: strims.chat.v1.ClientMuteRequest
+	(*ClientMuteResponse)(nil),                  // 65: strims.chat.v1.ClientMuteResponse
+	(*ClientUnmuteRequest)(nil),                 // 66: strims.chat.v1.ClientUnmuteRequest
+	(*ClientUnmuteResponse)(nil),                // 67: strims.chat.v1.ClientUnmuteResponse
+	(*ClientGetMuteRequest)(nil),                // 68: strims.chat.v1.ClientGetMuteRequest
+	(*ClientGetMuteResponse)(nil),               // 69: strims.chat.v1.ClientGetMuteResponse
+	(*WhisperRequest)(nil),                      // 70: strims.chat.v1.WhisperRequest
+	(*WhisperResponse)(nil),                     // 71: strims.chat.v1.WhisperResponse
+	(*ListWhispersRequest)(nil),                 // 72: strims.chat.v1.ListWhispersRequest
+	(*ListWhispersResponse)(nil),                // 73: strims.chat.v1.ListWhispersResponse
+	(*WatchWhispersRequest)(nil),                // 74: strims.chat.v1.WatchWhispersRequest
+	(*WatchWhispersResponse)(nil),               // 75: strims.chat.v1.WatchWhispersResponse
+	(*SetUIConfigRequest)(nil),                  // 76: strims.chat.v1.SetUIConfigRequest
+	(*SetUIConfigResponse)(nil),                 // 77: strims.chat.v1.SetUIConfigResponse
+	(*WatchUIConfigRequest)(nil),                // 78: strims.chat.v1.WatchUIConfigRequest
+	(*WatchUIConfigResponse)(nil),               // 79: strims.chat.v1.WatchUIConfigResponse
+	(*IgnoreRequest)(nil),                       // 80: strims.chat.v1.IgnoreRequest
+	(*IgnoreResponse)(nil),                      // 81: strims.chat.v1.IgnoreResponse
+	(*UnignoreRequest)(nil),                     // 82: strims.chat.v1.UnignoreRequest
+	(*UnignoreResponse)(nil),                    // 83: strims.chat.v1.UnignoreResponse
+	(*HighlightRequest)(nil),                    // 84: strims.chat.v1.HighlightRequest
+	(*HighlightResponse)(nil),                   // 85: strims.chat.v1.HighlightResponse
+	(*UnhighlightRequest)(nil),                  // 86: strims.chat.v1.UnhighlightRequest
+	(*UnhighlightResponse)(nil),                 // 87: strims.chat.v1.UnhighlightResponse
+	(*TagRequest)(nil),                          // 88: strims.chat.v1.TagRequest
+	(*TagResponse)(nil),                         // 89: strims.chat.v1.TagResponse
+	(*UntagRequest)(nil),                        // 90: strims.chat.v1.UntagRequest
+	(*UntagResponse)(nil),                       // 91: strims.chat.v1.UntagResponse
+	(*SendMessageRequest)(nil),                  // 92: strims.chat.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),                 // 93: strims.chat.v1.SendMessageResponse
+	(*MuteRequest)(nil),                         // 94: strims.chat.v1.MuteRequest
+	(*MuteResponse)(nil),                        // 95: strims.chat.v1.MuteResponse
+	(*UnmuteRequest)(nil),                       // 96: strims.chat.v1.UnmuteRequest
+	(*UnmuteResponse)(nil),                      // 97: strims.chat.v1.UnmuteResponse
+	(*GetMuteRequest)(nil),                      // 98: strims.chat.v1.GetMuteRequest
+	(*GetMuteResponse)(nil),                     // 99: strims.chat.v1.GetMuteResponse
+	(*WhisperThread)(nil),                       // 100: strims.chat.v1.WhisperThread
+	(*WhisperRecord)(nil),                       // 101: strims.chat.v1.WhisperRecord
+	(*WhisperSendMessageRequest)(nil),           // 102: strims.chat.v1.WhisperSendMessageRequest
+	(*WhisperSendMessageResponse)(nil),          // 103: strims.chat.v1.WhisperSendMessageResponse
+	(*EmoteEffect_CustomCSS)(nil),               // 104: strims.chat.v1.EmoteEffect.CustomCSS
+	(*EmoteEffect_SpriteAnimation)(nil),         // 105: strims.chat.v1.EmoteEffect.SpriteAnimation
+	(*EmoteEffect_DefaultModifiers)(nil),        // 106: strims.chat.v1.EmoteEffect.DefaultModifiers
+	(*Message_Entities)(nil),                    // 107: strims.chat.v1.Message.Entities
+	(*Message_Entities_Bounds)(nil),             // 108: strims.chat.v1.Message.Entities.Bounds
+	(*Message_Entities_Link)(nil),               // 109: strims.chat.v1.Message.Entities.Link
+	(*Message_Entities_Emote)(nil),              // 110: strims.chat.v1.Message.Entities.Emote
+	(*Message_Entities_Nick)(nil),               // 111: strims.chat.v1.Message.Entities.Nick
+	(*Message_Entities_Tag)(nil),                // 112: strims.chat.v1.Message.Entities.Tag
+	(*Message_Entities_CodeBlock)(nil),          // 113: strims.chat.v1.Message.Entities.CodeBlock
+	(*Message_Entities_Spoiler)(nil),            // 114: strims.chat.v1.Message.Entities.Spoiler
+	(*Message_Entities_GenericEntity)(nil),      // 115: strims.chat.v1.Message.Entities.GenericEntity
+	(*Profile_Mute)(nil),                        // 116: strims.chat.v1.Profile.Mute
+	(*UIConfig_SoundFile)(nil),                  // 117: strims.chat.v1.UIConfig.SoundFile
+	(*UIConfig_Highlight)(nil),                  // 118: strims.chat.v1.UIConfig.Highlight
+	(*UIConfig_Tag)(nil),                        // 119: strims.chat.v1.UIConfig.Tag
+	(*UIConfig_Ignore)(nil),                     // 120: strims.chat.v1.UIConfig.Ignore
+	(*OpenClientResponse_Open)(nil),             // 121: strims.chat.v1.OpenClientResponse.Open
+	(*OpenClientResponse_ServerEvents)(nil),     // 122: strims.chat.v1.OpenClientResponse.ServerEvents
+	(*WatchWhispersResponse_WhisperDelete)(nil), // 123: strims.chat.v1.WatchWhispersResponse.WhisperDelete
+	(*key.Key)(nil),                             // 124: strims.type.Key
 }
 var file_chat_v1_chat_proto_depIdxs = []int32{
 	15,  // 0: strims.chat.v1.ServerEvent.message:type_name -> strims.chat.v1.Message
-	119, // 1: strims.chat.v1.Server.key:type_name -> strims.type.Key
+	124, // 1: strims.chat.v1.Server.key:type_name -> strims.type.Key
 	6,   // 2: strims.chat.v1.Server.room:type_name -> strims.chat.v1.Room
 	0,   // 3: strims.chat.v1.EmoteImage.file_type:type_name -> strims.chat.v1.EmoteFileType
 	1,   // 4: strims.chat.v1.EmoteImage.scale:type_name -> strims.chat.v1.EmoteScale
-	100, // 5: strims.chat.v1.EmoteEffect.custom_css:type_name -> strims.chat.v1.EmoteEffect.CustomCSS
-	101, // 6: strims.chat.v1.EmoteEffect.sprite_animation:type_name -> strims.chat.v1.EmoteEffect.SpriteAnimation
-	102, // 7: strims.chat.v1.EmoteEffect.default_modifiers:type_name -> strims.chat.v1.EmoteEffect.DefaultModifiers
+	104, // 5: strims.chat.v1.EmoteEffect.custom_css:type_name -> strims.chat.v1.EmoteEffect.CustomCSS
+	105, // 6: strims.chat.v1.EmoteEffect.sprite_animation:type_name -> strims.chat.v1.EmoteEffect.SpriteAnimation
+	106, // 7: strims.chat.v1.EmoteEffect.default_modifiers:type_name -> strims.chat.v1.EmoteEffect.DefaultModifiers
 	8,   // 8: strims.chat.v1.Emote.images:type_name -> strims.chat.v1.EmoteImage
 	9,   // 9: strims.chat.v1.Emote.effects:type_name -> strims.chat.v1.EmoteEffect
 	10,  // 10: strims.chat.v1.Emote.contributor:type_name -> strims.chat.v1.EmoteContributor
@@ -8078,13 +8458,13 @@ var file_chat_v1_chat_proto_depIdxs = []int32{
 	11,  // 12: strims.chat.v1.AssetBundle.emotes:type_name -> strims.chat.v1.Emote
 	12,  // 13: strims.chat.v1.AssetBundle.modifiers:type_name -> strims.chat.v1.Modifier
 	13,  // 14: strims.chat.v1.AssetBundle.tags:type_name -> strims.chat.v1.Tag
-	103, // 15: strims.chat.v1.Message.entities:type_name -> strims.chat.v1.Message.Entities
-	112, // 16: strims.chat.v1.Profile.mutes:type_name -> strims.chat.v1.Profile.Mute
-	113, // 17: strims.chat.v1.UIConfig.notification_sound_file:type_name -> strims.chat.v1.UIConfig.SoundFile
-	114, // 18: strims.chat.v1.UIConfig.highlights:type_name -> strims.chat.v1.UIConfig.Highlight
-	115, // 19: strims.chat.v1.UIConfig.tags:type_name -> strims.chat.v1.UIConfig.Tag
+	107, // 15: strims.chat.v1.Message.entities:type_name -> strims.chat.v1.Message.Entities
+	116, // 16: strims.chat.v1.Profile.mutes:type_name -> strims.chat.v1.Profile.Mute
+	117, // 17: strims.chat.v1.UIConfig.notification_sound_file:type_name -> strims.chat.v1.UIConfig.SoundFile
+	118, // 18: strims.chat.v1.UIConfig.highlights:type_name -> strims.chat.v1.UIConfig.Highlight
+	119, // 19: strims.chat.v1.UIConfig.tags:type_name -> strims.chat.v1.UIConfig.Tag
 	2,   // 20: strims.chat.v1.UIConfig.show_removed:type_name -> strims.chat.v1.UIConfig.ShowRemoved
-	116, // 21: strims.chat.v1.UIConfig.ignores:type_name -> strims.chat.v1.UIConfig.Ignore
+	120, // 21: strims.chat.v1.UIConfig.ignores:type_name -> strims.chat.v1.UIConfig.Ignore
 	3,   // 22: strims.chat.v1.UIConfig.viewer_state_indicator:type_name -> strims.chat.v1.UIConfig.ViewerStateIndicator
 	6,   // 23: strims.chat.v1.CreateServerRequest.room:type_name -> strims.chat.v1.Room
 	7,   // 24: strims.chat.v1.CreateServerResponse.server:type_name -> strims.chat.v1.Server
@@ -8110,114 +8490,123 @@ var file_chat_v1_chat_proto_depIdxs = []int32{
 	13,  // 44: strims.chat.v1.UpdateTagResponse.tag:type_name -> strims.chat.v1.Tag
 	13,  // 45: strims.chat.v1.GetTagResponse.tag:type_name -> strims.chat.v1.Tag
 	13,  // 46: strims.chat.v1.ListTagsResponse.tags:type_name -> strims.chat.v1.Tag
-	117, // 47: strims.chat.v1.OpenClientResponse.open:type_name -> strims.chat.v1.OpenClientResponse.Open
-	118, // 48: strims.chat.v1.OpenClientResponse.server_events:type_name -> strims.chat.v1.OpenClientResponse.ServerEvents
+	121, // 47: strims.chat.v1.OpenClientResponse.open:type_name -> strims.chat.v1.OpenClientResponse.Open
+	122, // 48: strims.chat.v1.OpenClientResponse.server_events:type_name -> strims.chat.v1.OpenClientResponse.ServerEvents
 	14,  // 49: strims.chat.v1.OpenClientResponse.asset_bundle:type_name -> strims.chat.v1.AssetBundle
-	17,  // 50: strims.chat.v1.SetUIConfigRequest.ui_config:type_name -> strims.chat.v1.UIConfig
-	17,  // 51: strims.chat.v1.WatchUIConfigResponse.ui_config:type_name -> strims.chat.v1.UIConfig
-	4,   // 52: strims.chat.v1.WhisperRecord.state:type_name -> strims.chat.v1.WhisperRecord.State
-	15,  // 53: strims.chat.v1.WhisperRecord.message:type_name -> strims.chat.v1.Message
-	105, // 54: strims.chat.v1.Message.Entities.links:type_name -> strims.chat.v1.Message.Entities.Link
-	106, // 55: strims.chat.v1.Message.Entities.emotes:type_name -> strims.chat.v1.Message.Entities.Emote
-	107, // 56: strims.chat.v1.Message.Entities.nicks:type_name -> strims.chat.v1.Message.Entities.Nick
-	108, // 57: strims.chat.v1.Message.Entities.tags:type_name -> strims.chat.v1.Message.Entities.Tag
-	109, // 58: strims.chat.v1.Message.Entities.code_blocks:type_name -> strims.chat.v1.Message.Entities.CodeBlock
-	110, // 59: strims.chat.v1.Message.Entities.spoilers:type_name -> strims.chat.v1.Message.Entities.Spoiler
-	111, // 60: strims.chat.v1.Message.Entities.green_text:type_name -> strims.chat.v1.Message.Entities.GenericEntity
-	111, // 61: strims.chat.v1.Message.Entities.self_message:type_name -> strims.chat.v1.Message.Entities.GenericEntity
-	104, // 62: strims.chat.v1.Message.Entities.Link.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 63: strims.chat.v1.Message.Entities.Emote.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 64: strims.chat.v1.Message.Entities.Nick.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 65: strims.chat.v1.Message.Entities.Tag.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 66: strims.chat.v1.Message.Entities.CodeBlock.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 67: strims.chat.v1.Message.Entities.Spoiler.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	104, // 68: strims.chat.v1.Message.Entities.GenericEntity.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
-	5,   // 69: strims.chat.v1.OpenClientResponse.ServerEvents.events:type_name -> strims.chat.v1.ServerEvent
-	18,  // 70: strims.chat.v1.ChatServerFrontend.CreateServer:input_type -> strims.chat.v1.CreateServerRequest
-	20,  // 71: strims.chat.v1.ChatServerFrontend.UpdateServer:input_type -> strims.chat.v1.UpdateServerRequest
-	22,  // 72: strims.chat.v1.ChatServerFrontend.DeleteServer:input_type -> strims.chat.v1.DeleteServerRequest
-	24,  // 73: strims.chat.v1.ChatServerFrontend.GetServer:input_type -> strims.chat.v1.GetServerRequest
-	26,  // 74: strims.chat.v1.ChatServerFrontend.ListServers:input_type -> strims.chat.v1.ListServersRequest
-	28,  // 75: strims.chat.v1.ChatServerFrontend.CreateEmote:input_type -> strims.chat.v1.CreateEmoteRequest
-	30,  // 76: strims.chat.v1.ChatServerFrontend.UpdateEmote:input_type -> strims.chat.v1.UpdateEmoteRequest
-	32,  // 77: strims.chat.v1.ChatServerFrontend.DeleteEmote:input_type -> strims.chat.v1.DeleteEmoteRequest
-	34,  // 78: strims.chat.v1.ChatServerFrontend.GetEmote:input_type -> strims.chat.v1.GetEmoteRequest
-	36,  // 79: strims.chat.v1.ChatServerFrontend.ListEmotes:input_type -> strims.chat.v1.ListEmotesRequest
-	38,  // 80: strims.chat.v1.ChatServerFrontend.CreateModifier:input_type -> strims.chat.v1.CreateModifierRequest
-	40,  // 81: strims.chat.v1.ChatServerFrontend.UpdateModifier:input_type -> strims.chat.v1.UpdateModifierRequest
-	42,  // 82: strims.chat.v1.ChatServerFrontend.DeleteModifier:input_type -> strims.chat.v1.DeleteModifierRequest
-	44,  // 83: strims.chat.v1.ChatServerFrontend.GetModifier:input_type -> strims.chat.v1.GetModifierRequest
-	46,  // 84: strims.chat.v1.ChatServerFrontend.ListModifiers:input_type -> strims.chat.v1.ListModifiersRequest
-	48,  // 85: strims.chat.v1.ChatServerFrontend.CreateTag:input_type -> strims.chat.v1.CreateTagRequest
-	50,  // 86: strims.chat.v1.ChatServerFrontend.UpdateTag:input_type -> strims.chat.v1.UpdateTagRequest
-	52,  // 87: strims.chat.v1.ChatServerFrontend.DeleteTag:input_type -> strims.chat.v1.DeleteTagRequest
-	54,  // 88: strims.chat.v1.ChatServerFrontend.GetTag:input_type -> strims.chat.v1.GetTagRequest
-	56,  // 89: strims.chat.v1.ChatServerFrontend.ListTags:input_type -> strims.chat.v1.ListTagsRequest
-	58,  // 90: strims.chat.v1.ChatServerFrontend.SyncAssets:input_type -> strims.chat.v1.SyncAssetsRequest
-	60,  // 91: strims.chat.v1.ChatFrontend.OpenClient:input_type -> strims.chat.v1.OpenClientRequest
-	62,  // 92: strims.chat.v1.ChatFrontend.ClientSendMessage:input_type -> strims.chat.v1.ClientSendMessageRequest
-	64,  // 93: strims.chat.v1.ChatFrontend.ClientMute:input_type -> strims.chat.v1.ClientMuteRequest
-	66,  // 94: strims.chat.v1.ChatFrontend.ClientUnmute:input_type -> strims.chat.v1.ClientUnmuteRequest
-	68,  // 95: strims.chat.v1.ChatFrontend.ClientGetMute:input_type -> strims.chat.v1.ClientGetMuteRequest
-	70,  // 96: strims.chat.v1.ChatFrontend.Whisper:input_type -> strims.chat.v1.WhisperRequest
-	72,  // 97: strims.chat.v1.ChatFrontend.SetUIConfig:input_type -> strims.chat.v1.SetUIConfigRequest
-	74,  // 98: strims.chat.v1.ChatFrontend.WatchUIConfig:input_type -> strims.chat.v1.WatchUIConfigRequest
-	76,  // 99: strims.chat.v1.ChatFrontend.Ignore:input_type -> strims.chat.v1.IgnoreRequest
-	78,  // 100: strims.chat.v1.ChatFrontend.Unignore:input_type -> strims.chat.v1.UnignoreRequest
-	80,  // 101: strims.chat.v1.ChatFrontend.Highlight:input_type -> strims.chat.v1.HighlightRequest
-	82,  // 102: strims.chat.v1.ChatFrontend.Unhighlight:input_type -> strims.chat.v1.UnhighlightRequest
-	84,  // 103: strims.chat.v1.ChatFrontend.Tag:input_type -> strims.chat.v1.TagRequest
-	86,  // 104: strims.chat.v1.ChatFrontend.Untag:input_type -> strims.chat.v1.UntagRequest
-	88,  // 105: strims.chat.v1.Chat.SendMessage:input_type -> strims.chat.v1.SendMessageRequest
-	90,  // 106: strims.chat.v1.Chat.Mute:input_type -> strims.chat.v1.MuteRequest
-	92,  // 107: strims.chat.v1.Chat.Unmute:input_type -> strims.chat.v1.UnmuteRequest
-	94,  // 108: strims.chat.v1.Chat.GetMute:input_type -> strims.chat.v1.GetMuteRequest
-	98,  // 109: strims.chat.v1.Whisper.SendMessage:input_type -> strims.chat.v1.WhisperSendMessageRequest
-	19,  // 110: strims.chat.v1.ChatServerFrontend.CreateServer:output_type -> strims.chat.v1.CreateServerResponse
-	21,  // 111: strims.chat.v1.ChatServerFrontend.UpdateServer:output_type -> strims.chat.v1.UpdateServerResponse
-	23,  // 112: strims.chat.v1.ChatServerFrontend.DeleteServer:output_type -> strims.chat.v1.DeleteServerResponse
-	25,  // 113: strims.chat.v1.ChatServerFrontend.GetServer:output_type -> strims.chat.v1.GetServerResponse
-	27,  // 114: strims.chat.v1.ChatServerFrontend.ListServers:output_type -> strims.chat.v1.ListServersResponse
-	29,  // 115: strims.chat.v1.ChatServerFrontend.CreateEmote:output_type -> strims.chat.v1.CreateEmoteResponse
-	31,  // 116: strims.chat.v1.ChatServerFrontend.UpdateEmote:output_type -> strims.chat.v1.UpdateEmoteResponse
-	33,  // 117: strims.chat.v1.ChatServerFrontend.DeleteEmote:output_type -> strims.chat.v1.DeleteEmoteResponse
-	35,  // 118: strims.chat.v1.ChatServerFrontend.GetEmote:output_type -> strims.chat.v1.GetEmoteResponse
-	37,  // 119: strims.chat.v1.ChatServerFrontend.ListEmotes:output_type -> strims.chat.v1.ListEmotesResponse
-	39,  // 120: strims.chat.v1.ChatServerFrontend.CreateModifier:output_type -> strims.chat.v1.CreateModifierResponse
-	41,  // 121: strims.chat.v1.ChatServerFrontend.UpdateModifier:output_type -> strims.chat.v1.UpdateModifierResponse
-	43,  // 122: strims.chat.v1.ChatServerFrontend.DeleteModifier:output_type -> strims.chat.v1.DeleteModifierResponse
-	45,  // 123: strims.chat.v1.ChatServerFrontend.GetModifier:output_type -> strims.chat.v1.GetModifierResponse
-	47,  // 124: strims.chat.v1.ChatServerFrontend.ListModifiers:output_type -> strims.chat.v1.ListModifiersResponse
-	49,  // 125: strims.chat.v1.ChatServerFrontend.CreateTag:output_type -> strims.chat.v1.CreateTagResponse
-	51,  // 126: strims.chat.v1.ChatServerFrontend.UpdateTag:output_type -> strims.chat.v1.UpdateTagResponse
-	53,  // 127: strims.chat.v1.ChatServerFrontend.DeleteTag:output_type -> strims.chat.v1.DeleteTagResponse
-	55,  // 128: strims.chat.v1.ChatServerFrontend.GetTag:output_type -> strims.chat.v1.GetTagResponse
-	57,  // 129: strims.chat.v1.ChatServerFrontend.ListTags:output_type -> strims.chat.v1.ListTagsResponse
-	59,  // 130: strims.chat.v1.ChatServerFrontend.SyncAssets:output_type -> strims.chat.v1.SyncAssetsResponse
-	61,  // 131: strims.chat.v1.ChatFrontend.OpenClient:output_type -> strims.chat.v1.OpenClientResponse
-	63,  // 132: strims.chat.v1.ChatFrontend.ClientSendMessage:output_type -> strims.chat.v1.ClientSendMessageResponse
-	65,  // 133: strims.chat.v1.ChatFrontend.ClientMute:output_type -> strims.chat.v1.ClientMuteResponse
-	67,  // 134: strims.chat.v1.ChatFrontend.ClientUnmute:output_type -> strims.chat.v1.ClientUnmuteResponse
-	69,  // 135: strims.chat.v1.ChatFrontend.ClientGetMute:output_type -> strims.chat.v1.ClientGetMuteResponse
-	71,  // 136: strims.chat.v1.ChatFrontend.Whisper:output_type -> strims.chat.v1.WhisperResponse
-	73,  // 137: strims.chat.v1.ChatFrontend.SetUIConfig:output_type -> strims.chat.v1.SetUIConfigResponse
-	75,  // 138: strims.chat.v1.ChatFrontend.WatchUIConfig:output_type -> strims.chat.v1.WatchUIConfigResponse
-	77,  // 139: strims.chat.v1.ChatFrontend.Ignore:output_type -> strims.chat.v1.IgnoreResponse
-	79,  // 140: strims.chat.v1.ChatFrontend.Unignore:output_type -> strims.chat.v1.UnignoreResponse
-	81,  // 141: strims.chat.v1.ChatFrontend.Highlight:output_type -> strims.chat.v1.HighlightResponse
-	83,  // 142: strims.chat.v1.ChatFrontend.Unhighlight:output_type -> strims.chat.v1.UnhighlightResponse
-	85,  // 143: strims.chat.v1.ChatFrontend.Tag:output_type -> strims.chat.v1.TagResponse
-	87,  // 144: strims.chat.v1.ChatFrontend.Untag:output_type -> strims.chat.v1.UntagResponse
-	89,  // 145: strims.chat.v1.Chat.SendMessage:output_type -> strims.chat.v1.SendMessageResponse
-	91,  // 146: strims.chat.v1.Chat.Mute:output_type -> strims.chat.v1.MuteResponse
-	93,  // 147: strims.chat.v1.Chat.Unmute:output_type -> strims.chat.v1.UnmuteResponse
-	95,  // 148: strims.chat.v1.Chat.GetMute:output_type -> strims.chat.v1.GetMuteResponse
-	99,  // 149: strims.chat.v1.Whisper.SendMessage:output_type -> strims.chat.v1.WhisperSendMessageResponse
-	110, // [110:150] is the sub-list for method output_type
-	70,  // [70:110] is the sub-list for method input_type
-	70,  // [70:70] is the sub-list for extension type_name
-	70,  // [70:70] is the sub-list for extension extendee
-	0,   // [0:70] is the sub-list for field type_name
+	100, // 50: strims.chat.v1.ListWhispersResponse.thread:type_name -> strims.chat.v1.WhisperThread
+	101, // 51: strims.chat.v1.ListWhispersResponse.whispers:type_name -> strims.chat.v1.WhisperRecord
+	100, // 52: strims.chat.v1.WatchWhispersResponse.thread_update:type_name -> strims.chat.v1.WhisperThread
+	101, // 53: strims.chat.v1.WatchWhispersResponse.whisper_update:type_name -> strims.chat.v1.WhisperRecord
+	123, // 54: strims.chat.v1.WatchWhispersResponse.whisper_delete:type_name -> strims.chat.v1.WatchWhispersResponse.WhisperDelete
+	17,  // 55: strims.chat.v1.SetUIConfigRequest.ui_config:type_name -> strims.chat.v1.UIConfig
+	17,  // 56: strims.chat.v1.WatchUIConfigResponse.ui_config:type_name -> strims.chat.v1.UIConfig
+	4,   // 57: strims.chat.v1.WhisperRecord.state:type_name -> strims.chat.v1.WhisperRecord.State
+	15,  // 58: strims.chat.v1.WhisperRecord.message:type_name -> strims.chat.v1.Message
+	109, // 59: strims.chat.v1.Message.Entities.links:type_name -> strims.chat.v1.Message.Entities.Link
+	110, // 60: strims.chat.v1.Message.Entities.emotes:type_name -> strims.chat.v1.Message.Entities.Emote
+	111, // 61: strims.chat.v1.Message.Entities.nicks:type_name -> strims.chat.v1.Message.Entities.Nick
+	112, // 62: strims.chat.v1.Message.Entities.tags:type_name -> strims.chat.v1.Message.Entities.Tag
+	113, // 63: strims.chat.v1.Message.Entities.code_blocks:type_name -> strims.chat.v1.Message.Entities.CodeBlock
+	114, // 64: strims.chat.v1.Message.Entities.spoilers:type_name -> strims.chat.v1.Message.Entities.Spoiler
+	115, // 65: strims.chat.v1.Message.Entities.green_text:type_name -> strims.chat.v1.Message.Entities.GenericEntity
+	115, // 66: strims.chat.v1.Message.Entities.self_message:type_name -> strims.chat.v1.Message.Entities.GenericEntity
+	108, // 67: strims.chat.v1.Message.Entities.Link.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 68: strims.chat.v1.Message.Entities.Emote.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 69: strims.chat.v1.Message.Entities.Nick.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 70: strims.chat.v1.Message.Entities.Tag.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 71: strims.chat.v1.Message.Entities.CodeBlock.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 72: strims.chat.v1.Message.Entities.Spoiler.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	108, // 73: strims.chat.v1.Message.Entities.GenericEntity.bounds:type_name -> strims.chat.v1.Message.Entities.Bounds
+	5,   // 74: strims.chat.v1.OpenClientResponse.ServerEvents.events:type_name -> strims.chat.v1.ServerEvent
+	18,  // 75: strims.chat.v1.ChatServerFrontend.CreateServer:input_type -> strims.chat.v1.CreateServerRequest
+	20,  // 76: strims.chat.v1.ChatServerFrontend.UpdateServer:input_type -> strims.chat.v1.UpdateServerRequest
+	22,  // 77: strims.chat.v1.ChatServerFrontend.DeleteServer:input_type -> strims.chat.v1.DeleteServerRequest
+	24,  // 78: strims.chat.v1.ChatServerFrontend.GetServer:input_type -> strims.chat.v1.GetServerRequest
+	26,  // 79: strims.chat.v1.ChatServerFrontend.ListServers:input_type -> strims.chat.v1.ListServersRequest
+	28,  // 80: strims.chat.v1.ChatServerFrontend.CreateEmote:input_type -> strims.chat.v1.CreateEmoteRequest
+	30,  // 81: strims.chat.v1.ChatServerFrontend.UpdateEmote:input_type -> strims.chat.v1.UpdateEmoteRequest
+	32,  // 82: strims.chat.v1.ChatServerFrontend.DeleteEmote:input_type -> strims.chat.v1.DeleteEmoteRequest
+	34,  // 83: strims.chat.v1.ChatServerFrontend.GetEmote:input_type -> strims.chat.v1.GetEmoteRequest
+	36,  // 84: strims.chat.v1.ChatServerFrontend.ListEmotes:input_type -> strims.chat.v1.ListEmotesRequest
+	38,  // 85: strims.chat.v1.ChatServerFrontend.CreateModifier:input_type -> strims.chat.v1.CreateModifierRequest
+	40,  // 86: strims.chat.v1.ChatServerFrontend.UpdateModifier:input_type -> strims.chat.v1.UpdateModifierRequest
+	42,  // 87: strims.chat.v1.ChatServerFrontend.DeleteModifier:input_type -> strims.chat.v1.DeleteModifierRequest
+	44,  // 88: strims.chat.v1.ChatServerFrontend.GetModifier:input_type -> strims.chat.v1.GetModifierRequest
+	46,  // 89: strims.chat.v1.ChatServerFrontend.ListModifiers:input_type -> strims.chat.v1.ListModifiersRequest
+	48,  // 90: strims.chat.v1.ChatServerFrontend.CreateTag:input_type -> strims.chat.v1.CreateTagRequest
+	50,  // 91: strims.chat.v1.ChatServerFrontend.UpdateTag:input_type -> strims.chat.v1.UpdateTagRequest
+	52,  // 92: strims.chat.v1.ChatServerFrontend.DeleteTag:input_type -> strims.chat.v1.DeleteTagRequest
+	54,  // 93: strims.chat.v1.ChatServerFrontend.GetTag:input_type -> strims.chat.v1.GetTagRequest
+	56,  // 94: strims.chat.v1.ChatServerFrontend.ListTags:input_type -> strims.chat.v1.ListTagsRequest
+	58,  // 95: strims.chat.v1.ChatServerFrontend.SyncAssets:input_type -> strims.chat.v1.SyncAssetsRequest
+	60,  // 96: strims.chat.v1.ChatFrontend.OpenClient:input_type -> strims.chat.v1.OpenClientRequest
+	62,  // 97: strims.chat.v1.ChatFrontend.ClientSendMessage:input_type -> strims.chat.v1.ClientSendMessageRequest
+	64,  // 98: strims.chat.v1.ChatFrontend.ClientMute:input_type -> strims.chat.v1.ClientMuteRequest
+	66,  // 99: strims.chat.v1.ChatFrontend.ClientUnmute:input_type -> strims.chat.v1.ClientUnmuteRequest
+	68,  // 100: strims.chat.v1.ChatFrontend.ClientGetMute:input_type -> strims.chat.v1.ClientGetMuteRequest
+	70,  // 101: strims.chat.v1.ChatFrontend.Whisper:input_type -> strims.chat.v1.WhisperRequest
+	72,  // 102: strims.chat.v1.ChatFrontend.ListWhispers:input_type -> strims.chat.v1.ListWhispersRequest
+	74,  // 103: strims.chat.v1.ChatFrontend.WatchWhispers:input_type -> strims.chat.v1.WatchWhispersRequest
+	76,  // 104: strims.chat.v1.ChatFrontend.SetUIConfig:input_type -> strims.chat.v1.SetUIConfigRequest
+	78,  // 105: strims.chat.v1.ChatFrontend.WatchUIConfig:input_type -> strims.chat.v1.WatchUIConfigRequest
+	80,  // 106: strims.chat.v1.ChatFrontend.Ignore:input_type -> strims.chat.v1.IgnoreRequest
+	82,  // 107: strims.chat.v1.ChatFrontend.Unignore:input_type -> strims.chat.v1.UnignoreRequest
+	84,  // 108: strims.chat.v1.ChatFrontend.Highlight:input_type -> strims.chat.v1.HighlightRequest
+	86,  // 109: strims.chat.v1.ChatFrontend.Unhighlight:input_type -> strims.chat.v1.UnhighlightRequest
+	88,  // 110: strims.chat.v1.ChatFrontend.Tag:input_type -> strims.chat.v1.TagRequest
+	90,  // 111: strims.chat.v1.ChatFrontend.Untag:input_type -> strims.chat.v1.UntagRequest
+	92,  // 112: strims.chat.v1.Chat.SendMessage:input_type -> strims.chat.v1.SendMessageRequest
+	94,  // 113: strims.chat.v1.Chat.Mute:input_type -> strims.chat.v1.MuteRequest
+	96,  // 114: strims.chat.v1.Chat.Unmute:input_type -> strims.chat.v1.UnmuteRequest
+	98,  // 115: strims.chat.v1.Chat.GetMute:input_type -> strims.chat.v1.GetMuteRequest
+	102, // 116: strims.chat.v1.Whisper.SendMessage:input_type -> strims.chat.v1.WhisperSendMessageRequest
+	19,  // 117: strims.chat.v1.ChatServerFrontend.CreateServer:output_type -> strims.chat.v1.CreateServerResponse
+	21,  // 118: strims.chat.v1.ChatServerFrontend.UpdateServer:output_type -> strims.chat.v1.UpdateServerResponse
+	23,  // 119: strims.chat.v1.ChatServerFrontend.DeleteServer:output_type -> strims.chat.v1.DeleteServerResponse
+	25,  // 120: strims.chat.v1.ChatServerFrontend.GetServer:output_type -> strims.chat.v1.GetServerResponse
+	27,  // 121: strims.chat.v1.ChatServerFrontend.ListServers:output_type -> strims.chat.v1.ListServersResponse
+	29,  // 122: strims.chat.v1.ChatServerFrontend.CreateEmote:output_type -> strims.chat.v1.CreateEmoteResponse
+	31,  // 123: strims.chat.v1.ChatServerFrontend.UpdateEmote:output_type -> strims.chat.v1.UpdateEmoteResponse
+	33,  // 124: strims.chat.v1.ChatServerFrontend.DeleteEmote:output_type -> strims.chat.v1.DeleteEmoteResponse
+	35,  // 125: strims.chat.v1.ChatServerFrontend.GetEmote:output_type -> strims.chat.v1.GetEmoteResponse
+	37,  // 126: strims.chat.v1.ChatServerFrontend.ListEmotes:output_type -> strims.chat.v1.ListEmotesResponse
+	39,  // 127: strims.chat.v1.ChatServerFrontend.CreateModifier:output_type -> strims.chat.v1.CreateModifierResponse
+	41,  // 128: strims.chat.v1.ChatServerFrontend.UpdateModifier:output_type -> strims.chat.v1.UpdateModifierResponse
+	43,  // 129: strims.chat.v1.ChatServerFrontend.DeleteModifier:output_type -> strims.chat.v1.DeleteModifierResponse
+	45,  // 130: strims.chat.v1.ChatServerFrontend.GetModifier:output_type -> strims.chat.v1.GetModifierResponse
+	47,  // 131: strims.chat.v1.ChatServerFrontend.ListModifiers:output_type -> strims.chat.v1.ListModifiersResponse
+	49,  // 132: strims.chat.v1.ChatServerFrontend.CreateTag:output_type -> strims.chat.v1.CreateTagResponse
+	51,  // 133: strims.chat.v1.ChatServerFrontend.UpdateTag:output_type -> strims.chat.v1.UpdateTagResponse
+	53,  // 134: strims.chat.v1.ChatServerFrontend.DeleteTag:output_type -> strims.chat.v1.DeleteTagResponse
+	55,  // 135: strims.chat.v1.ChatServerFrontend.GetTag:output_type -> strims.chat.v1.GetTagResponse
+	57,  // 136: strims.chat.v1.ChatServerFrontend.ListTags:output_type -> strims.chat.v1.ListTagsResponse
+	59,  // 137: strims.chat.v1.ChatServerFrontend.SyncAssets:output_type -> strims.chat.v1.SyncAssetsResponse
+	61,  // 138: strims.chat.v1.ChatFrontend.OpenClient:output_type -> strims.chat.v1.OpenClientResponse
+	63,  // 139: strims.chat.v1.ChatFrontend.ClientSendMessage:output_type -> strims.chat.v1.ClientSendMessageResponse
+	65,  // 140: strims.chat.v1.ChatFrontend.ClientMute:output_type -> strims.chat.v1.ClientMuteResponse
+	67,  // 141: strims.chat.v1.ChatFrontend.ClientUnmute:output_type -> strims.chat.v1.ClientUnmuteResponse
+	69,  // 142: strims.chat.v1.ChatFrontend.ClientGetMute:output_type -> strims.chat.v1.ClientGetMuteResponse
+	71,  // 143: strims.chat.v1.ChatFrontend.Whisper:output_type -> strims.chat.v1.WhisperResponse
+	73,  // 144: strims.chat.v1.ChatFrontend.ListWhispers:output_type -> strims.chat.v1.ListWhispersResponse
+	75,  // 145: strims.chat.v1.ChatFrontend.WatchWhispers:output_type -> strims.chat.v1.WatchWhispersResponse
+	77,  // 146: strims.chat.v1.ChatFrontend.SetUIConfig:output_type -> strims.chat.v1.SetUIConfigResponse
+	79,  // 147: strims.chat.v1.ChatFrontend.WatchUIConfig:output_type -> strims.chat.v1.WatchUIConfigResponse
+	81,  // 148: strims.chat.v1.ChatFrontend.Ignore:output_type -> strims.chat.v1.IgnoreResponse
+	83,  // 149: strims.chat.v1.ChatFrontend.Unignore:output_type -> strims.chat.v1.UnignoreResponse
+	85,  // 150: strims.chat.v1.ChatFrontend.Highlight:output_type -> strims.chat.v1.HighlightResponse
+	87,  // 151: strims.chat.v1.ChatFrontend.Unhighlight:output_type -> strims.chat.v1.UnhighlightResponse
+	89,  // 152: strims.chat.v1.ChatFrontend.Tag:output_type -> strims.chat.v1.TagResponse
+	91,  // 153: strims.chat.v1.ChatFrontend.Untag:output_type -> strims.chat.v1.UntagResponse
+	93,  // 154: strims.chat.v1.Chat.SendMessage:output_type -> strims.chat.v1.SendMessageResponse
+	95,  // 155: strims.chat.v1.Chat.Mute:output_type -> strims.chat.v1.MuteResponse
+	97,  // 156: strims.chat.v1.Chat.Unmute:output_type -> strims.chat.v1.UnmuteResponse
+	99,  // 157: strims.chat.v1.Chat.GetMute:output_type -> strims.chat.v1.GetMuteResponse
+	103, // 158: strims.chat.v1.Whisper.SendMessage:output_type -> strims.chat.v1.WhisperSendMessageResponse
+	117, // [117:159] is the sub-list for method output_type
+	75,  // [75:117] is the sub-list for method input_type
+	75,  // [75:75] is the sub-list for extension type_name
+	75,  // [75:75] is the sub-list for extension extendee
+	0,   // [0:75] is the sub-list for field type_name
 }
 
 func init() { file_chat_v1_chat_proto_init() }
@@ -9031,7 +9420,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[67].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetUIConfigRequest); i {
+			switch v := v.(*ListWhispersRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9043,7 +9432,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[68].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetUIConfigResponse); i {
+			switch v := v.(*ListWhispersResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9055,7 +9444,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[69].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WatchUIConfigRequest); i {
+			switch v := v.(*WatchWhispersRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9067,7 +9456,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[70].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WatchUIConfigResponse); i {
+			switch v := v.(*WatchWhispersResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9079,7 +9468,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[71].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*IgnoreRequest); i {
+			switch v := v.(*SetUIConfigRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9091,7 +9480,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[72].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*IgnoreResponse); i {
+			switch v := v.(*SetUIConfigResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9103,7 +9492,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[73].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnignoreRequest); i {
+			switch v := v.(*WatchUIConfigRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9115,7 +9504,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[74].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnignoreResponse); i {
+			switch v := v.(*WatchUIConfigResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9127,7 +9516,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[75].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HighlightRequest); i {
+			switch v := v.(*IgnoreRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9139,7 +9528,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[76].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*HighlightResponse); i {
+			switch v := v.(*IgnoreResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9151,7 +9540,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[77].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnhighlightRequest); i {
+			switch v := v.(*UnignoreRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9163,7 +9552,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[78].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnhighlightResponse); i {
+			switch v := v.(*UnignoreResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9175,7 +9564,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[79].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TagRequest); i {
+			switch v := v.(*HighlightRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9187,7 +9576,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[80].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TagResponse); i {
+			switch v := v.(*HighlightResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9199,7 +9588,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[81].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UntagRequest); i {
+			switch v := v.(*UnhighlightRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9211,7 +9600,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[82].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UntagResponse); i {
+			switch v := v.(*UnhighlightResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9223,7 +9612,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[83].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendMessageRequest); i {
+			switch v := v.(*TagRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9235,7 +9624,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[84].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SendMessageResponse); i {
+			switch v := v.(*TagResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9247,7 +9636,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[85].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MuteRequest); i {
+			switch v := v.(*UntagRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9259,7 +9648,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[86].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MuteResponse); i {
+			switch v := v.(*UntagResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9271,7 +9660,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[87].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnmuteRequest); i {
+			switch v := v.(*SendMessageRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9283,7 +9672,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[88].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UnmuteResponse); i {
+			switch v := v.(*SendMessageResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9295,7 +9684,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[89].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetMuteRequest); i {
+			switch v := v.(*MuteRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9307,7 +9696,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[90].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetMuteResponse); i {
+			switch v := v.(*MuteResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9319,7 +9708,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[91].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WhisperThread); i {
+			switch v := v.(*UnmuteRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9331,7 +9720,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[92].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WhisperRecord); i {
+			switch v := v.(*UnmuteResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9343,7 +9732,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[93].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WhisperSendMessageRequest); i {
+			switch v := v.(*GetMuteRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9355,7 +9744,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[94].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WhisperSendMessageResponse); i {
+			switch v := v.(*GetMuteResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9367,7 +9756,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[95].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EmoteEffect_CustomCSS); i {
+			switch v := v.(*WhisperThread); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9379,7 +9768,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[96].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EmoteEffect_SpriteAnimation); i {
+			switch v := v.(*WhisperRecord); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9391,7 +9780,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[97].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*EmoteEffect_DefaultModifiers); i {
+			switch v := v.(*WhisperSendMessageRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9403,7 +9792,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[98].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities); i {
+			switch v := v.(*WhisperSendMessageResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9415,7 +9804,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[99].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Bounds); i {
+			switch v := v.(*EmoteEffect_CustomCSS); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9427,7 +9816,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[100].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Link); i {
+			switch v := v.(*EmoteEffect_SpriteAnimation); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9439,7 +9828,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[101].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Emote); i {
+			switch v := v.(*EmoteEffect_DefaultModifiers); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9451,7 +9840,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[102].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Nick); i {
+			switch v := v.(*Message_Entities); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9463,7 +9852,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[103].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Tag); i {
+			switch v := v.(*Message_Entities_Bounds); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9475,7 +9864,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[104].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_CodeBlock); i {
+			switch v := v.(*Message_Entities_Link); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9487,7 +9876,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[105].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_Spoiler); i {
+			switch v := v.(*Message_Entities_Emote); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9499,7 +9888,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[106].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Message_Entities_GenericEntity); i {
+			switch v := v.(*Message_Entities_Nick); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9511,7 +9900,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[107].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Profile_Mute); i {
+			switch v := v.(*Message_Entities_Tag); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9523,7 +9912,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[108].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UIConfig_SoundFile); i {
+			switch v := v.(*Message_Entities_CodeBlock); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9535,7 +9924,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[109].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UIConfig_Highlight); i {
+			switch v := v.(*Message_Entities_Spoiler); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9547,7 +9936,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[110].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UIConfig_Tag); i {
+			switch v := v.(*Message_Entities_GenericEntity); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9559,7 +9948,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[111].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UIConfig_Ignore); i {
+			switch v := v.(*Profile_Mute); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9571,7 +9960,7 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[112].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*OpenClientResponse_Open); i {
+			switch v := v.(*UIConfig_SoundFile); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9583,7 +9972,67 @@ func file_chat_v1_chat_proto_init() {
 			}
 		}
 		file_chat_v1_chat_proto_msgTypes[113].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UIConfig_Highlight); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_chat_proto_msgTypes[114].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UIConfig_Tag); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_chat_proto_msgTypes[115].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UIConfig_Ignore); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_chat_proto_msgTypes[116].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*OpenClientResponse_Open); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_chat_proto_msgTypes[117].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*OpenClientResponse_ServerEvents); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_chat_proto_msgTypes[118].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WatchWhispersResponse_WhisperDelete); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -9608,13 +10057,18 @@ func file_chat_v1_chat_proto_init() {
 		(*OpenClientResponse_ServerEvents_)(nil),
 		(*OpenClientResponse_AssetBundle)(nil),
 	}
+	file_chat_v1_chat_proto_msgTypes[70].OneofWrappers = []interface{}{
+		(*WatchWhispersResponse_ThreadUpdate)(nil),
+		(*WatchWhispersResponse_WhisperUpdate)(nil),
+		(*WatchWhispersResponse_WhisperDelete_)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_chat_v1_chat_proto_rawDesc,
 			NumEnums:      5,
-			NumMessages:   114,
+			NumMessages:   119,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

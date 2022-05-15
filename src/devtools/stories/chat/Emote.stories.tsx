@@ -21,7 +21,6 @@ import {
   ChatConsumer,
   Provider as ChatProvider,
   RoomConsumer,
-  RoomProvider,
   useChat,
   useRoom,
 } from "../../../contexts/Chat";
@@ -30,6 +29,7 @@ import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
 import { toEmoteProps } from "../../../pages/Settings/Chat/utils";
+import { RoomProvider } from "../../contexts/Chat";
 import { emoteNames, modifierNames } from "../../mocks/chat/assetBundle";
 import imgBrick from "../../mocks/chat/emotes/static/Brick.png";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";

@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
@@ -182,7 +183,7 @@ var ChatWhisperRecords = NewTable(
 var GetChatWhisperRecordsByPeerKey = SecondaryIndex(
 	chatWhisperRecordPeerKeyNS,
 	ChatWhisperRecords,
-	func(m *chatv1.WhisperRecord) []byte { return m.Message.PeerKey },
+	(*chatv1.WhisperRecord).GetPeerKey,
 )
 
 func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
@@ -333,9 +334,9 @@ func NewChatWhisperRecord(
 	g IDGenerator,
 	networkKey []byte,
 	serverKey []byte,
-	peerCert *certificate.Certificate,
+	peerKey []byte,
+	cert *certificate.Certificate,
 	body string,
-	received bool,
 ) (*chatv1.WhisperRecord, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -343,21 +344,22 @@ func NewChatWhisperRecord(
 	}
 
 	state := chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED
-	if received {
+	if bytes.Equal(peerKey, cert.Key) {
 		state = chatv1.WhisperRecord_WHISPER_STATE_RECEIVED
 	}
 
-	v := &chatv1.WhisperRecord{
+	return &chatv1.WhisperRecord{
 		Id:         id,
 		NetworkKey: networkKey,
 		ServerKey:  serverKey,
+		PeerKey:    peerKey,
 		State:      state,
 		Message: &chatv1.Message{
 			ServerTime: timeutil.Now().UnixNano() / int64(timeutil.Precision),
-			PeerKey:    peerCert.Key,
-			Nick:       peerCert.Subject,
+			PeerKey:    cert.Key,
+			Nick:       cert.Subject,
 			Body:       body,
+			Entities:   &chatv1.Message_Entities{},
 		},
-	}
-	return v, nil
+	}, nil
 }

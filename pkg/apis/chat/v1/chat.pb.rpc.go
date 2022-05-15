@@ -478,6 +478,8 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientUnmute", service.ClientUnmute)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientGetMute", service.ClientGetMute)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Whisper", service.Whisper)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListWhispers", service.ListWhispers)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchWhispers", service.WatchWhispers)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchUIConfig", service.WatchUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Ignore", service.Ignore)
@@ -514,6 +516,14 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *WhisperRequest,
 	) (*WhisperResponse, error)
+	ListWhispers(
+		ctx context.Context,
+		req *ListWhispersRequest,
+	) (*ListWhispersResponse, error)
+	WatchWhispers(
+		ctx context.Context,
+		req *WatchWhispersRequest,
+	) (<-chan *WatchWhispersResponse, error)
 	SetUIConfig(
 		ctx context.Context,
 		req *SetUIConfigRequest,
@@ -590,6 +600,20 @@ func (s *UnimplementedChatFrontendService) Whisper(
 	ctx context.Context,
 	req *WhisperRequest,
 ) (*WhisperResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) ListWhispers(
+	ctx context.Context,
+	req *ListWhispersRequest,
+) (*ListWhispersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) WatchWhispers(
+	ctx context.Context,
+	req *WatchWhispersRequest,
+) (<-chan *WatchWhispersResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -713,6 +737,24 @@ func (c *ChatFrontendClient) Whisper(
 	res *WhisperResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Whisper", req, res)
+}
+
+// ListWhispers ...
+func (c *ChatFrontendClient) ListWhispers(
+	ctx context.Context,
+	req *ListWhispersRequest,
+	res *ListWhispersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListWhispers", req, res)
+}
+
+// WatchWhispers ...
+func (c *ChatFrontendClient) WatchWhispers(
+	ctx context.Context,
+	req *WatchWhispersRequest,
+	res chan *WatchWhispersResponse,
+) error {
+	return c.client.CallStreaming(ctx, "strims.chat.v1.ChatFrontend.WatchWhispers", req, res)
 }
 
 // SetUIConfig ...

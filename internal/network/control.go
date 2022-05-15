@@ -76,6 +76,7 @@ var _ CA = (*ca.CA)(nil)
 type CA interface {
 	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 	FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error)
+	FindByKey(ctx context.Context, networkKey []byte, key []byte) (*certificate.Certificate, error)
 }
 
 var _ Dialer = (*dialer.Dialer)(nil)

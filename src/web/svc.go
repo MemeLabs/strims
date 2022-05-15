@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/frontend"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/session"
@@ -82,6 +83,7 @@ func newLogger(bridge js.Value) *zap.Logger {
 
 func initDefault(bridge js.Value, bus wasmio.Bus) {
 	logger := newLogger(bridge)
+	dao.Logger = logger
 
 	store := wasmio.NewKVStore(bridge)
 
@@ -118,6 +120,7 @@ func initDefault(bridge js.Value, bus wasmio.Bus) {
 
 func initBroker(bridge js.Value, bus wasmio.Bus) {
 	logger := newLogger(bridge)
+	dao.Logger = logger
 
 	server := rpc.NewServer(logger, &rpc.RWDialer{
 		Logger:     logger,

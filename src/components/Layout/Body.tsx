@@ -8,6 +8,7 @@ import { useLayout } from "../../contexts/Layout";
 import LoadingPlaceholder from "../LoadingPlaceholder";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 import Chat from "./Chat";
+import ChatBar from "./ChatBar";
 import Player from "./Player";
 
 export const LayoutBody: React.FC = ({ children }) => {
@@ -48,6 +49,7 @@ export const LayoutBody: React.FC = ({ children }) => {
           direction="left"
           open={open}
           onDragStateChange={handleDragStateChange}
+          preventScroll={true}
         >
           {showVideo && (
             <div className="layout__video">
@@ -58,6 +60,9 @@ export const LayoutBody: React.FC = ({ children }) => {
             <Chat />
           </div>
         </SwipablePanel>
+        {/* <div className="layout__chat_bar">
+          <ChatBar />
+        </div> */}
       </main>
     </>
   );

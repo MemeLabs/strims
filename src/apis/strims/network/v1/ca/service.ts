@@ -138,27 +138,33 @@ export class CARenewResponse {
 }
 
 export type ICAFindRequest = {
-  subject?: string;
-  serialNumber?: Uint8Array;
   fullChain?: boolean;
+  query?: CAFindRequest.IQuery
 }
 
 export class CAFindRequest {
-  subject: string;
-  serialNumber: Uint8Array;
   fullChain: boolean;
+  query: CAFindRequest.TQuery;
 
   constructor(v?: ICAFindRequest) {
-    this.subject = v?.subject || "";
-    this.serialNumber = v?.serialNumber || new Uint8Array();
     this.fullChain = v?.fullChain || false;
+    this.query = new CAFindRequest.Query(v?.query);
   }
 
   static encode(m: CAFindRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.subject.length) w.uint32(10).string(m.subject);
-    if (m.serialNumber.length) w.uint32(18).bytes(m.serialNumber);
-    if (m.fullChain) w.uint32(24).bool(m.fullChain);
+    if (m.fullChain) w.uint32(32).bool(m.fullChain);
+    switch (m.query.case) {
+      case CAFindRequest.QueryCase.SUBJECT:
+      w.uint32(8010).string(m.query.subject);
+      break;
+      case CAFindRequest.QueryCase.SERIAL_NUMBER:
+      w.uint32(8018).bytes(m.query.serialNumber);
+      break;
+      case CAFindRequest.QueryCase.KEY:
+      w.uint32(8026).bytes(m.query.key);
+      break;
+    }
     return w;
   }
 
@@ -169,13 +175,16 @@ export class CAFindRequest {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 1:
-        m.subject = r.string();
+        case 1001:
+        m.query = new CAFindRequest.Query({ subject: r.string() });
         break;
-        case 2:
-        m.serialNumber = r.bytes();
+        case 1002:
+        m.query = new CAFindRequest.Query({ serialNumber: r.bytes() });
         break;
-        case 3:
+        case 1003:
+        m.query = new CAFindRequest.Query({ key: r.bytes() });
+        break;
+        case 4:
         m.fullChain = r.bool();
         break;
         default:
@@ -185,6 +194,62 @@ export class CAFindRequest {
     }
     return m;
   }
+}
+
+export namespace CAFindRequest {
+  export enum QueryCase {
+    NOT_SET = 0,
+    SUBJECT = 1001,
+    SERIAL_NUMBER = 1002,
+    KEY = 1003,
+  }
+
+  export type IQuery =
+  { case?: QueryCase.NOT_SET }
+  |{ case?: QueryCase.SUBJECT, subject: string }
+  |{ case?: QueryCase.SERIAL_NUMBER, serialNumber: Uint8Array }
+  |{ case?: QueryCase.KEY, key: Uint8Array }
+  ;
+
+  export type TQuery = Readonly<
+  { case: QueryCase.NOT_SET }
+  |{ case: QueryCase.SUBJECT, subject: string }
+  |{ case: QueryCase.SERIAL_NUMBER, serialNumber: Uint8Array }
+  |{ case: QueryCase.KEY, key: Uint8Array }
+  >;
+
+  class QueryImpl {
+    subject: string;
+    serialNumber: Uint8Array;
+    key: Uint8Array;
+    case: QueryCase = QueryCase.NOT_SET;
+
+    constructor(v?: IQuery) {
+      if (v && "subject" in v) {
+        this.case = QueryCase.SUBJECT;
+        this.subject = v.subject;
+      } else
+      if (v && "serialNumber" in v) {
+        this.case = QueryCase.SERIAL_NUMBER;
+        this.serialNumber = v.serialNumber;
+      } else
+      if (v && "key" in v) {
+        this.case = QueryCase.KEY;
+        this.key = v.key;
+      }
+    }
+  }
+
+  export const Query = QueryImpl as {
+    new (): Readonly<{ case: QueryCase.NOT_SET }>;
+    new <T extends IQuery>(v: T): Readonly<
+    T extends { subject: string } ? { case: QueryCase.SUBJECT, subject: string } :
+    T extends { serialNumber: Uint8Array } ? { case: QueryCase.SERIAL_NUMBER, serialNumber: Uint8Array } :
+    T extends { key: Uint8Array } ? { case: QueryCase.KEY, key: Uint8Array } :
+    never
+    >;
+  };
+
 }
 
 export type ICAFindResponse = {

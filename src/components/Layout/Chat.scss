@@ -11,30 +11,75 @@
     flex-direction: column;
   }
 
-  &__toggle_on,
-  &__toggle_off {
+  &__toggle {
     margin: 7px;
     display: block;
     cursor: pointer;
+    border-radius: 3px;
 
     svg {
-      border-radius: 3px;
       display: block;
       padding: 10px;
     }
+
+    &:hover {
+      background: var(--color-background-chat-toggle-hover);
+    }
   }
 
-  &__toggle_on {
+  &__toggle--on {
     display: none;
   }
 
-  &__toggle_off:hover svg {
-    background: var(--color-background-chat-toggle-hover);
-  }
-
   &__header {
+    height: 52px;
+    border-bottom: 1px solid var(--color-opac-w-2);
     display: flex;
     flex-direction: row;
+    font-size: 1rem;
+  }
+
+  &__foo {
+    position: absolute;
+    box-shadow: var(--shadow-elevation-2);
+    background: var(--color-background-layout-chat-menu);
+    height: calc(100% + env(safe-area-inset-bottom));
+    width: calc(100% - 10px);
+    z-index: var(--z-index-above);
+    right: 0;
+    --swipable-peek-size: 0px;
+  }
+}
+
+.layout--tv,
+.layout--pc {
+  .layout_chat__room_carousel {
+    width: calc(var(--layout-chat-width) - 96px);
+  }
+}
+
+.layout--portable {
+  .layout_chat {
+    &__room_carousel {
+      width: calc(var(--layout-width) - 48px);
+    }
+  }
+
+  &.layout--min_aspect_ratio_2 {
+    .layout_chat__header {
+      margin-left: calc(-1 * env(safe-area-inset-left));
+    }
+
+    .layout_chat__room_carousel {
+      width: calc(var(--layout-width) - 96px);
+      margin-left: 48px;
+    }
+  }
+
+  &.layout--min_aspect_ratio_1_2.layout--show_video {
+    .layout_chat__room_carousel {
+      width: calc(var(--layout-chat-width) - 48px);
+    }
   }
 }
 
@@ -42,7 +87,7 @@
 .layout--pc {
   .layout_chat--closed {
     .layout_chat {
-      &__toggle_on {
+      &__toggle--on {
         display: block;
         position: absolute;
         left: -50px;
@@ -56,26 +101,26 @@
     }
   }
 
-  .layout_chat__toggle_off {
+  .layout_chat__toggle--off {
     transform: rotate(180deg);
   }
 
-  &.layout--meme_open .layout_chat__toggle_off {
+  &.layout--meme_open .layout_chat__toggle--off {
     transform: rotate(-90deg);
   }
 
   &.layout--min_aspect_ratio_1_2 {
-    .layout_chat__toggle_off {
+    .layout_chat__toggle--off {
       transform: scaleX(-1);
     }
 
     &.layout--swap {
       .layout_chat {
-        &__toggle_off {
+        &__toggle--off {
           transform: unset;
         }
 
-        &__toggle_on {
+        &__toggle--on {
           left: 0px;
           transform: scaleX(-1);
         }
@@ -86,41 +131,5 @@
   .layout_chat__header {
     border-bottom: 1px solid var(--color-opac-w-2);
     padding-right: 10px;
-  }
-}
-
-.layout--portable {
-  .layout_chat {
-    &__header {
-      position: absolute;
-      width: 100%;
-      height: calc(100% + env(safe-area-inset-bottom));
-      z-index: var(--z-index-above);
-      transition: height var(--timing-medium) step-end;
-      user-select: none;
-      overflow: hidden;
-      pointer-events: none;
-
-      &__room_list_button {
-        position: absolute;
-        right: 0;
-        padding: 10px;
-        z-index: 1;
-        pointer-events: visible;
-      }
-
-      &__room_list {
-        pointer-events: visible;
-        background: var(--color-background-chat);
-        transform: translateY(-100%);
-        transition: transform var(--timing-medium) ease-in-out;
-      }
-
-      &--open {
-        .layout_chat__header__room_list {
-          transform: translateY(0);
-        }
-      }
-    }
   }
 }

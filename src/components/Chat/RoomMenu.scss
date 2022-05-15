@@ -7,7 +7,7 @@
     flex: 1;
     display: flex;
     flex-direction: row;
-    padding: 0 10px;
+    padding: 0 0.6rem;
   }
 
   &__text {
@@ -41,7 +41,7 @@
   &__item {
     background: var(--body-foreground);
     text-align: left;
-    padding: 10px;
+    padding: 0.6rem;
     border-top: 1px solid var(--color-opac-w-1);
     cursor: pointer;
 
@@ -70,4 +70,156 @@
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-elevation-2);
+}
+
+.room_meme {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  &__tab_bar {
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid var(--color-border-chat-tab);
+    margin: 0.6rem 0.6rem 0.2rem;
+    user-select: none;
+  }
+
+  &__tab {
+    display: block;
+    margin: 0 0.1rem 0.4rem;
+    padding: 0.4rem 0.6rem;
+    cursor: pointer;
+    position: relative;
+    color: var(--color-text-chat-tab);
+    border-radius: var(--border-radius-medium);
+
+    &:hover,
+    &--active {
+      background-color: var(--color-opac-w-1);
+    }
+  }
+
+  &__content {
+    flex: 1;
+    width: 100%;
+    min-height: 1;
+  }
+
+  &__item {
+    padding: 0.6rem;
+    background: green;
+    margin: 0.6rem;
+  }
+}
+
+.rooms_list {
+  display: flex;
+  flex-direction: column;
+
+  &__content {
+    width: calc(100% - 2rem);
+    margin: 0 1rem env(safe-area-inset-bottom);
+  }
+
+  &__network {
+    display: flex;
+    flex-direction: row;
+  }
+
+  &__network_name {
+    flex: 40 0 0;
+    color: var(--color-grey-8);
+    padding-top: 0.6rem;
+  }
+
+  &__network_rooms {
+    flex: 60 0 0;
+    color: var(--color-grey-12);
+  }
+
+  &__network_rooms_item {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    cursor: pointer;
+    color: var(--color-grey-10);
+    padding-top: 0.6rem;
+
+    &:hover {
+      color: var(--color-grey-14);
+
+      .rooms_list__network_rooms_item__viewers {
+        color: var(--color-grey-8);
+      }
+    }
+
+    &__name,
+    &__viewers {
+      display: block;
+    }
+
+    &__viewers {
+      display: flex;
+      align-items: center;
+      color: var(--color-grey-6);
+      margin-left: 0.4rem;
+      font-size: 0.9rem;
+    }
+  }
+}
+
+.whispers_list {
+  &__table {
+    width: calc(100% - 2rem);
+    margin: 0 1rem env(safe-area-inset-bottom);
+    border-collapse: collapse;
+  }
+
+  &__row {
+    border-radius: var(--border-radius-medium);
+    cursor: pointer;
+    color: var(--color-grey-10);
+
+    td {
+      padding-top: 0.6rem;
+    }
+
+    &:hover {
+      color: var(--color-grey-14);
+
+      .whispers_list__unread {
+        color: var(--color-grey-8);
+      }
+    }
+  }
+
+  &__unread {
+    display: inline-block;
+    color: var(--color-grey-6);
+    margin-left: 0.4rem;
+    font-size: 0.9rem;
+  }
+
+  &__time {
+    text-align: right;
+  }
+}
+
+.user_list {
+  &__content {
+    width: calc(100% - 2rem);
+    margin: 0 1rem env(safe-area-inset-bottom);
+  }
+
+  &__item {
+    display: block;
+    padding-top: 0.6rem;
+    cursor: pointer;
+    color: var(--color-grey-10);
+
+    &:hover {
+      color: var(--color-grey-14);
+    }
+  }
 }

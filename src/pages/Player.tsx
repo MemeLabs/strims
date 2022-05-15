@@ -5,16 +5,16 @@ import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
 
-interface PlayerTestQueryParams {
+interface PlayerQueryParams {
   swarmUri: string;
   mimeType: string;
   listingId: string;
 }
 
-const PlayerTest: React.FC = () => {
+const Player: React.FC = () => {
   const params = useParams<"networkKey">();
   const location = useLocation();
-  const query = useQuery<PlayerTestQueryParams>(location.search);
+  const query = useQuery<PlayerQueryParams>(location.search);
   const { toggleShowVideo, toggleOverlayOpen } = useLayout();
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
@@ -42,4 +42,4 @@ const PlayerTest: React.FC = () => {
   return <div style={{ height: "1000px" }} />;
 };
 
-export default PlayerTest;
+export default Player;

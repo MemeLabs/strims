@@ -22,8 +22,13 @@ func syncTime(t int) {
 	timeutil.SyncNow(int64(t * 1000000))
 }
 
+//go:noescape
 func channelWrite(cid int, src []byte) (int, bool)
+
+//go:noescape
 func channelRead(cid int, dst []byte) (int, bool)
+
+//go:noescape
 func channelClose(cid int) bool
 
 func interfacesFromStrings(ss []string) []any {

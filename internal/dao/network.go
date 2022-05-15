@@ -233,14 +233,14 @@ var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCert
 	&ManyToOneOptions{CascadeDelete: true},
 )
 
-func FormatCertificateLogsSerialNumberKey(networkID uint64, serialNumber []byte) []byte {
+func FormatCertificateLogSerialNumberKey(networkID uint64, serialNumber []byte) []byte {
 	b := make([]byte, 8, 8+len(serialNumber))
 	binary.BigEndian.PutUint64(b, networkID)
 	return append(b, serialNumber...)
 }
 
 func certificateLogSerialNumberKey(m *networkv1ca.CertificateLog) []byte {
-	return FormatCertificateLogsSerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
+	return FormatCertificateLogSerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
 }
 
 var GetCertificateLogBySerialNumber = UniqueIndex(
@@ -266,6 +266,30 @@ var GetCertificateLogBySubject = UniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
 	certificateLogSubjectKey,
+	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
+		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
+			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
+				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
+			}
+			return ErrCertificateSubjectInUse
+		},
+	},
+)
+
+func FormatCertificateLogKeyKey(networkID uint64, key []byte) []byte {
+	b := make([]byte, 8, 8+len([]byte(key)))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, []byte(key)...)
+}
+
+func certificateLogKeyKey(m *networkv1ca.CertificateLog) []byte {
+	return FormatCertificateLogKeyKey(m.NetworkId, m.Certificate.Key)
+}
+
+var GetCertificateLogByKey = UniqueIndex(
+	networkCertificateLogSubjectNS,
+	CertificateLogs,
+	certificateLogKeyKey,
 	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
 			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
@@ -311,6 +335,12 @@ func NewCertificateLogCache(s kv.RWStore, opt *CacheStoreOptions) (c Certificate
 		certificateLogSubjectKey,
 		hashmap.NewByteInterface[[]byte],
 	)
+	c.ByKey = NewCacheIndex(
+		c.CacheStore,
+		GetCertificateLogByKey,
+		certificateLogKeyKey,
+		hashmap.NewByteInterface[[]byte],
+	)
 	return
 }
 
@@ -319,6 +349,7 @@ type CertificateLogCache struct {
 	ByID           CacheAccessor[uint64, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
 	BySerialNumber CacheAccessor[[]byte, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
 	BySubject      CacheAccessor[[]byte, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
+	ByKey          CacheAccessor[[]byte, networkv1ca.CertificateLog, *networkv1ca.CertificateLog]
 }
 
 // NetworkKey ...

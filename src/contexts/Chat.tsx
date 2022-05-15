@@ -1,8 +1,8 @@
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
-import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
-import { useEffect } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { FrontendClient } from "../apis/client";
 import {
   AssetBundle,
   Emote,
@@ -15,8 +15,11 @@ import {
   ServerEvent,
   Tag,
   UIConfig,
+  WatchWhispersResponse,
+  WhisperRecord,
+  WhisperThread,
 } from "../apis/strims/chat/v1/chat";
-import useReady from "../hooks/useReady";
+import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import {
   DirectoryListing,
@@ -25,39 +28,6 @@ import {
   useDirectoryListing,
 } from "./Directory";
 import { useClient } from "./FrontendApi";
-
-type RoomAction =
-  | {
-      type: "INIT";
-      serverEvents: Readable<OpenClientResponse>;
-      networkKey: Uint8Array;
-      serverKey: Uint8Array;
-    }
-  | {
-      type: "TOGGLE_MESSAGE_GC";
-      state: boolean;
-    }
-  | {
-      type: "SYNC_USERS";
-      nicks: string[];
-      users: Map<string, UserMeta>;
-    }
-  | {
-      type: "CLIENT_DATA";
-      data: OpenClientResponse;
-    }
-  | {
-      type: "CLIENT_ERROR";
-      error: Error;
-    }
-  | {
-      type: "CLIENT_CLOSE";
-    };
-
-type Action = {
-  type: "SET_UI_CONFIG";
-  uiConfig: UIConfig;
-};
 
 export interface Style {
   name: string;
@@ -83,12 +53,13 @@ const enum RoomInitState {
   CLOSED,
 }
 
-export interface RoomState {
-  serverEvents: Readable<OpenClientResponse>;
-  networkKey: Uint8Array;
-  serverKey: Uint8Array;
+export const enum TabGroup {
+  MAIN,
+  BREAKOUT,
+}
+
+export interface ThreadState {
   id: number;
-  clientId?: bigint;
   messages: Message[];
   messageGCEnabled: boolean;
   messageSizeCache: ChatCellMeasurerCache;
@@ -102,24 +73,37 @@ export interface RoomState {
   users: Map<string, UserMeta>;
   errors: Error[];
   state: RoomInitState;
+  tab: TabGroup;
+}
+
+export interface WhisperThreadState extends ThreadState {
+  networkKeys: Uint8Array[];
+  peerKey: Uint8Array;
+  thread: WhisperThread;
+}
+
+export interface RoomThreadState extends ThreadState {
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
+  serverEvents?: Readable<OpenClientResponse>;
+  room: Room;
 }
 
 export interface State {
+  nextId: number;
   uiConfig: UIConfig;
   config: {
     messageGCThreshold: number;
   };
-  rooms: {
-    [key: string]: RoomState;
-  };
+  rooms: Map<string, RoomThreadState>;
+  whispers: Map<string, WhisperThreadState>;
+  whisperThreads: Map<string, WhisperThread>;
 }
 
 type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
+type ThreadStateDispatcher<T extends ThreadState> = (action: (room: T, state: State) => T) => void;
 
-const initialRoomState: RoomState = {
-  serverEvents: null,
-  networkKey: null,
-  serverKey: null,
+const initialRoomState: ThreadState = {
   id: 0,
   messages: [],
   messageGCEnabled: true,
@@ -138,25 +122,11 @@ const initialRoomState: RoomState = {
   users: new Map(),
   errors: [],
   state: RoomInitState.NEW,
+  tab: TabGroup.MAIN,
 };
 
-let nextId = 0;
-const initializeRoomState = (
-  state: RoomState,
-  serverEvents: Readable<OpenClientResponse>,
-  networkKey: Uint8Array,
-  serverKey: Uint8Array
-): RoomState => ({
-  ...state,
-  serverEvents,
-  networkKey,
-  serverKey,
-  id: nextId++,
-  messageSizeCache: new ChatCellMeasurerCache(),
-  state: RoomInitState.INITIALIZED,
-});
-
 const initialState: State = {
+  nextId: 1,
   uiConfig: new UIConfig({
     showTime: false,
     showFlairIcons: true,
@@ -190,11 +160,15 @@ const initialState: State = {
   config: {
     messageGCThreshold: 250,
   },
-  rooms: {},
+  rooms: new Map(),
+  whispers: new Map(),
+  whisperThreads: new Map(),
 };
 
 type ChatActions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
+  openRoom: (serverKey: Uint8Array, networkKey: Uint8Array) => void;
+  openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[]) => void;
 };
 
 const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
@@ -206,97 +180,9 @@ type RoomActions = {
   toggleMessageGC: (state: boolean) => void;
 };
 
-const RoomContext = React.createContext<[RoomState, RoomActions]>(null);
+const RoomContext = React.createContext<[ThreadState, RoomActions]>(null);
 
-const useStateReducer = (setState: StateDispatcher) => (action: Action) =>
-  setState((state) => stateReducer(state, action));
-
-const useRoomStateReducer = (setState: StateDispatcher, key: string) => (action: RoomAction) =>
-  setState((state) => ({
-    ...state,
-    rooms: {
-      ...state.rooms,
-      [key]: roomReducer(state, state.rooms[key] ?? initialRoomState, action),
-    },
-  }));
-
-const stateReducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case "SET_UI_CONFIG":
-      return {
-        ...state,
-        uiConfig: action.uiConfig,
-      };
-    default:
-      return state;
-  }
-};
-
-const roomReducer = (state: State, room: RoomState, action: RoomAction): RoomState => {
-  switch (action.type) {
-    case "INIT":
-      return initializeRoomState(room, action.serverEvents, action.networkKey, action.serverKey);
-    case "CLIENT_DATA":
-      return serverEventsDataReducer(state, room, action.data);
-    case "CLIENT_ERROR":
-      return {
-        ...room,
-        errors: [...room.errors, action.error],
-      };
-    case "CLIENT_CLOSE":
-      return {
-        ...room,
-        state: RoomInitState.CLOSED,
-      };
-    case "TOGGLE_MESSAGE_GC":
-      return {
-        ...room,
-        messageGCEnabled: action.state,
-      };
-    case "SYNC_USERS":
-      return {
-        ...room,
-        nicks: action.nicks,
-        users: action.users,
-      };
-    default:
-      return room;
-  }
-};
-
-const serverEventsDataReducer = (
-  state: State,
-  room: RoomState,
-  event: OpenClientResponse
-): RoomState => {
-  switch (event.body.case) {
-    case OpenClientResponse.BodyCase.OPEN:
-      return {
-        ...room,
-        state: RoomInitState.OPEN,
-      };
-    case OpenClientResponse.BodyCase.SERVER_EVENTS:
-      return serverEventsReducer(state, room, event.body.serverEvents.events);
-    case OpenClientResponse.BodyCase.ASSET_BUNDLE:
-      return assetBundleReducer(room, event.body.assetBundle);
-    default:
-      return room;
-  }
-};
-
-const serverEventsReducer = (state: State, room: RoomState, events: ServerEvent[]): RoomState => {
-  for (const event of events) {
-    switch (event.body.case) {
-      case ServerEvent.BodyCase.MESSAGE:
-        room = messageReducer(state, room, event.body.message);
-        break;
-    }
-  }
-
-  return room;
-};
-
-const messageReducer = (state: State, room: RoomState, message: Message): RoomState => {
+const reduceMessage = <T extends ThreadState>(room: T, state: State, message: Message): T => {
   const messages = [...room.messages];
   if (
     messages.length !== 0 &&
@@ -321,92 +207,429 @@ const messageReducer = (state: State, room: RoomState, message: Message): RoomSt
   };
 };
 
-const toNames = (vs: { name: string }[]): string[] => vs.map(({ name }) => name).sort();
+const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) => {
+  const openRoom = (serverKey: Uint8Array, networkKey: Uint8Array) =>
+    setState((state) => {
+      const key = Base64.fromUint8Array(serverKey, true);
+      if (state.rooms.has(key)) {
+        return state;
+      }
 
-const assetBundleReducer = (state: RoomState, bundle: AssetBundle): RoomState => {
-  state.messageSizeCache.clearAll();
+      const roomActions = createRoomActions(client, setState, serverKey);
 
-  const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
-  const liveEmoteMap = new Map<bigint, Emote>();
-  const liveModifierMap = new Map<bigint, Modifier>();
-  const liveTagMap = new Map<bigint, Tag>();
-  let room: Room;
-  for (const b of assetBundles) {
-    for (const id of b.removedIds) {
-      liveEmoteMap.delete(id);
-      liveModifierMap.delete(id);
-      liveTagMap.delete(id);
-    }
-    b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
-    b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
-    b.tags.forEach((e) => liveTagMap.set(e.id, e));
-    room = b.room ?? room;
-  }
-  const liveEmotes = Array.from(liveEmoteMap.values());
-  const emoteStyles = new Map(
-    liveEmotes.map(({ id, name, effects }) => {
-      const style: Style = {
-        name: `e_${name}_${state.id}_${id}`,
-        animated: false,
-        modifiers: [],
+      const serverEvents = client.chat.openClient({ networkKey, serverKey });
+      serverEvents.on("data", roomActions.handleClientData);
+      serverEvents.on("error", roomActions.handleClientError);
+      serverEvents.on("close", roomActions.handleClientClose);
+
+      return {
+        ...state,
+        nextId: state.nextId + 1,
+        rooms: new Map(state.rooms).set(key, {
+          ...initialRoomState,
+          id: state.nextId,
+          messageSizeCache: new ChatCellMeasurerCache(),
+          networkKey,
+          serverKey,
+          serverEvents,
+          room: new Room(),
+        }),
       };
-      effects.forEach((e) => {
-        switch (e.effect.case) {
-          case EmoteEffect.EffectCase.SPRITE_ANIMATION:
-            style.animated = true;
-            break;
-          case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
-            style.modifiers = e.effect.defaultModifiers.modifiers;
-            break;
-        }
-      });
-      return [name, style];
-    })
-  );
-  const liveModifiers = Array.from(liveModifierMap.values());
-  const liveTags = Array.from(liveTagMap.values());
+    });
+
+  const openWhispers = (peerKey: Uint8Array, networkKeys: Uint8Array[]) =>
+    setState((state) => {
+      const key = Base64.fromUint8Array(peerKey, true);
+      if (state.whispers.has(key)) {
+        return state;
+      }
+
+      const whisperActions = createWhisperActions(client, setState, peerKey);
+
+      client.chat
+        .listWhispers({ peerKey })
+        .then(({ thread, whispers }) => whisperActions.setWhisperMessages(thread, whispers))
+        .catch((error: Error) => whisperActions.handleWhisperError(error));
+
+      return {
+        ...state,
+        nextId: state.nextId + 1,
+        whispers: new Map(state.whispers).set(key, {
+          ...initialRoomState,
+          id: state.nextId,
+          messageSizeCache: new ChatCellMeasurerCache(),
+          peerKey: peerKey,
+          networkKeys: networkKeys,
+          thread: new WhisperThread(),
+        }),
+      };
+    });
+
+  const setUiConfig = (uiConfig: UIConfig) =>
+    setState((state) => ({
+      ...state,
+      uiConfig,
+    }));
+
+  const reduceWhisperEvent = (
+    state: State,
+    thread: WhisperThreadState,
+    res: WatchWhispersResponse
+  ): WhisperThreadState => {
+    switch (res.body.case) {
+      case WatchWhispersResponse.BodyCase.THREAD_UPDATE:
+        return {
+          ...thread,
+          thread: res.body.threadUpdate,
+        };
+      case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
+        return reduceMessage(thread, state, res.body.whisperUpdate.message);
+      case WatchWhispersResponse.BodyCase.WHISPER_DELETE:
+      // TODO fallthrough
+      default:
+        return thread;
+    }
+  };
+
+  const handleWhisperEvent = (res: WatchWhispersResponse) =>
+    setState((state) => {
+      const key = Base64.fromUint8Array(res.peerKey, true);
+
+      if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_UPDATE) {
+        state = {
+          ...state,
+          whisperThreads: new Map(state.whisperThreads).set(key, res.body.threadUpdate),
+        };
+      }
+
+      if (!state.whispers.has(key)) {
+        return state;
+      }
+      return {
+        ...state,
+        whispers: new Map(state.whispers).set(
+          key,
+          reduceWhisperEvent(state, state.whispers.get(key), res)
+        ),
+      };
+    });
 
   return {
-    ...state,
-    assetBundles,
-    liveEmotes,
-    styles: {
-      emotes: emoteStyles,
-      modifiers: new Map(liveModifiers.map((m) => [m.name, m])),
-      tags: liveTags,
-    },
-    emotes: toNames(liveEmotes),
-    modifiers: toNames(liveModifiers.filter(({ internal }) => !internal)),
-    tags: toNames(liveTags),
+    openRoom,
+    openWhispers,
+    setUiConfig,
+    handleWhisperEvent,
+  };
+};
+
+const createWhisperActions = (
+  client: FrontendClient,
+  setState: StateDispatcher,
+  peerKey: Uint8Array
+) => {
+  const key = Base64.fromUint8Array(peerKey, true);
+  const setWhisperState: ThreadStateDispatcher<WhisperThreadState> = (action) =>
+    setState((state) => ({
+      ...state,
+      whispers: new Map(state.whispers).set(key, action(state.whispers.get(key), state)),
+    }));
+
+  const setWhisperMessages = (thread: WhisperThread, whispers: WhisperRecord[]) =>
+    setWhisperState((whisper) => ({
+      ...whisper,
+      thread,
+      messages: whispers.map(({ message }) => message),
+    }));
+
+  const handleWhisperError = (error: Error) =>
+    setWhisperState((whisper) => ({
+      ...whisper,
+      errors: [...whisper.errors, error],
+    }));
+
+  const sendMessage = (body: string) =>
+    setWhisperState((whisper) => {
+      const { networkKeys } = whisper;
+
+      client.chat
+        .whisper({
+          networkKey: networkKeys[0],
+          peerKey,
+          body,
+        })
+        .then((res) => console.log("send message res", res))
+        .catch((err) => console.log("send message err", err));
+
+      return whisper;
+    });
+
+  return {
+    ...createThreadActions(setWhisperState),
+    setWhisperMessages,
+    handleWhisperError,
+    sendMessage,
+  };
+};
+
+const createThreadActions = <T extends ThreadState>(setState: ThreadStateDispatcher<T>) => {
+  const toggleMessageGC = (messageGCEnabled: boolean) =>
+    setState((room) => ({
+      ...room,
+      messageGCEnabled,
+    }));
+
+  return { toggleMessageGC };
+};
+
+const createRoomActions = (
+  client: FrontendClient,
+  setState: StateDispatcher,
+  serverKey: Uint8Array
+) => {
+  const key = Base64.fromUint8Array(serverKey, true);
+  const setRoomState: ThreadStateDispatcher<RoomThreadState> = (action) =>
+    setState((state) => ({
+      ...state,
+      rooms: new Map(state.rooms).set(key, action(state.rooms.get(key), state)),
+    }));
+
+  const syncUsers = (nicks: string[], users: Map<string, UserMeta>) =>
+    setRoomState((room) => ({
+      ...room,
+      nicks,
+      users,
+    }));
+
+  const reduceServerEvent = (
+    state: State,
+    room: RoomThreadState,
+    events: ServerEvent[]
+  ): RoomThreadState => {
+    for (const event of events) {
+      switch (event.body.case) {
+        case ServerEvent.BodyCase.MESSAGE:
+          return reduceMessage(room, state, event.body.message);
+      }
+    }
+  };
+
+  const toNames = (vs: { name: string }[]): string[] => vs.map(({ name }) => name).sort();
+
+  const reduceAssetBundle = <T extends ThreadState>(state: T, bundle: AssetBundle): T => {
+    state.messageSizeCache.clearAll();
+
+    const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
+    const liveEmoteMap = new Map<bigint, Emote>();
+    const liveModifierMap = new Map<bigint, Modifier>();
+    const liveTagMap = new Map<bigint, Tag>();
+    let room: Room;
+    for (const b of assetBundles) {
+      for (const id of b.removedIds) {
+        liveEmoteMap.delete(id);
+        liveModifierMap.delete(id);
+        liveTagMap.delete(id);
+      }
+      b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
+      b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
+      b.tags.forEach((e) => liveTagMap.set(e.id, e));
+      room = b.room ?? room;
+    }
+    const liveEmotes = Array.from(liveEmoteMap.values());
+    const emoteStyles = new Map(
+      liveEmotes.map(({ id, name, effects }) => {
+        const style: Style = {
+          name: `e_${name}_${state.id}_${id}`,
+          animated: false,
+          modifiers: [],
+        };
+        effects.forEach((e) => {
+          switch (e.effect.case) {
+            case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+              style.animated = true;
+              break;
+            case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+              style.modifiers = e.effect.defaultModifiers.modifiers;
+              break;
+          }
+        });
+        return [name, style];
+      })
+    );
+    const liveModifiers = Array.from(liveModifierMap.values());
+    const liveTags = Array.from(liveTagMap.values());
+
+    return {
+      ...state,
+      room,
+      assetBundles,
+      liveEmotes,
+      styles: {
+        emotes: emoteStyles,
+        modifiers: new Map(liveModifiers.map((m) => [m.name, m])),
+        tags: liveTags,
+      },
+      emotes: toNames(liveEmotes),
+      modifiers: toNames(liveModifiers.filter(({ internal }) => !internal)),
+      tags: toNames(liveTags),
+    };
+  };
+
+  const handleClientData = (event: OpenClientResponse) =>
+    setRoomState((room, state) => {
+      switch (event.body.case) {
+        case OpenClientResponse.BodyCase.OPEN:
+          return {
+            ...room,
+            state: RoomInitState.OPEN,
+          };
+        case OpenClientResponse.BodyCase.SERVER_EVENTS:
+          return reduceServerEvent(state, room, event.body.serverEvents.events);
+        case OpenClientResponse.BodyCase.ASSET_BUNDLE:
+          return reduceAssetBundle(room, event.body.assetBundle);
+        default:
+          return room;
+      }
+    });
+
+  const handleClientError = (error: Error) =>
+    setRoomState((room) => ({
+      ...room,
+      errors: [...room.errors, error],
+    }));
+
+  const handleClientClose = () =>
+    setRoomState((room) => ({
+      ...room,
+      state: RoomInitState.CLOSED,
+    }));
+
+  const sendMessage = (body: string) =>
+    setRoomState((room) => {
+      const { networkKey } = room;
+
+      // TODO: handle rpc errors
+      const commandFuncs: { [key: string]: (...args: string[]) => void } = {
+        help: () => {
+          console.log("help");
+        },
+        ignore: (alias: string, duration: string) => {
+          if (alias) {
+            void client.chat.ignore({ networkKey, alias, duration });
+          } else {
+            console.log("ignore");
+          }
+        },
+        unignore: (alias: string) => {
+          void client.chat.unignore({ networkKey, alias });
+        },
+        highlight: (alias: string) => {
+          void client.chat.highlight({ networkKey, alias });
+        },
+        unhighlight: (alias: string) => {
+          void client.chat.unhighlight({ networkKey, alias });
+        },
+        maxlines: (n: string) => {
+          console.log("maxlines", { n });
+        },
+        mute: (alias: string, duration: string, message: string) => {
+          void client.chat.clientMute({ networkKey, serverKey, alias, duration, message });
+        },
+        unmute: (alias: string) => {
+          void client.chat.clientUnmute({ networkKey, serverKey, alias });
+        },
+        timestampformat: (format: string) => {
+          console.log("timestampformat", { format });
+        },
+        tag: (alias: string, color: string) => {
+          void client.chat.tag({ networkKey, alias, color });
+        },
+        untag: (alias: string) => {
+          void client.chat.untag({ networkKey, alias });
+        },
+        whisper: (alias: string, body: string) => {
+          void client.chat.whisper({ networkKey, alias, body });
+        },
+        exit: () => {
+          console.log("exit");
+        },
+        hideemote: (name: string) => {
+          console.log("hideemote", { name });
+        },
+        unhideemote: (name: string) => {
+          console.log("unhideemote", { name });
+        },
+        me: (body: string) => {
+          void client.chat.clientSendMessage({
+            networkKey,
+            serverKey,
+            body: `/me ${body}`,
+          });
+        },
+      };
+
+      const commandAliases: { [key: string]: string } = {
+        "w": "whisper",
+        "message": "whisper",
+        "msg": "whisper",
+        "tell": "whisper",
+        "t": "whisper",
+        "notify": "whisper",
+      };
+
+      if (body.startsWith("/")) {
+        const command = body.split(" ", 1).pop().toLowerCase().substring(1);
+        const func = commandFuncs[commandAliases[command] ?? command];
+        if (func) {
+          const args = body.split(" ", func.length);
+          func(...[...args.slice(1), body.substring(args.reduce((n, a) => n + a.length + 1, 0))]);
+        } else {
+          // TODO: invalid command feedback
+        }
+      } else {
+        void client.chat.clientSendMessage({ networkKey, serverKey, body });
+      }
+
+      // TODO: pending send state...
+      return room;
+    });
+
+  return {
+    ...createThreadActions(setRoomState),
+    syncUsers,
+    handleClientData,
+    handleClientError,
+    handleClientClose,
+    sendMessage,
   };
 };
 
 export const Provider: React.FC = ({ children }) => {
-  const [state, setState] = useState(initialState);
-  const dispatch = useStateReducer(setState);
-
   const client = useClient();
+  const [state, setState] = useState(initialState);
+  const actions = useStableCallbacks(createGlobalActions(client, setState));
 
   useEffect(() => {
-    const events = client.chat.watchUIConfig();
-    events.on("data", ({ uiConfig }) => dispatch({ type: "SET_UI_CONFIG", uiConfig }));
-    return () => events.destroy();
-  }, []);
+    const uiConfigEvents = client.chat.watchUIConfig();
+    uiConfigEvents.on("data", ({ uiConfig }) => actions.setUiConfig(uiConfig));
+    const whisperEvents = client.chat.watchWhispers();
+    whisperEvents.on("data", actions.handleWhisperEvent);
+    return () => {
+      uiConfigEvents.destroy();
+      whisperEvents.destroy();
+    };
+  }, [client]);
 
-  const mergeUIConfig = useCallback(
-    (values: Partial<IUIConfig>) => {
-      void client.chat.setUIConfig({
-        uiConfig: {
-          ...state.uiConfig,
-          ...values,
-        },
-      });
-    },
-    [client, state.uiConfig]
-  );
+  const mergeUIConfig = useStableCallback((values: Partial<IUIConfig>) => {
+    void client.chat.setUIConfig({
+      uiConfig: {
+        ...state.uiConfig,
+        ...values,
+      },
+    });
+  });
 
   const value = useMemo<[State, ChatActions, StateDispatcher]>(
-    () => [state, { mergeUIConfig }, setState],
+    () => [state, { mergeUIConfig, ...actions }, setState],
     [state]
   );
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
@@ -418,174 +641,72 @@ export const useChat = (): [State, ChatActions, StateDispatcher] => useContext(C
 
 export const ChatConsumer = ChatContext.Consumer;
 
-interface RoomProviderProps {
-  networkKey: Uint8Array;
-  serverKey: Uint8Array;
-  directoryListingId?: bigint;
+export interface RoomProviderProps {
+  type: "ROOM" | "WHISPER";
+  topicKey: Uint8Array;
 }
 
-export const RoomProvider: React.FC<RoomProviderProps> = ({
-  networkKey,
-  serverKey,
-  directoryListingId,
-  children,
-}) => {
-  const key = useMemo(
-    () => Base64.fromUint8Array(networkKey) + ":" + Base64.fromUint8Array(serverKey),
-    [networkKey, serverKey]
-  );
-
-  const [state, { mergeUIConfig }, setState] = React.useContext(ChatContext);
-  const dispatch = useRoomStateReducer(setState, key);
-
+export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }) => {
   const client = useClient();
+  const [state, , setState] = useChat();
 
-  const room = state.rooms[key] ?? initialRoomState;
-  useEffect(() => {
-    if (room.state > RoomInitState.NEW) {
-      return;
-    }
+  let thread: ThreadState;
+  let actions: ReturnType<typeof createRoomActions> | ReturnType<typeof createWhisperActions>;
+  switch (props.type) {
+    case "ROOM":
+      thread = state.rooms.get(Base64.fromUint8Array(props.topicKey, true));
+      actions = useStableCallbacks(createRoomActions(client, setState, props.topicKey));
+      break;
+    case "WHISPER":
+      console.log(props);
+      thread = state.whispers.get(Base64.fromUint8Array(props.topicKey, true));
+      actions = useStableCallbacks(createWhisperActions(client, setState, props.topicKey));
+      break;
+  }
 
-    const serverEvents = client.chat.openClient({ networkKey, serverKey });
-    serverEvents.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
-    serverEvents.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
-    serverEvents.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    dispatch({ type: "INIT", serverEvents, networkKey, serverKey });
-  }, [networkKey, serverKey]);
+  // const listing = useDirectoryListing(networkKey, directoryListingId);
+  // const directory = useDirectory(networkKey);
+  // useReady(() => {
+  //   const nicks: string[] = [];
+  //   const users = new Map<string, UserMeta>();
+  //   for (const user of listing.viewers.values()) {
+  //     nicks.push(user.alias);
+  //     users.set(Base64.fromUint8Array(user.peerKey, true), {
+  //       alias: user.alias,
+  //       listing: findUserMediaListing(directory, user),
+  //     });
+  //   }
+  //   dispatch({ type: "SYNC_USERS", nicks, users });
+  // }, [listing, directory]);
 
-  const listing = useDirectoryListing(networkKey, directoryListingId);
-  const directory = useDirectory(networkKey);
-  useReady(() => {
-    const nicks: string[] = [];
-    const users = new Map<string, UserMeta>();
-    for (const user of listing.viewers.values()) {
-      nicks.push(user.alias);
-      users.set(Base64.fromUint8Array(user.peerKey, true), {
-        alias: user.alias,
-        listing: findUserMediaListing(directory, user),
-      });
-    }
-    dispatch({ type: "SYNC_USERS", nicks, users });
-  }, [listing, directory]);
+  // useEffect(() => {
+  //   if (directoryListingId === BigInt(0)) {
+  //     return;
+  //   }
 
-  useEffect(() => {
-    if (directoryListingId === BigInt(0)) {
-      return;
-    }
-
-    const req = {
-      networkKey,
-      id: directoryListingId,
-    };
-    void client.directory.join(req);
-    return () => void client.directory.part(req);
-  }, [networkKey, directoryListingId]);
-
-  const sendMessage = useMemo(() => {
-    const commandFuncs: { [key: string]: (...args: string[]) => void } = {
-      help: () => {
-        console.log("help");
-      },
-      ignore: (alias: string, duration: string) => {
-        if (alias) {
-          void client.chat.ignore({ networkKey, alias, duration });
-        } else {
-          console.log("ignore");
-        }
-      },
-      unignore: (alias: string) => {
-        void client.chat.unignore({ networkKey, alias });
-      },
-      highlight: (alias: string) => {
-        void client.chat.highlight({ networkKey, alias });
-      },
-      unhighlight: (alias: string) => {
-        void client.chat.unhighlight({ networkKey, alias });
-      },
-      maxlines: (n: string) => {
-        console.log("maxlines", { n });
-      },
-      mute: (alias: string, duration: string, message: string) => {
-        void client.chat.clientMute({ networkKey, serverKey, alias, duration, message });
-      },
-      unmute: (alias: string) => {
-        void client.chat.clientUnmute({ networkKey, serverKey, alias });
-      },
-      timestampformat: (format: string) => {
-        console.log("timestampformat", { format });
-      },
-      tag: (alias: string, color: string) => {
-        void client.chat.tag({ networkKey, alias, color });
-      },
-      untag: (alias: string) => {
-        void client.chat.untag({ networkKey, alias });
-      },
-      whisper: (alias: string, body: string) => {
-        void client.chat.whisper({ networkKey, alias, body });
-      },
-      exit: () => {
-        console.log("exit");
-      },
-      hideemote: (name: string) => {
-        console.log("hideemote", { name });
-      },
-      unhideemote: (name: string) => {
-        console.log("unhideemote", { name });
-      },
-      me: (body: string) => {
-        void client.chat.clientSendMessage({
-          networkKey,
-          serverKey,
-          body: `/me ${body}`,
-        });
-      },
-    };
-
-    const commandAliases: { [key: string]: string } = {
-      "w": "whisper",
-      "message": "whisper",
-      "msg": "whisper",
-      "tell": "whisper",
-      "t": "whisper",
-      "notify": "whisper",
-    };
-
-    return (body: string) => {
-      if (body.startsWith("/")) {
-        const command = body.split(" ", 1).pop().toLowerCase().substring(1);
-        const func = commandFuncs[commandAliases[command] ?? command];
-        if (func) {
-          const args = body.split(" ", func.length);
-          func(...[...args.slice(1), body.substring(args.reduce((n, a) => n + a.length + 1, 0))]);
-        } else {
-          // invalid command
-        }
-      } else {
-        void client.chat.clientSendMessage({ networkKey, serverKey, body });
-      }
-    };
-  }, [client, room.clientId]);
+  //   const req = {
+  //     networkKey,
+  //     id: directoryListingId,
+  //   };
+  //   void client.directory.join(req);
+  //   return () => void client.directory.part(req);
+  // }, [networkKey, directoryListingId]);
 
   const messages = useRef<Message[]>();
-  messages.current = room.messages;
+  messages.current = thread.messages;
 
   const getMessage = useCallback((index: number): Message => messages.current[index], []);
   const getMessageCount = useCallback((): number => messages.current.length, []);
 
-  const toggleMessageGC = useCallback(
-    (state: boolean): void => dispatch({ type: "TOGGLE_MESSAGE_GC", state }),
-    []
-  );
-
-  const value = useMemo<[RoomState, RoomActions]>(
-    () => [room, { sendMessage, getMessage, getMessageCount, toggleMessageGC }],
-    [room]
+  const value = useMemo<[ThreadState, RoomActions]>(
+    () => [thread, { getMessage, getMessageCount, ...actions }],
+    [thread]
   );
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 };
 
 RoomProvider.displayName = "Room.Provider";
 
-export const useRoom = (): [RoomState, RoomActions] => useContext(RoomContext);
+export const useRoom = (): [ThreadState, RoomActions] => useContext(RoomContext);
 
 export const RoomConsumer = RoomContext.Consumer;

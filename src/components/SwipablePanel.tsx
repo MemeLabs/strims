@@ -3,10 +3,14 @@ import "./SwipablePanel.scss";
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { isEqual } from "lodash";
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import { useToggle } from "react-use";
 
 import useUpdate from "../hooks/useUpdate";
 import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
+
+const HorizontalContext = React.createContext<(open: boolean) => void>(null);
+const VerticalContext = React.createContext<(open: boolean) => void>(null);
 
 const TOGGLE_UPDATE_DELAY = 50;
 const TOGGLE_TRANSITION_DURATION = 200; // todo sync with scss
@@ -33,6 +37,8 @@ interface SwipablePaneProps {
   handleRef?: EventTarget | React.RefObject<EventTarget>;
   onToggle?: (open: boolean) => void;
   onDragStateChange?: (state: DragState) => void;
+  preventScroll?: boolean;
+  filterDeviceTypes?: DeviceType[] | null;
 }
 
 const SwipablePanel: React.FC<SwipablePaneProps> = ({
@@ -45,15 +51,39 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   handleRef,
   onToggle,
   onDragStateChange,
+  preventScroll = false,
+  filterDeviceTypes = [DeviceType.Portable],
 }) => {
-  if (DEVICE_TYPE !== DeviceType.Portable) {
+  if (filterDeviceTypes && !filterDeviceTypes.includes(DEVICE_TYPE)) {
     return <div className={className}>{children}</div>;
   }
 
   const ref = useRef<HTMLDivElement>(null);
+  const vertical = direction === "up" || direction === "down";
+
+  // gestures on nested swipable panels that move on the same axis collide. the
+  // prescribed solution for this in use-gesture doesn't work if preventScroll
+  // is enabled. without preventScroll gestures on scrollable elements interfere
+  // with panel gestures. to solve this panels disable their anscestores when
+  // opened.
+
+  // note that because the gestures for open and close collide if nested panels
+  // open in opposite directions this isn't supported.
+
+  const Context = vertical ? VerticalContext : HorizontalContext;
+  const toggleParentChildOpen = useContext(Context);
+  const [childOpen, toggleChildOpen] = useToggle(false);
+
+  const contextValue = useCallback((open: boolean) => {
+    toggleParentChildOpen?.(open);
+    toggleChildOpen(open);
+  }, []);
 
   const [dragState, setDragState] = useState(() => getDragState(open && !animateInitialState));
-  const toggleDragState = (open: boolean) => setDragState(getDragState(open));
+  const toggleDragState = (open: boolean) => {
+    setDragState(getDragState(open));
+    toggleParentChildOpen?.(open);
+  };
 
   useLayoutEffect(() => {
     if (dragState.closed == open) {
@@ -120,15 +150,20 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
       }
       if (!isEqual(dragState, next)) {
         setDragState(next);
+        toggleParentChildOpen?.(!next.closed);
         onDragStateChange?.({ ...next, transitioning: true });
       }
     },
     {
+      enabled: !childOpen,
+      axis: vertical ? "y" : "x",
       target: handleRef ?? ref,
       eventOptions: {
-        capture: true,
         passive: false,
       },
+      boundToParent: false,
+      triggerAllEvents: true,
+      preventScroll,
     }
   );
 
@@ -143,7 +178,7 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
         "swipable--closing": dragState.closing,
       })}
     >
-      {children}
+      <Context.Provider value={contextValue}>{children}</Context.Provider>
     </div>
   );
 };

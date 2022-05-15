@@ -2,78 +2,54 @@ import "./Chat.scss";
 
 import clsx from "clsx";
 import React, { useCallback, useRef, useState } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { BsArrowBarLeft } from "react-icons/bs";
-import { FiMenu } from "react-icons/fi";
+import { HiOutlineDotsVertical } from "react-icons/hi";
 import { useToggle } from "react-use";
 
-import { RoomDropdown, RoomList, RoomMenuItem } from "../../components/Chat/RoomMenu";
-import { RoomProvider } from "../../contexts/Chat";
+import { RoomButtons } from "../../components/Chat/RoomMenu";
+import { RoomProvider, RoomProviderProps } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import RoomCarousel from "../Chat/RoomCarousel";
 import ChatShell from "../Chat/Shell";
+import SwipablePanel from "../SwipablePanel";
 
-interface PortableHeaderProps {
-  onRoomChange: (item: RoomMenuItem) => void;
-}
-
-const PortableHeader: React.FC<PortableHeaderProps> = ({ onRoomChange }) => {
-  const [showRoomMenu, toggleShowRoomMenu] = useToggle(true);
-
-  const handleRoomListChange = useCallback((item: RoomMenuItem) => {
-    onRoomChange(item);
-    toggleShowRoomMenu(false);
-  }, []);
-
-  const button = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  useClickAway([button, list], () => toggleShowRoomMenu(false));
-
-  return (
-    <header
-      className={clsx({
-        "layout_chat__header": true,
-        "layout_chat__header--open": showRoomMenu,
-      })}
-    >
-      <button
-        ref={button}
-        className="layout_chat__header__room_list_button"
-        onClick={() => toggleShowRoomMenu()}
-      >
-        <FiMenu size={22} />
-      </button>
-      <Scrollbars className="layout_chat__header__room_list" autoHide>
-        <RoomList ref={list} onChange={handleRoomListChange} />
-      </Scrollbars>
-    </header>
-  );
-};
-
-interface DesktopHeaderProps {
+interface HeaderProps {
   onToggleClick: () => void;
-  onRoomChange: (item: RoomMenuItem) => void;
-  selectedRoom: RoomMenuItem;
+  onMenuToggleClick: () => void;
+  onChange: (topic: RoomProviderProps) => void;
 }
 
-const DesktopHeader: React.FC<DesktopHeaderProps> = ({
-  onToggleClick,
-  onRoomChange,
-  selectedRoom,
-}) => (
-  <header className="layout_chat__header">
-    <button className="layout_chat__toggle_off" onClick={onToggleClick}>
-      <BsArrowBarLeft />
+const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onChange }) => (
+  <div className="layout_chat__header">
+    {DEVICE_TYPE !== DeviceType.Portable && (
+      <button className="layout_chat__toggle layout_chat__toggle--off" onClick={onToggleClick}>
+        <BsArrowBarLeft />
+      </button>
+    )}
+    <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} />
+    <button className="layout_chat__toggle" onClick={onMenuToggleClick}>
+      <HiOutlineDotsVertical />
     </button>
-    <RoomDropdown onChange={onRoomChange} defaultSelection={selectedRoom} />
-  </header>
+  </div>
 );
 
 const Chat: React.FC = () => {
   const { showChat, toggleShowChat } = useLayout();
+  const onToggleClick = useCallback(() => toggleShowChat(), []);
 
-  const [chatRoom, setChatRoom] = useState<RoomMenuItem>(null);
+  const [menuOpen, toggleMenuOpen] = useToggle(false);
+  const onMenuToggleClick = useCallback(() => toggleMenuOpen(), []);
+
+  const ref = useRef<HTMLDivElement>();
+  useClickAway(ref, () => toggleMenuOpen(false));
+
+  const handleRoomMenuChange = useCallback(() => {
+    toggleMenuOpen(false);
+  }, []);
+
+  const [topic, setTopic] = useState<RoomProviderProps>(null);
 
   return (
     <div
@@ -81,22 +57,29 @@ const Chat: React.FC = () => {
         "layout_chat": true,
         "layout_chat--closed": !showChat,
       })}
+      ref={ref}
     >
-      <button className="layout_chat__toggle_on" onClick={() => toggleShowChat()}>
+      <button className="layout_chat__toggle layout_chat__toggle--on" onClick={onToggleClick}>
         <BsArrowBarLeft />
       </button>
       <div className="layout_chat__body">
-        {DEVICE_TYPE === DeviceType.Portable ? (
-          <PortableHeader onRoomChange={setChatRoom} />
-        ) : (
-          <DesktopHeader
-            onToggleClick={() => toggleShowChat()}
-            onRoomChange={setChatRoom}
-            selectedRoom={chatRoom}
-          />
-        )}
-        {chatRoom && (
-          <RoomProvider {...chatRoom}>
+        <SwipablePanel
+          open={menuOpen}
+          onToggle={toggleMenuOpen}
+          className="layout_chat__foo"
+          direction="left"
+          filterDeviceTypes={null}
+          preventScroll={true}
+        >
+          <RoomButtons onChange={handleRoomMenuChange} />
+        </SwipablePanel>
+        <Header
+          onToggleClick={onToggleClick}
+          onMenuToggleClick={onMenuToggleClick}
+          onChange={setTopic}
+        />
+        {topic && (
+          <RoomProvider {...topic}>
             <ChatShell className="home_page__chat" shouldHide={closed} />
           </RoomProvider>
         )}

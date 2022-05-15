@@ -1,8 +1,8 @@
 //go:build js
 
 // between go 1.17 and 1.18 something changed in the go gc and holding memory
-// like we do here prevents the runtime from freeing memory pages causing the
-// tab to oom...
+// like we do here prevents it from freeing memory pages causing the tab to
+// oom...
 
 package slab
 

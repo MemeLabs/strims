@@ -85,6 +85,12 @@ import {
   IWhisperRequest,
   WhisperRequest,
   WhisperResponse,
+  IListWhispersRequest,
+  ListWhispersRequest,
+  ListWhispersResponse,
+  IWatchWhispersRequest,
+  WatchWhispersRequest,
+  WatchWhispersResponse,
   ISetUIConfigRequest,
   SetUIConfigRequest,
   SetUIConfigResponse,
@@ -293,6 +299,8 @@ export interface ChatFrontendService {
   clientUnmute(req: ClientUnmuteRequest, call: strims_rpc_Call): Promise<ClientUnmuteResponse> | ClientUnmuteResponse;
   clientGetMute(req: ClientGetMuteRequest, call: strims_rpc_Call): Promise<ClientGetMuteResponse> | ClientGetMuteResponse;
   whisper(req: WhisperRequest, call: strims_rpc_Call): Promise<WhisperResponse> | WhisperResponse;
+  listWhispers(req: ListWhispersRequest, call: strims_rpc_Call): Promise<ListWhispersResponse> | ListWhispersResponse;
+  watchWhispers(req: WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<WatchWhispersResponse>;
   setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse;
   watchUIConfig(req: WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<WatchUIConfigResponse>;
   ignore(req: IgnoreRequest, call: strims_rpc_Call): Promise<IgnoreResponse> | IgnoreResponse;
@@ -310,6 +318,8 @@ export class UnimplementedChatFrontendService implements ChatFrontendService {
   clientUnmute(req: ClientUnmuteRequest, call: strims_rpc_Call): Promise<ClientUnmuteResponse> | ClientUnmuteResponse { throw new Error("not implemented"); }
   clientGetMute(req: ClientGetMuteRequest, call: strims_rpc_Call): Promise<ClientGetMuteResponse> | ClientGetMuteResponse { throw new Error("not implemented"); }
   whisper(req: WhisperRequest, call: strims_rpc_Call): Promise<WhisperResponse> | WhisperResponse { throw new Error("not implemented"); }
+  listWhispers(req: ListWhispersRequest, call: strims_rpc_Call): Promise<ListWhispersResponse> | ListWhispersResponse { throw new Error("not implemented"); }
+  watchWhispers(req: WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<WatchWhispersResponse> { throw new Error("not implemented"); }
   setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse { throw new Error("not implemented"); }
   watchUIConfig(req: WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<WatchUIConfigResponse> { throw new Error("not implemented"); }
   ignore(req: IgnoreRequest, call: strims_rpc_Call): Promise<IgnoreResponse> | IgnoreResponse { throw new Error("not implemented"); }
@@ -327,6 +337,8 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<ClientUnmuteRequest, ClientUnmuteResponse>("strims.chat.v1.ChatFrontend.ClientUnmute", service.clientUnmute.bind(service), ClientUnmuteRequest);
   host.registerMethod<ClientGetMuteRequest, ClientGetMuteResponse>("strims.chat.v1.ChatFrontend.ClientGetMute", service.clientGetMute.bind(service), ClientGetMuteRequest);
   host.registerMethod<WhisperRequest, WhisperResponse>("strims.chat.v1.ChatFrontend.Whisper", service.whisper.bind(service), WhisperRequest);
+  host.registerMethod<ListWhispersRequest, ListWhispersResponse>("strims.chat.v1.ChatFrontend.ListWhispers", service.listWhispers.bind(service), ListWhispersRequest);
+  host.registerMethod<WatchWhispersRequest, WatchWhispersResponse>("strims.chat.v1.ChatFrontend.WatchWhispers", service.watchWhispers.bind(service), WatchWhispersRequest);
   host.registerMethod<SetUIConfigRequest, SetUIConfigResponse>("strims.chat.v1.ChatFrontend.SetUIConfig", service.setUIConfig.bind(service), SetUIConfigRequest);
   host.registerMethod<WatchUIConfigRequest, WatchUIConfigResponse>("strims.chat.v1.ChatFrontend.WatchUIConfig", service.watchUIConfig.bind(service), WatchUIConfigRequest);
   host.registerMethod<IgnoreRequest, IgnoreResponse>("strims.chat.v1.ChatFrontend.Ignore", service.ignore.bind(service), IgnoreRequest);
@@ -362,6 +374,14 @@ export class ChatFrontendClient {
 
   public whisper(req?: IWhisperRequest, opts?: strims_rpc_UnaryCallOptions): Promise<WhisperResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.Whisper", new WhisperRequest(req)), WhisperResponse, opts);
+  }
+
+  public listWhispers(req?: IListWhispersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListWhispersResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ListWhispers", new ListWhispersRequest(req)), ListWhispersResponse, opts);
+  }
+
+  public watchWhispers(req?: IWatchWhispersRequest): GenericReadable<WatchWhispersResponse> {
+    return this.host.expectMany(this.host.call("strims.chat.v1.ChatFrontend.WatchWhispers", new WatchWhispersRequest(req)), WatchWhispersResponse);
   }
 
   public setUIConfig(req?: ISetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SetUIConfigResponse> {

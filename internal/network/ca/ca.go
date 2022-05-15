@@ -136,5 +136,9 @@ func (t *CA) find(ctx context.Context, networkKey []byte, req *networkv1ca.CAFin
 }
 
 func (t *CA) FindBySubject(ctx context.Context, networkKey []byte, subject string) (*certificate.Certificate, error) {
-	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Subject: subject})
+	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Query: &networkv1ca.CAFindRequest_Subject{Subject: subject}})
+}
+
+func (t *CA) FindByKey(ctx context.Context, networkKey []byte, key []byte) (*certificate.Certificate, error) {
+	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Query: &networkv1ca.CAFindRequest_Key{Key: key}})
 }

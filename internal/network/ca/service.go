@@ -133,16 +133,19 @@ func (s *service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*
 
 // Find ...
 func (s *service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*networkv1ca.CAFindResponse, error) {
-	if req.Subject == "" && req.SerialNumber == nil {
+	if req.Query == nil {
 		return nil, errors.New("find request must specify subject or serial number")
 	}
 
 	var log *networkv1ca.CertificateLog
 	var err error
-	if req.Subject != "" {
-		log, err = s.logCache.BySubject.Get(dao.FormatCertificateLogSubjectKey(s.network.Get().Id, req.Subject))
-	} else {
-		log, err = s.logCache.BySerialNumber.Get(dao.FormatCertificateLogsSerialNumberKey(s.network.Get().Id, req.SerialNumber))
+	switch q := req.Query.(type) {
+	case *networkv1ca.CAFindRequest_Subject:
+		log, err = s.logCache.BySubject.Get(dao.FormatCertificateLogSubjectKey(s.network.Get().Id, q.Subject))
+	case *networkv1ca.CAFindRequest_SerialNumber:
+		log, err = s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Get().Id, q.SerialNumber))
+	case *networkv1ca.CAFindRequest_Key:
+		log, err = s.logCache.ByKey.Get(dao.FormatCertificateLogKeyKey(s.network.Get().Id, q.Key))
 	}
 	if err != nil {
 		return nil, err
@@ -151,7 +154,7 @@ func (s *service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*ne
 	if req.FullChain {
 		cert := log.Certificate
 		for cert.GetParentSerialNumber() != nil {
-			parentLog, err := s.logCache.BySerialNumber.Get(dao.FormatCertificateLogsSerialNumberKey(s.network.Get().Id, cert.GetParentSerialNumber()))
+			parentLog, err := s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Get().Id, cert.GetParentSerialNumber()))
 			if err != nil {
 				return nil, err
 			}

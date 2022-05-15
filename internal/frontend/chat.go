@@ -10,19 +10,21 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/app"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/chanutil"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 )
 
 func init() {
 	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		svc := &chatService{
-			app:   params.App,
-			store: params.Store,
+			app:    params.App,
+			store:  params.Store,
+			logger: params.Logger,
 		}
 		chatv1.RegisterChatServerFrontendService(server, svc)
 		chatv1.RegisterChatFrontendService(server, svc)
@@ -31,8 +33,9 @@ func init() {
 
 // chatService ...
 type chatService struct {
-	app   app.Control
-	store *dao.ProfileStore
+	app    app.Control
+	store  *dao.ProfileStore
+	logger *zap.Logger
 }
 
 // CreateServer ...
@@ -197,11 +200,11 @@ func (s *chatService) GetModifier(ctx context.Context, req *chatv1.GetModifierRe
 
 // ListModifiers ...
 func (s *chatService) ListModifiers(ctx context.Context, req *chatv1.ListModifiersRequest) (*chatv1.ListModifiersResponse, error) {
-	emotes, err := dao.GetChatModifiersByServerID(s.store, req.ServerId)
+	modifiers, err := dao.GetChatModifiersByServerID(s.store, req.ServerId)
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.ListModifiersResponse{Modifiers: emotes}, nil
+	return &chatv1.ListModifiersResponse{Modifiers: modifiers}, nil
 }
 
 // CreateTag ...
@@ -224,7 +227,7 @@ func (s *chatService) CreateTag(ctx context.Context, req *chatv1.CreateTagReques
 
 // UpdateTag ...
 func (s *chatService) UpdateTag(ctx context.Context, req *chatv1.UpdateTagRequest) (*chatv1.UpdateTagResponse, error) {
-	emote, err := dao.ChatTags.Transform(s.store, req.Id, func(v *chatv1.Tag) error {
+	tag, err := dao.ChatTags.Transform(s.store, req.Id, func(v *chatv1.Tag) error {
 		v.Name = req.Name
 		v.Color = req.Color
 		v.Sensitive = req.Sensitive
@@ -233,7 +236,7 @@ func (s *chatService) UpdateTag(ctx context.Context, req *chatv1.UpdateTagReques
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.UpdateTagResponse{Tag: emote}, nil
+	return &chatv1.UpdateTagResponse{Tag: tag}, nil
 }
 
 // DeleteTag ...
@@ -246,20 +249,20 @@ func (s *chatService) DeleteTag(ctx context.Context, req *chatv1.DeleteTagReques
 
 // GetTag ...
 func (s *chatService) GetTag(ctx context.Context, req *chatv1.GetTagRequest) (*chatv1.GetTagResponse, error) {
-	emote, err := dao.ChatTags.Get(s.store, req.Id)
+	tag, err := dao.ChatTags.Get(s.store, req.Id)
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.GetTagResponse{Tag: emote}, nil
+	return &chatv1.GetTagResponse{Tag: tag}, nil
 }
 
 // ListTags ...
 func (s *chatService) ListTags(ctx context.Context, req *chatv1.ListTagsRequest) (*chatv1.ListTagsResponse, error) {
-	emotes, err := dao.GetChatTagsByServerID(s.store, req.ServerId)
+	tags, err := dao.GetChatTagsByServerID(s.store, req.ServerId)
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.ListTagsResponse{Tags: emotes}, nil
+	return &chatv1.ListTagsResponse{Tags: tags}, nil
 }
 
 // SyncAssets ...
@@ -379,7 +382,15 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		return nil, errors.New("no certificate found for network key")
 	}
 
-	peerCert, err := s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	var peerCert *certificate.Certificate
+	var err error
+	if req.PeerKey != nil {
+		peerCert, err = s.app.Network().CA().FindByKey(ctx, req.NetworkKey, req.PeerKey)
+	} else if req.Alias != "" {
+		peerCert, err = s.app.Network().CA().FindBySubject(ctx, req.NetworkKey, req.Alias)
+	} else {
+		return nil, errors.New("whisper subject undefined")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
@@ -388,9 +399,9 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		s.store,
 		req.NetworkKey,
 		req.ServerKey,
+		peerCert.Key,
 		cert,
 		req.Body,
-		false, // received
 	)
 	if err != nil {
 		return nil, err
@@ -412,12 +423,92 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		thread.LastMessageTime = timeutil.Now().UnixNano() / int64(timeutil.Precision)
 		thread.LastMessageId = record.Id
 
+		record.ThreadId = thread.Id
 		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
 			return err
 		}
 		return dao.ChatWhisperThreads.Upsert(tx, thread)
 	})
-	return &chatv1.WhisperResponse{}, err
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.WhisperResponse{}, nil
+}
+
+func (s *chatService) ListWhispers(ctx context.Context, req *chatv1.ListWhispersRequest) (*chatv1.ListWhispersResponse, error) {
+	thread, err := dao.GetChatWhisperThreadByPeerKey(s.store, req.PeerKey)
+	if err != nil {
+		return nil, err
+	}
+	whispers, err := dao.GetChatWhisperRecordsByPeerKey(s.store, req.PeerKey)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.ListWhispersResponse{
+		Thread:   thread,
+		Whispers: whispers,
+	}, nil
+}
+
+func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispersRequest) (<-chan *chatv1.WatchWhispersResponse, error) {
+	ch := make(chan *chatv1.WatchWhispersResponse, 1)
+
+	go func() {
+		defer close(ch)
+
+		events, done := s.app.Events().Events()
+		defer done()
+
+		threads, err := dao.ChatWhisperThreads.GetAll(s.store)
+		if err != nil {
+			s.logger.Debug("error loading whisper threads", zap.Error(err))
+			return
+		}
+
+		for _, t := range threads {
+			ch <- &chatv1.WatchWhispersResponse{
+				Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
+					ThreadUpdate: t,
+				},
+			}
+		}
+
+		for {
+			select {
+			case e := <-events:
+				switch e := e.(type) {
+				case *chatv1.WhisperThreadChangeEvent:
+					ch <- &chatv1.WatchWhispersResponse{
+						PeerKey: e.WhisperThread.PeerKey,
+						Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
+							ThreadUpdate: e.WhisperThread,
+						},
+					}
+				case *chatv1.WhisperRecordChangeEvent:
+					ch <- &chatv1.WatchWhispersResponse{
+						PeerKey: e.WhisperRecord.PeerKey,
+						Body: &chatv1.WatchWhispersResponse_WhisperUpdate{
+							WhisperUpdate: e.WhisperRecord,
+						},
+					}
+				case *chatv1.WhisperRecordDeleteEvent:
+					ch <- &chatv1.WatchWhispersResponse{
+						PeerKey: e.WhisperRecord.PeerKey,
+						Body: &chatv1.WatchWhispersResponse_WhisperDelete_{
+							WhisperDelete: &chatv1.WatchWhispersResponse_WhisperDelete{
+								RecordId: e.WhisperRecord.Id,
+								ThreadId: e.WhisperRecord.ThreadId,
+							},
+						},
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch, nil
 }
 
 // SetUIConfig ...
@@ -462,7 +553,6 @@ func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConf
 
 // Ignore ...
 func (s *chatService) Ignore(ctx context.Context, req *chatv1.IgnoreRequest) (*chatv1.IgnoreResponse, error) {
-	debug.PrintJSON(req)
 	var deadline int64
 	if req.Duration != "" {
 		duration, err := time.ParseDuration(req.Duration)
@@ -476,8 +566,6 @@ func (s *chatService) Ignore(ctx context.Context, req *chatv1.IgnoreRequest) (*c
 	if err != nil {
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
-
-	debug.PrintJSON(cert)
 
 	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
 		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](cert.Key)); i != -1 {

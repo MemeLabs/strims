@@ -4107,6 +4107,7 @@ export type IWhisperRequest = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
   alias?: string;
+  peerKey?: Uint8Array;
   body?: string;
 }
 
@@ -4114,12 +4115,14 @@ export class WhisperRequest {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
   alias: string;
+  peerKey: Uint8Array;
   body: string;
 
   constructor(v?: IWhisperRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
     this.serverKey = v?.serverKey || new Uint8Array();
     this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
     this.body = v?.body || "";
   }
 
@@ -4128,7 +4131,8 @@ export class WhisperRequest {
     if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
     if (m.serverKey.length) w.uint32(18).bytes(m.serverKey);
     if (m.alias.length) w.uint32(26).string(m.alias);
-    if (m.body.length) w.uint32(34).string(m.body);
+    if (m.peerKey.length) w.uint32(34).bytes(m.peerKey);
+    if (m.body.length) w.uint32(42).string(m.body);
     return w;
   }
 
@@ -4149,6 +4153,9 @@ export class WhisperRequest {
         m.alias = r.string();
         break;
         case 4:
+        m.peerKey = r.bytes();
+        break;
+        case 5:
         m.body = r.string();
         break;
         default:
@@ -4178,6 +4185,263 @@ export class WhisperResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new WhisperResponse();
   }
+}
+
+export type IListWhispersRequest = {
+  peerKey?: Uint8Array;
+}
+
+export class ListWhispersRequest {
+  peerKey: Uint8Array;
+
+  constructor(v?: IListWhispersRequest) {
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: ListWhispersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListWhispersRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListWhispersRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListWhispersResponse = {
+  thread?: IWhisperThread;
+  whispers?: IWhisperRecord[];
+}
+
+export class ListWhispersResponse {
+  thread: WhisperThread | undefined;
+  whispers: WhisperRecord[];
+
+  constructor(v?: IListWhispersResponse) {
+    this.thread = v?.thread && new WhisperThread(v.thread);
+    this.whispers = v?.whispers ? v.whispers.map(v => new WhisperRecord(v)) : [];
+  }
+
+  static encode(m: ListWhispersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.thread) WhisperThread.encode(m.thread, w.uint32(10).fork()).ldelim();
+    for (const v of m.whispers) WhisperRecord.encode(v, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListWhispersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListWhispersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.thread = WhisperThread.decode(r, r.uint32());
+        break;
+        case 2:
+        m.whispers.push(WhisperRecord.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWatchWhispersRequest = {
+}
+
+export class WatchWhispersRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IWatchWhispersRequest) {
+  }
+
+  static encode(m: WatchWhispersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchWhispersRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new WatchWhispersRequest();
+  }
+}
+
+export type IWatchWhispersResponse = {
+  peerKey?: Uint8Array;
+  body?: WatchWhispersResponse.IBody
+}
+
+export class WatchWhispersResponse {
+  peerKey: Uint8Array;
+  body: WatchWhispersResponse.TBody;
+
+  constructor(v?: IWatchWhispersResponse) {
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.body = new WatchWhispersResponse.Body(v?.body);
+  }
+
+  static encode(m: WatchWhispersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
+    switch (m.body.case) {
+      case WatchWhispersResponse.BodyCase.THREAD_UPDATE:
+      WhisperThread.encode(m.body.threadUpdate, w.uint32(8010).fork()).ldelim();
+      break;
+      case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
+      WhisperRecord.encode(m.body.whisperUpdate, w.uint32(8018).fork()).ldelim();
+      break;
+      case WatchWhispersResponse.BodyCase.WHISPER_DELETE:
+      WatchWhispersResponse.WhisperDelete.encode(m.body.whisperDelete, w.uint32(8026).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchWhispersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WatchWhispersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peerKey = r.bytes();
+        break;
+        case 1001:
+        m.body = new WatchWhispersResponse.Body({ threadUpdate: WhisperThread.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.body = new WatchWhispersResponse.Body({ whisperUpdate: WhisperRecord.decode(r, r.uint32()) });
+        break;
+        case 1003:
+        m.body = new WatchWhispersResponse.Body({ whisperDelete: WatchWhispersResponse.WhisperDelete.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace WatchWhispersResponse {
+  export enum BodyCase {
+    NOT_SET = 0,
+    THREAD_UPDATE = 1001,
+    WHISPER_UPDATE = 1002,
+    WHISPER_DELETE = 1003,
+  }
+
+  export type IBody =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.THREAD_UPDATE, threadUpdate: IWhisperThread }
+  |{ case?: BodyCase.WHISPER_UPDATE, whisperUpdate: IWhisperRecord }
+  |{ case?: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.IWhisperDelete }
+  ;
+
+  export type TBody = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.THREAD_UPDATE, threadUpdate: WhisperThread }
+  |{ case: BodyCase.WHISPER_UPDATE, whisperUpdate: WhisperRecord }
+  |{ case: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.WhisperDelete }
+  >;
+
+  class BodyImpl {
+    threadUpdate: WhisperThread;
+    whisperUpdate: WhisperRecord;
+    whisperDelete: WatchWhispersResponse.WhisperDelete;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBody) {
+      if (v && "threadUpdate" in v) {
+        this.case = BodyCase.THREAD_UPDATE;
+        this.threadUpdate = new WhisperThread(v.threadUpdate);
+      } else
+      if (v && "whisperUpdate" in v) {
+        this.case = BodyCase.WHISPER_UPDATE;
+        this.whisperUpdate = new WhisperRecord(v.whisperUpdate);
+      } else
+      if (v && "whisperDelete" in v) {
+        this.case = BodyCase.WHISPER_DELETE;
+        this.whisperDelete = new WatchWhispersResponse.WhisperDelete(v.whisperDelete);
+      }
+    }
+  }
+
+  export const Body = BodyImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBody>(v: T): Readonly<
+    T extends { threadUpdate: IWhisperThread } ? { case: BodyCase.THREAD_UPDATE, threadUpdate: WhisperThread } :
+    T extends { whisperUpdate: IWhisperRecord } ? { case: BodyCase.WHISPER_UPDATE, whisperUpdate: WhisperRecord } :
+    T extends { whisperDelete: WatchWhispersResponse.IWhisperDelete } ? { case: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.WhisperDelete } :
+    never
+    >;
+  };
+
+  export type IWhisperDelete = {
+    recordId?: bigint;
+    threadId?: bigint;
+  }
+
+  export class WhisperDelete {
+    recordId: bigint;
+    threadId: bigint;
+
+    constructor(v?: IWhisperDelete) {
+      this.recordId = v?.recordId || BigInt(0);
+      this.threadId = v?.threadId || BigInt(0);
+    }
+
+    static encode(m: WhisperDelete, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.recordId) w.uint32(8).uint64(m.recordId);
+      if (m.threadId) w.uint32(16).uint64(m.threadId);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): WhisperDelete {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new WhisperDelete();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.recordId = r.uint64();
+          break;
+          case 2:
+          m.threadId = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
 }
 
 export type ISetUIConfigRequest = {
@@ -5030,23 +5294,29 @@ export class WhisperThread {
 
 export type IWhisperRecord = {
   id?: bigint;
+  threadId?: bigint;
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
+  peerKey?: Uint8Array;
   state?: WhisperRecord.State;
   message?: IMessage;
 }
 
 export class WhisperRecord {
   id: bigint;
+  threadId: bigint;
   networkKey: Uint8Array;
   serverKey: Uint8Array;
+  peerKey: Uint8Array;
   state: WhisperRecord.State;
   message: Message | undefined;
 
   constructor(v?: IWhisperRecord) {
     this.id = v?.id || BigInt(0);
+    this.threadId = v?.threadId || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.serverKey = v?.serverKey || new Uint8Array();
+    this.peerKey = v?.peerKey || new Uint8Array();
     this.state = v?.state || 0;
     this.message = v?.message && new Message(v.message);
   }
@@ -5054,10 +5324,12 @@ export class WhisperRecord {
   static encode(m: WhisperRecord, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
-    if (m.serverKey.length) w.uint32(26).bytes(m.serverKey);
-    if (m.state) w.uint32(32).uint32(m.state);
-    if (m.message) Message.encode(m.message, w.uint32(42).fork()).ldelim();
+    if (m.threadId) w.uint32(16).uint64(m.threadId);
+    if (m.networkKey.length) w.uint32(26).bytes(m.networkKey);
+    if (m.serverKey.length) w.uint32(34).bytes(m.serverKey);
+    if (m.peerKey.length) w.uint32(42).bytes(m.peerKey);
+    if (m.state) w.uint32(48).uint32(m.state);
+    if (m.message) Message.encode(m.message, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -5072,15 +5344,21 @@ export class WhisperRecord {
         m.id = r.uint64();
         break;
         case 2:
-        m.networkKey = r.bytes();
+        m.threadId = r.uint64();
         break;
         case 3:
-        m.serverKey = r.bytes();
+        m.networkKey = r.bytes();
         break;
         case 4:
-        m.state = r.uint32();
+        m.serverKey = r.bytes();
         break;
         case 5:
+        m.peerKey = r.bytes();
+        break;
+        case 6:
+        m.state = r.uint32();
+        break;
+        case 7:
         m.message = Message.decode(r, r.uint32());
         break;
         default:
