@@ -3,7 +3,7 @@ name: web-cd
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
 
 jobs:
   build:

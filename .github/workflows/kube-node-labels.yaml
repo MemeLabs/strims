@@ -7,7 +7,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'infra/cmd/kube-node-labels/**'
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build:

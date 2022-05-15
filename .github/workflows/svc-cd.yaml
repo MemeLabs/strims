@@ -9,7 +9,7 @@ on:
       - 'cmd/svc/**'
       - 'pkg/**'
       - 'internal/**'
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build:

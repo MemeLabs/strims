@@ -7,7 +7,7 @@ on:
       - 'infra/cmd/atmon/**'
       - 'go.mod'
       - 'go.sum'
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build:

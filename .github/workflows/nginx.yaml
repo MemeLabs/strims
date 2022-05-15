@@ -2,7 +2,7 @@ name: nginx
 
 on:
   push:
-    branches: [ 'master' ]
+    branches: [ 'main' ]
     paths:
       - '.github/workflows/nginx.yaml'
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       with:
         repository: nginxinc/docker-nginx
         # TODO: use latest stable version once module spport is released
-        ref: master
+        ref: main
     - name: Docker login
       env:
         username: ${{ github.actor }}
