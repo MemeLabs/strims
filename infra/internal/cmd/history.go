@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	be "github.com/MemeLabs/go-ppspp/infra/internal/backend"
+	be "github.com/MemeLabs/strims/infra/internal/backend"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )

@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	be "github.com/MemeLabs/go-ppspp/infra/internal/backend"
-	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
+	be "github.com/MemeLabs/strims/infra/internal/backend"
+	"github.com/MemeLabs/strims/infra/pkg/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"

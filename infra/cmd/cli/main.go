@@ -6,7 +6,7 @@ package main
 import (
 	"log"
 
-	"github.com/MemeLabs/go-ppspp/infra/internal/cmd"
+	"github.com/MemeLabs/strims/infra/internal/cmd"
 )
 
 func main() {

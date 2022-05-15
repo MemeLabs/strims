@@ -19,9 +19,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/infra/internal/models"
-	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
-	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
+	"github.com/MemeLabs/strims/infra/internal/models"
+	"github.com/MemeLabs/strims/infra/pkg/node"
+	"github.com/MemeLabs/strims/infra/pkg/wgutil"
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/golang/geo/s2"
 	"github.com/mitchellh/mapstructure"

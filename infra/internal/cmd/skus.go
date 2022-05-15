@@ -10,7 +10,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
+	"github.com/MemeLabs/strims/infra/pkg/node"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
