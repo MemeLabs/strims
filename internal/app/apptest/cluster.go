@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package apptest
 
 import (
@@ -6,17 +9,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/dao/daotest"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/dao/daotest"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
+	"github.com/MemeLabs/strims/pkg/ppspp/ppspptest"
+	"github.com/MemeLabs/strims/pkg/vnic"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 )
 

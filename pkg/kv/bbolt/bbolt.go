@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package bbolt
 
 import (
@@ -5,7 +8,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv"
 	bboltlib "go.etcd.io/bbolt"
 )
 

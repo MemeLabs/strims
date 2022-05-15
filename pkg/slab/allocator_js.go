@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build js
 
 // between go 1.17 and 1.18 something changed in the go gc and holding memory

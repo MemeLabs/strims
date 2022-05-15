@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
@@ -7,9 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/kv"
 )
 
 const (

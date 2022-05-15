@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { CellMeasurerCacheParams } from "react-virtualized";
 import { CellMeasurerCacheInterface } from "react-virtualized/dist/es/CellMeasurer";
 

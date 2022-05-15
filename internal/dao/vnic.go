@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
-	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"google.golang.org/protobuf/proto"
 )
 

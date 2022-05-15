@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
@@ -5,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
 	"github.com/stretchr/testify/assert"
 )
 

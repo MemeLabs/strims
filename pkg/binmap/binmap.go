@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package binmap provides an implementation of the binmap data structure
 // described in Grishchenko, Victor, and Johan Pouwelse. "Binmaps: hybridizing
 // bitmaps and binary trees." PDS Technical Report PDS-2011-20001 (2011).

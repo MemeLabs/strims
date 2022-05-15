@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
@@ -5,10 +8,10 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/postgres"
-	"github.com/MemeLabs/go-ppspp/pkg/pathutil"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv/bbolt"
+	"github.com/MemeLabs/strims/pkg/kv/postgres"
+	"github.com/MemeLabs/strims/pkg/pathutil"
 )
 
 func openDB(cfg *Config) (kv.BlobStore, error) {

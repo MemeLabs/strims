@@ -1,12 +1,15 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
 	"bytes"
 	"encoding/base64"
 
-	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	"github.com/MemeLabs/strims/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"golang.org/x/crypto/blake2b"
 )
 

@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
 	"google.golang.org/protobuf/proto"
 )
 

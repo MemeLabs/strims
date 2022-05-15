@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chunkstream
 
 import (
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
 )
 
 func NewZeroPadWriter(w io.Writer) (*ZeroPadWriter, error) {

@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 syntax = "proto3";
 
 package strims.video.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/video/v1;video";
 option java_package = "gg.strims.video.v1";
 option swift_prefix = "SVO";
 

@@ -1,11 +1,14 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package protoutil
 
 import (
 	"bytes"
 	"testing"
 
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/image"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/apis/type/image"
 	"github.com/stretchr/testify/assert"
 )
 

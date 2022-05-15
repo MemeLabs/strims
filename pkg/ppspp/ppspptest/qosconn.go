@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
 	"errors"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 )
 
 var errQOSConnClosed = errors.New("qos conn closed")

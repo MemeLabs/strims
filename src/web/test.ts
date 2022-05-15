@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Bus, WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import Worker from "./svc.worker";

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package videoegress
 
 import (
@@ -10,17 +13,17 @@ import (
 	"io"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/hls"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/transfer"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
+	"github.com/MemeLabs/strims/pkg/chunkstream"
+	"github.com/MemeLabs/strims/pkg/hls"
+	"github.com/MemeLabs/strims/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"go.uber.org/zap"
 )
 

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
@@ -5,7 +8,7 @@ import (
 	"regexp"
 
 	parser "github.com/MemeLabs/chat-parser"
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"mvdan.cc/xurls/v2"
 )
 

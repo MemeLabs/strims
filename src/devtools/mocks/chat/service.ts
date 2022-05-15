@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { PassThrough } from "stream";
 
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";

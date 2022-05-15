@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package rtmpingress
 
 import (
@@ -11,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/edgeware/mp4ff/aac"
 	"github.com/edgeware/mp4ff/avc"
 	"github.com/edgeware/mp4ff/mp4"

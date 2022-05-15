@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
@@ -7,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/network/dialer"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 )

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import UAParser from "ua-parser-js";
 
 export const enum DeviceType {

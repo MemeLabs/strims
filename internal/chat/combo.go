@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
@@ -5,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 )
 
 var ErrComboDuplicate = errors.New("user has already participated in combo")

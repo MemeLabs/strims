@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dialer
 
 import (
@@ -7,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/event"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/internal/dao"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/event"
+	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/rpcutil"
+	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )

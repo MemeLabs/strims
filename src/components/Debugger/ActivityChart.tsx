@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
 import { format } from "d3-format";
 import React, { ReactElement, useEffect } from "react";

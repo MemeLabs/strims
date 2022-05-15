@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build !js
 
 package vnic
@@ -7,7 +10,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Base64 } from "js-base64";
 import React, { useContext } from "react";
 import { useParams } from "react-router-dom";

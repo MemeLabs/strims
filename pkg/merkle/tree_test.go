@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package merkle
 
 import (
@@ -7,8 +10,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/hmac_drbg"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/hmac_drbg"
 	"github.com/stretchr/testify/assert"
 )
 

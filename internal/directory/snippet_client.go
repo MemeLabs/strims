@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package directory
 
 import (
 	"context"
 
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/ppspp"
 )
 
 type snippetClient struct {

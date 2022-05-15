@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package debug
 
 import (
@@ -7,7 +10,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/errutil"
 )
 
 // PrintJSON ...

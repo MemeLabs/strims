@@ -1,19 +1,22 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package peer
 
 import (
 	"context"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/app"
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
-	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
-	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/rpcutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/dao"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/strims/pkg/rpcutil"
+	"github.com/MemeLabs/strims/pkg/vnic"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"go.uber.org/zap"
 )
 

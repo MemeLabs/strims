@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package session
 
 import (
@@ -6,8 +9,8 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/gorilla/websocket"
 )
 

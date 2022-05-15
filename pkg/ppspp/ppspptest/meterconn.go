@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/stats"
+	"github.com/MemeLabs/strims/pkg/stats"
 )
 
 // NewMeterConn ...

@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 syntax = "proto3";
 
 package strims.autoseed.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/autoseed/v1;autoseedv1";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/autoseed/v1;autoseedv1";
 option java_package = "gg.strims.autoseed.v1";
 option swift_prefix = "SAS";
 

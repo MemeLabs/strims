@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package codec
 
 import (
 	"errors"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 )
 
 var (

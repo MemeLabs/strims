@@ -1,6 +1,6 @@
 // For format details, see https://aka.ms/vscode-remote/devcontainer.json
 {
-	"name": "go-ppspp development container",
+	"name": "strims development container",
 	"dockerFile": "Dockerfile",
 	"context": "..",
 	"postCreateCommand": "npm ci && go get ./...",

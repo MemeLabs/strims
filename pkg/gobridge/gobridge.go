@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build js
 
 // SEE: https://github.com/aaronpowell/webpack-golang-wasm-async-loader/blob/master/gobridge/gobridge.go

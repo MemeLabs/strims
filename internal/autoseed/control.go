@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package autoseed
 
 import (
@@ -5,13 +8,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	autoseedv1 "github.com/MemeLabs/go-ppspp/pkg/apis/autoseed/v1"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/transfer"
+	autoseedv1 "github.com/MemeLabs/strims/pkg/apis/autoseed/v1"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/ppspp"
 	"go.uber.org/zap"
 )
 

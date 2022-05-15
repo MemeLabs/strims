@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package directory
 
 import (
@@ -7,8 +10,8 @@ import (
 	"fmt"
 	"net/http"
 
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 type angelThumpEmbedLoader struct{}

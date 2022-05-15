@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package apptest
 
 import (
 	"sync"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

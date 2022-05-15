@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
 	"time"
 
-	notificationv1 "github.com/MemeLabs/go-ppspp/pkg/apis/notification/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	notificationv1 "github.com/MemeLabs/strims/pkg/apis/notification/v1"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"google.golang.org/protobuf/proto"
 )
 

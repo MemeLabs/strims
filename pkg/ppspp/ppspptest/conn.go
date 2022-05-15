@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
 	"io"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 )
 
 const connMTU = 16 * 1024

@@ -1,15 +1,18 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package apptest
 
 import (
 	"context"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/app"
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/peer"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
+	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/peer"
+	"github.com/MemeLabs/strims/pkg/httputil"
 
 	"go.uber.org/zap"
 )

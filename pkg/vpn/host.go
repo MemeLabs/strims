@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vpn
 
 import (
@@ -6,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/event"
-	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
+	"github.com/MemeLabs/strims/pkg/event"
+	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/vnic"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"go.uber.org/zap"
 )
 

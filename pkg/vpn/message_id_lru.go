@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vpn
 
 import (
@@ -6,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/slab"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/slab"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 // TODO: use hashmap/lru (blocked by github.com/golang/go/issues/48849)

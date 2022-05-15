@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build js
 
 package vnic
@@ -5,7 +8,7 @@ package vnic
 import (
 	"syscall/js"
 
-	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
+	"github.com/MemeLabs/strims/pkg/wasmio"
 	"go.uber.org/zap"
 )
 

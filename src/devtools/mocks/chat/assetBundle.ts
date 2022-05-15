@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import * as chatv1 from "../../../apis/strims/chat/v1/chat";
 import imgBONK from "./emotes/animated/BONK.png";
 import imgcatJAM from "./emotes/animated/catJAM.png";

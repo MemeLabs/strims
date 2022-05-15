@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { useMemo } from "react";
 import { useForm } from "react-hook-form";

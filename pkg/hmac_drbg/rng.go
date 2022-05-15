@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package hmac_drbg
 
 import (
@@ -7,7 +10,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/errutil"
 	"golang.org/x/crypto/blake2b"
 )
 

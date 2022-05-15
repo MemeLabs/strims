@@ -1,11 +1,14 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package peer
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/internal/app"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/transfer"
+	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
 )
 
 type transferService struct {

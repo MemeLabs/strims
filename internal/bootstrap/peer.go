@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package bootstrap
 
 import (
-	"github.com/MemeLabs/go-ppspp/internal/api"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/strims/internal/api"
+	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/vnic"
 )
 
 type Peer any

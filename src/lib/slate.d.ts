@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { BaseEditor, BaseRange, BaseText } from "slate";
 import { HistoryEditor } from "slate-history";
 import { ReactEditor } from "slate-react";

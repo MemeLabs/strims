@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
-	autoseedv1 "github.com/MemeLabs/go-ppspp/pkg/apis/autoseed/v1"
+	autoseedv1 "github.com/MemeLabs/strims/pkg/apis/autoseed/v1"
 	"google.golang.org/protobuf/proto"
 )
 

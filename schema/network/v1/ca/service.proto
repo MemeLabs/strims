@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 syntax = "proto3";
 
 package strims.network.v1.ca;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca;ca";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/network/v1/ca;ca";
 option java_package = "gg.strims.network.v1.ca";
 option swift_prefix = "SNC";
 

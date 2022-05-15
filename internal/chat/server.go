@@ -1,22 +1,25 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/directory"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/directory"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/servicemanager"
+	"github.com/MemeLabs/strims/internal/transfer"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

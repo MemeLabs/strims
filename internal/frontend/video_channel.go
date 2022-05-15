@@ -1,13 +1,16 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/internal/app"
-	"github.com/MemeLabs/go-ppspp/internal/videochannel"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/videochannel"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
 )
 
 func init() {

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package prefixstream
 
 import (
@@ -5,7 +8,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 )
 
 var sentinel = [...]byte{0, 1, 1, 2, 3, 5, 8, 13}

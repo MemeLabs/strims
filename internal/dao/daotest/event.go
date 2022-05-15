@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package daotest
 
 import (
 	"log"
 
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
+	"github.com/MemeLabs/strims/pkg/debug"
 	"google.golang.org/protobuf/proto"
 )
 

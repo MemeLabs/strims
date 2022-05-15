@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import React, { ComponentType, RefCallback, useContext, useMemo, useState } from "react";
 import { useToggle } from "react-use";
 

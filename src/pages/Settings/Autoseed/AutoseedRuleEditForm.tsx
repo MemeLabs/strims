@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import base32Decode from "base32-decode";
 import base32Encode from "base32-encode";
 import { Base64 } from "js-base64";

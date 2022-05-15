@@ -1,3 +1,3 @@
-strims@home
+strims
 
 distributed live streaming

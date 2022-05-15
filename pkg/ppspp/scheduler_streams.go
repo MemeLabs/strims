@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/graph"
+	"github.com/MemeLabs/strims/pkg/graph"
 )
 
 func newPeerStreamAssigner(streamCount int64, channelCaps []int64) *peerStreamAssigner {

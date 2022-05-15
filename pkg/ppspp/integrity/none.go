@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package integrity
 
 import (
-	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	swarmpb "github.com/MemeLabs/strims/pkg/apis/type/swarm"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 var noneChannelVerifier = &NoneChannelVerifier{}

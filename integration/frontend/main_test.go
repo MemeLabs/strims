@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
@@ -5,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/integration/driver"
+	"github.com/MemeLabs/strims/integration/driver"
 )
 
 var td driver.Driver

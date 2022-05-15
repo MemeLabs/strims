@@ -1,11 +1,14 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package integrity
 
 import (
 	"crypto/ed25519"
 	"encoding/binary"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/pool"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 // NewED25519Signer ...

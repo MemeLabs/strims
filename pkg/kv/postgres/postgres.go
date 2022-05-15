@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package postgres
 
 import (
@@ -6,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/log/zapadapter"
 	"github.com/jackc/pgx/v4/pgxpool"

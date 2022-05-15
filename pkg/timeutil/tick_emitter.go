@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package timeutil
 
 import (
@@ -5,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
-	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/strims/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/randutil"
 )
 
 const maxTickerFuzz = 60 * time.Minute

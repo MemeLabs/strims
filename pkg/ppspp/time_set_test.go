@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import * as ebml from "ts-ebml";
 
 import { Source } from "./source";

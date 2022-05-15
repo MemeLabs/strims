@@ -1,11 +1,14 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package rpcutil
 
 import (
 	"context"
 	"reflect"
 
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )

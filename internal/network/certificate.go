@@ -1,14 +1,17 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package network
 
 import (
 	"bytes"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/strims/internal/dao"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 )
 

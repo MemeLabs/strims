@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Location, useLocation, useNavigate } from "react-router";
 

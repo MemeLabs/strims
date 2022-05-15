@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package chunkstream implements io Reader/Writer for serializing streams of
 // input segments (like mpeg-ts) by splitting them into fixed length chunks
 // with headers indicating whether the next chunk contains the end of an input

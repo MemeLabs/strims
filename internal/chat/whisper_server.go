@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
@@ -5,15 +8,15 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/servicemanager"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

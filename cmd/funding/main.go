@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
@@ -8,11 +11,11 @@ import (
 	"os"
 	"path"
 
-	funding "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	funding "github.com/MemeLabs/strims/pkg/apis/funding/v1"
+	"github.com/MemeLabs/strims/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv/bbolt"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

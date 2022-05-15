@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vnic
 
 import (
@@ -6,8 +9,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
+	"github.com/MemeLabs/strims/pkg/pool"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 )
 
 var errClosedFrameWriter = errors.New("write on closed frameReadWriter")

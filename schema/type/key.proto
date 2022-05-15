@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 syntax = "proto3";
 
 package strims.type;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/type/key;key";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/type/key;key";
 option java_package = "gg.strims.type";
 option swift_prefix = "STP";
 

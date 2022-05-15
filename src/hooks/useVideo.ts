@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { ComponentProps, useEffect, useRef, useState } from "react";
 
 import useReady from "./useReady";

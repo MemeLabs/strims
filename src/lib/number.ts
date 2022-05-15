@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export const formatNumberWithScale = (n: number, scale: number, unit: string): string =>
   `${(Math.round(n / (scale / 10)) / 10).toLocaleString()}${unit}`;
 

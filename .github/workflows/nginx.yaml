@@ -22,6 +22,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
     - name: Build image
-      run: docker build -f modules/Dockerfile.alpine --build-arg ENABLED_MODULES="brotli" -t docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest .
+      run: docker build -f modules/Dockerfile.alpine --build-arg ENABLED_MODULES="brotli" -t docker.pkg.github.com/memelabs/strims/nginx:latest .
     - name: Publish image
-      run: docker push docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest
+      run: docker push docker.pkg.github.com/memelabs/strims/nginx:latest

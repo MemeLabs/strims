@@ -58,7 +58,7 @@ RUN \
   && find dist/web -type f | xargs gzip -k9 \
   && find dist/web -not -name "*.gz" -type f | xargs brotli
 
-FROM docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest
+FROM docker.pkg.github.com/memelabs/strims/nginx:latest
 
 COPY hack/web/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /ui/dist/web /usr/share/nginx/html/

@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
 	"math/rand"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,25 +1,28 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package app
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/internal/autoseed"
-	"github.com/MemeLabs/go-ppspp/internal/bootstrap"
-	"github.com/MemeLabs/go-ppspp/internal/chat"
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/directory"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/notification"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	"github.com/MemeLabs/go-ppspp/internal/videocapture"
-	"github.com/MemeLabs/go-ppspp/internal/videochannel"
-	"github.com/MemeLabs/go-ppspp/internal/videoegress"
-	"github.com/MemeLabs/go-ppspp/internal/videoingress"
-	"github.com/MemeLabs/go-ppspp/internal/vnic"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/internal/autoseed"
+	"github.com/MemeLabs/strims/internal/bootstrap"
+	"github.com/MemeLabs/strims/internal/chat"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/directory"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/notification"
+	"github.com/MemeLabs/strims/internal/transfer"
+	"github.com/MemeLabs/strims/internal/videocapture"
+	"github.com/MemeLabs/strims/internal/videochannel"
+	"github.com/MemeLabs/strims/internal/videoegress"
+	"github.com/MemeLabs/strims/internal/videoingress"
+	"github.com/MemeLabs/strims/internal/vnic"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 )
 

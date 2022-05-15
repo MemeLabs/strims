@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package rtmpingress
 
 import (
@@ -12,9 +15,9 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/strims/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/pool"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )

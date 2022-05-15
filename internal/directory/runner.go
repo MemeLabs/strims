@@ -1,18 +1,21 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package directory
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/servicemanager"
+	"github.com/MemeLabs/strims/internal/transfer"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/protoutil"
+	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 )
 

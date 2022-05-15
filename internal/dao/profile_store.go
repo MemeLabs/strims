@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
@@ -5,8 +8,8 @@ import (
 	"fmt"
 	"sync"
 
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
 

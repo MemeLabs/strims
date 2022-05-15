@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package store
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/bufioutil"
 )
 
 // Publisher ...

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import React from "react";
 import { FiUser } from "react-icons/fi";
 import { Link, Navigate, useLocation } from "react-router-dom";

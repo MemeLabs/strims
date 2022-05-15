@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/stretchr/testify/assert"
 )
 

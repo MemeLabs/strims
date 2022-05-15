@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package integrity
 
 import (
@@ -5,12 +8,12 @@ import (
 	"io"
 	"sync"
 
-	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	swarmpb "github.com/MemeLabs/strims/pkg/apis/type/swarm"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/bufioutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ppspp/codec"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 // errors ...

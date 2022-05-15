@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package mpc
 
 import (
@@ -6,7 +9,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/mpc/mpctest"
+	"github.com/MemeLabs/strims/pkg/mpc/mpctest"
 )
 
 func testOT(

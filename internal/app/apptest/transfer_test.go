@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package apptest
 
 import (
@@ -5,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/stretchr/testify/assert"
 
 	"go.uber.org/zap"

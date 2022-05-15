@@ -1,12 +1,15 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
 	"errors"
 	"fmt"
 
-	swarmpb "github.com/MemeLabs/go-ppspp/pkg/apis/type/swarm"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	swarmpb "github.com/MemeLabs/strims/pkg/apis/type/swarm"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 )
 
 // NewDefaultSwarm ...

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build !js
 
 package videoingress
@@ -11,21 +14,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/directory"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/image"
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/directory"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/transfer"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/image"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
+	"github.com/MemeLabs/strims/pkg/chunkstream"
+	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/rtmpingress"
+	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )

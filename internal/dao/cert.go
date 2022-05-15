@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
@@ -7,9 +10,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	keyapi "github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	keyapi "github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 const certPredateDuration = time.Hour

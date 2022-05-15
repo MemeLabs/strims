@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package servicemanager
 
 import (
@@ -6,8 +9,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )

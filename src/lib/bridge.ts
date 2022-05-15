@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { EventEmitter } from "events";
 
 declare function postMessage<T>(message: T, targetOrigin?: string, transfer?: Transferable[]): void;

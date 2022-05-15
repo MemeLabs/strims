@@ -1,4 +1,4 @@
-module github.com/MemeLabs/go-ppspp
+module github.com/MemeLabs/strims
 
 go 1.18
 

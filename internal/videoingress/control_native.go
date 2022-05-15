@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build !js
 
 package videoingress
@@ -8,19 +11,19 @@ import (
 	"net"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/directory"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
-	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/directory"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/transfer"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
+	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/rtmpingress"
+	"github.com/MemeLabs/strims/pkg/sortutil"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

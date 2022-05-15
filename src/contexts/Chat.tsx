@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";

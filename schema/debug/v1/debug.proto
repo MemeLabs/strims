@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 syntax = "proto3";
 
 package strims.debug.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/debug/v1;debug";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1;debug";
 option java_package = "gg.strims.debug.v1";
 option swift_prefix = "SDG";
 

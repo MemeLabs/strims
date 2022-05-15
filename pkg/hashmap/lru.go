@@ -1,6 +1,9 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package hashmap
 
-import "github.com/MemeLabs/go-ppspp/pkg/timeutil"
+import "github.com/MemeLabs/strims/pkg/timeutil"
 
 func NewLRU[K, V any](iface Interface[K]) LRU[K, V] {
 	return LRU[K, V]{

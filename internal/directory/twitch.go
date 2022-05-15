@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package directory
 
 import (
@@ -9,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/set"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/set"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/nicklaw5/helix"
 	"golang.org/x/sync/errgroup"
 )

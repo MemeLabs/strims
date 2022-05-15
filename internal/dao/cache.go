@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
@@ -8,9 +11,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

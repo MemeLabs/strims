@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import React, { useRef, useState } from "react";
 import { useAsync } from "react-use";
 import UPNG from "upng-js";

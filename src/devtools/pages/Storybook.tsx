@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import clsx from "clsx";
 import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Location, Navigate, Route, Routes, useLocation } from "react-router";

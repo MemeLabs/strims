@@ -1,6 +1,9 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package rope_test
 
-import "github.com/MemeLabs/go-ppspp/pkg/rope"
+import "github.com/MemeLabs/strims/pkg/rope"
 
 func ExampleRope_Slice() {
 	rope.New([]byte("first chunk"), []byte("second chunk")).Slice(5, 10)

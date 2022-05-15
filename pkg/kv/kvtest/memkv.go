@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package kvtest
 
 import (
@@ -6,7 +9,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/petar/GoLLRB/llrb"
 )
 

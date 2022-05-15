@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package store
 
 import (
@@ -6,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/stretchr/testify/assert"
 )
 

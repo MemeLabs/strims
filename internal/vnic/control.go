@@ -1,13 +1,16 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vnic
 
 import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
+	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 )
 

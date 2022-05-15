@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package event
 
 import (
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 )
 
 // NetworkStart ...

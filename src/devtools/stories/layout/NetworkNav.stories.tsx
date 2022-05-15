@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import "../../../components/Layout/Layout.scss";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";

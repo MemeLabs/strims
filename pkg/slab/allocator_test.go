@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package slab
 
 import (
@@ -5,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
-	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
+	"github.com/MemeLabs/strims/pkg/sortutil"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slices"
 )

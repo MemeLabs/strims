@@ -1,14 +1,17 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package transfer
 
 import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/api"
-	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/strims/internal/api"
+	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/codec"
 	"go.uber.org/zap"
 )
 

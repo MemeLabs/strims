@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
@@ -9,9 +12,9 @@ import (
 	"math/rand"
 	"time"
 
-	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 )
 

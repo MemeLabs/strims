@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
@@ -12,15 +15,15 @@ import (
 	"path"
 	"time"
 
-	devtoolsv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1"
-	ppsppv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	devtoolsv1 "github.com/MemeLabs/strims/pkg/apis/devtools/v1"
+	ppsppv1 "github.com/MemeLabs/strims/pkg/apis/devtools/v1/ppspp"
+	"github.com/MemeLabs/strims/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv/bbolt"
+	"github.com/MemeLabs/strims/pkg/ppspp/codec"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/ppspptest"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"

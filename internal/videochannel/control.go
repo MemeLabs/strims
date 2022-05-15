@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package videochannel
 
 import (
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	"github.com/MemeLabs/strims/internal/dao"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
 )
 
 // Option ...

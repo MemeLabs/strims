@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vnic
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )

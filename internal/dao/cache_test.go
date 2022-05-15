@@ -1,13 +1,16 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
 	"testing"
 	"time"
 
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	"github.com/MemeLabs/strims/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 )
 

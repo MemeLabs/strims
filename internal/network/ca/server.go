@@ -1,19 +1,22 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ca
 
 import (
 	"context"
 	"errors"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
-	"github.com/MemeLabs/go-ppspp/internal/servicemanager"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network/dialer"
+	"github.com/MemeLabs/strims/internal/servicemanager"
+	"github.com/MemeLabs/strims/internal/transfer"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

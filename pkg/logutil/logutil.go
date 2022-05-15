@@ -1,10 +1,13 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package logutil
 
 import (
 	"encoding/hex"
 	"reflect"
 
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
+	"github.com/MemeLabs/strims/pkg/debug"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
 

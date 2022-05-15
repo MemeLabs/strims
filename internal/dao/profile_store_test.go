@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package dao
 
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 )
 

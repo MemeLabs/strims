@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspp
 
 import (
@@ -13,15 +16,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/ledbat"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
-	"github.com/MemeLabs/go-ppspp/pkg/stats"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/ledbat"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
+	"github.com/MemeLabs/strims/pkg/ppspp/codec"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
+	"github.com/MemeLabs/strims/pkg/stats"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

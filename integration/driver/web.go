@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package driver
 
 import (
@@ -14,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/httputil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/avast/retry-go"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"

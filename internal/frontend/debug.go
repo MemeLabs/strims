@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
@@ -8,9 +11,9 @@ import (
 	"runtime/pprof"
 	"time"
 
-	debugv1 "github.com/MemeLabs/go-ppspp/pkg/apis/debug/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
 )

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package integrity
 
 import (
@@ -8,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/hmac_drbg"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/pkg/hmac_drbg"
+	"github.com/MemeLabs/strims/pkg/ppspp/ppspptest"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )

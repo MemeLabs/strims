@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
@@ -11,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/binaryutil"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 )
 
 // event codes

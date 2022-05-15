@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package protoutil
 
 import (
@@ -7,7 +10,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/strims/pkg/pool"
 	"google.golang.org/protobuf/proto"
 )
 

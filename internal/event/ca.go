@@ -1,8 +1,11 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package event
 
 import (
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	network "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 )
 
 // CARenewNetworkCertError ...

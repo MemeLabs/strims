@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ca
 
 import (
@@ -5,17 +8,17 @@ import (
 	"context"
 	"errors"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
-	networkv1errors "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/errors"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/syncutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	networkv1errors "github.com/MemeLabs/strims/pkg/apis/network/v1/errors"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/protoutil"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"go.uber.org/zap"
 )
 

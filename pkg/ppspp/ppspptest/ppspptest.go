@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ppspptest
 
 import (
@@ -5,7 +8,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"go.uber.org/zap"
 )
 

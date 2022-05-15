@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { createContext, useCallback, useEffect, useMemo, useState } from "react";

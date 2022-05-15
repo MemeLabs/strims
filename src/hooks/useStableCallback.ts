@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // based on the react useEvent rfc
 // see: https://github.com/reactjs/rfcs/blob/useevent/text/0000-useevent.md
 // discussion: https://github.com/facebook/react/issues/14099

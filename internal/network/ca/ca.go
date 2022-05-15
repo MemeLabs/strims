@@ -1,17 +1,20 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package ca
 
 import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network/dialer"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/hashmap"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network/dialer"
+	"github.com/MemeLabs/strims/internal/transfer"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/hashmap"
 	"go.uber.org/zap"
 )
 

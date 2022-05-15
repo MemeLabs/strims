@@ -1,15 +1,18 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package app
 
 import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/internal/api"
-	"github.com/MemeLabs/go-ppspp/internal/bootstrap"
-	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/network"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/strims/internal/api"
+	"github.com/MemeLabs/strims/internal/bootstrap"
+	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/transfer"
+	"github.com/MemeLabs/strims/pkg/vnic"
 )
 
 type PeerControl interface {

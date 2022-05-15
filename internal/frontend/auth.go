@@ -1,12 +1,15 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/internal/session"
-	authv1 "github.com/MemeLabs/go-ppspp/pkg/apis/auth/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/session"
+	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"go.uber.org/zap"
 )
 

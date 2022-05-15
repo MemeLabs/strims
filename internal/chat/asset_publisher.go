@@ -1,9 +1,12 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package chat
 
 import (
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/strims/internal/dao"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
 )
 

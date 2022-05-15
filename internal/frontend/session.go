@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
@@ -6,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/internal/dao"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 )
 
 var errMalformedSessionID = errors.New("malformed session id")

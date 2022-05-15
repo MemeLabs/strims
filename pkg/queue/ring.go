@@ -1,7 +1,10 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package queue
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/rope"
+	"github.com/MemeLabs/strims/pkg/rope"
 )
 
 func NewRing[T any](n int) (r Ring[T]) {

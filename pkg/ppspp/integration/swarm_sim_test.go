@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package integration
 
 import (
@@ -19,12 +22,12 @@ import (
 
 	pkgerrors "github.com/pkg/errors"
 
-	"github.com/MemeLabs/go-ppspp/pkg/errutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
+	"github.com/MemeLabs/strims/pkg/errutil"
+	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/codec"
+	"github.com/MemeLabs/strims/pkg/ppspp/ppspptest"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package protoutil
 
 import (
@@ -6,9 +9,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
-	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/binaryutil"
+	"github.com/MemeLabs/strims/pkg/chunkstream"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

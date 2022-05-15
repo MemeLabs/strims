@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package frontend
 
 import (
@@ -6,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/integration/driver"
-	authv1 "github.com/MemeLabs/go-ppspp/pkg/apis/auth/v1"
-	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/integration/driver"
+	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/stretchr/testify/assert"
 )
 

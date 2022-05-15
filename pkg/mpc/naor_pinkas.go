@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package mpc
 
 // Implementation of the Naor-Pinkas oblivious transfer protocol (cf.

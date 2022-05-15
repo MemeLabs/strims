@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Base64 } from "js-base64";
 
 import { Event } from "../../../apis/strims/network/v1/directory/directory";

@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useEffect, useMemo } from "react";
 
 const useObjectURL = (type: string, data: Uint8Array): string => {

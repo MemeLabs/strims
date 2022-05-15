@@ -3,7 +3,7 @@ package ioutil
 import (
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/mathutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
 )
 
 func DiscardN(r io.Reader, n int64) (int64, error) {

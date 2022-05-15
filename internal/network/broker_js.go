@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //go:build js
 
 package network
@@ -10,10 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/wasmio"
 	"go.uber.org/zap"
 )
 

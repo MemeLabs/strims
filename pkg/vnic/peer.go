@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package vnic
 
 import (
@@ -8,15 +11,15 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
-	"github.com/MemeLabs/go-ppspp/pkg/randutil"
-	"github.com/MemeLabs/go-ppspp/pkg/version"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
+	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/protoutil"
+	"github.com/MemeLabs/strims/pkg/randutil"
+	"github.com/MemeLabs/strims/pkg/version"
+	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
