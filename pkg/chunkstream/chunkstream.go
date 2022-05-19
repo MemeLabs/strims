@@ -81,7 +81,7 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 }
 
 // Flush flushes any remaining bytes in the buffer to w. Should be called
-// after every input segment and before closing the underlying writer.
+// after every input segment and before closing w.
 func (c *Writer) Flush() (err error) {
 	if c.woff != 0 {
 		return ErrHeaderWritten
@@ -126,7 +126,7 @@ func NewReaderSize(r io.Reader, offset int64, size int) (c *Reader, err error) {
 type Reader struct {
 	r      io.Reader
 	header []byte
-	size   int // chunk byte length
+	size   int // chunk byte alignment
 	off    int // read offset in current chunk
 	roff   int // record end index in current chunk (int max when undefined)
 }

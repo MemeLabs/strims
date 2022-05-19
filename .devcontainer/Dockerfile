@@ -9,9 +9,9 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 ARG NODE_VERSION=14.x
-ARG GO_VERSION=1.18.1
-ARG PROTOC_VERSION=3.19.1
-ARG MEMELABS_PB_VERSION=0.2.3
+ARG GO_VERSION=1.18.2
+ARG PROTOC_VERSION=3.20.1
+ARG MEMELABS_PB_VERSION=0.3.0
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -44,41 +44,14 @@ RUN \
   && rm "go${GO_VERSION}.linux-amd64.tar.gz" \
   # Build go tools with module support
   && mkdir -p /tmp/gotools/temp \
-  && cd /tmp/gotools \
-  && go mod init gotools \
-  && GOPATH=/tmp/gotools/temp GO111MODULE=on go get -v golang.org/x/tools/gopls@latest 2>&1 \
-  && GOPATH=/tmp/gotools/temp GO111MODULE=on go get -v \
-    honnef.co/go/tools/...@latest \
-    golang.org/x/tools/cmd/gorename@latest \
-    golang.org/x/tools/cmd/goimports@latest \
-    golang.org/x/tools/cmd/guru@latest \
-    golang.org/x/lint/golint@latest \
-    github.com/mdempsky/gocode@latest \
-    github.com/cweill/gotests/...@latest \
-    github.com/haya14busa/goplay/cmd/goplay@latest \
-    github.com/sqs/goreturns@latest \
-    github.com/josharian/impl@latest \
-    github.com/davidrjenni/reftools/cmd/fillstruct@latest \
-    github.com/uudashr/gopkgs/v2/cmd/gopkgs@latest \
-    github.com/ramya-rao-a/go-outline@latest \
-    github.com/acroca/go-symbols@latest \
-    github.com/godoctor/godoctor@latest \
-    github.com/rogpeppe/godef@latest \
-    github.com/zmb3/gogetdoc@latest \
-    github.com/fatih/gomodifytags@latest \
-    github.com/mgechev/revive@latest \
-    github.com/go-delve/delve/cmd/dlv@latest \
-    github.com/golang/protobuf/protoc-gen-go 2>&1 \
-  # Build go tools without module support
-  && GOPATH=/tmp/gotools/temp GO111MODULE=off go get -v github.com/alecthomas/gometalinter 2>&1 \
-  # Build gocode-gomod
-  && GOPATH=/tmp/gotools/temp GO111MODULE=off go get -x -d github.com/stamblerre/gocode 2>&1 \
-  && GOPATH=/tmp/gotools/temp GO111MODULE=off go build -o gocode-gomod github.com/stamblerre/gocode \
-  # Install go tools
-  && mv /tmp/gotools/temp/bin/* /usr/local/bin/ \
-  && mv /tmp/gotools/gocode-gomod /usr/local/bin/ \
-  # Clean up go path
-  && cd ~ \
+  && GOPATH=/tmp/gotools/temp go install golang.org/x/tools/gopls@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/cweill/gotests/...@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/fatih/gomodifytags@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/josharian/impl@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/haya14busa/goplay/cmd/goplay@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/go-delve/delve/cmd/dlv@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install honnef.co/go/tools/cmd/staticcheck@latest 2>&1 \
+  && GOPATH=/tmp/gotools/temp go install github.com/golang/protobuf/protoc-gen-go@latest 2>&1 \
   && rm -rf /tmp/gotools \
   # Install golangci-lint
   && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>&1 \
