@@ -10,7 +10,6 @@ option java_package = "gg.strims.network.v1.bootstrap";
 option swift_prefix = "SNB";
 
 import "type/certificate.proto";
-import "network/v1/network.proto";
 
 message BootstrapClient {
   uint64 id = 1;
@@ -99,7 +98,7 @@ message BootstrapServiceMessage {
 
 message PublishNetworkToBootstrapPeerRequest {
   uint64 peer_id = 1;
-  strims.network.v1.Network network = 2;
+  uint64 network_id = 2;
 }
 
 message PublishNetworkToBootstrapPeerResponse {}

@@ -1,8 +1,9 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { Base64 } from "js-base64";
 import React from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Network } from "../../../apis/strims/network/v1/network";
 import {
@@ -37,17 +38,10 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
   }
 
   const rows = networks.map((network) => {
+    const navigate = useNavigate();
     const handleDelete = () => deleteChatServer({ id: network.id });
 
-    const handleCreateInvite = async () => {
-      const invitation = await client.network.createInvitation({
-        signingKey: profile.key,
-        signingCert: network.certificate,
-        networkName: certificateRoot(network.certificate).subject,
-      });
-      void navigator.clipboard.writeText(invitation.invitationB64);
-      console.log("copied invite to clipboard");
-    };
+    const handleCreateInvite = () => navigate(`${network.id}/invite`);
 
     const handlePublish = () => setPublishNetwork(network);
 

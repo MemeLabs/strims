@@ -453,7 +453,7 @@
 					},
 
 					// func channelWrite(cid int, src []byte) (int, bool)
-					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelWrite": (sp) => {
+					"github.com/MemeLabs/strims/pkg/wasmio.channelWrite": (sp) => {
 						sp >>>= 0
 						const cid = getInt64(sp + 8);
 						const src = loadSlice(sp + 16);
@@ -465,7 +465,7 @@
 					},
 
 					// func channelRead(cid int, b []byte) (int, bool)
-					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelRead": (sp) => {
+					"github.com/MemeLabs/strims/pkg/wasmio.channelRead": (sp) => {
 						sp >>>= 0
 						const cid = getInt64(sp + 8);
 						const dst = loadSlice(sp + 16);
@@ -475,7 +475,7 @@
 					},
 
 					// func channelClose(cid int) bool
-					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelClose": (sp) => {
+					"github.com/MemeLabs/strims/pkg/wasmio.channelClose": (sp) => {
 						sp >>>= 0
 						const cid = getInt64(sp + 8);
 						const ok = this.wasmio.channelClose(cid);

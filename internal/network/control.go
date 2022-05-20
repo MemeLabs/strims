@@ -19,6 +19,7 @@ import (
 	"github.com/MemeLabs/strims/internal/transfer"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	networkv1errors "github.com/MemeLabs/strims/pkg/apis/network/v1/errors"
 	notificationv1 "github.com/MemeLabs/strims/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
@@ -576,8 +577,10 @@ func (t *control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 	return nil, false
 }
 
-func (t *control) Add(network *networkv1.Network) error {
+// TODO: move to dao
+func (t *control) Add(network *networkv1.Network) (err error) {
 	var logs []*networkv1ca.CertificateLog
+	var adminRecord *networkv1directory.UserRecord
 	if network.GetServerConfig() != nil {
 		for c := network.Certificate; c != nil; c = c.GetParent() {
 			log, err := dao.NewCertificateLog(t.store, network.Id, c)
@@ -586,11 +589,11 @@ func (t *control) Add(network *networkv1.Network) error {
 			}
 			logs = append(logs, log)
 		}
-	}
 
-	adminRecord, err := dao.NewDirectoryUserRecord(t.store, network.Id, t.profile.Key.Public)
-	if err != nil {
-		return err
+		adminRecord, err = dao.NewDirectoryUserRecord(t.store, network.Id, t.profile.Key.Public)
+		if err != nil {
+			return err
+		}
 	}
 
 	return t.store.Update(func(tx kv.RWTx) error {
@@ -602,7 +605,14 @@ func (t *control) Add(network *networkv1.Network) error {
 				return err
 			}
 		}
-		return dao.DirectoryUserRecords.Insert(tx, adminRecord)
+
+		if adminRecord != nil {
+			if err := dao.DirectoryUserRecords.Insert(tx, adminRecord); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 }
 

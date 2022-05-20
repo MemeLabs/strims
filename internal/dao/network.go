@@ -35,6 +35,8 @@ const (
 	networkPeerNetworkNS
 	networkPeerPublicKeyNS
 	networkPeerInviterNS
+	networkCertificateLogKeyNS
+	networkBootstrapClientClientOptionsNS
 )
 
 var Networks = NewTable(
@@ -202,7 +204,7 @@ func NewNetworkFromCertificate(g IDGenerator, cert *certificate.Certificate) (*n
 }
 
 // NewInvitationV0 ...
-func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.InvitationV0, error) {
+func NewInvitationV0(key *key.Key, cert *certificate.Certificate, bootstrapClients []*networkv1bootstrap.BootstrapClient) (*networkv1.InvitationV0, error) {
 	inviteKey, err := GenerateKey()
 	if err != nil {
 		return nil, err
@@ -220,10 +222,18 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.In
 	}
 	inviteCert.ParentOneof = &certificate.Certificate_Parent{Parent: cert}
 
-	return &networkv1.InvitationV0{
+	invitation := &networkv1.InvitationV0{
 		Key:         inviteKey,
 		Certificate: inviteCert,
-	}, nil
+	}
+
+	for _, c := range bootstrapClients {
+		cc := proto.Clone(c).(*networkv1bootstrap.BootstrapClient)
+		cc.Id = 0
+		invitation.BootstrapClients = append(invitation.BootstrapClients, cc)
+	}
+
+	return invitation, nil
 }
 
 var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS, nil)
@@ -290,15 +300,12 @@ func certificateLogKeyKey(m *networkv1ca.CertificateLog) []byte {
 }
 
 var GetCertificateLogByKey = UniqueIndex(
-	networkCertificateLogSubjectNS,
+	networkCertificateLogKeyNS,
 	CertificateLogs,
 	certificateLogKeyKey,
 	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
-			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
-				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
-			}
-			return ErrCertificateSubjectInUse
+			return DeleteSecondaryIndex(s, networkCertificateLogKeyNS, certificateLogKeyKey(m), p.Id)
 		},
 	},
 )
@@ -369,6 +376,22 @@ var BootstrapClients = NewTable(
 	},
 )
 
+func FormatBootstrapClientClientOptionsKey(m *networkv1bootstrap.BootstrapClient) []byte {
+	switch o := m.ClientOptions.(type) {
+	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
+		return []byte(o.WebsocketOptions.Url)
+	default:
+		return nil
+	}
+}
+
+var GetBootstrapClientByClientOptions = UniqueIndex(
+	networkBootstrapClientClientOptionsNS,
+	BootstrapClients,
+	FormatBootstrapClientClientOptionsKey,
+	nil,
+)
+
 // NewWebSocketBootstrapClient ...
 func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*networkv1bootstrap.BootstrapClient, error) {
 	id, err := g.GenerateID()
@@ -384,6 +407,19 @@ func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTL
 				InsecureSkipVerifyTls: insecureSkipVerifyTLS,
 			},
 		},
+	}, nil
+}
+
+// NewBootstrapClient ...
+func NewBootstrapClient(g IDGenerator, bootstrapClient *networkv1bootstrap.BootstrapClient) (*networkv1bootstrap.BootstrapClient, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	return &networkv1bootstrap.BootstrapClient{
+		Id:            id,
+		ClientOptions: bootstrapClient.ClientOptions,
 	}, nil
 }
 

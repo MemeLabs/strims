@@ -13,7 +13,9 @@ import (
 	"github.com/MemeLabs/strims/internal/app"
 	"github.com/MemeLabs/strims/internal/dao"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -106,7 +108,21 @@ func (s *networkService) List(ctx context.Context, r *networkv1.ListNetworksRequ
 
 // CreateInvitation ...
 func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.CreateInvitationRequest) (*networkv1.CreateInvitationResponse, error) {
-	invitation, err := dao.NewInvitationV0(r.SigningKey, r.SigningCert)
+	network, err := dao.Networks.Get(s.store, r.NetworkId)
+	if err != nil {
+		return nil, err
+	}
+
+	var bootstrapClients []*networkv1bootstrap.BootstrapClient
+	if r.BootstrapClientId != 0 {
+		bootstrapClient, err := dao.BootstrapClients.Get(s.store, r.BootstrapClientId)
+		if err != nil {
+			return nil, err
+		}
+		bootstrapClients = append(bootstrapClients, bootstrapClient)
+	}
+
+	invitation, err := dao.NewInvitationV0(s.profile.Key, network.Certificate, bootstrapClients)
 	if err != nil {
 		return nil, err
 	}
@@ -116,19 +132,11 @@ func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.Crea
 		return nil, err
 	}
 
-	b, err = proto.Marshal(&networkv1.Invitation{
-		Version: 0,
-		Data:    b,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	b64 := base64.StdEncoding.WithPadding(base64.NoPadding).EncodeToString(b)
-
 	return &networkv1.CreateInvitationResponse{
-		InvitationB64:   b64,
-		InvitationBytes: b,
+		Invitation: &networkv1.Invitation{
+			Version: 0,
+			Data:    b,
+		},
 	}, nil
 }
 
@@ -168,8 +176,33 @@ func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *net
 		return nil, err
 	}
 
+	var bootstrapClients []*networkv1bootstrap.BootstrapClient
+	for _, c := range invitation.BootstrapClients {
+		c, err := dao.NewBootstrapClient(s.store, c)
+		if err != nil {
+			return nil, err
+		}
+		bootstrapClients = append(bootstrapClients, c)
+	}
+
 	if err := s.app.Network().Add(network); err != nil {
 		return nil, err
+	}
+
+	if len(bootstrapClients) != 0 {
+		err = s.store.Update(func(tx kv.RWTx) error {
+			for _, c := range bootstrapClients {
+				if err := dao.BootstrapClients.Insert(tx, c); err != nil {
+					if !errors.Is(err, dao.ErrUniqueConstraintViolated) {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &networkv1.CreateNetworkFromInvitationResponse{

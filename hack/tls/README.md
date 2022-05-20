@@ -1,5 +1,7 @@
 FROM: https://jaanus.com/ios-13-certificates/
 
+update `IP.1` in `config.cnf` with your dev machine's IP
+
 ```
 openssl genrsa -out development-ca.key 4096
 openssl req -x509 -new -nodes -key development-ca.key -sha256 -days 365 -out development-ca.crt
@@ -8,3 +10,11 @@ openssl req -new -key development.key -config config.cnf -out development.csr
 openssl req -new -key development.key -config config.cnf -out development.csr
 openssl x509 -req -in development.csr -CA development-ca.crt -CAkey development-ca.key -CAcreateserial -out development.crt -days 365 -sha256 -extfile config.cnf -extensions req_ext
 ```
+
+find instructions for adding `development-ca.crt` as a trusted root certificate on your test devices -
+
+windows:
+https://docs.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate
+
+ios:
+https://www.theictguy.co.uk/adding-trusted-root-certificates-to-ios14/

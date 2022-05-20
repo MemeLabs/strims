@@ -5,10 +5,6 @@ import {
   Certificate as strims_type_Certificate,
   ICertificate as strims_type_ICertificate,
 } from "../../../type/certificate";
-import {
-  Network as strims_network_v1_Network,
-  INetwork as strims_network_v1_INetwork,
-} from "../network";
 
 export type IBootstrapClient = {
   id?: bigint;
@@ -907,22 +903,22 @@ export namespace BootstrapServiceMessage {
 
 export type IPublishNetworkToBootstrapPeerRequest = {
   peerId?: bigint;
-  network?: strims_network_v1_INetwork;
+  networkId?: bigint;
 }
 
 export class PublishNetworkToBootstrapPeerRequest {
   peerId: bigint;
-  network: strims_network_v1_Network | undefined;
+  networkId: bigint;
 
   constructor(v?: IPublishNetworkToBootstrapPeerRequest) {
     this.peerId = v?.peerId || BigInt(0);
-    this.network = v?.network && new strims_network_v1_Network(v.network);
+    this.networkId = v?.networkId || BigInt(0);
   }
 
   static encode(m: PublishNetworkToBootstrapPeerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.peerId) w.uint32(8).uint64(m.peerId);
-    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(18).fork()).ldelim();
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
     return w;
   }
 
@@ -937,7 +933,7 @@ export class PublishNetworkToBootstrapPeerRequest {
         m.peerId = r.uint64();
         break;
         case 2:
-        m.network = strims_network_v1_Network.decode(r, r.uint32());
+        m.networkId = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

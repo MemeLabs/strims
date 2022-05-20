@@ -63,7 +63,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		return vpn.New(d.logger, vnicHost)
 	}
 
-	sessionManager := session.NewManager(d.logger, store, newVPN, network.NewBroker(d.logger))
+	sessionManager := session.NewManager(d.logger, store, newVPN, network.NewBroker(d.logger), mux)
 
 	srv := &frontend.Server{
 		Store:          store,

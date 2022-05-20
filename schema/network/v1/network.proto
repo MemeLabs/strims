@@ -11,6 +11,7 @@ option swift_prefix = "SNT";
 
 import "type/key.proto";
 import "type/certificate.proto";
+import "network/v1/bootstrap/bootstrap.proto";
 import "network/v1/directory/directory.proto";
 import "network/v1/errors/errors.proto";
 
@@ -91,15 +92,12 @@ message Peer {
 }
 
 message CreateInvitationRequest {
-  strims.type.Key signing_key = 1;
-  strims.type.Certificate signing_cert = 2;
-  string network_name = 3;
+  uint64 network_id = 1;
+  uint64 bootstrap_client_id = 2;
 }
 
 message CreateInvitationResponse {
   Invitation invitation = 1;
-  string invitation_b64 = 2;
-  bytes invitation_bytes = 3;
 }
 
 message Invitation {
@@ -111,6 +109,7 @@ message InvitationV0 {
   strims.type.Key key = 1;
   strims.type.Certificate certificate = 2;
   string network_name = 4;
+  repeated bootstrap.BootstrapClient bootstrap_clients = 5;
 }
 
 message CreateNetworkFromInvitationRequest {

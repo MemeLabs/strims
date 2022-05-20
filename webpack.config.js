@@ -216,13 +216,13 @@ module.exports = (env, argv) => {
   });
 
   const tlsCertRoot = path.join(__dirname, "hack", "tls");
-  const devServerHttps = fs.existsSync(tlsCertRoot)
+  const devServerOptions = fs.existsSync(path.join(tlsCertRoot, "development.key"))
     ? {
         key: fs.readFileSync(path.join(tlsCertRoot, "development.key")),
         cert: fs.readFileSync(path.join(tlsCertRoot, "development.crt")),
-        cacert: fs.readFileSync(path.join(tlsCertRoot, "development-ca.crt")),
+        ca: fs.readFileSync(path.join(tlsCertRoot, "development-ca.crt")),
       }
-    : true;
+    : {};
 
   switch (env.TARGET) {
     case "app":
@@ -260,8 +260,11 @@ module.exports = (env, argv) => {
             publicPath: "/",
           },
           devServer: {
-            https: devServerHttps,
-            hot: true,
+            server: {
+              type: "https",
+              options: devServerOptions,
+            },
+            hot: "only",
             compress: false,
             historyApiFallback: {
               index: "/",

@@ -10,6 +10,10 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 import {
+  BootstrapClient as strims_network_v1_bootstrap_BootstrapClient,
+  IBootstrapClient as strims_network_v1_bootstrap_IBootstrapClient,
+} from "./bootstrap/bootstrap";
+import {
   ServerConfig as strims_network_v1_directory_ServerConfig,
   IServerConfig as strims_network_v1_directory_IServerConfig,
 } from "./directory/directory";
@@ -609,27 +613,23 @@ export class Peer {
 }
 
 export type ICreateInvitationRequest = {
-  signingKey?: strims_type_IKey;
-  signingCert?: strims_type_ICertificate;
-  networkName?: string;
+  networkId?: bigint;
+  bootstrapClientId?: bigint;
 }
 
 export class CreateInvitationRequest {
-  signingKey: strims_type_Key | undefined;
-  signingCert: strims_type_Certificate | undefined;
-  networkName: string;
+  networkId: bigint;
+  bootstrapClientId: bigint;
 
   constructor(v?: ICreateInvitationRequest) {
-    this.signingKey = v?.signingKey && new strims_type_Key(v.signingKey);
-    this.signingCert = v?.signingCert && new strims_type_Certificate(v.signingCert);
-    this.networkName = v?.networkName || "";
+    this.networkId = v?.networkId || BigInt(0);
+    this.bootstrapClientId = v?.bootstrapClientId || BigInt(0);
   }
 
   static encode(m: CreateInvitationRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.signingKey) strims_type_Key.encode(m.signingKey, w.uint32(10).fork()).ldelim();
-    if (m.signingCert) strims_type_Certificate.encode(m.signingCert, w.uint32(18).fork()).ldelim();
-    if (m.networkName.length) w.uint32(26).string(m.networkName);
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    if (m.bootstrapClientId) w.uint32(16).uint64(m.bootstrapClientId);
     return w;
   }
 
@@ -641,13 +641,10 @@ export class CreateInvitationRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.signingKey = strims_type_Key.decode(r, r.uint32());
+        m.networkId = r.uint64();
         break;
         case 2:
-        m.signingCert = strims_type_Certificate.decode(r, r.uint32());
-        break;
-        case 3:
-        m.networkName = r.string();
+        m.bootstrapClientId = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -660,26 +657,18 @@ export class CreateInvitationRequest {
 
 export type ICreateInvitationResponse = {
   invitation?: IInvitation;
-  invitationB64?: string;
-  invitationBytes?: Uint8Array;
 }
 
 export class CreateInvitationResponse {
   invitation: Invitation | undefined;
-  invitationB64: string;
-  invitationBytes: Uint8Array;
 
   constructor(v?: ICreateInvitationResponse) {
     this.invitation = v?.invitation && new Invitation(v.invitation);
-    this.invitationB64 = v?.invitationB64 || "";
-    this.invitationBytes = v?.invitationBytes || new Uint8Array();
   }
 
   static encode(m: CreateInvitationResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.invitation) Invitation.encode(m.invitation, w.uint32(10).fork()).ldelim();
-    if (m.invitationB64.length) w.uint32(18).string(m.invitationB64);
-    if (m.invitationBytes.length) w.uint32(26).bytes(m.invitationBytes);
     return w;
   }
 
@@ -692,12 +681,6 @@ export class CreateInvitationResponse {
       switch (tag >> 3) {
         case 1:
         m.invitation = Invitation.decode(r, r.uint32());
-        break;
-        case 2:
-        m.invitationB64 = r.string();
-        break;
-        case 3:
-        m.invitationBytes = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -755,17 +738,20 @@ export type IInvitationV0 = {
   key?: strims_type_IKey;
   certificate?: strims_type_ICertificate;
   networkName?: string;
+  bootstrapClients?: strims_network_v1_bootstrap_IBootstrapClient[];
 }
 
 export class InvitationV0 {
   key: strims_type_Key | undefined;
   certificate: strims_type_Certificate | undefined;
   networkName: string;
+  bootstrapClients: strims_network_v1_bootstrap_BootstrapClient[];
 
   constructor(v?: IInvitationV0) {
     this.key = v?.key && new strims_type_Key(v.key);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.networkName = v?.networkName || "";
+    this.bootstrapClients = v?.bootstrapClients ? v.bootstrapClients.map(v => new strims_network_v1_bootstrap_BootstrapClient(v)) : [];
   }
 
   static encode(m: InvitationV0, w?: Writer): Writer {
@@ -773,6 +759,7 @@ export class InvitationV0 {
     if (m.key) strims_type_Key.encode(m.key, w.uint32(10).fork()).ldelim();
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
     if (m.networkName.length) w.uint32(34).string(m.networkName);
+    for (const v of m.bootstrapClients) strims_network_v1_bootstrap_BootstrapClient.encode(v, w.uint32(42).fork()).ldelim();
     return w;
   }
 
@@ -791,6 +778,9 @@ export class InvitationV0 {
         break;
         case 4:
         m.networkName = r.string();
+        break;
+        case 5:
+        m.bootstrapClients.push(strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);

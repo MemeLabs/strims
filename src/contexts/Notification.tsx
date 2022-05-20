@@ -1,9 +1,10 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useContext, useEffect, useReducer } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
 
-import { Event, Notification } from "../apis/strims/notification/v1/notification";
+import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
+import { useStableCallback } from "../hooks/useStableCallback";
 import { useClient } from "./FrontendApi";
 
 export interface State {
@@ -16,10 +17,13 @@ const initialState: State = {
   count: 0,
 };
 
-const NotificationContext = createContext<State>(null);
+export interface NotificationContextValue extends State {
+  pushTransientNotification: (notification: INotification) => void;
+}
+
+const NotificationContext = createContext<NotificationContextValue>(null);
 
 const reduceState = (prev: State, { body }: Event): State => {
-  console.log(">>>", body);
   switch (body.case) {
     case Event.BodyCase.NOTIFICATION:
       return {
@@ -35,20 +39,42 @@ const reduceState = (prev: State, { body }: Event): State => {
 };
 
 export const Provider: React.FC = ({ children }) => {
-  const [state, dispatch] = useReducer(reduceState, initialState);
+  const [state, setState] = useState(initialState);
 
   const client = useClient();
   useEffect(() => {
     const events = client.notification.watch();
-    events.on("data", ({ event }) => dispatch(event));
+    events.on("data", ({ event }) => setState((prev) => reduceState(prev, event)));
     return () => events.destroy();
   }, []);
 
-  return <NotificationContext.Provider value={state}>{children}</NotificationContext.Provider>;
+  const pushTransientNotification = useStableCallback((notification: INotification) =>
+    setState((prev) => ({
+      ...prev,
+      notifications: [
+        ...prev.notifications,
+        new Notification({
+          createdAt: BigInt(Date.now()),
+          status: Notification.Status.STATUS_INFO,
+          ...notification,
+        }),
+      ],
+    }))
+  );
+
+  const value = useMemo(
+    () => ({
+      ...state,
+      pushTransientNotification,
+    }),
+    [state]
+  );
+
+  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 };
 
 Provider.displayName = "Notification.Provider";
 
-export const useNotification = (): State => useContext(NotificationContext);
+export const useNotification = (): NotificationContextValue => useContext(NotificationContext);
 
 export const Consumer = NotificationContext.Consumer;

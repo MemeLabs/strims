@@ -48,8 +48,6 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 gioui.org v0.0.0-20210308172011-57750fc8a0a6/go.mod h1:RSH6KIUZ0p2xy5zHDxgAM4zumjgTw83q2ge/PI+yyw8=
-github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13 h1:MRAj9zMDffNCwEEHlGSlEeN1AzNJ8P1JzSancZUUgoI=
-github.com/3d0c/gmf v0.0.0-20211001080459-a2014c959f13/go.mod h1:0QMRcUq2JsDECeAq7bj4h79k7XbhtTsrPUQf6G7qfPs=
 github.com/Azure/go-autorest v14.2.0+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/Azure/go-autorest/autorest v0.11.18/go.mod h1:dSiJPy22c3u0OtOKDNttNgqpNFY/GeWa7GH/Pz56QRA=
 github.com/Azure/go-autorest/autorest/adal v0.9.13/go.mod h1:W/MM4U6nLxnIskrw4UwWzlHfGjwUS50aOsc/I3yuU8M=
@@ -67,8 +65,8 @@ github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3
 github.com/Masterminds/semver/v3 v3.1.1/go.mod h1:VPu/7SZ7ePZ3QOrcuXROw5FAcLl4a0cBrbBpGY/8hQs=
 github.com/MemeLabs/chat-parser v1.0.5 h1:XwbAicgQ78ZIo/PTFHUTjfVziPLDu/PZnGG8iNnJA0A=
 github.com/MemeLabs/chat-parser v1.0.5/go.mod h1:8AtJL7KlAt2u4DkoGI+Bu1PyFscRf5UtA4wdCnxsfxU=
-github.com/MemeLabs/protobuf v0.3.0 h1:qOJzEJJf+ccA9NOtTI7F8beDIITPtgDDyKmk7gt/fgA=
-github.com/MemeLabs/protobuf v0.3.0/go.mod h1:YMzFOoiZ8urT9DZG92Vm9bzhMOV6q3ngZAfj+cDZ2to=
+github.com/MemeLabs/protobuf v0.3.1 h1:Tq+C7lRxM0/bkIyKrqrtEn7R3cmcALixNUKl1XNvLf4=
+github.com/MemeLabs/protobuf v0.3.1/go.mod h1:rfSWx6XpOad3uRIi2wr99ZzjvrTwkf4DTVpB10tDS/o=
 github.com/Microsoft/go-winio v0.5.1 h1:aPJp2QD7OOrhO5tQXqQoGSJc+DjDtWTGLOmNyAm6FgY=
 github.com/Microsoft/go-winio v0.5.1/go.mod h1:JPGBdM1cNvN/6ISo+n8V5iA4v8pBzdOpzfwIujj1a84=
 github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46/go.mod h1:3wb06e3pkSAbeQ52E9H9iFoQsEEwGN64994WTCIhntQ=

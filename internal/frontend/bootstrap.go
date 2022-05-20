@@ -121,7 +121,12 @@ func (s *bootstrapService) ListPeers(ctx context.Context, r *bootstrap.ListBoots
 
 // PublishNetworkToPeer ...
 func (s *bootstrapService) PublishNetworkToPeer(ctx context.Context, r *bootstrap.PublishNetworkToBootstrapPeerRequest) (*bootstrap.PublishNetworkToBootstrapPeerResponse, error) {
-	if err := s.app.Bootstrap().Publish(ctx, r.PeerId, r.Network, time.Hour*24*365*2); err != nil {
+	network, err := dao.Networks.Get(s.store, r.NetworkId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.app.Bootstrap().Publish(ctx, r.PeerId, network, time.Hour*24*365*2); err != nil {
 		return nil, err
 	}
 
