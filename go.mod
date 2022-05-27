@@ -81,7 +81,7 @@ require (
 	google.golang.org/api v0.63.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/ini.v1 v1.66.2 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+	gopkg.in/yaml.v3 v3.0.0
 	lukechampine.com/uint128 v1.1.1
 	mvdan.cc/xurls/v2 v2.3.0
 )

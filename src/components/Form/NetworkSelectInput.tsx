@@ -90,13 +90,13 @@ const NetworkSelectInput = <T extends FieldValues, M extends boolean>({
         classNamePrefix="input_select"
         menuPortalTarget={root}
         menuPlacement="auto"
-        {...(inputProps as unknown)}
+        {...(inputProps as any)}
         {...field}
         value={value}
         options={options}
-        onChange={(option) => {
+        onChange={(option: SelectOption<string> | SelectOption<string>[]) => {
           const value = (Array.isArray(option)
-            ? (option as SelectOption<string>[]).map(({ value }) => value)
+            ? option.map(({ value }) => value)
             : option.value) as unknown as Value<M>;
           field.onChange(value);
           inputProps.onChange?.(value);

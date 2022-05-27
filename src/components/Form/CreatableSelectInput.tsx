@@ -56,7 +56,7 @@ const CreatableSelectInput = <T extends FieldValues>({
         classNamePrefix="input_select"
         menuPortalTarget={root}
         menuPlacement="auto"
-        {...(inputProps as unknown)}
+        {...inputProps}
         {...field}
         onChange={(value, action) => {
           field.onChange(value);

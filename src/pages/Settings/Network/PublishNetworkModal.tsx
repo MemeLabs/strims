@@ -24,7 +24,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
   const onSubmit = handleSubmit((data) => {
     void client.bootstrap.publishNetworkToPeer({
       peerId: data.peer.value,
-      network: network,
+      networkId: network.id,
     });
     onClose();
   });

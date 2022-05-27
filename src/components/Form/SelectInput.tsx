@@ -61,7 +61,7 @@ const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M exten
         classNamePrefix="input_select"
         menuPortalTarget={root}
         menuPlacement="auto"
-        {...(inputProps as unknown)}
+        {...inputProps}
         {...field}
         onChange={(value, action) => {
           field.onChange(value);

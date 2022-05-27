@@ -100,7 +100,7 @@ const ImageInput = <T extends FieldValues>({
   return (
     <>
       <InputError error={error} />
-      <Dropzone maxSize={maxSize} multiple={false} accept="image/*" onDrop={handleDrop}>
+      <Dropzone maxSize={maxSize} multiple={false} accept={{ "image/*": [] }} onDrop={handleDrop}>
         {({ getRootProps, getInputProps }) => (
           <div {...getRootProps()} className={classNameBase}>
             {previewUrl ? (
