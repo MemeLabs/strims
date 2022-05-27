@@ -6,23 +6,23 @@ import (
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
-// RegisterNetworkServiceService ...
-func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServiceService) {
-	host.RegisterMethod("strims.network.v1.NetworkService.CreateServer", service.CreateServer)
-	host.RegisterMethod("strims.network.v1.NetworkService.UpdateServerConfig", service.UpdateServerConfig)
-	host.RegisterMethod("strims.network.v1.NetworkService.Delete", service.Delete)
-	host.RegisterMethod("strims.network.v1.NetworkService.Get", service.Get)
-	host.RegisterMethod("strims.network.v1.NetworkService.List", service.List)
-	host.RegisterMethod("strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
-	host.RegisterMethod("strims.network.v1.NetworkService.CreateNetworkFromInvitation", service.CreateNetworkFromInvitation)
-	host.RegisterMethod("strims.network.v1.NetworkService.Watch", service.Watch)
-	host.RegisterMethod("strims.network.v1.NetworkService.UpdateDisplayOrder", service.UpdateDisplayOrder)
-	host.RegisterMethod("strims.network.v1.NetworkService.UpdateAlias", service.UpdateAlias)
-	host.RegisterMethod("strims.network.v1.NetworkService.GetUIConfig", service.GetUIConfig)
+// RegisterNetworkFrontendService ...
+func RegisterNetworkFrontendService(host rpc.ServiceRegistry, service NetworkFrontendService) {
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.CreateServer", service.CreateServer)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.UpdateServerConfig", service.UpdateServerConfig)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.Delete", service.Delete)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.Get", service.Get)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.List", service.List)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.CreateInvitation", service.CreateInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation", service.CreateNetworkFromInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.Watch", service.Watch)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.UpdateDisplayOrder", service.UpdateDisplayOrder)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.UpdateAlias", service.UpdateAlias)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.GetUIConfig", service.GetUIConfig)
 }
 
-// NetworkServiceService ...
-type NetworkServiceService interface {
+// NetworkFrontendService ...
+type NetworkFrontendService interface {
 	CreateServer(
 		ctx context.Context,
 		req *CreateServerRequest,
@@ -69,193 +69,193 @@ type NetworkServiceService interface {
 	) (*GetUIConfigResponse, error)
 }
 
-// NetworkServiceService ...
-type UnimplementedNetworkServiceService struct{}
+// NetworkFrontendService ...
+type UnimplementedNetworkFrontendService struct{}
 
-func (s *UnimplementedNetworkServiceService) CreateServer(
+func (s *UnimplementedNetworkFrontendService) CreateServer(
 	ctx context.Context,
 	req *CreateServerRequest,
 ) (*CreateServerResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) UpdateServerConfig(
+func (s *UnimplementedNetworkFrontendService) UpdateServerConfig(
 	ctx context.Context,
 	req *UpdateServerConfigRequest,
 ) (*UpdateServerConfigResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) Delete(
+func (s *UnimplementedNetworkFrontendService) Delete(
 	ctx context.Context,
 	req *DeleteNetworkRequest,
 ) (*DeleteNetworkResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) Get(
+func (s *UnimplementedNetworkFrontendService) Get(
 	ctx context.Context,
 	req *GetNetworkRequest,
 ) (*GetNetworkResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) List(
+func (s *UnimplementedNetworkFrontendService) List(
 	ctx context.Context,
 	req *ListNetworksRequest,
 ) (*ListNetworksResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) CreateInvitation(
+func (s *UnimplementedNetworkFrontendService) CreateInvitation(
 	ctx context.Context,
 	req *CreateInvitationRequest,
 ) (*CreateInvitationResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) CreateNetworkFromInvitation(
+func (s *UnimplementedNetworkFrontendService) CreateNetworkFromInvitation(
 	ctx context.Context,
 	req *CreateNetworkFromInvitationRequest,
 ) (*CreateNetworkFromInvitationResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) Watch(
+func (s *UnimplementedNetworkFrontendService) Watch(
 	ctx context.Context,
 	req *WatchNetworksRequest,
 ) (<-chan *WatchNetworksResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) UpdateDisplayOrder(
+func (s *UnimplementedNetworkFrontendService) UpdateDisplayOrder(
 	ctx context.Context,
 	req *UpdateDisplayOrderRequest,
 ) (*UpdateDisplayOrderResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) UpdateAlias(
+func (s *UnimplementedNetworkFrontendService) UpdateAlias(
 	ctx context.Context,
 	req *UpdateAliasRequest,
 ) (*UpdateAliasResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedNetworkServiceService) GetUIConfig(
+func (s *UnimplementedNetworkFrontendService) GetUIConfig(
 	ctx context.Context,
 	req *GetUIConfigRequest,
 ) (*GetUIConfigResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-var _ NetworkServiceService = (*UnimplementedNetworkServiceService)(nil)
+var _ NetworkFrontendService = (*UnimplementedNetworkFrontendService)(nil)
 
-// NetworkServiceClient ...
-type NetworkServiceClient struct {
+// NetworkFrontendClient ...
+type NetworkFrontendClient struct {
 	client rpc.Caller
 }
 
-// NewNetworkServiceClient ...
-func NewNetworkServiceClient(client rpc.Caller) *NetworkServiceClient {
-	return &NetworkServiceClient{client}
+// NewNetworkFrontendClient ...
+func NewNetworkFrontendClient(client rpc.Caller) *NetworkFrontendClient {
+	return &NetworkFrontendClient{client}
 }
 
 // CreateServer ...
-func (c *NetworkServiceClient) CreateServer(
+func (c *NetworkFrontendClient) CreateServer(
 	ctx context.Context,
 	req *CreateServerRequest,
 	res *CreateServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateServer", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.CreateServer", req, res)
 }
 
 // UpdateServerConfig ...
-func (c *NetworkServiceClient) UpdateServerConfig(
+func (c *NetworkFrontendClient) UpdateServerConfig(
 	ctx context.Context,
 	req *UpdateServerConfigRequest,
 	res *UpdateServerConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateServerConfig", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.UpdateServerConfig", req, res)
 }
 
 // Delete ...
-func (c *NetworkServiceClient) Delete(
+func (c *NetworkFrontendClient) Delete(
 	ctx context.Context,
 	req *DeleteNetworkRequest,
 	res *DeleteNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Delete", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.Delete", req, res)
 }
 
 // Get ...
-func (c *NetworkServiceClient) Get(
+func (c *NetworkFrontendClient) Get(
 	ctx context.Context,
 	req *GetNetworkRequest,
 	res *GetNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Get", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.Get", req, res)
 }
 
 // List ...
-func (c *NetworkServiceClient) List(
+func (c *NetworkFrontendClient) List(
 	ctx context.Context,
 	req *ListNetworksRequest,
 	res *ListNetworksResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.List", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.List", req, res)
 }
 
 // CreateInvitation ...
-func (c *NetworkServiceClient) CreateInvitation(
+func (c *NetworkFrontendClient) CreateInvitation(
 	ctx context.Context,
 	req *CreateInvitationRequest,
 	res *CreateInvitationResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateInvitation", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.CreateInvitation", req, res)
 }
 
 // CreateNetworkFromInvitation ...
-func (c *NetworkServiceClient) CreateNetworkFromInvitation(
+func (c *NetworkFrontendClient) CreateNetworkFromInvitation(
 	ctx context.Context,
 	req *CreateNetworkFromInvitationRequest,
 	res *CreateNetworkFromInvitationResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateNetworkFromInvitation", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation", req, res)
 }
 
 // Watch ...
-func (c *NetworkServiceClient) Watch(
+func (c *NetworkFrontendClient) Watch(
 	ctx context.Context,
 	req *WatchNetworksRequest,
 	res chan *WatchNetworksResponse,
 ) error {
-	return c.client.CallStreaming(ctx, "strims.network.v1.NetworkService.Watch", req, res)
+	return c.client.CallStreaming(ctx, "strims.network.v1.NetworkFrontend.Watch", req, res)
 }
 
 // UpdateDisplayOrder ...
-func (c *NetworkServiceClient) UpdateDisplayOrder(
+func (c *NetworkFrontendClient) UpdateDisplayOrder(
 	ctx context.Context,
 	req *UpdateDisplayOrderRequest,
 	res *UpdateDisplayOrderResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateDisplayOrder", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.UpdateDisplayOrder", req, res)
 }
 
 // UpdateAlias ...
-func (c *NetworkServiceClient) UpdateAlias(
+func (c *NetworkFrontendClient) UpdateAlias(
 	ctx context.Context,
 	req *UpdateAliasRequest,
 	res *UpdateAliasResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateAlias", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.UpdateAlias", req, res)
 }
 
 // GetUIConfig ...
-func (c *NetworkServiceClient) GetUIConfig(
+func (c *NetworkFrontendClient) GetUIConfig(
 	ctx context.Context,
 	req *GetUIConfigRequest,
 	res *GetUIConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.GetUIConfig", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.GetUIConfig", req, res)
 }

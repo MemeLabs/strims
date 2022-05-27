@@ -17,7 +17,7 @@ spec:
       - name: github-registry
       containers:
       - name: strims
-        image: ghcr.io/slugalisk/go-ppspp/web:latest
+        image: ghcr.io/memelabs/strims/web:latest
         imagePullPolicy: Always
         ports:
         - name: http

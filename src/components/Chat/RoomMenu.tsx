@@ -9,15 +9,18 @@ import { Base64 } from "js-base64";
 import React, { forwardRef, useContext, useMemo, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { HiOutlineUser } from "react-icons/hi";
-import { MdArrowDropDown } from "react-icons/md";
 
+import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Network } from "../../apis/strims/network/v1/network";
-import { useChat } from "../../contexts/Chat";
+import { RoomProviderProps, useChat } from "../../contexts/Chat";
 import { DirectoryContext, DirectoryUser } from "../../contexts/Directory";
 import { NetworkContext } from "../../contexts/Network";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
-import Dropdown from "../Dropdown";
+
+// import { MdArrowDropDown } from "react-icons/md";
+// import Dropdown from "../Dropdown";
 
 export interface RoomMenuItem {
   key?: string;
@@ -29,7 +32,7 @@ export interface RoomMenuItem {
 }
 
 export interface RoomMenuProps {
-  onChange?: (item: RoomMenuItem) => void;
+  onChange?: (item: RoomProviderProps) => void;
 }
 
 enum Tab {
@@ -90,8 +93,30 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange }) => {
   );
 };
 
-const RoomsList: React.FC<RoomMenuProps> = ({ onChange }) => {
+interface RoomsListItemProps extends RoomMenuProps {
+  chat: RoomMenuItem;
+}
+
+const RoomsListItem: React.FC<RoomsListItemProps> = ({ onChange, chat }) => {
   const [, { openRoom }] = useChat();
+
+  const handleClick = useStableCallback(() => {
+    openRoom(chat.serverKey, chat.networkKey);
+    onChange({ type: "ROOM", topicKey: chat.serverKey });
+  });
+
+  return (
+    <button className="rooms_list__network_rooms_item" onClick={handleClick} key={chat.key}>
+      <span className="rooms_list__network_rooms_item__name">{chat.name}</span>
+      <span className="rooms_list__network_rooms_item__viewers">
+        {chat.viewerCount.toLocaleString()}
+        <HiOutlineUser />
+      </span>
+    </button>
+  );
+};
+
+const RoomsList: React.FC<RoomMenuProps> = ({ onChange }) => {
   const networks = useContext(NetworkContext);
   const { directories } = useContext(DirectoryContext);
   const groups = useMemo(() => {
@@ -139,18 +164,8 @@ const RoomsList: React.FC<RoomMenuProps> = ({ onChange }) => {
               {certificateRoot(network.certificate).subject}
             </div>
             <div className="rooms_list__network_rooms">
-              {rooms.map((chat) => (
-                <button
-                  className="rooms_list__network_rooms_item"
-                  onClick={() => openRoom?.(chat.serverKey, chat.networkKey)}
-                  key={chat.key}
-                >
-                  <span className="rooms_list__network_rooms_item__name">{chat.name}</span>
-                  <span className="rooms_list__network_rooms_item__viewers">
-                    {chat.viewerCount.toLocaleString()}
-                    <HiOutlineUser />
-                  </span>
-                </button>
+              {rooms.map((chat, i) => (
+                <RoomsListItem key={i} chat={chat} onChange={onChange} />
               ))}
             </div>
           </div>
@@ -178,8 +193,41 @@ const useMessageTimeFormatter = () => {
   };
 };
 
-const WhispersList: React.FC<RoomMenuProps> = () => {
-  const [{ whisperThreads }, { openWhispers }] = useChat();
+interface WhispersListItemProps extends RoomMenuProps {
+  thread: WhisperThread;
+}
+
+const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread }) => {
+  const [, { openWhispers }] = useChat();
+  const formatMessageTime = useMessageTimeFormatter();
+
+  // TODO: get these from somewhere meaningful... the thread? directory?
+  const { items } = useContext(NetworkContext);
+  const networkKeys = useMemo(
+    () => items.map((i) => certificateRoot(i.network.certificate).key),
+    [items]
+  );
+
+  const handleClick = useStableCallback(() => {
+    openWhispers(thread.peerKey, networkKeys);
+    onChange({ type: "WHISPER", topicKey: thread.peerKey });
+  });
+
+  return (
+    <tr key={thread.id.toString()} className="whispers_list__row" onClick={handleClick}>
+      <td className="whispers_list__label">
+        <span className="whispers_list__alias">{thread.alias}</span>
+        <span className="whispers_list__unread">{thread.unreadCount}</span>
+      </td>
+      <td className="whispers_list__time">
+        {formatMessageTime(new Date(Number(thread.lastMessageTime)))}
+      </td>
+    </tr>
+  );
+};
+
+const WhispersList: React.FC<RoomMenuProps> = ({ onChange }) => {
+  const [{ whisperThreads }] = useChat();
 
   const sortedThreads = useMemo(
     () =>
@@ -189,33 +237,12 @@ const WhispersList: React.FC<RoomMenuProps> = () => {
     [whisperThreads]
   );
 
-  // TODO: get these from somewhere meaningful... the thread? directory?
-  const { items } = useContext(NetworkContext);
-  const networkKeys = useMemo(
-    () => items.map((i) => certificateRoot(i.network.certificate).key),
-    [items]
-  );
-
-  const formatMessageTime = useMessageTimeFormatter();
-
   return (
     <Scrollbars autoHide={true} className="whispers_list">
       <table className="whispers_list__table">
         <tbody>
-          {sortedThreads.map((thread) => (
-            <tr
-              key={thread.id.toString()}
-              className="whispers_list__row"
-              onClick={() => openWhispers(thread.peerKey, networkKeys)}
-            >
-              <td className="whispers_list__label">
-                <span className="whispers_list__alias">{thread.alias}</span>
-                <span className="whispers_list__unread">{thread.unreadCount}</span>
-              </td>
-              <td className="whispers_list__time">
-                {formatMessageTime(new Date(Number(thread.lastMessageTime)))}
-              </td>
-            </tr>
+          {sortedThreads.map((thread, i) => (
+            <WhispersListItem key={i} thread={thread} onChange={onChange} />
           ))}
         </tbody>
       </table>
@@ -223,18 +250,38 @@ const WhispersList: React.FC<RoomMenuProps> = () => {
   );
 };
 
-interface RoomUserThing {
+interface UsersListItemProps extends RoomMenuProps {
+  networks: Uint8Array[];
+  user: DirectoryUser;
+}
+
+const UsersListItem: React.FC<UsersListItemProps> = ({ onChange, networks, user }) => {
+  const [, { openWhispers }] = useChat();
+
+  const handleClick = useStableCallback(() => {
+    openWhispers(user.peerKey, networks);
+    onChange({ type: "WHISPER", topicKey: user.peerKey });
+  });
+
+  return (
+    <button onClick={handleClick} key={user.id.toString()} className="user_list__item">
+      {user.alias}
+    </button>
+  );
+};
+
+interface RoomUserThing extends RoomMenuProps {
   servers: directoryv1.Listing[];
   networks: Uint8Array[];
   user: DirectoryUser;
 }
 
-const UsersList: React.FC<RoomMenuProps> = () => {
+const UsersList: React.FC<RoomMenuProps> = ({ onChange }) => {
   const { directories } = useContext(DirectoryContext);
   const users = useMemo(() => {
     const users = new Map<string, RoomUserThing>();
     for (const { networkKey, listings } of Object.values(directories)) {
-      for (const { id, listing, viewers } of listings.values()) {
+      for (const { listing, viewers } of listings.values()) {
         if (listing?.content?.case === directoryv1.Listing.ContentCase.CHAT) {
           for (const viewer of viewers.values()) {
             const key = Base64.fromUint8Array(viewer.peerKey, true);
@@ -256,19 +303,11 @@ const UsersList: React.FC<RoomMenuProps> = () => {
     return Array.from(users.values()).sort((a, b) => a.user.alias.localeCompare(b.user.alias));
   }, [directories]);
 
-  const [, { openWhispers }] = useChat();
-
   return (
     <Scrollbars autoHide={true} className="user_list">
       <div className="user_list__content">
-        {users.map(({ user, networks }) => (
-          <button
-            key={user.id.toString()}
-            onClick={() => openWhispers(user.peerKey, networks)}
-            className="user_list__item"
-          >
-            {user.alias}
-          </button>
+        {users.map(({ user, networks }, i) => (
+          <UsersListItem key={i} user={user} networks={networks} onChange={onChange} />
         ))}
       </div>
     </Scrollbars>
@@ -281,27 +320,27 @@ export const RoomList = forwardRef<HTMLDivElement, RoomMenuProps>((props, ref) =
   </div>
 ));
 
-interface RoomDropdownPsop extends RoomMenuProps {
-  defaultSelection: RoomMenuItem;
-}
+// interface RoomDropdownPsop extends RoomMenuProps {
+//   defaultSelection: RoomMenuItem;
+// }
 
-export const RoomDropdown: React.FC<RoomDropdownPsop> = ({ onChange, defaultSelection }) => {
-  const [selection, setSelection] = useState<RoomMenuItem>(defaultSelection);
-  const handleChange = (item: RoomMenuItem) => {
-    setSelection(item);
-    onChange?.(item);
-  };
+// export const RoomDropdown: React.FC<RoomDropdownPsop> = ({ onChange, defaultSelection }) => {
+//   const [selection, setSelection] = useState<RoomMenuItem>(defaultSelection);
+//   const handleChange = (item: RoomMenuItem) => {
+//     setSelection(item);
+//     onChange?.(item);
+//   };
 
-  return (
-    <Dropdown
-      baseClassName="room_menu"
-      anchor={
-        <>
-          <div className="room_menu__text">{selection?.name}</div>
-          <MdArrowDropDown className="room_menu__icon" />
-        </>
-      }
-      items={<RoomButtons onChange={handleChange} />}
-    />
-  );
-};
+//   return (
+//     <Dropdown
+//       baseClassName="room_menu"
+//       anchor={
+//         <>
+//           <div className="room_menu__text">{selection?.name}</div>
+//           <MdArrowDropDown className="room_menu__icon" />
+//         </>
+//       }
+//       items={<RoomButtons onChange={handleChange} />}
+//     />
+//   );
+// };

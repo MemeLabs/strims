@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
 import { useStableCallback } from "../hooks/useStableCallback";

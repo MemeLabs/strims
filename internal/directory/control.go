@@ -227,7 +227,7 @@ func (t *control) ReadCachedEvents(ctx context.Context, ch chan any) {
 	for _, c := range t.eventCache {
 		es = append(es, event.DirectoryEvent{
 			NetworkID:  c.Network.Id,
-			NetworkKey: dao.CertificateRoot(c.Network.Certificate).Key,
+			NetworkKey: dao.NetworkKey(c.Network),
 			Broadcast:  c.Events(),
 		})
 	}

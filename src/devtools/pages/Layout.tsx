@@ -8,7 +8,7 @@ import React from "react";
 import { FrontendClient } from "../../apis/client";
 import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
 import { registerDirectoryFrontendService } from "../../apis/strims/network/v1/directory/directory_rpc";
-import { registerNetworkServiceService } from "../../apis/strims/network/v1/network_rpc";
+import { registerNetworkFrontendService } from "../../apis/strims/network/v1/network_rpc";
 import { registerNotificationFrontendService } from "../../apis/strims/notification/v1/notification_rpc";
 import LayoutPage from "../../components/Layout";
 import LayoutBody from "../../components/Layout/Body";
@@ -32,7 +32,7 @@ const LayoutTest: React.FC = () => {
     const svc = new ServiceRegistry();
     const chatService = new ChatService();
     registerChatFrontendService(svc, chatService);
-    registerNetworkServiceService(svc, new NetworkService(8));
+    registerNetworkFrontendService(svc, new NetworkService(8));
     registerDirectoryFrontendService(svc, new DirectoryService());
     registerNotificationFrontendService(svc, new NotificationService());
 

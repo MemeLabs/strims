@@ -62,7 +62,7 @@ func (s *directoryService) Open(ctx context.Context, r *networkv1directory.Front
 				case event.NetworkStop:
 					r = &networkv1directory.FrontendOpenResponse{
 						NetworkId:  e.Network.Id,
-						NetworkKey: dao.CertificateRoot(e.Network.Certificate).Key,
+						NetworkKey: dao.NetworkKey(e.Network),
 						Body: &networkv1directory.FrontendOpenResponse_Close_{
 							Close: &networkv1directory.FrontendOpenResponse_Close{},
 						},

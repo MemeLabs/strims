@@ -8,7 +8,7 @@ import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
 
 import { FrontendClient } from "../../../apis/client";
-import { registerNetworkServiceService } from "../../../apis/strims/network/v1/network_rpc";
+import { registerNetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc";
 import NetworkNav from "../../../components/Layout/NetworkNav";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { withLayoutContext } from "../../../contexts/Layout";
@@ -34,7 +34,7 @@ const Test: React.FC = () => {
   const [[service, client]] = React.useState((): [NetworkService, FrontendClient] => {
     const svc = new ServiceRegistry();
     const service = new NetworkService();
-    registerNetworkServiceService(svc, service);
+    registerNetworkFrontendService(svc, service);
 
     const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);

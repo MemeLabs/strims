@@ -147,6 +147,10 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	}
 	network.Certificate = cert
 
+	if profile.Name != cert.Subject {
+		network.Alias = cert.Subject
+	}
+
 	return network, nil
 }
 

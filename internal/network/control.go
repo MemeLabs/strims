@@ -411,11 +411,11 @@ func (t *control) dispatchCertificateRenewNotification(network *networkv1.Networ
 	t.notification.Dispatch(notification)
 }
 
-type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
+type certificateRenewFunc func(csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 
 // renewCertificateWithRenewFunc ...
-func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *networkv1.Network, fn certificateRenewFunc) error {
-	cert, err := t.renewCertificateWithRenewFunc1(ctx, network, fn)
+func (t *control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
+	cert, err := t.renewCertificateWithRenewFunc1(network, fn)
 
 	errCode := networkv1errors.ErrorCode(rpc.ErrorCode(err))
 	if err != nil && errCode == networkv1errors.ErrorCode_UNDEFINED {
@@ -434,7 +434,7 @@ func (t *control) renewCertificateWithRenewFunc(ctx context.Context, network *ne
 	return err
 }
 
-func (t *control) renewCertificateWithRenewFunc1(ctx context.Context, network *networkv1.Network, fn certificateRenewFunc) (*certificate.Certificate, error) {
+func (t *control) renewCertificateWithRenewFunc1(network *networkv1.Network, fn certificateRenewFunc) (*certificate.Certificate, error) {
 	subject := t.profile.Name
 	if network.Alias != "" {
 		subject = network.Alias
@@ -449,7 +449,7 @@ func (t *control) renewCertificateWithRenewFunc1(ctx context.Context, network *n
 		return nil, err
 	}
 
-	cert, err := fn(ctx, network.Certificate, csr)
+	cert, err := fn(csr)
 	if err != nil {
 		return nil, err
 	}
@@ -462,47 +462,39 @@ func (t *control) renewCertificateWithRenewFunc1(ctx context.Context, network *n
 
 // renewCertificate ...
 func (t *control) renewCertificate(ctx context.Context, network *networkv1.Network) error {
-	return t.renewCertificateWithRenewFunc(
-		ctx,
-		network,
-		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-			networkKey := dao.NetworkKey(network)
-			client, err := t.dialer.Client(ctx, networkKey, networkKey, ca.AddressSalt)
-			if err != nil {
-				return nil, err
-			}
-			caClient := networkv1ca.NewCAClient(client)
+	return t.renewCertificateWithRenewFunc(network, func(csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+		networkKey := dao.NetworkKey(network)
+		client, err := t.dialer.Client(ctx, networkKey, networkKey, ca.AddressSalt)
+		if err != nil {
+			return nil, err
+		}
+		caClient := networkv1ca.NewCAClient(client)
 
-			renewReq := &networkv1ca.CARenewRequest{
-				Certificate:        cert,
-				CertificateRequest: csr,
-			}
-			renewRes := &networkv1ca.CARenewResponse{}
-			if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
-				return nil, err
-			}
+		renewReq := &networkv1ca.CARenewRequest{
+			Certificate:        network.Certificate,
+			CertificateRequest: csr,
+		}
+		renewRes := &networkv1ca.CARenewResponse{}
+		if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
+			return nil, err
+		}
 
-			return renewRes.Certificate, nil
-		},
-	)
+		return renewRes.Certificate, nil
+	})
 }
 
 func (t *control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *peer) error {
-	return t.renewCertificateWithRenewFunc(
-		ctx,
-		network,
-		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-			req := &networkv1ca.CAPeerRenewRequest{
-				Certificate:        cert,
-				CertificateRequest: csr,
-			}
-			res := &networkv1ca.CAPeerRenewResponse{}
-			if err := peer.client.CA().Renew(ctx, req, res); err != nil {
-				return nil, err
-			}
-			return res.Certificate, nil
-		},
-	)
+	return t.renewCertificateWithRenewFunc(network, func(csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+		req := &networkv1ca.CAPeerRenewRequest{
+			Certificate:        network.Certificate,
+			CertificateRequest: csr,
+		}
+		res := &networkv1ca.CAPeerRenewResponse{}
+		if err := peer.client.CA().Renew(ctx, req, res); err != nil {
+			return nil, err
+		}
+		return res.Certificate, nil
+	})
 }
 
 // AddPeer ...

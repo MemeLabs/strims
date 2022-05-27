@@ -143,7 +143,7 @@ func (p *peer) sendCertificateUpdate(network *networkv1.Network) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	li := p.links.Get(&networkBinding{networkKey: dao.CertificateNetworkKey(network.Certificate)})
+	li := p.links.Get(&networkBinding{networkKey: dao.NetworkKey(network)})
 	if li == nil {
 		return ErrNetworkBindingNotFound
 	}

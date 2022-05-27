@@ -9,8 +9,8 @@ import { Base64 } from "js-base64";
 import * as networkv1 from "../../../apis/strims/network/v1/network";
 import { Network } from "../../../apis/strims/network/v1/network";
 import {
-  NetworkServiceService,
-  UnimplementedNetworkServiceService,
+  NetworkFrontendService,
+  UnimplementedNetworkFrontendService,
 } from "../../../apis/strims/network/v1/network_rpc";
 import imgAOCFace from "../chat/emotes/static/AOCFace.png";
 import imgBasedGod from "../chat/emotes/static/BasedGod.png";
@@ -113,8 +113,8 @@ const network = new Network({
 });
 
 export default class NetworkService
-  extends UnimplementedNetworkServiceService
-  implements NetworkServiceService
+  extends UnimplementedNetworkFrontendService
+  implements NetworkFrontendService
 {
   constructor(private limit: number = Infinity) {
     super();

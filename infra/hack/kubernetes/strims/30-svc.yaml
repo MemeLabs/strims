@@ -77,7 +77,7 @@ spec:
       serviceAccountName: node-reader
       containers:
       - name: strims
-        image: ghcr.io/slugalisk/go-ppspp/svc:latest
+        image: ghcr.io/memelabs/strims/svc:latest
         imagePullPolicy: Always
         command: ["sh", "-c"]
         args:

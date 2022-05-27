@@ -172,6 +172,8 @@ type ChatActions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
   openRoom: (serverKey: Uint8Array, networkKey: Uint8Array) => void;
   openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[]) => void;
+  closeRoom: (serverKey: Uint8Array) => void;
+  closeWhispers: (peerKey: Uint8Array) => void;
 };
 
 const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
@@ -268,6 +270,27 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       };
     });
 
+  const closeRoom = (serverKey: Uint8Array) =>
+    setState((state) => {
+      const key = Base64.fromUint8Array(serverKey, true);
+      if (!state.rooms.has(key)) {
+        return state;
+      }
+
+      state.rooms.get(key).serverEvents.destroy();
+
+      const rooms = new Map(state.rooms);
+      rooms.delete(key);
+      return { ...state, rooms };
+    });
+
+  const closeWhispers = (peerKey: Uint8Array) =>
+    setState((state) => {
+      const whispers = new Map(state.whispers);
+      whispers.delete(Base64.fromUint8Array(peerKey, true));
+      return { ...state, whispers };
+    });
+
   const setUiConfig = (uiConfig: UIConfig) =>
     setState((state) => ({
       ...state,
@@ -320,6 +343,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   return {
     openRoom,
     openWhispers,
+    closeRoom,
+    closeWhispers,
     setUiConfig,
     handleWhisperEvent,
   };
@@ -661,7 +686,6 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }
       actions = useStableCallbacks(createRoomActions(client, setState, props.topicKey));
       break;
     case "WHISPER":
-      console.log(props);
       thread = state.whispers.get(Base64.fromUint8Array(props.topicKey, true));
       actions = useStableCallbacks(createWhisperActions(client, setState, props.topicKey));
       break;

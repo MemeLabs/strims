@@ -11,7 +11,7 @@ import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
 import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";
 import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
 import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
-import { NetworkServiceClient } from "./strims/network/v1/network_rpc";
+import { NetworkFrontendClient } from "./strims/network/v1/network_rpc";
 import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc";
 import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc";
 import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc";
@@ -29,7 +29,7 @@ export class FrontendClient {
   public chatServer: ChatServerFrontendClient;
   public debug: DebugClient;
   public directory: DirectoryFrontendClient;
-  public network: NetworkServiceClient;
+  public network: NetworkFrontendClient;
   public notification: NotificationFrontendClient;
   public profile: ProfileFrontendClient;
   public videoCapture: VideoCaptureClient;
@@ -48,7 +48,7 @@ export class FrontendClient {
     this.chatServer = new ChatServerFrontendClient(host);
     this.debug = new DebugClient(host);
     this.directory = new DirectoryFrontendClient(host);
-    this.network = new NetworkServiceClient(host);
+    this.network = new NetworkFrontendClient(host);
     this.notification = new NotificationFrontendClient(host);
     this.profile = new ProfileFrontendClient(host);
     this.videoCapture = new VideoCaptureClient(host);

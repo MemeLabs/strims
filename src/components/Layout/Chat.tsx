@@ -22,16 +22,22 @@ interface HeaderProps {
   onToggleClick: () => void;
   onMenuToggleClick: () => void;
   onChange: (topic: RoomProviderProps) => void;
+  selected: RoomProviderProps;
 }
 
-const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onChange }) => (
+const Header: React.FC<HeaderProps> = ({
+  onToggleClick,
+  onMenuToggleClick,
+  onChange,
+  selected: topic,
+}) => (
   <div className="layout_chat__header">
     {DEVICE_TYPE !== DeviceType.Portable && (
       <button className="layout_chat__toggle layout_chat__toggle--off" onClick={onToggleClick}>
         <BsArrowBarLeft />
       </button>
     )}
-    <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} />
+    <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} selected={topic} />
     <button className="layout_chat__toggle" onClick={onMenuToggleClick}>
       <HiOutlineDotsVertical />
     </button>
@@ -48,11 +54,13 @@ const Chat: React.FC = () => {
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, () => toggleMenuOpen(false));
 
-  const handleRoomMenuChange = useCallback(() => {
-    toggleMenuOpen(false);
-  }, []);
-
   const [topic, setTopic] = useState<RoomProviderProps>(null);
+
+  const handleRoomMenuChange = useCallback((topic: RoomProviderProps) => {
+    toggleMenuOpen(false);
+    setTopic(topic);
+    console.log({ topic });
+  }, []);
 
   return (
     <div
@@ -80,6 +88,7 @@ const Chat: React.FC = () => {
           onToggleClick={onToggleClick}
           onMenuToggleClick={onMenuToggleClick}
           onChange={setTopic}
+          selected={topic}
         />
         {topic && (
           <RoomProvider {...topic}>

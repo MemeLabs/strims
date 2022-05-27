@@ -41,7 +41,7 @@ func (c *certificateMap) Insert(network *networkv1.Network) {
 	defer c.mu.Unlock()
 
 	c.m.ReplaceOrInsert(&certificateMapItem{
-		networkKey:  dao.CertificateNetworkKey(network.Certificate),
+		networkKey:  dao.NetworkKey(network),
 		networkID:   network.Id,
 		certificate: network.Certificate,
 		trusted:     isCertificateTrusted(network.Certificate),
@@ -115,6 +115,8 @@ func isCertificateExpired(cert *certificate.Certificate) bool {
 
 func nextCertificateRenewTime(network *networkv1.Network) timeutil.Time {
 	if isCertificateSubjectMismatched(network) {
+		// schedule immediate renewal we don't have a peer certificate for the
+		// requested alias
 		return timeutil.Now()
 	}
 	return timeutil.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)

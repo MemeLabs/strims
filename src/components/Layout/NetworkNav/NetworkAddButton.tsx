@@ -11,12 +11,7 @@ import { certificateRoot } from "../../../lib/certificate";
 import AddNetworkModal from "../../AddNetworkModal";
 
 const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, ...props }) => {
-  const { isOpen, openPortal, closePortal, Portal } = usePortal() as {
-    isOpen: () => void;
-    openPortal: () => void;
-    closePortal: () => void;
-    Portal: React.ElementType;
-  };
+  const { isOpen, openPortal, closePortal, Portal } = usePortal();
   const navigate = useNavigate();
 
   const handleCreate = (res: CreateServerResponse) => {

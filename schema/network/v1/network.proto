@@ -180,7 +180,7 @@ message GetUIConfigResponse {
   UIConfig config = 1;
 }
 
-service NetworkService {
+service NetworkFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse);
   rpc Delete(DeleteNetworkRequest) returns (DeleteNetworkResponse);
