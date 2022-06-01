@@ -12,7 +12,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
   const [{ value }] = useCall("bootstrap", "listClients");
   const navigate = useNavigate();
   const [{ error, loading }, createClient] = useLazyCall("bootstrap", "createClient", {
-    onComplete: () => navigate(`/settings/bootstrap/rules`, { replace: true }),
+    onComplete: () => navigate(`/settings/bootstrap`, { replace: true }),
   });
 
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {

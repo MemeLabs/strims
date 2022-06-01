@@ -115,7 +115,7 @@ func isCertificateExpired(cert *certificate.Certificate) bool {
 
 func nextCertificateRenewTime(network *networkv1.Network) timeutil.Time {
 	if isCertificateSubjectMismatched(network) {
-		// schedule immediate renewal we don't have a peer certificate for the
+		// schedule immediate renewal. we don't have a peer certificate for the
 		// requested alias
 		return timeutil.Now()
 	}

@@ -3,11 +3,9 @@ metrics:
 debug:
   address: "0.0.0.0:6060"
 storage:
-  adapter: "postgres"
+  adapter: "bbolt"
   bbolt:
     path: "hack/svc/.strims"
-  postgres:
-    connStr: "user=postgres password=supersecret host=172.17.0.3 sslmode=disable database=strims"
 http:
   address: "0.0.0.0:8083"
   tls:
@@ -17,10 +15,7 @@ session:
   remote:
     enabled: true
   headless:
-    - id: 55708340105248770
-      key: "gbnFAhEj/oTc4MCZ+qW/m8NHDV3+3lZf1TuVThZzDj8="
 vnic:
-  # label: ""
   webrtc:
     enabled: true
     tcpMuxAddress: 0.0.0.0:5000

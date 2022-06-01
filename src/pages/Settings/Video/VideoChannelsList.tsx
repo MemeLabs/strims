@@ -57,7 +57,7 @@ const VideoChannelsList = () => {
     return null;
   }
   if (!channelsRes.value?.channels.length) {
-    return <Navigate to="/settings/videos/channels/new" />;
+    return <Navigate to="/settings/video/channels/new" />;
   }
 
   const rows = channelsRes.value?.channels?.map((channel) => {
