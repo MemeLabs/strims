@@ -3,6 +3,7 @@
 
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
+import { isEqual } from "lodash";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
@@ -77,6 +78,7 @@ export interface ThreadState {
   errors: Error[];
   state: RoomInitState;
   tab: TabGroup;
+  label: string;
 }
 
 export interface WhisperThreadState extends ThreadState {
@@ -92,6 +94,11 @@ export interface RoomThreadState extends ThreadState {
   room: Room;
 }
 
+export interface Topic {
+  type: "ROOM" | "WHISPER";
+  topicKey: Uint8Array;
+}
+
 export interface State {
   nextId: number;
   uiConfig: UIConfig;
@@ -101,6 +108,10 @@ export interface State {
   rooms: Map<string, RoomThreadState>;
   whispers: Map<string, WhisperThreadState>;
   whisperThreads: Map<string, WhisperThread>;
+  popoutTopics: Topic[];
+  popoutTopicCapacity: number;
+  mainTopics: Topic[];
+  mainActiveTopic?: Topic;
 }
 
 type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
@@ -126,6 +137,7 @@ const initialRoomState: ThreadState = {
   errors: [],
   state: RoomInitState.NEW,
   tab: TabGroup.MAIN,
+  label: "",
 };
 
 const initialState: State = {
@@ -166,14 +178,19 @@ const initialState: State = {
   rooms: new Map(),
   whispers: new Map(),
   whisperThreads: new Map(),
+  popoutTopics: [],
+  popoutTopicCapacity: 0,
+  mainTopics: [],
 };
 
 type ChatActions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
   openRoom: (serverKey: Uint8Array, networkKey: Uint8Array) => void;
   openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[]) => void;
-  closeRoom: (serverKey: Uint8Array) => void;
-  closeWhispers: (peerKey: Uint8Array) => void;
+  openTopicPopout: (topic: Topic) => void;
+  setPopoutTopicCapacity: (popoutTopicCapacity: number) => void;
+  closeTopic: (topic: Topic) => void;
+  setMainActiveTopic: (topic: Topic) => void;
 };
 
 const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
@@ -227,6 +244,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       serverEvents.on("error", roomActions.handleClientError);
       serverEvents.on("close", roomActions.handleClientClose);
 
+      const topic: Topic = { type: "ROOM", topicKey: serverKey };
+
       return {
         ...state,
         nextId: state.nextId + 1,
@@ -239,6 +258,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           serverEvents,
           room: new Room(),
         }),
+        mainTopics: [...state.mainTopics, topic],
+        mainActiveTopic: topic,
       };
     });
 
@@ -256,6 +277,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         .then(({ thread, whispers }) => whisperActions.setWhisperMessages(thread, whispers))
         .catch((error: Error) => whisperActions.handleWhisperError(error));
 
+      const topic: Topic = { type: "WHISPER", topicKey: peerKey };
+
       return {
         ...state,
         nextId: state.nextId + 1,
@@ -267,6 +290,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           networkKeys: networkKeys,
           thread: new WhisperThread(),
         }),
+        mainTopics: [...state.mainTopics, topic],
+        mainActiveTopic: topic,
       };
     });
 
@@ -282,6 +307,79 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       const rooms = new Map(state.rooms);
       rooms.delete(key);
       return { ...state, rooms };
+    });
+
+  const closeTopic = (topic: Topic) => {
+    setState((state) => {
+      let { mainActiveTopic } = state;
+      if (isEqual(mainActiveTopic, topic)) {
+        const i = state.mainTopics.findIndex((t) => isEqual(t, topic));
+        mainActiveTopic = state.mainTopics[i + 1] ?? state.mainTopics[i - 1];
+      }
+
+      const mainTopics = state.mainTopics.filter((t) => !isEqual(t, topic));
+      const popoutTopics = state.popoutTopics.filter((t) => !isEqual(t, topic));
+      return { ...state, mainTopics, mainActiveTopic, popoutTopics };
+    });
+
+    switch (topic.type) {
+      case "ROOM":
+        return closeRoom(topic.topicKey);
+      case "WHISPER":
+        return closeWhispers(topic.topicKey);
+    }
+  };
+
+  const setMainActiveTopic = (topic: Topic) =>
+    setState((state) => {
+      const mainActiveTopic = state.mainTopics.find((t) => isEqual(t, topic));
+      if (!mainActiveTopic) {
+        return state;
+      }
+      return { ...state, mainActiveTopic };
+    });
+
+  const openTopicPopout = (topic: Topic) =>
+    setState((state) => {
+      const mainTopics = [...state.mainTopics];
+      const mainTopicIndex = mainTopics.findIndex((t) => isEqual(t, topic));
+      if (mainTopicIndex === -1) {
+        return state;
+      }
+      mainTopics.splice(mainTopicIndex, 1);
+
+      let { mainActiveTopic } = state;
+      if (isEqual(mainActiveTopic, topic)) {
+        mainActiveTopic = mainTopics[mainTopicIndex] ?? mainTopics[mainTopicIndex - 1];
+      }
+
+      const popoutTopics = [topic, ...state.popoutTopics];
+      if (popoutTopics.length > state.popoutTopicCapacity) {
+        mainTopics.push(...popoutTopics.splice(state.popoutTopicCapacity));
+      }
+
+      return {
+        ...state,
+        mainTopics,
+        mainActiveTopic,
+        popoutTopics,
+      };
+    });
+
+  const setPopoutTopicCapacity = (popoutTopicCapacity: number) =>
+    setState((state) => {
+      const mainTopics = [...state.mainTopics];
+      const popoutTopics = [...state.popoutTopics];
+      if (popoutTopics.length > popoutTopicCapacity) {
+        mainTopics.push(...popoutTopics.splice(popoutTopicCapacity));
+      }
+
+      return {
+        ...state,
+        mainTopics,
+        popoutTopics,
+        popoutTopicCapacity,
+      };
     });
 
   const closeWhispers = (peerKey: Uint8Array) =>
@@ -307,6 +405,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         return {
           ...thread,
           thread: res.body.threadUpdate,
+          label: res.body.threadUpdate.alias,
         };
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
         return reduceMessage(thread, state, res.body.whisperUpdate.message);
@@ -343,10 +442,12 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   return {
     openRoom,
     openWhispers,
-    closeRoom,
-    closeWhispers,
     setUiConfig,
     handleWhisperEvent,
+    openTopicPopout,
+    setPopoutTopicCapacity,
+    closeTopic,
+    setMainActiveTopic,
   };
 };
 
@@ -366,6 +467,7 @@ const createWhisperActions = (
     setWhisperState((whisper) => ({
       ...whisper,
       thread,
+      label: thread.alias,
       messages: whispers.map(({ message }) => message),
     }));
 
@@ -416,10 +518,16 @@ const createRoomActions = (
 ) => {
   const key = Base64.fromUint8Array(serverKey, true);
   const setRoomState: ThreadStateDispatcher<RoomThreadState> = (action) =>
-    setState((state) => ({
-      ...state,
-      rooms: new Map(state.rooms).set(key, action(state.rooms.get(key), state)),
-    }));
+    setState((state) => {
+      const room = state.rooms.get(key);
+      if (!room) {
+        return state;
+      }
+      return {
+        ...state,
+        rooms: new Map(state.rooms).set(key, action(room, state)),
+      };
+    });
 
   const syncUsers = (nicks: string[], users: Map<string, UserMeta>) =>
     setRoomState((room) => ({
@@ -489,6 +597,7 @@ const createRoomActions = (
     return {
       ...state,
       room,
+      label: room.name,
       assetBundles,
       liveEmotes,
       styles: {
@@ -669,10 +778,7 @@ export const useChat = (): [State, ChatActions, StateDispatcher] => useContext(C
 
 export const ChatConsumer = ChatContext.Consumer;
 
-export interface RoomProviderProps {
-  type: "ROOM" | "WHISPER";
-  topicKey: Uint8Array;
-}
+export type RoomProviderProps = Topic;
 
 export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }) => {
   const client = useClient();

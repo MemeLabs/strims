@@ -277,6 +277,12 @@
 
     --link-active-bg: #{$slate-300};
     --link-hover-bg: #{$slate-400};
+
+    --color-background-context-menu: var(--color-slate-4);
+    --color-background-context-menu-item-hover: var(--color-slate-9);
+    --color-text-context-menu-item: var(--color-grey-9);
+    --color-text-context-menu-item-hover: var(--color-grey-12);
+    --color-text-context-menu-item-disabled: var(--color-opac-w-7);
   }
 
   &--light {

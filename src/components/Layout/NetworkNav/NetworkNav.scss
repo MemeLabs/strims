@@ -86,6 +86,8 @@
     position: relative;
     text-align: center;
     width: 40px;
+    --badge-color: var(--color-hinted-grey-7);
+    --badge-offset: 0.3rem;
   }
 
   &--collapsed {

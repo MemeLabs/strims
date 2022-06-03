@@ -10,7 +10,7 @@ import { HiOutlineDotsVertical } from "react-icons/hi";
 import { useToggle } from "react-use";
 
 import { RoomButtons } from "../../components/Chat/RoomMenu";
-import { RoomProvider, RoomProviderProps } from "../../contexts/Chat";
+import { RoomProvider, RoomProviderProps, useChat } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
@@ -54,12 +54,11 @@ const Chat: React.FC = () => {
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, () => toggleMenuOpen(false));
 
-  const [topic, setTopic] = useState<RoomProviderProps>(null);
+  const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
 
   const handleRoomMenuChange = useCallback((topic: RoomProviderProps) => {
     toggleMenuOpen(false);
-    setTopic(topic);
-    console.log({ topic });
+    setMainActiveTopic(topic);
   }, []);
 
   return (
@@ -87,11 +86,11 @@ const Chat: React.FC = () => {
         <Header
           onToggleClick={onToggleClick}
           onMenuToggleClick={onMenuToggleClick}
-          onChange={setTopic}
-          selected={topic}
+          onChange={setMainActiveTopic}
+          selected={mainActiveTopic}
         />
-        {topic && (
-          <RoomProvider {...topic}>
+        {mainActiveTopic && (
+          <RoomProvider {...mainActiveTopic}>
             <ChatShell className="home_page__chat" shouldHide={closed} />
           </RoomProvider>
         )}

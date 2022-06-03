@@ -12,14 +12,14 @@
   }
 }
 
-.chat_whisper {
+.chat_popout {
   font-size: 0.8rem;
   width: 320px;
   height: 300px;
   background: var(--body-foreground);
   display: flex;
   flex-direction: column;
-  margin: 0 0.2rem;
+  margin-right: 0.4rem;
   position: relative;
   box-shadow: var(--shadow-elevation-3);
   z-index: var(--z-index-overlay);

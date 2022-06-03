@@ -7,6 +7,7 @@ import "./RoomCarousel.scss";
 
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
+import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { useCallback, useRef } from "react";
 import { FreeMode, Mousewheel } from "swiper";
@@ -16,6 +17,8 @@ import { RoomProviderProps, useChat } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import Badge from "../Badge";
+import { MenuItem, useContextMenu } from "../ContextMenu";
 
 const SWIPER_FREE_MODE_OPTIONS = {
   enabled: true,
@@ -37,31 +40,22 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   onChange,
   selected,
 }) => {
-  const [, { closeRoom, closeWhispers }] = useChat();
-
-  const closeTopic = () => {
-    switch (type) {
-      case "ROOM":
-        return closeRoom(topicKey);
-      case "WHISPER":
-        return closeWhispers(topicKey);
-    }
-  };
+  const [, { openTopicPopout, closeTopic }] = useChat();
 
   const ref = useRef<HTMLDivElement>();
   useDrag(
     ({ movement: [, my], swipe: [, sy], dragging, first }) => {
       ref.current.style.setProperty("--drag-offset", `${my}px`);
 
-      if (first && dragging) {
-        ref.current.classList.add("room_carousel__item--dragging");
-      } else if (!dragging) {
+      if (!dragging) {
         ref.current.classList.remove("room_carousel__item--dragging");
         ref.current.style.removeProperty("--drag-offset");
+      } else if (first) {
+        ref.current.classList.add("room_carousel__item--dragging");
       }
 
       if (sy === -1) {
-        closeTopic();
+        closeTopic({ type, topicKey });
       }
     },
     {
@@ -80,9 +74,20 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
 
   const handleClick = useStableCallback(() => onChange({ type, topicKey }));
 
+  const { openMenu, closeMenu, Menu } = useContextMenu();
   const handleContextMenu = useStableCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    closeTopic();
+    openMenu(e);
+  });
+
+  const handleOpenPopoutClick = useStableCallback(() => {
+    openTopicPopout({ type, topicKey });
+    closeMenu();
+  });
+
+  const handleCloseClick = useStableCallback(() => {
+    closeTopic({ type, topicKey });
+    closeMenu();
   });
 
   const className = clsx({
@@ -92,9 +97,17 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   });
 
   return (
-    <div ref={ref} className={className} onClick={handleClick} onContextMenu={handleContextMenu}>
-      {label}
-    </div>
+    <>
+      <div ref={ref} className={className} onClick={handleClick} onContextMenu={handleContextMenu}>
+        {label}
+        <Badge count={33} max={100} />
+      </div>
+      <Menu>
+        <MenuItem>mark as read</MenuItem>
+        <MenuItem onClick={handleOpenPopoutClick}>open mini chat</MenuItem>
+        <MenuItem onClick={handleCloseClick}>close</MenuItem>
+      </Menu>
+    </>
   );
 };
 
@@ -116,29 +129,30 @@ const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange, select
 
   const slidesPerView = size ? Math.floor(size?.width / 52) : 1;
 
-  const gems: RoomCarouselGemProps[] = [];
+  const [{ rooms, whispers, mainTopics, mainActiveTopic }] = useChat();
+  const gems: RoomCarouselGemProps[] = mainTopics.map((topic) => {
+    let label: string;
+    switch (topic.type) {
+      case "ROOM": {
+        const room = rooms.get(Base64.fromUint8Array(topic.topicKey, true));
+        label = room.room?.name.substring(0, 2) ?? "...";
+        break;
+      }
+      case "WHISPER": {
+        const whisper = whispers.get(Base64.fromUint8Array(topic.topicKey, true));
+        label = whisper.thread?.alias.substring(0, 2) ?? "...";
+        break;
+      }
+    }
 
-  const [{ rooms, whispers }] = useChat();
-  for (const room of rooms.values()) {
-    gems.push({
+    return {
+      ...topic,
       color: "green",
-      label: room.room?.name.substring(0, 2) ?? "...",
-      type: "ROOM",
-      topicKey: room.serverKey,
+      label,
       onChange,
-      selected: selected?.type === "ROOM" && isEqual(selected?.topicKey, room.serverKey),
-    });
-  }
-  for (const whisper of whispers.values()) {
-    gems.push({
-      color: "green",
-      label: whisper.thread?.alias.substring(0, 2) ?? "...",
-      type: "WHISPER",
-      topicKey: whisper.peerKey,
-      onChange,
-      selected: selected?.type === "WHISPER" && isEqual(selected?.topicKey, whisper.peerKey),
-    });
-  }
+      selected: isEqual(topic, mainActiveTopic),
+    };
+  });
 
   return (
     <div
