@@ -13,21 +13,17 @@ import React, { useCallback, useRef } from "react";
 import { FreeMode, Mousewheel } from "swiper";
 import { Swiper, SwiperSlide } from "swiper/react";
 
-import { RoomProviderProps, useChat } from "../../contexts/Chat";
+import { RoomProviderProps, ThreadState, useChat } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import Badge from "../Badge";
 import { MenuItem, useContextMenu } from "../ContextMenu";
 
-const SWIPER_FREE_MODE_OPTIONS = {
-  enabled: true,
-  sticky: true,
-};
-
 interface RoomCarouselGemProps extends RoomProviderProps {
   color: string;
   label: string;
+  unreadCount: number;
   onChange: (topic: RoomProviderProps) => void;
   selected: boolean;
 }
@@ -35,6 +31,7 @@ interface RoomCarouselGemProps extends RoomProviderProps {
 const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   color,
   label,
+  unreadCount,
   type,
   topicKey,
   onChange,
@@ -99,8 +96,8 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   return (
     <>
       <div ref={ref} className={className} onClick={handleClick} onContextMenu={handleContextMenu}>
-        {label}
-        <Badge count={33} max={100} />
+        {label?.substring(0, 2)}
+        {unreadCount > 0 && <Badge count={unreadCount} max={100} />}
       </div>
       <Menu>
         <MenuItem>mark as read</MenuItem>
@@ -111,69 +108,63 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   );
 };
 
+const SWIPER_FREE_MODE_OPTIONS = {
+  enabled: true,
+  sticky: true,
+};
+
 export interface RoomCarouselProps {
   className?: string;
   onChange: (topic: RoomProviderProps) => void;
-  selected: RoomProviderProps;
 }
 
-const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange, selected }) => {
-  const handleTouchStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (DEVICE_TYPE === DeviceType.Portable) {
-      e.stopPropagation();
-    }
-  }, []);
-
+const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {
+  const [{ rooms, whispers, mainTopics, mainActiveTopic }] = useChat();
   const ref = useRef<HTMLDivElement>();
   const size = useSize(ref.current);
 
   const slidesPerView = size ? Math.floor(size?.width / 52) : 1;
 
-  const [{ rooms, whispers, mainTopics, mainActiveTopic }] = useChat();
-  const gems: RoomCarouselGemProps[] = mainTopics.map((topic) => {
-    let label: string;
-    switch (topic.type) {
-      case "ROOM": {
-        const room = rooms.get(Base64.fromUint8Array(topic.topicKey, true));
-        label = room.room?.name.substring(0, 2) ?? "...";
-        break;
-      }
-      case "WHISPER": {
-        const whisper = whispers.get(Base64.fromUint8Array(topic.topicKey, true));
-        label = whisper.thread?.alias.substring(0, 2) ?? "...";
-        break;
-      }
-    }
+  const slides = mainTopics.map((topic) => {
+    const key = Base64.fromUint8Array(topic.topicKey, true);
+    const thread: ThreadState = topic.type === "ROOM" ? rooms.get(key) : whispers.get(key);
 
-    return {
-      ...topic,
-      color: "green",
-      label,
-      onChange,
-      selected: isEqual(topic, mainActiveTopic),
-    };
+    return (
+      <SwiperSlide key={key}>
+        <RoomCarouselGem
+          {...topic}
+          color="green"
+          label={thread.label}
+          unreadCount={thread.unreadCount}
+          selected={isEqual(topic, mainActiveTopic)}
+          onChange={onChange}
+        />
+      </SwiperSlide>
+    );
   });
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (DEVICE_TYPE === DeviceType.Portable) {
+      e.stopPropagation();
+    }
+  }, []);
 
   return (
     <div
       className={clsx(className, "room_carousel")}
       ref={ref}
-      onPointerDownCapture={handleTouchStart}
+      onPointerDownCapture={handlePointerDown}
     >
       <Swiper
         slidesPerView={slidesPerView}
         spaceBetween={4}
-        loop={gems.length > slidesPerView}
+        loop={slides.length > slidesPerView}
         mousewheel={true}
         modules={[Mousewheel, FreeMode]}
         freeMode={DEVICE_TYPE === DeviceType.Portable ? false : SWIPER_FREE_MODE_OPTIONS}
         touchStartPreventDefault={false}
       >
-        {gems.map((props, i) => (
-          <SwiperSlide key={i}>
-            <RoomCarouselGem {...props} />
-          </SwiperSlide>
-        ))}
+        {slides}
       </Swiper>
     </div>
   );

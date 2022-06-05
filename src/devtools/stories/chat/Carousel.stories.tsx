@@ -44,7 +44,7 @@ const Context: React.FC = ({ children }) => {
 };
 
 const Carousel: React.FC = () => {
-  const [, { openWhispers }] = useChat();
+  const [, { openWhispers, setMainActiveTopic }] = useChat();
 
   useEffect(() => {
     const key = new Uint8Array(32);
@@ -57,9 +57,7 @@ const Carousel: React.FC = () => {
     }
   }, []);
 
-  const [selected, setSelected] = useState<RoomProviderProps>();
-
-  return <RoomCarousel className="chat_carousel" onChange={setSelected} selected={selected} />;
+  return <RoomCarousel className="chat_carousel" onChange={setMainActiveTopic} />;
 };
 
 export default [

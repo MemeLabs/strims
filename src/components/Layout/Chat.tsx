@@ -4,7 +4,7 @@
 import "./Chat.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef } from "react";
 import { BsArrowBarLeft } from "react-icons/bs";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import { useToggle } from "react-use";
@@ -22,22 +22,16 @@ interface HeaderProps {
   onToggleClick: () => void;
   onMenuToggleClick: () => void;
   onChange: (topic: RoomProviderProps) => void;
-  selected: RoomProviderProps;
 }
 
-const Header: React.FC<HeaderProps> = ({
-  onToggleClick,
-  onMenuToggleClick,
-  onChange,
-  selected: topic,
-}) => (
+const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onChange }) => (
   <div className="layout_chat__header">
     {DEVICE_TYPE !== DeviceType.Portable && (
       <button className="layout_chat__toggle layout_chat__toggle--off" onClick={onToggleClick}>
         <BsArrowBarLeft />
       </button>
     )}
-    <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} selected={topic} />
+    <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} />
     <button className="layout_chat__toggle" onClick={onMenuToggleClick}>
       <HiOutlineDotsVertical />
     </button>
@@ -87,11 +81,10 @@ const Chat: React.FC = () => {
           onToggleClick={onToggleClick}
           onMenuToggleClick={onMenuToggleClick}
           onChange={setMainActiveTopic}
-          selected={mainActiveTopic}
         />
-        {mainActiveTopic && (
+        {showChat && mainActiveTopic && (
           <RoomProvider {...mainActiveTopic}>
-            <ChatShell className="home_page__chat" shouldHide={closed} />
+            <ChatShell />
           </RoomProvider>
         )}
       </div>

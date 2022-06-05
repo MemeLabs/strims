@@ -285,7 +285,7 @@ $chat-width-sm: 260px;
       flex-grow: 1;
     }
 
-    &.layout--min_aspect_ratio_1_2.layout--show_chat .layout__chat_bar {
+    &.layout--min_aspect_ratio_1_2 .layout__chat_bar {
       display: block;
     }
 

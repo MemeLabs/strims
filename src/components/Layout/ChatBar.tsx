@@ -23,21 +23,31 @@ interface ChatPopoutProps {
 }
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
-  const [{ uiConfig }, { closeTopic }] = useChat();
-  const [room, { getMessage, getMessageCount, toggleMessageGC, sendMessage }] = useRoom();
+  const [{ uiConfig }, { closeTopic, toggleTopicVisible }] = useChat();
+  const [room, roomActions] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
+
+  useEffect(() => {
+    toggleTopicVisible(room.topic, true);
+    return () => toggleTopicVisible(room.topic, false);
+  }, []);
 
   const renderMessage = useCallback(
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={getMessage(index)}
+        message={roomActions.getMessage(index)}
         style={style}
-        isMostRecent={index === getMessageCount() - 1}
+        isMostRecent={index === roomActions.getMessageCount() - 1}
       />
     ),
     [uiConfig, room.styles]
   );
+
+  const handleHeaderClick = useStableCallback(() => {
+    toggleMinimized(!minimized);
+    toggleTopicVisible(room.topic, minimized);
+  });
 
   const handleCloseClick = useStableCallback(() => closeTopic(topic));
 
@@ -47,8 +57,11 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
 
   return (
     <div className={className}>
-      <div className="chat_popout__header" onClick={toggleMinimized}>
-        <div className="chat_popout__title">{room.label}</div>
+      <div className="chat_popout__header" onClick={handleHeaderClick}>
+        <div className="chat_popout__title">
+          {room.label}
+          {room.unreadCount > 0 ? ` (${room.unreadCount.toLocaleString()})` : ""}
+        </div>
         <div className="chat_popout__controls">
           <button className="chat_popout__control" onClick={handleCloseClick}>
             <MdClose />
@@ -64,7 +77,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               renderMessage={renderMessage}
               messageCount={room.messages.length}
               messageSizeCache={room.messageSizeCache}
-              onAutoScrollChange={toggleMessageGC}
+              onAutoScrollChange={roomActions.toggleMessageGC}
             />
           </div>
           <div className="chat_popout__footer">
@@ -73,7 +86,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               modifiers={room.modifiers}
               tags={room.tags}
               nicks={room.nicks}
-              onMessage={sendMessage}
+              onMessage={roomActions.sendMessage}
             />
           </div>
         </>

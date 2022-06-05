@@ -35,7 +35,7 @@ const TestChat: React.FC = () => {
           networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
           serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
         >
-          <ChatShell className="home_page__chat" shouldHide={closed} />
+          <ChatShell className="home_page__chat" />
         </RoomProvider>
       </ChatProvider>
     </ApiProvider>

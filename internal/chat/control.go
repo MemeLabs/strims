@@ -178,7 +178,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 	runner, ok := t.runners.Get(key)
 	if !ok {
 		var err error
-		runner, err = newRunner(ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
+		runner, err = newRunner(t.ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
 		if err != nil {
 			logger.Error("failed to start chat runner", zap.Error(err))
 			return nil, nil, err
@@ -198,7 +198,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 			readers, stop, err := runner.Reader(rctx)
 			if err != nil {
-				logger.Debug("open chat readers failed", zap.Error(err))
+				logger.Error("open chat readers failed", zap.Error(err))
 				return
 			}
 			defer stop()

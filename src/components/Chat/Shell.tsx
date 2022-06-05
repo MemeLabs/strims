@@ -5,7 +5,7 @@ import "./Shell.scss";
 
 import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BiSmile } from "react-icons/bi";
 import { FiSettings } from "react-icons/fi";
@@ -48,16 +48,20 @@ const ChatDrawerButton: React.FC<ChatDrawerButtonProps> = ({ icon: Icon, onToggl
 };
 
 interface ShellProps {
-  shouldHide?: boolean;
   className?: string;
 }
 
-const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
+const Shell: React.FC<ShellProps> = ({ className }) => {
   const { t } = useTranslation();
 
-  const [{ uiConfig }] = useChat();
-  const [room, { getMessage, getMessageCount, toggleMessageGC, sendMessage }] = useRoom();
+  const [{ uiConfig }, { toggleTopicVisible }] = useChat();
+  const [room, roomActions] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
+
+  useEffect(() => {
+    toggleTopicVisible(room.topic, true);
+    return () => toggleTopicVisible(room.topic, false);
+  }, [room.id]);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 
@@ -67,17 +71,17 @@ const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
   const toggleSettings = useCallback(drawerToggler(ChatDrawerRole.Settings), []);
 
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = React.useState<DOMRectReadOnly>();
-  React.useLayoutEffect(() => setSize(ref.current?.getBoundingClientRect()), [ref.current, room]);
+  const [size, setSize] = useState<DOMRectReadOnly>();
+  useLayoutEffect(() => setSize(ref.current?.getBoundingClientRect()), [ref.current, room]);
   useResizeObserver(ref, (entry) => setSize(entry.contentRect));
 
   const renderMessage = useCallback(
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={getMessage(index)}
+        message={roomActions.getMessage(index)}
         style={style}
-        isMostRecent={index === getMessageCount() - 1}
+        isMostRecent={index === roomActions.getMessageCount() - 1}
       />
     ),
     [uiConfig, room.styles]
@@ -112,17 +116,13 @@ const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
         >
           <SettingsDrawer />
         </ChatDrawer>
-        {!shouldHide && (
-          // TODO: scroller is super fucking sketchy... this should probably be
-          // wrapped with an error boundary to keep it from taking down the app
-          <Scroller
-            uiConfig={uiConfig}
-            renderMessage={renderMessage}
-            messageCount={room.messages.length}
-            messageSizeCache={room.messageSizeCache}
-            onAutoScrollChange={toggleMessageGC}
-          />
-        )}
+        <Scroller
+          uiConfig={uiConfig}
+          renderMessage={renderMessage}
+          messageCount={room.messages.length}
+          messageSizeCache={room.messageSizeCache}
+          onAutoScrollChange={roomActions.toggleMessageGC}
+        />
       </div>
       <div className="chat__footer">
         <Composer
@@ -130,7 +130,7 @@ const Shell: React.FC<ShellProps> = ({ shouldHide = false, className }) => {
           modifiers={room.modifiers}
           tags={room.tags}
           nicks={room.nicks}
-          onMessage={sendMessage}
+          onMessage={roomActions.sendMessage}
         />
       </div>
       <div className="chat__nav">
