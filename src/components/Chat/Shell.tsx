@@ -5,6 +5,7 @@ import "./Shell.scss";
 
 import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
+import { isEqual } from "lodash";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BiSmile } from "react-icons/bi";
@@ -55,7 +56,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
   const { t } = useTranslation();
 
   const [{ uiConfig }, { toggleTopicVisible, resetTopicUnreadCount }] = useChat();
-  const [room, roomActions] = useRoom();
+  const [room, { getMessage, getMessageCount, toggleMessageGC, sendMessage }] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   useEffect(() => {
@@ -82,9 +83,10 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={roomActions.getMessage(index)}
+        message={getMessage(index)}
         style={style}
-        isMostRecent={index === roomActions.getMessageCount() - 1}
+        isMostRecent={index === getMessageCount() - 1}
+        isContinued={isEqual(getMessage(index).peerKey, getMessage(index + 1)?.peerKey)}
       />
     ),
     [uiConfig, room.styles]
@@ -124,7 +126,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           renderMessage={renderMessage}
           messageCount={room.messages.length}
           messageSizeCache={room.messageSizeCache}
-          onAutoScrollChange={roomActions.toggleMessageGC}
+          onAutoScrollChange={toggleMessageGC}
         />
       </div>
       <div className="chat__footer">
@@ -133,7 +135,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           modifiers={room.modifiers}
           tags={room.tags}
           nicks={room.nicks}
-          onMessage={roomActions.sendMessage}
+          onMessage={sendMessage}
         />
       </div>
       <div className="chat__nav">

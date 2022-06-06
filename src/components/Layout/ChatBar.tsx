@@ -5,6 +5,7 @@ import "./ChatBar.scss";
 
 import clsx from "clsx";
 import { Base64 } from "js-base64";
+import { isEqual } from "lodash";
 import React, { useCallback, useEffect, useRef } from "react";
 import { MdClose } from "react-icons/md";
 import { useToggle } from "react-use";
@@ -23,15 +24,15 @@ interface ChatPopoutProps {
 }
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
-  const [{ uiConfig }, { closeTopic, toggleTopicVisible, resetTopicUnreadCount }] = useChat();
-  const [room, roomActions] = useRoom();
+  const [{ uiConfig }, chatActions] = useChat();
+  const [room, { getMessageCount, getMessage, toggleMessageGC, sendMessage }] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
 
   useEffect(() => {
     if (room.state === ThreadInitState.OPEN) {
-      toggleTopicVisible(room.topic, true);
-      resetTopicUnreadCount(room.topic);
-      return () => toggleTopicVisible(room.topic, false);
+      chatActions.toggleTopicVisible(room.topic, true);
+      chatActions.resetTopicUnreadCount(room.topic);
+      return () => chatActions.toggleTopicVisible(room.topic, false);
     }
   }, [room.state]);
 
@@ -39,9 +40,10 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={roomActions.getMessage(index)}
+        message={getMessage(index)}
         style={style}
-        isMostRecent={index === roomActions.getMessageCount() - 1}
+        isMostRecent={index === getMessageCount() - 1}
+        isContinued={isEqual(getMessage(index).peerKey, getMessage(index + 1)?.peerKey)}
       />
     ),
     [uiConfig, room.styles]
@@ -49,10 +51,11 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
 
   const handleHeaderClick = useStableCallback(() => {
     toggleMinimized(!minimized);
-    toggleTopicVisible(room.topic, minimized);
+    chatActions.toggleTopicVisible(room.topic, minimized);
+    chatActions.resetTopicUnreadCount(room.topic);
   });
 
-  const handleCloseClick = useStableCallback(() => closeTopic(topic));
+  const handleCloseClick = useStableCallback(() => chatActions.closeTopic(topic));
 
   const className = clsx("chat_popout", {
     "chat_popout--minimized": minimized,
@@ -80,7 +83,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               renderMessage={renderMessage}
               messageCount={room.messages.length}
               messageSizeCache={room.messageSizeCache}
-              onAutoScrollChange={roomActions.toggleMessageGC}
+              onAutoScrollChange={toggleMessageGC}
             />
           </div>
           <div className="chat_popout__footer">
@@ -89,7 +92,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               modifiers={room.modifiers}
               tags={room.tags}
               nicks={room.nicks}
-              onMessage={roomActions.sendMessage}
+              onMessage={sendMessage}
             />
           </div>
         </>

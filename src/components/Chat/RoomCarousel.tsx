@@ -37,7 +37,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   onChange,
   selected,
 }) => {
-  const [, { openTopicPopout, closeTopic }] = useChat();
+  const [, chatActions] = useChat();
 
   const ref = useRef<HTMLDivElement>();
   useDrag(
@@ -52,7 +52,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
       }
 
       if (sy === -1) {
-        closeTopic({ type, topicKey });
+        chatActions.closeTopic({ type, topicKey });
       }
     },
     {
@@ -77,13 +77,18 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
     openMenu(e);
   });
 
+  const handleMarkReadClick = useStableCallback(() => {
+    chatActions.resetTopicUnreadCount({ type, topicKey });
+    closeMenu();
+  });
+
   const handleOpenPopoutClick = useStableCallback(() => {
-    openTopicPopout({ type, topicKey });
+    chatActions.openTopicPopout({ type, topicKey });
     closeMenu();
   });
 
   const handleCloseClick = useStableCallback(() => {
-    closeTopic({ type, topicKey });
+    chatActions.closeTopic({ type, topicKey });
     closeMenu();
   });
 
@@ -100,7 +105,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
         {unreadCount > 0 && <Badge count={unreadCount} max={100} />}
       </div>
       <Menu>
-        <MenuItem>mark as read</MenuItem>
+        <MenuItem onClick={handleMarkReadClick}>mark as read</MenuItem>
         <MenuItem onClick={handleOpenPopoutClick}>open mini chat</MenuItem>
         <MenuItem onClick={handleCloseClick}>close</MenuItem>
       </Menu>

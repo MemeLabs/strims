@@ -240,6 +240,7 @@ interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   uiConfig: UIConfig;
   message: chatv1_Message;
   isMostRecent?: boolean;
+  isContinued?: boolean;
 }
 
 const Message: React.FC<MessageProps> = ({ isMostRecent, ...props }) => {
@@ -302,6 +303,7 @@ const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
   message: { nick, peerKey, serverTime, body, entities },
   className: baseClassName,
+  isContinued,
   ...props
 }) => {
   const [{ users }] = useRoom();
@@ -345,6 +347,7 @@ const StandardMessage: React.FC<MessageProps> = ({
     "chat__message",
     `chat__message--author_${authorKey}`,
     {
+      "chat__message--continued": isContinued,
       "chat__message--self": entities.selfMessage,
       "chat__message--tagged": entities.tags.length > 0,
     },
@@ -372,6 +375,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       </span>
       <span className="chat__message__colon">{": "}</span>
       <span className="chat__message__body">{formatter.body}</span>
+      <br />
     </div>
   );
 };
