@@ -11,7 +11,7 @@ import { BiSmile } from "react-icons/bi";
 import { FiSettings } from "react-icons/fi";
 import { IconType } from "react-icons/lib";
 
-import { useChat, useRoom } from "../../contexts/Chat";
+import { ThreadInitState, useChat, useRoom } from "../../contexts/Chat";
 import Composer from "./Composer";
 import ChatDrawer from "./Drawer";
 import EmotesDrawer from "./EmotesDrawer";
@@ -54,14 +54,17 @@ interface ShellProps {
 const Shell: React.FC<ShellProps> = ({ className }) => {
   const { t } = useTranslation();
 
-  const [{ uiConfig }, { toggleTopicVisible }] = useChat();
+  const [{ uiConfig }, { toggleTopicVisible, resetTopicUnreadCount }] = useChat();
   const [room, roomActions] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   useEffect(() => {
-    toggleTopicVisible(room.topic, true);
-    return () => toggleTopicVisible(room.topic, false);
-  }, [room.id]);
+    if (room.state === ThreadInitState.OPEN) {
+      toggleTopicVisible(room.topic, true);
+      resetTopicUnreadCount(room.topic);
+      return () => toggleTopicVisible(room.topic, false);
+    }
+  }, [room.id, room.state]);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 

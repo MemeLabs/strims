@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { MdClose } from "react-icons/md";
 import { useToggle } from "react-use";
 
-import { RoomProvider, Topic, useChat, useRoom } from "../../contexts/Chat";
+import { RoomProvider, ThreadInitState, Topic, useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
@@ -23,14 +23,17 @@ interface ChatPopoutProps {
 }
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
-  const [{ uiConfig }, { closeTopic, toggleTopicVisible }] = useChat();
+  const [{ uiConfig }, { closeTopic, toggleTopicVisible, resetTopicUnreadCount }] = useChat();
   const [room, roomActions] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
 
   useEffect(() => {
-    toggleTopicVisible(room.topic, true);
-    return () => toggleTopicVisible(room.topic, false);
-  }, []);
+    if (room.state === ThreadInitState.OPEN) {
+      toggleTopicVisible(room.topic, true);
+      resetTopicUnreadCount(room.topic);
+      return () => toggleTopicVisible(room.topic, false);
+    }
+  }, [room.state]);
 
   const renderMessage = useCallback(
     ({ index, style }: MessageProps) => (

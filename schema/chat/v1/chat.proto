@@ -505,6 +505,12 @@ message WatchWhispersResponse {
   }
 }
 
+message MarkWhispersReadRequest {
+  uint64 thread_id = 1;
+}
+
+message MarkWhispersReadResponse {}
+
 message SetUIConfigRequest {
   UIConfig ui_config = 1;
 }
@@ -589,6 +595,7 @@ service ChatFrontend {
   rpc Whisper(WhisperRequest) returns (WhisperResponse);
   rpc ListWhispers(ListWhispersRequest) returns (ListWhispersResponse);
   rpc WatchWhispers(WatchWhispersRequest) returns (stream WatchWhispersResponse);
+  rpc MarkWhispersRead(MarkWhispersReadRequest) returns (MarkWhispersReadResponse);
 
   rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
   rpc WatchUIConfig(WatchUIConfigRequest) returns (stream WatchUIConfigResponse);

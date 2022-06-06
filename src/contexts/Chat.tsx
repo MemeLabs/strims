@@ -25,12 +25,8 @@ import {
 } from "../apis/strims/chat/v1/chat";
 import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
-import {
-  DirectoryListing,
-  findUserMediaListing,
-  useDirectory,
-  useDirectoryListing,
-} from "./Directory";
+import { updateInStateMap } from "../lib/setInStateMap";
+import { DirectoryListing } from "./Directory";
 import { useClient } from "./FrontendApi";
 
 export interface Style {
@@ -50,7 +46,7 @@ export interface UserMeta {
   listing: DirectoryListing;
 }
 
-const enum RoomInitState {
+export const enum ThreadInitState {
   NEW,
   INITIALIZED,
   OPEN,
@@ -72,7 +68,7 @@ export interface ThreadState {
   tags: string[];
   users: Map<string, UserMeta>;
   errors: Error[];
-  state: RoomInitState;
+  state: ThreadInitState;
   label: string;
   unreadCount: number;
   visible: boolean;
@@ -95,6 +91,11 @@ export interface Topic {
   type: "ROOM" | "WHISPER";
   topicKey: Uint8Array;
 }
+
+const topicThreadKeys = {
+  "WHISPER": "whispers",
+  "ROOM": "rooms",
+} as const;
 
 export interface State {
   nextId: number;
@@ -133,7 +134,7 @@ const initialRoomState: ThreadState = {
   tags: [],
   users: new Map(),
   errors: [],
-  state: RoomInitState.NEW,
+  state: ThreadInitState.NEW,
   label: "",
   unreadCount: 0,
   visible: true,
@@ -191,6 +192,7 @@ type ChatActions = {
   closeTopic: (topic: Topic) => void;
   setMainActiveTopic: (topic: Topic) => void;
   toggleTopicVisible: (topic: Topic, visible: boolean) => void;
+  resetTopicUnreadCount: (topic: Topic) => void;
 };
 
 const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
@@ -203,6 +205,11 @@ type RoomActions = {
 };
 
 const RoomContext = React.createContext<[ThreadState, RoomActions]>(null);
+
+const formatKey = (key: Uint8Array) => Base64.fromUint8Array(key, true);
+
+export const selectWhispers = (state: State, key: Uint8Array) => state.whispers.get(formatKey(key));
+export const selectRoom = (state: State, key: Uint8Array) => state.rooms.get(formatKey(key));
 
 const reduceMessage = <T extends ThreadState>(room: T, state: State, message: Message): T => {
   const messages = [...room.messages];
@@ -231,9 +238,14 @@ const reduceMessage = <T extends ThreadState>(room: T, state: State, message: Me
 };
 
 const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) => {
+  const setTopicThread = (
+    topic: Topic,
+    action: (thread: ThreadState, state: State) => ThreadState
+  ) => updateInStateMap(setState, topicThreadKeys[topic.type], formatKey(topic.topicKey), action);
+
   const openRoom = (serverKey: Uint8Array, networkKey: Uint8Array) =>
     setState((state) => {
-      const key = Base64.fromUint8Array(serverKey, true);
+      const key = formatKey(serverKey);
       if (state.rooms.has(key)) {
         return state;
       }
@@ -267,7 +279,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
 
   const openWhispers = (peerKey: Uint8Array, networkKeys: Uint8Array[]) =>
     setState((state) => {
-      const key = Base64.fromUint8Array(peerKey, true);
+      const key = formatKey(peerKey);
       if (state.whispers.has(key)) {
         return state;
       }
@@ -300,7 +312,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
 
   const closeRoom = (serverKey: Uint8Array) =>
     setState((state) => {
-      const key = Base64.fromUint8Array(serverKey, true);
+      const key = formatKey(serverKey);
       if (!state.rooms.has(key)) {
         return state;
       }
@@ -343,24 +355,16 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     });
 
   const toggleTopicVisible = (topic: Topic, visible: boolean) =>
-    setState((state) => {
-      const action = <T extends RoomThreadState | WhisperThreadState>(thread: T): T => ({
-        ...thread,
-        visible,
-        unreadCount: visible ? 0 : thread.unreadCount,
-      });
-      switch (topic.type) {
-        case "ROOM":
-          return {
-            ...state,
-            rooms: reduceThreadState(state, state.rooms, topic.topicKey, action),
-          };
-        case "WHISPER":
-          return {
-            ...state,
-            whispers: reduceThreadState(state, state.whispers, topic.topicKey, action),
-          };
+    setTopicThread(topic, (thread) => ({ ...thread, visible }));
+
+  const resetTopicUnreadCount = (topic: Topic) =>
+    setTopicThread(topic, (thread, state) => {
+      if (topic.type === "WHISPER") {
+        const threadId = selectWhispers(state, topic.topicKey).thread.id;
+        void client.chat.markWhispersRead({ threadId });
       }
+
+      return { ...thread, unreadCount: 0 };
     });
 
   const openTopicPopout = (topic: Topic) =>
@@ -409,7 +413,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const closeWhispers = (peerKey: Uint8Array) =>
     setState((state) => {
       const whispers = new Map(state.whispers);
-      whispers.delete(Base64.fromUint8Array(peerKey, true));
+      whispers.delete(formatKey(peerKey));
       return { ...state, whispers };
     });
 
@@ -442,7 +446,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
 
   const handleWhisperEvent = (res: WatchWhispersResponse) =>
     setState((state) => {
-      const key = Base64.fromUint8Array(res.peerKey, true);
+      const key = formatKey(res.peerKey);
 
       if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_UPDATE) {
         state = {
@@ -473,6 +477,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     closeTopic,
     setMainActiveTopic,
     toggleTopicVisible,
+    resetTopicUnreadCount,
   };
 };
 
@@ -482,7 +487,7 @@ const reduceThreadState = <T extends ThreadState>(
   k: Uint8Array,
   action: (thread: T, state: State) => T
 ) => {
-  const key = Base64.fromUint8Array(k, true);
+  const key = formatKey(k);
   const thread = m.get(key);
   return thread ? new Map(m).set(key, action(thread, state)) : m;
 };
@@ -504,6 +509,7 @@ const createWhisperActions = (
       thread,
       label: thread.alias,
       messages: whispers.map(({ message }) => message),
+      state: ThreadInitState.OPEN,
     }));
 
   const handleWhisperError = (error: Error) =>
@@ -646,7 +652,7 @@ const createRoomActions = (
         case OpenClientResponse.BodyCase.OPEN:
           return {
             ...room,
-            state: RoomInitState.OPEN,
+            state: ThreadInitState.OPEN,
           };
         case OpenClientResponse.BodyCase.SERVER_EVENTS:
           return reduceServerEvent(state, room, event.body.serverEvents.events);
@@ -666,7 +672,7 @@ const createRoomActions = (
   const handleClientClose = () =>
     setRoomState((room) => ({
       ...room,
-      state: RoomInitState.CLOSED,
+      state: ThreadInitState.CLOSED,
     }));
 
   const sendMessage = (body: string) =>
@@ -817,11 +823,11 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }
   let actions: ReturnType<typeof createRoomActions> | ReturnType<typeof createWhisperActions>;
   switch (props.type) {
     case "ROOM":
-      thread = state.rooms.get(Base64.fromUint8Array(props.topicKey, true));
+      thread = state.rooms.get(formatKey(props.topicKey));
       actions = useStableCallbacks(createRoomActions(client, setState, props.topicKey));
       break;
     case "WHISPER":
-      thread = state.whispers.get(Base64.fromUint8Array(props.topicKey, true));
+      thread = state.whispers.get(formatKey(props.topicKey));
       actions = useStableCallbacks(createWhisperActions(client, setState, props.topicKey));
       break;
   }
@@ -833,7 +839,7 @@ export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }
   //   const users = new Map<string, UserMeta>();
   //   for (const user of listing.viewers.values()) {
   //     nicks.push(user.alias);
-  //     users.set(Base64.fromUint8Array(user.peerKey, true), {
+  //     users.set(formatKey(user.peerKey), {
   //       alias: user.alias,
   //       listing: findUserMediaListing(directory, user),
   //     });

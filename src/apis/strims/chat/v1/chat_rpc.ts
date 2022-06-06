@@ -91,6 +91,9 @@ import {
   IWatchWhispersRequest,
   WatchWhispersRequest,
   WatchWhispersResponse,
+  IMarkWhispersReadRequest,
+  MarkWhispersReadRequest,
+  MarkWhispersReadResponse,
   ISetUIConfigRequest,
   SetUIConfigRequest,
   SetUIConfigResponse,
@@ -301,6 +304,7 @@ export interface ChatFrontendService {
   whisper(req: WhisperRequest, call: strims_rpc_Call): Promise<WhisperResponse> | WhisperResponse;
   listWhispers(req: ListWhispersRequest, call: strims_rpc_Call): Promise<ListWhispersResponse> | ListWhispersResponse;
   watchWhispers(req: WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<WatchWhispersResponse>;
+  markWhispersRead(req: MarkWhispersReadRequest, call: strims_rpc_Call): Promise<MarkWhispersReadResponse> | MarkWhispersReadResponse;
   setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse;
   watchUIConfig(req: WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<WatchUIConfigResponse>;
   ignore(req: IgnoreRequest, call: strims_rpc_Call): Promise<IgnoreResponse> | IgnoreResponse;
@@ -320,6 +324,7 @@ export class UnimplementedChatFrontendService implements ChatFrontendService {
   whisper(req: WhisperRequest, call: strims_rpc_Call): Promise<WhisperResponse> | WhisperResponse { throw new Error("not implemented"); }
   listWhispers(req: ListWhispersRequest, call: strims_rpc_Call): Promise<ListWhispersResponse> | ListWhispersResponse { throw new Error("not implemented"); }
   watchWhispers(req: WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<WatchWhispersResponse> { throw new Error("not implemented"); }
+  markWhispersRead(req: MarkWhispersReadRequest, call: strims_rpc_Call): Promise<MarkWhispersReadResponse> | MarkWhispersReadResponse { throw new Error("not implemented"); }
   setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse { throw new Error("not implemented"); }
   watchUIConfig(req: WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<WatchUIConfigResponse> { throw new Error("not implemented"); }
   ignore(req: IgnoreRequest, call: strims_rpc_Call): Promise<IgnoreResponse> | IgnoreResponse { throw new Error("not implemented"); }
@@ -339,6 +344,7 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<WhisperRequest, WhisperResponse>("strims.chat.v1.ChatFrontend.Whisper", service.whisper.bind(service), WhisperRequest);
   host.registerMethod<ListWhispersRequest, ListWhispersResponse>("strims.chat.v1.ChatFrontend.ListWhispers", service.listWhispers.bind(service), ListWhispersRequest);
   host.registerMethod<WatchWhispersRequest, WatchWhispersResponse>("strims.chat.v1.ChatFrontend.WatchWhispers", service.watchWhispers.bind(service), WatchWhispersRequest);
+  host.registerMethod<MarkWhispersReadRequest, MarkWhispersReadResponse>("strims.chat.v1.ChatFrontend.MarkWhispersRead", service.markWhispersRead.bind(service), MarkWhispersReadRequest);
   host.registerMethod<SetUIConfigRequest, SetUIConfigResponse>("strims.chat.v1.ChatFrontend.SetUIConfig", service.setUIConfig.bind(service), SetUIConfigRequest);
   host.registerMethod<WatchUIConfigRequest, WatchUIConfigResponse>("strims.chat.v1.ChatFrontend.WatchUIConfig", service.watchUIConfig.bind(service), WatchUIConfigRequest);
   host.registerMethod<IgnoreRequest, IgnoreResponse>("strims.chat.v1.ChatFrontend.Ignore", service.ignore.bind(service), IgnoreRequest);
@@ -382,6 +388,10 @@ export class ChatFrontendClient {
 
   public watchWhispers(req?: IWatchWhispersRequest): GenericReadable<WatchWhispersResponse> {
     return this.host.expectMany(this.host.call("strims.chat.v1.ChatFrontend.WatchWhispers", new WatchWhispersRequest(req)), WatchWhispersResponse);
+  }
+
+  public markWhispersRead(req?: IMarkWhispersReadRequest, opts?: strims_rpc_UnaryCallOptions): Promise<MarkWhispersReadResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.MarkWhispersRead", new MarkWhispersReadRequest(req)), MarkWhispersReadResponse, opts);
   }
 
   public setUIConfig(req?: ISetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SetUIConfigResponse> {

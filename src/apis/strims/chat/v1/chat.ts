@@ -4444,6 +4444,62 @@ export namespace WatchWhispersResponse {
 
 }
 
+export type IMarkWhispersReadRequest = {
+  threadId?: bigint;
+}
+
+export class MarkWhispersReadRequest {
+  threadId: bigint;
+
+  constructor(v?: IMarkWhispersReadRequest) {
+    this.threadId = v?.threadId || BigInt(0);
+  }
+
+  static encode(m: MarkWhispersReadRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.threadId) w.uint32(8).uint64(m.threadId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): MarkWhispersReadRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new MarkWhispersReadRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.threadId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IMarkWhispersReadResponse = {
+}
+
+export class MarkWhispersReadResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IMarkWhispersReadResponse) {
+  }
+
+  static encode(m: MarkWhispersReadResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): MarkWhispersReadResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new MarkWhispersReadResponse();
+  }
+}
+
 export type ISetUIConfigRequest = {
   uiConfig?: IUIConfig;
 }

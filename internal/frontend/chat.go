@@ -514,6 +514,17 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 	return ch, nil
 }
 
+func (s *chatService) MarkWhispersRead(ctx context.Context, req *chatv1.MarkWhispersReadRequest) (*chatv1.MarkWhispersReadResponse, error) {
+	_, err := dao.ChatWhisperThreads.Transform(s.store, req.ThreadId, func(p *chatv1.WhisperThread) error {
+		p.UnreadCount = 0
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.MarkWhispersReadResponse{}, nil
+}
+
 // SetUIConfig ...
 func (s *chatService) SetUIConfig(ctx context.Context, req *chatv1.SetUIConfigRequest) (*chatv1.SetUIConfigResponse, error) {
 	err := dao.ChatUIConfig.Set(s.store, req.UiConfig)
