@@ -135,3 +135,9 @@
     border-bottom: 1px solid var(--color-opac-w-2);
   }
 }
+
+.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
+  .layout_chat__header {
+    display: none;
+  }
+}

@@ -29,11 +29,7 @@ $chat-width-sm: 260px;
     padding-right: env(safe-area-inset-right);
   }
 
-  --layout-chat-width: #{$chat-width-sm};
-
-  &.layout--min_width_xl {
-    --layout-chat-width: #{$chat-width-lg};
-  }
+  --layout-chat-width: 100%;
 }
 
 .scroll_content_test {
@@ -370,6 +366,12 @@ $chat-width-sm: 260px;
 
 // landscape
 .layout--min_aspect_ratio_1_2 {
+  --layout-chat-width: #{$chat-width-sm};
+
+  &.layout--min_width_xl {
+    --layout-chat-width: #{$chat-width-lg};
+  }
+
   .foo_2 {
     flex-direction: row;
   }
