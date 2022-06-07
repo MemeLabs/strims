@@ -25,7 +25,7 @@ interface ChatPopoutProps {
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   const [{ uiConfig }, chatActions] = useChat();
-  const [room, { getMessageCount, getMessage, toggleMessageGC, sendMessage }] = useRoom();
+  const [room, { getMessageCount, getMessage, sendMessage }] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
 
   useEffect(() => {
@@ -83,7 +83,6 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               renderMessage={renderMessage}
               messageCount={room.messages.length}
               messageSizeCache={room.messageSizeCache}
-              onAutoScrollChange={toggleMessageGC}
             />
           </div>
           <div className="chat_popout__footer">

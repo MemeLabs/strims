@@ -21,7 +21,9 @@ import {
 import { RenderedRows } from "react-virtualized/dist/es/List";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
+import { useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { retrySync } from "../../lib/retry";
 
 const AUTOSCROLL_THRESHOLD = 20;
@@ -38,7 +40,6 @@ interface ScrollerProps {
   renderMessage: (MessageProps) => ReactNode;
   messageCount: number;
   messageSizeCache: CellMeasurerCache;
-  onAutoScrollChange?: (state: boolean) => void;
 }
 
 interface ListInternal {
@@ -57,8 +58,9 @@ const Scroller: React.FC<ScrollerProps> = ({
   messageCount,
   renderMessage,
   messageSizeCache,
-  onAutoScrollChange,
 }) => {
+  const [, { resetSelectedPeers, toggleMessageGC }] = useRoom();
+
   const list = useRef<List & ListInternal>();
   const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
 
@@ -188,7 +190,7 @@ const Scroller: React.FC<ScrollerProps> = ({
 
       if (autoScroll !== enabled) {
         setAutoScroll(enabled);
-        onAutoScrollChange?.(enabled);
+        toggleMessageGC?.(enabled);
       }
     },
     [autoScroll]
@@ -237,9 +239,11 @@ const Scroller: React.FC<ScrollerProps> = ({
 
   const resumeAutoScroll = useCallback(() => {
     setAutoScroll(true);
-    onAutoScrollChange?.(true);
+    toggleMessageGC?.(true);
     forceAutoScroll();
   }, []);
+
+  const handleClick = useStableCallback(() => resetSelectedPeers());
 
   return (
     <>
@@ -251,6 +255,7 @@ const Scroller: React.FC<ScrollerProps> = ({
         renderThumbVertical={renderScrollThumb}
         onMouseEnter={handleScrollMouseEnter}
         onMouseLeave={handleScrollMouseLeave}
+        onClick={handleClick}
       >
         <List
           ref={list}

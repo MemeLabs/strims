@@ -7,6 +7,8 @@
     line-height: 1.4rem;
     overflow-wrap: break-word;
     padding: 0 7px;
+    opacity: var(--opacity-chat-message, 1);
+    background-color: var(--color-background-chat-message, transparent);
 
     // a message preceded and followed by messages from different authors
     &:not(&--continued) + &:not(&--continued) {
@@ -61,6 +63,12 @@
 
       &__text {
         padding: 1px 8px 1px 3px;
+        cursor: pointer;
+      }
+
+      &:hover &__text {
+        color: var(--color-text-chat-author-hover);
+        text-decoration: underline;
       }
 
       .chat__viewer_state_indicator {

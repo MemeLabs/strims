@@ -56,7 +56,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
   const { t } = useTranslation();
 
   const [{ uiConfig }, { toggleTopicVisible, resetTopicUnreadCount }] = useChat();
-  const [room, { getMessage, getMessageCount, toggleMessageGC, sendMessage }] = useRoom();
+  const [room, { getMessage, getMessageCount, sendMessage }] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   useEffect(() => {
@@ -126,7 +126,6 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           renderMessage={renderMessage}
           messageCount={room.messages.length}
           messageSizeCache={room.messageSizeCache}
-          onAutoScrollChange={toggleMessageGC}
         />
       </div>
       <div className="chat__footer">

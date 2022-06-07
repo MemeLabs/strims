@@ -219,6 +219,9 @@
     --color-text-chat-tab: var(--color-grey-6);
     --color-text-chat-tab-hover: var(--color-grey-8);
     --color-text-chat-tab-active: var(--color-grey-12);
+    --opacity-chat-unselected: 0.3;
+    --color-background-chat-highlight: #{$slate-500};
+    --color-text-chat-author-hover: var(--color-grey-15);
 
     --color-icon: var(--color-opac-w-8);
     --color-icon-hover: var(--color-opac-w-12);

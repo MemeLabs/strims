@@ -11,6 +11,7 @@ import React, { ReactNode, useEffect, useRef } from "react";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import Emote from "./Emote";
 import { ViewerStateIndicator } from "./ViewerStateIndicator";
 
@@ -73,11 +74,18 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
 interface MessageNickProps {
   entity: chatv1_Message.Entities.Nick;
   normalizeCase: boolean;
+  onClick: (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => void;
 }
 
-const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase }) => (
-  <span className="chat__message__nick">{normalizeCase ? entity.nick : children}</span>
-);
+const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase, onClick }) => {
+  const handleClick = useStableCallback((e: React.MouseEvent) => onClick(e, entity));
+
+  return (
+    <span className="chat__message__nick" onClick={handleClick}>
+      {normalizeCase ? entity.nick : children}
+    </span>
+  );
+};
 
 interface MessageTagProps {
   entity: chatv1_Message.Entities.Tag;
@@ -306,7 +314,15 @@ const StandardMessage: React.FC<MessageProps> = ({
   isContinued,
   ...props
 }) => {
-  const [{ users }] = useRoom();
+  const [{ users }, { toggleSelectedPeer }] = useRoom();
+
+  const handleNickClick = useStableCallback(
+    (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
+      e.stopPropagation();
+      toggleSelectedPeer(peerKey, true);
+      toggleSelectedPeer(entity.peerKey);
+    }
+  );
 
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
@@ -327,6 +343,7 @@ const StandardMessage: React.FC<MessageProps> = ({
   entities.nicks.forEach((entity) =>
     formatter.insertEntity(MessageNick, entity, {
       normalizeCase: uiConfig.normalizeAliasCase,
+      onClick: handleNickClick,
     })
   );
   entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
@@ -359,12 +376,17 @@ const StandardMessage: React.FC<MessageProps> = ({
     )
   );
 
+  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleSelectedPeer(peerKey);
+  });
+
   return (
     <div {...props} className={classNames}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__message__author">
+      <span className="chat__message__author" onClick={handleAuthorClick}>
         {!!uiConfig.viewerStateIndicator && (
           <ViewerStateIndicator
             style={uiConfig.viewerStateIndicator}

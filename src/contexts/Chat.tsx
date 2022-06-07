@@ -39,6 +39,7 @@ export interface ChatStyles {
   emotes: Map<string, Style>;
   modifiers: Map<string, Modifier>;
   tags: Tag[];
+  selectedPeers: Set<string>;
 }
 
 export interface UserMeta {
@@ -127,6 +128,7 @@ const initialRoomState: ThreadState = {
     emotes: new Map(),
     modifiers: new Map(),
     tags: [],
+    selectedPeers: new Set(),
   },
   emotes: [],
   modifiers: [],
@@ -202,6 +204,8 @@ type RoomActions = {
   getMessage: (index: number) => Message;
   getMessageCount: () => number;
   toggleMessageGC: (messageGCEnabled: boolean) => void;
+  toggleSelectedPeer: (peerKey: Uint8Array, state?: boolean) => void;
+  resetSelectedPeers: () => void;
 };
 
 const RoomContext = React.createContext<[ThreadState, RoomActions]>(null);
@@ -549,7 +553,49 @@ const createThreadActions = <T extends ThreadState>(setState: ThreadStateDispatc
       messageGCEnabled,
     }));
 
-  return { toggleMessageGC };
+  const toggleSelectedPeer = (peerKey: Uint8Array, state?: boolean) =>
+    setState((thread) => {
+      const key = Base64.fromUint8Array(peerKey, true);
+      const selectedPeers = new Set(thread.styles.selectedPeers);
+
+      if (state === true) {
+        selectedPeers.add(key);
+      } else if (state === false) {
+        selectedPeers.delete(key);
+      } else if (selectedPeers.has(key)) {
+        selectedPeers.delete(key);
+      } else {
+        selectedPeers.add(key);
+      }
+
+      return {
+        ...thread,
+        styles: {
+          ...thread.styles,
+          selectedPeers,
+        },
+      };
+    });
+
+  const resetSelectedPeers = () =>
+    setState((thread) => {
+      if (thread.styles.selectedPeers.size === 0) {
+        return thread;
+      }
+      return {
+        ...thread,
+        styles: {
+          ...thread.styles,
+          selectedPeers: new Set(),
+        },
+      };
+    });
+
+  return {
+    toggleMessageGC,
+    toggleSelectedPeer,
+    resetSelectedPeers,
+  };
 };
 
 const createRoomActions = (
@@ -636,6 +682,7 @@ const createRoomActions = (
       assetBundles,
       liveEmotes,
       styles: {
+        ...state.styles,
         emotes: emoteStyles,
         modifiers: new Map(liveModifiers.map((m) => [m.name, m])),
         tags: liveTags,
