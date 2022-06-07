@@ -21,7 +21,6 @@ interface DirectoryGridItemProps extends DirectoryListing {
 const EMPTY_SNIPPET = new ListingSnippet();
 
 const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
-  id,
   listing,
   snippet,
   viewerCount,
@@ -45,10 +44,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   }
 
   const openListing = useOpenListing();
-  const handleClick = useCallback(
-    () => openListing(networkKey, listing, id),
-    [networkKey, listing, id]
-  );
+  const handleClick = useCallback(() => openListing(networkKey, listing), [networkKey, listing]);
 
   const title = snippet.title.trim();
 

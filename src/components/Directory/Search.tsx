@@ -303,7 +303,7 @@ const Search: React.FC<SearchProps> = ({
           results.push({
             type: "LISTING",
             listing,
-            onSelect: () => selectListing(networkKey, listing.listing, listing.id),
+            onSelect: () => selectListing(networkKey, listing.listing),
           });
         }
       }
@@ -344,8 +344,8 @@ const Search: React.FC<SearchProps> = ({
   };
 
   const openListing = useOpenListing();
-  const selectListing = (networkKey: Uint8Array, listing: Listing, id?: bigint) => {
-    openListing(Base64.fromUint8Array(networkKey, true), listing, id);
+  const selectListing = (networkKey: Uint8Array, listing: Listing) => {
+    openListing(Base64.fromUint8Array(networkKey, true), listing);
 
     setQuery("");
     onDone?.();

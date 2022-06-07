@@ -213,6 +213,13 @@ message ListingModeration {
   google.protobuf.StringValue category = 4;
 }
 
+message ListingQuery {
+  oneof query {
+    uint64 id = 1001;
+    Listing listing = 1002;
+  }
+}
+
 message ListingRecord {
   uint64 id = 1;
   uint64 network_id = 2;
@@ -254,10 +261,12 @@ message UnpublishRequest {
 message UnpublishResponse {}
 
 message JoinRequest {
-  uint64 id = 1;
+  ListingQuery query = 1;
 }
 
-message JoinResponse {}
+message JoinResponse {
+  uint64 id = 1;
+}
 
 message PartRequest {
   uint64 id = 1;
@@ -329,10 +338,12 @@ message FrontendUnpublishResponse {}
 
 message FrontendJoinRequest {
   bytes network_key = 1;
-  uint64 id = 2;
+  ListingQuery query = 2;
 }
 
-message FrontendJoinResponse {}
+message FrontendJoinResponse {
+  uint64 id = 1;
+}
 
 message FrontendPartRequest {
   bytes network_key = 1;

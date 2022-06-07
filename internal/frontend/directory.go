@@ -127,11 +127,12 @@ func (s *directoryService) Join(ctx context.Context, r *networkv1directory.Front
 		return nil, err
 	}
 
-	err = client.Join(ctx, &networkv1directory.JoinRequest{Id: r.Id}, &networkv1directory.JoinResponse{})
+	res := &networkv1directory.JoinResponse{}
+	err = client.Join(ctx, &networkv1directory.JoinRequest{Query: r.Query}, res)
 	if err != nil {
 		return nil, err
 	}
-	return &networkv1directory.FrontendJoinResponse{}, nil
+	return &networkv1directory.FrontendJoinResponse{Id: res.Id}, nil
 }
 
 // Part ...

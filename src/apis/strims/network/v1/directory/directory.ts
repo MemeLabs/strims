@@ -1825,6 +1825,99 @@ export class ListingModeration {
   }
 }
 
+export type IListingQuery = {
+  query?: ListingQuery.IQuery
+}
+
+export class ListingQuery {
+  query: ListingQuery.TQuery;
+
+  constructor(v?: IListingQuery) {
+    this.query = new ListingQuery.Query(v?.query);
+  }
+
+  static encode(m: ListingQuery, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    switch (m.query.case) {
+      case ListingQuery.QueryCase.ID:
+      w.uint32(8008).uint64(m.query.id);
+      break;
+      case ListingQuery.QueryCase.LISTING:
+      Listing.encode(m.query.listing, w.uint32(8018).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingQuery {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingQuery();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1001:
+        m.query = new ListingQuery.Query({ id: r.uint64() });
+        break;
+        case 1002:
+        m.query = new ListingQuery.Query({ listing: Listing.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace ListingQuery {
+  export enum QueryCase {
+    NOT_SET = 0,
+    ID = 1001,
+    LISTING = 1002,
+  }
+
+  export type IQuery =
+  { case?: QueryCase.NOT_SET }
+  |{ case?: QueryCase.ID, id: bigint }
+  |{ case?: QueryCase.LISTING, listing: IListing }
+  ;
+
+  export type TQuery = Readonly<
+  { case: QueryCase.NOT_SET }
+  |{ case: QueryCase.ID, id: bigint }
+  |{ case: QueryCase.LISTING, listing: Listing }
+  >;
+
+  class QueryImpl {
+    id: bigint;
+    listing: Listing;
+    case: QueryCase = QueryCase.NOT_SET;
+
+    constructor(v?: IQuery) {
+      if (v && "id" in v) {
+        this.case = QueryCase.ID;
+        this.id = v.id;
+      } else
+      if (v && "listing" in v) {
+        this.case = QueryCase.LISTING;
+        this.listing = new Listing(v.listing);
+      }
+    }
+  }
+
+  export const Query = QueryImpl as {
+    new (): Readonly<{ case: QueryCase.NOT_SET }>;
+    new <T extends IQuery>(v: T): Readonly<
+    T extends { id: bigint } ? { case: QueryCase.ID, id: bigint } :
+    T extends { listing: IListing } ? { case: QueryCase.LISTING, listing: Listing } :
+    never
+    >;
+  };
+
+}
+
 export type IListingRecord = {
   id?: bigint;
   networkId?: bigint;
@@ -2168,19 +2261,19 @@ export class UnpublishResponse {
 }
 
 export type IJoinRequest = {
-  id?: bigint;
+  query?: IListingQuery;
 }
 
 export class JoinRequest {
-  id: bigint;
+  query: ListingQuery | undefined;
 
   constructor(v?: IJoinRequest) {
-    this.id = v?.id || BigInt(0);
+    this.query = v?.query && new ListingQuery(v.query);
   }
 
   static encode(m: JoinRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.query) ListingQuery.encode(m.query, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2188,6 +2281,42 @@ export class JoinRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
     const m = new JoinRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.query = ListingQuery.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IJoinResponse = {
+  id?: bigint;
+}
+
+export class JoinResponse {
+  id: bigint;
+
+  constructor(v?: IJoinResponse) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: JoinResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): JoinResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new JoinResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -2200,26 +2329,6 @@ export class JoinRequest {
       }
     }
     return m;
-  }
-}
-
-export type IJoinResponse = {
-}
-
-export class JoinResponse {
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IJoinResponse) {
-  }
-
-  static encode(m: JoinResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): JoinResponse {
-    if (r instanceof Reader && length) r.skip(length);
-    return new JoinResponse();
   }
 }
 
@@ -2736,22 +2845,22 @@ export class FrontendUnpublishResponse {
 
 export type IFrontendJoinRequest = {
   networkKey?: Uint8Array;
-  id?: bigint;
+  query?: IListingQuery;
 }
 
 export class FrontendJoinRequest {
   networkKey: Uint8Array;
-  id: bigint;
+  query: ListingQuery | undefined;
 
   constructor(v?: IFrontendJoinRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.id = v?.id || BigInt(0);
+    this.query = v?.query && new ListingQuery(v.query);
   }
 
   static encode(m: FrontendJoinRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
-    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.query) ListingQuery.encode(m.query, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -2766,7 +2875,7 @@ export class FrontendJoinRequest {
         m.networkKey = r.bytes();
         break;
         case 2:
-        m.id = r.uint64();
+        m.query = ListingQuery.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2778,22 +2887,38 @@ export class FrontendJoinRequest {
 }
 
 export type IFrontendJoinResponse = {
+  id?: bigint;
 }
 
 export class FrontendJoinResponse {
+  id: bigint;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IFrontendJoinResponse) {
+    this.id = v?.id || BigInt(0);
   }
 
   static encode(m: FrontendJoinResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): FrontendJoinResponse {
-    if (r instanceof Reader && length) r.skip(length);
-    return new FrontendJoinResponse();
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendJoinResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
   }
 }
 

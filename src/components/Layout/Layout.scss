@@ -399,6 +399,6 @@ $chat-width-sm: 260px;
 }
 
 // mobile landscape with keyboard
-.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
+.layout--portable.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
   --layout-chat-width: #{$chat-width-lg};
 }

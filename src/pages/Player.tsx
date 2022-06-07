@@ -11,7 +11,6 @@ import useQuery from "../hooks/useQuery";
 interface PlayerQueryParams {
   swarmUri: string;
   mimeType: string;
-  listingId: string;
 }
 
 const Player: React.FC = () => {
@@ -30,14 +29,13 @@ const Player: React.FC = () => {
       networkKey: params.networkKey,
       swarmUri: query.swarmUri,
       mimeType: query.mimeType,
-      listingId: BigInt(query.listingId),
     });
     setPath(location.pathname + location.search);
     return () => {
       toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };
-  }, [params.networkKey, query.swarmUri, query.mimeType, query.listingId]);
+  }, [params.networkKey, query.swarmUri, query.mimeType]);
 
   // TODO: stream metadata - title, description, links, viewers, metrics,
   // schedule, etc...

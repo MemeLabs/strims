@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/crypto/blake2b"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )
@@ -494,6 +493,17 @@ func (d *directoryService) getUserRecord(ctx context.Context) (*networkv1directo
 	return ur, nil
 }
 
+func (d *directoryService) getListingByQuery(l *networkv1directory.ListingQuery) *listing {
+	switch q := l.Query.(type) {
+	case *networkv1directory.ListingQuery_Id:
+		return d.listings.GetByID(q.Id)
+	case *networkv1directory.ListingQuery_Listing:
+		return d.listings.GetByKey(formatListingKey(q.Listing))
+	default:
+		return nil
+	}
+}
+
 func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
 	ur, err := d.getUserRecord(ctx)
 	if err != nil {
@@ -611,7 +621,7 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 		return nil, errors.New("exceeded concurrent view quota")
 	}
 
-	l := d.listings.GetByID(req.Id)
+	l := d.getListingByQuery(req.Query)
 	if l == nil {
 		return nil, ErrListingNotFound
 	}
@@ -628,7 +638,7 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	}
 	u.sessions.ReplaceOrInsert(s)
 
-	return &networkv1directory.JoinResponse{}, nil
+	return &networkv1directory.JoinResponse{Id: l.id}, nil
 }
 
 func (d *directoryService) Part(ctx context.Context, req *networkv1directory.PartRequest) (*networkv1directory.PartResponse, error) {
@@ -796,35 +806,13 @@ func embedServiceName(s networkv1directory.Listing_Embed_Service) string {
 	}
 }
 
-func listingKey(m proto.Message) ([]byte, error) {
-	opt := proto.MarshalOptions{
-		Deterministic: true,
-		UseCachedSize: true,
-	}
-	b := make([]byte, 0, opt.Size(m))
-	b, err := opt.MarshalAppend(b, m)
-	if err != nil {
-		return nil, err
-	}
-
-	h, err := blake2b.New256(nil)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := h.Write(b); err != nil {
-		return nil, err
-	}
-	return h.Sum(nil), nil
+func formatListingKey(l *networkv1directory.Listing) []byte {
+	return dao.FormatDirectoryListingRecordListingKey(0, l)
 }
 
 func newListing(l *networkv1directory.Listing, r *networkv1directory.ListingRecord) (*listing, error) {
-	key, err := listingKey(l)
-	if err != nil {
-		return nil, err
-	}
-
 	return &listing{
-		key:          key,
+		key:          formatListingKey(l),
 		listing:      l,
 		nextSnippet:  &networkv1directory.ListingSnippet{},
 		snippet:      &networkv1directory.ListingSnippet{},

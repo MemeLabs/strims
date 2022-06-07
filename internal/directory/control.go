@@ -284,7 +284,7 @@ func (t *control) Join(ctx context.Context, id uint64, networkKey []byte) error 
 	}
 	defer c.Close()
 
-	return dc.Join(ctx, &networkv1directory.JoinRequest{Id: id}, &networkv1directory.JoinResponse{})
+	return dc.Join(ctx, &networkv1directory.JoinRequest{Query: &networkv1directory.ListingQuery{Query: &networkv1directory.ListingQuery_Id{Id: id}}}, &networkv1directory.JoinResponse{})
 }
 
 // Part ...

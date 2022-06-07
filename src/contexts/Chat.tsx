@@ -409,6 +409,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       return {
         ...state,
         mainTopics,
+        mainActiveTopic: state.mainActiveTopic ?? mainTopics[0],
         popoutTopics,
         popoutTopicCapacity,
       };

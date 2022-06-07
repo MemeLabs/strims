@@ -15,14 +15,14 @@ export const useOpenListing = () => {
   const player = useContext(PlayerContext);
   const navigate = useNavigate();
 
-  return useCallback((networkKey: string, listing: Listing, id?: bigint) => {
+  return useCallback((networkKey: string, listing: Listing) => {
     layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
     player.setMode(PlayerMode.FULL);
-    player.setSource(getListingPlayerSource(networkKey, listing, id));
+    player.setSource(getListingPlayerSource(networkKey, listing));
 
     if (DEVICE_TYPE !== DeviceType.Portable) {
-      const path = formatUri(networkKey, listing, id);
+      const path = formatUri(networkKey, listing);
       player.setPath(path);
       navigate(path);
     }
