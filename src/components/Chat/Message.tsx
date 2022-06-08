@@ -314,13 +314,13 @@ const StandardMessage: React.FC<MessageProps> = ({
   isContinued,
   ...props
 }) => {
-  const [{ users }, { toggleSelectedPeer }] = useRoom();
+  const [, { toggleSelectedPeer }] = useRoom();
 
   const handleNickClick = useStableCallback(
     (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
       e.stopPropagation();
-      toggleSelectedPeer(peerKey, true);
       toggleSelectedPeer(entity.peerKey);
+      toggleSelectedPeer(peerKey, true);
     }
   );
 
@@ -388,10 +388,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       )}
       <span className="chat__message__author" onClick={handleAuthorClick}>
         {!!uiConfig.viewerStateIndicator && (
-          <ViewerStateIndicator
-            style={uiConfig.viewerStateIndicator}
-            listing={users.get(authorKey)?.listing}
-          />
+          <ViewerStateIndicator style={uiConfig.viewerStateIndicator} peerKey={peerKey} />
         )}
         <span className="chat__message__author__text">{nick}</span>
       </span>

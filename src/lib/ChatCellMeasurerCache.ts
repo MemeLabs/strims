@@ -11,6 +11,7 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
   readonly defaultWidth = 0;
 
   private values: number[] = [];
+  private width: number = 0;
 
   columnWidth: (params: { index: number }) => number = () => 0;
   rowHeight: (params: { index: number }) => number;
@@ -31,6 +32,15 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
 
   clearAll(): void {
     this.values.length = 0;
+  }
+
+  resetWidth(size: number) {
+    const ok = this.width !== size;
+    if (ok) {
+      this.width = size;
+      this.clearAll();
+    }
+    return ok;
   }
 
   hasFixedHeight(): boolean {

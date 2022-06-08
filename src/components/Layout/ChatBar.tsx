@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { MdClose } from "react-icons/md";
 import { useToggle } from "react-use";
 
-import { RoomProvider, ThreadInitState, Topic, useChat, useRoom } from "../../contexts/Chat";
+import { ThreadInitState, ThreadProvider, Topic, useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
@@ -25,14 +25,14 @@ interface ChatPopoutProps {
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   const [{ uiConfig }, chatActions] = useChat();
-  const [room, { getMessageCount, getMessage, sendMessage }] = useRoom();
+  const [room, roomActions] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
 
   useEffect(() => {
     if (room.state === ThreadInitState.OPEN) {
-      chatActions.toggleTopicVisible(room.topic, true);
-      chatActions.resetTopicUnreadCount(room.topic);
-      return () => chatActions.toggleTopicVisible(room.topic, false);
+      roomActions.toggleVisible(true);
+      chatActions.resetTopicUnreadCount(topic);
+      return () => roomActions.toggleVisible(false);
     }
   }, [room.state]);
 
@@ -40,10 +40,13 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={getMessage(index)}
+        message={roomActions.getMessage(index)}
         style={style}
-        isMostRecent={index === getMessageCount() - 1}
-        isContinued={isEqual(getMessage(index).peerKey, getMessage(index + 1)?.peerKey)}
+        isMostRecent={index === roomActions.getMessageCount() - 1}
+        isContinued={isEqual(
+          roomActions.getMessage(index).peerKey,
+          roomActions.getMessage(index + 1)?.peerKey
+        )}
       />
     ),
     [uiConfig, room.styles]
@@ -51,8 +54,8 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
 
   const handleHeaderClick = useStableCallback(() => {
     toggleMinimized(!minimized);
-    chatActions.toggleTopicVisible(room.topic, minimized);
-    chatActions.resetTopicUnreadCount(room.topic);
+    roomActions.toggleVisible(minimized);
+    chatActions.resetTopicUnreadCount(topic);
   });
 
   const handleCloseClick = useStableCallback(() => chatActions.closeTopic(topic));
@@ -91,7 +94,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               modifiers={room.modifiers}
               tags={room.tags}
               nicks={room.nicks}
-              onMessage={sendMessage}
+              onMessage={roomActions.sendMessage}
             />
           </div>
         </>
@@ -114,9 +117,9 @@ const ChatBar: React.FC = () => {
   useEffect(() => setPopoutTopicCapacity(capacity), [capacity]);
 
   const topics = popoutTopics.map((topic) => (
-    <RoomProvider key={Base64.fromUint8Array(topic.topicKey, true)} {...topic}>
+    <ThreadProvider key={Base64.fromUint8Array(topic.topicKey, true)} {...topic}>
       <ChatPopout topic={topic} />
-    </RoomProvider>
+    </ThreadProvider>
   ));
 
   return (

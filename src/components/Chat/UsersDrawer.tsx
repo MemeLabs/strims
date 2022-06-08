@@ -15,14 +15,14 @@ const EmotesDrawer: React.FC = () => {
 
   return (
     <Scrollbars autoHide={true}>
-      <ul className="chat__users_list">
+      {/* <ul className="chat__users_list">
         {Array.from(room.users.values()).map(({ alias, listing }) => (
           <li key={alias} className="chat__users_list__item">
             <ViewerStateIndicator style={uiConfig.viewerStateIndicator} listing={listing} />
             <span>{alias}</span>
           </li>
         ))}
-      </ul>
+      </ul> */}
     </Scrollbars>
   );
 };

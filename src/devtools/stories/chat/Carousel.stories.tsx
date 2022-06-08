@@ -10,7 +10,7 @@ import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_r
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import RoomCarousel from "../../../components/Chat/RoomCarousel";
 import { Provider as ChatProvider, useChat } from "../../../contexts/Chat";
-import { RoomProviderProps } from "../../../contexts/Chat";
+import { ThreadProviderProps } from "../../../contexts/Chat";
 import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";

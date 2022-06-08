@@ -13,18 +13,18 @@ import React, { useCallback, useRef } from "react";
 import { FreeMode, Mousewheel } from "swiper";
 import { Swiper, SwiperSlide } from "swiper/react";
 
-import { RoomProviderProps, ThreadState, useChat } from "../../contexts/Chat";
+import { ThreadProviderProps, ThreadState, useChat } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import Badge from "../Badge";
 import { MenuItem, useContextMenu } from "../ContextMenu";
 
-interface RoomCarouselGemProps extends RoomProviderProps {
+interface RoomCarouselGemProps extends ThreadProviderProps {
   color: string;
   label: string;
   unreadCount: number;
-  onChange: (topic: RoomProviderProps) => void;
+  onChange: (topic: ThreadProviderProps) => void;
   selected: boolean;
 }
 
@@ -37,6 +37,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   onChange,
   selected,
 }) => {
+  const topic = { type, topicKey };
   const [, chatActions] = useChat();
 
   const ref = useRef<HTMLDivElement>();
@@ -52,7 +53,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
       }
 
       if (sy === -1) {
-        chatActions.closeTopic({ type, topicKey });
+        chatActions.closeTopic(topic);
       }
     },
     {
@@ -69,7 +70,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
     }
   );
 
-  const handleClick = useStableCallback(() => onChange({ type, topicKey }));
+  const handleClick = useStableCallback(() => onChange(topic));
 
   const { openMenu, closeMenu, Menu } = useContextMenu();
   const handleContextMenu = useStableCallback((e: React.MouseEvent) => {
@@ -78,17 +79,17 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = ({
   });
 
   const handleMarkReadClick = useStableCallback(() => {
-    chatActions.resetTopicUnreadCount({ type, topicKey });
+    chatActions.resetTopicUnreadCount(topic);
     closeMenu();
   });
 
   const handleOpenPopoutClick = useStableCallback(() => {
-    chatActions.openTopicPopout({ type, topicKey });
+    chatActions.openTopicPopout(topic);
     closeMenu();
   });
 
   const handleCloseClick = useStableCallback(() => {
-    chatActions.closeTopic({ type, topicKey });
+    chatActions.closeTopic(topic);
     closeMenu();
   });
 
@@ -120,7 +121,7 @@ const SWIPER_FREE_MODE_OPTIONS = {
 
 export interface RoomCarouselProps {
   className?: string;
-  onChange: (topic: RoomProviderProps) => void;
+  onChange: (topic: ThreadProviderProps) => void;
 }
 
 const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {

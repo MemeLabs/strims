@@ -13,7 +13,7 @@ import { HiOutlineUser } from "react-icons/hi";
 import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Network } from "../../apis/strims/network/v1/network";
-import { RoomProviderProps, useChat } from "../../contexts/Chat";
+import { ThreadProviderProps, useChat } from "../../contexts/Chat";
 import { DirectoryContext, DirectoryUser } from "../../contexts/Directory";
 import { NetworkContext } from "../../contexts/Network";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -32,7 +32,7 @@ export interface RoomMenuItem {
 }
 
 export interface RoomMenuProps {
-  onChange?: (item: RoomProviderProps) => void;
+  onChange?: (item: ThreadProviderProps) => void;
 }
 
 enum Tab {

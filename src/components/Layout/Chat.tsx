@@ -10,7 +10,7 @@ import { HiOutlineDotsVertical } from "react-icons/hi";
 import { useToggle } from "react-use";
 
 import { RoomButtons } from "../../components/Chat/RoomMenu";
-import { RoomProvider, RoomProviderProps, useChat } from "../../contexts/Chat";
+import { ThreadProvider, ThreadProviderProps, useChat } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
@@ -21,7 +21,7 @@ import SwipablePanel from "../SwipablePanel";
 interface HeaderProps {
   onToggleClick: () => void;
   onMenuToggleClick: () => void;
-  onChange: (topic: RoomProviderProps) => void;
+  onChange: (topic: ThreadProviderProps) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onChange }) => (
@@ -50,7 +50,7 @@ const Chat: React.FC = () => {
 
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
 
-  const handleRoomMenuChange = useCallback((topic: RoomProviderProps) => {
+  const handleRoomMenuChange = useCallback((topic: ThreadProviderProps) => {
     toggleMenuOpen(false);
     setMainActiveTopic(topic);
   }, []);
@@ -83,9 +83,9 @@ const Chat: React.FC = () => {
           onChange={setMainActiveTopic}
         />
         {showChat && mainActiveTopic && (
-          <RoomProvider {...mainActiveTopic}>
+          <ThreadProvider {...mainActiveTopic}>
             <ChatShell />
-          </RoomProvider>
+          </ThreadProvider>
         )}
       </div>
     </div>

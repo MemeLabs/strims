@@ -10,20 +10,14 @@ import { Scrollbars } from "react-custom-scrollbars-2";
 import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
 import { useDebounce, useUpdateEffect } from "react-use";
-import {
-  CellMeasurer,
-  CellMeasurerCache,
-  Grid,
-  List,
-  ListRowRenderer,
-  OnScrollParams,
-} from "react-virtualized";
+import { CellMeasurer, Grid, List, ListRowRenderer, OnScrollParams } from "react-virtualized";
 import { RenderedRows } from "react-virtualized/dist/es/List";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import ChatCellMeasurerCache from "../../lib/ChatCellMeasurerCache";
 import { retrySync } from "../../lib/retry";
 
 const AUTOSCROLL_THRESHOLD = 20;
@@ -39,7 +33,7 @@ interface ScrollerProps {
   uiConfig: UIConfig;
   renderMessage: (MessageProps) => ReactNode;
   messageCount: number;
-  messageSizeCache: CellMeasurerCache;
+  messageSizeCache: ChatCellMeasurerCache;
 }
 
 interface ListInternal {
@@ -110,8 +104,10 @@ const Scroller: React.FC<ScrollerProps> = ({
       getRow = () => index;
     }
 
+    if (!messageSizeCache.resetWidth(width)) {
+      return;
+    }
     state.recomputingRowHeights = true;
-    messageSizeCache.clearAll();
     list.current?.recomputeRowHeights();
 
     // row heights are recomputed asynchronously and the api gives no indication

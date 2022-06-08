@@ -55,15 +55,15 @@ interface ShellProps {
 const Shell: React.FC<ShellProps> = ({ className }) => {
   const { t } = useTranslation();
 
-  const [{ uiConfig }, { toggleTopicVisible, resetTopicUnreadCount }] = useChat();
-  const [room, { getMessage, getMessageCount, sendMessage }] = useRoom();
+  const [{ uiConfig }, chatActions] = useChat();
+  const [room, roomActions] = useRoom();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   useEffect(() => {
     if (room.state === ThreadInitState.OPEN) {
-      toggleTopicVisible(room.topic, true);
-      resetTopicUnreadCount(room.topic);
-      return () => toggleTopicVisible(room.topic, false);
+      roomActions.toggleVisible(true);
+      chatActions.resetTopicUnreadCount(room.topic);
+      return () => roomActions.toggleVisible(false);
     }
   }, [room.id, room.state]);
 
@@ -83,10 +83,13 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
     ({ index, style }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
-        message={getMessage(index)}
+        message={roomActions.getMessage(index)}
         style={style}
-        isMostRecent={index === getMessageCount() - 1}
-        isContinued={isEqual(getMessage(index).peerKey, getMessage(index + 1)?.peerKey)}
+        isMostRecent={index === roomActions.getMessageCount() - 1}
+        isContinued={isEqual(
+          roomActions.getMessage(index).peerKey,
+          roomActions.getMessage(index + 1)?.peerKey
+        )}
       />
     ),
     [uiConfig, room.styles]
@@ -134,7 +137,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           modifiers={room.modifiers}
           tags={room.tags}
           nicks={room.nicks}
-          onMessage={sendMessage}
+          onMessage={roomActions.sendMessage}
         />
       </div>
       <div className="chat__nav">

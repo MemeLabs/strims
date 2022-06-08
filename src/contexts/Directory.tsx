@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Base64 } from "js-base64";
+import { isEqual } from "lodash";
 import { omit } from "lodash/fp";
 import React, { createContext, useContext, useMemo, useState } from "react";
 
@@ -20,7 +21,7 @@ export interface DirectoryListing {
   listing: directory_Listing;
   snippet: ListingSnippet;
   viewerCount: number;
-  viewers: Map<bigint, DirectoryUser>;
+  viewers: Map<string, DirectoryUser>;
   viewersByName: Map<string, DirectoryUser>;
 }
 
@@ -34,7 +35,7 @@ export interface DirectoryUser {
 export interface Directory {
   networkKey: Uint8Array;
   listings: Map<bigint, DirectoryListing>;
-  users: Map<bigint, DirectoryUser>;
+  users: Map<string, DirectoryUser>;
 }
 
 export const findUserMediaListing = (
@@ -71,6 +72,32 @@ export const useDirectory = (networkKey: Uint8Array) => {
 
 export const useDirectoryListing = (networkKey: Uint8Array, id: bigint) => {
   return useDirectory(networkKey)?.listings.get(id);
+};
+
+type UseDirectoryUserResult = {
+  user: DirectoryUser;
+  networkKey: Uint8Array;
+  listings: DirectoryListing[];
+}[];
+
+export const useDirectoryUser = (peerKey: Uint8Array): UseDirectoryUserResult => {
+  const { directories } = useContext(DirectoryContext);
+  return useMemo(() => {
+    const key = Base64.fromUint8Array(peerKey, true);
+
+    const res: UseDirectoryUserResult = [];
+    for (const directory of Object.values(directories)) {
+      const user = directory.users.get(key);
+      if (user) {
+        res.push({
+          user,
+          networkKey: directory.networkKey,
+          listings: user.listingIds.map((id) => directory.listings.get(id)),
+        });
+      }
+    }
+    return res;
+  }, [peerKey, directories]);
 };
 
 export const Provider: React.FC = ({ children }) => {
@@ -126,14 +153,15 @@ export const Provider: React.FC = ({ children }) => {
           case Event.BodyCase.VIEWER_STATE_CHANGE: {
             const { id, alias, peerKey, listingIds, online } = event.viewerStateChange;
             const user: DirectoryUser = { id, alias, peerKey, listingIds };
-            const prevListingIds = users.get(user.id)?.listingIds ?? [];
+            const key = Base64.fromUint8Array(peerKey, true);
+            const prevListingIds = users.get(key)?.listingIds ?? [];
 
             for (const id of user.listingIds) {
               const listing = listings.get(id);
               if (listing) {
                 const viewers = new Map(listing.viewers);
                 const viewersByName = new Map(listing.viewersByName);
-                viewers.set(user.id, user);
+                viewers.set(key, user);
                 viewersByName.set(user.alias, user);
                 listings.set(id, { ...listing, viewers, viewersByName });
               }
@@ -145,16 +173,16 @@ export const Provider: React.FC = ({ children }) => {
               if (listing) {
                 const viewers = new Map(listing.viewers);
                 const viewersByName = new Map(listing.viewersByName);
-                viewers.delete(user.id);
+                viewers.delete(key);
                 viewersByName.delete(user.alias);
                 listings.set(id, { ...listing, viewers, viewersByName });
               }
             }
 
             if (online) {
-              users.set(user.id, user);
+              users.set(key, user);
             } else {
-              users.delete(user.id);
+              users.delete(key);
             }
             break;
           }

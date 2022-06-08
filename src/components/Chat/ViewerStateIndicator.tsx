@@ -4,11 +4,11 @@
 import "./ViewerStateIndicator.scss";
 
 import clsx from "clsx";
-import React from "react";
+import React, { useMemo } from "react";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
-import { DirectoryListing } from "../../contexts/Directory";
+import { DirectoryListing, useDirectoryUser } from "../../contexts/Directory";
 
 const fnv1a = (input: string) => {
   let hash = 2166136261;
@@ -64,10 +64,23 @@ const getListingColor = (listing: DirectoryListing) =>
 
 export interface ViewerStateIndicatorProps {
   style: UIConfig.ViewerStateIndicator;
-  listing: DirectoryListing;
+  peerKey: Uint8Array;
 }
 
-export const ViewerStateIndicator: React.FC<ViewerStateIndicatorProps> = ({ style, listing }) => {
+export const ViewerStateIndicator: React.FC<ViewerStateIndicatorProps> = ({ style, peerKey }) => {
+  const user = useDirectoryUser(peerKey);
+  const listing = useMemo(() => {
+    for (const { listings } of user) {
+      for (const listing of listings) {
+        switch (listing.listing.content.case) {
+          case Listing.ContentCase.EMBED:
+          case Listing.ContentCase.MEDIA:
+            return listing;
+        }
+      }
+    }
+  }, [user]);
+
   switch (style) {
     case UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED:
       return null;

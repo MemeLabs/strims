@@ -23,10 +23,11 @@ import {
   WhisperRecord,
   WhisperThread,
 } from "../apis/strims/chat/v1/chat";
+import { FrontendJoinResponse, Listing } from "../apis/strims/network/v1/directory/directory";
 import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { updateInStateMap } from "../lib/setInStateMap";
-import { DirectoryListing } from "./Directory";
+import { DirectoryListing, useDirectory } from "./Directory";
 import { useClient } from "./FrontendApi";
 
 export interface Style {
@@ -67,7 +68,6 @@ export interface ThreadState {
   modifiers: string[];
   nicks: string[];
   tags: string[];
-  users: Map<string, UserMeta>;
   errors: Error[];
   state: ThreadInitState;
   label: string;
@@ -84,7 +84,8 @@ export interface WhisperThreadState extends ThreadState {
 export interface RoomThreadState extends ThreadState {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
-  serverEvents?: Readable<OpenClientResponse>;
+  serverEvents: Readable<OpenClientResponse>;
+  directoryJoinRes: Promise<FrontendJoinResponse>;
   room: Room;
 }
 
@@ -134,7 +135,6 @@ const initialRoomState: ThreadState = {
   modifiers: [],
   nicks: [],
   tags: [],
-  users: new Map(),
   errors: [],
   state: ThreadInitState.NEW,
   label: "",
@@ -193,7 +193,6 @@ type ChatActions = {
   setPopoutTopicCapacity: (popoutTopicCapacity: number) => void;
   closeTopic: (topic: Topic) => void;
   setMainActiveTopic: (topic: Topic) => void;
-  toggleTopicVisible: (topic: Topic, visible: boolean) => void;
   resetTopicUnreadCount: (topic: Topic) => void;
 };
 
@@ -206,6 +205,7 @@ type RoomActions = {
   toggleMessageGC: (messageGCEnabled: boolean) => void;
   toggleSelectedPeer: (peerKey: Uint8Array, state?: boolean) => void;
   resetSelectedPeers: () => void;
+  toggleVisible: (visible: boolean) => void;
 };
 
 const RoomContext = React.createContext<[ThreadState, RoomActions]>(null);
@@ -261,6 +261,11 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       serverEvents.on("error", roomActions.handleClientError);
       serverEvents.on("close", roomActions.handleClientClose);
 
+      const directoryJoinRes = client.directory.join({
+        networkKey,
+        query: { query: { listing: { content: { chat: { key: serverKey } } } } },
+      });
+
       const topic: Topic = { type: "ROOM", topicKey: serverKey };
 
       return {
@@ -274,6 +279,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           networkKey,
           serverKey,
           serverEvents,
+          directoryJoinRes,
           room: new Room(),
         }),
         mainTopics: [...state.mainTopics, topic],
@@ -321,7 +327,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         return state;
       }
 
-      state.rooms.get(key).serverEvents.destroy();
+      const { serverEvents, directoryJoinRes, networkKey } = state.rooms.get(key);
+
+      serverEvents.destroy();
+      void directoryJoinRes.then(({ id }) => client.directory.part({ networkKey, id }));
 
       const rooms = new Map(state.rooms);
       rooms.delete(key);
@@ -357,9 +366,6 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       }
       return { ...state, mainActiveTopic };
     });
-
-  const toggleTopicVisible = (topic: Topic, visible: boolean) =>
-    setTopicThread(topic, (thread) => ({ ...thread, visible }));
 
   const resetTopicUnreadCount = (topic: Topic) =>
     setTopicThread(topic, (thread, state) => {
@@ -481,7 +487,6 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     setPopoutTopicCapacity,
     closeTopic,
     setMainActiveTopic,
-    toggleTopicVisible,
     resetTopicUnreadCount,
   };
 };
@@ -592,10 +597,13 @@ const createThreadActions = <T extends ThreadState>(setState: ThreadStateDispatc
       };
     });
 
+  const toggleVisible = (visible: boolean) => setState((thread) => ({ ...thread, visible }));
+
   return {
     toggleMessageGC,
     toggleSelectedPeer,
     resetSelectedPeers,
+    toggleVisible,
   };
 };
 
@@ -608,13 +616,6 @@ const createRoomActions = (
     setState((state) => ({
       ...state,
       rooms: reduceThreadState(state, state.rooms, serverKey, action),
-    }));
-
-  const syncUsers = (nicks: string[], users: Map<string, UserMeta>) =>
-    setRoomState((room) => ({
-      ...room,
-      nicks,
-      users,
     }));
 
   const reduceServerEvent = (
@@ -815,7 +816,6 @@ const createRoomActions = (
 
   return {
     ...createThreadActions(setRoomState),
-    syncUsers,
     handleClientData,
     handleClientError,
     handleClientClose,
@@ -861,67 +861,90 @@ export const useChat = (): [State, ChatActions, StateDispatcher] => useContext(C
 
 export const ChatConsumer = ChatContext.Consumer;
 
-export type RoomProviderProps = Topic;
+export type ThreadProviderProps = Topic;
 
-export const RoomProvider: React.FC<RoomProviderProps> = ({ children, ...props }) => {
+export const ThreadProvider: React.FC<ThreadProviderProps> = (props) => {
+  switch (props.type) {
+    case "ROOM":
+      return <RoomThreadProvider {...props} />;
+    case "WHISPER":
+      return <WhisperThreadProvider {...props} />;
+  }
+};
+
+ThreadProvider.displayName = "Thread.Provider";
+
+const useRoomNicks = (networkKey: Uint8Array, serverKey: Uint8Array) => {
+  const directory = useDirectory(networkKey);
+  const listing = useMemo(() => {
+    for (const listing of directory.listings.values()) {
+      const content = listing.listing.content;
+      if (content.case === Listing.ContentCase.CHAT && isEqual(content.chat.key, serverKey)) {
+        return listing;
+      }
+    }
+  }, [directory]);
+
+  return useMemo(() => {
+    const nicks: string[] = [];
+    for (const user of listing.viewers.values()) {
+      nicks.push(user.alias);
+    }
+    return nicks;
+  }, [listing]);
+};
+
+const useMessageAccessors = (messages: Message[]) => {
+  const ref = useRef<Message[]>();
+  ref.current = messages;
+
+  const getMessage = useCallback((index: number): Message => ref.current[index], []);
+  const getMessageCount = useCallback((): number => ref.current.length, []);
+
+  return { getMessage, getMessageCount };
+};
+
+const RoomThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props }) => {
   const client = useClient();
   const [state, , setState] = useChat();
 
-  let thread: ThreadState;
-  let actions: ReturnType<typeof createRoomActions> | ReturnType<typeof createWhisperActions>;
-  switch (props.type) {
-    case "ROOM":
-      thread = state.rooms.get(formatKey(props.topicKey));
-      actions = useStableCallbacks(createRoomActions(client, setState, props.topicKey));
-      break;
-    case "WHISPER":
-      thread = state.whispers.get(formatKey(props.topicKey));
-      actions = useStableCallbacks(createWhisperActions(client, setState, props.topicKey));
-      break;
-  }
+  const thread = state.rooms.get(formatKey(props.topicKey));
+  const actions = useMemo(
+    () => createRoomActions(client, setState, props.topicKey),
+    [props.type, props.topicKey]
+  );
 
-  // const listing = useDirectoryListing(networkKey, directoryListingId);
-  // const directory = useDirectory(networkKey);
-  // useReady(() => {
-  //   const nicks: string[] = [];
-  //   const users = new Map<string, UserMeta>();
-  //   for (const user of listing.viewers.values()) {
-  //     nicks.push(user.alias);
-  //     users.set(formatKey(user.peerKey), {
-  //       alias: user.alias,
-  //       listing: findUserMediaListing(directory, user),
-  //     });
-  //   }
-  //   dispatch({ type: "SYNC_USERS", nicks, users });
-  // }, [listing, directory]);
-
-  // useEffect(() => {
-  //   if (directoryListingId === BigInt(0)) {
-  //     return;
-  //   }
-
-  //   const req = {
-  //     networkKey,
-  //     id: directoryListingId,
-  //   };
-  //   void client.directory.join(req);
-  //   return () => void client.directory.part(req);
-  // }, [networkKey, directoryListingId]);
-
-  const messages = useRef<Message[]>();
-  messages.current = thread.messages;
-
-  const getMessage = useCallback((index: number): Message => messages.current[index], []);
-  const getMessageCount = useCallback((): number => messages.current.length, []);
+  const nicks = useRoomNicks(thread.networkKey, thread.serverKey);
+  const messageAccessors = useMessageAccessors(thread.messages);
 
   const value = useMemo<[ThreadState, RoomActions]>(
-    () => [thread, { getMessage, getMessageCount, ...actions }],
-    [thread]
+    () => [
+      { ...thread, nicks },
+      { ...actions, ...messageAccessors },
+    ],
+    [thread, nicks]
   );
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 };
 
-RoomProvider.displayName = "Room.Provider";
+const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props }) => {
+  const client = useClient();
+  const [state, , setState] = useChat();
+
+  const thread = state.whispers.get(formatKey(props.topicKey));
+  const actions = useMemo(
+    () => createWhisperActions(client, setState, props.topicKey),
+    [props.type, props.topicKey]
+  );
+
+  const messageAccessors = useMessageAccessors(thread.messages);
+
+  const value = useMemo<[ThreadState, RoomActions]>(
+    () => [thread, { ...actions, ...messageAccessors }],
+    [thread]
+  );
+  return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
+};
 
 export const useRoom = (): [ThreadState, RoomActions] => useContext(RoomContext);
 
