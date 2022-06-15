@@ -135,8 +135,7 @@ export class CaptureUpdateRequest {
   }
 }
 
-export type ICaptureUpdateResponse = {
-}
+export type ICaptureUpdateResponse = Record<string, any>;
 
 export class CaptureUpdateResponse {
 
@@ -205,8 +204,7 @@ export class CaptureAppendRequest {
   }
 }
 
-export type ICaptureAppendResponse = {
-}
+export type ICaptureAppendResponse = Record<string, any>;
 
 export class CaptureAppendResponse {
 
@@ -261,8 +259,7 @@ export class CaptureCloseRequest {
   }
 }
 
-export type ICaptureCloseResponse = {
-}
+export type ICaptureCloseResponse = Record<string, any>;
 
 export class CaptureCloseResponse {
 

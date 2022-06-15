@@ -124,8 +124,7 @@ export class VideoIngressStream {
   }
 }
 
-export type IVideoIngressIsSupportedRequest = {
-}
+export type IVideoIngressIsSupportedRequest = Record<string, any>;
 
 export class VideoIngressIsSupportedRequest {
 
@@ -180,8 +179,7 @@ export class VideoIngressIsSupportedResponse {
   }
 }
 
-export type IVideoIngressGetConfigRequest = {
-}
+export type IVideoIngressGetConfigRequest = Record<string, any>;
 
 export class VideoIngressGetConfigRequest {
 
@@ -308,8 +306,7 @@ export class VideoIngressSetConfigResponse {
   }
 }
 
-export type IVideoIngressListStreamsRequest = {
-}
+export type IVideoIngressListStreamsRequest = Record<string, any>;
 
 export class VideoIngressListStreamsRequest {
 
@@ -594,8 +591,7 @@ export class VideoIngressShareUpdateChannelResponse {
   }
 }
 
-export type IVideoIngressShareDeleteChannelRequest = {
-}
+export type IVideoIngressShareDeleteChannelRequest = Record<string, any>;
 
 export class VideoIngressShareDeleteChannelRequest {
 
@@ -614,8 +610,7 @@ export class VideoIngressShareDeleteChannelRequest {
   }
 }
 
-export type IVideoIngressShareDeleteChannelResponse = {
-}
+export type IVideoIngressShareDeleteChannelResponse = Record<string, any>;
 
 export class VideoIngressShareDeleteChannelResponse {
 

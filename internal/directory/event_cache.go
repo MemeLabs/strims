@@ -14,19 +14,19 @@ func newEventCache(network *networkv1.Network) *eventCache {
 	return &eventCache{
 		Network: network,
 
-		listingChangeEvents:     map[uint64]*networkv1directory.Event_ListingChange{},
-		viewerCountChangeEvents: map[uint64]*networkv1directory.Event_ViewerCountChange{},
-		viewerStateChangeEvents: map[uint64]*networkv1directory.Event_ViewerStateChange{},
+		listingChangeEvents:      map[uint64]*networkv1directory.Event_ListingChange{},
+		userCountChangeEvents:    map[uint64]*networkv1directory.Event_UserCountChange{},
+		userPresenceChangeEvents: map[uint64]*networkv1directory.Event_UserPresenceChange{},
 	}
 }
 
 type eventCache struct {
 	Network *networkv1.Network
 
-	mu                      sync.Mutex
-	listingChangeEvents     map[uint64]*networkv1directory.Event_ListingChange
-	viewerCountChangeEvents map[uint64]*networkv1directory.Event_ViewerCountChange
-	viewerStateChangeEvents map[uint64]*networkv1directory.Event_ViewerStateChange
+	mu                       sync.Mutex
+	listingChangeEvents      map[uint64]*networkv1directory.Event_ListingChange
+	userCountChangeEvents    map[uint64]*networkv1directory.Event_UserCountChange
+	userPresenceChangeEvents map[uint64]*networkv1directory.Event_UserPresenceChange
 }
 
 func (d *eventCache) Events() *networkv1directory.EventBroadcast {
@@ -41,17 +41,17 @@ func (d *eventCache) Events() *networkv1directory.EventBroadcast {
 			},
 		})
 	}
-	for _, e := range d.viewerCountChangeEvents {
+	for _, e := range d.userCountChangeEvents {
 		b.Events = append(b.Events, &networkv1directory.Event{
-			Body: &networkv1directory.Event_ViewerCountChange_{
-				ViewerCountChange: e,
+			Body: &networkv1directory.Event_UserCountChange_{
+				UserCountChange: e,
 			},
 		})
 	}
-	for _, e := range d.viewerStateChangeEvents {
+	for _, e := range d.userPresenceChangeEvents {
 		b.Events = append(b.Events, &networkv1directory.Event{
-			Body: &networkv1directory.Event_ViewerStateChange_{
-				ViewerStateChange: e,
+			Body: &networkv1directory.Event_UserPresenceChange_{
+				UserPresenceChange: e,
 			},
 		})
 	}
@@ -68,10 +68,10 @@ func (d *eventCache) StoreEvent(b *networkv1directory.EventBroadcast) {
 			d.handleListingChange(b.ListingChange)
 		case *networkv1directory.Event_Unpublish_:
 			d.handleUnpublish(b.Unpublish)
-		case *networkv1directory.Event_ViewerCountChange_:
-			d.handleViewerCountChange(b.ViewerCountChange)
-		case *networkv1directory.Event_ViewerStateChange_:
-			d.handleViewerStateChange(b.ViewerStateChange)
+		case *networkv1directory.Event_UserCountChange_:
+			d.handleUserCountChange(b.UserCountChange)
+		case *networkv1directory.Event_UserPresenceChange_:
+			d.handleUserPresenceChange(b.UserPresenceChange)
 		}
 	}
 }
@@ -82,17 +82,17 @@ func (d *eventCache) handleListingChange(e *networkv1directory.Event_ListingChan
 
 func (d *eventCache) handleUnpublish(e *networkv1directory.Event_Unpublish) {
 	delete(d.listingChangeEvents, e.Id)
-	delete(d.viewerCountChangeEvents, e.Id)
+	delete(d.userCountChangeEvents, e.Id)
 }
 
-func (d *eventCache) handleViewerCountChange(e *networkv1directory.Event_ViewerCountChange) {
-	d.viewerCountChangeEvents[e.Id] = e
+func (d *eventCache) handleUserCountChange(e *networkv1directory.Event_UserCountChange) {
+	d.userCountChangeEvents[e.Id] = e
 }
 
-func (d *eventCache) handleViewerStateChange(e *networkv1directory.Event_ViewerStateChange) {
+func (d *eventCache) handleUserPresenceChange(e *networkv1directory.Event_UserPresenceChange) {
 	if e.Online {
-		d.viewerStateChangeEvents[e.Id] = e
+		d.userPresenceChangeEvents[e.Id] = e
 	} else {
-		delete(d.viewerStateChangeEvents, e.Id)
+		delete(d.userPresenceChangeEvents, e.Id)
 	}
 }

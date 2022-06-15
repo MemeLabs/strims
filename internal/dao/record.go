@@ -641,7 +641,7 @@ func ManyToOne[AV, BV any, AT TableRecord[AV], BT TableRecord[BV]](ns namespace,
 	}
 
 	idk := func(m AT) []byte { return idKey(key(m)) }
-	getAllAByKey := SecondaryIndex(ns, a, idk)
+	getAllAByKey, _ := SecondaryIndex(ns, a, idk)
 
 	getAllAByBID := func(s kv.Store, id uint64) ([]AT, error) { return getAllAByKey(s, idKey(id)) }
 	getAllAByB := func(s kv.Store, m BT) ([]AT, error) { return getAllAByBID(s, m.GetId()) }
@@ -656,7 +656,7 @@ func idKey(id uint64) []byte {
 	return b
 }
 
-func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) func(s kv.Store, k []byte) ([]T, error) {
+func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) (func(s kv.Store, k []byte) ([]T, error), func(s kv.Store, k []byte) ([]uint64, error)) {
 	t.deleteHooks = append(t.deleteHooks, func(s kv.RWStore, m T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.DeleteHook"); ce != nil {
 			defer func() {
@@ -708,7 +708,7 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 	getAllErrCount := secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String())
 	getAllDurationMs := secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String())
 
-	return func(s kv.Store, k []byte) (vs []T, err error) {
+	getAll := func(s kv.Store, k []byte) (vs []T, err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAll"); ce != nil {
 			defer func() {
 				ce.Write(
@@ -744,6 +744,38 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 		}
 		return
 	}
+
+	getAllIDsCount := secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String())
+	getAllIDsErrCount := secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String())
+	getAllIDsDurationMs := secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String())
+
+	getAllIDs := func(s kv.Store, k []byte) (ids []uint64, err error) {
+		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAllIDs"); ce != nil {
+			defer func() {
+				ce.Write(
+					zap.String("type", t.name),
+					zap.Stringer("ns", ns),
+					zap.String("key", hashSecondaryIndexKey(k, s)),
+					zap.Int("records", len(ids)),
+					zap.Duration("duration", ts.Elapsed()),
+					zap.Error(err),
+				)
+			}()
+		}
+		getAllIDsCount.Inc()
+		defer observeDurationMs(getAllIDsDurationMs)()
+
+		err = s.View(func(tx kv.Tx) error {
+			ids, err = ScanSecondaryIndex(tx, ns, k)
+			return err
+		})
+		if err != nil {
+			getAllIDsErrCount.Inc()
+		}
+		return
+	}
+
+	return getAll, getAllIDs
 }
 
 var ErrUniqueConstraintViolated = errors.New("unique constraint violated")
@@ -752,7 +784,7 @@ type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
-func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) func(s kv.Store, k []byte) (T, error) {
+func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) (func(s kv.Store, k []byte) (T, error), func(s kv.Store, k []byte) (uint64, error)) {
 	if opt == nil {
 		opt = &UniqueIndexOptions[V, T]{}
 	}
@@ -794,9 +826,10 @@ func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func
 		return opt.OnConflict(s, t, m, c)
 	})
 
-	get := SecondaryIndex(ns, t, key)
-	return func(s kv.Store, k []byte) (v T, err error) {
-		vs, err := get(s, k)
+	getAll, getAllIDs := SecondaryIndex(ns, t, key)
+
+	get := func(s kv.Store, k []byte) (v T, err error) {
+		vs, err := getAll(s, k)
 		if err != nil {
 			return v, err
 		}
@@ -805,4 +838,17 @@ func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func
 		}
 		return vs[0], nil
 	}
+
+	getID := func(s kv.Store, k []byte) (v uint64, err error) {
+		ids, err := getAllIDs(s, k)
+		if err != nil {
+			return v, err
+		}
+		if len(ids) == 0 {
+			return v, kv.ErrRecordNotFound
+		}
+		return ids[0], nil
+	}
+
+	return get, getID
 }

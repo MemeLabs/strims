@@ -7,7 +7,7 @@ import React from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 
 import { useChat, useRoom } from "../../contexts/Chat";
-import { ViewerStateIndicator } from "./ViewerStateIndicator";
+import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const EmotesDrawer: React.FC = () => {
   const [{ uiConfig }] = useChat();
@@ -18,7 +18,7 @@ const EmotesDrawer: React.FC = () => {
       {/* <ul className="chat__users_list">
         {Array.from(room.users.values()).map(({ alias, listing }) => (
           <li key={alias} className="chat__users_list__item">
-            <ViewerStateIndicator style={uiConfig.viewerStateIndicator} listing={listing} />
+            <UserPresenceIndicator style={uiConfig.userPresenceIndicator} listing={listing} />
             <span>{alias}</span>
           </li>
         ))}

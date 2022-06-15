@@ -489,8 +489,7 @@ export namespace LinkedProfile {
     >;
   };
 
-  export type IUnencrypted = {
-  }
+  export type IUnencrypted = Record<string, any>;
 
   export class Unencrypted {
 

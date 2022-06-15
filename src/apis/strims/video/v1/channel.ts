@@ -293,8 +293,7 @@ export namespace VideoChannel {
 
 }
 
-export type IVideoChannelListRequest = {
-}
+export type IVideoChannelListRequest = Record<string, any>;
 
 export class VideoChannelListRequest {
 
@@ -622,8 +621,7 @@ export class VideoChannelDeleteRequest {
   }
 }
 
-export type IVideoChannelDeleteResponse = {
-}
+export type IVideoChannelDeleteResponse = Record<string, any>;
 
 export class VideoChannelDeleteResponse {
 

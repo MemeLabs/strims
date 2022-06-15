@@ -175,8 +175,7 @@ export namespace CapConnLog {
 
 }
 
-export type ICapConnWatchLogsRequest = {
-}
+export type ICapConnWatchLogsRequest = Record<string, any>;
 
 export class CapConnWatchLogsRequest {
 

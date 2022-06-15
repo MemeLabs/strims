@@ -106,8 +106,7 @@ export class Config {
   }
 }
 
-export type IGetConfigRequest = {
-}
+export type IGetConfigRequest = Record<string, any>;
 
 export class GetConfigRequest {
 

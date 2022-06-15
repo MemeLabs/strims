@@ -23,7 +23,7 @@ import { ImageValue, SelectInput, SelectOption, TextInput } from "../../../compo
 import {
   ChatConsumer,
   Provider as ChatProvider,
-  RoomConsumer,
+  ThreadConsumer,
   useChat,
   useRoom,
 } from "../../../contexts/Chat";
@@ -73,7 +73,7 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
             {shouldRenderStyleSheet && (
               <ChatConsumer>
                 {([{ uiConfig }]) => (
-                  <RoomConsumer>
+                  <ThreadConsumer>
                     {([room]) => (
                       <StyleSheet
                         liveEmotes={room.liveEmotes}
@@ -81,7 +81,7 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
                         uiConfig={uiConfig}
                       />
                     )}
-                  </RoomConsumer>
+                  </ThreadConsumer>
                 )}
               </ChatConsumer>
             )}

@@ -21,7 +21,7 @@ import {
 export type IServerConfig = {
   integrations?: ServerConfig.IIntegrations;
   publishQuota?: number;
-  viewQuota?: number;
+  joinQuota?: number;
   broadcastInterval?: number;
   refreshInterval?: number;
   sessionTimeout?: number;
@@ -34,7 +34,7 @@ export type IServerConfig = {
 export class ServerConfig {
   integrations: ServerConfig.Integrations | undefined;
   publishQuota: number;
-  viewQuota: number;
+  joinQuota: number;
   broadcastInterval: number;
   refreshInterval: number;
   sessionTimeout: number;
@@ -46,7 +46,7 @@ export class ServerConfig {
   constructor(v?: IServerConfig) {
     this.integrations = v?.integrations && new ServerConfig.Integrations(v.integrations);
     this.publishQuota = v?.publishQuota || 0;
-    this.viewQuota = v?.viewQuota || 0;
+    this.joinQuota = v?.joinQuota || 0;
     this.broadcastInterval = v?.broadcastInterval || 0;
     this.refreshInterval = v?.refreshInterval || 0;
     this.sessionTimeout = v?.sessionTimeout || 0;
@@ -60,7 +60,7 @@ export class ServerConfig {
     if (!w) w = new Writer();
     if (m.integrations) ServerConfig.Integrations.encode(m.integrations, w.uint32(10).fork()).ldelim();
     if (m.publishQuota) w.uint32(16).uint32(m.publishQuota);
-    if (m.viewQuota) w.uint32(24).uint32(m.viewQuota);
+    if (m.joinQuota) w.uint32(24).uint32(m.joinQuota);
     if (m.broadcastInterval) w.uint32(32).uint32(m.broadcastInterval);
     if (m.refreshInterval) w.uint32(40).uint32(m.refreshInterval);
     if (m.sessionTimeout) w.uint32(48).uint32(m.sessionTimeout);
@@ -85,7 +85,7 @@ export class ServerConfig {
         m.publishQuota = r.uint32();
         break;
         case 3:
-        m.viewQuota = r.uint32();
+        m.joinQuota = r.uint32();
         break;
         case 4:
         m.broadcastInterval = r.uint32();
@@ -348,7 +348,7 @@ export namespace ServerConfig {
 export type IClientConfig = {
   integrations?: ClientConfig.IIntegrations;
   publishQuota?: number;
-  viewQuota?: number;
+  joinQuota?: number;
   minPingInterval?: number;
   maxPingInterval?: number;
 }
@@ -356,14 +356,14 @@ export type IClientConfig = {
 export class ClientConfig {
   integrations: ClientConfig.Integrations | undefined;
   publishQuota: number;
-  viewQuota: number;
+  joinQuota: number;
   minPingInterval: number;
   maxPingInterval: number;
 
   constructor(v?: IClientConfig) {
     this.integrations = v?.integrations && new ClientConfig.Integrations(v.integrations);
     this.publishQuota = v?.publishQuota || 0;
-    this.viewQuota = v?.viewQuota || 0;
+    this.joinQuota = v?.joinQuota || 0;
     this.minPingInterval = v?.minPingInterval || 0;
     this.maxPingInterval = v?.maxPingInterval || 0;
   }
@@ -372,7 +372,7 @@ export class ClientConfig {
     if (!w) w = new Writer();
     if (m.integrations) ClientConfig.Integrations.encode(m.integrations, w.uint32(10).fork()).ldelim();
     if (m.publishQuota) w.uint32(16).uint32(m.publishQuota);
-    if (m.viewQuota) w.uint32(24).uint32(m.viewQuota);
+    if (m.joinQuota) w.uint32(24).uint32(m.joinQuota);
     if (m.minPingInterval) w.uint32(32).uint32(m.minPingInterval);
     if (m.maxPingInterval) w.uint32(40).uint32(m.maxPingInterval);
     return w;
@@ -392,7 +392,7 @@ export class ClientConfig {
         m.publishQuota = r.uint32();
         break;
         case 3:
-        m.viewQuota = r.uint32();
+        m.joinQuota = r.uint32();
         break;
         case 4:
         m.minPingInterval = r.uint32();
@@ -541,8 +541,7 @@ export class TestPublishRequest {
   }
 }
 
-export type ITestPublishResponse = {
-}
+export type ITestPublishResponse = Record<string, any>;
 
 export class TestPublishResponse {
 
@@ -775,7 +774,7 @@ export namespace Listing {
     constructor(v?: IEmbed) {
       this.service = v?.service || 0;
       this.id = v?.id || "";
-      if (v?.queryParams) this.queryParams = new Map(v.queryParams instanceof Map ? v.queryParams : Object.entries(v.queryParams));
+      if (v?.queryParams) this.queryParams = new Map(v.queryParams instanceof Map ? v.queryParams : Object.entries(v.queryParams).map(([k, v]) => [String(k), v]));
       else this.queryParams = new Map<string, string>();
     }
 
@@ -983,7 +982,7 @@ export type IListingSnippet = {
   tags?: string[];
   category?: string;
   channelName?: string;
-  viewerCount?: bigint;
+  userCount?: bigint;
   live?: boolean;
   isMature?: boolean;
   thumbnail?: IListingSnippetImage;
@@ -1001,7 +1000,7 @@ export class ListingSnippet {
   tags: string[];
   category: string;
   channelName: string;
-  viewerCount: bigint;
+  userCount: bigint;
   live: boolean;
   isMature: boolean;
   thumbnail: ListingSnippetImage | undefined;
@@ -1018,7 +1017,7 @@ export class ListingSnippet {
     this.tags = v?.tags ? v.tags : [];
     this.category = v?.category || "";
     this.channelName = v?.channelName || "";
-    this.viewerCount = v?.viewerCount || BigInt(0);
+    this.userCount = v?.userCount || BigInt(0);
     this.live = v?.live || false;
     this.isMature = v?.isMature || false;
     this.thumbnail = v?.thumbnail && new ListingSnippetImage(v.thumbnail);
@@ -1037,7 +1036,7 @@ export class ListingSnippet {
     for (const v of m.tags) w.uint32(26).string(v);
     if (m.category.length) w.uint32(34).string(m.category);
     if (m.channelName.length) w.uint32(42).string(m.channelName);
-    if (m.viewerCount) w.uint32(48).uint64(m.viewerCount);
+    if (m.userCount) w.uint32(48).uint64(m.userCount);
     if (m.live) w.uint32(56).bool(m.live);
     if (m.isMature) w.uint32(64).bool(m.isMature);
     if (m.thumbnail) ListingSnippetImage.encode(m.thumbnail, w.uint32(74).fork()).ldelim();
@@ -1073,7 +1072,7 @@ export class ListingSnippet {
         m.channelName = r.string();
         break;
         case 6:
-        m.viewerCount = r.uint64();
+        m.userCount = r.uint64();
         break;
         case 7:
         m.live = r.bool();
@@ -1116,7 +1115,7 @@ export type IListingSnippetDelta = {
   description?: google_protobuf_IStringValue;
   category?: google_protobuf_IStringValue;
   channelName?: google_protobuf_IStringValue;
-  viewerCount?: google_protobuf_IUInt64Value;
+  userCount?: google_protobuf_IUInt64Value;
   live?: google_protobuf_IBoolValue;
   isMature?: google_protobuf_IBoolValue;
   key?: google_protobuf_IBytesValue;
@@ -1134,7 +1133,7 @@ export class ListingSnippetDelta {
   description: google_protobuf_StringValue | undefined;
   category: google_protobuf_StringValue | undefined;
   channelName: google_protobuf_StringValue | undefined;
-  viewerCount: google_protobuf_UInt64Value | undefined;
+  userCount: google_protobuf_UInt64Value | undefined;
   live: google_protobuf_BoolValue | undefined;
   isMature: google_protobuf_BoolValue | undefined;
   key: google_protobuf_BytesValue | undefined;
@@ -1151,7 +1150,7 @@ export class ListingSnippetDelta {
     this.description = v?.description && new google_protobuf_StringValue(v.description);
     this.category = v?.category && new google_protobuf_StringValue(v.category);
     this.channelName = v?.channelName && new google_protobuf_StringValue(v.channelName);
-    this.viewerCount = v?.viewerCount && new google_protobuf_UInt64Value(v.viewerCount);
+    this.userCount = v?.userCount && new google_protobuf_UInt64Value(v.userCount);
     this.live = v?.live && new google_protobuf_BoolValue(v.live);
     this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
     this.key = v?.key && new google_protobuf_BytesValue(v.key);
@@ -1170,7 +1169,7 @@ export class ListingSnippetDelta {
     if (m.description) google_protobuf_StringValue.encode(m.description, w.uint32(18).fork()).ldelim();
     if (m.category) google_protobuf_StringValue.encode(m.category, w.uint32(26).fork()).ldelim();
     if (m.channelName) google_protobuf_StringValue.encode(m.channelName, w.uint32(34).fork()).ldelim();
-    if (m.viewerCount) google_protobuf_UInt64Value.encode(m.viewerCount, w.uint32(42).fork()).ldelim();
+    if (m.userCount) google_protobuf_UInt64Value.encode(m.userCount, w.uint32(42).fork()).ldelim();
     if (m.live) google_protobuf_BoolValue.encode(m.live, w.uint32(50).fork()).ldelim();
     if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(58).fork()).ldelim();
     if (m.key) google_protobuf_BytesValue.encode(m.key, w.uint32(66).fork()).ldelim();
@@ -1216,7 +1215,7 @@ export class ListingSnippetDelta {
         m.channelName = google_protobuf_StringValue.decode(r, r.uint32());
         break;
         case 5:
-        m.viewerCount = google_protobuf_UInt64Value.decode(r, r.uint32());
+        m.userCount = google_protobuf_UInt64Value.decode(r, r.uint32());
         break;
         case 6:
         m.live = google_protobuf_BoolValue.decode(r, r.uint32());
@@ -1421,11 +1420,11 @@ export class Event {
       case Event.BodyCase.UNPUBLISH:
       Event.Unpublish.encode(m.body.unpublish, w.uint32(8018).fork()).ldelim();
       break;
-      case Event.BodyCase.VIEWER_COUNT_CHANGE:
-      Event.ViewerCountChange.encode(m.body.viewerCountChange, w.uint32(8026).fork()).ldelim();
+      case Event.BodyCase.USER_COUNT_CHANGE:
+      Event.UserCountChange.encode(m.body.userCountChange, w.uint32(8026).fork()).ldelim();
       break;
-      case Event.BodyCase.VIEWER_STATE_CHANGE:
-      Event.ViewerStateChange.encode(m.body.viewerStateChange, w.uint32(8034).fork()).ldelim();
+      case Event.BodyCase.USER_PRESENCE_CHANGE:
+      Event.UserPresenceChange.encode(m.body.userPresenceChange, w.uint32(8034).fork()).ldelim();
       break;
       case Event.BodyCase.PING:
       Event.Ping.encode(m.body.ping, w.uint32(8042).fork()).ldelim();
@@ -1448,10 +1447,10 @@ export class Event {
         m.body = new Event.Body({ unpublish: Event.Unpublish.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.body = new Event.Body({ viewerCountChange: Event.ViewerCountChange.decode(r, r.uint32()) });
+        m.body = new Event.Body({ userCountChange: Event.UserCountChange.decode(r, r.uint32()) });
         break;
         case 1004:
-        m.body = new Event.Body({ viewerStateChange: Event.ViewerStateChange.decode(r, r.uint32()) });
+        m.body = new Event.Body({ userPresenceChange: Event.UserPresenceChange.decode(r, r.uint32()) });
         break;
         case 1005:
         m.body = new Event.Body({ ping: Event.Ping.decode(r, r.uint32()) });
@@ -1470,8 +1469,8 @@ export namespace Event {
     NOT_SET = 0,
     LISTING_CHANGE = 1001,
     UNPUBLISH = 1002,
-    VIEWER_COUNT_CHANGE = 1003,
-    VIEWER_STATE_CHANGE = 1004,
+    USER_COUNT_CHANGE = 1003,
+    USER_PRESENCE_CHANGE = 1004,
     PING = 1005,
   }
 
@@ -1479,8 +1478,8 @@ export namespace Event {
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.LISTING_CHANGE, listingChange: Event.IListingChange }
   |{ case?: BodyCase.UNPUBLISH, unpublish: Event.IUnpublish }
-  |{ case?: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: Event.IViewerCountChange }
-  |{ case?: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: Event.IViewerStateChange }
+  |{ case?: BodyCase.USER_COUNT_CHANGE, userCountChange: Event.IUserCountChange }
+  |{ case?: BodyCase.USER_PRESENCE_CHANGE, userPresenceChange: Event.IUserPresenceChange }
   |{ case?: BodyCase.PING, ping: Event.IPing }
   ;
 
@@ -1488,16 +1487,16 @@ export namespace Event {
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.LISTING_CHANGE, listingChange: Event.ListingChange }
   |{ case: BodyCase.UNPUBLISH, unpublish: Event.Unpublish }
-  |{ case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: Event.ViewerCountChange }
-  |{ case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: Event.ViewerStateChange }
+  |{ case: BodyCase.USER_COUNT_CHANGE, userCountChange: Event.UserCountChange }
+  |{ case: BodyCase.USER_PRESENCE_CHANGE, userPresenceChange: Event.UserPresenceChange }
   |{ case: BodyCase.PING, ping: Event.Ping }
   >;
 
   class BodyImpl {
     listingChange: Event.ListingChange;
     unpublish: Event.Unpublish;
-    viewerCountChange: Event.ViewerCountChange;
-    viewerStateChange: Event.ViewerStateChange;
+    userCountChange: Event.UserCountChange;
+    userPresenceChange: Event.UserPresenceChange;
     ping: Event.Ping;
     case: BodyCase = BodyCase.NOT_SET;
 
@@ -1510,13 +1509,13 @@ export namespace Event {
         this.case = BodyCase.UNPUBLISH;
         this.unpublish = new Event.Unpublish(v.unpublish);
       } else
-      if (v && "viewerCountChange" in v) {
-        this.case = BodyCase.VIEWER_COUNT_CHANGE;
-        this.viewerCountChange = new Event.ViewerCountChange(v.viewerCountChange);
+      if (v && "userCountChange" in v) {
+        this.case = BodyCase.USER_COUNT_CHANGE;
+        this.userCountChange = new Event.UserCountChange(v.userCountChange);
       } else
-      if (v && "viewerStateChange" in v) {
-        this.case = BodyCase.VIEWER_STATE_CHANGE;
-        this.viewerStateChange = new Event.ViewerStateChange(v.viewerStateChange);
+      if (v && "userPresenceChange" in v) {
+        this.case = BodyCase.USER_PRESENCE_CHANGE;
+        this.userPresenceChange = new Event.UserPresenceChange(v.userPresenceChange);
       } else
       if (v && "ping" in v) {
         this.case = BodyCase.PING;
@@ -1530,8 +1529,8 @@ export namespace Event {
     new <T extends IBody>(v: T): Readonly<
     T extends { listingChange: Event.IListingChange } ? { case: BodyCase.LISTING_CHANGE, listingChange: Event.ListingChange } :
     T extends { unpublish: Event.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: Event.Unpublish } :
-    T extends { viewerCountChange: Event.IViewerCountChange } ? { case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: Event.ViewerCountChange } :
-    T extends { viewerStateChange: Event.IViewerStateChange } ? { case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: Event.ViewerStateChange } :
+    T extends { userCountChange: Event.IUserCountChange } ? { case: BodyCase.USER_COUNT_CHANGE, userCountChange: Event.UserCountChange } :
+    T extends { userPresenceChange: Event.IUserPresenceChange } ? { case: BodyCase.USER_PRESENCE_CHANGE, userPresenceChange: Event.UserPresenceChange } :
     T extends { ping: Event.IPing } ? { case: BodyCase.PING, ping: Event.Ping } :
     never
     >;
@@ -1630,31 +1629,31 @@ export namespace Event {
     }
   }
 
-  export type IViewerCountChange = {
+  export type IUserCountChange = {
     id?: bigint;
     count?: number;
   }
 
-  export class ViewerCountChange {
+  export class UserCountChange {
     id: bigint;
     count: number;
 
-    constructor(v?: IViewerCountChange) {
+    constructor(v?: IUserCountChange) {
       this.id = v?.id || BigInt(0);
       this.count = v?.count || 0;
     }
 
-    static encode(m: ViewerCountChange, w?: Writer): Writer {
+    static encode(m: UserCountChange, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
       if (m.count) w.uint32(16).uint32(m.count);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): ViewerCountChange {
+    static decode(r: Reader | Uint8Array, length?: number): UserCountChange {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new ViewerCountChange();
+      const m = new UserCountChange();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -1673,7 +1672,7 @@ export namespace Event {
     }
   }
 
-  export type IViewerStateChange = {
+  export type IUserPresenceChange = {
     id?: bigint;
     alias?: string;
     peerKey?: Uint8Array;
@@ -1681,14 +1680,14 @@ export namespace Event {
     listingIds?: bigint[];
   }
 
-  export class ViewerStateChange {
+  export class UserPresenceChange {
     id: bigint;
     alias: string;
     peerKey: Uint8Array;
     online: boolean;
     listingIds: bigint[];
 
-    constructor(v?: IViewerStateChange) {
+    constructor(v?: IUserPresenceChange) {
       this.id = v?.id || BigInt(0);
       this.alias = v?.alias || "";
       this.peerKey = v?.peerKey || new Uint8Array();
@@ -1696,7 +1695,7 @@ export namespace Event {
       this.listingIds = v?.listingIds ? v.listingIds : [];
     }
 
-    static encode(m: ViewerStateChange, w?: Writer): Writer {
+    static encode(m: UserPresenceChange, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
       if (m.alias.length) w.uint32(18).string(m.alias);
@@ -1706,10 +1705,10 @@ export namespace Event {
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): ViewerStateChange {
+    static decode(r: Reader | Uint8Array, length?: number): UserPresenceChange {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new ViewerStateChange();
+      const m = new UserPresenceChange();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -2240,8 +2239,7 @@ export class UnpublishRequest {
   }
 }
 
-export type IUnpublishResponse = {
-}
+export type IUnpublishResponse = Record<string, any>;
 
 export class UnpublishResponse {
 
@@ -2368,8 +2366,7 @@ export class PartRequest {
   }
 }
 
-export type IPartResponse = {
-}
+export type IPartResponse = Record<string, any>;
 
 export class PartResponse {
 
@@ -2388,8 +2385,7 @@ export class PartResponse {
   }
 }
 
-export type IPingRequest = {
-}
+export type IPingRequest = Record<string, any>;
 
 export class PingRequest {
 
@@ -2408,8 +2404,7 @@ export class PingRequest {
   }
 }
 
-export type IPingResponse = {
-}
+export type IPingResponse = Record<string, any>;
 
 export class PingResponse {
 
@@ -2471,8 +2466,7 @@ export class ModerateListingRequest {
   }
 }
 
-export type IModerateListingResponse = {
-}
+export type IModerateListingResponse = Record<string, any>;
 
 export class ModerateListingResponse {
 
@@ -2534,8 +2528,7 @@ export class ModerateUserRequest {
   }
 }
 
-export type IModerateUserResponse = {
-}
+export type IModerateUserResponse = Record<string, any>;
 
 export class ModerateUserResponse {
 
@@ -2554,8 +2547,7 @@ export class ModerateUserResponse {
   }
 }
 
-export type IFrontendOpenRequest = {
-}
+export type IFrontendOpenRequest = Record<string, any>;
 
 export class FrontendOpenRequest {
 
@@ -2679,8 +2671,7 @@ export namespace FrontendOpenResponse {
     >;
   };
 
-  export type IClose = {
-  }
+  export type IClose = Record<string, any>;
 
   export class Close {
 
@@ -2823,8 +2814,7 @@ export class FrontendUnpublishRequest {
   }
 }
 
-export type IFrontendUnpublishResponse = {
-}
+export type IFrontendUnpublishResponse = Record<string, any>;
 
 export class FrontendUnpublishResponse {
 
@@ -2965,8 +2955,7 @@ export class FrontendPartRequest {
   }
 }
 
-export type IFrontendPartResponse = {
-}
+export type IFrontendPartResponse = Record<string, any>;
 
 export class FrontendPartResponse {
 
@@ -3021,8 +3010,7 @@ export class FrontendTestRequest {
   }
 }
 
-export type IFrontendTestResponse = {
-}
+export type IFrontendTestResponse = Record<string, any>;
 
 export class FrontendTestResponse {
 
@@ -3091,8 +3079,7 @@ export class FrontendModerateListingRequest {
   }
 }
 
-export type IFrontendModerateListingResponse = {
-}
+export type IFrontendModerateListingResponse = Record<string, any>;
 
 export class FrontendModerateListingResponse {
 
@@ -3161,8 +3148,7 @@ export class FrontendModerateUserRequest {
   }
 }
 
-export type IFrontendModerateUserResponse = {
-}
+export type IFrontendModerateUserResponse = Record<string, any>;
 
 export class FrontendModerateUserResponse {
 
@@ -3178,6 +3164,394 @@ export class FrontendModerateUserResponse {
   static decode(r: Reader | Uint8Array, length?: number): FrontendModerateUserResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new FrontendModerateUserResponse();
+  }
+}
+
+export type IFrontendGetUsersRequest = Record<string, any>;
+
+export class FrontendGetUsersRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendGetUsersRequest) {
+  }
+
+  static encode(m: FrontendGetUsersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetUsersRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendGetUsersRequest();
+  }
+}
+
+export type IFrontendGetUsersResponse = {
+  users?: FrontendGetUsersResponse.IUser[];
+  networks?: Map<bigint, FrontendGetUsersResponse.Network>;
+  memes?: Map<string, FrontendGetUsersResponse.INetwork> | { [key: string]: FrontendGetUsersResponse.INetwork };
+}
+
+export class FrontendGetUsersResponse {
+  users: FrontendGetUsersResponse.User[];
+  networks: Map<bigint, FrontendGetUsersResponse.Network>;
+  memes: Map<string, FrontendGetUsersResponse.Network>;
+
+  constructor(v?: IFrontendGetUsersResponse) {
+    this.users = v?.users ? v.users.map(v => new FrontendGetUsersResponse.User(v)) : [];
+    if (v?.networks) this.networks = new Map(Array.from(v.networks).map(([k, v]) => [k, new FrontendGetUsersResponse.Network(v)]));
+    else this.networks = new Map<bigint, FrontendGetUsersResponse.Network>();
+    if (v?.memes) this.memes = new Map(v.memes instanceof Map ? Array.from(v.memes).map(([k, v]) => [k, new FrontendGetUsersResponse.Network(v)]) : Object.entries(v.memes).map(([k, v]) => [String(k), new FrontendGetUsersResponse.Network(v)]));
+    else this.memes = new Map<string, FrontendGetUsersResponse.Network>();
+  }
+
+  static encode(m: FrontendGetUsersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.users) FrontendGetUsersResponse.User.encode(v, w.uint32(10).fork()).ldelim();
+    for (const [k, v] of m.networks) FrontendGetUsersResponse.Network.encode(v, w.uint32(18).fork().uint32(8).uint64(k).uint32(18).fork()).ldelim().ldelim();
+    for (const [k, v] of m.memes) FrontendGetUsersResponse.Network.encode(v, w.uint32(26).fork().uint32(10).string(k).uint32(18).fork()).ldelim().ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetUsersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetUsersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.users.push(FrontendGetUsersResponse.User.decode(r, r.uint32()));
+        break;
+        case 2:
+        {
+          const flen = r.uint32();
+          const fend = r.pos + flen;
+          let key: bigint;
+          let value: FrontendGetUsersResponse.Network;
+          while (r.pos < fend) {
+            const ftag = r.uint32();
+            switch (ftag >> 3) {
+              case 1:
+              key = r.uint64()
+              break;
+              case 2:
+              value = FrontendGetUsersResponse.Network.decode(r, r.uint32());
+              break;
+            }
+          }
+          m.networks.set(key, value)
+        }
+        break;
+        case 3:
+        {
+          const flen = r.uint32();
+          const fend = r.pos + flen;
+          let key: string;
+          let value: FrontendGetUsersResponse.Network;
+          while (r.pos < fend) {
+            const ftag = r.uint32();
+            switch (ftag >> 3) {
+              case 1:
+              key = r.string()
+              break;
+              case 2:
+              value = FrontendGetUsersResponse.Network.decode(r, r.uint32());
+              break;
+            }
+          }
+          m.memes.set(key, value)
+        }
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace FrontendGetUsersResponse {
+  export type IAlias = {
+    alias?: string;
+    networkIds?: bigint[];
+  }
+
+  export class Alias {
+    alias: string;
+    networkIds: bigint[];
+
+    constructor(v?: IAlias) {
+      this.alias = v?.alias || "";
+      this.networkIds = v?.networkIds ? v.networkIds : [];
+    }
+
+    static encode(m: Alias, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.alias.length) w.uint32(10).string(m.alias);
+      m.networkIds.reduce((w, v) => w.uint64(v), w.uint32(18).fork()).ldelim();
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Alias {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Alias();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.alias = r.string();
+          break;
+          case 2:
+          for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.networkIds.push(r.uint64());
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IUser = {
+    aliases?: FrontendGetUsersResponse.IAlias[];
+    peerKey?: Uint8Array;
+  }
+
+  export class User {
+    aliases: FrontendGetUsersResponse.Alias[];
+    peerKey: Uint8Array;
+
+    constructor(v?: IUser) {
+      this.aliases = v?.aliases ? v.aliases.map(v => new FrontendGetUsersResponse.Alias(v)) : [];
+      this.peerKey = v?.peerKey || new Uint8Array();
+    }
+
+    static encode(m: User, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      for (const v of m.aliases) FrontendGetUsersResponse.Alias.encode(v, w.uint32(10).fork()).ldelim();
+      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): User {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new User();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.aliases.push(FrontendGetUsersResponse.Alias.decode(r, r.uint32()));
+          break;
+          case 2:
+          m.peerKey = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type INetwork = {
+    id?: bigint;
+    name?: string;
+    key?: Uint8Array;
+  }
+
+  export class Network {
+    id: bigint;
+    name: string;
+    key: Uint8Array;
+
+    constructor(v?: INetwork) {
+      this.id = v?.id || BigInt(0);
+      this.name = v?.name || "";
+      this.key = v?.key || new Uint8Array();
+    }
+
+    static encode(m: Network, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.id) w.uint32(8).uint64(m.id);
+      if (m.name.length) w.uint32(18).string(m.name);
+      if (m.key.length) w.uint32(26).bytes(m.key);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Network {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Network();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.id = r.uint64();
+          break;
+          case 2:
+          m.name = r.string();
+          break;
+          case 3:
+          m.key = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+}
+
+export type IFrontendWatchListingUsersRequest = {
+  networkKey?: Uint8Array;
+  query?: IListingQuery;
+}
+
+export class FrontendWatchListingUsersRequest {
+  networkKey: Uint8Array;
+  query: ListingQuery | undefined;
+
+  constructor(v?: IFrontendWatchListingUsersRequest) {
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.query = v?.query && new ListingQuery(v.query);
+  }
+
+  static encode(m: FrontendWatchListingUsersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.query) ListingQuery.encode(m.query, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchListingUsersRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendWatchListingUsersRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkKey = r.bytes();
+        break;
+        case 2:
+        m.query = ListingQuery.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendWatchListingUsersResponse = {
+  type?: FrontendWatchListingUsersResponse.UserEventType;
+  users?: FrontendWatchListingUsersResponse.IUser[];
+}
+
+export class FrontendWatchListingUsersResponse {
+  type: FrontendWatchListingUsersResponse.UserEventType;
+  users: FrontendWatchListingUsersResponse.User[];
+
+  constructor(v?: IFrontendWatchListingUsersResponse) {
+    this.type = v?.type || 0;
+    this.users = v?.users ? v.users.map(v => new FrontendWatchListingUsersResponse.User(v)) : [];
+  }
+
+  static encode(m: FrontendWatchListingUsersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.type) w.uint32(8).uint32(m.type);
+    for (const v of m.users) FrontendWatchListingUsersResponse.User.encode(v, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchListingUsersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendWatchListingUsersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.type = r.uint32();
+        break;
+        case 2:
+        m.users.push(FrontendWatchListingUsersResponse.User.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace FrontendWatchListingUsersResponse {
+  export type IUser = {
+    id?: bigint;
+    alias?: string;
+    peerKey?: Uint8Array;
+  }
+
+  export class User {
+    id: bigint;
+    alias: string;
+    peerKey: Uint8Array;
+
+    constructor(v?: IUser) {
+      this.id = v?.id || BigInt(0);
+      this.alias = v?.alias || "";
+      this.peerKey = v?.peerKey || new Uint8Array();
+    }
+
+    static encode(m: User, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.id) w.uint32(8).uint64(m.id);
+      if (m.alias.length) w.uint32(18).string(m.alias);
+      if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): User {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new User();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.id = r.uint64();
+          break;
+          case 2:
+          m.alias = r.string();
+          break;
+          case 3:
+          m.peerKey = r.bytes();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export enum UserEventType {
+    USER_EVENT_TYPE_JOIN = 0,
+    USER_EVENT_TYPE_PART = 1,
+    USER_EVENT_TYPE_RENAME = 2,
   }
 }
 

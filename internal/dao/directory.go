@@ -97,7 +97,7 @@ func directoryListingKey(m *networkv1directory.ListingRecord) []byte {
 	return FormatDirectoryListingRecordListingKey(m.NetworkId, m.Listing)
 }
 
-var GetDirectoryListingRecordByListing = UniqueIndex(
+var GetDirectoryListingRecordByListing, GetDirectoryListingRecordIDByListing = UniqueIndex(
 	directoryListingRecordListingNS,
 	DirectoryListingRecords,
 	directoryListingKey,
@@ -142,7 +142,7 @@ func directoryUserRecordPeerKeyKey(m *networkv1directory.UserRecord) []byte {
 	return FormatDirectoryUserRecordPeerKeyKey(m.NetworkId, m.PeerKey)
 }
 
-var GetDirectoryUserRecordByPeerKey = UniqueIndex(
+var GetDirectoryUserRecordByPeerKey, GetDirectoryUserRecordIDByPeerKey = UniqueIndex(
 	directoryUserRecordPeerKeyNS,
 	DirectoryUserRecords,
 	directoryUserRecordPeerKeyKey,

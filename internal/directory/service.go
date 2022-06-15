@@ -205,7 +205,7 @@ func (d *directoryService) publishConfig(ctx context.Context, network *networkv1
 			Swarm:      config.GetIntegrations().GetSwarm().GetEnable(),
 		},
 		PublishQuota:    config.GetPublishQuota(),
-		ViewQuota:       config.GetViewQuota(),
+		JoinQuota:       config.GetJoinQuota(),
 		MinPingInterval: config.GetMinPingInterval(),
 		MaxPingInterval: config.GetMaxPingInterval(),
 	})
@@ -246,8 +246,8 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 				},
 			})
 			events = append(events, &networkv1directory.Event{
-				Body: &networkv1directory.Event_ViewerCountChange_{
-					ViewerCountChange: &networkv1directory.Event_ViewerCountChange{
+				Body: &networkv1directory.Event_UserCountChange_{
+					UserCountChange: &networkv1directory.Event_UserCountChange{
 						Id:    l.id,
 						Count: uint32(l.publishers.Len() + l.viewers.Len()),
 					},
@@ -286,8 +286,8 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 			})
 		} else {
 			events = append(events, &networkv1directory.Event{
-				Body: &networkv1directory.Event_ViewerCountChange_{
-					ViewerCountChange: &networkv1directory.Event_ViewerCountChange{
+				Body: &networkv1directory.Event_UserCountChange_{
+					UserCountChange: &networkv1directory.Event_UserCountChange{
 						Id:    l.id,
 						Count: uint32(l.publishers.Len() + l.viewers.Len()),
 					},
@@ -309,8 +309,8 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 		}
 
 		events = append(events, &networkv1directory.Event{
-			Body: &networkv1directory.Event_ViewerStateChange_{
-				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+			Body: &networkv1directory.Event_UserPresenceChange_{
+				UserPresenceChange: &networkv1directory.Event_UserPresenceChange{
 					Id:      u.id,
 					Alias:   u.certificate.Subject,
 					PeerKey: u.certificate.Key,
@@ -335,8 +335,8 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u *user) []*networkv1directory.Event {
 	return append(events, &networkv1directory.Event{
-		Body: &networkv1directory.Event_ViewerStateChange_{
-			ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+		Body: &networkv1directory.Event_UserPresenceChange_{
+			UserPresenceChange: &networkv1directory.Event_UserPresenceChange{
 				Id:         u.id,
 				Alias:      u.certificate.Subject,
 				PeerKey:    u.certificate.Key,

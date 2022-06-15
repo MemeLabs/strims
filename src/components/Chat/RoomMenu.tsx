@@ -6,7 +6,7 @@ import "./RoomMenu.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
-import React, { forwardRef, useContext, useMemo, useState } from "react";
+import React, { forwardRef, useContext, useEffect, useMemo, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { HiOutlineUser } from "react-icons/hi";
 
@@ -15,6 +15,7 @@ import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Network } from "../../apis/strims/network/v1/network";
 import { ThreadProviderProps, useChat } from "../../contexts/Chat";
 import { DirectoryContext, DirectoryUser } from "../../contexts/Directory";
+import { useClient } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
@@ -27,7 +28,7 @@ export interface RoomMenuItem {
   directoryListingId?: bigint;
   networkKey: Uint8Array;
   serverKey: Uint8Array;
-  viewerCount: number;
+  userCount: number;
   name: string;
 }
 
@@ -109,7 +110,7 @@ const RoomsListItem: React.FC<RoomsListItemProps> = ({ onChange, chat }) => {
     <button className="rooms_list__network_rooms_item" onClick={handleClick} key={chat.key}>
       <span className="rooms_list__network_rooms_item__name">{chat.name}</span>
       <span className="rooms_list__network_rooms_item__viewers">
-        {chat.viewerCount.toLocaleString()}
+        {chat.userCount.toLocaleString()}
         <HiOutlineUser />
       </span>
     </button>
@@ -129,7 +130,7 @@ const RoomsList: React.FC<RoomMenuProps> = ({ onChange }) => {
       }
 
       const rooms: RoomMenuItem[] = [];
-      for (const { id, listing, viewerCount } of directory.listings.values()) {
+      for (const { id, listing, userCount } of directory.listings.values()) {
         if (listing?.content?.case !== directoryv1.Listing.ContentCase.CHAT) {
           continue;
         }
@@ -140,7 +141,7 @@ const RoomsList: React.FC<RoomMenuProps> = ({ onChange }) => {
           directoryListingId: id,
           networkKey,
           serverKey: key,
-          viewerCount,
+          userCount,
           name,
         });
       }
@@ -277,6 +278,16 @@ interface RoomUserThing extends RoomMenuProps {
 }
 
 const UsersList: React.FC<RoomMenuProps> = ({ onChange }) => {
+  const client = useClient();
+  useEffect(() => {
+    void (async () => {
+      console.time("load users");
+      const users = await client.directory.getUsers();
+      console.timeEnd("load users");
+      console.log(users);
+    })();
+  }, []);
+
   const { directories } = useContext(DirectoryContext);
   const users = useMemo(() => {
     const users = new Map<string, RoomUserThing>();

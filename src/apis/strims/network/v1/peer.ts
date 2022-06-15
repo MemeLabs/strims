@@ -229,8 +229,7 @@ export class NetworkPeerCloseRequest {
   }
 }
 
-export type INetworkPeerCloseResponse = {
-}
+export type INetworkPeerCloseResponse = Record<string, any>;
 
 export class NetworkPeerCloseResponse {
 
@@ -285,8 +284,7 @@ export class NetworkPeerUpdateCertificateRequest {
   }
 }
 
-export type INetworkPeerUpdateCertificateResponse = {
-}
+export type INetworkPeerUpdateCertificateResponse = Record<string, any>;
 
 export class NetworkPeerUpdateCertificateResponse {
 

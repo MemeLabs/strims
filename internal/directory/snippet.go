@@ -33,8 +33,8 @@ func diffSnippets(a, b *networkv1directory.ListingSnippet) *networkv1directory.L
 	if a.ChannelName != b.ChannelName {
 		delta.ChannelName = &wrapperspb.StringValue{Value: b.ChannelName}
 	}
-	if a.ViewerCount != b.ViewerCount {
-		delta.ViewerCount = &wrapperspb.UInt64Value{Value: b.ViewerCount}
+	if a.UserCount != b.UserCount {
+		delta.UserCount = &wrapperspb.UInt64Value{Value: b.UserCount}
 	}
 	if a.Live != b.Live {
 		delta.Live = &wrapperspb.BoolValue{Value: b.Live}
@@ -87,8 +87,8 @@ func mergeSnippet(snippet *networkv1directory.ListingSnippet, delta *networkv1di
 	if delta.ChannelName != nil {
 		snippet.ChannelName = delta.ChannelName.Value
 	}
-	if delta.ViewerCount != nil {
-		snippet.ViewerCount = delta.ViewerCount.Value
+	if delta.UserCount != nil {
+		snippet.UserCount = delta.UserCount.Value
 	}
 	if delta.Live != nil {
 		snippet.Live = delta.Live.Value

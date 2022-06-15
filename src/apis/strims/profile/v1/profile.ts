@@ -85,8 +85,7 @@ export class UpdateProfileResponse {
   }
 }
 
-export type IGetProfileRequest = {
-}
+export type IGetProfileRequest = Record<string, any>;
 
 export class GetProfileRequest {
 

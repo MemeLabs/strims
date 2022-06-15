@@ -24,6 +24,7 @@ import {
   WhisperThread,
 } from "../apis/strims/chat/v1/chat";
 import { FrontendJoinResponse, Listing } from "../apis/strims/network/v1/directory/directory";
+import { useUserList } from "../hooks/chat";
 import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { updateInStateMap } from "../lib/setInStateMap";
@@ -172,7 +173,7 @@ const initialState: State = {
     shortenLinks: true,
     compactEmoteSpacing: false,
     normalizeAliasCase: true,
-    viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
+    userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
   }),
   config: {
     messageGCThreshold: 250,
@@ -198,7 +199,7 @@ type ChatActions = {
 
 const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(null);
 
-type RoomActions = {
+type ThreadActions = {
   sendMessage: (body: string) => void;
   getMessage: (index: number) => Message;
   getMessageCount: () => number;
@@ -208,7 +209,7 @@ type RoomActions = {
   toggleVisible: (visible: boolean) => void;
 };
 
-const RoomContext = React.createContext<[ThreadState, RoomActions]>(null);
+const ThreadContext = React.createContext<[ThreadState, ThreadActions]>(null);
 
 const formatKey = (key: Uint8Array) => Base64.fromUint8Array(key, true);
 
@@ -874,26 +875,6 @@ export const ThreadProvider: React.FC<ThreadProviderProps> = (props) => {
 
 ThreadProvider.displayName = "Thread.Provider";
 
-const useRoomNicks = (networkKey: Uint8Array, serverKey: Uint8Array) => {
-  const directory = useDirectory(networkKey);
-  const listing = useMemo(() => {
-    for (const listing of directory.listings.values()) {
-      const content = listing.listing.content;
-      if (content.case === Listing.ContentCase.CHAT && isEqual(content.chat.key, serverKey)) {
-        return listing;
-      }
-    }
-  }, [directory]);
-
-  return useMemo(() => {
-    const nicks: string[] = [];
-    for (const user of listing.viewers.values()) {
-      nicks.push(user.alias);
-    }
-    return nicks;
-  }, [listing]);
-};
-
 const useMessageAccessors = (messages: Message[]) => {
   const ref = useRef<Message[]>();
   ref.current = messages;
@@ -914,17 +895,17 @@ const RoomThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props 
     [props.type, props.topicKey]
   );
 
-  const nicks = useRoomNicks(thread.networkKey, thread.serverKey);
+  const nicks = useUserList(thread.networkKey, thread.serverKey);
   const messageAccessors = useMessageAccessors(thread.messages);
 
-  const value = useMemo<[ThreadState, RoomActions]>(
+  const value = useMemo<[ThreadState, ThreadActions]>(
     () => [
       { ...thread, nicks },
       { ...actions, ...messageAccessors },
     ],
     [thread, nicks]
   );
-  return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
+  return <ThreadContext.Provider value={value}>{children}</ThreadContext.Provider>;
 };
 
 const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props }) => {
@@ -939,13 +920,13 @@ const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...pro
 
   const messageAccessors = useMessageAccessors(thread.messages);
 
-  const value = useMemo<[ThreadState, RoomActions]>(
+  const value = useMemo<[ThreadState, ThreadActions]>(
     () => [thread, { ...actions, ...messageAccessors }],
     [thread]
   );
-  return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
+  return <ThreadContext.Provider value={value}>{children}</ThreadContext.Provider>;
 };
 
-export const useRoom = (): [ThreadState, RoomActions] => useContext(RoomContext);
+export const useRoom = (): [ThreadState, ThreadActions] => useContext(ThreadContext);
 
-export const RoomConsumer = RoomContext.Consumer;
+export const ThreadConsumer = ThreadContext.Consumer;

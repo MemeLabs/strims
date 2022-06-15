@@ -5,6 +5,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/app"
@@ -12,6 +13,7 @@ import (
 	"github.com/MemeLabs/strims/internal/directory"
 	"github.com/MemeLabs/strims/internal/event"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/hashmap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -93,27 +95,16 @@ func (s *directoryService) client(ctx context.Context, networkKey []byte) (*netw
 
 // Publish ...
 func (s *directoryService) Publish(ctx context.Context, r *networkv1directory.FrontendPublishRequest) (*networkv1directory.FrontendPublishResponse, error) {
-	client, err := s.client(ctx, r.NetworkKey)
+	id, err := s.app.Directory().Publish(ctx, r.Listing, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
-
-	res := &networkv1directory.PublishResponse{}
-	if err := client.Publish(ctx, &networkv1directory.PublishRequest{Listing: r.Listing}, res); err != nil {
-		return nil, err
-	}
-
-	return &networkv1directory.FrontendPublishResponse{Id: res.Id}, nil
+	return &networkv1directory.FrontendPublishResponse{Id: id}, nil
 }
 
 // Unpublish ...
 func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.FrontendUnpublishRequest) (*networkv1directory.FrontendUnpublishResponse, error) {
-	client, err := s.client(ctx, r.NetworkKey)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.Unpublish(ctx, &networkv1directory.UnpublishRequest{Id: r.Id}, &networkv1directory.UnpublishResponse{})
+	err := s.app.Directory().Unpublish(ctx, r.Id, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -122,27 +113,16 @@ func (s *directoryService) Unpublish(ctx context.Context, r *networkv1directory.
 
 // Join ...
 func (s *directoryService) Join(ctx context.Context, r *networkv1directory.FrontendJoinRequest) (*networkv1directory.FrontendJoinResponse, error) {
-	client, err := s.client(ctx, r.NetworkKey)
+	id, err := s.app.Directory().Join(ctx, r.Query, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
-
-	res := &networkv1directory.JoinResponse{}
-	err = client.Join(ctx, &networkv1directory.JoinRequest{Query: r.Query}, res)
-	if err != nil {
-		return nil, err
-	}
-	return &networkv1directory.FrontendJoinResponse{Id: res.Id}, nil
+	return &networkv1directory.FrontendJoinResponse{Id: id}, nil
 }
 
 // Part ...
 func (s *directoryService) Part(ctx context.Context, r *networkv1directory.FrontendPartRequest) (*networkv1directory.FrontendPartResponse, error) {
-	client, err := s.client(ctx, r.NetworkKey)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.Part(ctx, &networkv1directory.PartRequest{Id: r.Id}, &networkv1directory.PartResponse{})
+	err := s.app.Directory().Part(ctx, r.Id, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -249,16 +229,7 @@ func (s *directoryService) Test(ctx context.Context, r *networkv1directory.Front
 }
 
 func (s *directoryService) ModerateListing(ctx context.Context, r *networkv1directory.FrontendModerateListingRequest) (*networkv1directory.FrontendModerateListingResponse, error) {
-	client, err := s.client(ctx, r.NetworkKey)
-	if err != nil {
-		return nil, err
-	}
-
-	req := &networkv1directory.ModerateListingRequest{
-		Id:         r.Id,
-		Moderation: r.Moderation,
-	}
-	err = client.ModerateListing(ctx, req, &networkv1directory.ModerateListingResponse{})
+	err := s.app.Directory().ModerateListing(ctx, r.Id, r.Moderation, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -271,18 +242,111 @@ func (s *directoryService) ModerateUser(ctx context.Context, r *networkv1directo
 		return nil, err
 	}
 
-	client, err := s.client(ctx, r.NetworkKey)
-	if err != nil {
-		return nil, err
-	}
-
-	req := &networkv1directory.ModerateUserRequest{
-		PeerKey:    cert.Key,
-		Moderation: r.Moderation,
-	}
-	err = client.ModerateUser(ctx, req, &networkv1directory.ModerateUserResponse{})
+	err = s.app.Directory().ModerateUser(ctx, cert.Key, r.Moderation, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
 	return &networkv1directory.FrontendModerateUserResponse{}, nil
+}
+
+func (s *directoryService) GetUsers(ctx context.Context, r *networkv1directory.FrontendGetUsersRequest) (*networkv1directory.FrontendGetUsersResponse, error) {
+	res := &networkv1directory.FrontendGetUsersResponse{
+		Networks: map[uint64]*networkv1directory.FrontendGetUsersResponse_Network{},
+	}
+	users := hashmap.New[[]byte, *networkv1directory.FrontendGetUsersResponse_User](hashmap.NewByteInterface[[]byte]())
+
+	networks, err := dao.Networks.GetAll(s.store)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range networks {
+		res.Networks[n.Id] = &networkv1directory.FrontendGetUsersResponse_Network{
+			Id:   n.Id,
+			Name: dao.CertificateRoot(n.Certificate).Subject,
+			Key:  dao.NetworkKey(n),
+		}
+
+	EachNetworkUser:
+		for _, u := range s.app.Directory().GetUsersByNetworkID(n.Id) {
+			ru, ok := users.Get(u.PeerKey)
+			if !ok {
+				ru = &networkv1directory.FrontendGetUsersResponse_User{PeerKey: u.PeerKey}
+				users.Set(u.PeerKey, ru)
+				res.Users = append(res.Users, ru)
+			}
+
+			for _, a := range ru.Aliases {
+				if a.Alias == u.Alias {
+					a.NetworkIds = append(a.NetworkIds, n.Id)
+					continue EachNetworkUser
+				}
+			}
+
+			ru.Aliases = append(ru.Aliases, &networkv1directory.FrontendGetUsersResponse_Alias{
+				Alias:      u.Alias,
+				NetworkIds: []uint64{n.Id},
+			})
+		}
+	}
+
+	return res, nil
+}
+
+func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1directory.FrontendWatchListingUsersRequest) (<-chan *networkv1directory.FrontendWatchListingUsersResponse, error) {
+	networkID, err := dao.GetNetworkIDByKey(s.store, r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	listing, ok := s.app.Directory().GetListingByQuery(networkID, r.Query)
+	if !ok {
+		return nil, errors.New("listing not found")
+	}
+
+	users, events, err := s.app.Directory().WatchListingUsers(ctx, networkID, listing.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *networkv1directory.FrontendWatchListingUsersResponse, 1)
+	go func() {
+		res := &networkv1directory.FrontendWatchListingUsersResponse{
+			Type: networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_JOIN,
+		}
+		for _, u := range users {
+			res.Users = append(res.Users, &networkv1directory.FrontendWatchListingUsersResponse_User{
+				Id:      u.ID,
+				Alias:   u.Alias,
+				PeerKey: u.PeerKey,
+			})
+		}
+		ch <- res
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-events:
+				res := &networkv1directory.FrontendWatchListingUsersResponse{
+					Users: []*networkv1directory.FrontendWatchListingUsersResponse_User{{
+						Id:      e.User.ID,
+						Alias:   e.User.Alias,
+						PeerKey: e.User.PeerKey,
+					}},
+				}
+				switch e.Type {
+				case directory.JoinUserEventType:
+					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_JOIN
+				case directory.PartUserEventType:
+					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_PART
+				case directory.RenameUserEventType:
+					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_RENAME
+				}
+				ch <- res
+			}
+		}
+	}()
+
+	return ch, nil
 }

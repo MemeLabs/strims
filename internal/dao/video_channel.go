@@ -36,7 +36,7 @@ const (
 	videoChannelRemoteShare
 )
 
-var getVideoChannelByUniqueIndex = UniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
+var getVideoChannelByUniqueIndex, _ = UniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
 	var key []byte
 	switch o := v.Owner.(type) {
 	case *videov1.VideoChannel_LocalShare_:

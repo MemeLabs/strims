@@ -49,6 +49,12 @@ import {
   IFrontendModerateUserRequest,
   FrontendModerateUserRequest,
   FrontendModerateUserResponse,
+  IFrontendGetUsersRequest,
+  FrontendGetUsersRequest,
+  FrontendGetUsersResponse,
+  IFrontendWatchListingUsersRequest,
+  FrontendWatchListingUsersRequest,
+  FrontendWatchListingUsersResponse,
   ISnippetSubscribeRequest,
   SnippetSubscribeRequest,
   SnippetSubscribeResponse,
@@ -125,6 +131,8 @@ export interface DirectoryFrontendService {
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse;
   moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse;
   moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse;
+  getUsers(req: FrontendGetUsersRequest, call: strims_rpc_Call): Promise<FrontendGetUsersResponse> | FrontendGetUsersResponse;
+  watchListingUsers(req: FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<FrontendWatchListingUsersResponse>;
 }
 
 export class UnimplementedDirectoryFrontendService implements DirectoryFrontendService {
@@ -136,6 +144,8 @@ export class UnimplementedDirectoryFrontendService implements DirectoryFrontendS
   test(req: FrontendTestRequest, call: strims_rpc_Call): Promise<FrontendTestResponse> | FrontendTestResponse { throw new Error("not implemented"); }
   moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse { throw new Error("not implemented"); }
   moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse { throw new Error("not implemented"); }
+  getUsers(req: FrontendGetUsersRequest, call: strims_rpc_Call): Promise<FrontendGetUsersResponse> | FrontendGetUsersResponse { throw new Error("not implemented"); }
+  watchListingUsers(req: FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<FrontendWatchListingUsersResponse> { throw new Error("not implemented"); }
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
@@ -147,6 +157,8 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<FrontendTestRequest, FrontendTestResponse>("strims.network.v1.directory.DirectoryFrontend.Test", service.test.bind(service), FrontendTestRequest);
   host.registerMethod<FrontendModerateListingRequest, FrontendModerateListingResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.moderateListing.bind(service), FrontendModerateListingRequest);
   host.registerMethod<FrontendModerateUserRequest, FrontendModerateUserResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.moderateUser.bind(service), FrontendModerateUserRequest);
+  host.registerMethod<FrontendGetUsersRequest, FrontendGetUsersResponse>("strims.network.v1.directory.DirectoryFrontend.GetUsers", service.getUsers.bind(service), FrontendGetUsersRequest);
+  host.registerMethod<FrontendWatchListingUsersRequest, FrontendWatchListingUsersResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.watchListingUsers.bind(service), FrontendWatchListingUsersRequest);
 }
 
 export class DirectoryFrontendClient {
@@ -182,6 +194,14 @@ export class DirectoryFrontendClient {
 
   public moderateUser(req?: IFrontendModerateUserRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendModerateUserResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.ModerateUser", new FrontendModerateUserRequest(req)), FrontendModerateUserResponse, opts);
+  }
+
+  public getUsers(req?: IFrontendGetUsersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendGetUsersResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetUsers", new FrontendGetUsersRequest(req)), FrontendGetUsersResponse, opts);
+  }
+
+  public watchListingUsers(req?: IFrontendWatchListingUsersRequest): GenericReadable<FrontendWatchListingUsersResponse> {
+    return this.host.expectMany(this.host.call("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", new FrontendWatchListingUsersRequest(req)), FrontendWatchListingUsersResponse);
   }
 }
 

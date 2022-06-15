@@ -10,6 +10,7 @@ option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "SCH";
 
 import "type/key.proto";
+import "network/v1/directory/directory.proto";
 
 message ServerEvent {
   oneof body {
@@ -138,6 +139,7 @@ message Message {
       Bounds bounds = 1;
       string nick = 2;
       bytes peer_key = 3;
+      DirectoryRef viewed_listing = 4;
     }
 
     message Tag {
@@ -167,11 +169,19 @@ message Message {
     GenericEntity self_message = 8;
   }
 
+  message DirectoryRef {
+    uint64 directory_id = 1;
+    bytes network_key = 2;
+    network.v1.directory.Listing listing = 3;
+    uint32 themeColor = 4;
+  }
+
   int64 server_time = 1;
   bytes peer_key = 2;
   string nick = 3;
   string body = 4;
   Entities entities = 5;
+  DirectoryRef viewed_listing = 9;
 }
 
 message Profile {
@@ -197,11 +207,11 @@ message UIConfig {
     SHOW_REMOVED_DO_NOTHING = 2;
   }
 
-  enum ViewerStateIndicator {
-    VIEWER_STATE_INDICATOR_DISABLED = 0;
-    VIEWER_STATE_INDICATOR_BAR = 1;
-    VIEWER_STATE_INDICATOR_DOT = 2;
-    VIEWER_STATE_INDICATOR_ARRAY = 3;
+  enum UserPresenceIndicator {
+    USER_PRESENCE_INDICATOR_DISABLED = 0;
+    USER_PRESENCE_INDICATOR_BAR = 1;
+    USER_PRESENCE_INDICATOR_DOT = 2;
+    USER_PRESENCE_INDICATOR_ARRAY = 3;
   }
 
   message SoundFile {
@@ -255,7 +265,7 @@ message UIConfig {
   bool formatter_combo = 27;
   bool emote_modifiers = 28;
   bool disable_spoilers = 29;
-  ViewerStateIndicator viewer_state_indicator = 30;
+  UserPresenceIndicator user_presence_indicator = 30;
   repeated string hidden_emotes = 31;
   bool shorten_links = 32;
   bool compact_emote_spacing = 33;

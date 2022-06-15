@@ -1,14 +1,13 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./ViewerStateIndicator.scss";
+import "./UserPresenceIndicator.scss";
 
 import clsx from "clsx";
-import React, { useMemo } from "react";
+import React from "react";
 
-import { UIConfig } from "../../apis/strims/chat/v1/chat";
+import { Message, UIConfig } from "../../apis/strims/chat/v1/chat";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
-import { DirectoryListing, useDirectoryUser } from "../../contexts/Directory";
 
 const fnv1a = (input: string) => {
   let hash = 2166136261;
@@ -55,57 +54,47 @@ const createListingRng = (listing: Listing) => {
   }
 };
 
-const getListingColor = (listing: DirectoryListing) =>
-  listing
-    ? listing.snippet.themeColor
-      ? `#${listing.snippet.themeColor.toString(16)}`
-      : generateColor(createListingRng(listing.listing))
+const getListingColor = (directoryRef: Message.DirectoryRef) =>
+  directoryRef
+    ? directoryRef.themeColor
+      ? `#${directoryRef.themeColor.toString(16)}`
+      : generateColor(createListingRng(directoryRef.listing))
     : "";
 
-export interface ViewerStateIndicatorProps {
-  style: UIConfig.ViewerStateIndicator;
-  peerKey: Uint8Array;
+export interface UserPresenceIndicatorProps {
+  style: UIConfig.UserPresenceIndicator;
+  directoryRef: Message.DirectoryRef;
 }
 
-export const ViewerStateIndicator: React.FC<ViewerStateIndicatorProps> = ({ style, peerKey }) => {
-  const user = useDirectoryUser(peerKey);
-  const listing = useMemo(() => {
-    for (const { listings } of user) {
-      for (const listing of listings) {
-        switch (listing.listing.content.case) {
-          case Listing.ContentCase.EMBED:
-          case Listing.ContentCase.MEDIA:
-            return listing;
-        }
-      }
-    }
-  }, [user]);
-
+export const UserPresenceIndicator: React.FC<UserPresenceIndicatorProps> = ({
+  style,
+  directoryRef,
+}) => {
   switch (style) {
-    case UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED:
+    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED:
       return null;
-    case UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR:
-      return <BarImage listing={listing} />;
-    case UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DOT:
-      return <DotImage listing={listing} />;
-    case UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_ARRAY:
-      return <ArrayImage listing={listing} />;
+    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR:
+      return <BarImage directoryRef={directoryRef} />;
+    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT:
+      return <DotImage directoryRef={directoryRef} />;
+    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY:
+      return <ArrayImage directoryRef={directoryRef} />;
   }
 };
 
 interface ImageProps {
-  listing: DirectoryListing;
+  directoryRef: Message.DirectoryRef;
 }
 
-const BarImage: React.FC<ImageProps> = ({ listing }) => (
+const BarImage: React.FC<ImageProps> = ({ directoryRef }) => (
   <svg className={imageClassName("bar")} viewBox="0 0 15 100" xmlns="http://www.w3.org/2000/svg">
-    <rect width="15" height="100" style={{ "--fill-color": getListingColor(listing) }} />
+    <rect width="15" height="100" style={{ "--fill-color": getListingColor(directoryRef) }} />
   </svg>
 );
 
-const DotImage: React.FC<ImageProps> = ({ listing }) => (
+const DotImage: React.FC<ImageProps> = ({ directoryRef }) => (
   <svg className={imageClassName("dot")} viewBox="0 0 85 100" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="50" cy="50" r="30" style={{ "--fill-color": getListingColor(listing) }} />
+    <circle cx="50" cy="50" r="30" style={{ "--fill-color": getListingColor(directoryRef) }} />
   </svg>
 );
 
@@ -114,9 +103,9 @@ interface ArrayImageProps extends ImageProps {
   rows?: number;
 }
 
-const ArrayImage: React.FC<ArrayImageProps> = ({ listing, cols = 3, rows = 3 }) => {
-  const color = getListingColor(listing);
-  const rng = createListingRng(listing?.listing);
+const ArrayImage: React.FC<ArrayImageProps> = ({ directoryRef, cols = 3, rows = 3 }) => {
+  const color = getListingColor(directoryRef);
+  const rng = createListingRng(directoryRef?.listing);
 
   const size = 100;
   const steps = Math.max(cols, rows);

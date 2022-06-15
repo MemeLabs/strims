@@ -148,7 +148,7 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 func (d *chatService) handleDirectoryEvent(e event.DirectoryEvent) {
 	if bytes.Equal(e.NetworkKey, d.config.Get().NetworkKey) {
 		for _, e := range e.Broadcast.Events {
-			if e := e.GetViewerStateChange(); e != nil {
+			if e := e.GetUserPresenceChange(); e != nil {
 				if e.Online && slices.Contains(e.ListingIds, d.listingID) {
 					d.entityExtractor.AddNick(e.Alias, e.PeerKey)
 				} else {

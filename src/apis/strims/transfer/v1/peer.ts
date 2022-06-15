@@ -159,8 +159,7 @@ export class TransferPeerCloseRequest {
   }
 }
 
-export type ITransferPeerCloseResponse = {
-}
+export type ITransferPeerCloseResponse = Record<string, any>;
 
 export class TransferPeerCloseResponse {
 

@@ -231,8 +231,7 @@ export namespace Event {
 
 }
 
-export type IWatchRequest = {
-}
+export type IWatchRequest = Record<string, any>;
 
 export class WatchRequest {
 
@@ -323,8 +322,7 @@ export class DismissRequest {
   }
 }
 
-export type IDismissResponse = {
-}
+export type IDismissResponse = Record<string, any>;
 
 export class DismissResponse {
 

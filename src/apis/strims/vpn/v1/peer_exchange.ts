@@ -274,8 +274,7 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export type ICallbackRequest = {
-  }
+  export type ICallbackRequest = Record<string, any>;
 
   export class CallbackRequest {
 

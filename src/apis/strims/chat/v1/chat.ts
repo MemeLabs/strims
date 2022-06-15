@@ -5,6 +5,10 @@ import {
   Key as strims_type_Key,
   IKey as strims_type_IKey,
 } from "../../type/key";
+import {
+  Listing as strims_network_v1_directory_Listing,
+  IListing as strims_network_v1_directory_IListing,
+} from "../../network/v1/directory/directory";
 
 export type IServerEvent = {
   body?: ServerEvent.IBody
@@ -832,6 +836,7 @@ export type IMessage = {
   nick?: string;
   body?: string;
   entities?: Message.IEntities;
+  viewedListing?: Message.IDirectoryRef;
 }
 
 export class Message {
@@ -840,6 +845,7 @@ export class Message {
   nick: string;
   body: string;
   entities: Message.Entities | undefined;
+  viewedListing: Message.DirectoryRef | undefined;
 
   constructor(v?: IMessage) {
     this.serverTime = v?.serverTime || BigInt(0);
@@ -847,6 +853,7 @@ export class Message {
     this.nick = v?.nick || "";
     this.body = v?.body || "";
     this.entities = v?.entities && new Message.Entities(v.entities);
+    this.viewedListing = v?.viewedListing && new Message.DirectoryRef(v.viewedListing);
   }
 
   static encode(m: Message, w?: Writer): Writer {
@@ -856,6 +863,7 @@ export class Message {
     if (m.nick.length) w.uint32(26).string(m.nick);
     if (m.body.length) w.uint32(34).string(m.body);
     if (m.entities) Message.Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
+    if (m.viewedListing) Message.DirectoryRef.encode(m.viewedListing, w.uint32(74).fork()).ldelim();
     return w;
   }
 
@@ -880,6 +888,9 @@ export class Message {
         break;
         case 5:
         m.entities = Message.Entities.decode(r, r.uint32());
+        break;
+        case 9:
+        m.viewedListing = Message.DirectoryRef.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1124,17 +1135,20 @@ export namespace Message {
       bounds?: Message.Entities.IBounds;
       nick?: string;
       peerKey?: Uint8Array;
+      viewedListing?: Message.IDirectoryRef;
     }
 
     export class Nick {
       bounds: Message.Entities.Bounds | undefined;
       nick: string;
       peerKey: Uint8Array;
+      viewedListing: Message.DirectoryRef | undefined;
 
       constructor(v?: INick) {
         this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
         this.nick = v?.nick || "";
         this.peerKey = v?.peerKey || new Uint8Array();
+        this.viewedListing = v?.viewedListing && new Message.DirectoryRef(v.viewedListing);
       }
 
       static encode(m: Nick, w?: Writer): Writer {
@@ -1142,6 +1156,7 @@ export namespace Message {
         if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.nick.length) w.uint32(18).string(m.nick);
         if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+        if (m.viewedListing) Message.DirectoryRef.encode(m.viewedListing, w.uint32(34).fork()).ldelim();
         return w;
       }
 
@@ -1160,6 +1175,9 @@ export namespace Message {
             break;
             case 3:
             m.peerKey = r.bytes();
+            break;
+            case 4:
+            m.viewedListing = Message.DirectoryRef.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -1321,6 +1339,63 @@ export namespace Message {
       }
     }
 
+  }
+
+  export type IDirectoryRef = {
+    directoryId?: bigint;
+    networkKey?: Uint8Array;
+    listing?: strims_network_v1_directory_IListing;
+    themeColor?: number;
+  }
+
+  export class DirectoryRef {
+    directoryId: bigint;
+    networkKey: Uint8Array;
+    listing: strims_network_v1_directory_Listing | undefined;
+    themeColor: number;
+
+    constructor(v?: IDirectoryRef) {
+      this.directoryId = v?.directoryId || BigInt(0);
+      this.networkKey = v?.networkKey || new Uint8Array();
+      this.listing = v?.listing && new strims_network_v1_directory_Listing(v.listing);
+      this.themeColor = v?.themeColor || 0;
+    }
+
+    static encode(m: DirectoryRef, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.directoryId) w.uint32(8).uint64(m.directoryId);
+      if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
+      if (m.listing) strims_network_v1_directory_Listing.encode(m.listing, w.uint32(26).fork()).ldelim();
+      if (m.themeColor) w.uint32(32).uint32(m.themeColor);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): DirectoryRef {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new DirectoryRef();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.directoryId = r.uint64();
+          break;
+          case 2:
+          m.networkKey = r.bytes();
+          break;
+          case 3:
+          m.listing = strims_network_v1_directory_Listing.decode(r, r.uint32());
+          break;
+          case 4:
+          m.themeColor = r.uint32();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
   }
 
 }
@@ -1486,7 +1561,7 @@ export type IUIConfig = {
   formatterCombo?: boolean;
   emoteModifiers?: boolean;
   disableSpoilers?: boolean;
-  viewerStateIndicator?: UIConfig.ViewerStateIndicator;
+  userPresenceIndicator?: UIConfig.UserPresenceIndicator;
   hiddenEmotes?: string[];
   shortenLinks?: boolean;
   compactEmoteSpacing?: boolean;
@@ -1523,7 +1598,7 @@ export class UIConfig {
   formatterCombo: boolean;
   emoteModifiers: boolean;
   disableSpoilers: boolean;
-  viewerStateIndicator: UIConfig.ViewerStateIndicator;
+  userPresenceIndicator: UIConfig.UserPresenceIndicator;
   hiddenEmotes: string[];
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
@@ -1559,7 +1634,7 @@ export class UIConfig {
     this.formatterCombo = v?.formatterCombo || false;
     this.emoteModifiers = v?.emoteModifiers || false;
     this.disableSpoilers = v?.disableSpoilers || false;
-    this.viewerStateIndicator = v?.viewerStateIndicator || 0;
+    this.userPresenceIndicator = v?.userPresenceIndicator || 0;
     this.hiddenEmotes = v?.hiddenEmotes ? v.hiddenEmotes : [];
     this.shortenLinks = v?.shortenLinks || false;
     this.compactEmoteSpacing = v?.compactEmoteSpacing || false;
@@ -1597,7 +1672,7 @@ export class UIConfig {
     if (m.formatterCombo) w.uint32(216).bool(m.formatterCombo);
     if (m.emoteModifiers) w.uint32(224).bool(m.emoteModifiers);
     if (m.disableSpoilers) w.uint32(232).bool(m.disableSpoilers);
-    if (m.viewerStateIndicator) w.uint32(240).uint32(m.viewerStateIndicator);
+    if (m.userPresenceIndicator) w.uint32(240).uint32(m.userPresenceIndicator);
     for (const v of m.hiddenEmotes) w.uint32(250).string(v);
     if (m.shortenLinks) w.uint32(256).bool(m.shortenLinks);
     if (m.compactEmoteSpacing) w.uint32(264).bool(m.compactEmoteSpacing);
@@ -1700,7 +1775,7 @@ export class UIConfig {
         m.disableSpoilers = r.bool();
         break;
         case 30:
-        m.viewerStateIndicator = r.uint32();
+        m.userPresenceIndicator = r.uint32();
         break;
         case 31:
         m.hiddenEmotes.push(r.string())
@@ -1915,11 +1990,11 @@ export namespace UIConfig {
     SHOW_REMOVED_CENSOR = 1,
     SHOW_REMOVED_DO_NOTHING = 2,
   }
-  export enum ViewerStateIndicator {
-    VIEWER_STATE_INDICATOR_DISABLED = 0,
-    VIEWER_STATE_INDICATOR_BAR = 1,
-    VIEWER_STATE_INDICATOR_DOT = 2,
-    VIEWER_STATE_INDICATOR_ARRAY = 3,
+  export enum UserPresenceIndicator {
+    USER_PRESENCE_INDICATOR_DISABLED = 0,
+    USER_PRESENCE_INDICATOR_BAR = 1,
+    USER_PRESENCE_INDICATOR_DOT = 2,
+    USER_PRESENCE_INDICATOR_ARRAY = 3,
   }
 }
 
@@ -2124,8 +2199,7 @@ export class DeleteServerRequest {
   }
 }
 
-export type IDeleteServerResponse = {
-}
+export type IDeleteServerResponse = Record<string, any>;
 
 export class DeleteServerResponse {
 
@@ -2216,8 +2290,7 @@ export class GetServerResponse {
   }
 }
 
-export type IListServersRequest = {
-}
+export type IListServersRequest = Record<string, any>;
 
 export class ListServersRequest {
 
@@ -2536,8 +2609,7 @@ export class DeleteEmoteRequest {
   }
 }
 
-export type IDeleteEmoteResponse = {
-}
+export type IDeleteEmoteResponse = Record<string, any>;
 
 export class DeleteEmoteResponse {
 
@@ -2936,8 +3008,7 @@ export class DeleteModifierRequest {
   }
 }
 
-export type IDeleteModifierResponse = {
-}
+export type IDeleteModifierResponse = Record<string, any>;
 
 export class DeleteModifierResponse {
 
@@ -3336,8 +3407,7 @@ export class DeleteTagRequest {
   }
 }
 
-export type IDeleteTagResponse = {
-}
+export type IDeleteTagResponse = Record<string, any>;
 
 export class DeleteTagResponse {
 
@@ -3735,8 +3805,7 @@ export namespace OpenClientResponse {
     >;
   };
 
-  export type IOpen = {
-  }
+  export type IOpen = Record<string, any>;
 
   export class Open {
 
@@ -3843,8 +3912,7 @@ export class ClientSendMessageRequest {
   }
 }
 
-export type IClientSendMessageResponse = {
-}
+export type IClientSendMessageResponse = Record<string, any>;
 
 export class ClientSendMessageResponse {
 
@@ -3927,8 +3995,7 @@ export class ClientMuteRequest {
   }
 }
 
-export type IClientMuteResponse = {
-}
+export type IClientMuteResponse = Record<string, any>;
 
 export class ClientMuteResponse {
 
@@ -3997,8 +4064,7 @@ export class ClientUnmuteRequest {
   }
 }
 
-export type IClientUnmuteResponse = {
-}
+export type IClientUnmuteResponse = Record<string, any>;
 
 export class ClientUnmuteResponse {
 
@@ -4167,8 +4233,7 @@ export class WhisperRequest {
   }
 }
 
-export type IWhisperResponse = {
-}
+export type IWhisperResponse = Record<string, any>;
 
 export class WhisperResponse {
 
@@ -4266,8 +4331,7 @@ export class ListWhispersResponse {
   }
 }
 
-export type IWatchWhispersRequest = {
-}
+export type IWatchWhispersRequest = Record<string, any>;
 
 export class WatchWhispersRequest {
 
@@ -4480,8 +4544,7 @@ export class MarkWhispersReadRequest {
   }
 }
 
-export type IMarkWhispersReadResponse = {
-}
+export type IMarkWhispersReadResponse = Record<string, any>;
 
 export class MarkWhispersReadResponse {
 
@@ -4536,8 +4599,7 @@ export class SetUIConfigRequest {
   }
 }
 
-export type ISetUIConfigResponse = {
-}
+export type ISetUIConfigResponse = Record<string, any>;
 
 export class SetUIConfigResponse {
 
@@ -4556,8 +4618,7 @@ export class SetUIConfigResponse {
   }
 }
 
-export type IWatchUIConfigRequest = {
-}
+export type IWatchUIConfigRequest = Record<string, any>;
 
 export class WatchUIConfigRequest {
 
@@ -4662,8 +4723,7 @@ export class IgnoreRequest {
   }
 }
 
-export type IIgnoreResponse = {
-}
+export type IIgnoreResponse = Record<string, any>;
 
 export class IgnoreResponse {
 
@@ -4732,8 +4792,7 @@ export class UnignoreRequest {
   }
 }
 
-export type IUnignoreResponse = {
-}
+export type IUnignoreResponse = Record<string, any>;
 
 export class UnignoreResponse {
 
@@ -4795,8 +4854,7 @@ export class HighlightRequest {
   }
 }
 
-export type IHighlightResponse = {
-}
+export type IHighlightResponse = Record<string, any>;
 
 export class HighlightResponse {
 
@@ -4865,8 +4923,7 @@ export class UnhighlightRequest {
   }
 }
 
-export type IUnhighlightResponse = {
-}
+export type IUnhighlightResponse = Record<string, any>;
 
 export class UnhighlightResponse {
 
@@ -4935,8 +4992,7 @@ export class TagRequest {
   }
 }
 
-export type ITagResponse = {
-}
+export type ITagResponse = Record<string, any>;
 
 export class TagResponse {
 
@@ -5005,8 +5061,7 @@ export class UntagRequest {
   }
 }
 
-export type IUntagResponse = {
-}
+export type IUntagResponse = Record<string, any>;
 
 export class UntagResponse {
 
@@ -5061,8 +5116,7 @@ export class SendMessageRequest {
   }
 }
 
-export type ISendMessageResponse = {
-}
+export type ISendMessageResponse = Record<string, any>;
 
 export class SendMessageResponse {
 
@@ -5131,8 +5185,7 @@ export class MuteRequest {
   }
 }
 
-export type IMuteResponse = {
-}
+export type IMuteResponse = Record<string, any>;
 
 export class MuteResponse {
 
@@ -5187,8 +5240,7 @@ export class UnmuteRequest {
   }
 }
 
-export type IUnmuteResponse = {
-}
+export type IUnmuteResponse = Record<string, any>;
 
 export class UnmuteResponse {
 
@@ -5207,8 +5259,7 @@ export class UnmuteResponse {
   }
 }
 
-export type IGetMuteRequest = {
-}
+export type IGetMuteRequest = Record<string, any>;
 
 export class GetMuteRequest {
 
@@ -5478,8 +5529,7 @@ export class WhisperSendMessageRequest {
   }
 }
 
-export type IWhisperSendMessageResponse = {
-}
+export type IWhisperSendMessageResponse = Record<string, any>;
 
 export class WhisperSendMessageResponse {
 

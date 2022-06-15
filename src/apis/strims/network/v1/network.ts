@@ -265,8 +265,7 @@ export class DeleteNetworkRequest {
   }
 }
 
-export type IDeleteNetworkResponse = {
-}
+export type IDeleteNetworkResponse = Record<string, any>;
 
 export class DeleteNetworkResponse {
 
@@ -357,8 +356,7 @@ export class GetNetworkResponse {
   }
 }
 
-export type IListNetworksRequest = {
-}
+export type IListNetworksRequest = Record<string, any>;
 
 export class ListNetworksRequest {
 
@@ -1223,8 +1221,7 @@ export class UIConfig {
   }
 }
 
-export type IWatchNetworksRequest = {
-}
+export type IWatchNetworksRequest = Record<string, any>;
 
 export class WatchNetworksRequest {
 
@@ -1315,8 +1312,7 @@ export class UpdateDisplayOrderRequest {
   }
 }
 
-export type IUpdateDisplayOrderResponse = {
-}
+export type IUpdateDisplayOrderResponse = Record<string, any>;
 
 export class UpdateDisplayOrderResponse {
 
@@ -1414,8 +1410,7 @@ export class UpdateAliasResponse {
   }
 }
 
-export type IGetUIConfigRequest = {
-}
+export type IGetUIConfigRequest = Record<string, any>;
 
 export class GetUIConfigRequest {
 

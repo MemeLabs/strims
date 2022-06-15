@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/strims/internal/app"
 	"github.com/MemeLabs/strims/internal/dao"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/chanutil"
 	"github.com/MemeLabs/strims/pkg/kv"
@@ -277,6 +278,38 @@ func (s *chatService) SyncAssets(ctx context.Context, req *chatv1.SyncAssetsRequ
 	return &chatv1.SyncAssetsResponse{}, nil
 }
 
+func (s *chatService) getViewedListingByPeerKey(peerKey []byte) *chatv1.Message_DirectoryRef {
+	ls := s.app.Directory().GetListingsByPeerKey(peerKey)
+	for _, nl := range ls {
+		for _, l := range nl.Listings {
+			switch l.Listing.Content.(type) {
+			case *networkv1directory.Listing_Media_:
+			case *networkv1directory.Listing_Embed_:
+				return &chatv1.Message_DirectoryRef{
+					DirectoryId: l.ID,
+					NetworkKey:  nl.NetworkKey,
+					Listing:     l.Listing,
+					ThemeColor:  l.Snippet.GetThemeColor(),
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (s *chatService) extendServerEvents(events []*chatv1.ServerEvent) []*chatv1.ServerEvent {
+	for _, e := range events {
+		switch b := e.Body.(type) {
+		case *chatv1.ServerEvent_Message:
+			b.Message.ViewedListing = s.getViewedListingByPeerKey(b.Message.PeerKey)
+			for _, n := range b.Message.Entities.Nicks {
+				n.ViewedListing = s.getViewedListingByPeerKey(n.PeerKey)
+			}
+		}
+	}
+	return events
+}
+
 // OpenClient ...
 func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequest) (<-chan *chatv1.OpenClientResponse, error) {
 	ch := make(chan *chatv1.OpenClientResponse)
@@ -304,7 +337,7 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 				ch <- &chatv1.OpenClientResponse{
 					Body: &chatv1.OpenClientResponse_ServerEvents_{
 						ServerEvents: &chatv1.OpenClientResponse_ServerEvents{
-							Events: chanutil.AppendAll([]*chatv1.ServerEvent{e}, events),
+							Events: s.extendServerEvents(chanutil.AppendAll([]*chatv1.ServerEvent{e}, events)),
 						},
 					},
 				}

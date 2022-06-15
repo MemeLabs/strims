@@ -6,8 +6,7 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../../type/certificate";
 
-export type IBootstrapPeerGetPublishEnabledRequest = {
-}
+export type IBootstrapPeerGetPublishEnabledRequest = Record<string, any>;
 
 export class BootstrapPeerGetPublishEnabledRequest {
 
@@ -62,8 +61,7 @@ export class BootstrapPeerGetPublishEnabledResponse {
   }
 }
 
-export type IBootstrapPeerListNetworksRequest = {
-}
+export type IBootstrapPeerListNetworksRequest = Record<string, any>;
 
 export class BootstrapPeerListNetworksRequest {
 
@@ -82,8 +80,7 @@ export class BootstrapPeerListNetworksRequest {
   }
 }
 
-export type IBootstrapPeerListNetworksResponse = {
-}
+export type IBootstrapPeerListNetworksResponse = Record<string, any>;
 
 export class BootstrapPeerListNetworksResponse {
 
@@ -138,8 +135,7 @@ export class BootstrapPeerPublishRequest {
   }
 }
 
-export type IBootstrapPeerPublishResponse = {
-}
+export type IBootstrapPeerPublishResponse = Record<string, any>;
 
 export class BootstrapPeerPublishResponse {
 

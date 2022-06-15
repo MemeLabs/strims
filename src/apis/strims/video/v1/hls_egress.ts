@@ -45,8 +45,7 @@ export class HLSEgressConfig {
   }
 }
 
-export type IHLSEgressIsSupportedRequest = {
-}
+export type IHLSEgressIsSupportedRequest = Record<string, any>;
 
 export class HLSEgressIsSupportedRequest {
 
@@ -101,8 +100,7 @@ export class HLSEgressIsSupportedResponse {
   }
 }
 
-export type IHLSEgressGetConfigRequest = {
-}
+export type IHLSEgressGetConfigRequest = Record<string, any>;
 
 export class HLSEgressGetConfigRequest {
 
@@ -344,8 +342,7 @@ export class HLSEgressCloseStreamRequest {
   }
 }
 
-export type IHLSEgressCloseStreamResponse = {
-}
+export type IHLSEgressCloseStreamResponse = Record<string, any>;
 
 export class HLSEgressCloseStreamResponse {
 

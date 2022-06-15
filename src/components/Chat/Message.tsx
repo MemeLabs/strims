@@ -13,7 +13,7 @@ import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/c
 import { useRoom } from "../../contexts/Chat";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import Emote from "./Emote";
-import { ViewerStateIndicator } from "./ViewerStateIndicator";
+import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
 const LINK_SHORTEN_AFFIX_LENGTH = 35;
@@ -309,7 +309,7 @@ const ComboMessage: React.FC<MessageProps> = ({
 
 const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
-  message: { nick, peerKey, serverTime, body, entities },
+  message: { nick, peerKey, viewedListing, serverTime, body, entities },
   className: baseClassName,
   isContinued,
   ...props
@@ -387,8 +387,11 @@ const StandardMessage: React.FC<MessageProps> = ({
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
       <span className="chat__message__author" onClick={handleAuthorClick}>
-        {!!uiConfig.viewerStateIndicator && (
-          <ViewerStateIndicator style={uiConfig.viewerStateIndicator} peerKey={peerKey} />
+        {!!uiConfig.userPresenceIndicator && (
+          <UserPresenceIndicator
+            style={uiConfig.userPresenceIndicator}
+            directoryRef={viewedListing}
+          />
         )}
         <span className="chat__message__author__text">{nick}</span>
       </span>

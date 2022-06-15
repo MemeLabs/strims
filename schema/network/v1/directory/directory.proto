@@ -41,7 +41,7 @@ message ServerConfig {
 
   Integrations integrations = 1;
   uint32 publish_quota= 2;
-  uint32 view_quota= 3;
+  uint32 join_quota= 3;
   uint32 broadcast_interval = 4;
   uint32 refresh_interval = 5;
   uint32 session_timeout = 6;
@@ -61,7 +61,7 @@ message ClientConfig {
 
   Integrations integrations = 1;
   uint32 publish_quota= 2;
-  uint32 view_quota= 3;
+  uint32 join_quota= 3;
   uint32 min_ping_interval = 4;
   uint32 max_ping_interval = 5;
 }
@@ -125,7 +125,7 @@ message ListingSnippet {
   repeated string tags = 3;
   string category = 4;
   string channel_name = 5;
-  uint64 viewer_count = 6;
+  uint64 user_count = 6;
   bool live = 7;
   bool is_mature = 8;
   ListingSnippetImage thumbnail = 9;
@@ -147,7 +147,7 @@ message ListingSnippetDelta {
   google.protobuf.StringValue description = 2;
   google.protobuf.StringValue category = 3;
   google.protobuf.StringValue channel_name = 4;
-  google.protobuf.UInt64Value viewer_count = 5;
+  google.protobuf.UInt64Value user_count = 5;
   google.protobuf.BoolValue live = 6;
   google.protobuf.BoolValue is_mature = 7;
   google.protobuf.BytesValue key = 8;
@@ -181,12 +181,12 @@ message Event {
     uint64 id = 1;
   }
 
-  message ViewerCountChange {
+  message UserCountChange {
     uint64 id = 1;
     uint32 count = 2;
   }
 
-  message ViewerStateChange {
+  message UserPresenceChange {
     uint64 id = 1;
     string alias = 2;
     bytes peer_key = 3;
@@ -201,8 +201,8 @@ message Event {
   oneof body {
     ListingChange listing_change = 1001;
     Unpublish unpublish = 1002;
-    ViewerCountChange viewer_count_change = 1003;
-    ViewerStateChange viewer_state_change = 1004;
+    UserCountChange user_count_change = 1003;
+    UserPresenceChange user_presence_change = 1004;
     Ping ping = 1005;
   }
 }
@@ -283,18 +283,14 @@ message ModerateListingRequest {
   ListingModeration moderation = 2;
 }
 
-message ModerateListingResponse {
-
-}
+message ModerateListingResponse {}
 
 message ModerateUserRequest {
   bytes peer_key = 1;
   UserModeration moderation = 2;
 }
 
-message ModerateUserResponse {
-
-}
+message ModerateUserResponse {}
 
 service Directory {
   rpc Publish(PublishRequest) returns (PublishResponse);
@@ -364,9 +360,7 @@ message FrontendModerateListingRequest {
   ListingModeration moderation = 3;
 }
 
-message FrontendModerateListingResponse {
-
-}
+message FrontendModerateListingResponse {}
 
 message FrontendModerateUserRequest {
   bytes network_key = 1;
@@ -374,8 +368,52 @@ message FrontendModerateUserRequest {
   UserModeration moderation = 3;
 }
 
-message FrontendModerateUserResponse {
+message FrontendModerateUserResponse {}
 
+message FrontendGetUsersRequest {}
+
+message FrontendGetUsersResponse {
+  message Alias {
+    string alias = 1;
+    repeated uint64 network_ids = 2;
+  }
+
+  message User {
+    repeated Alias aliases = 1;
+    bytes peer_key = 2;
+  }
+
+  message Network {
+    uint64 id = 1;
+    string name = 2;
+    bytes key = 3;
+  }
+
+  repeated User users = 1;
+  map<uint64, Network> networks = 2;
+  map<string, Network> memes = 3;
+}
+
+message FrontendWatchListingUsersRequest {
+  bytes network_key = 1;
+  ListingQuery query = 2;
+}
+
+message FrontendWatchListingUsersResponse {
+  enum UserEventType {
+    USER_EVENT_TYPE_JOIN = 0;
+    USER_EVENT_TYPE_PART = 1;
+    USER_EVENT_TYPE_RENAME = 2;
+  }
+
+  message User {
+    uint64 id = 1;
+    string Alias = 2;
+    bytes peer_key = 3;
+  }
+
+  UserEventType type = 1;
+  repeated User users = 2;
 }
 
 service DirectoryFrontend {
@@ -388,6 +426,9 @@ service DirectoryFrontend {
 
   rpc ModerateListing(FrontendModerateListingRequest) returns (FrontendModerateListingResponse);
   rpc ModerateUser(FrontendModerateUserRequest) returns (FrontendModerateUserResponse);
+
+  rpc GetUsers(FrontendGetUsersRequest) returns (FrontendGetUsersResponse);
+  rpc WatchListingUsers(FrontendWatchListingUsersRequest) returns (stream FrontendWatchListingUsersResponse);
 }
 
 message SnippetSubscribeRequest {

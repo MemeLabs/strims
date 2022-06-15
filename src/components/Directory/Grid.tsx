@@ -23,7 +23,7 @@ const EMPTY_SNIPPET = new ListingSnippet();
 const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   listing,
   snippet,
-  viewerCount,
+  userCount,
   networkKey,
 }) => {
   const layout = useLayout();
@@ -61,8 +61,8 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
           source={snippet.thumbnail}
         />
         <span className="directory_grid__item__viewer_count">
-          {formatNumber(Number(snippet.viewerCount))}{" "}
-          {snippet.viewerCount === BigInt(1) ? "viewer" : "viewers"}
+          {formatNumber(Number(snippet.userCount))}{" "}
+          {snippet.userCount === BigInt(1) ? "viewer" : "viewers"}
         </span>
       </button>
       <div className="directory_grid__item__channel">

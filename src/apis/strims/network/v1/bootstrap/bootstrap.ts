@@ -405,8 +405,7 @@ export class DeleteBootstrapClientRequest {
   }
 }
 
-export type IDeleteBootstrapClientResponse = {
-}
+export type IDeleteBootstrapClientResponse = Record<string, any>;
 
 export class DeleteBootstrapClientResponse {
 
@@ -497,8 +496,7 @@ export class GetBootstrapClientResponse {
   }
 }
 
-export type IListBootstrapClientsRequest = {
-}
+export type IListBootstrapClientsRequest = Record<string, any>;
 
 export class ListBootstrapClientsRequest {
 
@@ -553,8 +551,7 @@ export class ListBootstrapClientsResponse {
   }
 }
 
-export type IListBootstrapPeersRequest = {
-}
+export type IListBootstrapPeersRequest = Record<string, any>;
 
 export class ListBootstrapPeersRequest {
 
@@ -758,8 +755,7 @@ export namespace BootstrapServiceMessage {
     >;
   };
 
-  export type IBrokerOffer = {
-  }
+  export type IBrokerOffer = Record<string, any>;
 
   export class BrokerOffer {
 
@@ -944,8 +940,7 @@ export class PublishNetworkToBootstrapPeerRequest {
   }
 }
 
-export type IPublishNetworkToBootstrapPeerResponse = {
-}
+export type IPublishNetworkToBootstrapPeerResponse = Record<string, any>;
 
 export class PublishNetworkToBootstrapPeerResponse {
 

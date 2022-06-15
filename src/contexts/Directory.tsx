@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Base64 } from "js-base64";
-import { isEqual } from "lodash";
 import { omit } from "lodash/fp";
 import React, { createContext, useContext, useMemo, useState } from "react";
 
@@ -20,7 +19,7 @@ export interface DirectoryListing {
   id: bigint;
   listing: directory_Listing;
   snippet: ListingSnippet;
-  viewerCount: number;
+  userCount: number;
   viewers: Map<string, DirectoryUser>;
   viewersByName: Map<string, DirectoryUser>;
 }
@@ -126,7 +125,7 @@ export const Provider: React.FC = ({ children }) => {
             const { id, listing, snippet } = event.listingChange;
             listings.set(id, {
               id,
-              viewerCount: 0,
+              userCount: 0,
               viewers: new Map(),
               viewersByName: new Map(),
               ...listings.get(id),
@@ -139,19 +138,19 @@ export const Provider: React.FC = ({ children }) => {
             listings.delete(event.unpublish.id);
             break;
           }
-          case Event.BodyCase.VIEWER_COUNT_CHANGE: {
-            const { id, count } = event.viewerCountChange;
+          case Event.BodyCase.USER_COUNT_CHANGE: {
+            const { id, count } = event.userCountChange;
             const prevListing = listings.get(id);
             if (prevListing) {
               listings.set(id, {
                 ...prevListing,
-                viewerCount: count,
+                userCount: count,
               });
             }
             break;
           }
-          case Event.BodyCase.VIEWER_STATE_CHANGE: {
-            const { id, alias, peerKey, listingIds, online } = event.viewerStateChange;
+          case Event.BodyCase.USER_PRESENCE_CHANGE: {
+            const { id, alias, peerKey, listingIds, online } = event.userPresenceChange;
             const user: DirectoryUser = { id, alias, peerKey, listingIds };
             const key = Base64.fromUint8Array(peerKey, true);
             const prevListingIds = users.get(key)?.listingIds ?? [];
@@ -207,6 +206,38 @@ export const Provider: React.FC = ({ children }) => {
     });
 
     return () => events.destroy();
+  }, []);
+
+  React.useEffect(() => {
+    const events: Event[] = [];
+    for (let i = 0; i < 10000; i++) {
+      const peerKey = new Uint8Array(32);
+      peerKey[0] = i & 255;
+      peerKey[1] = (i >> 8) & 255;
+
+      events.push(
+        new Event({
+          body: {
+            userPresenceChange: {
+              id: BigInt(i),
+              alias: `user${i}`,
+              peerKey,
+              listingIds: [BigInt(2)],
+              online: true,
+            },
+          },
+        })
+      );
+    }
+
+    let i = 0;
+    const networkKey = Base64.toUint8Array("S_AnIApF4-zQQhGhIzPxnmsslrO5g4SCCV8-ZGD925s");
+    setInterval(() => {
+      dispatchDirectoryEvent(
+        Base64.fromUint8Array(networkKey, true),
+        new EventBroadcast({ events: [events[i++ % events.length]] })
+      );
+    }, 100);
   }, []);
 
   const value = useMemo<ContextValues>(() => ({ directories }), [directories]);

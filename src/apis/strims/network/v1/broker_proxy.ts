@@ -216,8 +216,7 @@ export namespace BrokerProxyEvent {
     }
   }
 
-  export type IRead = {
-  }
+  export type IRead = Record<string, any>;
 
   export class Read {
 
@@ -281,8 +280,7 @@ export class BrokerProxySendKeysRequest {
   }
 }
 
-export type IBrokerProxySendKeysResponse = {
-}
+export type IBrokerProxySendKeysResponse = Record<string, any>;
 
 export class BrokerProxySendKeysResponse {
 
@@ -423,8 +421,7 @@ export class BrokerProxyDataRequest {
   }
 }
 
-export type IBrokerProxyDataResponse = {
-}
+export type IBrokerProxyDataResponse = Record<string, any>;
 
 export class BrokerProxyDataResponse {
 
@@ -479,8 +476,7 @@ export class BrokerProxyCloseRequest {
   }
 }
 
-export type IBrokerProxyCloseResponse = {
-}
+export type IBrokerProxyCloseResponse = Record<string, any>;
 
 export class BrokerProxyCloseResponse {
 

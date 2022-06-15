@@ -54,7 +54,7 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 			id: stream.User.Username,
 			snippet: &networkv1directory.ListingSnippet{
 				Live:        stream.Type == "live",
-				ViewerCount: uint64(stream.ViewerCount),
+				UserCount:   uint64(stream.ViewerCount),
 				Title:       stream.User.Title,
 				IsMature:    stream.User.Nsfw,
 				ChannelName: stream.User.DisplayName,

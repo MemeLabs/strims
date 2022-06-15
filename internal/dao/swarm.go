@@ -24,7 +24,7 @@ func FormatSwarmCacheMetaKey(id, salt []byte) []byte {
 	return b
 }
 
-var getSwarmCacheMetaByKey = UniqueIndex(
+var getSwarmCacheMetaByKey, _ = UniqueIndex(
 	swarmCacheMetaKeyNS,
 	swarmCacheMetas,
 	func(m *swarm.CacheMeta) []byte {

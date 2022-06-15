@@ -51,7 +51,7 @@ var Networks = NewTable(
 	},
 )
 
-var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
+var GetNetworkByKey, GetNetworkIDByKey = UniqueIndex(networkNetworkKeyNS, Networks, NetworkKey, nil)
 
 // NewNetworkCertificate ...
 func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
@@ -260,7 +260,7 @@ func certificateLogSerialNumberKey(m *networkv1ca.CertificateLog) []byte {
 	return FormatCertificateLogSerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
 }
 
-var GetCertificateLogBySerialNumber = UniqueIndex(
+var GetCertificateLogBySerialNumber, GetCertificateLogIDBySerialNumber = UniqueIndex(
 	networkCertificateLogSerialNS,
 	CertificateLogs,
 	certificateLogSerialNumberKey,
@@ -279,7 +279,7 @@ func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
 
 var ErrCertificateSubjectInUse = errors.New("certificate subject in use")
 
-var GetCertificateLogBySubject = UniqueIndex(
+var GetCertificateLogBySubject, GetCertificateLogIDBySubject = UniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
 	certificateLogSubjectKey,
@@ -303,7 +303,7 @@ func certificateLogKeyKey(m *networkv1ca.CertificateLog) []byte {
 	return FormatCertificateLogKeyKey(m.NetworkId, m.Certificate.Key)
 }
 
-var GetCertificateLogByKey = UniqueIndex(
+var GetCertificateLogByKey, GetCertificateLogIDByKey = UniqueIndex(
 	networkCertificateLogKeyNS,
 	CertificateLogs,
 	certificateLogKeyKey,
@@ -389,7 +389,7 @@ func FormatBootstrapClientClientOptionsKey(m *networkv1bootstrap.BootstrapClient
 	}
 }
 
-var GetBootstrapClientByClientOptions = UniqueIndex(
+var GetBootstrapClientByClientOptions, GetBootstrapClientIDByClientOptions = UniqueIndex(
 	networkBootstrapClientClientOptionsNS,
 	BootstrapClients,
 	FormatBootstrapClientClientOptionsKey,
@@ -463,7 +463,7 @@ func FormatNetworkPeerPublicKeyKey(networkID uint64, key []byte) []byte {
 	return append(b, key...)
 }
 
-var GetNetworkPeerByPublicKey = UniqueIndex(
+var GetNetworkPeerByPublicKey, GetNetworkPeerIDByPublicKey = UniqueIndex(
 	networkPeerPublicKeyNS,
 	NetworkPeers,
 	func(m *networkv1.Peer) []byte {

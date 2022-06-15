@@ -186,6 +186,8 @@ func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service Director
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.Test", service.Test)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.ModerateListing)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.ModerateUser)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetUsers", service.GetUsers)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.WatchListingUsers)
 }
 
 // DirectoryFrontendService ...
@@ -222,6 +224,14 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendModerateUserRequest,
 	) (*FrontendModerateUserResponse, error)
+	GetUsers(
+		ctx context.Context,
+		req *FrontendGetUsersRequest,
+	) (*FrontendGetUsersResponse, error)
+	WatchListingUsers(
+		ctx context.Context,
+		req *FrontendWatchListingUsersRequest,
+	) (<-chan *FrontendWatchListingUsersResponse, error)
 }
 
 // DirectoryFrontendService ...
@@ -280,6 +290,20 @@ func (s *UnimplementedDirectoryFrontendService) ModerateUser(
 	ctx context.Context,
 	req *FrontendModerateUserRequest,
 ) (*FrontendModerateUserResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) GetUsers(
+	ctx context.Context,
+	req *FrontendGetUsersRequest,
+) (*FrontendGetUsersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) WatchListingUsers(
+	ctx context.Context,
+	req *FrontendWatchListingUsersRequest,
+) (<-chan *FrontendWatchListingUsersResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -365,6 +389,24 @@ func (c *DirectoryFrontendClient) ModerateUser(
 	res *FrontendModerateUserResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.ModerateUser", req, res)
+}
+
+// GetUsers ...
+func (c *DirectoryFrontendClient) GetUsers(
+	ctx context.Context,
+	req *FrontendGetUsersRequest,
+	res *FrontendGetUsersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.GetUsers", req, res)
+}
+
+// WatchListingUsers ...
+func (c *DirectoryFrontendClient) WatchListingUsers(
+	ctx context.Context,
+	req *FrontendWatchListingUsersRequest,
+	res chan *FrontendWatchListingUsersResponse,
+) error {
+	return c.client.CallStreaming(ctx, "strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", req, res)
 }
 
 // RegisterDirectorySnippetService ...

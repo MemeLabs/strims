@@ -102,8 +102,7 @@ export class Rule {
   }
 }
 
-export type IGetConfigRequest = {
-}
+export type IGetConfigRequest = Record<string, any>;
 
 export class GetConfigRequest {
 
@@ -417,8 +416,7 @@ export class DeleteRuleRequest {
   }
 }
 
-export type IDeleteRuleResponse = {
-}
+export type IDeleteRuleResponse = Record<string, any>;
 
 export class DeleteRuleResponse {
 
@@ -509,8 +507,7 @@ export class GetRuleResponse {
   }
 }
 
-export type IListRulesRequest = {
-}
+export type IListRulesRequest = Record<string, any>;
 
 export class ListRulesRequest {
 
