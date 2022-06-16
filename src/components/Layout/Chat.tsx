@@ -55,6 +55,8 @@ const Chat: React.FC = () => {
     setMainActiveTopic(topic);
   }, []);
 
+  const handleRoomMenuClose = useCallback(() => toggleMenuOpen(false), []);
+
   return (
     <div
       className={clsx({
@@ -75,7 +77,9 @@ const Chat: React.FC = () => {
           filterDeviceTypes={null}
           preventScroll={true}
         >
-          <RoomButtons onChange={handleRoomMenuChange} />
+          {menuOpen && (
+            <RoomButtons onChange={handleRoomMenuChange} onClose={handleRoomMenuClose} />
+          )}
         </SwipablePanel>
         <Header
           onToggleClick={onToggleClick}

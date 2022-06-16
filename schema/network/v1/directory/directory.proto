@@ -75,6 +75,14 @@ message TestPublishRequest {
 }
 message TestPublishResponse {}
 
+enum ListingContentType {
+  LISTING_CONTENT_TYPE_UNDEFINED = 0;
+  LISTING_CONTENT_TYPE_MEDIA = 1;
+  LISTING_CONTENT_TYPE_SERVICE = 2;
+  LISTING_CONTENT_TYPE_EMBED = 3;
+  LISTING_CONTENT_TYPE_CHAT = 4;
+}
+
 message Listing {
   message Media {
     string mime_type = 1;
@@ -167,6 +175,12 @@ message ListingSnippetDelta {
   oneof channel_logo_oneof {
     ListingSnippetImage  channel_logo = 3001;
   }
+}
+
+message Network {
+  uint64 id = 1;
+  string name = 2;
+  bytes key = 3;
 }
 
 message Event {
@@ -383,15 +397,29 @@ message FrontendGetUsersResponse {
     bytes peer_key = 2;
   }
 
-  message Network {
-    uint64 id = 1;
-    string name = 2;
-    bytes key = 3;
-  }
-
   repeated User users = 1;
   map<uint64, Network> networks = 2;
-  map<string, Network> memes = 3;
+}
+
+message FrontendGetListingsRequest {
+  repeated ListingContentType content_types = 1;
+}
+
+message FrontendGetListingsResponse {
+  message NetworkListingsItem {
+    uint64 id = 1;
+    Listing listing = 2;
+    ListingSnippet snippet = 3;
+    ListingModeration moderation = 4;
+    uint32 user_count = 5;
+  }
+
+  message NetworkListings {
+    Network network = 1;
+    repeated NetworkListingsItem listings = 2;
+  }
+
+  repeated NetworkListings listings = 1;
 }
 
 message FrontendWatchListingUsersRequest {
@@ -428,6 +456,7 @@ service DirectoryFrontend {
   rpc ModerateUser(FrontendModerateUserRequest) returns (FrontendModerateUserResponse);
 
   rpc GetUsers(FrontendGetUsersRequest) returns (FrontendGetUsersResponse);
+  rpc GetListings(FrontendGetListingsRequest) returns (FrontendGetListingsResponse);
   rpc WatchListingUsers(FrontendWatchListingUsersRequest) returns (stream FrontendWatchListingUsersResponse);
 }
 

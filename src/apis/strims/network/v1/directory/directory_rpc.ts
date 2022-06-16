@@ -52,6 +52,9 @@ import {
   IFrontendGetUsersRequest,
   FrontendGetUsersRequest,
   FrontendGetUsersResponse,
+  IFrontendGetListingsRequest,
+  FrontendGetListingsRequest,
+  FrontendGetListingsResponse,
   IFrontendWatchListingUsersRequest,
   FrontendWatchListingUsersRequest,
   FrontendWatchListingUsersResponse,
@@ -132,6 +135,7 @@ export interface DirectoryFrontendService {
   moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse;
   moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse;
   getUsers(req: FrontendGetUsersRequest, call: strims_rpc_Call): Promise<FrontendGetUsersResponse> | FrontendGetUsersResponse;
+  getListings(req: FrontendGetListingsRequest, call: strims_rpc_Call): Promise<FrontendGetListingsResponse> | FrontendGetListingsResponse;
   watchListingUsers(req: FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<FrontendWatchListingUsersResponse>;
 }
 
@@ -145,6 +149,7 @@ export class UnimplementedDirectoryFrontendService implements DirectoryFrontendS
   moderateListing(req: FrontendModerateListingRequest, call: strims_rpc_Call): Promise<FrontendModerateListingResponse> | FrontendModerateListingResponse { throw new Error("not implemented"); }
   moderateUser(req: FrontendModerateUserRequest, call: strims_rpc_Call): Promise<FrontendModerateUserResponse> | FrontendModerateUserResponse { throw new Error("not implemented"); }
   getUsers(req: FrontendGetUsersRequest, call: strims_rpc_Call): Promise<FrontendGetUsersResponse> | FrontendGetUsersResponse { throw new Error("not implemented"); }
+  getListings(req: FrontendGetListingsRequest, call: strims_rpc_Call): Promise<FrontendGetListingsResponse> | FrontendGetListingsResponse { throw new Error("not implemented"); }
   watchListingUsers(req: FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<FrontendWatchListingUsersResponse> { throw new Error("not implemented"); }
 }
 
@@ -158,6 +163,7 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<FrontendModerateListingRequest, FrontendModerateListingResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.moderateListing.bind(service), FrontendModerateListingRequest);
   host.registerMethod<FrontendModerateUserRequest, FrontendModerateUserResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.moderateUser.bind(service), FrontendModerateUserRequest);
   host.registerMethod<FrontendGetUsersRequest, FrontendGetUsersResponse>("strims.network.v1.directory.DirectoryFrontend.GetUsers", service.getUsers.bind(service), FrontendGetUsersRequest);
+  host.registerMethod<FrontendGetListingsRequest, FrontendGetListingsResponse>("strims.network.v1.directory.DirectoryFrontend.GetListings", service.getListings.bind(service), FrontendGetListingsRequest);
   host.registerMethod<FrontendWatchListingUsersRequest, FrontendWatchListingUsersResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.watchListingUsers.bind(service), FrontendWatchListingUsersRequest);
 }
 
@@ -198,6 +204,10 @@ export class DirectoryFrontendClient {
 
   public getUsers(req?: IFrontendGetUsersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendGetUsersResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetUsers", new FrontendGetUsersRequest(req)), FrontendGetUsersResponse, opts);
+  }
+
+  public getListings(req?: IFrontendGetListingsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<FrontendGetListingsResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetListings", new FrontendGetListingsRequest(req)), FrontendGetListingsResponse, opts);
   }
 
   public watchListingUsers(req?: IFrontendWatchListingUsersRequest): GenericReadable<FrontendWatchListingUsersResponse> {

@@ -6,10 +6,13 @@ package directory
 import (
 	"sync"
 
+	"github.com/MemeLabs/strims/internal/dao"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/logutil"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 )
 
@@ -28,8 +31,9 @@ type syndicateStoreObserver struct {
 	stop ioutil.Stopper
 }
 
-func newSyndicateStore(network *networkv1.Network) *syndicateStore {
+func newSyndicateStore(logger *zap.Logger, network *networkv1.Network) *syndicateStore {
 	return &syndicateStore{
+		logger:  logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
 		Network: network,
 
 		observers:        map[uint64][]syndicateStoreObserver{},
@@ -40,6 +44,7 @@ func newSyndicateStore(network *networkv1.Network) *syndicateStore {
 }
 
 type syndicateStore struct {
+	logger  *zap.Logger
 	Network *networkv1.Network
 
 	mu               sync.Mutex
@@ -156,6 +161,12 @@ func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_Us
 			for _, l := range v.Listings {
 				delete(l.Viewers, e.Id)
 				d.emitUserEvent(UserEvent{PartUserEventType, v.User, l.Listing})
+
+				d.logger.Debug(
+					"parted",
+					zap.Object("user", v.User),
+					zap.Object("listing", l.Listing),
+				)
 			}
 			delete(d.viewers, e.Id)
 			d.viewersByPeerKey.Delete(v.PeerKey)
@@ -177,10 +188,12 @@ func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_Us
 
 	if v.User.Alias != e.Alias {
 		v.User.Alias = e.Alias
-		d.emitUserEvent(UserEvent{
-			Type: RenameUserEventType,
-			User: v.User,
-		})
+
+		for _, l := range v.Listings {
+			d.emitUserEvent(UserEvent{RenameUserEventType, v.User, l.Listing})
+		}
+
+		d.logger.Debug("renamed", zap.Object("user", v.User))
 	}
 
 	for _, id := range e.ListingIds {
@@ -189,6 +202,12 @@ func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_Us
 				v.Listings[id] = l
 				l.Viewers[v.ID] = v
 				d.emitUserEvent(UserEvent{JoinUserEventType, v.User, l.Listing})
+
+				d.logger.Debug(
+					"joined",
+					zap.Object("user", v.User),
+					zap.Object("listing", l.Listing),
+				)
 			}
 		}
 	}
@@ -198,6 +217,12 @@ func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_Us
 			delete(v.Listings, id)
 			delete(l.Viewers, l.ID)
 			d.emitUserEvent(UserEvent{PartUserEventType, v.User, l.Listing})
+
+			d.logger.Debug(
+				"parted",
+				zap.Object("user", v.User),
+				zap.Object("listing", l.Listing),
+			)
 		}
 	}
 }

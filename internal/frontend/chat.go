@@ -282,9 +282,9 @@ func (s *chatService) getViewedListingByPeerKey(peerKey []byte) *chatv1.Message_
 	ls := s.app.Directory().GetListingsByPeerKey(peerKey)
 	for _, nl := range ls {
 		for _, l := range nl.Listings {
-			switch l.Listing.Content.(type) {
-			case *networkv1directory.Listing_Media_:
-			case *networkv1directory.Listing_Embed_:
+			_, isMedia := l.Listing.Content.(*networkv1directory.Listing_Media_)
+			_, isEmbed := l.Listing.Content.(*networkv1directory.Listing_Embed_)
+			if isMedia || isEmbed {
 				return &chatv1.Message_DirectoryRef{
 					DirectoryId: l.ID,
 					NetworkKey:  nl.NetworkKey,

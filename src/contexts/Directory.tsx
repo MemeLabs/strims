@@ -208,38 +208,6 @@ export const Provider: React.FC = ({ children }) => {
     return () => events.destroy();
   }, []);
 
-  React.useEffect(() => {
-    const events: Event[] = [];
-    for (let i = 0; i < 10000; i++) {
-      const peerKey = new Uint8Array(32);
-      peerKey[0] = i & 255;
-      peerKey[1] = (i >> 8) & 255;
-
-      events.push(
-        new Event({
-          body: {
-            userPresenceChange: {
-              id: BigInt(i),
-              alias: `user${i}`,
-              peerKey,
-              listingIds: [BigInt(2)],
-              online: true,
-            },
-          },
-        })
-      );
-    }
-
-    let i = 0;
-    const networkKey = Base64.toUint8Array("S_AnIApF4-zQQhGhIzPxnmsslrO5g4SCCV8-ZGD925s");
-    setInterval(() => {
-      dispatchDirectoryEvent(
-        Base64.fromUint8Array(networkKey, true),
-        new EventBroadcast({ events: [events[i++ % events.length]] })
-      );
-    }, 100);
-  }, []);
-
   const value = useMemo<ContextValues>(() => ({ directories }), [directories]);
 
   return <DirectoryContext.Provider value={value}>{children}</DirectoryContext.Provider>;

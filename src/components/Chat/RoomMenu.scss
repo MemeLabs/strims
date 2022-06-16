@@ -1,90 +1,43 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-.room_menu {
-  flex: 1;
-  display: flex;
-
-  &__anchor {
-    align-items: center;
-    flex: 1;
-    display: flex;
-    flex-direction: row;
-    padding: 0 0.6rem;
-  }
-
-  &__text {
-    flex: 1;
-  }
-
-  &__icon {
-    display: block;
-    flex: 0 0 24px;
-    height: 24px;
-    transition: all var(--timing-short) ease-in-out;
-    filter: drop-shadow(0 1px 2px var(--color-opac-b-14));
-  }
-
-  &__anchor:hover &__icon {
-    transform: scale(1.1);
-    filter: drop-shadow(0 4px 8px var(--color-opac-b-7));
-  }
-
-  &__menu {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    box-sizing: border-box;
-    top: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  &__item {
-    background: var(--body-foreground);
-    text-align: left;
-    padding: 0.6rem;
-    border-top: 1px solid var(--color-opac-w-1);
-    cursor: pointer;
-
-    &:last-child {
-      border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
-    }
-
-    &:hover {
-      background: var(--body-background);
-    }
-  }
-
-  &--open {
-    box-shadow: var(--shadow-elevation-2);
-    border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
-
-    .room_menu__menu {
-      box-shadow: var(--shadow-elevation-2);
-      clip-path: inset(0px -22px -22px -22px);
-      border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
-    }
-  }
-}
-
 .room_list {
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-elevation-2);
 }
 
-.room_meme {
+.room_menu {
   height: 100%;
   display: flex;
   flex-direction: column;
 
-  &__tab_bar {
+  &__header {
     display: flex;
     flex-direction: row;
     border-bottom: 1px solid var(--color-border-chat-tab);
     margin: 0.6rem 0.6rem 0.2rem;
+  }
+
+  &__toggle {
+    margin: 0 7px 7px;
+    display: block;
+    cursor: pointer;
+    border-radius: 3px;
+
+    svg {
+      display: block;
+      padding: 10px;
+    }
+
+    &:hover {
+      background: var(--color-background-chat-toggle-hover);
+    }
+  }
+
+  &__tab_bar {
+    display: flex;
+    flex-direction: row;
     user-select: none;
   }
 
@@ -95,11 +48,18 @@
     cursor: pointer;
     position: relative;
     color: var(--color-text-chat-tab);
-    border-radius: var(--border-radius-medium);
+    border-radius: var(--border-radius-small);
 
-    &:hover,
-    &--active {
-      background-color: var(--color-opac-w-1);
+    &:hover {
+      color: var(--color-text-chat-tab-hover);
+      background-color: var(--color-background-chat-tab-hover);
+    }
+
+    &--active,
+    &--active:hover {
+      cursor: default;
+      color: var(--color-text-chat-tab-active);
+      background-color: var(--color-background-chat-tab-active);
     }
   }
 
@@ -180,7 +140,7 @@
   }
 
   &__row {
-    border-radius: var(--border-radius-medium);
+    border-radius: var(--border-radius-small);
     cursor: pointer;
     color: var(--color-grey-10);
 

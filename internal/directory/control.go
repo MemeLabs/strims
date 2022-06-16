@@ -22,6 +22,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // errors ...
@@ -37,6 +38,12 @@ type Listing struct {
 	UserCount  uint32
 }
 
+func (l Listing) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", l.ID)
+	marshalListingLogObject(l.Listing, e)
+	return nil
+}
+
 type NetworkListings struct {
 	NetworkKey []byte
 	Listings   []Listing
@@ -46,6 +53,13 @@ type User struct {
 	ID      uint64
 	Alias   string
 	PeerKey []byte
+}
+
+func (u User) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", u.ID)
+	e.AddBinary("key", u.PeerKey)
+	e.AddString("alias", u.Alias)
+	return nil
 }
 
 type UserEventType int
@@ -76,6 +90,7 @@ type Control interface {
 	ModerateUser(ctx context.Context, peerKey []byte, moderation *networkv1directory.UserModeration, networkKey []byte) error
 	GetListingsByPeerKey(peerKey []byte) []NetworkListings
 	GetUsersByNetworkID(id uint64) []User
+	GetListingsByNetworkID(id uint64) []Listing
 	GetListingByQuery(networkID uint64, query *networkv1directory.ListingQuery) (Listing, bool)
 	WatchListingUsers(ctx context.Context, networkID, listingID uint64) ([]User, chan UserEvent, error)
 }
@@ -176,7 +191,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 
 	c := newEventCache(network)
 	t.eventCache[network.Id] = c
-	s := newSyndicateStore(network)
+	s := newSyndicateStore(t.logger, network)
 	t.syndicateStores[network.Id] = s
 
 	go t.snippetServer.start(t.ctx, network)
@@ -407,12 +422,12 @@ func (t *control) GetUsersByNetworkID(id uint64) []User {
 	return nil
 }
 
-func (t *control) GetListingsByNetworkID(id uint64) []User {
+func (t *control) GetListingsByNetworkID(id uint64) []Listing {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	if s, ok := t.syndicateStores[id]; ok {
-		return s.GetUsers()
+		return s.GetListings()
 	}
 	return nil
 }

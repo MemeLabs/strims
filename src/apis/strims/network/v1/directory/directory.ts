@@ -1400,6 +1400,56 @@ export namespace ListingSnippetDelta {
 
 }
 
+export type INetwork = {
+  id?: bigint;
+  name?: string;
+  key?: Uint8Array;
+}
+
+export class Network {
+  id: bigint;
+  name: string;
+  key: Uint8Array;
+
+  constructor(v?: INetwork) {
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.key = v?.key || new Uint8Array();
+  }
+
+  static encode(m: Network, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.name.length) w.uint32(18).string(m.name);
+    if (m.key.length) w.uint32(26).bytes(m.key);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Network {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Network();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.key = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IEvent = {
   body?: Event.IBody
 }
@@ -3188,28 +3238,23 @@ export class FrontendGetUsersRequest {
 
 export type IFrontendGetUsersResponse = {
   users?: FrontendGetUsersResponse.IUser[];
-  networks?: Map<bigint, FrontendGetUsersResponse.Network>;
-  memes?: Map<string, FrontendGetUsersResponse.INetwork> | { [key: string]: FrontendGetUsersResponse.INetwork };
+  networks?: Map<bigint, Network>;
 }
 
 export class FrontendGetUsersResponse {
   users: FrontendGetUsersResponse.User[];
-  networks: Map<bigint, FrontendGetUsersResponse.Network>;
-  memes: Map<string, FrontendGetUsersResponse.Network>;
+  networks: Map<bigint, Network>;
 
   constructor(v?: IFrontendGetUsersResponse) {
     this.users = v?.users ? v.users.map(v => new FrontendGetUsersResponse.User(v)) : [];
-    if (v?.networks) this.networks = new Map(Array.from(v.networks).map(([k, v]) => [k, new FrontendGetUsersResponse.Network(v)]));
-    else this.networks = new Map<bigint, FrontendGetUsersResponse.Network>();
-    if (v?.memes) this.memes = new Map(v.memes instanceof Map ? Array.from(v.memes).map(([k, v]) => [k, new FrontendGetUsersResponse.Network(v)]) : Object.entries(v.memes).map(([k, v]) => [String(k), new FrontendGetUsersResponse.Network(v)]));
-    else this.memes = new Map<string, FrontendGetUsersResponse.Network>();
+    if (v?.networks) this.networks = new Map(Array.from(v.networks).map(([k, v]) => [k, new Network(v)]));
+    else this.networks = new Map<bigint, Network>();
   }
 
   static encode(m: FrontendGetUsersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     for (const v of m.users) FrontendGetUsersResponse.User.encode(v, w.uint32(10).fork()).ldelim();
-    for (const [k, v] of m.networks) FrontendGetUsersResponse.Network.encode(v, w.uint32(18).fork().uint32(8).uint64(k).uint32(18).fork()).ldelim().ldelim();
-    for (const [k, v] of m.memes) FrontendGetUsersResponse.Network.encode(v, w.uint32(26).fork().uint32(10).string(k).uint32(18).fork()).ldelim().ldelim();
+    for (const [k, v] of m.networks) Network.encode(v, w.uint32(18).fork().uint32(8).uint64(k).uint32(18).fork()).ldelim().ldelim();
     return w;
   }
 
@@ -3228,7 +3273,7 @@ export class FrontendGetUsersResponse {
           const flen = r.uint32();
           const fend = r.pos + flen;
           let key: bigint;
-          let value: FrontendGetUsersResponse.Network;
+          let value: Network;
           while (r.pos < fend) {
             const ftag = r.uint32();
             switch (ftag >> 3) {
@@ -3236,31 +3281,11 @@ export class FrontendGetUsersResponse {
               key = r.uint64()
               break;
               case 2:
-              value = FrontendGetUsersResponse.Network.decode(r, r.uint32());
+              value = Network.decode(r, r.uint32());
               break;
             }
           }
           m.networks.set(key, value)
-        }
-        break;
-        case 3:
-        {
-          const flen = r.uint32();
-          const fend = r.pos + flen;
-          let key: string;
-          let value: FrontendGetUsersResponse.Network;
-          while (r.pos < fend) {
-            const ftag = r.uint32();
-            switch (ftag >> 3) {
-              case 1:
-              key = r.string()
-              break;
-              case 2:
-              value = FrontendGetUsersResponse.Network.decode(r, r.uint32());
-              break;
-            }
-          }
-          m.memes.set(key, value)
         }
         break;
         default:
@@ -3359,35 +3384,118 @@ export namespace FrontendGetUsersResponse {
     }
   }
 
-  export type INetwork = {
-    id?: bigint;
-    name?: string;
-    key?: Uint8Array;
+}
+
+export type IFrontendGetListingsRequest = {
+  contentTypes?: ListingContentType[];
+}
+
+export class FrontendGetListingsRequest {
+  contentTypes: ListingContentType[];
+
+  constructor(v?: IFrontendGetListingsRequest) {
+    this.contentTypes = v?.contentTypes ? v.contentTypes : [];
   }
 
-  export class Network {
-    id: bigint;
-    name: string;
-    key: Uint8Array;
+  static encode(m: FrontendGetListingsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    m.contentTypes.reduce((w, v) => w.uint32(v), w.uint32(10).fork()).ldelim();
+    return w;
+  }
 
-    constructor(v?: INetwork) {
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.contentTypes.push(r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendGetListingsResponse = {
+  listings?: FrontendGetListingsResponse.INetworkListings[];
+}
+
+export class FrontendGetListingsResponse {
+  listings: FrontendGetListingsResponse.NetworkListings[];
+
+  constructor(v?: IFrontendGetListingsResponse) {
+    this.listings = v?.listings ? v.listings.map(v => new FrontendGetListingsResponse.NetworkListings(v)) : [];
+  }
+
+  static encode(m: FrontendGetListingsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.listings) FrontendGetListingsResponse.NetworkListings.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.listings.push(FrontendGetListingsResponse.NetworkListings.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace FrontendGetListingsResponse {
+  export type INetworkListingsItem = {
+    id?: bigint;
+    listing?: IListing;
+    snippet?: IListingSnippet;
+    moderation?: IListingModeration;
+    userCount?: number;
+  }
+
+  export class NetworkListingsItem {
+    id: bigint;
+    listing: Listing | undefined;
+    snippet: ListingSnippet | undefined;
+    moderation: ListingModeration | undefined;
+    userCount: number;
+
+    constructor(v?: INetworkListingsItem) {
       this.id = v?.id || BigInt(0);
-      this.name = v?.name || "";
-      this.key = v?.key || new Uint8Array();
+      this.listing = v?.listing && new Listing(v.listing);
+      this.snippet = v?.snippet && new ListingSnippet(v.snippet);
+      this.moderation = v?.moderation && new ListingModeration(v.moderation);
+      this.userCount = v?.userCount || 0;
     }
 
-    static encode(m: Network, w?: Writer): Writer {
+    static encode(m: NetworkListingsItem, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
-      if (m.name.length) w.uint32(18).string(m.name);
-      if (m.key.length) w.uint32(26).bytes(m.key);
+      if (m.listing) Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
+      if (m.snippet) ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
+      if (m.moderation) ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+      if (m.userCount) w.uint32(40).uint32(m.userCount);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Network {
+    static decode(r: Reader | Uint8Array, length?: number): NetworkListingsItem {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Network();
+      const m = new NetworkListingsItem();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -3395,10 +3503,59 @@ export namespace FrontendGetUsersResponse {
           m.id = r.uint64();
           break;
           case 2:
-          m.name = r.string();
+          m.listing = Listing.decode(r, r.uint32());
           break;
           case 3:
-          m.key = r.bytes();
+          m.snippet = ListingSnippet.decode(r, r.uint32());
+          break;
+          case 4:
+          m.moderation = ListingModeration.decode(r, r.uint32());
+          break;
+          case 5:
+          m.userCount = r.uint32();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type INetworkListings = {
+    network?: INetwork;
+    listings?: FrontendGetListingsResponse.INetworkListingsItem[];
+  }
+
+  export class NetworkListings {
+    network: Network | undefined;
+    listings: FrontendGetListingsResponse.NetworkListingsItem[];
+
+    constructor(v?: INetworkListings) {
+      this.network = v?.network && new Network(v.network);
+      this.listings = v?.listings ? v.listings.map(v => new FrontendGetListingsResponse.NetworkListingsItem(v)) : [];
+    }
+
+    static encode(m: NetworkListings, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+      for (const v of m.listings) FrontendGetListingsResponse.NetworkListingsItem.encode(v, w.uint32(18).fork()).ldelim();
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): NetworkListings {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new NetworkListings();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.network = Network.decode(r, r.uint32());
+          break;
+          case 2:
+          m.listings.push(FrontendGetListingsResponse.NetworkListingsItem.decode(r, r.uint32()));
           break;
           default:
           r.skipType(tag & 7);
@@ -3627,3 +3784,10 @@ export class SnippetSubscribeResponse {
   }
 }
 
+export enum ListingContentType {
+  LISTING_CONTENT_TYPE_UNDEFINED = 0,
+  LISTING_CONTENT_TYPE_MEDIA = 1,
+  LISTING_CONTENT_TYPE_SERVICE = 2,
+  LISTING_CONTENT_TYPE_EMBED = 3,
+  LISTING_CONTENT_TYPE_CHAT = 4,
+}

@@ -18,14 +18,14 @@
     margin: 7px;
     display: block;
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--border-radius-small);
 
     svg {
       display: block;
       padding: 10px;
     }
 
-    &:hover {
+    &--off:hover {
       background: var(--color-background-chat-toggle-hover);
     }
   }

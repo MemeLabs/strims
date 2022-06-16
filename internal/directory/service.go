@@ -913,23 +913,7 @@ func (l *listing) Less(o llrb.Item) bool {
 
 func (l *listing) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	e.AddUint64("id", l.id)
-
-	switch c := l.listing.Content.(type) {
-	case *networkv1directory.Listing_Media_:
-		e.AddString("type", "media")
-		e.AddString("uri", c.Media.SwarmUri)
-	case *networkv1directory.Listing_Service_:
-		e.AddString("type", "service")
-		e.AddString("service", c.Service.Type)
-	case *networkv1directory.Listing_Embed_:
-		e.AddString("type", "embed")
-		e.AddString("service", embedServiceName(c.Embed.Service))
-		e.AddString("id", c.Embed.GetId())
-	case *networkv1directory.Listing_Chat_:
-		e.AddString("type", "chat")
-		e.AddBinary("key", c.Chat.Key)
-		e.AddString("name", c.Chat.Name)
-	}
+	marshalListingLogObject(l.listing, e)
 	return nil
 }
 
@@ -953,12 +937,12 @@ func (s *session) EachPublished(it func(l *listing)) {
 	})
 }
 
-func (u *session) Key() []byte {
-	return u.certificate.Key
+func (s *session) Key() []byte {
+	return s.certificate.Key
 }
 
-func (u *session) Less(o llrb.Item) bool {
-	return keyerLess(u, o)
+func (s *session) Less(o llrb.Item) bool {
+	return keyerLess(s, o)
 }
 
 type user struct {

@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/strims/internal/event"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/hashmap"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -251,7 +252,7 @@ func (s *directoryService) ModerateUser(ctx context.Context, r *networkv1directo
 
 func (s *directoryService) GetUsers(ctx context.Context, r *networkv1directory.FrontendGetUsersRequest) (*networkv1directory.FrontendGetUsersResponse, error) {
 	res := &networkv1directory.FrontendGetUsersResponse{
-		Networks: map[uint64]*networkv1directory.FrontendGetUsersResponse_Network{},
+		Networks: map[uint64]*networkv1directory.Network{},
 	}
 	users := hashmap.New[[]byte, *networkv1directory.FrontendGetUsersResponse_User](hashmap.NewByteInterface[[]byte]())
 
@@ -261,7 +262,7 @@ func (s *directoryService) GetUsers(ctx context.Context, r *networkv1directory.F
 	}
 
 	for _, n := range networks {
-		res.Networks[n.Id] = &networkv1directory.FrontendGetUsersResponse_Network{
+		res.Networks[n.Id] = &networkv1directory.Network{
 			Id:   n.Id,
 			Name: dao.CertificateRoot(n.Certificate).Subject,
 			Key:  dao.NetworkKey(n),
@@ -288,6 +289,56 @@ func (s *directoryService) GetUsers(ctx context.Context, r *networkv1directory.F
 				NetworkIds: []uint64{n.Id},
 			})
 		}
+	}
+
+	return res, nil
+}
+
+func listingProtoContentType(l *networkv1directory.Listing) networkv1directory.ListingContentType {
+	switch l.Content.(type) {
+	case *networkv1directory.Listing_Media_:
+		return networkv1directory.ListingContentType_LISTING_CONTENT_TYPE_MEDIA
+	case *networkv1directory.Listing_Service_:
+		return networkv1directory.ListingContentType_LISTING_CONTENT_TYPE_SERVICE
+	case *networkv1directory.Listing_Embed_:
+		return networkv1directory.ListingContentType_LISTING_CONTENT_TYPE_EMBED
+	case *networkv1directory.Listing_Chat_:
+		return networkv1directory.ListingContentType_LISTING_CONTENT_TYPE_CHAT
+	default:
+		return networkv1directory.ListingContentType_LISTING_CONTENT_TYPE_UNDEFINED
+	}
+}
+
+func (s *directoryService) GetListings(ctx context.Context, r *networkv1directory.FrontendGetListingsRequest) (*networkv1directory.FrontendGetListingsResponse, error) {
+	res := &networkv1directory.FrontendGetListingsResponse{}
+
+	networks, err := dao.Networks.GetAll(s.store)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range networks {
+		var nls []*networkv1directory.FrontendGetListingsResponse_NetworkListingsItem
+		for _, l := range s.app.Directory().GetListingsByNetworkID(n.Id) {
+			if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
+				nls = append(nls, &networkv1directory.FrontendGetListingsResponse_NetworkListingsItem{
+					Id:         l.ID,
+					Listing:    l.Listing,
+					Snippet:    l.Snippet,
+					Moderation: l.Moderation,
+					UserCount:  l.UserCount,
+				})
+			}
+		}
+
+		res.Listings = append(res.Listings, &networkv1directory.FrontendGetListingsResponse_NetworkListings{
+			Network: &networkv1directory.Network{
+				Id:   n.Id,
+				Name: dao.CertificateRoot(n.Certificate).Subject,
+				Key:  dao.NetworkKey(n),
+			},
+			Listings: nls,
+		})
 	}
 
 	return res, nil
