@@ -8,7 +8,6 @@ import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { uniq } from "lodash";
 import React, { ReactNode, useEffect, useMemo, useRef } from "react";
-import runes from "runes";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
@@ -184,7 +183,7 @@ class MessageFormatter {
 
   constructor(body: string) {
     this.body = [body];
-    this.runes = runes(body);
+    this.runes = Array.from(body);
     this.bounds = [0, this.runes.length];
   }
 
