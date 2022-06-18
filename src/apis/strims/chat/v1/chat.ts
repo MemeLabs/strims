@@ -905,6 +905,7 @@ export namespace Message {
   export type IEntities = {
     links?: Message.Entities.ILink[];
     emotes?: Message.Entities.IEmote[];
+    emojis?: Message.Entities.IEmoji[];
     nicks?: Message.Entities.INick[];
     tags?: Message.Entities.ITag[];
     codeBlocks?: Message.Entities.ICodeBlock[];
@@ -916,6 +917,7 @@ export namespace Message {
   export class Entities {
     links: Message.Entities.Link[];
     emotes: Message.Entities.Emote[];
+    emojis: Message.Entities.Emoji[];
     nicks: Message.Entities.Nick[];
     tags: Message.Entities.Tag[];
     codeBlocks: Message.Entities.CodeBlock[];
@@ -926,6 +928,7 @@ export namespace Message {
     constructor(v?: IEntities) {
       this.links = v?.links ? v.links.map(v => new Message.Entities.Link(v)) : [];
       this.emotes = v?.emotes ? v.emotes.map(v => new Message.Entities.Emote(v)) : [];
+      this.emojis = v?.emojis ? v.emojis.map(v => new Message.Entities.Emoji(v)) : [];
       this.nicks = v?.nicks ? v.nicks.map(v => new Message.Entities.Nick(v)) : [];
       this.tags = v?.tags ? v.tags.map(v => new Message.Entities.Tag(v)) : [];
       this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new Message.Entities.CodeBlock(v)) : [];
@@ -938,12 +941,13 @@ export namespace Message {
       if (!w) w = new Writer();
       for (const v of m.links) Message.Entities.Link.encode(v, w.uint32(10).fork()).ldelim();
       for (const v of m.emotes) Message.Entities.Emote.encode(v, w.uint32(18).fork()).ldelim();
-      for (const v of m.nicks) Message.Entities.Nick.encode(v, w.uint32(26).fork()).ldelim();
-      for (const v of m.tags) Message.Entities.Tag.encode(v, w.uint32(34).fork()).ldelim();
-      for (const v of m.codeBlocks) Message.Entities.CodeBlock.encode(v, w.uint32(42).fork()).ldelim();
-      for (const v of m.spoilers) Message.Entities.Spoiler.encode(v, w.uint32(50).fork()).ldelim();
-      if (m.greenText) Message.Entities.GenericEntity.encode(m.greenText, w.uint32(58).fork()).ldelim();
-      if (m.selfMessage) Message.Entities.GenericEntity.encode(m.selfMessage, w.uint32(66).fork()).ldelim();
+      for (const v of m.emojis) Message.Entities.Emoji.encode(v, w.uint32(26).fork()).ldelim();
+      for (const v of m.nicks) Message.Entities.Nick.encode(v, w.uint32(34).fork()).ldelim();
+      for (const v of m.tags) Message.Entities.Tag.encode(v, w.uint32(42).fork()).ldelim();
+      for (const v of m.codeBlocks) Message.Entities.CodeBlock.encode(v, w.uint32(50).fork()).ldelim();
+      for (const v of m.spoilers) Message.Entities.Spoiler.encode(v, w.uint32(58).fork()).ldelim();
+      if (m.greenText) Message.Entities.GenericEntity.encode(m.greenText, w.uint32(66).fork()).ldelim();
+      if (m.selfMessage) Message.Entities.GenericEntity.encode(m.selfMessage, w.uint32(74).fork()).ldelim();
       return w;
     }
 
@@ -961,21 +965,24 @@ export namespace Message {
           m.emotes.push(Message.Entities.Emote.decode(r, r.uint32()));
           break;
           case 3:
-          m.nicks.push(Message.Entities.Nick.decode(r, r.uint32()));
+          m.emojis.push(Message.Entities.Emoji.decode(r, r.uint32()));
           break;
           case 4:
-          m.tags.push(Message.Entities.Tag.decode(r, r.uint32()));
+          m.nicks.push(Message.Entities.Nick.decode(r, r.uint32()));
           break;
           case 5:
-          m.codeBlocks.push(Message.Entities.CodeBlock.decode(r, r.uint32()));
+          m.tags.push(Message.Entities.Tag.decode(r, r.uint32()));
           break;
           case 6:
-          m.spoilers.push(Message.Entities.Spoiler.decode(r, r.uint32()));
+          m.codeBlocks.push(Message.Entities.CodeBlock.decode(r, r.uint32()));
           break;
           case 7:
-          m.greenText = Message.Entities.GenericEntity.decode(r, r.uint32());
+          m.spoilers.push(Message.Entities.Spoiler.decode(r, r.uint32()));
           break;
           case 8:
+          m.greenText = Message.Entities.GenericEntity.decode(r, r.uint32());
+          break;
+          case 9:
           m.selfMessage = Message.Entities.GenericEntity.decode(r, r.uint32());
           break;
           default:
@@ -1121,6 +1128,49 @@ export namespace Message {
             break;
             case 4:
             m.combo = r.uint32();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
+    export type IEmoji = {
+      bounds?: Message.Entities.IBounds;
+      description?: string;
+    }
+
+    export class Emoji {
+      bounds: Message.Entities.Bounds | undefined;
+      description: string;
+
+      constructor(v?: IEmoji) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.description = v?.description || "";
+      }
+
+      static encode(m: Emoji, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.description.length) w.uint32(18).string(m.description);
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Emoji {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Emoji();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            case 2:
+            m.description = r.string();
             break;
             default:
             r.skipType(tag & 7);

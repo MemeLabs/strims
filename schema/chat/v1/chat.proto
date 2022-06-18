@@ -135,6 +135,11 @@ message Message {
       uint32 combo = 4;
     }
 
+    message Emoji {
+      Bounds bounds = 1;
+      string description = 2;
+    }
+
     message Nick {
       Bounds bounds = 1;
       string nick = 2;
@@ -161,12 +166,13 @@ message Message {
 
     repeated Link links = 1;
     repeated Emote emotes = 2;
-    repeated Nick nicks = 3;
-    repeated Tag tags = 4;
-    repeated CodeBlock code_blocks = 5;
-    repeated Spoiler spoilers = 6;
-    GenericEntity green_text = 7;
-    GenericEntity self_message = 8;
+    repeated Emoji emojis = 3;
+    repeated Nick nicks = 4;
+    repeated Tag tags = 5;
+    repeated CodeBlock code_blocks = 6;
+    repeated Spoiler spoilers = 7;
+    GenericEntity green_text = 8;
+    GenericEntity self_message = 9;
   }
 
   message DirectoryRef {

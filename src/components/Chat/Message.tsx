@@ -7,7 +7,8 @@ import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { uniq } from "lodash";
-import React, { ReactNode, useEffect, useRef } from "react";
+import React, { ReactNode, useEffect, useMemo, useRef } from "react";
+import runes from "runes";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
@@ -69,6 +70,16 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   >
     {children}
   </Emote>
+);
+
+interface MessageEmojiProps {
+  entity: chatv1_Message.Entities.Emoji;
+}
+
+const MessageEmoji: React.FC<MessageEmojiProps> = ({ children, entity }) => (
+  <span className="chat__message__emoji" title={entity.description}>
+    {children}
+  </span>
 );
 
 interface MessageNickProps {
@@ -168,11 +179,13 @@ type EntityComponent =
 
 class MessageFormatter {
   private bounds: number[];
+  private runes: string[];
   public body: ReactNode[];
 
   constructor(body: string) {
-    this.bounds = [0, body.length];
     this.body = [body];
+    this.runes = runes(body);
+    this.bounds = [0, this.runes.length];
   }
 
   // splitSpan splits the text span in body at the given character offset and
@@ -198,8 +211,9 @@ class MessageFormatter {
       return -1;
     }
 
-    const splitOffset = offset - this.bounds[i];
-    this.body.splice(i, 1, span.substring(0, splitOffset), span.substring(splitOffset));
+    const left = this.runes.slice(this.bounds[i], offset).join("");
+    const right = this.runes.slice(offset, this.bounds[i + 1]).join("");
+    this.body.splice(i, 1, left, right);
     this.bounds.splice(i + 1, 0, offset);
     return i + 1;
   }
@@ -267,13 +281,16 @@ const ComboMessage: React.FC<MessageProps> = ({
   isMostRecent,
   ...props
 }) => {
-  const formatter = new MessageFormatter(body);
-  entities.emotes.forEach((entity) =>
-    formatter.insertEntity(MessageEmote, entity, {
-      shouldAnimateForever: uiConfig.animateForever,
-      shouldShowModifiers: uiConfig.emoteModifiers,
-    })
-  );
+  const formattedBody = useMemo(() => {
+    const formatter = new MessageFormatter(body);
+    entities.emotes.forEach((entity) =>
+      formatter.insertEntity(MessageEmote, entity, {
+        shouldAnimateForever: uiConfig.animateForever,
+        shouldShowModifiers: uiConfig.emoteModifiers,
+      })
+    );
+    return formatter.body;
+  }, [uiConfig]);
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
@@ -297,7 +314,7 @@ const ComboMessage: React.FC<MessageProps> = ({
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
       <span className="chat__combo_message__body">
-        {formatter.body}
+        {formattedBody}
         <i className="chat__combo_message__count">{count}</i>
         <i className="chat__combo_message__x">x</i>
         <i className="chat__combo_message__hits">hits</i>
@@ -324,57 +341,63 @@ const StandardMessage: React.FC<MessageProps> = ({
     }
   );
 
-  const formatter = new MessageFormatter(body);
-  entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
-  entities.links.forEach((entity) =>
-    formatter.insertEntity(MessageLink, entity, {
-      shouldShorten: uiConfig.shortenLinks,
-    })
-  );
-  if (uiConfig.formatterEmote) {
-    entities.emotes.forEach((entity) =>
-      formatter.insertEntity(MessageEmote, entity, {
-        shouldAnimateForever: uiConfig.animateForever,
-        shouldShowModifiers: uiConfig.emoteModifiers,
-        compactSpacing: uiConfig.compactEmoteSpacing,
+  const formattedBody = useMemo(() => {
+    const formatter = new MessageFormatter(body);
+    entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
+    entities.links.forEach((entity) =>
+      formatter.insertEntity(MessageLink, entity, {
+        shouldShorten: uiConfig.shortenLinks,
       })
     );
-  }
-  entities.nicks.forEach((entity) =>
-    formatter.insertEntity(MessageNick, entity, {
-      normalizeCase: uiConfig.normalizeAliasCase,
-      onClick: handleNickClick,
-    })
-  );
-  entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
-  if (!uiConfig.disableSpoilers) {
-    entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
-  }
-  if (uiConfig.formatterGreen && entities.greenText) {
-    formatter.insertEntity(MessageGreenText, entities.greenText);
-  }
-  if (entities.selfMessage) {
-    formatter.insertEntity(MessageSelf, entities.selfMessage);
-  }
+    if (uiConfig.formatterEmote) {
+      entities.emotes.forEach((entity) =>
+        formatter.insertEntity(MessageEmote, entity, {
+          shouldAnimateForever: uiConfig.animateForever,
+          shouldShowModifiers: uiConfig.emoteModifiers,
+          compactSpacing: uiConfig.compactEmoteSpacing,
+        })
+      );
+      entities.emojis.forEach((entity) => formatter.insertEntity(MessageEmoji, entity));
+    }
+    entities.nicks.forEach((entity) =>
+      formatter.insertEntity(MessageNick, entity, {
+        normalizeCase: uiConfig.normalizeAliasCase,
+        onClick: handleNickClick,
+      })
+    );
+    entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
+    if (!uiConfig.disableSpoilers) {
+      entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
+    }
+    if (uiConfig.formatterGreen && entities.greenText) {
+      formatter.insertEntity(MessageGreenText, entities.greenText);
+    }
+    if (entities.selfMessage) {
+      formatter.insertEntity(MessageSelf, entities.selfMessage);
+    }
+    return formatter.body;
+  }, [uiConfig]);
 
   const authorKey = Base64.fromUint8Array(peerKey, true);
 
-  const classNames = clsx(
-    baseClassName,
-    "chat__message",
-    `chat__message--author_${authorKey}`,
-    {
-      "chat__message--continued": isContinued,
-      "chat__message--self": entities.selfMessage,
-      "chat__message--tagged": entities.tags.length > 0,
-    },
-    uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
-    uniq(
-      entities.nicks.map(
-        ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+  const classNames = useMemo(() => {
+    return clsx(
+      baseClassName,
+      "chat__message",
+      `chat__message--author_${authorKey}`,
+      {
+        "chat__message--continued": isContinued,
+        "chat__message--self": entities.selfMessage,
+        "chat__message--tagged": entities.tags.length > 0,
+      },
+      uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
+      uniq(
+        entities.nicks.map(
+          ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+        )
       )
-    )
-  );
+    );
+  }, []);
 
   const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -396,7 +419,7 @@ const StandardMessage: React.FC<MessageProps> = ({
         <span className="chat__message__author__text">{nick}</span>
       </span>
       <span className="chat__message__colon">{": "}</span>
-      <span className="chat__message__body">{formatter.body}</span>
+      <span className="chat__message__body">{formattedBody}</span>
       <br />
     </div>
   );

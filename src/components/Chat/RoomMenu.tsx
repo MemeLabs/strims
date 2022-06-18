@@ -6,7 +6,7 @@ import "./RoomMenu.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
-import React, { forwardRef, useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { BsArrowBarRight } from "react-icons/bs";
 import { HiOutlineUser } from "react-icons/hi";
@@ -14,8 +14,7 @@ import { HiOutlineUser } from "react-icons/hi";
 import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { ThreadProviderProps, useChat } from "../../contexts/Chat";
-import { DirectoryContext, DirectoryUser } from "../../contexts/Directory";
-import { useCall, useClient } from "../../contexts/FrontendApi";
+import { useCall } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
@@ -124,18 +123,18 @@ const RoomsListItem: React.FC<RoomsListItemProps> = ({
 };
 
 const RoomsList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
-  const [result] = useCall("directory", "getListings", {
+  const [getListingsRes] = useCall("directory", "getListings", {
     args: [{ contentTypes: [directoryv1.ListingContentType.LISTING_CONTENT_TYPE_CHAT] }],
   });
 
-  if (result.loading) {
+  if (getListingsRes.loading) {
     return null;
   }
 
   return (
     <Scrollbars autoHide={true} className="rooms_list">
       <div className="rooms_list__content">
-        {result.value.listings.map(({ network, listings }) => (
+        {getListingsRes.value.listings.map(({ network, listings }) => (
           <div key={network.id.toString()} className="rooms_list__network">
             <div className="rooms_list__network_name">{network.name}</div>
             <div className="rooms_list__network_rooms">
@@ -237,63 +236,45 @@ const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
 };
 
 interface UsersListItemProps extends RoomMenuPropsBase {
-  networks: Uint8Array[];
-  user: DirectoryUser;
+  user: directoryv1.FrontendGetUsersResponse.User;
+  networks: Map<bigint, directoryv1.Network>;
 }
 
-const UsersListItem: React.FC<UsersListItemProps> = ({ onChange, networks, user }) => {
+const UsersListItem: React.FC<UsersListItemProps> = ({ onChange, user, networks }) => {
   const [, { openWhispers }] = useChat();
 
   const handleClick = useStableCallback(() => {
-    openWhispers(user.peerKey, networks);
+    const networkKeys = user.aliases
+      .reduce((ids, { networkIds }) => ids.concat(networkIds), [] as bigint[])
+      .map((id) => networks.get(id).key);
+    openWhispers(user.peerKey, networkKeys);
     onChange({ type: "WHISPER", topicKey: user.peerKey });
   });
 
   return (
-    <button onClick={handleClick} key={user.id.toString()} className="user_list__item">
-      {user.alias}
+    <button onClick={handleClick} className="user_list__item">
+      {user.aliases[0].alias}
     </button>
   );
 };
 
-interface RoomUserThing extends RoomMenuPropsBase {
-  servers: directoryv1.Listing[];
-  networks: Uint8Array[];
-  user: DirectoryUser;
-}
-
 const UsersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
-  const { directories } = useContext(DirectoryContext);
-  const users = useMemo(() => {
-    const users = new Map<string, RoomUserThing>();
-    for (const { networkKey, listings } of Object.values(directories)) {
-      for (const { listing, viewers } of listings.values()) {
-        if (listing?.content?.case === directoryv1.Listing.ContentCase.CHAT) {
-          for (const viewer of viewers.values()) {
-            const key = Base64.fromUint8Array(viewer.peerKey, true);
-            let user = users.get(key);
-            if (user === undefined) {
-              user = {
-                servers: [],
-                networks: [],
-                user: viewer,
-              };
-              users.set(key, user);
-            }
-            user.servers.push(listing);
-            user.networks.push(networkKey);
-          }
-        }
-      }
-    }
-    return Array.from(users.values()).sort((a, b) => a.user.alias.localeCompare(b.user.alias));
-  }, [directories]);
+  const [getUsersRes] = useCall("directory", "getUsers");
+
+  if (getUsersRes.loading) {
+    return null;
+  }
 
   return (
     <Scrollbars autoHide={true} className="user_list">
       <div className="user_list__content">
-        {users.map(({ user, networks }, i) => (
-          <UsersListItem key={i} user={user} networks={networks} onChange={onChange} />
+        {getUsersRes.value.users.map((user) => (
+          <UsersListItem
+            key={Base64.fromUint8Array(user.peerKey)}
+            user={user}
+            networks={getUsersRes.value.networks}
+            onChange={onChange}
+          />
         ))}
       </div>
     </Scrollbars>

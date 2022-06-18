@@ -95,15 +95,41 @@ func TestParse(t *testing.T) {
 				Links: []*chatv1.Message_Entities_Link{{Url: "https://strims.gg/weeb", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 14}}},
 			},
 		},
+		{
+			name:  "unicode flags",
+			input: "🇺🇸🏳️‍🌈🏴🏴󠁧󠁢󠁥󠁮󠁧󠁿🏴‍☠️",
+			entities: &chatv1.Message_Entities{
+				Emojis: []*chatv1.Message_Entities_Emoji{
+					{Description: "flag: United States", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 2}},
+					{Description: "rainbow flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 2, End: 6}},
+					{Description: "black flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 6, End: 7}},
+					{Description: "flag: England", Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 14}},
+					{Description: "pirate flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 14, End: 18}},
+				},
+			},
+		},
+		{
+			name:  "characters",
+			input: "🦸‍♂️🧑‍🚀🦍",
+			entities: &chatv1.Message_Entities{
+				Emojis: []*chatv1.Message_Entities_Emoji{
+					{Description: "man superhero", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
+					{Description: "astronaut", Bounds: &chatv1.Message_Entities_Bounds{Start: 4, End: 7}},
+					{Description: "gorilla", Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 8}},
+				},
+			},
+		},
 	}
 
 	extractor := xtractor()
 	for _, c := range cases {
+		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			result := extractor.Extract(c.input)
 			assert.Equal(t, c.entities.CodeBlocks, result.CodeBlocks)
 			assert.Equal(t, c.entities.Emotes, result.Emotes)
+			assert.Equal(t, c.entities.Emojis, result.Emojis)
 			assert.Equal(t, c.entities.Tags, result.Tags)
 			assert.Equal(t, c.entities.Spoilers, result.Spoilers)
 			assert.Equal(t, c.entities.Links, result.Links)

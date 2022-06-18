@@ -48,11 +48,20 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 
 		e.Links = append(e.Links, &chatv1.Message_Entities_Link{
 			Url:    url,
-			Bounds: &chatv1.Message_Entities_Bounds{Start: uint32(b[0]), End: uint32(b[1])},
+			Bounds: runeBounds(msg, b),
 		})
 	}
 
 	addEntitiesFromSpan(e, parser.NewParser(x.parserCtx, parser.NewLexer(msg)).ParseMessage())
+
+	for _, b := range emoji.FindAllStringIndex(msg, -1) {
+		if !inBounds(e.Links, b[0], b[1]) && !inBounds(e.CodeBlocks, b[0], b[1]) {
+			e.Emojis = append(e.Emojis, &chatv1.Message_Entities_Emoji{
+				Description: emojiDescriptions[msg[b[0]:b[1]]],
+				Bounds:      runeBounds(msg, b),
+			})
+		}
+	}
 
 	if len(e.Emotes) != 0 && rand.Float64() <= x.rareRate {
 		i := rand.Intn(len(e.Emotes))
@@ -89,11 +98,8 @@ func addEntitiesFromSpan(e *chatv1.Message_Entities, span *parser.Span) {
 }
 
 func addEntitiesFromNode(e *chatv1.Message_Entities, node parser.Node) {
-	for _, l := range e.Links {
-		if l.Bounds.Start <= uint32(node.Pos()) && l.Bounds.End >= uint32(node.End()) {
-			// skip node if we are in a link span
-			return
-		}
+	if inBounds(e.Links, node.Pos(), node.End()) {
+		return
 	}
 
 	switch n := node.(type) {
@@ -116,5 +122,29 @@ func addEntitiesFromNode(e *chatv1.Message_Entities, node parser.Node) {
 		})
 	case *parser.Span:
 		addEntitiesFromSpan(e, n)
+	}
+}
+
+type boundsGetter interface {
+	GetBounds() *chatv1.Message_Entities_Bounds
+}
+
+func inBounds[T boundsGetter](ls []T, start, end int) bool {
+	for _, l := range ls {
+		b := l.GetBounds()
+		if b.Start <= uint32(start) && b.End >= uint32(end) {
+			return true
+		}
+	}
+	return false
+}
+
+func runeBounds(msg string, b []int) *chatv1.Message_Entities_Bounds {
+	off := len([]rune(msg[:b[0]]))
+	width := len([]rune(msg[b[0]:b[1]]))
+
+	return &chatv1.Message_Entities_Bounds{
+		Start: uint32(off),
+		End:   uint32(off + width),
 	}
 }
