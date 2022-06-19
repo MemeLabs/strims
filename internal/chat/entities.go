@@ -6,34 +6,41 @@ package chat
 import (
 	"math/rand"
 	"regexp"
+	"sort"
+	"strings"
+	"unicode/utf8"
 
 	parser "github.com/MemeLabs/chat-parser"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	"github.com/MemeLabs/strims/pkg/sortutil"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"mvdan.cc/xurls/v2"
 )
 
 func newEntityExtractor() *entityExtractor {
 	return &entityExtractor{
-		parserCtx: parser.NewParserContext(parser.ParserContextValues{}),
-		urls:      xurls.Relaxed(),
+		parserCtx:         parser.NewParserContext(parser.ParserContextValues{}),
+		urls:              xurls.Relaxed(),
+		emoji:             compileEmojiRegexp(),
+		internalModifiers: syncutil.NewPointer(&[]*chatv1.Modifier{}),
 	}
 }
 
 // entityExtractor holds active emotes, modifiers, tags and a URL regex
 type entityExtractor struct {
-	parserCtx *parser.ParserContext
-	urls      *regexp.Regexp
-	rareRate  float64
+	parserCtx         *parser.ParserContext
+	urls              *regexp.Regexp
+	emoji             *regexp.Regexp
+	internalModifiers syncutil.Pointer[[]*chatv1.Modifier]
 }
 
-// AddNick adds a nick to the EntityExtractor
-func (x *entityExtractor) AddNick(nick string, peerKey []byte) {
-	x.parserCtx.Nicks.InsertWithMeta([]rune(nick), peerKey)
+func (x *entityExtractor) ParserContext() *parser.ParserContext {
+	return x.parserCtx
 }
 
-// RemoveNick removes a nick from the EntityExtractor
-func (x *entityExtractor) RemoveNick(nick string) {
-	x.parserCtx.Nicks.Remove([]rune(nick))
+// SetInternalModifiers updates the rare emote modifiers
+func (x *entityExtractor) SetInternalModifiers(v []*chatv1.Modifier) {
+	x.internalModifiers.Swap(&v)
 }
 
 // Extract splits a message string into it's component entities
@@ -54,7 +61,7 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 
 	addEntitiesFromSpan(e, parser.NewParser(x.parserCtx, parser.NewLexer(msg)).ParseMessage())
 
-	for _, b := range emoji.FindAllStringIndex(msg, -1) {
+	for _, b := range x.emoji.FindAllStringIndex(msg, -1) {
 		if !inBounds(e.Links, b[0], b[1]) && !inBounds(e.CodeBlocks, b[0], b[1]) {
 			e.Emojis = append(e.Emojis, &chatv1.Message_Entities_Emoji{
 				Description: emojiDescriptions[msg[b[0]:b[1]]],
@@ -63,9 +70,11 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 		}
 	}
 
-	if len(e.Emotes) != 0 && rand.Float64() <= x.rareRate {
-		i := rand.Intn(len(e.Emotes))
-		e.Emotes[i].Modifiers = append(e.Emotes[i].Modifiers, "rare")
+	for _, m := range *x.internalModifiers.Get() {
+		if len(e.Emotes) != 0 && rand.Float64() <= m.ProcChance {
+			i := rand.Intn(len(e.Emotes))
+			e.Emotes[i].Modifiers = append(e.Emotes[i].Modifiers, m.Name)
+		}
 	}
 
 	return e
@@ -140,11 +149,23 @@ func inBounds[T boundsGetter](ls []T, start, end int) bool {
 }
 
 func runeBounds(msg string, b []int) *chatv1.Message_Entities_Bounds {
-	off := len([]rune(msg[:b[0]]))
-	width := len([]rune(msg[b[0]:b[1]]))
+	off := utf8.RuneCountInString(msg[:b[0]])
+	width := utf8.RuneCountInString(msg[b[0]:b[1]])
 
 	return &chatv1.Message_Entities_Bounds{
 		Start: uint32(off),
 		End:   uint32(off + width),
 	}
+}
+
+func compileEmojiRegexp() *regexp.Regexp {
+	glyphs := make([]string, 0, len(emojiDescriptions))
+	for c := range emojiDescriptions {
+		glyphs = append(glyphs, regexp.QuoteMeta(c))
+	}
+	sort.Sort(sortutil.OrderedSlice[string](glyphs))
+
+	re := regexp.MustCompile(strings.Join(glyphs, "|"))
+	re.Longest()
+	return re
 }

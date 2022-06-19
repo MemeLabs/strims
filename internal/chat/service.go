@@ -107,11 +107,14 @@ func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifi
 	d.config.Swap(config)
 
 	var emoteNames, modifierNames, tagNames [][]rune
+	var internalModifiers []*chatv1.Modifier
 	for _, emote := range emotes {
 		emoteNames = append(emoteNames, []rune(emote.Name))
 	}
 	for _, modifier := range modifiers {
-		if !modifier.Internal {
+		if modifier.Internal {
+			internalModifiers = append(internalModifiers, modifier)
+		} else {
 			modifierNames = append(modifierNames, []rune(modifier.Name))
 		}
 	}
@@ -119,9 +122,10 @@ func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifi
 		tagNames = append(tagNames, []rune(tag.Name))
 	}
 
-	d.entityExtractor.parserCtx.Emotes.Replace(emoteNames)
-	d.entityExtractor.parserCtx.EmoteModifiers.Replace(modifierNames)
-	d.entityExtractor.parserCtx.Tags.Replace(tagNames)
+	d.entityExtractor.ParserContext().Emotes.Replace(emoteNames)
+	d.entityExtractor.ParserContext().EmoteModifiers.Replace(modifierNames)
+	d.entityExtractor.ParserContext().Tags.Replace(tagNames)
+	d.entityExtractor.SetInternalModifiers(internalModifiers)
 
 	return nil
 }
@@ -150,9 +154,9 @@ func (d *chatService) handleDirectoryEvent(e event.DirectoryEvent) {
 		for _, e := range e.Broadcast.Events {
 			if e := e.GetUserPresenceChange(); e != nil {
 				if e.Online && slices.Contains(e.ListingIds, d.listingID) {
-					d.entityExtractor.AddNick(e.Alias, e.PeerKey)
+					d.entityExtractor.ParserContext().Nicks.InsertWithMeta([]rune(e.Alias), e.PeerKey)
 				} else {
-					d.entityExtractor.RemoveNick(e.Alias)
+					d.entityExtractor.ParserContext().Nicks.Remove([]rune(e.Alias))
 				}
 			}
 		}

@@ -137,6 +137,7 @@ export type IServer = {
   key?: strims_type_IKey;
   room?: IRoom;
   adminPeerKeys?: Uint8Array[];
+  rareRate?: number;
 }
 
 export class Server {
@@ -145,6 +146,7 @@ export class Server {
   key: strims_type_Key | undefined;
   room: Room | undefined;
   adminPeerKeys: Uint8Array[];
+  rareRate: number;
 
   constructor(v?: IServer) {
     this.id = v?.id || BigInt(0);
@@ -152,6 +154,7 @@ export class Server {
     this.key = v?.key && new strims_type_Key(v.key);
     this.room = v?.room && new Room(v.room);
     this.adminPeerKeys = v?.adminPeerKeys ? v.adminPeerKeys : [];
+    this.rareRate = v?.rareRate || 0;
   }
 
   static encode(m: Server, w?: Writer): Writer {
@@ -161,6 +164,7 @@ export class Server {
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
     if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
     for (const v of m.adminPeerKeys) w.uint32(42).bytes(v);
+    if (m.rareRate) w.uint32(49).double(m.rareRate);
     return w;
   }
 
@@ -185,6 +189,9 @@ export class Server {
         break;
         case 5:
         m.adminPeerKeys.push(r.bytes())
+        break;
+        case 6:
+        m.rareRate = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -631,6 +638,7 @@ export type IModifier = {
   priority?: number;
   internal?: boolean;
   extraWrapCount?: number;
+  procChance?: number;
 }
 
 export class Modifier {
@@ -640,6 +648,7 @@ export class Modifier {
   priority: number;
   internal: boolean;
   extraWrapCount: number;
+  procChance: number;
 
   constructor(v?: IModifier) {
     this.id = v?.id || BigInt(0);
@@ -648,6 +657,7 @@ export class Modifier {
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
     this.extraWrapCount = v?.extraWrapCount || 0;
+    this.procChance = v?.procChance || 0;
   }
 
   static encode(m: Modifier, w?: Writer): Writer {
@@ -658,6 +668,7 @@ export class Modifier {
     if (m.priority) w.uint32(32).uint32(m.priority);
     if (m.internal) w.uint32(40).bool(m.internal);
     if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
+    if (m.procChance) w.uint32(57).double(m.procChance);
     return w;
   }
 
@@ -685,6 +696,9 @@ export class Modifier {
         break;
         case 6:
         m.extraWrapCount = r.uint32();
+        break;
+        case 7:
+        m.procChance = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -2064,8 +2078,8 @@ export class CreateServerRequest {
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
-    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
+    if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
+    if (m.room) Room.encode(m.room, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -2076,10 +2090,10 @@ export class CreateServerRequest {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 2:
+        case 1:
         m.networkKey = r.bytes();
         break;
-        case 3:
+        case 2:
         m.room = Room.decode(r, r.uint32());
         break;
         default:
@@ -2131,17 +2145,20 @@ export type IUpdateServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
   room?: IRoom;
+  rareRate?: number;
 }
 
 export class UpdateServerRequest {
   id: bigint;
   networkKey: Uint8Array;
   room: Room | undefined;
+  rareRate: number;
 
   constructor(v?: IUpdateServerRequest) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.room = v?.room && new Room(v.room);
+    this.rareRate = v?.rareRate || 0;
   }
 
   static encode(m: UpdateServerRequest, w?: Writer): Writer {
@@ -2149,6 +2166,7 @@ export class UpdateServerRequest {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
+    if (m.rareRate) w.uint32(33).double(m.rareRate);
     return w;
   }
 
@@ -2167,6 +2185,9 @@ export class UpdateServerRequest {
         break;
         case 3:
         m.room = Room.decode(r, r.uint32());
+        break;
+        case 4:
+        m.rareRate = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -2827,6 +2848,7 @@ export type ICreateModifierRequest = {
   name?: string;
   priority?: number;
   internal?: boolean;
+  procChance?: number;
 }
 
 export class CreateModifierRequest {
@@ -2834,12 +2856,14 @@ export class CreateModifierRequest {
   name: string;
   priority: number;
   internal: boolean;
+  procChance: number;
 
   constructor(v?: ICreateModifierRequest) {
     this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
+    this.procChance = v?.procChance || 0;
   }
 
   static encode(m: CreateModifierRequest, w?: Writer): Writer {
@@ -2848,6 +2872,7 @@ export class CreateModifierRequest {
     if (m.name.length) w.uint32(18).string(m.name);
     if (m.priority) w.uint32(24).uint32(m.priority);
     if (m.internal) w.uint32(32).bool(m.internal);
+    if (m.procChance) w.uint32(41).double(m.procChance);
     return w;
   }
 
@@ -2869,6 +2894,9 @@ export class CreateModifierRequest {
         break;
         case 4:
         m.internal = r.bool();
+        break;
+        case 5:
+        m.procChance = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -2921,6 +2949,7 @@ export type IUpdateModifierRequest = {
   name?: string;
   priority?: number;
   internal?: boolean;
+  procChance?: number;
 }
 
 export class UpdateModifierRequest {
@@ -2929,6 +2958,7 @@ export class UpdateModifierRequest {
   name: string;
   priority: number;
   internal: boolean;
+  procChance: number;
 
   constructor(v?: IUpdateModifierRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -2936,6 +2966,7 @@ export class UpdateModifierRequest {
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
+    this.procChance = v?.procChance || 0;
   }
 
   static encode(m: UpdateModifierRequest, w?: Writer): Writer {
@@ -2945,6 +2976,7 @@ export class UpdateModifierRequest {
     if (m.name.length) w.uint32(26).string(m.name);
     if (m.priority) w.uint32(32).uint32(m.priority);
     if (m.internal) w.uint32(40).bool(m.internal);
+    if (m.procChance) w.uint32(49).double(m.procChance);
     return w;
   }
 
@@ -2969,6 +3001,9 @@ export class UpdateModifierRequest {
         break;
         case 5:
         m.internal = r.bool();
+        break;
+        case 6:
+        m.procChance = r.double();
         break;
         default:
         r.skipType(tag & 7);

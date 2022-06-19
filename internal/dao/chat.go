@@ -202,7 +202,11 @@ var GetChatWhisperRecordsByState, GetChatWhisperRecordIDsByState = SecondaryInde
 )
 
 // NewChatServer ...
-func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *chatv1.Room) (*chatv1.Server, error) {
+func NewChatServer(
+	g IDGenerator,
+	networkKey []byte,
+	chatRoom *chatv1.Room,
+) (*chatv1.Server, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -254,6 +258,7 @@ func NewChatModifier(
 	name string,
 	priority uint32,
 	internal bool,
+	procChance float64,
 ) (*chatv1.Modifier, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -261,11 +266,12 @@ func NewChatModifier(
 	}
 
 	v := &chatv1.Modifier{
-		Id:       id,
-		ServerId: serverID,
-		Name:     name,
-		Priority: priority,
-		Internal: internal,
+		Id:         id,
+		ServerId:   serverID,
+		Name:       name,
+		Priority:   priority,
+		Internal:   internal,
+		ProcChance: procChance,
 	}
 	return v, nil
 }

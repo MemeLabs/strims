@@ -12,6 +12,7 @@ export interface ChatModifierFormData {
   priority: number;
   internal: boolean;
   extraWrapCount: number;
+  procChance: number;
 }
 
 export interface ChatModifierFormProps {
@@ -29,10 +30,12 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
   values = {},
   submitLabel,
 }) => {
-  const { handleSubmit, control } = useForm<ChatModifierFormData>({
+  const { handleSubmit, control, watch } = useForm<ChatModifierFormData>({
     mode: "onBlur",
     defaultValues: values,
   });
+
+  const internal = watch("internal");
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
@@ -71,6 +74,14 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
         placeholder="Enter a number of extra wrapper elements to render"
       />
       <ToggleInput control={control} name="internal" label="Internal" />
+      <TextInput
+        control={control}
+        name="procChance"
+        label="Proc chance"
+        type="number"
+        placeholder="Chance of randomly occurring in a message"
+        disabled={!internal}
+      />
       <ButtonSet>
         <Button disabled={loading}>{submitLabel}</Button>
       </ButtonSet>

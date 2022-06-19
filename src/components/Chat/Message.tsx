@@ -169,6 +169,7 @@ const MessageSelf: React.FC<MessageSelfProps> = ({ children }) => (
 type EntityComponent =
   | typeof MessageLink
   | typeof MessageEmote
+  | typeof MessageEmoji
   | typeof MessageNick
   | typeof MessageTag
   | typeof MessageSpoiler

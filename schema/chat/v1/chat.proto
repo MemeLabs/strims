@@ -29,6 +29,7 @@ message Server {
   strims.type.Key key = 3;
   Room room = 4;
   repeated bytes admin_peer_keys = 5;
+  double rare_rate = 6;
 }
 
 enum EmoteFileType {
@@ -97,6 +98,7 @@ message Modifier {
   uint32 priority = 4;
   bool internal = 5;
   uint32 extra_wrap_count = 6;
+  double proc_chance = 7;
 }
 
 message Tag {
@@ -279,8 +281,8 @@ message UIConfig {
 }
 
 message CreateServerRequest {
-  bytes network_key = 2;
-  Room room = 3;
+  bytes network_key = 1;
+  Room room = 2;
 }
 message CreateServerResponse {
   Server server = 1;
@@ -289,6 +291,7 @@ message UpdateServerRequest {
   uint64 id = 1;
   bytes network_key = 2;
   Room room = 3;
+  double rareRate = 4;
 }
 message UpdateServerResponse {
   Server server = 1;
@@ -354,6 +357,7 @@ message CreateModifierRequest {
   string name = 2;
   uint32 priority = 3;
   bool internal = 4;
+  double proc_chance = 5;
 }
 message CreateModifierResponse {
   Modifier modifier = 1;
@@ -364,6 +368,7 @@ message UpdateModifierRequest {
   string name = 3;
   uint32 priority = 4;
   bool internal = 5;
+  double proc_chance = 6;
 }
 message UpdateModifierResponse {
   Modifier modifier = 1;

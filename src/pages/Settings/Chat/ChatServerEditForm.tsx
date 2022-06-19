@@ -45,7 +45,7 @@ const ChatServerEditForm: React.FC = () => {
         loading={getRes.loading || updateRes.loading}
         id={BigInt(serverId)}
         values={data}
-        submitLabel="Create Server"
+        submitLabel="Update Server"
       />
     </>
   );

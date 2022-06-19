@@ -161,6 +161,7 @@ func (s *chatService) CreateModifier(ctx context.Context, req *chatv1.CreateModi
 		req.Name,
 		req.Priority,
 		req.Internal,
+		req.ProcChance,
 	)
 	if err != nil {
 		return nil, err
@@ -177,6 +178,7 @@ func (s *chatService) UpdateModifier(ctx context.Context, req *chatv1.UpdateModi
 		v.Name = req.Name
 		v.Priority = req.Priority
 		v.Internal = req.Internal
+		v.ProcChance = req.ProcChance
 		return nil
 	})
 	if err != nil {
