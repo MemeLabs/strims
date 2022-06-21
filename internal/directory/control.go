@@ -23,6 +23,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/maps"
 )
 
 // errors ...
@@ -398,10 +399,11 @@ func (t *control) ModerateUser(ctx context.Context, peerKey []byte, moderation *
 
 func (t *control) GetListingsByPeerKey(peerKey []byte) []NetworkListings {
 	t.lock.Lock()
-	defer t.lock.Unlock()
+	stores := maps.Values(t.syndicateStores)
+	t.lock.Unlock()
 
 	var nls []NetworkListings
-	for _, s := range t.syndicateStores {
+	for _, s := range stores {
 		if ls := s.GetListingsByPeerKey(peerKey); len(ls) != 0 {
 			nls = append(nls, NetworkListings{
 				NetworkKey: dao.NetworkKey(s.Network),
@@ -414,9 +416,10 @@ func (t *control) GetListingsByPeerKey(peerKey []byte) []NetworkListings {
 
 func (t *control) GetUsersByNetworkID(id uint64) []User {
 	t.lock.Lock()
-	defer t.lock.Unlock()
+	s, ok := t.syndicateStores[id]
+	t.lock.Unlock()
 
-	if s, ok := t.syndicateStores[id]; ok {
+	if ok {
 		return s.GetUsers()
 	}
 	return nil
@@ -424,9 +427,10 @@ func (t *control) GetUsersByNetworkID(id uint64) []User {
 
 func (t *control) GetListingsByNetworkID(id uint64) []Listing {
 	t.lock.Lock()
-	defer t.lock.Unlock()
+	s, ok := t.syndicateStores[id]
+	t.lock.Unlock()
 
-	if s, ok := t.syndicateStores[id]; ok {
+	if ok {
 		return s.GetListings()
 	}
 	return nil
@@ -434,9 +438,9 @@ func (t *control) GetListingsByNetworkID(id uint64) []Listing {
 
 func (t *control) GetListingByQuery(networkID uint64, query *networkv1directory.ListingQuery) (Listing, bool) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
-
 	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+
 	if !ok {
 		return Listing{}, false
 	}
@@ -457,9 +461,9 @@ func (t *control) GetListingByQuery(networkID uint64, query *networkv1directory.
 
 func (t *control) WatchListingUsers(ctx context.Context, networkID, listingID uint64) ([]User, chan UserEvent, error) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
-
 	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+
 	if !ok {
 		return nil, nil, errors.New("network id not found")
 	}

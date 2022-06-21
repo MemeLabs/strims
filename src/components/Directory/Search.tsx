@@ -19,6 +19,7 @@ import imgYouTube from "../../../assets/directory/youtube.png";
 import {
   FrontendGetListingsResponse,
   Listing,
+  ListingContentType,
 } from "../../apis/strims/network/v1/directory/directory";
 import { useLazyCall } from "../../contexts/FrontendApi";
 import { useOpenListing } from "../../hooks/directory";
@@ -346,11 +347,17 @@ const Search: React.FC<SearchProps> = ({
 
   const handleFocus = useStableCallback(() => {
     toggleIsFocused(true);
-    void getListings();
+    void getListings({
+      contentTypes: [
+        ListingContentType.LISTING_CONTENT_TYPE_EMBED,
+        ListingContentType.LISTING_CONTENT_TYPE_MEDIA,
+      ],
+    });
   });
 
   const selectEmbed = (embed: Listing.IEmbed) => {
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
+    //       update the directories in all networks?
     const [{ network }] = getListingsRes.value.listings;
     selectListing(network.key, new Listing({ content: { embed } }));
     onDone?.();

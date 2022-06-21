@@ -55,6 +55,9 @@ type syndicateStore struct {
 }
 
 func (d *syndicateStore) GetListings() (ls []Listing) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	for _, l := range d.listings {
 		ls = append(ls, l.Listing)
 	}
@@ -62,6 +65,9 @@ func (d *syndicateStore) GetListings() (ls []Listing) {
 }
 
 func (d *syndicateStore) GetListingByID(id uint64) (Listing, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if l, ok := d.listings[id]; ok {
 		return l.Listing, true
 	}
@@ -69,6 +75,9 @@ func (d *syndicateStore) GetListingByID(id uint64) (Listing, bool) {
 }
 
 func (d *syndicateStore) GetUsers() (us []User) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	for _, u := range d.viewers {
 		us = append(us, u.User)
 	}
@@ -76,6 +85,9 @@ func (d *syndicateStore) GetUsers() (us []User) {
 }
 
 func (d *syndicateStore) GetUsersByListingID(id uint64) (us []User) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if l, ok := d.listings[id]; ok {
 		for _, u := range l.Viewers {
 			us = append(us, u.User)
