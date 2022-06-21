@@ -137,7 +137,6 @@ export type IServer = {
   key?: strims_type_IKey;
   room?: IRoom;
   adminPeerKeys?: Uint8Array[];
-  rareRate?: number;
 }
 
 export class Server {
@@ -146,7 +145,6 @@ export class Server {
   key: strims_type_Key | undefined;
   room: Room | undefined;
   adminPeerKeys: Uint8Array[];
-  rareRate: number;
 
   constructor(v?: IServer) {
     this.id = v?.id || BigInt(0);
@@ -154,7 +152,6 @@ export class Server {
     this.key = v?.key && new strims_type_Key(v.key);
     this.room = v?.room && new Room(v.room);
     this.adminPeerKeys = v?.adminPeerKeys ? v.adminPeerKeys : [];
-    this.rareRate = v?.rareRate || 0;
   }
 
   static encode(m: Server, w?: Writer): Writer {
@@ -164,7 +161,6 @@ export class Server {
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
     if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
     for (const v of m.adminPeerKeys) w.uint32(42).bytes(v);
-    if (m.rareRate) w.uint32(49).double(m.rareRate);
     return w;
   }
 
@@ -189,9 +185,6 @@ export class Server {
         break;
         case 5:
         m.adminPeerKeys.push(r.bytes())
-        break;
-        case 6:
-        m.rareRate = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -2145,20 +2138,17 @@ export type IUpdateServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
   room?: IRoom;
-  rareRate?: number;
 }
 
 export class UpdateServerRequest {
   id: bigint;
   networkKey: Uint8Array;
   room: Room | undefined;
-  rareRate: number;
 
   constructor(v?: IUpdateServerRequest) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.room = v?.room && new Room(v.room);
-    this.rareRate = v?.rareRate || 0;
   }
 
   static encode(m: UpdateServerRequest, w?: Writer): Writer {
@@ -2166,7 +2156,6 @@ export class UpdateServerRequest {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
-    if (m.rareRate) w.uint32(33).double(m.rareRate);
     return w;
   }
 
@@ -2185,9 +2174,6 @@ export class UpdateServerRequest {
         break;
         case 3:
         m.room = Room.decode(r, r.uint32());
-        break;
-        case 4:
-        m.rareRate = r.double();
         break;
         default:
         r.skipType(tag & 7);

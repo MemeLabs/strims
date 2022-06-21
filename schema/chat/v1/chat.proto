@@ -29,7 +29,6 @@ message Server {
   strims.type.Key key = 3;
   Room room = 4;
   repeated bytes admin_peer_keys = 5;
-  double rare_rate = 6;
 }
 
 enum EmoteFileType {
@@ -291,7 +290,6 @@ message UpdateServerRequest {
   uint64 id = 1;
   bytes network_key = 2;
   Room room = 3;
-  double rareRate = 4;
 }
 message UpdateServerResponse {
   Server server = 1;
