@@ -36,8 +36,9 @@ const (
 	schedulerGCInterval          = 5 * time.Second
 	schedulerRateUpdateInterval  = 1 * time.Second
 	schedulerStreamCheckInterval = 5 * time.Second
+	schedulerRestartCooldown     = 1 * time.Second
 
-	timeGranularity   = int64(time.Millisecond)
+	timeGranularity   = timeutil.Precision
 	minRTTVar         = 200 * time.Millisecond
 	minRequestTimeout = 100 * time.Millisecond
 	maxRequestTimeout = 500 * time.Millisecond
@@ -258,16 +259,10 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 
 	for _, cs := range s.channels {
 		cs.timeOutRequests()
+		cs.tryRestart(t)
 	}
 
-	// decide which bin ranges we would consider from each peer
-
 	// when the bitrate is low worry less about who we subscribe to
-
-	// balance... tensor things... elastic springy something...
-	// downregulate when requests lag and adjust the target to compensate
-
-	// how do we allocate requests
 
 	// replace underperforming peers...
 	// collect peers that swarms could do without?
@@ -652,20 +647,21 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerTaskQueue, cw codecMessageWr
 	defer s.lock.Unlock()
 
 	c := &peerChannelScheduler{
-		logger:         s.logger.With(logutil.ByteHex("peer", p.ID())),
-		p:              p,
-		cw:             cw,
-		s:              s,
-		streamHaveLag:  make([]stats.Welford, s.streamCount),
-		dataRTT:        stats.NewSMA(int(schedulerStreamCheckInterval/(100*time.Millisecond)), 100*time.Millisecond),
-		dataRTTMean:    stats.NewEMA(0.125),
-		dataRTTVar:     stats.NewEMA(0.25),
-		dataChunks:     stats.NewSMA(15, time.Second),
-		haveBins:       s.haveBins.Clone(),
-		cancelBins:     binmap.New(),
-		requestStreams: make([]binmap.Bin, s.streamCount),
-		extraMessages:  []codec.Message{newHandshake(s.swarm)},
-		peerHaveBins:   binmap.New(),
+		logger:          s.logger.With(logutil.ByteHex("peer", p.ID())),
+		p:               p,
+		cw:              cw,
+		s:               s,
+		streamHaveLag:   make([]stats.Welford, s.streamCount),
+		dataRTT:         stats.NewSMA(int(schedulerStreamCheckInterval/(100*time.Millisecond)), 100*time.Millisecond),
+		dataRTTMean:     stats.NewEMA(0.125),
+		dataRTTVar:      stats.NewEMA(0.25),
+		dataChunks:      stats.NewSMA(15, time.Second),
+		haveBins:        s.haveBins.Clone(),
+		cancelBins:      binmap.New(),
+		requestStreams:  make([]binmap.Bin, s.streamCount),
+		extraMessages:   []codec.Message{newHandshake(s.swarm)},
+		peerHaveBins:    binmap.New(),
+		nextRestartTime: timeutil.Now().Add(schedulerRestartCooldown),
 		// sentBinMin:     binmap.None,
 		// sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
 
@@ -799,6 +795,8 @@ type peerChannelScheduler struct {
 	ledbat *ledbat.Controller
 	// flightSize uint64
 
+	nextRestartTime timeutil.Time
+
 	nextPingTime timeutil.Time
 	pingNonce    uint64
 
@@ -811,6 +809,17 @@ type peerChannelScheduler struct {
 	// pushedData  *binmap.Map
 
 	candidateBins [][]binmap.Bin
+}
+
+func (c *peerChannelScheduler) tryRestart(t timeutil.Time) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.peerLiveWindow == 0 && t.After(c.nextRestartTime) {
+		c.nextRestartTime = t.Add(schedulerRestartCooldown)
+		c.extraMessages = append(c.extraMessages, &codec.Restart{})
+		c.p.Enqueue(c)
+	}
 }
 
 func (c *peerChannelScheduler) appendHaveBins(hb binmap.Bin) {
@@ -964,6 +973,8 @@ func (c *peerChannelScheduler) write0() error {
 		switch m := m.(type) {
 		case *codec.Handshake:
 			_, err = c.cw.WriteHandshake(*m)
+		case *codec.Restart:
+			_, err = c.cw.WriteRestart(*m)
 		case *codec.StreamRequest:
 			_, err = c.cw.WriteStreamRequest(*m)
 		case *codec.StreamCancel:
@@ -1247,6 +1258,14 @@ func (c *peerChannelScheduler) HandleHandshake(liveWindow uint32) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.peerLiveWindow = binmap.Bin(liveWindow * 2)
+	return nil
+}
+
+func (c *peerChannelScheduler) HandleRestart() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.extraMessages = append(c.extraMessages, newHandshake(c.s.swarm))
+	c.haveBins = c.s.haveBins.Clone()
 	return nil
 }
 

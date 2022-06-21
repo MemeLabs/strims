@@ -6,6 +6,7 @@ package codec
 // MessageHandler ...
 type MessageHandler interface {
 	HandleHandshake(v Handshake) error
+	HandleRestart(v Restart) error
 	HandleData(v Data) error
 	HandleAck(v Ack) error
 	HandleHave(v Have) error
@@ -44,6 +45,8 @@ func (v Reader) Read(b []byte) (n int, err error) {
 		switch mt {
 		case HandshakeMessage:
 			mn, err = v.readHandshake(b[n:])
+		case RestartMessage:
+			mn, err = v.readRestart(b[n:])
 		case DataMessage:
 			mn, err = v.readData(b[n:])
 		case AckMessage:
@@ -94,6 +97,16 @@ func (v Reader) readHandshake(b []byte) (int, error) {
 		return 0, err
 	}
 	err = v.Handler.HandleHandshake(msg)
+	return n, err
+}
+
+func (v Reader) readRestart(b []byte) (int, error) {
+	var msg Restart
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	err = v.Handler.HandleRestart(msg)
 	return n, err
 }
 

@@ -999,6 +999,16 @@ func (v *Unchoke) Type() MessageType {
 	return UnchokeMessage
 }
 
+// Restart ...
+type Restart struct {
+	Empty
+}
+
+// Type ...
+func (v *Restart) Type() MessageType {
+	return RestartMessage
+}
+
 // End ...
 type End struct {
 	Empty

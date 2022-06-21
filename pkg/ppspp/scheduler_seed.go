@@ -500,6 +500,10 @@ func (c *seedChannelScheduler) HandleHandshake(liveWindow uint32) error {
 	return nil
 }
 
+func (c *seedChannelScheduler) HandleRestart() error {
+	return nil
+}
+
 // deprecated?
 func (c *seedChannelScheduler) HandleAck(b binmap.Bin, delaySample time.Duration) error {
 	c.lock.Lock()

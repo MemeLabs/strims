@@ -37,6 +37,7 @@ var (
 
 	errIncompatibleVersionOption                    = errors.New("incompatible VersionOption")
 	errIncompatibleMinimumVersionOption             = errors.New("incompatible MinimumVersionOption")
+	errInvalidLiveWindowOption                      = errors.New("invalid LiveWindowOption")
 	errIncompatibleChunkSizeOption                  = errors.New("incompatible ChunkSizeOption")
 	errIncompatibleChunksPerSignatureOption         = errors.New("incompatible ChunksPerSignatureOption")
 	errIncompatibleStreamCountOption                = errors.New("incompatible StreamCountOption")
@@ -122,6 +123,15 @@ func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
 	n, err := c.cw.WriteHandshake(m)
 	if err == nil {
 		c.metrics.HandshakeCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
+}
+
+func (c *channelWriter) WriteRestart(m codec.Restart) (int, error) {
+	n, err := c.cw.WriteRestart(m)
+	if err == nil {
+		c.metrics.RestartCount++
 		c.metrics.OverheadBytesCount += n
 	}
 	return n, err
@@ -367,11 +377,11 @@ type channelMessageHandler struct {
 	verifier  integrity.ChannelVerifier
 }
 
-func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
+func (c *channelMessageHandler) HandleHandshake(m codec.Handshake) error {
 	c.metrics.HandshakeCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(v.ByteLen()))
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
 
-	if swarmID, ok := v.Options.Find(codec.SwarmIdentifierOption); ok {
+	if swarmID, ok := m.Options.Find(codec.SwarmIdentifierOption); ok {
 		if !c.swarm.ID().Equals(NewSwarmID(*swarmID.(*codec.SwarmIdentifierProtocolOption))) {
 			return errIncompatibleSwarmIdentifierOption
 		}
@@ -379,7 +389,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoSwarmIdentifierOption
 	}
 
-	if version, ok := v.Options.Find(codec.VersionOption); ok {
+	if version, ok := m.Options.Find(codec.VersionOption); ok {
 		if version.(*codec.VersionProtocolOption).Value < MinimumProtocolVersion {
 			return errIncompatibleVersionOption
 		}
@@ -387,7 +397,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoVersionOption
 	}
 
-	if minimumVersion, ok := v.Options.Find(codec.MinimumVersionOption); ok {
+	if minimumVersion, ok := m.Options.Find(codec.MinimumVersionOption); ok {
 		if minimumVersion.(*codec.MinimumVersionProtocolOption).Value > ProtocolVersion {
 			return errIncompatibleMinimumVersionOption
 		}
@@ -395,11 +405,15 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoMinimumVersionOption
 	}
 
-	if _, ok := v.Options.Find(codec.LiveWindowOption); !ok {
+	if liveWindow, ok := m.Options.Find(codec.LiveWindowOption); ok {
+		if liveWindow.(*codec.LiveWindowProtocolOption).Value == 0 {
+			return errInvalidLiveWindowOption
+		}
+	} else {
 		return errNoLiveWindowOption
 	}
 
-	if chunkSize, ok := v.Options.Find(codec.ChunkSizeOption); ok {
+	if chunkSize, ok := m.Options.Find(codec.ChunkSizeOption); ok {
 		if chunkSize.(*codec.ChunkSizeProtocolOption).Value != uint32(c.swarm.options.ChunkSize) {
 			return errIncompatibleChunkSizeOption
 		}
@@ -407,7 +421,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoChunkSizeOption
 	}
 
-	if chunksPerSignature, ok := v.Options.Find(codec.ChunksPerSignatureOption); ok {
+	if chunksPerSignature, ok := m.Options.Find(codec.ChunksPerSignatureOption); ok {
 		if chunksPerSignature.(*codec.ChunksPerSignatureProtocolOption).Value != uint32(c.swarm.options.ChunksPerSignature) {
 			return errIncompatibleChunksPerSignatureOption
 		}
@@ -415,7 +429,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoChunksPerSignatureOption
 	}
 
-	if chunksPerSignature, ok := v.Options.Find(codec.StreamCountOption); ok {
+	if chunksPerSignature, ok := m.Options.Find(codec.StreamCountOption); ok {
 		if chunksPerSignature.(*codec.StreamCountProtocolOption).Value != uint16(c.swarm.options.StreamCount) {
 			return errIncompatibleStreamCountOption
 		}
@@ -423,7 +437,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoStreamCountOption
 	}
 
-	if contentIntegrityProtectionMethod, ok := v.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
+	if contentIntegrityProtectionMethod, ok := m.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
 		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.options.Integrity.ProtectionMethod) {
 			return errIncompatibleContentIntegrityProtectionMethod
 		}
@@ -431,7 +445,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoContentIntegrityProtectionMethod
 	}
 
-	if merkleHashTreeFunction, ok := v.Options.Find(codec.MerkleHashTreeFunctionOption); ok {
+	if merkleHashTreeFunction, ok := m.Options.Find(codec.MerkleHashTreeFunctionOption); ok {
 		if merkleHashTreeFunction.(*codec.MerkleHashTreeFunctionProtocolOption).Value != uint8(c.swarm.options.Integrity.MerkleHashTreeFunction) {
 			return errIncompatibleMerkleHashTreeFunction
 		}
@@ -439,7 +453,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoMerkleHashTreeFunction
 	}
 
-	if liveSignatureAlgorithm, ok := v.Options.Find(codec.LiveSignatureAlgorithmOption); ok {
+	if liveSignatureAlgorithm, ok := m.Options.Find(codec.LiveSignatureAlgorithmOption); ok {
 		if liveSignatureAlgorithm.(*codec.LiveSignatureAlgorithmProtocolOption).Value != uint8(c.swarm.options.Integrity.LiveSignatureAlgorithm) {
 			return errIncompatibleLiveSignatureAlgorithm
 		}
@@ -447,8 +461,14 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoLiveSignatureAlgorithm
 	}
 
-	liveWindow := v.Options.MustFind(codec.LiveWindowOption).(*codec.LiveWindowProtocolOption).Value
+	liveWindow := m.Options.MustFind(codec.LiveWindowOption).(*codec.LiveWindowProtocolOption).Value
 	return c.scheduler.HandleHandshake(liveWindow)
+}
+
+func (c *channelMessageHandler) HandleRestart(m codec.Restart) error {
+	c.metrics.RestartCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleRestart()
 }
 
 func (c *channelMessageHandler) HandleData(m codec.Data) error {
@@ -612,6 +632,7 @@ func newChannelWriterMetrics(s *Swarm, p *peer, pm *peerChannelMetrics) channelW
 
 type channelWriterMetrics struct {
 	HandshakeCount       int
+	RestartCount         int
 	DataCount            int
 	ChunkCount           uint64
 	IntegrityCount       int
@@ -635,6 +656,7 @@ type channelWriterMetrics struct {
 
 func (m *channelWriterMetrics) Merge() {
 	m.m.HandshakeCount.Add(float64(m.HandshakeCount))
+	m.m.RestartCount.Add(float64(m.RestartCount))
 	m.m.DataCount.Add(float64(m.DataCount))
 	m.m.ChunkCount.Add(float64(m.ChunkCount))
 	m.m.IntegrityCount.Add(float64(m.IntegrityCount))
@@ -657,6 +679,7 @@ func (m *channelWriterMetrics) Merge() {
 
 func (m *channelWriterMetrics) Reset() {
 	m.HandshakeCount = 0
+	m.RestartCount = 0
 	m.DataCount = 0
 	m.ChunkCount = 0
 	m.IntegrityCount = 0
@@ -688,6 +711,7 @@ func newChannelMetrics(s *Swarm, p *peer, direction string, pm *peerChannelMetri
 
 	return channelMetrics{
 		HandshakeCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "handshake_message"),
+		RestartCount:         channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "handshake_request_message"),
 		DataCount:            channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "data_message"),
 		ChunkCount:           channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "chunk"),
 		IntegrityCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "integrity_message"),
@@ -712,6 +736,7 @@ func newChannelMetrics(s *Swarm, p *peer, direction string, pm *peerChannelMetri
 
 type channelMetrics struct {
 	HandshakeCount       prometheus.Counter
+	RestartCount         prometheus.Counter
 	DataCount            prometheus.Counter
 	ChunkCount           prometheus.Counter
 	IntegrityCount       prometheus.Counter
@@ -744,6 +769,7 @@ func deleteChannelMetrics(s *Swarm, p *peer, direction string) {
 	label := s.options.Label
 
 	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "handshake_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "handshake_request_message")
 	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "data_message")
 	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "chunk")
 	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "integrity_message")

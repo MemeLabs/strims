@@ -102,6 +102,21 @@ func (w *Writer) WriteHandshake(m Handshake) (int, error) {
 	return n, nil
 }
 
+// WriteRestart ...
+func (w *Writer) WriteRestart(m Restart) (int, error) {
+	n := m.ByteLen() + MessageTypeLen
+	if err := w.ensureSpace(n); err != nil {
+		return 0, err
+	}
+
+	w.buf[w.off] = byte(m.Type())
+	w.off++
+
+	w.off += m.Marshal(w.buf[w.off:])
+
+	return n, nil
+}
+
 // WriteAck ...
 func (w *Writer) WriteAck(m Ack) (int, error) {
 	n := m.ByteLen() + MessageTypeLen

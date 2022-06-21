@@ -67,6 +67,7 @@ type mockCodecMessageWriter struct {
 	FlushFunc                func() error
 	ResetFunc                func()
 	WriteHandshakeFunc       func(m codec.Handshake) error
+	WriteRestartFunc         func(m codec.Restart) error
 	WriteAckFunc             func(m codec.Ack) error
 	WriteHaveFunc            func(m codec.Have) error
 	WriteDataFunc            func(m codec.Data) error
@@ -113,6 +114,13 @@ func (w *mockCodecMessageWriter) WriteHandshake(m codec.Handshake) (int, error) 
 	var err error
 	if w.WriteHandshakeFunc != nil {
 		err = w.WriteHandshakeFunc(m)
+	}
+	return m.ByteLen(), err
+}
+func (w *mockCodecMessageWriter) WriteRestart(m codec.Restart) (int, error) {
+	var err error
+	if w.WriteRestartFunc != nil {
+		err = w.WriteRestartFunc(m)
 	}
 	return m.ByteLen(), err
 }

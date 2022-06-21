@@ -228,6 +228,10 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			dst: &Unchoke{},
 		},
 		{
+			src: &Restart{},
+			dst: &Restart{},
+		},
+		{
 			src: &End{},
 			dst: &End{},
 		},
