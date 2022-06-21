@@ -330,6 +330,11 @@ func (h *codecHandler) ReadMessages() ([]ppsppv1.CapConnLog_PeerLog_Event_Messag
 	return t, a
 }
 
+func (h *codecHandler) HandleRestart(v codec.Restart) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_RESTART, 0)
+	return nil
+}
+
 func (h *codecHandler) HandleData(v codec.Data) error {
 	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_DATA, uint64(v.Address))
 	return nil

@@ -50,14 +50,14 @@ func TestWelchTTest2(t *testing.T) {
 	var w [5]Welford
 	n := 1000000
 	for i := 0; i < n; i++ {
-		w[0].Update(54.99 + rand.Float64()*10)
-		w[1].Update(55 + rand.Float64()*10)
-		w[2].Update(55 + rand.Float64()*10)
-		w[3].Update(55 + rand.Float64()*10)
-		w[4].Update(55 + rand.Float64()*10)
+		w[0].Update(10.01 + rand.Float64()*10)
+		w[1].Update(10 + rand.Float64()*10)
+		w[2].Update(10 + rand.Float64()*10)
+		w[3].Update(10 + rand.Float64()*10)
+		w[4].Update(10 + rand.Float64()*10)
 	}
 
-	g := WelfordMerge(w[:]...)
+	g := WelfordMerge(w[1:]...)
 
 	log.Println("count", w[0].Count(), g.Count())
 	log.Println("mean", w[0].Mean(), g.Mean())
