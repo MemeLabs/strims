@@ -72,6 +72,8 @@ func (t *control) Run() {
 			switch e := e.(type) {
 			case event.PeerAdd:
 				t.handlePeerAdd(e.ID)
+			case event.PeerRemove:
+				t.handlePeerRemove()
 			case *networkv1bootstrap.BootstrapClientChange:
 				go t.startClient(e.BootstrapClient)
 			}
@@ -95,6 +97,13 @@ func (t *control) handlePeerAdd(id uint64) {
 
 		peer.PublishEnabled.Set(res.Enabled)
 	}()
+}
+
+func (t *control) handlePeerRemove() {
+	// reconnect to bootstraps if the last peer connection closes
+	if t.vpn.VNIC().PeerCount() == 0 {
+		go t.startClients()
+	}
 }
 
 // AddPeer ...
