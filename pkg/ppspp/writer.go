@@ -8,6 +8,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 // WriterOptions ...
@@ -32,8 +33,19 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 	s.store.SetOffset(0)
 
 	sw := store.NewWriter(s.pubSub, s.options.ChunkSize)
-	w, err := integrity.NewWriter(o.Key.Private, s.verifier, sw, s.options.IntegrityWriterOptions())
+
+	iwo := s.options.IntegrityWriterOptions()
+	ss, err := iwo.LiveSignatureAlgorithm.Signer(o.Key.Private)
 	if err != nil {
+		return nil, err
+	}
+	w, err := integrity.NewWriter(ss, s.verifier, sw, iwo)
+	if err != nil {
+		return nil, err
+	}
+
+	e := timeutil.Now()
+	if _, err := s.epoch.Sync(e, ss.Sign(e, nil)); err != nil {
 		return nil, err
 	}
 

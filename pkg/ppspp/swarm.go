@@ -28,7 +28,12 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		return nil, err
 	}
 
-	v, err := integrity.NewVerifier(id, o.IntegrityVerifierOptions())
+	ivo := o.IntegrityVerifierOptions()
+	sv, err := ivo.LiveSignatureAlgorithm.Verifier(id)
+	if err != nil {
+		return nil, err
+	}
+	v, err := integrity.NewVerifier(sv, ivo)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +44,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		store:    buf,
 		pubSub:   store.NewPubSub(buf),
 		verifier: v,
+		epoch:    newEpoch(sv),
 	}, nil
 }
 
@@ -50,6 +56,12 @@ type Swarm struct {
 	reader   *store.BufferReader
 	pubSub   *store.PubSub
 	verifier integrity.SwarmVerifier
+	epoch    epoch
+}
+
+func (s *Swarm) reset() {
+	s.pubSub.Reset()
+	s.verifier.Reset()
 }
 
 // ID ...
@@ -74,6 +86,9 @@ func (s *Swarm) ImportCache(c *swarmpb.Cache) error {
 	if c.Uri != s.URI().String() {
 		return errors.New("cache import failed: incompatible swarm options")
 	}
+	if err := s.epoch.ImportCache(c.Epoch); err != nil {
+		return fmt.Errorf("epoch import failed: %w", err)
+	}
 	if err := s.verifier.ImportCache(c); err != nil {
 		return fmt.Errorf("cache import failed: %w", err)
 	}
@@ -91,6 +106,7 @@ func (s *Swarm) ExportCache() (*swarmpb.Cache, error) {
 
 	return &swarmpb.Cache{
 		Uri:       s.URI().String(),
+		Epoch:     s.epoch.ExportCache(),
 		Integrity: s.verifier.ExportCache(),
 		Data:      data,
 	}, nil

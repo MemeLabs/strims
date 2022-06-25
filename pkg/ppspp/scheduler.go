@@ -28,6 +28,7 @@ type peerTaskRunner interface {
 
 type channelScheduler interface {
 	peerTaskRunner
+	ExpectData(b binmap.Bin) bool
 	HandleHandshake(liveWindow uint32) error
 	HandleRestart() error
 	HandleAck(b binmap.Bin, delaySample time.Duration) error

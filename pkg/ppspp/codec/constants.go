@@ -104,6 +104,8 @@ func (m ProtocolOptionType) String() string {
 		return "ChunksPerSignature"
 	case StreamCountOption:
 		return "StreamCount"
+	case EpochOption:
+		return "Epoch"
 	case EndOption:
 		return "EndOption"
 	}
@@ -124,6 +126,7 @@ const (
 	ChunkSizeOption
 	ChunksPerSignatureOption
 	StreamCountOption
+	EpochOption
 	EndOption ProtocolOptionType = 255
 )
 

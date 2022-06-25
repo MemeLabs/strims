@@ -77,15 +77,15 @@ func RunEveryNWithStackSkip(n, skip int, fn func()) {
 }
 
 func RunEveryN(n int, fn func()) {
-	RunEveryNWithStackSkip(n, 1, fn)
+	RunEveryNWithStackSkip(n, 2, fn)
 }
 
 // LogEveryN ...
 func LogEveryN(n int, msg ...any) {
-	RunEveryNWithStackSkip(n, 1, func() { log.Println(msg...) })
+	RunEveryNWithStackSkip(n, 2, func() { log.Println(msg...) })
 }
 
 // LogfEveryN ...
 func LogfEveryN(n int, format string, a ...any) {
-	RunEveryNWithStackSkip(n, 1, func() { log.Printf(format, a...) })
+	RunEveryNWithStackSkip(n, 2, func() { log.Printf(format, a...) })
 }

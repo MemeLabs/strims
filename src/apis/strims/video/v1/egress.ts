@@ -190,25 +190,25 @@ export namespace EgressOpenStreamResponse {
   export type IData = {
     data?: Uint8Array;
     segmentEnd?: boolean;
-    bufferUnderrun?: boolean;
+    discontinuity?: boolean;
   }
 
   export class Data {
     data: Uint8Array;
     segmentEnd: boolean;
-    bufferUnderrun: boolean;
+    discontinuity: boolean;
 
     constructor(v?: IData) {
       this.data = v?.data || new Uint8Array();
       this.segmentEnd = v?.segmentEnd || false;
-      this.bufferUnderrun = v?.bufferUnderrun || false;
+      this.discontinuity = v?.discontinuity || false;
     }
 
     static encode(m: Data, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.data.length) w.uint32(10).bytes(m.data);
       if (m.segmentEnd) w.uint32(16).bool(m.segmentEnd);
-      if (m.bufferUnderrun) w.uint32(24).bool(m.bufferUnderrun);
+      if (m.discontinuity) w.uint32(24).bool(m.discontinuity);
       return w;
     }
 
@@ -226,7 +226,7 @@ export namespace EgressOpenStreamResponse {
           m.segmentEnd = r.bool();
           break;
           case 3:
-          m.bufferUnderrun = r.bool();
+          m.discontinuity = r.bool();
           break;
           default:
           r.skipType(tag & 7);

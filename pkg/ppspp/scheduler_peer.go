@@ -600,6 +600,36 @@ func (s *peerSwarmScheduler) gc(t timeutil.Time) {
 	}
 }
 
+func (s *peerSwarmScheduler) Reset() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.peerHaveChunkRate = stats.NewSMA(15, time.Second)
+	s.haveBins = binmap.New()
+	s.requestBins = binmap.New()
+	s.streams = newPeerSchedulerStreamSubscription(int(s.streamCount))
+	s.firstChunkSet = false
+
+	for _, cs := range s.channels {
+		cs.lock.Lock()
+
+		cs.streamHaveLag = make([]stats.Welford, s.streamCount)
+		cs.dataChunks = stats.NewSMA(15, time.Second)
+		cs.haveBins = binmap.New()
+		cs.cancelBins = binmap.New()
+		cs.requestStreams = make([]binmap.Bin, s.streamCount)
+		cs.extraMessages = []codec.Message{newHandshake(s.swarm)}
+		cs.peerHaveBins = binmap.New()
+		cs.nextRestartTime = timeutil.Now().Add(schedulerRestartCooldown)
+		cs.ledbat = ledbat.New()
+		cs.handshakeReceived = false
+
+		cs.p.EnqueueNow(cs)
+
+		cs.lock.Unlock()
+	}
+}
+
 func (s *peerSwarmScheduler) Consume(c store.Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -795,7 +825,8 @@ type peerChannelScheduler struct {
 	ledbat *ledbat.Controller
 	// flightSize uint64
 
-	nextRestartTime timeutil.Time
+	nextRestartTime   timeutil.Time
+	handshakeReceived bool
 
 	nextPingTime timeutil.Time
 	pingNonce    uint64
@@ -815,7 +846,7 @@ func (c *peerChannelScheduler) tryRestart(t timeutil.Time) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if c.peerLiveWindow == 0 && t.After(c.nextRestartTime) {
+	if !c.handshakeReceived && t.After(c.nextRestartTime) {
 		c.nextRestartTime = t.Add(schedulerRestartCooldown)
 		c.extraMessages = append(c.extraMessages, &codec.Restart{})
 		c.p.Enqueue(c)
@@ -1008,10 +1039,10 @@ func (c *peerChannelScheduler) write0() error {
 func (c *peerChannelScheduler) write1() error {
 	c.s.lock.Lock()
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
 
 	if c.choked {
-		c.lock.Unlock()
-		c.s.lock.Unlock()
 		return nil
 	}
 
@@ -1116,9 +1147,6 @@ func (c *peerChannelScheduler) write1() error {
 		// 		}
 		// 	}
 	}
-
-	c.lock.Unlock()
-	c.s.lock.Unlock()
 
 	return err
 }
@@ -1254,10 +1282,18 @@ func (c *peerChannelScheduler) pruneExtraMessages(i int) {
 	c.extraMessages = c.extraMessages[:n]
 }
 
+func (c *peerChannelScheduler) ExpectData(b binmap.Bin) bool {
+	// TODO: check that the data was either requested or part of a stream we
+	// expect from this peer?
+
+	return c.handshakeReceived
+}
+
 func (c *peerChannelScheduler) HandleHandshake(liveWindow uint32) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.peerLiveWindow = binmap.Bin(liveWindow * 2)
+	c.handshakeReceived = true
 	return nil
 }
 
@@ -1271,8 +1307,8 @@ func (c *peerChannelScheduler) HandleRestart() error {
 
 // deprecated?
 func (c *peerChannelScheduler) HandleAck(b binmap.Bin, delaySample time.Duration) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	// c.lock.Lock()
+	// defer c.lock.Unlock()
 	// ignore these for now?
 	return nil
 }
@@ -1352,6 +1388,12 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 	atomic.StoreUint32(&c.enqueueNow, 1)
 
 	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
+
 	if _, ts, ok := c.requestTimes.Get(b); ok {
 		// LEDBAT rtt...
 		rtt := float64(now.Sub(ts))
@@ -1375,7 +1417,6 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 		// }
 	}
 	c.dataChunks.AddWithTime(b.BaseLength(), now)
-	c.lock.Unlock()
 	return nil
 }
 
@@ -1387,10 +1428,15 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	t := timeutil.Now()
 
 	c.s.lock.Lock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
 
 	c.s.setBinTime(b, t)
-
-	c.lock.Lock()
 
 	for it := c.peerHaveBins.IterateEmptyAt(b); it.NextBase(); {
 		_, first, _ := c.s.binTimes.Get(it.Value())
@@ -1428,9 +1474,6 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 		c.s.peerMaxHaveBin = br
 	}
 
-	c.lock.Unlock()
-	c.s.lock.Unlock()
-
 	// debug.LogfEveryN(1000, "write1 count: %d time: %s avg: %d", nza, time.Duration(nzb), nzb/nza)
 
 	return nil
@@ -1444,6 +1487,13 @@ func (c *peerChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) erro
 	// }
 	// c.requested.Set(b)
 	// c.lock.Unlock()
+
+	c.lock.Lock()
+	ok := c.handshakeReceived
+	c.lock.Unlock()
+	if !ok {
+		return nil
+	}
 
 	c.p.PushData(c, b, t, peerPriorityLow)
 
@@ -1507,27 +1557,44 @@ func (c *peerChannelScheduler) HandlePong(nonce uint64) error {
 func (c *peerChannelScheduler) HandleStreamRequest(s codec.Stream, b binmap.Bin) error {
 	c.s.lock.Lock()
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
 
 	c.addStreamOpen(s, b)
 
-	c.lock.Unlock()
-	c.s.lock.Unlock()
 	return nil
 }
 
 func (c *peerChannelScheduler) HandleStreamCancel(s codec.Stream) error {
 	c.s.lock.Lock()
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
+
 	// c.addStreamClose(s)
 	c.s.streams[s].removeSubscriber(c)
-	c.lock.Unlock()
-	c.s.lock.Unlock()
+
 	return nil
 }
 
 func (c *peerChannelScheduler) HandleStreamOpen(s codec.Stream, b binmap.Bin) error {
 	c.s.lock.Lock()
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
+
 	// add to stream set
 
 	/*
@@ -1547,19 +1614,21 @@ func (c *peerChannelScheduler) HandleStreamOpen(s codec.Stream, b binmap.Bin) er
 
 	c.s.setStreamSource(c, s, b)
 
-	c.lock.Unlock()
-	c.s.lock.Unlock()
 	return nil
 }
 
 func (c *peerChannelScheduler) HandleStreamClose(s codec.Stream) error {
 	c.s.lock.Lock()
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	defer c.s.lock.Unlock()
+
+	if !c.handshakeReceived {
+		return nil
+	}
 
 	c.closeStream(s)
 
-	c.lock.Unlock()
-	c.s.lock.Unlock()
 	return nil
 }
 

@@ -48,20 +48,24 @@ var (
 )
 
 func newHandshake(swarm *Swarm) *codec.Handshake {
-	return &codec.Handshake{
-		Options: []codec.ProtocolOption{
-			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
-			&codec.VersionProtocolOption{Value: 2},
-			&codec.MinimumVersionProtocolOption{Value: 2},
-			&codec.LiveWindowProtocolOption{Value: uint32(swarm.options.LiveWindow)},
-			&codec.ChunkSizeProtocolOption{Value: uint32(swarm.options.ChunkSize)},
-			&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.options.Integrity.ProtectionMethod)},
-			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.options.Integrity.MerkleHashTreeFunction)},
-			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.options.Integrity.LiveSignatureAlgorithm)},
-			&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.options.ChunksPerSignature)},
-			&codec.StreamCountProtocolOption{Value: uint16(swarm.options.StreamCount)},
-		},
+	o := []codec.ProtocolOption{
+		codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
+		&codec.VersionProtocolOption{Value: 2},
+		&codec.MinimumVersionProtocolOption{Value: 2},
+		&codec.LiveWindowProtocolOption{Value: uint32(swarm.options.LiveWindow)},
+		&codec.ChunkSizeProtocolOption{Value: uint32(swarm.options.ChunkSize)},
+		&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.options.Integrity.ProtectionMethod)},
+		&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.options.Integrity.MerkleHashTreeFunction)},
+		&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.options.Integrity.LiveSignatureAlgorithm)},
+		&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.options.ChunksPerSignature)},
+		&codec.StreamCountProtocolOption{Value: uint16(swarm.options.StreamCount)},
 	}
+
+	if e := codec.NewEpochProtocolOption(swarm.epoch.Value()); e != nil {
+		o = append(o, e)
+	}
+
+	return &codec.Handshake{Options: o}
 }
 
 func newChannelWriter(metrics channelWriterMetrics, w ioutil.BufferedWriteFlusher, channel codec.Channel) *channelWriter {
@@ -461,6 +465,21 @@ func (c *channelMessageHandler) HandleHandshake(m codec.Handshake) error {
 		return errNoLiveSignatureAlgorithm
 	}
 
+	if epoch, ok := m.Options.Find(codec.EpochOption); ok {
+		e := epoch.(*codec.EpochProtocolOption)
+		if ok, err := c.swarm.epoch.Sync(e.Timestamp.Time, e.Signature); ok {
+			c.logger.Debug("epoch synced", zap.Stringer("epoch", e.Timestamp.Time))
+
+			c.swarm.reset()
+		} else if errors.Is(err, errEpochOutOfDate) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+
 	liveWindow := m.Options.MustFind(codec.LiveWindowOption).(*codec.LiveWindowProtocolOption).Value
 	return c.scheduler.HandleHandshake(liveWindow)
 }
@@ -476,6 +495,11 @@ func (c *channelMessageHandler) HandleData(m codec.Data) error {
 	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen() - m.Data.ByteLen()))
 	c.metrics.AddDataBytesCount(m.Data.ByteLen())
+
+	if !c.scheduler.ExpectData(m.Address.Bin()) {
+		// TODO: track wasted transfer
+		return nil
+	}
 
 	verified, err := c.verifier.ChunkVerifier(m.Address.Bin()).Verify(m.Address.Bin(), m.Data)
 	if !verified {

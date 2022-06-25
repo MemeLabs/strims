@@ -18,6 +18,7 @@ import (
 // errors ...
 var (
 	ErrBufferUnderrun     = errors.New("buffer underrun")
+	ErrStreamReset        = errors.New("stream reset")
 	ErrBinDataNotSet      = errors.New("bin data not set")
 	ErrClosed             = errors.New("cannot read from closed buffer")
 	ErrReadOffsetNotFound = errors.New("viable read offset not found")
@@ -59,6 +60,29 @@ type Buffer struct {
 	sem       uint64
 	err       error
 	readers   []chan error
+}
+
+// Reset ...
+func (s *Buffer) Reset() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.bins.Empty() {
+		return
+	}
+
+	s.head = binmap.Bin(s.size * 2)
+	s.bins = binmap.New()
+	s.next = binmap.None
+	s.prev = binmap.None
+	s.off = 0
+	s.sem++
+
+	s.readyOnce = sync.Once{}
+	s.ready = make(chan struct{})
+
+	s.swapReadable(ErrStreamReset)
+	s.pushReadable(nil)
 }
 
 // Consume ...

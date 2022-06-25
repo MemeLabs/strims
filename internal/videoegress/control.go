@@ -265,6 +265,8 @@ func (t *control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, 
 				w := stream.NextWriter()
 				buf.WriteTo(w)
 				w.Close()
+			case store.ErrStreamReset:
+				fallthrough
 			case store.ErrBufferUnderrun:
 				stream.MarkDiscontinuity()
 			default:
@@ -322,17 +324,22 @@ func (r *VideoReader) discardFragment() error {
 	off := r.b.Offset()
 	r.logger.Debug("discarding segment fragment", zap.Uint64("offset", off))
 
+EachChunk:
 	for {
-		if _, err := io.Copy(io.Discard, r.r); err == nil {
-			break
-		} else if err != store.ErrBufferUnderrun {
+		_, err := io.Copy(io.Discard, r.r)
+		switch err {
+		case nil:
+			break EachChunk
+		case store.ErrBufferUnderrun:
+			if _, err := r.b.Recover(); err != nil {
+				return err
+			}
+			fallthrough
+		case store.ErrStreamReset:
+			r.r.SetOffset(int64(r.b.Offset()))
+		default:
 			return err
 		}
-
-		if _, err := r.b.Recover(); err != nil {
-			return err
-		}
-		r.r.SetOffset(int64(r.b.Offset()))
 	}
 
 	doff := r.b.Offset()
@@ -354,11 +361,17 @@ func (r *VideoReader) Read(b []byte) (int, error) {
 	}
 
 	n, err := r.r.Read(b)
-	if err == store.ErrBufferUnderrun {
-		if err := r.reinitReader(); err != nil {
+	switch err {
+	case store.ErrBufferUnderrun:
+		if _, err := r.b.Recover(); err != nil {
+			return 0, err
+		}
+		fallthrough
+	case store.ErrStreamReset:
+		r.r.SetOffset(int64(r.b.Offset()))
+		if err := r.discardFragment(); err != nil {
 			return 0, err
 		}
 	}
-
 	return n, err
 }

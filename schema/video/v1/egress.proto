@@ -22,7 +22,7 @@ message EgressOpenStreamResponse {
   message Data {
     bytes data = 1;
     bool segment_end = 2;
-    bool buffer_underrun = 3;
+    bool discontinuity = 3;
   }
 
   message Error {

@@ -64,6 +64,7 @@ export type ICache = {
   uri?: string;
   integrity?: Cache.IIntegrity;
   data?: Uint8Array;
+  epoch?: Cache.IEpoch;
 }
 
 export class Cache {
@@ -71,12 +72,14 @@ export class Cache {
   uri: string;
   integrity: Cache.Integrity | undefined;
   data: Uint8Array;
+  epoch: Cache.Epoch | undefined;
 
   constructor(v?: ICache) {
     this.id = v?.id || BigInt(0);
     this.uri = v?.uri || "";
     this.integrity = v?.integrity && new Cache.Integrity(v.integrity);
     this.data = v?.data || new Uint8Array();
+    this.epoch = v?.epoch && new Cache.Epoch(v.epoch);
   }
 
   static encode(m: Cache, w?: Writer): Writer {
@@ -85,6 +88,7 @@ export class Cache {
     if (m.uri.length) w.uint32(18).string(m.uri);
     if (m.integrity) Cache.Integrity.encode(m.integrity, w.uint32(26).fork()).ldelim();
     if (m.data.length) w.uint32(34).bytes(m.data);
+    if (m.epoch) Cache.Epoch.encode(m.epoch, w.uint32(42).fork()).ldelim();
     return w;
   }
 
@@ -106,6 +110,9 @@ export class Cache {
         break;
         case 4:
         m.data = r.bytes();
+        break;
+        case 5:
+        m.epoch = Cache.Epoch.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -236,6 +243,49 @@ export namespace Cache {
           break;
           case 1002:
           m.merkleIntegrity = Cache.MerkleIntegrity.decode(r, r.uint32());
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IEpoch = {
+    timestamp?: bigint;
+    signature?: Uint8Array;
+  }
+
+  export class Epoch {
+    timestamp: bigint;
+    signature: Uint8Array;
+
+    constructor(v?: IEpoch) {
+      this.timestamp = v?.timestamp || BigInt(0);
+      this.signature = v?.signature || new Uint8Array();
+    }
+
+    static encode(m: Epoch, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.timestamp) w.uint32(8).int64(m.timestamp);
+      if (m.signature.length) w.uint32(18).bytes(m.signature);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Epoch {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Epoch();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.timestamp = r.int64();
+          break;
+          case 2:
+          m.signature = r.bytes();
           break;
           default:
           r.skipType(tag & 7);

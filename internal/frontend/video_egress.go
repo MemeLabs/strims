@@ -88,7 +88,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 
 			d := res.GetData()
 			d.SegmentEnd = false
-			d.BufferUnderrun = false
+			d.Discontinuity = false
 			d.Data = d.Data[:cap(d.Data)]
 
 			var n int
@@ -102,8 +102,10 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 				case io.EOF:
 					d.SegmentEnd = true
 					break ReadLoop
+				case store.ErrStreamReset:
+					fallthrough
 				case store.ErrBufferUnderrun:
-					d.BufferUnderrun = true
+					d.Discontinuity = true
 					n = 0
 				default:
 					logger.Debug("stream closed", zap.Error(err))

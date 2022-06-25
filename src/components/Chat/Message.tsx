@@ -376,7 +376,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       formatter.insertEntity(MessageSelf, entities.selfMessage);
     }
     return formatter.body;
-  }, [uiConfig]);
+  }, [uiConfig, entities]);
 
   const authorKey = Base64.fromUint8Array(peerKey, true);
 
@@ -397,7 +397,7 @@ const StandardMessage: React.FC<MessageProps> = ({
         )
       )
     );
-  }, []);
+  }, [baseClassName, isContinued, entities]);
 
   const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();

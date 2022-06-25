@@ -667,7 +667,7 @@ export class WorkerBridge extends EventEmitter {
   public openWebSocket(uri: string, proxy: ChannelGoProxy): number {
     const ws = new WebSocket(uri);
 
-    const checkConnectionState = (e: VisibilityChangeEvent) => {
+    const handleVisibilityChange = (e: VisibilityChangeEvent) => {
       if (!e.hidden && (ws.readyState > 1 || e.forceHUP)) {
         ws.close();
         onclose();
@@ -675,7 +675,7 @@ export class WorkerBridge extends EventEmitter {
       }
     };
 
-    this.on("window:visibilitychange", checkConnectionState);
+    this.on("window:visibilitychange", handleVisibilityChange);
 
     const onclose = () => {
       ws.onopen = null;
@@ -684,7 +684,7 @@ export class WorkerBridge extends EventEmitter {
       ws.onmessage = null;
       this.channelClose(cid);
 
-      this.off("window:visibilitychange", checkConnectionState);
+      this.off("window:visibilitychange", handleVisibilityChange);
     };
 
     const queue = new ReadQueue();

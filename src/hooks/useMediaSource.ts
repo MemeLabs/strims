@@ -57,7 +57,7 @@ const useMediaSource = ({
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {
         case EgressOpenStreamResponse.BodyCase.DATA:
-          if (body.data.bufferUnderrun) {
+          if (body.data.discontinuity) {
             decoder.reset();
             started = false;
           }

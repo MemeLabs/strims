@@ -91,7 +91,7 @@ func (v Reader) Read(b []byte) (n int, err error) {
 }
 
 func (v Reader) readHandshake(b []byte) (int, error) {
-	var msg Handshake
+	msg := Handshake{signatureSize: v.IntegritySignatureSize}
 	n, err := msg.Unmarshal(b)
 	if err != nil {
 		return 0, err

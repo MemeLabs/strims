@@ -63,6 +63,7 @@ func SetSwarmCache(s *ProfileStore, id, salt []byte, c *swarm.Cache) error {
 		return tx.Put(swarmCacheNS.Format(m.Id), &swarm.Cache{
 			Id:        m.Id,
 			Uri:       c.Uri,
+			Epoch:     c.Epoch,
 			Integrity: c.Integrity,
 			Data:      c.Data,
 		})
