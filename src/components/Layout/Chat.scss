@@ -57,31 +57,42 @@
 .layout--tv,
 .layout--pc {
   .layout_chat__room_carousel {
-    width: calc(var(--layout-chat-width) - 96px);
+    width: calc(100% - 96px);
   }
 }
 
 .layout--portable {
   .layout_chat {
     &__room_carousel {
-      width: calc(var(--layout-width) - 48px);
+      width: 100%;
     }
   }
 
   &.layout--min_aspect_ratio_2 {
-    .layout_chat__header {
-      margin-left: calc(-1 * env(safe-area-inset-left));
+    .layout_chat__room_carousel {
+      width: calc(100% - 48px);
     }
 
-    .layout_chat__room_carousel {
-      width: calc(var(--layout-width) - 96px);
-      margin-left: 48px;
+    &.layout--landscape_cw.layout--swap,
+    &.layout--landscape_ccw.layout--swap {
+      .layout_chat__header {
+        padding-right: 7px;
+        padding-left: calc(env(safe-area-inset-left) - 24px);
+      }
+    }
+
+    &.layout--landscape_cw:not(.layout--swap),
+    &.layout--landscape_ccw:not(.layout--swap) {
+      .layout_chat__header {
+        padding-left: 7px;
+        padding-right: calc(env(safe-area-inset-right) - 24px);
+      }
     }
   }
 
   &.layout--min_aspect_ratio_1_2.layout--show_video {
     .layout_chat__room_carousel {
-      width: calc(var(--layout-chat-width) - 48px);
+      width: 100%;
     }
   }
 }
