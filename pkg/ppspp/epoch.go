@@ -32,7 +32,9 @@ func (e *epoch) ImportCache(c *swarmpb.Cache_Epoch) error {
 	defer e.mu.Unlock()
 
 	e.Timestamp = timeutil.New(c.GetTimestamp())
-	e.Signature = append(([]byte)(nil), c.GetSignature()...)
+
+	e.Signature = make([]byte, e.verifier.Size())
+	copy(e.Signature, c.GetSignature())
 
 	return nil
 }

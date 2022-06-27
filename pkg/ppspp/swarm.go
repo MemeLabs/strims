@@ -59,11 +59,6 @@ type Swarm struct {
 	epoch    epoch
 }
 
-func (s *Swarm) reset() {
-	s.pubSub.Reset()
-	s.verifier.Reset()
-}
-
 // ID ...
 func (s *Swarm) ID() SwarmID {
 	return s.id

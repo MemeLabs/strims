@@ -470,7 +470,8 @@ func (c *channelMessageHandler) HandleHandshake(m codec.Handshake) error {
 		if ok, err := c.swarm.epoch.Sync(e.Timestamp.Time, e.Signature); ok {
 			c.logger.Debug("epoch synced", zap.Stringer("epoch", e.Timestamp.Time))
 
-			c.swarm.reset()
+			c.swarm.pubSub.Reset()
+			c.swarm.verifier.Reset()
 		} else if errors.Is(err, errEpochOutOfDate) {
 			return nil
 		} else if err != nil {
