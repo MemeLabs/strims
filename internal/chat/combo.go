@@ -43,6 +43,7 @@ func (c *comboTransformer) Transform(msg *chatv1.Message) error {
 	}
 
 	emote := msg.Entities.Emotes[0]
+	emote.CanCombo = true
 
 	// if the combo was broken by another emote message reset
 	if c.emote != emote.Name {

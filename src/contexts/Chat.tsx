@@ -23,12 +23,12 @@ import {
   WhisperRecord,
   WhisperThread,
 } from "../apis/strims/chat/v1/chat";
-import { FrontendJoinResponse, Listing } from "../apis/strims/network/v1/directory/directory";
+import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
 import { useUserList } from "../hooks/chat";
 import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { updateInStateMap } from "../lib/setInStateMap";
-import { DirectoryListing, useDirectory } from "./Directory";
+import { DirectoryListing } from "./Directory";
 import { useClient } from "./FrontendApi";
 
 export interface Style {

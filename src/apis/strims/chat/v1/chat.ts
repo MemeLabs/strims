@@ -1093,6 +1093,7 @@ export namespace Message {
       name?: string;
       modifiers?: string[];
       combo?: number;
+      canCombo?: boolean;
     }
 
     export class Emote {
@@ -1100,12 +1101,14 @@ export namespace Message {
       name: string;
       modifiers: string[];
       combo: number;
+      canCombo: boolean;
 
       constructor(v?: IEmote) {
         this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
         this.name = v?.name || "";
         this.modifiers = v?.modifiers ? v.modifiers : [];
         this.combo = v?.combo || 0;
+        this.canCombo = v?.canCombo || false;
       }
 
       static encode(m: Emote, w?: Writer): Writer {
@@ -1114,6 +1117,7 @@ export namespace Message {
         if (m.name.length) w.uint32(18).string(m.name);
         for (const v of m.modifiers) w.uint32(26).string(v);
         if (m.combo) w.uint32(32).uint32(m.combo);
+        if (m.canCombo) w.uint32(40).bool(m.canCombo);
         return w;
       }
 
@@ -1135,6 +1139,9 @@ export namespace Message {
             break;
             case 4:
             m.combo = r.uint32();
+            break;
+            case 5:
+            m.canCombo = r.bool();
             break;
             default:
             r.skipType(tag & 7);

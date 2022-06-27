@@ -134,6 +134,7 @@ message Message {
       string name = 2;
       repeated string modifiers = 3;
       uint32 combo = 4;
+      bool can_combo = 5;
     }
 
     message Emoji {

@@ -48,6 +48,10 @@
       padding-bottom: 3px;
     }
 
+    &--repeatable &__body {
+      cursor: pointer;
+    }
+
     &__time {
       white-space: nowrap;
       margin-right: 3px;
@@ -271,6 +275,10 @@
       .chat__combo_message__combo {
         font-weight: bold;
       }
+    }
+
+    &--repeatable &__body {
+      cursor: pointer;
     }
 
     &--complete {

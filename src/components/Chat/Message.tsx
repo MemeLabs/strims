@@ -265,10 +265,10 @@ interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   isContinued?: boolean;
 }
 
-const Message: React.FC<MessageProps> = ({ isMostRecent, ...props }) => {
+const Message: React.FC<MessageProps> = (props) => {
   const { emotes } = props.message.entities;
-  return emotes?.length === 1 && emotes[0].combo ? (
-    <ComboMessage {...props} isMostRecent={isMostRecent} />
+  return emotes.length === 1 && emotes[0].combo ? (
+    <ComboMessage {...props} />
   ) : (
     <StandardMessage {...props} />
   );
@@ -297,6 +297,7 @@ const ComboMessage: React.FC<MessageProps> = ({
   const className = clsx(baseClassName, "chat__combo_message", {
     [`chat__combo_message--scale_${scale}`]: scale > 0,
     "chat__combo_message--complete": !isMostRecent,
+    "chat__combo_message--repeatable": isMostRecent,
   });
 
   const ref = useRef<HTMLDivElement>();
@@ -308,12 +309,20 @@ const ComboMessage: React.FC<MessageProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [count]);
 
+  const [, { sendMessage }] = useRoom();
+
+  const handleBodyClick = useStableCallback(() => {
+    if (isMostRecent) {
+      sendMessage(body);
+    }
+  });
+
   return (
     <div {...props} className={className} ref={ref}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__combo_message__body">
+      <span className="chat__combo_message__body" onClick={handleBodyClick}>
         {formattedBody}
         <i className="chat__combo_message__count">{count}</i>
         <i className="chat__combo_message__x">x</i>
@@ -328,10 +337,11 @@ const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
   message: { nick, peerKey, viewedListing, serverTime, body, entities },
   className: baseClassName,
+  isMostRecent,
   isContinued,
   ...props
 }) => {
-  const [, { toggleSelectedPeer }] = useRoom();
+  const [, { toggleSelectedPeer, sendMessage }] = useRoom();
 
   const handleNickClick = useStableCallback(
     (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
@@ -380,6 +390,11 @@ const StandardMessage: React.FC<MessageProps> = ({
 
   const authorKey = Base64.fromUint8Array(peerKey, true);
 
+  const isRepeatable = useMemo(
+    () => isMostRecent && entities.emotes[0]?.canCombo,
+    [isMostRecent, entities]
+  );
+
   const classNames = useMemo(() => {
     return clsx(
       baseClassName,
@@ -387,6 +402,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       `chat__message--author_${authorKey}`,
       {
         "chat__message--continued": isContinued,
+        "chat__message--repeatable": isRepeatable,
         "chat__message--self": entities.selfMessage,
         "chat__message--tagged": entities.tags.length > 0,
       },
@@ -397,11 +413,17 @@ const StandardMessage: React.FC<MessageProps> = ({
         )
       )
     );
-  }, [baseClassName, isContinued, entities]);
+  }, [baseClassName, isContinued, isRepeatable, entities]);
 
   const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     toggleSelectedPeer(peerKey);
+  });
+
+  const handleBodyClick = useStableCallback(() => {
+    if (isRepeatable) {
+      sendMessage(body);
+    }
   });
 
   return (
@@ -419,7 +441,9 @@ const StandardMessage: React.FC<MessageProps> = ({
         <span className="chat__message__author__text">{nick}</span>
       </span>
       <span className="chat__message__colon">{": "}</span>
-      <span className="chat__message__body">{formattedBody}</span>
+      <span className="chat__message__body" onClick={handleBodyClick}>
+        {formattedBody}
+      </span>
       <br />
     </div>
   );
