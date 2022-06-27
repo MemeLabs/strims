@@ -265,12 +265,12 @@ interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   isContinued?: boolean;
 }
 
-const Message: React.FC<MessageProps> = (props) => {
+const Message: React.FC<MessageProps> = ({ isContinued, ...props }) => {
   const { emotes } = props.message.entities;
   return emotes.length === 1 && emotes[0].combo ? (
     <ComboMessage {...props} />
   ) : (
-    <StandardMessage {...props} />
+    <StandardMessage {...props} isContinued={isContinued} />
   );
 };
 
@@ -297,7 +297,7 @@ const ComboMessage: React.FC<MessageProps> = ({
   const className = clsx(baseClassName, "chat__combo_message", {
     [`chat__combo_message--scale_${scale}`]: scale > 0,
     "chat__combo_message--complete": !isMostRecent,
-    "chat__combo_message--repeatable": isMostRecent,
+    "chat__combo_message--clickable": isMostRecent,
   });
 
   const ref = useRef<HTMLDivElement>();
@@ -390,7 +390,7 @@ const StandardMessage: React.FC<MessageProps> = ({
 
   const authorKey = Base64.fromUint8Array(peerKey, true);
 
-  const isRepeatable = useMemo(
+  const canCombo = useMemo(
     () => isMostRecent && entities.emotes[0]?.canCombo,
     [isMostRecent, entities]
   );
@@ -402,7 +402,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       `chat__message--author_${authorKey}`,
       {
         "chat__message--continued": isContinued,
-        "chat__message--repeatable": isRepeatable,
+        "chat__message--clickable": canCombo,
         "chat__message--self": entities.selfMessage,
         "chat__message--tagged": entities.tags.length > 0,
       },
@@ -413,7 +413,7 @@ const StandardMessage: React.FC<MessageProps> = ({
         )
       )
     );
-  }, [baseClassName, isContinued, isRepeatable, entities]);
+  }, [baseClassName, isContinued, canCombo, entities]);
 
   const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -421,7 +421,7 @@ const StandardMessage: React.FC<MessageProps> = ({
   });
 
   const handleBodyClick = useStableCallback(() => {
-    if (isRepeatable) {
+    if (canCombo) {
       sendMessage(body);
     }
   });

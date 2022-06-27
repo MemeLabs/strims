@@ -64,13 +64,15 @@
     }
   }
 
-  &.layout--landscape_ccw.layout--swap {
+  &.layout--landscape_ccw.layout--swap,
+  &.layout--landscape_ccw:not(.layout--show_video) {
     .chat {
       margin-left: env(safe-area-inset-left);
     }
   }
 
-  &.layout--landscape_cw:not(.layout--swap) {
+  &.layout--landscape_cw:not(.layout--swap),
+  &.layout--landscape_cw:not(.layout--show_video) {
     .chat {
       margin-right: env(safe-area-inset-right);
     }

@@ -48,7 +48,7 @@
       padding-bottom: 3px;
     }
 
-    &--repeatable &__body {
+    &--clickable &__body {
       cursor: pointer;
     }
 
@@ -277,7 +277,7 @@
       }
     }
 
-    &--repeatable &__body {
+    &--clickable &__body {
       cursor: pointer;
     }
 

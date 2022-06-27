@@ -88,6 +88,10 @@
         padding-right: calc(env(safe-area-inset-right) - 24px);
       }
     }
+
+    &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__header {
+      padding-left: env(safe-area-inset-left);
+    }
   }
 
   &.layout--min_aspect_ratio_1_2.layout--show_video {
