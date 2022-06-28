@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Key as strims_type_Key,
-  IKey as strims_type_IKey,
+  strims_type_Key,
+  strims_type_IKey,
 } from "../../type/key";
 
 export type IUpdateProfileRequest = {
@@ -50,19 +50,19 @@ export class UpdateProfileRequest {
 }
 
 export type IUpdateProfileResponse = {
-  profile?: IProfile;
+  profile?: strims_profile_v1_IProfile;
 }
 
 export class UpdateProfileResponse {
-  profile: Profile | undefined;
+  profile: strims_profile_v1_Profile | undefined;
 
   constructor(v?: IUpdateProfileResponse) {
-    this.profile = v?.profile && new Profile(v.profile);
+    this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
   }
 
   static encode(m: UpdateProfileResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.profile) Profile.encode(m.profile, w.uint32(10).fork()).ldelim();
+    if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -74,7 +74,7 @@ export class UpdateProfileResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.profile = Profile.decode(r, r.uint32());
+        m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -105,19 +105,19 @@ export class GetProfileRequest {
 }
 
 export type IGetProfileResponse = {
-  profile?: IProfile;
+  profile?: strims_profile_v1_IProfile;
 }
 
 export class GetProfileResponse {
-  profile: Profile | undefined;
+  profile: strims_profile_v1_Profile | undefined;
 
   constructor(v?: IGetProfileResponse) {
-    this.profile = v?.profile && new Profile(v.profile);
+    this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
   }
 
   static encode(m: GetProfileResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.profile) Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
+    if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -129,7 +129,7 @@ export class GetProfileResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 2:
-        m.profile = Profile.decode(r, r.uint32());
+        m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -141,12 +141,12 @@ export class GetProfileResponse {
 }
 
 export type IStorageKey = {
-  kdfType?: KDFType;
+  kdfType?: strims_profile_v1_KDFType;
   kdfOptions?: StorageKey.IKdfOptions
 }
 
 export class StorageKey {
-  kdfType: KDFType;
+  kdfType: strims_profile_v1_KDFType;
   kdfOptions: StorageKey.TKdfOptions;
 
   constructor(v?: IStorageKey) {
@@ -159,7 +159,7 @@ export class StorageKey {
     if (m.kdfType) w.uint32(8).uint32(m.kdfType);
     switch (m.kdfOptions.case) {
       case StorageKey.KdfOptionsCase.PBKDF2_OPTIONS:
-      StorageKey.PBKDF2Options.encode(m.kdfOptions.pbkdf2Options, w.uint32(18).fork()).ldelim();
+      strims_profile_v1_StorageKey_PBKDF2Options.encode(m.kdfOptions.pbkdf2Options, w.uint32(18).fork()).ldelim();
       break;
     }
     return w;
@@ -176,7 +176,7 @@ export class StorageKey {
         m.kdfType = r.uint32();
         break;
         case 2:
-        m.kdfOptions = new StorageKey.KdfOptions({ pbkdf2Options: StorageKey.PBKDF2Options.decode(r, r.uint32()) });
+        m.kdfOptions = new StorageKey.KdfOptions({ pbkdf2Options: strims_profile_v1_StorageKey_PBKDF2Options.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -195,22 +195,22 @@ export namespace StorageKey {
 
   export type IKdfOptions =
   { case?: KdfOptionsCase.NOT_SET }
-  |{ case?: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.IPBKDF2Options }
+  |{ case?: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: strims_profile_v1_StorageKey_IPBKDF2Options }
   ;
 
   export type TKdfOptions = Readonly<
   { case: KdfOptionsCase.NOT_SET }
-  |{ case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options }
+  |{ case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: strims_profile_v1_StorageKey_PBKDF2Options }
   >;
 
   class KdfOptionsImpl {
-    pbkdf2Options: StorageKey.PBKDF2Options;
+    pbkdf2Options: strims_profile_v1_StorageKey_PBKDF2Options;
     case: KdfOptionsCase = KdfOptionsCase.NOT_SET;
 
     constructor(v?: IKdfOptions) {
       if (v && "pbkdf2Options" in v) {
         this.case = KdfOptionsCase.PBKDF2_OPTIONS;
-        this.pbkdf2Options = new StorageKey.PBKDF2Options(v.pbkdf2Options);
+        this.pbkdf2Options = new strims_profile_v1_StorageKey_PBKDF2Options(v.pbkdf2Options);
       }
     }
   }
@@ -218,7 +218,7 @@ export namespace StorageKey {
   export const KdfOptions = KdfOptionsImpl as {
     new (): Readonly<{ case: KdfOptionsCase.NOT_SET }>;
     new <T extends IKdfOptions>(v: T): Readonly<
-    T extends { pbkdf2Options: StorageKey.IPBKDF2Options } ? { case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options } :
+    T extends { pbkdf2Options: strims_profile_v1_StorageKey_IPBKDF2Options } ? { case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: strims_profile_v1_StorageKey_PBKDF2Options } :
     never
     >;
   };
@@ -372,3 +372,55 @@ export enum KDFType {
   KDF_TYPE_UNDEFINED = 0,
   KDF_TYPE_PBKDF2_SHA256 = 1,
 }
+/* @internal */
+export const strims_profile_v1_UpdateProfileRequest = UpdateProfileRequest;
+/* @internal */
+export type strims_profile_v1_UpdateProfileRequest = UpdateProfileRequest;
+/* @internal */
+export type strims_profile_v1_IUpdateProfileRequest = IUpdateProfileRequest;
+/* @internal */
+export const strims_profile_v1_UpdateProfileResponse = UpdateProfileResponse;
+/* @internal */
+export type strims_profile_v1_UpdateProfileResponse = UpdateProfileResponse;
+/* @internal */
+export type strims_profile_v1_IUpdateProfileResponse = IUpdateProfileResponse;
+/* @internal */
+export const strims_profile_v1_GetProfileRequest = GetProfileRequest;
+/* @internal */
+export type strims_profile_v1_GetProfileRequest = GetProfileRequest;
+/* @internal */
+export type strims_profile_v1_IGetProfileRequest = IGetProfileRequest;
+/* @internal */
+export const strims_profile_v1_GetProfileResponse = GetProfileResponse;
+/* @internal */
+export type strims_profile_v1_GetProfileResponse = GetProfileResponse;
+/* @internal */
+export type strims_profile_v1_IGetProfileResponse = IGetProfileResponse;
+/* @internal */
+export const strims_profile_v1_StorageKey = StorageKey;
+/* @internal */
+export type strims_profile_v1_StorageKey = StorageKey;
+/* @internal */
+export type strims_profile_v1_IStorageKey = IStorageKey;
+/* @internal */
+export const strims_profile_v1_Profile = Profile;
+/* @internal */
+export type strims_profile_v1_Profile = Profile;
+/* @internal */
+export type strims_profile_v1_IProfile = IProfile;
+/* @internal */
+export const strims_profile_v1_ProfileID = ProfileID;
+/* @internal */
+export type strims_profile_v1_ProfileID = ProfileID;
+/* @internal */
+export type strims_profile_v1_IProfileID = IProfileID;
+/* @internal */
+export const strims_profile_v1_StorageKey_PBKDF2Options = StorageKey.PBKDF2Options;
+/* @internal */
+export type strims_profile_v1_StorageKey_PBKDF2Options = StorageKey.PBKDF2Options;
+/* @internal */
+export type strims_profile_v1_StorageKey_IPBKDF2Options = StorageKey.IPBKDF2Options;
+/* @internal */
+export const strims_profile_v1_KDFType = KDFType;
+/* @internal */
+export type strims_profile_v1_KDFType = KDFType;

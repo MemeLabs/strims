@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  ListingSnippet as strims_network_v1_directory_ListingSnippet,
-  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+  strims_network_v1_directory_ListingSnippet,
+  strims_network_v1_directory_IListingSnippet,
 } from "../../network/v1/directory/directory";
 
 export type ICaptureOpenRequest = {
@@ -278,3 +278,51 @@ export class CaptureCloseResponse {
   }
 }
 
+/* @internal */
+export const strims_video_v1_CaptureOpenRequest = CaptureOpenRequest;
+/* @internal */
+export type strims_video_v1_CaptureOpenRequest = CaptureOpenRequest;
+/* @internal */
+export type strims_video_v1_ICaptureOpenRequest = ICaptureOpenRequest;
+/* @internal */
+export const strims_video_v1_CaptureOpenResponse = CaptureOpenResponse;
+/* @internal */
+export type strims_video_v1_CaptureOpenResponse = CaptureOpenResponse;
+/* @internal */
+export type strims_video_v1_ICaptureOpenResponse = ICaptureOpenResponse;
+/* @internal */
+export const strims_video_v1_CaptureUpdateRequest = CaptureUpdateRequest;
+/* @internal */
+export type strims_video_v1_CaptureUpdateRequest = CaptureUpdateRequest;
+/* @internal */
+export type strims_video_v1_ICaptureUpdateRequest = ICaptureUpdateRequest;
+/* @internal */
+export const strims_video_v1_CaptureUpdateResponse = CaptureUpdateResponse;
+/* @internal */
+export type strims_video_v1_CaptureUpdateResponse = CaptureUpdateResponse;
+/* @internal */
+export type strims_video_v1_ICaptureUpdateResponse = ICaptureUpdateResponse;
+/* @internal */
+export const strims_video_v1_CaptureAppendRequest = CaptureAppendRequest;
+/* @internal */
+export type strims_video_v1_CaptureAppendRequest = CaptureAppendRequest;
+/* @internal */
+export type strims_video_v1_ICaptureAppendRequest = ICaptureAppendRequest;
+/* @internal */
+export const strims_video_v1_CaptureAppendResponse = CaptureAppendResponse;
+/* @internal */
+export type strims_video_v1_CaptureAppendResponse = CaptureAppendResponse;
+/* @internal */
+export type strims_video_v1_ICaptureAppendResponse = ICaptureAppendResponse;
+/* @internal */
+export const strims_video_v1_CaptureCloseRequest = CaptureCloseRequest;
+/* @internal */
+export type strims_video_v1_CaptureCloseRequest = CaptureCloseRequest;
+/* @internal */
+export type strims_video_v1_ICaptureCloseRequest = ICaptureCloseRequest;
+/* @internal */
+export const strims_video_v1_CaptureCloseResponse = CaptureCloseResponse;
+/* @internal */
+export type strims_video_v1_CaptureCloseResponse = CaptureCloseResponse;
+/* @internal */
+export type strims_video_v1_ICaptureCloseResponse = ICaptureCloseResponse;

@@ -2,16 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../type/certificate";
 import {
-  Key as strims_type_Key,
-  IKey as strims_type_IKey,
+  strims_type_Key,
+  strims_type_IKey,
 } from "../../type/key";
 import {
-  ListingSnippet as strims_network_v1_directory_ListingSnippet,
-  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+  strims_network_v1_directory_ListingSnippet,
+  strims_network_v1_directory_IListingSnippet,
 } from "../../network/v1/directory/directory";
 
 export type IVideoChannel = {
@@ -45,13 +45,13 @@ export class VideoChannel {
     if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(34).fork()).ldelim();
     switch (m.owner.case) {
       case VideoChannel.OwnerCase.LOCAL:
-      VideoChannel.Local.encode(m.owner.local, w.uint32(8010).fork()).ldelim();
+      strims_video_v1_VideoChannel_Local.encode(m.owner.local, w.uint32(8010).fork()).ldelim();
       break;
       case VideoChannel.OwnerCase.LOCAL_SHARE:
-      VideoChannel.LocalShare.encode(m.owner.localShare, w.uint32(8018).fork()).ldelim();
+      strims_video_v1_VideoChannel_LocalShare.encode(m.owner.localShare, w.uint32(8018).fork()).ldelim();
       break;
       case VideoChannel.OwnerCase.REMOTE_SHARE:
-      VideoChannel.RemoteShare.encode(m.owner.remoteShare, w.uint32(8026).fork()).ldelim();
+      strims_video_v1_VideoChannel_RemoteShare.encode(m.owner.remoteShare, w.uint32(8026).fork()).ldelim();
       break;
     }
     return w;
@@ -68,13 +68,13 @@ export class VideoChannel {
         m.id = r.uint64();
         break;
         case 1001:
-        m.owner = new VideoChannel.Owner({ local: VideoChannel.Local.decode(r, r.uint32()) });
+        m.owner = new VideoChannel.Owner({ local: strims_video_v1_VideoChannel_Local.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.owner = new VideoChannel.Owner({ localShare: VideoChannel.LocalShare.decode(r, r.uint32()) });
+        m.owner = new VideoChannel.Owner({ localShare: strims_video_v1_VideoChannel_LocalShare.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.owner = new VideoChannel.Owner({ remoteShare: VideoChannel.RemoteShare.decode(r, r.uint32()) });
+        m.owner = new VideoChannel.Owner({ remoteShare: strims_video_v1_VideoChannel_RemoteShare.decode(r, r.uint32()) });
         break;
         case 2:
         m.key = strims_type_Key.decode(r, r.uint32());
@@ -104,36 +104,36 @@ export namespace VideoChannel {
 
   export type IOwner =
   { case?: OwnerCase.NOT_SET }
-  |{ case?: OwnerCase.LOCAL, local: VideoChannel.ILocal }
-  |{ case?: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.ILocalShare }
-  |{ case?: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.IRemoteShare }
+  |{ case?: OwnerCase.LOCAL, local: strims_video_v1_VideoChannel_ILocal }
+  |{ case?: OwnerCase.LOCAL_SHARE, localShare: strims_video_v1_VideoChannel_ILocalShare }
+  |{ case?: OwnerCase.REMOTE_SHARE, remoteShare: strims_video_v1_VideoChannel_IRemoteShare }
   ;
 
   export type TOwner = Readonly<
   { case: OwnerCase.NOT_SET }
-  |{ case: OwnerCase.LOCAL, local: VideoChannel.Local }
-  |{ case: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.LocalShare }
-  |{ case: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.RemoteShare }
+  |{ case: OwnerCase.LOCAL, local: strims_video_v1_VideoChannel_Local }
+  |{ case: OwnerCase.LOCAL_SHARE, localShare: strims_video_v1_VideoChannel_LocalShare }
+  |{ case: OwnerCase.REMOTE_SHARE, remoteShare: strims_video_v1_VideoChannel_RemoteShare }
   >;
 
   class OwnerImpl {
-    local: VideoChannel.Local;
-    localShare: VideoChannel.LocalShare;
-    remoteShare: VideoChannel.RemoteShare;
+    local: strims_video_v1_VideoChannel_Local;
+    localShare: strims_video_v1_VideoChannel_LocalShare;
+    remoteShare: strims_video_v1_VideoChannel_RemoteShare;
     case: OwnerCase = OwnerCase.NOT_SET;
 
     constructor(v?: IOwner) {
       if (v && "local" in v) {
         this.case = OwnerCase.LOCAL;
-        this.local = new VideoChannel.Local(v.local);
+        this.local = new strims_video_v1_VideoChannel_Local(v.local);
       } else
       if (v && "localShare" in v) {
         this.case = OwnerCase.LOCAL_SHARE;
-        this.localShare = new VideoChannel.LocalShare(v.localShare);
+        this.localShare = new strims_video_v1_VideoChannel_LocalShare(v.localShare);
       } else
       if (v && "remoteShare" in v) {
         this.case = OwnerCase.REMOTE_SHARE;
-        this.remoteShare = new VideoChannel.RemoteShare(v.remoteShare);
+        this.remoteShare = new strims_video_v1_VideoChannel_RemoteShare(v.remoteShare);
       }
     }
   }
@@ -141,9 +141,9 @@ export namespace VideoChannel {
   export const Owner = OwnerImpl as {
     new (): Readonly<{ case: OwnerCase.NOT_SET }>;
     new <T extends IOwner>(v: T): Readonly<
-    T extends { local: VideoChannel.ILocal } ? { case: OwnerCase.LOCAL, local: VideoChannel.Local } :
-    T extends { localShare: VideoChannel.ILocalShare } ? { case: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.LocalShare } :
-    T extends { remoteShare: VideoChannel.IRemoteShare } ? { case: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.RemoteShare } :
+    T extends { local: strims_video_v1_VideoChannel_ILocal } ? { case: OwnerCase.LOCAL, local: strims_video_v1_VideoChannel_Local } :
+    T extends { localShare: strims_video_v1_VideoChannel_ILocalShare } ? { case: OwnerCase.LOCAL_SHARE, localShare: strims_video_v1_VideoChannel_LocalShare } :
+    T extends { remoteShare: strims_video_v1_VideoChannel_IRemoteShare } ? { case: OwnerCase.REMOTE_SHARE, remoteShare: strims_video_v1_VideoChannel_RemoteShare } :
     never
     >;
   };
@@ -313,19 +313,19 @@ export class VideoChannelListRequest {
 }
 
 export type IVideoChannelListResponse = {
-  channels?: IVideoChannel[];
+  channels?: strims_video_v1_IVideoChannel[];
 }
 
 export class VideoChannelListResponse {
-  channels: VideoChannel[];
+  channels: strims_video_v1_VideoChannel[];
 
   constructor(v?: IVideoChannelListResponse) {
-    this.channels = v?.channels ? v.channels.map(v => new VideoChannel(v)) : [];
+    this.channels = v?.channels ? v.channels.map(v => new strims_video_v1_VideoChannel(v)) : [];
   }
 
   static encode(m: VideoChannelListResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.channels) VideoChannel.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.channels) strims_video_v1_VideoChannel.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -337,7 +337,7 @@ export class VideoChannelListResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.channels.push(VideoChannel.decode(r, r.uint32()));
+        m.channels.push(strims_video_v1_VideoChannel.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -385,19 +385,19 @@ export class VideoChannelGetRequest {
 }
 
 export type IVideoChannelGetResponse = {
-  channel?: IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel;
 }
 
 export class VideoChannelGetResponse {
-  channel: VideoChannel | undefined;
+  channel: strims_video_v1_VideoChannel | undefined;
 
   constructor(v?: IVideoChannelGetResponse) {
-    this.channel = v?.channel && new VideoChannel(v.channel);
+    this.channel = v?.channel && new strims_video_v1_VideoChannel(v.channel);
   }
 
   static encode(m: VideoChannelGetResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.channel) VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
+    if (m.channel) strims_video_v1_VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -409,7 +409,7 @@ export class VideoChannelGetResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.channel = VideoChannel.decode(r, r.uint32());
+        m.channel = strims_video_v1_VideoChannel.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -464,19 +464,19 @@ export class VideoChannelCreateRequest {
 }
 
 export type IVideoChannelCreateResponse = {
-  channel?: IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel;
 }
 
 export class VideoChannelCreateResponse {
-  channel: VideoChannel | undefined;
+  channel: strims_video_v1_VideoChannel | undefined;
 
   constructor(v?: IVideoChannelCreateResponse) {
-    this.channel = v?.channel && new VideoChannel(v.channel);
+    this.channel = v?.channel && new strims_video_v1_VideoChannel(v.channel);
   }
 
   static encode(m: VideoChannelCreateResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.channel) VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
+    if (m.channel) strims_video_v1_VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -488,7 +488,7 @@ export class VideoChannelCreateResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.channel = VideoChannel.decode(r, r.uint32());
+        m.channel = strims_video_v1_VideoChannel.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -550,19 +550,19 @@ export class VideoChannelUpdateRequest {
 }
 
 export type IVideoChannelUpdateResponse = {
-  channel?: IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel;
 }
 
 export class VideoChannelUpdateResponse {
-  channel: VideoChannel | undefined;
+  channel: strims_video_v1_VideoChannel | undefined;
 
   constructor(v?: IVideoChannelUpdateResponse) {
-    this.channel = v?.channel && new VideoChannel(v.channel);
+    this.channel = v?.channel && new strims_video_v1_VideoChannel(v.channel);
   }
 
   static encode(m: VideoChannelUpdateResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.channel) VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
+    if (m.channel) strims_video_v1_VideoChannel.encode(m.channel, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -574,7 +574,7 @@ export class VideoChannelUpdateResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.channel = VideoChannel.decode(r, r.uint32());
+        m.channel = strims_video_v1_VideoChannel.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -640,3 +640,87 @@ export class VideoChannelDeleteResponse {
   }
 }
 
+/* @internal */
+export const strims_video_v1_VideoChannel = VideoChannel;
+/* @internal */
+export type strims_video_v1_VideoChannel = VideoChannel;
+/* @internal */
+export type strims_video_v1_IVideoChannel = IVideoChannel;
+/* @internal */
+export const strims_video_v1_VideoChannelListRequest = VideoChannelListRequest;
+/* @internal */
+export type strims_video_v1_VideoChannelListRequest = VideoChannelListRequest;
+/* @internal */
+export type strims_video_v1_IVideoChannelListRequest = IVideoChannelListRequest;
+/* @internal */
+export const strims_video_v1_VideoChannelListResponse = VideoChannelListResponse;
+/* @internal */
+export type strims_video_v1_VideoChannelListResponse = VideoChannelListResponse;
+/* @internal */
+export type strims_video_v1_IVideoChannelListResponse = IVideoChannelListResponse;
+/* @internal */
+export const strims_video_v1_VideoChannelGetRequest = VideoChannelGetRequest;
+/* @internal */
+export type strims_video_v1_VideoChannelGetRequest = VideoChannelGetRequest;
+/* @internal */
+export type strims_video_v1_IVideoChannelGetRequest = IVideoChannelGetRequest;
+/* @internal */
+export const strims_video_v1_VideoChannelGetResponse = VideoChannelGetResponse;
+/* @internal */
+export type strims_video_v1_VideoChannelGetResponse = VideoChannelGetResponse;
+/* @internal */
+export type strims_video_v1_IVideoChannelGetResponse = IVideoChannelGetResponse;
+/* @internal */
+export const strims_video_v1_VideoChannelCreateRequest = VideoChannelCreateRequest;
+/* @internal */
+export type strims_video_v1_VideoChannelCreateRequest = VideoChannelCreateRequest;
+/* @internal */
+export type strims_video_v1_IVideoChannelCreateRequest = IVideoChannelCreateRequest;
+/* @internal */
+export const strims_video_v1_VideoChannelCreateResponse = VideoChannelCreateResponse;
+/* @internal */
+export type strims_video_v1_VideoChannelCreateResponse = VideoChannelCreateResponse;
+/* @internal */
+export type strims_video_v1_IVideoChannelCreateResponse = IVideoChannelCreateResponse;
+/* @internal */
+export const strims_video_v1_VideoChannelUpdateRequest = VideoChannelUpdateRequest;
+/* @internal */
+export type strims_video_v1_VideoChannelUpdateRequest = VideoChannelUpdateRequest;
+/* @internal */
+export type strims_video_v1_IVideoChannelUpdateRequest = IVideoChannelUpdateRequest;
+/* @internal */
+export const strims_video_v1_VideoChannelUpdateResponse = VideoChannelUpdateResponse;
+/* @internal */
+export type strims_video_v1_VideoChannelUpdateResponse = VideoChannelUpdateResponse;
+/* @internal */
+export type strims_video_v1_IVideoChannelUpdateResponse = IVideoChannelUpdateResponse;
+/* @internal */
+export const strims_video_v1_VideoChannelDeleteRequest = VideoChannelDeleteRequest;
+/* @internal */
+export type strims_video_v1_VideoChannelDeleteRequest = VideoChannelDeleteRequest;
+/* @internal */
+export type strims_video_v1_IVideoChannelDeleteRequest = IVideoChannelDeleteRequest;
+/* @internal */
+export const strims_video_v1_VideoChannelDeleteResponse = VideoChannelDeleteResponse;
+/* @internal */
+export type strims_video_v1_VideoChannelDeleteResponse = VideoChannelDeleteResponse;
+/* @internal */
+export type strims_video_v1_IVideoChannelDeleteResponse = IVideoChannelDeleteResponse;
+/* @internal */
+export const strims_video_v1_VideoChannel_Local = VideoChannel.Local;
+/* @internal */
+export type strims_video_v1_VideoChannel_Local = VideoChannel.Local;
+/* @internal */
+export type strims_video_v1_VideoChannel_ILocal = VideoChannel.ILocal;
+/* @internal */
+export const strims_video_v1_VideoChannel_LocalShare = VideoChannel.LocalShare;
+/* @internal */
+export type strims_video_v1_VideoChannel_LocalShare = VideoChannel.LocalShare;
+/* @internal */
+export type strims_video_v1_VideoChannel_ILocalShare = VideoChannel.ILocalShare;
+/* @internal */
+export const strims_video_v1_VideoChannel_RemoteShare = VideoChannel.RemoteShare;
+/* @internal */
+export type strims_video_v1_VideoChannel_RemoteShare = VideoChannel.RemoteShare;
+/* @internal */
+export type strims_video_v1_VideoChannel_IRemoteShare = VideoChannel.IRemoteShare;

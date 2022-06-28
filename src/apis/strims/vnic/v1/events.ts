@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Config as strims_vnic_v1_Config,
-  IConfig as strims_vnic_v1_IConfig,
+  strims_vnic_v1_Config,
+  strims_vnic_v1_IConfig,
 } from "./vnic";
 
 export type IConfigChangeEvent = {
@@ -42,3 +42,9 @@ export class ConfigChangeEvent {
   }
 }
 
+/* @internal */
+export const strims_vnic_v1_ConfigChangeEvent = ConfigChangeEvent;
+/* @internal */
+export type strims_vnic_v1_ConfigChangeEvent = ConfigChangeEvent;
+/* @internal */
+export type strims_vnic_v1_IConfigChangeEvent = IConfigChangeEvent;

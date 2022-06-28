@@ -7,7 +7,7 @@ go 1.18
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/MemeLabs/chat-parser v1.0.5
-	github.com/MemeLabs/protobuf v0.3.1
+	github.com/MemeLabs/protobuf v0.3.3
 	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/appleboy/easyssh-proxy v1.3.9

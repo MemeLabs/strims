@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../type/certificate";
 
 export type IPeerInit = {
@@ -126,19 +126,19 @@ export class GetConfigRequest {
 }
 
 export type IGetConfigResponse = {
-  config?: IConfig;
+  config?: strims_vnic_v1_IConfig;
 }
 
 export class GetConfigResponse {
-  config: Config | undefined;
+  config: strims_vnic_v1_Config | undefined;
 
   constructor(v?: IGetConfigResponse) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_vnic_v1_Config(v.config);
   }
 
   static encode(m: GetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_vnic_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -150,7 +150,7 @@ export class GetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_vnic_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -162,19 +162,19 @@ export class GetConfigResponse {
 }
 
 export type ISetConfigRequest = {
-  config?: IConfig;
+  config?: strims_vnic_v1_IConfig;
 }
 
 export class SetConfigRequest {
-  config: Config | undefined;
+  config: strims_vnic_v1_Config | undefined;
 
   constructor(v?: ISetConfigRequest) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_vnic_v1_Config(v.config);
   }
 
   static encode(m: SetConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_vnic_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -186,7 +186,7 @@ export class SetConfigRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_vnic_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -198,19 +198,19 @@ export class SetConfigRequest {
 }
 
 export type ISetConfigResponse = {
-  config?: IConfig;
+  config?: strims_vnic_v1_IConfig;
 }
 
 export class SetConfigResponse {
-  config: Config | undefined;
+  config: strims_vnic_v1_Config | undefined;
 
   constructor(v?: ISetConfigResponse) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_vnic_v1_Config(v.config);
   }
 
   static encode(m: SetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_vnic_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -222,7 +222,7 @@ export class SetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_vnic_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -233,3 +233,39 @@ export class SetConfigResponse {
   }
 }
 
+/* @internal */
+export const strims_vnic_v1_PeerInit = PeerInit;
+/* @internal */
+export type strims_vnic_v1_PeerInit = PeerInit;
+/* @internal */
+export type strims_vnic_v1_IPeerInit = IPeerInit;
+/* @internal */
+export const strims_vnic_v1_Config = Config;
+/* @internal */
+export type strims_vnic_v1_Config = Config;
+/* @internal */
+export type strims_vnic_v1_IConfig = IConfig;
+/* @internal */
+export const strims_vnic_v1_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_vnic_v1_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_vnic_v1_IGetConfigRequest = IGetConfigRequest;
+/* @internal */
+export const strims_vnic_v1_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_vnic_v1_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_vnic_v1_IGetConfigResponse = IGetConfigResponse;
+/* @internal */
+export const strims_vnic_v1_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_vnic_v1_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_vnic_v1_ISetConfigRequest = ISetConfigRequest;
+/* @internal */
+export const strims_vnic_v1_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_vnic_v1_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_vnic_v1_ISetConfigResponse = ISetConfigResponse;

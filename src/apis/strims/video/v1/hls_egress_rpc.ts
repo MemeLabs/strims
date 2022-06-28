@@ -3,68 +3,68 @@ import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import {
-  IHLSEgressIsSupportedRequest,
-  HLSEgressIsSupportedRequest,
-  HLSEgressIsSupportedResponse,
-  IHLSEgressGetConfigRequest,
-  HLSEgressGetConfigRequest,
-  HLSEgressGetConfigResponse,
-  IHLSEgressSetConfigRequest,
-  HLSEgressSetConfigRequest,
-  HLSEgressSetConfigResponse,
-  IHLSEgressOpenStreamRequest,
-  HLSEgressOpenStreamRequest,
-  HLSEgressOpenStreamResponse,
-  IHLSEgressCloseStreamRequest,
-  HLSEgressCloseStreamRequest,
-  HLSEgressCloseStreamResponse,
+  strims_video_v1_IHLSEgressIsSupportedRequest,
+  strims_video_v1_HLSEgressIsSupportedRequest,
+  strims_video_v1_HLSEgressIsSupportedResponse,
+  strims_video_v1_IHLSEgressGetConfigRequest,
+  strims_video_v1_HLSEgressGetConfigRequest,
+  strims_video_v1_HLSEgressGetConfigResponse,
+  strims_video_v1_IHLSEgressSetConfigRequest,
+  strims_video_v1_HLSEgressSetConfigRequest,
+  strims_video_v1_HLSEgressSetConfigResponse,
+  strims_video_v1_IHLSEgressOpenStreamRequest,
+  strims_video_v1_HLSEgressOpenStreamRequest,
+  strims_video_v1_HLSEgressOpenStreamResponse,
+  strims_video_v1_IHLSEgressCloseStreamRequest,
+  strims_video_v1_HLSEgressCloseStreamRequest,
+  strims_video_v1_HLSEgressCloseStreamResponse,
 } from "./hls_egress";
 
 export interface HLSEgressService {
-  isSupported(req: HLSEgressIsSupportedRequest, call: strims_rpc_Call): Promise<HLSEgressIsSupportedResponse> | HLSEgressIsSupportedResponse;
-  getConfig(req: HLSEgressGetConfigRequest, call: strims_rpc_Call): Promise<HLSEgressGetConfigResponse> | HLSEgressGetConfigResponse;
-  setConfig(req: HLSEgressSetConfigRequest, call: strims_rpc_Call): Promise<HLSEgressSetConfigResponse> | HLSEgressSetConfigResponse;
-  openStream(req: HLSEgressOpenStreamRequest, call: strims_rpc_Call): Promise<HLSEgressOpenStreamResponse> | HLSEgressOpenStreamResponse;
-  closeStream(req: HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<HLSEgressCloseStreamResponse> | HLSEgressCloseStreamResponse;
+  isSupported(req: strims_video_v1_HLSEgressIsSupportedRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressIsSupportedResponse> | strims_video_v1_HLSEgressIsSupportedResponse;
+  getConfig(req: strims_video_v1_HLSEgressGetConfigRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressGetConfigResponse> | strims_video_v1_HLSEgressGetConfigResponse;
+  setConfig(req: strims_video_v1_HLSEgressSetConfigRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressSetConfigResponse> | strims_video_v1_HLSEgressSetConfigResponse;
+  openStream(req: strims_video_v1_HLSEgressOpenStreamRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressOpenStreamResponse> | strims_video_v1_HLSEgressOpenStreamResponse;
+  closeStream(req: strims_video_v1_HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressCloseStreamResponse> | strims_video_v1_HLSEgressCloseStreamResponse;
 }
 
 export class UnimplementedHLSEgressService implements HLSEgressService {
-  isSupported(req: HLSEgressIsSupportedRequest, call: strims_rpc_Call): Promise<HLSEgressIsSupportedResponse> | HLSEgressIsSupportedResponse { throw new Error("not implemented"); }
-  getConfig(req: HLSEgressGetConfigRequest, call: strims_rpc_Call): Promise<HLSEgressGetConfigResponse> | HLSEgressGetConfigResponse { throw new Error("not implemented"); }
-  setConfig(req: HLSEgressSetConfigRequest, call: strims_rpc_Call): Promise<HLSEgressSetConfigResponse> | HLSEgressSetConfigResponse { throw new Error("not implemented"); }
-  openStream(req: HLSEgressOpenStreamRequest, call: strims_rpc_Call): Promise<HLSEgressOpenStreamResponse> | HLSEgressOpenStreamResponse { throw new Error("not implemented"); }
-  closeStream(req: HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<HLSEgressCloseStreamResponse> | HLSEgressCloseStreamResponse { throw new Error("not implemented"); }
+  isSupported(req: strims_video_v1_HLSEgressIsSupportedRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressIsSupportedResponse> | strims_video_v1_HLSEgressIsSupportedResponse { throw new Error("not implemented"); }
+  getConfig(req: strims_video_v1_HLSEgressGetConfigRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressGetConfigResponse> | strims_video_v1_HLSEgressGetConfigResponse { throw new Error("not implemented"); }
+  setConfig(req: strims_video_v1_HLSEgressSetConfigRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressSetConfigResponse> | strims_video_v1_HLSEgressSetConfigResponse { throw new Error("not implemented"); }
+  openStream(req: strims_video_v1_HLSEgressOpenStreamRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressOpenStreamResponse> | strims_video_v1_HLSEgressOpenStreamResponse { throw new Error("not implemented"); }
+  closeStream(req: strims_video_v1_HLSEgressCloseStreamRequest, call: strims_rpc_Call): Promise<strims_video_v1_HLSEgressCloseStreamResponse> | strims_video_v1_HLSEgressCloseStreamResponse { throw new Error("not implemented"); }
 }
 
 export const registerHLSEgressService = (host: strims_rpc_Service, service: HLSEgressService): void => {
-  host.registerMethod<HLSEgressIsSupportedRequest, HLSEgressIsSupportedResponse>("strims.video.v1.HLSEgress.IsSupported", service.isSupported.bind(service), HLSEgressIsSupportedRequest);
-  host.registerMethod<HLSEgressGetConfigRequest, HLSEgressGetConfigResponse>("strims.video.v1.HLSEgress.GetConfig", service.getConfig.bind(service), HLSEgressGetConfigRequest);
-  host.registerMethod<HLSEgressSetConfigRequest, HLSEgressSetConfigResponse>("strims.video.v1.HLSEgress.SetConfig", service.setConfig.bind(service), HLSEgressSetConfigRequest);
-  host.registerMethod<HLSEgressOpenStreamRequest, HLSEgressOpenStreamResponse>("strims.video.v1.HLSEgress.OpenStream", service.openStream.bind(service), HLSEgressOpenStreamRequest);
-  host.registerMethod<HLSEgressCloseStreamRequest, HLSEgressCloseStreamResponse>("strims.video.v1.HLSEgress.CloseStream", service.closeStream.bind(service), HLSEgressCloseStreamRequest);
+  host.registerMethod<strims_video_v1_HLSEgressIsSupportedRequest, strims_video_v1_HLSEgressIsSupportedResponse>("strims.video.v1.HLSEgress.IsSupported", service.isSupported.bind(service), strims_video_v1_HLSEgressIsSupportedRequest);
+  host.registerMethod<strims_video_v1_HLSEgressGetConfigRequest, strims_video_v1_HLSEgressGetConfigResponse>("strims.video.v1.HLSEgress.GetConfig", service.getConfig.bind(service), strims_video_v1_HLSEgressGetConfigRequest);
+  host.registerMethod<strims_video_v1_HLSEgressSetConfigRequest, strims_video_v1_HLSEgressSetConfigResponse>("strims.video.v1.HLSEgress.SetConfig", service.setConfig.bind(service), strims_video_v1_HLSEgressSetConfigRequest);
+  host.registerMethod<strims_video_v1_HLSEgressOpenStreamRequest, strims_video_v1_HLSEgressOpenStreamResponse>("strims.video.v1.HLSEgress.OpenStream", service.openStream.bind(service), strims_video_v1_HLSEgressOpenStreamRequest);
+  host.registerMethod<strims_video_v1_HLSEgressCloseStreamRequest, strims_video_v1_HLSEgressCloseStreamResponse>("strims.video.v1.HLSEgress.CloseStream", service.closeStream.bind(service), strims_video_v1_HLSEgressCloseStreamRequest);
 }
 
 export class HLSEgressClient {
   constructor(private readonly host: strims_rpc_Host) {}
 
-  public isSupported(req?: IHLSEgressIsSupportedRequest, opts?: strims_rpc_UnaryCallOptions): Promise<HLSEgressIsSupportedResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.IsSupported", new HLSEgressIsSupportedRequest(req)), HLSEgressIsSupportedResponse, opts);
+  public isSupported(req?: strims_video_v1_IHLSEgressIsSupportedRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_HLSEgressIsSupportedResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.IsSupported", new strims_video_v1_HLSEgressIsSupportedRequest(req)), strims_video_v1_HLSEgressIsSupportedResponse, opts);
   }
 
-  public getConfig(req?: IHLSEgressGetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<HLSEgressGetConfigResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.GetConfig", new HLSEgressGetConfigRequest(req)), HLSEgressGetConfigResponse, opts);
+  public getConfig(req?: strims_video_v1_IHLSEgressGetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_HLSEgressGetConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.GetConfig", new strims_video_v1_HLSEgressGetConfigRequest(req)), strims_video_v1_HLSEgressGetConfigResponse, opts);
   }
 
-  public setConfig(req?: IHLSEgressSetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<HLSEgressSetConfigResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.SetConfig", new HLSEgressSetConfigRequest(req)), HLSEgressSetConfigResponse, opts);
+  public setConfig(req?: strims_video_v1_IHLSEgressSetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_HLSEgressSetConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.SetConfig", new strims_video_v1_HLSEgressSetConfigRequest(req)), strims_video_v1_HLSEgressSetConfigResponse, opts);
   }
 
-  public openStream(req?: IHLSEgressOpenStreamRequest, opts?: strims_rpc_UnaryCallOptions): Promise<HLSEgressOpenStreamResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.OpenStream", new HLSEgressOpenStreamRequest(req)), HLSEgressOpenStreamResponse, opts);
+  public openStream(req?: strims_video_v1_IHLSEgressOpenStreamRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_HLSEgressOpenStreamResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.OpenStream", new strims_video_v1_HLSEgressOpenStreamRequest(req)), strims_video_v1_HLSEgressOpenStreamResponse, opts);
   }
 
-  public closeStream(req?: IHLSEgressCloseStreamRequest, opts?: strims_rpc_UnaryCallOptions): Promise<HLSEgressCloseStreamResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.CloseStream", new HLSEgressCloseStreamRequest(req)), HLSEgressCloseStreamResponse, opts);
+  public closeStream(req?: strims_video_v1_IHLSEgressCloseStreamRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_HLSEgressCloseStreamResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.CloseStream", new strims_video_v1_HLSEgressCloseStreamRequest(req)), strims_video_v1_HLSEgressCloseStreamResponse, opts);
   }
 }
 

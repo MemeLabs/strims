@@ -7,3 +7,7 @@ export enum ErrorCode {
   UNKNOWN = 1,
   CERTIFICATE_SUBJECT_IN_USE = 2,
 }
+/* @internal */
+export const strims_network_v1_errors_ErrorCode = ErrorCode;
+/* @internal */
+export type strims_network_v1_errors_ErrorCode = ErrorCode;

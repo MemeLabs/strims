@@ -3,19 +3,19 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
 export type ICapConnLog = {
-  peerLogs?: CapConnLog.IPeerLog[];
+  peerLogs?: strims_devtools_v1_ppspp_CapConnLog_IPeerLog[];
 }
 
 export class CapConnLog {
-  peerLogs: CapConnLog.PeerLog[];
+  peerLogs: strims_devtools_v1_ppspp_CapConnLog_PeerLog[];
 
   constructor(v?: ICapConnLog) {
-    this.peerLogs = v?.peerLogs ? v.peerLogs.map(v => new CapConnLog.PeerLog(v)) : [];
+    this.peerLogs = v?.peerLogs ? v.peerLogs.map(v => new strims_devtools_v1_ppspp_CapConnLog_PeerLog(v)) : [];
   }
 
   static encode(m: CapConnLog, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.peerLogs) CapConnLog.PeerLog.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.peerLogs) strims_devtools_v1_ppspp_CapConnLog_PeerLog.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -27,7 +27,7 @@ export class CapConnLog {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.peerLogs.push(CapConnLog.PeerLog.decode(r, r.uint32()));
+        m.peerLogs.push(strims_devtools_v1_ppspp_CapConnLog_PeerLog.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -41,22 +41,22 @@ export class CapConnLog {
 export namespace CapConnLog {
   export type IPeerLog = {
     label?: string;
-    events?: CapConnLog.PeerLog.IEvent[];
+    events?: strims_devtools_v1_ppspp_CapConnLog_PeerLog_IEvent[];
   }
 
   export class PeerLog {
     label: string;
-    events: CapConnLog.PeerLog.Event[];
+    events: strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event[];
 
     constructor(v?: IPeerLog) {
       this.label = v?.label || "";
-      this.events = v?.events ? v.events.map(v => new CapConnLog.PeerLog.Event(v)) : [];
+      this.events = v?.events ? v.events.map(v => new strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event(v)) : [];
     }
 
     static encode(m: PeerLog, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.label.length) w.uint32(10).string(m.label);
-      for (const v of m.events) CapConnLog.PeerLog.Event.encode(v, w.uint32(18).fork()).ldelim();
+      for (const v of m.events) strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event.encode(v, w.uint32(18).fork()).ldelim();
       return w;
     }
 
@@ -71,7 +71,7 @@ export namespace CapConnLog {
           m.label = r.string();
           break;
           case 2:
-          m.events.push(CapConnLog.PeerLog.Event.decode(r, r.uint32()));
+          m.events.push(strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event.decode(r, r.uint32()));
           break;
           default:
           r.skipType(tag & 7);
@@ -84,16 +84,16 @@ export namespace CapConnLog {
 
   export namespace PeerLog {
     export type IEvent = {
-      code?: CapConnLog.PeerLog.Event.Code;
+      code?: strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_Code;
       timestamp?: bigint;
-      messageTypes?: CapConnLog.PeerLog.Event.MessageType[];
+      messageTypes?: strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_MessageType[];
       messageAddresses?: bigint[];
     }
 
     export class Event {
-      code: CapConnLog.PeerLog.Event.Code;
+      code: strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_Code;
       timestamp: bigint;
-      messageTypes: CapConnLog.PeerLog.Event.MessageType[];
+      messageTypes: strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_MessageType[];
       messageAddresses: bigint[];
 
       constructor(v?: IEvent) {
@@ -196,12 +196,12 @@ export class CapConnWatchLogsRequest {
 }
 
 export type ICapConnWatchLogsResponse = {
-  op?: CapConnWatchLogsResponse.Op;
+  op?: strims_devtools_v1_ppspp_CapConnWatchLogsResponse_Op;
   name?: string;
 }
 
 export class CapConnWatchLogsResponse {
-  op: CapConnWatchLogsResponse.Op;
+  op: strims_devtools_v1_ppspp_CapConnWatchLogsResponse_Op;
   name: string;
 
   constructor(v?: ICapConnWatchLogsResponse) {
@@ -282,19 +282,19 @@ export class CapConnLoadLogRequest {
 }
 
 export type ICapConnLoadLogResponse = {
-  log?: ICapConnLog;
+  log?: strims_devtools_v1_ppspp_ICapConnLog;
 }
 
 export class CapConnLoadLogResponse {
-  log: CapConnLog | undefined;
+  log: strims_devtools_v1_ppspp_CapConnLog | undefined;
 
   constructor(v?: ICapConnLoadLogResponse) {
-    this.log = v?.log && new CapConnLog(v.log);
+    this.log = v?.log && new strims_devtools_v1_ppspp_CapConnLog(v.log);
   }
 
   static encode(m: CapConnLoadLogResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.log) CapConnLog.encode(m.log, w.uint32(10).fork()).ldelim();
+    if (m.log) strims_devtools_v1_ppspp_CapConnLog.encode(m.log, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -306,7 +306,7 @@ export class CapConnLoadLogResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.log = CapConnLog.decode(r, r.uint32());
+        m.log = strims_devtools_v1_ppspp_CapConnLog.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -317,3 +317,57 @@ export class CapConnLoadLogResponse {
   }
 }
 
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLog = CapConnLog;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog = CapConnLog;
+/* @internal */
+export type strims_devtools_v1_ppspp_ICapConnLog = ICapConnLog;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnWatchLogsRequest = CapConnWatchLogsRequest;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnWatchLogsRequest = CapConnWatchLogsRequest;
+/* @internal */
+export type strims_devtools_v1_ppspp_ICapConnWatchLogsRequest = ICapConnWatchLogsRequest;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnWatchLogsResponse = CapConnWatchLogsResponse;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnWatchLogsResponse = CapConnWatchLogsResponse;
+/* @internal */
+export type strims_devtools_v1_ppspp_ICapConnWatchLogsResponse = ICapConnWatchLogsResponse;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLoadLogRequest = CapConnLoadLogRequest;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLoadLogRequest = CapConnLoadLogRequest;
+/* @internal */
+export type strims_devtools_v1_ppspp_ICapConnLoadLogRequest = ICapConnLoadLogRequest;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLoadLogResponse = CapConnLoadLogResponse;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLoadLogResponse = CapConnLoadLogResponse;
+/* @internal */
+export type strims_devtools_v1_ppspp_ICapConnLoadLogResponse = ICapConnLoadLogResponse;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLog_PeerLog = CapConnLog.PeerLog;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_PeerLog = CapConnLog.PeerLog;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_IPeerLog = CapConnLog.IPeerLog;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event = CapConnLog.PeerLog.Event;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event = CapConnLog.PeerLog.Event;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_PeerLog_IEvent = CapConnLog.PeerLog.IEvent;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_Code = CapConnLog.PeerLog.Event.Code;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_Code = CapConnLog.PeerLog.Event.Code;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_MessageType = CapConnLog.PeerLog.Event.MessageType;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnLog_PeerLog_Event_MessageType = CapConnLog.PeerLog.Event.MessageType;
+/* @internal */
+export const strims_devtools_v1_ppspp_CapConnWatchLogsResponse_Op = CapConnWatchLogsResponse.Op;
+/* @internal */
+export type strims_devtools_v1_ppspp_CapConnWatchLogsResponse_Op = CapConnWatchLogsResponse.Op;

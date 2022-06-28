@@ -74,3 +74,15 @@ export class FundingTestResponse {
   }
 }
 
+/* @internal */
+export const strims_funding_v1_FundingTestRequest = FundingTestRequest;
+/* @internal */
+export type strims_funding_v1_FundingTestRequest = FundingTestRequest;
+/* @internal */
+export type strims_funding_v1_IFundingTestRequest = IFundingTestRequest;
+/* @internal */
+export const strims_funding_v1_FundingTestResponse = FundingTestResponse;
+/* @internal */
+export type strims_funding_v1_FundingTestResponse = FundingTestResponse;
+/* @internal */
+export type strims_funding_v1_IFundingTestResponse = IFundingTestResponse;

@@ -5,20 +5,20 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 export type INotification = {
   id?: bigint;
   createdAt?: bigint;
-  status?: Notification.Status;
+  status?: strims_notification_v1_Notification_Status;
   title?: string;
   message?: string;
-  subject?: Notification.ISubject;
+  subject?: strims_notification_v1_Notification_ISubject;
   errorCode?: number;
 }
 
 export class Notification {
   id: bigint;
   createdAt: bigint;
-  status: Notification.Status;
+  status: strims_notification_v1_Notification_Status;
   title: string;
   message: string;
-  subject: Notification.Subject | undefined;
+  subject: strims_notification_v1_Notification_Subject | undefined;
   errorCode: number;
 
   constructor(v?: INotification) {
@@ -27,7 +27,7 @@ export class Notification {
     this.status = v?.status || 0;
     this.title = v?.title || "";
     this.message = v?.message || "";
-    this.subject = v?.subject && new Notification.Subject(v.subject);
+    this.subject = v?.subject && new strims_notification_v1_Notification_Subject(v.subject);
     this.errorCode = v?.errorCode || 0;
   }
 
@@ -38,7 +38,7 @@ export class Notification {
     if (m.status) w.uint32(24).uint32(m.status);
     if (m.title.length) w.uint32(34).string(m.title);
     if (m.message.length) w.uint32(42).string(m.message);
-    if (m.subject) Notification.Subject.encode(m.subject, w.uint32(50).fork()).ldelim();
+    if (m.subject) strims_notification_v1_Notification_Subject.encode(m.subject, w.uint32(50).fork()).ldelim();
     if (m.errorCode) w.uint32(56).int32(m.errorCode);
     return w;
   }
@@ -66,7 +66,7 @@ export class Notification {
         m.message = r.string();
         break;
         case 6:
-        m.subject = Notification.Subject.decode(r, r.uint32());
+        m.subject = strims_notification_v1_Notification_Subject.decode(r, r.uint32());
         break;
         case 7:
         m.errorCode = r.int32();
@@ -82,12 +82,12 @@ export class Notification {
 
 export namespace Notification {
   export type ISubject = {
-    model?: Notification.Subject.Model;
+    model?: strims_notification_v1_Notification_Subject_Model;
     id?: bigint;
   }
 
   export class Subject {
-    model: Notification.Subject.Model;
+    model: strims_notification_v1_Notification_Subject_Model;
     id: bigint;
 
     constructor(v?: ISubject) {
@@ -153,7 +153,7 @@ export class Event {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case Event.BodyCase.NOTIFICATION:
-      Notification.encode(m.body.notification, w.uint32(8010).fork()).ldelim();
+      strims_notification_v1_Notification.encode(m.body.notification, w.uint32(8010).fork()).ldelim();
       break;
       case Event.BodyCase.DISMISS:
       w.uint32(8016).uint64(m.body.dismiss);
@@ -170,7 +170,7 @@ export class Event {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.body = new Event.Body({ notification: Notification.decode(r, r.uint32()) });
+        m.body = new Event.Body({ notification: strims_notification_v1_Notification.decode(r, r.uint32()) });
         break;
         case 1002:
         m.body = new Event.Body({ dismiss: r.uint64() });
@@ -193,25 +193,25 @@ export namespace Event {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.NOTIFICATION, notification: INotification }
+  |{ case?: BodyCase.NOTIFICATION, notification: strims_notification_v1_INotification }
   |{ case?: BodyCase.DISMISS, dismiss: bigint }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.NOTIFICATION, notification: Notification }
+  |{ case: BodyCase.NOTIFICATION, notification: strims_notification_v1_Notification }
   |{ case: BodyCase.DISMISS, dismiss: bigint }
   >;
 
   class BodyImpl {
-    notification: Notification;
+    notification: strims_notification_v1_Notification;
     dismiss: bigint;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "notification" in v) {
         this.case = BodyCase.NOTIFICATION;
-        this.notification = new Notification(v.notification);
+        this.notification = new strims_notification_v1_Notification(v.notification);
       } else
       if (v && "dismiss" in v) {
         this.case = BodyCase.DISMISS;
@@ -223,7 +223,7 @@ export namespace Event {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { notification: INotification } ? { case: BodyCase.NOTIFICATION, notification: Notification } :
+    T extends { notification: strims_notification_v1_INotification } ? { case: BodyCase.NOTIFICATION, notification: strims_notification_v1_Notification } :
     T extends { dismiss: bigint } ? { case: BodyCase.DISMISS, dismiss: bigint } :
     never
     >;
@@ -251,19 +251,19 @@ export class WatchRequest {
 }
 
 export type IWatchResponse = {
-  event?: IEvent;
+  event?: strims_notification_v1_IEvent;
 }
 
 export class WatchResponse {
-  event: Event | undefined;
+  event: strims_notification_v1_Event | undefined;
 
   constructor(v?: IWatchResponse) {
-    this.event = v?.event && new Event(v.event);
+    this.event = v?.event && new strims_notification_v1_Event(v.event);
   }
 
   static encode(m: WatchResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.event) Event.encode(m.event, w.uint32(10).fork()).ldelim();
+    if (m.event) strims_notification_v1_Event.encode(m.event, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -275,7 +275,7 @@ export class WatchResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.event = Event.decode(r, r.uint32());
+        m.event = strims_notification_v1_Event.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -341,3 +341,53 @@ export class DismissResponse {
   }
 }
 
+/* @internal */
+export const strims_notification_v1_Notification = Notification;
+/* @internal */
+export type strims_notification_v1_Notification = Notification;
+/* @internal */
+export type strims_notification_v1_INotification = INotification;
+/* @internal */
+export const strims_notification_v1_Event = Event;
+/* @internal */
+export type strims_notification_v1_Event = Event;
+/* @internal */
+export type strims_notification_v1_IEvent = IEvent;
+/* @internal */
+export const strims_notification_v1_WatchRequest = WatchRequest;
+/* @internal */
+export type strims_notification_v1_WatchRequest = WatchRequest;
+/* @internal */
+export type strims_notification_v1_IWatchRequest = IWatchRequest;
+/* @internal */
+export const strims_notification_v1_WatchResponse = WatchResponse;
+/* @internal */
+export type strims_notification_v1_WatchResponse = WatchResponse;
+/* @internal */
+export type strims_notification_v1_IWatchResponse = IWatchResponse;
+/* @internal */
+export const strims_notification_v1_DismissRequest = DismissRequest;
+/* @internal */
+export type strims_notification_v1_DismissRequest = DismissRequest;
+/* @internal */
+export type strims_notification_v1_IDismissRequest = IDismissRequest;
+/* @internal */
+export const strims_notification_v1_DismissResponse = DismissResponse;
+/* @internal */
+export type strims_notification_v1_DismissResponse = DismissResponse;
+/* @internal */
+export type strims_notification_v1_IDismissResponse = IDismissResponse;
+/* @internal */
+export const strims_notification_v1_Notification_Subject = Notification.Subject;
+/* @internal */
+export type strims_notification_v1_Notification_Subject = Notification.Subject;
+/* @internal */
+export type strims_notification_v1_Notification_ISubject = Notification.ISubject;
+/* @internal */
+export const strims_notification_v1_Notification_Status = Notification.Status;
+/* @internal */
+export type strims_notification_v1_Notification_Status = Notification.Status;
+/* @internal */
+export const strims_notification_v1_Notification_Subject_Model = Notification.Subject.Model;
+/* @internal */
+export type strims_notification_v1_Notification_Subject_Model = Notification.Subject.Model;

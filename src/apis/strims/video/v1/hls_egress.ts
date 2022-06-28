@@ -120,19 +120,19 @@ export class HLSEgressGetConfigRequest {
 }
 
 export type IHLSEgressGetConfigResponse = {
-  config?: IHLSEgressConfig;
+  config?: strims_video_v1_IHLSEgressConfig;
 }
 
 export class HLSEgressGetConfigResponse {
-  config: HLSEgressConfig | undefined;
+  config: strims_video_v1_HLSEgressConfig | undefined;
 
   constructor(v?: IHLSEgressGetConfigResponse) {
-    this.config = v?.config && new HLSEgressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_HLSEgressConfig(v.config);
   }
 
   static encode(m: HLSEgressGetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -144,7 +144,7 @@ export class HLSEgressGetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = HLSEgressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_HLSEgressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -156,19 +156,19 @@ export class HLSEgressGetConfigResponse {
 }
 
 export type IHLSEgressSetConfigRequest = {
-  config?: IHLSEgressConfig;
+  config?: strims_video_v1_IHLSEgressConfig;
 }
 
 export class HLSEgressSetConfigRequest {
-  config: HLSEgressConfig | undefined;
+  config: strims_video_v1_HLSEgressConfig | undefined;
 
   constructor(v?: IHLSEgressSetConfigRequest) {
-    this.config = v?.config && new HLSEgressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_HLSEgressConfig(v.config);
   }
 
   static encode(m: HLSEgressSetConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -180,7 +180,7 @@ export class HLSEgressSetConfigRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = HLSEgressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_HLSEgressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -192,19 +192,19 @@ export class HLSEgressSetConfigRequest {
 }
 
 export type IHLSEgressSetConfigResponse = {
-  config?: IHLSEgressConfig;
+  config?: strims_video_v1_IHLSEgressConfig;
 }
 
 export class HLSEgressSetConfigResponse {
-  config: HLSEgressConfig | undefined;
+  config: strims_video_v1_HLSEgressConfig | undefined;
 
   constructor(v?: IHLSEgressSetConfigResponse) {
-    this.config = v?.config && new HLSEgressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_HLSEgressConfig(v.config);
   }
 
   static encode(m: HLSEgressSetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_HLSEgressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -216,7 +216,7 @@ export class HLSEgressSetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = HLSEgressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_HLSEgressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -361,3 +361,69 @@ export class HLSEgressCloseStreamResponse {
   }
 }
 
+/* @internal */
+export const strims_video_v1_HLSEgressConfig = HLSEgressConfig;
+/* @internal */
+export type strims_video_v1_HLSEgressConfig = HLSEgressConfig;
+/* @internal */
+export type strims_video_v1_IHLSEgressConfig = IHLSEgressConfig;
+/* @internal */
+export const strims_video_v1_HLSEgressIsSupportedRequest = HLSEgressIsSupportedRequest;
+/* @internal */
+export type strims_video_v1_HLSEgressIsSupportedRequest = HLSEgressIsSupportedRequest;
+/* @internal */
+export type strims_video_v1_IHLSEgressIsSupportedRequest = IHLSEgressIsSupportedRequest;
+/* @internal */
+export const strims_video_v1_HLSEgressIsSupportedResponse = HLSEgressIsSupportedResponse;
+/* @internal */
+export type strims_video_v1_HLSEgressIsSupportedResponse = HLSEgressIsSupportedResponse;
+/* @internal */
+export type strims_video_v1_IHLSEgressIsSupportedResponse = IHLSEgressIsSupportedResponse;
+/* @internal */
+export const strims_video_v1_HLSEgressGetConfigRequest = HLSEgressGetConfigRequest;
+/* @internal */
+export type strims_video_v1_HLSEgressGetConfigRequest = HLSEgressGetConfigRequest;
+/* @internal */
+export type strims_video_v1_IHLSEgressGetConfigRequest = IHLSEgressGetConfigRequest;
+/* @internal */
+export const strims_video_v1_HLSEgressGetConfigResponse = HLSEgressGetConfigResponse;
+/* @internal */
+export type strims_video_v1_HLSEgressGetConfigResponse = HLSEgressGetConfigResponse;
+/* @internal */
+export type strims_video_v1_IHLSEgressGetConfigResponse = IHLSEgressGetConfigResponse;
+/* @internal */
+export const strims_video_v1_HLSEgressSetConfigRequest = HLSEgressSetConfigRequest;
+/* @internal */
+export type strims_video_v1_HLSEgressSetConfigRequest = HLSEgressSetConfigRequest;
+/* @internal */
+export type strims_video_v1_IHLSEgressSetConfigRequest = IHLSEgressSetConfigRequest;
+/* @internal */
+export const strims_video_v1_HLSEgressSetConfigResponse = HLSEgressSetConfigResponse;
+/* @internal */
+export type strims_video_v1_HLSEgressSetConfigResponse = HLSEgressSetConfigResponse;
+/* @internal */
+export type strims_video_v1_IHLSEgressSetConfigResponse = IHLSEgressSetConfigResponse;
+/* @internal */
+export const strims_video_v1_HLSEgressOpenStreamRequest = HLSEgressOpenStreamRequest;
+/* @internal */
+export type strims_video_v1_HLSEgressOpenStreamRequest = HLSEgressOpenStreamRequest;
+/* @internal */
+export type strims_video_v1_IHLSEgressOpenStreamRequest = IHLSEgressOpenStreamRequest;
+/* @internal */
+export const strims_video_v1_HLSEgressOpenStreamResponse = HLSEgressOpenStreamResponse;
+/* @internal */
+export type strims_video_v1_HLSEgressOpenStreamResponse = HLSEgressOpenStreamResponse;
+/* @internal */
+export type strims_video_v1_IHLSEgressOpenStreamResponse = IHLSEgressOpenStreamResponse;
+/* @internal */
+export const strims_video_v1_HLSEgressCloseStreamRequest = HLSEgressCloseStreamRequest;
+/* @internal */
+export type strims_video_v1_HLSEgressCloseStreamRequest = HLSEgressCloseStreamRequest;
+/* @internal */
+export type strims_video_v1_IHLSEgressCloseStreamRequest = IHLSEgressCloseStreamRequest;
+/* @internal */
+export const strims_video_v1_HLSEgressCloseStreamResponse = HLSEgressCloseStreamResponse;
+/* @internal */
+export type strims_video_v1_HLSEgressCloseStreamResponse = HLSEgressCloseStreamResponse;
+/* @internal */
+export type strims_video_v1_IHLSEgressCloseStreamResponse = IHLSEgressCloseStreamResponse;

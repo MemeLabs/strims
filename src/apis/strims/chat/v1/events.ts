@@ -2,20 +2,20 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Emote as strims_chat_v1_Emote,
-  IEmote as strims_chat_v1_IEmote,
-  Modifier as strims_chat_v1_Modifier,
-  IModifier as strims_chat_v1_IModifier,
-  Server as strims_chat_v1_Server,
-  IServer as strims_chat_v1_IServer,
-  Tag as strims_chat_v1_Tag,
-  ITag as strims_chat_v1_ITag,
-  UIConfig as strims_chat_v1_UIConfig,
-  IUIConfig as strims_chat_v1_IUIConfig,
-  WhisperRecord as strims_chat_v1_WhisperRecord,
-  IWhisperRecord as strims_chat_v1_IWhisperRecord,
-  WhisperThread as strims_chat_v1_WhisperThread,
-  IWhisperThread as strims_chat_v1_IWhisperThread,
+  strims_chat_v1_Emote,
+  strims_chat_v1_IEmote,
+  strims_chat_v1_Modifier,
+  strims_chat_v1_IModifier,
+  strims_chat_v1_Server,
+  strims_chat_v1_IServer,
+  strims_chat_v1_Tag,
+  strims_chat_v1_ITag,
+  strims_chat_v1_UIConfig,
+  strims_chat_v1_IUIConfig,
+  strims_chat_v1_WhisperRecord,
+  strims_chat_v1_IWhisperRecord,
+  strims_chat_v1_WhisperThread,
+  strims_chat_v1_IWhisperThread,
 } from "./chat";
 
 export type IServerChangeEvent = {
@@ -493,3 +493,81 @@ export class WhisperRecordDeleteEvent {
   }
 }
 
+/* @internal */
+export const strims_chat_v1_ServerChangeEvent = ServerChangeEvent;
+/* @internal */
+export type strims_chat_v1_ServerChangeEvent = ServerChangeEvent;
+/* @internal */
+export type strims_chat_v1_IServerChangeEvent = IServerChangeEvent;
+/* @internal */
+export const strims_chat_v1_ServerDeleteEvent = ServerDeleteEvent;
+/* @internal */
+export type strims_chat_v1_ServerDeleteEvent = ServerDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IServerDeleteEvent = IServerDeleteEvent;
+/* @internal */
+export const strims_chat_v1_EmoteChangeEvent = EmoteChangeEvent;
+/* @internal */
+export type strims_chat_v1_EmoteChangeEvent = EmoteChangeEvent;
+/* @internal */
+export type strims_chat_v1_IEmoteChangeEvent = IEmoteChangeEvent;
+/* @internal */
+export const strims_chat_v1_EmoteDeleteEvent = EmoteDeleteEvent;
+/* @internal */
+export type strims_chat_v1_EmoteDeleteEvent = EmoteDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IEmoteDeleteEvent = IEmoteDeleteEvent;
+/* @internal */
+export const strims_chat_v1_ModifierChangeEvent = ModifierChangeEvent;
+/* @internal */
+export type strims_chat_v1_ModifierChangeEvent = ModifierChangeEvent;
+/* @internal */
+export type strims_chat_v1_IModifierChangeEvent = IModifierChangeEvent;
+/* @internal */
+export const strims_chat_v1_ModifierDeleteEvent = ModifierDeleteEvent;
+/* @internal */
+export type strims_chat_v1_ModifierDeleteEvent = ModifierDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IModifierDeleteEvent = IModifierDeleteEvent;
+/* @internal */
+export const strims_chat_v1_TagChangeEvent = TagChangeEvent;
+/* @internal */
+export type strims_chat_v1_TagChangeEvent = TagChangeEvent;
+/* @internal */
+export type strims_chat_v1_ITagChangeEvent = ITagChangeEvent;
+/* @internal */
+export const strims_chat_v1_TagDeleteEvent = TagDeleteEvent;
+/* @internal */
+export type strims_chat_v1_TagDeleteEvent = TagDeleteEvent;
+/* @internal */
+export type strims_chat_v1_ITagDeleteEvent = ITagDeleteEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigChangeEvent = UIConfigChangeEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigChangeEvent = UIConfigChangeEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigChangeEvent = IUIConfigChangeEvent;
+/* @internal */
+export const strims_chat_v1_SyncAssetsEvent = SyncAssetsEvent;
+/* @internal */
+export type strims_chat_v1_SyncAssetsEvent = SyncAssetsEvent;
+/* @internal */
+export type strims_chat_v1_ISyncAssetsEvent = ISyncAssetsEvent;
+/* @internal */
+export const strims_chat_v1_WhisperThreadChangeEvent = WhisperThreadChangeEvent;
+/* @internal */
+export type strims_chat_v1_WhisperThreadChangeEvent = WhisperThreadChangeEvent;
+/* @internal */
+export type strims_chat_v1_IWhisperThreadChangeEvent = IWhisperThreadChangeEvent;
+/* @internal */
+export const strims_chat_v1_WhisperRecordChangeEvent = WhisperRecordChangeEvent;
+/* @internal */
+export type strims_chat_v1_WhisperRecordChangeEvent = WhisperRecordChangeEvent;
+/* @internal */
+export type strims_chat_v1_IWhisperRecordChangeEvent = IWhisperRecordChangeEvent;
+/* @internal */
+export const strims_chat_v1_WhisperRecordDeleteEvent = WhisperRecordDeleteEvent;
+/* @internal */
+export type strims_chat_v1_WhisperRecordDeleteEvent = WhisperRecordDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IWhisperRecordDeleteEvent = IWhisperRecordDeleteEvent;

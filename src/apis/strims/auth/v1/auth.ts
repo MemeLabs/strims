@@ -2,10 +2,10 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Profile as strims_profile_v1_Profile,
-  IProfile as strims_profile_v1_IProfile,
-  StorageKey as strims_profile_v1_StorageKey,
-  IStorageKey as strims_profile_v1_IStorageKey,
+  strims_profile_v1_Profile,
+  strims_profile_v1_IProfile,
+  strims_profile_v1_StorageKey,
+  strims_profile_v1_IStorageKey,
 } from "../../profile/v1/profile";
 
 export type ISessionThing = {
@@ -117,10 +117,10 @@ export class ServerUserThing {
     if (m.name.length) w.uint32(18).string(m.name);
     switch (m.credentials.case) {
       case ServerUserThing.CredentialsCase.UNENCRYPTED:
-      ServerUserThing.Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
+      strims_auth_v1_ServerUserThing_Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
       break;
       case ServerUserThing.CredentialsCase.PASSWORD:
-      ServerUserThing.Password.encode(m.credentials.password, w.uint32(8018).fork()).ldelim();
+      strims_auth_v1_ServerUserThing_Password.encode(m.credentials.password, w.uint32(8018).fork()).ldelim();
       break;
     }
     return w;
@@ -140,10 +140,10 @@ export class ServerUserThing {
         m.name = r.string();
         break;
         case 1001:
-        m.credentials = new ServerUserThing.Credentials({ unencrypted: ServerUserThing.Unencrypted.decode(r, r.uint32()) });
+        m.credentials = new ServerUserThing.Credentials({ unencrypted: strims_auth_v1_ServerUserThing_Unencrypted.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.credentials = new ServerUserThing.Credentials({ password: ServerUserThing.Password.decode(r, r.uint32()) });
+        m.credentials = new ServerUserThing.Credentials({ password: strims_auth_v1_ServerUserThing_Password.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -163,29 +163,29 @@ export namespace ServerUserThing {
 
   export type ICredentials =
   { case?: CredentialsCase.NOT_SET }
-  |{ case?: CredentialsCase.UNENCRYPTED, unencrypted: ServerUserThing.IUnencrypted }
-  |{ case?: CredentialsCase.PASSWORD, password: ServerUserThing.IPassword }
+  |{ case?: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_ServerUserThing_IUnencrypted }
+  |{ case?: CredentialsCase.PASSWORD, password: strims_auth_v1_ServerUserThing_IPassword }
   ;
 
   export type TCredentials = Readonly<
   { case: CredentialsCase.NOT_SET }
-  |{ case: CredentialsCase.UNENCRYPTED, unencrypted: ServerUserThing.Unencrypted }
-  |{ case: CredentialsCase.PASSWORD, password: ServerUserThing.Password }
+  |{ case: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_ServerUserThing_Unencrypted }
+  |{ case: CredentialsCase.PASSWORD, password: strims_auth_v1_ServerUserThing_Password }
   >;
 
   class CredentialsImpl {
-    unencrypted: ServerUserThing.Unencrypted;
-    password: ServerUserThing.Password;
+    unencrypted: strims_auth_v1_ServerUserThing_Unencrypted;
+    password: strims_auth_v1_ServerUserThing_Password;
     case: CredentialsCase = CredentialsCase.NOT_SET;
 
     constructor(v?: ICredentials) {
       if (v && "unencrypted" in v) {
         this.case = CredentialsCase.UNENCRYPTED;
-        this.unencrypted = new ServerUserThing.Unencrypted(v.unencrypted);
+        this.unencrypted = new strims_auth_v1_ServerUserThing_Unencrypted(v.unencrypted);
       } else
       if (v && "password" in v) {
         this.case = CredentialsCase.PASSWORD;
-        this.password = new ServerUserThing.Password(v.password);
+        this.password = new strims_auth_v1_ServerUserThing_Password(v.password);
       }
     }
   }
@@ -193,8 +193,8 @@ export namespace ServerUserThing {
   export const Credentials = CredentialsImpl as {
     new (): Readonly<{ case: CredentialsCase.NOT_SET }>;
     new <T extends ICredentials>(v: T): Readonly<
-    T extends { unencrypted: ServerUserThing.IUnencrypted } ? { case: CredentialsCase.UNENCRYPTED, unencrypted: ServerUserThing.Unencrypted } :
-    T extends { password: ServerUserThing.IPassword } ? { case: CredentialsCase.PASSWORD, password: ServerUserThing.Password } :
+    T extends { unencrypted: strims_auth_v1_ServerUserThing_IUnencrypted } ? { case: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_ServerUserThing_Unencrypted } :
+    T extends { password: strims_auth_v1_ServerUserThing_IPassword } ? { case: CredentialsCase.PASSWORD, password: strims_auth_v1_ServerUserThing_Password } :
     never
     >;
   };
@@ -296,25 +296,25 @@ export namespace ServerUserThing {
     export type ISecret = {
       profileId?: bigint;
       profileKey?: Uint8Array;
-      totp?: ITOTPConfig;
+      totp?: strims_auth_v1_ITOTPConfig;
     }
 
     export class Secret {
       profileId: bigint;
       profileKey: Uint8Array;
-      totp: TOTPConfig | undefined;
+      totp: strims_auth_v1_TOTPConfig | undefined;
 
       constructor(v?: ISecret) {
         this.profileId = v?.profileId || BigInt(0);
         this.profileKey = v?.profileKey || new Uint8Array();
-        this.totp = v?.totp && new TOTPConfig(v.totp);
+        this.totp = v?.totp && new strims_auth_v1_TOTPConfig(v.totp);
       }
 
       static encode(m: Secret, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.profileId) w.uint32(8).uint64(m.profileId);
         if (m.profileKey.length) w.uint32(18).bytes(m.profileKey);
-        if (m.totp) TOTPConfig.encode(m.totp, w.uint32(26).fork()).ldelim();
+        if (m.totp) strims_auth_v1_TOTPConfig.encode(m.totp, w.uint32(26).fork()).ldelim();
         return w;
       }
 
@@ -332,7 +332,7 @@ export namespace ServerUserThing {
             m.profileKey = r.bytes();
             break;
             case 3:
-            m.totp = TOTPConfig.decode(r, r.uint32());
+            m.totp = strims_auth_v1_TOTPConfig.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -374,16 +374,16 @@ export class LinkedProfile {
     if (m.serverAddress.length) w.uint32(26).string(m.serverAddress);
     switch (m.credentials.case) {
       case LinkedProfile.CredentialsCase.UNENCRYPTED:
-      LinkedProfile.Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
+      strims_auth_v1_LinkedProfile_Unencrypted.encode(m.credentials.unencrypted, w.uint32(8010).fork()).ldelim();
       break;
       case LinkedProfile.CredentialsCase.PASSWORD:
-      LinkedProfile.Password.encode(m.credentials.password, w.uint32(8018).fork()).ldelim();
+      strims_auth_v1_LinkedProfile_Password.encode(m.credentials.password, w.uint32(8018).fork()).ldelim();
       break;
       case LinkedProfile.CredentialsCase.TOKEN:
-      LinkedProfile.Token.encode(m.credentials.token, w.uint32(8026).fork()).ldelim();
+      strims_auth_v1_LinkedProfile_Token.encode(m.credentials.token, w.uint32(8026).fork()).ldelim();
       break;
       case LinkedProfile.CredentialsCase.KEY:
-      LinkedProfile.Key.encode(m.credentials.key, w.uint32(8034).fork()).ldelim();
+      strims_auth_v1_LinkedProfile_Key.encode(m.credentials.key, w.uint32(8034).fork()).ldelim();
       break;
     }
     return w;
@@ -406,16 +406,16 @@ export class LinkedProfile {
         m.serverAddress = r.string();
         break;
         case 1001:
-        m.credentials = new LinkedProfile.Credentials({ unencrypted: LinkedProfile.Unencrypted.decode(r, r.uint32()) });
+        m.credentials = new LinkedProfile.Credentials({ unencrypted: strims_auth_v1_LinkedProfile_Unencrypted.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.credentials = new LinkedProfile.Credentials({ password: LinkedProfile.Password.decode(r, r.uint32()) });
+        m.credentials = new LinkedProfile.Credentials({ password: strims_auth_v1_LinkedProfile_Password.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.credentials = new LinkedProfile.Credentials({ token: LinkedProfile.Token.decode(r, r.uint32()) });
+        m.credentials = new LinkedProfile.Credentials({ token: strims_auth_v1_LinkedProfile_Token.decode(r, r.uint32()) });
         break;
         case 1004:
-        m.credentials = new LinkedProfile.Credentials({ key: LinkedProfile.Key.decode(r, r.uint32()) });
+        m.credentials = new LinkedProfile.Credentials({ key: strims_auth_v1_LinkedProfile_Key.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -437,43 +437,43 @@ export namespace LinkedProfile {
 
   export type ICredentials =
   { case?: CredentialsCase.NOT_SET }
-  |{ case?: CredentialsCase.UNENCRYPTED, unencrypted: LinkedProfile.IUnencrypted }
-  |{ case?: CredentialsCase.PASSWORD, password: LinkedProfile.IPassword }
-  |{ case?: CredentialsCase.TOKEN, token: LinkedProfile.IToken }
-  |{ case?: CredentialsCase.KEY, key: LinkedProfile.IKey }
+  |{ case?: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_LinkedProfile_IUnencrypted }
+  |{ case?: CredentialsCase.PASSWORD, password: strims_auth_v1_LinkedProfile_IPassword }
+  |{ case?: CredentialsCase.TOKEN, token: strims_auth_v1_LinkedProfile_IToken }
+  |{ case?: CredentialsCase.KEY, key: strims_auth_v1_LinkedProfile_IKey }
   ;
 
   export type TCredentials = Readonly<
   { case: CredentialsCase.NOT_SET }
-  |{ case: CredentialsCase.UNENCRYPTED, unencrypted: LinkedProfile.Unencrypted }
-  |{ case: CredentialsCase.PASSWORD, password: LinkedProfile.Password }
-  |{ case: CredentialsCase.TOKEN, token: LinkedProfile.Token }
-  |{ case: CredentialsCase.KEY, key: LinkedProfile.Key }
+  |{ case: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_LinkedProfile_Unencrypted }
+  |{ case: CredentialsCase.PASSWORD, password: strims_auth_v1_LinkedProfile_Password }
+  |{ case: CredentialsCase.TOKEN, token: strims_auth_v1_LinkedProfile_Token }
+  |{ case: CredentialsCase.KEY, key: strims_auth_v1_LinkedProfile_Key }
   >;
 
   class CredentialsImpl {
-    unencrypted: LinkedProfile.Unencrypted;
-    password: LinkedProfile.Password;
-    token: LinkedProfile.Token;
-    key: LinkedProfile.Key;
+    unencrypted: strims_auth_v1_LinkedProfile_Unencrypted;
+    password: strims_auth_v1_LinkedProfile_Password;
+    token: strims_auth_v1_LinkedProfile_Token;
+    key: strims_auth_v1_LinkedProfile_Key;
     case: CredentialsCase = CredentialsCase.NOT_SET;
 
     constructor(v?: ICredentials) {
       if (v && "unencrypted" in v) {
         this.case = CredentialsCase.UNENCRYPTED;
-        this.unencrypted = new LinkedProfile.Unencrypted(v.unencrypted);
+        this.unencrypted = new strims_auth_v1_LinkedProfile_Unencrypted(v.unencrypted);
       } else
       if (v && "password" in v) {
         this.case = CredentialsCase.PASSWORD;
-        this.password = new LinkedProfile.Password(v.password);
+        this.password = new strims_auth_v1_LinkedProfile_Password(v.password);
       } else
       if (v && "token" in v) {
         this.case = CredentialsCase.TOKEN;
-        this.token = new LinkedProfile.Token(v.token);
+        this.token = new strims_auth_v1_LinkedProfile_Token(v.token);
       } else
       if (v && "key" in v) {
         this.case = CredentialsCase.KEY;
-        this.key = new LinkedProfile.Key(v.key);
+        this.key = new strims_auth_v1_LinkedProfile_Key(v.key);
       }
     }
   }
@@ -481,10 +481,10 @@ export namespace LinkedProfile {
   export const Credentials = CredentialsImpl as {
     new (): Readonly<{ case: CredentialsCase.NOT_SET }>;
     new <T extends ICredentials>(v: T): Readonly<
-    T extends { unencrypted: LinkedProfile.IUnencrypted } ? { case: CredentialsCase.UNENCRYPTED, unencrypted: LinkedProfile.Unencrypted } :
-    T extends { password: LinkedProfile.IPassword } ? { case: CredentialsCase.PASSWORD, password: LinkedProfile.Password } :
-    T extends { token: LinkedProfile.IToken } ? { case: CredentialsCase.TOKEN, token: LinkedProfile.Token } :
-    T extends { key: LinkedProfile.IKey } ? { case: CredentialsCase.KEY, key: LinkedProfile.Key } :
+    T extends { unencrypted: strims_auth_v1_LinkedProfile_IUnencrypted } ? { case: CredentialsCase.UNENCRYPTED, unencrypted: strims_auth_v1_LinkedProfile_Unencrypted } :
+    T extends { password: strims_auth_v1_LinkedProfile_IPassword } ? { case: CredentialsCase.PASSWORD, password: strims_auth_v1_LinkedProfile_Password } :
+    T extends { token: strims_auth_v1_LinkedProfile_IToken } ? { case: CredentialsCase.TOKEN, token: strims_auth_v1_LinkedProfile_Token } :
+    T extends { key: strims_auth_v1_LinkedProfile_IKey } ? { case: CredentialsCase.KEY, key: strims_auth_v1_LinkedProfile_Key } :
     never
     >;
   };
@@ -654,13 +654,13 @@ export class SignInRequest {
     if (!w) w = new Writer();
     switch (m.credentials.case) {
       case SignInRequest.CredentialsCase.PASSWORD:
-      SignInRequest.Password.encode(m.credentials.password, w.uint32(8010).fork()).ldelim();
+      strims_auth_v1_SignInRequest_Password.encode(m.credentials.password, w.uint32(8010).fork()).ldelim();
       break;
       case SignInRequest.CredentialsCase.TOKEN:
-      SignInRequest.Token.encode(m.credentials.token, w.uint32(8018).fork()).ldelim();
+      strims_auth_v1_SignInRequest_Token.encode(m.credentials.token, w.uint32(8018).fork()).ldelim();
       break;
       case SignInRequest.CredentialsCase.KEY:
-      SignInRequest.Key.encode(m.credentials.key, w.uint32(8026).fork()).ldelim();
+      strims_auth_v1_SignInRequest_Key.encode(m.credentials.key, w.uint32(8026).fork()).ldelim();
       break;
     }
     return w;
@@ -674,13 +674,13 @@ export class SignInRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.credentials = new SignInRequest.Credentials({ password: SignInRequest.Password.decode(r, r.uint32()) });
+        m.credentials = new SignInRequest.Credentials({ password: strims_auth_v1_SignInRequest_Password.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.credentials = new SignInRequest.Credentials({ token: SignInRequest.Token.decode(r, r.uint32()) });
+        m.credentials = new SignInRequest.Credentials({ token: strims_auth_v1_SignInRequest_Token.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.credentials = new SignInRequest.Credentials({ key: SignInRequest.Key.decode(r, r.uint32()) });
+        m.credentials = new SignInRequest.Credentials({ key: strims_auth_v1_SignInRequest_Key.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -701,36 +701,36 @@ export namespace SignInRequest {
 
   export type ICredentials =
   { case?: CredentialsCase.NOT_SET }
-  |{ case?: CredentialsCase.PASSWORD, password: SignInRequest.IPassword }
-  |{ case?: CredentialsCase.TOKEN, token: SignInRequest.IToken }
-  |{ case?: CredentialsCase.KEY, key: SignInRequest.IKey }
+  |{ case?: CredentialsCase.PASSWORD, password: strims_auth_v1_SignInRequest_IPassword }
+  |{ case?: CredentialsCase.TOKEN, token: strims_auth_v1_SignInRequest_IToken }
+  |{ case?: CredentialsCase.KEY, key: strims_auth_v1_SignInRequest_IKey }
   ;
 
   export type TCredentials = Readonly<
   { case: CredentialsCase.NOT_SET }
-  |{ case: CredentialsCase.PASSWORD, password: SignInRequest.Password }
-  |{ case: CredentialsCase.TOKEN, token: SignInRequest.Token }
-  |{ case: CredentialsCase.KEY, key: SignInRequest.Key }
+  |{ case: CredentialsCase.PASSWORD, password: strims_auth_v1_SignInRequest_Password }
+  |{ case: CredentialsCase.TOKEN, token: strims_auth_v1_SignInRequest_Token }
+  |{ case: CredentialsCase.KEY, key: strims_auth_v1_SignInRequest_Key }
   >;
 
   class CredentialsImpl {
-    password: SignInRequest.Password;
-    token: SignInRequest.Token;
-    key: SignInRequest.Key;
+    password: strims_auth_v1_SignInRequest_Password;
+    token: strims_auth_v1_SignInRequest_Token;
+    key: strims_auth_v1_SignInRequest_Key;
     case: CredentialsCase = CredentialsCase.NOT_SET;
 
     constructor(v?: ICredentials) {
       if (v && "password" in v) {
         this.case = CredentialsCase.PASSWORD;
-        this.password = new SignInRequest.Password(v.password);
+        this.password = new strims_auth_v1_SignInRequest_Password(v.password);
       } else
       if (v && "token" in v) {
         this.case = CredentialsCase.TOKEN;
-        this.token = new SignInRequest.Token(v.token);
+        this.token = new strims_auth_v1_SignInRequest_Token(v.token);
       } else
       if (v && "key" in v) {
         this.case = CredentialsCase.KEY;
-        this.key = new SignInRequest.Key(v.key);
+        this.key = new strims_auth_v1_SignInRequest_Key(v.key);
       }
     }
   }
@@ -738,9 +738,9 @@ export namespace SignInRequest {
   export const Credentials = CredentialsImpl as {
     new (): Readonly<{ case: CredentialsCase.NOT_SET }>;
     new <T extends ICredentials>(v: T): Readonly<
-    T extends { password: SignInRequest.IPassword } ? { case: CredentialsCase.PASSWORD, password: SignInRequest.Password } :
-    T extends { token: SignInRequest.IToken } ? { case: CredentialsCase.TOKEN, token: SignInRequest.Token } :
-    T extends { key: SignInRequest.IKey } ? { case: CredentialsCase.KEY, key: SignInRequest.Key } :
+    T extends { password: strims_auth_v1_SignInRequest_IPassword } ? { case: CredentialsCase.PASSWORD, password: strims_auth_v1_SignInRequest_Password } :
+    T extends { token: strims_auth_v1_SignInRequest_IToken } ? { case: CredentialsCase.TOKEN, token: strims_auth_v1_SignInRequest_Token } :
+    T extends { key: strims_auth_v1_SignInRequest_IKey } ? { case: CredentialsCase.KEY, key: strims_auth_v1_SignInRequest_Key } :
     never
     >;
   };
@@ -905,22 +905,22 @@ export namespace SignInRequest {
 }
 
 export type ISignInResponse = {
-  linkedProfile?: ILinkedProfile;
+  linkedProfile?: strims_auth_v1_ILinkedProfile;
   profile?: strims_profile_v1_IProfile;
 }
 
 export class SignInResponse {
-  linkedProfile: LinkedProfile | undefined;
+  linkedProfile: strims_auth_v1_LinkedProfile | undefined;
   profile: strims_profile_v1_Profile | undefined;
 
   constructor(v?: ISignInResponse) {
-    this.linkedProfile = v?.linkedProfile && new LinkedProfile(v.linkedProfile);
+    this.linkedProfile = v?.linkedProfile && new strims_auth_v1_LinkedProfile(v.linkedProfile);
     this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
   }
 
   static encode(m: SignInResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.linkedProfile) LinkedProfile.encode(m.linkedProfile, w.uint32(10).fork()).ldelim();
+    if (m.linkedProfile) strims_auth_v1_LinkedProfile.encode(m.linkedProfile, w.uint32(10).fork()).ldelim();
     if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
     return w;
   }
@@ -933,7 +933,7 @@ export class SignInResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.linkedProfile = LinkedProfile.decode(r, r.uint32());
+        m.linkedProfile = strims_auth_v1_LinkedProfile.decode(r, r.uint32());
         break;
         case 2:
         m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
@@ -1005,22 +1005,22 @@ export class SignUpRequest {
 }
 
 export type ISignUpResponse = {
-  linkedProfile?: ILinkedProfile;
+  linkedProfile?: strims_auth_v1_ILinkedProfile;
   profile?: strims_profile_v1_IProfile;
 }
 
 export class SignUpResponse {
-  linkedProfile: LinkedProfile | undefined;
+  linkedProfile: strims_auth_v1_LinkedProfile | undefined;
   profile: strims_profile_v1_Profile | undefined;
 
   constructor(v?: ISignUpResponse) {
-    this.linkedProfile = v?.linkedProfile && new LinkedProfile(v.linkedProfile);
+    this.linkedProfile = v?.linkedProfile && new strims_auth_v1_LinkedProfile(v.linkedProfile);
     this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
   }
 
   static encode(m: SignUpResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.linkedProfile) LinkedProfile.encode(m.linkedProfile, w.uint32(10).fork()).ldelim();
+    if (m.linkedProfile) strims_auth_v1_LinkedProfile.encode(m.linkedProfile, w.uint32(10).fork()).ldelim();
     if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
     return w;
   }
@@ -1033,7 +1033,7 @@ export class SignUpResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.linkedProfile = LinkedProfile.decode(r, r.uint32());
+        m.linkedProfile = strims_auth_v1_LinkedProfile.decode(r, r.uint32());
         break;
         case 2:
         m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
@@ -1047,3 +1047,111 @@ export class SignUpResponse {
   }
 }
 
+/* @internal */
+export const strims_auth_v1_SessionThing = SessionThing;
+/* @internal */
+export type strims_auth_v1_SessionThing = SessionThing;
+/* @internal */
+export type strims_auth_v1_ISessionThing = ISessionThing;
+/* @internal */
+export const strims_auth_v1_TOTPConfig = TOTPConfig;
+/* @internal */
+export type strims_auth_v1_TOTPConfig = TOTPConfig;
+/* @internal */
+export type strims_auth_v1_ITOTPConfig = ITOTPConfig;
+/* @internal */
+export const strims_auth_v1_ServerUserThing = ServerUserThing;
+/* @internal */
+export type strims_auth_v1_ServerUserThing = ServerUserThing;
+/* @internal */
+export type strims_auth_v1_IServerUserThing = IServerUserThing;
+/* @internal */
+export const strims_auth_v1_LinkedProfile = LinkedProfile;
+/* @internal */
+export type strims_auth_v1_LinkedProfile = LinkedProfile;
+/* @internal */
+export type strims_auth_v1_ILinkedProfile = ILinkedProfile;
+/* @internal */
+export const strims_auth_v1_SignInRequest = SignInRequest;
+/* @internal */
+export type strims_auth_v1_SignInRequest = SignInRequest;
+/* @internal */
+export type strims_auth_v1_ISignInRequest = ISignInRequest;
+/* @internal */
+export const strims_auth_v1_SignInResponse = SignInResponse;
+/* @internal */
+export type strims_auth_v1_SignInResponse = SignInResponse;
+/* @internal */
+export type strims_auth_v1_ISignInResponse = ISignInResponse;
+/* @internal */
+export const strims_auth_v1_SignUpRequest = SignUpRequest;
+/* @internal */
+export type strims_auth_v1_SignUpRequest = SignUpRequest;
+/* @internal */
+export type strims_auth_v1_ISignUpRequest = ISignUpRequest;
+/* @internal */
+export const strims_auth_v1_SignUpResponse = SignUpResponse;
+/* @internal */
+export type strims_auth_v1_SignUpResponse = SignUpResponse;
+/* @internal */
+export type strims_auth_v1_ISignUpResponse = ISignUpResponse;
+/* @internal */
+export const strims_auth_v1_ServerUserThing_Unencrypted = ServerUserThing.Unencrypted;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_Unencrypted = ServerUserThing.Unencrypted;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_IUnencrypted = ServerUserThing.IUnencrypted;
+/* @internal */
+export const strims_auth_v1_ServerUserThing_Password = ServerUserThing.Password;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_Password = ServerUserThing.Password;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_IPassword = ServerUserThing.IPassword;
+/* @internal */
+export const strims_auth_v1_ServerUserThing_Password_Secret = ServerUserThing.Password.Secret;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_Password_Secret = ServerUserThing.Password.Secret;
+/* @internal */
+export type strims_auth_v1_ServerUserThing_Password_ISecret = ServerUserThing.Password.ISecret;
+/* @internal */
+export const strims_auth_v1_LinkedProfile_Unencrypted = LinkedProfile.Unencrypted;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_Unencrypted = LinkedProfile.Unencrypted;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_IUnencrypted = LinkedProfile.IUnencrypted;
+/* @internal */
+export const strims_auth_v1_LinkedProfile_Password = LinkedProfile.Password;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_Password = LinkedProfile.Password;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_IPassword = LinkedProfile.IPassword;
+/* @internal */
+export const strims_auth_v1_LinkedProfile_Token = LinkedProfile.Token;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_Token = LinkedProfile.Token;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_IToken = LinkedProfile.IToken;
+/* @internal */
+export const strims_auth_v1_LinkedProfile_Key = LinkedProfile.Key;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_Key = LinkedProfile.Key;
+/* @internal */
+export type strims_auth_v1_LinkedProfile_IKey = LinkedProfile.IKey;
+/* @internal */
+export const strims_auth_v1_SignInRequest_Password = SignInRequest.Password;
+/* @internal */
+export type strims_auth_v1_SignInRequest_Password = SignInRequest.Password;
+/* @internal */
+export type strims_auth_v1_SignInRequest_IPassword = SignInRequest.IPassword;
+/* @internal */
+export const strims_auth_v1_SignInRequest_Token = SignInRequest.Token;
+/* @internal */
+export type strims_auth_v1_SignInRequest_Token = SignInRequest.Token;
+/* @internal */
+export type strims_auth_v1_SignInRequest_IToken = SignInRequest.IToken;
+/* @internal */
+export const strims_auth_v1_SignInRequest_Key = SignInRequest.Key;
+/* @internal */
+export type strims_auth_v1_SignInRequest_Key = SignInRequest.Key;
+/* @internal */
+export type strims_auth_v1_SignInRequest_IKey = SignInRequest.IKey;

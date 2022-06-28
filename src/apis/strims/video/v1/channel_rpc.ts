@@ -3,68 +3,68 @@ import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import {
-  IVideoChannelListRequest,
-  VideoChannelListRequest,
-  VideoChannelListResponse,
-  IVideoChannelGetRequest,
-  VideoChannelGetRequest,
-  VideoChannelGetResponse,
-  IVideoChannelCreateRequest,
-  VideoChannelCreateRequest,
-  VideoChannelCreateResponse,
-  IVideoChannelUpdateRequest,
-  VideoChannelUpdateRequest,
-  VideoChannelUpdateResponse,
-  IVideoChannelDeleteRequest,
-  VideoChannelDeleteRequest,
-  VideoChannelDeleteResponse,
+  strims_video_v1_IVideoChannelListRequest,
+  strims_video_v1_VideoChannelListRequest,
+  strims_video_v1_VideoChannelListResponse,
+  strims_video_v1_IVideoChannelGetRequest,
+  strims_video_v1_VideoChannelGetRequest,
+  strims_video_v1_VideoChannelGetResponse,
+  strims_video_v1_IVideoChannelCreateRequest,
+  strims_video_v1_VideoChannelCreateRequest,
+  strims_video_v1_VideoChannelCreateResponse,
+  strims_video_v1_IVideoChannelUpdateRequest,
+  strims_video_v1_VideoChannelUpdateRequest,
+  strims_video_v1_VideoChannelUpdateResponse,
+  strims_video_v1_IVideoChannelDeleteRequest,
+  strims_video_v1_VideoChannelDeleteRequest,
+  strims_video_v1_VideoChannelDeleteResponse,
 } from "./channel";
 
 export interface VideoChannelFrontendService {
-  list(req: VideoChannelListRequest, call: strims_rpc_Call): Promise<VideoChannelListResponse> | VideoChannelListResponse;
-  get(req: VideoChannelGetRequest, call: strims_rpc_Call): Promise<VideoChannelGetResponse> | VideoChannelGetResponse;
-  create(req: VideoChannelCreateRequest, call: strims_rpc_Call): Promise<VideoChannelCreateResponse> | VideoChannelCreateResponse;
-  update(req: VideoChannelUpdateRequest, call: strims_rpc_Call): Promise<VideoChannelUpdateResponse> | VideoChannelUpdateResponse;
-  delete(req: VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<VideoChannelDeleteResponse> | VideoChannelDeleteResponse;
+  list(req: strims_video_v1_VideoChannelListRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelListResponse> | strims_video_v1_VideoChannelListResponse;
+  get(req: strims_video_v1_VideoChannelGetRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelGetResponse> | strims_video_v1_VideoChannelGetResponse;
+  create(req: strims_video_v1_VideoChannelCreateRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelCreateResponse> | strims_video_v1_VideoChannelCreateResponse;
+  update(req: strims_video_v1_VideoChannelUpdateRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelUpdateResponse> | strims_video_v1_VideoChannelUpdateResponse;
+  delete(req: strims_video_v1_VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelDeleteResponse> | strims_video_v1_VideoChannelDeleteResponse;
 }
 
 export class UnimplementedVideoChannelFrontendService implements VideoChannelFrontendService {
-  list(req: VideoChannelListRequest, call: strims_rpc_Call): Promise<VideoChannelListResponse> | VideoChannelListResponse { throw new Error("not implemented"); }
-  get(req: VideoChannelGetRequest, call: strims_rpc_Call): Promise<VideoChannelGetResponse> | VideoChannelGetResponse { throw new Error("not implemented"); }
-  create(req: VideoChannelCreateRequest, call: strims_rpc_Call): Promise<VideoChannelCreateResponse> | VideoChannelCreateResponse { throw new Error("not implemented"); }
-  update(req: VideoChannelUpdateRequest, call: strims_rpc_Call): Promise<VideoChannelUpdateResponse> | VideoChannelUpdateResponse { throw new Error("not implemented"); }
-  delete(req: VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<VideoChannelDeleteResponse> | VideoChannelDeleteResponse { throw new Error("not implemented"); }
+  list(req: strims_video_v1_VideoChannelListRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelListResponse> | strims_video_v1_VideoChannelListResponse { throw new Error("not implemented"); }
+  get(req: strims_video_v1_VideoChannelGetRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelGetResponse> | strims_video_v1_VideoChannelGetResponse { throw new Error("not implemented"); }
+  create(req: strims_video_v1_VideoChannelCreateRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelCreateResponse> | strims_video_v1_VideoChannelCreateResponse { throw new Error("not implemented"); }
+  update(req: strims_video_v1_VideoChannelUpdateRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelUpdateResponse> | strims_video_v1_VideoChannelUpdateResponse { throw new Error("not implemented"); }
+  delete(req: strims_video_v1_VideoChannelDeleteRequest, call: strims_rpc_Call): Promise<strims_video_v1_VideoChannelDeleteResponse> | strims_video_v1_VideoChannelDeleteResponse { throw new Error("not implemented"); }
 }
 
 export const registerVideoChannelFrontendService = (host: strims_rpc_Service, service: VideoChannelFrontendService): void => {
-  host.registerMethod<VideoChannelListRequest, VideoChannelListResponse>("strims.video.v1.VideoChannelFrontend.List", service.list.bind(service), VideoChannelListRequest);
-  host.registerMethod<VideoChannelGetRequest, VideoChannelGetResponse>("strims.video.v1.VideoChannelFrontend.Get", service.get.bind(service), VideoChannelGetRequest);
-  host.registerMethod<VideoChannelCreateRequest, VideoChannelCreateResponse>("strims.video.v1.VideoChannelFrontend.Create", service.create.bind(service), VideoChannelCreateRequest);
-  host.registerMethod<VideoChannelUpdateRequest, VideoChannelUpdateResponse>("strims.video.v1.VideoChannelFrontend.Update", service.update.bind(service), VideoChannelUpdateRequest);
-  host.registerMethod<VideoChannelDeleteRequest, VideoChannelDeleteResponse>("strims.video.v1.VideoChannelFrontend.Delete", service.delete.bind(service), VideoChannelDeleteRequest);
+  host.registerMethod<strims_video_v1_VideoChannelListRequest, strims_video_v1_VideoChannelListResponse>("strims.video.v1.VideoChannelFrontend.List", service.list.bind(service), strims_video_v1_VideoChannelListRequest);
+  host.registerMethod<strims_video_v1_VideoChannelGetRequest, strims_video_v1_VideoChannelGetResponse>("strims.video.v1.VideoChannelFrontend.Get", service.get.bind(service), strims_video_v1_VideoChannelGetRequest);
+  host.registerMethod<strims_video_v1_VideoChannelCreateRequest, strims_video_v1_VideoChannelCreateResponse>("strims.video.v1.VideoChannelFrontend.Create", service.create.bind(service), strims_video_v1_VideoChannelCreateRequest);
+  host.registerMethod<strims_video_v1_VideoChannelUpdateRequest, strims_video_v1_VideoChannelUpdateResponse>("strims.video.v1.VideoChannelFrontend.Update", service.update.bind(service), strims_video_v1_VideoChannelUpdateRequest);
+  host.registerMethod<strims_video_v1_VideoChannelDeleteRequest, strims_video_v1_VideoChannelDeleteResponse>("strims.video.v1.VideoChannelFrontend.Delete", service.delete.bind(service), strims_video_v1_VideoChannelDeleteRequest);
 }
 
 export class VideoChannelFrontendClient {
   constructor(private readonly host: strims_rpc_Host) {}
 
-  public list(req?: IVideoChannelListRequest, opts?: strims_rpc_UnaryCallOptions): Promise<VideoChannelListResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.List", new VideoChannelListRequest(req)), VideoChannelListResponse, opts);
+  public list(req?: strims_video_v1_IVideoChannelListRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_VideoChannelListResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.List", new strims_video_v1_VideoChannelListRequest(req)), strims_video_v1_VideoChannelListResponse, opts);
   }
 
-  public get(req?: IVideoChannelGetRequest, opts?: strims_rpc_UnaryCallOptions): Promise<VideoChannelGetResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Get", new VideoChannelGetRequest(req)), VideoChannelGetResponse, opts);
+  public get(req?: strims_video_v1_IVideoChannelGetRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_VideoChannelGetResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Get", new strims_video_v1_VideoChannelGetRequest(req)), strims_video_v1_VideoChannelGetResponse, opts);
   }
 
-  public create(req?: IVideoChannelCreateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<VideoChannelCreateResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Create", new VideoChannelCreateRequest(req)), VideoChannelCreateResponse, opts);
+  public create(req?: strims_video_v1_IVideoChannelCreateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_VideoChannelCreateResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Create", new strims_video_v1_VideoChannelCreateRequest(req)), strims_video_v1_VideoChannelCreateResponse, opts);
   }
 
-  public update(req?: IVideoChannelUpdateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<VideoChannelUpdateResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Update", new VideoChannelUpdateRequest(req)), VideoChannelUpdateResponse, opts);
+  public update(req?: strims_video_v1_IVideoChannelUpdateRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_VideoChannelUpdateResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Update", new strims_video_v1_VideoChannelUpdateRequest(req)), strims_video_v1_VideoChannelUpdateResponse, opts);
   }
 
-  public delete(req?: IVideoChannelDeleteRequest, opts?: strims_rpc_UnaryCallOptions): Promise<VideoChannelDeleteResponse> {
-    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Delete", new VideoChannelDeleteRequest(req)), VideoChannelDeleteResponse, opts);
+  public delete(req?: strims_video_v1_IVideoChannelDeleteRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_video_v1_VideoChannelDeleteResponse> {
+    return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Delete", new strims_video_v1_VideoChannelDeleteRequest(req)), strims_video_v1_VideoChannelDeleteResponse, opts);
   }
 }
 

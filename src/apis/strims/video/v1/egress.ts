@@ -60,13 +60,13 @@ export class EgressOpenStreamResponse {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case EgressOpenStreamResponse.BodyCase.OPEN:
-      EgressOpenStreamResponse.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
+      strims_video_v1_EgressOpenStreamResponse_Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
       break;
       case EgressOpenStreamResponse.BodyCase.DATA:
-      EgressOpenStreamResponse.Data.encode(m.body.data, w.uint32(18).fork()).ldelim();
+      strims_video_v1_EgressOpenStreamResponse_Data.encode(m.body.data, w.uint32(18).fork()).ldelim();
       break;
       case EgressOpenStreamResponse.BodyCase.ERROR:
-      EgressOpenStreamResponse.Error.encode(m.body.error, w.uint32(26).fork()).ldelim();
+      strims_video_v1_EgressOpenStreamResponse_Error.encode(m.body.error, w.uint32(26).fork()).ldelim();
       break;
     }
     return w;
@@ -80,13 +80,13 @@ export class EgressOpenStreamResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new EgressOpenStreamResponse.Body({ open: EgressOpenStreamResponse.Open.decode(r, r.uint32()) });
+        m.body = new EgressOpenStreamResponse.Body({ open: strims_video_v1_EgressOpenStreamResponse_Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new EgressOpenStreamResponse.Body({ data: EgressOpenStreamResponse.Data.decode(r, r.uint32()) });
+        m.body = new EgressOpenStreamResponse.Body({ data: strims_video_v1_EgressOpenStreamResponse_Data.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new EgressOpenStreamResponse.Body({ error: EgressOpenStreamResponse.Error.decode(r, r.uint32()) });
+        m.body = new EgressOpenStreamResponse.Body({ error: strims_video_v1_EgressOpenStreamResponse_Error.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -107,36 +107,36 @@ export namespace EgressOpenStreamResponse {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: EgressOpenStreamResponse.IOpen }
-  |{ case?: BodyCase.DATA, data: EgressOpenStreamResponse.IData }
-  |{ case?: BodyCase.ERROR, error: EgressOpenStreamResponse.IError }
+  |{ case?: BodyCase.OPEN, open: strims_video_v1_EgressOpenStreamResponse_IOpen }
+  |{ case?: BodyCase.DATA, data: strims_video_v1_EgressOpenStreamResponse_IData }
+  |{ case?: BodyCase.ERROR, error: strims_video_v1_EgressOpenStreamResponse_IError }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: EgressOpenStreamResponse.Open }
-  |{ case: BodyCase.DATA, data: EgressOpenStreamResponse.Data }
-  |{ case: BodyCase.ERROR, error: EgressOpenStreamResponse.Error }
+  |{ case: BodyCase.OPEN, open: strims_video_v1_EgressOpenStreamResponse_Open }
+  |{ case: BodyCase.DATA, data: strims_video_v1_EgressOpenStreamResponse_Data }
+  |{ case: BodyCase.ERROR, error: strims_video_v1_EgressOpenStreamResponse_Error }
   >;
 
   class BodyImpl {
-    open: EgressOpenStreamResponse.Open;
-    data: EgressOpenStreamResponse.Data;
-    error: EgressOpenStreamResponse.Error;
+    open: strims_video_v1_EgressOpenStreamResponse_Open;
+    data: strims_video_v1_EgressOpenStreamResponse_Data;
+    error: strims_video_v1_EgressOpenStreamResponse_Error;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new EgressOpenStreamResponse.Open(v.open);
+        this.open = new strims_video_v1_EgressOpenStreamResponse_Open(v.open);
       } else
       if (v && "data" in v) {
         this.case = BodyCase.DATA;
-        this.data = new EgressOpenStreamResponse.Data(v.data);
+        this.data = new strims_video_v1_EgressOpenStreamResponse_Data(v.data);
       } else
       if (v && "error" in v) {
         this.case = BodyCase.ERROR;
-        this.error = new EgressOpenStreamResponse.Error(v.error);
+        this.error = new strims_video_v1_EgressOpenStreamResponse_Error(v.error);
       }
     }
   }
@@ -144,9 +144,9 @@ export namespace EgressOpenStreamResponse {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: EgressOpenStreamResponse.IOpen } ? { case: BodyCase.OPEN, open: EgressOpenStreamResponse.Open } :
-    T extends { data: EgressOpenStreamResponse.IData } ? { case: BodyCase.DATA, data: EgressOpenStreamResponse.Data } :
-    T extends { error: EgressOpenStreamResponse.IError } ? { case: BodyCase.ERROR, error: EgressOpenStreamResponse.Error } :
+    T extends { open: strims_video_v1_EgressOpenStreamResponse_IOpen } ? { case: BodyCase.OPEN, open: strims_video_v1_EgressOpenStreamResponse_Open } :
+    T extends { data: strims_video_v1_EgressOpenStreamResponse_IData } ? { case: BodyCase.DATA, data: strims_video_v1_EgressOpenStreamResponse_Data } :
+    T extends { error: strims_video_v1_EgressOpenStreamResponse_IError } ? { case: BodyCase.ERROR, error: strims_video_v1_EgressOpenStreamResponse_Error } :
     never
     >;
   };
@@ -275,3 +275,33 @@ export namespace EgressOpenStreamResponse {
 
 }
 
+/* @internal */
+export const strims_video_v1_EgressOpenStreamRequest = EgressOpenStreamRequest;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamRequest = EgressOpenStreamRequest;
+/* @internal */
+export type strims_video_v1_IEgressOpenStreamRequest = IEgressOpenStreamRequest;
+/* @internal */
+export const strims_video_v1_EgressOpenStreamResponse = EgressOpenStreamResponse;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse = EgressOpenStreamResponse;
+/* @internal */
+export type strims_video_v1_IEgressOpenStreamResponse = IEgressOpenStreamResponse;
+/* @internal */
+export const strims_video_v1_EgressOpenStreamResponse_Open = EgressOpenStreamResponse.Open;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_Open = EgressOpenStreamResponse.Open;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_IOpen = EgressOpenStreamResponse.IOpen;
+/* @internal */
+export const strims_video_v1_EgressOpenStreamResponse_Data = EgressOpenStreamResponse.Data;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_Data = EgressOpenStreamResponse.Data;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_IData = EgressOpenStreamResponse.IData;
+/* @internal */
+export const strims_video_v1_EgressOpenStreamResponse_Error = EgressOpenStreamResponse.Error;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_Error = EgressOpenStreamResponse.Error;
+/* @internal */
+export type strims_video_v1_EgressOpenStreamResponse_IError = EgressOpenStreamResponse.IError;

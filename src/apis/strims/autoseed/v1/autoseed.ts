@@ -122,19 +122,19 @@ export class GetConfigRequest {
 }
 
 export type IGetConfigResponse = {
-  config?: IConfig;
+  config?: strims_autoseed_v1_IConfig;
 }
 
 export class GetConfigResponse {
-  config: Config | undefined;
+  config: strims_autoseed_v1_Config | undefined;
 
   constructor(v?: IGetConfigResponse) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_autoseed_v1_Config(v.config);
   }
 
   static encode(m: GetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_autoseed_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -146,7 +146,7 @@ export class GetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_autoseed_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -158,19 +158,19 @@ export class GetConfigResponse {
 }
 
 export type ISetConfigRequest = {
-  config?: IConfig;
+  config?: strims_autoseed_v1_IConfig;
 }
 
 export class SetConfigRequest {
-  config: Config | undefined;
+  config: strims_autoseed_v1_Config | undefined;
 
   constructor(v?: ISetConfigRequest) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_autoseed_v1_Config(v.config);
   }
 
   static encode(m: SetConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_autoseed_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -182,7 +182,7 @@ export class SetConfigRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_autoseed_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -194,19 +194,19 @@ export class SetConfigRequest {
 }
 
 export type ISetConfigResponse = {
-  config?: IConfig;
+  config?: strims_autoseed_v1_IConfig;
 }
 
 export class SetConfigResponse {
-  config: Config | undefined;
+  config: strims_autoseed_v1_Config | undefined;
 
   constructor(v?: ISetConfigResponse) {
-    this.config = v?.config && new Config(v.config);
+    this.config = v?.config && new strims_autoseed_v1_Config(v.config);
   }
 
   static encode(m: SetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_autoseed_v1_Config.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -218,7 +218,7 @@ export class SetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = Config.decode(r, r.uint32());
+        m.config = strims_autoseed_v1_Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -230,19 +230,19 @@ export class SetConfigResponse {
 }
 
 export type ICreateRuleRequest = {
-  rule?: IRule;
+  rule?: strims_autoseed_v1_IRule;
 }
 
 export class CreateRuleRequest {
-  rule: Rule | undefined;
+  rule: strims_autoseed_v1_Rule | undefined;
 
   constructor(v?: ICreateRuleRequest) {
-    this.rule = v?.rule && new Rule(v.rule);
+    this.rule = v?.rule && new strims_autoseed_v1_Rule(v.rule);
   }
 
   static encode(m: CreateRuleRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.rule) Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
+    if (m.rule) strims_autoseed_v1_Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -254,7 +254,7 @@ export class CreateRuleRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.rule = Rule.decode(r, r.uint32());
+        m.rule = strims_autoseed_v1_Rule.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -266,19 +266,19 @@ export class CreateRuleRequest {
 }
 
 export type ICreateRuleResponse = {
-  rule?: IRule;
+  rule?: strims_autoseed_v1_IRule;
 }
 
 export class CreateRuleResponse {
-  rule: Rule | undefined;
+  rule: strims_autoseed_v1_Rule | undefined;
 
   constructor(v?: ICreateRuleResponse) {
-    this.rule = v?.rule && new Rule(v.rule);
+    this.rule = v?.rule && new strims_autoseed_v1_Rule(v.rule);
   }
 
   static encode(m: CreateRuleResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.rule) Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
+    if (m.rule) strims_autoseed_v1_Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -290,7 +290,7 @@ export class CreateRuleResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.rule = Rule.decode(r, r.uint32());
+        m.rule = strims_autoseed_v1_Rule.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -303,22 +303,22 @@ export class CreateRuleResponse {
 
 export type IUpdateRuleRequest = {
   id?: bigint;
-  rule?: IRule;
+  rule?: strims_autoseed_v1_IRule;
 }
 
 export class UpdateRuleRequest {
   id: bigint;
-  rule: Rule | undefined;
+  rule: strims_autoseed_v1_Rule | undefined;
 
   constructor(v?: IUpdateRuleRequest) {
     this.id = v?.id || BigInt(0);
-    this.rule = v?.rule && new Rule(v.rule);
+    this.rule = v?.rule && new strims_autoseed_v1_Rule(v.rule);
   }
 
   static encode(m: UpdateRuleRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.rule) Rule.encode(m.rule, w.uint32(18).fork()).ldelim();
+    if (m.rule) strims_autoseed_v1_Rule.encode(m.rule, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -333,7 +333,7 @@ export class UpdateRuleRequest {
         m.id = r.uint64();
         break;
         case 2:
-        m.rule = Rule.decode(r, r.uint32());
+        m.rule = strims_autoseed_v1_Rule.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -345,19 +345,19 @@ export class UpdateRuleRequest {
 }
 
 export type IUpdateRuleResponse = {
-  rule?: IRule;
+  rule?: strims_autoseed_v1_IRule;
 }
 
 export class UpdateRuleResponse {
-  rule: Rule | undefined;
+  rule: strims_autoseed_v1_Rule | undefined;
 
   constructor(v?: IUpdateRuleResponse) {
-    this.rule = v?.rule && new Rule(v.rule);
+    this.rule = v?.rule && new strims_autoseed_v1_Rule(v.rule);
   }
 
   static encode(m: UpdateRuleResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.rule) Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
+    if (m.rule) strims_autoseed_v1_Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -369,7 +369,7 @@ export class UpdateRuleResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.rule = Rule.decode(r, r.uint32());
+        m.rule = strims_autoseed_v1_Rule.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -472,19 +472,19 @@ export class GetRuleRequest {
 }
 
 export type IGetRuleResponse = {
-  rule?: IRule;
+  rule?: strims_autoseed_v1_IRule;
 }
 
 export class GetRuleResponse {
-  rule: Rule | undefined;
+  rule: strims_autoseed_v1_Rule | undefined;
 
   constructor(v?: IGetRuleResponse) {
-    this.rule = v?.rule && new Rule(v.rule);
+    this.rule = v?.rule && new strims_autoseed_v1_Rule(v.rule);
   }
 
   static encode(m: GetRuleResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.rule) Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
+    if (m.rule) strims_autoseed_v1_Rule.encode(m.rule, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -496,7 +496,7 @@ export class GetRuleResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.rule = Rule.decode(r, r.uint32());
+        m.rule = strims_autoseed_v1_Rule.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -527,19 +527,19 @@ export class ListRulesRequest {
 }
 
 export type IListRulesResponse = {
-  rules?: IRule[];
+  rules?: strims_autoseed_v1_IRule[];
 }
 
 export class ListRulesResponse {
-  rules: Rule[];
+  rules: strims_autoseed_v1_Rule[];
 
   constructor(v?: IListRulesResponse) {
-    this.rules = v?.rules ? v.rules.map(v => new Rule(v)) : [];
+    this.rules = v?.rules ? v.rules.map(v => new strims_autoseed_v1_Rule(v)) : [];
   }
 
   static encode(m: ListRulesResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.rules) Rule.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.rules) strims_autoseed_v1_Rule.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -551,7 +551,7 @@ export class ListRulesResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.rules.push(Rule.decode(r, r.uint32()));
+        m.rules.push(strims_autoseed_v1_Rule.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -562,3 +562,99 @@ export class ListRulesResponse {
   }
 }
 
+/* @internal */
+export const strims_autoseed_v1_Config = Config;
+/* @internal */
+export type strims_autoseed_v1_Config = Config;
+/* @internal */
+export type strims_autoseed_v1_IConfig = IConfig;
+/* @internal */
+export const strims_autoseed_v1_Rule = Rule;
+/* @internal */
+export type strims_autoseed_v1_Rule = Rule;
+/* @internal */
+export type strims_autoseed_v1_IRule = IRule;
+/* @internal */
+export const strims_autoseed_v1_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_autoseed_v1_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_autoseed_v1_IGetConfigRequest = IGetConfigRequest;
+/* @internal */
+export const strims_autoseed_v1_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_autoseed_v1_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_autoseed_v1_IGetConfigResponse = IGetConfigResponse;
+/* @internal */
+export const strims_autoseed_v1_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_autoseed_v1_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_autoseed_v1_ISetConfigRequest = ISetConfigRequest;
+/* @internal */
+export const strims_autoseed_v1_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_autoseed_v1_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_autoseed_v1_ISetConfigResponse = ISetConfigResponse;
+/* @internal */
+export const strims_autoseed_v1_CreateRuleRequest = CreateRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_CreateRuleRequest = CreateRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_ICreateRuleRequest = ICreateRuleRequest;
+/* @internal */
+export const strims_autoseed_v1_CreateRuleResponse = CreateRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_CreateRuleResponse = CreateRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_ICreateRuleResponse = ICreateRuleResponse;
+/* @internal */
+export const strims_autoseed_v1_UpdateRuleRequest = UpdateRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_UpdateRuleRequest = UpdateRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_IUpdateRuleRequest = IUpdateRuleRequest;
+/* @internal */
+export const strims_autoseed_v1_UpdateRuleResponse = UpdateRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_UpdateRuleResponse = UpdateRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_IUpdateRuleResponse = IUpdateRuleResponse;
+/* @internal */
+export const strims_autoseed_v1_DeleteRuleRequest = DeleteRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_DeleteRuleRequest = DeleteRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_IDeleteRuleRequest = IDeleteRuleRequest;
+/* @internal */
+export const strims_autoseed_v1_DeleteRuleResponse = DeleteRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_DeleteRuleResponse = DeleteRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_IDeleteRuleResponse = IDeleteRuleResponse;
+/* @internal */
+export const strims_autoseed_v1_GetRuleRequest = GetRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_GetRuleRequest = GetRuleRequest;
+/* @internal */
+export type strims_autoseed_v1_IGetRuleRequest = IGetRuleRequest;
+/* @internal */
+export const strims_autoseed_v1_GetRuleResponse = GetRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_GetRuleResponse = GetRuleResponse;
+/* @internal */
+export type strims_autoseed_v1_IGetRuleResponse = IGetRuleResponse;
+/* @internal */
+export const strims_autoseed_v1_ListRulesRequest = ListRulesRequest;
+/* @internal */
+export type strims_autoseed_v1_ListRulesRequest = ListRulesRequest;
+/* @internal */
+export type strims_autoseed_v1_IListRulesRequest = IListRulesRequest;
+/* @internal */
+export const strims_autoseed_v1_ListRulesResponse = ListRulesResponse;
+/* @internal */
+export type strims_autoseed_v1_ListRulesResponse = ListRulesResponse;
+/* @internal */
+export type strims_autoseed_v1_IListRulesResponse = IListRulesResponse;

@@ -2,10 +2,10 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
-  CertificateRequest as strims_type_CertificateRequest,
-  ICertificateRequest as strims_type_ICertificateRequest,
+  strims_type_Certificate,
+  strims_type_ICertificate,
+  strims_type_CertificateRequest,
+  strims_type_ICertificateRequest,
 } from "../../../type/certificate";
 
 export type ICAPeerRenewRequest = {
@@ -87,3 +87,15 @@ export class CAPeerRenewResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_ca_CAPeerRenewRequest = CAPeerRenewRequest;
+/* @internal */
+export type strims_network_v1_ca_CAPeerRenewRequest = CAPeerRenewRequest;
+/* @internal */
+export type strims_network_v1_ca_ICAPeerRenewRequest = ICAPeerRenewRequest;
+/* @internal */
+export const strims_network_v1_ca_CAPeerRenewResponse = CAPeerRenewResponse;
+/* @internal */
+export type strims_network_v1_ca_CAPeerRenewResponse = CAPeerRenewResponse;
+/* @internal */
+export type strims_network_v1_ca_ICAPeerRenewResponse = ICAPeerRenewResponse;

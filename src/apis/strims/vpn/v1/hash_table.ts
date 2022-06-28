@@ -17,16 +17,16 @@ export class HashTableMessage {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case HashTableMessage.BodyCase.PUBLISH:
-      HashTableMessage.Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
+      strims_vpn_v1_HashTableMessage_Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
       break;
       case HashTableMessage.BodyCase.UNPUBLISH:
-      HashTableMessage.Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
+      strims_vpn_v1_HashTableMessage_Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
       break;
       case HashTableMessage.BodyCase.GET_REQUEST:
-      HashTableMessage.GetRequest.encode(m.body.getRequest, w.uint32(26).fork()).ldelim();
+      strims_vpn_v1_HashTableMessage_GetRequest.encode(m.body.getRequest, w.uint32(26).fork()).ldelim();
       break;
       case HashTableMessage.BodyCase.GET_RESPONSE:
-      HashTableMessage.GetResponse.encode(m.body.getResponse, w.uint32(34).fork()).ldelim();
+      strims_vpn_v1_HashTableMessage_GetResponse.encode(m.body.getResponse, w.uint32(34).fork()).ldelim();
       break;
     }
     return w;
@@ -40,16 +40,16 @@ export class HashTableMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new HashTableMessage.Body({ publish: HashTableMessage.Publish.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ publish: strims_vpn_v1_HashTableMessage_Publish.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new HashTableMessage.Body({ unpublish: HashTableMessage.Unpublish.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ unpublish: strims_vpn_v1_HashTableMessage_Unpublish.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new HashTableMessage.Body({ getRequest: HashTableMessage.GetRequest.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ getRequest: strims_vpn_v1_HashTableMessage_GetRequest.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body = new HashTableMessage.Body({ getResponse: HashTableMessage.GetResponse.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ getResponse: strims_vpn_v1_HashTableMessage_GetResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -71,43 +71,43 @@ export namespace HashTableMessage {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.PUBLISH, publish: HashTableMessage.IPublish }
-  |{ case?: BodyCase.UNPUBLISH, unpublish: HashTableMessage.IUnpublish }
-  |{ case?: BodyCase.GET_REQUEST, getRequest: HashTableMessage.IGetRequest }
-  |{ case?: BodyCase.GET_RESPONSE, getResponse: HashTableMessage.IGetResponse }
+  |{ case?: BodyCase.PUBLISH, publish: strims_vpn_v1_HashTableMessage_IPublish }
+  |{ case?: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_HashTableMessage_IUnpublish }
+  |{ case?: BodyCase.GET_REQUEST, getRequest: strims_vpn_v1_HashTableMessage_IGetRequest }
+  |{ case?: BodyCase.GET_RESPONSE, getResponse: strims_vpn_v1_HashTableMessage_IGetResponse }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.PUBLISH, publish: HashTableMessage.Publish }
-  |{ case: BodyCase.UNPUBLISH, unpublish: HashTableMessage.Unpublish }
-  |{ case: BodyCase.GET_REQUEST, getRequest: HashTableMessage.GetRequest }
-  |{ case: BodyCase.GET_RESPONSE, getResponse: HashTableMessage.GetResponse }
+  |{ case: BodyCase.PUBLISH, publish: strims_vpn_v1_HashTableMessage_Publish }
+  |{ case: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_HashTableMessage_Unpublish }
+  |{ case: BodyCase.GET_REQUEST, getRequest: strims_vpn_v1_HashTableMessage_GetRequest }
+  |{ case: BodyCase.GET_RESPONSE, getResponse: strims_vpn_v1_HashTableMessage_GetResponse }
   >;
 
   class BodyImpl {
-    publish: HashTableMessage.Publish;
-    unpublish: HashTableMessage.Unpublish;
-    getRequest: HashTableMessage.GetRequest;
-    getResponse: HashTableMessage.GetResponse;
+    publish: strims_vpn_v1_HashTableMessage_Publish;
+    unpublish: strims_vpn_v1_HashTableMessage_Unpublish;
+    getRequest: strims_vpn_v1_HashTableMessage_GetRequest;
+    getResponse: strims_vpn_v1_HashTableMessage_GetResponse;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "publish" in v) {
         this.case = BodyCase.PUBLISH;
-        this.publish = new HashTableMessage.Publish(v.publish);
+        this.publish = new strims_vpn_v1_HashTableMessage_Publish(v.publish);
       } else
       if (v && "unpublish" in v) {
         this.case = BodyCase.UNPUBLISH;
-        this.unpublish = new HashTableMessage.Unpublish(v.unpublish);
+        this.unpublish = new strims_vpn_v1_HashTableMessage_Unpublish(v.unpublish);
       } else
       if (v && "getRequest" in v) {
         this.case = BodyCase.GET_REQUEST;
-        this.getRequest = new HashTableMessage.GetRequest(v.getRequest);
+        this.getRequest = new strims_vpn_v1_HashTableMessage_GetRequest(v.getRequest);
       } else
       if (v && "getResponse" in v) {
         this.case = BodyCase.GET_RESPONSE;
-        this.getResponse = new HashTableMessage.GetResponse(v.getResponse);
+        this.getResponse = new strims_vpn_v1_HashTableMessage_GetResponse(v.getResponse);
       }
     }
   }
@@ -115,10 +115,10 @@ export namespace HashTableMessage {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { publish: HashTableMessage.IPublish } ? { case: BodyCase.PUBLISH, publish: HashTableMessage.Publish } :
-    T extends { unpublish: HashTableMessage.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: HashTableMessage.Unpublish } :
-    T extends { getRequest: HashTableMessage.IGetRequest } ? { case: BodyCase.GET_REQUEST, getRequest: HashTableMessage.GetRequest } :
-    T extends { getResponse: HashTableMessage.IGetResponse } ? { case: BodyCase.GET_RESPONSE, getResponse: HashTableMessage.GetResponse } :
+    T extends { publish: strims_vpn_v1_HashTableMessage_IPublish } ? { case: BodyCase.PUBLISH, publish: strims_vpn_v1_HashTableMessage_Publish } :
+    T extends { unpublish: strims_vpn_v1_HashTableMessage_IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_HashTableMessage_Unpublish } :
+    T extends { getRequest: strims_vpn_v1_HashTableMessage_IGetRequest } ? { case: BodyCase.GET_REQUEST, getRequest: strims_vpn_v1_HashTableMessage_GetRequest } :
+    T extends { getResponse: strims_vpn_v1_HashTableMessage_IGetResponse } ? { case: BodyCase.GET_RESPONSE, getResponse: strims_vpn_v1_HashTableMessage_GetResponse } :
     never
     >;
   };
@@ -188,19 +188,19 @@ export namespace HashTableMessage {
   }
 
   export type IPublish = {
-    record?: HashTableMessage.IRecord;
+    record?: strims_vpn_v1_HashTableMessage_IRecord;
   }
 
   export class Publish {
-    record: HashTableMessage.Record | undefined;
+    record: strims_vpn_v1_HashTableMessage_Record | undefined;
 
     constructor(v?: IPublish) {
-      this.record = v?.record && new HashTableMessage.Record(v.record);
+      this.record = v?.record && new strims_vpn_v1_HashTableMessage_Record(v.record);
     }
 
     static encode(m: Publish, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.record) HashTableMessage.Record.encode(m.record, w.uint32(10).fork()).ldelim();
+      if (m.record) strims_vpn_v1_HashTableMessage_Record.encode(m.record, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -212,7 +212,7 @@ export namespace HashTableMessage {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.record = HashTableMessage.Record.decode(r, r.uint32());
+          m.record = strims_vpn_v1_HashTableMessage_Record.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -224,19 +224,19 @@ export namespace HashTableMessage {
   }
 
   export type IUnpublish = {
-    record?: HashTableMessage.IRecord;
+    record?: strims_vpn_v1_HashTableMessage_IRecord;
   }
 
   export class Unpublish {
-    record: HashTableMessage.Record | undefined;
+    record: strims_vpn_v1_HashTableMessage_Record | undefined;
 
     constructor(v?: IUnpublish) {
-      this.record = v?.record && new HashTableMessage.Record(v.record);
+      this.record = v?.record && new strims_vpn_v1_HashTableMessage_Record(v.record);
     }
 
     static encode(m: Unpublish, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.record) HashTableMessage.Record.encode(m.record, w.uint32(10).fork()).ldelim();
+      if (m.record) strims_vpn_v1_HashTableMessage_Record.encode(m.record, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -248,7 +248,7 @@ export namespace HashTableMessage {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.record = HashTableMessage.Record.decode(r, r.uint32());
+          m.record = strims_vpn_v1_HashTableMessage_Record.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -311,22 +311,22 @@ export namespace HashTableMessage {
 
   export type IGetResponse = {
     requestId?: bigint;
-    record?: HashTableMessage.IRecord;
+    record?: strims_vpn_v1_HashTableMessage_IRecord;
   }
 
   export class GetResponse {
     requestId: bigint;
-    record: HashTableMessage.Record | undefined;
+    record: strims_vpn_v1_HashTableMessage_Record | undefined;
 
     constructor(v?: IGetResponse) {
       this.requestId = v?.requestId || BigInt(0);
-      this.record = v?.record && new HashTableMessage.Record(v.record);
+      this.record = v?.record && new strims_vpn_v1_HashTableMessage_Record(v.record);
     }
 
     static encode(m: GetResponse, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.requestId) w.uint32(8).uint64(m.requestId);
-      if (m.record) HashTableMessage.Record.encode(m.record, w.uint32(18).fork()).ldelim();
+      if (m.record) strims_vpn_v1_HashTableMessage_Record.encode(m.record, w.uint32(18).fork()).ldelim();
       return w;
     }
 
@@ -341,7 +341,7 @@ export namespace HashTableMessage {
           m.requestId = r.uint64();
           break;
           case 2:
-          m.record = HashTableMessage.Record.decode(r, r.uint32());
+          m.record = strims_vpn_v1_HashTableMessage_Record.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -354,3 +354,39 @@ export namespace HashTableMessage {
 
 }
 
+/* @internal */
+export const strims_vpn_v1_HashTableMessage = HashTableMessage;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage = HashTableMessage;
+/* @internal */
+export type strims_vpn_v1_IHashTableMessage = IHashTableMessage;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_Record = HashTableMessage.Record;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_Record = HashTableMessage.Record;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IRecord = HashTableMessage.IRecord;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_Publish = HashTableMessage.Publish;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_Publish = HashTableMessage.Publish;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IPublish = HashTableMessage.IPublish;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_Unpublish = HashTableMessage.Unpublish;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_Unpublish = HashTableMessage.Unpublish;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IUnpublish = HashTableMessage.IUnpublish;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_GetRequest = HashTableMessage.GetRequest;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_GetRequest = HashTableMessage.GetRequest;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IGetRequest = HashTableMessage.IGetRequest;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_GetResponse = HashTableMessage.GetResponse;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_GetResponse = HashTableMessage.GetResponse;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IGetResponse = HashTableMessage.IGetResponse;

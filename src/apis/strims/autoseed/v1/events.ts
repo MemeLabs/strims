@@ -2,10 +2,10 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Config as strims_autoseed_v1_Config,
-  IConfig as strims_autoseed_v1_IConfig,
-  Rule as strims_autoseed_v1_Rule,
-  IRule as strims_autoseed_v1_IRule,
+  strims_autoseed_v1_Config,
+  strims_autoseed_v1_IConfig,
+  strims_autoseed_v1_Rule,
+  strims_autoseed_v1_IRule,
 } from "./autoseed";
 
 export type IConfigChangeEvent = {
@@ -116,3 +116,21 @@ export class RuleDeleteEvent {
   }
 }
 
+/* @internal */
+export const strims_autoseed_v1_ConfigChangeEvent = ConfigChangeEvent;
+/* @internal */
+export type strims_autoseed_v1_ConfigChangeEvent = ConfigChangeEvent;
+/* @internal */
+export type strims_autoseed_v1_IConfigChangeEvent = IConfigChangeEvent;
+/* @internal */
+export const strims_autoseed_v1_RuleChangeEvent = RuleChangeEvent;
+/* @internal */
+export type strims_autoseed_v1_RuleChangeEvent = RuleChangeEvent;
+/* @internal */
+export type strims_autoseed_v1_IRuleChangeEvent = IRuleChangeEvent;
+/* @internal */
+export const strims_autoseed_v1_RuleDeleteEvent = RuleDeleteEvent;
+/* @internal */
+export type strims_autoseed_v1_RuleDeleteEvent = RuleDeleteEvent;
+/* @internal */
+export type strims_autoseed_v1_IRuleDeleteEvent = IRuleDeleteEvent;

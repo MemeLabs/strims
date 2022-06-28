@@ -178,3 +178,27 @@ export class TransferPeerCloseResponse {
   }
 }
 
+/* @internal */
+export const strims_transfer_v1_TransferPeerAnnounceRequest = TransferPeerAnnounceRequest;
+/* @internal */
+export type strims_transfer_v1_TransferPeerAnnounceRequest = TransferPeerAnnounceRequest;
+/* @internal */
+export type strims_transfer_v1_ITransferPeerAnnounceRequest = ITransferPeerAnnounceRequest;
+/* @internal */
+export const strims_transfer_v1_TransferPeerAnnounceResponse = TransferPeerAnnounceResponse;
+/* @internal */
+export type strims_transfer_v1_TransferPeerAnnounceResponse = TransferPeerAnnounceResponse;
+/* @internal */
+export type strims_transfer_v1_ITransferPeerAnnounceResponse = ITransferPeerAnnounceResponse;
+/* @internal */
+export const strims_transfer_v1_TransferPeerCloseRequest = TransferPeerCloseRequest;
+/* @internal */
+export type strims_transfer_v1_TransferPeerCloseRequest = TransferPeerCloseRequest;
+/* @internal */
+export type strims_transfer_v1_ITransferPeerCloseRequest = ITransferPeerCloseRequest;
+/* @internal */
+export const strims_transfer_v1_TransferPeerCloseResponse = TransferPeerCloseResponse;
+/* @internal */
+export type strims_transfer_v1_TransferPeerCloseResponse = TransferPeerCloseResponse;
+/* @internal */
+export type strims_transfer_v1_ITransferPeerCloseResponse = ITransferPeerCloseResponse;

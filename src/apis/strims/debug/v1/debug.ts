@@ -96,11 +96,11 @@ export class PProfResponse {
 }
 
 export type IReadMetricsRequest = {
-  format?: MetricsFormat;
+  format?: strims_debug_v1_MetricsFormat;
 }
 
 export class ReadMetricsRequest {
-  format: MetricsFormat;
+  format: strims_debug_v1_MetricsFormat;
 
   constructor(v?: IReadMetricsRequest) {
     this.format = v?.format || 0;
@@ -168,12 +168,12 @@ export class ReadMetricsResponse {
 }
 
 export type IWatchMetricsRequest = {
-  format?: MetricsFormat;
+  format?: strims_debug_v1_MetricsFormat;
   intervalMs?: number;
 }
 
 export class WatchMetricsRequest {
-  format: MetricsFormat;
+  format: strims_debug_v1_MetricsFormat;
   intervalMs: number;
 
   constructor(v?: IWatchMetricsRequest) {
@@ -253,3 +253,43 @@ export enum MetricsFormat {
   METRICS_FORMAT_PROTO_COMPACT = 3,
   METRICS_FORMAT_OPEN_METRICS = 4,
 }
+/* @internal */
+export const strims_debug_v1_PProfRequest = PProfRequest;
+/* @internal */
+export type strims_debug_v1_PProfRequest = PProfRequest;
+/* @internal */
+export type strims_debug_v1_IPProfRequest = IPProfRequest;
+/* @internal */
+export const strims_debug_v1_PProfResponse = PProfResponse;
+/* @internal */
+export type strims_debug_v1_PProfResponse = PProfResponse;
+/* @internal */
+export type strims_debug_v1_IPProfResponse = IPProfResponse;
+/* @internal */
+export const strims_debug_v1_ReadMetricsRequest = ReadMetricsRequest;
+/* @internal */
+export type strims_debug_v1_ReadMetricsRequest = ReadMetricsRequest;
+/* @internal */
+export type strims_debug_v1_IReadMetricsRequest = IReadMetricsRequest;
+/* @internal */
+export const strims_debug_v1_ReadMetricsResponse = ReadMetricsResponse;
+/* @internal */
+export type strims_debug_v1_ReadMetricsResponse = ReadMetricsResponse;
+/* @internal */
+export type strims_debug_v1_IReadMetricsResponse = IReadMetricsResponse;
+/* @internal */
+export const strims_debug_v1_WatchMetricsRequest = WatchMetricsRequest;
+/* @internal */
+export type strims_debug_v1_WatchMetricsRequest = WatchMetricsRequest;
+/* @internal */
+export type strims_debug_v1_IWatchMetricsRequest = IWatchMetricsRequest;
+/* @internal */
+export const strims_debug_v1_WatchMetricsResponse = WatchMetricsResponse;
+/* @internal */
+export type strims_debug_v1_WatchMetricsResponse = WatchMetricsResponse;
+/* @internal */
+export type strims_debug_v1_IWatchMetricsResponse = IWatchMetricsResponse;
+/* @internal */
+export const strims_debug_v1_MetricsFormat = MetricsFormat;
+/* @internal */
+export type strims_debug_v1_MetricsFormat = MetricsFormat;

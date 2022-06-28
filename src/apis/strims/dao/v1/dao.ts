@@ -88,3 +88,15 @@ export class Mutex {
   }
 }
 
+/* @internal */
+export const strims_dao_v1_SecondaryIndexKey = SecondaryIndexKey;
+/* @internal */
+export type strims_dao_v1_SecondaryIndexKey = SecondaryIndexKey;
+/* @internal */
+export type strims_dao_v1_ISecondaryIndexKey = ISecondaryIndexKey;
+/* @internal */
+export const strims_dao_v1_Mutex = Mutex;
+/* @internal */
+export type strims_dao_v1_Mutex = Mutex;
+/* @internal */
+export type strims_dao_v1_IMutex = IMutex;

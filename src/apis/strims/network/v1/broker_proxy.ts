@@ -53,13 +53,13 @@ export class BrokerProxyEvent {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case BrokerProxyEvent.BodyCase.OPEN:
-      BrokerProxyEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
+      strims_network_v1_BrokerProxyEvent_Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
       break;
       case BrokerProxyEvent.BodyCase.DATA:
-      BrokerProxyEvent.Data.encode(m.body.data, w.uint32(18).fork()).ldelim();
+      strims_network_v1_BrokerProxyEvent_Data.encode(m.body.data, w.uint32(18).fork()).ldelim();
       break;
       case BrokerProxyEvent.BodyCase.READ:
-      BrokerProxyEvent.Read.encode(m.body.read, w.uint32(26).fork()).ldelim();
+      strims_network_v1_BrokerProxyEvent_Read.encode(m.body.read, w.uint32(26).fork()).ldelim();
       break;
     }
     return w;
@@ -73,13 +73,13 @@ export class BrokerProxyEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new BrokerProxyEvent.Body({ open: BrokerProxyEvent.Open.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ open: strims_network_v1_BrokerProxyEvent_Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new BrokerProxyEvent.Body({ data: BrokerProxyEvent.Data.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ data: strims_network_v1_BrokerProxyEvent_Data.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new BrokerProxyEvent.Body({ read: BrokerProxyEvent.Read.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ read: strims_network_v1_BrokerProxyEvent_Read.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -100,36 +100,36 @@ export namespace BrokerProxyEvent {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: BrokerProxyEvent.IOpen }
-  |{ case?: BodyCase.DATA, data: BrokerProxyEvent.IData }
-  |{ case?: BodyCase.READ, read: BrokerProxyEvent.IRead }
+  |{ case?: BodyCase.OPEN, open: strims_network_v1_BrokerProxyEvent_IOpen }
+  |{ case?: BodyCase.DATA, data: strims_network_v1_BrokerProxyEvent_IData }
+  |{ case?: BodyCase.READ, read: strims_network_v1_BrokerProxyEvent_IRead }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: BrokerProxyEvent.Open }
-  |{ case: BodyCase.DATA, data: BrokerProxyEvent.Data }
-  |{ case: BodyCase.READ, read: BrokerProxyEvent.Read }
+  |{ case: BodyCase.OPEN, open: strims_network_v1_BrokerProxyEvent_Open }
+  |{ case: BodyCase.DATA, data: strims_network_v1_BrokerProxyEvent_Data }
+  |{ case: BodyCase.READ, read: strims_network_v1_BrokerProxyEvent_Read }
   >;
 
   class BodyImpl {
-    open: BrokerProxyEvent.Open;
-    data: BrokerProxyEvent.Data;
-    read: BrokerProxyEvent.Read;
+    open: strims_network_v1_BrokerProxyEvent_Open;
+    data: strims_network_v1_BrokerProxyEvent_Data;
+    read: strims_network_v1_BrokerProxyEvent_Read;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new BrokerProxyEvent.Open(v.open);
+        this.open = new strims_network_v1_BrokerProxyEvent_Open(v.open);
       } else
       if (v && "data" in v) {
         this.case = BodyCase.DATA;
-        this.data = new BrokerProxyEvent.Data(v.data);
+        this.data = new strims_network_v1_BrokerProxyEvent_Data(v.data);
       } else
       if (v && "read" in v) {
         this.case = BodyCase.READ;
-        this.read = new BrokerProxyEvent.Read(v.read);
+        this.read = new strims_network_v1_BrokerProxyEvent_Read(v.read);
       }
     }
   }
@@ -137,9 +137,9 @@ export namespace BrokerProxyEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: BrokerProxyEvent.IOpen } ? { case: BodyCase.OPEN, open: BrokerProxyEvent.Open } :
-    T extends { data: BrokerProxyEvent.IData } ? { case: BodyCase.DATA, data: BrokerProxyEvent.Data } :
-    T extends { read: BrokerProxyEvent.IRead } ? { case: BodyCase.READ, read: BrokerProxyEvent.Read } :
+    T extends { open: strims_network_v1_BrokerProxyEvent_IOpen } ? { case: BodyCase.OPEN, open: strims_network_v1_BrokerProxyEvent_Open } :
+    T extends { data: strims_network_v1_BrokerProxyEvent_IData } ? { case: BodyCase.DATA, data: strims_network_v1_BrokerProxyEvent_Data } :
+    T extends { read: strims_network_v1_BrokerProxyEvent_IRead } ? { case: BodyCase.READ, read: strims_network_v1_BrokerProxyEvent_Read } :
     never
     >;
   };
@@ -495,3 +495,81 @@ export class BrokerProxyCloseResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_BrokerProxyRequest = BrokerProxyRequest;
+/* @internal */
+export type strims_network_v1_BrokerProxyRequest = BrokerProxyRequest;
+/* @internal */
+export type strims_network_v1_IBrokerProxyRequest = IBrokerProxyRequest;
+/* @internal */
+export const strims_network_v1_BrokerProxyEvent = BrokerProxyEvent;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent = BrokerProxyEvent;
+/* @internal */
+export type strims_network_v1_IBrokerProxyEvent = IBrokerProxyEvent;
+/* @internal */
+export const strims_network_v1_BrokerProxySendKeysRequest = BrokerProxySendKeysRequest;
+/* @internal */
+export type strims_network_v1_BrokerProxySendKeysRequest = BrokerProxySendKeysRequest;
+/* @internal */
+export type strims_network_v1_IBrokerProxySendKeysRequest = IBrokerProxySendKeysRequest;
+/* @internal */
+export const strims_network_v1_BrokerProxySendKeysResponse = BrokerProxySendKeysResponse;
+/* @internal */
+export type strims_network_v1_BrokerProxySendKeysResponse = BrokerProxySendKeysResponse;
+/* @internal */
+export type strims_network_v1_IBrokerProxySendKeysResponse = IBrokerProxySendKeysResponse;
+/* @internal */
+export const strims_network_v1_BrokerProxyReceiveKeysRequest = BrokerProxyReceiveKeysRequest;
+/* @internal */
+export type strims_network_v1_BrokerProxyReceiveKeysRequest = BrokerProxyReceiveKeysRequest;
+/* @internal */
+export type strims_network_v1_IBrokerProxyReceiveKeysRequest = IBrokerProxyReceiveKeysRequest;
+/* @internal */
+export const strims_network_v1_BrokerProxyReceiveKeysResponse = BrokerProxyReceiveKeysResponse;
+/* @internal */
+export type strims_network_v1_BrokerProxyReceiveKeysResponse = BrokerProxyReceiveKeysResponse;
+/* @internal */
+export type strims_network_v1_IBrokerProxyReceiveKeysResponse = IBrokerProxyReceiveKeysResponse;
+/* @internal */
+export const strims_network_v1_BrokerProxyDataRequest = BrokerProxyDataRequest;
+/* @internal */
+export type strims_network_v1_BrokerProxyDataRequest = BrokerProxyDataRequest;
+/* @internal */
+export type strims_network_v1_IBrokerProxyDataRequest = IBrokerProxyDataRequest;
+/* @internal */
+export const strims_network_v1_BrokerProxyDataResponse = BrokerProxyDataResponse;
+/* @internal */
+export type strims_network_v1_BrokerProxyDataResponse = BrokerProxyDataResponse;
+/* @internal */
+export type strims_network_v1_IBrokerProxyDataResponse = IBrokerProxyDataResponse;
+/* @internal */
+export const strims_network_v1_BrokerProxyCloseRequest = BrokerProxyCloseRequest;
+/* @internal */
+export type strims_network_v1_BrokerProxyCloseRequest = BrokerProxyCloseRequest;
+/* @internal */
+export type strims_network_v1_IBrokerProxyCloseRequest = IBrokerProxyCloseRequest;
+/* @internal */
+export const strims_network_v1_BrokerProxyCloseResponse = BrokerProxyCloseResponse;
+/* @internal */
+export type strims_network_v1_BrokerProxyCloseResponse = BrokerProxyCloseResponse;
+/* @internal */
+export type strims_network_v1_IBrokerProxyCloseResponse = IBrokerProxyCloseResponse;
+/* @internal */
+export const strims_network_v1_BrokerProxyEvent_Open = BrokerProxyEvent.Open;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_Open = BrokerProxyEvent.Open;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_IOpen = BrokerProxyEvent.IOpen;
+/* @internal */
+export const strims_network_v1_BrokerProxyEvent_Data = BrokerProxyEvent.Data;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_Data = BrokerProxyEvent.Data;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_IData = BrokerProxyEvent.IData;
+/* @internal */
+export const strims_network_v1_BrokerProxyEvent_Read = BrokerProxyEvent.Read;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_Read = BrokerProxyEvent.Read;
+/* @internal */
+export type strims_network_v1_BrokerProxyEvent_IRead = BrokerProxyEvent.IRead;

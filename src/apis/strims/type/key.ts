@@ -3,13 +3,13 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
 export type IKey = {
-  type?: KeyType;
+  type?: strims_type_KeyType;
   private?: Uint8Array;
   public?: Uint8Array;
 }
 
 export class Key {
-  type: KeyType;
+  type: strims_type_KeyType;
   private: Uint8Array;
   public: Uint8Array;
 
@@ -57,3 +57,13 @@ export enum KeyType {
   KEY_TYPE_ED25519 = 1,
   KEY_TYPE_X25519 = 2,
 }
+/* @internal */
+export const strims_type_Key = Key;
+/* @internal */
+export type strims_type_Key = Key;
+/* @internal */
+export type strims_type_IKey = IKey;
+/* @internal */
+export const strims_type_KeyType = KeyType;
+/* @internal */
+export type strims_type_KeyType = KeyType;

@@ -2,10 +2,10 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
-  CertificateRequest as strims_type_CertificateRequest,
-  ICertificateRequest as strims_type_ICertificateRequest,
+  strims_type_Certificate,
+  strims_type_ICertificate,
+  strims_type_CertificateRequest,
+  strims_type_ICertificateRequest,
 } from "../../../type/certificate";
 
 export type ICertificateLog = {
@@ -288,3 +288,33 @@ export class CAFindResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_ca_CertificateLog = CertificateLog;
+/* @internal */
+export type strims_network_v1_ca_CertificateLog = CertificateLog;
+/* @internal */
+export type strims_network_v1_ca_ICertificateLog = ICertificateLog;
+/* @internal */
+export const strims_network_v1_ca_CARenewRequest = CARenewRequest;
+/* @internal */
+export type strims_network_v1_ca_CARenewRequest = CARenewRequest;
+/* @internal */
+export type strims_network_v1_ca_ICARenewRequest = ICARenewRequest;
+/* @internal */
+export const strims_network_v1_ca_CARenewResponse = CARenewResponse;
+/* @internal */
+export type strims_network_v1_ca_CARenewResponse = CARenewResponse;
+/* @internal */
+export type strims_network_v1_ca_ICARenewResponse = ICARenewResponse;
+/* @internal */
+export const strims_network_v1_ca_CAFindRequest = CAFindRequest;
+/* @internal */
+export type strims_network_v1_ca_CAFindRequest = CAFindRequest;
+/* @internal */
+export type strims_network_v1_ca_ICAFindRequest = ICAFindRequest;
+/* @internal */
+export const strims_network_v1_ca_CAFindResponse = CAFindResponse;
+/* @internal */
+export type strims_network_v1_ca_CAFindResponse = CAFindResponse;
+/* @internal */
+export type strims_network_v1_ca_ICAFindResponse = ICAFindResponse;

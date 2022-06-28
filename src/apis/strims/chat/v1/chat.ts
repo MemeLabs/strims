@@ -2,12 +2,12 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Key as strims_type_Key,
-  IKey as strims_type_IKey,
+  strims_type_Key,
+  strims_type_IKey,
 } from "../../type/key";
 import {
-  Listing as strims_network_v1_directory_Listing,
-  IListing as strims_network_v1_directory_IListing,
+  strims_network_v1_directory_Listing,
+  strims_network_v1_directory_IListing,
 } from "../../network/v1/directory/directory";
 
 export type IServerEvent = {
@@ -25,7 +25,7 @@ export class ServerEvent {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case ServerEvent.BodyCase.MESSAGE:
-      Message.encode(m.body.message, w.uint32(8010).fork()).ldelim();
+      strims_chat_v1_Message.encode(m.body.message, w.uint32(8010).fork()).ldelim();
       break;
     }
     return w;
@@ -39,7 +39,7 @@ export class ServerEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.body = new ServerEvent.Body({ message: Message.decode(r, r.uint32()) });
+        m.body = new ServerEvent.Body({ message: strims_chat_v1_Message.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -58,22 +58,22 @@ export namespace ServerEvent {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.MESSAGE, message: IMessage }
+  |{ case?: BodyCase.MESSAGE, message: strims_chat_v1_IMessage }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.MESSAGE, message: Message }
+  |{ case: BodyCase.MESSAGE, message: strims_chat_v1_Message }
   >;
 
   class BodyImpl {
-    message: Message;
+    message: strims_chat_v1_Message;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
-        this.message = new Message(v.message);
+        this.message = new strims_chat_v1_Message(v.message);
       }
     }
   }
@@ -81,7 +81,7 @@ export namespace ServerEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { message: IMessage } ? { case: BodyCase.MESSAGE, message: Message } :
+    T extends { message: strims_chat_v1_IMessage } ? { case: BodyCase.MESSAGE, message: strims_chat_v1_Message } :
     never
     >;
   };
@@ -135,7 +135,7 @@ export type IServer = {
   id?: bigint;
   networkKey?: Uint8Array;
   key?: strims_type_IKey;
-  room?: IRoom;
+  room?: strims_chat_v1_IRoom;
   adminPeerKeys?: Uint8Array[];
 }
 
@@ -143,14 +143,14 @@ export class Server {
   id: bigint;
   networkKey: Uint8Array;
   key: strims_type_Key | undefined;
-  room: Room | undefined;
+  room: strims_chat_v1_Room | undefined;
   adminPeerKeys: Uint8Array[];
 
   constructor(v?: IServer) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.key = v?.key && new strims_type_Key(v.key);
-    this.room = v?.room && new Room(v.room);
+    this.room = v?.room && new strims_chat_v1_Room(v.room);
     this.adminPeerKeys = v?.adminPeerKeys ? v.adminPeerKeys : [];
   }
 
@@ -159,7 +159,7 @@ export class Server {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
-    if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
+    if (m.room) strims_chat_v1_Room.encode(m.room, w.uint32(34).fork()).ldelim();
     for (const v of m.adminPeerKeys) w.uint32(42).bytes(v);
     return w;
   }
@@ -181,7 +181,7 @@ export class Server {
         m.key = strims_type_Key.decode(r, r.uint32());
         break;
         case 4:
-        m.room = Room.decode(r, r.uint32());
+        m.room = strims_chat_v1_Room.decode(r, r.uint32());
         break;
         case 5:
         m.adminPeerKeys.push(r.bytes())
@@ -197,18 +197,18 @@ export class Server {
 
 export type IEmoteImage = {
   data?: Uint8Array;
-  fileType?: EmoteFileType;
+  fileType?: strims_chat_v1_EmoteFileType;
   height?: number;
   width?: number;
-  scale?: EmoteScale;
+  scale?: strims_chat_v1_EmoteScale;
 }
 
 export class EmoteImage {
   data: Uint8Array;
-  fileType: EmoteFileType;
+  fileType: strims_chat_v1_EmoteFileType;
   height: number;
   width: number;
-  scale: EmoteScale;
+  scale: strims_chat_v1_EmoteScale;
 
   constructor(v?: IEmoteImage) {
     this.data = v?.data || new Uint8Array();
@@ -274,13 +274,13 @@ export class EmoteEffect {
     if (!w) w = new Writer();
     switch (m.effect.case) {
       case EmoteEffect.EffectCase.CUSTOM_CSS:
-      EmoteEffect.CustomCSS.encode(m.effect.customCss, w.uint32(8010).fork()).ldelim();
+      strims_chat_v1_EmoteEffect_CustomCSS.encode(m.effect.customCss, w.uint32(8010).fork()).ldelim();
       break;
       case EmoteEffect.EffectCase.SPRITE_ANIMATION:
-      EmoteEffect.SpriteAnimation.encode(m.effect.spriteAnimation, w.uint32(8018).fork()).ldelim();
+      strims_chat_v1_EmoteEffect_SpriteAnimation.encode(m.effect.spriteAnimation, w.uint32(8018).fork()).ldelim();
       break;
       case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
-      EmoteEffect.DefaultModifiers.encode(m.effect.defaultModifiers, w.uint32(8026).fork()).ldelim();
+      strims_chat_v1_EmoteEffect_DefaultModifiers.encode(m.effect.defaultModifiers, w.uint32(8026).fork()).ldelim();
       break;
     }
     return w;
@@ -294,13 +294,13 @@ export class EmoteEffect {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.effect = new EmoteEffect.Effect({ customCss: EmoteEffect.CustomCSS.decode(r, r.uint32()) });
+        m.effect = new EmoteEffect.Effect({ customCss: strims_chat_v1_EmoteEffect_CustomCSS.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.effect = new EmoteEffect.Effect({ spriteAnimation: EmoteEffect.SpriteAnimation.decode(r, r.uint32()) });
+        m.effect = new EmoteEffect.Effect({ spriteAnimation: strims_chat_v1_EmoteEffect_SpriteAnimation.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.effect = new EmoteEffect.Effect({ defaultModifiers: EmoteEffect.DefaultModifiers.decode(r, r.uint32()) });
+        m.effect = new EmoteEffect.Effect({ defaultModifiers: strims_chat_v1_EmoteEffect_DefaultModifiers.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -321,36 +321,36 @@ export namespace EmoteEffect {
 
   export type IEffect =
   { case?: EffectCase.NOT_SET }
-  |{ case?: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.ICustomCSS }
-  |{ case?: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.ISpriteAnimation }
-  |{ case?: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.IDefaultModifiers }
+  |{ case?: EffectCase.CUSTOM_CSS, customCss: strims_chat_v1_EmoteEffect_ICustomCSS }
+  |{ case?: EffectCase.SPRITE_ANIMATION, spriteAnimation: strims_chat_v1_EmoteEffect_ISpriteAnimation }
+  |{ case?: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: strims_chat_v1_EmoteEffect_IDefaultModifiers }
   ;
 
   export type TEffect = Readonly<
   { case: EffectCase.NOT_SET }
-  |{ case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS }
-  |{ case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation }
-  |{ case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.DefaultModifiers }
+  |{ case: EffectCase.CUSTOM_CSS, customCss: strims_chat_v1_EmoteEffect_CustomCSS }
+  |{ case: EffectCase.SPRITE_ANIMATION, spriteAnimation: strims_chat_v1_EmoteEffect_SpriteAnimation }
+  |{ case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: strims_chat_v1_EmoteEffect_DefaultModifiers }
   >;
 
   class EffectImpl {
-    customCss: EmoteEffect.CustomCSS;
-    spriteAnimation: EmoteEffect.SpriteAnimation;
-    defaultModifiers: EmoteEffect.DefaultModifiers;
+    customCss: strims_chat_v1_EmoteEffect_CustomCSS;
+    spriteAnimation: strims_chat_v1_EmoteEffect_SpriteAnimation;
+    defaultModifiers: strims_chat_v1_EmoteEffect_DefaultModifiers;
     case: EffectCase = EffectCase.NOT_SET;
 
     constructor(v?: IEffect) {
       if (v && "customCss" in v) {
         this.case = EffectCase.CUSTOM_CSS;
-        this.customCss = new EmoteEffect.CustomCSS(v.customCss);
+        this.customCss = new strims_chat_v1_EmoteEffect_CustomCSS(v.customCss);
       } else
       if (v && "spriteAnimation" in v) {
         this.case = EffectCase.SPRITE_ANIMATION;
-        this.spriteAnimation = new EmoteEffect.SpriteAnimation(v.spriteAnimation);
+        this.spriteAnimation = new strims_chat_v1_EmoteEffect_SpriteAnimation(v.spriteAnimation);
       } else
       if (v && "defaultModifiers" in v) {
         this.case = EffectCase.DEFAULT_MODIFIERS;
-        this.defaultModifiers = new EmoteEffect.DefaultModifiers(v.defaultModifiers);
+        this.defaultModifiers = new strims_chat_v1_EmoteEffect_DefaultModifiers(v.defaultModifiers);
       }
     }
   }
@@ -358,9 +358,9 @@ export namespace EmoteEffect {
   export const Effect = EffectImpl as {
     new (): Readonly<{ case: EffectCase.NOT_SET }>;
     new <T extends IEffect>(v: T): Readonly<
-    T extends { customCss: EmoteEffect.ICustomCSS } ? { case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS } :
-    T extends { spriteAnimation: EmoteEffect.ISpriteAnimation } ? { case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation } :
-    T extends { defaultModifiers: EmoteEffect.IDefaultModifiers } ? { case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.DefaultModifiers } :
+    T extends { customCss: strims_chat_v1_EmoteEffect_ICustomCSS } ? { case: EffectCase.CUSTOM_CSS, customCss: strims_chat_v1_EmoteEffect_CustomCSS } :
+    T extends { spriteAnimation: strims_chat_v1_EmoteEffect_ISpriteAnimation } ? { case: EffectCase.SPRITE_ANIMATION, spriteAnimation: strims_chat_v1_EmoteEffect_SpriteAnimation } :
+    T extends { defaultModifiers: strims_chat_v1_EmoteEffect_IDefaultModifiers } ? { case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: strims_chat_v1_EmoteEffect_DefaultModifiers } :
     never
     >;
   };
@@ -557,26 +557,26 @@ export type IEmote = {
   id?: bigint;
   serverId?: bigint;
   name?: string;
-  images?: IEmoteImage[];
-  effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor;
+  images?: strims_chat_v1_IEmoteImage[];
+  effects?: strims_chat_v1_IEmoteEffect[];
+  contributor?: strims_chat_v1_IEmoteContributor;
 }
 
 export class Emote {
   id: bigint;
   serverId: bigint;
   name: string;
-  images: EmoteImage[];
-  effects: EmoteEffect[];
-  contributor: EmoteContributor | undefined;
+  images: strims_chat_v1_EmoteImage[];
+  effects: strims_chat_v1_EmoteEffect[];
+  contributor: strims_chat_v1_EmoteContributor | undefined;
 
   constructor(v?: IEmote) {
     this.id = v?.id || BigInt(0);
     this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
-    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
-    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
-    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
+    this.images = v?.images ? v.images.map(v => new strims_chat_v1_EmoteImage(v)) : [];
+    this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
   }
 
   static encode(m: Emote, w?: Writer): Writer {
@@ -584,9 +584,9 @@ export class Emote {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.serverId) w.uint32(16).uint64(m.serverId);
     if (m.name.length) w.uint32(26).string(m.name);
-    for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
-    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
-    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
+    for (const v of m.images) strims_chat_v1_EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
+    for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -607,13 +607,13 @@ export class Emote {
         m.name = r.string();
         break;
         case 4:
-        m.images.push(EmoteImage.decode(r, r.uint32()));
+        m.images.push(strims_chat_v1_EmoteImage.decode(r, r.uint32()));
         break;
         case 5:
-        m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        m.effects.push(strims_chat_v1_EmoteEffect.decode(r, r.uint32()));
         break;
         case 6:
-        m.contributor = EmoteContributor.decode(r, r.uint32());
+        m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -769,37 +769,37 @@ export class Tag {
 export type IAssetBundle = {
   isDelta?: boolean;
   removedIds?: bigint[];
-  room?: IRoom;
-  emotes?: IEmote[];
-  modifiers?: IModifier[];
-  tags?: ITag[];
+  room?: strims_chat_v1_IRoom;
+  emotes?: strims_chat_v1_IEmote[];
+  modifiers?: strims_chat_v1_IModifier[];
+  tags?: strims_chat_v1_ITag[];
 }
 
 export class AssetBundle {
   isDelta: boolean;
   removedIds: bigint[];
-  room: Room | undefined;
-  emotes: Emote[];
-  modifiers: Modifier[];
-  tags: Tag[];
+  room: strims_chat_v1_Room | undefined;
+  emotes: strims_chat_v1_Emote[];
+  modifiers: strims_chat_v1_Modifier[];
+  tags: strims_chat_v1_Tag[];
 
   constructor(v?: IAssetBundle) {
     this.isDelta = v?.isDelta || false;
     this.removedIds = v?.removedIds ? v.removedIds : [];
-    this.room = v?.room && new Room(v.room);
-    this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
-    this.modifiers = v?.modifiers ? v.modifiers.map(v => new Modifier(v)) : [];
-    this.tags = v?.tags ? v.tags.map(v => new Tag(v)) : [];
+    this.room = v?.room && new strims_chat_v1_Room(v.room);
+    this.emotes = v?.emotes ? v.emotes.map(v => new strims_chat_v1_Emote(v)) : [];
+    this.modifiers = v?.modifiers ? v.modifiers.map(v => new strims_chat_v1_Modifier(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_Tag(v)) : [];
   }
 
   static encode(m: AssetBundle, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.isDelta) w.uint32(8).bool(m.isDelta);
     m.removedIds.reduce((w, v) => w.uint64(v), w.uint32(18).fork()).ldelim();
-    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
-    for (const v of m.emotes) Emote.encode(v, w.uint32(34).fork()).ldelim();
-    for (const v of m.modifiers) Modifier.encode(v, w.uint32(42).fork()).ldelim();
-    for (const v of m.tags) Tag.encode(v, w.uint32(50).fork()).ldelim();
+    if (m.room) strims_chat_v1_Room.encode(m.room, w.uint32(26).fork()).ldelim();
+    for (const v of m.emotes) strims_chat_v1_Emote.encode(v, w.uint32(34).fork()).ldelim();
+    for (const v of m.modifiers) strims_chat_v1_Modifier.encode(v, w.uint32(42).fork()).ldelim();
+    for (const v of m.tags) strims_chat_v1_Tag.encode(v, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -817,16 +817,16 @@ export class AssetBundle {
         for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.removedIds.push(r.uint64());
         break;
         case 3:
-        m.room = Room.decode(r, r.uint32());
+        m.room = strims_chat_v1_Room.decode(r, r.uint32());
         break;
         case 4:
-        m.emotes.push(Emote.decode(r, r.uint32()));
+        m.emotes.push(strims_chat_v1_Emote.decode(r, r.uint32()));
         break;
         case 5:
-        m.modifiers.push(Modifier.decode(r, r.uint32()));
+        m.modifiers.push(strims_chat_v1_Modifier.decode(r, r.uint32()));
         break;
         case 6:
-        m.tags.push(Tag.decode(r, r.uint32()));
+        m.tags.push(strims_chat_v1_Tag.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -842,8 +842,8 @@ export type IMessage = {
   peerKey?: Uint8Array;
   nick?: string;
   body?: string;
-  entities?: Message.IEntities;
-  viewedListing?: Message.IDirectoryRef;
+  entities?: strims_chat_v1_Message_IEntities;
+  viewedListing?: strims_chat_v1_Message_IDirectoryRef;
 }
 
 export class Message {
@@ -851,16 +851,16 @@ export class Message {
   peerKey: Uint8Array;
   nick: string;
   body: string;
-  entities: Message.Entities | undefined;
-  viewedListing: Message.DirectoryRef | undefined;
+  entities: strims_chat_v1_Message_Entities | undefined;
+  viewedListing: strims_chat_v1_Message_DirectoryRef | undefined;
 
   constructor(v?: IMessage) {
     this.serverTime = v?.serverTime || BigInt(0);
     this.peerKey = v?.peerKey || new Uint8Array();
     this.nick = v?.nick || "";
     this.body = v?.body || "";
-    this.entities = v?.entities && new Message.Entities(v.entities);
-    this.viewedListing = v?.viewedListing && new Message.DirectoryRef(v.viewedListing);
+    this.entities = v?.entities && new strims_chat_v1_Message_Entities(v.entities);
+    this.viewedListing = v?.viewedListing && new strims_chat_v1_Message_DirectoryRef(v.viewedListing);
   }
 
   static encode(m: Message, w?: Writer): Writer {
@@ -869,8 +869,8 @@ export class Message {
     if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
     if (m.nick.length) w.uint32(26).string(m.nick);
     if (m.body.length) w.uint32(34).string(m.body);
-    if (m.entities) Message.Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
-    if (m.viewedListing) Message.DirectoryRef.encode(m.viewedListing, w.uint32(74).fork()).ldelim();
+    if (m.entities) strims_chat_v1_Message_Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
+    if (m.viewedListing) strims_chat_v1_Message_DirectoryRef.encode(m.viewedListing, w.uint32(74).fork()).ldelim();
     return w;
   }
 
@@ -894,10 +894,10 @@ export class Message {
         m.body = r.string();
         break;
         case 5:
-        m.entities = Message.Entities.decode(r, r.uint32());
+        m.entities = strims_chat_v1_Message_Entities.decode(r, r.uint32());
         break;
         case 9:
-        m.viewedListing = Message.DirectoryRef.decode(r, r.uint32());
+        m.viewedListing = strims_chat_v1_Message_DirectoryRef.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -910,51 +910,51 @@ export class Message {
 
 export namespace Message {
   export type IEntities = {
-    links?: Message.Entities.ILink[];
-    emotes?: Message.Entities.IEmote[];
-    emojis?: Message.Entities.IEmoji[];
-    nicks?: Message.Entities.INick[];
-    tags?: Message.Entities.ITag[];
-    codeBlocks?: Message.Entities.ICodeBlock[];
-    spoilers?: Message.Entities.ISpoiler[];
-    greenText?: Message.Entities.IGenericEntity;
-    selfMessage?: Message.Entities.IGenericEntity;
+    links?: strims_chat_v1_Message_Entities_ILink[];
+    emotes?: strims_chat_v1_Message_Entities_IEmote[];
+    emojis?: strims_chat_v1_Message_Entities_IEmoji[];
+    nicks?: strims_chat_v1_Message_Entities_INick[];
+    tags?: strims_chat_v1_Message_Entities_ITag[];
+    codeBlocks?: strims_chat_v1_Message_Entities_ICodeBlock[];
+    spoilers?: strims_chat_v1_Message_Entities_ISpoiler[];
+    greenText?: strims_chat_v1_Message_Entities_IGenericEntity;
+    selfMessage?: strims_chat_v1_Message_Entities_IGenericEntity;
   }
 
   export class Entities {
-    links: Message.Entities.Link[];
-    emotes: Message.Entities.Emote[];
-    emojis: Message.Entities.Emoji[];
-    nicks: Message.Entities.Nick[];
-    tags: Message.Entities.Tag[];
-    codeBlocks: Message.Entities.CodeBlock[];
-    spoilers: Message.Entities.Spoiler[];
-    greenText: Message.Entities.GenericEntity | undefined;
-    selfMessage: Message.Entities.GenericEntity | undefined;
+    links: strims_chat_v1_Message_Entities_Link[];
+    emotes: strims_chat_v1_Message_Entities_Emote[];
+    emojis: strims_chat_v1_Message_Entities_Emoji[];
+    nicks: strims_chat_v1_Message_Entities_Nick[];
+    tags: strims_chat_v1_Message_Entities_Tag[];
+    codeBlocks: strims_chat_v1_Message_Entities_CodeBlock[];
+    spoilers: strims_chat_v1_Message_Entities_Spoiler[];
+    greenText: strims_chat_v1_Message_Entities_GenericEntity | undefined;
+    selfMessage: strims_chat_v1_Message_Entities_GenericEntity | undefined;
 
     constructor(v?: IEntities) {
-      this.links = v?.links ? v.links.map(v => new Message.Entities.Link(v)) : [];
-      this.emotes = v?.emotes ? v.emotes.map(v => new Message.Entities.Emote(v)) : [];
-      this.emojis = v?.emojis ? v.emojis.map(v => new Message.Entities.Emoji(v)) : [];
-      this.nicks = v?.nicks ? v.nicks.map(v => new Message.Entities.Nick(v)) : [];
-      this.tags = v?.tags ? v.tags.map(v => new Message.Entities.Tag(v)) : [];
-      this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new Message.Entities.CodeBlock(v)) : [];
-      this.spoilers = v?.spoilers ? v.spoilers.map(v => new Message.Entities.Spoiler(v)) : [];
-      this.greenText = v?.greenText && new Message.Entities.GenericEntity(v.greenText);
-      this.selfMessage = v?.selfMessage && new Message.Entities.GenericEntity(v.selfMessage);
+      this.links = v?.links ? v.links.map(v => new strims_chat_v1_Message_Entities_Link(v)) : [];
+      this.emotes = v?.emotes ? v.emotes.map(v => new strims_chat_v1_Message_Entities_Emote(v)) : [];
+      this.emojis = v?.emojis ? v.emojis.map(v => new strims_chat_v1_Message_Entities_Emoji(v)) : [];
+      this.nicks = v?.nicks ? v.nicks.map(v => new strims_chat_v1_Message_Entities_Nick(v)) : [];
+      this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_Message_Entities_Tag(v)) : [];
+      this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new strims_chat_v1_Message_Entities_CodeBlock(v)) : [];
+      this.spoilers = v?.spoilers ? v.spoilers.map(v => new strims_chat_v1_Message_Entities_Spoiler(v)) : [];
+      this.greenText = v?.greenText && new strims_chat_v1_Message_Entities_GenericEntity(v.greenText);
+      this.selfMessage = v?.selfMessage && new strims_chat_v1_Message_Entities_GenericEntity(v.selfMessage);
     }
 
     static encode(m: Entities, w?: Writer): Writer {
       if (!w) w = new Writer();
-      for (const v of m.links) Message.Entities.Link.encode(v, w.uint32(10).fork()).ldelim();
-      for (const v of m.emotes) Message.Entities.Emote.encode(v, w.uint32(18).fork()).ldelim();
-      for (const v of m.emojis) Message.Entities.Emoji.encode(v, w.uint32(26).fork()).ldelim();
-      for (const v of m.nicks) Message.Entities.Nick.encode(v, w.uint32(34).fork()).ldelim();
-      for (const v of m.tags) Message.Entities.Tag.encode(v, w.uint32(42).fork()).ldelim();
-      for (const v of m.codeBlocks) Message.Entities.CodeBlock.encode(v, w.uint32(50).fork()).ldelim();
-      for (const v of m.spoilers) Message.Entities.Spoiler.encode(v, w.uint32(58).fork()).ldelim();
-      if (m.greenText) Message.Entities.GenericEntity.encode(m.greenText, w.uint32(66).fork()).ldelim();
-      if (m.selfMessage) Message.Entities.GenericEntity.encode(m.selfMessage, w.uint32(74).fork()).ldelim();
+      for (const v of m.links) strims_chat_v1_Message_Entities_Link.encode(v, w.uint32(10).fork()).ldelim();
+      for (const v of m.emotes) strims_chat_v1_Message_Entities_Emote.encode(v, w.uint32(18).fork()).ldelim();
+      for (const v of m.emojis) strims_chat_v1_Message_Entities_Emoji.encode(v, w.uint32(26).fork()).ldelim();
+      for (const v of m.nicks) strims_chat_v1_Message_Entities_Nick.encode(v, w.uint32(34).fork()).ldelim();
+      for (const v of m.tags) strims_chat_v1_Message_Entities_Tag.encode(v, w.uint32(42).fork()).ldelim();
+      for (const v of m.codeBlocks) strims_chat_v1_Message_Entities_CodeBlock.encode(v, w.uint32(50).fork()).ldelim();
+      for (const v of m.spoilers) strims_chat_v1_Message_Entities_Spoiler.encode(v, w.uint32(58).fork()).ldelim();
+      if (m.greenText) strims_chat_v1_Message_Entities_GenericEntity.encode(m.greenText, w.uint32(66).fork()).ldelim();
+      if (m.selfMessage) strims_chat_v1_Message_Entities_GenericEntity.encode(m.selfMessage, w.uint32(74).fork()).ldelim();
       return w;
     }
 
@@ -966,31 +966,31 @@ export namespace Message {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.links.push(Message.Entities.Link.decode(r, r.uint32()));
+          m.links.push(strims_chat_v1_Message_Entities_Link.decode(r, r.uint32()));
           break;
           case 2:
-          m.emotes.push(Message.Entities.Emote.decode(r, r.uint32()));
+          m.emotes.push(strims_chat_v1_Message_Entities_Emote.decode(r, r.uint32()));
           break;
           case 3:
-          m.emojis.push(Message.Entities.Emoji.decode(r, r.uint32()));
+          m.emojis.push(strims_chat_v1_Message_Entities_Emoji.decode(r, r.uint32()));
           break;
           case 4:
-          m.nicks.push(Message.Entities.Nick.decode(r, r.uint32()));
+          m.nicks.push(strims_chat_v1_Message_Entities_Nick.decode(r, r.uint32()));
           break;
           case 5:
-          m.tags.push(Message.Entities.Tag.decode(r, r.uint32()));
+          m.tags.push(strims_chat_v1_Message_Entities_Tag.decode(r, r.uint32()));
           break;
           case 6:
-          m.codeBlocks.push(Message.Entities.CodeBlock.decode(r, r.uint32()));
+          m.codeBlocks.push(strims_chat_v1_Message_Entities_CodeBlock.decode(r, r.uint32()));
           break;
           case 7:
-          m.spoilers.push(Message.Entities.Spoiler.decode(r, r.uint32()));
+          m.spoilers.push(strims_chat_v1_Message_Entities_Spoiler.decode(r, r.uint32()));
           break;
           case 8:
-          m.greenText = Message.Entities.GenericEntity.decode(r, r.uint32());
+          m.greenText = strims_chat_v1_Message_Entities_GenericEntity.decode(r, r.uint32());
           break;
           case 9:
-          m.selfMessage = Message.Entities.GenericEntity.decode(r, r.uint32());
+          m.selfMessage = strims_chat_v1_Message_Entities_GenericEntity.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -1046,22 +1046,22 @@ export namespace Message {
     }
 
     export type ILink = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
       url?: string;
     }
 
     export class Link {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
       url: string;
 
       constructor(v?: ILink) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
         this.url = v?.url || "";
       }
 
       static encode(m: Link, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.url.length) w.uint32(18).string(m.url);
         return w;
       }
@@ -1074,7 +1074,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             case 2:
             m.url = r.string();
@@ -1089,7 +1089,7 @@ export namespace Message {
     }
 
     export type IEmote = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
       name?: string;
       modifiers?: string[];
       combo?: number;
@@ -1097,14 +1097,14 @@ export namespace Message {
     }
 
     export class Emote {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
       name: string;
       modifiers: string[];
       combo: number;
       canCombo: boolean;
 
       constructor(v?: IEmote) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
         this.name = v?.name || "";
         this.modifiers = v?.modifiers ? v.modifiers : [];
         this.combo = v?.combo || 0;
@@ -1113,7 +1113,7 @@ export namespace Message {
 
       static encode(m: Emote, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.name.length) w.uint32(18).string(m.name);
         for (const v of m.modifiers) w.uint32(26).string(v);
         if (m.combo) w.uint32(32).uint32(m.combo);
@@ -1129,7 +1129,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             case 2:
             m.name = r.string();
@@ -1153,22 +1153,22 @@ export namespace Message {
     }
 
     export type IEmoji = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
       description?: string;
     }
 
     export class Emoji {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
       description: string;
 
       constructor(v?: IEmoji) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
         this.description = v?.description || "";
       }
 
       static encode(m: Emoji, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.description.length) w.uint32(18).string(m.description);
         return w;
       }
@@ -1181,7 +1181,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             case 2:
             m.description = r.string();
@@ -1196,31 +1196,31 @@ export namespace Message {
     }
 
     export type INick = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
       nick?: string;
       peerKey?: Uint8Array;
-      viewedListing?: Message.IDirectoryRef;
+      viewedListing?: strims_chat_v1_Message_IDirectoryRef;
     }
 
     export class Nick {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
       nick: string;
       peerKey: Uint8Array;
-      viewedListing: Message.DirectoryRef | undefined;
+      viewedListing: strims_chat_v1_Message_DirectoryRef | undefined;
 
       constructor(v?: INick) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
         this.nick = v?.nick || "";
         this.peerKey = v?.peerKey || new Uint8Array();
-        this.viewedListing = v?.viewedListing && new Message.DirectoryRef(v.viewedListing);
+        this.viewedListing = v?.viewedListing && new strims_chat_v1_Message_DirectoryRef(v.viewedListing);
       }
 
       static encode(m: Nick, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.nick.length) w.uint32(18).string(m.nick);
         if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
-        if (m.viewedListing) Message.DirectoryRef.encode(m.viewedListing, w.uint32(34).fork()).ldelim();
+        if (m.viewedListing) strims_chat_v1_Message_DirectoryRef.encode(m.viewedListing, w.uint32(34).fork()).ldelim();
         return w;
       }
 
@@ -1232,7 +1232,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             case 2:
             m.nick = r.string();
@@ -1241,7 +1241,7 @@ export namespace Message {
             m.peerKey = r.bytes();
             break;
             case 4:
-            m.viewedListing = Message.DirectoryRef.decode(r, r.uint32());
+            m.viewedListing = strims_chat_v1_Message_DirectoryRef.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -1253,22 +1253,22 @@ export namespace Message {
     }
 
     export type ITag = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
       name?: string;
     }
 
     export class Tag {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
       name: string;
 
       constructor(v?: ITag) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
         this.name = v?.name || "";
       }
 
       static encode(m: Tag, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         if (m.name.length) w.uint32(18).string(m.name);
         return w;
       }
@@ -1281,7 +1281,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             case 2:
             m.name = r.string();
@@ -1296,19 +1296,19 @@ export namespace Message {
     }
 
     export type ICodeBlock = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
     }
 
     export class CodeBlock {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
 
       constructor(v?: ICodeBlock) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
       }
 
       static encode(m: CodeBlock, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         return w;
       }
 
@@ -1320,7 +1320,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -1332,19 +1332,19 @@ export namespace Message {
     }
 
     export type ISpoiler = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
     }
 
     export class Spoiler {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
 
       constructor(v?: ISpoiler) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
       }
 
       static encode(m: Spoiler, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         return w;
       }
 
@@ -1356,7 +1356,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -1368,19 +1368,19 @@ export namespace Message {
     }
 
     export type IGenericEntity = {
-      bounds?: Message.Entities.IBounds;
+      bounds?: strims_chat_v1_Message_Entities_IBounds;
     }
 
     export class GenericEntity {
-      bounds: Message.Entities.Bounds | undefined;
+      bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
 
       constructor(v?: IGenericEntity) {
-        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
       }
 
       static encode(m: GenericEntity, w?: Writer): Writer {
         if (!w) w = new Writer();
-        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
         return w;
       }
 
@@ -1392,7 +1392,7 @@ export namespace Message {
           const tag = r.uint32();
           switch (tag >> 3) {
             case 1:
-            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
             break;
             default:
             r.skipType(tag & 7);
@@ -1469,7 +1469,7 @@ export type IProfile = {
   serverId?: bigint;
   peerKey?: Uint8Array;
   alias?: string;
-  mutes?: Profile.IMute[];
+  mutes?: strims_chat_v1_Profile_IMute[];
   muteDeadline?: bigint;
 }
 
@@ -1478,7 +1478,7 @@ export class Profile {
   serverId: bigint;
   peerKey: Uint8Array;
   alias: string;
-  mutes: Profile.Mute[];
+  mutes: strims_chat_v1_Profile_Mute[];
   muteDeadline: bigint;
 
   constructor(v?: IProfile) {
@@ -1486,7 +1486,7 @@ export class Profile {
     this.serverId = v?.serverId || BigInt(0);
     this.peerKey = v?.peerKey || new Uint8Array();
     this.alias = v?.alias || "";
-    this.mutes = v?.mutes ? v.mutes.map(v => new Profile.Mute(v)) : [];
+    this.mutes = v?.mutes ? v.mutes.map(v => new strims_chat_v1_Profile_Mute(v)) : [];
     this.muteDeadline = v?.muteDeadline || BigInt(0);
   }
 
@@ -1496,7 +1496,7 @@ export class Profile {
     if (m.serverId) w.uint32(16).uint64(m.serverId);
     if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
     if (m.alias.length) w.uint32(34).string(m.alias);
-    for (const v of m.mutes) Profile.Mute.encode(v, w.uint32(42).fork()).ldelim();
+    for (const v of m.mutes) strims_chat_v1_Profile_Mute.encode(v, w.uint32(42).fork()).ldelim();
     if (m.muteDeadline) w.uint32(48).int64(m.muteDeadline);
     return w;
   }
@@ -1521,7 +1521,7 @@ export class Profile {
         m.alias = r.string();
         break;
         case 5:
-        m.mutes.push(Profile.Mute.decode(r, r.uint32()));
+        m.mutes.push(strims_chat_v1_Profile_Mute.decode(r, r.uint32()));
         break;
         case 6:
         m.muteDeadline = r.int64();
@@ -1604,14 +1604,14 @@ export type IUIConfig = {
   soundNotificationWhisper?: boolean;
   notificationHighlight?: boolean;
   soundNotificationHighlight?: boolean;
-  notificationSoundFile?: UIConfig.ISoundFile;
+  notificationSoundFile?: strims_chat_v1_UIConfig_ISoundFile;
   highlight?: boolean;
   customHighlight?: string;
-  highlights?: UIConfig.IHighlight[];
-  tags?: UIConfig.ITag[];
-  showRemoved?: UIConfig.ShowRemoved;
+  highlights?: strims_chat_v1_UIConfig_IHighlight[];
+  tags?: strims_chat_v1_UIConfig_ITag[];
+  showRemoved?: strims_chat_v1_UIConfig_ShowRemoved;
   showWhispersInChat?: boolean;
-  ignores?: UIConfig.IIgnore[];
+  ignores?: strims_chat_v1_UIConfig_IIgnore[];
   focusMentioned?: boolean;
   notificationTimeout?: boolean;
   ignoreMentions?: boolean;
@@ -1625,7 +1625,7 @@ export type IUIConfig = {
   formatterCombo?: boolean;
   emoteModifiers?: boolean;
   disableSpoilers?: boolean;
-  userPresenceIndicator?: UIConfig.UserPresenceIndicator;
+  userPresenceIndicator?: strims_chat_v1_UIConfig_UserPresenceIndicator;
   hiddenEmotes?: string[];
   shortenLinks?: boolean;
   compactEmoteSpacing?: boolean;
@@ -1641,14 +1641,14 @@ export class UIConfig {
   soundNotificationWhisper: boolean;
   notificationHighlight: boolean;
   soundNotificationHighlight: boolean;
-  notificationSoundFile: UIConfig.SoundFile | undefined;
+  notificationSoundFile: strims_chat_v1_UIConfig_SoundFile | undefined;
   highlight: boolean;
   customHighlight: string;
-  highlights: UIConfig.Highlight[];
-  tags: UIConfig.Tag[];
-  showRemoved: UIConfig.ShowRemoved;
+  highlights: strims_chat_v1_UIConfig_Highlight[];
+  tags: strims_chat_v1_UIConfig_Tag[];
+  showRemoved: strims_chat_v1_UIConfig_ShowRemoved;
   showWhispersInChat: boolean;
-  ignores: UIConfig.Ignore[];
+  ignores: strims_chat_v1_UIConfig_Ignore[];
   focusMentioned: boolean;
   notificationTimeout: boolean;
   ignoreMentions: boolean;
@@ -1662,7 +1662,7 @@ export class UIConfig {
   formatterCombo: boolean;
   emoteModifiers: boolean;
   disableSpoilers: boolean;
-  userPresenceIndicator: UIConfig.UserPresenceIndicator;
+  userPresenceIndicator: strims_chat_v1_UIConfig_UserPresenceIndicator;
   hiddenEmotes: string[];
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
@@ -1677,14 +1677,14 @@ export class UIConfig {
     this.soundNotificationWhisper = v?.soundNotificationWhisper || false;
     this.notificationHighlight = v?.notificationHighlight || false;
     this.soundNotificationHighlight = v?.soundNotificationHighlight || false;
-    this.notificationSoundFile = v?.notificationSoundFile && new UIConfig.SoundFile(v.notificationSoundFile);
+    this.notificationSoundFile = v?.notificationSoundFile && new strims_chat_v1_UIConfig_SoundFile(v.notificationSoundFile);
     this.highlight = v?.highlight || false;
     this.customHighlight = v?.customHighlight || "";
-    this.highlights = v?.highlights ? v.highlights.map(v => new UIConfig.Highlight(v)) : [];
-    this.tags = v?.tags ? v.tags.map(v => new UIConfig.Tag(v)) : [];
+    this.highlights = v?.highlights ? v.highlights.map(v => new strims_chat_v1_UIConfig_Highlight(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_UIConfig_Tag(v)) : [];
     this.showRemoved = v?.showRemoved || 0;
     this.showWhispersInChat = v?.showWhispersInChat || false;
-    this.ignores = v?.ignores ? v.ignores.map(v => new UIConfig.Ignore(v)) : [];
+    this.ignores = v?.ignores ? v.ignores.map(v => new strims_chat_v1_UIConfig_Ignore(v)) : [];
     this.focusMentioned = v?.focusMentioned || false;
     this.notificationTimeout = v?.notificationTimeout || false;
     this.ignoreMentions = v?.ignoreMentions || false;
@@ -1715,14 +1715,14 @@ export class UIConfig {
     if (m.soundNotificationWhisper) w.uint32(48).bool(m.soundNotificationWhisper);
     if (m.notificationHighlight) w.uint32(56).bool(m.notificationHighlight);
     if (m.soundNotificationHighlight) w.uint32(64).bool(m.soundNotificationHighlight);
-    if (m.notificationSoundFile) UIConfig.SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
+    if (m.notificationSoundFile) strims_chat_v1_UIConfig_SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
     if (m.highlight) w.uint32(80).bool(m.highlight);
     if (m.customHighlight.length) w.uint32(90).string(m.customHighlight);
-    for (const v of m.highlights) UIConfig.Highlight.encode(v, w.uint32(98).fork()).ldelim();
-    for (const v of m.tags) UIConfig.Tag.encode(v, w.uint32(106).fork()).ldelim();
+    for (const v of m.highlights) strims_chat_v1_UIConfig_Highlight.encode(v, w.uint32(98).fork()).ldelim();
+    for (const v of m.tags) strims_chat_v1_UIConfig_Tag.encode(v, w.uint32(106).fork()).ldelim();
     if (m.showRemoved) w.uint32(112).uint32(m.showRemoved);
     if (m.showWhispersInChat) w.uint32(120).bool(m.showWhispersInChat);
-    for (const v of m.ignores) UIConfig.Ignore.encode(v, w.uint32(130).fork()).ldelim();
+    for (const v of m.ignores) strims_chat_v1_UIConfig_Ignore.encode(v, w.uint32(130).fork()).ldelim();
     if (m.focusMentioned) w.uint32(136).bool(m.focusMentioned);
     if (m.notificationTimeout) w.uint32(144).bool(m.notificationTimeout);
     if (m.ignoreMentions) w.uint32(152).bool(m.ignoreMentions);
@@ -1776,7 +1776,7 @@ export class UIConfig {
         m.soundNotificationHighlight = r.bool();
         break;
         case 9:
-        m.notificationSoundFile = UIConfig.SoundFile.decode(r, r.uint32());
+        m.notificationSoundFile = strims_chat_v1_UIConfig_SoundFile.decode(r, r.uint32());
         break;
         case 10:
         m.highlight = r.bool();
@@ -1785,10 +1785,10 @@ export class UIConfig {
         m.customHighlight = r.string();
         break;
         case 12:
-        m.highlights.push(UIConfig.Highlight.decode(r, r.uint32()));
+        m.highlights.push(strims_chat_v1_UIConfig_Highlight.decode(r, r.uint32()));
         break;
         case 13:
-        m.tags.push(UIConfig.Tag.decode(r, r.uint32()));
+        m.tags.push(strims_chat_v1_UIConfig_Tag.decode(r, r.uint32()));
         break;
         case 14:
         m.showRemoved = r.uint32();
@@ -1797,7 +1797,7 @@ export class UIConfig {
         m.showWhispersInChat = r.bool();
         break;
         case 16:
-        m.ignores.push(UIConfig.Ignore.decode(r, r.uint32()));
+        m.ignores.push(strims_chat_v1_UIConfig_Ignore.decode(r, r.uint32()));
         break;
         case 17:
         m.focusMentioned = r.bool();
@@ -2064,22 +2064,22 @@ export namespace UIConfig {
 
 export type ICreateServerRequest = {
   networkKey?: Uint8Array;
-  room?: IRoom;
+  room?: strims_chat_v1_IRoom;
 }
 
 export class CreateServerRequest {
   networkKey: Uint8Array;
-  room: Room | undefined;
+  room: strims_chat_v1_Room | undefined;
 
   constructor(v?: ICreateServerRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.room = v?.room && new Room(v.room);
+    this.room = v?.room && new strims_chat_v1_Room(v.room);
   }
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey.length) w.uint32(10).bytes(m.networkKey);
-    if (m.room) Room.encode(m.room, w.uint32(18).fork()).ldelim();
+    if (m.room) strims_chat_v1_Room.encode(m.room, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -2094,7 +2094,7 @@ export class CreateServerRequest {
         m.networkKey = r.bytes();
         break;
         case 2:
-        m.room = Room.decode(r, r.uint32());
+        m.room = strims_chat_v1_Room.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2106,19 +2106,19 @@ export class CreateServerRequest {
 }
 
 export type ICreateServerResponse = {
-  server?: IServer;
+  server?: strims_chat_v1_IServer;
 }
 
 export class CreateServerResponse {
-  server: Server | undefined;
+  server: strims_chat_v1_Server | undefined;
 
   constructor(v?: ICreateServerResponse) {
-    this.server = v?.server && new Server(v.server);
+    this.server = v?.server && new strims_chat_v1_Server(v.server);
   }
 
   static encode(m: CreateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
+    if (m.server) strims_chat_v1_Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2130,7 +2130,7 @@ export class CreateServerResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.server = Server.decode(r, r.uint32());
+        m.server = strims_chat_v1_Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2144,25 +2144,25 @@ export class CreateServerResponse {
 export type IUpdateServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
-  room?: IRoom;
+  room?: strims_chat_v1_IRoom;
 }
 
 export class UpdateServerRequest {
   id: bigint;
   networkKey: Uint8Array;
-  room: Room | undefined;
+  room: strims_chat_v1_Room | undefined;
 
   constructor(v?: IUpdateServerRequest) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.room = v?.room && new Room(v.room);
+    this.room = v?.room && new strims_chat_v1_Room(v.room);
   }
 
   static encode(m: UpdateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
-    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
+    if (m.room) strims_chat_v1_Room.encode(m.room, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -2180,7 +2180,7 @@ export class UpdateServerRequest {
         m.networkKey = r.bytes();
         break;
         case 3:
-        m.room = Room.decode(r, r.uint32());
+        m.room = strims_chat_v1_Room.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2192,19 +2192,19 @@ export class UpdateServerRequest {
 }
 
 export type IUpdateServerResponse = {
-  server?: IServer;
+  server?: strims_chat_v1_IServer;
 }
 
 export class UpdateServerResponse {
-  server: Server | undefined;
+  server: strims_chat_v1_Server | undefined;
 
   constructor(v?: IUpdateServerResponse) {
-    this.server = v?.server && new Server(v.server);
+    this.server = v?.server && new strims_chat_v1_Server(v.server);
   }
 
   static encode(m: UpdateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
+    if (m.server) strims_chat_v1_Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2216,7 +2216,7 @@ export class UpdateServerResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.server = Server.decode(r, r.uint32());
+        m.server = strims_chat_v1_Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2319,19 +2319,19 @@ export class GetServerRequest {
 }
 
 export type IGetServerResponse = {
-  server?: IServer;
+  server?: strims_chat_v1_IServer;
 }
 
 export class GetServerResponse {
-  server: Server | undefined;
+  server: strims_chat_v1_Server | undefined;
 
   constructor(v?: IGetServerResponse) {
-    this.server = v?.server && new Server(v.server);
+    this.server = v?.server && new strims_chat_v1_Server(v.server);
   }
 
   static encode(m: GetServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
+    if (m.server) strims_chat_v1_Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2343,7 +2343,7 @@ export class GetServerResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.server = Server.decode(r, r.uint32());
+        m.server = strims_chat_v1_Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2374,19 +2374,19 @@ export class ListServersRequest {
 }
 
 export type IListServersResponse = {
-  servers?: IServer[];
+  servers?: strims_chat_v1_IServer[];
 }
 
 export class ListServersResponse {
-  servers: Server[];
+  servers: strims_chat_v1_Server[];
 
   constructor(v?: IListServersResponse) {
-    this.servers = v?.servers ? v.servers.map(v => new Server(v)) : [];
+    this.servers = v?.servers ? v.servers.map(v => new strims_chat_v1_Server(v)) : [];
   }
 
   static encode(m: ListServersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.servers) Server.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.servers) strims_chat_v1_Server.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2398,7 +2398,7 @@ export class ListServersResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.servers.push(Server.decode(r, r.uint32()));
+        m.servers.push(strims_chat_v1_Server.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -2412,37 +2412,37 @@ export class ListServersResponse {
 export type ICreateEmoteRequest = {
   serverId?: bigint;
   name?: string;
-  images?: IEmoteImage[];
+  images?: strims_chat_v1_IEmoteImage[];
   css?: string;
-  effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor;
+  effects?: strims_chat_v1_IEmoteEffect[];
+  contributor?: strims_chat_v1_IEmoteContributor;
 }
 
 export class CreateEmoteRequest {
   serverId: bigint;
   name: string;
-  images: EmoteImage[];
+  images: strims_chat_v1_EmoteImage[];
   css: string;
-  effects: EmoteEffect[];
-  contributor: EmoteContributor | undefined;
+  effects: strims_chat_v1_EmoteEffect[];
+  contributor: strims_chat_v1_EmoteContributor | undefined;
 
   constructor(v?: ICreateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
-    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
+    this.images = v?.images ? v.images.map(v => new strims_chat_v1_EmoteImage(v)) : [];
     this.css = v?.css || "";
-    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
-    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
+    this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
   }
 
   static encode(m: CreateEmoteRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     if (m.name.length) w.uint32(18).string(m.name);
-    for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
+    for (const v of m.images) strims_chat_v1_EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
     if (m.css.length) w.uint32(34).string(m.css);
-    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
-    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
+    for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -2460,16 +2460,16 @@ export class CreateEmoteRequest {
         m.name = r.string();
         break;
         case 3:
-        m.images.push(EmoteImage.decode(r, r.uint32()));
+        m.images.push(strims_chat_v1_EmoteImage.decode(r, r.uint32()));
         break;
         case 4:
         m.css = r.string();
         break;
         case 5:
-        m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        m.effects.push(strims_chat_v1_EmoteEffect.decode(r, r.uint32()));
         break;
         case 6:
-        m.contributor = EmoteContributor.decode(r, r.uint32());
+        m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2481,19 +2481,19 @@ export class CreateEmoteRequest {
 }
 
 export type ICreateEmoteResponse = {
-  emote?: IEmote;
+  emote?: strims_chat_v1_IEmote;
 }
 
 export class CreateEmoteResponse {
-  emote: Emote | undefined;
+  emote: strims_chat_v1_Emote | undefined;
 
   constructor(v?: ICreateEmoteResponse) {
-    this.emote = v?.emote && new Emote(v.emote);
+    this.emote = v?.emote && new strims_chat_v1_Emote(v.emote);
   }
 
   static encode(m: CreateEmoteResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    if (m.emote) strims_chat_v1_Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2505,7 +2505,7 @@ export class CreateEmoteResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.emote = Emote.decode(r, r.uint32());
+        m.emote = strims_chat_v1_Emote.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2520,29 +2520,29 @@ export type IUpdateEmoteRequest = {
   serverId?: bigint;
   id?: bigint;
   name?: string;
-  images?: IEmoteImage[];
+  images?: strims_chat_v1_IEmoteImage[];
   css?: string;
-  effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor;
+  effects?: strims_chat_v1_IEmoteEffect[];
+  contributor?: strims_chat_v1_IEmoteContributor;
 }
 
 export class UpdateEmoteRequest {
   serverId: bigint;
   id: bigint;
   name: string;
-  images: EmoteImage[];
+  images: strims_chat_v1_EmoteImage[];
   css: string;
-  effects: EmoteEffect[];
-  contributor: EmoteContributor | undefined;
+  effects: strims_chat_v1_EmoteEffect[];
+  contributor: strims_chat_v1_EmoteContributor | undefined;
 
   constructor(v?: IUpdateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
     this.id = v?.id || BigInt(0);
     this.name = v?.name || "";
-    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
+    this.images = v?.images ? v.images.map(v => new strims_chat_v1_EmoteImage(v)) : [];
     this.css = v?.css || "";
-    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
-    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
+    this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
   }
 
   static encode(m: UpdateEmoteRequest, w?: Writer): Writer {
@@ -2550,10 +2550,10 @@ export class UpdateEmoteRequest {
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     if (m.id) w.uint32(16).uint64(m.id);
     if (m.name.length) w.uint32(26).string(m.name);
-    for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
+    for (const v of m.images) strims_chat_v1_EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
     if (m.css.length) w.uint32(42).string(m.css);
-    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
-    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(58).fork()).ldelim();
+    for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
+    if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -2574,16 +2574,16 @@ export class UpdateEmoteRequest {
         m.name = r.string();
         break;
         case 4:
-        m.images.push(EmoteImage.decode(r, r.uint32()));
+        m.images.push(strims_chat_v1_EmoteImage.decode(r, r.uint32()));
         break;
         case 5:
         m.css = r.string();
         break;
         case 6:
-        m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        m.effects.push(strims_chat_v1_EmoteEffect.decode(r, r.uint32()));
         break;
         case 7:
-        m.contributor = EmoteContributor.decode(r, r.uint32());
+        m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2595,19 +2595,19 @@ export class UpdateEmoteRequest {
 }
 
 export type IUpdateEmoteResponse = {
-  emote?: IEmote;
+  emote?: strims_chat_v1_IEmote;
 }
 
 export class UpdateEmoteResponse {
-  emote: Emote | undefined;
+  emote: strims_chat_v1_Emote | undefined;
 
   constructor(v?: IUpdateEmoteResponse) {
-    this.emote = v?.emote && new Emote(v.emote);
+    this.emote = v?.emote && new strims_chat_v1_Emote(v.emote);
   }
 
   static encode(m: UpdateEmoteResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    if (m.emote) strims_chat_v1_Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2619,7 +2619,7 @@ export class UpdateEmoteResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.emote = Emote.decode(r, r.uint32());
+        m.emote = strims_chat_v1_Emote.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2729,19 +2729,19 @@ export class GetEmoteRequest {
 }
 
 export type IGetEmoteResponse = {
-  emote?: IEmote;
+  emote?: strims_chat_v1_IEmote;
 }
 
 export class GetEmoteResponse {
-  emote: Emote | undefined;
+  emote: strims_chat_v1_Emote | undefined;
 
   constructor(v?: IGetEmoteResponse) {
-    this.emote = v?.emote && new Emote(v.emote);
+    this.emote = v?.emote && new strims_chat_v1_Emote(v.emote);
   }
 
   static encode(m: GetEmoteResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    if (m.emote) strims_chat_v1_Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2753,7 +2753,7 @@ export class GetEmoteResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.emote = Emote.decode(r, r.uint32());
+        m.emote = strims_chat_v1_Emote.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2801,19 +2801,19 @@ export class ListEmotesRequest {
 }
 
 export type IListEmotesResponse = {
-  emotes?: IEmote[];
+  emotes?: strims_chat_v1_IEmote[];
 }
 
 export class ListEmotesResponse {
-  emotes: Emote[];
+  emotes: strims_chat_v1_Emote[];
 
   constructor(v?: IListEmotesResponse) {
-    this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
+    this.emotes = v?.emotes ? v.emotes.map(v => new strims_chat_v1_Emote(v)) : [];
   }
 
   static encode(m: ListEmotesResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.emotes) Emote.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.emotes) strims_chat_v1_Emote.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2825,7 +2825,7 @@ export class ListEmotesResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.emotes.push(Emote.decode(r, r.uint32()));
+        m.emotes.push(strims_chat_v1_Emote.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -2901,19 +2901,19 @@ export class CreateModifierRequest {
 }
 
 export type ICreateModifierResponse = {
-  modifier?: IModifier;
+  modifier?: strims_chat_v1_IModifier;
 }
 
 export class CreateModifierResponse {
-  modifier: Modifier | undefined;
+  modifier: strims_chat_v1_Modifier | undefined;
 
   constructor(v?: ICreateModifierResponse) {
-    this.modifier = v?.modifier && new Modifier(v.modifier);
+    this.modifier = v?.modifier && new strims_chat_v1_Modifier(v.modifier);
   }
 
   static encode(m: CreateModifierResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    if (m.modifier) strims_chat_v1_Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -2925,7 +2925,7 @@ export class CreateModifierResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.modifier = Modifier.decode(r, r.uint32());
+        m.modifier = strims_chat_v1_Modifier.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3008,19 +3008,19 @@ export class UpdateModifierRequest {
 }
 
 export type IUpdateModifierResponse = {
-  modifier?: IModifier;
+  modifier?: strims_chat_v1_IModifier;
 }
 
 export class UpdateModifierResponse {
-  modifier: Modifier | undefined;
+  modifier: strims_chat_v1_Modifier | undefined;
 
   constructor(v?: IUpdateModifierResponse) {
-    this.modifier = v?.modifier && new Modifier(v.modifier);
+    this.modifier = v?.modifier && new strims_chat_v1_Modifier(v.modifier);
   }
 
   static encode(m: UpdateModifierResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    if (m.modifier) strims_chat_v1_Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3032,7 +3032,7 @@ export class UpdateModifierResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.modifier = Modifier.decode(r, r.uint32());
+        m.modifier = strims_chat_v1_Modifier.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3142,19 +3142,19 @@ export class GetModifierRequest {
 }
 
 export type IGetModifierResponse = {
-  modifier?: IModifier;
+  modifier?: strims_chat_v1_IModifier;
 }
 
 export class GetModifierResponse {
-  modifier: Modifier | undefined;
+  modifier: strims_chat_v1_Modifier | undefined;
 
   constructor(v?: IGetModifierResponse) {
-    this.modifier = v?.modifier && new Modifier(v.modifier);
+    this.modifier = v?.modifier && new strims_chat_v1_Modifier(v.modifier);
   }
 
   static encode(m: GetModifierResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    if (m.modifier) strims_chat_v1_Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3166,7 +3166,7 @@ export class GetModifierResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.modifier = Modifier.decode(r, r.uint32());
+        m.modifier = strims_chat_v1_Modifier.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3214,19 +3214,19 @@ export class ListModifiersRequest {
 }
 
 export type IListModifiersResponse = {
-  modifiers?: IModifier[];
+  modifiers?: strims_chat_v1_IModifier[];
 }
 
 export class ListModifiersResponse {
-  modifiers: Modifier[];
+  modifiers: strims_chat_v1_Modifier[];
 
   constructor(v?: IListModifiersResponse) {
-    this.modifiers = v?.modifiers ? v.modifiers.map(v => new Modifier(v)) : [];
+    this.modifiers = v?.modifiers ? v.modifiers.map(v => new strims_chat_v1_Modifier(v)) : [];
   }
 
   static encode(m: ListModifiersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.modifiers) Modifier.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.modifiers) strims_chat_v1_Modifier.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3238,7 +3238,7 @@ export class ListModifiersResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.modifiers.push(Modifier.decode(r, r.uint32()));
+        m.modifiers.push(strims_chat_v1_Modifier.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -3307,19 +3307,19 @@ export class CreateTagRequest {
 }
 
 export type ICreateTagResponse = {
-  tag?: ITag;
+  tag?: strims_chat_v1_ITag;
 }
 
 export class CreateTagResponse {
-  tag: Tag | undefined;
+  tag: strims_chat_v1_Tag | undefined;
 
   constructor(v?: ICreateTagResponse) {
-    this.tag = v?.tag && new Tag(v.tag);
+    this.tag = v?.tag && new strims_chat_v1_Tag(v.tag);
   }
 
   static encode(m: CreateTagResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    if (m.tag) strims_chat_v1_Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3331,7 +3331,7 @@ export class CreateTagResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.tag = Tag.decode(r, r.uint32());
+        m.tag = strims_chat_v1_Tag.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3407,19 +3407,19 @@ export class UpdateTagRequest {
 }
 
 export type IUpdateTagResponse = {
-  tag?: ITag;
+  tag?: strims_chat_v1_ITag;
 }
 
 export class UpdateTagResponse {
-  tag: Tag | undefined;
+  tag: strims_chat_v1_Tag | undefined;
 
   constructor(v?: IUpdateTagResponse) {
-    this.tag = v?.tag && new Tag(v.tag);
+    this.tag = v?.tag && new strims_chat_v1_Tag(v.tag);
   }
 
   static encode(m: UpdateTagResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    if (m.tag) strims_chat_v1_Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3431,7 +3431,7 @@ export class UpdateTagResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.tag = Tag.decode(r, r.uint32());
+        m.tag = strims_chat_v1_Tag.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3541,19 +3541,19 @@ export class GetTagRequest {
 }
 
 export type IGetTagResponse = {
-  tag?: ITag;
+  tag?: strims_chat_v1_ITag;
 }
 
 export class GetTagResponse {
-  tag: Tag | undefined;
+  tag: strims_chat_v1_Tag | undefined;
 
   constructor(v?: IGetTagResponse) {
-    this.tag = v?.tag && new Tag(v.tag);
+    this.tag = v?.tag && new strims_chat_v1_Tag(v.tag);
   }
 
   static encode(m: GetTagResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    if (m.tag) strims_chat_v1_Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3565,7 +3565,7 @@ export class GetTagResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.tag = Tag.decode(r, r.uint32());
+        m.tag = strims_chat_v1_Tag.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3613,19 +3613,19 @@ export class ListTagsRequest {
 }
 
 export type IListTagsResponse = {
-  tags?: ITag[];
+  tags?: strims_chat_v1_ITag[];
 }
 
 export class ListTagsResponse {
-  tags: Tag[];
+  tags: strims_chat_v1_Tag[];
 
   constructor(v?: IListTagsResponse) {
-    this.tags = v?.tags ? v.tags.map(v => new Tag(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_Tag(v)) : [];
   }
 
   static encode(m: ListTagsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.tags) Tag.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.tags) strims_chat_v1_Tag.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3637,7 +3637,7 @@ export class ListTagsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.tags.push(Tag.decode(r, r.uint32()));
+        m.tags.push(strims_chat_v1_Tag.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -3792,13 +3792,13 @@ export class OpenClientResponse {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case OpenClientResponse.BodyCase.OPEN:
-      OpenClientResponse.Open.encode(m.body.open, w.uint32(8010).fork()).ldelim();
+      strims_chat_v1_OpenClientResponse_Open.encode(m.body.open, w.uint32(8010).fork()).ldelim();
       break;
       case OpenClientResponse.BodyCase.SERVER_EVENTS:
-      OpenClientResponse.ServerEvents.encode(m.body.serverEvents, w.uint32(8018).fork()).ldelim();
+      strims_chat_v1_OpenClientResponse_ServerEvents.encode(m.body.serverEvents, w.uint32(8018).fork()).ldelim();
       break;
       case OpenClientResponse.BodyCase.ASSET_BUNDLE:
-      AssetBundle.encode(m.body.assetBundle, w.uint32(8026).fork()).ldelim();
+      strims_chat_v1_AssetBundle.encode(m.body.assetBundle, w.uint32(8026).fork()).ldelim();
       break;
     }
     return w;
@@ -3812,13 +3812,13 @@ export class OpenClientResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.body = new OpenClientResponse.Body({ open: OpenClientResponse.Open.decode(r, r.uint32()) });
+        m.body = new OpenClientResponse.Body({ open: strims_chat_v1_OpenClientResponse_Open.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.body = new OpenClientResponse.Body({ serverEvents: OpenClientResponse.ServerEvents.decode(r, r.uint32()) });
+        m.body = new OpenClientResponse.Body({ serverEvents: strims_chat_v1_OpenClientResponse_ServerEvents.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.body = new OpenClientResponse.Body({ assetBundle: AssetBundle.decode(r, r.uint32()) });
+        m.body = new OpenClientResponse.Body({ assetBundle: strims_chat_v1_AssetBundle.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -3839,36 +3839,36 @@ export namespace OpenClientResponse {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: OpenClientResponse.IOpen }
-  |{ case?: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.IServerEvents }
-  |{ case?: BodyCase.ASSET_BUNDLE, assetBundle: IAssetBundle }
+  |{ case?: BodyCase.OPEN, open: strims_chat_v1_OpenClientResponse_IOpen }
+  |{ case?: BodyCase.SERVER_EVENTS, serverEvents: strims_chat_v1_OpenClientResponse_IServerEvents }
+  |{ case?: BodyCase.ASSET_BUNDLE, assetBundle: strims_chat_v1_IAssetBundle }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: OpenClientResponse.Open }
-  |{ case: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.ServerEvents }
-  |{ case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle }
+  |{ case: BodyCase.OPEN, open: strims_chat_v1_OpenClientResponse_Open }
+  |{ case: BodyCase.SERVER_EVENTS, serverEvents: strims_chat_v1_OpenClientResponse_ServerEvents }
+  |{ case: BodyCase.ASSET_BUNDLE, assetBundle: strims_chat_v1_AssetBundle }
   >;
 
   class BodyImpl {
-    open: OpenClientResponse.Open;
-    serverEvents: OpenClientResponse.ServerEvents;
-    assetBundle: AssetBundle;
+    open: strims_chat_v1_OpenClientResponse_Open;
+    serverEvents: strims_chat_v1_OpenClientResponse_ServerEvents;
+    assetBundle: strims_chat_v1_AssetBundle;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new OpenClientResponse.Open(v.open);
+        this.open = new strims_chat_v1_OpenClientResponse_Open(v.open);
       } else
       if (v && "serverEvents" in v) {
         this.case = BodyCase.SERVER_EVENTS;
-        this.serverEvents = new OpenClientResponse.ServerEvents(v.serverEvents);
+        this.serverEvents = new strims_chat_v1_OpenClientResponse_ServerEvents(v.serverEvents);
       } else
       if (v && "assetBundle" in v) {
         this.case = BodyCase.ASSET_BUNDLE;
-        this.assetBundle = new AssetBundle(v.assetBundle);
+        this.assetBundle = new strims_chat_v1_AssetBundle(v.assetBundle);
       }
     }
   }
@@ -3876,9 +3876,9 @@ export namespace OpenClientResponse {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: OpenClientResponse.IOpen } ? { case: BodyCase.OPEN, open: OpenClientResponse.Open } :
-    T extends { serverEvents: OpenClientResponse.IServerEvents } ? { case: BodyCase.SERVER_EVENTS, serverEvents: OpenClientResponse.ServerEvents } :
-    T extends { assetBundle: IAssetBundle } ? { case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle } :
+    T extends { open: strims_chat_v1_OpenClientResponse_IOpen } ? { case: BodyCase.OPEN, open: strims_chat_v1_OpenClientResponse_Open } :
+    T extends { serverEvents: strims_chat_v1_OpenClientResponse_IServerEvents } ? { case: BodyCase.SERVER_EVENTS, serverEvents: strims_chat_v1_OpenClientResponse_ServerEvents } :
+    T extends { assetBundle: strims_chat_v1_IAssetBundle } ? { case: BodyCase.ASSET_BUNDLE, assetBundle: strims_chat_v1_AssetBundle } :
     never
     >;
   };
@@ -3903,19 +3903,19 @@ export namespace OpenClientResponse {
   }
 
   export type IServerEvents = {
-    events?: IServerEvent[];
+    events?: strims_chat_v1_IServerEvent[];
   }
 
   export class ServerEvents {
-    events: ServerEvent[];
+    events: strims_chat_v1_ServerEvent[];
 
     constructor(v?: IServerEvents) {
-      this.events = v?.events ? v.events.map(v => new ServerEvent(v)) : [];
+      this.events = v?.events ? v.events.map(v => new strims_chat_v1_ServerEvent(v)) : [];
     }
 
     static encode(m: ServerEvents, w?: Writer): Writer {
       if (!w) w = new Writer();
-      for (const v of m.events) ServerEvent.encode(v, w.uint32(10).fork()).ldelim();
+      for (const v of m.events) strims_chat_v1_ServerEvent.encode(v, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -3927,7 +3927,7 @@ export namespace OpenClientResponse {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.events.push(ServerEvent.decode(r, r.uint32()));
+          m.events.push(strims_chat_v1_ServerEvent.decode(r, r.uint32()));
           break;
           default:
           r.skipType(tag & 7);
@@ -4367,23 +4367,23 @@ export class ListWhispersRequest {
 }
 
 export type IListWhispersResponse = {
-  thread?: IWhisperThread;
-  whispers?: IWhisperRecord[];
+  thread?: strims_chat_v1_IWhisperThread;
+  whispers?: strims_chat_v1_IWhisperRecord[];
 }
 
 export class ListWhispersResponse {
-  thread: WhisperThread | undefined;
-  whispers: WhisperRecord[];
+  thread: strims_chat_v1_WhisperThread | undefined;
+  whispers: strims_chat_v1_WhisperRecord[];
 
   constructor(v?: IListWhispersResponse) {
-    this.thread = v?.thread && new WhisperThread(v.thread);
-    this.whispers = v?.whispers ? v.whispers.map(v => new WhisperRecord(v)) : [];
+    this.thread = v?.thread && new strims_chat_v1_WhisperThread(v.thread);
+    this.whispers = v?.whispers ? v.whispers.map(v => new strims_chat_v1_WhisperRecord(v)) : [];
   }
 
   static encode(m: ListWhispersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.thread) WhisperThread.encode(m.thread, w.uint32(10).fork()).ldelim();
-    for (const v of m.whispers) WhisperRecord.encode(v, w.uint32(18).fork()).ldelim();
+    if (m.thread) strims_chat_v1_WhisperThread.encode(m.thread, w.uint32(10).fork()).ldelim();
+    for (const v of m.whispers) strims_chat_v1_WhisperRecord.encode(v, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -4395,10 +4395,10 @@ export class ListWhispersResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.thread = WhisperThread.decode(r, r.uint32());
+        m.thread = strims_chat_v1_WhisperThread.decode(r, r.uint32());
         break;
         case 2:
-        m.whispers.push(WhisperRecord.decode(r, r.uint32()));
+        m.whispers.push(strims_chat_v1_WhisperRecord.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -4447,13 +4447,13 @@ export class WatchWhispersResponse {
     if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
     switch (m.body.case) {
       case WatchWhispersResponse.BodyCase.THREAD_UPDATE:
-      WhisperThread.encode(m.body.threadUpdate, w.uint32(8010).fork()).ldelim();
+      strims_chat_v1_WhisperThread.encode(m.body.threadUpdate, w.uint32(8010).fork()).ldelim();
       break;
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
-      WhisperRecord.encode(m.body.whisperUpdate, w.uint32(8018).fork()).ldelim();
+      strims_chat_v1_WhisperRecord.encode(m.body.whisperUpdate, w.uint32(8018).fork()).ldelim();
       break;
       case WatchWhispersResponse.BodyCase.WHISPER_DELETE:
-      WatchWhispersResponse.WhisperDelete.encode(m.body.whisperDelete, w.uint32(8026).fork()).ldelim();
+      strims_chat_v1_WatchWhispersResponse_WhisperDelete.encode(m.body.whisperDelete, w.uint32(8026).fork()).ldelim();
       break;
     }
     return w;
@@ -4470,13 +4470,13 @@ export class WatchWhispersResponse {
         m.peerKey = r.bytes();
         break;
         case 1001:
-        m.body = new WatchWhispersResponse.Body({ threadUpdate: WhisperThread.decode(r, r.uint32()) });
+        m.body = new WatchWhispersResponse.Body({ threadUpdate: strims_chat_v1_WhisperThread.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.body = new WatchWhispersResponse.Body({ whisperUpdate: WhisperRecord.decode(r, r.uint32()) });
+        m.body = new WatchWhispersResponse.Body({ whisperUpdate: strims_chat_v1_WhisperRecord.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.body = new WatchWhispersResponse.Body({ whisperDelete: WatchWhispersResponse.WhisperDelete.decode(r, r.uint32()) });
+        m.body = new WatchWhispersResponse.Body({ whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -4497,36 +4497,36 @@ export namespace WatchWhispersResponse {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.THREAD_UPDATE, threadUpdate: IWhisperThread }
-  |{ case?: BodyCase.WHISPER_UPDATE, whisperUpdate: IWhisperRecord }
-  |{ case?: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.IWhisperDelete }
+  |{ case?: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_IWhisperThread }
+  |{ case?: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_IWhisperRecord }
+  |{ case?: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_IWhisperDelete }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.THREAD_UPDATE, threadUpdate: WhisperThread }
-  |{ case: BodyCase.WHISPER_UPDATE, whisperUpdate: WhisperRecord }
-  |{ case: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.WhisperDelete }
+  |{ case: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_WhisperThread }
+  |{ case: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_WhisperRecord }
+  |{ case: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete }
   >;
 
   class BodyImpl {
-    threadUpdate: WhisperThread;
-    whisperUpdate: WhisperRecord;
-    whisperDelete: WatchWhispersResponse.WhisperDelete;
+    threadUpdate: strims_chat_v1_WhisperThread;
+    whisperUpdate: strims_chat_v1_WhisperRecord;
+    whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "threadUpdate" in v) {
         this.case = BodyCase.THREAD_UPDATE;
-        this.threadUpdate = new WhisperThread(v.threadUpdate);
+        this.threadUpdate = new strims_chat_v1_WhisperThread(v.threadUpdate);
       } else
       if (v && "whisperUpdate" in v) {
         this.case = BodyCase.WHISPER_UPDATE;
-        this.whisperUpdate = new WhisperRecord(v.whisperUpdate);
+        this.whisperUpdate = new strims_chat_v1_WhisperRecord(v.whisperUpdate);
       } else
       if (v && "whisperDelete" in v) {
         this.case = BodyCase.WHISPER_DELETE;
-        this.whisperDelete = new WatchWhispersResponse.WhisperDelete(v.whisperDelete);
+        this.whisperDelete = new strims_chat_v1_WatchWhispersResponse_WhisperDelete(v.whisperDelete);
       }
     }
   }
@@ -4534,9 +4534,9 @@ export namespace WatchWhispersResponse {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { threadUpdate: IWhisperThread } ? { case: BodyCase.THREAD_UPDATE, threadUpdate: WhisperThread } :
-    T extends { whisperUpdate: IWhisperRecord } ? { case: BodyCase.WHISPER_UPDATE, whisperUpdate: WhisperRecord } :
-    T extends { whisperDelete: WatchWhispersResponse.IWhisperDelete } ? { case: BodyCase.WHISPER_DELETE, whisperDelete: WatchWhispersResponse.WhisperDelete } :
+    T extends { threadUpdate: strims_chat_v1_IWhisperThread } ? { case: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_WhisperThread } :
+    T extends { whisperUpdate: strims_chat_v1_IWhisperRecord } ? { case: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_WhisperRecord } :
+    T extends { whisperDelete: strims_chat_v1_WatchWhispersResponse_IWhisperDelete } ? { case: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete } :
     never
     >;
   };
@@ -4642,19 +4642,19 @@ export class MarkWhispersReadResponse {
 }
 
 export type ISetUIConfigRequest = {
-  uiConfig?: IUIConfig;
+  uiConfig?: strims_chat_v1_IUIConfig;
 }
 
 export class SetUIConfigRequest {
-  uiConfig: UIConfig | undefined;
+  uiConfig: strims_chat_v1_UIConfig | undefined;
 
   constructor(v?: ISetUIConfigRequest) {
-    this.uiConfig = v?.uiConfig && new UIConfig(v.uiConfig);
+    this.uiConfig = v?.uiConfig && new strims_chat_v1_UIConfig(v.uiConfig);
   }
 
   static encode(m: SetUIConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.uiConfig) UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
+    if (m.uiConfig) strims_chat_v1_UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -4666,7 +4666,7 @@ export class SetUIConfigRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.uiConfig = UIConfig.decode(r, r.uint32());
+        m.uiConfig = strims_chat_v1_UIConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -4716,19 +4716,19 @@ export class WatchUIConfigRequest {
 }
 
 export type IWatchUIConfigResponse = {
-  uiConfig?: IUIConfig;
+  uiConfig?: strims_chat_v1_IUIConfig;
 }
 
 export class WatchUIConfigResponse {
-  uiConfig: UIConfig | undefined;
+  uiConfig: strims_chat_v1_UIConfig | undefined;
 
   constructor(v?: IWatchUIConfigResponse) {
-    this.uiConfig = v?.uiConfig && new UIConfig(v.uiConfig);
+    this.uiConfig = v?.uiConfig && new strims_chat_v1_UIConfig(v.uiConfig);
   }
 
   static encode(m: WatchUIConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.uiConfig) UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
+    if (m.uiConfig) strims_chat_v1_UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -4740,7 +4740,7 @@ export class WatchUIConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.uiConfig = UIConfig.decode(r, r.uint32());
+        m.uiConfig = strims_chat_v1_UIConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -5483,8 +5483,8 @@ export type IWhisperRecord = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
   peerKey?: Uint8Array;
-  state?: WhisperRecord.State;
-  message?: IMessage;
+  state?: strims_chat_v1_WhisperRecord_State;
+  message?: strims_chat_v1_IMessage;
 }
 
 export class WhisperRecord {
@@ -5493,8 +5493,8 @@ export class WhisperRecord {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
   peerKey: Uint8Array;
-  state: WhisperRecord.State;
-  message: Message | undefined;
+  state: strims_chat_v1_WhisperRecord_State;
+  message: strims_chat_v1_Message | undefined;
 
   constructor(v?: IWhisperRecord) {
     this.id = v?.id || BigInt(0);
@@ -5503,7 +5503,7 @@ export class WhisperRecord {
     this.serverKey = v?.serverKey || new Uint8Array();
     this.peerKey = v?.peerKey || new Uint8Array();
     this.state = v?.state || 0;
-    this.message = v?.message && new Message(v.message);
+    this.message = v?.message && new strims_chat_v1_Message(v.message);
   }
 
   static encode(m: WhisperRecord, w?: Writer): Writer {
@@ -5514,7 +5514,7 @@ export class WhisperRecord {
     if (m.serverKey.length) w.uint32(34).bytes(m.serverKey);
     if (m.peerKey.length) w.uint32(42).bytes(m.peerKey);
     if (m.state) w.uint32(48).uint32(m.state);
-    if (m.message) Message.encode(m.message, w.uint32(58).fork()).ldelim();
+    if (m.message) strims_chat_v1_Message.encode(m.message, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -5544,7 +5544,7 @@ export class WhisperRecord {
         m.state = r.uint32();
         break;
         case 7:
-        m.message = Message.decode(r, r.uint32());
+        m.message = strims_chat_v1_Message.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -5636,3 +5636,761 @@ export enum EmoteScale {
   EMOTE_SCALE_2X = 1,
   EMOTE_SCALE_4X = 2,
 }
+/* @internal */
+export const strims_chat_v1_ServerEvent = ServerEvent;
+/* @internal */
+export type strims_chat_v1_ServerEvent = ServerEvent;
+/* @internal */
+export type strims_chat_v1_IServerEvent = IServerEvent;
+/* @internal */
+export const strims_chat_v1_Room = Room;
+/* @internal */
+export type strims_chat_v1_Room = Room;
+/* @internal */
+export type strims_chat_v1_IRoom = IRoom;
+/* @internal */
+export const strims_chat_v1_Server = Server;
+/* @internal */
+export type strims_chat_v1_Server = Server;
+/* @internal */
+export type strims_chat_v1_IServer = IServer;
+/* @internal */
+export const strims_chat_v1_EmoteImage = EmoteImage;
+/* @internal */
+export type strims_chat_v1_EmoteImage = EmoteImage;
+/* @internal */
+export type strims_chat_v1_IEmoteImage = IEmoteImage;
+/* @internal */
+export const strims_chat_v1_EmoteEffect = EmoteEffect;
+/* @internal */
+export type strims_chat_v1_EmoteEffect = EmoteEffect;
+/* @internal */
+export type strims_chat_v1_IEmoteEffect = IEmoteEffect;
+/* @internal */
+export const strims_chat_v1_EmoteContributor = EmoteContributor;
+/* @internal */
+export type strims_chat_v1_EmoteContributor = EmoteContributor;
+/* @internal */
+export type strims_chat_v1_IEmoteContributor = IEmoteContributor;
+/* @internal */
+export const strims_chat_v1_Emote = Emote;
+/* @internal */
+export type strims_chat_v1_Emote = Emote;
+/* @internal */
+export type strims_chat_v1_IEmote = IEmote;
+/* @internal */
+export const strims_chat_v1_Modifier = Modifier;
+/* @internal */
+export type strims_chat_v1_Modifier = Modifier;
+/* @internal */
+export type strims_chat_v1_IModifier = IModifier;
+/* @internal */
+export const strims_chat_v1_Tag = Tag;
+/* @internal */
+export type strims_chat_v1_Tag = Tag;
+/* @internal */
+export type strims_chat_v1_ITag = ITag;
+/* @internal */
+export const strims_chat_v1_AssetBundle = AssetBundle;
+/* @internal */
+export type strims_chat_v1_AssetBundle = AssetBundle;
+/* @internal */
+export type strims_chat_v1_IAssetBundle = IAssetBundle;
+/* @internal */
+export const strims_chat_v1_Message = Message;
+/* @internal */
+export type strims_chat_v1_Message = Message;
+/* @internal */
+export type strims_chat_v1_IMessage = IMessage;
+/* @internal */
+export const strims_chat_v1_Profile = Profile;
+/* @internal */
+export type strims_chat_v1_Profile = Profile;
+/* @internal */
+export type strims_chat_v1_IProfile = IProfile;
+/* @internal */
+export const strims_chat_v1_UIConfig = UIConfig;
+/* @internal */
+export type strims_chat_v1_UIConfig = UIConfig;
+/* @internal */
+export type strims_chat_v1_IUIConfig = IUIConfig;
+/* @internal */
+export const strims_chat_v1_CreateServerRequest = CreateServerRequest;
+/* @internal */
+export type strims_chat_v1_CreateServerRequest = CreateServerRequest;
+/* @internal */
+export type strims_chat_v1_ICreateServerRequest = ICreateServerRequest;
+/* @internal */
+export const strims_chat_v1_CreateServerResponse = CreateServerResponse;
+/* @internal */
+export type strims_chat_v1_CreateServerResponse = CreateServerResponse;
+/* @internal */
+export type strims_chat_v1_ICreateServerResponse = ICreateServerResponse;
+/* @internal */
+export const strims_chat_v1_UpdateServerRequest = UpdateServerRequest;
+/* @internal */
+export type strims_chat_v1_UpdateServerRequest = UpdateServerRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateServerRequest = IUpdateServerRequest;
+/* @internal */
+export const strims_chat_v1_UpdateServerResponse = UpdateServerResponse;
+/* @internal */
+export type strims_chat_v1_UpdateServerResponse = UpdateServerResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateServerResponse = IUpdateServerResponse;
+/* @internal */
+export const strims_chat_v1_DeleteServerRequest = DeleteServerRequest;
+/* @internal */
+export type strims_chat_v1_DeleteServerRequest = DeleteServerRequest;
+/* @internal */
+export type strims_chat_v1_IDeleteServerRequest = IDeleteServerRequest;
+/* @internal */
+export const strims_chat_v1_DeleteServerResponse = DeleteServerResponse;
+/* @internal */
+export type strims_chat_v1_DeleteServerResponse = DeleteServerResponse;
+/* @internal */
+export type strims_chat_v1_IDeleteServerResponse = IDeleteServerResponse;
+/* @internal */
+export const strims_chat_v1_GetServerRequest = GetServerRequest;
+/* @internal */
+export type strims_chat_v1_GetServerRequest = GetServerRequest;
+/* @internal */
+export type strims_chat_v1_IGetServerRequest = IGetServerRequest;
+/* @internal */
+export const strims_chat_v1_GetServerResponse = GetServerResponse;
+/* @internal */
+export type strims_chat_v1_GetServerResponse = GetServerResponse;
+/* @internal */
+export type strims_chat_v1_IGetServerResponse = IGetServerResponse;
+/* @internal */
+export const strims_chat_v1_ListServersRequest = ListServersRequest;
+/* @internal */
+export type strims_chat_v1_ListServersRequest = ListServersRequest;
+/* @internal */
+export type strims_chat_v1_IListServersRequest = IListServersRequest;
+/* @internal */
+export const strims_chat_v1_ListServersResponse = ListServersResponse;
+/* @internal */
+export type strims_chat_v1_ListServersResponse = ListServersResponse;
+/* @internal */
+export type strims_chat_v1_IListServersResponse = IListServersResponse;
+/* @internal */
+export const strims_chat_v1_CreateEmoteRequest = CreateEmoteRequest;
+/* @internal */
+export type strims_chat_v1_CreateEmoteRequest = CreateEmoteRequest;
+/* @internal */
+export type strims_chat_v1_ICreateEmoteRequest = ICreateEmoteRequest;
+/* @internal */
+export const strims_chat_v1_CreateEmoteResponse = CreateEmoteResponse;
+/* @internal */
+export type strims_chat_v1_CreateEmoteResponse = CreateEmoteResponse;
+/* @internal */
+export type strims_chat_v1_ICreateEmoteResponse = ICreateEmoteResponse;
+/* @internal */
+export const strims_chat_v1_UpdateEmoteRequest = UpdateEmoteRequest;
+/* @internal */
+export type strims_chat_v1_UpdateEmoteRequest = UpdateEmoteRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateEmoteRequest = IUpdateEmoteRequest;
+/* @internal */
+export const strims_chat_v1_UpdateEmoteResponse = UpdateEmoteResponse;
+/* @internal */
+export type strims_chat_v1_UpdateEmoteResponse = UpdateEmoteResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateEmoteResponse = IUpdateEmoteResponse;
+/* @internal */
+export const strims_chat_v1_DeleteEmoteRequest = DeleteEmoteRequest;
+/* @internal */
+export type strims_chat_v1_DeleteEmoteRequest = DeleteEmoteRequest;
+/* @internal */
+export type strims_chat_v1_IDeleteEmoteRequest = IDeleteEmoteRequest;
+/* @internal */
+export const strims_chat_v1_DeleteEmoteResponse = DeleteEmoteResponse;
+/* @internal */
+export type strims_chat_v1_DeleteEmoteResponse = DeleteEmoteResponse;
+/* @internal */
+export type strims_chat_v1_IDeleteEmoteResponse = IDeleteEmoteResponse;
+/* @internal */
+export const strims_chat_v1_GetEmoteRequest = GetEmoteRequest;
+/* @internal */
+export type strims_chat_v1_GetEmoteRequest = GetEmoteRequest;
+/* @internal */
+export type strims_chat_v1_IGetEmoteRequest = IGetEmoteRequest;
+/* @internal */
+export const strims_chat_v1_GetEmoteResponse = GetEmoteResponse;
+/* @internal */
+export type strims_chat_v1_GetEmoteResponse = GetEmoteResponse;
+/* @internal */
+export type strims_chat_v1_IGetEmoteResponse = IGetEmoteResponse;
+/* @internal */
+export const strims_chat_v1_ListEmotesRequest = ListEmotesRequest;
+/* @internal */
+export type strims_chat_v1_ListEmotesRequest = ListEmotesRequest;
+/* @internal */
+export type strims_chat_v1_IListEmotesRequest = IListEmotesRequest;
+/* @internal */
+export const strims_chat_v1_ListEmotesResponse = ListEmotesResponse;
+/* @internal */
+export type strims_chat_v1_ListEmotesResponse = ListEmotesResponse;
+/* @internal */
+export type strims_chat_v1_IListEmotesResponse = IListEmotesResponse;
+/* @internal */
+export const strims_chat_v1_CreateModifierRequest = CreateModifierRequest;
+/* @internal */
+export type strims_chat_v1_CreateModifierRequest = CreateModifierRequest;
+/* @internal */
+export type strims_chat_v1_ICreateModifierRequest = ICreateModifierRequest;
+/* @internal */
+export const strims_chat_v1_CreateModifierResponse = CreateModifierResponse;
+/* @internal */
+export type strims_chat_v1_CreateModifierResponse = CreateModifierResponse;
+/* @internal */
+export type strims_chat_v1_ICreateModifierResponse = ICreateModifierResponse;
+/* @internal */
+export const strims_chat_v1_UpdateModifierRequest = UpdateModifierRequest;
+/* @internal */
+export type strims_chat_v1_UpdateModifierRequest = UpdateModifierRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateModifierRequest = IUpdateModifierRequest;
+/* @internal */
+export const strims_chat_v1_UpdateModifierResponse = UpdateModifierResponse;
+/* @internal */
+export type strims_chat_v1_UpdateModifierResponse = UpdateModifierResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateModifierResponse = IUpdateModifierResponse;
+/* @internal */
+export const strims_chat_v1_DeleteModifierRequest = DeleteModifierRequest;
+/* @internal */
+export type strims_chat_v1_DeleteModifierRequest = DeleteModifierRequest;
+/* @internal */
+export type strims_chat_v1_IDeleteModifierRequest = IDeleteModifierRequest;
+/* @internal */
+export const strims_chat_v1_DeleteModifierResponse = DeleteModifierResponse;
+/* @internal */
+export type strims_chat_v1_DeleteModifierResponse = DeleteModifierResponse;
+/* @internal */
+export type strims_chat_v1_IDeleteModifierResponse = IDeleteModifierResponse;
+/* @internal */
+export const strims_chat_v1_GetModifierRequest = GetModifierRequest;
+/* @internal */
+export type strims_chat_v1_GetModifierRequest = GetModifierRequest;
+/* @internal */
+export type strims_chat_v1_IGetModifierRequest = IGetModifierRequest;
+/* @internal */
+export const strims_chat_v1_GetModifierResponse = GetModifierResponse;
+/* @internal */
+export type strims_chat_v1_GetModifierResponse = GetModifierResponse;
+/* @internal */
+export type strims_chat_v1_IGetModifierResponse = IGetModifierResponse;
+/* @internal */
+export const strims_chat_v1_ListModifiersRequest = ListModifiersRequest;
+/* @internal */
+export type strims_chat_v1_ListModifiersRequest = ListModifiersRequest;
+/* @internal */
+export type strims_chat_v1_IListModifiersRequest = IListModifiersRequest;
+/* @internal */
+export const strims_chat_v1_ListModifiersResponse = ListModifiersResponse;
+/* @internal */
+export type strims_chat_v1_ListModifiersResponse = ListModifiersResponse;
+/* @internal */
+export type strims_chat_v1_IListModifiersResponse = IListModifiersResponse;
+/* @internal */
+export const strims_chat_v1_CreateTagRequest = CreateTagRequest;
+/* @internal */
+export type strims_chat_v1_CreateTagRequest = CreateTagRequest;
+/* @internal */
+export type strims_chat_v1_ICreateTagRequest = ICreateTagRequest;
+/* @internal */
+export const strims_chat_v1_CreateTagResponse = CreateTagResponse;
+/* @internal */
+export type strims_chat_v1_CreateTagResponse = CreateTagResponse;
+/* @internal */
+export type strims_chat_v1_ICreateTagResponse = ICreateTagResponse;
+/* @internal */
+export const strims_chat_v1_UpdateTagRequest = UpdateTagRequest;
+/* @internal */
+export type strims_chat_v1_UpdateTagRequest = UpdateTagRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateTagRequest = IUpdateTagRequest;
+/* @internal */
+export const strims_chat_v1_UpdateTagResponse = UpdateTagResponse;
+/* @internal */
+export type strims_chat_v1_UpdateTagResponse = UpdateTagResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateTagResponse = IUpdateTagResponse;
+/* @internal */
+export const strims_chat_v1_DeleteTagRequest = DeleteTagRequest;
+/* @internal */
+export type strims_chat_v1_DeleteTagRequest = DeleteTagRequest;
+/* @internal */
+export type strims_chat_v1_IDeleteTagRequest = IDeleteTagRequest;
+/* @internal */
+export const strims_chat_v1_DeleteTagResponse = DeleteTagResponse;
+/* @internal */
+export type strims_chat_v1_DeleteTagResponse = DeleteTagResponse;
+/* @internal */
+export type strims_chat_v1_IDeleteTagResponse = IDeleteTagResponse;
+/* @internal */
+export const strims_chat_v1_GetTagRequest = GetTagRequest;
+/* @internal */
+export type strims_chat_v1_GetTagRequest = GetTagRequest;
+/* @internal */
+export type strims_chat_v1_IGetTagRequest = IGetTagRequest;
+/* @internal */
+export const strims_chat_v1_GetTagResponse = GetTagResponse;
+/* @internal */
+export type strims_chat_v1_GetTagResponse = GetTagResponse;
+/* @internal */
+export type strims_chat_v1_IGetTagResponse = IGetTagResponse;
+/* @internal */
+export const strims_chat_v1_ListTagsRequest = ListTagsRequest;
+/* @internal */
+export type strims_chat_v1_ListTagsRequest = ListTagsRequest;
+/* @internal */
+export type strims_chat_v1_IListTagsRequest = IListTagsRequest;
+/* @internal */
+export const strims_chat_v1_ListTagsResponse = ListTagsResponse;
+/* @internal */
+export type strims_chat_v1_ListTagsResponse = ListTagsResponse;
+/* @internal */
+export type strims_chat_v1_IListTagsResponse = IListTagsResponse;
+/* @internal */
+export const strims_chat_v1_SyncAssetsRequest = SyncAssetsRequest;
+/* @internal */
+export type strims_chat_v1_SyncAssetsRequest = SyncAssetsRequest;
+/* @internal */
+export type strims_chat_v1_ISyncAssetsRequest = ISyncAssetsRequest;
+/* @internal */
+export const strims_chat_v1_SyncAssetsResponse = SyncAssetsResponse;
+/* @internal */
+export type strims_chat_v1_SyncAssetsResponse = SyncAssetsResponse;
+/* @internal */
+export type strims_chat_v1_ISyncAssetsResponse = ISyncAssetsResponse;
+/* @internal */
+export const strims_chat_v1_OpenClientRequest = OpenClientRequest;
+/* @internal */
+export type strims_chat_v1_OpenClientRequest = OpenClientRequest;
+/* @internal */
+export type strims_chat_v1_IOpenClientRequest = IOpenClientRequest;
+/* @internal */
+export const strims_chat_v1_OpenClientResponse = OpenClientResponse;
+/* @internal */
+export type strims_chat_v1_OpenClientResponse = OpenClientResponse;
+/* @internal */
+export type strims_chat_v1_IOpenClientResponse = IOpenClientResponse;
+/* @internal */
+export const strims_chat_v1_ClientSendMessageRequest = ClientSendMessageRequest;
+/* @internal */
+export type strims_chat_v1_ClientSendMessageRequest = ClientSendMessageRequest;
+/* @internal */
+export type strims_chat_v1_IClientSendMessageRequest = IClientSendMessageRequest;
+/* @internal */
+export const strims_chat_v1_ClientSendMessageResponse = ClientSendMessageResponse;
+/* @internal */
+export type strims_chat_v1_ClientSendMessageResponse = ClientSendMessageResponse;
+/* @internal */
+export type strims_chat_v1_IClientSendMessageResponse = IClientSendMessageResponse;
+/* @internal */
+export const strims_chat_v1_ClientMuteRequest = ClientMuteRequest;
+/* @internal */
+export type strims_chat_v1_ClientMuteRequest = ClientMuteRequest;
+/* @internal */
+export type strims_chat_v1_IClientMuteRequest = IClientMuteRequest;
+/* @internal */
+export const strims_chat_v1_ClientMuteResponse = ClientMuteResponse;
+/* @internal */
+export type strims_chat_v1_ClientMuteResponse = ClientMuteResponse;
+/* @internal */
+export type strims_chat_v1_IClientMuteResponse = IClientMuteResponse;
+/* @internal */
+export const strims_chat_v1_ClientUnmuteRequest = ClientUnmuteRequest;
+/* @internal */
+export type strims_chat_v1_ClientUnmuteRequest = ClientUnmuteRequest;
+/* @internal */
+export type strims_chat_v1_IClientUnmuteRequest = IClientUnmuteRequest;
+/* @internal */
+export const strims_chat_v1_ClientUnmuteResponse = ClientUnmuteResponse;
+/* @internal */
+export type strims_chat_v1_ClientUnmuteResponse = ClientUnmuteResponse;
+/* @internal */
+export type strims_chat_v1_IClientUnmuteResponse = IClientUnmuteResponse;
+/* @internal */
+export const strims_chat_v1_ClientGetMuteRequest = ClientGetMuteRequest;
+/* @internal */
+export type strims_chat_v1_ClientGetMuteRequest = ClientGetMuteRequest;
+/* @internal */
+export type strims_chat_v1_IClientGetMuteRequest = IClientGetMuteRequest;
+/* @internal */
+export const strims_chat_v1_ClientGetMuteResponse = ClientGetMuteResponse;
+/* @internal */
+export type strims_chat_v1_ClientGetMuteResponse = ClientGetMuteResponse;
+/* @internal */
+export type strims_chat_v1_IClientGetMuteResponse = IClientGetMuteResponse;
+/* @internal */
+export const strims_chat_v1_WhisperRequest = WhisperRequest;
+/* @internal */
+export type strims_chat_v1_WhisperRequest = WhisperRequest;
+/* @internal */
+export type strims_chat_v1_IWhisperRequest = IWhisperRequest;
+/* @internal */
+export const strims_chat_v1_WhisperResponse = WhisperResponse;
+/* @internal */
+export type strims_chat_v1_WhisperResponse = WhisperResponse;
+/* @internal */
+export type strims_chat_v1_IWhisperResponse = IWhisperResponse;
+/* @internal */
+export const strims_chat_v1_ListWhispersRequest = ListWhispersRequest;
+/* @internal */
+export type strims_chat_v1_ListWhispersRequest = ListWhispersRequest;
+/* @internal */
+export type strims_chat_v1_IListWhispersRequest = IListWhispersRequest;
+/* @internal */
+export const strims_chat_v1_ListWhispersResponse = ListWhispersResponse;
+/* @internal */
+export type strims_chat_v1_ListWhispersResponse = ListWhispersResponse;
+/* @internal */
+export type strims_chat_v1_IListWhispersResponse = IListWhispersResponse;
+/* @internal */
+export const strims_chat_v1_WatchWhispersRequest = WatchWhispersRequest;
+/* @internal */
+export type strims_chat_v1_WatchWhispersRequest = WatchWhispersRequest;
+/* @internal */
+export type strims_chat_v1_IWatchWhispersRequest = IWatchWhispersRequest;
+/* @internal */
+export const strims_chat_v1_WatchWhispersResponse = WatchWhispersResponse;
+/* @internal */
+export type strims_chat_v1_WatchWhispersResponse = WatchWhispersResponse;
+/* @internal */
+export type strims_chat_v1_IWatchWhispersResponse = IWatchWhispersResponse;
+/* @internal */
+export const strims_chat_v1_MarkWhispersReadRequest = MarkWhispersReadRequest;
+/* @internal */
+export type strims_chat_v1_MarkWhispersReadRequest = MarkWhispersReadRequest;
+/* @internal */
+export type strims_chat_v1_IMarkWhispersReadRequest = IMarkWhispersReadRequest;
+/* @internal */
+export const strims_chat_v1_MarkWhispersReadResponse = MarkWhispersReadResponse;
+/* @internal */
+export type strims_chat_v1_MarkWhispersReadResponse = MarkWhispersReadResponse;
+/* @internal */
+export type strims_chat_v1_IMarkWhispersReadResponse = IMarkWhispersReadResponse;
+/* @internal */
+export const strims_chat_v1_SetUIConfigRequest = SetUIConfigRequest;
+/* @internal */
+export type strims_chat_v1_SetUIConfigRequest = SetUIConfigRequest;
+/* @internal */
+export type strims_chat_v1_ISetUIConfigRequest = ISetUIConfigRequest;
+/* @internal */
+export const strims_chat_v1_SetUIConfigResponse = SetUIConfigResponse;
+/* @internal */
+export type strims_chat_v1_SetUIConfigResponse = SetUIConfigResponse;
+/* @internal */
+export type strims_chat_v1_ISetUIConfigResponse = ISetUIConfigResponse;
+/* @internal */
+export const strims_chat_v1_WatchUIConfigRequest = WatchUIConfigRequest;
+/* @internal */
+export type strims_chat_v1_WatchUIConfigRequest = WatchUIConfigRequest;
+/* @internal */
+export type strims_chat_v1_IWatchUIConfigRequest = IWatchUIConfigRequest;
+/* @internal */
+export const strims_chat_v1_WatchUIConfigResponse = WatchUIConfigResponse;
+/* @internal */
+export type strims_chat_v1_WatchUIConfigResponse = WatchUIConfigResponse;
+/* @internal */
+export type strims_chat_v1_IWatchUIConfigResponse = IWatchUIConfigResponse;
+/* @internal */
+export const strims_chat_v1_IgnoreRequest = IgnoreRequest;
+/* @internal */
+export type strims_chat_v1_IgnoreRequest = IgnoreRequest;
+/* @internal */
+export type strims_chat_v1_IIgnoreRequest = IIgnoreRequest;
+/* @internal */
+export const strims_chat_v1_IgnoreResponse = IgnoreResponse;
+/* @internal */
+export type strims_chat_v1_IgnoreResponse = IgnoreResponse;
+/* @internal */
+export type strims_chat_v1_IIgnoreResponse = IIgnoreResponse;
+/* @internal */
+export const strims_chat_v1_UnignoreRequest = UnignoreRequest;
+/* @internal */
+export type strims_chat_v1_UnignoreRequest = UnignoreRequest;
+/* @internal */
+export type strims_chat_v1_IUnignoreRequest = IUnignoreRequest;
+/* @internal */
+export const strims_chat_v1_UnignoreResponse = UnignoreResponse;
+/* @internal */
+export type strims_chat_v1_UnignoreResponse = UnignoreResponse;
+/* @internal */
+export type strims_chat_v1_IUnignoreResponse = IUnignoreResponse;
+/* @internal */
+export const strims_chat_v1_HighlightRequest = HighlightRequest;
+/* @internal */
+export type strims_chat_v1_HighlightRequest = HighlightRequest;
+/* @internal */
+export type strims_chat_v1_IHighlightRequest = IHighlightRequest;
+/* @internal */
+export const strims_chat_v1_HighlightResponse = HighlightResponse;
+/* @internal */
+export type strims_chat_v1_HighlightResponse = HighlightResponse;
+/* @internal */
+export type strims_chat_v1_IHighlightResponse = IHighlightResponse;
+/* @internal */
+export const strims_chat_v1_UnhighlightRequest = UnhighlightRequest;
+/* @internal */
+export type strims_chat_v1_UnhighlightRequest = UnhighlightRequest;
+/* @internal */
+export type strims_chat_v1_IUnhighlightRequest = IUnhighlightRequest;
+/* @internal */
+export const strims_chat_v1_UnhighlightResponse = UnhighlightResponse;
+/* @internal */
+export type strims_chat_v1_UnhighlightResponse = UnhighlightResponse;
+/* @internal */
+export type strims_chat_v1_IUnhighlightResponse = IUnhighlightResponse;
+/* @internal */
+export const strims_chat_v1_TagRequest = TagRequest;
+/* @internal */
+export type strims_chat_v1_TagRequest = TagRequest;
+/* @internal */
+export type strims_chat_v1_ITagRequest = ITagRequest;
+/* @internal */
+export const strims_chat_v1_TagResponse = TagResponse;
+/* @internal */
+export type strims_chat_v1_TagResponse = TagResponse;
+/* @internal */
+export type strims_chat_v1_ITagResponse = ITagResponse;
+/* @internal */
+export const strims_chat_v1_UntagRequest = UntagRequest;
+/* @internal */
+export type strims_chat_v1_UntagRequest = UntagRequest;
+/* @internal */
+export type strims_chat_v1_IUntagRequest = IUntagRequest;
+/* @internal */
+export const strims_chat_v1_UntagResponse = UntagResponse;
+/* @internal */
+export type strims_chat_v1_UntagResponse = UntagResponse;
+/* @internal */
+export type strims_chat_v1_IUntagResponse = IUntagResponse;
+/* @internal */
+export const strims_chat_v1_SendMessageRequest = SendMessageRequest;
+/* @internal */
+export type strims_chat_v1_SendMessageRequest = SendMessageRequest;
+/* @internal */
+export type strims_chat_v1_ISendMessageRequest = ISendMessageRequest;
+/* @internal */
+export const strims_chat_v1_SendMessageResponse = SendMessageResponse;
+/* @internal */
+export type strims_chat_v1_SendMessageResponse = SendMessageResponse;
+/* @internal */
+export type strims_chat_v1_ISendMessageResponse = ISendMessageResponse;
+/* @internal */
+export const strims_chat_v1_MuteRequest = MuteRequest;
+/* @internal */
+export type strims_chat_v1_MuteRequest = MuteRequest;
+/* @internal */
+export type strims_chat_v1_IMuteRequest = IMuteRequest;
+/* @internal */
+export const strims_chat_v1_MuteResponse = MuteResponse;
+/* @internal */
+export type strims_chat_v1_MuteResponse = MuteResponse;
+/* @internal */
+export type strims_chat_v1_IMuteResponse = IMuteResponse;
+/* @internal */
+export const strims_chat_v1_UnmuteRequest = UnmuteRequest;
+/* @internal */
+export type strims_chat_v1_UnmuteRequest = UnmuteRequest;
+/* @internal */
+export type strims_chat_v1_IUnmuteRequest = IUnmuteRequest;
+/* @internal */
+export const strims_chat_v1_UnmuteResponse = UnmuteResponse;
+/* @internal */
+export type strims_chat_v1_UnmuteResponse = UnmuteResponse;
+/* @internal */
+export type strims_chat_v1_IUnmuteResponse = IUnmuteResponse;
+/* @internal */
+export const strims_chat_v1_GetMuteRequest = GetMuteRequest;
+/* @internal */
+export type strims_chat_v1_GetMuteRequest = GetMuteRequest;
+/* @internal */
+export type strims_chat_v1_IGetMuteRequest = IGetMuteRequest;
+/* @internal */
+export const strims_chat_v1_GetMuteResponse = GetMuteResponse;
+/* @internal */
+export type strims_chat_v1_GetMuteResponse = GetMuteResponse;
+/* @internal */
+export type strims_chat_v1_IGetMuteResponse = IGetMuteResponse;
+/* @internal */
+export const strims_chat_v1_WhisperThread = WhisperThread;
+/* @internal */
+export type strims_chat_v1_WhisperThread = WhisperThread;
+/* @internal */
+export type strims_chat_v1_IWhisperThread = IWhisperThread;
+/* @internal */
+export const strims_chat_v1_WhisperRecord = WhisperRecord;
+/* @internal */
+export type strims_chat_v1_WhisperRecord = WhisperRecord;
+/* @internal */
+export type strims_chat_v1_IWhisperRecord = IWhisperRecord;
+/* @internal */
+export const strims_chat_v1_WhisperSendMessageRequest = WhisperSendMessageRequest;
+/* @internal */
+export type strims_chat_v1_WhisperSendMessageRequest = WhisperSendMessageRequest;
+/* @internal */
+export type strims_chat_v1_IWhisperSendMessageRequest = IWhisperSendMessageRequest;
+/* @internal */
+export const strims_chat_v1_WhisperSendMessageResponse = WhisperSendMessageResponse;
+/* @internal */
+export type strims_chat_v1_WhisperSendMessageResponse = WhisperSendMessageResponse;
+/* @internal */
+export type strims_chat_v1_IWhisperSendMessageResponse = IWhisperSendMessageResponse;
+/* @internal */
+export const strims_chat_v1_EmoteEffect_CustomCSS = EmoteEffect.CustomCSS;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_CustomCSS = EmoteEffect.CustomCSS;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_ICustomCSS = EmoteEffect.ICustomCSS;
+/* @internal */
+export const strims_chat_v1_EmoteEffect_SpriteAnimation = EmoteEffect.SpriteAnimation;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_SpriteAnimation = EmoteEffect.SpriteAnimation;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_ISpriteAnimation = EmoteEffect.ISpriteAnimation;
+/* @internal */
+export const strims_chat_v1_EmoteEffect_DefaultModifiers = EmoteEffect.DefaultModifiers;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_DefaultModifiers = EmoteEffect.DefaultModifiers;
+/* @internal */
+export type strims_chat_v1_EmoteEffect_IDefaultModifiers = EmoteEffect.IDefaultModifiers;
+/* @internal */
+export const strims_chat_v1_Message_Entities = Message.Entities;
+/* @internal */
+export type strims_chat_v1_Message_Entities = Message.Entities;
+/* @internal */
+export type strims_chat_v1_Message_IEntities = Message.IEntities;
+/* @internal */
+export const strims_chat_v1_Message_DirectoryRef = Message.DirectoryRef;
+/* @internal */
+export type strims_chat_v1_Message_DirectoryRef = Message.DirectoryRef;
+/* @internal */
+export type strims_chat_v1_Message_IDirectoryRef = Message.IDirectoryRef;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Bounds = Message.Entities.Bounds;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Bounds = Message.Entities.Bounds;
+/* @internal */
+export type strims_chat_v1_Message_Entities_IBounds = Message.Entities.IBounds;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Link = Message.Entities.Link;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Link = Message.Entities.Link;
+/* @internal */
+export type strims_chat_v1_Message_Entities_ILink = Message.Entities.ILink;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Emote = Message.Entities.Emote;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Emote = Message.Entities.Emote;
+/* @internal */
+export type strims_chat_v1_Message_Entities_IEmote = Message.Entities.IEmote;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Emoji = Message.Entities.Emoji;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Emoji = Message.Entities.Emoji;
+/* @internal */
+export type strims_chat_v1_Message_Entities_IEmoji = Message.Entities.IEmoji;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Nick = Message.Entities.Nick;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Nick = Message.Entities.Nick;
+/* @internal */
+export type strims_chat_v1_Message_Entities_INick = Message.Entities.INick;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Tag = Message.Entities.Tag;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Tag = Message.Entities.Tag;
+/* @internal */
+export type strims_chat_v1_Message_Entities_ITag = Message.Entities.ITag;
+/* @internal */
+export const strims_chat_v1_Message_Entities_CodeBlock = Message.Entities.CodeBlock;
+/* @internal */
+export type strims_chat_v1_Message_Entities_CodeBlock = Message.Entities.CodeBlock;
+/* @internal */
+export type strims_chat_v1_Message_Entities_ICodeBlock = Message.Entities.ICodeBlock;
+/* @internal */
+export const strims_chat_v1_Message_Entities_Spoiler = Message.Entities.Spoiler;
+/* @internal */
+export type strims_chat_v1_Message_Entities_Spoiler = Message.Entities.Spoiler;
+/* @internal */
+export type strims_chat_v1_Message_Entities_ISpoiler = Message.Entities.ISpoiler;
+/* @internal */
+export const strims_chat_v1_Message_Entities_GenericEntity = Message.Entities.GenericEntity;
+/* @internal */
+export type strims_chat_v1_Message_Entities_GenericEntity = Message.Entities.GenericEntity;
+/* @internal */
+export type strims_chat_v1_Message_Entities_IGenericEntity = Message.Entities.IGenericEntity;
+/* @internal */
+export const strims_chat_v1_Profile_Mute = Profile.Mute;
+/* @internal */
+export type strims_chat_v1_Profile_Mute = Profile.Mute;
+/* @internal */
+export type strims_chat_v1_Profile_IMute = Profile.IMute;
+/* @internal */
+export const strims_chat_v1_UIConfig_SoundFile = UIConfig.SoundFile;
+/* @internal */
+export type strims_chat_v1_UIConfig_SoundFile = UIConfig.SoundFile;
+/* @internal */
+export type strims_chat_v1_UIConfig_ISoundFile = UIConfig.ISoundFile;
+/* @internal */
+export const strims_chat_v1_UIConfig_Highlight = UIConfig.Highlight;
+/* @internal */
+export type strims_chat_v1_UIConfig_Highlight = UIConfig.Highlight;
+/* @internal */
+export type strims_chat_v1_UIConfig_IHighlight = UIConfig.IHighlight;
+/* @internal */
+export const strims_chat_v1_UIConfig_Tag = UIConfig.Tag;
+/* @internal */
+export type strims_chat_v1_UIConfig_Tag = UIConfig.Tag;
+/* @internal */
+export type strims_chat_v1_UIConfig_ITag = UIConfig.ITag;
+/* @internal */
+export const strims_chat_v1_UIConfig_Ignore = UIConfig.Ignore;
+/* @internal */
+export type strims_chat_v1_UIConfig_Ignore = UIConfig.Ignore;
+/* @internal */
+export type strims_chat_v1_UIConfig_IIgnore = UIConfig.IIgnore;
+/* @internal */
+export const strims_chat_v1_OpenClientResponse_Open = OpenClientResponse.Open;
+/* @internal */
+export type strims_chat_v1_OpenClientResponse_Open = OpenClientResponse.Open;
+/* @internal */
+export type strims_chat_v1_OpenClientResponse_IOpen = OpenClientResponse.IOpen;
+/* @internal */
+export const strims_chat_v1_OpenClientResponse_ServerEvents = OpenClientResponse.ServerEvents;
+/* @internal */
+export type strims_chat_v1_OpenClientResponse_ServerEvents = OpenClientResponse.ServerEvents;
+/* @internal */
+export type strims_chat_v1_OpenClientResponse_IServerEvents = OpenClientResponse.IServerEvents;
+/* @internal */
+export const strims_chat_v1_WatchWhispersResponse_WhisperDelete = WatchWhispersResponse.WhisperDelete;
+/* @internal */
+export type strims_chat_v1_WatchWhispersResponse_WhisperDelete = WatchWhispersResponse.WhisperDelete;
+/* @internal */
+export type strims_chat_v1_WatchWhispersResponse_IWhisperDelete = WatchWhispersResponse.IWhisperDelete;
+/* @internal */
+export const strims_chat_v1_EmoteFileType = EmoteFileType;
+/* @internal */
+export type strims_chat_v1_EmoteFileType = EmoteFileType;
+/* @internal */
+export const strims_chat_v1_EmoteScale = EmoteScale;
+/* @internal */
+export type strims_chat_v1_EmoteScale = EmoteScale;
+/* @internal */
+export const strims_chat_v1_UIConfig_ShowRemoved = UIConfig.ShowRemoved;
+/* @internal */
+export type strims_chat_v1_UIConfig_ShowRemoved = UIConfig.ShowRemoved;
+/* @internal */
+export const strims_chat_v1_UIConfig_UserPresenceIndicator = UIConfig.UserPresenceIndicator;
+/* @internal */
+export type strims_chat_v1_UIConfig_UserPresenceIndicator = UIConfig.UserPresenceIndicator;
+/* @internal */
+export const strims_chat_v1_WhisperRecord_State = WhisperRecord.State;
+/* @internal */
+export type strims_chat_v1_WhisperRecord_State = WhisperRecord.State;

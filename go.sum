@@ -67,6 +67,8 @@ github.com/MemeLabs/chat-parser v1.0.5 h1:XwbAicgQ78ZIo/PTFHUTjfVziPLDu/PZnGG8iN
 github.com/MemeLabs/chat-parser v1.0.5/go.mod h1:8AtJL7KlAt2u4DkoGI+Bu1PyFscRf5UtA4wdCnxsfxU=
 github.com/MemeLabs/protobuf v0.3.1 h1:Tq+C7lRxM0/bkIyKrqrtEn7R3cmcALixNUKl1XNvLf4=
 github.com/MemeLabs/protobuf v0.3.1/go.mod h1:rfSWx6XpOad3uRIi2wr99ZzjvrTwkf4DTVpB10tDS/o=
+github.com/MemeLabs/protobuf v0.3.3 h1:DLWCnjAYX1FqhWtgh38mCnlqjNtOCTppsmbDpeJdrvs=
+github.com/MemeLabs/protobuf v0.3.3/go.mod h1:rfSWx6XpOad3uRIi2wr99ZzjvrTwkf4DTVpB10tDS/o=
 github.com/Microsoft/go-winio v0.5.1 h1:aPJp2QD7OOrhO5tQXqQoGSJc+DjDtWTGLOmNyAm6FgY=
 github.com/Microsoft/go-winio v0.5.1/go.mod h1:JPGBdM1cNvN/6ISo+n8V5iA4v8pBzdOpzfwIujj1a84=
 github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46/go.mod h1:3wb06e3pkSAbeQ52E9H9iFoQsEEwGN64994WTCIhntQ=
