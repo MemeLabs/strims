@@ -5,6 +5,7 @@ package session
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/MemeLabs/strims/internal/app"
 	"github.com/MemeLabs/strims/internal/dao"
@@ -15,6 +16,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/queue"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -27,12 +29,14 @@ type Session struct {
 
 	Profile *profilev1.Profile
 	Store   *dao.ProfileStore
+	Queue   queue.Queue
 	App     app.Control
 }
 
 func NewManager(
 	logger *zap.Logger,
 	store kv.BlobStore,
+	queue queue.Transport,
 	newVPN VPNFunc,
 	broker network.Broker,
 	httpmux *httputil.MapServeMux,
@@ -40,6 +44,7 @@ func NewManager(
 	return &Manager{
 		logger:   logger,
 		store:    store,
+		queue:    queue,
 		newVPN:   newVPN,
 		broker:   broker,
 		httpmux:  httpmux,
@@ -50,6 +55,7 @@ func NewManager(
 type Manager struct {
 	logger   *zap.Logger
 	store    kv.BlobStore
+	queue    queue.Transport
 	newVPN   VPNFunc
 	broker   network.Broker
 	httpmux  *httputil.MapServeMux
@@ -61,12 +67,17 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 		return session, nil
 	}
 
-	observers := &event.Observers{}
-
 	storageKey, err := dao.NewStorageKeyFromBytes(profileKey, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	queue, err := t.queue.Open(strconv.FormatUint(profileID, 10))
+	if err != nil {
+		return nil, err
+	}
+	observers := event.NewObservers(t.logger, queue, storageKey)
+
 	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: observers})
 
 	profile, err := dao.Profile.Get(store)
@@ -86,6 +97,7 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 	session := &Session{
 		Profile: profile,
 		Store:   store,
+		Queue:   queue,
 		App:     app,
 	}
 	t.sessions[profileID] = session

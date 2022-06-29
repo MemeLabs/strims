@@ -24,6 +24,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/gobridge"
 	"github.com/MemeLabs/strims/pkg/httputil"
+	"github.com/MemeLabs/strims/pkg/queue/memory"
 	"github.com/MemeLabs/strims/pkg/randutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
@@ -89,6 +90,7 @@ func initDefault(bridge js.Value, bus wasmio.Bus) {
 	dao.Logger = logger
 
 	store := wasmio.NewKVStore(bridge)
+	queue := memory.NewTransport()
 
 	broker, err := network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
 	if err != nil {
@@ -108,7 +110,7 @@ func initDefault(bridge js.Value, bus wasmio.Bus) {
 	// TODO: expose via service worker
 	httpmux := httputil.NewMapServeMux()
 
-	sessionManager := session.NewManager(logger, store, newVPN, broker, httpmux)
+	sessionManager := session.NewManager(logger, store, queue, newVPN, broker, httpmux)
 
 	srv := frontend.Server{
 		Store:          store,

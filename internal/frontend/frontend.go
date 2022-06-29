@@ -14,6 +14,7 @@ import (
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/queue"
 	"go.uber.org/zap"
 )
 
@@ -46,6 +47,7 @@ type ServiceParams struct {
 	Logger  *zap.Logger
 	Profile *profilev1.Profile
 	Store   *dao.ProfileStore
+	Queue   queue.Queue
 	App     app.Control
 }
 
@@ -71,6 +73,7 @@ func serviceBinder(
 				Logger:  logger,
 				Profile: session.Profile,
 				Store:   session.Store,
+				Queue:   session.Queue,
 				App:     session.App,
 			})
 		}

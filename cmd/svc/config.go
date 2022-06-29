@@ -73,6 +73,12 @@ type Config struct {
 			ConnStr Optional[string] `yaml:"connStr"`
 		} `yaml:"postgres"`
 	} `yaml:"storage"`
+	Queue struct {
+		Adapter  Optional[string] `yaml:"adapter"`
+		Postgres struct {
+			ConnStr Optional[string] `yaml:"connStr"`
+		} `yaml:"postgres"`
+	} `yaml:"queue"`
 	HTTP struct {
 		Address Optional[string] `yaml:"address"`
 		TLS     struct {

@@ -128,7 +128,13 @@ func runCmd(fs Flags) error {
 	}
 	closers = append(closers, store)
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
+	queue, err := openQueue(cfg)
+	if err != nil {
+		return err
+	}
+	closers = append(closers, queue)
+
+	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpmux)
 
 	for _, s := range cfg.Session.Headless {
 		_, err := sessionManager.GetOrCreateSession(s.ID, s.Key)

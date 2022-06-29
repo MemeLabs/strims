@@ -238,8 +238,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const ref = useRef<HTMLDivElement>();
 
   useDrag(
-    ({ swipe: [, sy] }) => {
-      if (sy === -1) {
+    ({ dragging, movement: [mx, my] }) => {
+      if (!dragging && my < -50 && Math.abs(mx) < 50) {
         emitMessage();
       }
     },

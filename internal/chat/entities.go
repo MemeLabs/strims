@@ -80,7 +80,6 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 	return e
 }
 
-// recirsively extracts entities
 func addEntitiesFromSpan(e *chatv1.Message_Entities, span *parser.Span) {
 	switch span.Type {
 	case parser.SpanCode:
