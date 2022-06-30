@@ -221,3 +221,79 @@ body {
     border: 1px solid #333;
   }
 }
+
+// ---
+.radial_menu_page {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.chat_mockup__test {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 420px;
+}
+
+.radial_menu {
+  box-shadow: var(--shadow-elevation-3);
+  z-index: var(--z-index-menu);
+  margin: -150px -150px;
+
+  &,
+  &::after,
+  &::before,
+  &__ring {
+    position: absolute;
+    height: 300px;
+    width: 300px;
+    border-radius: 100%;
+  }
+
+  &::after,
+  &::before {
+    content: "";
+    display: block;
+    background: var(--color-opac-b-12);
+  }
+
+  &::after {
+    mask-image: radial-gradient(farthest-side at center, transparent 97%, black 98%);
+    z-index: calc(var(--z-index-menu) + 1);
+  }
+  &::before {
+    mask-image: radial-gradient(
+      farthest-side at center,
+      transparent 39%,
+      black 40%,
+      black 41%,
+      transparent 42%
+    );
+    z-index: calc(var(--z-index-menu) + 1);
+  }
+
+  &__ring {
+    mask-image: radial-gradient(
+      farthest-side at center,
+      transparent 40%,
+      rgba(0, 0, 0, 0.6) 41%,
+      black 90%
+    );
+    z-index: calc(var(--z-index-menu) + 2);
+  }
+
+  --background-color: var(--color-slate-4);
+  --background-color-active: var(--color-slate-1);
+
+  .chat__emote {
+    top: calc(-0.5 * var(--height));
+    left: calc(-0.5 * var(--width));
+    position: absolute;
+    transform: translate(var(--menu-x), var(--menu-y)) scale(var(--menu-scale));
+    transition: transform var(--timing-medium) ease-out;
+    z-index: calc(var(--z-index-menu) + 2);
+    cursor: pointer;
+  }
+}
