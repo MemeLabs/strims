@@ -19,17 +19,17 @@ import (
 const transactionTimeout = 10 * time.Second
 
 type Config struct {
-	ConnStr string
-	Logger  *zap.Logger
+	ConnStr       string
+	Logger        *zap.Logger
+	EnableLogging bool
 }
 
-// NewStore ...
-func NewStoreConfig(cfg *Config) (kv.BlobStore, error) {
+func NewStoreConfig(cfg Config) (kv.BlobStore, error) {
 	pcfg, err := pgxpool.ParseConfig(cfg.ConnStr)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Logger != nil {
+	if cfg.EnableLogging && cfg.Logger != nil {
 		pcfg.ConnConfig.Logger = zapadapter.NewLogger(cfg.Logger)
 	}
 
@@ -41,7 +41,7 @@ func NewStoreConfig(cfg *Config) (kv.BlobStore, error) {
 }
 
 func NewStore(connStr string) (kv.BlobStore, error) {
-	return NewStoreConfig(&Config{ConnStr: connStr})
+	return NewStoreConfig(Config{ConnStr: connStr})
 }
 
 // Store ...

@@ -70,13 +70,15 @@ type Config struct {
 			Path Optional[string] `yaml:"path"`
 		} `yaml:"bbolt"`
 		Postgres struct {
-			ConnStr Optional[string] `yaml:"connStr"`
+			ConnStr       Optional[string] `yaml:"connStr"`
+			EnableLogging bool             `yaml:"enableLogging"`
 		} `yaml:"postgres"`
 	} `yaml:"storage"`
 	Queue struct {
 		Adapter  Optional[string] `yaml:"adapter"`
 		Postgres struct {
-			ConnStr Optional[string] `yaml:"connStr"`
+			ConnStr       Optional[string] `yaml:"connStr"`
+			EnableLogging bool             `yaml:"enableLogging"`
 		} `yaml:"postgres"`
 	} `yaml:"queue"`
 	HTTP struct {

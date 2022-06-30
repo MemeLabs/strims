@@ -122,13 +122,13 @@ func runCmd(fs Flags) error {
 		return vpn.New(logger, host)
 	}
 
-	store, err := openDB(cfg)
+	store, err := openDB(logger, cfg)
 	if err != nil {
 		return err
 	}
 	closers = append(closers, store)
 
-	queue, err := openQueue(cfg)
+	queue, err := openQueue(logger, cfg)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func addProfileCmd(fs Flags) error {
 		return err
 	}
 
-	store, err := openDB(cfg)
+	store, err := openDB(nil, cfg)
 	if err != nil {
 		return err
 	}

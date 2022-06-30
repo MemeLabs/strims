@@ -4,6 +4,8 @@
 package event
 
 import (
+	"errors"
+
 	"github.com/MemeLabs/strims/pkg/event"
 	"github.com/MemeLabs/strims/pkg/queue"
 	"go.uber.org/zap"
@@ -40,7 +42,9 @@ type Observers struct {
 func (o *Observers) readQueue() {
 	for {
 		e, err := o.readQueueEvent()
-		if err != nil {
+		if errors.Is(err, queue.ErrTransportClosed) {
+			return
+		} else if err != nil {
 			o.logger.Error("reading global event queue", zap.Error(err))
 			continue
 		}

@@ -12,8 +12,8 @@ import (
 
 	"github.com/MemeLabs/strims/pkg/queue"
 	"github.com/MemeLabs/strims/pkg/queue/memory"
-	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
+	"github.com/avast/retry-go/v4"
 	"github.com/jackc/pgx/v4/log/zapadapter"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.uber.org/zap"
@@ -23,17 +23,17 @@ const postgresGCIntervalMins = 10
 const transactionTimeout = 10 * time.Second
 
 type Config struct {
-	ConnStr string
-	Logger  *zap.Logger
+	ConnStr       string
+	Logger        *zap.Logger
+	EnableLogging bool
 }
 
-// NewTransportConfig ...
-func NewTransportConfig(cfg *Config) (queue.Transport, error) {
+func NewTransport(cfg Config) (queue.Transport, error) {
 	pcfg, err := pgxpool.ParseConfig(cfg.ConnStr)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Logger != nil {
+	if cfg.EnableLogging && cfg.Logger != nil {
 		pcfg.ConnConfig.Logger = zapadapter.NewLogger(cfg.Logger)
 	}
 
@@ -43,32 +43,29 @@ func NewTransportConfig(cfg *Config) (queue.Transport, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Transport{conn, ctx, cancel}, nil
-}
-
-func NewTransport(connStr string) (queue.Transport, error) {
-	return NewTransportConfig(&Config{ConnStr: connStr})
+	return &Transport{cfg.Logger, conn, ctx, cancel}, nil
 }
 
 // Transport ...
 type Transport struct {
+	logger *zap.Logger
 	db     *pgxpool.Pool
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
 func (s *Transport) Open(name string) (queue.Queue, error) {
-	return newPostgresQueue(s.ctx, s.db, name)
+	return newPostgresQueue(s.logger, s.ctx, s.db, name)
 }
 
 // Close ...
 func (s *Transport) Close() error {
-	s.db.Close()
 	s.cancel()
+	s.db.Close()
 	return nil
 }
 
-func newPostgresQueue(ctx context.Context, db *pgxpool.Pool, name string) (*postgresQueue, error) {
+func newPostgresQueue(logger *zap.Logger, ctx context.Context, db *pgxpool.Pool, name string) (*postgresQueue, error) {
 	name = fmt.Sprintf("queue_%s", name)
 	sql := fmt.Sprintf(``+
 		`CREATE TABLE IF NOT EXISTS "%s" (`+
@@ -86,6 +83,7 @@ func newPostgresQueue(ctx context.Context, db *pgxpool.Pool, name string) (*post
 
 	ctx, cancel := context.WithCancel(ctx)
 	q := &postgresQueue{
+		logger: logger.With(zap.String("queue", name)),
 		name:   name,
 		db:     db,
 		ctx:    ctx,
@@ -93,26 +91,90 @@ func newPostgresQueue(ctx context.Context, db *pgxpool.Pool, name string) (*post
 		ids:    memory.NewQueue[int64](),
 	}
 
-	go q.doRead()
+	go q.run()
 	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, postgresGCIntervalMins*time.Minute, q.gc, nil)
 
 	return q, nil
 }
 
 type postgresQueue struct {
+	logger *zap.Logger
 	name   string
 	db     *pgxpool.Pool
 	ctx    context.Context
 	cancel context.CancelFunc
-	err    syncutil.Pointer[error]
 	ids    *memory.Queue[int64]
 }
 
 func (q *postgresQueue) gc(t timeutil.Time) {
 	_, err := q.db.Exec(q.ctx, fmt.Sprintf(`DELETE FROM "%s" WHERE ts < CURRENT_TIMESTAMP - INTERVAL '%d minute';`, q.name, postgresGCIntervalMins))
 	if err != nil {
-		q.err.Swap(&err)
+		q.logger.Warn("gc failed", zap.Error(err))
 	}
+}
+
+func (q *postgresQueue) run() {
+	defer q.Close()
+
+	err := retry.Do(
+		q.doRead,
+		retry.Attempts(0),
+		retry.Context(q.ctx),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			if !errors.Is(err, context.Canceled) {
+				q.logger.Warn("reader failed", zap.Error(err))
+			}
+			return retry.BackOffDelay(n, err, config)
+		}),
+	)
+	q.logger.Debug("reader closed", zap.Error(err))
+}
+
+func (q *postgresQueue) doRead() error {
+	q.logger.Debug("starting reader")
+	c, err := q.db.Acquire(q.ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Release()
+
+	_, err = c.Exec(q.ctx, fmt.Sprintf(`LISTEN "%s";`, q.name))
+	if err != nil {
+		return err
+	}
+
+	for {
+		notif, err := c.Conn().WaitForNotification(q.ctx)
+		if err != nil {
+			return err
+		}
+
+		id, err := strconv.ParseInt(notif.Payload, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if err := q.ids.Write(id); err != nil {
+			return err
+		}
+	}
+}
+
+func (q *postgresQueue) Read() (any, error) {
+	id, err := q.ids.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	r := q.db.QueryRow(q.ctx, fmt.Sprintf(`SELECT "message" FROM "%s" WHERE id = $1;`, q.name), id)
+	if err != nil {
+		return nil, err
+	}
+	var v []byte
+	if err := r.Scan(&v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 func (q *postgresQueue) Write(m any) error {
@@ -130,63 +192,6 @@ func (q *postgresQueue) Write(m any) error {
 	)
 	_, err := q.db.Exec(q.ctx, sql, b, q.name)
 	return err
-}
-
-func (q *postgresQueue) doRead() {
-	defer q.Close()
-
-	conn, err := q.db.Acquire(q.ctx)
-	if err != nil {
-		q.err.Swap(&err)
-		return
-	}
-	defer conn.Release()
-
-	_, err = conn.Exec(q.ctx, fmt.Sprintf(`LISTEN "%s";`, q.name))
-	if err != nil {
-		q.err.Swap(&err)
-		return
-	}
-
-	for {
-		notif, err := conn.Conn().WaitForNotification(q.ctx)
-		if err != nil {
-			q.err.Swap(&err)
-			return
-		}
-
-		id, err := strconv.ParseInt(notif.Payload, 10, 64)
-		if err != nil {
-			q.err.Swap(&err)
-			return
-		}
-
-		if err := q.ids.Write(id); err != nil {
-			q.err.Swap(&err)
-			return
-		}
-	}
-}
-
-func (q *postgresQueue) Read() (any, error) {
-	id, err := q.ids.Read()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := q.err.Get(); err != nil {
-		return nil, *err
-	}
-
-	r := q.db.QueryRow(q.ctx, fmt.Sprintf(`SELECT "message" FROM "%s" WHERE id = $1;`, q.name), id)
-	if err != nil {
-		return nil, err
-	}
-	var v []byte
-	if err := r.Scan(&v); err != nil {
-		return nil, err
-	}
-	return v, nil
 }
 
 func (q *postgresQueue) Close() error {

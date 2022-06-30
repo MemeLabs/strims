@@ -12,14 +12,15 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv/bbolt"
 	"github.com/MemeLabs/strims/pkg/kv/postgres"
 	"github.com/MemeLabs/strims/pkg/pathutil"
+	"go.uber.org/zap"
 )
 
-func openDB(cfg *Config) (kv.BlobStore, error) {
+func openDB(logger *zap.Logger, cfg *Config) (kv.BlobStore, error) {
 	switch cfg.Storage.Adapter.Get("bbolt") {
 	case "bbolt":
 		return bboltStorageAdapter(cfg)
 	case "postgres":
-		return postgresStorageAdapter(cfg)
+		return postgresStorageAdapter(logger, cfg)
 	default:
 		return nil, fmt.Errorf("unsupported storage adapter: %s", cfg.Storage.Adapter)
 	}
@@ -33,10 +34,14 @@ func bboltStorageAdapter(cfg *Config) (kv.BlobStore, error) {
 	return bbolt.NewStore(dbPath)
 }
 
-func postgresStorageAdapter(cfg *Config) (kv.BlobStore, error) {
+func postgresStorageAdapter(logger *zap.Logger, cfg *Config) (kv.BlobStore, error) {
 	connStr := cfg.Storage.Postgres.ConnStr.Get("")
 	if connStr == "" {
 		return nil, errors.New("postgres conn string empty")
 	}
-	return postgres.NewStore(connStr)
+	return postgres.NewStoreConfig(postgres.Config{
+		ConnStr:       connStr,
+		Logger:        logger,
+		EnableLogging: cfg.Storage.Postgres.EnableLogging,
+	})
 }
