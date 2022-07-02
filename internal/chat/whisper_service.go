@@ -80,7 +80,7 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 	}
 
 	err = d.store.Update(func(tx kv.RWTx) error {
-		thread, err := dao.GetChatWhisperThreadByPeerKey(tx, peerCert.Key)
+		thread, err := dao.ChatWhisperThreadsByPeerKey.Get(tx, peerCert.Key)
 		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
 		}

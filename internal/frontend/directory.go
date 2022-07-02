@@ -11,9 +11,11 @@ import (
 	"github.com/MemeLabs/strims/internal/app"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/directory"
-	"github.com/MemeLabs/strims/internal/event"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/chanutil"
 	"github.com/MemeLabs/strims/pkg/hashmap"
+	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,59 +33,6 @@ func init() {
 type directoryService struct {
 	app   app.Control
 	store *dao.ProfileStore
-}
-
-// Open ...
-func (s *directoryService) Open(ctx context.Context, r *networkv1directory.FrontendOpenRequest) (<-chan *networkv1directory.FrontendOpenResponse, error) {
-	ch := make(chan *networkv1directory.FrontendOpenResponse)
-
-	go func() {
-		raw := make(chan any)
-		s.app.Events().Notify(raw)
-		go s.app.Directory().ReadCachedEvents(ctx, raw)
-
-		defer func() {
-			s.app.Events().StopNotifying(raw)
-			close(raw)
-			close(ch)
-		}()
-
-		for {
-			select {
-			case e := <-raw:
-				var r *networkv1directory.FrontendOpenResponse
-
-				switch e := e.(type) {
-				case event.DirectoryEvent:
-					r = &networkv1directory.FrontendOpenResponse{
-						NetworkId:  e.NetworkID,
-						NetworkKey: e.NetworkKey,
-						Body: &networkv1directory.FrontendOpenResponse_Broadcast{
-							Broadcast: e.Broadcast,
-						},
-					}
-				case event.NetworkStop:
-					r = &networkv1directory.FrontendOpenResponse{
-						NetworkId:  e.Network.Id,
-						NetworkKey: dao.NetworkKey(e.Network),
-						Body: &networkv1directory.FrontendOpenResponse_Close_{
-							Close: &networkv1directory.FrontendOpenResponse_Close{},
-						},
-					}
-				}
-
-				select {
-				case ch <- r:
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return ch, nil
 }
 
 func (s *directoryService) client(ctx context.Context, networkKey []byte) (*networkv1directory.DirectoryClient, error) {
@@ -310,18 +259,24 @@ func listingProtoContentType(l *networkv1directory.Listing) networkv1directory.L
 }
 
 func (s *directoryService) GetListings(ctx context.Context, r *networkv1directory.FrontendGetListingsRequest) (*networkv1directory.FrontendGetListingsResponse, error) {
-	res := &networkv1directory.FrontendGetListingsResponse{}
-
-	networks, err := dao.Networks.GetAll(s.store)
+	var networks []*networkv1.Network
+	var err error
+	if len(r.NetworkKeys) == 0 {
+		networks, err = dao.Networks.GetAll(s.store)
+	} else {
+		networks, err = dao.NetworksByKey.GetMany(s.store, r.NetworkKeys...)
+	}
 	if err != nil {
 		return nil, err
 	}
 
+	res := &networkv1directory.FrontendGetListingsResponse{}
+
 	for _, n := range networks {
-		var nls []*networkv1directory.FrontendGetListingsResponse_NetworkListingsItem
+		var nls []*networkv1directory.NetworkListingsItem
 		for _, l := range s.app.Directory().GetListingsByNetworkID(n.Id) {
 			if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
-				nls = append(nls, &networkv1directory.FrontendGetListingsResponse_NetworkListingsItem{
+				nls = append(nls, &networkv1directory.NetworkListingsItem{
 					Id:         l.ID,
 					Listing:    l.Listing,
 					Snippet:    l.Snippet,
@@ -331,7 +286,7 @@ func (s *directoryService) GetListings(ctx context.Context, r *networkv1director
 			}
 		}
 
-		res.Listings = append(res.Listings, &networkv1directory.FrontendGetListingsResponse_NetworkListings{
+		res.Listings = append(res.Listings, &networkv1directory.NetworkListings{
 			Network: &networkv1directory.Network{
 				Id:   n.Id,
 				Name: dao.CertificateRoot(n.Certificate).Subject,
@@ -344,8 +299,151 @@ func (s *directoryService) GetListings(ctx context.Context, r *networkv1director
 	return res, nil
 }
 
+func (s *directoryService) WatchListings(ctx context.Context, r *networkv1directory.FrontendWatchListingsRequest) (<-chan *networkv1directory.FrontendWatchListingsResponse, error) {
+	var networks []*networkv1.Network
+	var err error
+	if len(r.NetworkKeys) == 0 {
+		networks, err = dao.Networks.GetAll(s.store)
+	} else {
+		networks, err = dao.NetworksByKey.GetMany(s.store, r.NetworkKeys...)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	events := make(chan *networkv1directory.FrontendWatchListingsResponse_Event, 128)
+
+	var errs []error
+	for _, n := range networks {
+		network := &networkv1directory.Network{
+			Id:   n.Id,
+			Name: dao.CertificateRoot(n.Certificate).Subject,
+			Key:  dao.NetworkKey(n),
+		}
+
+		src := make(chan directory.ListingEvent, 128)
+		listings, err := s.app.Directory().NotifyListingEvent(network.Id, src)
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		go func() {
+			defer s.app.Directory().StopNotifyingListingEvent(network.Id, src)
+
+			var nls []*networkv1directory.NetworkListingsItem
+			for _, l := range listings {
+				if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
+					nls = append(nls, &networkv1directory.NetworkListingsItem{
+						Id:         l.ID,
+						Listing:    l.Listing,
+						Snippet:    l.Snippet,
+						Moderation: l.Moderation,
+						UserCount:  l.UserCount,
+					})
+				}
+			}
+			res := &networkv1directory.FrontendWatchListingsResponse_Event{
+				Event: &networkv1directory.FrontendWatchListingsResponse_Event_Change{
+					Change: &networkv1directory.FrontendWatchListingsResponse_Change{
+						Listings: &networkv1directory.NetworkListings{
+							Network:  network,
+							Listings: nls,
+						},
+					},
+				},
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case events <- res:
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case e, ok := <-src:
+					if !ok {
+						return
+					}
+
+					l := e.Listing
+					if len(r.ContentTypes) != 0 && !slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
+						continue
+					}
+
+					res := &networkv1directory.FrontendWatchListingsResponse_Event{}
+					switch e.Type {
+					case directory.ChangeListingEventType:
+						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Change{
+							Change: &networkv1directory.FrontendWatchListingsResponse_Change{
+								Listings: &networkv1directory.NetworkListings{
+									Network: network,
+									Listings: []*networkv1directory.NetworkListingsItem{{
+										Id:         l.ID,
+										Listing:    l.Listing,
+										Snippet:    l.Snippet,
+										Moderation: l.Moderation,
+										UserCount:  l.UserCount,
+									}},
+								},
+							},
+						}
+					case directory.UnpublishListingEventType:
+						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Unpublish{
+							Unpublish: &networkv1directory.FrontendWatchListingsResponse_Unpublish{
+								NetworkId: network.Id,
+								ListingId: l.ID,
+							},
+						}
+					case directory.UserCountChangeListingEventType:
+						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_UserCountChange{
+							UserCountChange: &networkv1directory.FrontendWatchListingsResponse_UserCountChange{
+								NetworkId: network.Id,
+								ListingId: l.ID,
+								UserCount: l.UserCount,
+							},
+						}
+					}
+
+					select {
+					case <-ctx.Done():
+						return
+					case events <- res:
+					}
+				}
+			}
+		}()
+	}
+	if errs != nil {
+		return nil, multierr.Combine(errs...)
+	}
+
+	ch := make(chan *networkv1directory.FrontendWatchListingsResponse)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-events:
+				res := &networkv1directory.FrontendWatchListingsResponse{
+					Events: chanutil.AppendAll([]*networkv1directory.FrontendWatchListingsResponse_Event{e}, events),
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- res:
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
 func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1directory.FrontendWatchListingUsersRequest) (<-chan *networkv1directory.FrontendWatchListingUsersResponse, error) {
-	networkID, err := dao.GetNetworkIDByKey(s.store, r.NetworkKey)
+	networkID, err := dao.NetworksByKey.GetID(s.store, r.NetworkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -355,13 +453,16 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 		return nil, errors.New("listing not found")
 	}
 
-	users, events, err := s.app.Directory().WatchListingUsers(ctx, networkID, listing.ID)
+	events := make(chan directory.UserEvent, 1)
+	users, err := s.app.Directory().NotifyListingUserEvent(networkID, listing.ID, events)
 	if err != nil {
 		return nil, err
 	}
 
 	ch := make(chan *networkv1directory.FrontendWatchListingUsersResponse, 1)
 	go func() {
+		defer s.app.Directory().StopNotifyingListingUserEvent(networkID, listing.ID, events)
+
 		res := &networkv1directory.FrontendWatchListingUsersResponse{
 			Type: networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_JOIN,
 		}
@@ -378,7 +479,11 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 			select {
 			case <-ctx.Done():
 				return
-			case e := <-events:
+			case e, ok := <-events:
+				if !ok {
+					return
+				}
+
 				res := &networkv1directory.FrontendWatchListingUsersResponse{
 					Users: []*networkv1directory.FrontendWatchListingUsersResponse_User{{
 						Id:      e.User.ID,
@@ -394,7 +499,12 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 				case directory.RenameUserEventType:
 					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_RENAME
 				}
-				ch <- res
+
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- res:
+				}
 			}
 		}
 	}()

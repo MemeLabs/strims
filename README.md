@@ -32,9 +32,23 @@ take note of the path from the line `ws vnic listener starting` - you'll need it
 2022-06-01T13:54:33.545Z        DEBUG   vnic/ws_native.go:43    ws vnic listener starting       {"path": "/0408549bb2971e6051c11c1caafbbd2b0f88b6937d0bf608f6d1a2d4c237a0f8"}
 ```
 
-6.) in the web ui click `new login` and enter the username and password you used in the `add-profile` command.
+6.) run the webpack dev server
+```
+npm run dev:web
+```
 
-7.) toggle the advanced `advanced` options and enter `wss://0.0.0.0:8083/api` or the ip of your dev machine or localhost.
+on windows depending on the directory permissions this may throw an error
+```
+Error: Command failed: git rev-parse HEAD ...
+```
+if this happens run the command from the error message then retry the run command.
+```
+git config --global --add safe.directory /workspaces/strims
+```
+
+7.) in the web ui at `https://0.0.0.0:8080` click `new login` and enter the username and password you used in the `add-profile` command.
+
+8.) toggle the advanced `advanced` options and enter `wss://0.0.0.0:8083/api` or the ip of your dev machine or localhost.
 
 ## streaming
 

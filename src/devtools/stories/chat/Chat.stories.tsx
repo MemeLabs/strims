@@ -11,7 +11,6 @@ import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_r
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import ChatPanel from "../../../components/Chat/Shell";
 import { Provider as ChatProvider } from "../../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import { RoomProvider } from "../../contexts/Chat";
@@ -36,16 +35,14 @@ const Chat: React.FC = () => {
   return (
     <div className="chat_mockup">
       <ApiProvider value={client}>
-        <DirectoryProvider>
-          <ChatProvider>
-            <RoomProvider
-              networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
-              serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
-            >
-              <ChatPanel />
-            </RoomProvider>
-          </ChatProvider>
-        </DirectoryProvider>
+        <ChatProvider>
+          <RoomProvider
+            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
+            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
+          >
+            <ChatPanel />
+          </RoomProvider>
+        </ChatProvider>
       </ApiProvider>
     </div>
   );

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FrontendWatchListingUsersResponse } from "../apis/strims/network/v1/directory/directory";
 import { useClient } from "../contexts/FrontendApi";
 
+// TODO: move to directory hooks
 export const useUserList = (networkKey: Uint8Array, serverKey: Uint8Array) => {
   const client = useClient();
   const [users, setUsers] = useState<Map<bigint, string>>(new Map());

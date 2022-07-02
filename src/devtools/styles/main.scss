@@ -257,11 +257,11 @@ body {
     content: "";
     display: block;
     background: var(--color-opac-b-12);
+    z-index: calc(var(--z-index-menu) + 1);
   }
 
   &::after {
     mask-image: radial-gradient(farthest-side at center, transparent 97%, black 98%);
-    z-index: calc(var(--z-index-menu) + 1);
   }
   &::before {
     mask-image: radial-gradient(
@@ -271,10 +271,12 @@ body {
       black 41%,
       transparent 42%
     );
-    z-index: calc(var(--z-index-menu) + 1);
   }
 
   &__ring {
+    --background-color: var(--color-slate-4);
+    --background-color-active: var(--color-slate-1);
+
     mask-image: radial-gradient(
       farthest-side at center,
       transparent 40%,
@@ -283,9 +285,6 @@ body {
     );
     z-index: calc(var(--z-index-menu) + 2);
   }
-
-  --background-color: var(--color-slate-4);
-  --background-color-active: var(--color-slate-1);
 
   .chat__emote {
     top: calc(-0.5 * var(--height));

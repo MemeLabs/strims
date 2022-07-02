@@ -78,7 +78,7 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 	}
 	observers := event.NewObservers(t.logger, queue, storageKey)
 
-	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: observers})
+	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: dao.EventEmitterFunc(observers.EmitGlobal)})
 
 	profile, err := dao.Profile.Get(store)
 	if err != nil {

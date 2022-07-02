@@ -446,7 +446,7 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 	}
 
 	err = s.store.Update(func(tx kv.RWTx) error {
-		thread, err := dao.GetChatWhisperThreadByPeerKey(tx, peerCert.Key)
+		thread, err := dao.ChatWhisperThreadsByPeerKey.Get(tx, peerCert.Key)
 		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
 		}
@@ -474,11 +474,11 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 }
 
 func (s *chatService) ListWhispers(ctx context.Context, req *chatv1.ListWhispersRequest) (*chatv1.ListWhispersResponse, error) {
-	thread, err := dao.GetChatWhisperThreadByPeerKey(s.store, req.PeerKey)
+	thread, err := dao.ChatWhisperThreadsByPeerKey.Get(s.store, req.PeerKey)
 	if err != nil {
 		return nil, err
 	}
-	whispers, err := dao.GetChatWhisperRecordsByPeerKey(s.store, req.PeerKey)
+	whispers, err := dao.ChatWhisperRecordsByPeerKey.GetAll(s.store, req.PeerKey)
 	if err != nil {
 		return nil, err
 	}

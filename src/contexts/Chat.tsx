@@ -28,7 +28,6 @@ import { useUserList } from "../hooks/chat";
 import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { updateInStateMap } from "../lib/setInStateMap";
-import { DirectoryListing } from "./Directory";
 import { useClient } from "./FrontendApi";
 
 export interface Style {
@@ -42,11 +41,6 @@ export interface ChatStyles {
   modifiers: Map<string, Modifier>;
   tags: Tag[];
   selectedPeers: Set<string>;
-}
-
-export interface UserMeta {
-  alias: string;
-  listing: DirectoryListing;
 }
 
 export const enum ThreadInitState {
@@ -635,14 +629,14 @@ const createRoomActions = (
 
   const toNames = (vs: { name: string }[]): string[] => vs.map(({ name }) => name).sort();
 
-  const reduceAssetBundle = <T extends ThreadState>(state: T, bundle: AssetBundle): T => {
+  const reduceAssetBundle = (state: RoomThreadState, bundle: AssetBundle): RoomThreadState => {
     state.messageSizeCache.clearAll();
 
     const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
     const liveEmoteMap = new Map<bigint, Emote>();
     const liveModifierMap = new Map<bigint, Modifier>();
     const liveTagMap = new Map<bigint, Tag>();
-    let room: Room;
+    let room = state.room;
     for (const b of assetBundles) {
       for (const id of b.removedIds) {
         liveEmoteMap.delete(id);

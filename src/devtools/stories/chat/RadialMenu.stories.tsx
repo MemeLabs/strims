@@ -7,21 +7,20 @@ import { Base64 } from "js-base64";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import usePortal from "use-portal";
 
-import { FrontendClient } from "../../apis/client";
-import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
-import { registerDirectoryFrontendService } from "../../apis/strims/network/v1/directory/directory_rpc";
-import Emote from "../../components/Chat/Emote";
-import ChatPanel from "../../components/Chat/Shell";
-import { Provider as ChatProvider } from "../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../contexts/Directory";
-import { Provider as ApiProvider } from "../../contexts/FrontendApi";
-import { useLayout } from "../../contexts/Layout";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { AsyncPassThrough } from "../../lib/stream";
-import { RoomProvider } from "../contexts/Chat";
-import { emoteNames } from "../mocks/chat/assetBundle";
-import ChatService from "../mocks/chat/service";
-import DirectoryService from "../mocks/directory/service";
+import { FrontendClient } from "../../../apis/client";
+import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
+import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
+import Emote from "../../../components/Chat/Emote";
+import ChatPanel from "../../../components/Chat/Shell";
+import { Provider as ChatProvider } from "../../../contexts/Chat";
+import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
+import { useLayout } from "../../../contexts/Layout";
+import { useStableCallback } from "../../../hooks/useStableCallback";
+import { AsyncPassThrough } from "../../../lib/stream";
+import { RoomProvider } from "../../contexts/Chat";
+import { emoteNames } from "../../mocks/chat/assetBundle";
+import ChatService from "../../mocks/chat/service";
+import DirectoryService from "../../mocks/directory/service";
 
 interface RadialMenuProps {
   segmentCount: number;
@@ -170,21 +169,19 @@ const Test: React.FC = () => {
   return (
     <div className="chat_mockup">
       <ApiProvider value={client}>
-        <DirectoryProvider>
-          <ChatProvider>
-            <RoomProvider
-              networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
-              serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
-            >
-              <ChatPanel />
-              <div className="chat_mockup__test" onMouseDown={handleMouseDown}>
-                {state.open && (
-                  <RadialMenu segmentCount={6} cx={state.cx} cy={state.cy} onClose={handleClose} />
-                )}
-              </div>
-            </RoomProvider>
-          </ChatProvider>
-        </DirectoryProvider>
+        <ChatProvider>
+          <RoomProvider
+            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
+            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
+          >
+            <ChatPanel />
+            <div className="chat_mockup__test" onMouseDown={handleMouseDown}>
+              {state.open && (
+                <RadialMenu segmentCount={6} cx={state.cx} cy={state.cy} onClose={handleClose} />
+              )}
+            </div>
+          </RoomProvider>
+        </ChatProvider>
       </ApiProvider>
     </div>
   );

@@ -9,7 +9,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import monkey from "../../../assets/directory/monkey.png";
 import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
 import SnippetImage from "../../components/Directory/SnippetImage";
-import { DirectoryListing } from "../../contexts/Directory";
 import { useLayout } from "../../contexts/Layout";
 import { useOpenListing } from "../../hooks/directory";
 import { formatNumber } from "../../lib/number";
@@ -85,6 +84,13 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
     </div>
   );
 };
+
+export interface DirectoryListing {
+  id: bigint;
+  listing: Listing;
+  snippet: ListingSnippet;
+  userCount: number;
+}
 
 export interface DirectoryGridProps {
   listings: DirectoryListing[];

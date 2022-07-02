@@ -92,11 +92,6 @@ func (o *Observers) writeQueueEvent(m proto.Message) error {
 	return o.q.Write(b)
 }
 
-// Emit implements dao.EventEmitter
-func (o *Observers) Emit(v proto.Message) {
-	o.EmitGlobal(v)
-}
-
 // EmitGlobal ...
 func (o *Observers) EmitGlobal(v proto.Message) {
 	if err := o.writeQueueEvent(v); err != nil {

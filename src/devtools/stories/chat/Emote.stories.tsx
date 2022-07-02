@@ -27,7 +27,6 @@ import {
   useChat,
   useRoom,
 } from "../../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
@@ -67,28 +66,26 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
 
   return (
     <ApiProvider value={client}>
-      <DirectoryProvider>
-        <ChatProvider>
-          <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
-            {shouldRenderStyleSheet && (
-              <ChatConsumer>
-                {([{ uiConfig }]) => (
-                  <ThreadConsumer>
-                    {([room]) => (
-                      <StyleSheet
-                        liveEmotes={room.liveEmotes}
-                        styles={room.styles}
-                        uiConfig={uiConfig}
-                      />
-                    )}
-                  </ThreadConsumer>
-                )}
-              </ChatConsumer>
-            )}
-            <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
-          </RoomProvider>
-        </ChatProvider>
-      </DirectoryProvider>
+      <ChatProvider>
+        <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
+          {shouldRenderStyleSheet && (
+            <ChatConsumer>
+              {([{ uiConfig }]) => (
+                <ThreadConsumer>
+                  {([room]) => (
+                    <StyleSheet
+                      liveEmotes={room.liveEmotes}
+                      styles={room.styles}
+                      uiConfig={uiConfig}
+                    />
+                  )}
+                </ThreadConsumer>
+              )}
+            </ChatConsumer>
+          )}
+          <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
+        </RoomProvider>
+      </ChatProvider>
     </ApiProvider>
   );
 };

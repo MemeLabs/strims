@@ -9,6 +9,7 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	"github.com/MemeLabs/strims/pkg/event"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/MemeLabs/strims/pkg/logutil"
@@ -26,8 +27,8 @@ type syndicateViewer struct {
 	Listings map[uint64]*syndicateListing
 }
 
-type syndicateStoreObserver struct {
-	ch   chan UserEvent
+type syndicateStoreObserver[T any] struct {
+	ch   chan T
 	stop ioutil.Stopper
 }
 
@@ -36,7 +37,7 @@ func newSyndicateStore(logger *zap.Logger, network *networkv1.Network) *syndicat
 		logger:  logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
 		Network: network,
 
-		observers:        map[uint64][]syndicateStoreObserver{},
+		userObservers:    map[uint64]*event.Observer{},
 		listings:         map[uint64]*syndicateListing{},
 		viewers:          map[uint64]*syndicateViewer{},
 		viewersByPeerKey: hashmap.New[[]byte, *syndicateViewer](hashmap.NewByteInterface[[]byte]()),
@@ -48,7 +49,8 @@ type syndicateStore struct {
 	Network *networkv1.Network
 
 	mu               sync.Mutex
-	observers        map[uint64][]syndicateStoreObserver
+	listingObservers event.Observer
+	userObservers    map[uint64]*event.Observer
 	listings         map[uint64]*syndicateListing
 	viewers          map[uint64]*syndicateViewer
 	viewersByPeerKey hashmap.Map[[]byte, *syndicateViewer]
@@ -102,6 +104,9 @@ func (d *syndicateStore) GetViewersByListing(id uint64) {
 }
 
 func (d *syndicateStore) GetListingsByPeerKey(peerKey []byte) []Listing {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	var ls []Listing
 	if v, ok := d.viewersByPeerKey.Get(peerKey); ok {
 		for _, l := range v.Listings {
@@ -144,6 +149,11 @@ func (d *syndicateStore) handleListingChange(e *networkv1directory.Event_Listing
 	l.Listing.Listing = e.Listing
 	l.Listing.Snippet = e.Snippet
 	l.Listing.Moderation = e.Moderation
+
+	d.listingObservers.Emit(ListingEvent{
+		Type:    ChangeListingEventType,
+		Listing: l.Listing,
+	})
 }
 
 func (d *syndicateStore) handleUnpublish(e *networkv1directory.Event_Unpublish) {
@@ -156,13 +166,25 @@ func (d *syndicateStore) handleUnpublish(e *networkv1directory.Event_Unpublish) 
 		delete(v.Listings, e.Id)
 	}
 	delete(d.listings, e.Id)
+
+	d.listingObservers.Emit(ListingEvent{
+		Type:    UnpublishListingEventType,
+		Listing: l.Listing,
+	})
 }
 
 func (d *syndicateStore) handleUserCountChange(e *networkv1directory.Event_UserCountChange) {
 	l := d.listings[e.Id]
-	if l != nil {
-		l.UserCount = e.Count
+	if l == nil {
+		return
 	}
+
+	l.UserCount = e.Count
+
+	d.listingObservers.Emit(ListingEvent{
+		Type:    UserCountChangeListingEventType,
+		Listing: l.Listing,
+	})
 }
 
 func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_UserPresenceChange) {
@@ -239,33 +261,42 @@ func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_Us
 	}
 }
 
-func (d *syndicateStore) NotifyUserEvents(listingID uint64, ch chan UserEvent, stop ioutil.Stopper) {
+func (d *syndicateStore) NotifyListingEvent(ch chan ListingEvent) {
+	d.listingObservers.Notify(ch)
+}
+
+func (d *syndicateStore) StopNotifyingListingEvent(ch chan ListingEvent) {
+	d.listingObservers.StopNotifying(ch)
+}
+
+func (d *syndicateStore) NotifyUserEvent(listingID uint64, ch chan UserEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.observers[listingID] = append(d.observers[listingID], syndicateStoreObserver{ch, stop})
+	o, ok := d.userObservers[listingID]
+	if !ok {
+		o = &event.Observer{}
+		d.userObservers[listingID] = o
+	}
+	o.Notify(ch)
+}
+
+func (d *syndicateStore) StopNotifyingUserEvent(listingID uint64, ch chan UserEvent) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	o, ok := d.userObservers[listingID]
+	if !ok {
+		return
+	}
+	o.StopNotifying(ch)
+	if o.Size() == 0 {
+		delete(d.userObservers, listingID)
+	}
 }
 
 func (d *syndicateStore) emitUserEvent(e UserEvent) {
-	var removed []int
-	for i, obs := range d.observers[e.Listing.ID] {
-		select {
-		case <-obs.stop:
-			removed = append(removed, i)
-		case obs.ch <- e:
-		}
-	}
-
-	if len(removed) != 0 {
-		obs := d.observers[e.Listing.ID]
-		for i, j := range removed {
-			copy(obs[j-i:], obs[j-i+1:])
-			obs[len(obs)-i-1] = syndicateStoreObserver{}
-		}
-		if l := len(obs) - len(removed); l == 0 {
-			delete(d.observers, e.Listing.ID)
-		} else {
-			d.observers[e.Listing.ID] = obs[:l]
-		}
+	if o, ok := d.userObservers[e.Listing.ID]; ok {
+		o.Emit(e)
 	}
 }

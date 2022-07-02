@@ -17,9 +17,9 @@ import imgAngelThump from "../../../assets/directory/angelthump.png";
 import imgTwitch from "../../../assets/directory/twitch.png";
 import imgYouTube from "../../../assets/directory/youtube.png";
 import {
-  FrontendGetListingsResponse,
   Listing,
   ListingContentType,
+  NetworkListingsItem,
 } from "../../apis/strims/network/v1/directory/directory";
 import { useLazyCall } from "../../contexts/FrontendApi";
 import { useOpenListing } from "../../hooks/directory";
@@ -140,7 +140,7 @@ const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
 };
 
 interface ListingMenuItemProps {
-  listing: FrontendGetListingsResponse.NetworkListingsItem;
+  listing: NetworkListingsItem;
   selected: boolean;
   onMouseEnter: () => void;
   onSelect: () => void;
@@ -187,7 +187,7 @@ type SearchResult =
     }
   | {
       type: "LISTING";
-      listing: FrontendGetListingsResponse.NetworkListingsItem;
+      listing: NetworkListingsItem;
       onSelect: () => void;
     };
 

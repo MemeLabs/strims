@@ -1400,56 +1400,6 @@ export namespace ListingSnippetDelta {
 
 }
 
-export type INetwork = {
-  id?: bigint;
-  name?: string;
-  key?: Uint8Array;
-}
-
-export class Network {
-  id: bigint;
-  name: string;
-  key: Uint8Array;
-
-  constructor(v?: INetwork) {
-    this.id = v?.id || BigInt(0);
-    this.name = v?.name || "";
-    this.key = v?.key || new Uint8Array();
-  }
-
-  static encode(m: Network, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name.length) w.uint32(18).string(m.name);
-    if (m.key.length) w.uint32(26).bytes(m.key);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): Network {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new Network();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.id = r.uint64();
-        break;
-        case 2:
-        m.name = r.string();
-        break;
-        case 3:
-        m.key = r.bytes();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
 export type IEvent = {
   body?: Event.IBody
 }
@@ -2597,75 +2547,46 @@ export class ModerateUserResponse {
   }
 }
 
-export type IFrontendOpenRequest = Record<string, any>;
+export type INetwork = {
+  id?: bigint;
+  name?: string;
+  key?: Uint8Array;
+}
 
-export class FrontendOpenRequest {
+export class Network {
+  id: bigint;
+  name: string;
+  key: Uint8Array;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IFrontendOpenRequest) {
+  constructor(v?: INetwork) {
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.key = v?.key || new Uint8Array();
   }
 
-  static encode(m: FrontendOpenRequest, w?: Writer): Writer {
+  static encode(m: Network, w?: Writer): Writer {
     if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.name.length) w.uint32(18).string(m.name);
+    if (m.key.length) w.uint32(26).bytes(m.key);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): FrontendOpenRequest {
-    if (r instanceof Reader && length) r.skip(length);
-    return new FrontendOpenRequest();
-  }
-}
-
-export type IFrontendOpenResponse = {
-  networkId?: bigint;
-  networkKey?: Uint8Array;
-  body?: FrontendOpenResponse.IBody
-}
-
-export class FrontendOpenResponse {
-  networkId: bigint;
-  networkKey: Uint8Array;
-  body: FrontendOpenResponse.TBody;
-
-  constructor(v?: IFrontendOpenResponse) {
-    this.networkId = v?.networkId || BigInt(0);
-    this.networkKey = v?.networkKey || new Uint8Array();
-    this.body = new FrontendOpenResponse.Body(v?.body);
-  }
-
-  static encode(m: FrontendOpenResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.networkId) w.uint32(8).uint64(m.networkId);
-    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
-    switch (m.body.case) {
-      case FrontendOpenResponse.BodyCase.CLOSE:
-      strims_network_v1_directory_FrontendOpenResponse_Close.encode(m.body.close, w.uint32(8010).fork()).ldelim();
-      break;
-      case FrontendOpenResponse.BodyCase.BROADCAST:
-      strims_network_v1_directory_EventBroadcast.encode(m.body.broadcast, w.uint32(8018).fork()).ldelim();
-      break;
-    }
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): FrontendOpenResponse {
+  static decode(r: Reader | Uint8Array, length?: number): Network {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new FrontendOpenResponse();
+    const m = new Network();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.networkId = r.uint64();
+        m.id = r.uint64();
         break;
         case 2:
-        m.networkKey = r.bytes();
+        m.name = r.string();
         break;
-        case 1001:
-        m.body = new FrontendOpenResponse.Body({ close: strims_network_v1_directory_FrontendOpenResponse_Close.decode(r, r.uint32()) });
-        break;
-        case 1002:
-        m.body = new FrontendOpenResponse.Body({ broadcast: strims_network_v1_directory_EventBroadcast.decode(r, r.uint32()) });
+        case 3:
+        m.key = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -2676,70 +2597,111 @@ export class FrontendOpenResponse {
   }
 }
 
-export namespace FrontendOpenResponse {
-  export enum BodyCase {
-    NOT_SET = 0,
-    CLOSE = 1001,
-    BROADCAST = 1002,
+export type INetworkListingsItem = {
+  id?: bigint;
+  listing?: strims_network_v1_directory_IListing;
+  snippet?: strims_network_v1_directory_IListingSnippet;
+  moderation?: strims_network_v1_directory_IListingModeration;
+  userCount?: number;
+}
+
+export class NetworkListingsItem {
+  id: bigint;
+  listing: strims_network_v1_directory_Listing | undefined;
+  snippet: strims_network_v1_directory_ListingSnippet | undefined;
+  moderation: strims_network_v1_directory_ListingModeration | undefined;
+  userCount: number;
+
+  constructor(v?: INetworkListingsItem) {
+    this.id = v?.id || BigInt(0);
+    this.listing = v?.listing && new strims_network_v1_directory_Listing(v.listing);
+    this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
+    this.moderation = v?.moderation && new strims_network_v1_directory_ListingModeration(v.moderation);
+    this.userCount = v?.userCount || 0;
   }
 
-  export type IBody =
-  { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.CLOSE, close: strims_network_v1_directory_FrontendOpenResponse_IClose }
-  |{ case?: BodyCase.BROADCAST, broadcast: strims_network_v1_directory_IEventBroadcast }
-  ;
+  static encode(m: NetworkListingsItem, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.listing) strims_network_v1_directory_Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
+    if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
+    if (m.moderation) strims_network_v1_directory_ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    if (m.userCount) w.uint32(40).uint32(m.userCount);
+    return w;
+  }
 
-  export type TBody = Readonly<
-  { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.CLOSE, close: strims_network_v1_directory_FrontendOpenResponse_Close }
-  |{ case: BodyCase.BROADCAST, broadcast: strims_network_v1_directory_EventBroadcast }
-  >;
-
-  class BodyImpl {
-    close: strims_network_v1_directory_FrontendOpenResponse_Close;
-    broadcast: strims_network_v1_directory_EventBroadcast;
-    case: BodyCase = BodyCase.NOT_SET;
-
-    constructor(v?: IBody) {
-      if (v && "close" in v) {
-        this.case = BodyCase.CLOSE;
-        this.close = new strims_network_v1_directory_FrontendOpenResponse_Close(v.close);
-      } else
-      if (v && "broadcast" in v) {
-        this.case = BodyCase.BROADCAST;
-        this.broadcast = new strims_network_v1_directory_EventBroadcast(v.broadcast);
+  static decode(r: Reader | Uint8Array, length?: number): NetworkListingsItem {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new NetworkListingsItem();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.listing = strims_network_v1_directory_Listing.decode(r, r.uint32());
+        break;
+        case 3:
+        m.snippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
+        break;
+        case 4:
+        m.moderation = strims_network_v1_directory_ListingModeration.decode(r, r.uint32());
+        break;
+        case 5:
+        m.userCount = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
       }
     }
+    return m;
+  }
+}
+
+export type INetworkListings = {
+  network?: strims_network_v1_directory_INetwork;
+  listings?: strims_network_v1_directory_INetworkListingsItem[];
+}
+
+export class NetworkListings {
+  network: strims_network_v1_directory_Network | undefined;
+  listings: strims_network_v1_directory_NetworkListingsItem[];
+
+  constructor(v?: INetworkListings) {
+    this.network = v?.network && new strims_network_v1_directory_Network(v.network);
+    this.listings = v?.listings ? v.listings.map(v => new strims_network_v1_directory_NetworkListingsItem(v)) : [];
   }
 
-  export const Body = BodyImpl as {
-    new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBody>(v: T): Readonly<
-    T extends { close: strims_network_v1_directory_FrontendOpenResponse_IClose } ? { case: BodyCase.CLOSE, close: strims_network_v1_directory_FrontendOpenResponse_Close } :
-    T extends { broadcast: strims_network_v1_directory_IEventBroadcast } ? { case: BodyCase.BROADCAST, broadcast: strims_network_v1_directory_EventBroadcast } :
-    never
-    >;
-  };
-
-  export type IClose = Record<string, any>;
-
-  export class Close {
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-    constructor(v?: IClose) {
-    }
-
-    static encode(m: Close, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Close {
-      if (r instanceof Reader && length) r.skip(length);
-      return new Close();
-    }
+  static encode(m: NetworkListings, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.network) strims_network_v1_directory_Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    for (const v of m.listings) strims_network_v1_directory_NetworkListingsItem.encode(v, w.uint32(18).fork()).ldelim();
+    return w;
   }
 
+  static decode(r: Reader | Uint8Array, length?: number): NetworkListings {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new NetworkListings();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.network = strims_network_v1_directory_Network.decode(r, r.uint32());
+        break;
+        case 2:
+        m.listings.push(strims_network_v1_directory_NetworkListingsItem.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
 }
 
 export type IFrontendPublishRequest = {
@@ -3388,18 +3350,22 @@ export namespace FrontendGetUsersResponse {
 
 export type IFrontendGetListingsRequest = {
   contentTypes?: strims_network_v1_directory_ListingContentType[];
+  networkKeys?: Uint8Array[];
 }
 
 export class FrontendGetListingsRequest {
   contentTypes: strims_network_v1_directory_ListingContentType[];
+  networkKeys: Uint8Array[];
 
   constructor(v?: IFrontendGetListingsRequest) {
     this.contentTypes = v?.contentTypes ? v.contentTypes : [];
+    this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
   static encode(m: FrontendGetListingsRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     m.contentTypes.reduce((w, v) => w.uint32(v), w.uint32(10).fork()).ldelim();
+    for (const v of m.networkKeys) w.uint32(18).bytes(v);
     return w;
   }
 
@@ -3413,6 +3379,9 @@ export class FrontendGetListingsRequest {
         case 1:
         for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.contentTypes.push(r.uint32());
         break;
+        case 2:
+        m.networkKeys.push(r.bytes())
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -3423,19 +3392,19 @@ export class FrontendGetListingsRequest {
 }
 
 export type IFrontendGetListingsResponse = {
-  listings?: strims_network_v1_directory_FrontendGetListingsResponse_INetworkListings[];
+  listings?: strims_network_v1_directory_INetworkListings[];
 }
 
 export class FrontendGetListingsResponse {
-  listings: strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings[];
+  listings: strims_network_v1_directory_NetworkListings[];
 
   constructor(v?: IFrontendGetListingsResponse) {
-    this.listings = v?.listings ? v.listings.map(v => new strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings(v)) : [];
+    this.listings = v?.listings ? v.listings.map(v => new strims_network_v1_directory_NetworkListings(v)) : [];
   }
 
   static encode(m: FrontendGetListingsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.listings) strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.listings) strims_network_v1_directory_NetworkListings.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -3447,7 +3416,7 @@ export class FrontendGetListingsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.listings.push(strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings.decode(r, r.uint32()));
+        m.listings.push(strims_network_v1_directory_NetworkListings.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -3458,60 +3427,204 @@ export class FrontendGetListingsResponse {
   }
 }
 
-export namespace FrontendGetListingsResponse {
-  export type INetworkListingsItem = {
-    id?: bigint;
-    listing?: strims_network_v1_directory_IListing;
-    snippet?: strims_network_v1_directory_IListingSnippet;
-    moderation?: strims_network_v1_directory_IListingModeration;
-    userCount?: number;
+export type IFrontendWatchListingsRequest = {
+  contentTypes?: strims_network_v1_directory_ListingContentType[];
+  networkKeys?: Uint8Array[];
+}
+
+export class FrontendWatchListingsRequest {
+  contentTypes: strims_network_v1_directory_ListingContentType[];
+  networkKeys: Uint8Array[];
+
+  constructor(v?: IFrontendWatchListingsRequest) {
+    this.contentTypes = v?.contentTypes ? v.contentTypes : [];
+    this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
-  export class NetworkListingsItem {
-    id: bigint;
-    listing: strims_network_v1_directory_Listing | undefined;
-    snippet: strims_network_v1_directory_ListingSnippet | undefined;
-    moderation: strims_network_v1_directory_ListingModeration | undefined;
-    userCount: number;
+  static encode(m: FrontendWatchListingsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    m.contentTypes.reduce((w, v) => w.uint32(v), w.uint32(10).fork()).ldelim();
+    for (const v of m.networkKeys) w.uint32(18).bytes(v);
+    return w;
+  }
 
-    constructor(v?: INetworkListingsItem) {
-      this.id = v?.id || BigInt(0);
-      this.listing = v?.listing && new strims_network_v1_directory_Listing(v.listing);
-      this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
-      this.moderation = v?.moderation && new strims_network_v1_directory_ListingModeration(v.moderation);
-      this.userCount = v?.userCount || 0;
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchListingsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendWatchListingsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.contentTypes.push(r.uint32());
+        break;
+        case 2:
+        m.networkKeys.push(r.bytes())
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendWatchListingsResponse = {
+  events?: strims_network_v1_directory_FrontendWatchListingsResponse_IEvent[];
+}
+
+export class FrontendWatchListingsResponse {
+  events: strims_network_v1_directory_FrontendWatchListingsResponse_Event[];
+
+  constructor(v?: IFrontendWatchListingsResponse) {
+    this.events = v?.events ? v.events.map(v => new strims_network_v1_directory_FrontendWatchListingsResponse_Event(v)) : [];
+  }
+
+  static encode(m: FrontendWatchListingsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.events) strims_network_v1_directory_FrontendWatchListingsResponse_Event.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchListingsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendWatchListingsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.events.push(strims_network_v1_directory_FrontendWatchListingsResponse_Event.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace FrontendWatchListingsResponse {
+  export type IChange = {
+    listings?: strims_network_v1_directory_INetworkListings;
+  }
+
+  export class Change {
+    listings: strims_network_v1_directory_NetworkListings | undefined;
+
+    constructor(v?: IChange) {
+      this.listings = v?.listings && new strims_network_v1_directory_NetworkListings(v.listings);
     }
 
-    static encode(m: NetworkListingsItem, w?: Writer): Writer {
+    static encode(m: Change, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.id) w.uint32(8).uint64(m.id);
-      if (m.listing) strims_network_v1_directory_Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
-      if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
-      if (m.moderation) strims_network_v1_directory_ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
-      if (m.userCount) w.uint32(40).uint32(m.userCount);
+      if (m.listings) strims_network_v1_directory_NetworkListings.encode(m.listings, w.uint32(10).fork()).ldelim();
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): NetworkListingsItem {
+    static decode(r: Reader | Uint8Array, length?: number): Change {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new NetworkListingsItem();
+      const m = new Change();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.id = r.uint64();
+          m.listings = strims_network_v1_directory_NetworkListings.decode(r, r.uint32());
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IUnpublish = {
+    networkId?: bigint;
+    listingId?: bigint;
+  }
+
+  export class Unpublish {
+    networkId: bigint;
+    listingId: bigint;
+
+    constructor(v?: IUnpublish) {
+      this.networkId = v?.networkId || BigInt(0);
+      this.listingId = v?.listingId || BigInt(0);
+    }
+
+    static encode(m: Unpublish, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.networkId) w.uint32(8).uint64(m.networkId);
+      if (m.listingId) w.uint32(16).uint64(m.listingId);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Unpublish {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Unpublish();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.networkId = r.uint64();
           break;
           case 2:
-          m.listing = strims_network_v1_directory_Listing.decode(r, r.uint32());
+          m.listingId = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IUserCountChange = {
+    networkId?: bigint;
+    listingId?: bigint;
+    userCount?: number;
+  }
+
+  export class UserCountChange {
+    networkId: bigint;
+    listingId: bigint;
+    userCount: number;
+
+    constructor(v?: IUserCountChange) {
+      this.networkId = v?.networkId || BigInt(0);
+      this.listingId = v?.listingId || BigInt(0);
+      this.userCount = v?.userCount || 0;
+    }
+
+    static encode(m: UserCountChange, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.networkId) w.uint32(8).uint64(m.networkId);
+      if (m.listingId) w.uint32(16).uint64(m.listingId);
+      if (m.userCount) w.uint32(24).uint32(m.userCount);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): UserCountChange {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new UserCountChange();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.networkId = r.uint64();
+          break;
+          case 2:
+          m.listingId = r.uint64();
           break;
           case 3:
-          m.snippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
-          break;
-          case 4:
-          m.moderation = strims_network_v1_directory_ListingModeration.decode(r, r.uint32());
-          break;
-          case 5:
           m.userCount = r.uint32();
           break;
           default:
@@ -3523,39 +3636,48 @@ export namespace FrontendGetListingsResponse {
     }
   }
 
-  export type INetworkListings = {
-    network?: strims_network_v1_directory_INetwork;
-    listings?: strims_network_v1_directory_FrontendGetListingsResponse_INetworkListingsItem[];
+  export type IEvent = {
+    event?: Event.IEvent
   }
 
-  export class NetworkListings {
-    network: strims_network_v1_directory_Network | undefined;
-    listings: strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem[];
+  export class Event {
+    event: Event.TEvent;
 
-    constructor(v?: INetworkListings) {
-      this.network = v?.network && new strims_network_v1_directory_Network(v.network);
-      this.listings = v?.listings ? v.listings.map(v => new strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem(v)) : [];
+    constructor(v?: IEvent) {
+      this.event = new Event.Event(v?.event);
     }
 
-    static encode(m: NetworkListings, w?: Writer): Writer {
+    static encode(m: Event, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.network) strims_network_v1_directory_Network.encode(m.network, w.uint32(10).fork()).ldelim();
-      for (const v of m.listings) strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem.encode(v, w.uint32(18).fork()).ldelim();
+      switch (m.event.case) {
+        case Event.EventCase.CHANGE:
+        strims_network_v1_directory_FrontendWatchListingsResponse_Change.encode(m.event.change, w.uint32(8010).fork()).ldelim();
+        break;
+        case Event.EventCase.UNPUBLISH:
+        strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish.encode(m.event.unpublish, w.uint32(8018).fork()).ldelim();
+        break;
+        case Event.EventCase.USER_COUNT_CHANGE:
+        strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange.encode(m.event.userCountChange, w.uint32(8026).fork()).ldelim();
+        break;
+      }
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): NetworkListings {
+    static decode(r: Reader | Uint8Array, length?: number): Event {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new NetworkListings();
+      const m = new Event();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
-          case 1:
-          m.network = strims_network_v1_directory_Network.decode(r, r.uint32());
+          case 1001:
+          m.event = new Event.Event({ change: strims_network_v1_directory_FrontendWatchListingsResponse_Change.decode(r, r.uint32()) });
           break;
-          case 2:
-          m.listings.push(strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem.decode(r, r.uint32()));
+          case 1002:
+          m.event = new Event.Event({ unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish.decode(r, r.uint32()) });
+          break;
+          case 1003:
+          m.event = new Event.Event({ userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange.decode(r, r.uint32()) });
           break;
           default:
           r.skipType(tag & 7);
@@ -3564,6 +3686,62 @@ export namespace FrontendGetListingsResponse {
       }
       return m;
     }
+  }
+
+  export namespace Event {
+    export enum EventCase {
+      NOT_SET = 0,
+      CHANGE = 1001,
+      UNPUBLISH = 1002,
+      USER_COUNT_CHANGE = 1003,
+    }
+
+    export type IEvent =
+    { case?: EventCase.NOT_SET }
+    |{ case?: EventCase.CHANGE, change: strims_network_v1_directory_FrontendWatchListingsResponse_IChange }
+    |{ case?: EventCase.UNPUBLISH, unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_IUnpublish }
+    |{ case?: EventCase.USER_COUNT_CHANGE, userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_IUserCountChange }
+    ;
+
+    export type TEvent = Readonly<
+    { case: EventCase.NOT_SET }
+    |{ case: EventCase.CHANGE, change: strims_network_v1_directory_FrontendWatchListingsResponse_Change }
+    |{ case: EventCase.UNPUBLISH, unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish }
+    |{ case: EventCase.USER_COUNT_CHANGE, userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange }
+    >;
+
+    class EventImpl {
+      change: strims_network_v1_directory_FrontendWatchListingsResponse_Change;
+      unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish;
+      userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange;
+      case: EventCase = EventCase.NOT_SET;
+
+      constructor(v?: IEvent) {
+        if (v && "change" in v) {
+          this.case = EventCase.CHANGE;
+          this.change = new strims_network_v1_directory_FrontendWatchListingsResponse_Change(v.change);
+        } else
+        if (v && "unpublish" in v) {
+          this.case = EventCase.UNPUBLISH;
+          this.unpublish = new strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish(v.unpublish);
+        } else
+        if (v && "userCountChange" in v) {
+          this.case = EventCase.USER_COUNT_CHANGE;
+          this.userCountChange = new strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange(v.userCountChange);
+        }
+      }
+    }
+
+    export const Event = EventImpl as {
+      new (): Readonly<{ case: EventCase.NOT_SET }>;
+      new <T extends IEvent>(v: T): Readonly<
+      T extends { change: strims_network_v1_directory_FrontendWatchListingsResponse_IChange } ? { case: EventCase.CHANGE, change: strims_network_v1_directory_FrontendWatchListingsResponse_Change } :
+      T extends { unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_IUnpublish } ? { case: EventCase.UNPUBLISH, unpublish: strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish } :
+      T extends { userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_IUserCountChange } ? { case: EventCase.USER_COUNT_CHANGE, userCountChange: strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange } :
+      never
+      >;
+    };
+
   }
 
 }
@@ -3846,12 +4024,6 @@ export type strims_network_v1_directory_ListingSnippetDelta = ListingSnippetDelt
 /* @internal */
 export type strims_network_v1_directory_IListingSnippetDelta = IListingSnippetDelta;
 /* @internal */
-export const strims_network_v1_directory_Network = Network;
-/* @internal */
-export type strims_network_v1_directory_Network = Network;
-/* @internal */
-export type strims_network_v1_directory_INetwork = INetwork;
-/* @internal */
 export const strims_network_v1_directory_Event = Event;
 /* @internal */
 export type strims_network_v1_directory_Event = Event;
@@ -3978,17 +4150,23 @@ export type strims_network_v1_directory_ModerateUserResponse = ModerateUserRespo
 /* @internal */
 export type strims_network_v1_directory_IModerateUserResponse = IModerateUserResponse;
 /* @internal */
-export const strims_network_v1_directory_FrontendOpenRequest = FrontendOpenRequest;
+export const strims_network_v1_directory_Network = Network;
 /* @internal */
-export type strims_network_v1_directory_FrontendOpenRequest = FrontendOpenRequest;
+export type strims_network_v1_directory_Network = Network;
 /* @internal */
-export type strims_network_v1_directory_IFrontendOpenRequest = IFrontendOpenRequest;
+export type strims_network_v1_directory_INetwork = INetwork;
 /* @internal */
-export const strims_network_v1_directory_FrontendOpenResponse = FrontendOpenResponse;
+export const strims_network_v1_directory_NetworkListingsItem = NetworkListingsItem;
 /* @internal */
-export type strims_network_v1_directory_FrontendOpenResponse = FrontendOpenResponse;
+export type strims_network_v1_directory_NetworkListingsItem = NetworkListingsItem;
 /* @internal */
-export type strims_network_v1_directory_IFrontendOpenResponse = IFrontendOpenResponse;
+export type strims_network_v1_directory_INetworkListingsItem = INetworkListingsItem;
+/* @internal */
+export const strims_network_v1_directory_NetworkListings = NetworkListings;
+/* @internal */
+export type strims_network_v1_directory_NetworkListings = NetworkListings;
+/* @internal */
+export type strims_network_v1_directory_INetworkListings = INetworkListings;
 /* @internal */
 export const strims_network_v1_directory_FrontendPublishRequest = FrontendPublishRequest;
 /* @internal */
@@ -4097,6 +4275,18 @@ export const strims_network_v1_directory_FrontendGetListingsResponse = FrontendG
 export type strims_network_v1_directory_FrontendGetListingsResponse = FrontendGetListingsResponse;
 /* @internal */
 export type strims_network_v1_directory_IFrontendGetListingsResponse = IFrontendGetListingsResponse;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchListingsRequest = FrontendWatchListingsRequest;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsRequest = FrontendWatchListingsRequest;
+/* @internal */
+export type strims_network_v1_directory_IFrontendWatchListingsRequest = IFrontendWatchListingsRequest;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchListingsResponse = FrontendWatchListingsResponse;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsResponse = FrontendWatchListingsResponse;
+/* @internal */
+export type strims_network_v1_directory_IFrontendWatchListingsResponse = IFrontendWatchListingsResponse;
 /* @internal */
 export const strims_network_v1_directory_FrontendWatchListingUsersRequest = FrontendWatchListingUsersRequest;
 /* @internal */
@@ -4218,12 +4408,6 @@ export type strims_network_v1_directory_Event_Ping = Event.Ping;
 /* @internal */
 export type strims_network_v1_directory_Event_IPing = Event.IPing;
 /* @internal */
-export const strims_network_v1_directory_FrontendOpenResponse_Close = FrontendOpenResponse.Close;
-/* @internal */
-export type strims_network_v1_directory_FrontendOpenResponse_Close = FrontendOpenResponse.Close;
-/* @internal */
-export type strims_network_v1_directory_FrontendOpenResponse_IClose = FrontendOpenResponse.IClose;
-/* @internal */
 export const strims_network_v1_directory_FrontendGetUsersResponse_Alias = FrontendGetUsersResponse.Alias;
 /* @internal */
 export type strims_network_v1_directory_FrontendGetUsersResponse_Alias = FrontendGetUsersResponse.Alias;
@@ -4236,17 +4420,29 @@ export type strims_network_v1_directory_FrontendGetUsersResponse_User = Frontend
 /* @internal */
 export type strims_network_v1_directory_FrontendGetUsersResponse_IUser = FrontendGetUsersResponse.IUser;
 /* @internal */
-export const strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem = FrontendGetListingsResponse.NetworkListingsItem;
+export const strims_network_v1_directory_FrontendWatchListingsResponse_Change = FrontendWatchListingsResponse.Change;
 /* @internal */
-export type strims_network_v1_directory_FrontendGetListingsResponse_NetworkListingsItem = FrontendGetListingsResponse.NetworkListingsItem;
+export type strims_network_v1_directory_FrontendWatchListingsResponse_Change = FrontendWatchListingsResponse.Change;
 /* @internal */
-export type strims_network_v1_directory_FrontendGetListingsResponse_INetworkListingsItem = FrontendGetListingsResponse.INetworkListingsItem;
+export type strims_network_v1_directory_FrontendWatchListingsResponse_IChange = FrontendWatchListingsResponse.IChange;
 /* @internal */
-export const strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings = FrontendGetListingsResponse.NetworkListings;
+export const strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish = FrontendWatchListingsResponse.Unpublish;
 /* @internal */
-export type strims_network_v1_directory_FrontendGetListingsResponse_NetworkListings = FrontendGetListingsResponse.NetworkListings;
+export type strims_network_v1_directory_FrontendWatchListingsResponse_Unpublish = FrontendWatchListingsResponse.Unpublish;
 /* @internal */
-export type strims_network_v1_directory_FrontendGetListingsResponse_INetworkListings = FrontendGetListingsResponse.INetworkListings;
+export type strims_network_v1_directory_FrontendWatchListingsResponse_IUnpublish = FrontendWatchListingsResponse.IUnpublish;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange = FrontendWatchListingsResponse.UserCountChange;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsResponse_UserCountChange = FrontendWatchListingsResponse.UserCountChange;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsResponse_IUserCountChange = FrontendWatchListingsResponse.IUserCountChange;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchListingsResponse_Event = FrontendWatchListingsResponse.Event;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsResponse_Event = FrontendWatchListingsResponse.Event;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchListingsResponse_IEvent = FrontendWatchListingsResponse.IEvent;
 /* @internal */
 export const strims_network_v1_directory_FrontendWatchListingUsersResponse_User = FrontendWatchListingUsersResponse.User;
 /* @internal */

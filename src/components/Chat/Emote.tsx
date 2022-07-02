@@ -21,7 +21,7 @@ type EmoteProps = {
 const Emote: React.FC<EmoteProps> = ({
   children,
   name,
-  modifiers = [],
+  modifiers,
   shouldAnimateForever = false,
   shouldShowModifiers = true,
   compactSpacing = false,

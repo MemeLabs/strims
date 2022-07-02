@@ -11,7 +11,6 @@ import { registerDirectoryFrontendService } from "../../../apis/strims/network/v
 import RoomCarousel from "../../../components/Chat/RoomCarousel";
 import { Provider as ChatProvider, useChat } from "../../../contexts/Chat";
 import { ThreadProviderProps } from "../../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../../contexts/Directory";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatService from "../../mocks/chat/service";
@@ -35,9 +34,7 @@ const Context: React.FC = ({ children }) => {
   return (
     <div className="chat_mockup">
       <ApiProvider value={client}>
-        <DirectoryProvider>
-          <ChatProvider>{children}</ChatProvider>
-        </DirectoryProvider>
+        <ChatProvider>{children}</ChatProvider>
       </ApiProvider>
     </div>
   );

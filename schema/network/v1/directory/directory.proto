@@ -177,12 +177,6 @@ message ListingSnippetDelta {
   }
 }
 
-message Network {
-  uint64 id = 1;
-  string name = 2;
-  bytes key = 3;
-}
-
 message Event {
   message ListingChange {
     uint64 id = 1;
@@ -317,17 +311,23 @@ service Directory {
   rpc ModerateUser(ModerateUserRequest) returns (ModerateUserResponse);
 }
 
-message FrontendOpenRequest {}
+message Network {
+  uint64 id = 1;
+  string name = 2;
+  bytes key = 3;
+}
 
-message FrontendOpenResponse {
-  message Close {}
+message NetworkListingsItem {
+  uint64 id = 1;
+  Listing listing = 2;
+  ListingSnippet snippet = 3;
+  ListingModeration moderation = 4;
+  uint32 user_count = 5;
+}
 
-  uint64 network_id = 1;
-  bytes network_key = 2;
-  oneof body {
-    Close close = 1001;
-    EventBroadcast broadcast = 1002;
-  }
+message NetworkListings {
+  Network network = 1;
+  repeated NetworkListingsItem listings = 2;
 }
 
 message FrontendPublishRequest {
@@ -403,23 +403,43 @@ message FrontendGetUsersResponse {
 
 message FrontendGetListingsRequest {
   repeated ListingContentType content_types = 1;
+  repeated bytes network_keys = 2;
 }
 
 message FrontendGetListingsResponse {
-  message NetworkListingsItem {
-    uint64 id = 1;
-    Listing listing = 2;
-    ListingSnippet snippet = 3;
-    ListingModeration moderation = 4;
-    uint32 user_count = 5;
-  }
-
-  message NetworkListings {
-    Network network = 1;
-    repeated NetworkListingsItem listings = 2;
-  }
-
   repeated NetworkListings listings = 1;
+}
+
+message FrontendWatchListingsRequest {
+  repeated ListingContentType content_types = 1;
+  repeated bytes network_keys = 2;
+}
+
+message FrontendWatchListingsResponse {
+  message Change {
+    NetworkListings listings = 1;
+  }
+
+  message Unpublish {
+    uint64 network_id = 1;
+    uint64 listing_id = 2;
+  }
+
+  message UserCountChange {
+    uint64 network_id = 1;
+    uint64 listing_id = 2;
+    uint32 user_count = 3;
+  }
+
+  message Event {
+    oneof event {
+      Change change = 1001;
+      Unpublish unpublish = 1002;
+      UserCountChange user_count_change = 1003;
+    }
+  }
+
+  repeated Event events = 1;
 }
 
 message FrontendWatchListingUsersRequest {
@@ -445,7 +465,6 @@ message FrontendWatchListingUsersResponse {
 }
 
 service DirectoryFrontend {
-  rpc Open(FrontendOpenRequest) returns (stream FrontendOpenResponse);
   rpc Publish(FrontendPublishRequest) returns (FrontendPublishResponse);
   rpc Unpublish(FrontendUnpublishRequest) returns (FrontendUnpublishResponse);
   rpc Join(FrontendJoinRequest) returns (FrontendJoinResponse);
@@ -457,6 +476,7 @@ service DirectoryFrontend {
 
   rpc GetUsers(FrontendGetUsersRequest) returns (FrontendGetUsersResponse);
   rpc GetListings(FrontendGetListingsRequest) returns (FrontendGetListingsResponse);
+  rpc WatchListings(FrontendWatchListingsRequest) returns (stream FrontendWatchListingsResponse);
   rpc WatchListingUsers(FrontendWatchListingUsersRequest) returns (stream FrontendWatchListingUsersResponse);
 }
 

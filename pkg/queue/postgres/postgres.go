@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const postgresGCIntervalMins = 10
+const gcIntervalMins = 10
 const transactionTimeout = 10 * time.Second
 
 type Config struct {
@@ -92,7 +92,7 @@ func newPostgresQueue(logger *zap.Logger, ctx context.Context, db *pgxpool.Pool,
 	}
 
 	go q.run()
-	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, postgresGCIntervalMins*time.Minute, q.gc, nil)
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, gcIntervalMins*time.Minute, q.gc, nil)
 
 	return q, nil
 }
@@ -107,7 +107,7 @@ type postgresQueue struct {
 }
 
 func (q *postgresQueue) gc(t timeutil.Time) {
-	_, err := q.db.Exec(q.ctx, fmt.Sprintf(`DELETE FROM "%s" WHERE ts < CURRENT_TIMESTAMP - INTERVAL '%d minute';`, q.name, postgresGCIntervalMins))
+	_, err := q.db.Exec(q.ctx, fmt.Sprintf(`DELETE FROM "%s" WHERE ts < CURRENT_TIMESTAMP - INTERVAL '%d minute';`, q.name, gcIntervalMins))
 	if err != nil {
 		q.logger.Warn("gc failed", zap.Error(err))
 	}

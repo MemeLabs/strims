@@ -78,9 +78,22 @@ type UserEvent struct {
 	Listing Listing
 }
 
+type ListingEventType int
+
+const (
+	_ ListingEventType = iota
+	ChangeListingEventType
+	UnpublishListingEventType
+	UserCountChangeListingEventType
+)
+
+type ListingEvent struct {
+	Type    ListingEventType
+	Listing Listing
+}
+
 type Control interface {
 	Run()
-	ReadCachedEvents(ctx context.Context, ch chan any)
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
 	DeleteSnippet(swarmID ppspp.SwarmID)
 	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
@@ -93,7 +106,10 @@ type Control interface {
 	GetUsersByNetworkID(id uint64) []User
 	GetListingsByNetworkID(id uint64) []Listing
 	GetListingByQuery(networkID uint64, query *networkv1directory.ListingQuery) (Listing, bool)
-	WatchListingUsers(ctx context.Context, networkID, listingID uint64) ([]User, chan UserEvent, error)
+	NotifyListingEvent(networkID uint64, ch chan ListingEvent) ([]Listing, error)
+	StopNotifyingListingEvent(networkID uint64, ch chan ListingEvent)
+	NotifyListingUserEvent(networkID, listingID uint64, ch chan UserEvent) ([]User, error)
+	StopNotifyingListingUserEvent(networkID, listingID uint64, ch chan UserEvent)
 }
 
 // NewControl ...
@@ -119,7 +135,6 @@ func NewControl(
 		events:    observers.Chan(),
 
 		runners:         hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
-		eventCache:      map[uint64]*eventCache{},
 		syndicateStores: map[uint64]*syndicateStore{},
 
 		snippets: snippets,
@@ -146,7 +161,6 @@ type control struct {
 	events          chan any
 	lock            sync.Mutex
 	runners         hashmap.Map[[]byte, *runner]
-	eventCache      map[uint64]*eventCache
 	syndicateStores map[uint64]*syndicateStore
 
 	snippets      *snippetMap
@@ -190,8 +204,6 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 	}
 	t.runners.Set(dao.NetworkKey(network), r)
 
-	c := newEventCache(network)
-	t.eventCache[network.Id] = c
 	s := newSyndicateStore(t.logger, network)
 	t.syndicateStores[network.Id] = s
 
@@ -201,7 +213,6 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 		defer func() {
 			t.lock.Lock()
 			defer t.lock.Unlock()
-			delete(t.eventCache, network.Id)
 			delete(t.syndicateStores, network.Id)
 		}()
 
@@ -220,7 +231,6 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 				}
 
 				t.lock.Lock()
-				c.StoreEvent(b)
 				s.HandleEvent(b) // TODO: syncutil map?
 				t.lock.Unlock()
 
@@ -285,27 +295,6 @@ func (t *control) client(ctx context.Context, networkKey []byte) (*dialer.RPCCli
 	}
 
 	return client, networkv1directory.NewDirectoryClient(client), nil
-}
-
-func (t *control) ReadCachedEvents(ctx context.Context, ch chan any) {
-	var es []event.DirectoryEvent
-	t.lock.Lock()
-	for _, c := range t.eventCache {
-		es = append(es, event.DirectoryEvent{
-			NetworkID:  c.Network.Id,
-			NetworkKey: dao.NetworkKey(c.Network),
-			Broadcast:  c.Events(),
-		})
-	}
-	t.lock.Unlock()
-
-	for _, e := range es {
-		select {
-		case ch <- e:
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // PushSnippet ...
@@ -459,19 +448,44 @@ func (t *control) GetListingByQuery(networkID uint64, query *networkv1directory.
 	return Listing{}, false
 }
 
-func (t *control) WatchListingUsers(ctx context.Context, networkID, listingID uint64) ([]User, chan UserEvent, error) {
+func (t *control) NotifyListingEvent(networkID uint64, ch chan ListingEvent) ([]Listing, error) {
 	t.lock.Lock()
 	s, ok := t.syndicateStores[networkID]
 	t.lock.Unlock()
-
 	if !ok {
-		return nil, nil, errors.New("network id not found")
+		return nil, errors.New("network id not found")
 	}
 
-	users := s.GetUsersByListingID(listingID)
+	s.NotifyListingEvent(ch)
+	return s.GetListings(), nil
+}
 
-	ch := make(chan UserEvent, 1)
-	s.NotifyUserEvents(listingID, ch, ctx.Done())
+func (t *control) StopNotifyingListingEvent(networkID uint64, ch chan ListingEvent) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if ok {
+		s.StopNotifyingListingEvent(ch)
+	}
+}
 
-	return users, ch, nil
+func (t *control) NotifyListingUserEvent(networkID, listingID uint64, ch chan UserEvent) ([]User, error) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if !ok {
+		return nil, errors.New("network id not found")
+	}
+
+	s.NotifyUserEvent(listingID, ch)
+	return s.GetUsersByListingID(listingID), nil
+}
+
+func (t *control) StopNotifyingListingUserEvent(networkID, listingID uint64, ch chan UserEvent) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if ok {
+		s.StopNotifyingUserEvent(listingID, ch)
+	}
 }

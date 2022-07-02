@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -992,7 +991,7 @@ func (u *user) ListingIDs() []uint64 {
 	})
 
 	sortutil.Uint64(ids)
-	return slices.Compact(ids)
+	return ids
 }
 
 func (u *user) EachSession(it func(s *session)) {
