@@ -134,6 +134,16 @@ func (d *syndicateStore) HandleEvent(b *networkv1directory.EventBroadcast) {
 	}
 }
 
+func (d *syndicateStore) Close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, o := range d.userObservers {
+		o.Close()
+	}
+	d.listingObservers.Close()
+}
+
 func (d *syndicateStore) handleListingChange(e *networkv1directory.Event_ListingChange) {
 	l := d.listings[e.Id]
 	if l == nil {
@@ -150,10 +160,7 @@ func (d *syndicateStore) handleListingChange(e *networkv1directory.Event_Listing
 	l.Listing.Snippet = e.Snippet
 	l.Listing.Moderation = e.Moderation
 
-	d.listingObservers.Emit(ListingEvent{
-		Type:    ChangeListingEventType,
-		Listing: l.Listing,
-	})
+	d.listingObservers.Emit(ListingEvent{ChangeListingEventType, l.Listing})
 }
 
 func (d *syndicateStore) handleUnpublish(e *networkv1directory.Event_Unpublish) {
@@ -167,10 +174,7 @@ func (d *syndicateStore) handleUnpublish(e *networkv1directory.Event_Unpublish) 
 	}
 	delete(d.listings, e.Id)
 
-	d.listingObservers.Emit(ListingEvent{
-		Type:    UnpublishListingEventType,
-		Listing: l.Listing,
-	})
+	d.listingObservers.Emit(ListingEvent{UnpublishListingEventType, l.Listing})
 }
 
 func (d *syndicateStore) handleUserCountChange(e *networkv1directory.Event_UserCountChange) {
@@ -179,12 +183,10 @@ func (d *syndicateStore) handleUserCountChange(e *networkv1directory.Event_UserC
 		return
 	}
 
-	l.UserCount = e.Count
+	l.UserCount = e.UserCount
+	l.RecentUserCount = e.RecentUserCount
 
-	d.listingObservers.Emit(ListingEvent{
-		Type:    UserCountChangeListingEventType,
-		Listing: l.Listing,
-	})
+	d.listingObservers.Emit(ListingEvent{UserCountChangeListingEventType, l.Listing})
 }
 
 func (d *syndicateStore) handleUserPresenceChange(e *networkv1directory.Event_UserPresenceChange) {

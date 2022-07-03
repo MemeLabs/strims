@@ -42,10 +42,14 @@ const Directory: React.FC = () => {
           listing: l.listing,
           snippet: l.snippet,
           userCount: l.userCount,
+          recentUserCount: l.recentUserCount,
         });
       }
     }
-    return gridListings;
+    return gridListings.sort((a, b) => {
+      const d = a.userCount - b.userCount;
+      return d != 0 ? d : Number(a.id - b.id);
+    });
   }, [listings]);
 
   return (

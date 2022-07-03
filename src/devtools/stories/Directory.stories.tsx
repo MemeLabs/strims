@@ -45,6 +45,7 @@ const GridStory: React.FC = () => {
       listing: new Listing(e.listing),
       snippet: new ListingSnippet(e.snippet),
       userCount: 0,
+      recentUserCount: 0,
     });
   }
 

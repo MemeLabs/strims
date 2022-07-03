@@ -191,7 +191,8 @@ message Event {
 
   message UserCountChange {
     uint64 id = 1;
-    uint32 count = 2;
+    uint32 user_count = 2;
+    uint32 recent_user_count = 3;
   }
 
   message UserPresenceChange {
@@ -323,6 +324,7 @@ message NetworkListingsItem {
   ListingSnippet snippet = 3;
   ListingModeration moderation = 4;
   uint32 user_count = 5;
+  uint32 recent_user_count = 6;
 }
 
 message NetworkListings {
@@ -429,6 +431,7 @@ message FrontendWatchListingsResponse {
     uint64 network_id = 1;
     uint64 listing_id = 2;
     uint32 user_count = 3;
+    uint32 recent_user_count = 4;
   }
 
   message Event {

@@ -277,11 +277,12 @@ func (s *directoryService) GetListings(ctx context.Context, r *networkv1director
 		for _, l := range s.app.Directory().GetListingsByNetworkID(n.Id) {
 			if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
 				nls = append(nls, &networkv1directory.NetworkListingsItem{
-					Id:         l.ID,
-					Listing:    l.Listing,
-					Snippet:    l.Snippet,
-					Moderation: l.Moderation,
-					UserCount:  l.UserCount,
+					Id:              l.ID,
+					Listing:         l.Listing,
+					Snippet:         l.Snippet,
+					Moderation:      l.Moderation,
+					UserCount:       l.UserCount,
+					RecentUserCount: l.RecentUserCount,
 				})
 			}
 		}
@@ -334,11 +335,12 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 			for _, l := range listings {
 				if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
 					nls = append(nls, &networkv1directory.NetworkListingsItem{
-						Id:         l.ID,
-						Listing:    l.Listing,
-						Snippet:    l.Snippet,
-						Moderation: l.Moderation,
-						UserCount:  l.UserCount,
+						Id:              l.ID,
+						Listing:         l.Listing,
+						Snippet:         l.Snippet,
+						Moderation:      l.Moderation,
+						UserCount:       l.UserCount,
+						RecentUserCount: l.RecentUserCount,
 					})
 				}
 			}
@@ -380,11 +382,12 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 								Listings: &networkv1directory.NetworkListings{
 									Network: network,
 									Listings: []*networkv1directory.NetworkListingsItem{{
-										Id:         l.ID,
-										Listing:    l.Listing,
-										Snippet:    l.Snippet,
-										Moderation: l.Moderation,
-										UserCount:  l.UserCount,
+										Id:              l.ID,
+										Listing:         l.Listing,
+										Snippet:         l.Snippet,
+										Moderation:      l.Moderation,
+										UserCount:       l.UserCount,
+										RecentUserCount: l.RecentUserCount,
 									}},
 								},
 							},
@@ -399,9 +402,10 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 					case directory.UserCountChangeListingEventType:
 						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_UserCountChange{
 							UserCountChange: &networkv1directory.FrontendWatchListingsResponse_UserCountChange{
-								NetworkId: network.Id,
-								ListingId: l.ID,
-								UserCount: l.UserCount,
+								NetworkId:       network.Id,
+								ListingId:       l.ID,
+								UserCount:       l.UserCount,
+								RecentUserCount: l.RecentUserCount,
 							},
 						}
 					}

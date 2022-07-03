@@ -23,6 +23,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   listing,
   snippet,
   userCount,
+  recentUserCount,
   networkKey,
 }) => {
   const layout = useLayout();
@@ -90,6 +91,7 @@ export interface DirectoryListing {
   listing: Listing;
   snippet: ListingSnippet;
   userCount: number;
+  recentUserCount: number;
 }
 
 export interface DirectoryGridProps {

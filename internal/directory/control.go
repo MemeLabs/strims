@@ -32,11 +32,12 @@ var (
 )
 
 type Listing struct {
-	ID         uint64
-	Listing    *networkv1directory.Listing
-	Snippet    *networkv1directory.ListingSnippet
-	Moderation *networkv1directory.ListingModeration
-	UserCount  uint32
+	ID              uint64
+	Listing         *networkv1directory.Listing
+	Snippet         *networkv1directory.ListingSnippet
+	Moderation      *networkv1directory.ListingModeration
+	UserCount       uint32
+	RecentUserCount uint32
 }
 
 func (l Listing) MarshalLogObject(e zapcore.ObjectEncoder) error {
@@ -214,6 +215,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 			t.lock.Lock()
 			defer t.lock.Unlock()
 			delete(t.syndicateStores, network.Id)
+			s.Close()
 		}()
 
 		for {

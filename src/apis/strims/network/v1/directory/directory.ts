@@ -1631,22 +1631,26 @@ export namespace Event {
 
   export type IUserCountChange = {
     id?: bigint;
-    count?: number;
+    userCount?: number;
+    recentUserCount?: number;
   }
 
   export class UserCountChange {
     id: bigint;
-    count: number;
+    userCount: number;
+    recentUserCount: number;
 
     constructor(v?: IUserCountChange) {
       this.id = v?.id || BigInt(0);
-      this.count = v?.count || 0;
+      this.userCount = v?.userCount || 0;
+      this.recentUserCount = v?.recentUserCount || 0;
     }
 
     static encode(m: UserCountChange, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
-      if (m.count) w.uint32(16).uint32(m.count);
+      if (m.userCount) w.uint32(16).uint32(m.userCount);
+      if (m.recentUserCount) w.uint32(24).uint32(m.recentUserCount);
       return w;
     }
 
@@ -1661,7 +1665,10 @@ export namespace Event {
           m.id = r.uint64();
           break;
           case 2:
-          m.count = r.uint32();
+          m.userCount = r.uint32();
+          break;
+          case 3:
+          m.recentUserCount = r.uint32();
           break;
           default:
           r.skipType(tag & 7);
@@ -2603,6 +2610,7 @@ export type INetworkListingsItem = {
   snippet?: strims_network_v1_directory_IListingSnippet;
   moderation?: strims_network_v1_directory_IListingModeration;
   userCount?: number;
+  recentUserCount?: number;
 }
 
 export class NetworkListingsItem {
@@ -2611,6 +2619,7 @@ export class NetworkListingsItem {
   snippet: strims_network_v1_directory_ListingSnippet | undefined;
   moderation: strims_network_v1_directory_ListingModeration | undefined;
   userCount: number;
+  recentUserCount: number;
 
   constructor(v?: INetworkListingsItem) {
     this.id = v?.id || BigInt(0);
@@ -2618,6 +2627,7 @@ export class NetworkListingsItem {
     this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
     this.moderation = v?.moderation && new strims_network_v1_directory_ListingModeration(v.moderation);
     this.userCount = v?.userCount || 0;
+    this.recentUserCount = v?.recentUserCount || 0;
   }
 
   static encode(m: NetworkListingsItem, w?: Writer): Writer {
@@ -2627,6 +2637,7 @@ export class NetworkListingsItem {
     if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
     if (m.moderation) strims_network_v1_directory_ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
     if (m.userCount) w.uint32(40).uint32(m.userCount);
+    if (m.recentUserCount) w.uint32(48).uint32(m.recentUserCount);
     return w;
   }
 
@@ -2651,6 +2662,9 @@ export class NetworkListingsItem {
         break;
         case 5:
         m.userCount = r.uint32();
+        break;
+        case 6:
+        m.recentUserCount = r.uint32();
         break;
         default:
         r.skipType(tag & 7);
@@ -3590,17 +3604,20 @@ export namespace FrontendWatchListingsResponse {
     networkId?: bigint;
     listingId?: bigint;
     userCount?: number;
+    recentUserCount?: number;
   }
 
   export class UserCountChange {
     networkId: bigint;
     listingId: bigint;
     userCount: number;
+    recentUserCount: number;
 
     constructor(v?: IUserCountChange) {
       this.networkId = v?.networkId || BigInt(0);
       this.listingId = v?.listingId || BigInt(0);
       this.userCount = v?.userCount || 0;
+      this.recentUserCount = v?.recentUserCount || 0;
     }
 
     static encode(m: UserCountChange, w?: Writer): Writer {
@@ -3608,6 +3625,7 @@ export namespace FrontendWatchListingsResponse {
       if (m.networkId) w.uint32(8).uint64(m.networkId);
       if (m.listingId) w.uint32(16).uint64(m.listingId);
       if (m.userCount) w.uint32(24).uint32(m.userCount);
+      if (m.recentUserCount) w.uint32(32).uint32(m.recentUserCount);
       return w;
     }
 
@@ -3626,6 +3644,9 @@ export namespace FrontendWatchListingsResponse {
           break;
           case 3:
           m.userCount = r.uint32();
+          break;
+          case 4:
+          m.recentUserCount = r.uint32();
           break;
           default:
           r.skipType(tag & 7);

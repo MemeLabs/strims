@@ -323,7 +323,6 @@ export class WindowBridge extends EventEmitter {
     window.addEventListener("focus", checkConnectionState);
 
     const onclose = () => {
-      console.log("wrtc closed");
       dataChannels.forEach(({ id, port, dataChannel }) => {
         port.postMessage({ type: EventType.DATA_CHANNEL_CLOSE });
         this.dataChannelPorts.delete(id);
