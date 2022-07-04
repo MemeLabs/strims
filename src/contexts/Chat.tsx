@@ -9,6 +9,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { FrontendClient } from "../apis/client";
 import {
   AssetBundle,
+  EmojiCategory,
   Emote,
   EmoteEffect,
   IUIConfig,
@@ -107,6 +108,7 @@ export interface State {
   popoutTopicCapacity: number;
   mainTopics: Topic[];
   mainActiveTopic?: Topic;
+  emoji: EmojiCategory[];
 }
 
 type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
@@ -178,6 +180,7 @@ const initialState: State = {
   popoutTopics: [],
   popoutTopicCapacity: 0,
   mainTopics: [],
+  emoji: [],
 };
 
 type ChatActions = {
@@ -473,6 +476,19 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       };
     });
 
+  const mergeUIConfig = (values: Partial<IUIConfig>) =>
+    setState((state) => {
+      void client.chat.setUIConfig({
+        uiConfig: {
+          ...state.uiConfig,
+          ...values,
+        },
+      });
+
+      // TODO: api req state?
+      return state;
+    });
+
   return {
     openRoom,
     openWhispers,
@@ -483,6 +499,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     closeTopic,
     setMainActiveTopic,
     resetTopicUnreadCount,
+    mergeUIConfig,
   };
 };
 
@@ -824,27 +841,23 @@ export const Provider: React.FC = ({ children }) => {
   const actions = useStableCallbacks(createGlobalActions(client, setState));
 
   useEffect(() => {
+    void client.chat
+      .getEmoji()
+      .then(({ categories }) => setState((state) => ({ ...state, emoji: categories })));
+
     const uiConfigEvents = client.chat.watchUIConfig();
     uiConfigEvents.on("data", ({ uiConfig }) => actions.setUiConfig(uiConfig));
     const whisperEvents = client.chat.watchWhispers();
     whisperEvents.on("data", actions.handleWhisperEvent);
+
     return () => {
       uiConfigEvents.destroy();
       whisperEvents.destroy();
     };
   }, [client]);
 
-  const mergeUIConfig = useStableCallback((values: Partial<IUIConfig>) => {
-    void client.chat.setUIConfig({
-      uiConfig: {
-        ...state.uiConfig,
-        ...values,
-      },
-    });
-  });
-
   const value = useMemo<[State, ChatActions, StateDispatcher]>(
-    () => [state, { mergeUIConfig, ...actions }, setState],
+    () => [state, actions, setState],
     [state]
   );
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

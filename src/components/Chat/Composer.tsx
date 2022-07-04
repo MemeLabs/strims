@@ -6,6 +6,7 @@ import "./Composer.scss";
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import filterObj from "filter-obj";
+import { escapeRegExp } from "lodash";
 import Prism from "prismjs";
 import React, {
   KeyboardEvent,
@@ -34,6 +35,7 @@ import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
 
+import { EmojiCategory } from "../../apis/strims/chat/v1/chat";
 import { useChat } from "../../contexts/Chat";
 import Emote from "./Emote";
 
@@ -88,7 +90,7 @@ interface ComposerProps {
 
 const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
   const { t } = useTranslation();
-  const [{ uiConfig }] = useChat();
+  const [{ uiConfig, emoji }] = useChat();
 
   const [[matchSources, matchEntries], setMatch] = useState<Match>(defaultMatch);
   const [selectedMatch, setSelectedMatch] = useState<SelectedMatch>(defaultSelectedMatch);
@@ -129,8 +131,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
 
   const grammar = useMemo(
-    () => getGrammar(emotes, modifiers, nicks, tags),
-    [emotes, modifiers, nicks, tags]
+    () => getGrammar(emotes, modifiers, emoji, nicks, tags),
+    [emotes, modifiers, emoji, nicks, tags]
   );
 
   const decorate = useCallback(
@@ -393,6 +395,7 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
         "chat_composer__span--spoiler": leaf.spoiler,
         "chat_composer__span--url": leaf.url,
         "chat_composer__span--emote": leaf.emote,
+        "chat_composer__span--emoji": leaf.emoji,
         "chat_composer__span--tag": leaf.tag,
         "chat_composer__span--nick": leaf.nick,
         "chat_composer__span--self": leaf.self,
@@ -409,7 +412,13 @@ export default Composer;
 
 const noopPattern = /_^/;
 
-const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags: string[]) => {
+const getGrammar = (
+  emotes: string[],
+  modifiers: string[],
+  emoji: EmojiCategory[],
+  nicks: string[],
+  tags: string[]
+) => {
   const nestableEntities = {
     code: {
       pattern: /`(\\`|[^`])*(`|$)/,
@@ -418,6 +427,9 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
     emote: {
       pattern: noopPattern,
       lookbehind: true,
+    },
+    emoji: {
+      pattern: noopPattern,
     },
     nick: {
       pattern: noopPattern,
@@ -436,6 +448,13 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
     );
   } else if (emotes.length !== 0) {
     nestableEntities.emote.pattern = new RegExp(`(\\W|^)(${emotes.join("|")})(?=\\W|$)`);
+  }
+  if (emoji.length !== 0) {
+    const glyphs: string[] = [];
+    for (const category of emoji) {
+      glyphs.push(...category.emoji.map(({ glyph }) => escapeRegExp(glyph)));
+    }
+    nestableEntities.emoji.pattern = new RegExp(glyphs.join("|"));
   }
   if (nicks.length !== 0) {
     nestableEntities.nick.pattern = new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`);

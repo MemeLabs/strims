@@ -5,7 +5,7 @@ package chat
 
 // TODO: generate from https://unicode.org/emoji/charts/full-emoji-list.html
 
-var emojiDescriptions = map[string]string{
+var EmojiDescriptions = map[string]string{
 	"\U0001f600":                             "grinning face",
 	"\U0001f603":                             "grinning face with big eyes",
 	"\U0001f604":                             "grinning face with smiling eyes",

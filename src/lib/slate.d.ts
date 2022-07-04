@@ -10,6 +10,7 @@ type EntityToken = {
   spoiler?: boolean;
   url?: boolean;
   emote?: boolean;
+  emoji?: boolean;
   tag?: boolean;
   nick?: boolean;
   self?: boolean;

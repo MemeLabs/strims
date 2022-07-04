@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/chat"
 	"github.com/MemeLabs/strims/internal/dao"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
@@ -739,4 +741,21 @@ func (s *chatService) Untag(ctx context.Context, req *chatv1.UntagRequest) (*cha
 		return nil
 	})
 	return &chatv1.UntagResponse{}, err
+}
+
+// GetEmoji ...
+func (s *chatService) GetEmoji(ctx context.Context, req *chatv1.GetEmojiRequest) (*chatv1.GetEmojiResponse, error) {
+	c := &chatv1.EmojiCategory{
+		Name: "all",
+	}
+	for v, d := range chat.EmojiDescriptions {
+		c.Emoji = append(c.Emoji, &chatv1.Emoji{
+			Glyph:       v,
+			Description: d,
+		})
+	}
+	sort.Slice(c.Emoji, func(i, j int) bool {
+		return c.Emoji[i].Glyph < c.Emoji[j].Glyph
+	})
+	return &chatv1.GetEmojiResponse{Categories: []*chatv1.EmojiCategory{c}}, nil
 }

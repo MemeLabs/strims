@@ -64,7 +64,7 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 	for _, b := range x.emoji.FindAllStringIndex(msg, -1) {
 		if !inBounds(e.Links, b[0], b[1]) && !inBounds(e.CodeBlocks, b[0], b[1]) {
 			e.Emojis = append(e.Emojis, &chatv1.Message_Entities_Emoji{
-				Description: emojiDescriptions[msg[b[0]:b[1]]],
+				Description: EmojiDescriptions[msg[b[0]:b[1]]],
 				Bounds:      runeBounds(msg, b),
 			})
 		}
@@ -158,8 +158,8 @@ func runeBounds(msg string, b []int) *chatv1.Message_Entities_Bounds {
 }
 
 func compileEmojiRegexp() *regexp.Regexp {
-	glyphs := make([]string, 0, len(emojiDescriptions))
-	for c := range emojiDescriptions {
+	glyphs := make([]string, 0, len(EmojiDescriptions))
+	for c := range EmojiDescriptions {
 		glyphs = append(glyphs, regexp.QuoteMeta(c))
 	}
 	sort.Sort(sortutil.OrderedSlice[string](glyphs))

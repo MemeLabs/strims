@@ -118,6 +118,9 @@ import {
   strims_chat_v1_IUntagRequest,
   strims_chat_v1_UntagRequest,
   strims_chat_v1_UntagResponse,
+  strims_chat_v1_IGetEmojiRequest,
+  strims_chat_v1_GetEmojiRequest,
+  strims_chat_v1_GetEmojiResponse,
   strims_chat_v1_ISendMessageRequest,
   strims_chat_v1_SendMessageRequest,
   strims_chat_v1_SendMessageResponse,
@@ -313,6 +316,7 @@ export interface ChatFrontendService {
   unhighlight(req: strims_chat_v1_UnhighlightRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UnhighlightResponse> | strims_chat_v1_UnhighlightResponse;
   tag(req: strims_chat_v1_TagRequest, call: strims_rpc_Call): Promise<strims_chat_v1_TagResponse> | strims_chat_v1_TagResponse;
   untag(req: strims_chat_v1_UntagRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UntagResponse> | strims_chat_v1_UntagResponse;
+  getEmoji(req: strims_chat_v1_GetEmojiRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetEmojiResponse> | strims_chat_v1_GetEmojiResponse;
 }
 
 export class UnimplementedChatFrontendService implements ChatFrontendService {
@@ -333,6 +337,7 @@ export class UnimplementedChatFrontendService implements ChatFrontendService {
   unhighlight(req: strims_chat_v1_UnhighlightRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UnhighlightResponse> | strims_chat_v1_UnhighlightResponse { throw new Error("not implemented"); }
   tag(req: strims_chat_v1_TagRequest, call: strims_rpc_Call): Promise<strims_chat_v1_TagResponse> | strims_chat_v1_TagResponse { throw new Error("not implemented"); }
   untag(req: strims_chat_v1_UntagRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UntagResponse> | strims_chat_v1_UntagResponse { throw new Error("not implemented"); }
+  getEmoji(req: strims_chat_v1_GetEmojiRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetEmojiResponse> | strims_chat_v1_GetEmojiResponse { throw new Error("not implemented"); }
 }
 
 export const registerChatFrontendService = (host: strims_rpc_Service, service: ChatFrontendService): void => {
@@ -353,6 +358,7 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<strims_chat_v1_UnhighlightRequest, strims_chat_v1_UnhighlightResponse>("strims.chat.v1.ChatFrontend.Unhighlight", service.unhighlight.bind(service), strims_chat_v1_UnhighlightRequest);
   host.registerMethod<strims_chat_v1_TagRequest, strims_chat_v1_TagResponse>("strims.chat.v1.ChatFrontend.Tag", service.tag.bind(service), strims_chat_v1_TagRequest);
   host.registerMethod<strims_chat_v1_UntagRequest, strims_chat_v1_UntagResponse>("strims.chat.v1.ChatFrontend.Untag", service.untag.bind(service), strims_chat_v1_UntagRequest);
+  host.registerMethod<strims_chat_v1_GetEmojiRequest, strims_chat_v1_GetEmojiResponse>("strims.chat.v1.ChatFrontend.GetEmoji", service.getEmoji.bind(service), strims_chat_v1_GetEmojiRequest);
 }
 
 export class ChatFrontendClient {
@@ -424,6 +430,10 @@ export class ChatFrontendClient {
 
   public untag(req?: strims_chat_v1_IUntagRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_UntagResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.Untag", new strims_chat_v1_UntagRequest(req)), strims_chat_v1_UntagResponse, opts);
+  }
+
+  public getEmoji(req?: strims_chat_v1_IGetEmojiRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_GetEmojiResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.GetEmoji", new strims_chat_v1_GetEmojiRequest(req)), strims_chat_v1_GetEmojiResponse, opts);
   }
 }
 

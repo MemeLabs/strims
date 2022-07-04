@@ -489,6 +489,7 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Unhighlight", service.Unhighlight)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Tag", service.Tag)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Untag", service.Untag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetEmoji", service.GetEmoji)
 }
 
 // ChatFrontendService ...
@@ -561,6 +562,10 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *UntagRequest,
 	) (*UntagResponse, error)
+	GetEmoji(
+		ctx context.Context,
+		req *GetEmojiRequest,
+	) (*GetEmojiResponse, error)
 }
 
 // ChatFrontendService ...
@@ -682,6 +687,13 @@ func (s *UnimplementedChatFrontendService) Untag(
 	ctx context.Context,
 	req *UntagRequest,
 ) (*UntagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) GetEmoji(
+	ctx context.Context,
+	req *GetEmojiRequest,
+) (*GetEmojiResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -848,6 +860,15 @@ func (c *ChatFrontendClient) Untag(
 	res *UntagResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Untag", req, res)
+}
+
+// GetEmoji ...
+func (c *ChatFrontendClient) GetEmoji(
+	ctx context.Context,
+	req *GetEmojiRequest,
+	res *GetEmojiResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetEmoji", req, res)
 }
 
 // RegisterChatService ...
