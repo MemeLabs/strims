@@ -127,13 +127,13 @@ func chatProfilePeerKey(m *chatv1.Profile) []byte {
 	return FormatChatProfilePeerKey(m.ServerId, m.PeerKey)
 }
 
-var GetChatProfileByPeerKey = UniqueIndex(chatProfilePeerKeyNS, ChatProfiles, chatProfilePeerKey, nil)
+var ChatProfilesByPeerKey = NewUniqueIndex(chatProfilePeerKeyNS, ChatProfiles, chatProfilePeerKey, nil)
 
 func NewChatProfileCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatProfileCache) {
 	c.CacheStore, c.ByID = newCacheStore[chatv1.Profile](s, ChatProfiles, opt)
 	c.ByPeerKey = NewCacheIndex(
 		c.CacheStore,
-		GetChatProfileByPeerKey,
+		ChatProfilesByPeerKey.Get,
 		chatProfilePeerKey,
 		hashmap.NewByteInterface[[]byte],
 	)
@@ -164,7 +164,7 @@ var ChatWhisperThreads = NewTable(
 	},
 )
 
-var GetChatWhisperThreadByPeerKey = UniqueIndex(
+var ChatWhisperThreadsByPeerKey = NewUniqueIndex(
 	chatWhisperThreadPeerKeyNS,
 	ChatWhisperThreads,
 	(*chatv1.WhisperThread).GetPeerKey,
@@ -183,7 +183,7 @@ var ChatWhisperRecords = NewTable(
 	},
 )
 
-var GetChatWhisperRecordsByPeerKey = SecondaryIndex(
+var ChatWhisperRecordsByPeerKey = NewSecondaryIndex(
 	chatWhisperRecordPeerKeyNS,
 	ChatWhisperRecords,
 	(*chatv1.WhisperRecord).GetPeerKey,
@@ -195,14 +195,18 @@ func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
 	return b
 }
 
-var GetChatWhisperRecordsByState = SecondaryIndex(
+var ChatWhisperRecordsByState = NewSecondaryIndex(
 	chatWhisperRecordStateNS,
 	ChatWhisperRecords,
 	func(m *chatv1.WhisperRecord) []byte { return FormatChatWhisperRecordStateKey(m.State) },
 )
 
 // NewChatServer ...
-func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *chatv1.Room) (*chatv1.Server, error) {
+func NewChatServer(
+	g IDGenerator,
+	networkKey []byte,
+	chatRoom *chatv1.Room,
+) (*chatv1.Server, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -254,6 +258,7 @@ func NewChatModifier(
 	name string,
 	priority uint32,
 	internal bool,
+	procChance float64,
 ) (*chatv1.Modifier, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -261,11 +266,12 @@ func NewChatModifier(
 	}
 
 	v := &chatv1.Modifier{
-		Id:       id,
-		ServerId: serverID,
-		Name:     name,
-		Priority: priority,
-		Internal: internal,
+		Id:         id,
+		ServerId:   serverID,
+		Name:       name,
+		Priority:   priority,
+		Internal:   internal,
+		ProcChance: procChance,
 	}
 	return v, nil
 }

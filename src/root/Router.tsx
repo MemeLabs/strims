@@ -10,7 +10,7 @@ import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
 import SignUp from "../pages/SignUp";
 
-const Main = lazy(() => import("./Main"));
+const Main = lazy(() => import(/* webpackPrefetch: true */ "./Main"));
 
 const RootRouter: React.FC = () => {
   const { location } = useBackgroundRoute();

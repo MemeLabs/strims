@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,18 +17,25 @@ import (
 type Observer struct {
 	observers sync.Map
 	callers   sync.Map
+	size      int32
+}
+
+func (o *Observer) Size() int {
+	return int(atomic.LoadInt32(&o.size))
 }
 
 // Notify ...
 func (o *Observer) Notify(ch any) {
-	o.observers.Store(ch, ch)
+	o.observers.Store(ch, reflect.ValueOf(ch))
 	_, file, line, _ := runtime.Caller(2)
 	o.callers.Store(ch, fmt.Sprintf("%s:%d", file, line))
+	atomic.AddInt32(&o.size, 1)
 }
 
 // StopNotifying ...
 func (o *Observer) StopNotifying(ch any) {
 	o.observers.Delete(ch)
+	atomic.AddInt32(&o.size, -1)
 }
 
 // Emit ...
@@ -35,7 +43,7 @@ func (o *Observer) Emit(v any) {
 	t := time.NewTimer(time.Second)
 	done := make(chan struct{})
 	defer t.Stop()
-	o.observers.Range(func(_ any, chi any) bool {
+	o.observers.Range(func(chi any, chv any) bool {
 		go func() {
 			select {
 			case <-t.C:
@@ -44,7 +52,7 @@ func (o *Observer) Emit(v any) {
 			case <-done:
 			}
 		}()
-		reflect.ValueOf(chi).Send(reflect.ValueOf(v))
+		chv.(reflect.Value).Send(reflect.ValueOf(v))
 		done <- struct{}{}
 		return true
 	})
@@ -52,8 +60,9 @@ func (o *Observer) Emit(v any) {
 
 // Close ...
 func (o *Observer) Close() {
-	o.observers.Range(func(_ any, chi any) bool {
-		reflect.ValueOf(chi).Close()
+	o.observers.Range(func(chi any, chv any) bool {
+		o.StopNotifying(chi)
+		chv.(reflect.Value).Close()
 		return true
 	})
 }

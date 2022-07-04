@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 .room_carousel {
   font-size: 1rem;
 
@@ -19,6 +22,8 @@
     box-sizing: border-box;
     transition: transform var(--timing-short) ease-in-out;
     transform: translateY(calc(min(var(--drag-offset, 0px), 0px)));
+    position: relative;
+    --badge-color: #d00;
 
     &--dragging {
       transition-duration: 0s;

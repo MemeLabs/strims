@@ -28,7 +28,9 @@ type peerTaskRunner interface {
 
 type channelScheduler interface {
 	peerTaskRunner
+	ExpectData(b binmap.Bin) bool
 	HandleHandshake(liveWindow uint32) error
+	HandleRestart() error
 	HandleAck(b binmap.Bin, delaySample time.Duration) error
 	HandleData(b binmap.Bin, t timeutil.Time, valid bool) error
 	HandleHave(b binmap.Bin) error
@@ -61,6 +63,7 @@ type codecMessageWriter interface {
 	Flush() error
 	Reset()
 	WriteHandshake(m codec.Handshake) (int, error)
+	WriteRestart(m codec.Restart) (int, error)
 	WriteAck(m codec.Ack) (int, error)
 	WriteHave(m codec.Have) (int, error)
 	WriteData(m codec.Data) (int, error)

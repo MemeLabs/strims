@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 .network_nav {
   display: flex;
   flex-direction: column;
@@ -86,6 +89,8 @@
     position: relative;
     text-align: center;
     width: 40px;
+    --badge-color: var(--color-hinted-grey-7);
+    --badge-offset: 0.3rem;
   }
 
   &--collapsed {

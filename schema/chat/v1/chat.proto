@@ -10,6 +10,7 @@ option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "SCH";
 
 import "type/key.proto";
+import "network/v1/directory/directory.proto";
 
 message ServerEvent {
   oneof body {
@@ -96,6 +97,7 @@ message Modifier {
   uint32 priority = 4;
   bool internal = 5;
   uint32 extra_wrap_count = 6;
+  double proc_chance = 7;
 }
 
 message Tag {
@@ -115,6 +117,16 @@ message AssetBundle {
   repeated Tag tags = 6;
 }
 
+message Emoji {
+  string glyph = 1;
+  string description = 2;
+}
+
+message EmojiCategory {
+  string name = 1;
+  repeated Emoji emoji = 2;
+}
+
 message Message {
   message Entities {
     message Bounds {
@@ -132,12 +144,19 @@ message Message {
       string name = 2;
       repeated string modifiers = 3;
       uint32 combo = 4;
+      bool can_combo = 5;
+    }
+
+    message Emoji {
+      Bounds bounds = 1;
+      string description = 2;
     }
 
     message Nick {
       Bounds bounds = 1;
       string nick = 2;
       bytes peer_key = 3;
+      DirectoryRef viewed_listing = 4;
     }
 
     message Tag {
@@ -159,12 +178,20 @@ message Message {
 
     repeated Link links = 1;
     repeated Emote emotes = 2;
-    repeated Nick nicks = 3;
-    repeated Tag tags = 4;
-    repeated CodeBlock code_blocks = 5;
-    repeated Spoiler spoilers = 6;
-    GenericEntity green_text = 7;
-    GenericEntity self_message = 8;
+    repeated Emoji emojis = 3;
+    repeated Nick nicks = 4;
+    repeated Tag tags = 5;
+    repeated CodeBlock code_blocks = 6;
+    repeated Spoiler spoilers = 7;
+    GenericEntity green_text = 8;
+    GenericEntity self_message = 9;
+  }
+
+  message DirectoryRef {
+    uint64 directory_id = 1;
+    bytes network_key = 2;
+    network.v1.directory.Listing listing = 3;
+    uint32 themeColor = 4;
   }
 
   int64 server_time = 1;
@@ -172,6 +199,7 @@ message Message {
   string nick = 3;
   string body = 4;
   Entities entities = 5;
+  DirectoryRef viewed_listing = 9;
 }
 
 message Profile {
@@ -197,11 +225,11 @@ message UIConfig {
     SHOW_REMOVED_DO_NOTHING = 2;
   }
 
-  enum ViewerStateIndicator {
-    VIEWER_STATE_INDICATOR_DISABLED = 0;
-    VIEWER_STATE_INDICATOR_BAR = 1;
-    VIEWER_STATE_INDICATOR_DOT = 2;
-    VIEWER_STATE_INDICATOR_ARRAY = 3;
+  enum UserPresenceIndicator {
+    USER_PRESENCE_INDICATOR_DISABLED = 0;
+    USER_PRESENCE_INDICATOR_BAR = 1;
+    USER_PRESENCE_INDICATOR_DOT = 2;
+    USER_PRESENCE_INDICATOR_ARRAY = 3;
   }
 
   message SoundFile {
@@ -255,7 +283,7 @@ message UIConfig {
   bool formatter_combo = 27;
   bool emote_modifiers = 28;
   bool disable_spoilers = 29;
-  ViewerStateIndicator viewer_state_indicator = 30;
+  UserPresenceIndicator user_presence_indicator = 30;
   repeated string hidden_emotes = 31;
   bool shorten_links = 32;
   bool compact_emote_spacing = 33;
@@ -263,8 +291,8 @@ message UIConfig {
 }
 
 message CreateServerRequest {
-  bytes network_key = 2;
-  Room room = 3;
+  bytes network_key = 1;
+  Room room = 2;
 }
 message CreateServerResponse {
   Server server = 1;
@@ -338,6 +366,7 @@ message CreateModifierRequest {
   string name = 2;
   uint32 priority = 3;
   bool internal = 4;
+  double proc_chance = 5;
 }
 message CreateModifierResponse {
   Modifier modifier = 1;
@@ -348,6 +377,7 @@ message UpdateModifierRequest {
   string name = 3;
   uint32 priority = 4;
   bool internal = 5;
+  double proc_chance = 6;
 }
 message UpdateModifierResponse {
   Modifier modifier = 1;
@@ -505,6 +535,12 @@ message WatchWhispersResponse {
   }
 }
 
+message MarkWhispersReadRequest {
+  uint64 thread_id = 1;
+}
+
+message MarkWhispersReadResponse {}
+
 message SetUIConfigRequest {
   UIConfig ui_config = 1;
 }
@@ -551,6 +587,11 @@ message UntagRequest {
 }
 message UntagResponse {}
 
+message GetEmojiRequest{}
+message GetEmojiResponse {
+  repeated EmojiCategory categories = 1;
+}
+
 service ChatServerFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
@@ -589,6 +630,7 @@ service ChatFrontend {
   rpc Whisper(WhisperRequest) returns (WhisperResponse);
   rpc ListWhispers(ListWhispersRequest) returns (ListWhispersResponse);
   rpc WatchWhispers(WatchWhispersRequest) returns (stream WatchWhispersResponse);
+  rpc MarkWhispersRead(MarkWhispersReadRequest) returns (MarkWhispersReadResponse);
 
   rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
   rpc WatchUIConfig(WatchUIConfigRequest) returns (stream WatchUIConfigResponse);
@@ -598,6 +640,7 @@ service ChatFrontend {
   rpc Unhighlight(UnhighlightRequest) returns (UnhighlightResponse);
   rpc Tag(TagRequest) returns (TagResponse);
   rpc Untag(UntagRequest) returns (UntagResponse);
+  rpc GetEmoji(GetEmojiRequest) returns (GetEmojiResponse);
 }
 
 message SendMessageRequest {

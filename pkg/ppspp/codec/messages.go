@@ -360,6 +360,55 @@ func (v *LiveSignatureAlgorithmProtocolOption) ByteLen() int {
 	return 1
 }
 
+// NewEpochProtocolOption ...
+func NewEpochProtocolOption(t timeutil.Time, sig []byte) *EpochProtocolOption {
+	if t.IsNil() {
+		return nil
+	}
+	return &EpochProtocolOption{
+		Timestamp: Timestamp{t},
+		Signature: sig,
+	}
+}
+
+// EpochProtocolOption ...
+type EpochProtocolOption struct {
+	signatureSize int
+	Timestamp     Timestamp
+	Signature     Buffer
+}
+
+// Unmarshal ...
+func (v *EpochProtocolOption) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Timestamp.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	v.Signature = b[size : size+v.signatureSize]
+	size += v.signatureSize
+
+	return
+}
+
+// Marshal ...
+func (v *EpochProtocolOption) Marshal(b []byte) (size int) {
+	size += v.Timestamp.Marshal(b)
+	size += v.Signature.Marshal(b[size:])
+	return
+}
+
+// Type ...
+func (v *EpochProtocolOption) Type() ProtocolOptionType {
+	return EpochOption
+}
+
+// ByteLen ...
+func (v *EpochProtocolOption) ByteLen() int {
+	return v.Timestamp.ByteLen() + v.Signature.ByteLen()
+}
+
 // NewSwarmIdentifierProtocolOption ...
 func NewSwarmIdentifierProtocolOption(id []byte) *SwarmIdentifierProtocolOption {
 	o := SwarmIdentifierProtocolOption(id)
@@ -402,8 +451,9 @@ func (v *SwarmIdentifierProtocolOption) ByteLen() int {
 
 // Handshake ...
 type Handshake struct {
-	ChannelID uint32
-	Options   ProtocolOptions
+	signatureSize int
+	ChannelID     uint32
+	Options       ProtocolOptions
 }
 
 // NewHandshake ...
@@ -445,6 +495,8 @@ func (v *Handshake) Unmarshal(b []byte) (size int, err error) {
 			option = &MerkleHashTreeFunctionProtocolOption{}
 		case LiveSignatureAlgorithmOption:
 			option = &LiveSignatureAlgorithmProtocolOption{}
+		case EpochOption:
+			option = &EpochProtocolOption{signatureSize: v.signatureSize}
 		case EndOption:
 			return
 		default:
@@ -997,6 +1049,16 @@ type Unchoke struct {
 // Type ...
 func (v *Unchoke) Type() MessageType {
 	return UnchokeMessage
+}
+
+// Restart ...
+type Restart struct {
+	Empty
+}
+
+// Type ...
+func (v *Restart) Type() MessageType {
+	return RestartMessage
 }
 
 // End ...

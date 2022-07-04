@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kv/bbolt"
+	"github.com/MemeLabs/strims/pkg/queue/memory"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
@@ -63,6 +64,8 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
+	queue := memory.NewTransport()
+
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
 		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
@@ -75,7 +78,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 
 	httpmux := httputil.NewMapServeMux()
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
+	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpmux)
 
 	srv := frontend.Server{
 		Store:          store,

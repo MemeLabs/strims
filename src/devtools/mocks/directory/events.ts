@@ -85,7 +85,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "key": new Uint8Array(),
@@ -109,7 +109,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "key": new Uint8Array(),
@@ -133,7 +133,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "eastmancolor",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -169,7 +169,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Alphamaxnova1",
-      "viewerCount": BigInt("713977"),
+      "userCount": BigInt("713977"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -205,7 +205,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "key": new Uint8Array(),
@@ -229,7 +229,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "DrLupo",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": true,
       "isMature": false,
       "thumbnail": {
@@ -265,7 +265,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "buddha",
-      "viewerCount": BigInt("586022"),
+      "userCount": BigInt("586022"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -301,7 +301,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "buddha",
-      "viewerCount": BigInt("431258"),
+      "userCount": BigInt("431258"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -337,7 +337,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "TastelessTV",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -373,7 +373,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "ibabyrainbow",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -409,7 +409,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "hannapig_",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -445,7 +445,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Destiny",
-      "viewerCount": BigInt("2957"),
+      "userCount": BigInt("2957"),
       "live": true,
       "isMature": true,
       "thumbnail": {
@@ -481,7 +481,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "sweetdreams",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -517,7 +517,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "PurgeGamers",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -553,7 +553,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "shroud",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -589,7 +589,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "buddha",
-      "viewerCount": BigInt("19397"),
+      "userCount": BigInt("19397"),
       "live": true,
       "isMature": true,
       "thumbnail": {
@@ -625,7 +625,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "not0like0this",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -661,7 +661,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "namemannen",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -697,7 +697,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "harkdan",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -733,7 +733,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "feenamabob",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": true,
       "thumbnail": {
@@ -769,7 +769,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "keyno",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -805,7 +805,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "windowsmoviehouse",
-      "viewerCount": BigInt("5"),
+      "userCount": BigInt("5"),
       "live": true,
       "isMature": false,
       "thumbnail": {
@@ -841,7 +841,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "erik",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -877,7 +877,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "somuchforsubtlety",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -913,7 +913,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "t4tv",
-      "viewerCount": BigInt("344"),
+      "userCount": BigInt("344"),
       "live": true,
       "isMature": true,
       "thumbnail": {
@@ -949,7 +949,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "bliutwo",
-      "viewerCount": BigInt("0"),
+      "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -985,7 +985,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "xQcOW",
-      "viewerCount": BigInt("1610117"),
+      "userCount": BigInt("1610117"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1022,7 +1022,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "shakiraVEVO",
-      "viewerCount": BigInt("2989475293"),
+      "userCount": BigInt("2989475293"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1058,7 +1058,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Emuvies",
-      "viewerCount": BigInt("348539"),
+      "userCount": BigInt("348539"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1094,7 +1094,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "CS:GO Daily Stream",
-      "viewerCount": BigInt("5719"),
+      "userCount": BigInt("5719"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1130,7 +1130,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Vic Dibitetto",
-      "viewerCount": BigInt("19426753"),
+      "userCount": BigInt("19426753"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1166,7 +1166,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "CarbotAnimations",
-      "viewerCount": BigInt("584811"),
+      "userCount": BigInt("584811"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1202,7 +1202,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "OddshotBot",
-      "viewerCount": BigInt("66130"),
+      "userCount": BigInt("66130"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1238,7 +1238,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Hugo Rubin de Celis",
-      "viewerCount": BigInt("909500"),
+      "userCount": BigInt("909500"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1274,7 +1274,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "Cherdleys2",
-      "viewerCount": BigInt("1527940"),
+      "userCount": BigInt("1527940"),
       "live": false,
       "isMature": false,
       "thumbnail": {
@@ -1310,7 +1310,7 @@ export default [
       "tags": [],
       "category": "",
       "channelName": "CalSwagDistrict",
-      "viewerCount": BigInt("38914"),
+      "userCount": BigInt("38914"),
       "live": false,
       "isMature": false,
       "thumbnail": {

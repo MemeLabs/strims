@@ -20,6 +20,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kv/bbolt"
+	"github.com/MemeLabs/strims/pkg/queue/memory"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -77,6 +78,8 @@ func main() {
 		logger.Fatal("failed to open db", zap.Error(err))
 	}
 
+	queue := memory.NewTransport()
+
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
 		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
@@ -95,7 +98,7 @@ func main() {
 
 	httpmux := httputil.NewMapServeMux()
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
+	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpmux)
 
 	srv := frontend.Server{
 		Store:          store,

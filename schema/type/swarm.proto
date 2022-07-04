@@ -32,8 +32,14 @@ message Cache {
     MerkleIntegrity merkle_integrity = 1002;
   }
 
+  message Epoch {
+    int64 timestamp = 1;
+    bytes signature = 2;
+  }
+
   uint64 id = 1;
   string uri = 2;
   Integrity integrity = 3;
   bytes data = 4;
+  Epoch epoch = 5;
 }

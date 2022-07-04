@@ -2,30 +2,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Base64 } from "js-base64";
-import React, { useContext } from "react";
+import React, { useMemo } from "react";
 import { useParams } from "react-router-dom";
 
-import DirectoryGrid from "../components/Directory/Grid";
-import { DirectoryContext } from "../contexts/Directory";
+import { ListingContentType } from "../apis/strims/network/v1/directory/directory";
+import DirectoryGrid, { DirectoryListing } from "../components/Directory/Grid";
 import { useClient } from "../contexts/FrontendApi";
+import { useListings } from "../hooks/directory";
 
 const Directory: React.FC = () => {
   const params = useParams<"networkKey">();
-  // const [listings, dispatch] = React.useReducer(directoryReducer, []);
-  const { directories } = useContext(DirectoryContext);
   const client = useClient();
 
-  // console.log(directories);
-
-  const listings = Array.from(directories[params.networkKey]?.listings.values() ?? []);
-
-  // React.useEffect(() => {
-  //   const networkKey = Base64.toUint8Array(params.networkKey);
-  //   const events = client.directory.open({ networkKey });
-  //   events.on("data", ({ event }) => dispatch(event));
-  //   events.on("close", () => console.log("directory event stream closed"));
-  //   return () => events.destroy();
-  // }, [params.networkKey]);
+  const listings = useListings(
+    useMemo(
+      () => ({
+        networkKeys: [Base64.toUint8Array(params.networkKey)],
+        contentTypes: [
+          ListingContentType.LISTING_CONTENT_TYPE_MEDIA,
+          ListingContentType.LISTING_CONTENT_TYPE_EMBED,
+        ],
+      }),
+      [params.networkKey]
+    )
+  );
 
   const handleTestClick = async () => {
     const networkKey = Base64.toUint8Array(params.networkKey);
@@ -33,12 +33,31 @@ const Directory: React.FC = () => {
     console.log(res);
   };
 
+  const gridListings = useMemo(() => {
+    const gridListings: DirectoryListing[] = [];
+    for (const [, n] of listings.networkListings) {
+      for (const [, l] of n.listings) {
+        gridListings.push({
+          id: l.id,
+          listing: l.listing,
+          snippet: l.snippet,
+          userCount: l.userCount,
+          recentUserCount: l.recentUserCount,
+        });
+      }
+    }
+    return gridListings.sort((a, b) => {
+      const d = a.userCount - b.userCount;
+      return d != 0 ? d : Number(a.id - b.id);
+    });
+  }, [listings]);
+
   return (
     <div>
       <button onClick={handleTestClick} className="input input_button">
         test
       </button>
-      <DirectoryGrid listings={listings} networkKey={params.networkKey} />
+      <DirectoryGrid listings={gridListings} networkKey={params.networkKey} />
     </div>
   );
 };

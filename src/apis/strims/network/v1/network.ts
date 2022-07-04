@@ -2,23 +2,23 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Key as strims_type_Key,
-  IKey as strims_type_IKey,
+  strims_type_Key,
+  strims_type_IKey,
 } from "../../type/key";
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../type/certificate";
 import {
-  BootstrapClient as strims_network_v1_bootstrap_BootstrapClient,
-  IBootstrapClient as strims_network_v1_bootstrap_IBootstrapClient,
+  strims_network_v1_bootstrap_BootstrapClient,
+  strims_network_v1_bootstrap_IBootstrapClient,
 } from "./bootstrap/bootstrap";
 import {
-  ServerConfig as strims_network_v1_directory_ServerConfig,
-  IServerConfig as strims_network_v1_directory_IServerConfig,
+  strims_network_v1_directory_ServerConfig,
+  strims_network_v1_directory_IServerConfig,
 } from "./directory/directory";
 import {
-  ErrorCode as strims_network_v1_errors_ErrorCode,
+  strims_network_v1_errors_ErrorCode,
 } from "./errors/errors";
 
 export type INetworkIcon = {
@@ -66,25 +66,25 @@ export class NetworkIcon {
 
 export type ICreateServerRequest = {
   name?: string;
-  icon?: INetworkIcon;
+  icon?: strims_network_v1_INetworkIcon;
   alias?: string;
 }
 
 export class CreateServerRequest {
   name: string;
-  icon: NetworkIcon | undefined;
+  icon: strims_network_v1_NetworkIcon | undefined;
   alias: string;
 
   constructor(v?: ICreateServerRequest) {
     this.name = v?.name || "";
-    this.icon = v?.icon && new NetworkIcon(v.icon);
+    this.icon = v?.icon && new strims_network_v1_NetworkIcon(v.icon);
     this.alias = v?.alias || "";
   }
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name.length) w.uint32(10).string(m.name);
-    if (m.icon) NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
+    if (m.icon) strims_network_v1_NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
     if (m.alias.length) w.uint32(26).string(m.alias);
     return w;
   }
@@ -100,7 +100,7 @@ export class CreateServerRequest {
         m.name = r.string();
         break;
         case 2:
-        m.icon = NetworkIcon.decode(r, r.uint32());
+        m.icon = strims_network_v1_NetworkIcon.decode(r, r.uint32());
         break;
         case 3:
         m.alias = r.string();
@@ -115,19 +115,19 @@ export class CreateServerRequest {
 }
 
 export type ICreateServerResponse = {
-  network?: INetwork;
+  network?: strims_network_v1_INetwork;
 }
 
 export class CreateServerResponse {
-  network: Network | undefined;
+  network: strims_network_v1_Network | undefined;
 
   constructor(v?: ICreateServerResponse) {
-    this.network = v?.network && new Network(v.network);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
   }
 
   static encode(m: CreateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -139,7 +139,7 @@ export class CreateServerResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.network = Network.decode(r, r.uint32());
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -152,22 +152,22 @@ export class CreateServerResponse {
 
 export type IUpdateServerConfigRequest = {
   networkId?: bigint;
-  serverConfig?: IServerConfig;
+  serverConfig?: strims_network_v1_IServerConfig;
 }
 
 export class UpdateServerConfigRequest {
   networkId: bigint;
-  serverConfig: ServerConfig | undefined;
+  serverConfig: strims_network_v1_ServerConfig | undefined;
 
   constructor(v?: IUpdateServerConfigRequest) {
     this.networkId = v?.networkId || BigInt(0);
-    this.serverConfig = v?.serverConfig && new ServerConfig(v.serverConfig);
+    this.serverConfig = v?.serverConfig && new strims_network_v1_ServerConfig(v.serverConfig);
   }
 
   static encode(m: UpdateServerConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkId) w.uint32(8).uint64(m.networkId);
-    if (m.serverConfig) ServerConfig.encode(m.serverConfig, w.uint32(18).fork()).ldelim();
+    if (m.serverConfig) strims_network_v1_ServerConfig.encode(m.serverConfig, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -182,7 +182,7 @@ export class UpdateServerConfigRequest {
         m.networkId = r.uint64();
         break;
         case 2:
-        m.serverConfig = ServerConfig.decode(r, r.uint32());
+        m.serverConfig = strims_network_v1_ServerConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -194,19 +194,19 @@ export class UpdateServerConfigRequest {
 }
 
 export type IUpdateServerConfigResponse = {
-  network?: INetwork;
+  network?: strims_network_v1_INetwork;
 }
 
 export class UpdateServerConfigResponse {
-  network: Network | undefined;
+  network: strims_network_v1_Network | undefined;
 
   constructor(v?: IUpdateServerConfigResponse) {
-    this.network = v?.network && new Network(v.network);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
   }
 
   static encode(m: UpdateServerConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -218,7 +218,7 @@ export class UpdateServerConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.network = Network.decode(r, r.uint32());
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -265,8 +265,7 @@ export class DeleteNetworkRequest {
   }
 }
 
-export type IDeleteNetworkResponse = {
-}
+export type IDeleteNetworkResponse = Record<string, any>;
 
 export class DeleteNetworkResponse {
 
@@ -322,19 +321,19 @@ export class GetNetworkRequest {
 }
 
 export type IGetNetworkResponse = {
-  network?: INetwork;
+  network?: strims_network_v1_INetwork;
 }
 
 export class GetNetworkResponse {
-  network: Network | undefined;
+  network: strims_network_v1_Network | undefined;
 
   constructor(v?: IGetNetworkResponse) {
-    this.network = v?.network && new Network(v.network);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
   }
 
   static encode(m: GetNetworkResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -346,7 +345,7 @@ export class GetNetworkResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.network = Network.decode(r, r.uint32());
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -357,8 +356,7 @@ export class GetNetworkResponse {
   }
 }
 
-export type IListNetworksRequest = {
-}
+export type IListNetworksRequest = Record<string, any>;
 
 export class ListNetworksRequest {
 
@@ -378,19 +376,19 @@ export class ListNetworksRequest {
 }
 
 export type IListNetworksResponse = {
-  networks?: INetwork[];
+  networks?: strims_network_v1_INetwork[];
 }
 
 export class ListNetworksResponse {
-  networks: Network[];
+  networks: strims_network_v1_Network[];
 
   constructor(v?: IListNetworksResponse) {
-    this.networks = v?.networks ? v.networks.map(v => new Network(v)) : [];
+    this.networks = v?.networks ? v.networks.map(v => new strims_network_v1_Network(v)) : [];
   }
 
   static encode(m: ListNetworksResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.networks) Network.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.networks) strims_network_v1_Network.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -402,7 +400,7 @@ export class ListNetworksResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.networks.push(Network.decode(r, r.uint32()));
+        m.networks.push(strims_network_v1_Network.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -480,26 +478,26 @@ export class ServerConfig {
 export type INetwork = {
   id?: bigint;
   certificate?: strims_type_ICertificate;
-  icon?: INetworkIcon;
+  icon?: strims_network_v1_INetworkIcon;
   alias?: string;
-  serverConfig?: IServerConfig;
+  serverConfig?: strims_network_v1_IServerConfig;
   certificateRenewalError?: strims_network_v1_errors_ErrorCode;
 }
 
 export class Network {
   id: bigint;
   certificate: strims_type_Certificate | undefined;
-  icon: NetworkIcon | undefined;
+  icon: strims_network_v1_NetworkIcon | undefined;
   alias: string;
-  serverConfig: ServerConfig | undefined;
+  serverConfig: strims_network_v1_ServerConfig | undefined;
   certificateRenewalError: strims_network_v1_errors_ErrorCode;
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
-    this.icon = v?.icon && new NetworkIcon(v.icon);
+    this.icon = v?.icon && new strims_network_v1_NetworkIcon(v.icon);
     this.alias = v?.alias || "";
-    this.serverConfig = v?.serverConfig && new ServerConfig(v.serverConfig);
+    this.serverConfig = v?.serverConfig && new strims_network_v1_ServerConfig(v.serverConfig);
     this.certificateRenewalError = v?.certificateRenewalError || 0;
   }
 
@@ -507,9 +505,9 @@ export class Network {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
-    if (m.icon) NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
+    if (m.icon) strims_network_v1_NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
     if (m.alias.length) w.uint32(34).string(m.alias);
-    if (m.serverConfig) ServerConfig.encode(m.serverConfig, w.uint32(42).fork()).ldelim();
+    if (m.serverConfig) strims_network_v1_ServerConfig.encode(m.serverConfig, w.uint32(42).fork()).ldelim();
     if (m.certificateRenewalError) w.uint32(48).uint32(m.certificateRenewalError);
     return w;
   }
@@ -528,13 +526,13 @@ export class Network {
         m.certificate = strims_type_Certificate.decode(r, r.uint32());
         break;
         case 3:
-        m.icon = NetworkIcon.decode(r, r.uint32());
+        m.icon = strims_network_v1_NetworkIcon.decode(r, r.uint32());
         break;
         case 4:
         m.alias = r.string();
         break;
         case 5:
-        m.serverConfig = ServerConfig.decode(r, r.uint32());
+        m.serverConfig = strims_network_v1_ServerConfig.decode(r, r.uint32());
         break;
         case 6:
         m.certificateRenewalError = r.uint32();
@@ -656,19 +654,19 @@ export class CreateInvitationRequest {
 }
 
 export type ICreateInvitationResponse = {
-  invitation?: IInvitation;
+  invitation?: strims_network_v1_IInvitation;
 }
 
 export class CreateInvitationResponse {
-  invitation: Invitation | undefined;
+  invitation: strims_network_v1_Invitation | undefined;
 
   constructor(v?: ICreateInvitationResponse) {
-    this.invitation = v?.invitation && new Invitation(v.invitation);
+    this.invitation = v?.invitation && new strims_network_v1_Invitation(v.invitation);
   }
 
   static encode(m: CreateInvitationResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.invitation) Invitation.encode(m.invitation, w.uint32(10).fork()).ldelim();
+    if (m.invitation) strims_network_v1_Invitation.encode(m.invitation, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -680,7 +678,7 @@ export class CreateInvitationResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.invitation = Invitation.decode(r, r.uint32());
+        m.invitation = strims_network_v1_Invitation.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -892,19 +890,19 @@ export namespace CreateNetworkFromInvitationRequest {
 }
 
 export type ICreateNetworkFromInvitationResponse = {
-  network?: INetwork;
+  network?: strims_network_v1_INetwork;
 }
 
 export class CreateNetworkFromInvitationResponse {
-  network: Network | undefined;
+  network: strims_network_v1_Network | undefined;
 
   constructor(v?: ICreateNetworkFromInvitationResponse) {
-    this.network = v?.network && new Network(v.network);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
   }
 
   static encode(m: CreateNetworkFromInvitationResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -916,7 +914,7 @@ export class CreateNetworkFromInvitationResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.network = Network.decode(r, r.uint32());
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -942,19 +940,19 @@ export class NetworkEvent {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case NetworkEvent.BodyCase.NETWORK_START:
-      NetworkEvent.NetworkStart.encode(m.body.networkStart, w.uint32(8010).fork()).ldelim();
+      strims_network_v1_NetworkEvent_NetworkStart.encode(m.body.networkStart, w.uint32(8010).fork()).ldelim();
       break;
       case NetworkEvent.BodyCase.NETWORK_STOP:
-      NetworkEvent.NetworkStop.encode(m.body.networkStop, w.uint32(8018).fork()).ldelim();
+      strims_network_v1_NetworkEvent_NetworkStop.encode(m.body.networkStop, w.uint32(8018).fork()).ldelim();
       break;
       case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
-      NetworkEvent.NetworkPeerCountUpdate.encode(m.body.networkPeerCountUpdate, w.uint32(8026).fork()).ldelim();
+      strims_network_v1_NetworkEvent_NetworkPeerCountUpdate.encode(m.body.networkPeerCountUpdate, w.uint32(8026).fork()).ldelim();
       break;
       case NetworkEvent.BodyCase.UI_CONFIG_UPDATE:
-      UIConfig.encode(m.body.uiConfigUpdate, w.uint32(8034).fork()).ldelim();
+      strims_network_v1_UIConfig.encode(m.body.uiConfigUpdate, w.uint32(8034).fork()).ldelim();
       break;
       case NetworkEvent.BodyCase.NETWORK_UPDATE:
-      Network.encode(m.body.networkUpdate, w.uint32(8042).fork()).ldelim();
+      strims_network_v1_Network.encode(m.body.networkUpdate, w.uint32(8042).fork()).ldelim();
       break;
     }
     return w;
@@ -968,19 +966,19 @@ export class NetworkEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1001:
-        m.body = new NetworkEvent.Body({ networkStart: NetworkEvent.NetworkStart.decode(r, r.uint32()) });
+        m.body = new NetworkEvent.Body({ networkStart: strims_network_v1_NetworkEvent_NetworkStart.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.body = new NetworkEvent.Body({ networkStop: NetworkEvent.NetworkStop.decode(r, r.uint32()) });
+        m.body = new NetworkEvent.Body({ networkStop: strims_network_v1_NetworkEvent_NetworkStop.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.body = new NetworkEvent.Body({ networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate.decode(r, r.uint32()) });
+        m.body = new NetworkEvent.Body({ networkPeerCountUpdate: strims_network_v1_NetworkEvent_NetworkPeerCountUpdate.decode(r, r.uint32()) });
         break;
         case 1004:
-        m.body = new NetworkEvent.Body({ uiConfigUpdate: UIConfig.decode(r, r.uint32()) });
+        m.body = new NetworkEvent.Body({ uiConfigUpdate: strims_network_v1_UIConfig.decode(r, r.uint32()) });
         break;
         case 1005:
-        m.body = new NetworkEvent.Body({ networkUpdate: Network.decode(r, r.uint32()) });
+        m.body = new NetworkEvent.Body({ networkUpdate: strims_network_v1_Network.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -1003,50 +1001,50 @@ export namespace NetworkEvent {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.NETWORK_START, networkStart: NetworkEvent.INetworkStart }
-  |{ case?: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.INetworkStop }
-  |{ case?: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate }
-  |{ case?: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: IUIConfig }
-  |{ case?: BodyCase.NETWORK_UPDATE, networkUpdate: INetwork }
+  |{ case?: BodyCase.NETWORK_START, networkStart: strims_network_v1_NetworkEvent_INetworkStart }
+  |{ case?: BodyCase.NETWORK_STOP, networkStop: strims_network_v1_NetworkEvent_INetworkStop }
+  |{ case?: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: strims_network_v1_NetworkEvent_INetworkPeerCountUpdate }
+  |{ case?: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: strims_network_v1_IUIConfig }
+  |{ case?: BodyCase.NETWORK_UPDATE, networkUpdate: strims_network_v1_INetwork }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart }
-  |{ case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop }
-  |{ case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate }
-  |{ case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig }
-  |{ case: BodyCase.NETWORK_UPDATE, networkUpdate: Network }
+  |{ case: BodyCase.NETWORK_START, networkStart: strims_network_v1_NetworkEvent_NetworkStart }
+  |{ case: BodyCase.NETWORK_STOP, networkStop: strims_network_v1_NetworkEvent_NetworkStop }
+  |{ case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: strims_network_v1_NetworkEvent_NetworkPeerCountUpdate }
+  |{ case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: strims_network_v1_UIConfig }
+  |{ case: BodyCase.NETWORK_UPDATE, networkUpdate: strims_network_v1_Network }
   >;
 
   class BodyImpl {
-    networkStart: NetworkEvent.NetworkStart;
-    networkStop: NetworkEvent.NetworkStop;
-    networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate;
-    uiConfigUpdate: UIConfig;
-    networkUpdate: Network;
+    networkStart: strims_network_v1_NetworkEvent_NetworkStart;
+    networkStop: strims_network_v1_NetworkEvent_NetworkStop;
+    networkPeerCountUpdate: strims_network_v1_NetworkEvent_NetworkPeerCountUpdate;
+    uiConfigUpdate: strims_network_v1_UIConfig;
+    networkUpdate: strims_network_v1_Network;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "networkStart" in v) {
         this.case = BodyCase.NETWORK_START;
-        this.networkStart = new NetworkEvent.NetworkStart(v.networkStart);
+        this.networkStart = new strims_network_v1_NetworkEvent_NetworkStart(v.networkStart);
       } else
       if (v && "networkStop" in v) {
         this.case = BodyCase.NETWORK_STOP;
-        this.networkStop = new NetworkEvent.NetworkStop(v.networkStop);
+        this.networkStop = new strims_network_v1_NetworkEvent_NetworkStop(v.networkStop);
       } else
       if (v && "networkPeerCountUpdate" in v) {
         this.case = BodyCase.NETWORK_PEER_COUNT_UPDATE;
-        this.networkPeerCountUpdate = new NetworkEvent.NetworkPeerCountUpdate(v.networkPeerCountUpdate);
+        this.networkPeerCountUpdate = new strims_network_v1_NetworkEvent_NetworkPeerCountUpdate(v.networkPeerCountUpdate);
       } else
       if (v && "uiConfigUpdate" in v) {
         this.case = BodyCase.UI_CONFIG_UPDATE;
-        this.uiConfigUpdate = new UIConfig(v.uiConfigUpdate);
+        this.uiConfigUpdate = new strims_network_v1_UIConfig(v.uiConfigUpdate);
       } else
       if (v && "networkUpdate" in v) {
         this.case = BodyCase.NETWORK_UPDATE;
-        this.networkUpdate = new Network(v.networkUpdate);
+        this.networkUpdate = new strims_network_v1_Network(v.networkUpdate);
       }
     }
   }
@@ -1054,32 +1052,32 @@ export namespace NetworkEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { networkStart: NetworkEvent.INetworkStart } ? { case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart } :
-    T extends { networkStop: NetworkEvent.INetworkStop } ? { case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop } :
-    T extends { networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate } ? { case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate } :
-    T extends { uiConfigUpdate: IUIConfig } ? { case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: UIConfig } :
-    T extends { networkUpdate: INetwork } ? { case: BodyCase.NETWORK_UPDATE, networkUpdate: Network } :
+    T extends { networkStart: strims_network_v1_NetworkEvent_INetworkStart } ? { case: BodyCase.NETWORK_START, networkStart: strims_network_v1_NetworkEvent_NetworkStart } :
+    T extends { networkStop: strims_network_v1_NetworkEvent_INetworkStop } ? { case: BodyCase.NETWORK_STOP, networkStop: strims_network_v1_NetworkEvent_NetworkStop } :
+    T extends { networkPeerCountUpdate: strims_network_v1_NetworkEvent_INetworkPeerCountUpdate } ? { case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: strims_network_v1_NetworkEvent_NetworkPeerCountUpdate } :
+    T extends { uiConfigUpdate: strims_network_v1_IUIConfig } ? { case: BodyCase.UI_CONFIG_UPDATE, uiConfigUpdate: strims_network_v1_UIConfig } :
+    T extends { networkUpdate: strims_network_v1_INetwork } ? { case: BodyCase.NETWORK_UPDATE, networkUpdate: strims_network_v1_Network } :
     never
     >;
   };
 
   export type INetworkStart = {
-    network?: INetwork;
+    network?: strims_network_v1_INetwork;
     peerCount?: number;
   }
 
   export class NetworkStart {
-    network: Network | undefined;
+    network: strims_network_v1_Network | undefined;
     peerCount: number;
 
     constructor(v?: INetworkStart) {
-      this.network = v?.network && new Network(v.network);
+      this.network = v?.network && new strims_network_v1_Network(v.network);
       this.peerCount = v?.peerCount || 0;
     }
 
     static encode(m: NetworkStart, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+      if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
       if (m.peerCount) w.uint32(16).uint32(m.peerCount);
       return w;
     }
@@ -1092,7 +1090,7 @@ export namespace NetworkEvent {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.network = Network.decode(r, r.uint32());
+          m.network = strims_network_v1_Network.decode(r, r.uint32());
           break;
           case 2:
           m.peerCount = r.uint32();
@@ -1223,8 +1221,7 @@ export class UIConfig {
   }
 }
 
-export type IWatchNetworksRequest = {
-}
+export type IWatchNetworksRequest = Record<string, any>;
 
 export class WatchNetworksRequest {
 
@@ -1244,19 +1241,19 @@ export class WatchNetworksRequest {
 }
 
 export type IWatchNetworksResponse = {
-  event?: INetworkEvent;
+  event?: strims_network_v1_INetworkEvent;
 }
 
 export class WatchNetworksResponse {
-  event: NetworkEvent | undefined;
+  event: strims_network_v1_NetworkEvent | undefined;
 
   constructor(v?: IWatchNetworksResponse) {
-    this.event = v?.event && new NetworkEvent(v.event);
+    this.event = v?.event && new strims_network_v1_NetworkEvent(v.event);
   }
 
   static encode(m: WatchNetworksResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.event) NetworkEvent.encode(m.event, w.uint32(10).fork()).ldelim();
+    if (m.event) strims_network_v1_NetworkEvent.encode(m.event, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -1268,7 +1265,7 @@ export class WatchNetworksResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.event = NetworkEvent.decode(r, r.uint32());
+        m.event = strims_network_v1_NetworkEvent.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1315,8 +1312,7 @@ export class UpdateDisplayOrderRequest {
   }
 }
 
-export type IUpdateDisplayOrderResponse = {
-}
+export type IUpdateDisplayOrderResponse = Record<string, any>;
 
 export class UpdateDisplayOrderResponse {
 
@@ -1379,19 +1375,19 @@ export class UpdateAliasRequest {
 }
 
 export type IUpdateAliasResponse = {
-  network?: INetwork;
+  network?: strims_network_v1_INetwork;
 }
 
 export class UpdateAliasResponse {
-  network: Network | undefined;
+  network: strims_network_v1_Network | undefined;
 
   constructor(v?: IUpdateAliasResponse) {
-    this.network = v?.network && new Network(v.network);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
   }
 
   static encode(m: UpdateAliasResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -1403,7 +1399,7 @@ export class UpdateAliasResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.network = Network.decode(r, r.uint32());
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1414,8 +1410,7 @@ export class UpdateAliasResponse {
   }
 }
 
-export type IGetUIConfigRequest = {
-}
+export type IGetUIConfigRequest = Record<string, any>;
 
 export class GetUIConfigRequest {
 
@@ -1435,19 +1430,19 @@ export class GetUIConfigRequest {
 }
 
 export type IGetUIConfigResponse = {
-  config?: IUIConfig;
+  config?: strims_network_v1_IUIConfig;
 }
 
 export class GetUIConfigResponse {
-  config: UIConfig | undefined;
+  config: strims_network_v1_UIConfig | undefined;
 
   constructor(v?: IGetUIConfigResponse) {
-    this.config = v?.config && new UIConfig(v.config);
+    this.config = v?.config && new strims_network_v1_UIConfig(v.config);
   }
 
   static encode(m: GetUIConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) UIConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_network_v1_UIConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -1459,7 +1454,7 @@ export class GetUIConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = UIConfig.decode(r, r.uint32());
+        m.config = strims_network_v1_UIConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1470,3 +1465,201 @@ export class GetUIConfigResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_NetworkIcon = NetworkIcon;
+/* @internal */
+export type strims_network_v1_NetworkIcon = NetworkIcon;
+/* @internal */
+export type strims_network_v1_INetworkIcon = INetworkIcon;
+/* @internal */
+export const strims_network_v1_CreateServerRequest = CreateServerRequest;
+/* @internal */
+export type strims_network_v1_CreateServerRequest = CreateServerRequest;
+/* @internal */
+export type strims_network_v1_ICreateServerRequest = ICreateServerRequest;
+/* @internal */
+export const strims_network_v1_CreateServerResponse = CreateServerResponse;
+/* @internal */
+export type strims_network_v1_CreateServerResponse = CreateServerResponse;
+/* @internal */
+export type strims_network_v1_ICreateServerResponse = ICreateServerResponse;
+/* @internal */
+export const strims_network_v1_UpdateServerConfigRequest = UpdateServerConfigRequest;
+/* @internal */
+export type strims_network_v1_UpdateServerConfigRequest = UpdateServerConfigRequest;
+/* @internal */
+export type strims_network_v1_IUpdateServerConfigRequest = IUpdateServerConfigRequest;
+/* @internal */
+export const strims_network_v1_UpdateServerConfigResponse = UpdateServerConfigResponse;
+/* @internal */
+export type strims_network_v1_UpdateServerConfigResponse = UpdateServerConfigResponse;
+/* @internal */
+export type strims_network_v1_IUpdateServerConfigResponse = IUpdateServerConfigResponse;
+/* @internal */
+export const strims_network_v1_DeleteNetworkRequest = DeleteNetworkRequest;
+/* @internal */
+export type strims_network_v1_DeleteNetworkRequest = DeleteNetworkRequest;
+/* @internal */
+export type strims_network_v1_IDeleteNetworkRequest = IDeleteNetworkRequest;
+/* @internal */
+export const strims_network_v1_DeleteNetworkResponse = DeleteNetworkResponse;
+/* @internal */
+export type strims_network_v1_DeleteNetworkResponse = DeleteNetworkResponse;
+/* @internal */
+export type strims_network_v1_IDeleteNetworkResponse = IDeleteNetworkResponse;
+/* @internal */
+export const strims_network_v1_GetNetworkRequest = GetNetworkRequest;
+/* @internal */
+export type strims_network_v1_GetNetworkRequest = GetNetworkRequest;
+/* @internal */
+export type strims_network_v1_IGetNetworkRequest = IGetNetworkRequest;
+/* @internal */
+export const strims_network_v1_GetNetworkResponse = GetNetworkResponse;
+/* @internal */
+export type strims_network_v1_GetNetworkResponse = GetNetworkResponse;
+/* @internal */
+export type strims_network_v1_IGetNetworkResponse = IGetNetworkResponse;
+/* @internal */
+export const strims_network_v1_ListNetworksRequest = ListNetworksRequest;
+/* @internal */
+export type strims_network_v1_ListNetworksRequest = ListNetworksRequest;
+/* @internal */
+export type strims_network_v1_IListNetworksRequest = IListNetworksRequest;
+/* @internal */
+export const strims_network_v1_ListNetworksResponse = ListNetworksResponse;
+/* @internal */
+export type strims_network_v1_ListNetworksResponse = ListNetworksResponse;
+/* @internal */
+export type strims_network_v1_IListNetworksResponse = IListNetworksResponse;
+/* @internal */
+export const strims_network_v1_ServerConfig = ServerConfig;
+/* @internal */
+export type strims_network_v1_ServerConfig = ServerConfig;
+/* @internal */
+export type strims_network_v1_IServerConfig = IServerConfig;
+/* @internal */
+export const strims_network_v1_Network = Network;
+/* @internal */
+export type strims_network_v1_Network = Network;
+/* @internal */
+export type strims_network_v1_INetwork = INetwork;
+/* @internal */
+export const strims_network_v1_Peer = Peer;
+/* @internal */
+export type strims_network_v1_Peer = Peer;
+/* @internal */
+export type strims_network_v1_IPeer = IPeer;
+/* @internal */
+export const strims_network_v1_CreateInvitationRequest = CreateInvitationRequest;
+/* @internal */
+export type strims_network_v1_CreateInvitationRequest = CreateInvitationRequest;
+/* @internal */
+export type strims_network_v1_ICreateInvitationRequest = ICreateInvitationRequest;
+/* @internal */
+export const strims_network_v1_CreateInvitationResponse = CreateInvitationResponse;
+/* @internal */
+export type strims_network_v1_CreateInvitationResponse = CreateInvitationResponse;
+/* @internal */
+export type strims_network_v1_ICreateInvitationResponse = ICreateInvitationResponse;
+/* @internal */
+export const strims_network_v1_Invitation = Invitation;
+/* @internal */
+export type strims_network_v1_Invitation = Invitation;
+/* @internal */
+export type strims_network_v1_IInvitation = IInvitation;
+/* @internal */
+export const strims_network_v1_InvitationV0 = InvitationV0;
+/* @internal */
+export type strims_network_v1_InvitationV0 = InvitationV0;
+/* @internal */
+export type strims_network_v1_IInvitationV0 = IInvitationV0;
+/* @internal */
+export const strims_network_v1_CreateNetworkFromInvitationRequest = CreateNetworkFromInvitationRequest;
+/* @internal */
+export type strims_network_v1_CreateNetworkFromInvitationRequest = CreateNetworkFromInvitationRequest;
+/* @internal */
+export type strims_network_v1_ICreateNetworkFromInvitationRequest = ICreateNetworkFromInvitationRequest;
+/* @internal */
+export const strims_network_v1_CreateNetworkFromInvitationResponse = CreateNetworkFromInvitationResponse;
+/* @internal */
+export type strims_network_v1_CreateNetworkFromInvitationResponse = CreateNetworkFromInvitationResponse;
+/* @internal */
+export type strims_network_v1_ICreateNetworkFromInvitationResponse = ICreateNetworkFromInvitationResponse;
+/* @internal */
+export const strims_network_v1_NetworkEvent = NetworkEvent;
+/* @internal */
+export type strims_network_v1_NetworkEvent = NetworkEvent;
+/* @internal */
+export type strims_network_v1_INetworkEvent = INetworkEvent;
+/* @internal */
+export const strims_network_v1_UIConfig = UIConfig;
+/* @internal */
+export type strims_network_v1_UIConfig = UIConfig;
+/* @internal */
+export type strims_network_v1_IUIConfig = IUIConfig;
+/* @internal */
+export const strims_network_v1_WatchNetworksRequest = WatchNetworksRequest;
+/* @internal */
+export type strims_network_v1_WatchNetworksRequest = WatchNetworksRequest;
+/* @internal */
+export type strims_network_v1_IWatchNetworksRequest = IWatchNetworksRequest;
+/* @internal */
+export const strims_network_v1_WatchNetworksResponse = WatchNetworksResponse;
+/* @internal */
+export type strims_network_v1_WatchNetworksResponse = WatchNetworksResponse;
+/* @internal */
+export type strims_network_v1_IWatchNetworksResponse = IWatchNetworksResponse;
+/* @internal */
+export const strims_network_v1_UpdateDisplayOrderRequest = UpdateDisplayOrderRequest;
+/* @internal */
+export type strims_network_v1_UpdateDisplayOrderRequest = UpdateDisplayOrderRequest;
+/* @internal */
+export type strims_network_v1_IUpdateDisplayOrderRequest = IUpdateDisplayOrderRequest;
+/* @internal */
+export const strims_network_v1_UpdateDisplayOrderResponse = UpdateDisplayOrderResponse;
+/* @internal */
+export type strims_network_v1_UpdateDisplayOrderResponse = UpdateDisplayOrderResponse;
+/* @internal */
+export type strims_network_v1_IUpdateDisplayOrderResponse = IUpdateDisplayOrderResponse;
+/* @internal */
+export const strims_network_v1_UpdateAliasRequest = UpdateAliasRequest;
+/* @internal */
+export type strims_network_v1_UpdateAliasRequest = UpdateAliasRequest;
+/* @internal */
+export type strims_network_v1_IUpdateAliasRequest = IUpdateAliasRequest;
+/* @internal */
+export const strims_network_v1_UpdateAliasResponse = UpdateAliasResponse;
+/* @internal */
+export type strims_network_v1_UpdateAliasResponse = UpdateAliasResponse;
+/* @internal */
+export type strims_network_v1_IUpdateAliasResponse = IUpdateAliasResponse;
+/* @internal */
+export const strims_network_v1_GetUIConfigRequest = GetUIConfigRequest;
+/* @internal */
+export type strims_network_v1_GetUIConfigRequest = GetUIConfigRequest;
+/* @internal */
+export type strims_network_v1_IGetUIConfigRequest = IGetUIConfigRequest;
+/* @internal */
+export const strims_network_v1_GetUIConfigResponse = GetUIConfigResponse;
+/* @internal */
+export type strims_network_v1_GetUIConfigResponse = GetUIConfigResponse;
+/* @internal */
+export type strims_network_v1_IGetUIConfigResponse = IGetUIConfigResponse;
+/* @internal */
+export const strims_network_v1_NetworkEvent_NetworkStart = NetworkEvent.NetworkStart;
+/* @internal */
+export type strims_network_v1_NetworkEvent_NetworkStart = NetworkEvent.NetworkStart;
+/* @internal */
+export type strims_network_v1_NetworkEvent_INetworkStart = NetworkEvent.INetworkStart;
+/* @internal */
+export const strims_network_v1_NetworkEvent_NetworkStop = NetworkEvent.NetworkStop;
+/* @internal */
+export type strims_network_v1_NetworkEvent_NetworkStop = NetworkEvent.NetworkStop;
+/* @internal */
+export type strims_network_v1_NetworkEvent_INetworkStop = NetworkEvent.INetworkStop;
+/* @internal */
+export const strims_network_v1_NetworkEvent_NetworkPeerCountUpdate = NetworkEvent.NetworkPeerCountUpdate;
+/* @internal */
+export type strims_network_v1_NetworkEvent_NetworkPeerCountUpdate = NetworkEvent.NetworkPeerCountUpdate;
+/* @internal */
+export type strims_network_v1_NetworkEvent_INetworkPeerCountUpdate = NetworkEvent.INetworkPeerCountUpdate;

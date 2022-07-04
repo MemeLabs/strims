@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kv/kvtest"
+	"github.com/MemeLabs/strims/pkg/queue/memory"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
@@ -44,6 +45,7 @@ type nativeDriverClient struct {
 
 func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	store := kvtest.NewMemStore()
+	queue := memory.NewTransport()
 
 	mux := httputil.NewMapServeMux()
 	if o.VPNServerAddr != "" {
@@ -63,7 +65,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		return vpn.New(d.logger, vnicHost)
 	}
 
-	sessionManager := session.NewManager(d.logger, store, newVPN, network.NewBroker(d.logger), mux)
+	sessionManager := session.NewManager(d.logger, store, queue, newVPN, network.NewBroker(d.logger), mux)
 
 	srv := &frontend.Server{
 		Store:          store,

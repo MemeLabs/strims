@@ -213,6 +213,22 @@ func (v *MerkleSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
 	return &swarmpb.Cache_Integrity{MerkleIntegrity: c}
 }
 
+func (v *MerkleSwarmVerifier) Reset() {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.head = 0
+	v.tail = 0
+
+	for i, s := range v.segments {
+		if s != nil {
+			v.treePool.Put(s.Free())
+			segmentPool.Put(s)
+			v.segments[i] = nil
+		}
+	}
+}
+
 var segmentPool = sync.Pool{
 	New: func() any {
 		return &merkleTreeSegment{}
@@ -344,15 +360,13 @@ func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 // Verify ...
 func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 	verified, err := v.verify(b, d)
+	if verified && err == nil {
+		v.swarmVerifier.storeSegment(v.timestamp, v.tree, v.signature)
+	}
 
 	v.bin = binmap.None
 
-	if !verified || err != nil {
-		return false, err
-	}
-
-	v.swarmVerifier.storeSegment(v.timestamp, v.tree, v.signature)
-	return true, nil
+	return verified, err
 }
 
 // MerkleWriterOptions ...

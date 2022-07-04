@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React, { useEffect } from "react";
 
-import { RoomProvider as ChatRoomProvider, useChat } from "../../contexts/Chat";
+import { ThreadProvider as ChatRoomProvider, useChat } from "../../contexts/Chat";
 
 export interface RoomProviderProps {
   networkKey: Uint8Array;

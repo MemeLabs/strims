@@ -63,5 +63,5 @@ func (w *Writer) Available() int {
 }
 
 func (w *Writer) AvailableBuffer() []byte {
-	return w.buf[w.n:][:0]
+	return w.buf[w.n:w.n]
 }

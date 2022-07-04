@@ -322,6 +322,7 @@ func (t *control) handleNetworkDelete(n *networkv1.Network) error {
 func (t *control) startNetwork(n *networkv1.Network) error {
 	if nn, ok := t.networks[n.Id]; ok {
 		if !proto.Equal(nn.network.Certificate, n.Certificate) {
+			nn.network = n
 			t.certificates.Insert(n)
 			t.dialer.ReplaceOrInsertNetwork(n)
 

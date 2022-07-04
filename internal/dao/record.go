@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -74,6 +75,12 @@ func observeDurationMs(obs prometheus.Observer) func() {
 
 type EventEmitter interface {
 	Emit(e proto.Message)
+}
+
+type EventEmitterFunc func(e proto.Message)
+
+func (f EventEmitterFunc) Emit(e proto.Message) {
+	f(e)
 }
 
 type changeObserverFunc[V any, T Record[V]] func(m, p T) proto.Message
@@ -641,9 +648,9 @@ func ManyToOne[AV, BV any, AT TableRecord[AV], BT TableRecord[BV]](ns namespace,
 	}
 
 	idk := func(m AT) []byte { return idKey(key(m)) }
-	getAllAByKey := SecondaryIndex(ns, a, idk)
+	byKey := NewSecondaryIndex(ns, a, idk)
 
-	getAllAByBID := func(s kv.Store, id uint64) ([]AT, error) { return getAllAByKey(s, idKey(id)) }
+	getAllAByBID := func(s kv.Store, id uint64) ([]AT, error) { return byKey.GetAll(s, idKey(id)) }
 	getAllAByB := func(s kv.Store, m BT) ([]AT, error) { return getAllAByBID(s, m.GetId()) }
 	getBByA := func(s kv.Store, m AT) (BT, error) { return b.Get(s, key(m)) }
 
@@ -656,7 +663,7 @@ func idKey(id uint64) []byte {
 	return b
 }
 
-func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) func(s kv.Store, k []byte) ([]T, error) {
+func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) *SecondaryIndex[V, T] {
 	t.deleteHooks = append(t.deleteHooks, func(s kv.RWStore, m T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.DeleteHook"); ce != nil {
 			defer func() {
@@ -704,46 +711,92 @@ func SecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 		})
 	})
 
-	getAllCount := secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String())
-	getAllErrCount := secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String())
-	getAllDurationMs := secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String())
+	return &SecondaryIndex[V, T]{
+		ns: ns,
+		t:  t,
 
-	return func(s kv.Store, k []byte) (vs []T, err error) {
-		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAll"); ce != nil {
-			defer func() {
-				ce.Write(
-					zap.String("type", t.name),
-					zap.Stringer("ns", ns),
-					zap.String("key", hashSecondaryIndexKey(k, s)),
-					zap.Int("records", len(vs)),
-					zap.Duration("duration", ts.Elapsed()),
-					zap.Error(err),
-				)
-			}()
+		getAllCount:         secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String()),
+		getAllErrCount:      secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String()),
+		getAllDurationMs:    secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String()),
+		getAllIDsCount:      secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String()),
+		getAllIDsErrCount:   secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String()),
+		getAllIDsDurationMs: secondaryIndexGetAllDurationMs.WithLabelValues(typeName[V](), ns.String()),
+	}
+}
+
+type SecondaryIndex[V any, T TableRecord[V]] struct {
+	ns namespace
+	t  *Table[V, T]
+
+	getAllCount         prometheus.Counter
+	getAllErrCount      prometheus.Counter
+	getAllDurationMs    prometheus.Observer
+	getAllIDsCount      prometheus.Counter
+	getAllIDsErrCount   prometheus.Counter
+	getAllIDsDurationMs prometheus.Observer
+}
+
+func (idx *SecondaryIndex[V, T]) GetAll(s kv.Store, k []byte) (vs []T, err error) {
+	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAll"); ce != nil {
+		defer func() {
+			ce.Write(
+				zap.String("type", idx.t.name),
+				zap.Stringer("ns", idx.ns),
+				zap.String("key", hashSecondaryIndexKey(k, s)),
+				zap.Int("records", len(vs)),
+				zap.Duration("duration", ts.Elapsed()),
+				zap.Error(err),
+			)
+		}()
+	}
+	idx.getAllCount.Inc()
+	defer observeDurationMs(idx.getAllDurationMs)()
+
+	err = s.View(func(tx kv.Tx) error {
+		ids, err := ScanSecondaryIndex(tx, idx.ns, k)
+		if err != nil {
+			return err
 		}
-		getAllCount.Inc()
-		defer observeDurationMs(getAllDurationMs)()
 
-		err = s.View(func(tx kv.Tx) error {
-			ids, err := ScanSecondaryIndex(tx, ns, k)
+		for _, id := range ids {
+			v, err := idx.t.Get(tx, id)
 			if err != nil {
 				return err
 			}
-
-			for _, id := range ids {
-				v, err := t.Get(tx, id)
-				if err != nil {
-					return err
-				}
-				vs = append(vs, v)
-			}
-			return nil
-		})
-		if err != nil {
-			getAllErrCount.Inc()
+			vs = append(vs, v)
 		}
-		return
+		return nil
+	})
+	if err != nil {
+		idx.getAllErrCount.Inc()
 	}
+	return
+}
+
+func (idx *SecondaryIndex[V, T]) GetAllIDs(s kv.Store, k []byte) (ids []uint64, err error) {
+	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAllIDs"); ce != nil {
+		defer func() {
+			ce.Write(
+				zap.String("type", idx.t.name),
+				zap.Stringer("ns", idx.ns),
+				zap.String("key", hashSecondaryIndexKey(k, s)),
+				zap.Int("records", len(ids)),
+				zap.Duration("duration", ts.Elapsed()),
+				zap.Error(err),
+			)
+		}()
+	}
+	idx.getAllIDsCount.Inc()
+	defer observeDurationMs(idx.getAllIDsDurationMs)()
+
+	err = s.View(func(tx kv.Tx) error {
+		ids, err = ScanSecondaryIndex(tx, idx.ns, k)
+		return err
+	})
+	if err != nil {
+		idx.getAllIDsErrCount.Inc()
+	}
+	return
 }
 
 var ErrUniqueConstraintViolated = errors.New("unique constraint violated")
@@ -752,7 +805,7 @@ type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
-func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) func(s kv.Store, k []byte) (T, error) {
+func NewUniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) *UniqueIndex[V, T] {
 	if opt == nil {
 		opt = &UniqueIndexOptions[V, T]{}
 	}
@@ -794,15 +847,59 @@ func UniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func
 		return opt.OnConflict(s, t, m, c)
 	})
 
-	get := SecondaryIndex(ns, t, key)
-	return func(s kv.Store, k []byte) (v T, err error) {
-		vs, err := get(s, k)
-		if err != nil {
-			return v, err
-		}
-		if len(vs) == 0 {
-			return v, kv.ErrRecordNotFound
-		}
-		return vs[0], nil
+	return &UniqueIndex[V, T]{NewSecondaryIndex(ns, t, key)}
+}
+
+type UniqueIndex[V any, T TableRecord[V]] struct {
+	i *SecondaryIndex[V, T]
+}
+
+func (idx *UniqueIndex[V, T]) Get(s kv.Store, k []byte) (v T, err error) {
+	vs, err := idx.i.GetAll(s, k)
+	if err != nil {
+		return v, err
 	}
+	if len(vs) == 0 {
+		return v, kv.ErrRecordNotFound
+	}
+	return vs[0], nil
+}
+
+func (idx *UniqueIndex[V, T]) GetID(s kv.Store, k []byte) (v uint64, err error) {
+	ids, err := idx.i.GetAllIDs(s, k)
+	if err != nil {
+		return v, err
+	}
+	if len(ids) == 0 {
+		return v, kv.ErrRecordNotFound
+	}
+	return ids[0], nil
+}
+
+func (idx *UniqueIndex[V, T]) GetMany(s kv.Store, ks ...[]byte) (vs []T, err error) {
+	vs = make([]T, len(ks))
+	var eg errgroup.Group
+	for i, k := range ks {
+		i, k := i, k
+		eg.Go(func() (err error) {
+			vs[i], err = idx.Get(s, k)
+			return
+		})
+	}
+	err = eg.Wait()
+	return
+}
+
+func (idx *UniqueIndex[V, T]) GetManyIDs(s kv.Store, ks ...[]byte) (vs []uint64, err error) {
+	vs = make([]uint64, len(ks))
+	var eg errgroup.Group
+	for i, k := range ks {
+		i, k := i, k
+		eg.Go(func() (err error) {
+			vs[i], err = idx.GetID(s, k)
+			return
+		})
+	}
+	err = eg.Wait()
+	return
 }

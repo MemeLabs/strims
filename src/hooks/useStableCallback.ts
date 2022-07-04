@@ -7,17 +7,26 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
-export const useStableCallback = <T extends (...args: any[]) => void>(callback: T) => {
-  const ref = useRef<T>(null);
+export const useStableCallback = <P extends any[], R>(
+  callback: (...args: P) => R
+): ((...args: P) => R) => {
+  const ref = useRef<(...args: P) => R>(null);
 
   useLayoutEffect(() => {
     ref.current = callback;
   }, [callback]);
 
-  return useCallback((...args: Parameters<T>) => ref.current(...args), []);
+  return useCallback((...args: P) => ref.current(...args), []);
 };
 
-export const useStableCallbacks = <T extends { [key: string]: (...args: any[]) => void }>(
+type ReturnTypes<T> = {
+  [K in keyof T]: T[K] extends (...args: any[]) => infer R ? R : never;
+}[keyof T];
+
+export const useStableCallbacks = <
+  R extends ReturnTypes<T>,
+  T extends { [key: string]: (...args: any[]) => R }
+>(
   callbacks: T
 ) => {
   const ref = useRef<T>(null);
@@ -27,7 +36,7 @@ export const useStableCallbacks = <T extends { [key: string]: (...args: any[]) =
   }, [callbacks]);
 
   return useMemo(() => {
-    const proxy = {} as { [K in keyof T]: (...args: Parameters<T[K]>) => void };
+    const proxy = {} as { [K in keyof T]: (...args: Parameters<T[K]>) => ReturnType<T[K]> };
     for (const key in callbacks) {
       proxy[key] = (...args) => ref.current[key](...args);
     }

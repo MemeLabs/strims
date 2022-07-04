@@ -2,16 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  VideoIngressConfig as strims_video_v1_VideoIngressConfig,
-  IVideoIngressConfig as strims_video_v1_IVideoIngressConfig,
+  strims_video_v1_VideoIngressConfig,
+  strims_video_v1_IVideoIngressConfig,
 } from "./ingress";
 import {
-  HLSEgressConfig as strims_video_v1_HLSEgressConfig,
-  IHLSEgressConfig as strims_video_v1_IHLSEgressConfig,
+  strims_video_v1_HLSEgressConfig,
+  strims_video_v1_IHLSEgressConfig,
 } from "./hls_egress";
 import {
-  VideoChannel as strims_video_v1_VideoChannel,
-  IVideoChannel as strims_video_v1_IVideoChannel,
+  strims_video_v1_VideoChannel,
+  strims_video_v1_IVideoChannel,
 } from "./channel";
 
 export type IVideoIngressConfigChangeEvent = {
@@ -158,3 +158,27 @@ export class VideoChannelDeleteEvent {
   }
 }
 
+/* @internal */
+export const strims_video_v1_VideoIngressConfigChangeEvent = VideoIngressConfigChangeEvent;
+/* @internal */
+export type strims_video_v1_VideoIngressConfigChangeEvent = VideoIngressConfigChangeEvent;
+/* @internal */
+export type strims_video_v1_IVideoIngressConfigChangeEvent = IVideoIngressConfigChangeEvent;
+/* @internal */
+export const strims_video_v1_HLSEgressConfigChangeEvent = HLSEgressConfigChangeEvent;
+/* @internal */
+export type strims_video_v1_HLSEgressConfigChangeEvent = HLSEgressConfigChangeEvent;
+/* @internal */
+export type strims_video_v1_IHLSEgressConfigChangeEvent = IHLSEgressConfigChangeEvent;
+/* @internal */
+export const strims_video_v1_VideoChannelChangeEvent = VideoChannelChangeEvent;
+/* @internal */
+export type strims_video_v1_VideoChannelChangeEvent = VideoChannelChangeEvent;
+/* @internal */
+export type strims_video_v1_IVideoChannelChangeEvent = IVideoChannelChangeEvent;
+/* @internal */
+export const strims_video_v1_VideoChannelDeleteEvent = VideoChannelDeleteEvent;
+/* @internal */
+export type strims_video_v1_VideoChannelDeleteEvent = VideoChannelDeleteEvent;
+/* @internal */
+export type strims_video_v1_IVideoChannelDeleteEvent = IVideoChannelDeleteEvent;

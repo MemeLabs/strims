@@ -2,10 +2,10 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Network as strims_network_v1_Network,
-  INetwork as strims_network_v1_INetwork,
-  UIConfig as strims_network_v1_UIConfig,
-  IUIConfig as strims_network_v1_IUIConfig,
+  strims_network_v1_Network,
+  strims_network_v1_INetwork,
+  strims_network_v1_UIConfig,
+  strims_network_v1_IUIConfig,
 } from "./network";
 
 export type INetworkChangeEvent = {
@@ -116,3 +116,21 @@ export class UIConfigChangeEvent {
   }
 }
 
+/* @internal */
+export const strims_network_v1_NetworkChangeEvent = NetworkChangeEvent;
+/* @internal */
+export type strims_network_v1_NetworkChangeEvent = NetworkChangeEvent;
+/* @internal */
+export type strims_network_v1_INetworkChangeEvent = INetworkChangeEvent;
+/* @internal */
+export const strims_network_v1_NetworkDeleteEvent = NetworkDeleteEvent;
+/* @internal */
+export type strims_network_v1_NetworkDeleteEvent = NetworkDeleteEvent;
+/* @internal */
+export type strims_network_v1_INetworkDeleteEvent = INetworkDeleteEvent;
+/* @internal */
+export const strims_network_v1_UIConfigChangeEvent = UIConfigChangeEvent;
+/* @internal */
+export type strims_network_v1_UIConfigChangeEvent = UIConfigChangeEvent;
+/* @internal */
+export type strims_network_v1_IUIConfigChangeEvent = IUIConfigChangeEvent;

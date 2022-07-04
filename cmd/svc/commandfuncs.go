@@ -122,13 +122,19 @@ func runCmd(fs Flags) error {
 		return vpn.New(logger, host)
 	}
 
-	store, err := openDB(cfg)
+	store, err := openDB(logger, cfg)
 	if err != nil {
 		return err
 	}
 	closers = append(closers, store)
 
-	sessionManager := session.NewManager(logger, store, newVPN, network.NewBroker(logger), httpmux)
+	queue, err := openQueue(logger, cfg)
+	if err != nil {
+		return err
+	}
+	closers = append(closers, queue)
+
+	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpmux)
 
 	for _, s := range cfg.Session.Headless {
 		_, err := sessionManager.GetOrCreateSession(s.ID, s.Key)
@@ -189,7 +195,7 @@ func addProfileCmd(fs Flags) error {
 		return err
 	}
 
-	store, err := openDB(cfg)
+	store, err := openDB(nil, cfg)
 	if err != nil {
 		return err
 	}

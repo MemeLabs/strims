@@ -51,7 +51,7 @@ var Networks = NewTable(
 	},
 )
 
-var GetNetworkByKey = SecondaryIndex(networkNetworkKeyNS, Networks, NetworkKey)
+var NetworksByKey = NewUniqueIndex(networkNetworkKeyNS, Networks, NetworkKey, nil)
 
 // NewNetworkCertificate ...
 func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
@@ -260,7 +260,7 @@ func certificateLogSerialNumberKey(m *networkv1ca.CertificateLog) []byte {
 	return FormatCertificateLogSerialNumberKey(m.NetworkId, m.Certificate.SerialNumber)
 }
 
-var GetCertificateLogBySerialNumber = UniqueIndex(
+var CertificateLogsBySerialNumber = NewUniqueIndex(
 	networkCertificateLogSerialNS,
 	CertificateLogs,
 	certificateLogSerialNumberKey,
@@ -279,7 +279,7 @@ func certificateLogSubjectKey(m *networkv1ca.CertificateLog) []byte {
 
 var ErrCertificateSubjectInUse = errors.New("certificate subject in use")
 
-var GetCertificateLogBySubject = UniqueIndex(
+var CertificateLogsBySubject = NewUniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
 	certificateLogSubjectKey,
@@ -303,7 +303,7 @@ func certificateLogKeyKey(m *networkv1ca.CertificateLog) []byte {
 	return FormatCertificateLogKeyKey(m.NetworkId, m.Certificate.Key)
 }
 
-var GetCertificateLogByKey = UniqueIndex(
+var CertificateLogsByKey = NewUniqueIndex(
 	networkCertificateLogKeyNS,
 	CertificateLogs,
 	certificateLogKeyKey,
@@ -339,19 +339,19 @@ func NewCertificateLogCache(s kv.RWStore, opt *CacheStoreOptions) (c Certificate
 	c.CacheStore, c.ByID = newCacheStore[networkv1ca.CertificateLog](s, CertificateLogs, opt)
 	c.BySerialNumber = NewCacheIndex(
 		c.CacheStore,
-		GetCertificateLogBySerialNumber,
+		CertificateLogsBySerialNumber.Get,
 		certificateLogSerialNumberKey,
 		hashmap.NewByteInterface[[]byte],
 	)
 	c.BySubject = NewCacheIndex(
 		c.CacheStore,
-		GetCertificateLogBySubject,
+		CertificateLogsBySubject.Get,
 		certificateLogSubjectKey,
 		hashmap.NewByteInterface[[]byte],
 	)
 	c.ByKey = NewCacheIndex(
 		c.CacheStore,
-		GetCertificateLogByKey,
+		CertificateLogsByKey.Get,
 		certificateLogKeyKey,
 		hashmap.NewByteInterface[[]byte],
 	)
@@ -389,7 +389,7 @@ func FormatBootstrapClientClientOptionsKey(m *networkv1bootstrap.BootstrapClient
 	}
 }
 
-var GetBootstrapClientByClientOptions = UniqueIndex(
+var BootstrapClientsByClientOptions = NewUniqueIndex(
 	networkBootstrapClientClientOptionsNS,
 	BootstrapClients,
 	FormatBootstrapClientClientOptionsKey,
@@ -463,7 +463,7 @@ func FormatNetworkPeerPublicKeyKey(networkID uint64, key []byte) []byte {
 	return append(b, key...)
 }
 
-var GetNetworkPeerByPublicKey = UniqueIndex(
+var NetworkPeersByPublicKey = NewUniqueIndex(
 	networkPeerPublicKeyNS,
 	NetworkPeers,
 	func(m *networkv1.Peer) []byte {
@@ -489,7 +489,7 @@ func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, inviterPe
 
 func GetOrCreateNetworkPeer(s *ProfileStore, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
 	for retries := 0; retries < 2; retries++ {
-		p, err := GetNetworkPeerByPublicKey(s, publicKey)
+		p, err := NetworkPeersByPublicKey.Get(s, publicKey)
 		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
 			return p, err
 		}

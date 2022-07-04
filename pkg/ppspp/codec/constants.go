@@ -13,6 +13,8 @@ func (m MessageType) String() string {
 	switch m {
 	case HandshakeMessage:
 		return "Handshake"
+	case RestartMessage:
+		return "Restart"
 	case DataMessage:
 		return "Data"
 	case AckMessage:
@@ -53,6 +55,7 @@ func (m MessageType) String() string {
 const (
 	_ MessageType = iota
 	HandshakeMessage
+	RestartMessage
 	DataMessage
 	AckMessage
 	HaveMessage
@@ -101,6 +104,8 @@ func (m ProtocolOptionType) String() string {
 		return "ChunksPerSignature"
 	case StreamCountOption:
 		return "StreamCount"
+	case EpochOption:
+		return "Epoch"
 	case EndOption:
 		return "EndOption"
 	}
@@ -121,6 +126,7 @@ const (
 	ChunkSizeOption
 	ChunksPerSignatureOption
 	StreamCountOption
+	EpochOption
 	EndOption ProtocolOptionType = 255
 )
 

@@ -9,6 +9,16 @@ func New[T comparable](size int) *Set[T] {
 	}
 }
 
+func NewFromSlice[T comparable](vs []T) *Set[T] {
+	s := &Set[T]{
+		values: make(map[T]struct{}, len(vs)),
+	}
+	for _, v := range vs {
+		s.values[v] = struct{}{}
+	}
+	return s
+}
+
 type Set[T comparable] struct {
 	values map[T]struct{}
 }

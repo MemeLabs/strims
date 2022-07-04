@@ -28,7 +28,6 @@ export interface SwarmSource {
   swarmUri: string;
   networkKey: string;
   mimeType: string;
-  listingId: bigint;
 }
 
 export type PlayerSource = EmbedSource | SwarmSource;
@@ -73,10 +72,13 @@ export const Provider: React.FC = ({ children }) => {
     return () => void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
   };
 
-  const joinSwarmListing = ({ networkKey: networkKeyString, listingId: id }: SwarmSource) => {
+  const joinSwarmListing = ({ networkKey: networkKeyString, swarmUri, mimeType }: SwarmSource) => {
     const networkKey = Base64.toUint8Array(networkKeyString);
-    const res = client.directory.join({ networkKey, id });
-    return () => void res.then(() => client.directory.part({ networkKey, id }));
+    const res = client.directory.join({
+      networkKey,
+      query: { query: { listing: { content: { media: { swarmUri, mimeType } } } } },
+    });
+    return () => void res.then(({ id }) => client.directory.part({ networkKey, id }));
   };
 
   const updateListing = (source: PlayerSource) => {

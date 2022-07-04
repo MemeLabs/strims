@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../../type/certificate";
 
 export type IBootstrapClient = {
@@ -25,7 +25,7 @@ export class BootstrapClient {
     if (m.id) w.uint32(8).uint64(m.id);
     switch (m.clientOptions.case) {
       case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS:
-      BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
       break;
     }
     return w;
@@ -42,7 +42,7 @@ export class BootstrapClient {
         m.id = r.uint64();
         break;
         case 2:
-        m.clientOptions = new BootstrapClient.ClientOptions({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
+        m.clientOptions = new BootstrapClient.ClientOptions({ websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -61,22 +61,22 @@ export namespace BootstrapClient {
 
   export type IClientOptions =
   { case?: ClientOptionsCase.NOT_SET }
-  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions }
   ;
 
   export type TClientOptions = Readonly<
   { case: ClientOptionsCase.NOT_SET }
-  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions }
   >;
 
   class ClientOptionsImpl {
-    websocketOptions: BootstrapClientWebSocketOptions;
+    websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions;
     case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
 
     constructor(v?: IClientOptions) {
       if (v && "websocketOptions" in v) {
         this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+        this.websocketOptions = new strims_network_v1_bootstrap_BootstrapClientWebSocketOptions(v.websocketOptions);
       }
     }
   }
@@ -84,7 +84,7 @@ export namespace BootstrapClient {
   export const ClientOptions = ClientOptionsImpl as {
     new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
     new <T extends IClientOptions>(v: T): Readonly<
-    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    T extends { websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions } :
     never
     >;
   };
@@ -149,7 +149,7 @@ export class CreateBootstrapClientRequest {
     if (!w) w = new Writer();
     switch (m.clientOptions.case) {
       case CreateBootstrapClientRequest.ClientOptionsCase.WEBSOCKET_OPTIONS:
-      BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(10).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(10).fork()).ldelim();
       break;
     }
     return w;
@@ -163,7 +163,7 @@ export class CreateBootstrapClientRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.clientOptions = new CreateBootstrapClientRequest.ClientOptions({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
+        m.clientOptions = new CreateBootstrapClientRequest.ClientOptions({ websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -182,22 +182,22 @@ export namespace CreateBootstrapClientRequest {
 
   export type IClientOptions =
   { case?: ClientOptionsCase.NOT_SET }
-  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions }
   ;
 
   export type TClientOptions = Readonly<
   { case: ClientOptionsCase.NOT_SET }
-  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions }
   >;
 
   class ClientOptionsImpl {
-    websocketOptions: BootstrapClientWebSocketOptions;
+    websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions;
     case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
 
     constructor(v?: IClientOptions) {
       if (v && "websocketOptions" in v) {
         this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+        this.websocketOptions = new strims_network_v1_bootstrap_BootstrapClientWebSocketOptions(v.websocketOptions);
       }
     }
   }
@@ -205,7 +205,7 @@ export namespace CreateBootstrapClientRequest {
   export const ClientOptions = ClientOptionsImpl as {
     new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
     new <T extends IClientOptions>(v: T): Readonly<
-    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    T extends { websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions } :
     never
     >;
   };
@@ -213,19 +213,19 @@ export namespace CreateBootstrapClientRequest {
 }
 
 export type ICreateBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: strims_network_v1_bootstrap_IBootstrapClient;
 }
 
 export class CreateBootstrapClientResponse {
-  bootstrapClient: BootstrapClient | undefined;
+  bootstrapClient: strims_network_v1_bootstrap_BootstrapClient | undefined;
 
   constructor(v?: ICreateBootstrapClientResponse) {
-    this.bootstrapClient = v?.bootstrapClient && new BootstrapClient(v.bootstrapClient);
+    this.bootstrapClient = v?.bootstrapClient && new strims_network_v1_bootstrap_BootstrapClient(v.bootstrapClient);
   }
 
   static encode(m: CreateBootstrapClientResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.bootstrapClient) BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
+    if (m.bootstrapClient) strims_network_v1_bootstrap_BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -237,7 +237,7 @@ export class CreateBootstrapClientResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bootstrapClient = BootstrapClient.decode(r, r.uint32());
+        m.bootstrapClient = strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -267,7 +267,7 @@ export class UpdateBootstrapClientRequest {
     if (m.id) w.uint32(8).uint64(m.id);
     switch (m.clientOptions.case) {
       case UpdateBootstrapClientRequest.ClientOptionsCase.WEBSOCKET_OPTIONS:
-      BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
       break;
     }
     return w;
@@ -284,7 +284,7 @@ export class UpdateBootstrapClientRequest {
         m.id = r.uint64();
         break;
         case 2:
-        m.clientOptions = new UpdateBootstrapClientRequest.ClientOptions({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
+        m.clientOptions = new UpdateBootstrapClientRequest.ClientOptions({ websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -303,22 +303,22 @@ export namespace UpdateBootstrapClientRequest {
 
   export type IClientOptions =
   { case?: ClientOptionsCase.NOT_SET }
-  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions }
   ;
 
   export type TClientOptions = Readonly<
   { case: ClientOptionsCase.NOT_SET }
-  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions }
   >;
 
   class ClientOptionsImpl {
-    websocketOptions: BootstrapClientWebSocketOptions;
+    websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions;
     case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
 
     constructor(v?: IClientOptions) {
       if (v && "websocketOptions" in v) {
         this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+        this.websocketOptions = new strims_network_v1_bootstrap_BootstrapClientWebSocketOptions(v.websocketOptions);
       }
     }
   }
@@ -326,7 +326,7 @@ export namespace UpdateBootstrapClientRequest {
   export const ClientOptions = ClientOptionsImpl as {
     new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
     new <T extends IClientOptions>(v: T): Readonly<
-    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    T extends { websocketOptions: strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions } :
     never
     >;
   };
@@ -334,19 +334,19 @@ export namespace UpdateBootstrapClientRequest {
 }
 
 export type IUpdateBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: strims_network_v1_bootstrap_IBootstrapClient;
 }
 
 export class UpdateBootstrapClientResponse {
-  bootstrapClient: BootstrapClient | undefined;
+  bootstrapClient: strims_network_v1_bootstrap_BootstrapClient | undefined;
 
   constructor(v?: IUpdateBootstrapClientResponse) {
-    this.bootstrapClient = v?.bootstrapClient && new BootstrapClient(v.bootstrapClient);
+    this.bootstrapClient = v?.bootstrapClient && new strims_network_v1_bootstrap_BootstrapClient(v.bootstrapClient);
   }
 
   static encode(m: UpdateBootstrapClientResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.bootstrapClient) BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
+    if (m.bootstrapClient) strims_network_v1_bootstrap_BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -358,7 +358,7 @@ export class UpdateBootstrapClientResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bootstrapClient = BootstrapClient.decode(r, r.uint32());
+        m.bootstrapClient = strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -405,8 +405,7 @@ export class DeleteBootstrapClientRequest {
   }
 }
 
-export type IDeleteBootstrapClientResponse = {
-}
+export type IDeleteBootstrapClientResponse = Record<string, any>;
 
 export class DeleteBootstrapClientResponse {
 
@@ -462,19 +461,19 @@ export class GetBootstrapClientRequest {
 }
 
 export type IGetBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: strims_network_v1_bootstrap_IBootstrapClient;
 }
 
 export class GetBootstrapClientResponse {
-  bootstrapClient: BootstrapClient | undefined;
+  bootstrapClient: strims_network_v1_bootstrap_BootstrapClient | undefined;
 
   constructor(v?: IGetBootstrapClientResponse) {
-    this.bootstrapClient = v?.bootstrapClient && new BootstrapClient(v.bootstrapClient);
+    this.bootstrapClient = v?.bootstrapClient && new strims_network_v1_bootstrap_BootstrapClient(v.bootstrapClient);
   }
 
   static encode(m: GetBootstrapClientResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.bootstrapClient) BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
+    if (m.bootstrapClient) strims_network_v1_bootstrap_BootstrapClient.encode(m.bootstrapClient, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -486,7 +485,7 @@ export class GetBootstrapClientResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bootstrapClient = BootstrapClient.decode(r, r.uint32());
+        m.bootstrapClient = strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -497,8 +496,7 @@ export class GetBootstrapClientResponse {
   }
 }
 
-export type IListBootstrapClientsRequest = {
-}
+export type IListBootstrapClientsRequest = Record<string, any>;
 
 export class ListBootstrapClientsRequest {
 
@@ -518,19 +516,19 @@ export class ListBootstrapClientsRequest {
 }
 
 export type IListBootstrapClientsResponse = {
-  bootstrapClients?: IBootstrapClient[];
+  bootstrapClients?: strims_network_v1_bootstrap_IBootstrapClient[];
 }
 
 export class ListBootstrapClientsResponse {
-  bootstrapClients: BootstrapClient[];
+  bootstrapClients: strims_network_v1_bootstrap_BootstrapClient[];
 
   constructor(v?: IListBootstrapClientsResponse) {
-    this.bootstrapClients = v?.bootstrapClients ? v.bootstrapClients.map(v => new BootstrapClient(v)) : [];
+    this.bootstrapClients = v?.bootstrapClients ? v.bootstrapClients.map(v => new strims_network_v1_bootstrap_BootstrapClient(v)) : [];
   }
 
   static encode(m: ListBootstrapClientsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.bootstrapClients) BootstrapClient.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.bootstrapClients) strims_network_v1_bootstrap_BootstrapClient.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -542,7 +540,7 @@ export class ListBootstrapClientsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bootstrapClients.push(BootstrapClient.decode(r, r.uint32()));
+        m.bootstrapClients.push(strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -553,8 +551,7 @@ export class ListBootstrapClientsResponse {
   }
 }
 
-export type IListBootstrapPeersRequest = {
-}
+export type IListBootstrapPeersRequest = Record<string, any>;
 
 export class ListBootstrapPeersRequest {
 
@@ -574,19 +571,19 @@ export class ListBootstrapPeersRequest {
 }
 
 export type IListBootstrapPeersResponse = {
-  peers?: IBootstrapPeer[];
+  peers?: strims_network_v1_bootstrap_IBootstrapPeer[];
 }
 
 export class ListBootstrapPeersResponse {
-  peers: BootstrapPeer[];
+  peers: strims_network_v1_bootstrap_BootstrapPeer[];
 
   constructor(v?: IListBootstrapPeersResponse) {
-    this.peers = v?.peers ? v.peers.map(v => new BootstrapPeer(v)) : [];
+    this.peers = v?.peers ? v.peers.map(v => new strims_network_v1_bootstrap_BootstrapPeer(v)) : [];
   }
 
   static encode(m: ListBootstrapPeersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.peers) BootstrapPeer.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.peers) strims_network_v1_bootstrap_BootstrapPeer.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -598,7 +595,7 @@ export class ListBootstrapPeersResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.peers.push(BootstrapPeer.decode(r, r.uint32()));
+        m.peers.push(strims_network_v1_bootstrap_BootstrapPeer.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -667,13 +664,13 @@ export class BootstrapServiceMessage {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case BootstrapServiceMessage.BodyCase.BROKER_OFFER:
-      BootstrapServiceMessage.BrokerOffer.encode(m.body.brokerOffer, w.uint32(10).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer.encode(m.body.brokerOffer, w.uint32(10).fork()).ldelim();
       break;
       case BootstrapServiceMessage.BodyCase.PUBLISH_REQUEST:
-      BootstrapServiceMessage.PublishRequest.encode(m.body.publishRequest, w.uint32(18).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest.encode(m.body.publishRequest, w.uint32(18).fork()).ldelim();
       break;
       case BootstrapServiceMessage.BodyCase.PUBLISH_RESPONSE:
-      BootstrapServiceMessage.PublishResponse.encode(m.body.publishResponse, w.uint32(26).fork()).ldelim();
+      strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse.encode(m.body.publishResponse, w.uint32(26).fork()).ldelim();
       break;
     }
     return w;
@@ -687,13 +684,13 @@ export class BootstrapServiceMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new BootstrapServiceMessage.Body({ brokerOffer: BootstrapServiceMessage.BrokerOffer.decode(r, r.uint32()) });
+        m.body = new BootstrapServiceMessage.Body({ brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new BootstrapServiceMessage.Body({ publishRequest: BootstrapServiceMessage.PublishRequest.decode(r, r.uint32()) });
+        m.body = new BootstrapServiceMessage.Body({ publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new BootstrapServiceMessage.Body({ publishResponse: BootstrapServiceMessage.PublishResponse.decode(r, r.uint32()) });
+        m.body = new BootstrapServiceMessage.Body({ publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -714,36 +711,36 @@ export namespace BootstrapServiceMessage {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.IBrokerOffer }
-  |{ case?: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.IPublishRequest }
-  |{ case?: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.IPublishResponse }
+  |{ case?: BodyCase.BROKER_OFFER, brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_IBrokerOffer }
+  |{ case?: BodyCase.PUBLISH_REQUEST, publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishRequest }
+  |{ case?: BodyCase.PUBLISH_RESPONSE, publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishResponse }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.BrokerOffer }
-  |{ case: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.PublishRequest }
-  |{ case: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.PublishResponse }
+  |{ case: BodyCase.BROKER_OFFER, brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer }
+  |{ case: BodyCase.PUBLISH_REQUEST, publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest }
+  |{ case: BodyCase.PUBLISH_RESPONSE, publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse }
   >;
 
   class BodyImpl {
-    brokerOffer: BootstrapServiceMessage.BrokerOffer;
-    publishRequest: BootstrapServiceMessage.PublishRequest;
-    publishResponse: BootstrapServiceMessage.PublishResponse;
+    brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer;
+    publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest;
+    publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "brokerOffer" in v) {
         this.case = BodyCase.BROKER_OFFER;
-        this.brokerOffer = new BootstrapServiceMessage.BrokerOffer(v.brokerOffer);
+        this.brokerOffer = new strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer(v.brokerOffer);
       } else
       if (v && "publishRequest" in v) {
         this.case = BodyCase.PUBLISH_REQUEST;
-        this.publishRequest = new BootstrapServiceMessage.PublishRequest(v.publishRequest);
+        this.publishRequest = new strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest(v.publishRequest);
       } else
       if (v && "publishResponse" in v) {
         this.case = BodyCase.PUBLISH_RESPONSE;
-        this.publishResponse = new BootstrapServiceMessage.PublishResponse(v.publishResponse);
+        this.publishResponse = new strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse(v.publishResponse);
       }
     }
   }
@@ -751,15 +748,14 @@ export namespace BootstrapServiceMessage {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { brokerOffer: BootstrapServiceMessage.IBrokerOffer } ? { case: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.BrokerOffer } :
-    T extends { publishRequest: BootstrapServiceMessage.IPublishRequest } ? { case: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.PublishRequest } :
-    T extends { publishResponse: BootstrapServiceMessage.IPublishResponse } ? { case: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.PublishResponse } :
+    T extends { brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_IBrokerOffer } ? { case: BodyCase.BROKER_OFFER, brokerOffer: strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer } :
+    T extends { publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishRequest } ? { case: BodyCase.PUBLISH_REQUEST, publishRequest: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest } :
+    T extends { publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishResponse } ? { case: BodyCase.PUBLISH_RESPONSE, publishResponse: strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse } :
     never
     >;
   };
 
-  export type IBrokerOffer = {
-  }
+  export type IBrokerOffer = Record<string, any>;
 
   export class BrokerOffer {
 
@@ -944,8 +940,7 @@ export class PublishNetworkToBootstrapPeerRequest {
   }
 }
 
-export type IPublishNetworkToBootstrapPeerResponse = {
-}
+export type IPublishNetworkToBootstrapPeerResponse = Record<string, any>;
 
 export class PublishNetworkToBootstrapPeerResponse {
 
@@ -964,3 +959,129 @@ export class PublishNetworkToBootstrapPeerResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapClient = BootstrapClient;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapClient = BootstrapClient;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapClient = IBootstrapClient;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapClientWebSocketOptions = BootstrapClientWebSocketOptions;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapClientWebSocketOptions = BootstrapClientWebSocketOptions;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapClientWebSocketOptions = IBootstrapClientWebSocketOptions;
+/* @internal */
+export const strims_network_v1_bootstrap_CreateBootstrapClientRequest = CreateBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_CreateBootstrapClientRequest = CreateBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_ICreateBootstrapClientRequest = ICreateBootstrapClientRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_CreateBootstrapClientResponse = CreateBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_CreateBootstrapClientResponse = CreateBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_ICreateBootstrapClientResponse = ICreateBootstrapClientResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_UpdateBootstrapClientRequest = UpdateBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_UpdateBootstrapClientRequest = UpdateBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IUpdateBootstrapClientRequest = IUpdateBootstrapClientRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_UpdateBootstrapClientResponse = UpdateBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_UpdateBootstrapClientResponse = UpdateBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IUpdateBootstrapClientResponse = IUpdateBootstrapClientResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_DeleteBootstrapClientRequest = DeleteBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_DeleteBootstrapClientRequest = DeleteBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IDeleteBootstrapClientRequest = IDeleteBootstrapClientRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_DeleteBootstrapClientResponse = DeleteBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_DeleteBootstrapClientResponse = DeleteBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IDeleteBootstrapClientResponse = IDeleteBootstrapClientResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_GetBootstrapClientRequest = GetBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_GetBootstrapClientRequest = GetBootstrapClientRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IGetBootstrapClientRequest = IGetBootstrapClientRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_GetBootstrapClientResponse = GetBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_GetBootstrapClientResponse = GetBootstrapClientResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IGetBootstrapClientResponse = IGetBootstrapClientResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_ListBootstrapClientsRequest = ListBootstrapClientsRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_ListBootstrapClientsRequest = ListBootstrapClientsRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IListBootstrapClientsRequest = IListBootstrapClientsRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_ListBootstrapClientsResponse = ListBootstrapClientsResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_ListBootstrapClientsResponse = ListBootstrapClientsResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IListBootstrapClientsResponse = IListBootstrapClientsResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_ListBootstrapPeersRequest = ListBootstrapPeersRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_ListBootstrapPeersRequest = ListBootstrapPeersRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IListBootstrapPeersRequest = IListBootstrapPeersRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_ListBootstrapPeersResponse = ListBootstrapPeersResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_ListBootstrapPeersResponse = ListBootstrapPeersResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IListBootstrapPeersResponse = IListBootstrapPeersResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeer = BootstrapPeer;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeer = BootstrapPeer;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeer = IBootstrapPeer;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapServiceMessage = BootstrapServiceMessage;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage = BootstrapServiceMessage;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapServiceMessage = IBootstrapServiceMessage;
+/* @internal */
+export const strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest = PublishNetworkToBootstrapPeerRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest = PublishNetworkToBootstrapPeerRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IPublishNetworkToBootstrapPeerRequest = IPublishNetworkToBootstrapPeerRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse = PublishNetworkToBootstrapPeerResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse = PublishNetworkToBootstrapPeerResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IPublishNetworkToBootstrapPeerResponse = IPublishNetworkToBootstrapPeerResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer = BootstrapServiceMessage.BrokerOffer;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_BrokerOffer = BootstrapServiceMessage.BrokerOffer;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_IBrokerOffer = BootstrapServiceMessage.IBrokerOffer;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest = BootstrapServiceMessage.PublishRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_PublishRequest = BootstrapServiceMessage.PublishRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishRequest = BootstrapServiceMessage.IPublishRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse = BootstrapServiceMessage.PublishResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_PublishResponse = BootstrapServiceMessage.PublishResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapServiceMessage_IPublishResponse = BootstrapServiceMessage.IPublishResponse;

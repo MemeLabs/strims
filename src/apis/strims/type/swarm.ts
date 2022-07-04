@@ -62,29 +62,33 @@ export class CacheMeta {
 export type ICache = {
   id?: bigint;
   uri?: string;
-  integrity?: Cache.IIntegrity;
+  integrity?: strims_type_Cache_IIntegrity;
   data?: Uint8Array;
+  epoch?: strims_type_Cache_IEpoch;
 }
 
 export class Cache {
   id: bigint;
   uri: string;
-  integrity: Cache.Integrity | undefined;
+  integrity: strims_type_Cache_Integrity | undefined;
   data: Uint8Array;
+  epoch: strims_type_Cache_Epoch | undefined;
 
   constructor(v?: ICache) {
     this.id = v?.id || BigInt(0);
     this.uri = v?.uri || "";
-    this.integrity = v?.integrity && new Cache.Integrity(v.integrity);
+    this.integrity = v?.integrity && new strims_type_Cache_Integrity(v.integrity);
     this.data = v?.data || new Uint8Array();
+    this.epoch = v?.epoch && new strims_type_Cache_Epoch(v.epoch);
   }
 
   static encode(m: Cache, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.uri.length) w.uint32(18).string(m.uri);
-    if (m.integrity) Cache.Integrity.encode(m.integrity, w.uint32(26).fork()).ldelim();
+    if (m.integrity) strims_type_Cache_Integrity.encode(m.integrity, w.uint32(26).fork()).ldelim();
     if (m.data.length) w.uint32(34).bytes(m.data);
+    if (m.epoch) strims_type_Cache_Epoch.encode(m.epoch, w.uint32(42).fork()).ldelim();
     return w;
   }
 
@@ -102,10 +106,13 @@ export class Cache {
         m.uri = r.string();
         break;
         case 3:
-        m.integrity = Cache.Integrity.decode(r, r.uint32());
+        m.integrity = strims_type_Cache_Integrity.decode(r, r.uint32());
         break;
         case 4:
         m.data = r.bytes();
+        break;
+        case 5:
+        m.epoch = strims_type_Cache_Epoch.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -204,23 +211,23 @@ export namespace Cache {
   }
 
   export type IIntegrity = {
-    signAllIntegrity?: Cache.ISignAllIntegrity;
-    merkleIntegrity?: Cache.IMerkleIntegrity;
+    signAllIntegrity?: strims_type_Cache_ISignAllIntegrity;
+    merkleIntegrity?: strims_type_Cache_IMerkleIntegrity;
   }
 
   export class Integrity {
-    signAllIntegrity: Cache.SignAllIntegrity | undefined;
-    merkleIntegrity: Cache.MerkleIntegrity | undefined;
+    signAllIntegrity: strims_type_Cache_SignAllIntegrity | undefined;
+    merkleIntegrity: strims_type_Cache_MerkleIntegrity | undefined;
 
     constructor(v?: IIntegrity) {
-      this.signAllIntegrity = v?.signAllIntegrity && new Cache.SignAllIntegrity(v.signAllIntegrity);
-      this.merkleIntegrity = v?.merkleIntegrity && new Cache.MerkleIntegrity(v.merkleIntegrity);
+      this.signAllIntegrity = v?.signAllIntegrity && new strims_type_Cache_SignAllIntegrity(v.signAllIntegrity);
+      this.merkleIntegrity = v?.merkleIntegrity && new strims_type_Cache_MerkleIntegrity(v.merkleIntegrity);
     }
 
     static encode(m: Integrity, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.signAllIntegrity) Cache.SignAllIntegrity.encode(m.signAllIntegrity, w.uint32(8010).fork()).ldelim();
-      if (m.merkleIntegrity) Cache.MerkleIntegrity.encode(m.merkleIntegrity, w.uint32(8018).fork()).ldelim();
+      if (m.signAllIntegrity) strims_type_Cache_SignAllIntegrity.encode(m.signAllIntegrity, w.uint32(8010).fork()).ldelim();
+      if (m.merkleIntegrity) strims_type_Cache_MerkleIntegrity.encode(m.merkleIntegrity, w.uint32(8018).fork()).ldelim();
       return w;
     }
 
@@ -232,10 +239,53 @@ export namespace Cache {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1001:
-          m.signAllIntegrity = Cache.SignAllIntegrity.decode(r, r.uint32());
+          m.signAllIntegrity = strims_type_Cache_SignAllIntegrity.decode(r, r.uint32());
           break;
           case 1002:
-          m.merkleIntegrity = Cache.MerkleIntegrity.decode(r, r.uint32());
+          m.merkleIntegrity = strims_type_Cache_MerkleIntegrity.decode(r, r.uint32());
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IEpoch = {
+    timestamp?: bigint;
+    signature?: Uint8Array;
+  }
+
+  export class Epoch {
+    timestamp: bigint;
+    signature: Uint8Array;
+
+    constructor(v?: IEpoch) {
+      this.timestamp = v?.timestamp || BigInt(0);
+      this.signature = v?.signature || new Uint8Array();
+    }
+
+    static encode(m: Epoch, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.timestamp) w.uint32(8).int64(m.timestamp);
+      if (m.signature.length) w.uint32(18).bytes(m.signature);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Epoch {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Epoch();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.timestamp = r.int64();
+          break;
+          case 2:
+          m.signature = r.bytes();
           break;
           default:
           r.skipType(tag & 7);
@@ -248,3 +298,39 @@ export namespace Cache {
 
 }
 
+/* @internal */
+export const strims_type_CacheMeta = CacheMeta;
+/* @internal */
+export type strims_type_CacheMeta = CacheMeta;
+/* @internal */
+export type strims_type_ICacheMeta = ICacheMeta;
+/* @internal */
+export const strims_type_Cache = Cache;
+/* @internal */
+export type strims_type_Cache = Cache;
+/* @internal */
+export type strims_type_ICache = ICache;
+/* @internal */
+export const strims_type_Cache_SignAllIntegrity = Cache.SignAllIntegrity;
+/* @internal */
+export type strims_type_Cache_SignAllIntegrity = Cache.SignAllIntegrity;
+/* @internal */
+export type strims_type_Cache_ISignAllIntegrity = Cache.ISignAllIntegrity;
+/* @internal */
+export const strims_type_Cache_MerkleIntegrity = Cache.MerkleIntegrity;
+/* @internal */
+export type strims_type_Cache_MerkleIntegrity = Cache.MerkleIntegrity;
+/* @internal */
+export type strims_type_Cache_IMerkleIntegrity = Cache.IMerkleIntegrity;
+/* @internal */
+export const strims_type_Cache_Integrity = Cache.Integrity;
+/* @internal */
+export type strims_type_Cache_Integrity = Cache.Integrity;
+/* @internal */
+export type strims_type_Cache_IIntegrity = Cache.IIntegrity;
+/* @internal */
+export const strims_type_Cache_Epoch = Cache.Epoch;
+/* @internal */
+export type strims_type_Cache_Epoch = Cache.Epoch;
+/* @internal */
+export type strims_type_Cache_IEpoch = Cache.IEpoch;

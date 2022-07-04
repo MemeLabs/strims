@@ -63,9 +63,9 @@ export const LayoutBody: React.FC = ({ children }) => {
             <Chat />
           </div>
         </SwipablePanel>
-        {/* <div className="layout__chat_bar">
+        <div className="layout__chat_bar">
           <ChatBar />
-        </div> */}
+        </div>
       </main>
     </>
   );

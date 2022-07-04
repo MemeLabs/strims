@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  BootstrapClient as strims_network_v1_bootstrap_BootstrapClient,
-  IBootstrapClient as strims_network_v1_bootstrap_IBootstrapClient,
+  strims_network_v1_bootstrap_BootstrapClient,
+  strims_network_v1_bootstrap_IBootstrapClient,
 } from "./bootstrap";
 
 export type IBootstrapClientChange = {
@@ -42,3 +42,9 @@ export class BootstrapClientChange {
   }
 }
 
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapClientChange = BootstrapClientChange;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapClientChange = BootstrapClientChange;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapClientChange = IBootstrapClientChange;

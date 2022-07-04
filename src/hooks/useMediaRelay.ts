@@ -48,7 +48,7 @@ const useMediaRelay = ({ networkKey, swarmUri, mimeType, videoRef }: MediaRelayP
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {
         case EgressOpenStreamResponse.BodyCase.DATA:
-          if (body.data.bufferUnderrun) {
+          if (body.data.discontinuity) {
             relay.reset();
           }
 

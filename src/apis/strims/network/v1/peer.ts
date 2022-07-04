@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../type/certificate";
 
 export type INetworkPeerNegotiateRequest = {
@@ -122,19 +122,19 @@ export class NetworkPeerBinding {
 }
 
 export type INetworkPeerOpenRequest = {
-  bindings?: INetworkPeerBinding[];
+  bindings?: strims_network_v1_INetworkPeerBinding[];
 }
 
 export class NetworkPeerOpenRequest {
-  bindings: NetworkPeerBinding[];
+  bindings: strims_network_v1_NetworkPeerBinding[];
 
   constructor(v?: INetworkPeerOpenRequest) {
-    this.bindings = v?.bindings ? v.bindings.map(v => new NetworkPeerBinding(v)) : [];
+    this.bindings = v?.bindings ? v.bindings.map(v => new strims_network_v1_NetworkPeerBinding(v)) : [];
   }
 
   static encode(m: NetworkPeerOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.bindings) NetworkPeerBinding.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.bindings) strims_network_v1_NetworkPeerBinding.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -146,7 +146,7 @@ export class NetworkPeerOpenRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bindings.push(NetworkPeerBinding.decode(r, r.uint32()));
+        m.bindings.push(strims_network_v1_NetworkPeerBinding.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -158,19 +158,19 @@ export class NetworkPeerOpenRequest {
 }
 
 export type INetworkPeerOpenResponse = {
-  bindings?: INetworkPeerBinding[];
+  bindings?: strims_network_v1_INetworkPeerBinding[];
 }
 
 export class NetworkPeerOpenResponse {
-  bindings: NetworkPeerBinding[];
+  bindings: strims_network_v1_NetworkPeerBinding[];
 
   constructor(v?: INetworkPeerOpenResponse) {
-    this.bindings = v?.bindings ? v.bindings.map(v => new NetworkPeerBinding(v)) : [];
+    this.bindings = v?.bindings ? v.bindings.map(v => new strims_network_v1_NetworkPeerBinding(v)) : [];
   }
 
   static encode(m: NetworkPeerOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.bindings) NetworkPeerBinding.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.bindings) strims_network_v1_NetworkPeerBinding.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -182,7 +182,7 @@ export class NetworkPeerOpenResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.bindings.push(NetworkPeerBinding.decode(r, r.uint32()));
+        m.bindings.push(strims_network_v1_NetworkPeerBinding.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -229,8 +229,7 @@ export class NetworkPeerCloseRequest {
   }
 }
 
-export type INetworkPeerCloseResponse = {
-}
+export type INetworkPeerCloseResponse = Record<string, any>;
 
 export class NetworkPeerCloseResponse {
 
@@ -285,8 +284,7 @@ export class NetworkPeerUpdateCertificateRequest {
   }
 }
 
-export type INetworkPeerUpdateCertificateResponse = {
-}
+export type INetworkPeerUpdateCertificateResponse = Record<string, any>;
 
 export class NetworkPeerUpdateCertificateResponse {
 
@@ -305,3 +303,57 @@ export class NetworkPeerUpdateCertificateResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_NetworkPeerNegotiateRequest = NetworkPeerNegotiateRequest;
+/* @internal */
+export type strims_network_v1_NetworkPeerNegotiateRequest = NetworkPeerNegotiateRequest;
+/* @internal */
+export type strims_network_v1_INetworkPeerNegotiateRequest = INetworkPeerNegotiateRequest;
+/* @internal */
+export const strims_network_v1_NetworkPeerNegotiateResponse = NetworkPeerNegotiateResponse;
+/* @internal */
+export type strims_network_v1_NetworkPeerNegotiateResponse = NetworkPeerNegotiateResponse;
+/* @internal */
+export type strims_network_v1_INetworkPeerNegotiateResponse = INetworkPeerNegotiateResponse;
+/* @internal */
+export const strims_network_v1_NetworkPeerBinding = NetworkPeerBinding;
+/* @internal */
+export type strims_network_v1_NetworkPeerBinding = NetworkPeerBinding;
+/* @internal */
+export type strims_network_v1_INetworkPeerBinding = INetworkPeerBinding;
+/* @internal */
+export const strims_network_v1_NetworkPeerOpenRequest = NetworkPeerOpenRequest;
+/* @internal */
+export type strims_network_v1_NetworkPeerOpenRequest = NetworkPeerOpenRequest;
+/* @internal */
+export type strims_network_v1_INetworkPeerOpenRequest = INetworkPeerOpenRequest;
+/* @internal */
+export const strims_network_v1_NetworkPeerOpenResponse = NetworkPeerOpenResponse;
+/* @internal */
+export type strims_network_v1_NetworkPeerOpenResponse = NetworkPeerOpenResponse;
+/* @internal */
+export type strims_network_v1_INetworkPeerOpenResponse = INetworkPeerOpenResponse;
+/* @internal */
+export const strims_network_v1_NetworkPeerCloseRequest = NetworkPeerCloseRequest;
+/* @internal */
+export type strims_network_v1_NetworkPeerCloseRequest = NetworkPeerCloseRequest;
+/* @internal */
+export type strims_network_v1_INetworkPeerCloseRequest = INetworkPeerCloseRequest;
+/* @internal */
+export const strims_network_v1_NetworkPeerCloseResponse = NetworkPeerCloseResponse;
+/* @internal */
+export type strims_network_v1_NetworkPeerCloseResponse = NetworkPeerCloseResponse;
+/* @internal */
+export type strims_network_v1_INetworkPeerCloseResponse = INetworkPeerCloseResponse;
+/* @internal */
+export const strims_network_v1_NetworkPeerUpdateCertificateRequest = NetworkPeerUpdateCertificateRequest;
+/* @internal */
+export type strims_network_v1_NetworkPeerUpdateCertificateRequest = NetworkPeerUpdateCertificateRequest;
+/* @internal */
+export type strims_network_v1_INetworkPeerUpdateCertificateRequest = INetworkPeerUpdateCertificateRequest;
+/* @internal */
+export const strims_network_v1_NetworkPeerUpdateCertificateResponse = NetworkPeerUpdateCertificateResponse;
+/* @internal */
+export type strims_network_v1_NetworkPeerUpdateCertificateResponse = NetworkPeerUpdateCertificateResponse;
+/* @internal */
+export type strims_network_v1_INetworkPeerUpdateCertificateResponse = INetworkPeerUpdateCertificateResponse;

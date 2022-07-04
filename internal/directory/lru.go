@@ -21,6 +21,10 @@ type lru[V any, T keyerPointer[V]] struct {
 	head  *lruItem[V, T]
 }
 
+func (l *lru[V, T]) Len() int {
+	return l.items.Len()
+}
+
 func (l *lru[V, T]) Get(u T) T {
 	return l.get(u)
 }

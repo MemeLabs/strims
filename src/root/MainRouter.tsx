@@ -8,20 +8,20 @@ import LayoutBody from "../components/Layout/Body";
 import { useBackgroundRoute } from "../contexts/BackgroundRoute";
 import SettingsLayout from "../pages/Settings/Layout";
 
-const Network = lazy(() => import("../pages/Settings/Network"));
-const Bootstrap = lazy(() => import("../pages/Settings/Bootstrap"));
-const Chat = lazy(() => import("../pages/Settings/Chat"));
-const Video = lazy(() => import("../pages/Settings/Video"));
-const VNIC = lazy(() => import("../pages/Settings/VNIC"));
-const Autoseed = lazy(() => import("../pages/Settings/Autoseed"));
+const Network = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Network"));
+const Bootstrap = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Bootstrap"));
+const Chat = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Chat"));
+const Video = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Video"));
+const VNIC = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/VNIC"));
+const Autoseed = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Autoseed"));
 
-const Broadcast = lazy(() => import("../pages/Broadcast"));
-const Categories = lazy(() => import("../pages/Categories"));
-const Directory = lazy(() => import("../pages/Directory"));
-const Embed = lazy(() => import("../pages/Embed"));
-const Home = lazy(() => import("../pages/Home"));
-const Player = lazy(() => import("../pages/Player"));
-const Streams = lazy(() => import("../pages/Streams"));
+const Broadcast = lazy(() => import(/* webpackPrefetch: true */ "../pages/Broadcast"));
+const Categories = lazy(() => import(/* webpackPrefetch: true */ "../pages/Categories"));
+const Directory = lazy(() => import(/* webpackPrefetch: true */ "../pages/Directory"));
+const Embed = lazy(() => import(/* webpackPrefetch: true */ "../pages/Embed"));
+const Home = lazy(() => import(/* webpackPrefetch: true */ "../pages/Home"));
+const Player = lazy(() => import(/* webpackPrefetch: true */ "../pages/Player"));
+const Streams = lazy(() => import(/* webpackPrefetch: true */ "../pages/Streams"));
 
 export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings/*" element={layout}>

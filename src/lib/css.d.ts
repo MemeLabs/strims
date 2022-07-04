@@ -22,5 +22,8 @@ declare module "csstype" {
     "--video-height"?: string | number;
 
     "--fill-color"?: string;
+
+    "--context-menu-x"?: string | number;
+    "--context-menu-y"?: string | number;
   }
 }

@@ -21,7 +21,7 @@ export const serviceToSlug = (t: Listing.Embed.Service): ServiceSlug =>
 export const slugToService = (t: ServiceSlug): Listing.Embed.Service =>
   serviceSlugs.find(([k]) => k === t)[1];
 
-export const formatUri = (networkKey: string, { content }: Listing, listingId?: bigint): string => {
+export const formatUri = (networkKey: string, { content }: Listing): string => {
   switch (content.case) {
     case Listing.ContentCase.EMBED: {
       const search = qs.stringify({
@@ -32,18 +32,14 @@ export const formatUri = (networkKey: string, { content }: Listing, listingId?: 
     }
     case Listing.ContentCase.MEDIA: {
       const { mimeType, swarmUri } = content.media;
-      return `/player/${networkKey}?${qs.stringify({ mimeType, swarmUri, listingId })}`;
+      return `/player/${networkKey}?${qs.stringify({ mimeType, swarmUri })}`;
     }
     default:
       return "";
   }
 };
 
-export const getListingPlayerSource = (
-  networkKey: string,
-  { content }: Listing,
-  listingId?: bigint
-): PlayerSource => {
+export const getListingPlayerSource = (networkKey: string, { content }: Listing): PlayerSource => {
   switch (content.case) {
     case Listing.ContentCase.EMBED:
       return {
@@ -59,7 +55,6 @@ export const getListingPlayerSource = (
         mimeType: content.media.mimeType,
         swarmUri: content.media.swarmUri,
         networkKey,
-        listingId,
       };
     default:
       return null;

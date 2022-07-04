@@ -2,12 +2,12 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  VideoChannel as strims_video_v1_VideoChannel,
-  IVideoChannel as strims_video_v1_IVideoChannel,
+  strims_video_v1_VideoChannel,
+  strims_video_v1_IVideoChannel,
 } from "./channel";
 import {
-  ListingSnippet as strims_network_v1_directory_ListingSnippet,
-  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+  strims_network_v1_directory_ListingSnippet,
+  strims_network_v1_directory_IListingSnippet,
 } from "../../network/v1/directory/directory";
 
 export type IVideoIngressConfig = {
@@ -124,8 +124,7 @@ export class VideoIngressStream {
   }
 }
 
-export type IVideoIngressIsSupportedRequest = {
-}
+export type IVideoIngressIsSupportedRequest = Record<string, any>;
 
 export class VideoIngressIsSupportedRequest {
 
@@ -180,8 +179,7 @@ export class VideoIngressIsSupportedResponse {
   }
 }
 
-export type IVideoIngressGetConfigRequest = {
-}
+export type IVideoIngressGetConfigRequest = Record<string, any>;
 
 export class VideoIngressGetConfigRequest {
 
@@ -201,19 +199,19 @@ export class VideoIngressGetConfigRequest {
 }
 
 export type IVideoIngressGetConfigResponse = {
-  config?: IVideoIngressConfig;
+  config?: strims_video_v1_IVideoIngressConfig;
 }
 
 export class VideoIngressGetConfigResponse {
-  config: VideoIngressConfig | undefined;
+  config: strims_video_v1_VideoIngressConfig | undefined;
 
   constructor(v?: IVideoIngressGetConfigResponse) {
-    this.config = v?.config && new VideoIngressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_VideoIngressConfig(v.config);
   }
 
   static encode(m: VideoIngressGetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -225,7 +223,7 @@ export class VideoIngressGetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = VideoIngressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_VideoIngressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -237,19 +235,19 @@ export class VideoIngressGetConfigResponse {
 }
 
 export type IVideoIngressSetConfigRequest = {
-  config?: IVideoIngressConfig;
+  config?: strims_video_v1_IVideoIngressConfig;
 }
 
 export class VideoIngressSetConfigRequest {
-  config: VideoIngressConfig | undefined;
+  config: strims_video_v1_VideoIngressConfig | undefined;
 
   constructor(v?: IVideoIngressSetConfigRequest) {
-    this.config = v?.config && new VideoIngressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_VideoIngressConfig(v.config);
   }
 
   static encode(m: VideoIngressSetConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -261,7 +259,7 @@ export class VideoIngressSetConfigRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = VideoIngressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_VideoIngressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -273,19 +271,19 @@ export class VideoIngressSetConfigRequest {
 }
 
 export type IVideoIngressSetConfigResponse = {
-  config?: IVideoIngressConfig;
+  config?: strims_video_v1_IVideoIngressConfig;
 }
 
 export class VideoIngressSetConfigResponse {
-  config: VideoIngressConfig | undefined;
+  config: strims_video_v1_VideoIngressConfig | undefined;
 
   constructor(v?: IVideoIngressSetConfigResponse) {
-    this.config = v?.config && new VideoIngressConfig(v.config);
+    this.config = v?.config && new strims_video_v1_VideoIngressConfig(v.config);
   }
 
   static encode(m: VideoIngressSetConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.config) VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
+    if (m.config) strims_video_v1_VideoIngressConfig.encode(m.config, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -297,7 +295,7 @@ export class VideoIngressSetConfigResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.config = VideoIngressConfig.decode(r, r.uint32());
+        m.config = strims_video_v1_VideoIngressConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -308,8 +306,7 @@ export class VideoIngressSetConfigResponse {
   }
 }
 
-export type IVideoIngressListStreamsRequest = {
-}
+export type IVideoIngressListStreamsRequest = Record<string, any>;
 
 export class VideoIngressListStreamsRequest {
 
@@ -329,19 +326,19 @@ export class VideoIngressListStreamsRequest {
 }
 
 export type IVideoIngressListStreamsResponse = {
-  streams?: IVideoIngressStream[];
+  streams?: strims_video_v1_IVideoIngressStream[];
 }
 
 export class VideoIngressListStreamsResponse {
-  streams: VideoIngressStream[];
+  streams: strims_video_v1_VideoIngressStream[];
 
   constructor(v?: IVideoIngressListStreamsResponse) {
-    this.streams = v?.streams ? v.streams.map(v => new VideoIngressStream(v)) : [];
+    this.streams = v?.streams ? v.streams.map(v => new strims_video_v1_VideoIngressStream(v)) : [];
   }
 
   static encode(m: VideoIngressListStreamsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.streams) VideoIngressStream.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.streams) strims_video_v1_VideoIngressStream.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -353,7 +350,7 @@ export class VideoIngressListStreamsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.streams.push(VideoIngressStream.decode(r, r.uint32()));
+        m.streams.push(strims_video_v1_VideoIngressStream.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -594,8 +591,7 @@ export class VideoIngressShareUpdateChannelResponse {
   }
 }
 
-export type IVideoIngressShareDeleteChannelRequest = {
-}
+export type IVideoIngressShareDeleteChannelRequest = Record<string, any>;
 
 export class VideoIngressShareDeleteChannelRequest {
 
@@ -614,8 +610,7 @@ export class VideoIngressShareDeleteChannelRequest {
   }
 }
 
-export type IVideoIngressShareDeleteChannelResponse = {
-}
+export type IVideoIngressShareDeleteChannelResponse = Record<string, any>;
 
 export class VideoIngressShareDeleteChannelResponse {
 
@@ -634,3 +629,111 @@ export class VideoIngressShareDeleteChannelResponse {
   }
 }
 
+/* @internal */
+export const strims_video_v1_VideoIngressConfig = VideoIngressConfig;
+/* @internal */
+export type strims_video_v1_VideoIngressConfig = VideoIngressConfig;
+/* @internal */
+export type strims_video_v1_IVideoIngressConfig = IVideoIngressConfig;
+/* @internal */
+export const strims_video_v1_VideoIngressStream = VideoIngressStream;
+/* @internal */
+export type strims_video_v1_VideoIngressStream = VideoIngressStream;
+/* @internal */
+export type strims_video_v1_IVideoIngressStream = IVideoIngressStream;
+/* @internal */
+export const strims_video_v1_VideoIngressIsSupportedRequest = VideoIngressIsSupportedRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressIsSupportedRequest = VideoIngressIsSupportedRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressIsSupportedRequest = IVideoIngressIsSupportedRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressIsSupportedResponse = VideoIngressIsSupportedResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressIsSupportedResponse = VideoIngressIsSupportedResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressIsSupportedResponse = IVideoIngressIsSupportedResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressGetConfigRequest = VideoIngressGetConfigRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressGetConfigRequest = VideoIngressGetConfigRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressGetConfigRequest = IVideoIngressGetConfigRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressGetConfigResponse = VideoIngressGetConfigResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressGetConfigResponse = VideoIngressGetConfigResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressGetConfigResponse = IVideoIngressGetConfigResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressSetConfigRequest = VideoIngressSetConfigRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressSetConfigRequest = VideoIngressSetConfigRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressSetConfigRequest = IVideoIngressSetConfigRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressSetConfigResponse = VideoIngressSetConfigResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressSetConfigResponse = VideoIngressSetConfigResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressSetConfigResponse = IVideoIngressSetConfigResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressListStreamsRequest = VideoIngressListStreamsRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressListStreamsRequest = VideoIngressListStreamsRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressListStreamsRequest = IVideoIngressListStreamsRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressListStreamsResponse = VideoIngressListStreamsResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressListStreamsResponse = VideoIngressListStreamsResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressListStreamsResponse = IVideoIngressListStreamsResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressGetChannelURLRequest = VideoIngressGetChannelURLRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressGetChannelURLRequest = VideoIngressGetChannelURLRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressGetChannelURLRequest = IVideoIngressGetChannelURLRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressGetChannelURLResponse = VideoIngressGetChannelURLResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressGetChannelURLResponse = VideoIngressGetChannelURLResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressGetChannelURLResponse = IVideoIngressGetChannelURLResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressShareCreateChannelRequest = VideoIngressShareCreateChannelRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressShareCreateChannelRequest = VideoIngressShareCreateChannelRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareCreateChannelRequest = IVideoIngressShareCreateChannelRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressShareCreateChannelResponse = VideoIngressShareCreateChannelResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressShareCreateChannelResponse = VideoIngressShareCreateChannelResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareCreateChannelResponse = IVideoIngressShareCreateChannelResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressShareUpdateChannelRequest = VideoIngressShareUpdateChannelRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressShareUpdateChannelRequest = VideoIngressShareUpdateChannelRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareUpdateChannelRequest = IVideoIngressShareUpdateChannelRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressShareUpdateChannelResponse = VideoIngressShareUpdateChannelResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressShareUpdateChannelResponse = VideoIngressShareUpdateChannelResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareUpdateChannelResponse = IVideoIngressShareUpdateChannelResponse;
+/* @internal */
+export const strims_video_v1_VideoIngressShareDeleteChannelRequest = VideoIngressShareDeleteChannelRequest;
+/* @internal */
+export type strims_video_v1_VideoIngressShareDeleteChannelRequest = VideoIngressShareDeleteChannelRequest;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareDeleteChannelRequest = IVideoIngressShareDeleteChannelRequest;
+/* @internal */
+export const strims_video_v1_VideoIngressShareDeleteChannelResponse = VideoIngressShareDeleteChannelResponse;
+/* @internal */
+export type strims_video_v1_VideoIngressShareDeleteChannelResponse = VideoIngressShareDeleteChannelResponse;
+/* @internal */
+export type strims_video_v1_IVideoIngressShareDeleteChannelResponse = IVideoIngressShareDeleteChannelResponse;

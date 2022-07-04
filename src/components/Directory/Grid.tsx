@@ -9,7 +9,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import monkey from "../../../assets/directory/monkey.png";
 import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
 import SnippetImage from "../../components/Directory/SnippetImage";
-import { DirectoryListing } from "../../contexts/Directory";
 import { useLayout } from "../../contexts/Layout";
 import { useOpenListing } from "../../hooks/directory";
 import { formatNumber } from "../../lib/number";
@@ -21,10 +20,10 @@ interface DirectoryGridItemProps extends DirectoryListing {
 const EMPTY_SNIPPET = new ListingSnippet();
 
 const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
-  id,
   listing,
   snippet,
-  viewerCount,
+  userCount,
+  recentUserCount,
   networkKey,
 }) => {
   const layout = useLayout();
@@ -45,10 +44,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   }
 
   const openListing = useOpenListing();
-  const handleClick = useCallback(
-    () => openListing(networkKey, listing, id),
-    [networkKey, listing, id]
-  );
+  const handleClick = useCallback(() => openListing(networkKey, listing), [networkKey, listing]);
 
   const title = snippet.title.trim();
 
@@ -65,8 +61,8 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
           source={snippet.thumbnail}
         />
         <span className="directory_grid__item__viewer_count">
-          {formatNumber(Number(snippet.viewerCount))}{" "}
-          {snippet.viewerCount === BigInt(1) ? "viewer" : "viewers"}
+          {formatNumber(Number(snippet.userCount))}{" "}
+          {snippet.userCount === BigInt(1) ? "viewer" : "viewers"}
         </span>
       </button>
       <div className="directory_grid__item__channel">
@@ -89,6 +85,14 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
     </div>
   );
 };
+
+export interface DirectoryListing {
+  id: bigint;
+  listing: Listing;
+  snippet: ListingSnippet;
+  userCount: number;
+  recentUserCount: number;
+}
 
 export interface DirectoryGridProps {
   listings: DirectoryListing[];

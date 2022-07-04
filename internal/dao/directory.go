@@ -97,7 +97,7 @@ func directoryListingKey(m *networkv1directory.ListingRecord) []byte {
 	return FormatDirectoryListingRecordListingKey(m.NetworkId, m.Listing)
 }
 
-var GetDirectoryListingRecordByListing = UniqueIndex(
+var DirectoryListingRecordsByListing = NewUniqueIndex(
 	directoryListingRecordListingNS,
 	DirectoryListingRecords,
 	directoryListingKey,
@@ -108,7 +108,7 @@ func NewDirectoryListingRecordCache(s kv.RWStore, opt *CacheStoreOptions) (c Dir
 	c.CacheStore, c.ByID = newCacheStore[networkv1directory.ListingRecord](s, DirectoryListingRecords, opt)
 	c.ByListing = NewCacheIndex(
 		c.CacheStore,
-		GetDirectoryListingRecordByListing,
+		DirectoryListingRecordsByListing.Get,
 		directoryListingKey,
 		hashmap.NewByteInterface[[]byte],
 	)
@@ -142,7 +142,7 @@ func directoryUserRecordPeerKeyKey(m *networkv1directory.UserRecord) []byte {
 	return FormatDirectoryUserRecordPeerKeyKey(m.NetworkId, m.PeerKey)
 }
 
-var GetDirectoryUserRecordByPeerKey = UniqueIndex(
+var DirectoryUserRecordsByPeerKey = NewUniqueIndex(
 	directoryUserRecordPeerKeyNS,
 	DirectoryUserRecords,
 	directoryUserRecordPeerKeyKey,
@@ -153,7 +153,7 @@ func NewDirectoryUserRecordCache(s kv.RWStore, opt *CacheStoreOptions) (c Direct
 	c.CacheStore, c.ByID = newCacheStore[networkv1directory.UserRecord](s, DirectoryUserRecords, opt)
 	c.ByPeerKey = NewCacheIndex(
 		c.CacheStore,
-		GetDirectoryUserRecordByPeerKey,
+		DirectoryUserRecordsByPeerKey.Get,
 		directoryUserRecordPeerKeyKey,
 		hashmap.NewByteInterface[[]byte],
 	)

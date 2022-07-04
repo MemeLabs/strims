@@ -7,12 +7,13 @@ import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { uniq } from "lodash";
-import React, { ReactNode, useEffect, useRef } from "react";
+import React, { ReactNode, useEffect, useMemo, useRef } from "react";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import Emote from "./Emote";
-import { ViewerStateIndicator } from "./ViewerStateIndicator";
+import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
 const LINK_SHORTEN_AFFIX_LENGTH = 35;
@@ -70,14 +71,31 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   </Emote>
 );
 
+interface MessageEmojiProps {
+  entity: chatv1_Message.Entities.Emoji;
+}
+
+const MessageEmoji: React.FC<MessageEmojiProps> = ({ children, entity }) => (
+  <span className="chat__message__emoji" title={entity.description}>
+    {children}
+  </span>
+);
+
 interface MessageNickProps {
   entity: chatv1_Message.Entities.Nick;
   normalizeCase: boolean;
+  onClick: (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => void;
 }
 
-const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase }) => (
-  <span className="chat__message__nick">{normalizeCase ? entity.nick : children}</span>
-);
+const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase, onClick }) => {
+  const handleClick = useStableCallback((e: React.MouseEvent) => onClick(e, entity));
+
+  return (
+    <span className="chat__message__nick" onClick={handleClick}>
+      {normalizeCase ? entity.nick : children}
+    </span>
+  );
+};
 
 interface MessageTagProps {
   entity: chatv1_Message.Entities.Tag;
@@ -151,6 +169,7 @@ const MessageSelf: React.FC<MessageSelfProps> = ({ children }) => (
 type EntityComponent =
   | typeof MessageLink
   | typeof MessageEmote
+  | typeof MessageEmoji
   | typeof MessageNick
   | typeof MessageTag
   | typeof MessageSpoiler
@@ -160,11 +179,13 @@ type EntityComponent =
 
 class MessageFormatter {
   private bounds: number[];
+  private runes: string[];
   public body: ReactNode[];
 
   constructor(body: string) {
-    this.bounds = [0, body.length];
     this.body = [body];
+    this.runes = Array.from(body);
+    this.bounds = [0, this.runes.length];
   }
 
   // splitSpan splits the text span in body at the given character offset and
@@ -190,8 +211,9 @@ class MessageFormatter {
       return -1;
     }
 
-    const splitOffset = offset - this.bounds[i];
-    this.body.splice(i, 1, span.substring(0, splitOffset), span.substring(splitOffset));
+    const left = this.runes.slice(this.bounds[i], offset).join("");
+    const right = this.runes.slice(offset, this.bounds[i + 1]).join("");
+    this.body.splice(i, 1, left, right);
     this.bounds.splice(i + 1, 0, offset);
     return i + 1;
   }
@@ -240,14 +262,15 @@ interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   uiConfig: UIConfig;
   message: chatv1_Message;
   isMostRecent?: boolean;
+  isContinued?: boolean;
 }
 
-const Message: React.FC<MessageProps> = ({ isMostRecent, ...props }) => {
+const Message: React.FC<MessageProps> = ({ isContinued, ...props }) => {
   const { emotes } = props.message.entities;
-  return emotes?.length === 1 && emotes[0].combo ? (
-    <ComboMessage {...props} isMostRecent={isMostRecent} />
+  return emotes.length === 1 && emotes[0].combo ? (
+    <ComboMessage {...props} />
   ) : (
-    <StandardMessage {...props} />
+    <StandardMessage {...props} isContinued={isContinued} />
   );
 };
 
@@ -258,19 +281,23 @@ const ComboMessage: React.FC<MessageProps> = ({
   isMostRecent,
   ...props
 }) => {
-  const formatter = new MessageFormatter(body);
-  entities.emotes.forEach((entity) =>
-    formatter.insertEntity(MessageEmote, entity, {
-      shouldAnimateForever: uiConfig.animateForever,
-      shouldShowModifiers: uiConfig.emoteModifiers,
-    })
-  );
+  const formattedBody = useMemo(() => {
+    const formatter = new MessageFormatter(body);
+    entities.emotes.forEach((entity) =>
+      formatter.insertEntity(MessageEmote, entity, {
+        shouldAnimateForever: uiConfig.animateForever,
+        shouldShowModifiers: uiConfig.emoteModifiers,
+      })
+    );
+    return formatter.body;
+  }, [uiConfig]);
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
   const className = clsx(baseClassName, "chat__combo_message", {
     [`chat__combo_message--scale_${scale}`]: scale > 0,
     "chat__combo_message--complete": !isMostRecent,
+    "chat__combo_message--clickable": isMostRecent,
   });
 
   const ref = useRef<HTMLDivElement>();
@@ -282,13 +309,21 @@ const ComboMessage: React.FC<MessageProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [count]);
 
+  const [, { sendMessage }] = useRoom();
+
+  const handleBodyClick = useStableCallback(() => {
+    if (isMostRecent) {
+      sendMessage(body);
+    }
+  });
+
   return (
     <div {...props} className={className} ref={ref}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__combo_message__body">
-        {formatter.body}
+      <span className="chat__combo_message__body" onClick={handleBodyClick}>
+        {formattedBody}
         <i className="chat__combo_message__count">{count}</i>
         <i className="chat__combo_message__x">x</i>
         <i className="chat__combo_message__hits">hits</i>
@@ -300,78 +335,116 @@ const ComboMessage: React.FC<MessageProps> = ({
 
 const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
-  message: { nick, peerKey, serverTime, body, entities },
+  message: { nick, peerKey, viewedListing, serverTime, body, entities },
   className: baseClassName,
+  isMostRecent,
+  isContinued,
   ...props
 }) => {
-  const [{ users }] = useRoom();
+  const [, { toggleSelectedPeer, sendMessage }] = useRoom();
 
-  const formatter = new MessageFormatter(body);
-  entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
-  entities.links.forEach((entity) =>
-    formatter.insertEntity(MessageLink, entity, {
-      shouldShorten: uiConfig.shortenLinks,
-    })
+  const handleNickClick = useStableCallback(
+    (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
+      e.stopPropagation();
+      toggleSelectedPeer(entity.peerKey);
+      toggleSelectedPeer(peerKey, true);
+    }
   );
-  if (uiConfig.formatterEmote) {
-    entities.emotes.forEach((entity) =>
-      formatter.insertEntity(MessageEmote, entity, {
-        shouldAnimateForever: uiConfig.animateForever,
-        shouldShowModifiers: uiConfig.emoteModifiers,
-        compactSpacing: uiConfig.compactEmoteSpacing,
+
+  const formattedBody = useMemo(() => {
+    const formatter = new MessageFormatter(body);
+    entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
+    entities.links.forEach((entity) =>
+      formatter.insertEntity(MessageLink, entity, {
+        shouldShorten: uiConfig.shortenLinks,
       })
     );
-  }
-  entities.nicks.forEach((entity) =>
-    formatter.insertEntity(MessageNick, entity, {
-      normalizeCase: uiConfig.normalizeAliasCase,
-    })
-  );
-  entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
-  if (!uiConfig.disableSpoilers) {
-    entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
-  }
-  if (uiConfig.formatterGreen && entities.greenText) {
-    formatter.insertEntity(MessageGreenText, entities.greenText);
-  }
-  if (entities.selfMessage) {
-    formatter.insertEntity(MessageSelf, entities.selfMessage);
-  }
+    if (uiConfig.formatterEmote) {
+      entities.emotes.forEach((entity) =>
+        formatter.insertEntity(MessageEmote, entity, {
+          shouldAnimateForever: uiConfig.animateForever,
+          shouldShowModifiers: uiConfig.emoteModifiers,
+          compactSpacing: uiConfig.compactEmoteSpacing,
+        })
+      );
+      entities.emojis.forEach((entity) => formatter.insertEntity(MessageEmoji, entity));
+    }
+    entities.nicks.forEach((entity) =>
+      formatter.insertEntity(MessageNick, entity, {
+        normalizeCase: uiConfig.normalizeAliasCase,
+        onClick: handleNickClick,
+      })
+    );
+    entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
+    if (!uiConfig.disableSpoilers) {
+      entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
+    }
+    if (uiConfig.formatterGreen && entities.greenText) {
+      formatter.insertEntity(MessageGreenText, entities.greenText);
+    }
+    if (entities.selfMessage) {
+      formatter.insertEntity(MessageSelf, entities.selfMessage);
+    }
+    return formatter.body;
+  }, [uiConfig, entities]);
 
   const authorKey = Base64.fromUint8Array(peerKey, true);
 
-  const classNames = clsx(
-    baseClassName,
-    "chat__message",
-    `chat__message--author_${authorKey}`,
-    {
-      "chat__message--self": entities.selfMessage,
-      "chat__message--tagged": entities.tags.length > 0,
-    },
-    uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
-    uniq(
-      entities.nicks.map(
-        ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
-      )
-    )
+  const canCombo = useMemo(
+    () => isMostRecent && entities.emotes[0]?.canCombo,
+    [isMostRecent, entities]
   );
+
+  const classNames = useMemo(() => {
+    return clsx(
+      baseClassName,
+      "chat__message",
+      `chat__message--author_${authorKey}`,
+      {
+        "chat__message--continued": isContinued,
+        "chat__message--clickable": canCombo,
+        "chat__message--self": entities.selfMessage,
+        "chat__message--tagged": entities.tags.length > 0,
+      },
+      uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
+      uniq(
+        entities.nicks.map(
+          ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+        )
+      )
+    );
+  }, [baseClassName, isContinued, canCombo, entities]);
+
+  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleSelectedPeer(peerKey);
+  });
+
+  const handleBodyClick = useStableCallback(() => {
+    if (canCombo) {
+      sendMessage(body);
+    }
+  });
 
   return (
     <div {...props} className={classNames}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__message__author">
-        {!!uiConfig.viewerStateIndicator && (
-          <ViewerStateIndicator
-            style={uiConfig.viewerStateIndicator}
-            listing={users.get(authorKey)?.listing}
+      <span className="chat__message__author" onClick={handleAuthorClick}>
+        {!!uiConfig.userPresenceIndicator && (
+          <UserPresenceIndicator
+            style={uiConfig.userPresenceIndicator}
+            directoryRef={viewedListing}
           />
         )}
         <span className="chat__message__author__text">{nick}</span>
       </span>
       <span className="chat__message__colon">{": "}</span>
-      <span className="chat__message__body">{formatter.body}</span>
+      <span className="chat__message__body" onClick={handleBodyClick}>
+        {formattedBody}
+      </span>
+      <br />
     </div>
   );
 };

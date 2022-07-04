@@ -3,23 +3,82 @@
 
 import "./ContextMenu.scss";
 
-import React from "react";
-import usePortal from "react-useportal";
+import clsx from "clsx";
+import React, { ReactHTML, useCallback, useMemo, useRef, useState } from "react";
+import usePortal from "use-portal";
 
-export interface ContextMenuProps {}
+import { useLayout } from "../contexts/Layout";
+import useClickAway from "../hooks/useClickAway";
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ children }) => {
-  const { isOpen, openPortal, closePortal, Portal } = usePortal();
+interface MenuProps {
+  onClose: () => void;
+  x: number;
+  y: number;
+}
+
+const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
+  const { root } = useLayout();
+  const { Portal } = usePortal({ target: root });
+
+  const ref = useRef<HTMLDivElement>(null);
+  useClickAway(ref, onClose);
 
   return (
-    <>
-      {isOpen && (
-        <Portal>
-          <div className="context_menu">{children}</div>
-        </Portal>
-      )}
-    </>
+    <Portal>
+      <div
+        ref={ref}
+        className="context_menu"
+        style={{
+          "--context-menu-x": `${x}px`,
+          "--context-menu-y": `${y}px`,
+        }}
+      >
+        {children}
+      </div>
+    </Portal>
   );
 };
 
-export default ContextMenu;
+export const useContextMenu = () => {
+  const [{ isOpen, ...position }, setState] = useState({ isOpen: false, x: 0, y: 0 });
+
+  const openMenu = useCallback(
+    (e: React.MouseEvent) => setState({ isOpen: true, x: e.pageX, y: e.pageY }),
+    []
+  );
+
+  const closeMenu = useCallback(() => setState({ isOpen: false, x: 0, y: 0 }), []);
+
+  const Menu: React.FC = useMemo(() => {
+    return isOpen
+      ? ({ children }) => (
+          <MenuPortal onClose={closeMenu} {...position}>
+            {children}
+          </MenuPortal>
+        )
+      : () => null;
+  }, [isOpen]);
+
+  return {
+    isOpen,
+    openMenu,
+    closeMenu,
+    Menu,
+  };
+};
+
+export const MenuItem: React.FC<React.ComponentProps<"button">> = ({
+  children,
+  className,
+  ...props
+}) => (
+  <button
+    className={clsx(className, {
+      "context_menu__item": true,
+      "context_menu__item--disabled": props.disabled,
+    })}
+    {...props}
+  >
+    {children}
+  </button>
+);

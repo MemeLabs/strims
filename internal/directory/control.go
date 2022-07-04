@@ -4,6 +4,7 @@
 package directory
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math/rand"
@@ -21,6 +22,8 @@ import (
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/maps"
 )
 
 // errors ...
@@ -28,15 +31,86 @@ var (
 	ErrNetworkNotFound = errors.New("network not found")
 )
 
+type Listing struct {
+	ID              uint64
+	Listing         *networkv1directory.Listing
+	Snippet         *networkv1directory.ListingSnippet
+	Moderation      *networkv1directory.ListingModeration
+	UserCount       uint32
+	RecentUserCount uint32
+}
+
+func (l Listing) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", l.ID)
+	marshalListingLogObject(l.Listing, e)
+	return nil
+}
+
+type NetworkListings struct {
+	NetworkKey []byte
+	Listings   []Listing
+}
+
+type User struct {
+	ID      uint64
+	Alias   string
+	PeerKey []byte
+}
+
+func (u User) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", u.ID)
+	e.AddBinary("key", u.PeerKey)
+	e.AddString("alias", u.Alias)
+	return nil
+}
+
+type UserEventType int
+
+const (
+	_ UserEventType = iota
+	JoinUserEventType
+	PartUserEventType
+	RenameUserEventType
+)
+
+type UserEvent struct {
+	Type    UserEventType
+	User    User
+	Listing Listing
+}
+
+type ListingEventType int
+
+const (
+	_ ListingEventType = iota
+	ChangeListingEventType
+	UnpublishListingEventType
+	UserCountChangeListingEventType
+)
+
+type ListingEvent struct {
+	Type    ListingEventType
+	Listing Listing
+}
+
 type Control interface {
 	Run()
-	ReadCachedEvents(ctx context.Context, ch chan any)
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
 	DeleteSnippet(swarmID ppspp.SwarmID)
 	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
 	Unpublish(ctx context.Context, id uint64, networkKey []byte) error
-	Join(ctx context.Context, id uint64, networkKey []byte) error
+	Join(ctx context.Context, query *networkv1directory.ListingQuery, networkKey []byte) (uint64, error)
 	Part(ctx context.Context, id uint64, networkKey []byte) error
+	ModerateListing(ctx context.Context, id uint64, moderation *networkv1directory.ListingModeration, networkKey []byte) error
+	ModerateUser(ctx context.Context, peerKey []byte, moderation *networkv1directory.UserModeration, networkKey []byte) error
+	GetListingsByPeerKey(peerKey []byte) []NetworkListings
+	GetUsersByNetworkID(id uint64) []User
+	GetListingsByNetworkID(id uint64) []Listing
+	GetListingByQuery(networkID uint64, query *networkv1directory.ListingQuery) (Listing, bool)
+	NotifyListingEvent(networkID uint64, ch chan ListingEvent) ([]Listing, error)
+	StopNotifyingListingEvent(networkID uint64, ch chan ListingEvent)
+	NotifyListingUserEvent(networkID, listingID uint64, ch chan UserEvent) ([]User, error)
+	StopNotifyingListingUserEvent(networkID, listingID uint64, ch chan UserEvent)
 }
 
 // NewControl ...
@@ -61,8 +135,8 @@ func NewControl(
 		transfer:  transfer,
 		events:    observers.Chan(),
 
-		runners:    hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
-		eventCache: map[uint64]*eventCache{},
+		runners:         hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
+		syndicateStores: map[uint64]*syndicateStore{},
 
 		snippets: snippets,
 		snippetServer: &snippetServer{
@@ -85,10 +159,10 @@ type control struct {
 	network   network.Control
 	transfer  transfer.Control
 
-	events     chan any
-	lock       sync.Mutex
-	runners    hashmap.Map[[]byte, *runner]
-	eventCache map[uint64]*eventCache
+	events          chan any
+	lock            sync.Mutex
+	runners         hashmap.Map[[]byte, *runner]
+	syndicateStores map[uint64]*syndicateStore
 
 	snippets      *snippetMap
 	snippetServer *snippetServer
@@ -131,8 +205,8 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 	}
 	t.runners.Set(dao.NetworkKey(network), r)
 
-	c := newEventCache(network)
-	t.eventCache[network.Id] = c
+	s := newSyndicateStore(t.logger, network)
+	t.syndicateStores[network.Id] = s
 
 	go t.snippetServer.start(t.ctx, network)
 
@@ -140,7 +214,8 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 		defer func() {
 			t.lock.Lock()
 			defer t.lock.Unlock()
-			delete(t.eventCache, network.Id)
+			delete(t.syndicateStores, network.Id)
+			s.Close()
 		}()
 
 		for {
@@ -157,7 +232,10 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 					break
 				}
 
-				c.StoreEvent(b)
+				t.lock.Lock()
+				s.HandleEvent(b) // TODO: syncutil map?
+				t.lock.Unlock()
+
 				t.observers.EmitLocal(event.DirectoryEvent{
 					NetworkID:  network.Id,
 					NetworkKey: dao.NetworkKey(network),
@@ -221,27 +299,6 @@ func (t *control) client(ctx context.Context, networkKey []byte) (*dialer.RPCCli
 	return client, networkv1directory.NewDirectoryClient(client), nil
 }
 
-func (t *control) ReadCachedEvents(ctx context.Context, ch chan any) {
-	var es []event.DirectoryEvent
-	t.lock.Lock()
-	for _, c := range t.eventCache {
-		es = append(es, event.DirectoryEvent{
-			NetworkID:  c.Network.Id,
-			NetworkKey: dao.NetworkKey(c.Network),
-			Broadcast:  c.Events(),
-		})
-	}
-	t.lock.Unlock()
-
-	for _, e := range es {
-		select {
-		case ch <- e:
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 // PushSnippet ...
 func (t *control) PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
 	t.snippets.Update(swarmID, snippet)
@@ -277,14 +334,19 @@ func (t *control) Unpublish(ctx context.Context, id uint64, networkKey []byte) e
 }
 
 // Join ...
-func (t *control) Join(ctx context.Context, id uint64, networkKey []byte) error {
+func (t *control) Join(ctx context.Context, query *networkv1directory.ListingQuery, networkKey []byte) (uint64, error) {
 	c, dc, err := t.client(ctx, networkKey)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer c.Close()
 
-	return dc.Join(ctx, &networkv1directory.JoinRequest{Id: id}, &networkv1directory.JoinResponse{})
+	res := &networkv1directory.JoinResponse{}
+	err = dc.Join(ctx, &networkv1directory.JoinRequest{Query: query}, res)
+	if err != nil {
+		return 0, err
+	}
+	return res.Id, nil
 }
 
 // Part ...
@@ -296,4 +358,136 @@ func (t *control) Part(ctx context.Context, id uint64, networkKey []byte) error 
 	defer c.Close()
 
 	return dc.Part(ctx, &networkv1directory.PartRequest{Id: id}, &networkv1directory.PartResponse{})
+}
+
+func (t *control) ModerateListing(ctx context.Context, id uint64, moderation *networkv1directory.ListingModeration, networkKey []byte) error {
+	c, dc, err := t.client(ctx, networkKey)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &networkv1directory.ModerateListingRequest{
+		Id:         id,
+		Moderation: moderation,
+	}
+	return dc.ModerateListing(ctx, req, &networkv1directory.ModerateListingResponse{})
+}
+
+func (t *control) ModerateUser(ctx context.Context, peerKey []byte, moderation *networkv1directory.UserModeration, networkKey []byte) error {
+	c, dc, err := t.client(ctx, networkKey)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	req := &networkv1directory.ModerateUserRequest{
+		PeerKey:    peerKey,
+		Moderation: moderation,
+	}
+	return dc.ModerateUser(ctx, req, &networkv1directory.ModerateUserResponse{})
+}
+
+func (t *control) GetListingsByPeerKey(peerKey []byte) []NetworkListings {
+	t.lock.Lock()
+	stores := maps.Values(t.syndicateStores)
+	t.lock.Unlock()
+
+	var nls []NetworkListings
+	for _, s := range stores {
+		if ls := s.GetListingsByPeerKey(peerKey); len(ls) != 0 {
+			nls = append(nls, NetworkListings{
+				NetworkKey: dao.NetworkKey(s.Network),
+				Listings:   ls,
+			})
+		}
+	}
+	return nls
+}
+
+func (t *control) GetUsersByNetworkID(id uint64) []User {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[id]
+	t.lock.Unlock()
+
+	if ok {
+		return s.GetUsers()
+	}
+	return nil
+}
+
+func (t *control) GetListingsByNetworkID(id uint64) []Listing {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[id]
+	t.lock.Unlock()
+
+	if ok {
+		return s.GetListings()
+	}
+	return nil
+}
+
+func (t *control) GetListingByQuery(networkID uint64, query *networkv1directory.ListingQuery) (Listing, bool) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+
+	if !ok {
+		return Listing{}, false
+	}
+
+	switch q := query.Query.(type) {
+	case *networkv1directory.ListingQuery_Id:
+		return s.GetListingByID(q.Id)
+	case *networkv1directory.ListingQuery_Listing:
+		key := dao.FormatDirectoryListingRecordListingKey(networkID, q.Listing)
+		for _, l := range s.GetListings() {
+			if bytes.Equal(key, dao.FormatDirectoryListingRecordListingKey(networkID, l.Listing)) {
+				return l, true
+			}
+		}
+	}
+	return Listing{}, false
+}
+
+func (t *control) NotifyListingEvent(networkID uint64, ch chan ListingEvent) ([]Listing, error) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if !ok {
+		return nil, errors.New("network id not found")
+	}
+
+	s.NotifyListingEvent(ch)
+	return s.GetListings(), nil
+}
+
+func (t *control) StopNotifyingListingEvent(networkID uint64, ch chan ListingEvent) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if ok {
+		s.StopNotifyingListingEvent(ch)
+	}
+}
+
+func (t *control) NotifyListingUserEvent(networkID, listingID uint64, ch chan UserEvent) ([]User, error) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if !ok {
+		return nil, errors.New("network id not found")
+	}
+
+	s.NotifyUserEvent(listingID, ch)
+	return s.GetUsersByListingID(listingID), nil
+}
+
+func (t *control) StopNotifyingListingUserEvent(networkID, listingID uint64, ch chan UserEvent) {
+	t.lock.Lock()
+	s, ok := t.syndicateStores[networkID]
+	t.lock.Unlock()
+	if ok {
+		s.StopNotifyingUserEvent(listingID, ch)
+	}
 }

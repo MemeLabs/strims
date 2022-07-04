@@ -3,14 +3,14 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
 export type IImage = {
-  type?: ImageType;
+  type?: strims_type_ImageType;
   height?: number;
   width?: number;
   data?: Uint8Array;
 }
 
 export class Image {
-  type: ImageType;
+  type: strims_type_ImageType;
   height: number;
   width: number;
   data: Uint8Array;
@@ -68,3 +68,13 @@ export enum ImageType {
   IMAGE_TYPE_PNG = 5,
   IMAGE_TYPE_WEBP = 6,
 }
+/* @internal */
+export const strims_type_Image = Image;
+/* @internal */
+export type strims_type_Image = Image;
+/* @internal */
+export type strims_type_IImage = IImage;
+/* @internal */
+export const strims_type_ImageType = ImageType;
+/* @internal */
+export type strims_type_ImageType = ImageType;

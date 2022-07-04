@@ -10,8 +10,7 @@ import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_r
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import RoomCarousel from "../../../components/Chat/RoomCarousel";
 import { Provider as ChatProvider, useChat } from "../../../contexts/Chat";
-import { RoomProviderProps } from "../../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../../contexts/Directory";
+import { ThreadProviderProps } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatService from "../../mocks/chat/service";
@@ -35,16 +34,14 @@ const Context: React.FC = ({ children }) => {
   return (
     <div className="chat_mockup">
       <ApiProvider value={client}>
-        <DirectoryProvider>
-          <ChatProvider>{children}</ChatProvider>
-        </DirectoryProvider>
+        <ChatProvider>{children}</ChatProvider>
       </ApiProvider>
     </div>
   );
 };
 
 const Carousel: React.FC = () => {
-  const [, { openWhispers }] = useChat();
+  const [, { openWhispers, setMainActiveTopic }] = useChat();
 
   useEffect(() => {
     const key = new Uint8Array(32);
@@ -57,9 +54,7 @@ const Carousel: React.FC = () => {
     }
   }, []);
 
-  const [selected, setSelected] = useState<RoomProviderProps>();
-
-  return <RoomCarousel className="chat_carousel" onChange={setSelected} selected={selected} />;
+  return <RoomCarousel className="chat_carousel" onChange={setMainActiveTopic} />;
 };
 
 export default [

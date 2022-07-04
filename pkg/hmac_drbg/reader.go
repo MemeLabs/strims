@@ -83,7 +83,13 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 	if _, err := h.Write(r.v); err != nil {
 		return 0, err
 	}
-	n = copy(b, h.Sum(nil))
+
+	if len(b) >= r.size {
+		n = r.size
+		h.Sum(b[:0])
+	} else {
+		n = copy(b, h.Sum(nil))
+	}
 
 	return
 }

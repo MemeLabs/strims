@@ -4,7 +4,6 @@
 package integrity
 
 import (
-	"crypto/ed25519"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -129,26 +128,43 @@ type LiveSignatureAlgorithm uint8
 // LiveSignatureAlgorithms ...
 const (
 	_ LiveSignatureAlgorithm = iota
+	LiveSignatureAlgorithmNone
 	LiveSignatureAlgorithmED25519
 )
 
 // SignatureSize ...
 func (a LiveSignatureAlgorithm) SignatureSize() int {
 	switch a {
+	case LiveSignatureAlgorithmNone:
+		return NoneSignatureSize
 	case LiveSignatureAlgorithmED25519:
-		return ed25519.SignatureSize
+		return ED25519SignatureSize
 	default:
 		panic("unsupported live signature algorithm")
 	}
 }
 
-// Verifier ...
-func (a LiveSignatureAlgorithm) Verifier(key []byte) SignatureVerifier {
+// Signer ...
+func (a LiveSignatureAlgorithm) Signer(key []byte) (SignatureSigner, error) {
 	switch a {
+	case LiveSignatureAlgorithmNone:
+		return NewNoneSigner(), nil
 	case LiveSignatureAlgorithmED25519:
-		return NewED25519Verifier(key)
+		return NewED25519Signer(key), nil
 	default:
-		panic("unsupported live signature algorithm")
+		return nil, errors.New("unsupported live signature algorithm")
+	}
+}
+
+// Verifier ...
+func (a LiveSignatureAlgorithm) Verifier(key []byte) (SignatureVerifier, error) {
+	switch a {
+	case LiveSignatureAlgorithmNone:
+		return NewNoneVerifier(), nil
+	case LiveSignatureAlgorithmED25519:
+		return NewED25519Verifier(key), nil
+	default:
+		return nil, errors.New("unsupported live signature algorithm")
 	}
 }
 
@@ -211,9 +227,7 @@ type Writer interface {
 }
 
 // NewVerifier ...
-func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
-	signatureVerifier := opt.LiveSignatureAlgorithm.Verifier(key)
-
+func NewVerifier(v SignatureVerifier, opt SwarmVerifierOptions) (SwarmVerifier, error) {
 	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
 		return &NoneSwarmVerifier{}, nil
@@ -222,14 +236,14 @@ func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
 			LiveDiscardWindow:  opt.LiveDiscardWindow,
 			ChunkSize:          opt.ChunkSize,
 			ChunksPerSignature: opt.ChunksPerSignature,
-			Verifier:           signatureVerifier,
+			Verifier:           v,
 			Hash:               opt.MerkleHashTreeFunction.HashFunc(),
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllSwarmVerifier(&SignAllOptions{
 			LiveDiscardWindow: opt.LiveDiscardWindow,
 			ChunkSize:         opt.ChunkSize,
-			Verifier:          signatureVerifier,
+			Verifier:          v,
 		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")
@@ -241,22 +255,11 @@ type SwarmWriterOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
 	ProtectionMethod       ProtectionMethod
 	ChunkSize              int
-	WriterOptions
-}
-
-// WriterOptions ...
-type WriterOptions struct {
-	ChunksPerSignature int
+	ChunksPerSignature     int
 }
 
 // NewWriter ...
-func NewWriter(key []byte, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
-	var signatureSigner SignatureSigner
-	switch opt.LiveSignatureAlgorithm {
-	case LiveSignatureAlgorithmED25519:
-		signatureSigner = NewED25519Signer(key)
-	}
-
+func NewWriter(s SignatureSigner, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
 	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
 		return w, nil
@@ -265,14 +268,14 @@ func NewWriter(key []byte, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWrit
 			ChunksPerSignature: opt.ChunksPerSignature,
 			ChunkSize:          opt.ChunkSize,
 			Verifier:           v.(*MerkleSwarmVerifier),
-			Signer:             signatureSigner,
+			Signer:             s,
 			Writer:             w,
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllWriter(&SignAllWriterOptions{
 			ChunkSize: opt.ChunkSize,
 			Verifier:  v.(*SignAllSwarmVerifier),
-			Signer:    signatureSigner,
+			Signer:    s,
 			Writer:    w,
 		}), nil
 	default:
@@ -286,6 +289,7 @@ type SwarmVerifier interface {
 	ChannelVerifier() ChannelVerifier
 	ImportCache(c *swarmpb.Cache) error
 	ExportCache() *swarmpb.Cache_Integrity
+	Reset()
 }
 
 // ChannelVerifier ...

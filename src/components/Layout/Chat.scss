@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 .layout_chat {
   height: 100%;
   width: 100%;
@@ -15,14 +18,14 @@
     margin: 7px;
     display: block;
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--border-radius-small);
 
     svg {
       display: block;
       padding: 10px;
     }
 
-    &:hover {
+    &--off:hover {
       background: var(--color-background-chat-toggle-hover);
     }
   }
@@ -54,31 +57,46 @@
 .layout--tv,
 .layout--pc {
   .layout_chat__room_carousel {
-    width: calc(var(--layout-chat-width) - 96px);
+    width: calc(100% - 96px);
   }
 }
 
 .layout--portable {
   .layout_chat {
     &__room_carousel {
-      width: calc(var(--layout-width) - 48px);
+      width: 100%;
     }
   }
 
   &.layout--min_aspect_ratio_2 {
-    .layout_chat__header {
-      margin-left: calc(-1 * env(safe-area-inset-left));
+    .layout_chat__room_carousel {
+      width: calc(100% - 48px);
     }
 
-    .layout_chat__room_carousel {
-      width: calc(var(--layout-width) - 96px);
-      margin-left: 48px;
+    &.layout--landscape_cw.layout--swap,
+    &.layout--landscape_ccw.layout--swap {
+      .layout_chat__header {
+        padding-right: 7px;
+        padding-left: calc(env(safe-area-inset-left) - 24px);
+      }
+    }
+
+    &.layout--landscape_cw:not(.layout--swap),
+    &.layout--landscape_ccw:not(.layout--swap) {
+      .layout_chat__header {
+        padding-left: 7px;
+        padding-right: calc(env(safe-area-inset-right) - 24px);
+      }
+    }
+
+    &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__header {
+      padding-left: env(safe-area-inset-left);
     }
   }
 
   &.layout--min_aspect_ratio_1_2.layout--show_video {
     .layout_chat__room_carousel {
-      width: calc(var(--layout-chat-width) - 48px);
+      width: 100%;
     }
   }
 }
@@ -130,6 +148,11 @@
 
   .layout_chat__header {
     border-bottom: 1px solid var(--color-opac-w-2);
-    padding-right: 10px;
+  }
+}
+
+.layout--portable.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
+  .layout_chat__header {
+    display: none;
   }
 }

@@ -39,6 +39,10 @@ type ChunkStreamReader struct {
 	buf  bytes.Buffer
 }
 
+func (r *ChunkStreamReader) Reset() {
+	r.zpr = nil
+}
+
 func (r *ChunkStreamReader) Read(m protoreflect.ProtoMessage) error {
 	if r.zpr == nil {
 		off := r.or.Offset()

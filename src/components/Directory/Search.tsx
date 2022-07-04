@@ -6,7 +6,7 @@ import "./Search.scss";
 import clsx from "clsx";
 import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
-import React, { RefObject, useContext, useEffect, useRef, useState } from "react";
+import React, { RefObject, useEffect, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
@@ -16,10 +16,15 @@ import { Key } from "ts-key-enum";
 import imgAngelThump from "../../../assets/directory/angelthump.png";
 import imgTwitch from "../../../assets/directory/twitch.png";
 import imgYouTube from "../../../assets/directory/youtube.png";
-import { Listing } from "../../apis/strims/network/v1/directory/directory";
-import { DirectoryContext, DirectoryListing } from "../../contexts/Directory";
+import {
+  Listing,
+  ListingContentType,
+  NetworkListingsItem,
+} from "../../apis/strims/network/v1/directory/directory";
+import { useLazyCall } from "../../contexts/FrontendApi";
 import { useOpenListing } from "../../hooks/directory";
 import useClickAway from "../../hooks/useClickAway";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import SnippetImage from "../Directory/SnippetImage";
 
 const EMBED_ID = "([\\w-]{1,30})";
@@ -135,7 +140,7 @@ const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
 };
 
 interface ListingMenuItemProps {
-  listing: DirectoryListing;
+  listing: NetworkListingsItem;
   selected: boolean;
   onMouseEnter: () => void;
   onSelect: () => void;
@@ -182,7 +187,7 @@ type SearchResult =
     }
   | {
       type: "LISTING";
-      listing: DirectoryListing;
+      listing: NetworkListingsItem;
       onSelect: () => void;
     };
 
@@ -260,10 +265,10 @@ const Search: React.FC<SearchProps> = ({
 
   const ref = useRef<HTMLDivElement>(null);
   const [isFocused, toggleIsFocused] = useToggle(false);
-  const { directories } = useContext(DirectoryContext);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [getListingsRes, getListings] = useLazyCall("directory", "getListings");
 
   const menuOpen = forceMenuOpen || (isFocused && results.length !== 0);
 
@@ -294,27 +299,31 @@ const Search: React.FC<SearchProps> = ({
 
     const pattern = new RegExp(escapeStringRegexp(query), "i");
 
-    for (const { networkKey, listings } of Object.values(directories)) {
-      for (const listing of listings.values()) {
+    for (const { network, listings } of getListingsRes.value?.listings || []) {
+      for (const listing of listings) {
         if (
           pattern.exec(listing.snippet?.title) !== null ||
           pattern.exec(listing.snippet?.channelName) !== null
         ) {
           results.push({
             type: "LISTING",
-            listing,
-            onSelect: () => selectListing(networkKey, listing.listing, listing.id),
+            listing: listing,
+            onSelect: () => selectListing(network.key, listing.listing),
           });
         }
       }
     }
 
     setResults(results.slice(0, maxResults));
-  }, [query, directories]);
+  }, [query, getListingsRes]);
 
   useEffect(() => setSelectedIndex(-1), [results.length, query]);
 
-  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+  const handleChange: React.ChangeEventHandler<HTMLInputElement> = useStableCallback((e) => {
+    setQuery(e.target.value);
+  });
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = useStableCallback((e) => {
     switch (e.key) {
       case Key.Tab:
       case Key.ArrowDown:
@@ -334,18 +343,29 @@ const Search: React.FC<SearchProps> = ({
         e.currentTarget.blur();
         return;
     }
-  };
+  });
+
+  const handleFocus = useStableCallback(() => {
+    toggleIsFocused(true);
+    void getListings({
+      contentTypes: [
+        ListingContentType.LISTING_CONTENT_TYPE_EMBED,
+        ListingContentType.LISTING_CONTENT_TYPE_MEDIA,
+      ],
+    });
+  });
 
   const selectEmbed = (embed: Listing.IEmbed) => {
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
-    const [{ networkKey }] = Object.values(directories);
-    selectListing(networkKey, new Listing({ content: { embed } }));
+    //       update the directories in all networks?
+    const [{ network }] = getListingsRes.value.listings;
+    selectListing(network.key, new Listing({ content: { embed } }));
     onDone?.();
   };
 
   const openListing = useOpenListing();
-  const selectListing = (networkKey: Uint8Array, listing: Listing, id?: bigint) => {
-    openListing(Base64.fromUint8Array(networkKey, true), listing, id);
+  const selectListing = (networkKey: Uint8Array, listing: Listing) => {
+    openListing(Base64.fromUint8Array(networkKey, true), listing);
 
     setQuery("");
     onDone?.();
@@ -362,9 +382,9 @@ const Search: React.FC<SearchProps> = ({
           autoComplete="off"
           spellCheck="false"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => toggleIsFocused(true)}
+          onFocus={handleFocus}
           placeholder={t("directory.Search")}
         />
       </form>

@@ -3,6 +3,10 @@
 
 import { EventEmitter } from "events";
 
+import UAParser from "ua-parser-js";
+
+const IS_IOS = new UAParser().getOS().name === "iOS";
+
 declare function postMessage<T>(message: T, targetOrigin?: string, transfer?: Transferable[]): void;
 declare function postMessage<T>(message: T, transfer?: Transferable[]): void;
 
@@ -40,6 +44,8 @@ const enum EventType {
   DATA_CHANNEL_CLOSE = 18,
   CREATE_DATA_CHANNEL = 19,
   OPEN_WORKER = 20,
+  OBSERVE_WINDOW = 21,
+  WINDOW_VISIBILITYCHANGE = 22,
 }
 
 type WorkerEvent =
@@ -61,6 +67,10 @@ type WorkerEvent =
       type: EventType.OPEN_BUS;
       port: BusMessagePort;
       label: string;
+    }
+  | {
+      type: EventType.OBSERVE_WINDOW;
+      port: WindowMessagePort;
     };
 
 type WebRTCWorkerEvent =
@@ -172,6 +182,17 @@ type BusEvent =
 
 type BusMessagePort = GenericMessagePort<BusEvent, BusEvent>;
 
+type VisibilityChangeEvent = {
+  hidden: boolean;
+  forceHUP: boolean;
+};
+
+type WindowWindowEvent = VisibilityChangeEvent & {
+  type: EventType.WINDOW_VISIBILITYCHANGE;
+};
+
+type WindowMessagePort = GenericMessagePort<void, WindowWindowEvent>;
+
 interface PortState {
   port: WebRTCDataChannelMessagePort;
   open: () => void;
@@ -201,6 +222,9 @@ export class WindowBridge extends EventEmitter {
           break;
         case EventType.OPEN_BUS:
           this.openBus(data.port, data.label);
+          break;
+        case EventType.OBSERVE_WINDOW:
+          this.observeWindow(data.port);
           break;
       }
     };
@@ -290,6 +314,14 @@ export class WindowBridge extends EventEmitter {
 
     peerConnection.ondatachannel = ({ channel }: RTCDataChannelEvent) => handleDataChannel(channel);
 
+    const checkConnectionState = () => {
+      if (["failed", "disconnected", "closed"].includes(peerConnection.iceConnectionState)) {
+        onclose();
+      }
+    };
+
+    window.addEventListener("focus", checkConnectionState);
+
     const onclose = () => {
       dataChannels.forEach(({ id, port, dataChannel }) => {
         port.postMessage({ type: EventType.DATA_CHANNEL_CLOSE });
@@ -311,6 +343,8 @@ export class WindowBridge extends EventEmitter {
       peerConnection.onsignalingstatechange = null;
       peerConnection.close();
 
+      window.removeEventListener("focus", checkConnectionState);
+
       port.onmessage = null;
       port.close();
     };
@@ -322,15 +356,12 @@ export class WindowBridge extends EventEmitter {
       });
 
     peerConnection.onconnectionstatechange = () => {
-      const state = peerConnection.iceConnectionState;
       port.postMessage({
         type: EventType.CONNECTION_STATE_CHANGE,
-        state,
+        state: peerConnection.iceConnectionState,
       });
 
-      if (state === "failed" || state === "disconnected" || state === "closed") {
-        onclose();
-      }
+      checkConnectionState();
     };
 
     peerConnection.onicegatheringstatechange = () =>
@@ -440,6 +471,23 @@ export class WindowBridge extends EventEmitter {
     this.emit(`busport:${label}`, port);
     this.emit(`busopen:${label}`, new Bus(port, label));
   }
+
+  private n = 0;
+  private observeWindow(port: WindowMessagePort) {
+    document.addEventListener("visibilitychange", () => {
+      port.postMessage({
+        type: EventType.WINDOW_VISIBILITYCHANGE,
+        hidden: document.hidden,
+
+        // locking the screen or putting the tab/pwa in the background on ios
+        // causes any open websockets to close. onerror/onclose do not reliably
+        // fire and readyState is not reliably updated. when the app returns to
+        // the foreground we have to discard any previously open connections.
+        // TODO: this probably isn't the best heuristic to use here...
+        forceHUP: IS_IOS,
+      });
+    });
+  }
 }
 
 export class Bus extends EventEmitter {
@@ -548,9 +596,30 @@ class ReadQueue {
   }
 }
 
-export class WorkerBridge {
+export class WorkerBridge extends EventEmitter {
   private channelId = 0;
   private channels = new Map<number, ChannelProxy>();
+
+  constructor() {
+    super();
+
+    const { port1, port2 } = new MessageChannel() as GenericChannel<WindowWindowEvent, never>;
+    port1.onmessage = ({ data }) => {
+      switch (data.type) {
+        case EventType.WINDOW_VISIBILITYCHANGE:
+          this.emit("window:visibilitychange", data);
+          break;
+      }
+    };
+
+    postMessage<WorkerEvent>(
+      {
+        type: EventType.OBSERVE_WINDOW,
+        port: port2,
+      },
+      [port2]
+    );
+  }
 
   private channelOpen(ch: ChannelProxy): number {
     const id = this.channelId++;
@@ -597,12 +666,24 @@ export class WorkerBridge {
   public openWebSocket(uri: string, proxy: ChannelGoProxy): number {
     const ws = new WebSocket(uri);
 
+    const handleVisibilityChange = (e: VisibilityChangeEvent) => {
+      if (!e.hidden && (ws.readyState > 1 || e.forceHUP)) {
+        ws.close();
+        onclose();
+        proxy.onclose();
+      }
+    };
+
+    this.on("window:visibilitychange", handleVisibilityChange);
+
     const onclose = () => {
       ws.onopen = null;
       ws.onclose = null;
       ws.onerror = null;
       ws.onmessage = null;
       this.channelClose(cid);
+
+      this.off("window:visibilitychange", handleVisibilityChange);
     };
 
     const queue = new ReadQueue();
@@ -613,7 +694,10 @@ export class WorkerBridge {
       onclose();
       proxy.onclose();
     };
-    ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message || "unknown websocket error"));
+    ws.onerror = (e: ErrorEvent) => {
+      onclose();
+      proxy.onerror(String(e.message || "unknown websocket error"));
+    };
     ws.onmessage = ({ data }: MessageEvent<ArrayBuffer>) => {
       queue.set(new Uint8Array(data));
       proxy.ondata(data.byteLength);

@@ -3,8 +3,10 @@
 
 import "./Composer.scss";
 
+import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import filterObj from "filter-obj";
+import { escapeRegExp } from "lodash";
 import Prism from "prismjs";
 import React, {
   KeyboardEvent,
@@ -12,6 +14,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,6 +35,7 @@ import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
 
+import { EmojiCategory } from "../../apis/strims/chat/v1/chat";
 import { useChat } from "../../contexts/Chat";
 import Emote from "./Emote";
 
@@ -86,7 +90,7 @@ interface ComposerProps {
 
 const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
   const { t } = useTranslation();
-  const [{ uiConfig }] = useChat();
+  const [{ uiConfig, emoji }] = useChat();
 
   const [[matchSources, matchEntries], setMatch] = useState<Match>(defaultMatch);
   const [selectedMatch, setSelectedMatch] = useState<SelectedMatch>(defaultSelectedMatch);
@@ -127,8 +131,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
 
   const grammar = useMemo(
-    () => getGrammar(emotes, modifiers, nicks, tags),
-    [emotes, modifiers, nicks, tags]
+    () => getGrammar(emotes, modifiers, emoji, nicks, tags),
+    [emotes, modifiers, emoji, nicks, tags]
   );
 
   const decorate = useCallback(
@@ -145,12 +149,19 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
     [editor, grammar, searchSources]
   );
 
+  const emitMessage = () => {
+    const body = ComposerEditor.text(editor).trim();
+    if (body) {
+      onMessage(body);
+      ComposerEditor.clear(editor);
+    }
+  };
+
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === Key.Enter) {
         event.preventDefault();
-        onMessage(ComposerEditor.text(editor).trim());
-        ComposerEditor.clear(editor);
+        emitMessage();
         return;
       }
 
@@ -226,11 +237,29 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   //   search,
   // });
 
+  const ref = useRef<HTMLDivElement>();
+
+  useDrag(
+    ({ dragging, movement: [mx, my] }) => {
+      if (!dragging && my < -50 && Math.abs(mx) < 50) {
+        emitMessage();
+      }
+    },
+    {
+      axis: "y",
+      target: ref,
+      boundToParent: false,
+      eventOptions: {
+        capture: true,
+      },
+    }
+  );
+
   return (
-    <div className="chat__composer">
+    <div className="chat_composer">
       {showSuggestions && (
-        <div className="chat__composer__autocomplete">
-          <div className="chat__composer__autocomplete__list">
+        <div className="chat_composer__autocomplete">
+          <div className="chat_composer__autocomplete__list">
             {matchSources.map((m, i) => (
               <AutocompleteGroup
                 {...m}
@@ -242,14 +271,16 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
           </div>
         </div>
       )}
-      <Slate editor={editor} value={value} onChange={onChange}>
-        <Editable
-          decorate={decorate}
-          onKeyDown={onKeyDown}
-          placeholder={t("chat.composer.Write a message")}
-          renderLeaf={renderLeaf}
-        />
-      </Slate>
+      <div className="chat_composer__editor" ref={ref}>
+        <Slate editor={editor} value={value} onChange={onChange}>
+          <Editable
+            decorate={decorate}
+            onKeyDown={onKeyDown}
+            placeholder={t("chat.composer.Write a message")}
+            renderLeaf={renderLeaf}
+          />
+        </Slate>
+      </div>
     </div>
   );
 };
@@ -276,7 +307,7 @@ const AutocompleteGroup: React.FC<AutocompleteGroupProps> = ({
 
   return (
     <>
-      <div className="chat__composer__autocomplete__label">{label}</div>
+      <div className="chat_composer__autocomplete__label">{label}</div>
       {entries.map((e, i) => (
         <AutocompleteGroupItem
           entry={e}
@@ -308,25 +339,25 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
       content = (
         <>
           {uiConfig.autocompleteEmotePreview && (
-            <span className="chat__composer__autocomplete__item__emote">
+            <span className="chat_composer__autocomplete__item__emote">
               <Emote name={entry.value} shouldAnimateForever />
             </span>
           )}
-          <span className="chat__composer__autocomplete__item__label">{entry.value}</span>
+          <span className="chat_composer__autocomplete__item__label">{entry.value}</span>
         </>
       );
       break;
     default:
-      content = <span className="chat__composer__autocomplete__item__label">{entry.value}</span>;
+      content = <span className="chat_composer__autocomplete__item__label">{entry.value}</span>;
   }
 
   return (
     <div
       className={clsx(
-        "chat__composer__autocomplete__item",
-        `chat__composer__autocomplete__item--${entry.type}`,
+        "chat_composer__autocomplete__item",
+        `chat_composer__autocomplete__item--${entry.type}`,
         {
-          "chat__composer__autocomplete__item--selected": entry === selectedMatch.entry,
+          "chat_composer__autocomplete__item--selected": entry === selectedMatch.entry,
         }
       )}
       onClick={onClick}
@@ -360,14 +391,15 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
     <span
       {...attributes}
       className={clsx({
-        "chat__composer__span--code": leaf.code,
-        "chat__composer__span--spoiler": leaf.spoiler,
-        "chat__composer__span--url": leaf.url,
-        "chat__composer__span--emote": leaf.emote,
-        "chat__composer__span--tag": leaf.tag,
-        "chat__composer__span--nick": leaf.nick,
-        "chat__composer__span--self": leaf.self,
-        "chat__composer__span--greentext": leaf.greentext,
+        "chat_composer__span--code": leaf.code,
+        "chat_composer__span--spoiler": leaf.spoiler,
+        "chat_composer__span--url": leaf.url,
+        "chat_composer__span--emote": leaf.emote,
+        "chat_composer__span--emoji": leaf.emoji,
+        "chat_composer__span--tag": leaf.tag,
+        "chat_composer__span--nick": leaf.nick,
+        "chat_composer__span--self": leaf.self,
+        "chat_composer__span--greentext": leaf.greentext,
       })}
       spellCheck={!leaf.emote && !leaf.tag && !leaf.nick}
     >
@@ -380,7 +412,13 @@ export default Composer;
 
 const noopPattern = /_^/;
 
-const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags: string[]) => {
+const getGrammar = (
+  emotes: string[],
+  modifiers: string[],
+  emoji: EmojiCategory[],
+  nicks: string[],
+  tags: string[]
+) => {
   const nestableEntities = {
     code: {
       pattern: /`(\\`|[^`])*(`|$)/,
@@ -389,6 +427,9 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
     emote: {
       pattern: noopPattern,
       lookbehind: true,
+    },
+    emoji: {
+      pattern: noopPattern,
     },
     nick: {
       pattern: noopPattern,
@@ -407,6 +448,13 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
     );
   } else if (emotes.length !== 0) {
     nestableEntities.emote.pattern = new RegExp(`(\\W|^)(${emotes.join("|")})(?=\\W|$)`);
+  }
+  if (emoji.length !== 0) {
+    const glyphs: string[] = [];
+    for (const category of emoji) {
+      glyphs.push(...category.emoji.map(({ glyph }) => escapeRegExp(glyph)));
+    }
+    nestableEntities.emoji.pattern = new RegExp(glyphs.join("|"));
   }
   if (nicks.length !== 0) {
     nestableEntities.nick.pattern = new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`);

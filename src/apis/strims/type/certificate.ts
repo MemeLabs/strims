@@ -2,13 +2,13 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  KeyType as strims_type_KeyType,
+  strims_type_KeyType,
 } from "./key";
 
 export type ICertificateRequest = {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
-  keyUsage?: KeyUsage;
+  keyUsage?: strims_type_KeyUsage;
   subject?: string;
   signature?: Uint8Array;
 }
@@ -16,7 +16,7 @@ export type ICertificateRequest = {
 export class CertificateRequest {
   key: Uint8Array;
   keyType: strims_type_KeyType;
-  keyUsage: KeyUsage;
+  keyUsage: strims_type_KeyUsage;
   subject: string;
   signature: Uint8Array;
 
@@ -72,7 +72,7 @@ export class CertificateRequest {
 export type ICertificate = {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
-  keyUsage?: KeyUsage;
+  keyUsage?: strims_type_KeyUsage;
   subject?: string;
   notBefore?: bigint;
   notAfter?: bigint;
@@ -84,7 +84,7 @@ export type ICertificate = {
 export class Certificate {
   key: Uint8Array;
   keyType: strims_type_KeyType;
-  keyUsage: KeyUsage;
+  keyUsage: strims_type_KeyUsage;
   subject: string;
   notBefore: bigint;
   notAfter: bigint;
@@ -116,7 +116,7 @@ export class Certificate {
     if (m.signature.length) w.uint32(66).bytes(m.signature);
     switch (m.parentOneof.case) {
       case Certificate.ParentOneofCase.PARENT:
-      Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();
+      strims_type_Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();
       break;
       case Certificate.ParentOneofCase.PARENT_SERIAL_NUMBER:
       w.uint32(82).bytes(m.parentOneof.parentSerialNumber);
@@ -157,7 +157,7 @@ export class Certificate {
         m.signature = r.bytes();
         break;
         case 9:
-        m.parentOneof = new Certificate.ParentOneof({ parent: Certificate.decode(r, r.uint32()) });
+        m.parentOneof = new Certificate.ParentOneof({ parent: strims_type_Certificate.decode(r, r.uint32()) });
         break;
         case 10:
         m.parentOneof = new Certificate.ParentOneof({ parentSerialNumber: r.bytes() });
@@ -180,25 +180,25 @@ export namespace Certificate {
 
   export type IParentOneof =
   { case?: ParentOneofCase.NOT_SET }
-  |{ case?: ParentOneofCase.PARENT, parent: ICertificate }
+  |{ case?: ParentOneofCase.PARENT, parent: strims_type_ICertificate }
   |{ case?: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
   ;
 
   export type TParentOneof = Readonly<
   { case: ParentOneofCase.NOT_SET }
-  |{ case: ParentOneofCase.PARENT, parent: Certificate }
+  |{ case: ParentOneofCase.PARENT, parent: strims_type_Certificate }
   |{ case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
   >;
 
   class ParentOneofImpl {
-    parent: Certificate;
+    parent: strims_type_Certificate;
     parentSerialNumber: Uint8Array;
     case: ParentOneofCase = ParentOneofCase.NOT_SET;
 
     constructor(v?: IParentOneof) {
       if (v && "parent" in v) {
         this.case = ParentOneofCase.PARENT;
-        this.parent = new Certificate(v.parent);
+        this.parent = new strims_type_Certificate(v.parent);
       } else
       if (v && "parentSerialNumber" in v) {
         this.case = ParentOneofCase.PARENT_SERIAL_NUMBER;
@@ -210,7 +210,7 @@ export namespace Certificate {
   export const ParentOneof = ParentOneofImpl as {
     new (): Readonly<{ case: ParentOneofCase.NOT_SET }>;
     new <T extends IParentOneof>(v: T): Readonly<
-    T extends { parent: ICertificate } ? { case: ParentOneofCase.PARENT, parent: Certificate } :
+    T extends { parent: strims_type_ICertificate } ? { case: ParentOneofCase.PARENT, parent: strims_type_Certificate } :
     T extends { parentSerialNumber: Uint8Array } ? { case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array } :
     never
     >;
@@ -226,3 +226,19 @@ export enum KeyUsage {
   KEY_USAGE_BROKER = 8,
   KEY_USAGE_ENCIPHERMENT = 16,
 }
+/* @internal */
+export const strims_type_CertificateRequest = CertificateRequest;
+/* @internal */
+export type strims_type_CertificateRequest = CertificateRequest;
+/* @internal */
+export type strims_type_ICertificateRequest = ICertificateRequest;
+/* @internal */
+export const strims_type_Certificate = Certificate;
+/* @internal */
+export type strims_type_Certificate = Certificate;
+/* @internal */
+export type strims_type_ICertificate = ICertificate;
+/* @internal */
+export const strims_type_KeyUsage = KeyUsage;
+/* @internal */
+export type strims_type_KeyUsage = KeyUsage;

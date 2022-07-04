@@ -136,9 +136,9 @@ func (t *twitchVODEmbedLoader) Load(ctx context.Context, ids []string) ([]*embed
 		embed := &embedLoaderResult{
 			id: video.ID,
 			snippet: &networkv1directory.ListingSnippet{
-				ViewerCount: uint64(video.ViewCount),
-				Title:       video.Title,
-				IsMature:    false,
+				UserCount: uint64(video.ViewCount),
+				Title:     video.Title,
+				IsMature:  false,
 				Thumbnail: &networkv1directory.ListingSnippetImage{
 					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 						Url: twitchVODThumbnailTokens.Replace(video.ThumbnailURL),
@@ -208,7 +208,7 @@ func (t *twitchStreamEmbedLoader) Load(ctx context.Context, ids []string) ([]*em
 
 		if stream, ok := streamsByUserID[user.ID]; ok {
 			embed.snippet.Live = true
-			embed.snippet.ViewerCount = uint64(stream.ViewerCount)
+			embed.snippet.UserCount = uint64(stream.ViewerCount)
 			embed.snippet.Title = stream.Title
 			embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
 				SourceOneof: &networkv1directory.ListingSnippetImage_Url{

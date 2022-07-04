@@ -38,3 +38,9 @@ export class Transfer {
   }
 }
 
+/* @internal */
+export const strims_transfer_v1_Transfer = Transfer;
+/* @internal */
+export type strims_transfer_v1_Transfer = Transfer;
+/* @internal */
+export type strims_transfer_v1_ITransfer = ITransfer;

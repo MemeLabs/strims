@@ -2,12 +2,11 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
+  strims_type_Certificate,
+  strims_type_ICertificate,
 } from "../../../type/certificate";
 
-export type IBootstrapPeerGetPublishEnabledRequest = {
-}
+export type IBootstrapPeerGetPublishEnabledRequest = Record<string, any>;
 
 export class BootstrapPeerGetPublishEnabledRequest {
 
@@ -62,8 +61,7 @@ export class BootstrapPeerGetPublishEnabledResponse {
   }
 }
 
-export type IBootstrapPeerListNetworksRequest = {
-}
+export type IBootstrapPeerListNetworksRequest = Record<string, any>;
 
 export class BootstrapPeerListNetworksRequest {
 
@@ -82,8 +80,7 @@ export class BootstrapPeerListNetworksRequest {
   }
 }
 
-export type IBootstrapPeerListNetworksResponse = {
-}
+export type IBootstrapPeerListNetworksResponse = Record<string, any>;
 
 export class BootstrapPeerListNetworksResponse {
 
@@ -138,8 +135,7 @@ export class BootstrapPeerPublishRequest {
   }
 }
 
-export type IBootstrapPeerPublishResponse = {
-}
+export type IBootstrapPeerPublishResponse = Record<string, any>;
 
 export class BootstrapPeerPublishResponse {
 
@@ -158,3 +154,39 @@ export class BootstrapPeerPublishResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerGetPublishEnabledRequest = BootstrapPeerGetPublishEnabledRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerGetPublishEnabledRequest = BootstrapPeerGetPublishEnabledRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerGetPublishEnabledRequest = IBootstrapPeerGetPublishEnabledRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerGetPublishEnabledResponse = BootstrapPeerGetPublishEnabledResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerGetPublishEnabledResponse = BootstrapPeerGetPublishEnabledResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerGetPublishEnabledResponse = IBootstrapPeerGetPublishEnabledResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerListNetworksRequest = BootstrapPeerListNetworksRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerListNetworksRequest = BootstrapPeerListNetworksRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerListNetworksRequest = IBootstrapPeerListNetworksRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerListNetworksResponse = BootstrapPeerListNetworksResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerListNetworksResponse = BootstrapPeerListNetworksResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerListNetworksResponse = IBootstrapPeerListNetworksResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerPublishRequest = BootstrapPeerPublishRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerPublishRequest = BootstrapPeerPublishRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerPublishRequest = IBootstrapPeerPublishRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_BootstrapPeerPublishResponse = BootstrapPeerPublishResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_BootstrapPeerPublishResponse = BootstrapPeerPublishResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IBootstrapPeerPublishResponse = IBootstrapPeerPublishResponse;

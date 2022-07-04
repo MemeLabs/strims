@@ -63,9 +63,7 @@ func (o SwarmOptions) IntegrityWriterOptions() integrity.SwarmWriterOptions {
 		LiveSignatureAlgorithm: o.Integrity.LiveSignatureAlgorithm,
 		ProtectionMethod:       o.Integrity.ProtectionMethod,
 		ChunkSize:              o.ChunkSize,
-		WriterOptions: integrity.WriterOptions{
-			ChunksPerSignature: o.ChunksPerSignature,
-		},
+		ChunksPerSignature:     o.ChunksPerSignature,
 	}
 }
 

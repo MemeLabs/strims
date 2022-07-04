@@ -189,7 +189,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     for (const { peerKey } of uiConfig.highlights) {
       const key = Base64.fromUint8Array(peerKey, true);
-      props.set(key, [["--author-highlight-color", "var(--chat-highlight-color)"]]);
+      props.set(key, [
+        ["--color-background-chat-message", "var(--color-background-chat-highlight)"],
+      ]);
     }
 
     for (const { peerKey, color } of uiConfig.tags) {
@@ -205,6 +207,14 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     for (const [key, rules] of props) {
       ref.current.sheet.insertRule(
         `.chat__message--author_${key} {${rules.map((r) => r.join(":")).join(";")}}`
+      );
+    }
+
+    if (styles.selectedPeers.size !== 0) {
+      const keys = Array.from(styles.selectedPeers).map((key) => `.chat__message--author_${key}`);
+      const selector = `.chat__message:not(${keys.join(", ")})`;
+      ref.current.sheet.insertRule(
+        `${selector} { --opacity-chat-message: var(--opacity-chat-unselected); }`
       );
     }
 

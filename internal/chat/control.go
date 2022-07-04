@@ -19,6 +19,7 @@ import (
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -178,7 +179,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 	runner, ok := t.runners.Get(key)
 	if !ok {
 		var err error
-		runner, err = newRunner(ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
+		runner, err = newRunner(t.ctx, t.logger, t.store, t.observers, t.network.Dialer(), t.transfer, t.directory, key, networkKey, nil)
 		if err != nil {
 			logger.Error("failed to start chat runner", zap.Error(err))
 			return nil, nil, err
@@ -198,7 +199,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 			readers, stop, err := runner.Reader(rctx)
 			if err != nil {
-				logger.Debug("open chat readers failed", zap.Error(err))
+				logger.Error("open chat readers failed", zap.Error(err))
 				return
 			}
 			defer stop()
@@ -206,7 +207,11 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			eg.Go(func() error {
 				for {
 					e := &chatv1.ServerEvent{}
-					if err := readers.events.Read(e); err != nil {
+					err := readers.events.Read(e)
+					if errors.Is(err, store.ErrStreamReset) {
+						readers.events.Reset()
+						continue
+					} else if err != nil {
 						return fmt.Errorf("reading event: %w", err)
 					}
 
@@ -221,7 +226,11 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 			eg.Go(func() error {
 				for {
 					b := &chatv1.AssetBundle{}
-					if err := readers.assets.Read(b); err != nil {
+					err := readers.assets.Read(b)
+					if errors.Is(err, store.ErrStreamReset) {
+						readers.assets.Reset()
+						continue
+					} else if err != nil {
 						return fmt.Errorf("reading asset bundle: %w", err)
 					}
 

@@ -167,6 +167,8 @@ func (s *seedSwarmScheduler) gc(t timeutil.Time) {
 	}
 }
 
+func (s *seedSwarmScheduler) Reset() {}
+
 func (s *seedSwarmScheduler) Consume(c store.Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -493,10 +495,18 @@ func (c *seedChannelScheduler) flushWrites() (int, error) {
 	return n, nil
 }
 
+func (c *seedChannelScheduler) ExpectData(b binmap.Bin) bool {
+	return false
+}
+
 func (c *seedChannelScheduler) HandleHandshake(liveWindow uint32) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.liveWindow = liveWindow
+	return nil
+}
+
+func (c *seedChannelScheduler) HandleRestart() error {
 	return nil
 }
 

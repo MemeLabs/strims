@@ -3,23 +3,16 @@
 
 import "react-useportal";
 
+import React from "react";
+
 declare module "react-useportal" {
   interface UsePortalResult {
     isOpen: () => void;
-    openPortal: () => void;
-    togglePortal: () => void;
+    openPortal: (e: React.MouseEvent) => void;
+    togglePortal: (open: boolean) => void;
     closePortal: () => void;
     Portal: React.ElementType;
   }
 
-  export default function usePortal({
-    closeOnOutsideClick,
-    closeOnEsc,
-    bindTo,
-    isOpen: defaultIsOpen,
-    onOpen,
-    onClose,
-    onPortalClick,
-    ...eventHandlers
-  }?: UsePortalOptions): UsePortalResult;
+  export default function usePortal(options?: UsePortalOptions): UsePortalResult;
 }

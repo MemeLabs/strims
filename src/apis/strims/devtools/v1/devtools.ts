@@ -74,3 +74,15 @@ export class DevToolsTestResponse {
   }
 }
 
+/* @internal */
+export const strims_devtools_v1_DevToolsTestRequest = DevToolsTestRequest;
+/* @internal */
+export type strims_devtools_v1_DevToolsTestRequest = DevToolsTestRequest;
+/* @internal */
+export type strims_devtools_v1_IDevToolsTestRequest = IDevToolsTestRequest;
+/* @internal */
+export const strims_devtools_v1_DevToolsTestResponse = DevToolsTestResponse;
+/* @internal */
+export type strims_devtools_v1_DevToolsTestResponse = DevToolsTestResponse;
+/* @internal */
+export type strims_devtools_v1_IDevToolsTestResponse = IDevToolsTestResponse;

@@ -45,3 +45,9 @@ export class NetworkAddress {
   }
 }
 
+/* @internal */
+export const strims_vpn_v1_NetworkAddress = NetworkAddress;
+/* @internal */
+export type strims_vpn_v1_NetworkAddress = NetworkAddress;
+/* @internal */
+export type strims_vpn_v1_INetworkAddress = INetworkAddress;

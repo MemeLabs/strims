@@ -13,7 +13,6 @@ import { registerNotificationFrontendService } from "../../apis/strims/notificat
 import LayoutPage from "../../components/Layout";
 import LayoutBody from "../../components/Layout/Body";
 import { Provider as ChatProvider } from "../../contexts/Chat";
-import { Provider as DirectoryProvider } from "../../contexts/Directory";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { Provider as NetworkProvider } from "../../contexts/Network";
 import { Provider as NotificationProvider } from "../../contexts/Notification";
@@ -46,22 +45,20 @@ const LayoutTest: React.FC = () => {
   return (
     <ApiProvider value={client}>
       <ThemeProvider>
-        <DirectoryProvider>
-          <NetworkProvider>
-            <NotificationProvider>
-              <ChatProvider>
-                <PlayerProvider>
-                  <LayoutPage>
-                    <LayoutControl />
-                    <LayoutBody>
-                      <Directory />
-                    </LayoutBody>
-                  </LayoutPage>
-                </PlayerProvider>
-              </ChatProvider>
-            </NotificationProvider>
-          </NetworkProvider>
-        </DirectoryProvider>
+        <NetworkProvider>
+          <NotificationProvider>
+            <ChatProvider>
+              <PlayerProvider>
+                <LayoutPage>
+                  <LayoutControl />
+                  <LayoutBody>
+                    <Directory />
+                  </LayoutBody>
+                </LayoutPage>
+              </PlayerProvider>
+            </ChatProvider>
+          </NotificationProvider>
+        </NetworkProvider>
       </ThemeProvider>
     </ApiProvider>
   );

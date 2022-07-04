@@ -36,7 +36,7 @@ const (
 	videoChannelRemoteShare
 )
 
-var getVideoChannelByUniqueIndex = UniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
+var videoChannelsByUniqueIndex = NewUniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
 	var key []byte
 	switch o := v.Owner.(type) {
 	case *videov1.VideoChannel_LocalShare_:
@@ -61,7 +61,7 @@ func GetVideoChannelIDByOwnerCert(s kv.Store, cert *certificate.Certificate) (ui
 	key = append(key, CertificateRoot(cert).Key...)
 	key = append(key, cert.Key...)
 
-	res, err := getVideoChannelByUniqueIndex(s, key)
+	res, err := videoChannelsByUniqueIndex.Get(s, key)
 	return res.GetId(), err
 }
 

@@ -17,16 +17,16 @@ export class PeerIndexMessage {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case PeerIndexMessage.BodyCase.PUBLISH:
-      PeerIndexMessage.Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
+      strims_vpn_v1_PeerIndexMessage_Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
       break;
       case PeerIndexMessage.BodyCase.UNPUBLISH:
-      PeerIndexMessage.Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
+      strims_vpn_v1_PeerIndexMessage_Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
       break;
       case PeerIndexMessage.BodyCase.SEARCH_REQUEST:
-      PeerIndexMessage.SearchRequest.encode(m.body.searchRequest, w.uint32(26).fork()).ldelim();
+      strims_vpn_v1_PeerIndexMessage_SearchRequest.encode(m.body.searchRequest, w.uint32(26).fork()).ldelim();
       break;
       case PeerIndexMessage.BodyCase.SEARCH_RESPONSE:
-      PeerIndexMessage.SearchResponse.encode(m.body.searchResponse, w.uint32(34).fork()).ldelim();
+      strims_vpn_v1_PeerIndexMessage_SearchResponse.encode(m.body.searchResponse, w.uint32(34).fork()).ldelim();
       break;
     }
     return w;
@@ -40,16 +40,16 @@ export class PeerIndexMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new PeerIndexMessage.Body({ publish: PeerIndexMessage.Publish.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ publish: strims_vpn_v1_PeerIndexMessage_Publish.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new PeerIndexMessage.Body({ unpublish: PeerIndexMessage.Unpublish.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ unpublish: strims_vpn_v1_PeerIndexMessage_Unpublish.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new PeerIndexMessage.Body({ searchRequest: PeerIndexMessage.SearchRequest.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ searchRequest: strims_vpn_v1_PeerIndexMessage_SearchRequest.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body = new PeerIndexMessage.Body({ searchResponse: PeerIndexMessage.SearchResponse.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ searchResponse: strims_vpn_v1_PeerIndexMessage_SearchResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -71,43 +71,43 @@ export namespace PeerIndexMessage {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.PUBLISH, publish: PeerIndexMessage.IPublish }
-  |{ case?: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.IUnpublish }
-  |{ case?: BodyCase.SEARCH_REQUEST, searchRequest: PeerIndexMessage.ISearchRequest }
-  |{ case?: BodyCase.SEARCH_RESPONSE, searchResponse: PeerIndexMessage.ISearchResponse }
+  |{ case?: BodyCase.PUBLISH, publish: strims_vpn_v1_PeerIndexMessage_IPublish }
+  |{ case?: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_PeerIndexMessage_IUnpublish }
+  |{ case?: BodyCase.SEARCH_REQUEST, searchRequest: strims_vpn_v1_PeerIndexMessage_ISearchRequest }
+  |{ case?: BodyCase.SEARCH_RESPONSE, searchResponse: strims_vpn_v1_PeerIndexMessage_ISearchResponse }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.PUBLISH, publish: PeerIndexMessage.Publish }
-  |{ case: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.Unpublish }
-  |{ case: BodyCase.SEARCH_REQUEST, searchRequest: PeerIndexMessage.SearchRequest }
-  |{ case: BodyCase.SEARCH_RESPONSE, searchResponse: PeerIndexMessage.SearchResponse }
+  |{ case: BodyCase.PUBLISH, publish: strims_vpn_v1_PeerIndexMessage_Publish }
+  |{ case: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_PeerIndexMessage_Unpublish }
+  |{ case: BodyCase.SEARCH_REQUEST, searchRequest: strims_vpn_v1_PeerIndexMessage_SearchRequest }
+  |{ case: BodyCase.SEARCH_RESPONSE, searchResponse: strims_vpn_v1_PeerIndexMessage_SearchResponse }
   >;
 
   class BodyImpl {
-    publish: PeerIndexMessage.Publish;
-    unpublish: PeerIndexMessage.Unpublish;
-    searchRequest: PeerIndexMessage.SearchRequest;
-    searchResponse: PeerIndexMessage.SearchResponse;
+    publish: strims_vpn_v1_PeerIndexMessage_Publish;
+    unpublish: strims_vpn_v1_PeerIndexMessage_Unpublish;
+    searchRequest: strims_vpn_v1_PeerIndexMessage_SearchRequest;
+    searchResponse: strims_vpn_v1_PeerIndexMessage_SearchResponse;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "publish" in v) {
         this.case = BodyCase.PUBLISH;
-        this.publish = new PeerIndexMessage.Publish(v.publish);
+        this.publish = new strims_vpn_v1_PeerIndexMessage_Publish(v.publish);
       } else
       if (v && "unpublish" in v) {
         this.case = BodyCase.UNPUBLISH;
-        this.unpublish = new PeerIndexMessage.Unpublish(v.unpublish);
+        this.unpublish = new strims_vpn_v1_PeerIndexMessage_Unpublish(v.unpublish);
       } else
       if (v && "searchRequest" in v) {
         this.case = BodyCase.SEARCH_REQUEST;
-        this.searchRequest = new PeerIndexMessage.SearchRequest(v.searchRequest);
+        this.searchRequest = new strims_vpn_v1_PeerIndexMessage_SearchRequest(v.searchRequest);
       } else
       if (v && "searchResponse" in v) {
         this.case = BodyCase.SEARCH_RESPONSE;
-        this.searchResponse = new PeerIndexMessage.SearchResponse(v.searchResponse);
+        this.searchResponse = new strims_vpn_v1_PeerIndexMessage_SearchResponse(v.searchResponse);
       }
     }
   }
@@ -115,10 +115,10 @@ export namespace PeerIndexMessage {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { publish: PeerIndexMessage.IPublish } ? { case: BodyCase.PUBLISH, publish: PeerIndexMessage.Publish } :
-    T extends { unpublish: PeerIndexMessage.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.Unpublish } :
-    T extends { searchRequest: PeerIndexMessage.ISearchRequest } ? { case: BodyCase.SEARCH_REQUEST, searchRequest: PeerIndexMessage.SearchRequest } :
-    T extends { searchResponse: PeerIndexMessage.ISearchResponse } ? { case: BodyCase.SEARCH_RESPONSE, searchResponse: PeerIndexMessage.SearchResponse } :
+    T extends { publish: strims_vpn_v1_PeerIndexMessage_IPublish } ? { case: BodyCase.PUBLISH, publish: strims_vpn_v1_PeerIndexMessage_Publish } :
+    T extends { unpublish: strims_vpn_v1_PeerIndexMessage_IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: strims_vpn_v1_PeerIndexMessage_Unpublish } :
+    T extends { searchRequest: strims_vpn_v1_PeerIndexMessage_ISearchRequest } ? { case: BodyCase.SEARCH_REQUEST, searchRequest: strims_vpn_v1_PeerIndexMessage_SearchRequest } :
+    T extends { searchResponse: strims_vpn_v1_PeerIndexMessage_ISearchResponse } ? { case: BodyCase.SEARCH_RESPONSE, searchResponse: strims_vpn_v1_PeerIndexMessage_SearchResponse } :
     never
     >;
   };
@@ -195,19 +195,19 @@ export namespace PeerIndexMessage {
   }
 
   export type IPublish = {
-    record?: PeerIndexMessage.IRecord;
+    record?: strims_vpn_v1_PeerIndexMessage_IRecord;
   }
 
   export class Publish {
-    record: PeerIndexMessage.Record | undefined;
+    record: strims_vpn_v1_PeerIndexMessage_Record | undefined;
 
     constructor(v?: IPublish) {
-      this.record = v?.record && new PeerIndexMessage.Record(v.record);
+      this.record = v?.record && new strims_vpn_v1_PeerIndexMessage_Record(v.record);
     }
 
     static encode(m: Publish, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.record) PeerIndexMessage.Record.encode(m.record, w.uint32(10).fork()).ldelim();
+      if (m.record) strims_vpn_v1_PeerIndexMessage_Record.encode(m.record, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -219,7 +219,7 @@ export namespace PeerIndexMessage {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.record = PeerIndexMessage.Record.decode(r, r.uint32());
+          m.record = strims_vpn_v1_PeerIndexMessage_Record.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -231,19 +231,19 @@ export namespace PeerIndexMessage {
   }
 
   export type IUnpublish = {
-    record?: PeerIndexMessage.IRecord;
+    record?: strims_vpn_v1_PeerIndexMessage_IRecord;
   }
 
   export class Unpublish {
-    record: PeerIndexMessage.Record | undefined;
+    record: strims_vpn_v1_PeerIndexMessage_Record | undefined;
 
     constructor(v?: IUnpublish) {
-      this.record = v?.record && new PeerIndexMessage.Record(v.record);
+      this.record = v?.record && new strims_vpn_v1_PeerIndexMessage_Record(v.record);
     }
 
     static encode(m: Unpublish, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.record) PeerIndexMessage.Record.encode(m.record, w.uint32(10).fork()).ldelim();
+      if (m.record) strims_vpn_v1_PeerIndexMessage_Record.encode(m.record, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -255,7 +255,7 @@ export namespace PeerIndexMessage {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.record = PeerIndexMessage.Record.decode(r, r.uint32());
+          m.record = strims_vpn_v1_PeerIndexMessage_Record.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -311,22 +311,22 @@ export namespace PeerIndexMessage {
 
   export type ISearchResponse = {
     requestId?: bigint;
-    records?: PeerIndexMessage.IRecord[];
+    records?: strims_vpn_v1_PeerIndexMessage_IRecord[];
   }
 
   export class SearchResponse {
     requestId: bigint;
-    records: PeerIndexMessage.Record[];
+    records: strims_vpn_v1_PeerIndexMessage_Record[];
 
     constructor(v?: ISearchResponse) {
       this.requestId = v?.requestId || BigInt(0);
-      this.records = v?.records ? v.records.map(v => new PeerIndexMessage.Record(v)) : [];
+      this.records = v?.records ? v.records.map(v => new strims_vpn_v1_PeerIndexMessage_Record(v)) : [];
     }
 
     static encode(m: SearchResponse, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.requestId) w.uint32(8).uint64(m.requestId);
-      for (const v of m.records) PeerIndexMessage.Record.encode(v, w.uint32(18).fork()).ldelim();
+      for (const v of m.records) strims_vpn_v1_PeerIndexMessage_Record.encode(v, w.uint32(18).fork()).ldelim();
       return w;
     }
 
@@ -341,7 +341,7 @@ export namespace PeerIndexMessage {
           m.requestId = r.uint64();
           break;
           case 2:
-          m.records.push(PeerIndexMessage.Record.decode(r, r.uint32()));
+          m.records.push(strims_vpn_v1_PeerIndexMessage_Record.decode(r, r.uint32()));
           break;
           default:
           r.skipType(tag & 7);
@@ -354,3 +354,39 @@ export namespace PeerIndexMessage {
 
 }
 
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage = PeerIndexMessage;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage = PeerIndexMessage;
+/* @internal */
+export type strims_vpn_v1_IPeerIndexMessage = IPeerIndexMessage;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_Record = PeerIndexMessage.Record;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_Record = PeerIndexMessage.Record;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_IRecord = PeerIndexMessage.IRecord;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_Publish = PeerIndexMessage.Publish;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_Publish = PeerIndexMessage.Publish;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_IPublish = PeerIndexMessage.IPublish;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_Unpublish = PeerIndexMessage.Unpublish;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_Unpublish = PeerIndexMessage.Unpublish;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_IUnpublish = PeerIndexMessage.IUnpublish;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_SearchRequest = PeerIndexMessage.SearchRequest;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_SearchRequest = PeerIndexMessage.SearchRequest;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_ISearchRequest = PeerIndexMessage.ISearchRequest;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_SearchResponse = PeerIndexMessage.SearchResponse;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_SearchResponse = PeerIndexMessage.SearchResponse;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_ISearchResponse = PeerIndexMessage.ISearchResponse;

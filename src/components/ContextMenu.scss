@@ -1,2 +1,36 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 .context_menu {
+  position: fixed;
+  left: var(--context-menu-x, 0px);
+  top: var(--context-menu-y, 0px);
+  background: var(--color-background-context-menu);
+  z-index: var(--z-index-menu);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-medium);
+  padding: 0.2rem 0;
+  box-shadow: var(--shadow-elevation-3);
+
+  &__item {
+    display: block;
+    text-align: left;
+    padding: 0.2rem 0.4rem;
+    margin: 0.2rem 0.4rem;
+    border-radius: var(--border-radius-small);
+    color: var(--color-text-context-menu-item);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-background-context-menu-item-hover);
+      color: var(--color-text-context-menu-item-hover);
+    }
+
+    &--disabled,
+    &--disabled:hover {
+      background: unset;
+      color: var(--color-text-context-menu-item-disabled);
+    }
+  }
 }

@@ -1,9 +1,56 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 .chat {
   &__message {
     box-sizing: border-box;
     line-height: 1.4rem;
     overflow-wrap: break-word;
-    padding: 3px 7px;
+    padding: 0 7px;
+    opacity: var(--opacity-chat-message, 1);
+    background-color: var(--color-background-chat-message, transparent);
+
+    // a message preceded and followed by messages from different authors
+    &:not(&--continued) + &:not(&--continued) {
+      padding-top: 3px;
+      padding-bottom: 3px;
+    }
+
+    // the first in a sequence of messages from the same author
+    &:not(&--continued) + .chat__message {
+      padding-top: 3px;
+    }
+
+    // all except the first in a sequence of messages from the same author
+    &--continued + &--continued:not(&--self),
+    &--continued + &:not(&--continued, &--self) {
+      .chat__message__author,
+      .chat__message__author__text,
+      .chat__message__colon {
+        font-size: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+      }
+
+      .chat__viewer_state_indicator {
+        display: none;
+      }
+
+      .chat__message__body {
+        padding-left: 5px;
+        display: inline-block;
+      }
+    }
+
+    // the last in a sequence of messages from the same author
+    &--continued + &:not(&--continued) {
+      padding-bottom: 3px;
+    }
+
+    &--clickable &__body {
+      cursor: pointer;
+    }
 
     &__time {
       white-space: nowrap;
@@ -21,6 +68,12 @@
 
       &__text {
         padding: 1px 8px 1px 3px;
+        cursor: pointer;
+      }
+
+      &:hover &__text {
+        color: var(--color-text-chat-author-hover);
+        text-decoration: underline;
       }
 
       .chat__viewer_state_indicator {
@@ -33,6 +86,11 @@
 
     &__colon {
       margin: 0 3px 0 -8px;
+    }
+
+    &__emoji {
+      font-size: 24px;
+      line-height: 1rem;
     }
 
     &__link {
@@ -217,6 +275,10 @@
       .chat__combo_message__combo {
         font-weight: bold;
       }
+    }
+
+    &--clickable &__body {
+      cursor: pointer;
     }
 
     &--complete {

@@ -326,3 +326,57 @@ export class BytesValue {
   }
 }
 
+/* @internal */
+export const google_protobuf_DoubleValue = DoubleValue;
+/* @internal */
+export type google_protobuf_DoubleValue = DoubleValue;
+/* @internal */
+export type google_protobuf_IDoubleValue = IDoubleValue;
+/* @internal */
+export const google_protobuf_FloatValue = FloatValue;
+/* @internal */
+export type google_protobuf_FloatValue = FloatValue;
+/* @internal */
+export type google_protobuf_IFloatValue = IFloatValue;
+/* @internal */
+export const google_protobuf_Int64Value = Int64Value;
+/* @internal */
+export type google_protobuf_Int64Value = Int64Value;
+/* @internal */
+export type google_protobuf_IInt64Value = IInt64Value;
+/* @internal */
+export const google_protobuf_UInt64Value = UInt64Value;
+/* @internal */
+export type google_protobuf_UInt64Value = UInt64Value;
+/* @internal */
+export type google_protobuf_IUInt64Value = IUInt64Value;
+/* @internal */
+export const google_protobuf_Int32Value = Int32Value;
+/* @internal */
+export type google_protobuf_Int32Value = Int32Value;
+/* @internal */
+export type google_protobuf_IInt32Value = IInt32Value;
+/* @internal */
+export const google_protobuf_UInt32Value = UInt32Value;
+/* @internal */
+export type google_protobuf_UInt32Value = UInt32Value;
+/* @internal */
+export type google_protobuf_IUInt32Value = IUInt32Value;
+/* @internal */
+export const google_protobuf_BoolValue = BoolValue;
+/* @internal */
+export type google_protobuf_BoolValue = BoolValue;
+/* @internal */
+export type google_protobuf_IBoolValue = IBoolValue;
+/* @internal */
+export const google_protobuf_StringValue = StringValue;
+/* @internal */
+export type google_protobuf_StringValue = StringValue;
+/* @internal */
+export type google_protobuf_IStringValue = IStringValue;
+/* @internal */
+export const google_protobuf_BytesValue = BytesValue;
+/* @internal */
+export type google_protobuf_BytesValue = BytesValue;
+/* @internal */
+export type google_protobuf_IBytesValue = IBytesValue;

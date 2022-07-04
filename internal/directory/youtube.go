@@ -96,9 +96,9 @@ func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLo
 
 		if video.LiveStreamingDetails != nil {
 			embed.snippet.Live = true
-			embed.snippet.ViewerCount = video.LiveStreamingDetails.ConcurrentViewers
+			embed.snippet.UserCount = video.LiveStreamingDetails.ConcurrentViewers
 		} else {
-			embed.snippet.ViewerCount = video.Statistics.ViewCount
+			embed.snippet.UserCount = video.Statistics.ViewCount
 		}
 
 		embeds = append(embeds, embed)

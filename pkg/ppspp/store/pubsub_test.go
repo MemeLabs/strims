@@ -42,8 +42,22 @@ func TestPubSubUnsubscribe(t *testing.T) {
 	assert.Equal(t, 0, len(s1.chunks), "unsubscribed subscriber received chunk")
 }
 
+func TestPubSubReset(t *testing.T) {
+	s0 := &testSubscriber{}
+	p := NewPubSub(s0)
+
+	p.Reset()
+
+	assert.True(t, s0.reset, "subscriber should be marked reset")
+}
+
 type testSubscriber struct {
+	reset  bool
 	chunks []Chunk
+}
+
+func (s *testSubscriber) Reset() {
+	s.reset = true
 }
 
 func (s *testSubscriber) Consume(c Chunk) {

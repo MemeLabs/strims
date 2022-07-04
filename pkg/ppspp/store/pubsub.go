@@ -42,6 +42,16 @@ func (p *PubSub) Unsubscribe(s Subscriber) {
 	}
 }
 
+// Reset ...
+func (p *PubSub) Reset() {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	for _, s := range p.subs {
+		s.Reset()
+	}
+}
+
 // Publish ...
 func (p *PubSub) Publish(c Chunk) {
 	p.lock.Lock()
@@ -54,6 +64,7 @@ func (p *PubSub) Publish(c Chunk) {
 
 // Subscriber ...
 type Subscriber interface {
+	Reset()
 	Consume(c Chunk)
 }
 

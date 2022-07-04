@@ -9,6 +9,44 @@ import (
 	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
+const NoneSignatureSize = 0
+
+// NewNoneSigner ...
+func NewNoneSigner() *NoneSigner {
+	return &NoneSigner{}
+}
+
+// NoneSigner ...
+type NoneSigner struct{}
+
+// Sign ...
+func (s *NoneSigner) Sign(t timeutil.Time, p []byte) []byte {
+	return nil
+}
+
+// Size ...
+func (s *NoneSigner) Size() int {
+	return NoneSignatureSize
+}
+
+// NewNoneVerifier ...
+func NewNoneVerifier() *NoneVerifier {
+	return &NoneVerifier{}
+}
+
+// NoneVerifier ...
+type NoneVerifier struct{}
+
+// Verify ...
+func (s *NoneVerifier) Verify(t timeutil.Time, p []byte, sig []byte) bool {
+	return true
+}
+
+// Size ...
+func (s *NoneVerifier) Size() int {
+	return NoneSignatureSize
+}
+
 var noneChannelVerifier = &NoneChannelVerifier{}
 var noneChunkVerifier = &NoneChunkVerifier{}
 
@@ -32,6 +70,8 @@ func (v *NoneSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
 func (v *NoneSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
 	return &swarmpb.Cache_Integrity{}
 }
+
+func (v *NoneSwarmVerifier) Reset() {}
 
 // NoneChannelVerifier ...
 type NoneChannelVerifier struct{}

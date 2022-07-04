@@ -42,27 +42,28 @@ func TestWelchTTest(t *testing.T) {
 			log.Println("t", WelchTTest(w0, w1))
 			log.Println("v", WelchSatterthwaite(w0, w1))
 			log.Println("p", TDistribution(WelchTTest(w0, w1), WelchSatterthwaite(w0, w1)))
+			log.Println("glass delta", GlassDelta(w0, w1))
+			log.Println("cohensd", CohensD(w0, w1))
+			log.Println("hedgesg", HedgesG(w0, w1))
 		})
 	}
 }
 
 func TestWelchTTest2(t *testing.T) {
-	var w [5]Welford
-	n := 1000000
+	var w [2]Welford
+	n := 100000000
 	for i := 0; i < n; i++ {
-		w[0].Update(54.99 + rand.Float64()*10)
-		w[1].Update(55 + rand.Float64()*10)
-		w[2].Update(55 + rand.Float64()*10)
-		w[3].Update(55 + rand.Float64()*10)
-		w[4].Update(55 + rand.Float64()*10)
+		w[0].Update(10.01 + rand.NormFloat64()*5)
+		w[1].Update(10 + rand.NormFloat64()*3)
 	}
 
-	g := WelfordMerge(w[:]...)
-
-	log.Println("count", w[0].Count(), g.Count())
-	log.Println("mean", w[0].Mean(), g.Mean())
-	log.Println("var", w[0].Variance(), g.Variance())
-	log.Println("t", WelchTTest(w[0], g))
-	log.Println("v", WelchSatterthwaite(w[0], g))
-	log.Println("p", TDistribution(WelchTTest(w[0], g), WelchSatterthwaite(w[0], g)))
+	log.Println("count", w[0].Count(), w[1].Count())
+	log.Println("mean", w[0].Mean(), w[1].Mean())
+	log.Println("var", w[0].Variance(), w[1].Variance())
+	log.Println("t", WelchTTest(w[0], w[1]))
+	log.Println("v", WelchSatterthwaite(w[0], w[1]))
+	log.Println("p", TDistribution(WelchTTest(w[0], w[1]), WelchSatterthwaite(w[0], w[1])))
+	log.Println("glass delta", GlassDelta(w[0], w[1]))
+	log.Println("cohensd", CohensD(w[0], w[1]))
+	log.Println("hedgesg", HedgesG(w[0], w[1]))
 }

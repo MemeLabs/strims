@@ -149,6 +149,14 @@ func (v *SignAllSwarmVerifier) ExportCache() *swarmpb.Cache_Integrity {
 	return &swarmpb.Cache_Integrity{SignAllIntegrity: c}
 }
 
+func (v *SignAllSwarmVerifier) Reset() {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.head = 0
+	v.tail = 0
+}
+
 func newSignAllChannelVerifier(v *SignAllSwarmVerifier) *SignAllChannelVerifier {
 	return &SignAllChannelVerifier{
 		chunkVerifier: SignAllChunkVerifier{

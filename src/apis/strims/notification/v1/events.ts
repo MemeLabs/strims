@@ -2,8 +2,8 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Notification as strims_notification_v1_Notification,
-  INotification as strims_notification_v1_INotification,
+  strims_notification_v1_Notification,
+  strims_notification_v1_INotification,
 } from "./notification";
 
 export type INotificationChangeEvent = {
@@ -78,3 +78,15 @@ export class NotificationDeleteEvent {
   }
 }
 
+/* @internal */
+export const strims_notification_v1_NotificationChangeEvent = NotificationChangeEvent;
+/* @internal */
+export type strims_notification_v1_NotificationChangeEvent = NotificationChangeEvent;
+/* @internal */
+export type strims_notification_v1_INotificationChangeEvent = INotificationChangeEvent;
+/* @internal */
+export const strims_notification_v1_NotificationDeleteEvent = NotificationDeleteEvent;
+/* @internal */
+export type strims_notification_v1_NotificationDeleteEvent = NotificationDeleteEvent;
+/* @internal */
+export type strims_notification_v1_INotificationDeleteEvent = INotificationDeleteEvent;

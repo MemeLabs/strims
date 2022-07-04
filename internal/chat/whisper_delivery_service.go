@@ -47,7 +47,7 @@ func (s *whisperDeliveryService) Run(ctx context.Context) error {
 	var closing bool
 	var activeSends int
 
-	rs, err := dao.GetChatWhisperRecordsByState(
+	rs, err := dao.ChatWhisperRecordsByState.GetAll(
 		s.store,
 		dao.FormatChatWhisperRecordStateKey(chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED),
 	)

@@ -11,6 +11,8 @@ import (
 	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
+const ED25519SignatureSize = ed25519.SignatureSize
+
 // NewED25519Signer ...
 func NewED25519Signer(key ed25519.PrivateKey) *ED25519Signer {
 	return &ED25519Signer{key: key}
@@ -33,7 +35,7 @@ func (s *ED25519Signer) Sign(t timeutil.Time, p []byte) []byte {
 
 // Size ...
 func (s *ED25519Signer) Size() int {
-	return ed25519.SignatureSize
+	return ED25519SignatureSize
 }
 
 // NewED25519Verifier ...
@@ -58,5 +60,5 @@ func (s *ED25519Verifier) Verify(t timeutil.Time, p []byte, sig []byte) bool {
 
 // Size ...
 func (s *ED25519Verifier) Size() int {
-	return ed25519.SignatureSize
+	return ED25519SignatureSize
 }

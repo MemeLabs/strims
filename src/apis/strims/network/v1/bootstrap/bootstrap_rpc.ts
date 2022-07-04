@@ -3,88 +3,88 @@ import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import {
-  ICreateBootstrapClientRequest,
-  CreateBootstrapClientRequest,
-  CreateBootstrapClientResponse,
-  IUpdateBootstrapClientRequest,
-  UpdateBootstrapClientRequest,
-  UpdateBootstrapClientResponse,
-  IDeleteBootstrapClientRequest,
-  DeleteBootstrapClientRequest,
-  DeleteBootstrapClientResponse,
-  IGetBootstrapClientRequest,
-  GetBootstrapClientRequest,
-  GetBootstrapClientResponse,
-  IListBootstrapClientsRequest,
-  ListBootstrapClientsRequest,
-  ListBootstrapClientsResponse,
-  IListBootstrapPeersRequest,
-  ListBootstrapPeersRequest,
-  ListBootstrapPeersResponse,
-  IPublishNetworkToBootstrapPeerRequest,
-  PublishNetworkToBootstrapPeerRequest,
-  PublishNetworkToBootstrapPeerResponse,
+  strims_network_v1_bootstrap_ICreateBootstrapClientRequest,
+  strims_network_v1_bootstrap_CreateBootstrapClientRequest,
+  strims_network_v1_bootstrap_CreateBootstrapClientResponse,
+  strims_network_v1_bootstrap_IUpdateBootstrapClientRequest,
+  strims_network_v1_bootstrap_UpdateBootstrapClientRequest,
+  strims_network_v1_bootstrap_UpdateBootstrapClientResponse,
+  strims_network_v1_bootstrap_IDeleteBootstrapClientRequest,
+  strims_network_v1_bootstrap_DeleteBootstrapClientRequest,
+  strims_network_v1_bootstrap_DeleteBootstrapClientResponse,
+  strims_network_v1_bootstrap_IGetBootstrapClientRequest,
+  strims_network_v1_bootstrap_GetBootstrapClientRequest,
+  strims_network_v1_bootstrap_GetBootstrapClientResponse,
+  strims_network_v1_bootstrap_IListBootstrapClientsRequest,
+  strims_network_v1_bootstrap_ListBootstrapClientsRequest,
+  strims_network_v1_bootstrap_ListBootstrapClientsResponse,
+  strims_network_v1_bootstrap_IListBootstrapPeersRequest,
+  strims_network_v1_bootstrap_ListBootstrapPeersRequest,
+  strims_network_v1_bootstrap_ListBootstrapPeersResponse,
+  strims_network_v1_bootstrap_IPublishNetworkToBootstrapPeerRequest,
+  strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest,
+  strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse,
 } from "./bootstrap";
 
 export interface BootstrapFrontendService {
-  createClient(req: CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<CreateBootstrapClientResponse> | CreateBootstrapClientResponse;
-  updateClient(req: UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<UpdateBootstrapClientResponse> | UpdateBootstrapClientResponse;
-  deleteClient(req: DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<DeleteBootstrapClientResponse> | DeleteBootstrapClientResponse;
-  getClient(req: GetBootstrapClientRequest, call: strims_rpc_Call): Promise<GetBootstrapClientResponse> | GetBootstrapClientResponse;
-  listClients(req: ListBootstrapClientsRequest, call: strims_rpc_Call): Promise<ListBootstrapClientsResponse> | ListBootstrapClientsResponse;
-  listPeers(req: ListBootstrapPeersRequest, call: strims_rpc_Call): Promise<ListBootstrapPeersResponse> | ListBootstrapPeersResponse;
-  publishNetworkToPeer(req: PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<PublishNetworkToBootstrapPeerResponse> | PublishNetworkToBootstrapPeerResponse;
+  createClient(req: strims_network_v1_bootstrap_CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> | strims_network_v1_bootstrap_CreateBootstrapClientResponse;
+  updateClient(req: strims_network_v1_bootstrap_UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_UpdateBootstrapClientResponse> | strims_network_v1_bootstrap_UpdateBootstrapClientResponse;
+  deleteClient(req: strims_network_v1_bootstrap_DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_DeleteBootstrapClientResponse> | strims_network_v1_bootstrap_DeleteBootstrapClientResponse;
+  getClient(req: strims_network_v1_bootstrap_GetBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_GetBootstrapClientResponse> | strims_network_v1_bootstrap_GetBootstrapClientResponse;
+  listClients(req: strims_network_v1_bootstrap_ListBootstrapClientsRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_ListBootstrapClientsResponse> | strims_network_v1_bootstrap_ListBootstrapClientsResponse;
+  listPeers(req: strims_network_v1_bootstrap_ListBootstrapPeersRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_ListBootstrapPeersResponse> | strims_network_v1_bootstrap_ListBootstrapPeersResponse;
+  publishNetworkToPeer(req: strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse> | strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse;
 }
 
 export class UnimplementedBootstrapFrontendService implements BootstrapFrontendService {
-  createClient(req: CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<CreateBootstrapClientResponse> | CreateBootstrapClientResponse { throw new Error("not implemented"); }
-  updateClient(req: UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<UpdateBootstrapClientResponse> | UpdateBootstrapClientResponse { throw new Error("not implemented"); }
-  deleteClient(req: DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<DeleteBootstrapClientResponse> | DeleteBootstrapClientResponse { throw new Error("not implemented"); }
-  getClient(req: GetBootstrapClientRequest, call: strims_rpc_Call): Promise<GetBootstrapClientResponse> | GetBootstrapClientResponse { throw new Error("not implemented"); }
-  listClients(req: ListBootstrapClientsRequest, call: strims_rpc_Call): Promise<ListBootstrapClientsResponse> | ListBootstrapClientsResponse { throw new Error("not implemented"); }
-  listPeers(req: ListBootstrapPeersRequest, call: strims_rpc_Call): Promise<ListBootstrapPeersResponse> | ListBootstrapPeersResponse { throw new Error("not implemented"); }
-  publishNetworkToPeer(req: PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<PublishNetworkToBootstrapPeerResponse> | PublishNetworkToBootstrapPeerResponse { throw new Error("not implemented"); }
+  createClient(req: strims_network_v1_bootstrap_CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> | strims_network_v1_bootstrap_CreateBootstrapClientResponse { throw new Error("not implemented"); }
+  updateClient(req: strims_network_v1_bootstrap_UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_UpdateBootstrapClientResponse> | strims_network_v1_bootstrap_UpdateBootstrapClientResponse { throw new Error("not implemented"); }
+  deleteClient(req: strims_network_v1_bootstrap_DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_DeleteBootstrapClientResponse> | strims_network_v1_bootstrap_DeleteBootstrapClientResponse { throw new Error("not implemented"); }
+  getClient(req: strims_network_v1_bootstrap_GetBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_GetBootstrapClientResponse> | strims_network_v1_bootstrap_GetBootstrapClientResponse { throw new Error("not implemented"); }
+  listClients(req: strims_network_v1_bootstrap_ListBootstrapClientsRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_ListBootstrapClientsResponse> | strims_network_v1_bootstrap_ListBootstrapClientsResponse { throw new Error("not implemented"); }
+  listPeers(req: strims_network_v1_bootstrap_ListBootstrapPeersRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_ListBootstrapPeersResponse> | strims_network_v1_bootstrap_ListBootstrapPeersResponse { throw new Error("not implemented"); }
+  publishNetworkToPeer(req: strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse> | strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse { throw new Error("not implemented"); }
 }
 
 export const registerBootstrapFrontendService = (host: strims_rpc_Service, service: BootstrapFrontendService): void => {
-  host.registerMethod<CreateBootstrapClientRequest, CreateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.createClient.bind(service), CreateBootstrapClientRequest);
-  host.registerMethod<UpdateBootstrapClientRequest, UpdateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.updateClient.bind(service), UpdateBootstrapClientRequest);
-  host.registerMethod<DeleteBootstrapClientRequest, DeleteBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", service.deleteClient.bind(service), DeleteBootstrapClientRequest);
-  host.registerMethod<GetBootstrapClientRequest, GetBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", service.getClient.bind(service), GetBootstrapClientRequest);
-  host.registerMethod<ListBootstrapClientsRequest, ListBootstrapClientsResponse>("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", service.listClients.bind(service), ListBootstrapClientsRequest);
-  host.registerMethod<ListBootstrapPeersRequest, ListBootstrapPeersResponse>("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", service.listPeers.bind(service), ListBootstrapPeersRequest);
-  host.registerMethod<PublishNetworkToBootstrapPeerRequest, PublishNetworkToBootstrapPeerResponse>("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", service.publishNetworkToPeer.bind(service), PublishNetworkToBootstrapPeerRequest);
+  host.registerMethod<strims_network_v1_bootstrap_CreateBootstrapClientRequest, strims_network_v1_bootstrap_CreateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.createClient.bind(service), strims_network_v1_bootstrap_CreateBootstrapClientRequest);
+  host.registerMethod<strims_network_v1_bootstrap_UpdateBootstrapClientRequest, strims_network_v1_bootstrap_UpdateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.updateClient.bind(service), strims_network_v1_bootstrap_UpdateBootstrapClientRequest);
+  host.registerMethod<strims_network_v1_bootstrap_DeleteBootstrapClientRequest, strims_network_v1_bootstrap_DeleteBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", service.deleteClient.bind(service), strims_network_v1_bootstrap_DeleteBootstrapClientRequest);
+  host.registerMethod<strims_network_v1_bootstrap_GetBootstrapClientRequest, strims_network_v1_bootstrap_GetBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", service.getClient.bind(service), strims_network_v1_bootstrap_GetBootstrapClientRequest);
+  host.registerMethod<strims_network_v1_bootstrap_ListBootstrapClientsRequest, strims_network_v1_bootstrap_ListBootstrapClientsResponse>("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", service.listClients.bind(service), strims_network_v1_bootstrap_ListBootstrapClientsRequest);
+  host.registerMethod<strims_network_v1_bootstrap_ListBootstrapPeersRequest, strims_network_v1_bootstrap_ListBootstrapPeersResponse>("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", service.listPeers.bind(service), strims_network_v1_bootstrap_ListBootstrapPeersRequest);
+  host.registerMethod<strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest, strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse>("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", service.publishNetworkToPeer.bind(service), strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest);
 }
 
 export class BootstrapFrontendClient {
   constructor(private readonly host: strims_rpc_Host) {}
 
-  public createClient(req?: ICreateBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateBootstrapClientResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", new CreateBootstrapClientRequest(req)), CreateBootstrapClientResponse, opts);
+  public createClient(req?: strims_network_v1_bootstrap_ICreateBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", new strims_network_v1_bootstrap_CreateBootstrapClientRequest(req)), strims_network_v1_bootstrap_CreateBootstrapClientResponse, opts);
   }
 
-  public updateClient(req?: IUpdateBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateBootstrapClientResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", new UpdateBootstrapClientRequest(req)), UpdateBootstrapClientResponse, opts);
+  public updateClient(req?: strims_network_v1_bootstrap_IUpdateBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_UpdateBootstrapClientResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", new strims_network_v1_bootstrap_UpdateBootstrapClientRequest(req)), strims_network_v1_bootstrap_UpdateBootstrapClientResponse, opts);
   }
 
-  public deleteClient(req?: IDeleteBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<DeleteBootstrapClientResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", new DeleteBootstrapClientRequest(req)), DeleteBootstrapClientResponse, opts);
+  public deleteClient(req?: strims_network_v1_bootstrap_IDeleteBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_DeleteBootstrapClientResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", new strims_network_v1_bootstrap_DeleteBootstrapClientRequest(req)), strims_network_v1_bootstrap_DeleteBootstrapClientResponse, opts);
   }
 
-  public getClient(req?: IGetBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetBootstrapClientResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", new GetBootstrapClientRequest(req)), GetBootstrapClientResponse, opts);
+  public getClient(req?: strims_network_v1_bootstrap_IGetBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_GetBootstrapClientResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", new strims_network_v1_bootstrap_GetBootstrapClientRequest(req)), strims_network_v1_bootstrap_GetBootstrapClientResponse, opts);
   }
 
-  public listClients(req?: IListBootstrapClientsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListBootstrapClientsResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", new ListBootstrapClientsRequest(req)), ListBootstrapClientsResponse, opts);
+  public listClients(req?: strims_network_v1_bootstrap_IListBootstrapClientsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_ListBootstrapClientsResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", new strims_network_v1_bootstrap_ListBootstrapClientsRequest(req)), strims_network_v1_bootstrap_ListBootstrapClientsResponse, opts);
   }
 
-  public listPeers(req?: IListBootstrapPeersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListBootstrapPeersResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", new ListBootstrapPeersRequest(req)), ListBootstrapPeersResponse, opts);
+  public listPeers(req?: strims_network_v1_bootstrap_IListBootstrapPeersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_ListBootstrapPeersResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", new strims_network_v1_bootstrap_ListBootstrapPeersRequest(req)), strims_network_v1_bootstrap_ListBootstrapPeersResponse, opts);
   }
 
-  public publishNetworkToPeer(req?: IPublishNetworkToBootstrapPeerRequest, opts?: strims_rpc_UnaryCallOptions): Promise<PublishNetworkToBootstrapPeerResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", new PublishNetworkToBootstrapPeerRequest(req)), PublishNetworkToBootstrapPeerResponse, opts);
+  public publishNetworkToPeer(req?: strims_network_v1_bootstrap_IPublishNetworkToBootstrapPeerRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", new strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerRequest(req)), strims_network_v1_bootstrap_PublishNetworkToBootstrapPeerResponse, opts);
   }
 }
 

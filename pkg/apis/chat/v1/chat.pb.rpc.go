@@ -480,6 +480,7 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Whisper", service.Whisper)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListWhispers", service.ListWhispers)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchWhispers", service.WatchWhispers)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.MarkWhispersRead", service.MarkWhispersRead)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchUIConfig", service.WatchUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Ignore", service.Ignore)
@@ -488,6 +489,7 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Unhighlight", service.Unhighlight)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Tag", service.Tag)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Untag", service.Untag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetEmoji", service.GetEmoji)
 }
 
 // ChatFrontendService ...
@@ -524,6 +526,10 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *WatchWhispersRequest,
 	) (<-chan *WatchWhispersResponse, error)
+	MarkWhispersRead(
+		ctx context.Context,
+		req *MarkWhispersReadRequest,
+	) (*MarkWhispersReadResponse, error)
 	SetUIConfig(
 		ctx context.Context,
 		req *SetUIConfigRequest,
@@ -556,6 +562,10 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *UntagRequest,
 	) (*UntagResponse, error)
+	GetEmoji(
+		ctx context.Context,
+		req *GetEmojiRequest,
+	) (*GetEmojiResponse, error)
 }
 
 // ChatFrontendService ...
@@ -617,6 +627,13 @@ func (s *UnimplementedChatFrontendService) WatchWhispers(
 	return nil, rpc.ErrNotImplemented
 }
 
+func (s *UnimplementedChatFrontendService) MarkWhispersRead(
+	ctx context.Context,
+	req *MarkWhispersReadRequest,
+) (*MarkWhispersReadResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
 func (s *UnimplementedChatFrontendService) SetUIConfig(
 	ctx context.Context,
 	req *SetUIConfigRequest,
@@ -670,6 +687,13 @@ func (s *UnimplementedChatFrontendService) Untag(
 	ctx context.Context,
 	req *UntagRequest,
 ) (*UntagResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) GetEmoji(
+	ctx context.Context,
+	req *GetEmojiRequest,
+) (*GetEmojiResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -757,6 +781,15 @@ func (c *ChatFrontendClient) WatchWhispers(
 	return c.client.CallStreaming(ctx, "strims.chat.v1.ChatFrontend.WatchWhispers", req, res)
 }
 
+// MarkWhispersRead ...
+func (c *ChatFrontendClient) MarkWhispersRead(
+	ctx context.Context,
+	req *MarkWhispersReadRequest,
+	res *MarkWhispersReadResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.MarkWhispersRead", req, res)
+}
+
 // SetUIConfig ...
 func (c *ChatFrontendClient) SetUIConfig(
 	ctx context.Context,
@@ -827,6 +860,15 @@ func (c *ChatFrontendClient) Untag(
 	res *UntagResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.Untag", req, res)
+}
+
+// GetEmoji ...
+func (c *ChatFrontendClient) GetEmoji(
+	ctx context.Context,
+	req *GetEmojiRequest,
+	res *GetEmojiResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetEmoji", req, res)
 }
 
 // RegisterChatService ...

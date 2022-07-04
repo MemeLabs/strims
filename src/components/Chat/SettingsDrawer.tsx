@@ -49,8 +49,8 @@ interface SettingsFormData {
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
   normalizeAliasCase: boolean;
-  viewerStateIndicator: {
-    value: UIConfig.ViewerStateIndicator;
+  userPresenceIndicator: {
+    value: UIConfig.UserPresenceIndicator;
     label: string;
   };
 }
@@ -87,21 +87,21 @@ const primitivePropNames = [
 const SettingsDrawer: React.FC = () => {
   const { t } = useTranslation();
 
-  const viewerStateIndicatorOptions = [
+  const userPresenceIndicatorOptions = [
     {
-      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED,
+      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
       label: t("chat.settings.Disable"),
     },
     {
-      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
+      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
       label: t("chat.settings.Bar"),
     },
     {
-      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DOT,
+      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
       label: t("chat.settings.Dot"),
     },
     {
-      value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_ARRAY,
+      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY,
       label: t("chat.settings.Array"),
     },
   ];
@@ -126,12 +126,12 @@ const SettingsDrawer: React.FC = () => {
   const { control, getValues, reset } = useForm<SettingsFormData>({ mode: "onBlur" });
 
   useEffect(() => {
-    const { showRemoved, viewerStateIndicator, notificationSoundFile, ...values } = uiConfig;
+    const { showRemoved, userPresenceIndicator, notificationSoundFile, ...values } = uiConfig;
 
     reset({
       showRemoved: showRemovedOptions.find(({ value }) => value === showRemoved),
-      viewerStateIndicator: viewerStateIndicatorOptions.find(
-        ({ value }) => value === viewerStateIndicator
+      userPresenceIndicator: userPresenceIndicatorOptions.find(
+        ({ value }) => value === userPresenceIndicator
       ),
       notificationSoundFile: notificationSoundFile?.data
         ? {
@@ -146,14 +146,14 @@ const SettingsDrawer: React.FC = () => {
   const handleChange = () => {
     const {
       showRemoved: { value: showRemoved },
-      viewerStateIndicator: { value: viewerStateIndicator },
+      userPresenceIndicator: { value: userPresenceIndicator },
       notificationSoundFile,
     } = getValues();
     const values = pick(getValues(), primitivePropNames);
 
     mergeUIConfig({
       showRemoved,
-      viewerStateIndicator,
+      userPresenceIndicator,
       notificationSoundFile: notificationSoundFile
         ? new UIConfig.SoundFile({
             fileType: notificationSoundFile.fileType,
@@ -242,8 +242,8 @@ const SettingsDrawer: React.FC = () => {
           <SelectInput
             control={control}
             label={t("chat.settings.Stream viewer indicators")}
-            name="viewerStateIndicator"
-            options={viewerStateIndicatorOptions}
+            name="userPresenceIndicator"
+            options={userPresenceIndicatorOptions}
             onChange={handleChange}
             isSearchable={false}
           />
