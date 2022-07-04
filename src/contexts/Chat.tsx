@@ -798,6 +798,13 @@ const createRoomActions = (
             body: `/me ${body}`,
           });
         },
+        spoiler: (body: string) => {
+          void client.chat.clientSendMessage({
+            networkKey,
+            serverKey,
+            body: `|| ${body} ||`,
+          });
+        },
       };
 
       const commandAliases: { [key: string]: string } = {
