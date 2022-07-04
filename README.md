@@ -9,11 +9,15 @@ distributed live streaming
 2.) copy `hack/svc/config.sample.yaml` to `hack/svc/config.yaml`
 
 3.) create a user profile
+  - on windows you may run into permissions issues on this step if you run this command from inside the /hack/svc folder. Instead you can run this from the root of the container: /workspaces/strims
+  - you can also generate the certificates outside the container process, and then copy & paste the contents into files inside the container
+  - you will also have to install the certificates on the root machine (i.e outside the container) using MMC.exe, following the steps [here](/hack/tls/README.md)
 ```sh
 $ go run ./cmd/svc add-profile -config ./hack/svc/config.yaml -username dev -password secret
 2022/06/01 13:48:18 74880235203461122
 2022/06/01 13:48:18 DnLta2pK2GlRLHTobM2jKecX/XNqD4OGDjwWSOs0o7s=
 ```
+
 
 4.) copy the id and auth key into `config.yaml` in `session/headless` ex:
 ```yaml
@@ -35,6 +39,7 @@ take note of the path from the line `ws vnic listener starting` - you'll need it
 6.) in the web ui click `new login` and enter the username and password you used in the `add-profile` command.
 
 7.) toggle the advanced `advanced` options and enter `wss://0.0.0.0:8083/api` or the ip of your dev machine or localhost.
+  - on windows, this address might have to be set as be `wss://localhost:8083/api`
 
 ## streaming
 
@@ -45,10 +50,12 @@ take note of the path from the line `ws vnic listener starting` - you'll need it
 3.) click `channels` at the bottom of the ingress form
 
 4.) enter a title for your stream, select your network from the dropdown, and click `create channel`
+  - on windows, the rtmp address for this channel ingress should be `rtmp://0.0.0.0:1935/live`
 
 5.) in the channels table click the menu icon to the right of the ingress url and click `copy stream key`
 
 6.) in obs stream settings choose `Custom...` from the service dropdown. enter `rtmp://0.0.0.0:1935/live` for the server and paste the stream key you copied from the channel list.
+  - on windows, this address should be `rtmp://127.0.0.1:1935/live`
 
 7.) in obs output settings set the keyframe interval to 1 and the bitrate to 6000kbps
 
