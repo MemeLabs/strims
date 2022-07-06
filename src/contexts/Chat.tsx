@@ -26,7 +26,7 @@ import {
 } from "../apis/strims/chat/v1/chat";
 import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
 import { useUserList } from "../hooks/chat";
-import { useStableCallback, useStableCallbacks } from "../hooks/useStableCallback";
+import { useStableCallbacks } from "../hooks/useStableCallback";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { updateInStateMap } from "../lib/setInStateMap";
 import { useClient } from "./FrontendApi";

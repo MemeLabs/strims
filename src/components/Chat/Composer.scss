@@ -104,17 +104,23 @@
         border-radius: 0 0 3px 3px;
       }
 
-      &__emote {
+      &__emote,
+      &__emoji {
         margin-right: 10px;
       }
 
+      &__emoji {
+        font-size: 24px;
+      }
+
       &__label {
+        flex: 1;
         display: flex;
         align-content: center;
       }
 
       &--selected {
-        background: var(--color-background-inpu);
+        background: var(--color-opac-b-3);
       }
     }
   }

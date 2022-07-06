@@ -391,9 +391,17 @@ func (n *Network) sendMessage(m *Message) error {
 			// log.Println("using direct route")
 		} else if id, ok := n.nextHop.Get(m.Header.DstID); ok {
 			if conn, ok := n.links.Get(id); ok {
-				if ln > 0 {
-					copy(conns[1:], conns[:ln-1])
+				k := ln
+				for i := 0; i < ln; i++ {
+					if conns[i] == conn {
+						k = i
+						break
+					}
 				}
+				if k == ln && ln < len(conns) {
+					ln++
+				}
+				copy(conns[1:], conns[:k])
 				conns[0] = conn
 				// ln = 1
 				// log.Println("using known route", conn.ID().String())

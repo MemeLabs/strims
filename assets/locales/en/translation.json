@@ -46,6 +46,7 @@
       "commands": "commands",
       "emotes": "emotes",
       "modifiers": "modifiers",
+      "emoji": "emoji",
       "Write a message": "Write a message..."
     },
 

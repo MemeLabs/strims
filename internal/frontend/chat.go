@@ -507,6 +507,7 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 
 		for _, t := range threads {
 			ch <- &chatv1.WatchWhispersResponse{
+				PeerKey: t.PeerKey,
 				Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
 					ThreadUpdate: t,
 				},
@@ -748,9 +749,9 @@ func (s *chatService) GetEmoji(ctx context.Context, req *chatv1.GetEmojiRequest)
 	c := &chatv1.EmojiCategory{
 		Name: "all",
 	}
-	for v, d := range chat.EmojiDescriptions {
+	for g, d := range chat.EmojiDescriptions {
 		c.Emoji = append(c.Emoji, &chatv1.Emoji{
-			Glyph:       v,
+			Glyph:       g,
 			Description: d,
 		})
 	}

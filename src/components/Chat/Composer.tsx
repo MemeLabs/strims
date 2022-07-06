@@ -61,6 +61,7 @@ const commands = [
   "exit",
   "hideemote",
   "unhideemote",
+  "spoiler",
 ];
 
 const initialValue: Descendant[] = [
@@ -86,9 +87,17 @@ interface ComposerProps {
   modifiers: string[];
   nicks: string[];
   tags: string[];
+  maxAutoCompleteResults?: number;
 }
 
-const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
+const Composer: React.FC<ComposerProps> = ({
+  onMessage,
+  emotes,
+  modifiers,
+  nicks,
+  tags,
+  maxAutoCompleteResults = 10,
+}) => {
   const { t } = useTranslation();
   const [{ uiConfig, emoji }] = useChat();
 
@@ -101,12 +110,15 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
   const [value, setValue] = useState<Descendant[]>(initialValue);
 
-  const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers);
+  const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers, emoji);
 
   useEffect(() => {
     if (!search) {
       setMatch(defaultMatch);
       setSelectedMatch(defaultSelectedMatch);
+      return;
+    }
+    if (lastSearch) {
       return;
     }
 
@@ -116,10 +128,17 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
       "substring": ({ index }: SearchSourceEntry) => index.indexOf(query) !== -1,
     }[search.queryMode];
 
+    let count = 0;
+    const truncate = (entries: SearchSourceEntry[]) => {
+      const res = entries.slice(0, maxAutoCompleteResults - count);
+      count += res.length;
+      return res;
+    };
+
     const matches = search.sources
       .map((s) => ({
         ...s,
-        entries: s.entries.filter(test),
+        entries: truncate(s.entries.filter(test)),
       }))
       .filter(({ entries }) => entries.length > 0);
     const entries = matches.map(({ entries }) => entries).flat();
@@ -162,7 +181,6 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
       if (event.key === Key.Enter) {
         event.preventDefault();
         emitMessage();
-        return;
       }
 
       if (!search) {
@@ -192,15 +210,19 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
             return;
           }
 
-          insertAutocompleteEntry(selectedMatch.entry);
-          setLastSearch(search);
+          const target = insertAutocompleteEntry(selectedMatch.entry);
+          setLastSearch({
+            ...search,
+            target,
+            lastEntry: selectedMatch.entry,
+          });
           setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
         }
         case Key.Escape: {
           event.preventDefault();
           setSearch(null);
-          return;
+          break;
         }
       }
 
@@ -210,12 +232,21 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
     [matchEntries, selectedMatch, search, currentSearch]
   );
 
-  const insertAutocompleteEntry = (entry: SearchSourceEntry): void => {
-    const target = entry.type === "modifier" ? currentSearch.modifierTarget : currentSearch.target;
-    Transforms.select(editor, target);
-    const whitespace = currentSearch.suffixSpace ? " " : "";
-    Transforms.insertText(editor, (entry.substitution || entry.value) + whitespace);
+  const insertAutocompleteEntry = (entry: SearchSourceEntry): Range => {
+    const prefix = entry.type !== "modifier" ? search.prefix : "";
+    const suffix = search.suffixSpace ? " " : "";
+    const substitution = prefix + (entry.substitution || entry.value) + suffix;
+
+    Transforms.select(editor, search.target);
+    Transforms.insertText(editor, substitution);
     Transforms.move(editor);
+
+    const anchor = search.target.anchor;
+    const targetFocus = {
+      path: anchor.path,
+      offset: anchor.offset + substitution.length,
+    };
+    return Editor.range(editor, anchor, targetFocus);
   };
 
   const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
@@ -333,22 +364,19 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
 }) => {
   const [{ uiConfig }] = useChat();
 
-  let content: React.ReactNode;
-  switch (entry.type) {
-    case "emote":
-      content = (
-        <>
-          {uiConfig.autocompleteEmotePreview && (
-            <span className="chat_composer__autocomplete__item__emote">
-              <Emote name={entry.value} shouldAnimateForever />
-            </span>
-          )}
-          <span className="chat_composer__autocomplete__item__label">{entry.value}</span>
-        </>
+  let preview: React.ReactNode;
+  if (uiConfig.autocompleteEmotePreview) {
+    if (entry.type === "emote") {
+      preview = (
+        <span className="chat_composer__autocomplete__item__emote">
+          <Emote name={entry.value} shouldAnimateForever />
+        </span>
       );
-      break;
-    default:
-      content = <span className="chat_composer__autocomplete__item__label">{entry.value}</span>;
+    } else if (entry.type === "emoji") {
+      preview = (
+        <span className="chat_composer__autocomplete__item__emoji">{entry.substitution}</span>
+      );
+    }
   }
 
   return (
@@ -363,7 +391,8 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
       onClick={onClick}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {content}
+      {preview}
+      <span className="chat_composer__autocomplete__item__label">{entry.value}</span>
     </div>
   );
 };
@@ -454,6 +483,7 @@ const getGrammar = (
     for (const category of emoji) {
       glyphs.push(...category.emoji.map(({ glyph }) => escapeRegExp(glyph)));
     }
+    glyphs.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
     nestableEntities.emoji.pattern = new RegExp(glyphs.join("|"));
   }
   if (nicks.length !== 0) {
@@ -465,7 +495,7 @@ const getGrammar = (
 
   const entities = {
     spoiler: {
-      pattern: /\|\|(\\\||\|(?!\|)|[^|])*(\|\||$)/,
+      pattern: /(^\/spoiler|\|\|)(\\\||\|(?!\|)|[^|])*(\|\||$)/,
       inside: nestableEntities,
     },
     ...nestableEntities,
@@ -510,7 +540,7 @@ const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
 };
 
 interface SearchSourceEntry {
-  type: "nick" | "tag" | "command" | "emote" | "modifier";
+  type: "nick" | "tag" | "command" | "emote" | "modifier" | "emoji";
   value: string;
   substitution?: string;
   index: string;
@@ -527,6 +557,7 @@ interface SearchSources {
   commands: SearchSource;
   emotes: SearchSource;
   modifiers: SearchSource;
+  emoji: SearchSource;
 }
 
 const useSearchSources = (
@@ -534,7 +565,8 @@ const useSearchSources = (
   tags: string[],
   commands: string[],
   emotes: string[],
-  modifiers: string[]
+  modifiers: string[],
+  emoji: EmojiCategory[]
 ): SearchSources => {
   const { t } = useTranslation();
   const sources: SearchSources = {
@@ -595,8 +627,25 @@ const useSearchSources = (
       }),
       [modifiers]
     ),
+    emoji: useMemo(() => {
+      const source: SearchSource = {
+        label: t("chat.composer.emoji"),
+        entries: [],
+      };
+      for (const category of emoji) {
+        for (const { glyph, description } of category.emoji) {
+          source.entries.push({
+            type: "emoji",
+            value: description,
+            substitution: glyph,
+            index: description,
+          });
+        }
+      }
+      return source;
+    }, [emoji]),
   };
-  return useMemo(() => sources, [nicks, tags, commands, emotes, modifiers]);
+  return useMemo(() => sources, [nicks, tags, commands, emotes, modifiers, emoji]);
 };
 
 interface SearchState {
@@ -605,9 +654,9 @@ interface SearchState {
   sources: SearchSource[];
   query: string;
   target: Range;
+  prefix: string;
   suffixSpace: boolean;
-  modifierContext: string | undefined;
-  modifierTarget: Range;
+  lastEntry?: SearchSourceEntry;
 }
 
 const getSearchState = (
@@ -633,69 +682,64 @@ const getSearchState = (
   const hasSuffix = suffixStart || suffixEnd;
   const query = queryStart + (hasSuffix ? "" : queryEnd);
 
-  const targetStart = { path, offset: offset - (delta.length - prefix.length) };
+  const targetStart = { path, offset: offset - delta.length };
   const targetEnd = { path, offset: offset + (hasSuffix ? -suffixStart.length : queryEnd.length) };
   const target = Editor.range(editor, targetStart, targetEnd);
 
   const entityRanges = getRanges(text, path, filterObj(grammar, ["code", "emote", "url"]));
 
   const contextEnd = (prefix || punct) && { path, offset: offset - delta.length };
-  const modifierContextRange =
-    contextEnd && entityRanges.find((r) => r.emote && Range.includes(r, contextEnd));
-  const modifierContext = modifierContextRange && Editor.string(editor, modifierContextRange);
-  const modifierTarget = modifierContextRange && Editor.range(editor, contextEnd, targetEnd);
+  const emoteContext =
+    contextEnd && entityRanges.some((r) => r.emote && Range.includes(r, contextEnd));
 
   const invalidContext =
-    (contiguousContext && !modifierContext) ||
+    (contiguousContext && !emoteContext) ||
     entityRanges.some((r) => (r.code || r.url) && Range.includes(r, selection));
 
   const sources: SearchSource[] = [];
   if (punct === ":") {
-    if (modifierContext) {
+    if (emoteContext) {
       sources.push(searchSources.modifiers);
     }
     if (!contiguousContext) {
-      sources.push(searchSources.emotes);
+      sources.push(searchSources.emotes, searchSources.emoji);
     }
   } else if (punct === "@") {
     sources.push(searchSources.nicks);
   } else if (punct === "/") {
     sources.push(searchSources.commands);
   } else {
-    if (modifierContext) {
+    if (emoteContext) {
       sources.push(searchSources.modifiers);
     }
     sources.push(searchSources.emotes, searchSources.nicks, searchSources.tags);
   }
 
+  // console.log({
+  //   text,
+  //   offset,
+  //   contiguousContext,
+  //   delta,
+  //   prefix,
+  //   punct,
+  //   queryStart,
+  //   suffixStart,
+  //   suffixEnd,
+  //   queryEnd,
+  //   hasSuffix,
+  //   query,
+  //   targetStart,
+  //   targetEnd,
+  //   target,
+  //   entityRanges,
+  //   contextEnd,
+  //   invalidContext,
+  //   sources,
+  // });
+
   if (invalidContext || !(punct || query) || sources.length === 0) {
     return null;
   }
-
-  console.log({
-    text,
-    offset,
-    contiguousContext,
-    delta,
-    prefix,
-    punct,
-    queryStart,
-    suffixStart,
-    suffixEnd,
-    queryEnd,
-    hasSuffix,
-    query,
-    targetStart,
-    targetEnd,
-    target,
-    entityRanges,
-    contextEnd,
-    modifierContextRange,
-    modifierContext,
-    modifierTarget,
-    invalidContext,
-    sources,
-  });
 
   return {
     debounceDelay: punct ? 0 : 100,
@@ -703,9 +747,8 @@ const getSearchState = (
     sources,
     query,
     target,
+    prefix,
     suffixSpace: !hasSuffix,
-    modifierContext,
-    modifierTarget,
   };
 };
 
