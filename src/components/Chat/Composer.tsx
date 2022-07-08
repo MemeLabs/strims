@@ -256,7 +256,7 @@ const Composer: React.FC<ComposerProps> = ({
   const insertEmote = (v: string) => {
     const { selection } = editor;
     if (!selection) {
-      Transforms.move(editor);
+      Transforms.select(editor, [0, 0]);
     }
 
     Transforms.insertText(editor, v + " ");
@@ -437,7 +437,7 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
     );
   }
   if (leaf.emoji) {
-    return <Emoji>{children}</Emoji>;
+    return <Emoji {...attributes}>{children}</Emoji>;
   }
 
   return (
