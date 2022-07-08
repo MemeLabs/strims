@@ -54,7 +54,7 @@ const handleStaticRequest = (event: FetchEvent) => {
 
 const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
   [/_hls-relay\/([^/]+)/, handleHLSRelayRequest],
-  [/\.(css|js|json|png|svg|wasm)$/, handleStaticRequest],
+  [/\.(css|js|json|png|svg|wasm|ttf)$/, handleStaticRequest],
 ];
 
 self.addEventListener("fetch", (event: FetchEvent) => {
