@@ -14,7 +14,7 @@ void i18n
   .use(initReactI18next)
   .init({
     fallbackLng: "en",
-    supportedLngs: ["en"],
+    supportedLngs: I18N_LANG,
     load: "languageOnly",
     debug: !IS_PRODUCTION,
 

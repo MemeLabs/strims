@@ -2,15 +2,35 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 .chat_composer {
+  position: relative;
+
   &__editor {
     background: var(--input-bg);
-    border-radius: 3px;
+    border-radius: var(--border-radius-small);
     border: 1px solid var(--input-border-color);
     color: var(--input-color);
     line-height: 1.4rem;
-    margin: 5px;
+    margin: 5px 10px 5px 5px;
     padding: 10px 5px;
     touch-action: none;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  &__textbox {
+    flex: 1;
+  }
+
+  &__button {
+    flex: 0 0 24px;
+    margin: 0 4px;
+    cursor: pointer;
+
+    & > svg {
+      height: 24px;
+      width: 24px;
+    }
   }
 
   [data-slate-string] {
@@ -45,15 +65,6 @@
       color: red;
     }
 
-    &--emote {
-      color: orange;
-    }
-
-    &--emoji {
-      font-size: 24px;
-      line-height: 1rem;
-    }
-
     &--tag {
       color: yellow;
     }
@@ -70,16 +81,17 @@
 
     &__list {
       box-sizing: border-box;
-      width: calc(100% - 10px);
+      width: calc(100% - 15px);
       display: flex;
       flex-direction: column;
-      border-radius: 3px;
+      border-radius: var(--border-radius-small);
       bottom: 4px;
       display: block;
       margin: 0;
       position: absolute;
       overflow: hidden;
       background: var(--color-background-input);
+      box-shadow: var(--shadow-elevation-2);
     }
 
     &__label {
@@ -90,7 +102,7 @@
       background: var(--card-bg);
 
       &:first-child {
-        border-radius: 3px 3px 0 0;
+        border-radius: var(--border-radius-small) var(--border-radius-small) 0 0;
       }
     }
 
@@ -101,16 +113,12 @@
       cursor: pointer;
 
       &:last-child {
-        border-radius: 0 0 3px 3px;
+        border-radius: 0 0 var(--border-radius-small) var(--border-radius-small);
       }
 
       &__emote,
       &__emoji {
         margin-right: 10px;
-      }
-
-      &__emoji {
-        font-size: 24px;
       }
 
       &__label {
@@ -122,6 +130,17 @@
       &--selected {
         background: var(--color-opac-b-3);
       }
+    }
+  }
+
+  &__emote_menu {
+    position: absolute;
+    width: 100%;
+
+    &__content {
+      right: 10px;
+      bottom: 4px;
+      position: absolute;
     }
   }
 }

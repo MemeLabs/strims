@@ -5,8 +5,9 @@ import "./Composer.scss";
 
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
+import { CompactEmoji } from "emojibase";
+import emojiPattern from "emojibase-regex/emoji";
 import filterObj from "filter-obj";
-import { escapeRegExp } from "lodash";
 import Prism from "prismjs";
 import React, {
   KeyboardEvent,
@@ -18,6 +19,8 @@ import React, {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { BiSmile } from "react-icons/bi";
+import { useToggle } from "react-use";
 import {
   Descendant,
   Editor,
@@ -35,9 +38,10 @@ import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
 
-import { EmojiCategory } from "../../apis/strims/chat/v1/chat";
 import { useChat } from "../../contexts/Chat";
+import Emoji from "./Emoji";
 import Emote from "./Emote";
+import EmoteMenu from "./EmoteMenu";
 
 const commands = [
   "help",
@@ -110,7 +114,7 @@ const Composer: React.FC<ComposerProps> = ({
   const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
   const [value, setValue] = useState<Descendant[]>(initialValue);
 
-  const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers, emoji);
+  const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers, emoji?.emoji);
 
   useEffect(() => {
     if (!search) {
@@ -150,8 +154,8 @@ const Composer: React.FC<ComposerProps> = ({
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
 
   const grammar = useMemo(
-    () => getGrammar(emotes, modifiers, emoji, nicks, tags),
-    [emotes, modifiers, emoji, nicks, tags]
+    () => getGrammar(emotes, modifiers, nicks, tags),
+    [emotes, modifiers, nicks, tags]
   );
 
   const decorate = useCallback(
@@ -242,31 +246,33 @@ const Composer: React.FC<ComposerProps> = ({
     Transforms.move(editor);
 
     const anchor = search.target.anchor;
-    const targetFocus = {
+    const focus = {
       path: anchor.path,
       offset: anchor.offset + substitution.length,
     };
-    return Editor.range(editor, anchor, targetFocus);
+    return Editor.range(editor, anchor, focus);
+  };
+
+  const insertEmote = (v: string) => {
+    const { selection } = editor;
+    if (!selection) {
+      Transforms.move(editor);
+    }
+
+    Transforms.insertText(editor, v + " ");
+    toggleMenu(false);
   };
 
   const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
     insertAutocompleteEntry(entry);
-    // setLastSearch(search);
     setLastSearch(null);
     setSearch(null);
     setSelectedMatch(defaultSelectedMatch);
   };
 
   const showSuggestions =
-    uiConfig.autocompleteHelper && search && matchEntries.length > (lastSearch ? 1 : 0);
-
-  // console.log(selectedMatch);
-  // console.log({
-  //   matchSources,
-  //   matchEntries,
-  //   selectedMatch,
-  //   search,
-  // });
+    uiConfig.autocompleteHelper &&
+    matchEntries.some((e) => (e.substitution ?? e.value) !== currentSearch?.query);
 
   const ref = useRef<HTMLDivElement>();
 
@@ -286,6 +292,8 @@ const Composer: React.FC<ComposerProps> = ({
     }
   );
 
+  const [showMenu, toggleMenu] = useToggle(false);
+
   return (
     <div className="chat_composer">
       {showSuggestions && (
@@ -302,15 +310,26 @@ const Composer: React.FC<ComposerProps> = ({
           </div>
         </div>
       )}
+      {showMenu && (
+        <div className="chat_composer__emote_menu">
+          <div className="chat_composer__emote_menu__content">
+            <EmoteMenu onSelect={insertEmote} />
+          </div>
+        </div>
+      )}
       <div className="chat_composer__editor" ref={ref}>
         <Slate editor={editor} value={value} onChange={onChange}>
           <Editable
+            className="chat_composer__textbox"
             decorate={decorate}
             onKeyDown={onKeyDown}
             placeholder={t("chat.composer.Write a message")}
             renderLeaf={renderLeaf}
           />
         </Slate>
+        <button className="chat_composer__button" onClick={toggleMenu}>
+          <BiSmile />
+        </button>
       </div>
     </div>
   );
@@ -374,7 +393,9 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
       );
     } else if (entry.type === "emoji") {
       preview = (
-        <span className="chat_composer__autocomplete__item__emoji">{entry.substitution}</span>
+        <span className="chat_composer__autocomplete__item__emoji">
+          <Emoji>{entry.substitution}</Emoji>
+        </span>
       );
     }
   }
@@ -415,6 +436,9 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
       </Emote>
     );
   }
+  if (leaf.emoji) {
+    return <Emoji>{children}</Emoji>;
+  }
 
   return (
     <span
@@ -423,8 +447,6 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
         "chat_composer__span--code": leaf.code,
         "chat_composer__span--spoiler": leaf.spoiler,
         "chat_composer__span--url": leaf.url,
-        "chat_composer__span--emote": leaf.emote,
-        "chat_composer__span--emoji": leaf.emoji,
         "chat_composer__span--tag": leaf.tag,
         "chat_composer__span--nick": leaf.nick,
         "chat_composer__span--self": leaf.self,
@@ -441,13 +463,7 @@ export default Composer;
 
 const noopPattern = /_^/;
 
-const getGrammar = (
-  emotes: string[],
-  modifiers: string[],
-  emoji: EmojiCategory[],
-  nicks: string[],
-  tags: string[]
-) => {
+const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags: string[]) => {
   const nestableEntities = {
     code: {
       pattern: /`(\\`|[^`])*(`|$)/,
@@ -458,7 +474,7 @@ const getGrammar = (
       lookbehind: true,
     },
     emoji: {
-      pattern: noopPattern,
+      pattern: emojiPattern,
     },
     nick: {
       pattern: noopPattern,
@@ -477,14 +493,6 @@ const getGrammar = (
     );
   } else if (emotes.length !== 0) {
     nestableEntities.emote.pattern = new RegExp(`(\\W|^)(${emotes.join("|")})(?=\\W|$)`);
-  }
-  if (emoji.length !== 0) {
-    const glyphs: string[] = [];
-    for (const category of emoji) {
-      glyphs.push(...category.emoji.map(({ glyph }) => escapeRegExp(glyph)));
-    }
-    glyphs.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
-    nestableEntities.emoji.pattern = new RegExp(glyphs.join("|"));
   }
   if (nicks.length !== 0) {
     nestableEntities.nick.pattern = new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`);
@@ -566,7 +574,7 @@ const useSearchSources = (
   commands: string[],
   emotes: string[],
   modifiers: string[],
-  emoji: EmojiCategory[]
+  emoji?: CompactEmoji[]
 ): SearchSources => {
   const { t } = useTranslation();
   const sources: SearchSources = {
@@ -632,20 +640,19 @@ const useSearchSources = (
         label: t("chat.composer.emoji"),
         entries: [],
       };
-      for (const category of emoji) {
-        for (const { glyph, description } of category.emoji) {
-          source.entries.push({
-            type: "emoji",
-            value: description,
-            substitution: glyph,
-            index: description,
-          });
-        }
+      for (const { unicode, label } of emoji ?? []) {
+        // TODO tags/shortcode
+        source.entries.push({
+          type: "emoji",
+          value: label,
+          substitution: unicode,
+          index: label,
+        });
       }
       return source;
     }, [emoji]),
   };
-  return useMemo(() => sources, [nicks, tags, commands, emotes, modifiers, emoji]);
+  return useMemo(() => sources, [nicks, tags, commands, emotes, modifiers]);
 };
 
 interface SearchState {
@@ -674,11 +681,43 @@ const getSearchState = (
     return null;
   }
 
+  // for the purposes of search emoji and words are interchangeable
+  const extendWordClass = (rx: RegExp): RegExp =>
+    new RegExp(rx.source.replace(/(\\w\*?)/g, `(?:$1|${emojiPattern.source})`));
+
+  const leftPattern = extendWordClass(/(\w(?=:|@))?((\s*)(:|@|^\/)?(\w*)(\s*))$/);
+  const rightPattern = extendWordClass(/^(\s*)(\w*)/);
+
   const { text } = node;
   const { offset } = Range.start(selection);
-  const [, contiguousContext, delta, prefix, punct, queryStart, suffixStart] =
-    /(\w(?=:|@))?((\s*)(:|@|^\/)?(\w*)(\s*))$/.exec(text.substring(0, offset)) || [];
-  const [, suffixEnd, queryEnd] = /^(\s*)(\w*)/.exec(text.substring(offset)) || [""];
+  const [
+    ,
+    // a word character preceding :. if one exists we're either typing an
+    // emote modifier or have no suggestions to offer. this helps to
+    // disambiguate the colon punctuation used to start modifer or emote/emoji
+    // search.
+    contiguousContext,
+    // all of the contiguous query characters and the preceding whitespace
+    delta,
+    // the whitespace preceding the query
+    prefix,
+    // : @ or / for emote/emoji/modifier, nick, or command search
+    punct,
+    // the word characters of the query
+    queryStart,
+    // whitespace after the query. this allows the pattern to continue matching
+    // the updated query after inserting substitutions so we can check if we've
+    // inserted the only matching result and hide the menu
+    suffixStart,
+  ] = leftPattern.exec(text.substring(0, offset)) || [];
+  const [
+    ,
+    // whitepace after the cursor to check if a space should be inserted after
+    // the result
+    suffixEnd,
+    // word characters after the cursor in case it is in the middle of the query
+    queryEnd,
+  ] = rightPattern.exec(text.substring(offset)) || [];
   const hasSuffix = suffixStart || suffixEnd;
   const query = queryStart + (hasSuffix ? "" : queryEnd);
 
@@ -705,7 +744,9 @@ const getSearchState = (
       sources.push(searchSources.emotes, searchSources.emoji);
     }
   } else if (punct === "@") {
-    sources.push(searchSources.nicks);
+    if (!contiguousContext) {
+      sources.push(searchSources.nicks);
+    }
   } else if (punct === "/") {
     sources.push(searchSources.commands);
   } else {
@@ -714,28 +755,6 @@ const getSearchState = (
     }
     sources.push(searchSources.emotes, searchSources.nicks, searchSources.tags);
   }
-
-  // console.log({
-  //   text,
-  //   offset,
-  //   contiguousContext,
-  //   delta,
-  //   prefix,
-  //   punct,
-  //   queryStart,
-  //   suffixStart,
-  //   suffixEnd,
-  //   queryEnd,
-  //   hasSuffix,
-  //   query,
-  //   targetStart,
-  //   targetEnd,
-  //   target,
-  //   entityRanges,
-  //   contextEnd,
-  //   invalidContext,
-  //   sources,
-  // });
 
   if (invalidContext || !(punct || query) || sources.length === 0) {
     return null;

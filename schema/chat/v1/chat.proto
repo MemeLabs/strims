@@ -117,16 +117,6 @@ message AssetBundle {
   repeated Tag tags = 6;
 }
 
-message Emoji {
-  string glyph = 1;
-  string description = 2;
-}
-
-message EmojiCategory {
-  string name = 1;
-  repeated Emoji emoji = 2;
-}
-
 message Message {
   message Entities {
     message Bounds {
@@ -149,7 +139,6 @@ message Message {
 
     message Emoji {
       Bounds bounds = 1;
-      string description = 2;
     }
 
     message Nick {
@@ -587,11 +576,6 @@ message UntagRequest {
 }
 message UntagResponse {}
 
-message GetEmojiRequest{}
-message GetEmojiResponse {
-  repeated EmojiCategory categories = 1;
-}
-
 service ChatServerFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
@@ -640,7 +624,6 @@ service ChatFrontend {
   rpc Unhighlight(UnhighlightRequest) returns (UnhighlightResponse);
   rpc Tag(TagRequest) returns (TagResponse);
   rpc Untag(UntagRequest) returns (UntagResponse);
-  rpc GetEmoji(GetEmojiRequest) returns (GetEmojiResponse);
 }
 
 message SendMessageRequest {

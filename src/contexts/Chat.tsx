@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
+import { CompactEmoji, MessagesDataset, ShortcodesDataset } from "emojibase";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,6 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { FrontendClient } from "../apis/client";
 import {
   AssetBundle,
-  EmojiCategory,
   Emote,
   EmoteEffect,
   IUIConfig,
@@ -108,7 +108,11 @@ export interface State {
   popoutTopicCapacity: number;
   mainTopics: Topic[];
   mainActiveTopic?: Topic;
-  emoji: EmojiCategory[];
+  emoji?: {
+    emoji: CompactEmoji[];
+    messages: MessagesDataset;
+    shortcodes: ShortcodesDataset;
+  };
 }
 
 type StateDispatcher = React.Dispatch<React.SetStateAction<State>>;
@@ -180,7 +184,6 @@ const initialState: State = {
   popoutTopics: [],
   popoutTopicCapacity: 0,
   mainTopics: [],
-  emoji: [],
 };
 
 type ChatActions = {
@@ -848,10 +851,23 @@ export const Provider: React.FC = ({ children }) => {
   const actions = useStableCallbacks(createGlobalActions(client, setState));
 
   useEffect(() => {
-    void client.chat
-      .getEmoji()
-      .then(({ categories }) => setState((state) => ({ ...state, emoji: categories })));
+    const langExists = (lang: string) => EMOJI_LANG.includes(lang);
 
+    // TODO: app language preference
+    const langFull = navigator.language;
+    const lang2Code = langFull.substring(0, 2);
+    const lang = langExists(langFull) ? langFull : langExists(lang2Code) ? lang2Code : "en";
+
+    void Promise.all([
+      fetch(`/emoji/${lang}/compact.json`).then((res) => res.json()),
+      fetch(`/emoji/${lang}/messages.json`).then((res) => res.json()),
+      fetch(`/emoji/${lang}/shortcodes/cldr.json`).then((res) => res.json()),
+    ]).then(([emoji, messages, shortcodes]: [CompactEmoji[], MessagesDataset, ShortcodesDataset]) =>
+      setState((prev) => ({ ...prev, emoji: { emoji, messages, shortcodes } }))
+    );
+  }, []);
+
+  useEffect(() => {
     const uiConfigEvents = client.chat.watchUIConfig();
     uiConfigEvents.on("data", ({ uiConfig }) => actions.setUiConfig(uiConfig));
     const whisperEvents = client.chat.watchWhispers();

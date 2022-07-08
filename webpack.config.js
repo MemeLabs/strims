@@ -110,7 +110,7 @@ module.exports = (env, argv) => {
       icons: [
         {
           src: path.resolve("assets/splat.png"),
-          sizes: [96, 128, 192, 256, 384, 512], // multiple sizes
+          sizes: [96, 128, 192, 256, 384, 512],
         },
       ],
     }),
@@ -120,6 +120,12 @@ module.exports = (env, argv) => {
           from: path.resolve(__dirname, "assets", "locales"),
           to: "locales",
           transform: (content) => JSON.stringify(JSON5.parse(content)),
+        },
+        {
+          from: path.resolve(__dirname, "node_modules", "emojibase-data"),
+          to: "emoji",
+          filter: (path) =>
+            path.match(/\/[a-z]{2}(?:-[a-z]{2})?\/.*(compact|messages|cldr)\.json$/i),
         },
       ],
     }),
@@ -134,6 +140,12 @@ module.exports = (env, argv) => {
         require("child_process").execSync("git rev-parse HEAD").toString().trim()
       ),
       VERSION: JSON.stringify(require(path.resolve(__dirname, "package.json")).version),
+      I18N_LANG: JSON.stringify(fs.readdirSync(path.resolve(__dirname, "assets", "locales"))),
+      EMOJI_LANG: JSON.stringify(
+        fs
+          .readdirSync(path.resolve(__dirname, "node_modules", "emojibase-data"))
+          .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
+      ),
     }),
   ];
 

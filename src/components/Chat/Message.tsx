@@ -13,6 +13,7 @@ import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/c
 import { useRoom } from "../../contexts/Chat";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import Emote from "./Emote";
+import Emoji from "./Emoji";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
@@ -75,10 +76,9 @@ interface MessageEmojiProps {
   entity: chatv1_Message.Entities.Emoji;
 }
 
-const MessageEmoji: React.FC<MessageEmojiProps> = ({ children, entity }) => (
-  <span className="chat__message__emoji" title={entity.description}>
-    {children}
-  </span>
+// TODO: load shortcode from emoji in chat context
+const MessageEmoji: React.FC<MessageEmojiProps> = ({ children }) => (
+  <Emoji>{children}</Emoji>
 );
 
 interface MessageNickProps {

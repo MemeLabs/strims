@@ -1,0 +1,14 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+@font-face {
+  font-family: "Twemoji";
+  src: url("../../../assets/chat/TwemojiMozilla.ttf") format("truetype");
+}
+
+.emoji {
+  font-size: 28px;
+  font-family: "Twemoji";
+  line-height: 1rem;
+  vertical-align: text-bottom;
+}

@@ -6,13 +6,10 @@ package chat
 import (
 	"math/rand"
 	"regexp"
-	"sort"
-	"strings"
 	"unicode/utf8"
 
 	parser "github.com/MemeLabs/chat-parser"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
-	"github.com/MemeLabs/strims/pkg/sortutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
 	"mvdan.cc/xurls/v2"
 )
@@ -21,7 +18,6 @@ func newEntityExtractor() *entityExtractor {
 	return &entityExtractor{
 		parserCtx:         parser.NewParserContext(parser.ParserContextValues{}),
 		urls:              xurls.Relaxed(),
-		emoji:             compileEmojiRegexp(),
 		internalModifiers: syncutil.NewPointer(&[]*chatv1.Modifier{}),
 	}
 }
@@ -30,7 +26,6 @@ func newEntityExtractor() *entityExtractor {
 type entityExtractor struct {
 	parserCtx         *parser.ParserContext
 	urls              *regexp.Regexp
-	emoji             *regexp.Regexp
 	internalModifiers syncutil.Pointer[[]*chatv1.Modifier]
 }
 
@@ -61,11 +56,10 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 
 	addEntitiesFromSpan(e, parser.NewParser(x.parserCtx, parser.NewLexer(msg)).ParseMessage())
 
-	for _, b := range x.emoji.FindAllStringIndex(msg, -1) {
+	for _, b := range Emoji.FindAllStringIndex(msg, -1) {
 		if !inBounds(e.Links, b[0], b[1]) && !inBounds(e.CodeBlocks, b[0], b[1]) {
 			e.Emojis = append(e.Emojis, &chatv1.Message_Entities_Emoji{
-				Description: EmojiDescriptions[msg[b[0]:b[1]]],
-				Bounds:      runeBounds(msg, b),
+				Bounds: runeBounds(msg, b),
 			})
 		}
 	}
@@ -155,16 +149,4 @@ func runeBounds(msg string, b []int) *chatv1.Message_Entities_Bounds {
 		Start: uint32(off),
 		End:   uint32(off + width),
 	}
-}
-
-func compileEmojiRegexp() *regexp.Regexp {
-	glyphs := make([]string, 0, len(EmojiDescriptions))
-	for c := range EmojiDescriptions {
-		glyphs = append(glyphs, regexp.QuoteMeta(c))
-	}
-	sort.Sort(sortutil.OrderedSlice[string](glyphs))
-
-	re := regexp.MustCompile(strings.Join(glyphs, "|"))
-	re.Longest()
-	return re
 }

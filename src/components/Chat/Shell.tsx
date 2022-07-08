@@ -140,7 +140,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           onMessage={roomActions.sendMessage}
         />
       </div>
-      <div className="chat__nav">
+      {/* <div className="chat__nav">
         <div className="chat__nav__left">
           <ChatDrawerButton
             icon={BiSmile}
@@ -155,7 +155,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
             onToggle={toggleSettings}
           />
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

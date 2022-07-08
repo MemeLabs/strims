@@ -99,11 +99,11 @@ func TestParse(t *testing.T) {
 			input: "🇺🇸🏳️‍🌈🏴🏴󠁧󠁢󠁥󠁮󠁧󠁿🏴‍☠️",
 			entities: &chatv1.Message_Entities{
 				Emojis: []*chatv1.Message_Entities_Emoji{
-					{Description: "flag: United States", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 2}},
-					{Description: "rainbow flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 2, End: 6}},
-					{Description: "black flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 6, End: 7}},
-					{Description: "flag: England", Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 14}},
-					{Description: "pirate flag", Bounds: &chatv1.Message_Entities_Bounds{Start: 14, End: 18}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 2}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 2, End: 6}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 6, End: 7}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 14}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 14, End: 18}},
 				},
 			},
 		},
@@ -112,9 +112,9 @@ func TestParse(t *testing.T) {
 			input: "🦸‍♂️🧑‍🚀🦍",
 			entities: &chatv1.Message_Entities{
 				Emojis: []*chatv1.Message_Entities_Emoji{
-					{Description: "man superhero", Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
-					{Description: "astronaut", Bounds: &chatv1.Message_Entities_Bounds{Start: 4, End: 7}},
-					{Description: "gorilla", Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 8}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 0, End: 4}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 4, End: 7}},
+					{Bounds: &chatv1.Message_Entities_Bounds{Start: 7, End: 8}},
 				},
 			},
 		},

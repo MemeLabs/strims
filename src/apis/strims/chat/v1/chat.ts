@@ -837,92 +837,6 @@ export class AssetBundle {
   }
 }
 
-export type IEmoji = {
-  glyph?: string;
-  description?: string;
-}
-
-export class Emoji {
-  glyph: string;
-  description: string;
-
-  constructor(v?: IEmoji) {
-    this.glyph = v?.glyph || "";
-    this.description = v?.description || "";
-  }
-
-  static encode(m: Emoji, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.glyph.length) w.uint32(10).string(m.glyph);
-    if (m.description.length) w.uint32(18).string(m.description);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): Emoji {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new Emoji();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.glyph = r.string();
-        break;
-        case 2:
-        m.description = r.string();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IEmojiCategory = {
-  name?: string;
-  emoji?: strims_chat_v1_IEmoji[];
-}
-
-export class EmojiCategory {
-  name: string;
-  emoji: strims_chat_v1_Emoji[];
-
-  constructor(v?: IEmojiCategory) {
-    this.name = v?.name || "";
-    this.emoji = v?.emoji ? v.emoji.map(v => new strims_chat_v1_Emoji(v)) : [];
-  }
-
-  static encode(m: EmojiCategory, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.name.length) w.uint32(10).string(m.name);
-    for (const v of m.emoji) strims_chat_v1_Emoji.encode(v, w.uint32(18).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): EmojiCategory {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new EmojiCategory();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.name = r.string();
-        break;
-        case 2:
-        m.emoji.push(strims_chat_v1_Emoji.decode(r, r.uint32()));
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
 export type IMessage = {
   serverTime?: bigint;
   peerKey?: Uint8Array;
@@ -1240,22 +1154,18 @@ export namespace Message {
 
     export type IEmoji = {
       bounds?: strims_chat_v1_Message_Entities_IBounds;
-      description?: string;
     }
 
     export class Emoji {
       bounds: strims_chat_v1_Message_Entities_Bounds | undefined;
-      description: string;
 
       constructor(v?: IEmoji) {
         this.bounds = v?.bounds && new strims_chat_v1_Message_Entities_Bounds(v.bounds);
-        this.description = v?.description || "";
       }
 
       static encode(m: Emoji, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.bounds) strims_chat_v1_Message_Entities_Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-        if (m.description.length) w.uint32(18).string(m.description);
         return w;
       }
 
@@ -1268,9 +1178,6 @@ export namespace Message {
           switch (tag >> 3) {
             case 1:
             m.bounds = strims_chat_v1_Message_Entities_Bounds.decode(r, r.uint32());
-            break;
-            case 2:
-            m.description = r.string();
             break;
             default:
             r.skipType(tag & 7);
@@ -5244,61 +5151,6 @@ export class UntagResponse {
   }
 }
 
-export type IGetEmojiRequest = Record<string, any>;
-
-export class GetEmojiRequest {
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IGetEmojiRequest) {
-  }
-
-  static encode(m: GetEmojiRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): GetEmojiRequest {
-    if (r instanceof Reader && length) r.skip(length);
-    return new GetEmojiRequest();
-  }
-}
-
-export type IGetEmojiResponse = {
-  categories?: strims_chat_v1_IEmojiCategory[];
-}
-
-export class GetEmojiResponse {
-  categories: strims_chat_v1_EmojiCategory[];
-
-  constructor(v?: IGetEmojiResponse) {
-    this.categories = v?.categories ? v.categories.map(v => new strims_chat_v1_EmojiCategory(v)) : [];
-  }
-
-  static encode(m: GetEmojiResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    for (const v of m.categories) strims_chat_v1_EmojiCategory.encode(v, w.uint32(10).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): GetEmojiResponse {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new GetEmojiResponse();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.categories.push(strims_chat_v1_EmojiCategory.decode(r, r.uint32()));
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
 export type ISendMessageRequest = {
   body?: string;
 }
@@ -5838,18 +5690,6 @@ export type strims_chat_v1_AssetBundle = AssetBundle;
 /* @internal */
 export type strims_chat_v1_IAssetBundle = IAssetBundle;
 /* @internal */
-export const strims_chat_v1_Emoji = Emoji;
-/* @internal */
-export type strims_chat_v1_Emoji = Emoji;
-/* @internal */
-export type strims_chat_v1_IEmoji = IEmoji;
-/* @internal */
-export const strims_chat_v1_EmojiCategory = EmojiCategory;
-/* @internal */
-export type strims_chat_v1_EmojiCategory = EmojiCategory;
-/* @internal */
-export type strims_chat_v1_IEmojiCategory = IEmojiCategory;
-/* @internal */
 export const strims_chat_v1_Message = Message;
 /* @internal */
 export type strims_chat_v1_Message = Message;
@@ -6323,18 +6163,6 @@ export const strims_chat_v1_UntagResponse = UntagResponse;
 export type strims_chat_v1_UntagResponse = UntagResponse;
 /* @internal */
 export type strims_chat_v1_IUntagResponse = IUntagResponse;
-/* @internal */
-export const strims_chat_v1_GetEmojiRequest = GetEmojiRequest;
-/* @internal */
-export type strims_chat_v1_GetEmojiRequest = GetEmojiRequest;
-/* @internal */
-export type strims_chat_v1_IGetEmojiRequest = IGetEmojiRequest;
-/* @internal */
-export const strims_chat_v1_GetEmojiResponse = GetEmojiResponse;
-/* @internal */
-export type strims_chat_v1_GetEmojiResponse = GetEmojiResponse;
-/* @internal */
-export type strims_chat_v1_IGetEmojiResponse = IGetEmojiResponse;
 /* @internal */
 export const strims_chat_v1_SendMessageRequest = SendMessageRequest;
 /* @internal */
