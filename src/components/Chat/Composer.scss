@@ -78,6 +78,7 @@
     left: 4px;
     position: absolute;
     width: 100%;
+    z-index: var(--z-index-menu);
 
     &__list {
       box-sizing: border-box;

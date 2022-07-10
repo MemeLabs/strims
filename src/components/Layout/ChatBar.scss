@@ -18,8 +18,9 @@
 .chat_popout {
   font-size: 0.8rem;
   width: 330px;
-  --chat-width: 330px;
   height: 300px;
+  --chat-width: 330px;
+  --chat-height: 500px;
   background: var(--body-foreground);
   display: flex;
   flex-direction: column;

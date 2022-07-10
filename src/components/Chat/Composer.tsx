@@ -645,13 +645,12 @@ const useSearchSources = (
         label: t("chat.composer.emoji"),
         entries: [],
       };
-      for (const { unicode, label } of emoji ?? []) {
-        // TODO tags/shortcode
+      for (const { unicode, label, tags } of emoji ?? []) {
         source.entries.push({
           type: "emoji",
           value: label,
           substitution: unicode,
-          index: label,
+          index: `${label} ${tags?.join(" ") ?? ""}`,
         });
       }
       return source;

@@ -18,11 +18,13 @@ import { useCall } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
+import SettingsDrawer from "./SettingsDrawer";
 
 enum Tab {
   Rooms,
   Whispers,
   Users,
+  Settings,
 }
 
 interface TabsProps<T> {
@@ -62,6 +64,7 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
       { key: Tab.Rooms, label: "rooms" },
       { key: Tab.Whispers, label: "whispers" },
       { key: Tab.Users, label: "users" },
+      { key: Tab.Settings, label: "settings" },
     ],
     []
   );
@@ -74,6 +77,8 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
         return <WhispersList onChange={onChange} />;
       case Tab.Users:
         return <UsersList onChange={onChange} />;
+      case Tab.Settings:
+        return <SettingsDrawer />;
     }
   })();
 
