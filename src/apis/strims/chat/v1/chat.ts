@@ -1623,6 +1623,7 @@ export type IUIConfig = {
   shortenLinks?: boolean;
   compactEmoteSpacing?: boolean;
   normalizeAliasCase?: boolean;
+  emojiSkinTone?: string;
 }
 
 export class UIConfig {
@@ -1660,6 +1661,7 @@ export class UIConfig {
   shortenLinks: boolean;
   compactEmoteSpacing: boolean;
   normalizeAliasCase: boolean;
+  emojiSkinTone: string;
 
   constructor(v?: IUIConfig) {
     this.showTime = v?.showTime || false;
@@ -1696,6 +1698,7 @@ export class UIConfig {
     this.shortenLinks = v?.shortenLinks || false;
     this.compactEmoteSpacing = v?.compactEmoteSpacing || false;
     this.normalizeAliasCase = v?.normalizeAliasCase || false;
+    this.emojiSkinTone = v?.emojiSkinTone || "";
   }
 
   static encode(m: UIConfig, w?: Writer): Writer {
@@ -1734,6 +1737,7 @@ export class UIConfig {
     if (m.shortenLinks) w.uint32(256).bool(m.shortenLinks);
     if (m.compactEmoteSpacing) w.uint32(264).bool(m.compactEmoteSpacing);
     if (m.normalizeAliasCase) w.uint32(272).bool(m.normalizeAliasCase);
+    if (m.emojiSkinTone.length) w.uint32(282).string(m.emojiSkinTone);
     return w;
   }
 
@@ -1845,6 +1849,9 @@ export class UIConfig {
         break;
         case 34:
         m.normalizeAliasCase = r.bool();
+        break;
+        case 35:
+        m.emojiSkinTone = r.string();
         break;
         default:
         r.skipType(tag & 7);

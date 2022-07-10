@@ -174,6 +174,7 @@ const initialState: State = {
     compactEmoteSpacing: false,
     normalizeAliasCase: true,
     userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
+    emojiSkinTone: "",
   }),
   config: {
     messageGCThreshold: 250,
@@ -668,7 +669,9 @@ const createRoomActions = (
       b.tags.forEach((e) => liveTagMap.set(e.id, e));
       room = b.room ?? room;
     }
-    const liveEmotes = Array.from(liveEmoteMap.values());
+    const liveEmotes = Array.from(liveEmoteMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
     const emoteStyles = new Map(
       liveEmotes.map(({ id, name, effects }) => {
         const style: Style = {

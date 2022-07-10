@@ -16,6 +16,7 @@ import {
 } from "../../../apis/strims/chat/v1/chat_rpc";
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import Emote from "../../../components/Chat/Emote";
+import EmoteMenu from "../../../components/Chat/EmoteMenu";
 import ChatMessage from "../../../components/Chat/Message";
 import ChatScroller, { MessageProps } from "../../../components/Chat/Scroller";
 import StyleSheet from "../../../components/Chat/StyleSheet";
@@ -445,6 +446,18 @@ const Combo: React.FC = () => {
   );
 };
 
+const Menu: React.FC = () => {
+  const onSelect = (v: string) => console.log(v);
+
+  return (
+    <div className="chat_mockup">
+      <Chat>
+        <EmoteMenu onSelect={onSelect} />
+      </Chat>
+    </div>
+  );
+};
+
 export default [
   {
     name: "Modifiers",
@@ -457,5 +470,9 @@ export default [
   {
     name: "Combo",
     component: Combo,
+  },
+  {
+    name: "Menu",
+    component: Menu,
   },
 ];

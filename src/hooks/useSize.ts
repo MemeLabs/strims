@@ -4,14 +4,29 @@
 import useResizeObserver from "@react-hook/resize-observer";
 import * as React from "react";
 
-const useSize = (target: HTMLElement): DOMRectReadOnly => {
+const useSize = <T extends HTMLElement>(
+  target: React.RefObject<T> | HTMLElement | (() => HTMLElement)
+): DOMRectReadOnly => {
   const [size, setSize] = React.useState<DOMRectReadOnly>();
 
   React.useLayoutEffect(() => {
-    setSize(target?.getBoundingClientRect());
+    if (target instanceof HTMLElement) {
+      setSize(target.getBoundingClientRect());
+    } else if (target instanceof Function) {
+      setSize(target()?.getBoundingClientRect());
+    } else {
+      setSize(target?.current?.getBoundingClientRect());
+    }
   }, [target]);
 
-  useResizeObserver(target, (entry) => setSize(entry.contentRect));
+  if (target instanceof HTMLElement) {
+    useResizeObserver(target, (entry) => setSize(entry.contentRect));
+  } else if (target instanceof Function) {
+    useResizeObserver(target(), (entry) => setSize(entry.contentRect));
+  } else {
+    useResizeObserver(target?.current, (entry) => setSize(entry.contentRect));
+  }
+
   return size;
 };
 

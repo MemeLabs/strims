@@ -127,7 +127,7 @@ export interface RoomCarouselProps {
 const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {
   const [{ rooms, whispers, mainTopics, mainActiveTopic }] = useChat();
   const ref = useRef<HTMLDivElement>();
-  const size = useSize(ref.current);
+  const size = useSize(ref);
 
   const slidesPerView = size ? Math.floor(size?.width / 52) : 1;
 

@@ -196,6 +196,10 @@ const src = {
           "scale": 2,
         },
       ],
+      "contributor": {
+        "name": "memer",
+        "link": "https://www.google.com",
+      },
       "effects": [],
     },
     {

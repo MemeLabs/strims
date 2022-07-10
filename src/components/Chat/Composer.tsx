@@ -39,6 +39,7 @@ import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
 
 import { useChat } from "../../contexts/Chat";
+import useClickAway from "../../hooks/useClickAway";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteMenu from "./EmoteMenu";
@@ -254,8 +255,7 @@ const Composer: React.FC<ComposerProps> = ({
   };
 
   const insertEmote = (v: string) => {
-    const { selection } = editor;
-    if (!selection) {
+    if (!editor.selection) {
       Transforms.select(editor, [0, 0]);
     }
 
@@ -293,6 +293,9 @@ const Composer: React.FC<ComposerProps> = ({
   );
 
   const [showMenu, toggleMenu] = useToggle(false);
+  const emoteMenu = useRef<HTMLDivElement>();
+  const emoteMenuButton = useRef<HTMLButtonElement>();
+  useClickAway([emoteMenu, emoteMenuButton], () => toggleMenu(false), { enable: showMenu });
 
   return (
     <div className="chat_composer">
@@ -311,7 +314,7 @@ const Composer: React.FC<ComposerProps> = ({
         </div>
       )}
       {showMenu && (
-        <div className="chat_composer__emote_menu">
+        <div className="chat_composer__emote_menu" ref={emoteMenu}>
           <div className="chat_composer__emote_menu__content">
             <EmoteMenu onSelect={insertEmote} />
           </div>
@@ -327,7 +330,7 @@ const Composer: React.FC<ComposerProps> = ({
             renderLeaf={renderLeaf}
           />
         </Slate>
-        <button className="chat_composer__button" onClick={toggleMenu}>
+        <button className="chat_composer__button" ref={emoteMenuButton} onClick={toggleMenu}>
           <BiSmile />
         </button>
       </div>

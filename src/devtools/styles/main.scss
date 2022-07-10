@@ -62,6 +62,7 @@ body {
   background: var(--body-background);
   height: 100%;
   width: 420px;
+  --chat-width: 420px;
   display: flex;
   flex-direction: row;
 }

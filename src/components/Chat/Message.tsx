@@ -12,8 +12,9 @@ import React, { ReactNode, useEffect, useMemo, useRef } from "react";
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
 import { useStableCallback } from "../../hooks/useStableCallback";
-import Emote from "./Emote";
+import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
+import Emote from "./Emote";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
@@ -41,9 +42,9 @@ const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShort
   }
 
   return (
-    <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
+    <ExternalLink className="chat__message__link" href={entity.url}>
       {children}
-    </a>
+    </ExternalLink>
   );
 };
 
@@ -77,9 +78,7 @@ interface MessageEmojiProps {
 }
 
 // TODO: load shortcode from emoji in chat context
-const MessageEmoji: React.FC<MessageEmojiProps> = ({ children }) => (
-  <Emoji>{children}</Emoji>
-);
+const MessageEmoji: React.FC<MessageEmojiProps> = ({ children }) => <Emoji>{children}</Emoji>;
 
 interface MessageNickProps {
   entity: chatv1_Message.Entities.Nick;

@@ -19,7 +19,7 @@ const Dropdown: React.FC<DropdownProps> = ({ baseClassName, anchor, items }) => 
   const ref = useRef<HTMLDivElement>(null);
 
   const [open, toggleOpen] = useToggle(false);
-  useClickAway(ref, () => toggleOpen(false), ["click"]);
+  useClickAway(ref, () => toggleOpen(false), { events: ["click"] });
 
   return (
     <div

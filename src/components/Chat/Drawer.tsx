@@ -15,7 +15,7 @@ interface ChatDrawerBodyProps {
 
 const ChatDrawerBody: React.FC<ChatDrawerBodyProps> = ({ onClose, children }) => {
   const ref = useRef<HTMLDivElement>(null);
-  useClickAway(ref, onClose, ["click"]);
+  useClickAway(ref, onClose, { events: ["click"] });
 
   return (
     <div className="chat__drawer__body" ref={ref}>

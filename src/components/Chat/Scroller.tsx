@@ -62,7 +62,7 @@ const Scroller: React.FC<ScrollerProps> = ({
     list.current.Grid._scrollingContainer = scrollbars.current.view;
   }, []);
 
-  const size = useSize(scrollbars.current?.container);
+  const size = useSize(useCallback(() => scrollbars.current?.container, []));
   const width = size?.width ?? 0;
   const height = size?.height ?? 0;
 

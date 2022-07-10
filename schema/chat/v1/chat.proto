@@ -277,6 +277,7 @@ message UIConfig {
   bool shorten_links = 32;
   bool compact_emote_spacing = 33;
   bool normalize_alias_case = 34;
+  string emoji_skin_tone = 35;
 }
 
 message CreateServerRequest {

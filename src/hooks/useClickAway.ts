@@ -5,17 +5,28 @@ import { RefObject, useEffect, useRef } from "react";
 
 const defaultEvents = ["mousedown", "touchstart"];
 
+interface Options {
+  events?: string[];
+  enable?: boolean;
+}
+
 const useClickAway = <E extends Event = Event>(
   ref: RefObject<HTMLElement | null> | RefObject<HTMLElement | null>[],
   onClickAway: (event: E) => void,
-  events: string[] = defaultEvents
+  options?: Options
 ): void => {
+  const { events, enable } = { events: defaultEvents, enable: true, ...options };
+
   const savedCallback = useRef(onClickAway);
   useEffect(() => {
     savedCallback.current = onClickAway;
   }, [onClickAway]);
 
   useEffect(() => {
+    if (!enable) {
+      return;
+    }
+
     const refs = Array.isArray(ref) ? ref : [ref];
 
     const handler = (event: E) => {
@@ -41,7 +52,7 @@ const useClickAway = <E extends Event = Event>(
         document.removeEventListener(eventName, handler);
       }
     };
-  }, [events, ref]);
+  }, [events, enable, ref]);
 };
 
 export default useClickAway;
