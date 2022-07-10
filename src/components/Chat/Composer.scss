@@ -136,6 +136,7 @@
   &__emote_menu {
     position: absolute;
     width: 100%;
+    z-index: var(--z-index-menu);
 
     &__content {
       right: 10px;

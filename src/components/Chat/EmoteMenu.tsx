@@ -22,7 +22,7 @@ import {
   FaTree,
   FaWalking,
 } from "react-icons/fa";
-import { MdFastfood } from "react-icons/md";
+import { MdClose, MdFastfood } from "react-icons/md";
 import { useDebounce } from "react-use";
 import { CellMeasurer, CellMeasurerCache, Grid, List, ListRowRenderer } from "react-virtualized";
 import { RenderedRows } from "react-virtualized/dist/es/List";
@@ -37,9 +37,10 @@ import Emote from "./Emote";
 
 interface EmoteMenuProps {
   onSelect: (v: string) => void;
+  onClose: () => void;
 }
 
-const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect }) => {
+const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
   const [{ uiConfig, emoji }, { mergeUIConfig }] = useChat();
   const [{ liveEmotes }] = useRoom();
 
@@ -107,6 +108,9 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect }) => {
       <div className="emote_menu__header">
         <Search onChange={setSearchQuery} />
         <SkinTones value={uiConfig.emojiSkinTone} onSelect={setEmojiSkinTone} />
+        <button className="emote_menu__close" onClick={onClose}>
+          <MdClose />
+        </button>
       </div>
       <div className="emote_menu__main">
         <div className="emote_menu__nav">
@@ -222,7 +226,11 @@ const Nav: React.FC<NavProps> = ({ categories, focusIndex, onSelect }) => {
     </li>
   ));
 
-  return <ul className="emote_menu_nav">{items}</ul>;
+  return (
+    <Scrollbars className="emo">
+      <ul className="emote_menu_nav">{items}</ul>
+    </Scrollbars>
+  );
 };
 
 interface PreviewProps {
@@ -479,7 +487,6 @@ const Scroller = React.forwardRef<ScrollerRef, ScrollerProps>(
           deferredMeasurementCache={sizeCache}
           rowHeight={sizeCache.rowHeight}
           rowCount={categories.length}
-          overscanRowCount={5}
           rowRenderer={renderRow}
           onRowsRendered={handleRowsRendered}
         />

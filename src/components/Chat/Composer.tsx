@@ -37,8 +37,10 @@ import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
+import usePortal from "use-portal";
 
 import { useChat } from "../../contexts/Chat";
+import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
@@ -316,7 +318,7 @@ const Composer: React.FC<ComposerProps> = ({
       {showMenu && (
         <div className="chat_composer__emote_menu" ref={emoteMenu}>
           <div className="chat_composer__emote_menu__content">
-            <EmoteMenu onSelect={insertEmote} />
+            <EmoteMenu onSelect={insertEmote} onClose={toggleMenu} />
           </div>
         </div>
       )}

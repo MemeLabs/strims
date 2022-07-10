@@ -448,11 +448,12 @@ const Combo: React.FC = () => {
 
 const Menu: React.FC = () => {
   const onSelect = (v: string) => console.log(v);
+  const onClose = () => console.log("close");
 
   return (
     <div className="chat_mockup">
       <Chat>
-        <EmoteMenu onSelect={onSelect} />
+        <EmoteMenu onSelect={onSelect} onClose={onClose} />
       </Chat>
     </div>
   );
