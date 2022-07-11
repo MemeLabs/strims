@@ -74,7 +74,7 @@
     &__list_item {
       cursor: pointer;
 
-      .emoji {
+      .chat__emoji {
         line-height: 1em;
       }
     }
@@ -170,7 +170,7 @@
       clip-path: inset(0 -10px -10px -10px);
     }
 
-    .emoji {
+    .chat__emoji {
       display: block;
       line-height: 1.2em;
       cursor: pointer;

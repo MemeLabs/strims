@@ -132,6 +132,7 @@
       background: var(--chat-spoiler-color, black);
 
       & > .chat__emote,
+      & > .chat__emoji,
       & > .chat__emote_container,
       & > .chat__message__code,
       & > .chat__message__link {
@@ -144,6 +145,7 @@
         color: transparent;
 
         & > .chat__emote,
+        & > .chat__emoji,
         & > .chat__emote_container,
         & > .chat__message__code,
         & > .chat__message__link {

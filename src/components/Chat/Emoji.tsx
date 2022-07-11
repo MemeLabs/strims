@@ -10,7 +10,7 @@ export type EmojiProps = React.ComponentProps<"span">;
 
 const Emoji: React.FC<EmojiProps> = ({ children, className, ...props }) => {
   return (
-    <span className={clsx("emoji", className)} {...props}>
+    <span className={clsx("chat__emoji", className)} {...props}>
       {children}
     </span>
   );

@@ -190,7 +190,7 @@ const initialState: State = {
   mainTopics: [],
 };
 
-const defaultCommands = [
+const roomCommands = [
   "help",
   "emotes",
   "me",
@@ -303,7 +303,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         nextId: state.nextId + 1,
         rooms: new Map(state.rooms).set(key, {
           ...initialRoomState,
-          commands: defaultCommands,
+          commands: roomCommands,
           id: state.nextId,
           topic,
           messageSizeCache: new ChatCellMeasurerCache(),
