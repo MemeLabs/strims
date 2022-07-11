@@ -94,6 +94,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
               modifiers={room.modifiers}
               tags={room.tags}
               nicks={room.nicks}
+              commands={room.commands}
               onMessage={roomActions.sendMessage}
             />
           </div>

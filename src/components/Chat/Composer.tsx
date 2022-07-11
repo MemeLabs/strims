@@ -37,39 +37,12 @@ import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import urlRegex from "url-regex-safe";
-import usePortal from "use-portal";
 
 import { useChat } from "../../contexts/Chat";
-import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteMenu from "./EmoteMenu";
-
-const commands = [
-  "help",
-  "emotes",
-  "me",
-  "message",
-  "msg",
-  "ignore",
-  "unignore",
-  "highlight",
-  "unhighlight",
-  "maxlines",
-  "mute",
-  "unmute",
-  "subonly",
-  "ban",
-  "unban",
-  "timestampformat",
-  "tag",
-  "untag",
-  "exit",
-  "hideemote",
-  "unhideemote",
-  "spoiler",
-];
 
 const initialValue: Descendant[] = [
   {
@@ -94,6 +67,7 @@ interface ComposerProps {
   modifiers: string[];
   nicks: string[];
   tags: string[];
+  commands: string[];
   maxAutoCompleteResults?: number;
 }
 
@@ -103,6 +77,7 @@ const Composer: React.FC<ComposerProps> = ({
   modifiers,
   nicks,
   tags,
+  commands,
   maxAutoCompleteResults = 10,
 }) => {
   const { t } = useTranslation();

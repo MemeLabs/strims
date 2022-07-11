@@ -14,6 +14,10 @@ import (
 	"mvdan.cc/xurls/v2"
 )
 
+func ExtractMessageEntities(msg string) *chatv1.Message_Entities {
+	return newEntityExtractor().Extract(msg)
+}
+
 func newEntityExtractor() *entityExtractor {
 	return &entityExtractor{
 		parserCtx:         parser.NewParserContext(parser.ParserContextValues{}),

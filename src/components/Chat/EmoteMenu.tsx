@@ -247,7 +247,7 @@ const Preview: React.FC<PreviewProps> = ({ meme }) => {
         <div className="emote_menu_preview__image">
           <Emoji>{meme.emoji.unicode}</Emoji>
         </div>
-        <div>{meme.emoji.label}</div>
+        <div className="emote_menu_preview__name">{meme.emoji.label}</div>
       </div>
     );
   } else {
@@ -258,8 +258,13 @@ const Preview: React.FC<PreviewProps> = ({ meme }) => {
           <Emote name={name} />
         </div>
         <div>
-          <div>{name}</div>
-          <div>{contributor?.name}</div>
+          <div className="emote_menu_preview__name">{name}</div>
+          {contributor?.name && (
+            <div className="emote_menu_preview__contributor">
+              <span className="emote_menu_preview__contributor__label">by:</span>
+              <span className="emote_menu_preview__contributor__name">{contributor?.name}</span>
+            </div>
+          )}
         </div>
       </div>
     );

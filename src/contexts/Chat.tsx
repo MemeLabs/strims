@@ -64,6 +64,7 @@ export interface ThreadState {
   modifiers: string[];
   nicks: string[];
   tags: string[];
+  commands: string[];
   errors: Error[];
   state: ThreadInitState;
   label: string;
@@ -75,6 +76,7 @@ export interface WhisperThreadState extends ThreadState {
   networkKeys: Uint8Array[];
   peerKey: Uint8Array;
   thread: WhisperThread;
+  messageIndex: Map<bigint, Message>;
 }
 
 export interface RoomThreadState extends ThreadState {
@@ -136,6 +138,7 @@ const initialRoomState: ThreadState = {
   modifiers: [],
   nicks: [],
   tags: [],
+  commands: [],
   errors: [],
   state: ThreadInitState.NEW,
   label: "",
@@ -186,6 +189,31 @@ const initialState: State = {
   popoutTopicCapacity: 0,
   mainTopics: [],
 };
+
+const defaultCommands = [
+  "help",
+  "emotes",
+  "me",
+  "message",
+  "msg",
+  "ignore",
+  "unignore",
+  "highlight",
+  "unhighlight",
+  "maxlines",
+  "mute",
+  "unmute",
+  "subonly",
+  "ban",
+  "unban",
+  "timestampformat",
+  "tag",
+  "untag",
+  "exit",
+  "hideemote",
+  "unhideemote",
+  "spoiler",
+];
 
 type ChatActions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
@@ -275,6 +303,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         nextId: state.nextId + 1,
         rooms: new Map(state.rooms).set(key, {
           ...initialRoomState,
+          commands: defaultCommands,
           id: state.nextId,
           topic,
           messageSizeCache: new ChatCellMeasurerCache(),
@@ -316,6 +345,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           peerKey: peerKey,
           networkKeys: networkKeys,
           thread: new WhisperThread(),
+          messageIndex: new Map(),
         }),
         mainTopics: [...state.mainTopics, topic],
         mainActiveTopic: topic,
@@ -448,10 +478,24 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           thread: res.body.threadUpdate,
           label: res.body.threadUpdate.alias,
         };
-      case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
-        return reduceMessage(thread, state, res.body.whisperUpdate.message);
-      case WatchWhispersResponse.BodyCase.WHISPER_DELETE:
-      // TODO fallthrough
+      case WatchWhispersResponse.BodyCase.WHISPER_UPDATE: {
+        const { id, message } = res.body.whisperUpdate;
+        const messageIndex = new Map(thread.messageIndex).set(id, message);
+        return {
+          ...thread,
+          messageIndex,
+          messages: Array.from(messageIndex.values()),
+        };
+      }
+      case WatchWhispersResponse.BodyCase.WHISPER_DELETE: {
+        const messageIndex = new Map(thread.messageIndex);
+        messageIndex.delete(res.body.whisperDelete.recordId);
+        return {
+          ...thread,
+          messageIndex,
+          messages: Array.from(messageIndex.values()),
+        };
+      }
       default:
         return thread;
     }
@@ -534,6 +578,7 @@ const createWhisperActions = (
       ...whisper,
       thread,
       label: thread.alias,
+      messageIndex: new Map(whispers.map(({ id, message }) => [id, message])),
       messages: whispers.map(({ message }) => message),
       state: ThreadInitState.OPEN,
     }));

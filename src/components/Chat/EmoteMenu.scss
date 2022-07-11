@@ -167,6 +167,7 @@
       width: 32px;
       padding-bottom: 4px;
       box-shadow: var(--shadow-elevation-2);
+      clip-path: inset(0 -10px -10px -10px);
     }
 
     .emoji {
@@ -217,7 +218,22 @@
     margin: 0 0.4rem;
   }
 
-  &__contributor_link {
-    margin-left: 0.4rem;
+  &__name,
+  &__contributor {
+    line-height: 1.2em;
+  }
+
+  &__contributor {
+    font-size: 0.8rem;
+
+    &__label {
+      color: var(--color-grey-5);
+      display: inline-block;
+      margin-right: 0.2rem;
+    }
+
+    &__name {
+      color: var(--color-grey-7);
+    }
   }
 }

@@ -346,6 +346,7 @@ func NewChatWhisperRecord(
 	peerKey []byte,
 	cert *certificate.Certificate,
 	body string,
+	entities *chatv1.Message_Entities,
 ) (*chatv1.WhisperRecord, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -368,7 +369,7 @@ func NewChatWhisperRecord(
 			PeerKey:    cert.Key,
 			Nick:       cert.Subject,
 			Body:       body,
-			Entities:   &chatv1.Message_Entities{},
+			Entities:   entities,
 		},
 	}, nil
 }

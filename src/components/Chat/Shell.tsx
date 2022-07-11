@@ -73,6 +73,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
           modifiers={room.modifiers}
           tags={room.tags}
           nicks={room.nicks}
+          commands={room.commands}
           onMessage={roomActions.sendMessage}
         />
       </div>

@@ -12,6 +12,7 @@ import (
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/app"
+	"github.com/MemeLabs/strims/internal/chat"
 	"github.com/MemeLabs/strims/internal/dao"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
@@ -440,6 +441,7 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		peerCert.Key,
 		cert,
 		req.Body,
+		chat.ExtractMessageEntities(req.Body),
 	)
 	if err != nil {
 		return nil, err

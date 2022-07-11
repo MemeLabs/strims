@@ -74,6 +74,7 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 		peerCert.Key,
 		peerCert,
 		req.Body,
+		ExtractMessageEntities(req.Body),
 	)
 	if err != nil {
 		return nil, errWhisperInternalError
