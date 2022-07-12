@@ -463,7 +463,7 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 		return nil, err
 	}
 
-	ch := make(chan *networkv1directory.FrontendWatchListingUsersResponse, 1)
+	ch := make(chan *networkv1directory.FrontendWatchListingUsersResponse, 128)
 	go func() {
 		defer s.app.Directory().StopNotifyingListingUserEvent(networkID, listing.ID, events)
 
@@ -488,26 +488,36 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 					return
 				}
 
-				res := &networkv1directory.FrontendWatchListingUsersResponse{
-					Users: []*networkv1directory.FrontendWatchListingUsersResponse_User{{
-						Id:      e.User.ID,
-						Alias:   e.User.Alias,
-						PeerKey: e.User.PeerKey,
-					}},
-				}
-				switch e.Type {
-				case directory.JoinUserEventType:
-					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_JOIN
-				case directory.PartUserEventType:
-					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_PART
-				case directory.RenameUserEventType:
-					res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_RENAME
-				}
+				es := chanutil.AppendAll([]directory.UserEvent{e}, events)
+				for len(es) > 0 {
+					res := &networkv1directory.FrontendWatchListingUsersResponse{}
+					switch es[0].Type {
+					case directory.JoinUserEventType:
+						res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_JOIN
+					case directory.PartUserEventType:
+						res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_PART
+					case directory.RenameUserEventType:
+						res.Type = networkv1directory.FrontendWatchListingUsersResponse_USER_EVENT_TYPE_RENAME
+					}
 
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- res:
+					n := slices.IndexFunc(es, func(e directory.UserEvent) bool { return e.Type != es[0].Type })
+					if n == -1 {
+						n = len(es)
+					}
+					for i := 0; i < n; i++ {
+						res.Users = append(res.Users, &networkv1directory.FrontendWatchListingUsersResponse_User{
+							Id:      es[i].User.ID,
+							Alias:   es[i].User.Alias,
+							PeerKey: es[i].User.PeerKey,
+						})
+					}
+					es = es[n:]
+
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- res:
+					}
 				}
 			}
 		}

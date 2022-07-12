@@ -232,9 +232,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 					break
 				}
 
-				t.lock.Lock()
-				s.HandleEvent(b) // TODO: syncutil map?
-				t.lock.Unlock()
+				s.HandleEvent(b)
 
 				t.observers.EmitLocal(event.DirectoryEvent{
 					NetworkID:  network.Id,
@@ -242,7 +240,9 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 					Broadcast:  b,
 				})
 			}
+
 			stop()
+			s.Reset()
 		}
 	}()
 }

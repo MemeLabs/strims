@@ -134,6 +134,22 @@ func (d *syndicateStore) HandleEvent(b *networkv1directory.EventBroadcast) {
 	}
 }
 
+func (d *syndicateStore) Reset() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, l := range d.listings {
+		for _, v := range l.Viewers {
+			d.emitUserEvent(UserEvent{PartUserEventType, v.User, l.Listing})
+		}
+		d.listingObservers.Emit(ListingEvent{UnpublishListingEventType, l.Listing})
+	}
+
+	d.listings = map[uint64]*syndicateListing{}
+	d.viewers = map[uint64]*syndicateViewer{}
+	d.viewersByPeerKey = hashmap.New[[]byte, *syndicateViewer](hashmap.NewByteInterface[[]byte]())
+}
+
 func (d *syndicateStore) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
