@@ -7,7 +7,7 @@ import "../lib/i18n";
 import { Readable, Writable } from "stream";
 
 import React from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import registerServiceWorker, {
   ServiceWorkerNoSupportError,
 } from "service-worker-loader!../web/sw";
@@ -68,5 +68,5 @@ void registerServiceWorker({ scope: "/" })
   root.setAttribute("id", "root");
   document.body.appendChild(root);
 
-  ReactDOM.render(<App client={client} />, root);
+  createRoot(root).render(<App client={client} />);
 })();

@@ -4,7 +4,7 @@
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import { Base64 } from "js-base64";
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useUpdateEffect } from "react-use";
 
@@ -57,6 +57,7 @@ const initChatState = (messages?: MessageEmitter): [ChatService, FrontendClient]
 interface ChatProps {
   messages?: MessageEmitter;
   shouldRenderStyleSheet?: boolean;
+  children: ReactNode;
 }
 
 const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet = true }) => {
@@ -270,12 +271,6 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
     </>
   );
 };
-
-interface EmoteTesterFormProps {
-  url: string;
-  image: ImageValue;
-  legacyEmoteSpacing: boolean;
-}
 
 const EmoteTester: React.FC = () => {
   const messages = useMemo(() => initEmoteTesterMessages(), []);

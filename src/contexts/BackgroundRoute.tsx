@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Location, useLocation, useNavigate } from "react-router";
 
 export interface State {
@@ -20,7 +20,11 @@ export interface BackgroundRouteContextValue extends State {
 
 const BackgroundRouteContext = createContext<BackgroundRouteContextValue>(null);
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const [state, setState] = useState<State>(initialState);
   const location = useLocation();
   const navigate = useNavigate();

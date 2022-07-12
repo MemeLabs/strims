@@ -4,7 +4,7 @@
 import "./Emote.scss";
 
 import clsx from "clsx";
-import React from "react";
+import React, { ReactNode } from "react";
 
 import { Modifier } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
@@ -15,6 +15,7 @@ type EmoteProps = {
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
   compactSpacing?: boolean;
+  children?: ReactNode;
   [key: string]: any;
 };
 

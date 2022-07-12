@@ -19,6 +19,7 @@ interface ModalProps {
   className?: string;
   open?: boolean;
   onClose?: () => void;
+  children: ReactNode;
 }
 
 const Modal: React.FC<ModalProps> = ({

@@ -3,12 +3,10 @@
 
 import "./VideoPlayer.scss";
 
-import { Base64 } from "js-base64";
 import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
-import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useMediaRelay from "../../hooks/useMediaRelay";

@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React from "react";
+import React, { ReactNode } from "react";
 
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { useCall } from "./FrontendApi";
@@ -51,7 +51,11 @@ export const useProfile = (): [UseProfileState, UseProfileActions] => {
   return [state, actions];
 };
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const [state, setState] = React.useState(initialState);
 
   const handleDone = (profile?: Profile) =>

@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
 import { useStableCallback } from "../hooks/useStableCallback";
@@ -38,7 +38,11 @@ const reduceState = (prev: State, { body }: Event): State => {
   }
 };
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const [state, setState] = useState(initialState);
 
   const client = useClient();

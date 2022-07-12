@@ -87,9 +87,9 @@ const VideoProgressBar: React.FC<VideoProgressBarProps> = ({ videoState, videoCo
     dragging,
   });
 
-  const clampValue = (value) => Math.min(bufferEnd, value);
+  const clampValue = (value: number) => Math.min(bufferEnd, value);
 
-  const handleUpdate = ([newValue]) => {
+  const handleUpdate = ([newValue]: number[]) => {
     const clampedValue = clampValue(newValue);
     if (dragging && clampedValue !== value) {
       setCurrentTime(clampedValue);

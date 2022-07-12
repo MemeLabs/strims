@@ -13,18 +13,18 @@ import React, { useCallback, useRef } from "react";
 import { FreeMode, Mousewheel } from "swiper";
 import { Swiper, SwiperSlide } from "swiper/react";
 
-import { ThreadProviderProps, ThreadState, useChat } from "../../contexts/Chat";
+import { ThreadProviderProps, ThreadState, Topic, useChat } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import Badge from "../Badge";
 import { MenuItem, useContextMenu } from "../ContextMenu";
 
-interface RoomCarouselGemProps extends ThreadProviderProps {
+interface RoomCarouselGemProps extends Topic {
   color: string;
   label: string;
   unreadCount: number;
-  onChange: (topic: ThreadProviderProps) => void;
+  onChange: (topic: Topic) => void;
   selected: boolean;
 }
 

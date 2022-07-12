@@ -279,9 +279,9 @@ class Emitter extends PassThrough {
     }, ivl);
   }
 
-  destroy(): void {
+  destroy(e: Error) {
     clearInterval(this.tid);
-    super.destroy();
+    return super.destroy(e);
   }
 }
 

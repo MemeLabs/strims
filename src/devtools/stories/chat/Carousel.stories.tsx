@@ -3,20 +3,23 @@
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
-import React, { useEffect, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 
 import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import RoomCarousel from "../../../components/Chat/RoomCarousel";
 import { Provider as ChatProvider, useChat } from "../../../contexts/Chat";
-import { ThreadProviderProps } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../../lib/stream";
 import ChatService from "../../mocks/chat/service";
 import DirectoryService from "../../mocks/directory/service";
 
-const Context: React.FC = ({ children }) => {
+interface ContextProps {
+  children: ReactNode;
+}
+
+const Context: React.FC<ContextProps> = ({ children }) => {
   const [[chatService, client]] = useState((): [ChatService, FrontendClient] => {
     const svc = new ServiceRegistry();
     const chatService = new ChatService();

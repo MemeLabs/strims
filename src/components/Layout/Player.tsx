@@ -4,7 +4,7 @@
 import "./Player.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useContext, useEffect, useRef } from "react";
+import React, { ReactNode, useCallback, useContext, useEffect, useRef } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { BsBoxArrowUpRight } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
@@ -16,7 +16,11 @@ import { PlayerContext, PlayerMode } from "../../contexts/Player";
 import EmbedPlayer from "../EmbedPlayer";
 import VideoPlayer from "../VideoPlayer";
 
-const Player: React.FC = ({ children }) => {
+interface PlayerProps {
+  children?: ReactNode;
+}
+
+const Player: React.FC<PlayerProps> = ({ children }) => {
   const { path, source, setSource, mode, setMode } = useContext(PlayerContext);
   const { theaterMode, toggleShowVideo } = useLayout();
 

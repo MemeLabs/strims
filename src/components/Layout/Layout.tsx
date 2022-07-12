@@ -4,7 +4,7 @@
 import "./Layout.scss";
 
 import clsx from "clsx";
-import React, { RefCallback, useEffect, useState } from "react";
+import React, { ReactNode, RefCallback, useEffect, useState } from "react";
 
 import { useLayout, withLayoutContext } from "../../contexts/Layout";
 import { DEVICE_TYPE, DeviceType, IS_PWA, OS } from "../../lib/userAgent";
@@ -67,6 +67,7 @@ interface ExtendedTouchEvent extends TouchEvent {
 interface LayoutProps {
   className: string;
   rootRef: RefCallback<HTMLElement>;
+  children: ReactNode;
 }
 
 const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {

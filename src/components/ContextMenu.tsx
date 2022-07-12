@@ -4,7 +4,7 @@
 import "./ContextMenu.scss";
 
 import clsx from "clsx";
-import React, { ReactHTML, useCallback, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import usePortal from "use-portal";
 
 import { useLayout } from "../contexts/Layout";
@@ -14,6 +14,7 @@ interface MenuProps {
   onClose: () => void;
   x: number;
   y: number;
+  children: ReactNode;
 }
 
 const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
@@ -39,6 +40,10 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
   );
 };
 
+interface ContextMenuProps {
+  children: ReactNode;
+}
+
 export const useContextMenu = () => {
   const [{ isOpen, ...position }, setState] = useState({ isOpen: false, x: 0, y: 0 });
 
@@ -49,7 +54,7 @@ export const useContextMenu = () => {
 
   const closeMenu = useCallback(() => setState({ isOpen: false, x: 0, y: 0 }), []);
 
-  const Menu: React.FC = useMemo(() => {
+  const Menu: React.FC<ContextMenuProps> = useMemo(() => {
     return isOpen
       ? ({ children }) => (
           <MenuPortal onClose={closeMenu} {...position}>

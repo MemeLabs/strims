@@ -4,7 +4,15 @@
 import { Readable, Writable } from "stream";
 
 import { DBSchema, IDBPDatabase, openDB } from "idb";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { FrontendClient } from "../apis/client";
 import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
@@ -51,6 +59,7 @@ export const SessionContext = createContext<[State, Ops]>(null);
 
 interface ProviderProps {
   apiDialer: APIDialer;
+  children: ReactNode;
 }
 
 interface LinkedProfilesDBSchema extends DBSchema {

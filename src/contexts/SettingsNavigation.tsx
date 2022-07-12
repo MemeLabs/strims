@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Location, useLocation as useRouterLocation } from "react-router-dom";
 
 interface NavigationPushOptions {
@@ -22,6 +22,7 @@ const NavigationContext = createContext<NavigationContextValue>(null);
 
 interface ProviderProps {
   initialPath: string;
+  children: ReactNode;
 }
 
 export const Provider: React.FC<ProviderProps> = ({ children, initialPath }) => {

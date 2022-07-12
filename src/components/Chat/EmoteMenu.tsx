@@ -6,7 +6,7 @@ import "./EmoteMenu.scss";
 import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import { escapeRegExp } from "lodash";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { BiSearch } from "react-icons/bi";
 import {

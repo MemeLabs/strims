@@ -3,13 +3,14 @@
 
 import "./NetworkNav.scss";
 
-import React, { RefObject, useMemo, useRef, useState } from "react";
+import React, { ReactNode, RefObject, useMemo, useRef, useState } from "react";
 import usePortal from "use-portal";
 
 import { useLayout } from "../../../contexts/Layout";
 
 export interface TooltipOverlayProps {
   anchor: RefObject<HTMLElement>;
+  children: ReactNode;
 }
 
 const TooltipOverlay: React.FC<TooltipOverlayProps> = ({ anchor, children }) => {
@@ -38,6 +39,7 @@ const TooltipOverlay: React.FC<TooltipOverlayProps> = ({ anchor, children }) => 
 interface TooltipProps {
   label: string;
   visible?: boolean;
+  children: ReactNode;
 }
 
 const Tooltip: React.FC<TooltipProps> = ({ children, label, visible = true }) => {

@@ -4,7 +4,7 @@
 import "./InputLabel.scss";
 
 import clsx from "clsx";
-import React, { ReactHTML } from "react";
+import React, { ReactHTML, ReactNode } from "react";
 
 export interface InputLabelProps {
   required?: boolean;
@@ -12,6 +12,7 @@ export interface InputLabelProps {
   description?: string;
   inputType?: string;
   component?: keyof ReactHTML;
+  children: ReactNode;
 }
 
 const InputLabel: React.FC<InputLabelProps> = ({

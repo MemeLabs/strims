@@ -1,7 +1,14 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { MouseEvent, MouseEventHandler, useCallback, useRef, useState } from "react";
+import React, {
+  MouseEvent,
+  MouseEventHandler,
+  ReactNode,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import ReactDOM from "react-dom";
 import { FiXSquare } from "react-icons/fi";
 import { useClickAway } from "react-use";
@@ -58,6 +65,7 @@ export interface PortletProps {
   isOpen: boolean;
   headerSize?: number;
   handleSize?: number;
+  children: ReactNode;
 }
 
 const Portlet: React.FC<PortletProps> = ({

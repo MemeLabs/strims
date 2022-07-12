@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { Suspense } from "react";
+import React, { ReactNode, Suspense } from "react";
 
 import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { Provider as BackgroundRouteProvider } from "../contexts/BackgroundRoute";
@@ -10,6 +10,7 @@ import { Provider as ThemeProvider } from "../contexts/Theme";
 
 export interface ProviderProps {
   apiDialer: APIDialer;
+  children: ReactNode;
 }
 
 const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => (

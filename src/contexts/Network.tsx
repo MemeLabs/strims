@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useCallback, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useCallback, useMemo, useState } from "react";
 
 import { Network, NetworkEvent, UIConfig } from "../apis/strims/network/v1/network";
 import { useClient } from "./FrontendApi";
@@ -19,7 +19,11 @@ interface Item {
   peerCount: number;
 }
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const client = useClient();
   const [items, setItems] = useState<Item[]>([]);
   const [config, setConfig] = useState<UIConfig>(null);

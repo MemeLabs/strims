@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { ComponentType } from "react";
+import React, { ReactNode } from "react";
 import { HashRouter, MemoryRouter } from "react-router-dom";
 
 import { DevToolsClient } from "../../apis/client";
@@ -11,9 +11,14 @@ import { Provider as ApiProvider } from "../contexts/DevToolsApi";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
-const Router: ComponentType = IS_PWA ? MemoryRouter : HashRouter;
+const Router = IS_PWA ? MemoryRouter : HashRouter;
 
-const Provider = ({ client, children }: { client: DevToolsClient; children: any }) => (
+interface ProviderProps {
+  client: DevToolsClient;
+  children: ReactNode;
+}
+
+const Provider: React.FC<ProviderProps> = ({ client, children }) => (
   <Router>
     <React.Suspense fallback={<LoadingMessage />}>
       <ApiProvider value={client}>

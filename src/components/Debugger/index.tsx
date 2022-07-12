@@ -15,7 +15,7 @@ import Portlet, { PortletProps } from "./Portlet";
 
 type Tab = "activity" | "swarms";
 
-type DebuggerProps = PortletProps;
+type DebuggerProps = Omit<PortletProps, "children">;
 
 const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
   const client = useClient();

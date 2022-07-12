@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import clsx from "clsx";
-import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import React, { ReactNode, Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Location, Navigate, Route, Routes, useLocation } from "react-router";
 import { NavLink } from "react-router-dom";
 import { useToggle } from "react-use";
@@ -176,7 +176,9 @@ const storybookRoutes = (location: Location, node: Nav, extend: Extend): React.R
   return routes;
 };
 
-interface StoryContainerProps extends WithThemeProps, WithRootRefProps {}
+interface StoryContainerProps extends WithThemeProps, WithRootRefProps {
+  children: ReactNode;
+}
 
 const StoryContainerBase: React.FC<StoryContainerProps> = ({ className, rootRef, children }) => (
   <div className={clsx(className, "storybook__content layout--pc")} ref={rootRef}>

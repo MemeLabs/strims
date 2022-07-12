@@ -4,7 +4,6 @@
 import React from "react";
 import { useParams } from "react-router-dom";
 
-import { Network } from "../../../apis/strims/network/v1/network";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkDirectoryForm, { NetworkDirectoryFormData } from "./NetworkDirectoryForm";

@@ -7,7 +7,7 @@ import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { Readable, Writable } from "stream";
 
 import React from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 
 import { APIDialer, ClientConstructor } from "../contexts/Session";
 import { WSReadWriter } from "../lib/ws";
@@ -48,5 +48,5 @@ window.addEventListener("DOMContentLoaded", () => {
   root.setAttribute("id", "root");
   document.body.appendChild(root);
 
-  ReactDOM.render(<App apiDialer={apiDialer} />, root);
+  createRoot(root).render(<App apiDialer={apiDialer} />);
 });

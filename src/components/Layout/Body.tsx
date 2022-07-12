@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { Suspense, useEffect } from "react";
+import React, { ReactNode, Suspense, useEffect } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { Outlet } from "react-router";
 import { useToggle } from "react-use";
@@ -14,7 +14,11 @@ import Chat from "./Chat";
 import ChatBar from "./ChatBar";
 import Player from "./Player";
 
-export const LayoutBody: React.FC = ({ children }) => {
+interface LayoutBodyProps {
+  children?: ReactNode;
+}
+
+export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
   const { showVideo, overlayState, setOverlayState } = useLayout();
 
   const handleDragStateChange = (state: DragState) => {

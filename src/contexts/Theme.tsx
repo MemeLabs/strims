@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useContext, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 
 type ColorScheme = "dark" | "light";
@@ -13,7 +13,11 @@ export interface ThemeState {
 
 const ThemeContext = createContext<ThemeState>(null);
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const savedTheme = useMemo(() => window.localStorage.getItem("theme") as ColorScheme, []);
   const [colorScheme, setColorScheme] = useState<ColorScheme>(savedTheme || "dark");
 

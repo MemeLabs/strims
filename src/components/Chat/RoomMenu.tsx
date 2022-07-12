@@ -13,7 +13,7 @@ import { HiOutlineUser } from "react-icons/hi";
 
 import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
-import { ThreadProviderProps, useChat } from "../../contexts/Chat";
+import { ThreadProviderProps, Topic, useChat } from "../../contexts/Chat";
 import { useCall } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -50,7 +50,7 @@ const Tabs = <T extends number>({ onChange, active, tabs }: TabsProps<T>) => (
 );
 
 interface RoomMenuPropsBase {
-  onChange?: (item: ThreadProviderProps) => void;
+  onChange?: (item: Topic) => void;
 }
 
 interface RoomMenuProps extends RoomMenuPropsBase {

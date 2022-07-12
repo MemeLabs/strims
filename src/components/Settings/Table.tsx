@@ -4,16 +4,26 @@
 import "./Table.scss";
 
 import clsx from "clsx";
-import React from "react";
+import React, { ReactNode } from "react";
 import { BsThreeDots } from "react-icons/bs";
 import { MdChevronLeft } from "react-icons/md";
 import { Link } from "react-router-dom";
 
 import Dropdown from "../Dropdown";
 
-export const Table: React.FC = ({ children }) => <table className="thing_table">{children}</table>;
+interface TableProps {
+  children: ReactNode;
+}
 
-export const MenuCell: React.FC = ({ children }) => (
+export const Table: React.FC<TableProps> = ({ children }) => (
+  <table className="thing_table">{children}</table>
+);
+
+interface MenuCellProps {
+  children: ReactNode;
+}
+
+export const MenuCell: React.FC<MenuCellProps> = ({ children }) => (
   <td className="thing_table__row_menu">
     <Dropdown baseClassName="thing_table_item_dropdown" anchor={<BsThreeDots />} items={children} />
   </td>
@@ -22,6 +32,7 @@ export const MenuCell: React.FC = ({ children }) => (
 export interface TableTitleBarProps {
   label: string;
   backLink?: string;
+  children?: ReactNode;
 }
 
 export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, children }) => (
@@ -40,6 +51,7 @@ export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, c
 
 export interface TableCellProps {
   truncate?: boolean;
+  children: ReactNode;
 }
 
 export const TableCell: React.FC<TableCellProps> = ({ truncate, children }) => {
@@ -59,6 +71,7 @@ export const TableCell: React.FC<TableCellProps> = ({ truncate, children }) => {
 
 export interface TableMenuProps {
   label: string;
+  children: ReactNode;
 }
 
 export const TableMenu: React.FC<TableMenuProps> = ({ label = "Create", children }) => (

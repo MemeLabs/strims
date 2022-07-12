@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
-import React, { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ServiceSlug, slugToService } from "../lib/directory";
 import { useClient } from "./FrontendApi";
@@ -43,7 +43,11 @@ interface PlayerValue {
 
 export const PlayerContext = createContext<PlayerValue>(null);
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const client = useClient();
   const [path, setPath] = useState<string>("");
   const [source, setSourceState] = useState<PlayerSource>(null);

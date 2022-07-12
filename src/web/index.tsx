@@ -7,7 +7,7 @@ import "../lib/i18n";
 import { Readable, Writable } from "stream";
 
 import React from "react";
-import ReactDOM from "react-dom";
+import { Root, createRoot } from "react-dom/client";
 import registerServiceWorker from "service-worker-loader!./sw";
 
 import { APIDialer, ClientConstructor } from "../contexts/Session";
@@ -55,20 +55,21 @@ const apiDialer: APIDialer = {
 };
 
 class Runner {
-  root: HTMLDivElement;
+  root: Root;
 
   constructor() {
-    this.root = document.createElement("div");
-    this.root.setAttribute("id", "root");
-    document.body.appendChild(this.root);
+    const root = document.createElement("div");
+    root.setAttribute("id", "root");
+    document.body.appendChild(root);
+    this.root = createRoot(root);
   }
 
   start() {
-    ReactDOM.render(<App apiDialer={apiDialer} />, this.root);
+    this.root.render(<App apiDialer={apiDialer} />);
   }
 
   stop() {
-    ReactDOM.unmountComponentAtNode(this.root);
+    this.root.unmount();
   }
 
   restart() {

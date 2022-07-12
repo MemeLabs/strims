@@ -6,9 +6,9 @@ import "./Header.scss";
 import clsx from "clsx";
 import React, { useCallback, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { FiActivity, FiBell, FiCloud, FiUser } from "react-icons/fi";
+import { FiActivity, FiUser } from "react-icons/fi";
 import { MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
-import { Link, NavLink } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient } from "../../contexts/FrontendApi";

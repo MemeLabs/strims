@@ -24,6 +24,7 @@ const LINK_SHORTEN_AFFIX_LENGTH = 35;
 interface MessageLinkProps {
   entity: chatv1_Message.Entities.Link;
   shouldShorten: boolean;
+  children: ReactNode;
 }
 
 const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShorten }) => {
@@ -53,6 +54,7 @@ interface MessageEmoteProps {
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
   compactSpacing?: boolean;
+  children: ReactNode[];
 }
 
 const MessageEmote: React.FC<MessageEmoteProps> = ({
@@ -75,6 +77,7 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
 
 interface MessageEmojiProps {
   entity: chatv1_Message.Entities.Emoji;
+  children: ReactNode[];
 }
 
 // TODO: load shortcode from emoji in chat context
@@ -83,6 +86,7 @@ const MessageEmoji: React.FC<MessageEmojiProps> = ({ children }) => <Emoji>{chil
 interface MessageNickProps {
   entity: chatv1_Message.Entities.Nick;
   normalizeCase: boolean;
+  children: ReactNode[];
   onClick: (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => void;
 }
 
@@ -98,6 +102,7 @@ const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCa
 
 interface MessageTagProps {
   entity: chatv1_Message.Entities.Tag;
+  children: ReactNode[];
 }
 
 const MessageTag: React.FC<MessageTagProps> = ({ children }) => (
@@ -110,11 +115,11 @@ const SPOILER_SUFFIX = /[|\s]+$/;
 const CODE_PREFIX = /^[`\s]+/;
 const CODE_SUFFIX = /[`\s]+$/;
 
-const trimTextNode = (node: React.ReactNode, rx: RegExp) =>
+const trimTextNode = (node: ReactNode, rx: RegExp): ReactNode =>
   typeof node === "string" ? node.replace(rx, "") : node;
 
-const trimChildren = (children: React.ReactNode, prefix: RegExp, suffix: RegExp) => {
-  const nodes = React.Children.toArray(children);
+const trimChildren = (children: ReactNode, prefix: RegExp, suffix: RegExp) => {
+  const nodes: ReactNode[] = React.Children.toArray(children);
   nodes[0] = trimTextNode(nodes[0], prefix);
   nodes[nodes.length - 1] = trimTextNode(nodes[nodes.length - 1], suffix);
   return nodes;
@@ -122,6 +127,7 @@ const trimChildren = (children: React.ReactNode, prefix: RegExp, suffix: RegExp)
 
 interface MessageSpoilerProps {
   entity: chatv1_Message.Entities.Spoiler;
+  children: ReactNode[];
 }
 
 const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children }) => {
@@ -143,6 +149,7 @@ const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children }) => {
 
 interface MessageCodeBlockProps {
   entity: chatv1_Message.Entities.CodeBlock;
+  children: ReactNode[];
 }
 
 const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
@@ -151,6 +158,7 @@ const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
 
 interface MessageGreenTextProps {
   entity: chatv1_Message.Entities.GenericEntity;
+  children: ReactNode[];
 }
 
 const MessageGreenText: React.FC<MessageGreenTextProps> = ({ children }) => (
@@ -159,22 +167,22 @@ const MessageGreenText: React.FC<MessageGreenTextProps> = ({ children }) => (
 
 interface MessageSelfProps {
   entity: chatv1_Message.Entities.GenericEntity;
+  children: ReactNode[];
 }
 
 const MessageSelf: React.FC<MessageSelfProps> = ({ children }) => (
   <span className="chat__message__self">{children}</span>
 );
 
-type EntityComponent =
-  | typeof MessageLink
-  | typeof MessageEmote
-  | typeof MessageEmoji
-  | typeof MessageNick
-  | typeof MessageTag
-  | typeof MessageSpoiler
-  | typeof MessageCodeBlock
-  | typeof MessageGreenText
-  | typeof MessageSelf;
+type Entity =
+  | chatv1_Message.Entities.Link
+  | chatv1_Message.Entities.Emote
+  | chatv1_Message.Entities.Emoji
+  | chatv1_Message.Entities.Nick
+  | chatv1_Message.Entities.Tag
+  | chatv1_Message.Entities.Spoiler
+  | chatv1_Message.Entities.CodeBlock
+  | chatv1_Message.Entities.GenericEntity;
 
 class MessageFormatter {
   private bounds: number[];
@@ -219,10 +227,10 @@ class MessageFormatter {
 
   // replaces the message body from the bounds in the supplied entity with a
   // react node of type C.
-  public insertEntity<C extends EntityComponent>(
+  public insertEntity<C extends React.ComponentType<{ entity: E }>, E extends Entity>(
     component: C,
-    entity: React.ComponentProps<C>["entity"],
-    props?: Omit<React.ComponentProps<C>, "entity">
+    entity: E,
+    props?: Omit<React.ComponentProps<C>, "entity" | "children">
   ) {
     const { start, end } = entity.bounds;
     const startIndex = this.splitSpan(start);

@@ -35,10 +35,11 @@
     "@types/lodash": "^4.14.182",
     "@types/prismjs": "^1.26.0",
     "@types/qs": "^6.9.7",
+    "@types/react": "^18.0.15",
     "@types/react-beautiful-dnd": "^13.1.2",
     "@types/react-custom-scrollbars": "^4.0.10",
     "@types/react-document-title": "^2.0.5",
-    "@types/react-dom": "^18.0.5",
+    "@types/react-dom": "^18.0.6",
     "@types/react-dropzone": "^5.1.0",
     "@types/react-helmet": "^6.1.5",
     "@types/react-router-dom": "^5.3.3",
@@ -166,7 +167,7 @@
     "worker-loader": "^3.0.8"
   },
   "resolutions": {
-    "@babel/runtime": "^7.12.5"
+    "@types/react": "^18.0.15"
   },
   "browserslist": [
     "defaults"

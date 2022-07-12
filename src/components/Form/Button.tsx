@@ -4,9 +4,13 @@
 import "./Button.scss";
 
 import clsx from "clsx";
-import React, { ComponentProps } from "react";
+import React, { ComponentProps, ReactNode } from "react";
 
-export const ButtonSet: React.FC = ({ children }: ButtonProps) => (
+interface ButtonSetProps {
+  children: ReactNode;
+}
+
+export const ButtonSet: React.FC<ButtonSetProps> = ({ children }: ButtonProps) => (
   <div className="input_label input_buttonset">{children}</div>
 );
 

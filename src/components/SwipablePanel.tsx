@@ -6,7 +6,14 @@ import "./SwipablePanel.scss";
 import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { isEqual } from "lodash";
-import React, { useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useToggle } from "react-use";
 
 import useUpdate from "../hooks/useUpdate";
@@ -42,6 +49,7 @@ interface SwipablePaneProps {
   onDragStateChange?: (state: DragState) => void;
   preventScroll?: boolean;
   filterDeviceTypes?: DeviceType[] | null;
+  children: ReactNode;
 }
 
 const SwipablePanel: React.FC<SwipablePaneProps> = ({

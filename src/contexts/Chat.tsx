@@ -5,7 +5,15 @@ import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { CompactEmoji, MessagesDataset, ShortcodesDataset } from "emojibase";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { FrontendClient } from "../apis/client";
 import {
@@ -897,7 +905,11 @@ const createRoomActions = (
   };
 };
 
-export const Provider: React.FC = ({ children }) => {
+interface ProviderProps {
+  children: ReactNode;
+}
+
+export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const client = useClient();
   const [state, setState] = useState(initialState);
   const actions = useStableCallbacks(createGlobalActions(client, setState));
@@ -944,7 +956,9 @@ export const useChat = (): [State, ChatActions, StateDispatcher] => useContext(C
 
 export const ChatConsumer = ChatContext.Consumer;
 
-export type ThreadProviderProps = Topic;
+export interface ThreadProviderProps extends Topic {
+  children: ReactNode;
+}
 
 export const ThreadProvider: React.FC<ThreadProviderProps> = (props) => {
   switch (props.type) {
