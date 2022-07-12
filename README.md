@@ -4,15 +4,13 @@ distributed live streaming
 
 ## headless service
 
-1.) generate a self signed root certificate using the instructions in `hack/tls`
+1.) generate a self signed root certificate using the instructions in [/hack/tls](/hack/tls)
 
 2.) copy `hack/svc/config.sample.yaml` to `hack/svc/config.yaml`
 
 3.) create a user profile
-  - on windows you may run into permissions issues on this step if you run this command from inside the /hack/svc folder. Instead you can run this from the root of the container: /workspaces/strims
-  - you can also generate the certificates outside the container process, and then copy & paste the contents into files inside the container
-  - you will also have to install the certificates on the root machine (i.e outside the container) using MMC.exe, following the steps [here](/hack/tls/README.md)
 ```sh
+$ cd /workspaces/strims
 $ go run ./cmd/svc add-profile -config ./hack/svc/config.yaml -username dev -password secret
 2022/06/01 13:48:18 74880235203461122
 2022/06/01 13:48:18 DnLta2pK2GlRLHTobM2jKecX/XNqD4OGDjwWSOs0o7s=
@@ -54,7 +52,7 @@ git config --global --add safe.directory /workspaces/strims
 
 8.) toggle the advanced `advanced` options and enter `wss://0.0.0.0:8083/api` or the ip of your dev machine or localhost.
   - on windows, this address might have to be set as be `wss://localhost:8083/api`
-  
+
 ## streaming
 
 1.) create a network
