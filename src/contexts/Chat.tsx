@@ -479,6 +479,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           label: res.body.threadUpdate.alias,
         };
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE: {
+        if (thread.visible) {
+          void client.chat.markWhispersRead({ threadId: thread.thread.id });
+        }
+
         const { id, message } = res.body.whisperUpdate;
         const messageIndex = new Map(thread.messageIndex).set(id, message);
         return {
