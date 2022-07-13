@@ -5,7 +5,6 @@ import "./ChatBar.scss";
 
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import { isEqual } from "lodash";
 import React, { useCallback, useEffect, useRef } from "react";
 import { MdClose } from "react-icons/md";
 import { useToggle } from "react-use";
@@ -43,10 +42,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
         message={roomActions.getMessage(index)}
         style={style}
         isMostRecent={index === roomActions.getMessageCount() - 1}
-        isContinued={isEqual(
-          roomActions.getMessage(index).peerKey,
-          roomActions.getMessage(index + 1)?.peerKey
-        )}
+        isContinued={roomActions.getMessageIsContinued(index)}
       />
     ),
     [uiConfig, room.styles]

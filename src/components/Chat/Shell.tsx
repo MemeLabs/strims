@@ -4,7 +4,6 @@
 import "./Shell.scss";
 
 import clsx from "clsx";
-import { isEqual } from "lodash";
 import React, { useCallback, useEffect, useRef } from "react";
 
 import { ThreadInitState, useChat, useRoom } from "../../contexts/Chat";
@@ -40,10 +39,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         message={roomActions.getMessage(index)}
         style={style}
         isMostRecent={index === roomActions.getMessageCount() - 1}
-        isContinued={isEqual(
-          roomActions.getMessage(index).peerKey,
-          roomActions.getMessage(index + 1)?.peerKey
-        )}
+        isContinued={roomActions.getMessageIsContinued(index)}
       />
     ),
     [uiConfig, room.styles]

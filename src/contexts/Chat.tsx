@@ -240,6 +240,7 @@ type ThreadActions = {
   sendMessage: (body: string) => void;
   getMessage: (index: number) => Message;
   getMessageCount: () => number;
+  getMessageIsContinued: (index: number) => boolean;
   toggleMessageGC: (messageGCEnabled: boolean) => void;
   toggleSelectedPeer: (peerKey: Uint8Array, state?: boolean) => void;
   resetSelectedPeers: () => void;
@@ -978,7 +979,13 @@ const useMessageAccessors = (messages: Message[]) => {
   const getMessage = useCallback((index: number): Message => ref.current[index], []);
   const getMessageCount = useCallback((): number => ref.current.length, []);
 
-  return { getMessage, getMessageCount };
+  const getMessageIsContinued = useCallback(
+    (index: number): boolean =>
+      isEqual(ref.current[index].peerKey, ref.current[index + 1]?.peerKey),
+    []
+  );
+
+  return { getMessage, getMessageCount, getMessageIsContinued };
 };
 
 const RoomThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props }) => {

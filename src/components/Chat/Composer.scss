@@ -49,11 +49,11 @@
     }
 
     &--greentext {
-      color: #6ca528;
+      color: var(--color-text-chat-greentext);
     }
 
     &--code {
-      color: gray;
+      color: var(--color-text-chat-code);
       font-family: monospace;
     }
 
@@ -62,15 +62,21 @@
     }
 
     &--url {
-      color: red;
+      color: var(--color-blue-8);
     }
 
     &--tag {
-      color: yellow;
+      display: inline-block;
+      padding: 0 0.4em;
+      background: var(--color-slate-11);
+      border: 1px solid var(--color-slate-9);
+      border-radius: var(--border-radius-small);
     }
 
     &--nick {
-      color: skyblue;
+      &:before {
+        content: "@";
+      }
     }
   }
 
