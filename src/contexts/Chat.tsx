@@ -241,6 +241,7 @@ type ThreadActions = {
   getMessage: (index: number) => Message;
   getMessageCount: () => number;
   getMessageIsContinued: (index: number) => boolean;
+  getNetworkKeys: () => Uint8Array[];
   toggleMessageGC: (messageGCEnabled: boolean) => void;
   toggleSelectedPeer: (peerKey: Uint8Array, state?: boolean) => void;
   resetSelectedPeers: () => void;
@@ -350,6 +351,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           ...initialRoomState,
           id: state.nextId,
           topic,
+          label: alias,
           messageSizeCache: new ChatCellMeasurerCache(),
           peerKey: peerKey,
           networkKeys: networkKeys,
@@ -1001,10 +1003,12 @@ const RoomThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props 
   const nicks = useUserList(thread.networkKey, thread.serverKey);
   const messageAccessors = useMessageAccessors(thread.messages);
 
+  const getNetworkKeys = useCallback(() => [thread.networkKey], [thread.networkKey]);
+
   const value = useMemo<[ThreadState, ThreadActions]>(
     () => [
       { ...thread, nicks },
-      { ...actions, ...messageAccessors },
+      { ...actions, ...messageAccessors, getNetworkKeys },
     ],
     [thread, nicks]
   );
@@ -1023,8 +1027,10 @@ const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...pro
 
   const messageAccessors = useMessageAccessors(thread.messages);
 
+  const getNetworkKeys = useCallback(() => thread.networkKeys, [thread.networkKeys]);
+
   const value = useMemo<[ThreadState, ThreadActions]>(
-    () => [thread, { ...actions, ...messageAccessors }],
+    () => [thread, { ...actions, ...messageAccessors, getNetworkKeys }],
     [thread]
   );
   return <ThreadContext.Provider value={value}>{children}</ThreadContext.Provider>;

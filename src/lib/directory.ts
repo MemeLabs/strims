@@ -60,3 +60,69 @@ export const getListingPlayerSource = (networkKey: string, { content }: Listing)
       return null;
   }
 };
+
+const EMBED_ID = "([\\w-]{1,30})";
+const EMBED_URLS = [
+  {
+    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_ID}(?:.*&t=([^&$]+))`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
+      id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
+    }),
+  },
+  {
+    pattern: new RegExp(`twitch\\.tv/${EMBED_ID}/?$`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_ID}$`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_ID}`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      id: v[1],
+    }),
+  },
+  {
+    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_ID}(?:.*&t=([^&$]+))?`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
+    }),
+  },
+  {
+    pattern: new RegExp(`youtu\\.be/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
+    }),
+  },
+  {
+    pattern: new RegExp(`youtube\\.com/embed/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
+    embed: (v: RegExpExecArray) => ({
+      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      id: v[1],
+      queryParams: v[2] ? { t: v[2] } : {},
+    }),
+  },
+];
+
+export const createEmbedFromURL = (url: string): Listing.Embed => {
+  for (const { pattern, embed } of EMBED_URLS) {
+    const match = pattern.exec(url);
+    if (match) {
+      return new Listing.Embed(embed(match));
+    }
+  }
+};

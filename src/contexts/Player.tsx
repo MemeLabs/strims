@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
-import React, { ReactNode, createContext, useCallback, useEffect, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useEffect, useMemo, useState } from "react";
 
 import { ServiceSlug, slugToService } from "../lib/directory";
 import { useClient } from "./FrontendApi";

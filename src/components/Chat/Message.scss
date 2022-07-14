@@ -117,6 +117,27 @@
         font-size: 0;
         vertical-align: top;
       }
+
+      &--external_embed {
+        vertical-align: middle;
+        line-height: 1.1rem;
+        padding-left: 0.1em;
+
+        &,
+        &:visited {
+          color: var(--color-grey-4);
+        }
+
+        &:hover {
+          text-decoration: none;
+          color: var(--color-grey-7);
+        }
+
+        svg {
+          height: 1.1rem;
+          width: 1.1rem;
+        }
+      }
     }
 
     &__nick {

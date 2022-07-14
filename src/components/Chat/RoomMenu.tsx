@@ -151,6 +151,7 @@ const RoomsListItem: React.FC<RoomsListItemProps> = ({
   return (
     <button className="rooms_list__network_rooms_item" onClick={handleClick}>
       <span className="rooms_list__network_rooms_item__name">{name}</span>
+      <span className="rooms_list__network_rooms_item__dash">&mdash;</span>
       <span className="rooms_list__network_rooms_item__viewers">
         {userCount.toLocaleString()}
         <HiOutlineUser />
@@ -164,33 +165,41 @@ const roomListingsReq = {
 };
 
 const RoomsList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
-  const listings = useListings(roomListingsReq);
+  const { networkListings } = useListings(roomListingsReq);
+
+  const content: ReactNode[] = [];
+  for (const { network, listings } of networkListings.values()) {
+    const rooms: ReactNode[] = [];
+    for (const { id, listing, userCount } of listings.values()) {
+      if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
+        rooms.push(
+          <RoomsListItem
+            key={id.toString()}
+            networkKey={network.key}
+            serverKey={listing.content.chat.key}
+            name={listing.content.chat.name}
+            userCount={userCount}
+            onChange={onChange}
+          />
+        );
+      }
+    }
+
+    if (rooms.length) {
+      content.push(
+        <div key={network.id.toString()} className="rooms_list__network">
+          <div className="rooms_list__network_name">{network.name}</div>
+          <div className="rooms_list__network_rooms">{rooms}</div>
+        </div>
+      );
+    }
+  }
 
   return (
     <Scrollbars autoHide={true} className="rooms_list">
       <div className="rooms_list__content">
         <h4 className="rooms_list__header">rooms</h4>
-        {Array.from(listings.networkListings.values()).map(({ network, listings }) => (
-          <div key={network.id.toString()} className="rooms_list__network">
-            <div className="rooms_list__network_name">{network.name}</div>
-            <div className="rooms_list__network_rooms">
-              {Array.from(listings.values()).map(({ id, listing, userCount }) => {
-                if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
-                  return (
-                    <RoomsListItem
-                      key={id.toString()}
-                      networkKey={network.key}
-                      serverKey={listing.content.chat.key}
-                      name={listing.content.chat.name}
-                      userCount={userCount}
-                      onChange={onChange}
-                    />
-                  );
-                }
-              })}
-            </div>
-          </div>
-        ))}
+        {content}
       </div>
     </Scrollbars>
   );
@@ -288,13 +297,11 @@ const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
   const [{ whisperThreads }] = useChat();
   const [getUsersRes] = useCall("directory", "getUsers");
 
-  const sortedThreads = useMemo(
-    () =>
-      Array.from(whisperThreads.values()).sort((a, b) =>
-        Number(b.lastMessageTime - a.lastMessageTime)
-      ),
-    [whisperThreads]
-  );
+  const threads = useMemo(() => {
+    return Array.from(whisperThreads.values()).sort((a, b) =>
+      Number(b.lastMessageTime - a.lastMessageTime)
+    );
+  }, [whisperThreads]);
 
   const threadPeerKeys = useMemo(() => {
     return new Set(
@@ -317,20 +324,23 @@ const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
   return (
     <Scrollbars autoHide={true} className="whispers_list">
       <div className="whispers_list__content">
-        <h4 className="whispers_list__header">whispers</h4>
-        <table className="whispers_list__table">
-          <tbody>
-            {sortedThreads.map((thread, i) => (
-              <WhispersListItem
-                key={i}
-                thread={thread}
-                onChange={onChange}
-                online={onlinePeerKeys.has(Base64.fromUint8Array(thread.peerKey, true))}
-              />
-            ))}
-          </tbody>
-        </table>
-        <hr />
+        {threads.length > 0 && (
+          <>
+            <h4 className="whispers_list__header">whispers</h4>
+            <table className="whispers_list__table">
+              <tbody>
+                {threads.map((thread, i) => (
+                  <WhispersListItem
+                    key={i}
+                    thread={thread}
+                    onChange={onChange}
+                    online={onlinePeerKeys.has(Base64.fromUint8Array(thread.peerKey, true))}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
         {users?.length > 0 && (
           <>
             <h4 className="whispers_list__header">chatters</h4>

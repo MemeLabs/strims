@@ -140,15 +140,19 @@
     }
 
     &__name,
+    &__dash,
     &__viewers {
       display: block;
+    }
+
+    &__dash {
+      margin: 0 0.4rem;
     }
 
     &__viewers {
       display: flex;
       align-items: center;
       color: var(--color-grey-6);
-      margin-left: 0.4rem;
       font-size: 0.9rem;
     }
   }

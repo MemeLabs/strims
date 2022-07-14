@@ -6,7 +6,7 @@ import "./Search.scss";
 import clsx from "clsx";
 import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
-import React, { RefObject, useEffect, useRef, useState } from "react";
+import React, { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
@@ -25,64 +25,8 @@ import { useLazyCall } from "../../contexts/FrontendApi";
 import { useOpenListing } from "../../hooks/directory";
 import useClickAway from "../../hooks/useClickAway";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { createEmbedFromURL } from "../../lib/directory";
 import SnippetImage from "../Directory/SnippetImage";
-
-const EMBED_ID = "([\\w-]{1,30})";
-const EMBED_URLS = [
-  {
-    pattern: new RegExp(`twitch\\.tv/videos/${EMBED_ID}(?:.*&t=([^&$]+))`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
-      id: v[1],
-      queryParams: v[2] ? { t: v[2] } : {},
-    }),
-  },
-  {
-    pattern: new RegExp(`twitch\\.tv/${EMBED_ID}/?$`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
-      id: v[1],
-    }),
-  },
-  {
-    pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_ID}$`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
-      id: v[1],
-    }),
-  },
-  {
-    pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_ID}`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
-      id: v[1],
-    }),
-  },
-  {
-    pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_ID}(?:.*&t=([^&$]+))?`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
-      id: v[1],
-      queryParams: v[2] ? { t: v[2] } : {},
-    }),
-  },
-  {
-    pattern: new RegExp(`youtu\\.be/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
-      id: v[1],
-      queryParams: v[2] ? { t: v[2] } : {},
-    }),
-  },
-  {
-    pattern: new RegExp(`youtube\\.com/embed/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
-    embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
-      id: v[1],
-      queryParams: v[2] ? { t: v[2] } : {},
-    }),
-  },
-];
 
 interface EmbedMenuItemProps {
   embed: Listing.IEmbed;
@@ -265,36 +209,26 @@ const Search: React.FC<SearchProps> = ({
 
   const ref = useRef<HTMLDivElement>(null);
   const [isFocused, toggleIsFocused] = useToggle(false);
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [getListingsRes, getListings] = useLazyCall("directory", "getListings");
 
-  const menuOpen = forceMenuOpen || (isFocused && results.length !== 0);
-
-  useClickAway(ref, () => toggleIsFocused(false));
-
-  useEffect(() => {
+  const results = useMemo<SearchResult[]>(() => {
     if (query === "") {
-      setResults([]);
-      return;
+      return [];
     }
 
     const results: SearchResult[] = [];
 
-    for (const { pattern, embed } of EMBED_URLS) {
-      const match = pattern.exec(query);
-      if (match) {
-        setResults([]);
-        setResults([
-          {
-            type: "EMBED",
-            embed: embed(match),
-            onSelect: () => selectEmbed(embed(match)),
-          },
-        ]);
-        return;
-      }
+    const embed = createEmbedFromURL(query);
+    if (embed) {
+      return [
+        {
+          type: "EMBED",
+          embed,
+          onSelect: () => selectEmbed(embed),
+        },
+      ];
     }
 
     const pattern = new RegExp(escapeStringRegexp(query), "i");
@@ -314,10 +248,14 @@ const Search: React.FC<SearchProps> = ({
       }
     }
 
-    setResults(results.slice(0, maxResults));
+    return results.slice(0, maxResults);
   }, [query, getListingsRes]);
 
+  const menuOpen = forceMenuOpen || (isFocused && results.length !== 0);
+
   useEffect(() => setSelectedIndex(-1), [results.length, query]);
+
+  useClickAway(ref, () => toggleIsFocused(false));
 
   const handleChange: React.ChangeEventHandler<HTMLInputElement> = useStableCallback((e) => {
     setQuery(e.target.value);

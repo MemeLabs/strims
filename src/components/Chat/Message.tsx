@@ -8,10 +8,15 @@ import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { uniq } from "lodash";
 import React, { ReactNode, useEffect, useMemo, useRef } from "react";
+import { FiExternalLink } from "react-icons/fi";
+import { Link } from "react-router-dom";
 
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
+import { Listing } from "../../apis/strims/network/v1/directory/directory";
 import { useRoom } from "../../contexts/Chat";
+import { useOpenListing } from "../../hooks/directory";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import * as directory from "../../lib/directory";
 import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
@@ -20,7 +25,6 @@ import { UserPresenceIndicator } from "./UserPresenceIndicator";
 const LINK_SHORTEN_THRESHOLD = 75;
 const LINK_SHORTEN_AFFIX_LENGTH = 35;
 
-// TODO: in app links
 interface MessageLinkProps {
   entity: chatv1_Message.Entities.Link;
   shouldShorten: boolean;
@@ -28,6 +32,38 @@ interface MessageLinkProps {
 }
 
 const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShorten }) => {
+  const embed = directory.createEmbedFromURL(entity.url);
+  if (embed) {
+    const [, { getNetworkKeys }] = useRoom();
+    const openListing = useOpenListing();
+
+    const [networkKey] = getNetworkKeys();
+    const listing = new Listing({ content: { embed } });
+
+    const handleClick = useStableCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      openListing(Base64.fromUint8Array(networkKey, true), listing);
+    });
+
+    return (
+      <>
+        <Link
+          className="chat__message__link"
+          to={directory.formatUri(Base64.fromUint8Array(networkKey, true), listing)}
+          onClick={handleClick}
+        >
+          {directory.serviceToSlug(embed.service)}/{embed.id}
+        </Link>
+        <ExternalLink
+          className="chat__message__link chat__message__link--external_embed"
+          href={entity.url}
+        >
+          <FiExternalLink />
+        </ExternalLink>
+      </>
+    );
+  }
+
   const [node] = React.Children.toArray(children);
   if (shouldShorten && typeof node === "string" && node.length > LINK_SHORTEN_THRESHOLD) {
     children = (
