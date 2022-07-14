@@ -182,6 +182,8 @@
     }
 
     &--self {
+      font-style: italic;
+
       .chat__viewer_state_indicator {
         display: none;
       }

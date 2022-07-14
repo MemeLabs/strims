@@ -99,6 +99,16 @@
       width: 100%;
     }
   }
+
+  &.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
+    .layout_chat__header {
+      display: none;
+    }
+  }
+
+  &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__foo {
+    width: calc(100% - env(safe-area-inset-left));
+  }
 }
 
 .layout--tv,
@@ -148,11 +158,5 @@
 
   .layout_chat__header {
     border-bottom: 1px solid var(--color-opac-w-2);
-  }
-}
-
-.layout--portable.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {
-  .layout_chat__header {
-    display: none;
   }
 }

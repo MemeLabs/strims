@@ -6,16 +6,19 @@ import "./RoomMenu.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
-import React, { useContext, useMemo, useState } from "react";
+import React, { ReactNode, useContext, useMemo, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { BsArrowBarRight } from "react-icons/bs";
-import { HiOutlineUser } from "react-icons/hi";
+import { FiSettings } from "react-icons/fi";
+import { HiOutlineChatAlt2, HiOutlineUser, HiOutlineUsers } from "react-icons/hi";
 
 import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
-import { ThreadProviderProps, Topic, useChat } from "../../contexts/Chat";
+import { Topic, useChat } from "../../contexts/Chat";
 import { useCall } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
+import { useListings } from "../../hooks/directory";
+import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
 import SettingsDrawer from "./SettingsDrawer";
@@ -23,14 +26,13 @@ import SettingsDrawer from "./SettingsDrawer";
 enum Tab {
   Rooms,
   Whispers,
-  Users,
   Settings,
 }
 
 interface TabsProps<T> {
   onChange: (tab: T) => void;
   active: T;
-  tabs: { key: T; label: string }[];
+  tabs: { key: T; label: ReactNode }[];
 }
 
 const Tabs = <T extends number>({ onChange, active, tabs }: TabsProps<T>) => (
@@ -61,10 +63,33 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Rooms);
   const tabs = useMemo(
     () => [
-      { key: Tab.Rooms, label: "rooms" },
-      { key: Tab.Whispers, label: "whispers" },
-      { key: Tab.Users, label: "users" },
-      { key: Tab.Settings, label: "settings" },
+      {
+        key: Tab.Rooms,
+        label: (
+          <>
+            <HiOutlineChatAlt2 className="room_menu__tab__icon" title="rooms" />
+            <span className="room_menu__tab__label">rooms</span>
+          </>
+        ),
+      },
+      {
+        key: Tab.Whispers,
+        label: (
+          <>
+            <HiOutlineUsers className="room_menu__tab__icon" title="whispers" />
+            <span className="room_menu__tab__label">whispers</span>
+          </>
+        ),
+      },
+      {
+        key: Tab.Settings,
+        label: (
+          <>
+            <FiSettings className="room_menu__tab__icon" title="settings" />
+            <span className="room_menu__tab__label">settings</span>
+          </>
+        ),
+      },
     ],
     []
   );
@@ -75,15 +100,22 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
         return <RoomsList onChange={onChange} />;
       case Tab.Whispers:
         return <WhispersList onChange={onChange} />;
-      case Tab.Users:
-        return <UsersList onChange={onChange} />;
       case Tab.Settings:
         return <SettingsDrawer />;
     }
   })();
 
+  const ref = useRef();
+  const size = useSize(ref);
+
   return (
-    <div className="room_menu">
+    <div
+      className={clsx({
+        "room_menu": true,
+        "room_menu--wide": size?.width > 400,
+      })}
+      ref={ref}
+    >
       <div className="room_menu__header">
         <button className="room_menu__toggle" onClick={onClose}>
           <BsArrowBarRight />
@@ -127,23 +159,22 @@ const RoomsListItem: React.FC<RoomsListItemProps> = ({
   );
 };
 
-const RoomsList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
-  const [getListingsRes] = useCall("directory", "getListings", {
-    args: [{ contentTypes: [directoryv1.ListingContentType.LISTING_CONTENT_TYPE_CHAT] }],
-  });
+const roomListingsReq = {
+  contentTypes: [directoryv1.ListingContentType.LISTING_CONTENT_TYPE_CHAT],
+};
 
-  if (getListingsRes.loading) {
-    return null;
-  }
+const RoomsList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
+  const listings = useListings(roomListingsReq);
 
   return (
     <Scrollbars autoHide={true} className="rooms_list">
       <div className="rooms_list__content">
-        {getListingsRes.value.listings.map(({ network, listings }) => (
+        <h4 className="rooms_list__header">rooms</h4>
+        {Array.from(listings.networkListings.values()).map(({ network, listings }) => (
           <div key={network.id.toString()} className="rooms_list__network">
             <div className="rooms_list__network_name">{network.name}</div>
             <div className="rooms_list__network_rooms">
-              {listings.map(({ id, listing, userCount }) => {
+              {Array.from(listings.values()).map(({ id, listing, userCount }) => {
                 if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
                   return (
                     <RoomsListItem
@@ -185,9 +216,10 @@ const useMessageTimeFormatter = () => {
 
 interface WhispersListItemProps extends RoomMenuPropsBase {
   thread: WhisperThread;
+  online: boolean;
 }
 
-const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread }) => {
+const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread, online }) => {
   const [, { openWhispers }] = useChat();
   const formatMessageTime = useMessageTimeFormatter();
 
@@ -205,38 +237,25 @@ const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread })
 
   return (
     <tr key={thread.id.toString()} className="whispers_list__row" onClick={handleClick}>
+      <td className="whispers_list__status">
+        <span
+          className={clsx({
+            "whispers_list__status__icon": true,
+            "whispers_list__status__icon--online": online,
+          })}
+          title={online ? "online" : "offline"}
+        />
+      </td>
       <td className="whispers_list__label">
         <span className="whispers_list__alias">{thread.alias}</span>
-        <span className="whispers_list__unread">{thread.unreadCount}</span>
+        {thread.unreadCount > 0 && (
+          <span className="whispers_list__unread">({thread.unreadCount})</span>
+        )}
       </td>
       <td className="whispers_list__time">
         {formatMessageTime(new Date(Number(thread.lastMessageTime)))}
       </td>
     </tr>
-  );
-};
-
-const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
-  const [{ whisperThreads }] = useChat();
-
-  const sortedThreads = useMemo(
-    () =>
-      Array.from(whisperThreads.values()).sort((a, b) =>
-        Number(b.lastMessageTime - a.lastMessageTime)
-      ),
-    [whisperThreads]
-  );
-
-  return (
-    <Scrollbars autoHide={true} className="whispers_list">
-      <table className="whispers_list__table">
-        <tbody>
-          {sortedThreads.map((thread, i) => (
-            <WhispersListItem key={i} thread={thread} onChange={onChange} />
-          ))}
-        </tbody>
-      </table>
-    </Scrollbars>
   );
 };
 
@@ -248,39 +267,83 @@ interface UsersListItemProps extends RoomMenuPropsBase {
 const UsersListItem: React.FC<UsersListItemProps> = ({ onChange, user, networks }) => {
   const [, { openWhispers }] = useChat();
 
+  const { alias } = user.aliases[0];
+
   const handleClick = useStableCallback(() => {
     const networkKeys = user.aliases
       .reduce((ids, { networkIds }) => ids.concat(networkIds), [] as bigint[])
       .map((id) => networks.get(id).key);
-    openWhispers(user.peerKey, networkKeys);
+    openWhispers(user.peerKey, networkKeys, alias);
     onChange({ type: "WHISPER", topicKey: user.peerKey });
   });
 
   return (
-    <button onClick={handleClick} className="user_list__item">
-      {user.aliases[0].alias}
+    <button onClick={handleClick} className="whispers_list__chatter">
+      {alias}
     </button>
   );
 };
 
-const UsersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
+const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
+  const [{ whisperThreads }] = useChat();
   const [getUsersRes] = useCall("directory", "getUsers");
 
-  if (getUsersRes.loading) {
-    return null;
-  }
+  const sortedThreads = useMemo(
+    () =>
+      Array.from(whisperThreads.values()).sort((a, b) =>
+        Number(b.lastMessageTime - a.lastMessageTime)
+      ),
+    [whisperThreads]
+  );
+
+  const threadPeerKeys = useMemo(() => {
+    return new Set(
+      Array.from(whisperThreads.values()).map(({ peerKey }) => Base64.fromUint8Array(peerKey, true))
+    );
+  }, [whisperThreads]);
+
+  const users = useMemo(() => {
+    return getUsersRes.value?.users.filter(
+      ({ peerKey }) => !threadPeerKeys.has(Base64.fromUint8Array(peerKey, true))
+    );
+  }, [getUsersRes, threadPeerKeys]);
+
+  const onlinePeerKeys = useMemo(() => {
+    return new Set(
+      getUsersRes.value?.users.map(({ peerKey }) => Base64.fromUint8Array(peerKey, true))
+    );
+  }, [getUsersRes]);
 
   return (
-    <Scrollbars autoHide={true} className="user_list">
-      <div className="user_list__content">
-        {getUsersRes.value.users.map((user) => (
-          <UsersListItem
-            key={Base64.fromUint8Array(user.peerKey)}
-            user={user}
-            networks={getUsersRes.value.networks}
-            onChange={onChange}
-          />
-        ))}
+    <Scrollbars autoHide={true} className="whispers_list">
+      <div className="whispers_list__content">
+        <h4 className="whispers_list__header">whispers</h4>
+        <table className="whispers_list__table">
+          <tbody>
+            {sortedThreads.map((thread, i) => (
+              <WhispersListItem
+                key={i}
+                thread={thread}
+                onChange={onChange}
+                online={onlinePeerKeys.has(Base64.fromUint8Array(thread.peerKey, true))}
+              />
+            ))}
+          </tbody>
+        </table>
+        <hr />
+        {users?.length > 0 && (
+          <>
+            <h4 className="whispers_list__header">chatters</h4>
+            {users.map((user) => (
+              <UsersListItem
+                key={Base64.fromUint8Array(user.peerKey)}
+                user={user}
+                networks={getUsersRes.value.networks}
+                onChange={onChange}
+              />
+            ))}
+          </>
+        )}
       </div>
     </Scrollbars>
   );

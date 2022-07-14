@@ -16,7 +16,7 @@
     display: flex;
     flex-direction: row;
     border-bottom: 1px solid var(--color-border-chat-tab);
-    margin: 0.6rem 0.6rem 0.2rem;
+    padding: 0.4rem 0.2rem 0.1rem;
   }
 
   &__toggle {
@@ -42,7 +42,9 @@
   }
 
   &__tab {
-    display: block;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
     margin: 0 0.1rem 0.4rem;
     padding: 0.4rem 0.6rem;
     cursor: pointer;
@@ -60,6 +62,20 @@
       cursor: default;
       color: var(--color-text-chat-tab-active);
       background-color: var(--color-background-chat-tab-active);
+    }
+
+    &__icon {
+      height: 18px;
+      width: 18px;
+    }
+
+    &__label {
+      display: none;
+
+      @at-root .room_menu--wide & {
+        display: block;
+        text-indent: 0.4rem;
+      }
     }
   }
 
@@ -80,9 +96,15 @@
   display: flex;
   flex-direction: column;
 
+  &__header {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    color: var(--color-grey-8);
+  }
+
   &__content {
     width: calc(100% - 2rem);
-    margin: 0 1rem env(safe-area-inset-bottom);
+    margin: 0.6rem 1rem env(safe-area-inset-bottom);
   }
 
   &__network {
@@ -133,9 +155,20 @@
 }
 
 .whispers_list {
+  &__content {
+    width: calc(100% - 2rem);
+    margin: 0.6rem 1rem env(safe-area-inset-bottom);
+  }
+
+  &__header {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    color: var(--color-grey-8);
+  }
+
   &__table {
     width: calc(100% - 2rem);
-    margin: 0 1rem env(safe-area-inset-bottom);
+    margin-bottom: 1rem;
     border-collapse: collapse;
   }
 
@@ -157,6 +190,23 @@
     }
   }
 
+  &__status {
+    width: 1rem;
+    vertical-align: center;
+
+    &__icon {
+      background-color: var(--color-slate-12);
+      display: block;
+      height: 0.6rem;
+      width: 0.6rem;
+      border-radius: var(--border-radius-rounded);
+
+      &--online {
+        background-color: var(--color-grey-10);
+      }
+    }
+  }
+
   &__unread {
     display: inline-block;
     color: var(--color-grey-6);
@@ -167,15 +217,8 @@
   &__time {
     text-align: right;
   }
-}
 
-.user_list {
-  &__content {
-    width: calc(100% - 2rem);
-    margin: 0 1rem env(safe-area-inset-bottom);
-  }
-
-  &__item {
+  &__chatter {
     display: block;
     padding-top: 0.6rem;
     cursor: pointer;

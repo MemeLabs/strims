@@ -226,7 +226,7 @@ const roomCommands = [
 type ChatActions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
   openRoom: (serverKey: Uint8Array, networkKey: Uint8Array) => void;
-  openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[]) => void;
+  openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[], alias?: string) => void;
   openTopicPopout: (topic: Topic) => void;
   setPopoutTopicCapacity: (popoutTopicCapacity: number) => void;
   closeTopic: (topic: Topic) => void;
@@ -327,7 +327,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       };
     });
 
-  const openWhispers = (peerKey: Uint8Array, networkKeys: Uint8Array[]) =>
+  const openWhispers = (peerKey: Uint8Array, networkKeys?: Uint8Array[], alias?: string) =>
     setState((state) => {
       const key = formatKey(peerKey);
       if (state.whispers.has(key)) {
@@ -353,7 +353,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           messageSizeCache: new ChatCellMeasurerCache(),
           peerKey: peerKey,
           networkKeys: networkKeys,
-          thread: new WhisperThread(),
+          thread: new WhisperThread({ alias }),
           messageIndex: new Map(),
         }),
         mainTopics: [...state.mainTopics, topic],

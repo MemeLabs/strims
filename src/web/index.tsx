@@ -55,21 +55,23 @@ const apiDialer: APIDialer = {
 };
 
 class Runner {
+  rootElement: HTMLDivElement;
   root: Root;
 
   constructor() {
-    const root = document.createElement("div");
-    root.setAttribute("id", "root");
-    document.body.appendChild(root);
-    this.root = createRoot(root);
+    this.rootElement = document.createElement("div");
+    this.rootElement.setAttribute("id", "root");
+    document.body.appendChild(this.rootElement);
   }
 
   start() {
+    this.root = createRoot(this.rootElement);
     this.root.render(<App apiDialer={apiDialer} />);
   }
 
   stop() {
-    this.root.unmount();
+    this.root?.unmount();
+    this.root = null;
   }
 
   restart() {

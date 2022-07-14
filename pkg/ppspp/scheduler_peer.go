@@ -604,8 +604,10 @@ func (s *peerSwarmScheduler) Reset() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	s.binTimes = timeSet{}
 	s.peerHaveChunkRate = stats.NewSMA(15, time.Second)
 	s.haveBins = binmap.New()
+	s.haveBinMax = 0
 	s.requestBins = binmap.New()
 	s.streams = newPeerSchedulerStreamSubscription(int(s.streamCount))
 	s.firstChunkSet = false
@@ -614,14 +616,16 @@ func (s *peerSwarmScheduler) Reset() {
 		cs.lock.Lock()
 
 		cs.streamHaveLag = make([]stats.Welford, s.streamCount)
+		cs.requestTimes = timeSet{}
 		cs.dataChunks = stats.NewSMA(15, time.Second)
 		cs.haveBins = binmap.New()
 		cs.cancelBins = binmap.New()
+		cs.requestBins = binQueue{}
 		cs.requestStreams = make([]binmap.Bin, s.streamCount)
 		cs.extraMessages = []codec.Message{newHandshake(s.swarm)}
 		cs.peerHaveBins = binmap.New()
-		cs.nextRestartTime = timeutil.Now().Add(schedulerRestartCooldown)
 		cs.ledbat = ledbat.New()
+		cs.nextRestartTime = timeutil.Now().Add(schedulerRestartCooldown)
 		cs.handshakeReceived = false
 
 		cs.p.EnqueueNow(cs)
@@ -794,7 +798,6 @@ type peerChannelScheduler struct {
 
 	lock sync.Mutex
 
-	handshakeSent bool
 	choked        bool
 	streamHaveLag []stats.Welford
 	requestTimes  timeSet

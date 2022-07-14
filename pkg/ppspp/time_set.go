@@ -5,13 +5,11 @@ package ppspp
 
 import (
 	"github.com/MemeLabs/strims/pkg/binmap"
-	"github.com/MemeLabs/strims/pkg/slab"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 )
 
 type timeSet struct {
-	root      *timeSetNode
-	allocator *slab.Allocator[timeSetNode]
+	root *timeSetNode
 }
 
 func (t *timeSet) Size() int {
@@ -20,7 +18,6 @@ func (t *timeSet) Size() int {
 
 func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 	if t.root == nil {
-		t.allocator = slab.New[timeSetNode]()
 		t.root = &timeSetNode{bin: bin}
 	}
 
