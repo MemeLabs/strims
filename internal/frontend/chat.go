@@ -491,7 +491,7 @@ func (s *chatService) ListWhispers(ctx context.Context, req *chatv1.ListWhispers
 }
 
 func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispersRequest) (<-chan *chatv1.WatchWhispersResponse, error) {
-	ch := make(chan *chatv1.WatchWhispersResponse, 1)
+	ch := make(chan *chatv1.WatchWhispersResponse, 8)
 
 	go func() {
 		defer close(ch)

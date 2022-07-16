@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/network"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -102,6 +103,9 @@ func (s *whisperDeliveryService) send(r *chatv1.WhisperRecord) {
 	}
 
 	_, err := dao.ChatWhisperRecords.Transform(s.store, r.Id, func(p *chatv1.WhisperRecord) error {
+		if p == nil {
+			return kv.ErrRecordNotFound
+		}
 		p.State = state
 		return nil
 	})

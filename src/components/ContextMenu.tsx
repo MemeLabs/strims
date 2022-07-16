@@ -25,7 +25,7 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
   const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, onClose);
 
-  // because menus are rendered at the react root poitner events targeted here
+  // because menus are rendered at the react root pointer events targeted here
   // are not filtered out by useClickAway. this prevents interacting with menus
   // in modals that unmount when they lose focus. to prevent this we stop events
   // before they bubble up to the document.

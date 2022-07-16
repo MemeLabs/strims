@@ -8,7 +8,7 @@ import date from "date-and-time";
 import { Base64 } from "js-base64";
 import React, { ReactNode, useContext, useMemo, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { BsArrowBarRight, BsThreeDots } from "react-icons/bs";
+import { BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineChatAlt2, HiOutlineUser, HiOutlineUsers } from "react-icons/hi";
 
