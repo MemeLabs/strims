@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/set"
@@ -94,9 +95,14 @@ func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLo
 			}
 		}
 
-		if video.LiveStreamingDetails != nil {
+		if video.LiveStreamingDetails != nil && video.LiveStreamingDetails.ActualEndTime == "" {
 			embed.snippet.Live = true
 			embed.snippet.UserCount = video.LiveStreamingDetails.ConcurrentViewers
+
+			startTime, err := time.Parse(time.RFC3339, video.LiveStreamingDetails.ActualStartTime)
+			if err == nil {
+				embed.snippet.StartTime = startTime.Unix()
+			}
 		} else {
 			embed.snippet.UserCount = video.Statistics.ViewCount
 		}

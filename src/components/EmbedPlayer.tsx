@@ -3,6 +3,7 @@
 
 import "./EmbedPlayer.scss";
 
+import clsx from "clsx";
 import qs from "qs";
 import React from "react";
 
@@ -14,6 +15,7 @@ export interface EmbedPlayerProps {
   queryParams?: Map<string, string>;
   networkKey?: string;
   disableControls?: boolean;
+  className?: string;
 }
 
 const getEmbedUrl = (
@@ -34,7 +36,7 @@ const getEmbedUrl = (
   }
 };
 
-const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id, queryParams }) => {
+const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id, queryParams, className }) => {
   const url = getEmbedUrl(service, id, queryParams);
 
   if (!url) {
@@ -43,7 +45,7 @@ const EmbedPlayer: React.FC<EmbedPlayerProps> = ({ service, id, queryParams }) =
 
   return (
     <iframe
-      className="embed_player__frame"
+      className={clsx("embed_player__frame", className)}
       width="100%"
       height="100%"
       frameBorder="0"

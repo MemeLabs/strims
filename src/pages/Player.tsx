@@ -37,10 +37,7 @@ const Player: React.FC = () => {
     };
   }, [params.networkKey, query.swarmUri, query.mimeType]);
 
-  // TODO: stream metadata - title, description, links, viewers, metrics,
-  // schedule, etc...
-  // directory api
-  return <div style={{ height: "1000px" }} />;
+  return null;
 };
 
 export default Player;

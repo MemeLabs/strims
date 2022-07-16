@@ -229,9 +229,11 @@ $chat-width-sm: 260px;
 
 .layout--tv,
 .layout--pc {
+  --layout-header-height: 50px;
+
   .layout__header {
     display: flex;
-    flex: 50px 0 0;
+    flex: var(--layout-header-height) 0 0;
     flex-direction: column;
     background: red;
   }
@@ -330,6 +332,8 @@ $chat-width-sm: 260px;
   }
 
   &.layout--theater_mode {
+    --layout-header-height: 0px;
+
     .layout__header {
       display: none;
     }

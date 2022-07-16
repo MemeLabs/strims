@@ -10,6 +10,7 @@ import NetworkNav from "../../components/Layout/NetworkNav";
 import { useLayout } from "../../contexts/Layout";
 import LoadingPlaceholder from "../LoadingPlaceholder";
 import SwipablePanel, { DragState } from "../SwipablePanel";
+import VideoMeta from "../VideoMeta";
 import Chat from "./Chat";
 import ChatBar from "./ChatBar";
 import Player from "./Player";
@@ -60,7 +61,9 @@ export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
         >
           {showVideo && (
             <div className="layout__video">
-              <Player />
+              <Player>
+                <VideoMeta />
+              </Player>
             </div>
           )}
           <div className="layout__chat">

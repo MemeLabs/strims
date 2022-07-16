@@ -14,12 +14,12 @@
 
 .player_embed {
   height: 100%;
+  background: var(--color-slate-2);
 
   &__media {
     position: absolute;
     background: #000;
     height: 100%;
-    max-height: calc(100vh - 100px);
 
     @at-root .layout--show_chat & {
       height: unset;
@@ -38,7 +38,6 @@
     top: 0;
     left: 0;
     width: 100%;
-    max-height: 100%;
   }
 
   &--closed &__media {
@@ -94,8 +93,25 @@
     opacity: 1;
   }
 
-  &--large &__meta {
+  &--large &__meta,
+  &--full &__meta {
     margin-top: var(--video-height);
+  }
+}
+
+.layout--min_aspect_ratio_1_2 .player_embed {
+  &--large .player_embed__media {
+    &,
+    &__content {
+      max-height: calc(100vh - var(--layout-header-height, 0px) - 5.2rem);
+    }
+  }
+
+  &--full .player_embed__media {
+    &,
+    &__content {
+      height: calc(100vh - var(--layout-header-height, 0px));
+    }
   }
 }
 

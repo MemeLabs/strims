@@ -5,6 +5,7 @@ import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { ReactNode, createContext, useEffect, useMemo, useState } from "react";
 
+import { useStableCallbacks } from "../hooks/useStableCallback";
 import { ServiceSlug, slugToService } from "../lib/directory";
 import { useClient } from "./FrontendApi";
 
@@ -32,12 +33,25 @@ export interface SwarmSource {
 
 export type PlayerSource = EmbedSource | SwarmSource;
 
-interface PlayerValue {
+interface State {
   path: string;
-  setPath: (path: string) => void;
   source: PlayerSource;
-  setSource: (source: PlayerSource) => void;
   mode: PlayerMode;
+  networkKey: Uint8Array;
+  listingId: bigint;
+}
+
+const initialState: State = {
+  path: "",
+  source: null,
+  mode: PlayerMode.PIP,
+  networkKey: null,
+  listingId: null,
+};
+
+interface PlayerValue extends State {
+  setPath: (path: string) => void;
+  setSource: (source: PlayerSource) => void;
   setMode: (mode: PlayerMode) => void;
 }
 
@@ -49,10 +63,11 @@ interface ProviderProps {
 
 export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const client = useClient();
-  const [path, setPath] = useState<string>("");
-  const [source, setSourceState] = useState<PlayerSource>(null);
-  const [mode, setMode] = useState<PlayerMode>(PlayerMode.PIP);
+  const [state, setState] = useState<State>(initialState);
   const [listingCleanup, setListingCleanup] = useState<() => void>();
+
+  const setDirectoryState = (networkKey?: Uint8Array, directoryId?: bigint) =>
+    setState((state) => ({ ...state, networkKey, listingId: directoryId }));
 
   const publishEmbedListing = ({
     networkKey: networkKeyString,
@@ -73,7 +88,14 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
         },
       },
     });
-    return () => void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
+
+    void res.then(({ id }) => setDirectoryState(networkKey, id));
+
+    return () =>
+      void res.then(({ id }) => {
+        setDirectoryState();
+        void client.directory.unpublish({ networkKey, id });
+      });
   };
 
   const joinSwarmListing = ({ networkKey: networkKeyString, swarmUri, mimeType }: SwarmSource) => {
@@ -82,7 +104,13 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
       networkKey,
       query: { query: { listing: { content: { media: { swarmUri, mimeType } } } } },
     });
-    return () => void res.then(({ id }) => client.directory.part({ networkKey, id }));
+
+    void res.then(({ id }) => setDirectoryState(networkKey, id));
+
+    return () => {
+      setDirectoryState();
+      void res.then(({ id }) => client.directory.part({ networkKey, id }));
+    };
   };
 
   const updateListing = (source: PlayerSource) => {
@@ -100,28 +128,25 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
   };
   useEffect(() => () => listingCleanup?.(), [listingCleanup]);
 
-  const setSource = (next: PlayerSource) => {
-    setSourceState((prev) => {
-      if (isEqual(next, prev)) {
-        return prev;
-      }
+  const actions = useMemo(() => {
+    const setPath = (path: string) => setState((state) => ({ ...state, path }));
 
-      updateListing(next);
-      return next;
-    });
-  };
+    const setSource = (source: PlayerSource) =>
+      setState((state) => {
+        if (isEqual(source, state.source)) {
+          return state;
+        }
 
-  const value = useMemo<PlayerValue>(
-    () => ({
-      path,
-      setPath,
-      source,
-      setSource,
-      mode,
-      setMode,
-    }),
-    [source, mode]
-  );
+        updateListing(source);
+        return { ...state, source };
+      });
+
+    const setMode = (mode: PlayerMode) => setState((state) => ({ ...state, mode }));
+
+    return { setPath, setSource, setMode };
+  }, []);
+
+  const value = useMemo<PlayerValue>(() => ({ ...state, ...actions }), [state]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 };

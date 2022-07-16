@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import * as directoryv1 from "../apis/strims/network/v1/directory/directory";
@@ -19,7 +19,7 @@ export const useOpenListing = () => {
   return useCallback((networkKey: string, listing: directoryv1.Listing) => {
     layout.toggleOverlayOpen(true);
     layout.toggleShowVideo(true);
-    player.setMode(PlayerMode.FULL);
+    player.setMode(PlayerMode.LARGE);
     player.setSource(getListingPlayerSource(networkKey, listing));
 
     if (DEVICE_TYPE !== DeviceType.Portable) {
@@ -113,4 +113,21 @@ export const useListings = (args: directoryv1.IFrontendWatchListingsRequest) => 
   }, [args]);
 
   return values;
+};
+
+export const useListing = (networkKey: Uint8Array, listingId: bigint) => {
+  const req = useMemo(() => {
+    return {
+      networkKeys: [networkKey],
+      listingId,
+    };
+  }, [networkKey, listingId]);
+  const { networkListings, ...res } = useListings(req);
+
+  for (const { listings } of networkListings.values()) {
+    for (const listing of listings.values()) {
+      return { listing, ...res };
+    }
+  }
+  return { listing: null, ...res };
 };

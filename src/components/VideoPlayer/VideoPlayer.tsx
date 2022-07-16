@@ -3,6 +3,7 @@
 
 import "./VideoPlayer.scss";
 
+import clsx from "clsx";
 import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
@@ -22,6 +23,7 @@ interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmU
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
   handleClose: () => void;
+  className?: string;
 }
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
@@ -32,6 +34,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   disableControls = false,
   defaultAspectRatio = "16/9",
   handleClose,
+  className,
 }) => {
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
@@ -115,7 +118,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
 
   return (
     <div
-      className="video_player"
+      className={clsx("video_player", className)}
       onMouseMove={renewControlsTimeout}
       onMouseLeave={clearControlsTimeout}
       onDoubleClick={handleToggleFullscreen}

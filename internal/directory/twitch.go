@@ -209,6 +209,7 @@ func (t *twitchStreamEmbedLoader) Load(ctx context.Context, ids []string) ([]*em
 		if stream, ok := streamsByUserID[user.ID]; ok {
 			embed.snippet.Live = true
 			embed.snippet.UserCount = uint64(stream.ViewerCount)
+			embed.snippet.StartTime = stream.StartedAt.Unix()
 			embed.snippet.Title = stream.Title
 			embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
 				SourceOneof: &networkv1directory.ListingSnippetImage_Url{

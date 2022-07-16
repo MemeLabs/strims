@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -33,6 +34,7 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 		Type         string `json:"type"`
 		ThumbnailURL string `json:"thumbnail_url"`
 		ViewerCount  int    `json:"viewer_count"`
+		CreatedAt    string `json:"createdAt"`
 		User         struct {
 			DisplayName      string `json:"display_name"`
 			OfflineBannerURL string `json:"offline_banner_url"`
@@ -76,6 +78,10 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 					Url: stream.User.OfflineBannerURL,
 				},
 			}
+		}
+		startTime, err := time.Parse(time.RFC3339, stream.CreatedAt)
+		if err == nil {
+			embed.snippet.StartTime = startTime.Unix()
 		}
 
 		embeds = append(embeds, embed)

@@ -56,7 +56,7 @@ const Player: React.FC<PlayerProps> = ({ children }) => {
   return (
     <Scrollbars
       ref={scrollbarRef}
-      autoHide={false}
+      autoHide={true}
       className={className}
       style={{ "--video-height": `${height}px`, "height": undefined }}
       renderView={(props) => <div className="player_embed__view" {...props} />}
@@ -65,6 +65,7 @@ const Player: React.FC<PlayerProps> = ({ children }) => {
       <div className="player_embed__media" ref={embedRef}>
         {source?.type === "swarm" && (
           <VideoPlayer
+            className="player_embed__media__content"
             networkKey={source.networkKey}
             swarmUri={source.swarmUri}
             mimeType={source.mimeType}
@@ -74,6 +75,7 @@ const Player: React.FC<PlayerProps> = ({ children }) => {
         )}
         {source?.type === "embed" && (
           <EmbedPlayer
+            className="player_embed__media__content"
             networkKey={source.networkKey}
             service={source.service}
             id={source.id}

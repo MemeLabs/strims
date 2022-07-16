@@ -1,0 +1,71 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.video_meta {
+  display: flex;
+  flex-direction: row;
+  border-top: 1px solid var(--color-slate-4);
+  padding: 0.6rem;
+
+  &__logo {
+    height: 4rem;
+    width: 4rem;
+    border-radius: var(--border-radius-rounded);
+    align-self: center;
+  }
+
+  &__label {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    padding-left: 1rem;
+  }
+
+  &__title {
+    font-size: 1.1rem;
+    line-height: 1.6rem;
+  }
+
+  &__stats {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  &__viewers,
+  &__runtime {
+    margin-right: 0.6rem;
+  }
+
+  &__viewers {
+    color: var(--color-strims-orange-5);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    svg {
+      height: 1.4rem;
+      width: 1.4rem;
+    }
+  }
+
+  &__toggle_height {
+    cursor: pointer;
+    height: 2rem;
+    width: 2rem;
+    color: var(--color-grey-6);
+
+    &:hover {
+      border-radius: var(--border-radius-small);
+      background: var(--color-opac-w-2);
+      color: var(--color-grey-10);
+    }
+
+    svg {
+      padding-top: 0.2rem;
+      height: 1.4rem;
+      width: 1.4rem;
+    }
+  }
+}

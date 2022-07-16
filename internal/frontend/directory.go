@@ -314,6 +314,16 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 
 	events := make(chan *networkv1directory.FrontendWatchListingsResponse_Event, 128)
 
+	filterListing := func(l directory.Listing) bool {
+		if r.ListingId != 0 && r.ListingId != l.ID {
+			return false
+		}
+		if len(r.ContentTypes) != 0 && !slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
+			return false
+		}
+		return true
+	}
+
 	var errs []error
 	for _, n := range networks {
 		network := &networkv1directory.Network{
@@ -333,16 +343,18 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 
 			var nls []*networkv1directory.NetworkListingsItem
 			for _, l := range listings {
-				if len(r.ContentTypes) == 0 || slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
-					nls = append(nls, &networkv1directory.NetworkListingsItem{
-						Id:              l.ID,
-						Listing:         l.Listing,
-						Snippet:         l.Snippet,
-						Moderation:      l.Moderation,
-						UserCount:       l.UserCount,
-						RecentUserCount: l.RecentUserCount,
-					})
+				if !filterListing(l) {
+					continue
 				}
+
+				nls = append(nls, &networkv1directory.NetworkListingsItem{
+					Id:              l.ID,
+					Listing:         l.Listing,
+					Snippet:         l.Snippet,
+					Moderation:      l.Moderation,
+					UserCount:       l.UserCount,
+					RecentUserCount: l.RecentUserCount,
+				})
 			}
 			res := &networkv1directory.FrontendWatchListingsResponse_Event{
 				Event: &networkv1directory.FrontendWatchListingsResponse_Event_Change{
@@ -370,7 +382,7 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 					}
 
 					l := e.Listing
-					if len(r.ContentTypes) != 0 && !slices.Contains(r.ContentTypes, listingProtoContentType(l.Listing)) {
+					if !filterListing(l) {
 						continue
 					}
 

@@ -51,6 +51,9 @@ func diffSnippets(a, b *networkv1directory.ListingSnippet) *networkv1directory.L
 	if a.ThemeColor != b.ThemeColor {
 		delta.ThemeColor = &wrapperspb.UInt32Value{Value: b.ThemeColor}
 	}
+	if a.StartTime != b.StartTime {
+		delta.StartTime = &wrapperspb.Int64Value{Value: b.StartTime}
+	}
 	if !proto.Equal(a.ChannelLogo, b.ChannelLogo) {
 		delta.ChannelLogoOneof = &networkv1directory.ListingSnippetDelta_ChannelLogo{ChannelLogo: b.ChannelLogo}
 	}
@@ -104,6 +107,9 @@ func mergeSnippet(snippet *networkv1directory.ListingSnippet, delta *networkv1di
 	}
 	if delta.ThemeColor != nil {
 		snippet.ThemeColor = delta.ThemeColor.Value
+	}
+	if delta.StartTime != nil {
+		snippet.StartTime = delta.StartTime.Value
 	}
 	if delta.ThumbnailOneof != nil {
 		snippet.Thumbnail = delta.GetThumbnail()

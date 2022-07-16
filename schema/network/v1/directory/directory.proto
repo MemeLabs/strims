@@ -141,6 +141,7 @@ message ListingSnippet {
   uint32 video_height = 11;
   uint32 video_width = 12;
   fixed32 theme_color = 13;
+  int64 start_time = 14;
 
   bytes key = 10001;
   bytes signature = 10002;
@@ -163,6 +164,7 @@ message ListingSnippetDelta {
   google.protobuf.UInt32Value video_height = 10;
   google.protobuf.UInt32Value video_width = 11;
   google.protobuf.UInt32Value theme_color = 12;
+  google.protobuf.Int64Value start_time = 13;
 
   oneof tags_oneof {
     Tags tags = 1001;
@@ -415,6 +417,7 @@ message FrontendGetListingsResponse {
 message FrontendWatchListingsRequest {
   repeated ListingContentType content_types = 1;
   repeated bytes network_keys = 2;
+  uint64 listing_id = 3;
 }
 
 message FrontendWatchListingsResponse {

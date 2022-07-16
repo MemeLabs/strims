@@ -10,6 +10,8 @@ import {
   google_protobuf_IBoolValue,
   google_protobuf_BytesValue,
   google_protobuf_IBytesValue,
+  google_protobuf_Int64Value,
+  google_protobuf_IInt64Value,
   google_protobuf_StringValue,
   google_protobuf_IStringValue,
   google_protobuf_UInt32Value,
@@ -990,6 +992,7 @@ export type IListingSnippet = {
   videoHeight?: number;
   videoWidth?: number;
   themeColor?: number;
+  startTime?: bigint;
   key?: Uint8Array;
   signature?: Uint8Array;
 }
@@ -1008,6 +1011,7 @@ export class ListingSnippet {
   videoHeight: number;
   videoWidth: number;
   themeColor: number;
+  startTime: bigint;
   key: Uint8Array;
   signature: Uint8Array;
 
@@ -1025,6 +1029,7 @@ export class ListingSnippet {
     this.videoHeight = v?.videoHeight || 0;
     this.videoWidth = v?.videoWidth || 0;
     this.themeColor = v?.themeColor || 0;
+    this.startTime = v?.startTime || BigInt(0);
     this.key = v?.key || new Uint8Array();
     this.signature = v?.signature || new Uint8Array();
   }
@@ -1044,6 +1049,7 @@ export class ListingSnippet {
     if (m.videoHeight) w.uint32(88).uint32(m.videoHeight);
     if (m.videoWidth) w.uint32(96).uint32(m.videoWidth);
     if (m.themeColor) w.uint32(109).fixed32(m.themeColor);
+    if (m.startTime) w.uint32(112).int64(m.startTime);
     if (m.key.length) w.uint32(80010).bytes(m.key);
     if (m.signature.length) w.uint32(80018).bytes(m.signature);
     return w;
@@ -1095,6 +1101,9 @@ export class ListingSnippet {
         case 13:
         m.themeColor = r.fixed32();
         break;
+        case 14:
+        m.startTime = r.int64();
+        break;
         case 10001:
         m.key = r.bytes();
         break;
@@ -1123,6 +1132,7 @@ export type IListingSnippetDelta = {
   videoHeight?: google_protobuf_IUInt32Value;
   videoWidth?: google_protobuf_IUInt32Value;
   themeColor?: google_protobuf_IUInt32Value;
+  startTime?: google_protobuf_IInt64Value;
   tagsOneof?: ListingSnippetDelta.ITagsOneof
   thumbnailOneof?: ListingSnippetDelta.IThumbnailOneof
   channelLogoOneof?: ListingSnippetDelta.IChannelLogoOneof
@@ -1141,6 +1151,7 @@ export class ListingSnippetDelta {
   videoHeight: google_protobuf_UInt32Value | undefined;
   videoWidth: google_protobuf_UInt32Value | undefined;
   themeColor: google_protobuf_UInt32Value | undefined;
+  startTime: google_protobuf_Int64Value | undefined;
   tagsOneof: ListingSnippetDelta.TTagsOneof;
   thumbnailOneof: ListingSnippetDelta.TThumbnailOneof;
   channelLogoOneof: ListingSnippetDelta.TChannelLogoOneof;
@@ -1158,6 +1169,7 @@ export class ListingSnippetDelta {
     this.videoHeight = v?.videoHeight && new google_protobuf_UInt32Value(v.videoHeight);
     this.videoWidth = v?.videoWidth && new google_protobuf_UInt32Value(v.videoWidth);
     this.themeColor = v?.themeColor && new google_protobuf_UInt32Value(v.themeColor);
+    this.startTime = v?.startTime && new google_protobuf_Int64Value(v.startTime);
     this.tagsOneof = new ListingSnippetDelta.TagsOneof(v?.tagsOneof);
     this.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof(v?.thumbnailOneof);
     this.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof(v?.channelLogoOneof);
@@ -1177,6 +1189,7 @@ export class ListingSnippetDelta {
     if (m.videoHeight) google_protobuf_UInt32Value.encode(m.videoHeight, w.uint32(82).fork()).ldelim();
     if (m.videoWidth) google_protobuf_UInt32Value.encode(m.videoWidth, w.uint32(90).fork()).ldelim();
     if (m.themeColor) google_protobuf_UInt32Value.encode(m.themeColor, w.uint32(98).fork()).ldelim();
+    if (m.startTime) google_protobuf_Int64Value.encode(m.startTime, w.uint32(106).fork()).ldelim();
     switch (m.tagsOneof.case) {
       case ListingSnippetDelta.TagsOneofCase.TAGS:
       strims_network_v1_directory_ListingSnippetDelta_Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
@@ -1237,6 +1250,9 @@ export class ListingSnippetDelta {
         break;
         case 12:
         m.themeColor = google_protobuf_UInt32Value.decode(r, r.uint32());
+        break;
+        case 13:
+        m.startTime = google_protobuf_Int64Value.decode(r, r.uint32());
         break;
         case 1001:
         m.tagsOneof = new ListingSnippetDelta.TagsOneof({ tags: strims_network_v1_directory_ListingSnippetDelta_Tags.decode(r, r.uint32()) });
@@ -3444,21 +3460,25 @@ export class FrontendGetListingsResponse {
 export type IFrontendWatchListingsRequest = {
   contentTypes?: strims_network_v1_directory_ListingContentType[];
   networkKeys?: Uint8Array[];
+  listingId?: bigint;
 }
 
 export class FrontendWatchListingsRequest {
   contentTypes: strims_network_v1_directory_ListingContentType[];
   networkKeys: Uint8Array[];
+  listingId: bigint;
 
   constructor(v?: IFrontendWatchListingsRequest) {
     this.contentTypes = v?.contentTypes ? v.contentTypes : [];
     this.networkKeys = v?.networkKeys ? v.networkKeys : [];
+    this.listingId = v?.listingId || BigInt(0);
   }
 
   static encode(m: FrontendWatchListingsRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     m.contentTypes.reduce((w, v) => w.uint32(v), w.uint32(10).fork()).ldelim();
     for (const v of m.networkKeys) w.uint32(18).bytes(v);
+    if (m.listingId) w.uint32(24).uint64(m.listingId);
     return w;
   }
 
@@ -3474,6 +3494,9 @@ export class FrontendWatchListingsRequest {
         break;
         case 2:
         m.networkKeys.push(r.bytes())
+        break;
+        case 3:
+        m.listingId = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

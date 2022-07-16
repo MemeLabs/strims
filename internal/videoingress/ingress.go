@@ -362,7 +362,10 @@ func (s *ingressStream) unpublishDirectoryListing() error {
 }
 
 func (s *ingressStream) syncDirectorySnippet() {
-	snippet := &networkv1directory.ListingSnippet{}
+	snippet := &networkv1directory.ListingSnippet{
+		StartTime: time.Now().Unix(),
+		Live:      true,
+	}
 
 	var segment bytes.Buffer
 

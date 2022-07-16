@@ -5,6 +5,7 @@ package rpcutil
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -40,7 +41,7 @@ func (c *ClientRetrier) CallUnary(ctx context.Context, method string, req proto.
 		err := c.c.CallUnary(callCtx, method, req, res)
 		cancel()
 
-		if err == nil || retries == 0 {
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || retries == 0 {
 			return err
 		}
 
