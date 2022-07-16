@@ -5,7 +5,9 @@ import "./Shell.scss";
 
 import clsx from "clsx";
 import React, { useCallback, useEffect, useRef } from "react";
+import { Helmet } from "react-helmet";
 
+import twemoji from "../../../assets/chat/TwemojiMozilla.ttf";
 import { ThreadInitState, useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import Composer from "./Composer";
@@ -54,6 +56,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         "--chat-height": size ? `${size.height}px` : "100%",
       }}
     >
+      <Helmet link={[{ rel: "preload", as: "font", href: twemoji }]} />
       <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <div className="chat__messages">
         <Scroller
