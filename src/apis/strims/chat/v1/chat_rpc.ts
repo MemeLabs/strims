@@ -94,6 +94,9 @@ import {
   strims_chat_v1_IMarkWhispersReadRequest,
   strims_chat_v1_MarkWhispersReadRequest,
   strims_chat_v1_MarkWhispersReadResponse,
+  strims_chat_v1_IDeleteWhisperThreadRequest,
+  strims_chat_v1_DeleteWhisperThreadRequest,
+  strims_chat_v1_DeleteWhisperThreadResponse,
   strims_chat_v1_ISetUIConfigRequest,
   strims_chat_v1_SetUIConfigRequest,
   strims_chat_v1_SetUIConfigResponse,
@@ -305,6 +308,7 @@ export interface ChatFrontendService {
   listWhispers(req: strims_chat_v1_ListWhispersRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListWhispersResponse> | strims_chat_v1_ListWhispersResponse;
   watchWhispers(req: strims_chat_v1_WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<strims_chat_v1_WatchWhispersResponse>;
   markWhispersRead(req: strims_chat_v1_MarkWhispersReadRequest, call: strims_rpc_Call): Promise<strims_chat_v1_MarkWhispersReadResponse> | strims_chat_v1_MarkWhispersReadResponse;
+  deleteWhisperThread(req: strims_chat_v1_DeleteWhisperThreadRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteWhisperThreadResponse> | strims_chat_v1_DeleteWhisperThreadResponse;
   setUIConfig(req: strims_chat_v1_SetUIConfigRequest, call: strims_rpc_Call): Promise<strims_chat_v1_SetUIConfigResponse> | strims_chat_v1_SetUIConfigResponse;
   watchUIConfig(req: strims_chat_v1_WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<strims_chat_v1_WatchUIConfigResponse>;
   ignore(req: strims_chat_v1_IgnoreRequest, call: strims_rpc_Call): Promise<strims_chat_v1_IgnoreResponse> | strims_chat_v1_IgnoreResponse;
@@ -325,6 +329,7 @@ export class UnimplementedChatFrontendService implements ChatFrontendService {
   listWhispers(req: strims_chat_v1_ListWhispersRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListWhispersResponse> | strims_chat_v1_ListWhispersResponse { throw new Error("not implemented"); }
   watchWhispers(req: strims_chat_v1_WatchWhispersRequest, call: strims_rpc_Call): GenericReadable<strims_chat_v1_WatchWhispersResponse> { throw new Error("not implemented"); }
   markWhispersRead(req: strims_chat_v1_MarkWhispersReadRequest, call: strims_rpc_Call): Promise<strims_chat_v1_MarkWhispersReadResponse> | strims_chat_v1_MarkWhispersReadResponse { throw new Error("not implemented"); }
+  deleteWhisperThread(req: strims_chat_v1_DeleteWhisperThreadRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteWhisperThreadResponse> | strims_chat_v1_DeleteWhisperThreadResponse { throw new Error("not implemented"); }
   setUIConfig(req: strims_chat_v1_SetUIConfigRequest, call: strims_rpc_Call): Promise<strims_chat_v1_SetUIConfigResponse> | strims_chat_v1_SetUIConfigResponse { throw new Error("not implemented"); }
   watchUIConfig(req: strims_chat_v1_WatchUIConfigRequest, call: strims_rpc_Call): GenericReadable<strims_chat_v1_WatchUIConfigResponse> { throw new Error("not implemented"); }
   ignore(req: strims_chat_v1_IgnoreRequest, call: strims_rpc_Call): Promise<strims_chat_v1_IgnoreResponse> | strims_chat_v1_IgnoreResponse { throw new Error("not implemented"); }
@@ -345,6 +350,7 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<strims_chat_v1_ListWhispersRequest, strims_chat_v1_ListWhispersResponse>("strims.chat.v1.ChatFrontend.ListWhispers", service.listWhispers.bind(service), strims_chat_v1_ListWhispersRequest);
   host.registerMethod<strims_chat_v1_WatchWhispersRequest, strims_chat_v1_WatchWhispersResponse>("strims.chat.v1.ChatFrontend.WatchWhispers", service.watchWhispers.bind(service), strims_chat_v1_WatchWhispersRequest);
   host.registerMethod<strims_chat_v1_MarkWhispersReadRequest, strims_chat_v1_MarkWhispersReadResponse>("strims.chat.v1.ChatFrontend.MarkWhispersRead", service.markWhispersRead.bind(service), strims_chat_v1_MarkWhispersReadRequest);
+  host.registerMethod<strims_chat_v1_DeleteWhisperThreadRequest, strims_chat_v1_DeleteWhisperThreadResponse>("strims.chat.v1.ChatFrontend.DeleteWhisperThread", service.deleteWhisperThread.bind(service), strims_chat_v1_DeleteWhisperThreadRequest);
   host.registerMethod<strims_chat_v1_SetUIConfigRequest, strims_chat_v1_SetUIConfigResponse>("strims.chat.v1.ChatFrontend.SetUIConfig", service.setUIConfig.bind(service), strims_chat_v1_SetUIConfigRequest);
   host.registerMethod<strims_chat_v1_WatchUIConfigRequest, strims_chat_v1_WatchUIConfigResponse>("strims.chat.v1.ChatFrontend.WatchUIConfig", service.watchUIConfig.bind(service), strims_chat_v1_WatchUIConfigRequest);
   host.registerMethod<strims_chat_v1_IgnoreRequest, strims_chat_v1_IgnoreResponse>("strims.chat.v1.ChatFrontend.Ignore", service.ignore.bind(service), strims_chat_v1_IgnoreRequest);
@@ -392,6 +398,10 @@ export class ChatFrontendClient {
 
   public markWhispersRead(req?: strims_chat_v1_IMarkWhispersReadRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_MarkWhispersReadResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.MarkWhispersRead", new strims_chat_v1_MarkWhispersReadRequest(req)), strims_chat_v1_MarkWhispersReadResponse, opts);
+  }
+
+  public deleteWhisperThread(req?: strims_chat_v1_IDeleteWhisperThreadRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_DeleteWhisperThreadResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.DeleteWhisperThread", new strims_chat_v1_DeleteWhisperThreadRequest(req)), strims_chat_v1_DeleteWhisperThreadResponse, opts);
   }
 
   public setUIConfig(req?: strims_chat_v1_ISetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_SetUIConfigResponse> {

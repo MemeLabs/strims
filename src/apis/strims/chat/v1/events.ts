@@ -421,6 +421,42 @@ export class WhisperThreadChangeEvent {
   }
 }
 
+export type IWhisperThreadDeleteEvent = {
+  whisperThread?: strims_chat_v1_IWhisperThread;
+}
+
+export class WhisperThreadDeleteEvent {
+  whisperThread: strims_chat_v1_WhisperThread | undefined;
+
+  constructor(v?: IWhisperThreadDeleteEvent) {
+    this.whisperThread = v?.whisperThread && new strims_chat_v1_WhisperThread(v.whisperThread);
+  }
+
+  static encode(m: WhisperThreadDeleteEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.whisperThread) strims_chat_v1_WhisperThread.encode(m.whisperThread, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WhisperThreadDeleteEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WhisperThreadDeleteEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.whisperThread = strims_chat_v1_WhisperThread.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IWhisperRecordChangeEvent = {
   whisperRecord?: strims_chat_v1_IWhisperRecord;
 }
@@ -559,6 +595,12 @@ export const strims_chat_v1_WhisperThreadChangeEvent = WhisperThreadChangeEvent;
 export type strims_chat_v1_WhisperThreadChangeEvent = WhisperThreadChangeEvent;
 /* @internal */
 export type strims_chat_v1_IWhisperThreadChangeEvent = IWhisperThreadChangeEvent;
+/* @internal */
+export const strims_chat_v1_WhisperThreadDeleteEvent = WhisperThreadDeleteEvent;
+/* @internal */
+export type strims_chat_v1_WhisperThreadDeleteEvent = WhisperThreadDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IWhisperThreadDeleteEvent = IWhisperThreadDeleteEvent;
 /* @internal */
 export const strims_chat_v1_WhisperRecordChangeEvent = WhisperRecordChangeEvent;
 /* @internal */

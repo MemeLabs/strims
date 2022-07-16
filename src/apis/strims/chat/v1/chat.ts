@@ -4449,11 +4449,14 @@ export class WatchWhispersResponse {
       case WatchWhispersResponse.BodyCase.THREAD_UPDATE:
       strims_chat_v1_WhisperThread.encode(m.body.threadUpdate, w.uint32(8010).fork()).ldelim();
       break;
+      case WatchWhispersResponse.BodyCase.THREAD_DELETE:
+      strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete.encode(m.body.threadDelete, w.uint32(8018).fork()).ldelim();
+      break;
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE:
-      strims_chat_v1_WhisperRecord.encode(m.body.whisperUpdate, w.uint32(8018).fork()).ldelim();
+      strims_chat_v1_WhisperRecord.encode(m.body.whisperUpdate, w.uint32(8026).fork()).ldelim();
       break;
       case WatchWhispersResponse.BodyCase.WHISPER_DELETE:
-      strims_chat_v1_WatchWhispersResponse_WhisperDelete.encode(m.body.whisperDelete, w.uint32(8026).fork()).ldelim();
+      strims_chat_v1_WatchWhispersResponse_WhisperDelete.encode(m.body.whisperDelete, w.uint32(8034).fork()).ldelim();
       break;
     }
     return w;
@@ -4473,9 +4476,12 @@ export class WatchWhispersResponse {
         m.body = new WatchWhispersResponse.Body({ threadUpdate: strims_chat_v1_WhisperThread.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.body = new WatchWhispersResponse.Body({ whisperUpdate: strims_chat_v1_WhisperRecord.decode(r, r.uint32()) });
+        m.body = new WatchWhispersResponse.Body({ threadDelete: strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete.decode(r, r.uint32()) });
         break;
         case 1003:
+        m.body = new WatchWhispersResponse.Body({ whisperUpdate: strims_chat_v1_WhisperRecord.decode(r, r.uint32()) });
+        break;
+        case 1004:
         m.body = new WatchWhispersResponse.Body({ whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete.decode(r, r.uint32()) });
         break;
         default:
@@ -4491,13 +4497,15 @@ export namespace WatchWhispersResponse {
   export enum BodyCase {
     NOT_SET = 0,
     THREAD_UPDATE = 1001,
-    WHISPER_UPDATE = 1002,
-    WHISPER_DELETE = 1003,
+    THREAD_DELETE = 1002,
+    WHISPER_UPDATE = 1003,
+    WHISPER_DELETE = 1004,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_IWhisperThread }
+  |{ case?: BodyCase.THREAD_DELETE, threadDelete: strims_chat_v1_WatchWhispersResponse_IWhisperThreadDelete }
   |{ case?: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_IWhisperRecord }
   |{ case?: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_IWhisperDelete }
   ;
@@ -4505,12 +4513,14 @@ export namespace WatchWhispersResponse {
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_WhisperThread }
+  |{ case: BodyCase.THREAD_DELETE, threadDelete: strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete }
   |{ case: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_WhisperRecord }
   |{ case: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete }
   >;
 
   class BodyImpl {
     threadUpdate: strims_chat_v1_WhisperThread;
+    threadDelete: strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete;
     whisperUpdate: strims_chat_v1_WhisperRecord;
     whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete;
     case: BodyCase = BodyCase.NOT_SET;
@@ -4519,6 +4529,10 @@ export namespace WatchWhispersResponse {
       if (v && "threadUpdate" in v) {
         this.case = BodyCase.THREAD_UPDATE;
         this.threadUpdate = new strims_chat_v1_WhisperThread(v.threadUpdate);
+      } else
+      if (v && "threadDelete" in v) {
+        this.case = BodyCase.THREAD_DELETE;
+        this.threadDelete = new strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete(v.threadDelete);
       } else
       if (v && "whisperUpdate" in v) {
         this.case = BodyCase.WHISPER_UPDATE;
@@ -4535,11 +4549,48 @@ export namespace WatchWhispersResponse {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
     T extends { threadUpdate: strims_chat_v1_IWhisperThread } ? { case: BodyCase.THREAD_UPDATE, threadUpdate: strims_chat_v1_WhisperThread } :
+    T extends { threadDelete: strims_chat_v1_WatchWhispersResponse_IWhisperThreadDelete } ? { case: BodyCase.THREAD_DELETE, threadDelete: strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete } :
     T extends { whisperUpdate: strims_chat_v1_IWhisperRecord } ? { case: BodyCase.WHISPER_UPDATE, whisperUpdate: strims_chat_v1_WhisperRecord } :
     T extends { whisperDelete: strims_chat_v1_WatchWhispersResponse_IWhisperDelete } ? { case: BodyCase.WHISPER_DELETE, whisperDelete: strims_chat_v1_WatchWhispersResponse_WhisperDelete } :
     never
     >;
   };
+
+  export type IWhisperThreadDelete = {
+    threadId?: bigint;
+  }
+
+  export class WhisperThreadDelete {
+    threadId: bigint;
+
+    constructor(v?: IWhisperThreadDelete) {
+      this.threadId = v?.threadId || BigInt(0);
+    }
+
+    static encode(m: WhisperThreadDelete, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.threadId) w.uint32(8).uint64(m.threadId);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): WhisperThreadDelete {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new WhisperThreadDelete();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.threadId = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
 
   export type IWhisperDelete = {
     recordId?: bigint;
@@ -4638,6 +4689,61 @@ export class MarkWhispersReadResponse {
   static decode(r: Reader | Uint8Array, length?: number): MarkWhispersReadResponse {
     if (r instanceof Reader && length) r.skip(length);
     return new MarkWhispersReadResponse();
+  }
+}
+
+export type IDeleteWhisperThreadRequest = {
+  threadId?: bigint;
+}
+
+export class DeleteWhisperThreadRequest {
+  threadId: bigint;
+
+  constructor(v?: IDeleteWhisperThreadRequest) {
+    this.threadId = v?.threadId || BigInt(0);
+  }
+
+  static encode(m: DeleteWhisperThreadRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.threadId) w.uint32(8).uint64(m.threadId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteWhisperThreadRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeleteWhisperThreadRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.threadId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteWhisperThreadResponse = Record<string, any>;
+
+export class DeleteWhisperThreadResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeleteWhisperThreadResponse) {
+  }
+
+  static encode(m: DeleteWhisperThreadResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteWhisperThreadResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeleteWhisperThreadResponse();
   }
 }
 
@@ -6075,6 +6181,18 @@ export type strims_chat_v1_MarkWhispersReadResponse = MarkWhispersReadResponse;
 /* @internal */
 export type strims_chat_v1_IMarkWhispersReadResponse = IMarkWhispersReadResponse;
 /* @internal */
+export const strims_chat_v1_DeleteWhisperThreadRequest = DeleteWhisperThreadRequest;
+/* @internal */
+export type strims_chat_v1_DeleteWhisperThreadRequest = DeleteWhisperThreadRequest;
+/* @internal */
+export type strims_chat_v1_IDeleteWhisperThreadRequest = IDeleteWhisperThreadRequest;
+/* @internal */
+export const strims_chat_v1_DeleteWhisperThreadResponse = DeleteWhisperThreadResponse;
+/* @internal */
+export type strims_chat_v1_DeleteWhisperThreadResponse = DeleteWhisperThreadResponse;
+/* @internal */
+export type strims_chat_v1_IDeleteWhisperThreadResponse = IDeleteWhisperThreadResponse;
+/* @internal */
 export const strims_chat_v1_SetUIConfigRequest = SetUIConfigRequest;
 /* @internal */
 export type strims_chat_v1_SetUIConfigRequest = SetUIConfigRequest;
@@ -6368,6 +6486,12 @@ export const strims_chat_v1_OpenClientResponse_ServerEvents = OpenClientResponse
 export type strims_chat_v1_OpenClientResponse_ServerEvents = OpenClientResponse.ServerEvents;
 /* @internal */
 export type strims_chat_v1_OpenClientResponse_IServerEvents = OpenClientResponse.IServerEvents;
+/* @internal */
+export const strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete = WatchWhispersResponse.WhisperThreadDelete;
+/* @internal */
+export type strims_chat_v1_WatchWhispersResponse_WhisperThreadDelete = WatchWhispersResponse.WhisperThreadDelete;
+/* @internal */
+export type strims_chat_v1_WatchWhispersResponse_IWhisperThreadDelete = WatchWhispersResponse.IWhisperThreadDelete;
 /* @internal */
 export const strims_chat_v1_WatchWhispersResponse_WhisperDelete = WatchWhispersResponse.WhisperDelete;
 /* @internal */

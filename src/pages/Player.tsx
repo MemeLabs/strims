@@ -20,7 +20,10 @@ const Player: React.FC = () => {
   const query = useQuery<PlayerQueryParams>(location.search);
   const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
 
-  useHotkeys("alt+t", () => toggleTheaterMode(), { enableOnContentEditable: true });
+  useHotkeys("alt+t", () => toggleTheaterMode(), {
+    enableOnContentEditable: true,
+    enableOnTags: ["INPUT"],
+  });
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {

@@ -525,6 +525,15 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 							ThreadUpdate: e.WhisperThread,
 						},
 					}
+				case *chatv1.WhisperThreadDeleteEvent:
+					ch <- &chatv1.WatchWhispersResponse{
+						PeerKey: e.WhisperThread.PeerKey,
+						Body: &chatv1.WatchWhispersResponse_ThreadDelete{
+							ThreadDelete: &chatv1.WatchWhispersResponse_WhisperThreadDelete{
+								ThreadId: e.WhisperThread.Id,
+							},
+						},
+					}
 				case *chatv1.WhisperRecordChangeEvent:
 					ch <- &chatv1.WatchWhispersResponse{
 						PeerKey: e.WhisperRecord.PeerKey,
@@ -561,6 +570,15 @@ func (s *chatService) MarkWhispersRead(ctx context.Context, req *chatv1.MarkWhis
 		return nil, err
 	}
 	return &chatv1.MarkWhispersReadResponse{}, nil
+}
+
+func (s *chatService) DeleteWhisperThread(ctx context.Context, req *chatv1.DeleteWhisperThreadRequest) (*chatv1.DeleteWhisperThreadResponse, error) {
+	err := dao.ChatWhisperThreads.Delete(s.store, req.ThreadId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &chatv1.DeleteWhisperThreadResponse{}, nil
 }
 
 // SetUIConfig ...

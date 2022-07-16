@@ -56,6 +56,10 @@ message WhisperThreadChangeEvent {
   WhisperThread whisper_thread = 1;
 }
 
+message WhisperThreadDeleteEvent {
+  WhisperThread whisper_thread = 1;
+}
+
 message WhisperRecordChangeEvent {
   WhisperRecord whisper_record = 1;
 }

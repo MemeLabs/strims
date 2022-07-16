@@ -9,6 +9,7 @@ import usePortal from "use-portal";
 
 import { useLayout } from "../contexts/Layout";
 import useClickAway from "../hooks/useClickAway";
+import { useStableCallback } from "../hooks/useStableCallback";
 
 interface MenuProps {
   onClose: () => void;
@@ -24,6 +25,14 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
   const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, onClose);
 
+  // because menus are rendered at the react root poitner events targeted here
+  // are not filtered out by useClickAway. this prevents interacting with menus
+  // in modals that unmount when they lose focus. to prevent this we stop events
+  // before they bubble up to the document.
+  const stopEventPropagation = useStableCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+  });
+
   return (
     <Portal>
       <div
@@ -33,6 +42,9 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
           "--context-menu-x": `${x}px`,
           "--context-menu-y": `${y}px`,
         }}
+        onMouseDown={stopEventPropagation}
+        onClick={stopEventPropagation}
+        onTouchStart={stopEventPropagation}
       >
         {children}
       </div>

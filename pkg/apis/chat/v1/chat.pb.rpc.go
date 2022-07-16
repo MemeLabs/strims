@@ -481,6 +481,7 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListWhispers", service.ListWhispers)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchWhispers", service.WatchWhispers)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.MarkWhispersRead", service.MarkWhispersRead)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteWhisperThread", service.DeleteWhisperThread)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.WatchUIConfig", service.WatchUIConfig)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.Ignore", service.Ignore)
@@ -529,6 +530,10 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *MarkWhispersReadRequest,
 	) (*MarkWhispersReadResponse, error)
+	DeleteWhisperThread(
+		ctx context.Context,
+		req *DeleteWhisperThreadRequest,
+	) (*DeleteWhisperThreadResponse, error)
 	SetUIConfig(
 		ctx context.Context,
 		req *SetUIConfigRequest,
@@ -626,6 +631,13 @@ func (s *UnimplementedChatFrontendService) MarkWhispersRead(
 	ctx context.Context,
 	req *MarkWhispersReadRequest,
 ) (*MarkWhispersReadResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatFrontendService) DeleteWhisperThread(
+	ctx context.Context,
+	req *DeleteWhisperThreadRequest,
+) (*DeleteWhisperThreadResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -776,6 +788,15 @@ func (c *ChatFrontendClient) MarkWhispersRead(
 	res *MarkWhispersReadResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.MarkWhispersRead", req, res)
+}
+
+// DeleteWhisperThread ...
+func (c *ChatFrontendClient) DeleteWhisperThread(
+	ctx context.Context,
+	req *DeleteWhisperThreadRequest,
+	res *DeleteWhisperThreadResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteWhisperThread", req, res)
 }
 
 // SetUIConfig ...

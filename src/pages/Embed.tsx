@@ -23,7 +23,10 @@ const Embed: React.FC = () => {
   const { k: networkKey, ...queryParams } = useQuery<EmbedQueryParams>(location.search);
   const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
 
-  useHotkeys("alt+t", () => toggleTheaterMode(), { enableOnContentEditable: true });
+  useHotkeys("alt+t", () => toggleTheaterMode(), {
+    enableOnContentEditable: true,
+    enableOnTags: ["INPUT"],
+  });
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {

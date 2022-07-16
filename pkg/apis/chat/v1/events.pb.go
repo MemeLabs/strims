@@ -548,6 +548,53 @@ func (x *WhisperThreadChangeEvent) GetWhisperThread() *WhisperThread {
 	return nil
 }
 
+type WhisperThreadDeleteEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	WhisperThread *WhisperThread `protobuf:"bytes,1,opt,name=whisper_thread,json=whisperThread,proto3" json:"whisper_thread,omitempty"`
+}
+
+func (x *WhisperThreadDeleteEvent) Reset() {
+	*x = WhisperThreadDeleteEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_v1_events_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WhisperThreadDeleteEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WhisperThreadDeleteEvent) ProtoMessage() {}
+
+func (x *WhisperThreadDeleteEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_v1_events_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WhisperThreadDeleteEvent.ProtoReflect.Descriptor instead.
+func (*WhisperThreadDeleteEvent) Descriptor() ([]byte, []int) {
+	return file_chat_v1_events_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WhisperThreadDeleteEvent) GetWhisperThread() *WhisperThread {
+	if x != nil {
+		return x.WhisperThread
+	}
+	return nil
+}
+
 type WhisperRecordChangeEvent struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -559,7 +606,7 @@ type WhisperRecordChangeEvent struct {
 func (x *WhisperRecordChangeEvent) Reset() {
 	*x = WhisperRecordChangeEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_events_proto_msgTypes[11]
+		mi := &file_chat_v1_events_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -572,7 +619,7 @@ func (x *WhisperRecordChangeEvent) String() string {
 func (*WhisperRecordChangeEvent) ProtoMessage() {}
 
 func (x *WhisperRecordChangeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_events_proto_msgTypes[11]
+	mi := &file_chat_v1_events_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -585,7 +632,7 @@ func (x *WhisperRecordChangeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperRecordChangeEvent.ProtoReflect.Descriptor instead.
 func (*WhisperRecordChangeEvent) Descriptor() ([]byte, []int) {
-	return file_chat_v1_events_proto_rawDescGZIP(), []int{11}
+	return file_chat_v1_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *WhisperRecordChangeEvent) GetWhisperRecord() *WhisperRecord {
@@ -606,7 +653,7 @@ type WhisperRecordDeleteEvent struct {
 func (x *WhisperRecordDeleteEvent) Reset() {
 	*x = WhisperRecordDeleteEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_v1_events_proto_msgTypes[12]
+		mi := &file_chat_v1_events_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -619,7 +666,7 @@ func (x *WhisperRecordDeleteEvent) String() string {
 func (*WhisperRecordDeleteEvent) ProtoMessage() {}
 
 func (x *WhisperRecordDeleteEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_v1_events_proto_msgTypes[12]
+	mi := &file_chat_v1_events_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -632,7 +679,7 @@ func (x *WhisperRecordDeleteEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhisperRecordDeleteEvent.ProtoReflect.Descriptor instead.
 func (*WhisperRecordDeleteEvent) Descriptor() ([]byte, []int) {
-	return file_chat_v1_events_proto_rawDescGZIP(), []int{12}
+	return file_chat_v1_events_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *WhisperRecordDeleteEvent) GetWhisperRecord() *WhisperRecord {
@@ -699,25 +746,31 @@ var file_chat_v1_events_proto_rawDesc = []byte{
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
 	0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54,
 	0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54, 0x68,
-	0x72, 0x65, 0x61, 0x64, 0x22, 0x60, 0x0a, 0x18, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x52,
-	0x65, 0x63, 0x6f, 0x72, 0x64, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74,
-	0x12, 0x44, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x5f, 0x72, 0x65, 0x63, 0x6f,
-	0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x72, 0x65, 0x61, 0x64, 0x22, 0x60, 0x0a, 0x18, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x54,
+	0x68, 0x72, 0x65, 0x61, 0x64, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74,
+	0x12, 0x44, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x5f, 0x74, 0x68, 0x72, 0x65,
+	0x61, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
 	0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65,
-	0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72,
-	0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x22, 0x60, 0x0a, 0x18, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65,
-	0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x45, 0x76, 0x65,
+	0x72, 0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72,
+	0x54, 0x68, 0x72, 0x65, 0x61, 0x64, 0x22, 0x60, 0x0a, 0x18, 0x57, 0x68, 0x69, 0x73, 0x70, 0x65,
+	0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x45, 0x76, 0x65,
 	0x6e, 0x74, 0x12, 0x44, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x5f, 0x72, 0x65,
 	0x63, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73, 0x74, 0x72,
 	0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68, 0x69, 0x73,
 	0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x0d, 0x77, 0x68, 0x69, 0x73, 0x70,
-	0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x42, 0x51, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
-	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x5a, 0x32, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
-	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2f, 0x70, 0x6b,
-	0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f, 0x76, 0x31, 0x3b, 0x63,
-	0x68, 0x61, 0x74, 0x76, 0x31, 0xba, 0x02, 0x03, 0x53, 0x43, 0x48, 0x62, 0x06, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x33,
+	0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x22, 0x60, 0x0a, 0x18, 0x57, 0x68, 0x69, 0x73,
+	0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x12, 0x44, 0x0a, 0x0e, 0x77, 0x68, 0x69, 0x73, 0x70, 0x65, 0x72, 0x5f,
+	0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x68,
+	0x69, 0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x52, 0x0d, 0x77, 0x68, 0x69,
+	0x73, 0x70, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x42, 0x51, 0x0a, 0x15, 0x67, 0x67,
+	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x5a, 0x32, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
+	0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2f,
+	0x70, 0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x63, 0x68, 0x61, 0x74, 0x2f, 0x76, 0x31,
+	0x3b, 0x63, 0x68, 0x61, 0x74, 0x76, 0x31, 0xba, 0x02, 0x03, 0x53, 0x43, 0x48, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -732,7 +785,7 @@ func file_chat_v1_events_proto_rawDescGZIP() []byte {
 	return file_chat_v1_events_proto_rawDescData
 }
 
-var file_chat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_chat_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_chat_v1_events_proto_goTypes = []interface{}{
 	(*ServerChangeEvent)(nil),        // 0: strims.chat.v1.ServerChangeEvent
 	(*ServerDeleteEvent)(nil),        // 1: strims.chat.v1.ServerDeleteEvent
@@ -745,34 +798,36 @@ var file_chat_v1_events_proto_goTypes = []interface{}{
 	(*UIConfigChangeEvent)(nil),      // 8: strims.chat.v1.UIConfigChangeEvent
 	(*SyncAssetsEvent)(nil),          // 9: strims.chat.v1.SyncAssetsEvent
 	(*WhisperThreadChangeEvent)(nil), // 10: strims.chat.v1.WhisperThreadChangeEvent
-	(*WhisperRecordChangeEvent)(nil), // 11: strims.chat.v1.WhisperRecordChangeEvent
-	(*WhisperRecordDeleteEvent)(nil), // 12: strims.chat.v1.WhisperRecordDeleteEvent
-	(*Server)(nil),                   // 13: strims.chat.v1.Server
-	(*Emote)(nil),                    // 14: strims.chat.v1.Emote
-	(*Modifier)(nil),                 // 15: strims.chat.v1.Modifier
-	(*Tag)(nil),                      // 16: strims.chat.v1.Tag
-	(*UIConfig)(nil),                 // 17: strims.chat.v1.UIConfig
-	(*WhisperThread)(nil),            // 18: strims.chat.v1.WhisperThread
-	(*WhisperRecord)(nil),            // 19: strims.chat.v1.WhisperRecord
+	(*WhisperThreadDeleteEvent)(nil), // 11: strims.chat.v1.WhisperThreadDeleteEvent
+	(*WhisperRecordChangeEvent)(nil), // 12: strims.chat.v1.WhisperRecordChangeEvent
+	(*WhisperRecordDeleteEvent)(nil), // 13: strims.chat.v1.WhisperRecordDeleteEvent
+	(*Server)(nil),                   // 14: strims.chat.v1.Server
+	(*Emote)(nil),                    // 15: strims.chat.v1.Emote
+	(*Modifier)(nil),                 // 16: strims.chat.v1.Modifier
+	(*Tag)(nil),                      // 17: strims.chat.v1.Tag
+	(*UIConfig)(nil),                 // 18: strims.chat.v1.UIConfig
+	(*WhisperThread)(nil),            // 19: strims.chat.v1.WhisperThread
+	(*WhisperRecord)(nil),            // 20: strims.chat.v1.WhisperRecord
 }
 var file_chat_v1_events_proto_depIdxs = []int32{
-	13, // 0: strims.chat.v1.ServerChangeEvent.server:type_name -> strims.chat.v1.Server
-	13, // 1: strims.chat.v1.ServerDeleteEvent.server:type_name -> strims.chat.v1.Server
-	14, // 2: strims.chat.v1.EmoteChangeEvent.emote:type_name -> strims.chat.v1.Emote
-	14, // 3: strims.chat.v1.EmoteDeleteEvent.emote:type_name -> strims.chat.v1.Emote
-	15, // 4: strims.chat.v1.ModifierChangeEvent.modifier:type_name -> strims.chat.v1.Modifier
-	15, // 5: strims.chat.v1.ModifierDeleteEvent.modifier:type_name -> strims.chat.v1.Modifier
-	16, // 6: strims.chat.v1.TagChangeEvent.tag:type_name -> strims.chat.v1.Tag
-	16, // 7: strims.chat.v1.TagDeleteEvent.tag:type_name -> strims.chat.v1.Tag
-	17, // 8: strims.chat.v1.UIConfigChangeEvent.ui_config:type_name -> strims.chat.v1.UIConfig
-	18, // 9: strims.chat.v1.WhisperThreadChangeEvent.whisper_thread:type_name -> strims.chat.v1.WhisperThread
-	19, // 10: strims.chat.v1.WhisperRecordChangeEvent.whisper_record:type_name -> strims.chat.v1.WhisperRecord
-	19, // 11: strims.chat.v1.WhisperRecordDeleteEvent.whisper_record:type_name -> strims.chat.v1.WhisperRecord
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	14, // 0: strims.chat.v1.ServerChangeEvent.server:type_name -> strims.chat.v1.Server
+	14, // 1: strims.chat.v1.ServerDeleteEvent.server:type_name -> strims.chat.v1.Server
+	15, // 2: strims.chat.v1.EmoteChangeEvent.emote:type_name -> strims.chat.v1.Emote
+	15, // 3: strims.chat.v1.EmoteDeleteEvent.emote:type_name -> strims.chat.v1.Emote
+	16, // 4: strims.chat.v1.ModifierChangeEvent.modifier:type_name -> strims.chat.v1.Modifier
+	16, // 5: strims.chat.v1.ModifierDeleteEvent.modifier:type_name -> strims.chat.v1.Modifier
+	17, // 6: strims.chat.v1.TagChangeEvent.tag:type_name -> strims.chat.v1.Tag
+	17, // 7: strims.chat.v1.TagDeleteEvent.tag:type_name -> strims.chat.v1.Tag
+	18, // 8: strims.chat.v1.UIConfigChangeEvent.ui_config:type_name -> strims.chat.v1.UIConfig
+	19, // 9: strims.chat.v1.WhisperThreadChangeEvent.whisper_thread:type_name -> strims.chat.v1.WhisperThread
+	19, // 10: strims.chat.v1.WhisperThreadDeleteEvent.whisper_thread:type_name -> strims.chat.v1.WhisperThread
+	20, // 11: strims.chat.v1.WhisperRecordChangeEvent.whisper_record:type_name -> strims.chat.v1.WhisperRecord
+	20, // 12: strims.chat.v1.WhisperRecordDeleteEvent.whisper_record:type_name -> strims.chat.v1.WhisperRecord
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_chat_v1_events_proto_init() }
@@ -915,7 +970,7 @@ func file_chat_v1_events_proto_init() {
 			}
 		}
 		file_chat_v1_events_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WhisperRecordChangeEvent); i {
+			switch v := v.(*WhisperThreadDeleteEvent); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -927,6 +982,18 @@ func file_chat_v1_events_proto_init() {
 			}
 		}
 		file_chat_v1_events_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WhisperRecordChangeEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_v1_events_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WhisperRecordDeleteEvent); i {
 			case 0:
 				return &v.state
@@ -945,7 +1012,7 @@ func file_chat_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_chat_v1_events_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

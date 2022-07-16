@@ -33,6 +33,7 @@ const (
 	chatWhisperRecordStateNS
 	chatWhisperThreadNS
 	chatWhisperThreadPeerKeyNS
+	chatWhisperRecordWhisperThreadNS
 )
 
 var ChatServers = NewTable(
@@ -161,6 +162,9 @@ var ChatWhisperThreads = NewTable(
 		ObserveChange: func(m, p *chatv1.WhisperThread) proto.Message {
 			return &chatv1.WhisperThreadChangeEvent{WhisperThread: m}
 		},
+		ObserveDelete: func(m *chatv1.WhisperThread) proto.Message {
+			return &chatv1.WhisperThreadDeleteEvent{WhisperThread: m}
+		},
 	},
 )
 
@@ -181,6 +185,14 @@ var ChatWhisperRecords = NewTable(
 			return &chatv1.WhisperRecordDeleteEvent{WhisperRecord: m}
 		},
 	},
+)
+
+var GetChatWhisperRecordsByWhisperThreadID, GetChatWhisperRecordsByWhisperThread, GetChatWhisperThreadByWhisperRecord = ManyToOne(
+	chatWhisperRecordWhisperThreadNS,
+	ChatWhisperRecords,
+	ChatWhisperThreads,
+	(*chatv1.WhisperRecord).GetThreadId,
+	&ManyToOneOptions{CascadeDelete: true},
 )
 
 var ChatWhisperRecordsByPeerKey = NewSecondaryIndex(

@@ -47,7 +47,10 @@ const Chat: React.FC = () => {
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, () => toggleMenuOpen(false));
 
-  useHotkeys("alt+r", () => toggleShowChat(), { enableOnContentEditable: true });
+  useHotkeys("alt+r", () => toggleShowChat(), {
+    enableOnContentEditable: true,
+    enableOnTags: ["INPUT"],
+  });
 
   const handleToggleClick = useCallback(() => toggleShowChat(), []);
 

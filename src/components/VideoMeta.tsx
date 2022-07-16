@@ -15,14 +15,14 @@ import { formatNumber } from "../lib/number";
 import SnippetImage from "./Directory/SnippetImage";
 import Stopwatch from "./Stopwatch";
 
-const PlayerMeta: React.FC = () => {
+const VideoMeta: React.FC = () => {
   const { listingId: listingId } = useContext(PlayerContext);
-  return listingId && <Foo />;
+  return listingId && <VideoMetaContent />;
 };
 
-export default PlayerMeta;
+export default VideoMeta;
 
-const Foo: React.FC = () => {
+const VideoMetaContent: React.FC = () => {
   const { networkKey, listingId } = useContext(PlayerContext);
   const { listing } = useListing(networkKey, listingId);
 

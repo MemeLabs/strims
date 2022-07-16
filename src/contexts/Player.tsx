@@ -5,7 +5,6 @@ import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { ReactNode, createContext, useEffect, useMemo, useState } from "react";
 
-import { useStableCallbacks } from "../hooks/useStableCallback";
 import { ServiceSlug, slugToService } from "../lib/directory";
 import { useClient } from "./FrontendApi";
 
@@ -138,7 +137,12 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
         }
 
         updateListing(source);
-        return { ...state, source };
+        return {
+          ...state,
+          source,
+          networkKey: null,
+          directoryId: null,
+        };
       });
 
     const setMode = (mode: PlayerMode) => setState((state) => ({ ...state, mode }));

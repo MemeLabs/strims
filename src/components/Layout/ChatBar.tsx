@@ -28,12 +28,12 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   const [minimized, toggleMinimized] = useToggle(false);
 
   useEffect(() => {
-    if (room.state === ThreadInitState.OPEN) {
-      roomActions.toggleVisible(true);
+    roomActions.toggleVisible(!minimized);
+    if (!minimized && room.state === ThreadInitState.OPEN) {
       chatActions.resetTopicUnreadCount(topic);
       return () => roomActions.toggleVisible(false);
     }
-  }, [room.state]);
+  }, [minimized, room.state]);
 
   const renderMessage = useCallback(
     ({ index, style }: MessageProps) => (
@@ -48,11 +48,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
     [uiConfig, room.styles]
   );
 
-  const handleHeaderClick = useStableCallback(() => {
-    toggleMinimized(!minimized);
-    roomActions.toggleVisible(minimized);
-    chatActions.resetTopicUnreadCount(topic);
-  });
+  const handleHeaderClick = useStableCallback(() => toggleMinimized());
 
   const handleCloseClick = useStableCallback(() => chatActions.closeTopic(topic));
 

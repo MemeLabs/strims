@@ -8,19 +8,20 @@ import date from "date-and-time";
 import { Base64 } from "js-base64";
 import React, { ReactNode, useContext, useMemo, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { BsArrowBarRight } from "react-icons/bs";
+import { BsArrowBarRight, BsThreeDots } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineChatAlt2, HiOutlineUser, HiOutlineUsers } from "react-icons/hi";
 
 import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Topic, useChat } from "../../contexts/Chat";
-import { useCall } from "../../contexts/FrontendApi";
+import { useCall, useClient } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
 import { useListings } from "../../hooks/directory";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { certificateRoot } from "../../lib/certificate";
+import { MenuItem, useContextMenu } from "../ContextMenu";
 import SettingsDrawer from "./SettingsDrawer";
 
 enum Tab {
@@ -244,27 +245,50 @@ const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread, o
     onChange({ type: "WHISPER", topicKey: thread.peerKey });
   });
 
+  const { openMenu, closeMenu, Menu } = useContextMenu();
+  const client = useClient();
+
+  const handleContextMenu = useStableCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    openMenu(e);
+  });
+
+  const handleDeleteThreadClick = useStableCallback(() => {
+    void client.chat.deleteWhisperThread({ threadId: thread.id });
+    closeMenu();
+  });
+
   return (
-    <tr key={thread.id.toString()} className="whispers_list__row" onClick={handleClick}>
-      <td className="whispers_list__status">
-        <span
-          className={clsx({
-            "whispers_list__status__icon": true,
-            "whispers_list__status__icon--online": online,
-          })}
-          title={online ? "online" : "offline"}
-        />
-      </td>
-      <td className="whispers_list__label">
-        <span className="whispers_list__alias">{thread.alias}</span>
-        {thread.unreadCount > 0 && (
-          <span className="whispers_list__unread">({thread.unreadCount})</span>
-        )}
-      </td>
-      <td className="whispers_list__time">
-        {formatMessageTime(new Date(Number(thread.lastMessageTime)))}
-      </td>
-    </tr>
+    <>
+      <tr
+        key={thread.id.toString()}
+        className="whispers_list__row"
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+      >
+        <td className="whispers_list__status">
+          <span
+            className={clsx({
+              "whispers_list__status__icon": true,
+              "whispers_list__status__icon--online": online,
+            })}
+            title={online ? "online" : "offline"}
+          />
+        </td>
+        <td className="whispers_list__label">
+          <span className="whispers_list__alias">{thread.alias}</span>
+          {thread.unreadCount > 0 && (
+            <span className="whispers_list__unread">({thread.unreadCount})</span>
+          )}
+        </td>
+        <td className="whispers_list__time">
+          {formatMessageTime(new Date(Number(thread.lastMessageTime)))}
+        </td>
+      </tr>
+      <Menu>
+        <MenuItem onClick={handleDeleteThreadClick}>delete thread</MenuItem>
+      </Menu>
+    </>
   );
 };
 
@@ -310,9 +334,9 @@ const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
   }, [whisperThreads]);
 
   const users = useMemo(() => {
-    return getUsersRes.value?.users.filter(
-      ({ peerKey }) => !threadPeerKeys.has(Base64.fromUint8Array(peerKey, true))
-    );
+    return getUsersRes.value?.users
+      .filter(({ peerKey }) => !threadPeerKeys.has(Base64.fromUint8Array(peerKey, true)))
+      .sort((a, b) => a.aliases[0].alias.localeCompare(b.aliases[0].alias));
   }, [getUsersRes, threadPeerKeys]);
 
   const onlinePeerKeys = useMemo(() => {
@@ -329,9 +353,9 @@ const WhispersList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
             <h4 className="whispers_list__header">whispers</h4>
             <table className="whispers_list__table">
               <tbody>
-                {threads.map((thread, i) => (
+                {threads.map((thread) => (
                   <WhispersListItem
-                    key={i}
+                    key={thread.id.toString()}
                     thread={thread}
                     onChange={onChange}
                     online={onlinePeerKeys.has(Base64.fromUint8Array(thread.peerKey, true))}

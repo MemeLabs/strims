@@ -512,6 +512,10 @@ message ListWhispersResponse {
 message WatchWhispersRequest {}
 
 message WatchWhispersResponse {
+  message WhisperThreadDelete {
+    uint64 thread_id = 1;
+  }
+
   message WhisperDelete {
     uint64 record_id = 1;
     uint64 thread_id = 2;
@@ -520,8 +524,9 @@ message WatchWhispersResponse {
   bytes peer_key = 1;
   oneof body {
     WhisperThread thread_update = 1001;
-    WhisperRecord whisper_update = 1002;
-    WhisperDelete whisper_delete = 1003;
+    WhisperThreadDelete thread_delete = 1002;
+    WhisperRecord whisper_update = 1003;
+    WhisperDelete whisper_delete = 1004;
   }
 }
 
@@ -530,6 +535,12 @@ message MarkWhispersReadRequest {
 }
 
 message MarkWhispersReadResponse {}
+
+message DeleteWhisperThreadRequest {
+  uint64 thread_id = 1;
+}
+
+message DeleteWhisperThreadResponse {}
 
 message SetUIConfigRequest {
   UIConfig ui_config = 1;
@@ -616,6 +627,7 @@ service ChatFrontend {
   rpc ListWhispers(ListWhispersRequest) returns (ListWhispersResponse);
   rpc WatchWhispers(WatchWhispersRequest) returns (stream WatchWhispersResponse);
   rpc MarkWhispersRead(MarkWhispersReadRequest) returns (MarkWhispersReadResponse);
+  rpc DeleteWhisperThread(DeleteWhisperThreadRequest) returns (DeleteWhisperThreadResponse);
 
   rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
   rpc WatchUIConfig(WatchUIConfigRequest) returns (stream WatchUIConfigResponse);
