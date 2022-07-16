@@ -5,6 +5,7 @@ import "./Chat.scss";
 
 import clsx from "clsx";
 import React, { useCallback, useRef } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { BsArrowBarLeft } from "react-icons/bs";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 import { useToggle } from "react-use";
@@ -40,15 +41,17 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 
 const Chat: React.FC = () => {
   const { showChat, toggleShowChat } = useLayout();
-  const onToggleClick = useCallback(() => toggleShowChat(), []);
-
-  const [menuOpen, toggleMenuOpen] = useToggle(false);
-  const onMenuToggleClick = useCallback(() => toggleMenuOpen(), []);
+  const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
+  const [menuOpen, toggleMenuOpen] = useToggle(!mainActiveTopic);
 
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, () => toggleMenuOpen(false));
 
-  const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
+  useHotkeys("alt+r", () => toggleShowChat(), { enableOnContentEditable: true });
+
+  const handleToggleClick = useCallback(() => toggleShowChat(), []);
+
+  const handleMenuToggleClick = useCallback(() => toggleMenuOpen(), []);
 
   const handleRoomMenuChange = useCallback((topic: ThreadProviderProps) => {
     toggleMenuOpen(false);
@@ -65,7 +68,7 @@ const Chat: React.FC = () => {
       })}
       ref={ref}
     >
-      <button className="layout_chat__toggle layout_chat__toggle--on" onClick={onToggleClick}>
+      <button className="layout_chat__toggle layout_chat__toggle--on" onClick={handleToggleClick}>
         <BsArrowBarLeft />
       </button>
       <div className="layout_chat__body">
@@ -82,8 +85,8 @@ const Chat: React.FC = () => {
           )}
         </SwipablePanel>
         <Header
-          onToggleClick={onToggleClick}
-          onMenuToggleClick={onMenuToggleClick}
+          onToggleClick={handleToggleClick}
+          onMenuToggleClick={handleMenuToggleClick}
           onChange={setMainActiveTopic}
         />
         {showChat && mainActiveTopic && (

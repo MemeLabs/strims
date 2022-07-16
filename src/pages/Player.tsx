@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useContext, useEffect } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation, useParams } from "react-router-dom";
 
 import { useLayout } from "../contexts/Layout";
@@ -17,7 +18,9 @@ const Player: React.FC = () => {
   const params = useParams<"networkKey">();
   const location = useLocation();
   const query = useQuery<PlayerQueryParams>(location.search);
-  const { toggleShowVideo, toggleOverlayOpen } = useLayout();
+  const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
+
+  useHotkeys("alt+t", () => toggleTheaterMode(), { enableOnContentEditable: true });
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {
@@ -32,6 +35,7 @@ const Player: React.FC = () => {
     });
     setPath(location.pathname + location.search);
     return () => {
+      toggleTheaterMode(false);
       toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };

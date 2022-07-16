@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useContext, useEffect } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation, useParams } from "react-router-dom";
 
 import { useLayout } from "../contexts/Layout";
@@ -12,19 +13,23 @@ import { ServiceSlug } from "../lib/directory";
 interface EmbedQueryParams {
   k: string;
   [key: string]: string;
+  npm;
 }
 
+// TODO: merge with player page
 const Embed: React.FC = () => {
   const routeParams = useParams<"service" | "id">();
   const location = useLocation();
   const { k: networkKey, ...queryParams } = useQuery<EmbedQueryParams>(location.search);
-  const { toggleShowVideo, toggleOverlayOpen } = useLayout();
+  const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
+
+  useHotkeys("alt+t", () => toggleTheaterMode(), { enableOnContentEditable: true });
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {
     toggleOverlayOpen(true);
     toggleShowVideo(true);
-    setMode(PlayerMode.FULL);
+    setMode(PlayerMode.LARGE);
     setSource({
       type: "embed",
       service: routeParams.service as ServiceSlug,
@@ -34,6 +39,7 @@ const Embed: React.FC = () => {
     });
     setPath(location.pathname + location.search);
     return () => {
+      toggleTheaterMode(false);
       toggleOverlayOpen(false);
       setMode(PlayerMode.PIP);
     };
