@@ -34,9 +34,9 @@ import {
 } from "../apis/strims/chat/v1/chat";
 import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
 import { useUserList } from "../hooks/chat";
-import { applyActionInStateMap } from "../lib/applyActionInStateMap";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import curryDispatchActions from "../lib/curryDispatchActions";
+import { applyActionInStateMap, deleteFromStateMap, setInStateMap } from "../lib/stateMap";
 import { useClient } from "./FrontendApi";
 
 export interface Style {
@@ -379,20 +379,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     };
   };
 
-  const closeRoom = (state: State, serverKey: Uint8Array) => {
-    const key = formatKey(serverKey);
-    if (!state.rooms.has(key)) {
-      return state;
-    }
-
-    const { serverEvents, directoryJoinRes, networkKey } = state.rooms.get(key);
-
-    serverEvents.destroy();
-    void directoryJoinRes.then(({ id }) => client.directory.part({ networkKey, id }));
-
-    const rooms = new Map(state.rooms);
-    rooms.delete(key);
-    return { ...state, rooms };
+  const closeRoom = (room: RoomThreadState) => {
+    const { networkKey } = room;
+    room.serverEvents.destroy();
+    void room.directoryJoinRes.then(({ id }) => client.directory.part({ networkKey, id }));
   };
 
   const closeTopic = (state: State, topic: Topic) => {
@@ -407,11 +397,12 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
 
     state = { ...state, mainTopics, mainActiveTopic, popoutTopics };
 
+    const key = formatKey(topic.topicKey);
     switch (topic.type) {
       case "ROOM":
-        return closeRoom(state, topic.topicKey);
+        return applyActionInStateMap(state, "rooms", key, closeRoom);
       case "WHISPER":
-        return closeWhispers(state, topic.topicKey);
+        return deleteFromStateMap(state, "whispers", key);
     }
   };
 
@@ -475,12 +466,6 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     };
   };
 
-  const closeWhispers = (state: State, peerKey: Uint8Array) => {
-    const whispers = new Map(state.whispers);
-    whispers.delete(formatKey(peerKey));
-    return { ...state, whispers };
-  };
-
   const setUiConfig = (state: State, uiConfig: UIConfig) => ({
     ...state,
     uiConfig,
@@ -488,6 +473,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
 
   const reduceWhisperEvent = (
     thread: WhisperThreadState,
+    state: State,
     res: WatchWhispersResponse
   ): WhisperThreadState => {
     switch (res.body.case) {
@@ -499,6 +485,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           unreadCount: res.body.threadUpdate.unreadCount,
           state: ThreadInitState.OPEN,
         };
+      case WatchWhispersResponse.BodyCase.THREAD_DELETE:
+        return undefined;
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE: {
         if (thread.visible) {
           void client.chat.markWhispersRead({ threadId: thread.thread.id });
@@ -530,27 +518,16 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     const key = formatKey(res.peerKey);
 
     if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_UPDATE) {
-      state = {
-        ...state,
-        whisperThreads: new Map(state.whisperThreads).set(key, res.body.threadUpdate),
-      };
-    }
-
-    const whispers = new Map(state.whispers);
-    if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_DELETE) {
-      const whisperThreads = new Map(state.whisperThreads);
-      whisperThreads.delete(key);
-      state = { ...state, whisperThreads };
-
+      state = setInStateMap(state, "whisperThreads", key, res.body.threadUpdate);
+    } else if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_DELETE) {
+      state = deleteFromStateMap(state, "whisperThreads", key);
       state = closeTopic(state, {
         type: "WHISPER",
         topicKey: res.peerKey,
       });
-      whispers.delete(key);
-    } else if (state.whispers.has(key)) {
-      whispers.set(key, reduceWhisperEvent(state.whispers.get(key), res));
     }
-    return { ...state, whispers };
+
+    return applyActionInStateMap(state, "whispers", key, reduceWhisperEvent, res);
   };
 
   const mergeUIConfig = (state: State, values: Partial<IUIConfig>) => {
@@ -803,102 +780,105 @@ const createRoomActions = (
       state: ThreadInitState.CLOSED,
     }));
 
-  const sendMessage = (state: State, body: string) =>
-    applyRoomAction(state, (room) => {
-      const { networkKey } = room;
+  const { mergeUIConfig, closeTopic } = createGlobalActions(client, setState);
 
-      // TODO: handle rpc errors
-      const commandFuncs: { [key: string]: (...args: string[]) => void } = {
-        help: () => {
-          console.log("help");
-        },
-        ignore: (alias: string, duration: string) => {
-          if (alias) {
-            void client.chat.ignore({ networkKey, alias, duration });
-          } else {
-            console.log("ignore");
-          }
-        },
-        unignore: (alias: string) => {
-          void client.chat.unignore({ networkKey, alias });
-        },
-        highlight: (alias: string) => {
-          void client.chat.highlight({ networkKey, alias });
-        },
-        unhighlight: (alias: string) => {
-          void client.chat.unhighlight({ networkKey, alias });
-        },
-        maxlines: (n: string) => {
-          console.log("maxlines", { n });
-        },
-        mute: (alias: string, duration: string, message: string) => {
-          void client.chat.clientMute({ networkKey, serverKey, alias, duration, message });
-        },
-        unmute: (alias: string) => {
-          void client.chat.clientUnmute({ networkKey, serverKey, alias });
-        },
-        timestampformat: (format: string) => {
-          console.log("timestampformat", { format });
-        },
-        tag: (alias: string, color: string) => {
-          void client.chat.tag({ networkKey, alias, color });
-        },
-        untag: (alias: string) => {
-          void client.chat.untag({ networkKey, alias });
-        },
-        whisper: (alias: string, body: string) => {
-          void client.chat.whisper({ networkKey, alias, body });
-        },
-        exit: () => {
-          console.log("exit");
-        },
-        hideemote: (name: string) => {
-          console.log("hideemote", { name });
-        },
-        unhideemote: (name: string) => {
-          console.log("unhideemote", { name });
-        },
-        me: (body: string) => {
-          void client.chat.clientSendMessage({
-            networkKey,
-            serverKey,
-            body: `/me ${body}`,
-          });
-        },
-        spoiler: (body: string) => {
-          void client.chat.clientSendMessage({
-            networkKey,
-            serverKey,
-            body: `|| ${body} ||`,
-          });
-        },
-      };
+  const sendMessage = (state: State, body: string) => {
+    const { networkKey } = state.rooms.get(formatKey(serverKey));
 
-      const commandAliases: { [key: string]: string } = {
-        "w": "whisper",
-        "message": "whisper",
-        "msg": "whisper",
-        "tell": "whisper",
-        "t": "whisper",
-        "notify": "whisper",
-      };
-
-      if (body.startsWith("/")) {
-        const command = body.split(" ", 1).pop().toLowerCase().substring(1);
-        const func = commandFuncs[commandAliases[command] ?? command];
-        if (func) {
-          const args = body.split(" ", func.length);
-          func(...[...args.slice(1), body.substring(args.reduce((n, a) => n + a.length + 1, 0))]);
+    // TODO: handle rpc errors
+    const commandFuncs: { [key: string]: (...args: string[]) => void } = {
+      help: () => {
+        console.log("help");
+      },
+      ignore: (alias: string, duration: string) => {
+        if (alias) {
+          void client.chat.ignore({ networkKey, alias, duration });
         } else {
-          // TODO: invalid command feedback
+          console.log("ignore");
         }
-      } else {
-        void client.chat.clientSendMessage({ networkKey, serverKey, body });
-      }
+      },
+      unignore: (alias: string) => {
+        void client.chat.unignore({ networkKey, alias });
+      },
+      highlight: (alias: string) => {
+        void client.chat.highlight({ networkKey, alias });
+      },
+      unhighlight: (alias: string) => {
+        void client.chat.unhighlight({ networkKey, alias });
+      },
+      maxlines: (n: string) => {
+        state = mergeUIConfig(state, { maxLines: parseInt(n) });
+      },
+      mute: (alias: string, duration: string, message: string) => {
+        void client.chat.clientMute({ networkKey, serverKey, alias, duration, message });
+      },
+      unmute: (alias: string) => {
+        void client.chat.clientUnmute({ networkKey, serverKey, alias });
+      },
+      timestampformat: (timestampFormat: string) => {
+        state = mergeUIConfig(state, { timestampFormat });
+      },
+      tag: (alias: string, color: string) => {
+        void client.chat.tag({ networkKey, alias, color });
+      },
+      untag: (alias: string) => {
+        void client.chat.untag({ networkKey, alias });
+      },
+      whisper: (alias: string, body: string) => {
+        void client.chat.whisper({ networkKey, alias, body });
+      },
+      exit: () => {
+        state = closeTopic(state, { type: "ROOM", topicKey: serverKey });
+      },
+      hideemote: (name: string) => {
+        const hiddenEmotes = Array.from(new Set(state.uiConfig.hiddenEmotes).add(name));
+        state = mergeUIConfig(state, { hiddenEmotes });
+      },
+      unhideemote: (name: string) => {
+        const hiddenEmotes = state.uiConfig.hiddenEmotes.filter((e) => e !== name);
+        state = mergeUIConfig(state, { hiddenEmotes });
+      },
+      me: (body: string) => {
+        void client.chat.clientSendMessage({
+          networkKey,
+          serverKey,
+          body: `/me ${body}`,
+        });
+      },
+      spoiler: (body: string) => {
+        void client.chat.clientSendMessage({
+          networkKey,
+          serverKey,
+          body: `|| ${body} ||`,
+        });
+      },
+    };
 
-      // TODO: pending send state...
-      return room;
-    });
+    const commandAliases: { [key: string]: string } = {
+      "w": "whisper",
+      "message": "whisper",
+      "msg": "whisper",
+      "tell": "whisper",
+      "t": "whisper",
+      "notify": "whisper",
+    };
+
+    if (body.startsWith("/")) {
+      const command = body.split(" ", 1).pop().toLowerCase().substring(1);
+      const func = commandFuncs[commandAliases[command] ?? command];
+      if (func) {
+        const args = body.split(" ", func.length);
+        func(...[...args.slice(1), body.substring(args.reduce((n, a) => n + a.length + 1, 0))]);
+      } else {
+        // TODO: invalid command feedback
+      }
+    } else {
+      void client.chat.clientSendMessage({ networkKey, serverKey, body });
+    }
+
+    // TODO: pending send state...
+    return state;
+  };
 
   return {
     ...createThreadActions(applyRoomAction),

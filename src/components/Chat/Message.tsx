@@ -90,6 +90,7 @@ interface MessageEmoteProps {
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
   compactSpacing?: boolean;
+  hidden?: boolean;
   children: ReactNode[];
 }
 
@@ -99,17 +100,21 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   shouldAnimateForever,
   shouldShowModifiers,
   compactSpacing,
-}) => (
-  <Emote
-    name={entity.name}
-    modifiers={entity.modifiers}
-    shouldAnimateForever={shouldAnimateForever}
-    shouldShowModifiers={shouldShowModifiers}
-    compactSpacing={compactSpacing}
-  >
-    {children}
-  </Emote>
-);
+  hidden,
+}) =>
+  hidden ? (
+    <span className="chat__hidden_emote">{entity.name}</span>
+  ) : (
+    <Emote
+      name={entity.name}
+      modifiers={entity.modifiers}
+      shouldAnimateForever={shouldAnimateForever}
+      shouldShowModifiers={shouldShowModifiers}
+      compactSpacing={compactSpacing}
+    >
+      {children}
+    </Emote>
+  );
 
 interface MessageEmojiProps {
   entity: chatv1_Message.Entities.Emoji;
@@ -330,6 +335,7 @@ const ComboMessage: React.FC<MessageProps> = ({
       formatter.insertEntity(MessageEmote, entity, {
         shouldAnimateForever: uiConfig.animateForever,
         shouldShowModifiers: uiConfig.emoteModifiers,
+        hidden: uiConfig.hiddenEmotes.includes(entity.name),
       })
     );
     return formatter.body;
@@ -408,6 +414,7 @@ const StandardMessage: React.FC<MessageProps> = ({
           shouldAnimateForever: uiConfig.animateForever,
           shouldShowModifiers: uiConfig.emoteModifiers,
           compactSpacing: uiConfig.compactEmoteSpacing,
+          hidden: uiConfig.hiddenEmotes.includes(entity.name),
         })
       );
       entities.emojis.forEach((entity) => formatter.insertEntity(MessageEmoji, entity));

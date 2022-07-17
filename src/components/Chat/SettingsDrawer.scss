@@ -3,7 +3,7 @@
 
 .chat {
   &__settings_form {
-    margin: 0 15px;
+    margin: 0 15px env(safe-area-inset-bottom);
 
     fieldset {
       margin-top: 10px;

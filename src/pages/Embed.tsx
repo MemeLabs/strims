@@ -13,7 +13,6 @@ import { ServiceSlug } from "../lib/directory";
 interface EmbedQueryParams {
   k: string;
   [key: string]: string;
-  npm;
 }
 
 // TODO: merge with player page
