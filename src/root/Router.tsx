@@ -7,7 +7,6 @@ import { Route, Routes } from "react-router-dom";
 import AuthGate from "../components/AuthGate";
 import { useBackgroundRoute } from "../contexts/BackgroundRoute";
 import Login from "../pages/Login";
-import NotFound from "../pages/NotFound";
 import SignUp from "../pages/SignUp";
 
 const Main = lazy(() => import(/* webpackPrefetch: true */ "./Main"));
@@ -18,7 +17,6 @@ const RootRouter: React.FC = () => {
     <Routes location={location}>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<SignUp />} />
-      <Route path="/404" element={<NotFound />} />
       <Route
         path="/*"
         element={

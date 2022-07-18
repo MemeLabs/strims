@@ -28,6 +28,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TODO: use type.Image
 type NetworkIcon struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

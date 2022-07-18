@@ -19,7 +19,7 @@ export interface EmbedPlayerProps {
 }
 
 const getEmbedUrl = (
-  service: string,
+  service: ServiceSlug,
   id: string,
   queryParams: Map<string, string> = new Map()
 ): string | undefined => {
@@ -29,7 +29,7 @@ const getEmbedUrl = (
       return `https://player.angelthump.com/?channel=${id}`;
     case "twitch-vod":
       return `https://player.twitch.tv/?video=v${id}&parent=${location.hostname}${queryString}`;
-    case "twitch-stream":
+    case "twitch":
       return `https://player.twitch.tv/?channel=${id}&parent=${location.hostname}`;
     case "youtube":
       return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1${queryString}`;

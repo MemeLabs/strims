@@ -15,6 +15,7 @@ import "network/v1/bootstrap/bootstrap.proto";
 import "network/v1/directory/directory.proto";
 import "network/v1/errors/errors.proto";
 
+// TODO: use type.Image
 message NetworkIcon {
   bytes data = 1;
   string type = 2;

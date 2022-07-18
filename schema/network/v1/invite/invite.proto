@@ -1,0 +1,24 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.network.v1.invite;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/network/v1/invite;networkv1invite";
+option java_package = "gg.strims.network.v1.invite";
+option swift_prefix = "SNI";
+
+import "network/v1/network.proto";
+
+message GetInvitationRequest {
+  string code = 1;
+}
+
+message GetInvitationResponse {
+  strims.network.v1.Invitation invitation = 1;
+}
+
+service InviteLink {
+  rpc GetInvitation(GetInvitationRequest) returns (GetInvitationResponse);
+}

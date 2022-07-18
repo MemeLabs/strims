@@ -11,7 +11,7 @@ import { WSReadWriter } from "../lib/ws";
 import App from "./root/App";
 
 (() => {
-  const ws: any = new WSReadWriter(`wss://${location.host}/devtools`);
+  const ws: any = new WSReadWriter(`wss://${location.host}/api/funding`);
   const client = new FundingClient(ws, ws);
 
   const root = document.createElement("div");

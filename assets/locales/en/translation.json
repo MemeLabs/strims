@@ -112,5 +112,16 @@
       "Twitch VOD": "Twitch VOD",
       "YouTube": "YouTube video"
     }
+  },
+
+  "inviteAuth": {
+    "header": "{peer} invited you to join",
+    "Error creating membership": "Error creating membership",
+    "bootstrapServers": "{count, plural, =1 {Bootstrap server} other {Bootstrap servers}}",
+    "Alias": "Alias",
+    "Name contains invalid characters": "Name contains invalid characters",
+    "Enter an alternate name for this network": "Enter an alternate name for this network",
+    "Continue": "Continue",
+    "Reject invitation": "Reject invitation"
   }
 }

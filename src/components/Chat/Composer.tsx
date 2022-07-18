@@ -36,7 +36,7 @@ import {
 import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
-import urlRegex from "url-regex-safe";
+import createUrlRegExp from "url-regex-safe";
 
 import { useChat } from "../../contexts/Chat";
 import useClickAway from "../../hooks/useClickAway";
@@ -464,7 +464,7 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
       pattern: noopPattern,
       lookbehind: true,
     },
-    url: urlRegex(),
+    url: createUrlRegExp(),
   };
 
   if (emotes.length !== 0 && modifiers.length !== 0) {

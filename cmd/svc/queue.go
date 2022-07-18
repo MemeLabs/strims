@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func openQueue(logger *zap.Logger, cfg *Config) (queue.Transport, error) {
+func openQueue(logger *zap.Logger, cfg *PeerConfig) (queue.Transport, error) {
 	switch cfg.Queue.Adapter.Get("memory") {
 	case "memory":
 		return memoryQueueAdapter(cfg)
@@ -24,11 +24,11 @@ func openQueue(logger *zap.Logger, cfg *Config) (queue.Transport, error) {
 	}
 }
 
-func memoryQueueAdapter(cfg *Config) (queue.Transport, error) {
+func memoryQueueAdapter(cfg *PeerConfig) (queue.Transport, error) {
 	return memory.NewTransport(), nil
 }
 
-func postgresQueueAdapter(logger *zap.Logger, cfg *Config) (queue.Transport, error) {
+func postgresQueueAdapter(logger *zap.Logger, cfg *PeerConfig) (queue.Transport, error) {
 	connStr := cfg.Queue.Postgres.ConnStr.Get("")
 	if connStr == "" {
 		return nil, errors.New("postgres conn string empty")

@@ -1,0 +1,15 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.internal_link {
+  color: var(--color-blue-8);
+
+  &:hover,
+  &:focus {
+    text-decoration: underline;
+  }
+
+  &:active {
+    color: var(--color-blue-6);
+  }
+}

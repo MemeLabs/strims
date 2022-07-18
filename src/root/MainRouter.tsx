@@ -6,6 +6,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import LayoutBody from "../components/Layout/Body";
 import { useBackgroundRoute } from "../contexts/BackgroundRoute";
+import Invite from "../pages/Invite";
+import NotFound from "../pages/NotFound";
 import SettingsLayout from "../pages/Settings/Layout";
 
 const Network = lazy(() => import(/* webpackPrefetch: true */ "../pages/Settings/Network"));
@@ -40,13 +42,14 @@ const settingsRoutes = createSettingsRoutes(<SettingsLayout />);
 const mainRoutes = (
   <Route path="*" element={<LayoutBody />}>
     <Route index element={<Home />} />
+    <Route path="invite/:code" element={<Invite />} />
     <Route path="directory/:networkKey" element={<Directory />} />
     <Route path="player/:networkKey" element={<Player />} />
     <Route path="embed/:service/:id" element={<Embed />} />
     <Route path="categories" element={<Categories />} />
     <Route path="broadcast" element={<Broadcast />} />
     <Route path="streams" element={<Streams />} />
-    <Route path="*" element={<Navigate to="/404" />} />
+    <Route path="*" element={<NotFound />} />
   </Route>
 );
 

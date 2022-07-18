@@ -4,6 +4,7 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
+import createUrlRegExp from "url-regex-safe";
 
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 
@@ -45,7 +46,7 @@ const BootstrapForm: React.FC<BootstrapFormProps> = ({
             message: "URL is required",
           },
           pattern: {
-            value: /^\S+$/i,
+            value: createUrlRegExp(),
             message: "Invalid format",
           },
         }}

@@ -4,7 +4,7 @@
 import "../styles/main.scss";
 import "../lib/i18n";
 
-import { Readable, Writable } from "stream";
+import { Duplex } from "stream";
 
 import React from "react";
 import { Root, createRoot } from "react-dom/client";
@@ -22,12 +22,12 @@ void registerServiceWorker({ scope: "/" })
 
 class WorkerConn {
   bridge: WindowBridge;
-  bus: Promise<Readable & Writable>;
+  bus: Promise<Duplex>;
 
   constructor() {
     this.bridge = new WindowBridge(Worker);
-    this.bus = new Promise<Readable & Writable>((resolve) => {
-      this.bridge.once("busopen:default", (b: Readable & Writable) => resolve(b));
+    this.bus = new Promise<Duplex>((resolve) => {
+      this.bridge.once("busopen:default", (b: Duplex) => resolve(b));
     });
     this.bridge.createWorker("default");
   }
@@ -44,7 +44,7 @@ class WorkerConn {
 
 class WSConn extends WSReadWriter {
   client<T>(C: ClientConstructor<T>): Promise<T> {
-    const ws = this as unknown as Readable & Writable;
+    const ws = this as unknown as Duplex;
     return Promise.resolve(new C(ws, ws));
   }
 }

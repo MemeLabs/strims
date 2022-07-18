@@ -39,7 +39,7 @@ func init() {
 		Name:  "run",
 		Func:  runCmd,
 		Usage: "[--config <path>] [--host-ip <ip>]",
-		Short: `Starts the server`,
+		Short: `Starts the peer server`,
 		Flags: func() *flag.FlagSet {
 			fs := flag.NewFlagSet("run", flag.ExitOnError)
 			fs.String("config", "", "Configuration file")
@@ -80,5 +80,17 @@ func init() {
 	RegisterCommand(Command{
 		Name: "export-profile",
 		Func: noopCmd,
+	})
+
+	RegisterCommand(Command{
+		Name:  "serve-invites",
+		Func:  serveInvitesCmd,
+		Usage: "[--config <path>]",
+		Short: `Starts the invitation code server`,
+		Flags: func() *flag.FlagSet {
+			fs := flag.NewFlagSet("run", flag.ExitOnError)
+			fs.String("config", "", "Configuration file")
+			return fs
+		}(),
 	})
 }

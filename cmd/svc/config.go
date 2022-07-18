@@ -57,37 +57,64 @@ func (v *Bytes) UnmarshalYAML(node *yaml.Node) (err error) {
 	return err
 }
 
-type Config struct {
+func loadConfig[T any](path string) (*T, error) {
+	var cfg T
+
+	if path == "" {
+		return &cfg, nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+type MonitoringConfig struct {
 	Metrics struct {
 		Address Optional[string] `yaml:"address"`
 	} `yaml:"metrics"`
 	Debug struct {
 		Address Optional[string] `yaml:"address"`
 	}
-	Storage struct {
-		Adapter Optional[string] `yaml:"adapter"`
-		BBolt   struct {
-			Path Optional[string] `yaml:"path"`
-		} `yaml:"bbolt"`
-		Postgres struct {
-			ConnStr       Optional[string] `yaml:"connStr"`
-			EnableLogging bool             `yaml:"enableLogging"`
-		} `yaml:"postgres"`
-	} `yaml:"storage"`
-	Queue struct {
+}
+
+type StorageConfig struct {
+	Adapter Optional[string] `yaml:"adapter"`
+	BBolt   struct {
+		Path Optional[string] `yaml:"path"`
+	} `yaml:"bbolt"`
+	Postgres struct {
+		ConnStr       Optional[string] `yaml:"connStr"`
+		EnableLogging bool             `yaml:"enableLogging"`
+	} `yaml:"postgres"`
+}
+
+type HTTPConfig struct {
+	Address Optional[string] `yaml:"address"`
+	TLS     struct {
+		Cert Optional[string] `yaml:"cert"`
+		Key  Optional[string] `yaml:"key"`
+	} `yaml:"tls"`
+}
+
+type PeerConfig struct {
+	MonitoringConfig
+	Storage StorageConfig `yaml:"storage"`
+	Queue   struct {
 		Adapter  Optional[string] `yaml:"adapter"`
 		Postgres struct {
 			ConnStr       Optional[string] `yaml:"connStr"`
 			EnableLogging bool             `yaml:"enableLogging"`
 		} `yaml:"postgres"`
 	} `yaml:"queue"`
-	HTTP struct {
-		Address Optional[string] `yaml:"address"`
-		TLS     struct {
-			Cert Optional[string] `yaml:"cert"`
-			Key  Optional[string] `yaml:"key"`
-		} `yaml:"tls"`
-	} `yaml:"http"`
+	HTTP    HTTPConfig `yaml:"http"`
 	Session struct {
 		Remote struct {
 			Enabled Optional[bool] `yaml:"enabled"`
@@ -114,20 +141,8 @@ type Config struct {
 	} `yaml:"vnic"`
 }
 
-func loadConfig(path string) (*Config, error) {
-	if path == "" {
-		return &Config{}, nil
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	cfg := &Config{}
-	if err := yaml.NewDecoder(f).Decode(cfg); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+type InviteServerConfig struct {
+	MonitoringConfig
+	Storage StorageConfig `yaml:"storage"`
+	HTTP    HTTPConfig    `yaml:"http"`
 }

@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { validNamePattern, validNetworkNamePattern } from "../../../lib/validation";
 
 const CreateForm: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ const CreateForm: React.FC = () => {
               message: "Name is required",
             },
             pattern: {
-              value: /^\S+$/i,
+              value: validNetworkNamePattern,
               message: "Names contains invalid characers",
             },
           }}
@@ -52,7 +53,7 @@ const CreateForm: React.FC = () => {
           control={control}
           rules={{
             pattern: {
-              value: /^\S+$/i,
+              value: validNamePattern,
               message: "Name contains invalid characters",
             },
           }}

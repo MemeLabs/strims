@@ -291,9 +291,12 @@ module.exports = (env, argv) => {
                 target: "ws://localhost:8083",
                 ws: true,
               },
-              "/api": {
+              "/api/funding": {
                 target: "ws://localhost:8084",
                 ws: true,
+              },
+              "/api/invite": {
+                target: "http://localhost:8084",
               },
             },
           },

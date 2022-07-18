@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { validNamePattern } from "../../../lib/validation";
 
 const JoinForm: React.FC = () => {
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ const JoinForm: React.FC = () => {
           control={control}
           rules={{
             pattern: {
-              value: /^\S+$/i,
+              value: validNamePattern,
               message: "Name contains invalid characters",
             },
           }}

@@ -15,33 +15,33 @@ import (
 	"go.uber.org/zap"
 )
 
-func openDB(logger *zap.Logger, cfg *Config) (kv.BlobStore, error) {
-	switch cfg.Storage.Adapter.Get("bbolt") {
+func openDB(logger *zap.Logger, cfg StorageConfig) (kv.BlobStore, error) {
+	switch cfg.Adapter.Get("bbolt") {
 	case "bbolt":
 		return bboltStorageAdapter(cfg)
 	case "postgres":
 		return postgresStorageAdapter(logger, cfg)
 	default:
-		return nil, fmt.Errorf("unsupported storage adapter: %s", cfg.Storage.Adapter)
+		return nil, fmt.Errorf("unsupported storage adapter: %s", cfg.Adapter)
 	}
 }
 
-func bboltStorageAdapter(cfg *Config) (kv.BlobStore, error) {
-	dbPath, err := pathutil.Resolve(cfg.Storage.BBolt.Path.Get(path.Join("~", ".strims")))
+func bboltStorageAdapter(cfg StorageConfig) (kv.BlobStore, error) {
+	dbPath, err := pathutil.Resolve(cfg.BBolt.Path.Get(path.Join("~", ".strims")))
 	if err != nil {
 		return nil, err
 	}
 	return bbolt.NewStore(dbPath)
 }
 
-func postgresStorageAdapter(logger *zap.Logger, cfg *Config) (kv.BlobStore, error) {
-	connStr := cfg.Storage.Postgres.ConnStr.Get("")
+func postgresStorageAdapter(logger *zap.Logger, cfg StorageConfig) (kv.BlobStore, error) {
+	connStr := cfg.Postgres.ConnStr.Get("")
 	if connStr == "" {
 		return nil, errors.New("postgres conn string empty")
 	}
 	return postgres.NewStoreConfig(postgres.Config{
 		ConnStr:       connStr,
 		Logger:        logger,
-		EnableLogging: cfg.Storage.Postgres.EnableLogging,
+		EnableLogging: cfg.Postgres.EnableLogging,
 	})
 }

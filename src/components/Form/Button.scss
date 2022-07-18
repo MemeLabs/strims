@@ -8,22 +8,29 @@
   justify-content: flex-end;
 }
 
-.input.input_button {
+.input_button {
   align-items: center;
   flex: 0;
   white-space: nowrap;
   cursor: pointer;
 
-  &:not(:disabled) {
-    &:hover {
-      background: var(--color-background-input-focus);
-      color: var(--color-text-input-focus);
-    }
+  &:hover,
+  &:focus {
+    background: var(--color-background-input-focus);
+    color: var(--color-text-input-focus);
+  }
 
-    &:active {
-      background: var(--color-background-input-active);
-      color: var(--color-text-input-active);
-    }
+  &:active {
+    background: var(--color-background-input-active);
+    color: var(--color-text-input-active);
+  }
+
+  &:disabled,
+  &:disabled:hover,
+  &:disabled:active,
+  &:disabled:focus {
+    background: var(--color-background-input-disabled);
+    color: var(--color-text-input-disabled);
   }
 
   &--borderless {

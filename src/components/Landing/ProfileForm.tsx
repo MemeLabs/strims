@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import createUrlRegexp from "url-regex-safe";
 
+import { validNamePattern } from "../../lib/validation";
 import { InputError, TextInput, ToggleInput } from "../Form";
 
 export interface ProfileFormValues {
@@ -54,7 +55,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
             message: "Name is required",
           },
           pattern: {
-            value: /^\S+$/i,
+            value: validNamePattern,
             message: "Name contains invalid characters",
           },
         }}

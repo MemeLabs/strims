@@ -1,16 +1,17 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import qs from "qs";
 import React from "react";
 import { FiUser } from "react-icons/fi";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
 import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
-import useQuery from "../hooks/useQuery";
+import useNextQuery from "../hooks/useNextQuery";
 import useReady from "../hooks/useReady";
 
 const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%&]*$/;
@@ -42,14 +43,10 @@ const LinkedProfileListItem: React.FC<LinkedProfileListItemProps> = ({ profile, 
   );
 };
 
-interface LoginQueryParams {
-  next: string;
-}
-
 const LoginPage: React.FC = () => {
   const [selectedProfile, setSelectedProfile] = React.useState<LinkedProfile | null>(null);
   const [session, sessionOps] = useSession();
-  const { next } = useQuery<LoginQueryParams>(useLocation().search);
+  const next = useNextQuery();
 
   useReady(() => {
     const { credentials } = selectedProfile;
@@ -77,7 +74,7 @@ const LoginPage: React.FC = () => {
     return <LoadingPlaceholder />;
   }
   if (session.profile) {
-    return <Navigate to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
+    return <Navigate to={next ?? "/"} />;
   }
 
   if (!selectedProfile && session.linkedProfiles.length) {
@@ -91,7 +88,10 @@ const LoginPage: React.FC = () => {
               onClick={setSelectedProfile}
             />
           ))}
-          <Link className="input input_button input_button--borderless" to="/signup">
+          <Link
+            className="input input_button input_button--borderless"
+            to={`/signup${qs.stringify({ next }, { addQueryPrefix: true })}`}
+          >
             Create Profile
           </Link>
           <button
@@ -122,7 +122,7 @@ const LoginPage: React.FC = () => {
       <ProfileForm
         onSubmit={handleSubmit}
         error={session.error?.message}
-        secondaryUri="/signup"
+        secondaryUri={`/signup${qs.stringify({ next }, { addQueryPrefix: true })}`}
         secondaryLabel="Create profile"
         submitLabel="Log in"
         defaultValues={{

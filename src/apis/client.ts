@@ -1,3 +1,6 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Readable, Writable } from "stream";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
@@ -11,6 +14,7 @@ import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
 import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";
 import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
 import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
+import { InviteLinkClient } from "./strims/network/v1/invite/invite_rpc";
 import { NetworkFrontendClient } from "./strims/network/v1/network_rpc";
 import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc";
 import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc";
@@ -80,4 +84,13 @@ export class DevToolsClient {
   }
 }
 
-export type Client = FrontendClient | FundingClient | DevToolsClient;
+export class InviteClient {
+  public inviteLink: InviteLinkClient;
+
+  constructor(w: Writable, r: Readable) {
+    const host = new Host(w, r);
+    this.inviteLink = new InviteLinkClient(host);
+  }
+}
+
+export type Client = FrontendClient | FundingClient | DevToolsClient | InviteClient;

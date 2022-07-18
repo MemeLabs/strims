@@ -6,6 +6,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
+import { validNamePattern } from "../../../lib/validation";
 import ForwardLink from "../ForwardLink";
 
 export interface NetworkFormData {
@@ -46,7 +47,7 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
         control={control}
         rules={{
           pattern: {
-            value: /^\S+$/i,
+            value: validNamePattern,
             message: "Name contains invalid characters",
           },
         }}

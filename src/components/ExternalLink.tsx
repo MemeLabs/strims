@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useMemo } from "react";
-import urlRegex from "url-regex-safe";
+import createUrlRegExp from "url-regex-safe";
 
 type ExternalLinkProps = React.ComponentProps<"a">;
 
 const ExternalLink: React.FC<ExternalLinkProps> = ({ href, children, ...props }) => {
-  const valid = useMemo(() => urlRegex({ exact: true, strict: true }).test(href), [href]);
+  const valid = useMemo(() => createUrlRegExp({ exact: true, strict: true }).test(href), [href]);
 
   return valid ? (
     <a target="_blank" rel="nofollow" href={href} {...props}>

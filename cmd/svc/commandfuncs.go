@@ -16,6 +16,7 @@ import (
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/frontend"
+	"github.com/MemeLabs/strims/internal/invite"
 	"github.com/MemeLabs/strims/internal/network"
 	"github.com/MemeLabs/strims/internal/session"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
@@ -29,7 +30,7 @@ import (
 )
 
 func runCmd(fs Flags) error {
-	cfg, err := loadConfig(fs.String("config"))
+	cfg, err := loadConfig[PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
@@ -122,7 +123,7 @@ func runCmd(fs Flags) error {
 		return vpn.New(logger, host)
 	}
 
-	store, err := openDB(logger, cfg)
+	store, err := openDB(logger, cfg.Storage)
 	if err != nil {
 		return err
 	}
@@ -190,12 +191,12 @@ func runCmd(fs Flags) error {
 }
 
 func addProfileCmd(fs Flags) error {
-	cfg, err := loadConfig(fs.String("config"))
+	cfg, err := loadConfig[PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
 
-	store, err := openDB(nil, cfg)
+	store, err := openDB(nil, cfg.Storage)
 	if err != nil {
 		return err
 	}
@@ -209,4 +210,90 @@ func addProfileCmd(fs Flags) error {
 	log.Println(base64.StdEncoding.EncodeToString(key))
 
 	return nil
+}
+
+func serveInvitesCmd(fs Flags) error {
+	cfg, err := loadConfig[InviteServerConfig](fs.String("config"))
+	if err != nil {
+		return err
+	}
+
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return err
+	}
+
+	var eg errgroup.Group
+	var closers []io.Closer
+
+	if cfg.Debug.Address.Ok() {
+		eg.Go(func() error {
+			srv := &http.Server{
+				Addr:    cfg.Debug.Address.MustGet(),
+				Handler: http.DefaultServeMux,
+			}
+			closers = append(closers, srv)
+			logger.Debug("debug server starting", zap.String("address", cfg.Debug.Address.MustGet()))
+			err := srv.ListenAndServe()
+			logger.Debug("debug server exited", zap.Error(err))
+			return err
+		})
+	}
+
+	if cfg.Metrics.Address.Ok() {
+		eg.Go(func() error {
+			mux := http.NewServeMux()
+			mux.Handle("/metrics", promhttp.Handler())
+			srv := &http.Server{
+				Addr:    cfg.Metrics.Address.MustGet(),
+				Handler: mux,
+			}
+			closers = append(closers, srv)
+			logger.Debug("metrics server starting", zap.String("address", cfg.Metrics.Address.MustGet()))
+			err := srv.ListenAndServe()
+			logger.Debug("metrics server exited", zap.Error(err))
+			return err
+		})
+	}
+
+	store, err := openDB(logger, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	closers = append(closers, store)
+
+	handler, err := invite.NewServer(logger, store)
+	if err != nil {
+		return err
+	}
+
+	eg.Go(func() (err error) {
+		srv := &http.Server{
+			Addr:    cfg.HTTP.Address.MustGet(),
+			Handler: handler,
+		}
+		closers = append(closers, srv)
+
+		logger.Debug("app server starting", zap.String("address", cfg.HTTP.Address.MustGet()))
+		if cfg.HTTP.TLS.Cert.Ok() && cfg.HTTP.TLS.Key.Ok() {
+			err = srv.ListenAndServeTLS(cfg.HTTP.TLS.Cert.MustGet(), cfg.HTTP.TLS.Key.MustGet())
+		} else {
+			err = srv.ListenAndServe()
+		}
+		logger.Debug("app server exited", zap.Error(err))
+		return err
+	})
+
+	eg.Go(func() error {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+		err := fmt.Errorf("signal: %s", <-sig)
+
+		for _, c := range closers {
+			c.Close()
+		}
+		return err
+	})
+
+	return eg.Wait()
 }
