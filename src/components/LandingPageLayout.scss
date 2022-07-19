@@ -104,25 +104,6 @@
       justify-content: center;
     }
 
-    .input_buttons {
-      justify-content: space-between;
-    }
-
-    .input_button {
-      flex-grow: 0;
-      white-space: nowrap;
-    }
-
-    .input_button--borderless {
-      background: unset;
-      color: $gray-300;
-
-      &:hover {
-        background: unset;
-        color: $gray-500;
-      }
-    }
-
     .input_label--toggle {
       flex-direction: row;
       justify-content: space-between;

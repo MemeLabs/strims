@@ -6,9 +6,16 @@
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
+  gap: 1rem;
 }
 
 .input_button {
+  padding: 0.5rem 0.8rem;
+  margin: 0.25rem 0;
+  border-radius: 0.25rem;
+  color: var(--color-text-input);
+  background: var(--color-background-input);
+
   align-items: center;
   flex: 0;
   white-space: nowrap;
@@ -34,7 +41,14 @@
   }
 
   &--borderless {
+    background: unset;
     border: none;
     box-shadow: none;
+  }
+
+  &--primary {
+    --color-background-input: var(--color-green-3);
+    --color-background-input-focus: var(--color-green-2);
+    --color-background-input-active: var(--color-green-1);
   }
 }

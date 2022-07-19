@@ -56,17 +56,7 @@
   }
 
   &__continue {
-    background: var(--color-green-3);
     padding: 0.8rem 0;
-
-    &:hover,
-    &:focus {
-      background: var(--color-green-2);
-    }
-
-    &:active {
-      background: var(--color-green-1);
-    }
   }
 
   &__reject {

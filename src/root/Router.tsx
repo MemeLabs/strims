@@ -16,6 +16,7 @@ const RootRouter: React.FC = () => {
   return (
     <Routes location={location}>
       <Route path="/login" element={<Login />} />
+      <Route path="/login/new" element={<Login newLogin />} />
       <Route path="/signup" element={<SignUp />} />
       <Route
         path="/*"

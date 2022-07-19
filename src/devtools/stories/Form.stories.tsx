@@ -17,6 +17,7 @@ import {
   TextInput,
   ToggleInput,
 } from "../../components/Form";
+import InternalLink from "../../components/InternalLink";
 
 const selectOptions: SelectOption<string>[] = [
   {
@@ -74,7 +75,9 @@ const InputStory: React.FC = () => {
         <ImageInput control={control} name="image" />
       </InputLabel>
       <ButtonSet>
-        <Button>Save</Button>
+        <InternalLink to="#">other</InternalLink>
+        <Button>cancel</Button>
+        <Button primary>Save</Button>
       </ButtonSet>
     </form>
   );

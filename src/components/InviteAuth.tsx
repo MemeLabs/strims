@@ -157,7 +157,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
             ))}
           </InputLabel>
         )}
-        <Button className="invite_auth__continue" disabled={formState.isSubmitting}>
+        <Button className="invite_auth--primary" disabled={formState.isSubmitting}>
           {t("inviteAuth.Continue")}
         </Button>
         <InternalLink className="invite_auth__reject" to="/">

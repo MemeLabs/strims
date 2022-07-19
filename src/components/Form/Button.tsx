@@ -11,13 +11,28 @@ interface ButtonSetProps {
 }
 
 export const ButtonSet: React.FC<ButtonSetProps> = ({ children }: ButtonProps) => (
-  <div className="input_label input_buttonset">{children}</div>
+  <div className="input_buttonset">{children}</div>
 );
 
-export type ButtonProps = ComponentProps<"button">;
+export interface ButtonProps extends ComponentProps<"button"> {
+  primary?: boolean;
+  borderless?: boolean;
+}
 
-const Button: React.FC<ButtonProps> = ({ children, className, ...inputProps }: ButtonProps) => (
-  <button className={clsx("input", "input_button", className)} {...inputProps}>
+const Button: React.FC<ButtonProps> = ({
+  children,
+  className,
+  primary,
+  borderless,
+  ...inputProps
+}: ButtonProps) => (
+  <button
+    className={clsx("input_button", className, {
+      "input_button--primary": primary,
+      "input_button--borderless": borderless,
+    })}
+    {...inputProps}
+  >
     {children}
   </button>
 );

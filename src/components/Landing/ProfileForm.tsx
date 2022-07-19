@@ -4,11 +4,11 @@
 import clsx from "clsx";
 import React from "react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
 import createUrlRegexp from "url-regex-safe";
 
 import { validNamePattern } from "../../lib/validation";
-import { InputError, TextInput, ToggleInput } from "../Form";
+import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../Form";
+import InternalLink from "../InternalLink";
 
 export interface ProfileFormValues {
   name: string;
@@ -103,14 +103,10 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
           <ToggleInput control={control} label="Stay logged in" name="persistLogin" />
         </div>
       </div>
-      <div className="input_buttons">
-        {secondaryVisible && (
-          <Link className="input input_button input_button--borderless" to={secondaryUri}>
-            {secondaryLabel}
-          </Link>
-        )}
-        <button className="input input_button">{submitLabel}</button>
-      </div>
+      <ButtonSet>
+        {secondaryVisible && <InternalLink to={secondaryUri}>{secondaryLabel}</InternalLink>}
+        <Button primary>{submitLabel}</Button>
+      </ButtonSet>
     </form>
   );
 };

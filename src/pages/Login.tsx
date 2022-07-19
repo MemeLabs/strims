@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import qs from "qs";
-import React from "react";
+import React, { useEffect } from "react";
 import { FiUser } from "react-icons/fi";
+import { useLocation } from "react-router";
 import { Link, Navigate } from "react-router-dom";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import { Button, ButtonSet } from "../components/Form";
+import InternalLink from "../components/InternalLink";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
 import LoadingPlaceholder from "../components/LoadingPlaceholder";
@@ -43,10 +46,16 @@ const LinkedProfileListItem: React.FC<LinkedProfileListItemProps> = ({ profile, 
   );
 };
 
-const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  newLogin?: boolean;
+}
+
+const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
   const [selectedProfile, setSelectedProfile] = React.useState<LinkedProfile | null>(null);
   const [session, sessionOps] = useSession();
   const next = useNextQuery();
+
+  useEffect(() => setSelectedProfile(newLogin ? new LinkedProfile() : null), [newLogin]);
 
   useReady(() => {
     const { credentials } = selectedProfile;
@@ -88,18 +97,14 @@ const LoginPage: React.FC = () => {
               onClick={setSelectedProfile}
             />
           ))}
-          <Link
-            className="input input_button input_button--borderless"
-            to={`/signup${qs.stringify({ next }, { addQueryPrefix: true })}`}
-          >
-            Create Profile
-          </Link>
-          <button
-            className="input input_button input_button--borderless"
-            onClick={() => setSelectedProfile(new LinkedProfile())}
-          >
-            New Login
-          </button>
+          <ButtonSet>
+            <InternalLink to={`/signup${qs.stringify({ next }, { addQueryPrefix: true })}`}>
+              Create Profile
+            </InternalLink>
+            <InternalLink to={`/login/new${qs.stringify({ next }, { addQueryPrefix: true })}`}>
+              New Login
+            </InternalLink>
+          </ButtonSet>
         </div>
       </LandingPageLayout>
     );
