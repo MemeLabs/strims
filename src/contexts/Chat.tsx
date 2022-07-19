@@ -1013,15 +1013,6 @@ const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...pro
 
   const getNetworkKeys = useCallback(() => thread.networkKeys, [thread.networkKeys]);
 
-  // useEffect(() => {
-  //   let n = 0;
-  //   const id = setInterval(() => {
-  //     n++;
-  //     actions.sendMessage(n.toString());
-  //   }, 1000);
-  //   return () => clearInterval(id);
-  // }, []);
-
   const value = useMemo<[ThreadState, ThreadActions]>(
     () => [thread, { ...actions, ...messageAccessors, getNetworkKeys }],
     [thread]

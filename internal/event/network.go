@@ -58,3 +58,11 @@ type DirectoryEvent struct {
 	NetworkKey []byte
 	Broadcast  *networkv1directory.EventBroadcast
 }
+
+type DirectorySyndicateStart struct {
+	Network *networkv1.Network
+}
+
+type DirectorySyndicateStop struct {
+	Network *networkv1.Network
+}

@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { RefObject, useEffect, useRef } from "react";
+import React, { RefObject, useEffect, useRef } from "react";
 
 const defaultEvents = ["mousedown", "touchstart"];
 
@@ -56,3 +56,15 @@ const useClickAway = <E extends Event = Event>(
 };
 
 export default useClickAway;
+
+const suppressClickAwayHandlers = Object.seal({
+  onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+  onClick: (e: React.MouseEvent) => e.stopPropagation(),
+  onTouchStart: (e: React.TouchEvent) => e.stopPropagation(),
+});
+
+// suppress propagation of pointer events that would trigger useClickAway. for
+// example in a context menu anchored in a modal that unmounts when it loses
+// focus because the menu is rendered in a portal the target detection doesn't
+// work
+export const suppressClickAway = () => suppressClickAwayHandlers;

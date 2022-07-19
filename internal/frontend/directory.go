@@ -11,11 +11,13 @@ import (
 	"github.com/MemeLabs/strims/internal/app"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/directory"
+	"github.com/MemeLabs/strims/internal/event"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/chanutil"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
@@ -23,16 +25,18 @@ import (
 func init() {
 	RegisterService(func(server *rpc.Server, params ServiceParams) {
 		networkv1directory.RegisterDirectoryFrontendService(server, &directoryService{
-			app:   params.App,
-			store: params.Store,
+			app:    params.App,
+			store:  params.Store,
+			logger: params.Logger,
 		})
 	})
 }
 
 // directoryService ...
 type directoryService struct {
-	app   app.Control
-	store *dao.ProfileStore
+	app    app.Control
+	store  *dao.ProfileStore
+	logger *zap.Logger
 }
 
 func (s *directoryService) client(ctx context.Context, networkKey []byte) (*networkv1directory.DirectoryClient, error) {
@@ -300,6 +304,115 @@ func (s *directoryService) GetListings(ctx context.Context, r *networkv1director
 	return res, nil
 }
 
+func (s *directoryService) watchNetworkListings(ctx context.Context, n *networkv1.Network, filterListing func(l directory.Listing) bool, events chan *networkv1directory.FrontendWatchListingsResponse_Event) error {
+	network := &networkv1directory.Network{
+		Id:   n.Id,
+		Name: dao.CertificateRoot(n.Certificate).Subject,
+		Key:  dao.NetworkKey(n),
+	}
+
+	src := make(chan directory.ListingEvent, 128)
+	listings, err := s.app.Directory().NotifyListingEvent(network.Id, src)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		defer s.app.Directory().StopNotifyingListingEvent(network.Id, src)
+
+		var nls []*networkv1directory.NetworkListingsItem
+		for _, l := range listings {
+			if !filterListing(l) {
+				continue
+			}
+
+			nls = append(nls, &networkv1directory.NetworkListingsItem{
+				Id:              l.ID,
+				Listing:         l.Listing,
+				Snippet:         l.Snippet,
+				Moderation:      l.Moderation,
+				UserCount:       l.UserCount,
+				RecentUserCount: l.RecentUserCount,
+			})
+		}
+		res := &networkv1directory.FrontendWatchListingsResponse_Event{
+			Event: &networkv1directory.FrontendWatchListingsResponse_Event_Change{
+				Change: &networkv1directory.FrontendWatchListingsResponse_Change{
+					Listings: &networkv1directory.NetworkListings{
+						Network:  network,
+						Listings: nls,
+					},
+				},
+			},
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case events <- res:
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e, ok := <-src:
+				if !ok {
+					return
+				}
+
+				l := e.Listing
+				if !filterListing(l) {
+					continue
+				}
+
+				res := &networkv1directory.FrontendWatchListingsResponse_Event{}
+				switch e.Type {
+				case directory.ChangeListingEventType:
+					res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Change{
+						Change: &networkv1directory.FrontendWatchListingsResponse_Change{
+							Listings: &networkv1directory.NetworkListings{
+								Network: network,
+								Listings: []*networkv1directory.NetworkListingsItem{{
+									Id:              l.ID,
+									Listing:         l.Listing,
+									Snippet:         l.Snippet,
+									Moderation:      l.Moderation,
+									UserCount:       l.UserCount,
+									RecentUserCount: l.RecentUserCount,
+								}},
+							},
+						},
+					}
+				case directory.UnpublishListingEventType:
+					res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Unpublish{
+						Unpublish: &networkv1directory.FrontendWatchListingsResponse_Unpublish{
+							NetworkId: network.Id,
+							ListingId: l.ID,
+						},
+					}
+				case directory.UserCountChangeListingEventType:
+					res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_UserCountChange{
+						UserCountChange: &networkv1directory.FrontendWatchListingsResponse_UserCountChange{
+							NetworkId:       network.Id,
+							ListingId:       l.ID,
+							UserCount:       l.UserCount,
+							RecentUserCount: l.RecentUserCount,
+						},
+					}
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case events <- res:
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (s *directoryService) WatchListings(ctx context.Context, r *networkv1directory.FrontendWatchListingsRequest) (<-chan *networkv1directory.FrontendWatchListingsResponse, error) {
 	var networks []*networkv1.Network
 	var err error
@@ -312,7 +425,7 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 		return nil, err
 	}
 
-	events := make(chan *networkv1directory.FrontendWatchListingsResponse_Event, 128)
+	listingEvents := make(chan *networkv1directory.FrontendWatchListingsResponse_Event, 128)
 
 	filterListing := func(l directory.Listing) bool {
 		if r.ListingId != 0 && r.ListingId != l.ID {
@@ -326,110 +439,9 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 
 	var errs []error
 	for _, n := range networks {
-		network := &networkv1directory.Network{
-			Id:   n.Id,
-			Name: dao.CertificateRoot(n.Certificate).Subject,
-			Key:  dao.NetworkKey(n),
-		}
-
-		src := make(chan directory.ListingEvent, 128)
-		listings, err := s.app.Directory().NotifyListingEvent(network.Id, src)
-		if err != nil {
+		if err := s.watchNetworkListings(ctx, n, filterListing, listingEvents); err != nil {
 			errs = append(errs, err)
 		}
-
-		go func() {
-			defer s.app.Directory().StopNotifyingListingEvent(network.Id, src)
-
-			var nls []*networkv1directory.NetworkListingsItem
-			for _, l := range listings {
-				if !filterListing(l) {
-					continue
-				}
-
-				nls = append(nls, &networkv1directory.NetworkListingsItem{
-					Id:              l.ID,
-					Listing:         l.Listing,
-					Snippet:         l.Snippet,
-					Moderation:      l.Moderation,
-					UserCount:       l.UserCount,
-					RecentUserCount: l.RecentUserCount,
-				})
-			}
-			res := &networkv1directory.FrontendWatchListingsResponse_Event{
-				Event: &networkv1directory.FrontendWatchListingsResponse_Event_Change{
-					Change: &networkv1directory.FrontendWatchListingsResponse_Change{
-						Listings: &networkv1directory.NetworkListings{
-							Network:  network,
-							Listings: nls,
-						},
-					},
-				},
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case events <- res:
-			}
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case e, ok := <-src:
-					if !ok {
-						return
-					}
-
-					l := e.Listing
-					if !filterListing(l) {
-						continue
-					}
-
-					res := &networkv1directory.FrontendWatchListingsResponse_Event{}
-					switch e.Type {
-					case directory.ChangeListingEventType:
-						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Change{
-							Change: &networkv1directory.FrontendWatchListingsResponse_Change{
-								Listings: &networkv1directory.NetworkListings{
-									Network: network,
-									Listings: []*networkv1directory.NetworkListingsItem{{
-										Id:              l.ID,
-										Listing:         l.Listing,
-										Snippet:         l.Snippet,
-										Moderation:      l.Moderation,
-										UserCount:       l.UserCount,
-										RecentUserCount: l.RecentUserCount,
-									}},
-								},
-							},
-						}
-					case directory.UnpublishListingEventType:
-						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_Unpublish{
-							Unpublish: &networkv1directory.FrontendWatchListingsResponse_Unpublish{
-								NetworkId: network.Id,
-								ListingId: l.ID,
-							},
-						}
-					case directory.UserCountChangeListingEventType:
-						res.Event = &networkv1directory.FrontendWatchListingsResponse_Event_UserCountChange{
-							UserCountChange: &networkv1directory.FrontendWatchListingsResponse_UserCountChange{
-								NetworkId:       network.Id,
-								ListingId:       l.ID,
-								UserCount:       l.UserCount,
-								RecentUserCount: l.RecentUserCount,
-							},
-						}
-					}
-
-					select {
-					case <-ctx.Done():
-						return
-					case events <- res:
-					}
-				}
-			}
-		}()
 	}
 	if errs != nil {
 		return nil, multierr.Combine(errs...)
@@ -438,18 +450,34 @@ func (s *directoryService) WatchListings(ctx context.Context, r *networkv1direct
 	ch := make(chan *networkv1directory.FrontendWatchListingsResponse)
 
 	go func() {
+		defer close(ch)
+
+		events, done := s.app.Events().Events()
+		defer done()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case e := <-events:
+			case e := <-listingEvents:
 				res := &networkv1directory.FrontendWatchListingsResponse{
-					Events: chanutil.AppendAll([]*networkv1directory.FrontendWatchListingsResponse_Event{e}, events),
+					Events: chanutil.AppendAll([]*networkv1directory.FrontendWatchListingsResponse_Event{e}, listingEvents),
 				}
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- res:
+				}
+			case e := <-events:
+				switch e := e.(type) {
+				case event.DirectorySyndicateStart:
+					if len(r.NetworkKeys) == 0 && slices.IndexFunc(networks, func(n *networkv1.Network) bool { return n.Id == e.Network.Id }) == -1 {
+						err := s.watchNetworkListings(ctx, e.Network, filterListing, listingEvents)
+						if err != nil {
+							s.logger.Error("failed to watch directory", zap.Error(err))
+							return
+						}
+					}
 				}
 			}
 		}

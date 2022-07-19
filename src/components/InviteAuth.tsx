@@ -17,6 +17,8 @@ import { Invitation, InvitationV0 } from "../apis/strims/network/v1/network";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Certificate } from "../apis/strims/type/certificate";
 import { useCall, useLazyCall } from "../contexts/FrontendApi";
+import { suppressClickAway } from "../hooks/useClickAway";
+import { certificateChain } from "../lib/certificate";
 import { HTTPReadWriter } from "../lib/http";
 import { networkKey } from "../lib/network";
 import { validNamePattern } from "../lib/validation";
@@ -37,17 +39,7 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
       throw new Error("unexpected invitation version");
     }
     const invitation = InvitationV0.decode(res.invitation.data);
-
-    const chain: Certificate[] = [];
-    for (let cert = invitation.certificate; cert; ) {
-      chain.unshift(cert);
-      cert =
-        cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
-          ? cert.parentOneof.parent
-          : null;
-    }
-
-    const [networkCert, peerCert] = chain;
+    const [networkCert, peerCert] = certificateChain(invitation.certificate);
     return { invitation, networkCert, peerCert };
   }, [code]);
 
@@ -62,14 +54,12 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
   }
 
   const { networkCert } = inviteRes.value;
-  for (const network of networksRes.value.networks) {
-    if (isEqual(networkKey(network), networkCert.key)) {
-      return <Navigate to={`/directory/${Base64.fromUint8Array(networkCert.key, true)}`} />;
-    }
+  if (networksRes.value.networks.some((n) => isEqual(networkKey(n), networkCert.key))) {
+    return <Navigate to={`/directory/${Base64.fromUint8Array(networkCert.key, true)}`} />;
   }
 
   return (
-    <div className="invite_auth">
+    <div className="invite_auth" {...suppressClickAway()}>
       <div className="invite_auth__mask" />
       <InviteAuthForm {...inviteRes.value} profile={profileRes.value.profile} />
     </div>
@@ -158,7 +148,10 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
           placeholder={t("inviteAuth.Enter an alternate name for this network")}
         />
         {bootstrapClients.length > 0 && (
-          <InputLabel text={t("inviteAuth.bootstrapServers", { count: bootstrapClients.length })}>
+          <InputLabel
+            text={t("inviteAuth.bootstrapServers", { count: bootstrapClients.length })}
+            component="div"
+          >
             {bootstrapClients.map((client, i) => (
               <BootstrapClientCheckbox key={i} client={client} index={i} control={control} />
             ))}
