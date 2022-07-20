@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
+	"github.com/MemeLabs/strims/pkg/binaryutil"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,6 +33,7 @@ var VideoChannels = NewTable(
 
 const (
 	_ byte = iota
+	videoChannelLocal
 	videoChannelLocalShare
 	videoChannelRemoteShare
 )
@@ -39,19 +41,20 @@ const (
 var videoChannelsByUniqueIndex = NewUniqueIndex(videoChannelKeyNS, VideoChannels, func(v *videov1.VideoChannel) []byte {
 	var key []byte
 	switch o := v.Owner.(type) {
+	case *videov1.VideoChannel_Local_:
+		key = make([]byte, 1+binaryutil.UvarintLen(v.Id))
+		key[0] = videoChannelLocal
+		binary.PutUvarint(key[1:], v.Id)
 	case *videov1.VideoChannel_LocalShare_:
 		key = append(key, videoChannelLocalShare)
 		key = append(key, CertificateRoot(o.LocalShare.Certificate).Key...)
 		key = append(key, o.LocalShare.Certificate.Key...)
-		return key
 	case *videov1.VideoChannel_RemoteShare_:
 		key = append(key, videoChannelRemoteShare)
 		key = append(key, o.RemoteShare.NetworkKey...)
 		key = append(key, o.RemoteShare.ServiceKey...)
-		return key
-	default:
-		return nil
 	}
+	return key
 }, nil)
 
 // GetVideoChannelIDByOwnerCert ...
