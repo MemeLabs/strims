@@ -79,7 +79,9 @@ func (s *service) Run(ctx context.Context) error {
 		case e := <-events:
 			switch e := e.(type) {
 			case *networkv1.NetworkChangeEvent:
-				s.network.Swap(e.Network)
+				if e.Network.Id == s.network.Get().Id {
+					s.network.Swap(e.Network)
+				}
 			}
 		case <-ctx.Done():
 			return ctx.Err()

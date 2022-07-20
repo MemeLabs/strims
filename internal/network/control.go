@@ -164,8 +164,10 @@ func (t *control) Dialer() Dialer {
 func (t *control) Run() {
 	go t.ca.Run()
 
-	t.startNetworks()
-	t.scheduleCertRenewal()
+	go func() {
+		t.startNetworks()
+		t.scheduleCertRenewal()
+	}()
 
 	for {
 		select {
@@ -183,10 +185,10 @@ func (t *control) Run() {
 			case event.NetworkPeerClose:
 				t.handleNetworkPeerCountUpdate(e.NetworkID, -1)
 			case *networkv1.NetworkChangeEvent:
-				t.handleNetworkChange(e.Network)
+				t.startNetwork(e.Network)
 				t.scheduleCertRenewal()
 			case *networkv1.NetworkDeleteEvent:
-				t.handleNetworkDelete(e.Network)
+				t.stopNetwork(e.Network)
 			}
 		case <-t.ctx.Done():
 			return
@@ -195,8 +197,6 @@ func (t *control) Run() {
 }
 
 func (t *control) startNetworks() error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
 
 	networks, err := dao.Networks.GetAll(t.store)
 	if err != nil {
@@ -291,35 +291,26 @@ func (t *control) handlePeerBinding(peerID uint64, networkKeys [][]byte) {
 
 func (t *control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	n, ok := t.networks[networkID]
 	if !ok {
-		t.lock.Unlock()
 		return
 	}
 
 	n.peerCount += d
 	peerCount := n.peerCount
-	t.lock.Unlock()
 
-	t.observers.EmitLocal(event.NetworkPeerCountUpdate{
+	defer t.observers.EmitLocal(event.NetworkPeerCountUpdate{
 		NetworkID: networkID,
 		PeerCount: peerCount,
 	})
 }
 
-func (t *control) handleNetworkChange(n *networkv1.Network) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.startNetwork(n)
-}
-
-func (t *control) handleNetworkDelete(n *networkv1.Network) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.stopNetwork(n)
-}
-
 func (t *control) startNetwork(n *networkv1.Network) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	if nn, ok := t.networks[n.Id]; ok {
 		if !proto.Equal(nn.network.Certificate, n.Certificate) {
 			nn.network = n
@@ -343,7 +334,7 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 	t.certificates.Insert(n)
 	t.dialer.ReplaceOrInsertNetwork(n)
 
-	t.observers.EmitLocal(event.NetworkStart{Network: n})
+	defer t.observers.EmitLocal(event.NetworkStart{Network: n})
 
 	// TODO: throttle
 	for _, peer := range t.peers {
@@ -359,6 +350,9 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 }
 
 func (t *control) stopNetwork(n *networkv1.Network) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n)); err != nil {
 		return err
 	}
@@ -371,7 +365,7 @@ func (t *control) stopNetwork(n *networkv1.Network) error {
 	t.certificates.Delete(dao.NetworkKey(n))
 	delete(t.networks, n.Id)
 
-	t.observers.EmitLocal(event.NetworkStop{Network: n})
+	defer t.observers.EmitLocal(event.NetworkStop{Network: n})
 
 	return nil
 }

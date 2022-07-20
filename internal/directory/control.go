@@ -208,16 +208,18 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 	s := newSyndicateStore(t.logger, network)
 	t.syndicateStores[network.Id] = s
 
-	t.observers.EmitLocal(event.DirectorySyndicateStart{Network: network})
+	defer t.observers.EmitLocal(event.DirectorySyndicateStart{Network: network})
 
 	go t.snippetServer.start(t.ctx, network)
 
 	go func() {
 		defer func() {
 			t.lock.Lock()
-			defer t.lock.Unlock()
 			delete(t.syndicateStores, network.Id)
+			t.lock.Unlock()
+
 			s.Close()
+
 			t.observers.EmitLocal(event.DirectorySyndicateStop{Network: network})
 		}()
 

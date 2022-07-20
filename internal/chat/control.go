@@ -83,11 +83,13 @@ type control struct {
 
 // Run ...
 func (t *control) Run() {
-	t.startWhisperServerRunner()
+	go func() {
+		t.startWhisperServerRunner()
 
-	if err := t.startServerRunners(); err != nil {
-		t.logger.Debug("starting chat server runners failed", zap.Error(err))
-	}
+		if err := t.startServerRunners(); err != nil {
+			t.logger.Debug("starting chat server runners failed", zap.Error(err))
+		}
+	}()
 
 	for {
 		select {

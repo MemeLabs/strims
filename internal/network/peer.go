@@ -180,7 +180,7 @@ func (p *peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 		}
 		node.Network.RemovePeer(p.vnicPeer.HostID())
 
-		p.observers.EmitLocal(event.NetworkPeerClose{
+		defer p.observers.EmitLocal(event.NetworkPeerClose{
 			PeerID:     p.id,
 			NetworkID:  li.(*networkBinding).networkID,
 			NetworkKey: networkKey,

@@ -7,10 +7,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"golang.org/x/exp/slices"
 )
+
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
+}
 
 func main() {
 	code, err := run()
