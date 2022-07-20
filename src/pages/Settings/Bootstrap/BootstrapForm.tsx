@@ -6,10 +6,11 @@ import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import createUrlRegExp from "url-regex-safe";
 
-import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
+import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
 
 export interface BootstrapFormData {
   url: string;
+  insecureSkipVerifyTls: boolean;
 }
 
 export interface BootstrapFormProps {
@@ -55,6 +56,12 @@ const BootstrapForm: React.FC<BootstrapFormProps> = ({
         label="URL"
         name="url"
         placeholder="Enter a bootstrap url"
+      />
+      <ToggleInput
+        control={control}
+        name="insecureSkipVerifyTls"
+        label="Skip TLS verification"
+        description="Ignore invalid TLS certificates (native clients only)"
       />
       <ButtonSet>
         <Button disabled={loading}>{submitLabel}</Button>

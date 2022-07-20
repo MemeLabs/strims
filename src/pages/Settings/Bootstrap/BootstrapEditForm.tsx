@@ -25,9 +25,7 @@ const BootstrapEditForm: React.FC = () => {
     await updateBootstrap({
       id: BigInt(ruleId),
       clientOptions: {
-        websocketOptions: {
-          url: data.url,
-        },
+        websocketOptions: data,
       },
     });
   }, []);
@@ -38,11 +36,10 @@ const BootstrapEditForm: React.FC = () => {
 
   let data: BootstrapFormData;
   switch (value.bootstrapClient.clientOptions.case) {
-    case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS:
-      data = {
-        url: value.bootstrapClient.clientOptions.websocketOptions.url,
-      };
+    case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS: {
+      data = value.bootstrapClient.clientOptions.websocketOptions;
       break;
+    }
     default:
       return null;
   }

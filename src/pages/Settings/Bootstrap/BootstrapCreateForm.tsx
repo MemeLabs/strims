@@ -18,9 +18,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {
     await createClient({
       clientOptions: {
-        websocketOptions: {
-          url: data.url,
-        },
+        websocketOptions: data,
       },
     });
   }, []);

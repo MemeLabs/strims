@@ -61,7 +61,8 @@ func (s *bootstrapService) UpdateClient(ctx context.Context, r *bootstrap.Update
 		case *bootstrap.UpdateBootstrapClientRequest_WebsocketOptions:
 			p.ClientOptions = &bootstrap.BootstrapClient_WebsocketOptions{
 				WebsocketOptions: &bootstrap.BootstrapClientWebSocketOptions{
-					Url: v.WebsocketOptions.Url,
+					Url:                   v.WebsocketOptions.Url,
+					InsecureSkipVerifyTls: v.WebsocketOptions.InsecureSkipVerifyTls,
 				},
 			}
 		default:
