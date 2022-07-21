@@ -35,7 +35,7 @@ export interface APIDialer {
   remote(address: string): Conn;
 }
 
-interface State {
+export interface State {
   linkedProfiles: LinkedProfile[];
   profile: Profile;
   loading: boolean;
@@ -44,10 +44,10 @@ interface State {
   error?: Error;
 }
 
-type Ops = {
+export interface Ops {
   createProfile: (serverAddress: string, req: ISignUpRequest) => Promise<void>;
   signIn: (serverAddress: string, req: ISignInRequest) => Promise<void>;
-};
+}
 
 const initialState: State = {
   linkedProfiles: [],

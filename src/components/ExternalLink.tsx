@@ -4,10 +4,12 @@
 import React, { useMemo } from "react";
 import createUrlRegExp from "url-regex-safe";
 
+const validUrlPattern = createUrlRegExp({ exact: true, strict: true });
+
 type ExternalLinkProps = React.ComponentProps<"a">;
 
 const ExternalLink: React.FC<ExternalLinkProps> = ({ href, children, ...props }) => {
-  const valid = useMemo(() => createUrlRegExp({ exact: true, strict: true }).test(href), [href]);
+  const valid = useMemo(() => validUrlPattern.test(href), [href]);
 
   return valid ? (
     <a target="_blank" rel="nofollow" href={href} {...props}>

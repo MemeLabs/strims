@@ -18,6 +18,7 @@ import { useLayout } from "../../../contexts/Layout";
 import { useStableCallback } from "../../../hooks/useStableCallback";
 import { AsyncPassThrough } from "../../../lib/stream";
 import { RoomProvider } from "../../contexts/Chat";
+import { SessionProvider } from "../../contexts/Session";
 import { emoteNames } from "../../mocks/chat/assetBundle";
 import ChatService from "../../mocks/chat/service";
 import DirectoryService from "../../mocks/directory/service";
@@ -169,19 +170,21 @@ const Test: React.FC = () => {
   return (
     <div className="chat_mockup">
       <ApiProvider value={client}>
-        <ChatProvider>
-          <RoomProvider
-            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
-            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
-          >
-            <ChatPanel />
-            <div className="chat_mockup__test" onMouseDown={handleMouseDown}>
-              {state.open && (
-                <RadialMenu segmentCount={6} cx={state.cx} cy={state.cy} onClose={handleClose} />
-              )}
-            </div>
-          </RoomProvider>
-        </ChatProvider>
+        <SessionProvider>
+          <ChatProvider>
+            <RoomProvider
+              networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
+              serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
+            >
+              <ChatPanel />
+              <div className="chat_mockup__test" onMouseDown={handleMouseDown}>
+                {state.open && (
+                  <RadialMenu segmentCount={6} cx={state.cx} cy={state.cy} onClose={handleClose} />
+                )}
+              </div>
+            </RoomProvider>
+          </ChatProvider>
+        </SessionProvider>
       </ApiProvider>
     </div>
   );

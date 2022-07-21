@@ -11,10 +11,7 @@ export const useStableCallback = <P extends any[], R>(
   callback: (...args: P) => R
 ): ((...args: P) => R) => {
   const ref = useRef<(...args: P) => R>(null);
-
-  useLayoutEffect(() => {
-    ref.current = callback;
-  }, [callback]);
+  ref.current = callback;
 
   return useCallback((...args: P) => ref.current(...args), []);
 };
@@ -30,10 +27,7 @@ export const useStableCallbacks = <
   callbacks: T
 ) => {
   const ref = useRef<T>(null);
-
-  useLayoutEffect(() => {
-    ref.current = callbacks;
-  }, [callbacks]);
+  ref.current = callbacks;
 
   return useMemo(() => {
     const proxy = {} as { [K in keyof T]: (...args: Parameters<T[K]>) => ReturnType<T[K]> };

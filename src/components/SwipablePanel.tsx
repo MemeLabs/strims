@@ -14,9 +14,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useToggle } from "react-use";
+import { useToggle, useUpdateEffect } from "react-use";
 
-import useUpdate from "../hooks/useUpdate";
 import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
 
 const HorizontalContext = React.createContext<(open: boolean) => void>(null);
@@ -104,9 +103,9 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   }, [open]);
 
   const [emittedOpen, setEmittedOpen] = useState(open);
-  useUpdate(() => onToggle?.(emittedOpen), [emittedOpen]);
+  useUpdateEffect(() => onToggle?.(emittedOpen), [emittedOpen]);
 
-  useUpdate(() => {
+  useUpdateEffect(() => {
     if (!dragState.dragging) {
       const tid = setTimeout(() => {
         setEmittedOpen(!dragState.closed);

@@ -17,6 +17,7 @@ import { Invitation, InvitationV0 } from "../apis/strims/network/v1/network";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Certificate } from "../apis/strims/type/certificate";
 import { useCall, useLazyCall } from "../contexts/FrontendApi";
+import { useSession } from "../contexts/Session";
 import { suppressClickAway } from "../hooks/useClickAway";
 import { certificateChain } from "../lib/certificate";
 import { HTTPReadWriter } from "../lib/http";
@@ -43,13 +44,13 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
     return { invitation, networkCert, peerCert };
   }, [code]);
 
-  const [profileRes] = useCall("profile", "get");
+  const [{ profile }] = useSession();
   const [networksRes] = useCall("network", "list");
 
-  if (inviteRes.error || profileRes.error || networksRes.error) {
+  if (inviteRes.error || networksRes.error) {
     return <div>error</div>;
   }
-  if (!inviteRes.value || !profileRes.value || !networksRes.value) {
+  if (!inviteRes.value || !networksRes.value) {
     return null;
   }
 
@@ -61,7 +62,7 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
   return (
     <div className="invite_auth" {...suppressClickAway()}>
       <div className="invite_auth__mask" />
-      <InviteAuthForm {...inviteRes.value} profile={profileRes.value.profile} />
+      <InviteAuthForm {...inviteRes.value} profile={profile} />
     </div>
   );
 };

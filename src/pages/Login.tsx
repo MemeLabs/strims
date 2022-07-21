@@ -8,7 +8,7 @@ import { useLocation } from "react-router";
 import { Link, Navigate } from "react-router-dom";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
-import { Button, ButtonSet } from "../components/Form";
+import { ButtonSet } from "../components/Form";
 import InternalLink from "../components/InternalLink";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
@@ -16,8 +16,6 @@ import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
 import useNextQuery from "../hooks/useNextQuery";
 import useReady from "../hooks/useReady";
-
-const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%&]*$/;
 
 interface LinkedProfileListItemProps {
   profile: LinkedProfile;

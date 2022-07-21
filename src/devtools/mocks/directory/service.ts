@@ -79,9 +79,41 @@ export default class DirectoryService
     });
   }
 
+  watchListings(req: directoryv1.FrontendWatchListingsRequest) {
+    console.log("watchListings", req);
+    const ch = new PassThrough({ objectMode: true });
+    ch.push(
+      new directoryv1.FrontendWatchListingsResponse({
+        events: [
+          {
+            event: {
+              change: {
+                listings: {
+                  network: {
+                    id: BigInt(1),
+                    key: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
+                    name: "test",
+                  },
+                  listings: events.map((e) => ({
+                    ...e,
+                    moderation: {},
+                    userCount: 0,
+                    recentUserCount: 0,
+                  })),
+                },
+              },
+            },
+          },
+        ],
+      })
+    );
+    return ch;
+  }
+
   watchListingUsers(req: directoryv1.FrontendWatchListingUsersRequest) {
     console.log("watchListingUsers", req);
     const ch = new PassThrough({ objectMode: true });
+    ch.push(new directoryv1.FrontendWatchListingUsersResponse({}));
     return ch;
   }
 }

@@ -21,6 +21,8 @@ import { Provider as ThemeProvider } from "../../contexts/Theme";
 import { AsyncPassThrough } from "../../lib/stream";
 import Directory from "../../pages/Directory";
 import LayoutControl from "../components/LayoutControl";
+import { SessionProvider } from "../contexts/Session";
+import Emitter from "../mocks/chat/MessageEmitter";
 import ChatService from "../mocks/chat/service";
 import DirectoryService from "../mocks/directory/service";
 import NetworkService from "../mocks/network/service";
@@ -29,7 +31,7 @@ import NotificationService from "../mocks/notification/service";
 const LayoutTest: React.FC = () => {
   const [[chatService, client]] = React.useState((): [ChatService, FrontendClient] => {
     const svc = new ServiceRegistry();
-    const chatService = new ChatService();
+    const chatService = new ChatService(new Emitter({ ivl: 100, limit: 250, preload: 0 }));
     registerChatFrontendService(svc, chatService);
     registerNetworkFrontendService(svc, new NetworkService(8));
     registerDirectoryFrontendService(svc, new DirectoryService());
@@ -44,22 +46,24 @@ const LayoutTest: React.FC = () => {
 
   return (
     <ApiProvider value={client}>
-      <ThemeProvider>
-        <NetworkProvider>
-          <NotificationProvider>
-            <ChatProvider>
-              <PlayerProvider>
-                <LayoutPage>
-                  <LayoutControl />
-                  <LayoutBody>
-                    <Directory />
-                  </LayoutBody>
-                </LayoutPage>
-              </PlayerProvider>
-            </ChatProvider>
-          </NotificationProvider>
-        </NetworkProvider>
-      </ThemeProvider>
+      <SessionProvider>
+        <ThemeProvider>
+          <NetworkProvider>
+            <NotificationProvider>
+              <ChatProvider>
+                <PlayerProvider>
+                  <LayoutPage>
+                    <LayoutControl />
+                    <LayoutBody>
+                      <Directory />
+                    </LayoutBody>
+                  </LayoutPage>
+                </PlayerProvider>
+              </ChatProvider>
+            </NotificationProvider>
+          </NetworkProvider>
+        </ThemeProvider>
+      </SessionProvider>
     </ApiProvider>
   );
 };

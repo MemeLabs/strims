@@ -6,11 +6,10 @@ import "./Modal.scss";
 import clsx from "clsx";
 import React, { ReactNode, useRef } from "react";
 import { BsArrowBarDown } from "react-icons/bs";
-import { useToggle } from "react-use";
+import { useToggle, useUpdateEffect } from "react-use";
 import usePortal from "use-portal";
 
 import { useLayout } from "../../contexts/Layout";
-import useUpdate from "../../hooks/useUpdate";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 
 interface ModalProps {
@@ -33,7 +32,7 @@ const Modal: React.FC<ModalProps> = ({
   const header = useRef<HTMLDivElement>(null);
 
   const [modalOpen, toggleModalOpen] = useToggle(open);
-  useUpdate(() => toggleModalOpen(open), [open]);
+  useUpdateEffect(() => toggleModalOpen(open), [open]);
 
   const layout = useLayout();
   const { Portal } = usePortal({ target: layout.root });
