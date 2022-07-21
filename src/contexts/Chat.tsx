@@ -34,8 +34,8 @@ import {
 } from "../apis/strims/chat/v1/chat";
 import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
 import { useUserList } from "../hooks/chat";
-import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import curryDispatchActions from "../lib/curryDispatchActions";
+import MessageSizeCache from "../lib/MessageSizeCache";
 import { applyActionInStateMap, deleteFromStateMap, setInStateMap } from "../lib/stateMap";
 import { useClient } from "./FrontendApi";
 
@@ -64,7 +64,7 @@ export interface ThreadState {
   topic: Topic;
   messages: Message[];
   messageGCEnabled: boolean;
-  messageSizeCache: ChatCellMeasurerCache;
+  messageSizeCache: MessageSizeCache;
   assetBundles: AssetBundle[];
   liveEmotes: Emote[];
   styles: ChatStyles;
@@ -136,7 +136,7 @@ const initialRoomState: ThreadState = {
   topic: null,
   messages: [],
   messageGCEnabled: true,
-  messageSizeCache: new ChatCellMeasurerCache(),
+  messageSizeCache: null,
   assetBundles: [],
   liveEmotes: [],
   styles: {
@@ -200,6 +200,8 @@ const initialState: State = {
   popoutTopicCapacity: 0,
   mainTopics: [],
 };
+
+const initialMessageHeight = 30;
 
 const roomCommands = [
   "help",
@@ -266,7 +268,7 @@ const reduceMessage = <T extends ThreadState>(room: T, state: State, message: Me
     message.entities.emotes[0].combo > 0
   ) {
     messages[messages.length - 1] = message;
-    room.messageSizeCache.clear(messages.length - 1, 0);
+    room.messageSizeCache.unset(messages.length - 1);
   } else {
     messages.push(message);
   }
@@ -322,7 +324,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         commands: roomCommands,
         id: state.nextId,
         topic,
-        messageSizeCache: new ChatCellMeasurerCache(),
+        messageSizeCache: new MessageSizeCache(state.uiConfig.maxLines, initialMessageHeight),
         networkKey,
         serverKey,
         serverEvents,
@@ -366,7 +368,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         id: state.nextId,
         topic,
         label: alias,
-        messageSizeCache: new ChatCellMeasurerCache(),
+        messageSizeCache: new MessageSizeCache(state.uiConfig.maxLines, initialMessageHeight),
         peerKey: peerKey,
         networkKeys,
         thread: thread ?? new WhisperThread({ alias }),
@@ -689,7 +691,7 @@ const createRoomActions = (
   const toNames = (vs: { name: string }[]): string[] => vs.map(({ name }) => name).sort();
 
   const reduceAssetBundle = (state: RoomThreadState, bundle: AssetBundle): RoomThreadState => {
-    state.messageSizeCache.clearAll();
+    state.messageSizeCache.reset();
 
     const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
     const liveEmoteMap = new Map<bigint, Emote>();

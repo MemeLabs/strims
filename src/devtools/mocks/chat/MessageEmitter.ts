@@ -255,27 +255,61 @@ const historyMessages = history
     ({ nick, timestamp, data, entities }) =>
       new Message({
         nick: nick,
+        peerKey: new TextEncoder().encode(nick),
         // sentTime: BigInt(timestamp),
         serverTime: BigInt(timestamp),
         body: data,
-        entities: new Message.Entities(entities),
+        entities: new Message.Entities({
+          ...entities,
+          nicks: entities.nicks?.map((nick) => ({
+            ...nick,
+            peerKey: new TextEncoder().encode(nick.nick),
+          })),
+        }),
       })
   );
 
 export const messages = historyMessages;
 
+interface EmitterOptions {
+  ivl?: number;
+  limit?: number;
+  preload?: number;
+  messages?: Message[];
+}
+
 class Emitter extends PassThrough {
   tid: number;
   i = 0;
 
-  constructor(ivl: number = 5000, limit: number = Infinity, messages: Message[] = historyMessages) {
+  constructor({
+    ivl = 5000,
+    limit = Infinity,
+    preload = 0,
+    messages = historyMessages,
+  }: EmitterOptions) {
     super({ objectMode: true });
+
+    let n = preload || 1;
     this.tid = window.setInterval(() => {
       if (this.i === limit) {
         clearInterval(this.tid);
         return;
       }
-      this.push(messages[this.i++ % history.length]);
+
+      const batch = [];
+      while (n > 0) {
+        const start = this.i % history.length;
+        const end = Math.min(start + n, history.length);
+
+        this.i += end - start;
+        n -= end - start;
+
+        batch.push(...messages.slice(start, end));
+      }
+      n = 1;
+
+      this.push(batch);
     }, ivl);
   }
 

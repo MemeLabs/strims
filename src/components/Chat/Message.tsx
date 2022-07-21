@@ -6,8 +6,8 @@ import "./Message.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
-import { uniq } from "lodash";
-import React, { ReactNode, useEffect, useMemo, useRef } from "react";
+import { isEqual, uniq } from "lodash";
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { Link } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/c
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
 import { useRoom } from "../../contexts/Chat";
 import { useOpenListing } from "../../hooks/directory";
+import useRefs from "../../hooks/useRefs";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import * as directory from "../../lib/directory";
 import ExternalLink from "../ExternalLink";
@@ -313,20 +314,27 @@ interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   isContinued?: boolean;
 }
 
-const Message: React.FC<MessageProps> = ({ isContinued, ...props }) => {
+const Message = React.forwardRef<HTMLDivElement, MessageProps>(({ isContinued, ...props }, ref) => {
   const { emotes } = props.message.entities;
   return emotes.length === 1 && emotes[0].combo ? (
-    <ComboMessage {...props} />
+    <ComboMessage {...props} fwRef={ref} />
   ) : (
-    <StandardMessage {...props} isContinued={isContinued} />
+    <StandardMessage {...props} isContinued={isContinued} fwRef={ref} />
   );
-};
+});
 
-const ComboMessage: React.FC<MessageProps> = ({
+Message.displayName = "Message";
+
+interface MessageImplProps extends MessageProps {
+  fwRef: React.ForwardedRef<HTMLDivElement>;
+}
+
+const ComboMessage: React.FC<MessageImplProps> = ({
   uiConfig,
   message: { serverTime, body, entities },
   className: baseClassName,
   isMostRecent,
+  fwRef,
   ...props
 }) => {
   const formattedBody = useMemo(() => {
@@ -349,7 +357,7 @@ const ComboMessage: React.FC<MessageProps> = ({
     "chat__combo_message--clickable": isMostRecent,
   });
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLElement>();
   useEffect(() => {
     ref.current.classList.remove(`chat__combo_message--hit`);
     const rafId = requestAnimationFrame(() =>
@@ -367,7 +375,7 @@ const ComboMessage: React.FC<MessageProps> = ({
   });
 
   return (
-    <div {...props} className={className} ref={ref}>
+    <div {...props} className={className} ref={useRefs(ref, fwRef)}>
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
@@ -382,12 +390,13 @@ const ComboMessage: React.FC<MessageProps> = ({
   );
 };
 
-const StandardMessage: React.FC<MessageProps> = ({
+const StandardMessage: React.FC<MessageImplProps> = ({
   uiConfig,
   message: { nick, peerKey, viewedListing, serverTime, body, entities },
   className: baseClassName,
   isMostRecent,
   isContinued,
+  fwRef,
   ...props
 }) => {
   const [, { toggleSelectedPeer, sendMessage }] = useRoom();
@@ -400,7 +409,45 @@ const StandardMessage: React.FC<MessageProps> = ({
     }
   );
 
-  const formattedBody = useMemo(() => {
+  const canCombo = useMemo(
+    () => isMostRecent && entities.emotes[0]?.canCombo,
+    [isMostRecent, entities]
+  );
+
+  const classNames = useMemo(() => {
+    const authorKey = Base64.fromUint8Array(peerKey, true);
+
+    return clsx(
+      baseClassName,
+      "chat__message",
+      `chat__message--author_${authorKey}`,
+      {
+        "chat__message--continued": isContinued,
+        "chat__message--clickable": canCombo,
+        "chat__message--self": entities.selfMessage,
+        "chat__message--tagged": entities.tags.length > 0,
+      },
+      uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
+      uniq(
+        entities.nicks.map(
+          ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
+        )
+      )
+    );
+  }, [baseClassName, isContinued, canCombo, entities, uiConfig]);
+
+  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleSelectedPeer(peerKey);
+  });
+
+  const handleBodyClick = useStableCallback(() => {
+    if (canCombo) {
+      sendMessage(body);
+    }
+  });
+
+  const content = useMemo(() => {
     const formatter = new MessageFormatter(body);
     entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
     entities.links.forEach((entity) =>
@@ -435,66 +482,32 @@ const StandardMessage: React.FC<MessageProps> = ({
     if (entities.selfMessage) {
       formatter.insertEntity(MessageSelf, entities.selfMessage);
     }
-    return formatter.body;
+    return (
+      <>
+        {uiConfig.showTime && (
+          <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
+        )}
+        <span className="chat__message__author" onClick={handleAuthorClick}>
+          {!!uiConfig.userPresenceIndicator && (
+            <UserPresenceIndicator
+              style={uiConfig.userPresenceIndicator}
+              directoryRef={viewedListing}
+            />
+          )}
+          <span className="chat__message__author__text">{nick}</span>
+        </span>
+        <span className="chat__message__colon">{": "}</span>
+        <span className="chat__message__body" onClick={handleBodyClick}>
+          {formatter.body}
+        </span>
+        <br />
+      </>
+    );
   }, [uiConfig, entities]);
 
-  const authorKey = Base64.fromUint8Array(peerKey, true);
-
-  const canCombo = useMemo(
-    () => isMostRecent && entities.emotes[0]?.canCombo,
-    [isMostRecent, entities]
-  );
-
-  const classNames = useMemo(() => {
-    return clsx(
-      baseClassName,
-      "chat__message",
-      `chat__message--author_${authorKey}`,
-      {
-        "chat__message--continued": isContinued,
-        "chat__message--clickable": canCombo,
-        "chat__message--self": entities.selfMessage,
-        "chat__message--tagged": entities.tags.length > 0,
-      },
-      uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
-      uniq(
-        entities.nicks.map(
-          ({ peerKey }) => `chat__message--mention_${Base64.fromUint8Array(peerKey, true)}`
-        )
-      )
-    );
-  }, [baseClassName, isContinued, canCombo, entities]);
-
-  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    toggleSelectedPeer(peerKey);
-  });
-
-  const handleBodyClick = useStableCallback(() => {
-    if (canCombo) {
-      sendMessage(body);
-    }
-  });
-
   return (
-    <div {...props} className={classNames}>
-      {uiConfig.showTime && (
-        <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
-      )}
-      <span className="chat__message__author" onClick={handleAuthorClick}>
-        {!!uiConfig.userPresenceIndicator && (
-          <UserPresenceIndicator
-            style={uiConfig.userPresenceIndicator}
-            directoryRef={viewedListing}
-          />
-        )}
-        <span className="chat__message__author__text">{nick}</span>
-      </span>
-      <span className="chat__message__colon">{": "}</span>
-      <span className="chat__message__body" onClick={handleBodyClick}>
-        {formattedBody}
-      </span>
-      <br />
+    <div {...props} className={classNames} ref={fwRef}>
+      {content}
     </div>
   );
 };

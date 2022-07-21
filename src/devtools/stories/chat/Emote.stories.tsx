@@ -207,7 +207,7 @@ const initEmoteTesterMessages = (): MessageEmitter => {
     }
   }
 
-  return new MessageEmitter(0, messages.length, messages);
+  return new MessageEmitter({ ivl: 0, limit: messages.length, messages });
 };
 
 type EmoteSource =
@@ -414,7 +414,7 @@ const defaultComboFormValues: ComboFormProps = {
 };
 
 const Combo: React.FC = () => {
-  const messages = useMemo(() => new MessageEmitter(0, 0), []);
+  const messages = useMemo(() => new MessageEmitter({ ivl: 0, limit: 0 }), []);
 
   const { control, watch } = useForm<ComboFormProps>({
     defaultValues: defaultComboFormValues,

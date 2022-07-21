@@ -16,11 +16,11 @@ import assetBundle, { modifiers } from "../../mocks/chat/assetBundle";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
 
 class ChatService {
-  messages: Readable<chatv1.Message>;
+  messages: Readable<chatv1.Message[]>;
   assetBundles: Readable<chatv1.AssetBundle>;
   uiConfigs: Readable<chatv1.UIConfig>;
 
-  constructor(messages = new MessageEmitter(1000)) {
+  constructor(messages = new MessageEmitter({ ivl: 1000 })) {
     this.messages = messages;
     this.assetBundles = new PassThrough({ objectMode: true });
     this.uiConfigs = new PassThrough({ objectMode: true });
@@ -32,7 +32,7 @@ class ChatService {
   }
 
   emitMessage(message: chatv1.Message): void {
-    this.messages.push(message);
+    this.messages.push([message]);
   }
 
   emitAssetBundle(bundle: chatv1.AssetBundle): void {
@@ -64,16 +64,14 @@ class ChatService {
 
     void assetBundle().then((assetBundle) => this.assetBundles.push(assetBundle));
 
-    this.messages.on("data", (message) =>
+    this.messages.on("data", (messages) =>
       ch.push(
         new chatv1.OpenClientResponse({
           body: {
             serverEvents: {
-              events: [
-                {
-                  body: { message },
-                },
-              ],
+              events: messages.map((message) => ({
+                body: { message },
+              })),
             },
           },
         })
@@ -84,14 +82,14 @@ class ChatService {
   }
 
   clientSendMessage(req: chatv1.ClientSendMessageRequest): chatv1.ClientSendMessageResponse {
-    this.messages.push(
+    this.messages.push([
       new chatv1.Message({
         nick: "test_user",
         serverTime: BigInt(Date.now()),
         body: req.body,
         entities: new chatv1.Message.Entities(),
-      })
-    );
+      }),
+    ]);
     return new chatv1.ClientSendMessageResponse();
   }
 
