@@ -27,7 +27,15 @@ module.exports = {
     "@typescript-eslint/no-misused-promises": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
     "max-classes-per-file": "off",
-    "max-len": ["warn", { "code": 100, "ignoreComments": true }],
+    "max-len": [
+      "warn",
+      {
+        "code": 100,
+        "ignoreComments": true,
+        "ignoreStrings": true,
+        "ignoreTemplateLiterals": true,
+      },
+    ],
     "no-bitwise": "off",
     "no-console": "warn",
     "quote-props": ["error", "consistent"],

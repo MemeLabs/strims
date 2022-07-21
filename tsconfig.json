@@ -19,5 +19,10 @@
     "src/**/*.tsx",
     "src/**/*.js",
   ],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules"],
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS"
+    }
+  }
 }
