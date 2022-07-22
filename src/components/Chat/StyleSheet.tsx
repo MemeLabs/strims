@@ -184,6 +184,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     }
 
     deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--author_"));
+    deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--mention_"));
 
     const props = new Map<string, PropList>();
 
@@ -211,14 +212,18 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     }
 
     if (styles.selectedPeers.size !== 0) {
-      const keys = Array.from(styles.selectedPeers).map((key) => `.chat__message--author_${key}`);
+      const keys = [];
+      for (const key of styles.selectedPeers) {
+        keys.push(`.chat__message--author_${key}`);
+        if (uiConfig.focusMentioned) {
+          keys.push(`.chat__message--mention_${key}`);
+        }
+      }
       const selector = `.chat__message:not(${keys.join(", ")})`;
       ref.current.sheet.insertRule(
         `${selector} { --opacity-chat-message: var(--opacity-chat-unselected); }`
       );
     }
-
-    deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--mention_"));
 
     if (uiConfig.ignoreMentions) {
       for (const { peerKey } of uiConfig.ignores) {

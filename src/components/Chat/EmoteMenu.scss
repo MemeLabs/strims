@@ -110,6 +110,10 @@
     width: 480px;
   }
 
+  @at-root .layout--portable.layout--landscape_cw & {
+    right: max(10px, env(safe-area-inset-right));
+  }
+
   @at-root .layout--portable.layout--min_aspect_ratio_4 & {
     bottom: unset;
     height: calc(var(--layout-height) - 20px);

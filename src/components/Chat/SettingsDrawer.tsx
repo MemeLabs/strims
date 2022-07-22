@@ -291,7 +291,7 @@ const SettingsDrawer: React.FC = () => {
           <ToggleInput
             control={control}
             label={t("chat.settings.Include mentions when focused")}
-            name="ignoreMentions"
+            name="focusMentioned"
             onChange={handleChange}
           />
           <ToggleInput
