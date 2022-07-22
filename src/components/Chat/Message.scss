@@ -11,6 +11,7 @@
     opacity: var(--opacity-chat-message, 1);
     background-color: var(--color-background-chat-message, transparent);
     margin-top: 1px;
+    transform: translateZ(0);
 
     // a message preceded and followed by messages from different authors
     &:not(&--continued) + &:not(&--continued) {
