@@ -8,9 +8,8 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
-import { useFirstMountState, usePrevious } from "react-use";
+import { usePrevious } from "react-use";
 
-import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
 import useRefs from "../../hooks/useRefs";
 import useSize from "../../hooks/useSize";
@@ -26,7 +25,6 @@ export interface MessageProps {
 export type MessageRenderFunc = (props: MessageProps) => React.ReactElement;
 
 interface ScrollerProps extends React.ComponentProps<"div"> {
-  uiConfig: UIConfig;
   renderMessage: MessageRenderFunc;
   messageCount: number;
   messageSizeCache: MessageSizeCache;
@@ -44,7 +42,6 @@ interface ScrollerViewProps extends ScrollerProps {
 const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
   (
     {
-      uiConfig,
       renderMessage,
       messageCount,
       messageSizeCache,
@@ -58,12 +55,23 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
     },
     fwRef
   ) => {
-    const [, { toggleMessageGC }] = useRoom();
     const [scrollTop, setScrollTop] = useState(0);
+    const pruned = usePrevious(messageCount) > messageCount;
+    const prevViewportWidth = usePrevious(viewportWidth);
+    const reset = prevViewportWidth !== undefined && prevViewportWidth !== viewportWidth;
 
+    if (reset) {
+      messageSizeCache.reset();
+    }
     messageSizeCache.grow(messageCount);
 
-    const pruned = usePrevious(messageCount) > messageCount;
+    messageSizeCache.onchange = () => {
+      if (autoScroll) {
+        setScrollTop(messageSizeCache.getOffset(messageCount) - viewportHeight);
+      }
+    };
+    useEffect(() => () => (messageSizeCache.onchange = null), []);
+
     const indexRange = useMemo(() => {
       const start = Math.max(0, messageSizeCache.findIndex(scrollTop) - overscan);
       const end = Math.min(
@@ -71,7 +79,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
         messageSizeCache.findIndex(scrollTop + viewportHeight) + overscan
       );
       return { start, end };
-    }, [pruned, scrollTop, viewportHeight]);
+    }, [reset, pruned, scrollTop, viewportHeight]);
 
     const children = useMemo(() => {
       const children: React.ReactElement[] = [];
@@ -92,38 +100,18 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
     }, [renderMessage, indexRange, messageSizeCache.getOffset(indexRange.end)]);
 
     const ref = useRef<HTMLDivElement>();
-    const firstMount = useFirstMountState();
     const ignoreScroll = useRef(false);
     const height = messageSizeCache.getOffset(messageCount);
+    const [, { toggleMessageGC }] = useRoom();
 
     useLayoutEffect(() => {
-      if (!firstMount) {
-        messageSizeCache.reset();
-
-        if (!autoScroll) {
-          const offset = messageSizeCache.getOffset(indexRange.start + overscan);
-          ref.current.scrollTo({ top: offset });
-          setScrollTop(offset);
-        }
-      }
-    }, [viewportWidth, uiConfig]);
-
-    const syncOffset = useStableCallback((height?: number) => {
-      if (autoScroll && ref.current) {
+      if (autoScroll) {
         ignoreScroll.current = true;
 
-        height ??= messageSizeCache.getOffset(messageCount);
-        ref.current.scrollTo({ top: height });
+        ref.current?.scrollTo({ top: height });
         setScrollTop(height - viewportHeight);
       }
-    });
-
-    useLayoutEffect(() => syncOffset(height), [height, autoScroll, viewportHeight, viewportWidth]);
-
-    useEffect(() => {
-      messageSizeCache.onchange = syncOffset;
-      return () => (messageSizeCache.onchange = null);
-    }, []);
+    }, [height, autoScroll, viewportHeight]);
 
     const handleScroll = useStableCallback(() => {
       // ignore scroll events triggered by autoscroll
@@ -177,24 +165,20 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
   const handleScrollMouseEnter = useCallback(() => setHovering(true), []);
   const handleScrollMouseLeave = useCallback(() => setHovering(false), []);
   const handleClick = useStableCallback(() => resetSelectedPeers());
-
-  const renderScrollThumb = useCallback(
-    (props) => (
-      <div
-        {...props}
-        className={clsx({
-          "chat__scroller__scrollbar_handle": true,
-          "chat__scroller__scrollbar_handle--scrolling": (scrolling && !autoScroll) || hovering,
-        })}
-      />
-    ),
-    [hovering]
-  );
-
   const handleResumeClick = useStableCallback(() => {
     toggleMessageGC(true);
     setAutoScroll(true);
   });
+
+  const renderScrollThumb = (props) => (
+    <div
+      {...props}
+      className={clsx({
+        "chat__scroller__scrollbar_handle": true,
+        "chat__scroller__scrollbar_handle--scrolling": (scrolling && !autoScroll) || hovering,
+      })}
+    />
+  );
 
   const renderView = (renderProps) => (
     <ScrollerView

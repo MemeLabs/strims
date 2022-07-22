@@ -163,7 +163,7 @@ const initialState: State = {
     showTime: false,
     showFlairIcons: true,
     timestampFormat: "HH:mm",
-    maxLines: 250,
+    maxLines: 1024,
     notificationWhisper: true,
     soundNotificationWhisper: false,
     notificationHighlight: true,
@@ -191,7 +191,7 @@ const initialState: State = {
     emojiSkinTone: "",
   }),
   config: {
-    messageGCThreshold: 250,
+    messageGCThreshold: 1024,
   },
   rooms: new Map(),
   whispers: new Map(),

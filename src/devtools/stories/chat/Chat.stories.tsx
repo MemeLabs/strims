@@ -9,6 +9,7 @@ import React from "react";
 import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import { registerDirectoryFrontendService } from "../../../apis/strims/network/v1/directory/directory_rpc";
+import SettingsDrawer from "../../../components/Chat/SettingsDrawer";
 import ChatPanel from "../../../components/Chat/Shell";
 import { Provider as ChatProvider } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
@@ -22,7 +23,7 @@ import DirectoryService from "../../mocks/directory/service";
 const Chat: React.FC = () => {
   const [[chatService, client]] = React.useState((): [ChatService, FrontendClient] => {
     const svc = new ServiceRegistry();
-    const chatService = new ChatService(new Emitter({ ivl: 50, limit: 15000, preload: 10000 }));
+    const chatService = new ChatService(new Emitter({ ivl: 5000, limit: 15000, preload: 10000 }));
     const directoryService = new DirectoryService();
     registerChatFrontendService(svc, chatService);
     registerDirectoryFrontendService(svc, directoryService);
@@ -35,7 +36,7 @@ const Chat: React.FC = () => {
   React.useEffect(() => () => chatService.destroy(), [chatService]);
 
   return (
-    <div className="chat_mockup">
+    <div className="chat_mockup chat_mockup--with_settings">
       <ApiProvider value={client}>
         <SessionProvider>
           <ChatProvider>
@@ -44,6 +45,9 @@ const Chat: React.FC = () => {
               serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
             >
               <ChatPanel />
+              <div className="chat_mockup__settings">
+                <SettingsDrawer />
+              </div>
             </RoomProvider>
           </ChatProvider>
         </SessionProvider>

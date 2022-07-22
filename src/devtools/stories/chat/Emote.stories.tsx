@@ -256,7 +256,6 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
     <>
       <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <ChatScroller
-        uiConfig={uiConfig}
         renderMessage={({ index, style }: MessageProps) => (
           <ChatMessage
             uiConfig={uiConfig}
@@ -384,7 +383,6 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
 
   return (
     <ChatScroller
-      uiConfig={uiConfig}
       renderMessage={({ index, style }: MessageProps) => (
         <ChatMessage
           uiConfig={uiConfig}

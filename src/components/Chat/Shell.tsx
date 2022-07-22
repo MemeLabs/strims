@@ -61,7 +61,6 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
       <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <div className="chat__messages">
         <Scroller
-          uiConfig={uiConfig}
           renderMessage={renderMessage}
           messageCount={room.messages.length}
           messageSizeCache={room.messageSizeCache}

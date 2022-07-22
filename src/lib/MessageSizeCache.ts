@@ -62,7 +62,7 @@ class MessageSizeCache {
     this.heights[i] = height;
 
     const offsetChanged = this.syncOffset(i);
-    const nextOffsetChange = i < this.size && this.syncOffset(i + 1);
+    const nextOffsetChange = i + 1 < this.size && this.syncOffset(i + 1);
     if (offsetChanged || nextOffsetChange) {
       this.onchange?.();
     }
