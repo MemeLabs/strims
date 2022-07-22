@@ -273,6 +273,7 @@ export const messages = historyMessages;
 
 interface EmitterOptions {
   ivl?: number;
+  batchSize?: number;
   limit?: number;
   preload?: number;
   messages?: Message[];
@@ -284,6 +285,7 @@ class Emitter extends PassThrough {
 
   constructor({
     ivl = 5000,
+    batchSize = 1,
     limit = Infinity,
     preload = 0,
     messages = historyMessages,
@@ -307,7 +309,7 @@ class Emitter extends PassThrough {
 
         batch.push(...messages.slice(start, end));
       }
-      n = 1;
+      n = batchSize;
 
       this.push(batch);
     }, ivl);

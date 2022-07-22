@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
 import { useRoom } from "../../contexts/Chat";
+import { useSession } from "../../contexts/Session";
 import { useOpenListing } from "../../hooks/directory";
 import useRefs from "../../hooks/useRefs";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -400,6 +401,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
   ...props
 }) => {
   const [, { toggleSelectedPeer, sendMessage }] = useRoom();
+  const [{ profile }] = useSession();
 
   const handleNickClick = useStableCallback(
     (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
@@ -416,6 +418,11 @@ const StandardMessage: React.FC<MessageImplProps> = ({
 
   const classNames = useMemo(() => {
     const authorKey = Base64.fromUint8Array(peerKey, true);
+    const sent = isEqual(peerKey, profile.key.public);
+    const highlight =
+      (uiConfig.highlight && entities.nicks.some((n) => isEqual(n.peerKey, profile.key.public))) ||
+      entities.nicks.some((n) => uiConfig.highlights.some((h) => isEqual(n.peerKey, h.peerKey))) ||
+      uiConfig.customHighlight.some((h) => body.includes(h));
 
     return clsx(
       baseClassName,
@@ -426,6 +433,8 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         "chat__message--clickable": canCombo,
         "chat__message--self": entities.selfMessage,
         "chat__message--tagged": entities.tags.length > 0,
+        "chat__message--sent": sent,
+        "chat__message--highlight": !sent && highlight,
       },
       uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
       uniq(

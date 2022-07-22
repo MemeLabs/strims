@@ -253,7 +253,7 @@ message UIConfig {
   bool sound_notification_highlight = 8;
   SoundFile notification_sound_file = 9;
   bool highlight = 10;
-  string custom_highlight = 11;
+  repeated string custom_highlight = 11;
   repeated Highlight highlights = 12;
   repeated Tag tags = 13;
   ShowRemoved show_removed = 14;

@@ -23,7 +23,7 @@ import DirectoryService from "../../mocks/directory/service";
 const Chat: React.FC = () => {
   const [[chatService, client]] = React.useState((): [ChatService, FrontendClient] => {
     const svc = new ServiceRegistry();
-    const chatService = new ChatService(new Emitter({ ivl: 5000, limit: 15000, preload: 10000 }));
+    const chatService = new ChatService(new Emitter({ ivl: 500, limit: 15000, preload: 10000 }));
     const directoryService = new DirectoryService();
     registerChatFrontendService(svc, chatService);
     registerDirectoryFrontendService(svc, directoryService);

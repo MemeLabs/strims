@@ -64,7 +64,6 @@ const primitivePropNames = [
   "notificationHighlight",
   "soundNotificationHighlight",
   "highlight",
-  "customHighlight",
   "showWhispersInChat",
   "focusMentioned",
   "notificationTimeout",
@@ -126,7 +125,13 @@ const SettingsDrawer: React.FC = () => {
   const { control, getValues, reset } = useForm<SettingsFormData>({ mode: "onBlur" });
 
   useEffect(() => {
-    const { showRemoved, userPresenceIndicator, notificationSoundFile, ...values } = uiConfig;
+    const {
+      showRemoved,
+      userPresenceIndicator,
+      notificationSoundFile,
+      customHighlight,
+      ...values
+    } = uiConfig;
 
     reset({
       showRemoved: showRemovedOptions.find(({ value }) => value === showRemoved),
@@ -139,6 +144,7 @@ const SettingsDrawer: React.FC = () => {
             data: Base64.fromUint8Array(notificationSoundFile.data),
           }
         : undefined,
+      customHighlight: customHighlight.join(", "),
       ...values,
     });
   }, [uiConfig]);
@@ -148,6 +154,7 @@ const SettingsDrawer: React.FC = () => {
       showRemoved: { value: showRemoved },
       userPresenceIndicator: { value: userPresenceIndicator },
       notificationSoundFile,
+      customHighlight,
     } = getValues();
     const values = pick(getValues(), primitivePropNames);
 
@@ -160,9 +167,12 @@ const SettingsDrawer: React.FC = () => {
             data: Base64.toUint8Array(notificationSoundFile.data),
           })
         : undefined,
+      customHighlight: customHighlight.split(/\s*,\s*/).filter(Boolean),
       ...values,
     });
   };
+
+  useEffect(() => handleChange, []);
 
   return (
     <Scrollbars autoHide={true}>

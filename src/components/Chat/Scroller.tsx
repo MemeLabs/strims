@@ -248,13 +248,20 @@ const MessageMeasurer = React.memo<MessageMeasurerProps>(
     const style = useMemo<React.CSSProperties>(() => {
       return {
         position: "absolute",
-        width: "100%",
         top: `${offset}px`,
       };
     }, [offset]);
 
     return renderMessage({ index, ref, style });
-  }
+  },
+  (prev, next) =>
+    next.settled &&
+    prev.index === next.index &&
+    prev.renderMessage === next.renderMessage &&
+    prev.messageSizeCache === next.messageSizeCache &&
+    prev.unstable === next.unstable &&
+    prev.offset === next.offset &&
+    prev.settled === next.settled
 );
 
 MessageMeasurer.displayName = "Scroller.MessageMeasurer";

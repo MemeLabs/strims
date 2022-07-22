@@ -1599,7 +1599,7 @@ export type IUIConfig = {
   soundNotificationHighlight?: boolean;
   notificationSoundFile?: strims_chat_v1_UIConfig_ISoundFile;
   highlight?: boolean;
-  customHighlight?: string;
+  customHighlight?: string[];
   highlights?: strims_chat_v1_UIConfig_IHighlight[];
   tags?: strims_chat_v1_UIConfig_ITag[];
   showRemoved?: strims_chat_v1_UIConfig_ShowRemoved;
@@ -1637,7 +1637,7 @@ export class UIConfig {
   soundNotificationHighlight: boolean;
   notificationSoundFile: strims_chat_v1_UIConfig_SoundFile | undefined;
   highlight: boolean;
-  customHighlight: string;
+  customHighlight: string[];
   highlights: strims_chat_v1_UIConfig_Highlight[];
   tags: strims_chat_v1_UIConfig_Tag[];
   showRemoved: strims_chat_v1_UIConfig_ShowRemoved;
@@ -1674,7 +1674,7 @@ export class UIConfig {
     this.soundNotificationHighlight = v?.soundNotificationHighlight || false;
     this.notificationSoundFile = v?.notificationSoundFile && new strims_chat_v1_UIConfig_SoundFile(v.notificationSoundFile);
     this.highlight = v?.highlight || false;
-    this.customHighlight = v?.customHighlight || "";
+    this.customHighlight = v?.customHighlight ? v.customHighlight : [];
     this.highlights = v?.highlights ? v.highlights.map(v => new strims_chat_v1_UIConfig_Highlight(v)) : [];
     this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_UIConfig_Tag(v)) : [];
     this.showRemoved = v?.showRemoved || 0;
@@ -1713,7 +1713,7 @@ export class UIConfig {
     if (m.soundNotificationHighlight) w.uint32(64).bool(m.soundNotificationHighlight);
     if (m.notificationSoundFile) strims_chat_v1_UIConfig_SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
     if (m.highlight) w.uint32(80).bool(m.highlight);
-    if (m.customHighlight.length) w.uint32(90).string(m.customHighlight);
+    for (const v of m.customHighlight) w.uint32(90).string(v);
     for (const v of m.highlights) strims_chat_v1_UIConfig_Highlight.encode(v, w.uint32(98).fork()).ldelim();
     for (const v of m.tags) strims_chat_v1_UIConfig_Tag.encode(v, w.uint32(106).fork()).ldelim();
     if (m.showRemoved) w.uint32(112).uint32(m.showRemoved);
@@ -1779,7 +1779,7 @@ export class UIConfig {
         m.highlight = r.bool();
         break;
         case 11:
-        m.customHighlight = r.string();
+        m.customHighlight.push(r.string())
         break;
         case 12:
         m.highlights.push(strims_chat_v1_UIConfig_Highlight.decode(r, r.uint32()));

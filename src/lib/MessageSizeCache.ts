@@ -42,9 +42,7 @@ class MessageSizeCache {
   }
 
   public unset(i: number) {
-    if (this.settled[i]) {
-      this.settled[i] = false;
-    }
+    this.set(i, false, this.estimate, 0, 0);
   }
 
   public prune(n: number) {
@@ -68,8 +66,15 @@ class MessageSizeCache {
     }
   }
 
+  private collapseMargins(a: number, b: number) {
+    if (a < 0 && b < 0) return Math.min(a, b);
+    if (a >= 0 && b >= 0) return Math.max(a, b);
+    return a + b;
+  }
+
   private syncOffset(i: number) {
-    const height = this.heights[i] + Math.max(this.margins[i * 2 - 1] ?? 0, this.margins[i * 2]);
+    const margin = this.collapseMargins(this.margins[i * 2 - 1] ?? 0, this.margins[i * 2]);
+    const height = this.heights[i] + margin;
     if (this.offsets.get(i) !== height) {
       this.offsets.set(i, height);
       return true;

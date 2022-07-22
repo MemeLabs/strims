@@ -33,6 +33,7 @@ import { AsyncPassThrough } from "../../../lib/stream";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../pages/Settings/Chat/ChatEmoteForm";
 import { toEmoteProps } from "../../../pages/Settings/Chat/utils";
 import { RoomProvider } from "../../contexts/Chat";
+import { SessionProvider } from "../../contexts/Session";
 import { emoteNames, modifierNames } from "../../mocks/chat/assetBundle";
 import imgBrick from "../../mocks/chat/emotes/static/Brick.png";
 import MessageEmitter from "../../mocks/chat/MessageEmitter";
@@ -68,26 +69,28 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
 
   return (
     <ApiProvider value={client}>
-      <ChatProvider>
-        <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
-          {shouldRenderStyleSheet && (
-            <ChatConsumer>
-              {([{ uiConfig }]) => (
-                <ThreadConsumer>
-                  {([room]) => (
-                    <StyleSheet
-                      liveEmotes={room.liveEmotes}
-                      styles={room.styles}
-                      uiConfig={uiConfig}
-                    />
-                  )}
-                </ThreadConsumer>
-              )}
-            </ChatConsumer>
-          )}
-          <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
-        </RoomProvider>
-      </ChatProvider>
+      <SessionProvider>
+        <ChatProvider>
+          <RoomProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
+            {shouldRenderStyleSheet && (
+              <ChatConsumer>
+                {([{ uiConfig }]) => (
+                  <ThreadConsumer>
+                    {([room]) => (
+                      <StyleSheet
+                        liveEmotes={room.liveEmotes}
+                        styles={room.styles}
+                        uiConfig={uiConfig}
+                      />
+                    )}
+                  </ThreadConsumer>
+                )}
+              </ChatConsumer>
+            )}
+            <MockChatContext.Provider value={service}>{children}</MockChatContext.Provider>
+          </RoomProvider>
+        </ChatProvider>
+      </SessionProvider>
     </ApiProvider>
   );
 };
@@ -256,8 +259,9 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
     <>
       <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <ChatScroller
-        renderMessage={({ index, style }: MessageProps) => (
+        renderMessage={({ index, style, ref }: MessageProps) => (
           <ChatMessage
+            ref={ref}
             uiConfig={uiConfig}
             message={room.messages[index]}
             style={style}
@@ -383,8 +387,9 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
 
   return (
     <ChatScroller
-      renderMessage={({ index, style }: MessageProps) => (
+      renderMessage={({ index, style, ref }: MessageProps) => (
         <ChatMessage
+          ref={ref}
           uiConfig={uiConfig}
           message={room.messages[index]}
           style={style}
