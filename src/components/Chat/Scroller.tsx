@@ -165,9 +165,12 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
   const handleScrollMouseEnter = useCallback(() => setHovering(true), []);
   const handleScrollMouseLeave = useCallback(() => setHovering(false), []);
   const handleClick = useStableCallback(() => resetSelectedPeers());
+
   const handleResumeClick = useStableCallback(() => {
-    toggleMessageGC(true);
-    setAutoScroll(true);
+    if (!scrolling) {
+      toggleMessageGC(true);
+      setAutoScroll(true);
+    }
   });
 
   const renderScrollThumb = (props) => (
@@ -204,19 +207,32 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
         onMouseLeave={handleScrollMouseLeave}
         onClick={handleClick}
       />
-      {!autoScroll && (
-        <div className="chat__scroller__resume_autoscroll" onClick={handleResumeClick}>
-          <span>
-            <Trans>chat.More messages below</Trans>
-          </span>
-          <FiArrowDownCircle />
-        </div>
-      )}
+      {!autoScroll && <AutoScrollResumer onClick={handleResumeClick} disabled={scrolling} />}
     </>
   );
 };
 
 export default Scroller;
+
+interface AutoScrollResumerProps {
+  onClick: () => void;
+  disabled: boolean;
+}
+
+const AutoScrollResumer: React.FC<AutoScrollResumerProps> = ({ onClick, disabled }) => (
+  <div
+    className={clsx({
+      "chat__scroller__resume_autoscroll": true,
+      "chat__scroller__resume_autoscroll--disabled": disabled,
+    })}
+    onClick={onClick}
+  >
+    <span>
+      <Trans>chat.More messages below</Trans>
+    </span>
+    <FiArrowDownCircle />
+  </div>
+);
 
 interface MessageMeasurerProps {
   index: number;

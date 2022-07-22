@@ -18,6 +18,7 @@
     &__resume_autoscroll {
       position: absolute;
       background: var(--color-background-chat-scroll-resume);
+      color: var(--color-text-chat-scroll-resume);
       width: calc(100% - 15px);
       box-sizing: border-box;
       padding: 5px 10px;
@@ -29,6 +30,13 @@
       justify-content: space-between;
       align-items: center;
       z-index: var(--z-index-sticky);
+      transition: all var(--timing-medium);
+
+      &--disabled {
+        background: var(--color-background-chat-scroll-resume-disabled);
+        color: var(--color-text-chat-scroll-resume-disabled);
+        cursor: default;
+      }
     }
   }
 }

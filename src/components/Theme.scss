@@ -243,7 +243,10 @@
 
     --color-text-shadow-chat-combo: #000;
     --color-background-chat-scroll-handle: var(--color-opac-w-8);
-    --color-background-chat-scroll-resume: #{$slate-300};
+    --color-background-chat-scroll-resume: var(--color-slate-8);
+    --color-background-chat-scroll-resume-disabled: var(--color-slate-9);
+    --color-text-chat-scroll-resume: var(--color-grey-13);
+    --color-text-chat-scroll-resume-disabled: var(--color-grey-6);
     --color-text-chat-settings-legend: #{$gray-200};
     --color-background-chat-toggle-hover: #{$slate-500};
     --color-border-chat-tab: var(--color-opac-w-5);
