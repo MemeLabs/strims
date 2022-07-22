@@ -11,20 +11,20 @@ class MessageSizeCache {
   public onchange?: () => void;
 
   constructor(private size: number, private estimate: number) {
-    size = this.minSize(size);
+    this.size = size = this.roundSize(size);
     this.settled = new Array<boolean>(size).fill(false);
     this.margins = new Array<number>(size * 2).fill(0);
     this.heights = new Array<number>(size).fill(estimate);
     this.offsets = new FenwickTree(this.heights);
   }
 
-  private minSize(size: number) {
-    return 1 << (32 - Math.clz32(size * 2));
+  private roundSize(size: number) {
+    return Math.pow(2, Math.ceil(Math.log2(size)));
   }
 
   public grow(size: number) {
     if (size > this.size) {
-      size = this.minSize(size);
+      size = this.roundSize(size);
       const d = size - this.size;
       this.settled.push(...new Array<boolean>(d).fill(false));
       this.margins.push(...new Array<number>(d * 2).fill(0));
@@ -61,13 +61,9 @@ class MessageSizeCache {
     this.margins[i * 2 + 1] = marginBottom;
     this.heights[i] = height;
 
-    let changed = false;
-    // update i +/- 1 to resolve css effects from sibling selectors
-    changed = i > 0 && this.syncOffset(i - 1);
-    changed = this.syncOffset(i) || changed;
-    changed = (i < this.size && this.syncOffset(i + 1)) || changed;
-
-    if (changed) {
+    const offsetChanged = this.syncOffset(i);
+    const nextOffsetChange = i < this.size && this.syncOffset(i + 1);
+    if (offsetChanged || nextOffsetChange) {
       this.onchange?.();
     }
   }

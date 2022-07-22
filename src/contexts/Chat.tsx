@@ -324,7 +324,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         commands: roomCommands,
         id: state.nextId,
         topic,
-        messageSizeCache: new MessageSizeCache(state.uiConfig.maxLines, initialMessageHeight),
+        messageSizeCache: new MessageSizeCache(
+          state.uiConfig.maxLines + state.config.messageGCThreshold,
+          initialMessageHeight
+        ),
         networkKey,
         serverKey,
         serverEvents,
@@ -368,7 +371,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         id: state.nextId,
         topic,
         label: alias,
-        messageSizeCache: new MessageSizeCache(state.uiConfig.maxLines, initialMessageHeight),
+        messageSizeCache: new MessageSizeCache(
+          state.uiConfig.maxLines + state.config.messageGCThreshold,
+          initialMessageHeight
+        ),
         peerKey: peerKey,
         networkKeys,
         thread: thread ?? new WhisperThread({ alias }),

@@ -35,8 +35,8 @@ interface ScrollerProps extends React.ComponentProps<"div"> {
 }
 
 interface ScrollerViewProps extends ScrollerProps {
-  height: number;
-  width: number;
+  viewportHeight: number;
+  viewportWidth: number;
   onAutoscrollChange: (v: boolean) => void;
   autoScroll: boolean;
 }
@@ -50,8 +50,8 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
       messageSizeCache,
       onAutoscrollChange,
       autoScroll,
-      height = 0,
-      width = 0,
+      viewportHeight = 0,
+      viewportWidth = 0,
       overscan = 10,
       autoScrollThreshold = 20,
       ...props
@@ -63,14 +63,15 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
 
     messageSizeCache.grow(messageCount);
 
-    const offset = messageSizeCache.getOffset(messageCount);
     const pruned = usePrevious(messageCount) > messageCount;
-
     const indexRange = useMemo(() => {
       const start = Math.max(0, messageSizeCache.findIndex(scrollTop) - overscan);
-      const end = Math.min(messageCount, messageSizeCache.findIndex(scrollTop + height) + overscan);
+      const end = Math.min(
+        messageCount,
+        messageSizeCache.findIndex(scrollTop + viewportHeight) + overscan
+      );
       return { start, end };
-    }, [pruned, scrollTop, height]);
+    }, [pruned, scrollTop, viewportHeight]);
 
     const children = useMemo(() => {
       const children: React.ReactElement[] = [];
@@ -93,7 +94,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
     const ref = useRef<HTMLDivElement>();
     const firstMount = useFirstMountState();
     const ignoreScroll = useRef(false);
-    const [style, setStyle] = useState<React.CSSProperties>({ width: "100%" });
+    const height = messageSizeCache.getOffset(messageCount);
 
     useLayoutEffect(() => {
       if (!firstMount) {
@@ -105,36 +106,40 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
           setScrollTop(offset);
         }
       }
-    }, [width, uiConfig]);
+    }, [viewportWidth, uiConfig]);
 
-    const syncOffset = useStableCallback(() => {
-      setStyle({
-        width: "100%",
-        height: `${offset}px`,
-      });
-
+    const syncOffset = useStableCallback((height?: number) => {
       if (autoScroll && ref.current) {
         ignoreScroll.current = true;
-        ref.current.scrollTo({ top: offset });
-        setScrollTop(offset - height);
+
+        height ??= messageSizeCache.getOffset(messageCount);
+        ref.current.scrollTo({ top: height });
+        setScrollTop(height - viewportHeight);
       }
     });
 
-    useLayoutEffect(syncOffset, [offset, autoScroll, height]);
+    useLayoutEffect(() => syncOffset(height), [height, autoScroll, viewportHeight, viewportWidth]);
 
     useEffect(() => {
       messageSizeCache.onchange = syncOffset;
       return () => (messageSizeCache.onchange = null);
     }, []);
 
-    const handleScroll = useStableCallback((e) => {
+    const handleScroll = useStableCallback(() => {
+      // ignore scroll events triggered by autoscroll
       if (ignoreScroll.current) {
         ignoreScroll.current = false;
         return;
       }
 
+      // ignore scroll events until the viewport resize event resolves to avoid
+      // ending autoscroll unintentionally
+      if (autoScroll && ref.current.parentElement.offsetHeight !== Math.round(viewportHeight)) {
+        return;
+      }
+
       const { scrollTop } = ref.current;
-      const thresholdExceeded = offset - scrollTop - height < autoScrollThreshold;
+      const thresholdExceeded = height - scrollTop - viewportHeight < autoScrollThreshold;
       if (thresholdExceeded !== autoScroll) {
         toggleMessageGC(thresholdExceeded);
         onAutoscrollChange(thresholdExceeded);
@@ -142,8 +147,15 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
       setScrollTop(scrollTop);
     });
 
+    const style = useMemo<React.CSSProperties>(() => {
+      return {
+        width: "100%",
+        height: `${height}px`,
+      };
+    }, [height]);
+
     return (
-      <div className="scroller2" onScroll={handleScroll} {...props} ref={useRefs(ref, fwRef)}>
+      <div onScroll={handleScroll} {...props} ref={useRefs(ref, fwRef)}>
         <div style={style}>{children}</div>
       </div>
     );
@@ -155,11 +167,13 @@ ScrollerView.displayName = "Scroller.ScrollerView";
 const Scroller: React.FC<ScrollerProps> = (props) => {
   const ref = useRef<Scrollbars>(null);
   const size = useSize(useCallback(() => ref.current?.container, []));
-  const [autoScroll, setAutoScroll] = useState(true);
   const [, { resetSelectedPeers, toggleMessageGC }] = useRoom();
-
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [scrolling, setScrolling] = useState(true);
   const [hovering, setHovering] = useState(false);
 
+  const handleScrollStart = useCallback(() => setScrolling(true), []);
+  const handleScrollStop = useCallback(() => setScrolling(false), []);
   const handleScrollMouseEnter = useCallback(() => setHovering(true), []);
   const handleScrollMouseLeave = useCallback(() => setHovering(false), []);
   const handleClick = useStableCallback(() => resetSelectedPeers());
@@ -170,7 +184,7 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
         {...props}
         className={clsx({
           "chat__scroller__scrollbar_handle": true,
-          "chat__scroller__scrollbar_handle--scrolling": hovering,
+          "chat__scroller__scrollbar_handle--scrolling": (scrolling && !autoScroll) || hovering,
         })}
       />
     ),
@@ -186,8 +200,8 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
     <ScrollerView
       {...props}
       {...renderProps}
-      height={size?.height}
-      width={size?.width}
+      viewportHeight={size?.height}
+      viewportWidth={size?.width}
       autoScroll={autoScroll}
       onAutoscrollChange={setAutoScroll}
     />
@@ -200,6 +214,8 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
         style={{ overflowX: "hidden" }}
         renderView={renderView}
         renderThumbVertical={renderScrollThumb}
+        onScrollStart={handleScrollStart}
+        onScrollStop={handleScrollStop}
         onMouseEnter={handleScrollMouseEnter}
         onMouseLeave={handleScrollMouseLeave}
         onClick={handleClick}
