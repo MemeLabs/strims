@@ -196,8 +196,12 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     }
 
     for (const { peerKey, color } of uiConfig.tags) {
+      const tagProps: PropList = [["--color-chat-author-tag", color]];
+      if (uiConfig.taggedVisibility) {
+        tagProps.push(["--color-background-chat-message", "var(--color-background-chat-tagged)"]);
+      }
       const key = Base64.fromUint8Array(peerKey, true);
-      props.set(key, [...(props.get(key) ?? []), ["--author-tag-color", color]]);
+      props.set(key, [...(props.get(key) ?? []), ...tagProps]);
     }
 
     for (const { peerKey } of uiConfig.ignores) {

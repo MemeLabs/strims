@@ -6,7 +6,7 @@
 
   circle,
   rect {
-    fill: var(--fill-color, #333);
+    fill: var(--fill-color, var(--color-chat-user-presence-indicator-default));
     transition: fill var(--timing-medium) ease-in-out;
   }
 }
