@@ -279,7 +279,7 @@ class MessageFormatter {
     const startIndex = this.splitSpan(start);
     const endIndex = this.splitSpan(end);
     if (startIndex === -1 || endIndex === -1) {
-      return false;
+      return;
     }
 
     const node = React.createElement(component, {
@@ -512,7 +512,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         <br />
       </>
     );
-  }, [uiConfig, entities]);
+  }, [uiConfig]);
 
   return (
     <div {...props} className={classNames} ref={fwRef}>

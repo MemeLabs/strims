@@ -24,7 +24,8 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
   };
 
   const goBin = join(opts.env.GOROOT, "bin", "go");
-  const outFile = this.resourcePath + ".wasm";
+  const rand = Math.ceil(Math.random() * Number.MAX_SAFE_INTEGER).toString(36);
+  const outFile = this.resourcePath + `.${rand}.wasm`;
 
   const args = ["build", "-mod", "readonly"];
   if (this.mode === "production") {
@@ -58,7 +59,8 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     cb(null, [
       `require("${join(__dirname, "..", "lib", "wasm_exec.js")}");`,
       `import gobridge from "${join(__dirname, "..", "dist", "gobridge.js")}";`,
-      `export default gobridge("${emittedFilename}");`,
+      `export const wasmPath = "${emittedFilename}";`,
+      `export default gobridge(wasmPath);`,
     ].join("\n"));
   });
 }

@@ -20,7 +20,8 @@ function loader(contents) {
         },
     };
     const goBin = path_1.join(opts.env.GOROOT, "bin", "go");
-    const outFile = this.resourcePath + ".wasm";
+    const rand = Math.ceil(Math.random() * Number.MAX_SAFE_INTEGER).toString(36);
+    const outFile = this.resourcePath + `.${rand}.wasm`;
     const args = ["build", "-mod", "readonly"];
     if (this.mode === "production") {
         const rev = process.env.VERSION || child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
@@ -45,7 +46,8 @@ function loader(contents) {
         cb(null, [
             `require("${path_1.join(__dirname, "..", "lib", "wasm_exec.js")}");`,
             `import gobridge from "${path_1.join(__dirname, "..", "dist", "gobridge.js")}";`,
-            `export default gobridge("${emittedFilename}");`,
+            `export const wasmPath = "${emittedFilename}";`,
+            `export default gobridge(wasmPath);`,
         ].join("\n"));
     });
 }
