@@ -163,16 +163,20 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
   const { height, width, orientation } = viewportShape;
   const aspectRatio = width / height;
 
-  const style =
-    FORCE_FIXED_SIZE && viewportShape.useFixedSize
-      ? {
-          "--layout-height": `${height}px`,
-          "--layout-width": `${width}px`,
-        }
-      : {
-          "--layout-height": "100%",
-          "--layout-width": "100%",
-        };
+  const style = !FORCE_FIXED_SIZE
+    ? {
+        "--layout-height": "100vh",
+        "--layout-width": "100vw",
+      }
+    : viewportShape.useFixedSize
+    ? {
+        "--layout-height": `${height}px`,
+        "--layout-width": `${width}px`,
+      }
+    : {
+        "--layout-height": "100%",
+        "--layout-width": "100%",
+      };
 
   return (
     <div
