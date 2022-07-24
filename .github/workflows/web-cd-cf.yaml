@@ -1,0 +1,46 @@
+name: web-cd
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - uses: actions/setup-go@v3
+      with:
+        go-version-file: go.mod
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 14
+    - name: Install packages
+      run: |
+        sudo apt-get install -y \
+          build-essential \
+          git-core \
+          curl
+    - run: go mod download
+    - run: npm install --unsafe-perm
+    - run: npm run build
+    - uses: actions/upload-artifact@v3
+      with:
+        name: pages
+        path: dist/
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 18
+    - uses: actions/download-artifact@v3
+      with:
+        name: pages
+        path: dist
+    - run: |
+        npx wrangler pages publish dist/ --project-name next-strims
