@@ -12,7 +12,7 @@ export interface AuthGateProps {
 
 const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const { pathname, search, hash } = useLocation();
-  const [{ profile, loading }] = useSession();
+  const [{ linkedProfiles, profile, loading }] = useSession();
 
   if (loading) {
     return null;
@@ -21,8 +21,9 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     return children;
   }
 
+  const page = linkedProfiles.length ? "login" : "signup";
   const next = (pathname || "") + (search || "") + (hash || "");
-  return <Navigate to={`/login?next=${encodeURIComponent(next)}`} />;
+  return <Navigate to={`/${page}?next=${encodeURIComponent(next)}`} />;
 };
 
 export default AuthGate;

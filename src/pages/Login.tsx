@@ -4,8 +4,7 @@
 import qs from "qs";
 import React, { useEffect } from "react";
 import { FiUser } from "react-icons/fi";
-import { useLocation } from "react-router";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { ButtonSet } from "../components/Form";

@@ -4,20 +4,13 @@
 import { Readable, Writable } from "stream";
 
 import { DBSchema, IDBPDatabase, openDB } from "idb";
-import React, {
-  ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
 import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
+import { useStableCallbacks } from "../hooks/useStableCallback";
 
 const API_TIMEOUT = 60 * 1000 * 1000;
 
@@ -52,7 +45,7 @@ export interface Ops {
 const initialState: State = {
   linkedProfiles: [],
   profile: null,
-  loading: false,
+  loading: true,
 };
 
 export const SessionContext = createContext<[State, Ops]>(null);
@@ -114,7 +107,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
 
   // TODO: init state from... default? current? profile
 
-  const mergeProfiles = useCallback((...profiles: LinkedProfile[]) => {
+  const mergeProfiles = (...profiles: LinkedProfile[]) => {
     setState((prev) => ({
       ...prev,
       linkedProfiles: [
@@ -122,13 +115,16 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
         ...profiles,
       ],
     }));
-  }, []);
+  };
 
   useEffect(() => {
-    void db.getAll().then((profiles) => mergeProfiles(...profiles));
+    void db.getAll().then((profiles) => {
+      mergeProfiles(...profiles);
+      setState((prev) => ({ ...prev, loading: false }));
+    });
   }, []);
 
-  const createProfile = useCallback(async (serverAddress: string, req: ISignUpRequest) => {
+  const createProfile = async (serverAddress: string, req: ISignUpRequest) => {
     setState((prev) => ({
       ...prev,
       loading: true,
@@ -162,9 +158,9 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       conn,
       client,
     }));
-  }, []);
+  };
 
-  const signIn = useCallback(async (serverAddress: string, req: ISignInRequest) => {
+  const signIn = async (serverAddress: string, req: ISignInRequest) => {
     setState((prev) => ({
       ...prev,
       loading: true,
@@ -204,9 +200,10 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       conn,
       client,
     }));
-  }, []);
+  };
 
-  const value = useMemo<[State, Ops]>(() => [state, { createProfile, signIn }], [state]);
+  const actions = useStableCallbacks({ createProfile, signIn });
+  const value = useMemo<[State, Ops]>(() => [state, actions], [state]);
 
   return (
     <SessionContext.Provider value={value}>
