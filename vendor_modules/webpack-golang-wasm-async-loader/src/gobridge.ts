@@ -19,10 +19,18 @@ const caller = (name: string) => (...args: any) => new Promise((resolve, reject)
   bridge[name].apply(undefined, [ ...args, cb ]);
 });
 
-export default function(wasmPath: string) {
+export default function(wasmChunks: string[]) {
   return async (baseURI: string, wasmio: unknown) => {
-    const res = await fetch(`${baseURI}/${wasmPath}`);
-    const mod = await WebAssembly.compileStreaming(res);
+    const chunks = await Promise.all(wasmChunks.map(async (chunkPath) => {
+      const res = await fetch(`${baseURI}/${chunkPath}`)
+      return new Uint8Array(await res.arrayBuffer());
+    }));
+    const source = new Uint8Array(chunks.reduce((n, a) => n + a.byteLength, 0));
+    for (let i = 0, n = 0; i < chunks.length; i ++) {
+      source.set(chunks[i], n);
+      n += chunks[i].byteLength;
+    }
+    const mod = await WebAssembly.compile(source);
 
     // we need to run wasm startup in a retry loop because in ios wasm's stack
     // size is not predictable (https://bugs.webkit.org/show_bug.cgi?id=201028).

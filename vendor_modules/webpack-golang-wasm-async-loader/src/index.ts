@@ -53,14 +53,21 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     const digest = hash.digest().toString("hex").substring(0, 20);
 
     unlinkSync(outFile);
-    const emittedFilename = basename(this.resourcePath, ".go") + `.${digest}.wasm`;
-    this.emitFile(emittedFilename, out, null);
+    const chunkNameBase = basename(this.resourcePath, ".go") + `.${digest}`;
+    const wasmChunks = [];
+    const chunkSize = 20000000;
+    for (let i = 0; i < out.byteLength / chunkSize; i ++) {
+      const chunkName = chunkNameBase + `.${i}.wasm`;
+      wasmChunks.push(chunkName);
+      const chunk = out.subarray(i * chunkSize, Math.min((i+1)*chunkSize, out.byteLength));
+      this.emitFile(chunkName, chunk, null);
+    }
 
     cb(null, [
       `require("${join(__dirname, "..", "lib", "wasm_exec.js")}");`,
       `import gobridge from "${join(__dirname, "..", "dist", "gobridge.js")}";`,
-      `export const wasmPath = "${emittedFilename}";`,
-      `export default gobridge(wasmPath);`,
+      `export const wasmChunks = ${JSON.stringify(wasmChunks)};`,
+      `export default gobridge(wasmChunks);`,
     ].join("\n"));
   });
 }

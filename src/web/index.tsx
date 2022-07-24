@@ -14,14 +14,16 @@ import { APIDialer, ClientConstructor } from "../contexts/Session";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "./App";
-import { wasmPath } from "./svc.go";
+import { wasmChunks } from "./svc.go";
 import Worker from "./svc.worker";
 
-const link = document.createElement("link");
-link.rel = "prefetch";
-link.as = "worker";
-link.href = "/" + wasmPath;
-document.head.appendChild(link);
+for (const chunkPath of wasmChunks) {
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.as = "worker";
+  link.href = "/" + chunkPath;
+  document.head.appendChild(link);
+}
 
 void registerServiceWorker({ scope: "/" })
   .then(() => console.log("service worker registered"))

@@ -4,4 +4,4 @@ declare global {
         Go: any;
     }
 }
-export default function (wasmPath: string): (baseURI: string, wasmio: unknown) => Promise<any>;
+export default function (wasmChunks: string[]): (baseURI: string, wasmio: unknown) => Promise<any>;

@@ -41,13 +41,20 @@ function loader(contents) {
         hash.write(out);
         const digest = hash.digest().toString("hex").substring(0, 20);
         fs_1.unlinkSync(outFile);
-        const emittedFilename = path_1.basename(this.resourcePath, ".go") + `.${digest}.wasm`;
-        this.emitFile(emittedFilename, out, null);
+        const chunkNameBase = path_1.basename(this.resourcePath, ".go") + `.${digest}`;
+        const wasmChunks = [];
+        const chunkSize = 20000000;
+        for (let i = 0; i < out.byteLength / chunkSize; i++) {
+            const chunkName = chunkNameBase + `.${i}.wasm`;
+            wasmChunks.push(chunkName);
+            const chunk = out.subarray(i * chunkSize, Math.min((i + 1) * chunkSize, out.byteLength));
+            this.emitFile(chunkName, chunk, null);
+        }
         cb(null, [
             `require("${path_1.join(__dirname, "..", "lib", "wasm_exec.js")}");`,
             `import gobridge from "${path_1.join(__dirname, "..", "dist", "gobridge.js")}";`,
-            `export const wasmPath = "${emittedFilename}";`,
-            `export default gobridge(wasmPath);`,
+            `export const wasmChunks = ${JSON.stringify(wasmChunks)};`,
+            `export default gobridge(wasmChunks);`,
         ].join("\n"));
     });
 }

@@ -3,7 +3,7 @@
 
 import { WorkerBridge } from "../lib/bridge";
 
-export const wasmPath: string;
+export const wasmChunks: string[];
 
 declare const init: (
   baseURI: string,
