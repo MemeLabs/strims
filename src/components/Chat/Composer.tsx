@@ -7,7 +7,7 @@ import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import emojiPattern from "emojibase-regex/emoji";
-import filterObj from "filter-obj";
+import { pick } from "lodash";
 import Prism from "prismjs";
 import React, {
   KeyboardEvent,
@@ -704,7 +704,7 @@ const getSearchState = (
   const targetEnd = { path, offset: offset + (hasSuffix ? -suffixStart.length : queryEnd.length) };
   const target = Editor.range(editor, targetStart, targetEnd);
 
-  const entityRanges = getRanges(text, path, filterObj(grammar, ["code", "emote", "url"]));
+  const entityRanges = getRanges(text, path, pick(grammar, ["code", "emote", "url"]));
 
   const contextEnd = (prefix || punct) && { path, offset: offset - delta.length };
   const emoteContext =
