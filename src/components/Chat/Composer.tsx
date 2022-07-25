@@ -158,7 +158,7 @@ const Composer: React.FC<ComposerProps> = ({
     }
   };
 
-  const onKeyDown = useCallback(
+  const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === Key.Enter) {
         event.preventDefault();
@@ -214,6 +214,10 @@ const Composer: React.FC<ComposerProps> = ({
     [matchEntries, selectedMatch, search, currentSearch]
   );
 
+  const [isFocused, setIsFocused] = useState(false);
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
+
   const insertAutocompleteEntry = (entry: SearchSourceEntry): Range => {
     const prefix = entry.type !== "modifier" ? search.prefix : "";
     const suffix = search.suffixSpace ? " " : "";
@@ -248,6 +252,7 @@ const Composer: React.FC<ComposerProps> = ({
   };
 
   const showSuggestions =
+    isFocused &&
     uiConfig.autocompleteHelper &&
     matchEntries.some((e) => (e.substitution ?? e.value) !== currentSearch?.query);
 
@@ -302,7 +307,9 @@ const Composer: React.FC<ComposerProps> = ({
           <Editable
             className="chat_composer__textbox"
             decorate={decorate}
-            onKeyDown={onKeyDown}
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             placeholder={t("chat.composer.Write a message")}
             renderLeaf={renderLeaf}
           />
