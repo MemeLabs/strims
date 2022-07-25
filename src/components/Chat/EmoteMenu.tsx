@@ -6,7 +6,7 @@ import "./EmoteMenu.scss";
 import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import { escapeRegExp } from "lodash";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { BiSearch } from "react-icons/bi";
 import {
@@ -24,8 +24,6 @@ import {
 } from "react-icons/fa";
 import { MdClose, MdFastfood } from "react-icons/md";
 import { useDebounce } from "react-use";
-import { CellMeasurer, CellMeasurerCache, Grid, List, ListRowRenderer } from "react-virtualized";
-import { RenderedRows } from "react-virtualized/dist/es/List";
 
 import * as chatv1 from "../../apis/strims/chat/v1/chat";
 import { useChat, useRoom } from "../../contexts/Chat";
@@ -90,11 +88,13 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
     return categories;
   }, [liveEmotes, debouncedSearchQuery]);
 
-  const [preview, setPreview] = useState<Meme>(null);
+  const [preview, setPreview] = useState<CategoryItem>(null);
   const [focusIndex, setFocusIndex] = useState(0);
 
-  const scroller = useRef<ScrollerRef>();
-  const handleNavSelect = (index: number) => scroller.current.scrollToIndex(index);
+  const scroller = useRef<ScrollerControl>();
+  const handleNavSelect = (index: number) => {
+    scroller.current.scrollToIndex(index);
+  };
 
   const setEmojiSkinTone = (emojiSkinTone: string) => mergeUIConfig({ emojiSkinTone });
 
@@ -124,7 +124,7 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
             onScroll={setFocusIndex}
             onSelect={onSelect}
             onHover={setPreview}
-            ref={scroller}
+            control={scroller}
           />
           <div className="emote_menu__footer">
             <Preview meme={preview} />
@@ -234,7 +234,7 @@ const Nav: React.FC<NavProps> = ({ categories, focusIndex, onSelect }) => {
 };
 
 interface PreviewProps {
-  meme: Meme;
+  meme: CategoryItem;
 }
 
 const Preview: React.FC<PreviewProps> = ({ meme }) => {
@@ -285,7 +285,7 @@ type Category = {
     }
 );
 
-type Meme =
+type CategoryItem =
   | {
       type: "emote";
       emote: chatv1.Emote;
@@ -298,21 +298,16 @@ type Meme =
 interface CategoryPanelProps {
   uiConfig: chatv1.UIConfig;
   category: Category;
-  style: React.CSSProperties;
   onSelect: (v: string) => void;
-  onHover: (v: Meme) => void;
+  onHover: (v: CategoryItem) => void;
+  containerRef: React.MutableRefObject<HTMLDivElement>;
 }
 
-const CategoryPanel: React.FC<CategoryPanelProps> = ({
-  uiConfig,
-  category,
-  style,
-  onSelect,
-  onHover,
-}) => {
-  const content = useMemo(() => {
+const CategoryPanel = React.memo<CategoryPanelProps>(
+  ({ uiConfig, category, onSelect, onHover, containerRef }) => {
+    let content: React.ReactElement[];
     if (category.type === "emote") {
-      return category.emotes.map((emote) => (
+      content = category.emotes.map((emote) => (
         <li
           key={emote.name}
           className="emote_menu__category__list_item emote_menu__category__list_item--emote"
@@ -323,7 +318,7 @@ const CategoryPanel: React.FC<CategoryPanelProps> = ({
         </li>
       ));
     } else {
-      return category.emoji.map((emoji) => {
+      content = category.emoji.map((emoji) => {
         const variant = uiConfig.emojiSkinTone
           ? emoji.skins?.find((s) => s.unicode.endsWith(uiConfig.emojiSkinTone)) ?? emoji
           : emoji;
@@ -340,22 +335,22 @@ const CategoryPanel: React.FC<CategoryPanelProps> = ({
         );
       });
     }
-  }, [uiConfig, category]);
 
-  return (
-    <div className="emote_menu__category" style={style}>
-      <div className="emote_menu__category__header">{category.title}</div>
-      <ul
-        className={clsx(
-          "emote_menu__category__list",
-          `emote_menu__category__list--${category.type}`
-        )}
-      >
-        {content}
-      </ul>
-    </div>
-  );
-};
+    return (
+      <div className="emote_menu__category" ref={containerRef}>
+        <div className="emote_menu__category__header">{category.title}</div>
+        <ul
+          className={clsx(
+            "emote_menu__category__list",
+            `emote_menu__category__list--${category.type}`
+          )}
+        >
+          {content}
+        </ul>
+      </div>
+    );
+  }
+);
 
 interface ScrollerProps {
   uiConfig: chatv1.UIConfig;
@@ -363,139 +358,67 @@ interface ScrollerProps {
   categories: Category[];
   onScroll: (index: number) => void;
   onSelect: (v: string) => void;
-  onHover: (v: Meme) => void;
+  onHover: (v: CategoryItem) => void;
+  control: React.MutableRefObject<ScrollerControl>;
 }
 
-interface ScrollerRef {
+interface ScrollerControl {
   scrollToIndex(index: number): void;
-}
-
-interface ListInternal {
-  Grid: Grid & {
-    _scrollingContainer: HTMLElement;
-    _onScroll: (e: React.UIEvent) => void;
-  };
 }
 
 interface ScrollbarsInternal {
   view: HTMLElement;
 }
 
-const Scroller = React.forwardRef<ScrollerRef, ScrollerProps>(
-  ({ className, uiConfig, categories, onScroll, onSelect, onHover }, ref) => {
-    const list = useRef<List & ListInternal>();
-    const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
-    const sizeCache = useMemo(() => new CellMeasurerCache({ fixedWidth: true }), []);
-
-    useEffect(() => {
-      const current = {
-        scrollToIndex: (index: number) => {
-          let top = 0;
-          for (let i = 0; i < index; i++) {
-            top += sizeCache.getHeight(i, 0);
-          }
-
-          scrollbars.current.view.scrollTo({
-            top,
-            behavior: "smooth",
-          });
-        },
-      };
-
-      if (ref instanceof Function) {
-        ref(current);
-      } else if (ref) {
-        ref.current = current;
-      }
-    }, [ref]);
-
-    useEffect(() => {
-      list.current.Grid._scrollingContainer = scrollbars.current.view;
-    }, []);
-
-    const size = useSize(useCallback(() => scrollbars.current?.container, []));
-    const width = size?.width ?? 0;
-    const height = size?.height ?? 0;
-
-    useEffect(() => {
-      sizeCache.clearAll();
-      list.current.recomputeRowHeights();
-    }, [width, height, categories]);
-
-    const handleScroll: React.UIEventHandler = useCallback((e) => {
-      list.current?.Grid?._onScroll(e);
-    }, []);
-
-    const renderRow: ListRowRenderer = useCallback(
-      ({ index, key, style, parent }) => (
-        <CellMeasurer
-          cache={sizeCache}
-          columnIndex={0}
-          key={key}
-          parent={parent}
-          rowIndex={index}
-          width={width}
-        >
-          <CategoryPanel
-            uiConfig={uiConfig}
-            category={categories[index]}
-            style={style}
-            onSelect={onSelect}
-            onHover={onHover}
-          />
-        </CellMeasurer>
-      ),
-      [uiConfig, categories, width]
-    );
-
-    const handleRowsRendered = useStableCallback(({ startIndex }: RenderedRows) =>
-      onScroll(startIndex)
-    );
-
-    const [scrolling, setScrolling] = useState(false);
-    const [hovering, setHovering] = useState(false);
-
-    const handleScrollStart = useCallback(() => setScrolling(true), []);
-    const handleScrollStop = useCallback(() => setScrolling(false), []);
-    const handleScrollMouseEnter = useCallback(() => setHovering(true), []);
-    const handleScrollMouseLeave = useCallback(() => setHovering(false), []);
-
-    const renderScrollThumb = useCallback(
-      (props) => (
-        <div
-          {...props}
-          className={clsx({
-            "chat__scroller__scrollbar_handle": true,
-            "chat__scroller__scrollbar_handle--scrolling": scrolling || hovering,
-          })}
-        />
-      ),
-      [scrolling, hovering]
-    );
-
-    return (
-      <Scrollbars
-        ref={scrollbars}
-        onScroll={handleScroll}
-        onScrollStart={handleScrollStart}
-        onScrollStop={handleScrollStop}
-        renderThumbVertical={renderScrollThumb}
-        onMouseEnter={handleScrollMouseEnter}
-        onMouseLeave={handleScrollMouseLeave}
-        className={className}
-      >
-        <List
-          ref={list}
-          height={height}
-          width={width}
-          style={{ overflowX: "visible", overflowY: "visible" }}
-          deferredMeasurementCache={sizeCache}
-          rowHeight={sizeCache.rowHeight}
-          rowCount={categories.length}
-          rowRenderer={renderRow}
-          onRowsRendered={handleRowsRendered}
-        />
-      </Scrollbars>
+const Scroller: React.FC<ScrollerProps> = ({
+  className,
+  categories,
+  onScroll,
+  control,
+  ...panelProps
+}) => {
+  const sizes: DOMRectReadOnly[] = [];
+  const panels: React.ReactNode[] = [];
+  for (const category of categories) {
+    const ref = useRef<HTMLDivElement>();
+    const size = useSize(ref);
+    sizes.push(size);
+    panels.push(
+      <CategoryPanel key={category.key} category={category} containerRef={ref} {...panelProps} />
     );
   }
-);
+
+  const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
+  useEffect(() => {
+    control.current = {
+      scrollToIndex: (index: number) => {
+        let top = 0;
+        for (let i = 0; i < index; i++) {
+          top += sizes[i]?.height ?? 0;
+        }
+        scrollbars.current.view.scrollTo({
+          top,
+          behavior: "smooth",
+        });
+      },
+    };
+  }, [control, sizes]);
+
+  const handleScroll = useStableCallback(() => {
+    const top = scrollbars.current.getScrollTop();
+    let sum = 0;
+    for (let i = 0; i < sizes.length; i++) {
+      sum += sizes[i]?.height ?? 0;
+      if (sum > top) {
+        onScroll(i);
+        break;
+      }
+    }
+  });
+
+  return (
+    <Scrollbars ref={scrollbars} onScroll={handleScroll} className={className} autoHide>
+      {panels}
+    </Scrollbars>
+  );
+};

@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "preinstall": "npx npm-force-resolutions",
     "app:electron": "electron ./dist/desktop/main.js",
     "app:webpack": "webpack --mode development --watch --env TARGET=app",
     "app:go": "nodemon --watch pkg --watch internal --watch cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/desktop/svc ./cmd/app || exit 1'",
@@ -49,7 +48,6 @@
     "@types/react-router-dom": "^5.3.3",
     "@types/react-select": "^5.0.1",
     "@types/react-sparklines": "^1.7.2",
-    "@types/react-virtualized": "^9.21.21",
     "@types/react-vis": "^1.11.11",
     "@types/ua-parser-js": "^0.7.36",
     "@types/upng-js": "^2.1.2",
@@ -141,7 +139,6 @@
     "react-sparklines": "^1.7.0",
     "react-use": "^17.4.0",
     "react-useportal": "^1.0.16",
-    "react-virtualized": "^9.22.3",
     "react-vis": "^1.11.7",
     "resolve-url-loader": "^5.0.0",
     "sass": "^1.54.0",
@@ -175,9 +172,6 @@
     "webpack-dev-server": "^4.9.3",
     "webpack-pwa-manifest": "^4.3.0",
     "worker-loader": "^3.0.8"
-  },
-  "resolutions": {
-    "@types/react": "^18.0.15"
   },
   "browserslist": [
     "defaults"
