@@ -13,3 +13,4 @@ ios/App/Bridge.framework linguist-generated
 android/app/src/main/java/gg/strims/** linguist-generated
 android/.idea/** linguist-generated
 internal/chat/emoji.go linguist-generated
+webpack/lib/** linguist-generated

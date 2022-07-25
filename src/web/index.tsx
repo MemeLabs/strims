@@ -17,11 +17,29 @@ import App from "./App";
 import { wasmPath } from "./svc.go";
 import Worker from "./svc.worker";
 
-const link = document.createElement("link");
-link.rel = "prefetch";
-link.as = "worker";
-link.href = "/" + wasmPath;
-document.head.appendChild(link);
+void (async () => {
+  // webpack chunk prefetching with mini-css-extract-plugin doesn't load css
+  // chunks. even if this worked safari and firefox seem to ignore prefetch
+  // headers. so the only way to make sure the app assets actually get
+  // prefetched is to manually load them.
+
+  // TODO: delay this until after the translations load?
+
+  const preloadTiers: string[][] = [[], [wasmPath]];
+  const collectPreloadFiles = (c: ChunkManifest, d: number = 0) => {
+    preloadTiers[d] = (preloadTiers[d] ?? []).concat(...c.files);
+    for (const ac of c.asyncChunks ?? []) {
+      collectPreloadFiles(ac, d + 1);
+    }
+  };
+  collectPreloadFiles(MANIFEST);
+
+  for (let i = 1; i < preloadTiers.length; i++) {
+    await Promise.allSettled(
+      preloadTiers[i].map((f) => fetch(f, { priority: "low" } as RequestInit))
+    );
+  }
+})();
 
 void registerServiceWorker({ scope: "/" })
   .then(() => console.log("service worker registered"))

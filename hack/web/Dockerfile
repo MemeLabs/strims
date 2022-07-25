@@ -40,6 +40,7 @@ RUN go mod download
 COPY .git ./.git
 COPY assets ./assets
 COPY src ./src
+COPY webpack ./webpack
 COPY vendor_modules ./vendor_modules
 COPY pkg ./pkg
 COPY internal ./internal

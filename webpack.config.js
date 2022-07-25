@@ -10,6 +10,7 @@ const TerserPlugin = require("terser-webpack-plugin");
 const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
 const JSON5 = require("json5");
+const { ChunkManifestPlugin } = require("./webpack/lib/ChunkManifestPlugin");
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
@@ -146,6 +147,11 @@ module.exports = (env, argv) => {
           .readdirSync(path.resolve(__dirname, "node_modules", "emojibase-data"))
           .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
       ),
+    }),
+    new ChunkManifestPlugin(HtmlWebpackPlugin, {
+      chunk: "index",
+      varName: "MANIFEST",
+      htmlFilename: "index.html",
     }),
   ];
 

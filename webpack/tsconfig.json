@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "outDir": "lib",
+    "module": "CommonJS",
+    "allowJs": true,
+    "declaration": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+  },
+  "include": [
+    ".eslintrc.js",
+    "*.ts",
+  ],
+  "exclude": ["node_modules"]
+}

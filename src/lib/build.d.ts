@@ -7,3 +7,9 @@ declare const GIT_HASH: string;
 declare const VERSION: string;
 declare const I18N_LANG: string[];
 declare const EMOJI_LANG: string[];
+
+interface ChunkManifest {
+  files: string[];
+  asyncChunks?: ChunkManifest[];
+}
+declare const MANIFEST: ChunkManifest;
