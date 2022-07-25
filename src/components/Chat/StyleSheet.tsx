@@ -52,7 +52,7 @@ type Prop = [string, string];
 type PropList = Prop[];
 
 const upsertProps = (prev: PropList, ...vs: Prop[]): PropList => [
-  ...prev.filter(([pp]) => !vs.some(([vp]) => pp === vp)),
+  ...(prev ?? []).filter(([pp]) => !vs.some(([vp]) => pp === vp)),
   ...vs,
 ];
 
@@ -188,25 +188,26 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     const props = new Map<string, PropList>();
 
-    for (const { peerKey } of uiConfig.highlights) {
-      const key = Base64.fromUint8Array(peerKey, true);
-      props.set(key, [
-        ["--color-background-chat-message", "var(--color-background-chat-highlight)"],
-      ]);
-    }
-
     for (const { peerKey, color } of uiConfig.tags) {
-      const tagProps: PropList = [["--color-chat-author-tag", color]];
+      const rules: PropList = [["--color-chat-author-tag", color]];
       if (uiConfig.taggedVisibility) {
-        tagProps.push(["--color-background-chat-message", "var(--color-background-chat-tagged)"]);
+        rules.push(["--color-background-chat-message", "var(--color-background-chat-tagged)"]);
       }
       const key = Base64.fromUint8Array(peerKey, true);
-      props.set(key, [...(props.get(key) ?? []), ...tagProps]);
+      props.set(key, upsertProps(props.get(key), ...rules));
+    }
+
+    for (const { peerKey } of uiConfig.highlights) {
+      const rules: PropList = [
+        ["--color-background-chat-message", "var(--color-background-chat-highlight)"],
+      ];
+      const key = Base64.fromUint8Array(peerKey, true);
+      props.set(key, upsertProps(props.get(key), ...rules));
     }
 
     for (const { peerKey } of uiConfig.ignores) {
       const key = Base64.fromUint8Array(peerKey, true);
-      props.set(key, [...(props.get(key) ?? []), ["display", "none"]]);
+      props.set(key, upsertProps(props.get(key), ["display", "none"]));
     }
 
     for (const [key, rules] of props) {

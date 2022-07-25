@@ -7,7 +7,7 @@ import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { isEqual, uniq } from "lodash";
-import React, { ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { ReactNode, useEffect, useMemo, useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { Link } from "react-router-dom";
 
@@ -411,10 +411,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     }
   );
 
-  const canCombo = useMemo(
-    () => isMostRecent && entities.emotes[0]?.canCombo,
-    [isMostRecent, entities]
-  );
+  const canCombo = isMostRecent && entities.emotes[0]?.canCombo;
 
   const classNames = useMemo(() => {
     const authorKey = Base64.fromUint8Array(peerKey, true);
