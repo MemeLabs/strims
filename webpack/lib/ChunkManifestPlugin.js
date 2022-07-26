@@ -5,14 +5,6 @@ exports.__esModule = true;
 exports.ChunkManifestPlugin = void 0;
 var webpack_1 = require("webpack");
 var RawSource = webpack_1.sources.RawSource;
-var getManifest = function (chunk) {
-    var summary = { files: Array.from(chunk.files.values()) };
-    var asyncChunks = Array.from(chunk.getAllAsyncChunks().values());
-    if (asyncChunks.length) {
-        summary.asyncChunks = asyncChunks.map(function (c) { return getManifest(c); });
-    }
-    return summary;
-};
 var ChunkManifestPlugin = /** @class */ (function () {
     function ChunkManifestPlugin(htmlWebpackPlugin, options) {
         this.htmlWebpackPlugin = htmlWebpackPlugin;
@@ -32,17 +24,16 @@ var ChunkManifestPlugin = /** @class */ (function () {
                     throw new Error("chunk named \"".concat(_this.options.chunk, "\" does not exist"));
                 }
                 var filename = "".concat(_this.options.chunk, ".").concat(chunk.renderedHash, ".manifest.js");
-                compilation.emitAsset(filename, new RawSource("const ".concat(_this.options.varName, "=").concat(JSON.stringify(getManifest(chunk)), ";")));
-                assets.headTags.unshift({
-                    tagName: "script",
-                    voidTag: false,
-                    meta: { plugin: "chunk-manifest-plugin" },
-                    attributes: {
-                        defer: true,
-                        type: undefined,
-                        src: "/" + filename
-                    }
+                var files = Array.from(chunk.getAllAsyncChunks())
+                    .map(function (c) { return Array.from(c.files); })
+                    .flat();
+                compilation.emitAsset(filename, new RawSource("const ".concat(_this.options.varName, "=").concat(JSON.stringify(files), ";")));
+                var scriptIndex = assets.headTags.findIndex(function (t) { return t.tagName === "script"; });
+                var script = _this.htmlWebpackPlugin.createHtmlTagObject("script", {
+                    defer: true,
+                    src: "/" + filename
                 });
+                assets.headTags.splice(scriptIndex, 0, script);
                 return assets;
             });
         });

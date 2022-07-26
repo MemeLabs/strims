@@ -2,25 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import HtmlWebpackPlugin from "html-webpack-plugin";
-import { Chunk, Compiler, sources } from "webpack";
+import { Compiler, sources } from "webpack";
 
 const { RawSource } = sources;
-
-interface ChunkManifest {
-  files: string[];
-  asyncChunks?: ChunkManifest[];
-}
-
-const getManifest = (chunk: Chunk): ChunkManifest => {
-  const summary: ChunkManifest = { files: Array.from(chunk.files.values()) };
-
-  const asyncChunks = Array.from(chunk.getAllAsyncChunks().values());
-  if (asyncChunks.length) {
-    summary.asyncChunks = asyncChunks.map((c) => getManifest(c));
-  }
-
-  return summary;
-};
 
 interface Options {
   chunk: string;
@@ -45,21 +29,21 @@ export class ChunkManifestPlugin {
             throw new Error(`chunk named "${this.options.chunk}" does not exist`);
           }
           const filename = `${this.options.chunk}.${chunk.renderedHash}.manifest.js`;
+          const files = Array.from(chunk.getAllAsyncChunks())
+            .map((c) => Array.from(c.files))
+            .flat();
           compilation.emitAsset(
             filename,
-            new RawSource(`const ${this.options.varName}=${JSON.stringify(getManifest(chunk))};`)
+            new RawSource(`const ${this.options.varName}=${JSON.stringify(files)};`)
           );
 
-          assets.headTags.unshift({
-            tagName: "script",
-            voidTag: false,
-            meta: { plugin: "chunk-manifest-plugin" },
-            attributes: {
-              defer: true,
-              type: undefined,
-              src: "/" + filename,
-            },
+          const scriptIndex = assets.headTags.findIndex((t) => t.tagName === "script");
+          const script = this.htmlWebpackPlugin.createHtmlTagObject("script", {
+            defer: true,
+            src: "/" + filename,
           });
+          assets.headTags.splice(scriptIndex, 0, script);
+
           return assets;
         });
     });
