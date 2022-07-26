@@ -35,26 +35,29 @@ const handleHLSRelayRequest = (event: FetchEvent, url: URL) => {
   );
 };
 
-const handleStaticRequest = (event: FetchEvent) => {
-  if (!IS_PRODUCTION) {
-    return;
-  }
+const storeInCache = async (req: URL | RequestInfo, res: Response) => {
+  const cache = await caches.open(`${GIT_HASH}_static`);
+  await cache.put(req, res);
+};
 
-  event.respondWith(
-    caches.match(event.request).then(async (res) => {
-      if (!res) {
-        res = await fetch(event.request);
-        const cache = await caches.open(`${GIT_HASH}_static`);
-        await cache.put(event.request, res.clone());
-      }
-      return res;
-    })
-  );
+const cacheFirst = async (req: URL | RequestInfo) => {
+  let res = await caches.match(req);
+  if (!res) {
+    res = await fetch(req);
+    void storeInCache(req, res.clone());
+  }
+  return res;
+};
+
+const handleStaticRequest = (event: FetchEvent) => {
+  if (IS_PRODUCTION) {
+    event.respondWith(cacheFirst(event.request));
+  }
 };
 
 const routes: [RegExp, (event: FetchEvent, url: URL) => void][] = [
   [/_hls-relay\/([^/]+)/, handleHLSRelayRequest],
-  [/\.(css|js|json|png|svg|wasm|ttf)$/, handleStaticRequest],
+  [/\.(css|js|json|png|svg|wasm|ttf|ico)$/, handleStaticRequest],
 ];
 
 self.addEventListener("fetch", (event: FetchEvent) => {
@@ -82,13 +85,13 @@ self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then(async (keys) => {
-      const expired = keys.filter((k) => !k.startsWith(GIT_HASH));
-      await Promise.all(expired.map((k) => caches.delete(k)));
-    })
-  );
+const deleteStaleCaches = async () => {
+  const keys = await caches.keys();
+  const expired = keys.filter((k) => !k.startsWith(GIT_HASH));
+  await Promise.all(expired.map((k) => caches.delete(k)));
+};
 
+self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
+  event.waitUntil(deleteStaleCaches());
 });

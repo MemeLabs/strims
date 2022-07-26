@@ -14,20 +14,17 @@ import { APIDialer, ClientConstructor } from "../contexts/Session";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "./App";
-import { wasmPath } from "./svc.go";
+import manifest from "./manifest";
 import Worker from "./svc.worker";
 
-if (IS_PRODUCTION && localStorage.getItem("cacheVersion") !== GIT_HASH) {
-  // TODO: delay this until after the translations load?
-  void caches
-    .open(`${GIT_HASH}_static`)
-    .then((cache) => cache.addAll([wasmPath, ...MANIFEST]))
-    .then(() => localStorage.setItem("cacheVersion", GIT_HASH));
-}
+void (async () => {
+  if (IS_PRODUCTION && !(await caches.has(`${GIT_HASH}_static`))) {
+    const cache = await caches.open(`${GIT_HASH}_static`);
+    await cache.addAll(manifest);
+  }
+})();
 
-void registerServiceWorker({ scope: "/" })
-  .then(() => console.log("service worker registered"))
-  .catch((e) => console.log("error registering service worker", e));
+void registerServiceWorker({ scope: "/" });
 
 class WorkerConn {
   bridge: WindowBridge;
