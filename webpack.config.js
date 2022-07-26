@@ -148,11 +148,6 @@ module.exports = (env, argv) => {
           .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
       ),
     }),
-    new ChunkManifestPlugin(HtmlWebpackPlugin, {
-      chunk: "index",
-      varName: "MANIFEST",
-      htmlFilename: "index.html",
-    }),
   ];
 
   let devtool, optimization, entries;
@@ -168,6 +163,11 @@ module.exports = (env, argv) => {
       new MiniCssExtractPlugin({
         filename: "[name].[contenthash].css",
         chunkFilename: "[id].[contenthash].css",
+      }),
+      new ChunkManifestPlugin(HtmlWebpackPlugin, {
+        chunk: "index",
+        varName: "MANIFEST",
+        htmlFilename: "index.html",
       })
     );
 
@@ -196,6 +196,9 @@ module.exports = (env, argv) => {
         chunks: ["devtools"],
         title: "devtools",
         ...htmlWebpackPluginOptions,
+      }),
+      new webpack.DefinePlugin({
+        MANIFEST: "[]",
       })
     );
 

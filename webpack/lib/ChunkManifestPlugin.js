@@ -1,4 +1,6 @@
 "use strict";
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
 exports.__esModule = true;
 exports.ChunkManifestPlugin = void 0;
 var webpack_1 = require("webpack");

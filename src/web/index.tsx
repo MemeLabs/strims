@@ -6,6 +6,7 @@ import "../lib/i18n";
 
 import { Duplex } from "stream";
 
+import { uniq } from "lodash";
 import React from "react";
 import { Root, createRoot } from "react-dom/client";
 import registerServiceWorker from "service-worker-loader!./sw";
@@ -17,29 +18,25 @@ import App from "./App";
 import { wasmPath } from "./svc.go";
 import Worker from "./svc.worker";
 
-void (async () => {
-  // webpack chunk prefetching with mini-css-extract-plugin doesn't load css
-  // chunks. even if this worked safari and firefox seem to ignore prefetch
-  // headers. so the only way to make sure the app assets actually get
-  // prefetched is to manually load them.
-
-  // TODO: delay this until after the translations load?
-
+const warmCache = async () => {
   const preloadTiers: string[][] = [[], [wasmPath]];
   const collectPreloadFiles = (c: ChunkManifest, d: number = 0) => {
-    preloadTiers[d] = (preloadTiers[d] ?? []).concat(...c.files);
+    preloadTiers[d] = (preloadTiers[d] ?? []).concat(c.files);
     for (const ac of c.asyncChunks ?? []) {
       collectPreloadFiles(ac, d + 1);
     }
   };
   collectPreloadFiles(MANIFEST);
 
+  const cache = await caches.open(`${GIT_HASH}_static`);
   for (let i = 1; i < preloadTiers.length; i++) {
-    await Promise.allSettled(
-      preloadTiers[i].map((f) => fetch(f, { priority: "low" } as RequestInit))
-    );
+    await cache.addAll(uniq(preloadTiers[i]));
   }
-})();
+};
+if (localStorage.getItem("cacheVersion") !== GIT_HASH) {
+  // TODO: delay this until after the translations load?
+  void warmCache().then(() => localStorage.setItem("cacheVersion", GIT_HASH));
+}
 
 void registerServiceWorker({ scope: "/" })
   .then(() => console.log("service worker registered"))
