@@ -81,24 +81,6 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
       return { start, end };
     }, [reset, pruned, scrollTop, viewportHeight]);
 
-    const children = useMemo(() => {
-      const children: React.ReactElement[] = [];
-      for (let i = indexRange.start; i < indexRange.end; i++) {
-        children.push(
-          <MessageMeasurer
-            key={i}
-            index={i}
-            renderMessage={renderMessage}
-            messageSizeCache={messageSizeCache}
-            unstable={i === indexRange.start || i === indexRange.end - 1}
-            offset={messageSizeCache.getOffset(i)}
-            settled={messageSizeCache.isSettled(i)}
-          />
-        );
-      }
-      return children;
-    }, [renderMessage, indexRange, messageSizeCache.getOffset(indexRange.end)]);
-
     const ref = useRef<HTMLDivElement>();
     const ignoreScroll = useRef(false);
     const height = messageSizeCache.getOffset(messageCount);
@@ -141,6 +123,21 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
         height: `${height}px`,
       };
     }, [height]);
+
+    const children: React.ReactElement[] = [];
+    for (let i = indexRange.start; i < indexRange.end; i++) {
+      children.push(
+        <MessageMeasurer
+          key={i}
+          index={i}
+          renderMessage={renderMessage}
+          messageSizeCache={messageSizeCache}
+          unstable={i === indexRange.start || i === indexRange.end - 1}
+          offset={messageSizeCache.getOffset(i)}
+          settled={messageSizeCache.isSettled(i)}
+        />
+      );
+    }
 
     return (
       <div onScroll={handleScroll} {...props} ref={useRefs(ref, fwRef)}>

@@ -29,7 +29,7 @@ class MessageSizeCache {
       this.settled.push(...new Array<boolean>(d).fill(false));
       this.margins.push(...new Array<number>(d * 2).fill(0));
       this.heights.push(...new Array<number>(d).fill(this.estimate));
-      this.offsets = new FenwickTree(this.heights);
+      this.offsets.push(...new Array<number>(d).fill(this.estimate));
       this.size = size;
     }
   }
@@ -42,7 +42,9 @@ class MessageSizeCache {
   }
 
   public unset(i: number) {
-    this.set(i, false, this.estimate, 0, 0);
+    if (i > 0 && i < this.size) {
+      this.set(i, false, this.estimate, 0, 0);
+    }
   }
 
   public prune(n: number) {

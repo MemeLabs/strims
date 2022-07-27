@@ -5,12 +5,16 @@
 // SEE: https://en.wikipedia.org/wiki/Fenwick_tree
 
 class FenwickTree {
-  values: number[];
+  values: number[] = [];
   tree: number[];
   size: number;
 
   constructor(values: number[]) {
-    this.values = values.slice();
+    this.push(...values);
+  }
+
+  public push(...values: number[]) {
+    this.values.push(...values);
     this.tree = new Array<number>(values.length + 1).fill(0);
     this.size = values.length;
     for (let i = 0; i < this.size; i++) {
@@ -22,7 +26,7 @@ class FenwickTree {
     return i & -i;
   }
 
-  private add(i: number, d: number) {
+  public add(i: number, d: number) {
     for (i++; i <= this.size; i += this.lsb(i)) {
       this.tree[i] += d;
     }

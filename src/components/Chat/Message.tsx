@@ -348,7 +348,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
       })
     );
     return formatter.body;
-  }, [uiConfig]);
+  }, [uiConfig, entities]);
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
@@ -509,7 +509,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         <br />
       </>
     );
-  }, [uiConfig]);
+  }, [uiConfig, entities]);
 
   return (
     <div {...props} className={classNames} ref={fwRef}>

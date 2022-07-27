@@ -477,6 +477,10 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const setUiConfig = (state: State, uiConfig: UIConfig) => ({
     ...state,
     uiConfig,
+    config: {
+      ...state.config,
+      messageGCThreshold: uiConfig.maxLines,
+    },
   });
 
   const reduceWhisperEvent = (
