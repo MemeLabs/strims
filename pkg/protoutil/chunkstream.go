@@ -16,7 +16,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-const maxChunkStreamSize = 10 * 1024 * 1024
+// TODO: allow callers to define limits
+const maxChunkStreamSize = 128 * 1024 * 1024
+const maxChunkStreamBufferSize = 1024 * 1024
 
 var ErrMaxChunkStreamSize = errors.New("message exceeds max segment size")
 
@@ -54,7 +56,12 @@ func (r *ChunkStreamReader) Read(m protoreflect.ProtoMessage) error {
 	}
 
 	for {
-		r.buf.Reset()
+		if r.buf.Len() > maxChunkStreamBufferSize {
+			r.buf = bytes.Buffer{}
+		} else {
+			r.buf.Reset()
+		}
+
 		_, err := r.buf.ReadFrom(io.LimitReader(r.zpr, maxChunkStreamSize))
 		if err != nil {
 			return err
@@ -108,13 +115,15 @@ func (w *ChunkStreamWriter) Write(m protoreflect.ProtoMessage) error {
 	}
 	n := binary.PutUvarint(w.buf, uint64(size))
 
-	var err error
-	w.buf, err = opt.MarshalAppend(w.buf[:n], m)
+	buf, err := opt.MarshalAppend(w.buf[:n], m)
 	if err != nil {
 		return err
 	}
+	if len(buf) < maxChunkStreamBufferSize {
+		w.buf = buf
+	}
 
-	if _, err = w.zpw.Write(w.buf); err != nil {
+	if _, err = w.zpw.Write(buf); err != nil {
 		return err
 	}
 	return w.zpw.Flush()

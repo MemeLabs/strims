@@ -260,13 +260,18 @@ func (s *chatServer) trySyncAssets(serverID uint64, unifiedUpdate bool) {
 }
 
 func (s *chatServer) syncAssets(unifiedUpdate bool) {
-	s.logger.Debug("syncing assets for chat server", zap.Uint64("serverID", s.config.Id))
+	logger := s.logger.With(zap.Uint64("serverID", s.config.Id))
+	logger.Debug("syncing assets for chat server")
 
 	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
 	if err != nil {
 		return
 	}
 
-	s.service.Sync(config, emotes, modifiers, tags)
-	s.assetPublisher.Sync(config, emotes, modifiers, tags)
+	if err := s.service.Sync(config, emotes, modifiers, tags); err != nil {
+		logger.Error("syncing assets to service failed", zap.Error(err))
+	}
+	if err := s.assetPublisher.Sync(config, emotes, modifiers, tags); err != nil {
+		logger.Error("syncing assets to asset stream failed", zap.Error(err))
+	}
 }
