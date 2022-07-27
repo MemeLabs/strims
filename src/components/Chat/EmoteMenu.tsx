@@ -300,11 +300,11 @@ interface CategoryPanelProps {
   category: Category;
   onSelect: (v: string) => void;
   onHover: (v: CategoryItem) => void;
-  containerRef: React.MutableRefObject<HTMLDivElement>;
+  sizeRef: React.MutableRefObject<DOMRectReadOnly>;
 }
 
 const CategoryPanel = React.memo<CategoryPanelProps>(
-  ({ uiConfig, category, onSelect, onHover, containerRef }) => {
+  ({ uiConfig, category, onSelect, onHover, sizeRef }) => {
     let content: React.ReactElement[];
     if (category.type === "emote") {
       content = category.emotes.map((emote) => (
@@ -336,8 +336,11 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
       });
     }
 
+    const ref = useRef<HTMLDivElement>();
+    sizeRef.current = useSize(ref);
+
     return (
-      <div className="emote_menu__category" ref={containerRef}>
+      <div className="emote_menu__category" ref={ref}>
         <div className="emote_menu__category__header">{category.title}</div>
         <ul
           className={clsx(
@@ -377,14 +380,13 @@ const Scroller: React.FC<ScrollerProps> = ({
   control,
   ...panelProps
 }) => {
-  const sizes: DOMRectReadOnly[] = [];
+  const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
   const panels: React.ReactNode[] = [];
   for (const category of categories) {
-    const ref = useRef<HTMLDivElement>();
-    const size = useSize(ref);
+    const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
     sizes.push(size);
     panels.push(
-      <CategoryPanel key={category.key} category={category} containerRef={ref} {...panelProps} />
+      <CategoryPanel key={category.key} category={category} sizeRef={size} {...panelProps} />
     );
   }
 
@@ -394,7 +396,7 @@ const Scroller: React.FC<ScrollerProps> = ({
       scrollToIndex: (index: number) => {
         let top = 0;
         for (let i = 0; i < index; i++) {
-          top += sizes[i]?.height ?? 0;
+          top += sizes[i].current?.height ?? 0;
         }
         scrollbars.current.view.scrollTo({
           top,
@@ -408,7 +410,7 @@ const Scroller: React.FC<ScrollerProps> = ({
     const top = scrollbars.current.getScrollTop();
     let sum = 0;
     for (let i = 0; i < sizes.length; i++) {
-      sum += sizes[i]?.height ?? 0;
+      sum += sizes[i].current?.height ?? 0;
       if (sum > top) {
         onScroll(i);
         break;
