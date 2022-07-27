@@ -10,9 +10,30 @@ import DirectoryGrid, { DirectoryListing } from "../components/Directory/Grid";
 import { useClient } from "../contexts/FrontendApi";
 import { useListings } from "../hooks/directory";
 
+const TestButton = () => {
+  // TODO: feature gates
+  if (IS_PRODUCTION) {
+    return null;
+  }
+
+  const params = useParams<"networkKey">();
+
+  const client = useClient();
+  const handleTestClick = async () => {
+    const networkKey = Base64.toUint8Array(params.networkKey);
+    const res = await client.directory.test({ networkKey });
+    console.log(res);
+  };
+
+  return (
+    <button onClick={handleTestClick} className="input input_button">
+      test
+    </button>
+  );
+};
+
 const Directory: React.FC = () => {
   const params = useParams<"networkKey">();
-  const client = useClient();
 
   const listings = useListings(
     useMemo(
@@ -26,12 +47,6 @@ const Directory: React.FC = () => {
       [params.networkKey]
     )
   );
-
-  const handleTestClick = async () => {
-    const networkKey = Base64.toUint8Array(params.networkKey);
-    const res = await client.directory.test({ networkKey });
-    console.log(res);
-  };
 
   const gridListings = useMemo(() => {
     const gridListings: DirectoryListing[] = [];
@@ -54,9 +69,7 @@ const Directory: React.FC = () => {
 
   return (
     <div>
-      <button onClick={handleTestClick} className="input input_button">
-        test
-      </button>
+      <TestButton />
       <DirectoryGrid listings={gridListings} networkKey={params.networkKey} />
     </div>
   );
