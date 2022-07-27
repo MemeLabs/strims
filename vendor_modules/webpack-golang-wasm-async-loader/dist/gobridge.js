@@ -11,7 +11,7 @@ const caller = (name) => (...args) => new Promise((resolve, reject) => {
 });
 function default_1(wasmPath) {
     return async (baseURI, wasmio) => {
-        const res = await fetch(`${baseURI}/${wasmPath}`);
+        const res = await fetch(baseURI + wasmPath);
         const mod = await WebAssembly.compileStreaming(res);
         // we need to run wasm startup in a retry loop because in ios wasm's stack
         // size is not predictable (https://bugs.webkit.org/show_bug.cgi?id=201028).

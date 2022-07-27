@@ -21,7 +21,7 @@ const caller = (name: string) => (...args: any) => new Promise((resolve, reject)
 
 export default function(wasmPath: string) {
   return async (baseURI: string, wasmio: unknown) => {
-    const res = await fetch(`${baseURI}/${wasmPath}`);
+    const res = await fetch(baseURI + wasmPath);
     const mod = await WebAssembly.compileStreaming(res);
 
     // we need to run wasm startup in a retry loop because in ios wasm's stack

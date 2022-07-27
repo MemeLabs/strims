@@ -59,7 +59,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     cb(null, [
       `require("${join(__dirname, "..", "lib", "wasm_exec.js")}");`,
       `import gobridge from "${join(__dirname, "..", "dist", "gobridge.js")}";`,
-      `export const wasmPath = "${emittedFilename}";`,
+      `export const wasmPath = __webpack_public_path__+"${emittedFilename}";`,
       `export default gobridge(wasmPath);`,
     ].join("\n"));
   });

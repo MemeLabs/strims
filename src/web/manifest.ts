@@ -4,4 +4,4 @@
 import twemoji from "../../assets/chat/TwemojiMozilla.ttf";
 import { wasmPath } from "./svc.go";
 
-export default [wasmPath, ...MANIFEST, twemoji];
+export default [wasmPath, ...MANIFEST.map((f) => __webpack_public_path__ + f), twemoji];
