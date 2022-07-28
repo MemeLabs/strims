@@ -6,9 +6,9 @@ import { isEqual } from "lodash";
 import React, { ReactNode, createContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
-import promiseWithCancel from "../lib/promiseWithCancel";
 import curryDispatchActions from "../lib/curryDispatchActions";
 import { ServiceSlug, slugToService } from "../lib/directory";
+import promiseWithCancel from "../lib/promiseWithCancel";
 import { useClient } from "./FrontendApi";
 
 export const enum PlayerMode {
@@ -107,7 +107,14 @@ const createActions = (
     return () => {
       cancel();
       setState((state) => ({ ...state, networkKey: null, listingId: null }));
-      void res.then(({ id }) => client.directory.unpublish({ networkKey, id }));
+      void res.then(({ id }) => {
+        switch (source.type) {
+          case "embed":
+            return client.directory.unpublish({ networkKey, id });
+          case "swarm":
+            return client.directory.part({ networkKey, id });
+        }
+      });
     };
   };
 
