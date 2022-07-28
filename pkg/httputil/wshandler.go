@@ -4,8 +4,11 @@
 package httputil
 
 import (
+	"context"
 	"net/http"
+	"time"
 
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/gorilla/websocket"
 )
 
@@ -24,4 +27,32 @@ func (h WSHandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h(c)
+}
+
+type WSKeepaliveOptions struct {
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
+	PingInterval time.Duration
+}
+
+var DefaultWSKeepaliveOptions = WSKeepaliveOptions{
+	WriteTimeout: 5 * time.Second,
+	ReadTimeout:  25 * time.Second,
+	PingInterval: 20 * time.Second,
+}
+
+func ScheduleWSKeepalive(ctx context.Context, c *websocket.Conn, opt *WSKeepaliveOptions) {
+	if opt == nil {
+		opt = &DefaultWSKeepaliveOptions
+	}
+
+	c.SetReadDeadline(timeutil.Now().Add(opt.ReadTimeout).Time())
+	c.SetPongHandler(func(string) error {
+		c.SetReadDeadline(timeutil.Now().Add(opt.ReadTimeout).Time())
+		return nil
+	})
+
+	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, opt.PingInterval, func(t timeutil.Time) {
+		c.WriteControl(websocket.PingMessage, nil, t.Add(opt.WriteTimeout).Time())
+	}, nil)
 }

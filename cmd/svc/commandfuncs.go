@@ -152,6 +152,7 @@ func runCmd(fs Flags) error {
 		}
 
 		httpmux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
+			httputil.ScheduleWSKeepalive(ctx, c, nil)
 			err := srv.Listen(ctx, httputil.NewWSReadWriter(c))
 			logger.Debug("remote client closed", zap.Error(err))
 		}))
