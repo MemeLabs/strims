@@ -93,11 +93,7 @@ func (s *PassthruServer) connContext(nc net.Conn) context.Context {
 
 func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 	init := mp4.NewMP4Init()
-	init.AddChild(&mp4.FtypBox{
-		MajorBrand:       "iso5",
-		MinorVersion:     512,
-		CompatibleBrands: []string{"iso6", "mp41"},
-	})
+	init.AddChild(mp4.NewFtyp("iso5", 512, []string{"iso6", "mp41"}))
 
 	moov := mp4.NewMoovBox()
 	moov.AddChild(mp4.CreateMvhd())
@@ -174,10 +170,7 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 				}
 			}
 
-			styp := &mp4.StypBox{
-				MajorBrand:       "msdh",
-				CompatibleBrands: []string{"msdh", "msix"},
-			}
+			styp := mp4.NewStyp("msdh", 0, []string{"msdh", "msix"})
 			if err := styp.Encode(w); err != nil {
 				return fmt.Errorf("encoding stype: %w", err)
 			}
@@ -246,12 +239,12 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 				return errors.New("no framerate in amf")
 			}
 		case av.H264DecoderConfig:
-			c, err := avc.DecodeAVCDecConfRec(bytes.NewBuffer(pkt.Data))
+			c, err := avc.DecodeAVCDecConfRec(pkt.Data)
 			if err != nil {
 				return fmt.Errorf("parsing avc decoder config: %w", err)
 			}
 
-			init.Moov.Traks[0].SetAVCDescriptor("avc1", c.SPSnalus, c.PPSnalus)
+			init.Moov.Traks[0].SetAVCDescriptor("avc1", c.SPSnalus, c.PPSnalus, true)
 			init.Moov.Traks[0].Mdia.Mdhd.Timescale = uint32(timeScale[0] * float64(time.Second))
 			init.Moov.Traks[0].Mdia.Hdlr.Name = "VideoHandler"
 			init.Moov.Traks[0].Mdia.Minf.Stbl.Stsd.AvcX.CompressorName = ""

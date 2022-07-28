@@ -51,7 +51,7 @@ RUN \
   && GOPATH=/tmp/gotools go install github.com/haya14busa/goplay/cmd/goplay@latest 2>&1 \
   && GOPATH=/tmp/gotools go install github.com/go-delve/delve/cmd/dlv@latest 2>&1 \
   && GOPATH=/tmp/gotools go install honnef.co/go/tools/cmd/staticcheck@latest 2>&1 \
-  && GOPATH=/tmp/gotools go install github.com/golang/protobuf/protoc-gen-go@latest 2>&1 \
+  && GOPATH=/tmp/gotools go install google.golang.org/protobuf/cmd/protoc-gen-go@latest 2>&1 \
   && rm -rf /tmp/gotools \
   # Install golangci-lint
   && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>&1 \
