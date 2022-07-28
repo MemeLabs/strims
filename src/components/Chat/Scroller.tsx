@@ -132,6 +132,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
           index={i}
           renderMessage={renderMessage}
           messageSizeCache={messageSizeCache}
+          viewportWidth={viewportWidth}
           unstable={i === indexRange.start || i === indexRange.end - 1}
           offset={messageSizeCache.getOffset(i)}
           settled={messageSizeCache.isSettled(i)}
@@ -235,13 +236,14 @@ interface MessageMeasurerProps {
   index: number;
   renderMessage: MessageRenderFunc;
   messageSizeCache: MessageSizeCache;
+  viewportWidth: number;
   unstable: boolean;
   offset: number;
   settled: boolean;
 }
 
 const MessageMeasurer = React.memo<MessageMeasurerProps>(
-  ({ index, renderMessage, messageSizeCache, unstable, offset, settled }) => {
+  ({ index, renderMessage, messageSizeCache, viewportWidth, unstable, offset, settled }) => {
     const ref = useRef<HTMLDivElement>();
 
     useLayoutEffect(() => {
@@ -256,7 +258,7 @@ const MessageMeasurer = React.memo<MessageMeasurerProps>(
           parseFloat(marginBottom)
         );
       }
-    }, [unstable, settled]);
+    }, [viewportWidth, unstable, settled]);
 
     const style = useMemo<React.CSSProperties>(() => {
       return {
@@ -272,6 +274,7 @@ const MessageMeasurer = React.memo<MessageMeasurerProps>(
     prev.index === next.index &&
     prev.renderMessage === next.renderMessage &&
     prev.messageSizeCache === next.messageSizeCache &&
+    prev.viewportWidth === next.viewportWidth &&
     prev.unstable === next.unstable &&
     prev.offset === next.offset &&
     prev.settled === next.settled

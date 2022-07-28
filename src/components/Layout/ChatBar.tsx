@@ -36,13 +36,14 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   }, [minimized, room.state]);
 
   const renderMessage = useCallback(
-    ({ index, style }: MessageProps) => (
+    ({ index, style, ref }: MessageProps) => (
       <Message
         uiConfig={uiConfig}
         message={roomActions.getMessage(index)}
         style={style}
         isMostRecent={index === roomActions.getMessageCount() - 1}
         isContinued={roomActions.getMessageIsContinued(index)}
+        ref={ref}
       />
     ),
     [uiConfig, room.styles]

@@ -293,6 +293,9 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     action: (thread: ThreadState, state: State) => ThreadState
   ) => applyActionInStateMap(state, topicThreadKeys[topic.type], formatKey(topic.topicKey), action);
 
+  const selectThread = (state: State, topic: Topic) =>
+    state[topicThreadKeys[topic.type]].get(formatKey(topic.topicKey));
+
   const openRoom = (state: State, serverKey: Uint8Array, networkKey: Uint8Array) => {
     const key = formatKey(serverKey);
     if (state.rooms.has(key)) {
@@ -446,8 +449,11 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     }
 
     const popoutTopics = [topic, ...state.popoutTopics];
-    if (popoutTopics.length > state.popoutTopicCapacity) {
-      mainTopics.push(...popoutTopics.splice(state.popoutTopicCapacity));
+    const overflow = popoutTopics.splice(state.popoutTopicCapacity);
+    mainTopics.push(...overflow);
+
+    for (const movedTopic of [topic, ...overflow]) {
+      selectThread(state, movedTopic)?.messageSizeCache.reset();
     }
 
     return {
@@ -461,8 +467,11 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const setPopoutTopicCapacity = (state: State, popoutTopicCapacity: number) => {
     const mainTopics = [...state.mainTopics];
     const popoutTopics = [...state.popoutTopics];
-    if (popoutTopics.length > popoutTopicCapacity) {
-      mainTopics.push(...popoutTopics.splice(popoutTopicCapacity));
+    const overflow = popoutTopics.splice(popoutTopicCapacity);
+    mainTopics.push(...overflow);
+
+    for (const movedTopic of overflow) {
+      selectThread(state, movedTopic)?.messageSizeCache.reset();
     }
 
     return {
