@@ -21,7 +21,7 @@ func ExtractMessageEntities(msg string) *chatv1.Message_Entities {
 func newEntityExtractor() *entityExtractor {
 	return &entityExtractor{
 		parserCtx:         parser.NewParserContext(parser.ParserContextValues{}),
-		urls:              xurls.Relaxed(),
+		urlScheme:         regexp.MustCompile("^" + xurls.AnyScheme),
 		internalModifiers: syncutil.NewPointer(&[]*chatv1.Modifier{}),
 	}
 }
@@ -29,7 +29,7 @@ func newEntityExtractor() *entityExtractor {
 // entityExtractor holds active emotes, modifiers, tags and a URL regex
 type entityExtractor struct {
 	parserCtx         *parser.ParserContext
-	urls              *regexp.Regexp
+	urlScheme         *regexp.Regexp
 	internalModifiers syncutil.Pointer[[]*chatv1.Modifier]
 }
 
@@ -46,9 +46,9 @@ func (x *entityExtractor) SetInternalModifiers(v []*chatv1.Modifier) {
 func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 	e := &chatv1.Message_Entities{}
 
-	for _, b := range x.urls.FindAllStringSubmatchIndex(msg, -1) {
+	for _, b := range xurls.Relaxed().FindAllStringSubmatchIndex(msg, -1) {
 		url := msg[b[0]:b[1]]
-		if b[2] == -1 {
+		if !x.urlScheme.MatchString(url) {
 			url = "https://" + url
 		}
 

@@ -174,7 +174,7 @@ func (d *ScalewayDriver) findLatestImage(ctx context.Context, region, sku string
 
 	latestImage := images.Images[0]
 	for _, image := range images.Images {
-		if image.CreationDate.After(latestImage.CreationDate) {
+		if image.CreationDate.After(*latestImage.CreationDate) {
 			latestImage = image
 		}
 	}

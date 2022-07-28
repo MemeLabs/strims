@@ -126,7 +126,7 @@ func (d *DreamHostDriver) findOrAddKey(ctx context.Context, region, public strin
 		return nil, err
 	}
 
-	keypairsPager, err := keypairs.List(computeClient).AllPages()
+	keypairsPager, err := keypairs.List(computeClient, nil).AllPages()
 	if err != nil {
 		return nil, err
 	}
