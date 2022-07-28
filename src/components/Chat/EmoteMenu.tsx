@@ -308,7 +308,10 @@ interface CategoryPanelProps {
 const CategoryPanel = React.memo<CategoryPanelProps>(
   ({ uiConfig, category, onSelect, onHover, sizeRef }) => {
     const [doubleClickTimeout, setDoubleClickTimeout] = useState(0);
-    const handleSelect = (v: string) => {
+    const handlePointerUp = (e: React.PointerEvent, v: string) => {
+      if (e.button !== 0) {
+        return;
+      }
       if (doubleClickTimeout === 0) {
         setDoubleClickTimeout(window.setTimeout(() => onSelect(v, false), DOUBLE_CLICK_TIMEOUT));
       } else {
@@ -323,7 +326,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
         <li
           key={emote.name}
           className="emote_menu__category__list_item emote_menu__category__list_item--emote"
-          onPointerDown={() => handleSelect(emote.name)}
+          onPointerUp={(e) => handlePointerUp(e, emote.name)}
           onMouseEnter={() => onHover({ type: "emote", emote })}
         >
           <Emote name={emote.name} shouldAnimateForever />
@@ -339,7 +342,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
           <li
             key={emoji.unicode}
             className="emote_menu__category__list_item emote_menu__category__list_item--emoji"
-            onPointerDown={() => handleSelect(variant.unicode)}
+            onPointerUp={(e) => handlePointerUp(e, variant.unicode)}
             onMouseEnter={() => onHover({ type: "emoji", emoji: variant })}
           >
             <Emoji>{variant.unicode}</Emoji>
