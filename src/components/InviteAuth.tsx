@@ -35,7 +35,12 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
     const rw = new HTTPReadWriter("/api/invite");
     const client = new InviteClient(rw, rw);
 
-    const res = await client.inviteLink.getInvitation({ code });
+    const res = await Promise.race([
+      client.inviteLink.getInvitation({ code }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("request timeout")), 1000)
+      ),
+    ]);
     if (res.invitation.version !== 0) {
       throw new Error("unexpected invitation version");
     }
@@ -44,14 +49,20 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
     return { invitation, networkCert, peerCert };
   }, [code]);
 
+  const { t } = useTranslation();
   const [{ profile }] = useSession();
   const [networksRes] = useCall("network", "list");
 
   if (inviteRes.error || networksRes.error) {
-    return <div>error</div>;
+    return (
+      <InviteAuthModal>
+        <div className="invite_auth__error">{t("inviteAuth.error")}</div>
+        <InternalLink to="/">{t("inviteAuth.Continue")}</InternalLink>
+      </InviteAuthModal>
+    );
   }
   if (!inviteRes.value || !networksRes.value) {
-    return null;
+    return <InviteAuthModal>{t("inviteAuth.Loading")}</InviteAuthModal>;
   }
 
   const { networkCert } = inviteRes.value;
@@ -60,12 +71,22 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
   }
 
   return (
-    <div className="invite_auth" {...suppressClickAway()}>
-      <div className="invite_auth__mask" />
+    <InviteAuthModal>
       <InviteAuthForm {...inviteRes.value} profile={profile} />
-    </div>
+    </InviteAuthModal>
   );
 };
+
+interface InviteAuthModalProps {
+  children: React.ReactNode;
+}
+
+const InviteAuthModal: React.FC<InviteAuthModalProps> = ({ children }) => (
+  <div className="invite_auth" {...suppressClickAway()}>
+    <div className="invite_auth__mask" />
+    <div className="invite_auth__modal">{children}</div>
+  </div>
+);
 
 export default InviteAuth;
 
@@ -129,42 +150,40 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
 
   return (
     <form onSubmit={onSubmit}>
-      <div className="invite_auth__modal">
-        <span className="invite_auth__peer">
-          {t("inviteAuth.header", { peer: peerCert.subject })}
-        </span>
-        <span className="invite_auth__network_name">{networkCert.subject}</span>
+      <span className="invite_auth__peer">
+        {t("inviteAuth.header", { peer: peerCert.subject })}
+      </span>
+      <span className="invite_auth__network_name">{networkCert.subject}</span>
 
-        {error && <InputError error={error.message || t("inviteAuth.Error creating membership")} />}
-        <TextInput
-          control={control}
-          rules={{
-            pattern: {
-              value: validNamePattern,
-              message: t("inviteAuth.Name contains invalid characters"),
-            },
-          }}
-          label={t("inviteAuth.Alias")}
-          name="alias"
-          placeholder={t("inviteAuth.Enter an alternate name for this network")}
-        />
-        {bootstrapClients.length > 0 && (
-          <InputLabel
-            text={t("inviteAuth.bootstrapServers", { count: bootstrapClients.length })}
-            component="div"
-          >
-            {bootstrapClients.map((client, i) => (
-              <BootstrapClientCheckbox key={i} client={client} index={i} control={control} />
-            ))}
-          </InputLabel>
-        )}
-        <Button className="invite_auth--primary" disabled={formState.isSubmitting}>
-          {t("inviteAuth.Continue")}
-        </Button>
-        <InternalLink className="invite_auth__reject" to="/">
-          {t("inviteAuth.Reject invitation")}
-        </InternalLink>
-      </div>
+      {error && <InputError error={error.message || t("inviteAuth.Error creating membership")} />}
+      <TextInput
+        control={control}
+        rules={{
+          pattern: {
+            value: validNamePattern,
+            message: t("inviteAuth.Name contains invalid characters"),
+          },
+        }}
+        label={t("inviteAuth.Alias")}
+        name="alias"
+        placeholder={t("inviteAuth.Enter an alternate name for this network")}
+      />
+      {bootstrapClients.length > 0 && (
+        <InputLabel
+          text={t("inviteAuth.bootstrapServers", { count: bootstrapClients.length })}
+          component="div"
+        >
+          {bootstrapClients.map((client, i) => (
+            <BootstrapClientCheckbox key={i} client={client} index={i} control={control} />
+          ))}
+        </InputLabel>
+      )}
+      <Button className="invite_auth--primary" disabled={formState.isSubmitting}>
+        {t("inviteAuth.Continue")}
+      </Button>
+      <InternalLink className="invite_auth__reject" to="/">
+        {t("inviteAuth.Reject invitation")}
+      </InternalLink>
     </form>
   );
 };

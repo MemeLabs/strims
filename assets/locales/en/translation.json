@@ -122,6 +122,8 @@
     "Name contains invalid characters": "Name contains invalid characters",
     "Enter an alternate name for this network": "Enter an alternate name for this network",
     "Continue": "Continue",
-    "Reject invitation": "Reject invitation"
+    "Reject invitation": "Reject invitation",
+    "Loading": "Loading...",
+    "error": "An error occurred while loading the invitation."
   }
 }
