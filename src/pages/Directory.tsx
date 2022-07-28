@@ -38,7 +38,7 @@ const Directory: React.FC = () => {
   const listings = useListings(
     useMemo(
       () => ({
-        networkKeys: [Base64.toUint8Array(params.networkKey ?? "")],
+        networkKeys: params.networkKey ? [Base64.toUint8Array(params.networkKey)] : [],
         contentTypes: [
           ListingContentType.LISTING_CONTENT_TYPE_MEDIA,
           ListingContentType.LISTING_CONTENT_TYPE_EMBED,

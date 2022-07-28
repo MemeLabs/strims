@@ -3,13 +3,8 @@
 
 import React from "react";
 
-const HomePage: React.FC = () => {
-  return (
-    <>
-      <header className="home_page__subheader"></header>
-      <section className="home_page__main__video"></section>
-    </>
-  );
-};
+import Directory from "./Directory";
+
+const HomePage: React.FC = () => <Directory />;
 
 export default HomePage;
