@@ -43,11 +43,6 @@
       .chat__viewer_state_indicator {
         display: none;
       }
-
-      .chat__message__body {
-        padding-left: 5px;
-        display: inline-block;
-      }
     }
 
     // the last in a sequence of messages from the same author
@@ -75,8 +70,9 @@
     }
 
     &__time {
-      white-space: nowrap;
       margin-right: 3px;
+      color: var(--color-text-chat-time);
+      font-size: 0.7rem;
     }
 
     &:not(&--self) {
