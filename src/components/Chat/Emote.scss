@@ -30,7 +30,7 @@
     z-index: 1;
 
     &--animated {
-      background-position-x: calc(var(--animation-end-on-frame) * var(--width));
+      background-position-x: calc(-1 * var(--animation-end-on-frame) * var(--width) + var(--width));
       animation-name: sprite-animation;
       animation-duration: calc(var(--animation-duration-ms) * 1ms);
       animation-timing-function: steps(var(--animation-frame-count));
