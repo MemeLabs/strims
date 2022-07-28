@@ -4,7 +4,7 @@
 import "./VideoPlayer.scss";
 
 import clsx from "clsx";
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
@@ -85,13 +85,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       />
     );
 
-  const handleToggleFullscreen = () => {
+  const handleToggleFullscreen = useCallback(() => {
     if (typeof videoRef.current.webkitSetPresentationMode === "function") {
       videoRef.current.webkitSetPresentationMode("fullscreen");
     } else {
       void toggleFullscreen(rootRef.current);
     }
-  };
+  }, []);
 
   useEffect(renewControlsTimeout, [videoState.volume]);
 
@@ -121,12 +121,12 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       className={clsx("video_player", className)}
       onMouseMove={renewControlsTimeout}
       onMouseLeave={clearControlsTimeout}
-      onDoubleClick={handleToggleFullscreen}
       ref={rootRef}
       style={{ aspectRatio }}
     >
       <video
         onClick={(e) => e.preventDefault()}
+        onDoubleClick={handleToggleFullscreen}
         className="video_player__video"
         autoPlay
         playsInline
