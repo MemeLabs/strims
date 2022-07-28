@@ -5,6 +5,7 @@ package debug
 
 import (
 	"log"
+	"sync"
 	"time"
 )
 
@@ -40,8 +41,14 @@ func IfStalled(handlers ...func()) (cancel func()) {
 		}
 	}()
 
+	var cancelOnce sync.Once
 	return func() {
-		c <- struct{}{}
-		close(c)
+		cancelOnce.Do(func() {
+			select {
+			case c <- struct{}{}:
+			default:
+			}
+			close(c)
+		})
 	}
 }

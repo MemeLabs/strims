@@ -57,22 +57,26 @@ func newWebRTCMediatorFromOffer(
 }
 
 type webRTCMediator struct {
-	mediationID           uint64
+	init             bool
+	id               kademlia.ID
+	network          *Network
+	mediationID      uint64
+	nextICESendIndex uint64
+
+	lock                  sync.Mutex
 	remoteMediationID     uint64
-	id                    kademlia.ID
-	network               *Network
-	init                  bool
 	closeErr              error
-	closeOnce             sync.Once
-	done                  chan struct{}
-	nextICESendIndex      uint64
-	remoteICELock         sync.Mutex
-	remoteICEReadIndices  uint64
-	remoteICEAllIndices   uint64
-	remoteICECandiates    chan []byte
-	remoteICECloseOnce    sync.Once
 	remoteDescriptionDone chan struct{}
 	remoteDescription     []byte
+
+	remoteICELock        sync.Mutex
+	remoteICEReadIndices uint64
+	remoteICEAllIndices  uint64
+	remoteICECandiates   chan []byte
+	remoteICECloseOnce   sync.Once
+
+	closeOnce sync.Once
+	done      chan struct{}
 }
 
 func (m *webRTCMediator) Scheme() string {
@@ -84,10 +88,15 @@ func (m *webRTCMediator) String() string {
 }
 
 func (m *webRTCMediator) HasOffer() bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	return m.remoteDescription == nil
 }
 
 func (m *webRTCMediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	if remoteMediationID == 0 {
 		return errors.New("remote mediation id must be non zero")
 	}
@@ -107,7 +116,10 @@ func (m *webRTCMediator) SetAnswer(remoteMediationID uint64, answer []byte) erro
 
 func (m *webRTCMediator) close(err error) {
 	m.closeOnce.Do(func() {
+		m.lock.Lock()
 		m.closeErr = err
+		m.lock.Unlock()
+
 		close(m.done)
 	})
 }
@@ -142,8 +154,12 @@ func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, 
 func (m *webRTCMediator) getRemoteDescription() ([]byte, error) {
 	select {
 	case <-m.remoteDescriptionDone:
+		m.lock.Lock()
+		defer m.lock.Unlock()
 		return m.remoteDescription, nil
 	case <-m.done:
+		m.lock.Lock()
+		defer m.lock.Unlock()
 		return nil, fmt.Errorf("mediator closed: %w", m.closeErr)
 	}
 }
@@ -234,9 +250,6 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return err
 	}
-
-	s.mediatorsLock.Lock()
-	defer s.mediatorsLock.Unlock()
 
 	switch b := m.Body.(type) {
 	case *vpnv1.PeerExchangeMessage_MediationOffer_:
@@ -334,9 +347,8 @@ func (s *peerExchange) sendRejection(hostID kademlia.ID, mediationID uint64) err
 
 func (s *peerExchange) handleRejection(m *vpnv1.PeerExchangeMessage_Rejection, msg *Message) error {
 	s.mediatorsLock.Lock()
-	defer s.mediatorsLock.Unlock()
-
 	t, ok := s.mediators[msg.SrcHostID()]
+	s.mediatorsLock.Unlock()
 	if !ok || t.mediationID != m.MediationId {
 		return nil
 	}
@@ -347,7 +359,9 @@ func (s *peerExchange) handleRejection(m *vpnv1.PeerExchangeMessage_Rejection, m
 		zap.Uint64("mediationId", t.mediationID),
 	)
 	t.close(errors.New("remote host rejected offer"))
+	s.mediatorsLock.Lock()
 	delete(s.mediators, msg.SrcHostID())
+	s.mediatorsLock.Unlock()
 
 	return nil
 }
@@ -417,7 +431,9 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 }
 
 func (s *peerExchange) handleMediationAnswer(m *vpnv1.PeerExchangeMessage_MediationAnswer, msg *Message) error {
+	s.mediatorsLock.Lock()
 	t, ok := s.mediators[msg.SrcHostID()]
+	s.mediatorsLock.Unlock()
 	if !ok {
 		return fmt.Errorf("no mediator to handle answer from %s", msg.SrcHostID())
 	}
@@ -426,7 +442,9 @@ func (s *peerExchange) handleMediationAnswer(m *vpnv1.PeerExchangeMessage_Mediat
 }
 
 func (s *peerExchange) handleMediationICECandidate(m *vpnv1.PeerExchangeMessage_MediationIceCandidate, msg *Message) error {
+	s.mediatorsLock.Lock()
 	t, ok := s.mediators[msg.SrcHostID()]
+	s.mediatorsLock.Unlock()
 	if !ok || t.remoteMediationID != m.MediationId {
 		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.SrcHostID())
 	}
@@ -436,7 +454,9 @@ func (s *peerExchange) handleMediationICECandidate(m *vpnv1.PeerExchangeMessage_
 		return err
 	}
 	if done {
+		s.mediatorsLock.Lock()
 		delete(s.mediators, msg.SrcHostID())
+		s.mediatorsLock.Unlock()
 	}
 	return nil
 }

@@ -63,3 +63,8 @@ func (d *Mutex) Unlock() {
 	d.lastReleased.Update(2)
 	d.lastReleasedTime = time.Now()
 }
+
+func IfLockStalled(l sync.Locker, handlers ...func()) {
+	defer IfStalled(handlers...)()
+	l.Lock()
+}
