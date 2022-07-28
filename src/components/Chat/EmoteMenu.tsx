@@ -33,8 +33,10 @@ import Dropdown from "../Dropdown";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 
+const DOUBLE_CLICK_TIMEOUT = 200;
+
 interface EmoteMenuProps {
-  onSelect: (v: string) => void;
+  onSelect: (v: string, send: boolean) => void;
   onClose: () => void;
 }
 
@@ -298,20 +300,30 @@ type CategoryItem =
 interface CategoryPanelProps {
   uiConfig: chatv1.UIConfig;
   category: Category;
-  onSelect: (v: string) => void;
+  onSelect: (v: string, send: boolean) => void;
   onHover: (v: CategoryItem) => void;
   sizeRef: React.MutableRefObject<DOMRectReadOnly>;
 }
 
 const CategoryPanel = React.memo<CategoryPanelProps>(
   ({ uiConfig, category, onSelect, onHover, sizeRef }) => {
+    const [doubleClickTimeout, setDoubleClickTimeout] = useState(0);
+    const handleSelect = (v: string) => {
+      if (doubleClickTimeout === 0) {
+        setDoubleClickTimeout(window.setTimeout(() => onSelect(v, false), DOUBLE_CLICK_TIMEOUT));
+      } else {
+        clearTimeout(doubleClickTimeout);
+        onSelect(v, true);
+      }
+    };
+
     let content: React.ReactElement[];
     if (category.type === "emote") {
       content = category.emotes.map((emote) => (
         <li
           key={emote.name}
           className="emote_menu__category__list_item emote_menu__category__list_item--emote"
-          onClick={() => onSelect(emote.name)}
+          onPointerDown={() => handleSelect(emote.name)}
           onMouseEnter={() => onHover({ type: "emote", emote })}
         >
           <Emote name={emote.name} shouldAnimateForever />
@@ -327,7 +339,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
           <li
             key={emoji.unicode}
             className="emote_menu__category__list_item emote_menu__category__list_item--emoji"
-            onClick={() => onSelect(variant.unicode)}
+            onPointerDown={() => handleSelect(variant.unicode)}
             onMouseEnter={() => onHover({ type: "emoji", emoji: variant })}
           >
             <Emoji>{variant.unicode}</Emoji>
@@ -360,7 +372,7 @@ interface ScrollerProps {
   className?: string;
   categories: Category[];
   onScroll: (index: number) => void;
-  onSelect: (v: string) => void;
+  onSelect: (v: string, send: boolean) => void;
   onHover: (v: CategoryItem) => void;
   control: React.MutableRefObject<ScrollerControl>;
 }

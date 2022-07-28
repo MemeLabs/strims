@@ -20,7 +20,7 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { BiSmile } from "react-icons/bi";
-import { useTimeout, useTimeoutFn, useToggle } from "react-use";
+import { useTimeoutFn, useToggle } from "react-use";
 import {
   Descendant,
   Editor,
@@ -258,13 +258,18 @@ const Composer: React.FC<ComposerProps> = ({
     return Editor.range(editor, anchor, focus);
   };
 
-  const insertEmote = (v: string) => {
-    if (!editor.selection) {
-      Transforms.select(editor, [0, 0]);
-    }
-
-    Transforms.insertText(editor, v + " ");
+  const insertEmote = (v: string, send: boolean) => {
     toggleMenu(false);
+
+    if (send) {
+      onMessage(v);
+    } else {
+      if (!editor.selection) {
+        Transforms.select(editor, [0, 0]);
+      }
+
+      Transforms.insertText(editor, v + " ");
+    }
   };
 
   const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
