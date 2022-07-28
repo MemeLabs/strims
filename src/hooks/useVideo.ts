@@ -199,6 +199,7 @@ const useVideo = (
       const clampedVolume = Math.max(0, Math.min(1, volume));
       unsafelySetVolume(clampedVolume);
       ref.current.volume = clampedVolume;
+      ref.current.muted = clampedVolume === 0;
     }
   };
 

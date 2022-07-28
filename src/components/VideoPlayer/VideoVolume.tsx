@@ -82,14 +82,7 @@ const VideoVolume: React.FC<VolumeProps> = ({
     active: !idle,
   });
 
-  const handleUpdate = useCallback(
-    (values: number[]) => {
-      if (dragging) {
-        onUpdate(values[0]);
-      }
-    },
-    [dragging]
-  );
+  const handleUpdate = useCallback((values: number[]) => onUpdate(values[0]), []);
 
   const handleSlideStart = useCallback(() => {
     onSlideStart();

@@ -23,6 +23,7 @@ import { RiLayout6Line, RiLayoutRightLine } from "react-icons/ri";
 import { useDebounce } from "react-use";
 
 import useClickAway from "../../hooks/useClickAway";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { VideoControls, VideoState } from "../../hooks/useVideo";
 import VideoProgressBar from "./VideoProgressBar";
 import VideoVolume from "./VideoVolume";
@@ -120,7 +121,9 @@ const VolumeControl: React.FC<VolumeControlProps> = ({
   const volumeIcons = [MdVolumeOff, MdVolumeMute, MdVolumeDown, MdVolumeUp];
   const volumeLevel = Math.ceil(volume * (volumeIcons.length - 1));
   const VolumeIcon = volumeIcons[volumeLevel];
-  const handleVolumeClick = () => (volume === 0 ? videoControls.unmute() : videoControls.mute());
+  const handleVolumeClick = useStableCallback(() =>
+    volume === 0 ? videoControls.unmute() : videoControls.mute()
+  );
 
   return (
     <div className="volume button-wrap">
