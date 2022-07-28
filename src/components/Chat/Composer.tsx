@@ -20,7 +20,7 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { BiSmile } from "react-icons/bi";
-import { useToggle } from "react-use";
+import { useTimeout, useTimeoutFn, useToggle } from "react-use";
 import {
   Descendant,
   Editor,
@@ -68,7 +68,9 @@ interface ComposerProps {
   nicks: string[];
   tags: string[];
   commands: string[];
-  maxAutoCompleteResults?: number;
+  maxAutocompleteResults?: number;
+  slowTypingDelay?: number;
+  autocompleteHideDelay?: number;
 }
 
 const Composer: React.FC<ComposerProps> = ({
@@ -78,7 +80,9 @@ const Composer: React.FC<ComposerProps> = ({
   nicks,
   tags,
   commands,
-  maxAutoCompleteResults = 10,
+  maxAutocompleteResults = 10,
+  slowTypingDelay = 600,
+  autocompleteHideDelay = 15000,
 }) => {
   const { t } = useTranslation();
   const [{ uiConfig, emoji }] = useChat();
@@ -112,7 +116,7 @@ const Composer: React.FC<ComposerProps> = ({
 
     let count = 0;
     const truncate = (entries: SearchSourceEntry[]) => {
-      const res = entries.slice(0, maxAutoCompleteResults - count);
+      const res = entries.slice(0, maxAutocompleteResults - count);
       count += res.length;
       return res;
     };
@@ -158,6 +162,28 @@ const Composer: React.FC<ComposerProps> = ({
     }
   };
 
+  const haveMoreSuggestions = matchEntries.some(
+    (e) => (e.substitution ?? e.value) !== currentSearch?.query
+  );
+  const [isTypingSlow, setIsTypingSlow] = useState(false);
+  const [, , resetFastTimeout] = useTimeoutFn(() => setIsTypingSlow(true), slowTypingDelay);
+  const [, , resetSlowTimeout] = useTimeoutFn(() => setIsTypingSlow(false), autocompleteHideDelay);
+  useEffect(() => setIsTypingSlow((prev) => prev && haveMoreSuggestions), [haveMoreSuggestions]);
+  const [isFocused, setIsFocused] = useState(false);
+  const showAutocomplete =
+    uiConfig.autocompleteHelper && isFocused && isTypingSlow && haveMoreSuggestions;
+
+  const handleKeyPress = useCallback(() => {
+    resetFastTimeout();
+    resetSlowTimeout();
+  }, []);
+
+  const handleFocus = useCallback(() => {
+    setIsTypingSlow(haveMoreSuggestions);
+    setIsFocused(true);
+  }, [haveMoreSuggestions]);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === Key.Enter) {
@@ -199,6 +225,7 @@ const Composer: React.FC<ComposerProps> = ({
             lastEntry: selectedMatch.entry,
           });
           setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
+          setIsTypingSlow(true);
           return;
         }
         case Key.Escape: {
@@ -213,10 +240,6 @@ const Composer: React.FC<ComposerProps> = ({
     },
     [matchEntries, selectedMatch, search, currentSearch]
   );
-
-  const [isFocused, setIsFocused] = useState(false);
-  const handleFocus = useCallback(() => setIsFocused(true), []);
-  const handleBlur = useCallback(() => setIsFocused(false), []);
 
   const insertAutocompleteEntry = (entry: SearchSourceEntry): Range => {
     const prefix = entry.type !== "modifier" ? search.prefix : "";
@@ -251,11 +274,6 @@ const Composer: React.FC<ComposerProps> = ({
     setSelectedMatch(defaultSelectedMatch);
   };
 
-  const showSuggestions =
-    isFocused &&
-    uiConfig.autocompleteHelper &&
-    matchEntries.some((e) => (e.substitution ?? e.value) !== currentSearch?.query);
-
   const ref = useRef<HTMLDivElement>();
 
   useDrag(
@@ -281,7 +299,7 @@ const Composer: React.FC<ComposerProps> = ({
 
   return (
     <div className="chat_composer">
-      {showSuggestions && (
+      {showAutocomplete && (
         <div className="chat_composer__autocomplete">
           <div className="chat_composer__autocomplete__list">
             {matchSources.map((m, i) => (
@@ -308,6 +326,7 @@ const Composer: React.FC<ComposerProps> = ({
             className="chat_composer__textbox"
             decorate={decorate}
             onKeyDown={handleKeyDown}
+            onKeyPress={handleKeyPress}
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder={t("chat.composer.Write a message")}
