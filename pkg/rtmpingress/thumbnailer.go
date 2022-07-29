@@ -96,7 +96,6 @@ func (t *Thumbnailer) GetImageFromMp4(src []byte) ([]byte, error) {
 			t.MaxWidth,
 			t.MaxHeight,
 		),
-		"-f", "singlejpeg",
 		"-q:v", strconv.Itoa(t.Quality),
 		t.dst,
 	)
