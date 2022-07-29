@@ -38,8 +38,7 @@ function configure_system() {
 }
 
 function install_tools() {
-	# KUBE_VERSION=1.22.2-00
-	CRIO_VERSION=1.21
+	CRIO_VERSION=1.24
 	VERSION_ID=$(grep VERSION_ID </etc/os-release | awk -F'=' '{print $2}' | tr -d \")
 	OS=xUbuntu_$VERSION_ID
 	KEYRINGS_DIR=/usr/share/keyrings
