@@ -152,8 +152,6 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 					return nil, fmt.Errorf("unsupported driver: %s", driverName)
 				}
 				return driverConfig, mapstructure.Decode(val, driverConfig)
-			case timeType:
-				return time.Parse(time.RFC3339, val.(string))
 			}
 			return val, nil
 		},
