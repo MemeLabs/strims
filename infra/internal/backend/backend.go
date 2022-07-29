@@ -557,7 +557,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		b.log.Info("Creating a new cluster")
 		if err = b.stream(
 			ssh,
-			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q --host-ip %q | tee -a /tmp/setup.log", b.certificateKey, n.Networks.V4[0]),
+			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q --public-ip %q | tee -a /tmp/setup.log", b.certificateKey, n.Networks.V4[0]),
 		); err != nil {
 			return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 		}

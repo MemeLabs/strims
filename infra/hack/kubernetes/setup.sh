@@ -186,7 +186,7 @@ if ! command -v sudo &>/dev/null; then
 	alias sudo=
 fi
 
-options=$(getopt -o nh:c: --long new,hostname:,ca-key: -- "$@")
+options=$(getopt -o nh:c:p: --long new,hostname:,ca-key:,public-ip: -- "$@")
 eval set -- "$options"
 
 NEW_CLUSTER=false
