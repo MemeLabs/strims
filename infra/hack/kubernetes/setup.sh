@@ -136,7 +136,7 @@ function start_cluster() {
 	sudo systemctl enable --now kubelet
 
 	tee /tmp/kubeadm.yaml <<EOF
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 localAPIEndpoint:
   advertiseAddress: ${wg_ip}
@@ -149,9 +149,14 @@ nodeRegistration:
     - Swap
     - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
     - SystemVerification
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
 certificateKey: ${ca_key}
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 controlPlaneEndpoint: ${wg_ip}:6443
 networking:
@@ -168,8 +173,6 @@ EOF
 	mkdir -p "$HOME"/.kube
 	sudo cp -i /etc/kubernetes/admin.conf "$HOME"/.kube/config
 	sudo chown "$(id -u)":"$(id -g)" "$HOME"/.kube/config
-
-	kubectl taint nodes --all node-role.kubernetes.io/master-
 
 	curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml \
 		| sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' \
