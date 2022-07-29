@@ -4,18 +4,18 @@
 import "./Grid.scss";
 
 import clsx from "clsx";
+import { Base64 } from "js-base64";
 import React, { useCallback, useEffect, useState } from "react";
+import { HiOutlineUser } from "react-icons/hi";
 
 import monkey from "../../../assets/directory/monkey.png";
-import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
+import { Listing, ListingSnippet, Network } from "../../apis/strims/network/v1/directory/directory";
 import SnippetImage from "../../components/Directory/SnippetImage";
 import { useLayout } from "../../contexts/Layout";
 import { useOpenListing } from "../../hooks/directory";
 import { formatNumber } from "../../lib/number";
 
-interface DirectoryGridItemProps extends DirectoryListing {
-  networkKey: string;
-}
+type DirectoryGridItemProps = DirectoryListing;
 
 const EMPTY_SNIPPET = new ListingSnippet();
 
@@ -24,7 +24,7 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   snippet,
   userCount,
   recentUserCount,
-  networkKey,
+  network,
 }) => {
   const layout = useLayout();
 
@@ -44,7 +44,10 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
   }
 
   const openListing = useOpenListing();
-  const handleClick = useCallback(() => openListing(networkKey, listing), [networkKey, listing]);
+  const handleClick = useCallback(
+    () => openListing(Base64.fromUint8Array(network.key, true), listing),
+    [network, listing]
+  );
 
   const title = snippet.title.trim();
 
@@ -60,10 +63,12 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
           fallback={monkey}
           source={snippet.thumbnail}
         />
-        <span className="directory_grid__item__viewer_count">
-          {formatNumber(Number(snippet.userCount))}{" "}
-          {snippet.userCount === BigInt(1) ? "viewer" : "viewers"}
-        </span>
+        {snippet.userCount > 0 && (
+          <span className="directory_grid__item__viewer_count">
+            {formatNumber(Number(snippet.userCount))}{" "}
+            {snippet.userCount === BigInt(1) ? "viewer" : "viewers"}
+          </span>
+        )}
       </button>
       <div className="directory_grid__item__channel">
         <SnippetImage
@@ -81,6 +86,10 @@ const DirectoryGridItem: React.FC<DirectoryGridItemProps> = ({
             <span className="directory_grid__item__channel__name">{snippet.channelName}</span>
           )}
         </div>
+        <span className="directory_grid__item__channel__user_count">
+          {formatNumber(Number(userCount))}
+          <HiOutlineUser />
+        </span>
       </div>
     </div>
   );
@@ -92,14 +101,14 @@ export interface DirectoryListing {
   snippet: ListingSnippet;
   userCount: number;
   recentUserCount: number;
+  network: Network;
 }
 
 export interface DirectoryGridProps {
   listings: DirectoryListing[];
-  networkKey: string;
 }
 
-export const DirectoryGrid: React.FC<DirectoryGridProps> = ({ listings, networkKey }) => (
+export const DirectoryGrid: React.FC<DirectoryGridProps> = ({ listings }) => (
   <div className="directory_grid">
     {listings
       .filter(
@@ -108,7 +117,7 @@ export const DirectoryGrid: React.FC<DirectoryGridProps> = ({ listings, networkK
           listing?.content?.case === Listing.ContentCase.MEDIA
       )
       .map((listing) => (
-        <DirectoryGridItem key={listing.id.toString()} networkKey={networkKey} {...listing} />
+        <DirectoryGridItem key={listing.id.toString()} {...listing} />
       ))}
   </div>
 );

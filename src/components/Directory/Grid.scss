@@ -39,6 +39,7 @@
     &__channel {
       display: flex;
       flex-direction: row;
+      align-items: center;
       background-color: var(--body-foreground);
       padding: 0.5rem;
 
@@ -69,6 +70,16 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      &__user_count {
+        border-radius: var(--border-radius-medium);
+        background: var(--color-green-4);
+        padding: 0.1rem 0.3rem;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.1rem;
       }
     }
   }

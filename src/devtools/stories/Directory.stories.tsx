@@ -3,10 +3,11 @@
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
+import { Base64 } from "js-base64";
 import React from "react";
 
 import { FrontendClient } from "../../apis/client";
-import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
+import { Listing, ListingSnippet, Network } from "../../apis/strims/network/v1/directory/directory";
 import { registerDirectoryFrontendService } from "../../apis/strims/network/v1/directory/directory_rpc";
 import DirectoryGrid, { DirectoryListing } from "../../components/Directory/Grid";
 import Search from "../../components/Directory/Search";
@@ -46,10 +47,15 @@ const GridStory: React.FC = () => {
       snippet: new ListingSnippet(e.snippet),
       userCount: 0,
       recentUserCount: 0,
+      network: new Network({
+        id: BigInt(0),
+        name: "test-network",
+        key: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
+      }),
     });
   }
 
-  return <DirectoryGrid networkKey="" listings={listings} />;
+  return <DirectoryGrid listings={listings} />;
 };
 
 export default [

@@ -58,6 +58,7 @@ const Directory: React.FC = () => {
           snippet: l.snippet,
           userCount: l.userCount,
           recentUserCount: l.recentUserCount,
+          network: n.network,
         });
       }
     }
@@ -70,7 +71,7 @@ const Directory: React.FC = () => {
   return (
     <div>
       <TestButton />
-      <DirectoryGrid listings={gridListings} networkKey={params.networkKey} />
+      <DirectoryGrid listings={gridListings} />
     </div>
   );
 };
