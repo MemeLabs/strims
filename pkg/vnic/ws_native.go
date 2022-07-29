@@ -16,7 +16,8 @@ import (
 )
 
 type WSInterfaceOptions struct {
-	ServeMux *httputil.MapServeMux
+	ServeMux    *httputil.MapServeMux
+	ConnOptions httputil.WSOptions
 }
 
 // NewWSInterface ...
@@ -42,7 +43,7 @@ func (f *wsInterface) Listen(h *Host) error {
 		f.path = fmt.Sprintf("/%x", h.profileKey.Public)
 		f.logger.Debug("ws vnic listener starting", zap.String("path", f.path))
 		f.options.ServeMux.HandleWSFunc(f.path, func(c *websocket.Conn) {
-			h.AddLink(httputil.NewWSReadWriter(c))
+			h.AddLink(httputil.NewWSReadWriter(c, f.options.ConnOptions))
 		})
 	}
 	return nil
@@ -65,5 +66,5 @@ func (f *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
 	if err != nil {
 		return nil, err
 	}
-	return httputil.NewWSReadWriter(c), nil
+	return httputil.NewWSReadWriter(c, f.options.ConnOptions), nil
 }

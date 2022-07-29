@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -96,12 +97,19 @@ type StorageConfig struct {
 	} `yaml:"postgres"`
 }
 
+type WebSocketConfig struct {
+	WriteTimeout Optional[time.Duration] `yaml:"writeTimeout"`
+	ReadTimeout  Optional[time.Duration] `yaml:"readTimeout"`
+	PingInterval Optional[time.Duration] `yaml:"pingInterval"`
+}
+
 type HTTPConfig struct {
 	Address Optional[string] `yaml:"address"`
 	TLS     struct {
 		Cert Optional[string] `yaml:"cert"`
 		Key  Optional[string] `yaml:"key"`
 	} `yaml:"tls"`
+	WebSocket WebSocketConfig `yaml:"webSocket"`
 }
 
 type PeerConfig struct {
@@ -137,6 +145,7 @@ type PeerConfig struct {
 		} `yaml:"webrtc"`
 		WebSocket struct {
 			Enabled Optional[bool] `yaml:"enabled"`
+			WebSocketConfig
 		} `yaml:"websocket"`
 	} `yaml:"vnic"`
 }

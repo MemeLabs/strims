@@ -91,7 +91,7 @@ func (s *devToolsServer) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	server := rpc.NewServer(s.logger, &rpc.RWDialer{
 		Logger:     s.logger,
-		ReadWriter: httputil.NewWSReadWriter(c),
+		ReadWriter: httputil.NewDefaultWSReadWriter(c),
 	})
 
 	devtoolsv1.RegisterDevToolsService(server, s.devTools)

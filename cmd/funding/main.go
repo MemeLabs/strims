@@ -78,7 +78,7 @@ func (s *fundingServer) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	server := rpc.NewServer(s.logger, &rpc.RWDialer{
 		Logger:     s.logger,
-		ReadWriter: httputil.NewWSReadWriter(c),
+		ReadWriter: httputil.NewDefaultWSReadWriter(c),
 	})
 
 	funding.RegisterFundingService(server, s.service)

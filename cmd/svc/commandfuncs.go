@@ -114,6 +114,11 @@ func runCmd(fs Flags) error {
 		if cfg.VNIC.WebSocket.Enabled.Get(true) {
 			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{
 				ServeMux: httpmux,
+				ConnOptions: httputil.WSOptions{
+					WriteTimeout: cfg.VNIC.WebSocket.WriteTimeout.Get(cfg.HTTP.WebSocket.WriteTimeout.Get(0)),
+					ReadTimeout:  cfg.VNIC.WebSocket.ReadTimeout.Get(cfg.HTTP.WebSocket.ReadTimeout.Get(0)),
+					PingInterval: cfg.VNIC.WebSocket.PingInterval.Get(cfg.HTTP.WebSocket.PingInterval.Get(0)),
+				},
 			})))
 		}
 		host, err := vnic.New(logger, key, opts...)
@@ -152,8 +157,11 @@ func runCmd(fs Flags) error {
 		}
 
 		httpmux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
-			httputil.ScheduleWSKeepalive(ctx, c, nil)
-			err := srv.Listen(ctx, httputil.NewWSReadWriter(c))
+			err := srv.Listen(ctx, httputil.NewWSReadWriter(c, httputil.WSOptions{
+				WriteTimeout: cfg.HTTP.WebSocket.WriteTimeout.Get(0),
+				ReadTimeout:  cfg.HTTP.WebSocket.ReadTimeout.Get(0),
+				PingInterval: cfg.HTTP.WebSocket.PingInterval.Get(0),
+			}))
 			logger.Debug("remote client closed", zap.Error(err))
 		}))
 	}

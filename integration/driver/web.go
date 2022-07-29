@@ -165,7 +165,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	rw := httputil.NewWSReadWriter(c)
+	rw := httputil.NewDefaultWSReadWriter(c)
 	client, err := rpc.NewClient(t.logger, &rpc.RWDialer{
 		Logger:     t.logger,
 		ReadWriter: rw,
