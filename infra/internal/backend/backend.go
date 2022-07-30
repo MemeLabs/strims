@@ -36,6 +36,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+//go:embed setup.sh
+var setupsh []byte
+
 // DriverConfig ...
 type DriverConfig interface {
 	isDriverConfig()
@@ -537,7 +540,18 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
-	if err = ssh.Scp(fmt.Sprintf("%s/setup.sh", b.scriptDirectory), "/tmp/setup.sh"); err != nil {
+	var setupScript *os.File
+	setupScript, err = ioutil.TempFile("", "strims-setup-")
+	if err != nil {
+		return fmt.Errorf("failed creating tmp file: %w", err)
+	}
+	defer os.Remove(setupScript.Name())
+
+	if _, err = setupScript.Write(setupsh); err != nil {
+		return fmt.Errorf("failed to write out setupsh: %w", err)
+	}
+
+	if err = ssh.Scp(setupScript.Name(), "/tmp/setup.sh"); err != nil {
 		return fmt.Errorf("failed to copy setup.sh script to node: %w", err)
 	}
 
