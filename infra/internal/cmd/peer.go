@@ -15,9 +15,6 @@ func init() {
 	addPeerCmd.Flags().IntP("port", "p", 51820, "WireGuard listening port")
 	addPeerCmd.MarkFlagRequired("address")
 
-	peerCmd.PersistentFlags().StringP("name", "n", "", "name of peer")
-	peerCmd.MarkFlagRequired("name")
-
 	// TODO: list peers
 	peerCmd.AddCommand(addPeerCmd)
 	peerCmd.AddCommand(removePeerCmd)
@@ -31,17 +28,17 @@ var peerCmd = &cobra.Command{
 }
 
 var addPeerCmd = &cobra.Command{
-	Use:   "add",
-	Short: "Add an external peer",
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		name, _ := cmd.Flags().GetString("name")
+	Use:   "add [name]",
+	Short: "Add an external peer by name",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
 		address, _ := cmd.Flags().GetString("address")
 		port, err := cmd.Flags().GetInt("port")
 		if err != nil {
 			return err
 		}
 
-		conf, err := backend.AddStaticPeer(context.TODO(), name, address, port)
+		conf, err := backend.AddStaticPeer(context.TODO(), args[0], address, port)
 		if err != nil {
 			return err
 		}
@@ -53,21 +50,21 @@ var addPeerCmd = &cobra.Command{
 
 var removePeerCmd = &cobra.Command{
 	Aliases: []string{"delete"},
-	Use:     "remove",
-	Short:   "Remove an external peer",
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		name, _ := cmd.Flags().GetString("name")
-		return backend.RemoveStaticPeer(context.TODO(), name)
+	Use:     "remove [name]",
+	Short:   "Remove an external peer by name",
+	Args:    cobra.MinimumNArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		return backend.RemoveStaticPeer(context.TODO(), args[0])
 	},
 }
 
 var configPeerCmd = &cobra.Command{
 	Aliases: []string{"get"},
-	Use:     "config",
-	Short:   "Get the WireGuard config for a specific peer",
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		name, _ := cmd.Flags().GetString("name")
-		conf, err := backend.GetConfigForPeer(context.TODO(), name)
+	Use:     "config [name]",
+	Short:   "Get the WireGuard config for a specific peer by name",
+	Args:    cobra.MinimumNArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		conf, err := backend.GetConfigForPeer(context.TODO(), args[0])
 		if err != nil {
 			return err
 		}

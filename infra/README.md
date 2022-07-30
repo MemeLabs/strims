@@ -66,7 +66,7 @@ infra node destroy --name [name]
 #### Add
 
 ```
-infra peer add --name [name] --address [public IPv4]
+infra peer add [name] --address [public IPv4]
 ```
 
 This will output this peer's specific WireGuard config that can be written to
@@ -76,7 +76,7 @@ wg-quick@wg0`
 #### Remove
 
 ```
-infra peer remove --name [name]
+infra peer remove [name]
 ```
 
 #### Generate `CertificateKey`
