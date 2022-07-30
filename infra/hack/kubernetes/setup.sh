@@ -8,12 +8,15 @@ function configure_system() {
 	DEBIAN_FRONTEND=noninteractive
 	sudo apt-get update
 	sudo apt-get upgrade -y
-	sudo apt autoremove -y --purge \
-		snapd
 
-	sudo rm -rf /var/cache/snapd/
-	sudo apt-get clean
-	sudo apt-mark hold snapd
+	if ! sudo grep -qa container=lxc /proc/1/environ ; then
+		sudo apt autoremove -y --purge \
+			snapd
+
+		sudo rm -rf /var/cache/snapd/
+		sudo apt-get clean
+		sudo apt-mark hold snapd
+	fi
 
 	sudo apt-get install -y \
 		apt-transport-https \
@@ -107,8 +110,12 @@ net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 EOF
 
-	sudo modprobe overlay
-	sudo modprobe br_netfilter
+
+	if ! sudo grep -qa container=lxc /proc/1/environ ; then
+		sudo modprobe overlay
+		sudo modprobe br_netfilter
+	fi
+
 	sudo sysctl --system
 	sudo systemctl daemon-reload
 	sudo systemctl enable --now crio.service
