@@ -22,12 +22,12 @@ func TestConfig(t *testing.T) {
 	cfg := InterfaceConfig{
 		PrivateKey: "QGlZp+MxF1N+nZ4etcXg2tFkxgdCuooJq86v9wJOxko=",
 		Address:    "10.0.0.1/32",
-		ListenPort: 51280,
+		ListenPort: 51820,
 		Peers: []InterfacePeerConfig{
 			{
 				PublicKey:  "oJ+yj94MoLJOsuZyOB+r9u2BrPW+FUiASCqL/+Xpq34=",
 				AllowedIPs: "10.0.0.2/32",
-				Endpoint:   "node0.strims.gg:51280",
+				Endpoint:   "node0.strims.gg:51820",
 			},
 		},
 	}
@@ -35,11 +35,11 @@ func TestConfig(t *testing.T) {
 	cstr := `[Interface]
 PrivateKey = QGlZp+MxF1N+nZ4etcXg2tFkxgdCuooJq86v9wJOxko=
 Address = 10.0.0.1/32
-ListenPort = 51280
+ListenPort = 51820
 [Peer]
 PublicKey = oJ+yj94MoLJOsuZyOB+r9u2BrPW+FUiASCqL/+Xpq34=
 AllowedIPs = 10.0.0.2/32
-Endpoint = node0.strims.gg:51280
+Endpoint = node0.strims.gg:51820
 PersistentKeepalive = 0
 `
 	assert.Equal(t, cstr, cfg.String())

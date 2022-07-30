@@ -12,7 +12,7 @@ import (
 
 func init() {
 	addPeerCmd.Flags().StringP("address", "a", "", "external IP address")
-	addPeerCmd.Flags().IntP("port", "p", 51280, "WireGuard listening port")
+	addPeerCmd.Flags().IntP("port", "p", 51820, "WireGuard listening port")
 	addPeerCmd.MarkFlagRequired("address")
 
 	peerCmd.PersistentFlags().StringP("name", "n", "", "name of peer")
