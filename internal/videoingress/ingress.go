@@ -278,6 +278,7 @@ func (s *ingressStream) Close() {
 
 		s.transfer.Remove(s.transferID)
 		s.unpublishDirectoryListing()
+		s.directory.DeleteSnippet(s.swarm.ID())
 	})
 }
 

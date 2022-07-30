@@ -163,6 +163,9 @@ func (m *snippetMap) Delete(swarmID ppspp.SwarmID) {
 }
 
 func (m *snippetMap) Get(swarmID ppspp.SwarmID) (*snippetItem, bool) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	it, ok := m.snippets.Get(&snippetItem{id: swarmID}).(*snippetItem)
 	return it, ok
 }

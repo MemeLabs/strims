@@ -109,7 +109,7 @@ type HTTPConfig struct {
 		Cert Optional[string] `yaml:"cert"`
 		Key  Optional[string] `yaml:"key"`
 	} `yaml:"tls"`
-	WebSocket WebSocketConfig `yaml:"webSocket"`
+	WebSocket WebSocketConfig `yaml:"websocket"`
 }
 
 type PeerConfig struct {

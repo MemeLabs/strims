@@ -18,6 +18,7 @@ import (
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/ppspp"
@@ -522,8 +523,8 @@ func (d *directoryService) mergeSnippet(listingID uint64, delta *networkv1direct
 	return true
 }
 
-func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64, swarmID ppspp.SwarmID, candidate kademlia.ID) error {
-	ctx, cancel := context.WithCancel(ctx)
+func (d *directoryService) loadMediaEmbed(stop ioutil.Stopper, listingID uint64, swarmID ppspp.SwarmID, candidate kademlia.ID) error {
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	client, err := d.dialer.ClientWithHostAddr(ctx, d.network.Get().GetServerConfig().GetKey().GetPublic(), candidate, vnic.SnippetPort)
@@ -536,18 +537,18 @@ func (d *directoryService) loadMediaEmbed(ctx context.Context, listingID uint64,
 
 	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
 	go func() {
+		defer cancel()
 		for {
 			select {
 			case res, ok := <-ch:
 				if !ok || res.SnippetDelta == nil {
-					cancel()
 					return
 				}
 				if d.mergeSnippet(listingID, res.SnippetDelta) {
 					// TODO: move on to another candidate if we haven't received a
 					// successful update after... some timeout
 				}
-			case <-ctx.Done():
+			case <-stop:
 				return
 			}
 		}
@@ -655,7 +656,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 			return nil, err
 		}
 		uri, _ := ppspp.ParseURI(req.Listing.GetMedia().SwarmUri)
-		go d.loadMediaEmbed(context.Background(), l.id, uri.ID, candidate)
+		go d.loadMediaEmbed(l.Done(), l.id, uri.ID, candidate)
 	}
 
 	return &networkv1directory.PublishResponse{Id: l.id}, nil
@@ -908,6 +909,7 @@ func newListing(l *networkv1directory.Listing, r *networkv1directory.ListingReco
 		snippet:      &networkv1directory.ListingSnippet{},
 		moderation:   r.GetModeration(),
 		modifiedTime: timeutil.Now(),
+		done:         make(chan struct{}),
 	}, nil
 }
 
@@ -931,6 +933,7 @@ type listing struct {
 	viewerSessionCount    prometheus.Gauge
 	publisherUserCount    prometheus.Gauge
 	viewerUserCount       prometheus.Gauge
+	done                  chan struct{}
 }
 
 func (l *listing) InitID(id uint64) {
@@ -946,6 +949,11 @@ func (l *listing) Cleanup() {
 	viewerSessionCount.DeleteLabelValues(listingContentType(l.listing), strconv.FormatUint(l.id, 10))
 	publisherUserCount.DeleteLabelValues(listingContentType(l.listing), strconv.FormatUint(l.id, 10))
 	viewerUserCount.DeleteLabelValues(listingContentType(l.listing), strconv.FormatUint(l.id, 10))
+	close(l.done)
+}
+
+func (l *listing) Done() <-chan struct{} {
+	return l.done
 }
 
 func listingContentType(l *networkv1directory.Listing) string {
