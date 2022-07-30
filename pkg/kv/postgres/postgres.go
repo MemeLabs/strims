@@ -105,19 +105,19 @@ type Tx struct {
 
 // Put ...
 func (t Tx) Put(key string, value []byte) error {
-	_, err := t.tx.Exec(t.ctx, fmt.Sprintf(`INSERT INTO "%[1]s" VALUES($1, $2) ON CONFLICT ON CONSTRAINT "%[1]s_pkey" DO UPDATE SET "value" = $2`, t.table), key, value)
+	_, err := t.tx.Exec(t.ctx, fmt.Sprintf(`INSERT INTO "%[1]s" VALUES(%s, $1) ON CONFLICT ON CONSTRAINT "%[1]s_pkey" DO UPDATE SET "value" = $1`, t.table, escapeString(key)), value)
 	return err
 }
 
 // Delete ...
 func (t Tx) Delete(key string) error {
-	_, err := t.tx.Exec(t.ctx, fmt.Sprintf(`DELETE FROM "%s" WHERE "key" = $1`, t.table), key)
+	_, err := t.tx.Exec(t.ctx, fmt.Sprintf(`DELETE FROM "%s" WHERE "key" = %s`, t.table, escapeString(key)))
 	return err
 }
 
 // Get ...
 func (t Tx) Get(key string) (value []byte, err error) {
-	r := t.tx.QueryRow(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" = $1`, t.table), key)
+	r := t.tx.QueryRow(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" = %s`, t.table, escapeString(key)))
 	err = r.Scan(&value)
 	if err == pgx.ErrNoRows {
 		return nil, kv.ErrRecordNotFound
@@ -143,7 +143,7 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 		limit = strconv.Itoa(cursor.Last)
 	}
 
-	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" > $1 AND "key" < $2 ORDER BY "key" %s LIMIT %s`, t.table, order, limit), cursor.After, cursor.Before)
+	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" > %s AND "key" < %s ORDER BY "key" %s LIMIT %s`, t.table, escapeString(cursor.After), escapeString(cursor.Before), order, limit))
 	if err != nil {
 		return nil, err
 	}
@@ -155,4 +155,43 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 		values = append(values, v)
 	}
 	return values, nil
+}
+
+const lowerhex = "0123456789abcdef"
+
+func escapeString(s string) string {
+	buf := make([]byte, 0, 3*len(s)/2)
+	buf = append(buf, `'`...)
+	for _, r := range s {
+		switch r {
+		case '\b':
+			buf = append(buf, `\b`...)
+		case '\f':
+			buf = append(buf, `\f`...)
+		case '\n':
+			buf = append(buf, `\n`...)
+		case '\r':
+			buf = append(buf, `\r`...)
+		case '\t':
+			buf = append(buf, `\t`...)
+		case '\'':
+			buf = append(buf, `''`...)
+		default:
+			if r < 0x7f {
+				buf = append(buf, byte(r))
+			} else if r < 0x10000 {
+				buf = append(buf, `\u`...)
+				for s := 12; s >= 0; s -= 4 {
+					buf = append(buf, lowerhex[r>>uint(s)&0xF])
+				}
+			} else {
+				buf = append(buf, `\U`...)
+				for s := 28; s >= 0; s -= 4 {
+					buf = append(buf, lowerhex[r>>uint(s)&0xF])
+				}
+			}
+		}
+	}
+	buf = append(buf, `'`...)
+	return string(buf)
 }
