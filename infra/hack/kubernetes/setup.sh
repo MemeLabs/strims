@@ -148,18 +148,14 @@ localAPIEndpoint:
   advertiseAddress: ${wg_ip}
 nodeRegistration:
   name: ${HOSTNAME}
+  criSocket: unix://var/run/crio/crio.sock
   kubeletExtraArgs:
     node-ip: ${wg_ip}
-    node-labels: "strims.gg/public-ip=${public_ip}"
+    node-labels: "strims.gg/public-ip=${public_ip},strims.gg/svc=leader"
   ignorePreflightErrors:
     - Swap
     - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
     - SystemVerification
-  taints:
-  - effect: NoSchedule
-    key: node-role.kubernetes.io/master
-  - effect: NoSchedule
-    key: node-role.kubernetes.io/control-plane
 certificateKey: ${ca_key}
 ---
 apiVersion: kubeadm.k8s.io/v1beta3

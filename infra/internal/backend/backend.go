@@ -922,7 +922,7 @@ func (b *Backend) run(ssh *easyssh.MakeConfig, cmd string, timeout ...time.Durat
 
 var joinKubeadmConfigTpls = map[node.NodeType]string{
 	node.TypeWorker: `
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
 discovery:
   bootstrapToken:
@@ -931,11 +931,12 @@ discovery:
     caCertHashes: [{{ .CaCertHash }}]
 nodeRegistration:
   name: {{ .NodeName }}
+  criSocket: unix://var/run/crio/crio.sock
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
-    node-labels: "strims.gg/public-ip={{ .PublicIP }}"`,
+    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder"`,
 	node.TypeController: `
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
 discovery:
   bootstrapToken:
@@ -944,9 +945,10 @@ discovery:
     caCertHashes: [{{ .CaCertHash }}]
 nodeRegistration:
   name: {{ .NodeName }}
+  criSocket: unix://var/run/crio/crio.sock
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
-    node-labels: "strims.gg/public-ip={{ .PublicIP }}"
+    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder"
 controlPlane:
   certificateKey: {{ .CaKey }}
   localAPIEndpoint:
