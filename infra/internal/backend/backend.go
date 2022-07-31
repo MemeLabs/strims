@@ -30,7 +30,6 @@ import (
 
 	// db driver
 	_ "github.com/lib/pq"
-	"github.com/sony/sonyflake"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -104,7 +103,6 @@ type Config struct {
 		Host string
 		Port int
 	}
-	FlakeStartTime  time.Time
 	Providers       map[string]DriverConfig
 	SSHIdentityFile string
 	ScriptDirectory string
@@ -196,10 +194,6 @@ func New(cfg Config) (*Backend, error) {
 
 	boil.SetDB(db)
 
-	flake := sonyflake.NewSonyflake(sonyflake.Settings{
-		StartTime: cfg.FlakeStartTime,
-	})
-
 	drivers := map[string]node.Driver{"custom": node.NewCustomDriver()}
 	for name, dci := range cfg.Providers {
 		switch dc := dci.(type) {
@@ -238,7 +232,6 @@ func New(cfg Config) (*Backend, error) {
 		NodeDrivers:     drivers,
 		DB:              db,
 		log:             log,
-		flake:           flake,
 		sshIdentityFile: cfg.SSHIdentityFile,
 		scriptDirectory: cfg.ScriptDirectory,
 		certificateKey:  cfg.CertificateKey,
@@ -291,16 +284,10 @@ type Backend struct {
 	NodeDrivers     map[string]node.Driver
 	DB              *sql.DB
 	log             *zap.Logger
-	flake           *sonyflake.Sonyflake
 	scriptDirectory string
 	sshIdentityFile string
 	certificateKey  string
 	peers           []*wgutil.InterfacePeerConfig
-}
-
-// NextID ...
-func (b *Backend) NextID() (uint64, error) {
-	return b.flake.NextID()
 }
 
 // SSHIdentityFile ...

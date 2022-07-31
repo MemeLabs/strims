@@ -9,7 +9,6 @@ DB:
   Pass: ""
   Host: ""
   Port: 5432
-FlakeStartTime: 2019-09-14T00:00:00Z
 Providers:
   digitalocean:
     Driver: DigitalOcean
