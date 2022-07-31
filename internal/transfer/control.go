@@ -19,6 +19,7 @@ import (
 	"github.com/MemeLabs/strims/internal/event"
 	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -67,6 +68,8 @@ func NewControl(
 		searchQueue: newSearchQueue(int(peerSearchInterval / peerSearchTickRate)),
 		networks:    hashmap.New[[]byte, *network](hashmap.NewByteInterface[[]byte]()),
 		runner:      ppspp.NewRunner(ctx, logger),
+
+		hackDialedPeers: map[kademlia.ID]struct{}{},
 	}
 }
 
@@ -86,6 +89,8 @@ type control struct {
 	searchQueue *searchQueue
 	networks    hashmap.Map[[]byte, *network]
 	runner      *ppspp.Runner
+
+	hackDialedPeers map[kademlia.ID]struct{}
 }
 
 // Run ...
@@ -173,9 +178,15 @@ func (c *control) loadNetworkPeers(t *transfer, n *network) error {
 			zap.Stringer("peer", p.HostID),
 			zap.Bool("connected", c.vpn.VNIC().HasPeer(p.HostID)),
 		)
-		if !c.vpn.VNIC().HasPeer(p.HostID) {
-			go node.PeerExchange.Connect(p.HostID)
+		if c.vpn.VNIC().HasPeer(p.HostID) {
+			continue
 		}
+		if _, ok := c.hackDialedPeers[p.HostID]; ok {
+			continue
+		}
+		c.hackDialedPeers[p.HostID] = struct{}{}
+
+		go node.PeerExchange.Connect(p.HostID)
 		// c.candidates.addToCandidateThing(node, t, p)
 		count++
 	}
