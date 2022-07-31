@@ -87,7 +87,7 @@ const BridgePage: React.FC = () => {
     );
 
     const t1 = await new Promise<Uint8Array[]>((resolve, reject) =>
-      kv.scanCursor("foo:", "foo:00038", 5, 0, (error: string, value: Uint8Array[]) =>
+      kv.scanCursor("foo:", "", "foo:00038", 5, 0, (error: string, value: Uint8Array[]) =>
         error ? reject(error) : resolve(value)
       )
     );
