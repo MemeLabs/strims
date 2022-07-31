@@ -9,7 +9,7 @@ function configure_system() {
 	sudo apt-get update
 	sudo apt-get upgrade -y
 
-	if ! sudo grep -qa container=lxc /proc/1/environ ; then
+	if ! sudo grep -qa container=lxc /proc/1/environ; then
 		sudo apt autoremove -y --purge \
 			snapd
 
@@ -110,8 +110,7 @@ net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 EOF
 
-
-	if ! sudo grep -qa container=lxc /proc/1/environ ; then
+	if ! sudo grep -qa container=lxc /proc/1/environ; then
 		sudo modprobe overlay
 		sudo modprobe br_netfilter
 	fi
@@ -181,9 +180,9 @@ EOF
 	sudo cp -i /etc/kubernetes/admin.conf "$HOME"/.kube/config
 	sudo chown "$(id -u)":"$(id -g)" "$HOME"/.kube/config
 
-	curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml \
-		| sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' \
-		| kubectl apply -f -
+	curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml |
+		sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' |
+		kubectl apply -f -
 
 	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.22/deploy/local-path-storage.yaml
 
@@ -203,13 +202,25 @@ CA_KEY=
 PUBLIC_IP=
 
 while true; do
-  case "$1" in
-    -n | --new ) NEW_CLUSTER=true; shift ;;
-    -h | --hostname ) HOST_NAME="$2"; shift 2 ;;
-    -c | --ca-key ) CA_KEY="$2"; shift 2 ;;
-    -p | --public-ip ) PUBLIC_IP="$2"; shift 2 ;;
-    * ) break ;;
-  esac
+	case "$1" in
+	-n | --new)
+		NEW_CLUSTER=true
+		shift
+		;;
+	-h | --hostname)
+		HOST_NAME="$2"
+		shift 2
+		;;
+	-c | --ca-key)
+		CA_KEY="$2"
+		shift 2
+		;;
+	-p | --public-ip)
+		PUBLIC_IP="$2"
+		shift 2
+		;;
+	*) break ;;
+	esac
 done
 
 set -exo pipefail
