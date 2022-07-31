@@ -563,6 +563,11 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		}
 	} else {
 		b.log.Info("Joining an existing cluster")
+
+		if _, err := b.runOnController("sudo kubeadm init phase upload-certs --upload-certs"); err != nil {
+			return fmt.Errorf("failed to upload-certs: %w", err)
+		}
+
 		stdout, err := b.runOnController("sudo kubeadm token create --print-join-command | tr -d '\n'")
 		if err != nil {
 			return fmt.Errorf("failed to get kubeadm token: %w", err)
