@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/MemeLabs/strims/pkg/bytesutil"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/petar/GoLLRB/llrb"
 )
@@ -137,14 +138,24 @@ func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	t.s.mu.Lock()
 	defer t.s.mu.Unlock()
 
+	prefixStart := []byte(cursor.Prefix)
+	prefixEnd := append([]byte(cursor.Prefix), 0xff)
+
 	var limit int
 	var boundFunc func(string) bool
 	if cursor.Last == 0 {
 		limit = cursor.First
-		boundFunc = func(k string) bool { return k > cursor.Before }
+
+		bound := prefixEnd
+		if cursor.Before != "" {
+			bound = bytesutil.Clamp([]byte(cursor.Before), prefixStart, prefixEnd)
+		}
+		boundFunc = func(k string) bool { return k > string(bound) }
 	} else {
 		limit = cursor.Last
-		boundFunc = func(k string) bool { return k < cursor.After }
+
+		bound := bytesutil.Clamp([]byte(cursor.After), prefixStart, prefixEnd)
+		boundFunc = func(k string) bool { return k < string(bound) }
 	}
 
 	if limit == 0 {

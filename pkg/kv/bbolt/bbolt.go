@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/MemeLabs/strims/pkg/bytesutil"
 	"github.com/MemeLabs/strims/pkg/kv"
 	bboltlib "go.etcd.io/bbolt"
 )
@@ -103,20 +104,30 @@ func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
 	c := t.b.Cursor()
 
+	prefixStart := []byte(cursor.Prefix)
+	prefixEnd := append([]byte(cursor.Prefix), 0xff)
+
 	var limit int
 	var k, v, pivot []byte
 	var continueFunc func(*bboltlib.Cursor) (k, v []byte)
 	var boundFunc func([]byte) bool
 	if cursor.Last == 0 {
 		limit = cursor.First
-		pivot = []byte(cursor.After)
+		pivot = bytesutil.Clamp([]byte(cursor.After), prefixStart, prefixEnd)
 		continueFunc = (*bboltlib.Cursor).Next
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.Before)) > 0 }
+
+		bound := prefixEnd
+		if cursor.Before != "" {
+			bound = bytesutil.Clamp([]byte(cursor.Before), prefixStart, prefixEnd)
+		}
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, bound) > 0 }
 	} else {
 		limit = cursor.Last
-		pivot = []byte(cursor.Before)
+		pivot = bytesutil.Clamp([]byte(cursor.Before), prefixStart, prefixEnd)
 		continueFunc = (*bboltlib.Cursor).Prev
-		boundFunc = func(k []byte) bool { return bytes.Compare(k, []byte(cursor.After)) < 0 }
+
+		bound := bytesutil.Clamp([]byte(cursor.After), prefixStart, prefixEnd)
+		boundFunc = func(k []byte) bool { return bytes.Compare(k, bound) < 0 }
 	}
 
 	k, v = c.Seek(pivot)

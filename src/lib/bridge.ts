@@ -566,6 +566,7 @@ interface KVStoreProxy {
   delete: (key: string, done: (error: string | null) => void) => void;
   get: (key: string, done: (error: string | null, value?: Uint8Array) => void) => void;
   scanCursor: (
+    prefix: string,
     after: string,
     before: string,
     first: number,
@@ -1008,6 +1009,7 @@ export class WorkerBridge extends EventEmitter {
         transact((s) => s.get(key), done);
       },
       scanCursor: (
+        prefix: string,
         after: string,
         before: string,
         first: number,
@@ -1019,8 +1021,8 @@ export class WorkerBridge extends EventEmitter {
             const ascending = last == 0;
             const limit = first || last || Infinity;
             const range = ascending
-              ? IDBKeyRange.bound(after, before + "\uffff", true, false)
-              : IDBKeyRange.bound(after, before, false, true);
+              ? IDBKeyRange.bound(after, before || prefix + "\uffff", true, false)
+              : IDBKeyRange.bound(after || prefix, before, false, true);
             const req = tx.objectStore("data").openCursor(range, ascending ? "next" : "prev");
 
             const values = [];

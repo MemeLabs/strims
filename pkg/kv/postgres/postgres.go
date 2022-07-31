@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MemeLabs/strims/pkg/kv"
@@ -127,23 +128,36 @@ func (t Tx) Get(key string) (value []byte, err error) {
 
 // ScanPrefix ...
 func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
-	return t.ScanCursor(kv.Cursor{After: prefix, Before: prefix + "\uffff"})
+	return t.ScanCursor(kv.Cursor{Prefix: prefix})
 }
 
 // ScanCursor ...
 func (t Tx) ScanCursor(cursor kv.Cursor) (values [][]byte, err error) {
-	order := "DESC"
+	order := "ASC"
 	limit := "ALL"
-	if cursor.Last == 0 {
-		order = "ASC"
-		if cursor.First != 0 {
-			limit = strconv.Itoa(cursor.First)
-		}
-	} else {
+	if cursor.Last != 0 {
+		order = "DESC"
 		limit = strconv.Itoa(cursor.Last)
+	} else if cursor.First != 0 {
+		limit = strconv.Itoa(cursor.First)
 	}
 
-	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" WHERE "key" > %s AND "key" < %s ORDER BY "key" %s LIMIT %s`, t.table, escapeString(cursor.After), escapeString(cursor.Before), order, limit))
+	var predicates []string
+	if cursor.Prefix != "" {
+		predicates = append(predicates, `"key" LIKE `+escapeString(cursor.Prefix+"%"))
+	}
+	if cursor.After != "" {
+		predicates = append(predicates, `"key" > `+escapeString(cursor.After))
+	}
+	if cursor.Before != "" {
+		predicates = append(predicates, `"key" < `+escapeString(cursor.Before))
+	}
+	var whereClause string
+	if len(predicates) > 0 {
+		whereClause = `WHERE ` + strings.Join(predicates, " AND ")
+	}
+
+	rs, err := t.tx.Query(t.ctx, fmt.Sprintf(`SELECT "value" FROM "%s" %s ORDER BY "key" %s LIMIT %s`, t.table, whereClause, order, limit))
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +191,7 @@ func escapeString(s string) string {
 		case '\'':
 			buf = append(buf, `''`...)
 		default:
-			if r < 0x7f {
+			if r > 0x1f && r < 0x7f {
 				buf = append(buf, byte(r))
 			} else if r < 0x10000 {
 				buf = append(buf, `\u`...)

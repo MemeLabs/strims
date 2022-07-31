@@ -60,6 +60,7 @@ type RWTx interface {
 }
 
 type Cursor struct {
+	Prefix string
 	After  string
 	Before string
 	First  int
