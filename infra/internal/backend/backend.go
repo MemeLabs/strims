@@ -264,7 +264,7 @@ func New(cfg Config) (*Backend, error) {
 		})
 	}
 
-	peers, err := models.ExternalPeers().AllG(ctx)
+	peers, err := b.getPeers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get external peers: %w", err)
 	}
@@ -406,6 +406,14 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 
 func (b *Backend) InactiveNodes(ctx context.Context) ([]*node.Node, error) {
 	return b.getNodesByActivity(ctx, false)
+}
+
+func (b *Backend) getPeers(ctx context.Context) ([]*models.ExternalPeer, error) {
+	peers, err := models.ExternalPeers().AllG(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get external peers: %w", err)
+	}
+	return peers, nil
 }
 
 func (b *Backend) AddStaticPeer(ctx context.Context, name, address string, port int) (*wgutil.InterfaceConfig, error) {
@@ -779,6 +787,12 @@ func ComputeCost(sku *node.SKU, timeOnline time.Duration) float64 {
 }
 
 func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
+	peers, err := b.getPeers(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get external peers: %w", err)
+	}
+
+	// TODO: write this differently
 OUTER:
 	for i := 1; i < 255; i++ {
 		for _, node := range activeNodes {
@@ -790,6 +804,17 @@ OUTER:
 				}
 			}
 		}
+
+		for _, peer := range peers {
+			addr := strings.Split(peer.WireguardIP, ".")
+			if len(addr) == 4 {
+				// addr already taken
+				if addr[3] == fmt.Sprint(i) {
+					continue OUTER
+				}
+			}
+		}
+
 		// no node has this addr
 		nextWGIPv4 := fmt.Sprintf("10.0.0.%d", i)
 		b.log.Info("next wireguard address", zap.String("wg_ipv4", nextWGIPv4))
