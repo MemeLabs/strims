@@ -626,7 +626,10 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 	} else {
 		b.log.Info("Joining an existing cluster")
 
-		if _, err := b.runOnController("sudo kubeadm init phase upload-certs --upload-certs"); err != nil {
+		// Refresh the upload-certs, they are deleted after two hours
+		if _, err := b.runOnController(
+			fmt.Sprintf("sudo kubeadm init phase upload-certs --upload-certs --certificate-key %q", b.certificateKey),
+		); err != nil {
 			return fmt.Errorf("failed to upload-certs: %w", err)
 		}
 
