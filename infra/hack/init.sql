@@ -38,3 +38,13 @@ CREATE TABLE IF NOT EXISTS "external_peers" (
   "wireguard_ip"          TEXT NOT NULL,
   UNIQUE ("public_ip_v4")
 );
+
+CREATE TYPE wireguard_peer_type AS ENUM ('node', 'external_peer');
+
+CREATE TABLE IF NOT EXISTS "wireguard_ip_leases" (
+  "lessee_type"           wireguard_peer_type,
+  "lessee_id"             BIGINT,
+  "ip"                    inet NOT NULL,
+  PRIMARY KEY ("lessee_type", "lessee_id"),
+  UNIQUE ("ip")
+);
