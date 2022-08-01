@@ -3,7 +3,6 @@ package backend_test
 import (
 	"database/sql"
 	"log"
-	"testing"
 
 	_ "github.com/lib/pq"
 )
@@ -53,7 +52,7 @@ func releaseWGIPLease(lesseeType string, lesseeID int64) error {
 	return nil
 }
 
-func TestLeaseWGIP(t *testing.T) {
+func ExampleBackend_leaseWGIP() {
 	nodeIP, err := leaseWGIP("node", 1234)
 	log.Println(nodeIP, err)
 
