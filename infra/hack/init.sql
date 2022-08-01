@@ -1,4 +1,5 @@
-CREATE TYPE NODE_TYPE as ENUM ('controller', 'worker');
+CREATE TYPE NODE_TYPE           as ENUM ('controller', 'worker');
+CREATE TYPE WIREGUARD_PEER_TYPE AS ENUM ('node', 'external_peer');
 
 CREATE TABLE IF NOT EXISTS "nodes" (
   "id"                BIGSERIAL PRIMARY KEY,
@@ -22,7 +23,6 @@ CREATE TABLE IF NOT EXISTS "nodes" (
   "sku_price_monthly" REAL NOT NULL,
   "sku_price_hourly"  REAL NOT NULL,
   "wireguard_key"     TEXT NOT NULL,
-  "wireguard_ip"      TEXT NOT NULL,
   "user"              TEXT NOT NULL,
   "type"              NODE_TYPE NOT NULL,
   UNIQUE ("provider_name", "provider_id"),
@@ -35,16 +35,14 @@ CREATE TABLE IF NOT EXISTS "external_peers" (
   "public_ip_v4"          TEXT NOT NULL,
   "wireguard_port"        INTEGER NOT NULL,
   "wireguard_private_key" TEXT NOT NULL,
-  "wireguard_ip"          TEXT NOT NULL,
   UNIQUE ("public_ip_v4")
 );
 
-CREATE TYPE wireguard_peer_type AS ENUM ('node', 'external_peer');
 
 CREATE TABLE IF NOT EXISTS "wireguard_ip_leases" (
-  "lessee_type"           wireguard_peer_type,
+  "lessee_type"           WIREGUARD_PEER_TYPE,
   "lessee_id"             BIGINT,
-  "ip"                    inet NOT NULL,
+  "ip"                    INET NOT NULL,
   PRIMARY KEY ("lessee_type", "lessee_id"),
   UNIQUE ("ip")
 );
