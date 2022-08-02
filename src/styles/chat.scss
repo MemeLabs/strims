@@ -662,5 +662,79 @@
         transform: translateY(2px);
       }
     }
+
+    &--slide {
+      clip-path: polygon(0 -100%, 100% -100%, 100% 200%, 0 200%);
+
+      &__extra_1 {
+        animation: slide 6s linear 1.5;
+
+        @at-root &:hover,
+          &.chat__emote_container--animate_forever {
+          animation-iteration-count: infinite;
+        }
+
+        @at-root .chat__emote_container--reverse & {
+          animation-direction: reverse;
+        }
+
+        @at-root .chat__emote_container--slow & {
+          animation-duration: 12s;
+        }
+
+        @at-root .chat__emote_container--fase & {
+          animation-duration: 3s;
+        }
+      }
+    }
+
+    @keyframes slide {
+      0% {
+        transform: translate(-110%, 0);
+      }
+
+      100% {
+        transform: translate(110%, 0);
+      }
+    }
+
+    &--peek {
+      clip-path: polygon(0 -100%, 100% -100%, 100% 200%, 0 200%);
+
+      &__extra_1 {
+        animation: peek 6s ease-in-out 1.5;
+
+        @at-root &:hover,
+          &.chat__emote_container--animate_forever {
+          animation-iteration-count: infinite;
+        }
+
+        @at-root .chat__emote_container--reverse & {
+          animation-direction: reverse;
+        }
+
+        @at-root .chat__emote_container--slow & {
+          animation-duration: 12s;
+        }
+
+        @at-root .chat__emote_container--fase & {
+          animation-duration: 3s;
+        }
+      }
+    }
+
+    @keyframes peek {
+      0% {
+        transform: translate(-110%, 0);
+      }
+
+      50% {
+        transform: translate(-0%, 0);
+      }
+
+      100% {
+        transform: translate(-110%, 0);
+      }
+    }
   }
 }

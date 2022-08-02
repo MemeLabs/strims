@@ -2880,6 +2880,16 @@ const src = {
       "name": "gold",
       "priority": 1000,
     },
+    {
+      "id": "3023",
+      "name": "slide",
+      "extraWrapCount": 1,
+    },
+    {
+      "id": "3024",
+      "name": "peek",
+      "extraWrapCount": 1,
+    },
   ],
   "removedIds": [],
 };
