@@ -2841,6 +2841,7 @@ export type ICreateModifierRequest = {
   name?: string;
   priority?: number;
   internal?: boolean;
+  extraWrapCount?: number;
   procChance?: number;
 }
 
@@ -2849,6 +2850,7 @@ export class CreateModifierRequest {
   name: string;
   priority: number;
   internal: boolean;
+  extraWrapCount: number;
   procChance: number;
 
   constructor(v?: ICreateModifierRequest) {
@@ -2856,6 +2858,7 @@ export class CreateModifierRequest {
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
+    this.extraWrapCount = v?.extraWrapCount || 0;
     this.procChance = v?.procChance || 0;
   }
 
@@ -2865,7 +2868,8 @@ export class CreateModifierRequest {
     if (m.name.length) w.uint32(18).string(m.name);
     if (m.priority) w.uint32(24).uint32(m.priority);
     if (m.internal) w.uint32(32).bool(m.internal);
-    if (m.procChance) w.uint32(41).double(m.procChance);
+    if (m.extraWrapCount) w.uint32(40).uint32(m.extraWrapCount);
+    if (m.procChance) w.uint32(49).double(m.procChance);
     return w;
   }
 
@@ -2889,6 +2893,9 @@ export class CreateModifierRequest {
         m.internal = r.bool();
         break;
         case 5:
+        m.extraWrapCount = r.uint32();
+        break;
+        case 6:
         m.procChance = r.double();
         break;
         default:
@@ -2942,6 +2949,7 @@ export type IUpdateModifierRequest = {
   name?: string;
   priority?: number;
   internal?: boolean;
+  extraWrapCount?: number;
   procChance?: number;
 }
 
@@ -2951,6 +2959,7 @@ export class UpdateModifierRequest {
   name: string;
   priority: number;
   internal: boolean;
+  extraWrapCount: number;
   procChance: number;
 
   constructor(v?: IUpdateModifierRequest) {
@@ -2959,6 +2968,7 @@ export class UpdateModifierRequest {
     this.name = v?.name || "";
     this.priority = v?.priority || 0;
     this.internal = v?.internal || false;
+    this.extraWrapCount = v?.extraWrapCount || 0;
     this.procChance = v?.procChance || 0;
   }
 
@@ -2969,7 +2979,8 @@ export class UpdateModifierRequest {
     if (m.name.length) w.uint32(26).string(m.name);
     if (m.priority) w.uint32(32).uint32(m.priority);
     if (m.internal) w.uint32(40).bool(m.internal);
-    if (m.procChance) w.uint32(49).double(m.procChance);
+    if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
+    if (m.procChance) w.uint32(57).double(m.procChance);
     return w;
   }
 
@@ -2996,6 +3007,9 @@ export class UpdateModifierRequest {
         m.internal = r.bool();
         break;
         case 6:
+        m.extraWrapCount = r.uint32();
+        break;
+        case 7:
         m.procChance = r.double();
         break;
         default:

@@ -356,7 +356,8 @@ message CreateModifierRequest {
   string name = 2;
   uint32 priority = 3;
   bool internal = 4;
-  double proc_chance = 5;
+  uint32 extra_wrap_count = 5;
+  double proc_chance = 6;
 }
 message CreateModifierResponse {
   Modifier modifier = 1;
@@ -367,7 +368,8 @@ message UpdateModifierRequest {
   string name = 3;
   uint32 priority = 4;
   bool internal = 5;
-  double proc_chance = 6;
+  uint32 extra_wrap_count = 6;
+  double proc_chance = 7;
 }
 message UpdateModifierResponse {
   Modifier modifier = 1;

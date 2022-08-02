@@ -270,6 +270,7 @@ func NewChatModifier(
 	name string,
 	priority uint32,
 	internal bool,
+	extraWrapCount uint32,
 	procChance float64,
 ) (*chatv1.Modifier, error) {
 	id, err := g.GenerateID()
@@ -278,12 +279,13 @@ func NewChatModifier(
 	}
 
 	v := &chatv1.Modifier{
-		Id:         id,
-		ServerId:   serverID,
-		Name:       name,
-		Priority:   priority,
-		Internal:   internal,
-		ProcChance: procChance,
+		Id:             id,
+		ServerId:       serverID,
+		Name:           name,
+		Priority:       priority,
+		Internal:       internal,
+		ExtraWrapCount: extraWrapCount,
+		ProcChance:     procChance,
 	}
 	return v, nil
 }
