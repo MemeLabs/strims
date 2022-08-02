@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -127,7 +128,7 @@ func (t *Dialer) ServerDialer(ctx context.Context, networkKey []byte, port uint1
 		Node:      node,
 		Port:      port,
 		Publisher: publisher,
-		CertFunc:  cert.Get,
+		CertFunc:  cert.Load,
 	}, nil
 }
 
@@ -160,7 +161,7 @@ func (t *Dialer) ClientDialer(ctx context.Context, networkKey []byte, resolver H
 		Logger:   t.logger,
 		Node:     node,
 		Resolver: resolver,
-		CertFunc: cert.Get,
+		CertFunc: cert.Load,
 	}, nil
 }
 
@@ -195,11 +196,11 @@ func (h *hostCertKey) Less(o llrb.Item) bool {
 }
 
 type hostCert struct {
-	syncutil.Pointer[certificate.Certificate]
+	atomic.Pointer[certificate.Certificate]
 }
 
 func (h *hostCert) Key() []byte {
-	return dao.CertificateRoot(h.Get()).Key
+	return dao.CertificateRoot(h.Load()).Key
 }
 
 func (h *hostCert) Less(o llrb.Item) bool {

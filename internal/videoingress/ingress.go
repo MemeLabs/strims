@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -261,7 +262,7 @@ type ingressStream struct {
 
 	startTime      timeutil.Time
 	channelID      uint64
-	channel        syncutil.Pointer[videov1.VideoChannel]
+	channel        atomic.Pointer[videov1.VideoChannel]
 	channelUpdates chan struct{}
 	directoryID    uint64
 	conn           io.Closer
@@ -305,7 +306,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, e
 				LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 			},
 		},
-		Key: s.channel.Get().Key,
+		Key: s.channel.Load().Key,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -320,7 +321,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, *ioutil.WriteFlushSampler, e
 }
 
 func (s *ingressStream) channelNetworkKey() []byte {
-	switch o := s.channel.Get().Owner.(type) {
+	switch o := s.channel.Load().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
 	case *videov1.VideoChannel_LocalShare_:
@@ -331,7 +332,7 @@ func (s *ingressStream) channelNetworkKey() []byte {
 }
 
 func (s *ingressStream) channelCreatorCert() (*certificate.Certificate, error) {
-	switch o := s.channel.Get().Owner.(type) {
+	switch o := s.channel.Load().Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
@@ -377,7 +378,7 @@ func (s *ingressStream) syncDirectorySnippet() {
 	for {
 		select {
 		case <-s.channelUpdates:
-			channelSnippet := s.channel.Get().DirectoryListingSnippet
+			channelSnippet := s.channel.Load().DirectoryListingSnippet
 			snippet.Title = channelSnippet.Title
 			snippet.Description = channelSnippet.Description
 			snippet.Tags = channelSnippet.Tags
@@ -417,7 +418,7 @@ func (s *ingressStream) syncDirectorySnippet() {
 			},
 		}
 
-		if err := dao.SignMessage(snippet, s.channel.Get().Key); err != nil {
+		if err := dao.SignMessage(snippet, s.channel.Load().Key); err != nil {
 			s.logger.Debug("signing listing snippet failed", zap.Error(err))
 			continue
 		}

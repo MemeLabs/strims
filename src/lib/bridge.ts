@@ -527,7 +527,7 @@ export class Bus extends EventEmitter {
 }
 
 export interface WebRTCGoProxy {
-  onicecandidate(candidate: string, localDescription: string): void;
+  onicecandidate(candidate: string, description: string): void;
   onconnectionstatechange(state: string): void;
   onicegatheringstatechange(state: string): void;
   onsignalingstatechange(state: string): void;

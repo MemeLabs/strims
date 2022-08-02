@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -127,13 +128,13 @@ type directoryService struct {
 	observers *event.Observers
 	dialer    network.Dialer
 
-	network           syncutil.Pointer[networkv1.Network]
+	network           atomic.Pointer[networkv1.Network]
 	broadcastTicker   timeutil.Ticker
 	embedLoadTicker   timeutil.Ticker
 	lastBroadcastTime timeutil.Time
 	lastRefreshTime   timeutil.Time
 	eventWriter       *protoutil.ChunkStreamWriter
-	embedLoader       syncutil.Pointer[embedLoader]
+	embedLoader       atomic.Pointer[embedLoader]
 	lock              sync.Mutex
 	nextID            uint64
 	listings          indexedLRU[listing, *listing]
@@ -148,7 +149,7 @@ type directoryService struct {
 func (d *directoryService) Run(ctx context.Context) error {
 	defer d.Close()
 
-	if err := d.publishConfig(ctx, d.network.Get()); err != nil {
+	if err := d.publishConfig(ctx, d.network.Load()); err != nil {
 		return err
 	}
 
@@ -480,7 +481,7 @@ func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) er
 	})
 
 	go func() {
-		res := d.embedLoader.Get().Load(ctx, embedIDs)
+		res := d.embedLoader.Load().Load(ctx, embedIDs)
 		now := timeutil.Now()
 
 		d.lock.Lock()
@@ -527,7 +528,7 @@ func (d *directoryService) loadMediaEmbed(stop ioutil.Stopper, listingID uint64,
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := d.dialer.ClientWithHostAddr(ctx, d.network.Get().GetServerConfig().GetKey().GetPublic(), candidate, vnic.SnippetPort)
+	client, err := d.dialer.ClientWithHostAddr(ctx, d.network.Load().GetServerConfig().GetKey().GetPublic(), candidate, vnic.SnippetPort)
 	if err != nil {
 		return nil
 	}
@@ -561,7 +562,7 @@ func (d *directoryService) loadMediaEmbed(stop ioutil.Stopper, listingID uint64,
 }
 
 func (d *directoryService) getListingRecord(l *networkv1directory.Listing) (*networkv1directory.ListingRecord, error) {
-	r, err := d.listingRecords.ByListing.Get(dao.FormatDirectoryListingRecordListingKey(d.network.Get().Id, l))
+	r, err := d.listingRecords.ByListing.Get(dao.FormatDirectoryListingRecordListingKey(d.network.Load().Id, l))
 	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 		return nil, fmt.Errorf("failed to load directory metadata: %w", err)
 	}
@@ -570,7 +571,7 @@ func (d *directoryService) getListingRecord(l *networkv1directory.Listing) (*net
 
 func (d *directoryService) getUserRecord(ctx context.Context) (*networkv1directory.UserRecord, error) {
 	peerKey := dialer.VPNCertificate(ctx).GetParent().GetKey()
-	ur, err := d.userRecords.ByPeerKey.Get(dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Get().Id, peerKey))
+	ur, err := d.userRecords.ByPeerKey.Get(dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Load().Id, peerKey))
 	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 		return nil, fmt.Errorf("failed to load user metadata: %w", err)
 	}
@@ -599,7 +600,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 
 	switch c := req.Listing.GetContent().(type) {
 	case *networkv1directory.Listing_Embed_:
-		if !d.embedLoader.Get().IsSupported(c.Embed.Service) {
+		if !d.embedLoader.Load().IsSupported(c.Embed.Service) {
 			return nil, errors.New("unsupported embed service")
 		}
 	case *networkv1directory.Listing_Media_:
@@ -783,11 +784,11 @@ func (d *directoryService) ModerateListing(ctx context.Context, req *networkv1di
 		return nil, ErrListingNotFound
 	}
 
-	key := dao.FormatDirectoryListingRecordListingKey(d.network.Get().Id, l.listing)
+	key := dao.FormatDirectoryListingRecordListingKey(d.network.Load().Id, l.listing)
 
 	lr, found, err := d.listingRecords.ByListing.GetOrInsert(key, func() (*networkv1directory.ListingRecord, error) {
 		return &networkv1directory.ListingRecord{
-			NetworkId:  d.network.Get().Id,
+			NetworkId:  d.network.Load().Id,
 			Listing:    l.listing,
 			Moderation: req.Moderation,
 		}, nil
@@ -828,11 +829,11 @@ func (d *directoryService) ModerateUser(ctx context.Context, req *networkv1direc
 		return nil, errors.New("permission denied")
 	}
 
-	key := dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Get().Id, req.PeerKey)
+	key := dao.FormatDirectoryUserRecordPeerKeyKey(d.network.Load().Id, req.PeerKey)
 
 	uur, found, err := d.userRecords.ByPeerKey.GetOrInsert(key, func() (*networkv1directory.UserRecord, error) {
 		return &networkv1directory.UserRecord{
-			NetworkId:  d.network.Get().Id,
+			NetworkId:  d.network.Load().Id,
 			PeerKey:    req.PeerKey,
 			Moderation: req.Moderation,
 		}, nil

@@ -254,7 +254,7 @@ func newHashTableItem(hashTableID uint32, localHostID kademlia.ID, r *vpnv1.Hash
 
 type hashTableItem struct {
 	key    hashTableItemKey
-	record syncutil.Pointer[vpnv1.HashTableMessage_Record]
+	record atomic.Pointer[vpnv1.HashTableMessage_Record]
 }
 
 func (p *hashTableItem) SetRecord(r *vpnv1.HashTableMessage_Record) {
@@ -262,7 +262,7 @@ func (p *hashTableItem) SetRecord(r *vpnv1.HashTableMessage_Record) {
 }
 
 func (p *hashTableItem) Record() *vpnv1.HashTableMessage_Record {
-	return p.record.Get()
+	return p.record.Load()
 }
 
 // Less implements llrb.Item

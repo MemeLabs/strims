@@ -5,6 +5,7 @@ package directory
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
@@ -63,7 +64,7 @@ func (r *runner) Sync(network *networkv1.Network) {
 }
 
 func (r *runner) NetworkKey() []byte {
-	return dao.NetworkKey(r.adapter.network.Get())
+	return dao.NetworkKey(r.adapter.network.Load())
 }
 
 func (r *runner) Logger() *zap.Logger {
@@ -78,20 +79,20 @@ type runnerAdapter struct {
 	dialer    network.Dialer
 	transfer  transfer.Control
 
-	network syncutil.Pointer[networkv1.Network]
+	network atomic.Pointer[networkv1.Network]
 }
 
 func (s *runnerAdapter) Mutex() *dao.Mutex {
-	return dao.NewMutex(s.logger, s.store, "directory", s.network.Get().Id)
+	return dao.NewMutex(s.logger, s.store, "directory", s.network.Load().Id)
 }
 
 func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
-	return newDirectoryReader(s.logger, s.transfer, dao.NetworkKey(s.network.Get()))
+	return newDirectoryReader(s.logger, s.transfer, dao.NetworkKey(s.network.Load()))
 }
 
 func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
-	if s.network.Get().GetServerConfig() == nil {
+	if s.network.Load().GetServerConfig() == nil {
 		return nil, nil
 	}
-	return newDirectoryServer(s.logger, s.vpn, s.store, s.observers, s.dialer, s.transfer, s.network.Get())
+	return newDirectoryServer(s.logger, s.vpn, s.store, s.observers, s.dialer, s.transfer, s.network.Load())
 }

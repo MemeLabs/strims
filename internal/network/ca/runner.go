@@ -5,6 +5,7 @@ package ca
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
@@ -70,20 +71,20 @@ type runnerAdapter struct {
 	dialer    *dialer.Dialer
 	transfer  transfer.Control
 
-	network syncutil.Pointer[networkv1.Network]
+	network atomic.Pointer[networkv1.Network]
 }
 
 func (s *runnerAdapter) Mutex() *dao.Mutex {
-	return dao.NewMutex(s.logger, s.store, "ca", s.network.Get().Id)
+	return dao.NewMutex(s.logger, s.store, "ca", s.network.Load().Id)
 }
 
 func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
-	return newCAReader(s.logger, s.transfer, dao.NetworkKey(s.network.Get()))
+	return newCAReader(s.logger, s.transfer, dao.NetworkKey(s.network.Load()))
 }
 
 func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
-	if s.network.Get().GetServerConfig() == nil {
+	if s.network.Load().GetServerConfig() == nil {
 		return nil, nil
 	}
-	return newServer(s.logger, s.store, s.observers, s.dialer, s.transfer, s.network.Get())
+	return newServer(s.logger, s.store, s.observers, s.dialer, s.transfer, s.network.Load())
 }

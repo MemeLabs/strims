@@ -57,7 +57,6 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         "--chat-height": size ? `${size.height}px` : "100%",
       }}
     >
-      <Helmet link={[{ rel: "preload", as: "font", href: twemoji }]} />
       <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
       <div className="chat__messages">
         <Scroller

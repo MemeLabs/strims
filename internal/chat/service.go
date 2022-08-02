@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -58,7 +59,7 @@ type chatService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	observers         *event.Observers
 	store             *dao.ProfileStore
-	config            syncutil.Pointer[chatv1.Server]
+	config            atomic.Pointer[chatv1.Server]
 	listingID         uint64
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime timeutil.Time
@@ -150,7 +151,7 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 }
 
 func (d *chatService) handleDirectoryEvent(e event.DirectoryEvent) {
-	if bytes.Equal(e.NetworkKey, d.config.Get().NetworkKey) {
+	if bytes.Equal(e.NetworkKey, d.config.Load().NetworkKey) {
 		for _, e := range e.Broadcast.Events {
 			if e := e.GetUserPresenceChange(); e != nil {
 				if e.Online && slices.Contains(e.ListingIds, d.listingID) {
@@ -165,16 +166,16 @@ func (d *chatService) handleDirectoryEvent(e event.DirectoryEvent) {
 
 func (d *chatService) getOrInsertProfile(peerKey []byte, alias string) (p *chatv1.Profile, err error) {
 	p, _, err = d.profileCache.ByPeerKey.GetOrInsert(
-		dao.FormatChatProfilePeerKey(d.config.Get().Id, peerKey),
+		dao.FormatChatProfilePeerKey(d.config.Load().Id, peerKey),
 		func() (*chatv1.Profile, error) {
-			return dao.NewChatProfile(d.store, d.config.Get().Id, peerKey, alias)
+			return dao.NewChatProfile(d.store, d.config.Load().Id, peerKey, alias)
 		},
 	)
 	return
 }
 
 func (d *chatService) isModerator(peerKey []byte) bool {
-	for _, k := range d.config.Get().AdminPeerKeys {
+	for _, k := range d.config.Load().AdminPeerKeys {
 		if bytes.Equal(k, peerKey) {
 			return true
 		}
@@ -226,7 +227,7 @@ func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv
 	}
 
 	_, err := d.profileCache.ByPeerKey.Transform(
-		dao.FormatChatProfilePeerKey(d.config.Get().Id, req.PeerKey),
+		dao.FormatChatProfilePeerKey(d.config.Load().Id, req.PeerKey),
 		func(m *chatv1.Profile) error {
 			m.MuteDeadline = timeutil.Now().Add(time.Duration(req.DurationSecs) * time.Second).Unix()
 			if req.Message != "" {
@@ -256,7 +257,7 @@ func (d *chatService) Unmute(ctx context.Context, req *chatv1.UnmuteRequest) (*c
 	}
 
 	_, err := d.profileCache.ByPeerKey.Transform(
-		dao.FormatChatProfilePeerKey(d.config.Get().Id, req.PeerKey),
+		dao.FormatChatProfilePeerKey(d.config.Load().Id, req.PeerKey),
 		func(m *chatv1.Profile) error {
 			m.MuteDeadline = timeutil.Now().Unix()
 			return nil

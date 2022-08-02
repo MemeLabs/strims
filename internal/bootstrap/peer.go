@@ -4,8 +4,9 @@
 package bootstrap
 
 import (
+	"sync/atomic"
+
 	"github.com/MemeLabs/strims/internal/api"
-	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 )
 
@@ -17,5 +18,5 @@ var _ Peer = (*peer)(nil)
 type peer struct {
 	vnicPeer       *vnic.Peer
 	client         api.PeerClient
-	PublishEnabled syncutil.Bool
+	PublishEnabled atomic.Bool
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
@@ -60,7 +61,7 @@ type service struct {
 	observers *event.Observers
 
 	logCache    dao.CertificateLogCache
-	network     syncutil.Pointer[networkv1.Network]
+	network     atomic.Pointer[networkv1.Network]
 	eventWriter *protoutil.ChunkStreamWriter
 
 	// invite policy
@@ -79,7 +80,7 @@ func (s *service) Run(ctx context.Context) error {
 		case e := <-events:
 			switch e := e.(type) {
 			case *networkv1.NetworkChangeEvent:
-				if e.Network.Id == s.network.Get().Id {
+				if e.Network.Id == s.network.Load().Id {
 					s.network.Swap(e.Network)
 				}
 			}
@@ -99,7 +100,7 @@ func (s *service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*
 	if err := dao.VerifyCertificate(req.Certificate); err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(dao.CertificateNetworkKey(req.Certificate), dao.NetworkKey(s.network.Get())) {
+	if !bytes.Equal(dao.CertificateNetworkKey(req.Certificate), dao.NetworkKey(s.network.Load())) {
 		return nil, errors.New("signing certificate network key mismatch")
 	}
 	if !bytes.Equal(req.Certificate.GetKey(), req.CertificateRequest.GetKey()) {
@@ -115,12 +116,12 @@ func (s *service) Renew(ctx context.Context, req *networkv1ca.CARenewRequest) (*
 
 	// TODO: verify invitation policy
 	// TODO: verify nick
-	cert, err := dao.SignCertificateRequestWithNetwork(req.CertificateRequest, s.network.Get().GetServerConfig())
+	cert, err := dao.SignCertificateRequestWithNetwork(req.CertificateRequest, s.network.Load().GetServerConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	log, err := dao.NewCertificateLog(s.store, s.network.Get().Id, cert)
+	log, err := dao.NewCertificateLog(s.store, s.network.Load().Id, cert)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +147,11 @@ func (s *service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*ne
 	var err error
 	switch q := req.Query.(type) {
 	case *networkv1ca.CAFindRequest_Subject:
-		log, err = s.logCache.BySubject.Get(dao.FormatCertificateLogSubjectKey(s.network.Get().Id, q.Subject))
+		log, err = s.logCache.BySubject.Get(dao.FormatCertificateLogSubjectKey(s.network.Load().Id, q.Subject))
 	case *networkv1ca.CAFindRequest_SerialNumber:
-		log, err = s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Get().Id, q.SerialNumber))
+		log, err = s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Load().Id, q.SerialNumber))
 	case *networkv1ca.CAFindRequest_Key:
-		log, err = s.logCache.ByKey.Get(dao.FormatCertificateLogKeyKey(s.network.Get().Id, q.Key))
+		log, err = s.logCache.ByKey.Get(dao.FormatCertificateLogKeyKey(s.network.Load().Id, q.Key))
 	}
 	if err != nil {
 		return nil, err
@@ -159,7 +160,7 @@ func (s *service) Find(ctx context.Context, req *networkv1ca.CAFindRequest) (*ne
 	if req.FullChain {
 		cert := log.Certificate
 		for cert.GetParentSerialNumber() != nil {
-			parentLog, err := s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Get().Id, cert.GetParentSerialNumber()))
+			parentLog, err := s.logCache.BySerialNumber.Get(dao.FormatCertificateLogSerialNumberKey(s.network.Load().Id, cert.GetParentSerialNumber()))
 			if err != nil {
 				return nil, err
 			}

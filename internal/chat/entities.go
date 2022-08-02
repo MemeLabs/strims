@@ -6,6 +6,7 @@ package chat
 import (
 	"math/rand"
 	"regexp"
+	"sync/atomic"
 	"unicode/utf8"
 
 	parser "github.com/MemeLabs/chat-parser"
@@ -30,7 +31,7 @@ func newEntityExtractor() *entityExtractor {
 type entityExtractor struct {
 	parserCtx         *parser.ParserContext
 	urlScheme         *regexp.Regexp
-	internalModifiers syncutil.Pointer[[]*chatv1.Modifier]
+	internalModifiers atomic.Pointer[[]*chatv1.Modifier]
 }
 
 func (x *entityExtractor) ParserContext() *parser.ParserContext {
@@ -68,7 +69,7 @@ func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 		}
 	}
 
-	for _, m := range *x.internalModifiers.Get() {
+	for _, m := range *x.internalModifiers.Load() {
 		if len(e.Emotes) != 0 && rand.Float64() <= m.ProcChance {
 			i := rand.Intn(len(e.Emotes))
 			e.Emotes[i].Modifiers = append(e.Emotes[i].Modifiers, m.Name)

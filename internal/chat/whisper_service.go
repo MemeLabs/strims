@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -46,7 +47,7 @@ func newWhisperService(
 type whisperService struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
-	config    syncutil.Pointer[chatv1.UIConfig]
+	config    atomic.Pointer[chatv1.UIConfig]
 	closeOnce sync.Once
 	done      chan struct{}
 	lock      sync.Mutex
@@ -60,7 +61,7 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 	now := timeutil.Now()
 	peerCert := dialer.VPNCertificate(ctx).GetParent()
 
-	ignoreIndex := slices.IndexFunc(d.config.Get().Ignores, func(e *chatv1.UIConfig_Ignore) bool {
+	ignoreIndex := slices.IndexFunc(d.config.Load().Ignores, func(e *chatv1.UIConfig_Ignore) bool {
 		return bytes.Equal(e.PeerKey, peerCert.Key) && (e.Deadline == 0 || e.Deadline > now.Unix())
 	})
 	if ignoreIndex != -1 {

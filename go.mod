@@ -1,6 +1,6 @@
 module github.com/MemeLabs/strims
 
-go 1.18
+go 1.19
 
 // replace github.com/MemeLabs/protobuf => ./vendor_modules/protobuf
 
