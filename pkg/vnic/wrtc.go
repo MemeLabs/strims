@@ -31,8 +31,6 @@ type WebRTCMediator interface {
 	InterfaceAddr
 	GetOffer() ([]byte, error)
 	GetAnswer() ([]byte, error)
-	GetICECandidates() <-chan []byte
 	SendOffer([]byte) error
 	SendAnswer([]byte) error
-	SendICECandidate([]byte) error
 }

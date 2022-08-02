@@ -296,6 +296,10 @@ func (s *PassthruServer) Listen() error {
 
 // Close ...
 func (s *PassthruServer) Close() error {
+	if s.listener == nil {
+		return nil
+	}
+
 	var errs []error
 
 	if err := s.listener.Close(); err != nil {

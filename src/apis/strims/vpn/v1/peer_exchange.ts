@@ -22,14 +22,11 @@ export class PeerExchangeMessage {
       case PeerExchangeMessage.BodyCase.MEDIATION_ANSWER:
       strims_vpn_v1_PeerExchangeMessage_MediationAnswer.encode(m.body.mediationAnswer, w.uint32(8018).fork()).ldelim();
       break;
-      case PeerExchangeMessage.BodyCase.MEDIATION_ICE_CANDIDATE:
-      strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate.encode(m.body.mediationIceCandidate, w.uint32(8026).fork()).ldelim();
-      break;
       case PeerExchangeMessage.BodyCase.CALLBACK_REQUEST:
-      strims_vpn_v1_PeerExchangeMessage_CallbackRequest.encode(m.body.callbackRequest, w.uint32(8034).fork()).ldelim();
+      strims_vpn_v1_PeerExchangeMessage_CallbackRequest.encode(m.body.callbackRequest, w.uint32(8026).fork()).ldelim();
       break;
       case PeerExchangeMessage.BodyCase.REJECTION:
-      strims_vpn_v1_PeerExchangeMessage_Rejection.encode(m.body.rejection, w.uint32(8042).fork()).ldelim();
+      strims_vpn_v1_PeerExchangeMessage_Rejection.encode(m.body.rejection, w.uint32(8034).fork()).ldelim();
       break;
     }
     return w;
@@ -49,12 +46,9 @@ export class PeerExchangeMessage {
         m.body = new PeerExchangeMessage.Body({ mediationAnswer: strims_vpn_v1_PeerExchangeMessage_MediationAnswer.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.body = new PeerExchangeMessage.Body({ mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate.decode(r, r.uint32()) });
-        break;
-        case 1004:
         m.body = new PeerExchangeMessage.Body({ callbackRequest: strims_vpn_v1_PeerExchangeMessage_CallbackRequest.decode(r, r.uint32()) });
         break;
-        case 1005:
+        case 1004:
         m.body = new PeerExchangeMessage.Body({ rejection: strims_vpn_v1_PeerExchangeMessage_Rejection.decode(r, r.uint32()) });
         break;
         default:
@@ -71,16 +65,14 @@ export namespace PeerExchangeMessage {
     NOT_SET = 0,
     MEDIATION_OFFER = 1001,
     MEDIATION_ANSWER = 1002,
-    MEDIATION_ICE_CANDIDATE = 1003,
-    CALLBACK_REQUEST = 1004,
-    REJECTION = 1005,
+    CALLBACK_REQUEST = 1003,
+    REJECTION = 1004,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.MEDIATION_OFFER, mediationOffer: strims_vpn_v1_PeerExchangeMessage_IMediationOffer }
   |{ case?: BodyCase.MEDIATION_ANSWER, mediationAnswer: strims_vpn_v1_PeerExchangeMessage_IMediationAnswer }
-  |{ case?: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_IMediationIceCandidate }
   |{ case?: BodyCase.CALLBACK_REQUEST, callbackRequest: strims_vpn_v1_PeerExchangeMessage_ICallbackRequest }
   |{ case?: BodyCase.REJECTION, rejection: strims_vpn_v1_PeerExchangeMessage_IRejection }
   ;
@@ -89,7 +81,6 @@ export namespace PeerExchangeMessage {
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.MEDIATION_OFFER, mediationOffer: strims_vpn_v1_PeerExchangeMessage_MediationOffer }
   |{ case: BodyCase.MEDIATION_ANSWER, mediationAnswer: strims_vpn_v1_PeerExchangeMessage_MediationAnswer }
-  |{ case: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate }
   |{ case: BodyCase.CALLBACK_REQUEST, callbackRequest: strims_vpn_v1_PeerExchangeMessage_CallbackRequest }
   |{ case: BodyCase.REJECTION, rejection: strims_vpn_v1_PeerExchangeMessage_Rejection }
   >;
@@ -97,7 +88,6 @@ export namespace PeerExchangeMessage {
   class BodyImpl {
     mediationOffer: strims_vpn_v1_PeerExchangeMessage_MediationOffer;
     mediationAnswer: strims_vpn_v1_PeerExchangeMessage_MediationAnswer;
-    mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate;
     callbackRequest: strims_vpn_v1_PeerExchangeMessage_CallbackRequest;
     rejection: strims_vpn_v1_PeerExchangeMessage_Rejection;
     case: BodyCase = BodyCase.NOT_SET;
@@ -110,10 +100,6 @@ export namespace PeerExchangeMessage {
       if (v && "mediationAnswer" in v) {
         this.case = BodyCase.MEDIATION_ANSWER;
         this.mediationAnswer = new strims_vpn_v1_PeerExchangeMessage_MediationAnswer(v.mediationAnswer);
-      } else
-      if (v && "mediationIceCandidate" in v) {
-        this.case = BodyCase.MEDIATION_ICE_CANDIDATE;
-        this.mediationIceCandidate = new strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate(v.mediationIceCandidate);
       } else
       if (v && "callbackRequest" in v) {
         this.case = BodyCase.CALLBACK_REQUEST;
@@ -131,7 +117,6 @@ export namespace PeerExchangeMessage {
     new <T extends IBody>(v: T): Readonly<
     T extends { mediationOffer: strims_vpn_v1_PeerExchangeMessage_IMediationOffer } ? { case: BodyCase.MEDIATION_OFFER, mediationOffer: strims_vpn_v1_PeerExchangeMessage_MediationOffer } :
     T extends { mediationAnswer: strims_vpn_v1_PeerExchangeMessage_IMediationAnswer } ? { case: BodyCase.MEDIATION_ANSWER, mediationAnswer: strims_vpn_v1_PeerExchangeMessage_MediationAnswer } :
-    T extends { mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_IMediationIceCandidate } ? { case: BodyCase.MEDIATION_ICE_CANDIDATE, mediationIceCandidate: strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate } :
     T extends { callbackRequest: strims_vpn_v1_PeerExchangeMessage_ICallbackRequest } ? { case: BodyCase.CALLBACK_REQUEST, callbackRequest: strims_vpn_v1_PeerExchangeMessage_CallbackRequest } :
     T extends { rejection: strims_vpn_v1_PeerExchangeMessage_IRejection } ? { case: BodyCase.REJECTION, rejection: strims_vpn_v1_PeerExchangeMessage_Rejection } :
     never
@@ -224,56 +209,6 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export type IMediationIceCandidate = {
-    mediationId?: bigint;
-    index?: bigint;
-    data?: Uint8Array;
-  }
-
-  export class MediationIceCandidate {
-    mediationId: bigint;
-    index: bigint;
-    data: Uint8Array;
-
-    constructor(v?: IMediationIceCandidate) {
-      this.mediationId = v?.mediationId || BigInt(0);
-      this.index = v?.index || BigInt(0);
-      this.data = v?.data || new Uint8Array();
-    }
-
-    static encode(m: MediationIceCandidate, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.mediationId) w.uint32(8).uint64(m.mediationId);
-      if (m.index) w.uint32(16).uint64(m.index);
-      if (m.data.length) w.uint32(26).bytes(m.data);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): MediationIceCandidate {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new MediationIceCandidate();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.mediationId = r.uint64();
-          break;
-          case 2:
-          m.index = r.uint64();
-          break;
-          case 3:
-          m.data = r.bytes();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
   export type ICallbackRequest = Record<string, any>;
 
   export class CallbackRequest {
@@ -349,12 +284,6 @@ export const strims_vpn_v1_PeerExchangeMessage_MediationAnswer = PeerExchangeMes
 export type strims_vpn_v1_PeerExchangeMessage_MediationAnswer = PeerExchangeMessage.MediationAnswer;
 /* @internal */
 export type strims_vpn_v1_PeerExchangeMessage_IMediationAnswer = PeerExchangeMessage.IMediationAnswer;
-/* @internal */
-export const strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate = PeerExchangeMessage.MediationIceCandidate;
-/* @internal */
-export type strims_vpn_v1_PeerExchangeMessage_MediationIceCandidate = PeerExchangeMessage.MediationIceCandidate;
-/* @internal */
-export type strims_vpn_v1_PeerExchangeMessage_IMediationIceCandidate = PeerExchangeMessage.IMediationIceCandidate;
 /* @internal */
 export const strims_vpn_v1_PeerExchangeMessage_CallbackRequest = PeerExchangeMessage.CallbackRequest;
 /* @internal */

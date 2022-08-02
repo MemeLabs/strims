@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	vpnv1 "github.com/MemeLabs/strims/pkg/apis/vpn/v1"
@@ -32,7 +31,6 @@ func newWebRTCMediator(hostID kademlia.ID, network *Network) *webRTCMediator {
 		network:               network,
 		init:                  true,
 		done:                  make(chan struct{}),
-		remoteICECandiates:    make(chan []byte, 64),
 		remoteDescriptionDone: make(chan struct{}),
 	}
 }
@@ -50,30 +48,22 @@ func newWebRTCMediatorFromOffer(
 		network:               network,
 		init:                  false,
 		done:                  make(chan struct{}),
-		remoteICECandiates:    make(chan []byte, 64),
 		remoteDescriptionDone: closedChan,
 		remoteDescription:     offer,
 	}
 }
 
 type webRTCMediator struct {
-	init             bool
-	id               kademlia.ID
-	network          *Network
-	mediationID      uint64
-	nextICESendIndex uint64
+	init        bool
+	id          kademlia.ID
+	network     *Network
+	mediationID uint64
 
 	lock                  sync.Mutex
 	remoteMediationID     uint64
 	closeErr              error
 	remoteDescriptionDone chan struct{}
 	remoteDescription     []byte
-
-	remoteICELock        sync.Mutex
-	remoteICEReadIndices uint64
-	remoteICEAllIndices  uint64
-	remoteICECandiates   chan []byte
-	remoteICECloseOnce   sync.Once
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -124,33 +114,6 @@ func (m *webRTCMediator) close(err error) {
 	})
 }
 
-func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, error) {
-	if index > 64 {
-		return false, errors.New("ice candidate index out of range")
-	}
-
-	m.remoteICELock.Lock()
-	defer m.remoteICELock.Unlock()
-
-	mask := uint64(1) << index
-	if candidate == nil {
-		m.remoteICEAllIndices = mask - 1
-	} else if m.remoteICEReadIndices&mask == 0 {
-		m.remoteICEReadIndices |= mask
-
-		select {
-		case m.remoteICECandiates <- candidate:
-		default:
-		}
-	}
-
-	if m.remoteICEAllIndices != 0 && m.remoteICEReadIndices == m.remoteICEAllIndices {
-		m.remoteICECloseOnce.Do(func() { close(m.remoteICECandiates) })
-		return true, nil
-	}
-	return false, nil
-}
-
 func (m *webRTCMediator) getRemoteDescription() ([]byte, error) {
 	select {
 	case <-m.remoteDescriptionDone:
@@ -176,10 +139,6 @@ func (m *webRTCMediator) GetAnswer() ([]byte, error) {
 	return m.getRemoteDescription()
 }
 
-func (m *webRTCMediator) GetICECandidates() <-chan []byte {
-	return m.remoteICECandiates
-}
-
 func (m *webRTCMediator) SendOffer(offer []byte) error {
 	msg := &vpnv1.PeerExchangeMessage{
 		Body: &vpnv1.PeerExchangeMessage_MediationOffer_{
@@ -198,25 +157,6 @@ func (m *webRTCMediator) SendAnswer(answer []byte) error {
 			MediationAnswer: &vpnv1.PeerExchangeMessage_MediationAnswer{
 				MediationId: m.mediationID,
 				Data:        answer,
-			},
-		},
-	}
-	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
-}
-
-func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
-	index := atomic.AddUint64(&m.nextICESendIndex, 1) - 1
-
-	if _, err := m.getRemoteDescription(); err != nil {
-		return err
-	}
-
-	msg := &vpnv1.PeerExchangeMessage{
-		Body: &vpnv1.PeerExchangeMessage_MediationIceCandidate_{
-			MediationIceCandidate: &vpnv1.PeerExchangeMessage_MediationIceCandidate{
-				MediationId: m.mediationID,
-				Index:       index,
-				Data:        candidate,
 			},
 		},
 	}
@@ -256,8 +196,6 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 		return s.handleMediationOffer(b.MediationOffer, msg)
 	case *vpnv1.PeerExchangeMessage_MediationAnswer_:
 		return s.handleMediationAnswer(b.MediationAnswer, msg)
-	case *vpnv1.PeerExchangeMessage_MediationIceCandidate_:
-		return s.handleMediationICECandidate(b.MediationIceCandidate, msg)
 	case *vpnv1.PeerExchangeMessage_CallbackRequest_:
 		return s.handleCallbackRequest(b.CallbackRequest, msg)
 	case *vpnv1.PeerExchangeMessage_Rejection_:
@@ -439,24 +377,4 @@ func (s *peerExchange) handleMediationAnswer(m *vpnv1.PeerExchangeMessage_Mediat
 	}
 
 	return t.SetAnswer(m.MediationId, m.Data)
-}
-
-func (s *peerExchange) handleMediationICECandidate(m *vpnv1.PeerExchangeMessage_MediationIceCandidate, msg *Message) error {
-	s.mediatorsLock.Lock()
-	t, ok := s.mediators[msg.SrcHostID()]
-	s.mediatorsLock.Unlock()
-	if !ok || t.remoteMediationID != m.MediationId {
-		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.SrcHostID())
-	}
-
-	done, err := t.addICECandidate(m.Index, m.Data)
-	if err != nil {
-		return err
-	}
-	if done {
-		s.mediatorsLock.Lock()
-		delete(s.mediators, msg.SrcHostID())
-		s.mediatorsLock.Unlock()
-	}
-	return nil
 }

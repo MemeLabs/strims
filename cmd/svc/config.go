@@ -77,15 +77,6 @@ func loadConfig[T any](path string) (*T, error) {
 	return &cfg, nil
 }
 
-type MonitoringConfig struct {
-	Metrics struct {
-		Address Optional[string] `yaml:"address"`
-	} `yaml:"metrics"`
-	Debug struct {
-		Address Optional[string] `yaml:"address"`
-	}
-}
-
 type StorageConfig struct {
 	Adapter Optional[string] `yaml:"adapter"`
 	BBolt   struct {
@@ -113,7 +104,12 @@ type HTTPConfig struct {
 }
 
 type PeerConfig struct {
-	MonitoringConfig
+	Metrics struct {
+		Address Optional[string] `yaml:"address"`
+	} `yaml:"metrics"`
+	Debug struct {
+		Address Optional[string] `yaml:"address"`
+	}
 	Storage StorageConfig `yaml:"storage"`
 	Queue   struct {
 		Adapter  Optional[string] `yaml:"adapter"`
@@ -151,7 +147,12 @@ type PeerConfig struct {
 }
 
 type InviteServerConfig struct {
-	MonitoringConfig
+	Metrics struct {
+		Address Optional[string] `yaml:"address"`
+	} `yaml:"metrics"`
+	Debug struct {
+		Address Optional[string] `yaml:"address"`
+	}
 	Storage StorageConfig `yaml:"storage"`
 	HTTP    HTTPConfig    `yaml:"http"`
 }

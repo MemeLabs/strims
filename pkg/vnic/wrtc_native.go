@@ -195,11 +195,16 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		if err != nil {
 			return nil, err
 		}
+
+		gatherComplete := webrtc.GatheringCompletePromise(pc)
+
 		if err := pc.SetLocalDescription(answer); err != nil {
 			return nil, err
 		}
 
-		answerBytes, err := json.Marshal(answer)
+		<-gatherComplete
+
+		answerBytes, err := json.Marshal(pc.LocalDescription())
 		if err != nil {
 			return nil, err
 		}
@@ -226,11 +231,16 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		if err != nil {
 			return nil, err
 		}
+
+		gatherComplete := webrtc.GatheringCompletePromise(pc)
+
 		if err := pc.SetLocalDescription(offer); err != nil {
 			return nil, err
 		}
 
-		offerBytes, err := json.Marshal(offer)
+		<-gatherComplete
+
+		offerBytes, err := json.Marshal(pc.LocalDescription())
 		if err != nil {
 			return nil, err
 		}
@@ -250,35 +260,6 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 			return nil, err
 		}
 	}
-
-	go func() {
-		for candidate := range candidates {
-			var b []byte
-			if candidate != nil {
-				b, err = json.Marshal(candidate.ToJSON())
-				if err != nil {
-					d.logger.Debug("candidate json marshal failed", zap.Error(err))
-					continue
-				}
-			}
-			if err := m.SendICECandidate(b); err != nil {
-				d.logger.Debug("sending ice candidate failed", zap.Error(err))
-			}
-		}
-	}()
-
-	go func() {
-		for b := range m.GetICECandidates() {
-			var c webrtc.ICECandidateInit
-			if err := json.Unmarshal(b, &c); err != nil {
-				d.logger.Debug("getting ice candidate failed", zap.Error(err))
-				continue
-			}
-			if err := pc.AddICECandidate(c); err != nil {
-				d.logger.Debug("adding ice candidate failed", zap.Error(err))
-			}
-		}
-	}()
 
 	select {
 	case dc := <-dcReady:

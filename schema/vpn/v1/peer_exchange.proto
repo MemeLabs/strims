@@ -20,12 +20,6 @@ message PeerExchangeMessage {
     bytes data = 2;
   }
 
-  message MediationIceCandidate {
-    uint64 mediation_id = 1;
-    uint64 index = 2;
-    bytes data = 3;
-  }
-
   message CallbackRequest {}
 
   message Rejection {
@@ -35,8 +29,7 @@ message PeerExchangeMessage {
   oneof body {
     MediationOffer mediation_offer = 1001;
     MediationAnswer mediation_answer = 1002;
-    MediationIceCandidate mediation_ice_candidate = 1003;
-    CallbackRequest callback_request = 1004;
-    Rejection rejection = 1005;
+    CallbackRequest callback_request = 1003;
+    Rejection rejection = 1004;
   }
 }

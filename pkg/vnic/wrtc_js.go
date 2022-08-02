@@ -11,7 +11,6 @@ import (
 
 	"github.com/MemeLabs/strims/pkg/wasmio"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // NewWebRTCDialer ...
@@ -52,46 +51,11 @@ func (d *WebRTCDialer) dial(m WebRTCMediator, pc *wasmio.WebRTCProxy) (Link, err
 		}
 	}
 
-	var g errgroup.Group
-	g.Go(func() error { return d.recieveICECandidates(m, pc) })
-	g.Go(func() error { return d.sendICECandidates(m, pc) })
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-
 	cid, err := pc.DataChannelID("data")
 	if err != nil {
 		return nil, err
 	}
 	return wasmio.NewDataChannelProxy(d.bridge, cid)
-}
-
-func (d *WebRTCDialer) recieveICECandidates(m WebRTCMediator, pc *wasmio.WebRTCProxy) error {
-	for b := range m.GetICECandidates() {
-		var c wasmio.ICECandidateInit
-		if err := json.Unmarshal(b, &c); err != nil {
-			return err
-		}
-		pc.AddICECandidate(&c)
-	}
-	return nil
-}
-
-func (d *WebRTCDialer) sendICECandidates(m WebRTCMediator, pc *wasmio.WebRTCProxy) error {
-	for c := range pc.ICECandidates() {
-		var b []byte
-		var err error
-		if c != nil {
-			b, err = json.Marshal(c)
-			if err != nil {
-				return err
-			}
-		}
-		if err := m.SendICECandidate(b); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (d *WebRTCDialer) sendAnswer(m WebRTCMediator, pc *wasmio.WebRTCProxy, offerBytes []byte) error {
@@ -107,11 +71,10 @@ func (d *WebRTCDialer) sendAnswer(m WebRTCMediator, pc *wasmio.WebRTCProxy, offe
 	}
 	pc.SetLocalDescription(answer)
 
-	answerBytes, err := json.Marshal(answer)
-	if err != nil {
-		return err
+	for range pc.ICECandidates() {
 	}
-	if err := m.SendAnswer(answerBytes); err != nil {
+
+	if err := m.SendAnswer([]byte(pc.LocalDescription())); err != nil {
 		return err
 	}
 	return nil
@@ -126,11 +89,10 @@ func (d *WebRTCDialer) sendOffer(m WebRTCMediator, pc *wasmio.WebRTCProxy) error
 	}
 	pc.SetLocalDescription(offer)
 
-	offerBytes, err := json.Marshal(offer)
-	if err != nil {
-		return err
+	for range pc.ICECandidates() {
 	}
-	if err := m.SendOffer(offerBytes); err != nil {
+
+	if err := m.SendOffer([]byte(pc.LocalDescription())); err != nil {
 		return err
 	}
 

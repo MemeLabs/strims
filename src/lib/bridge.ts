@@ -104,6 +104,7 @@ type WebRTCWindowEvent =
   | {
       type: EventType.ICE_CANDIDATE;
       candidate: string;
+      description: string;
     }
   | {
       type: EventType.CONNECTION_STATE_CHANGE;
@@ -353,6 +354,7 @@ export class WindowBridge extends EventEmitter {
       port.postMessage({
         type: EventType.ICE_CANDIDATE,
         candidate: JSON.stringify(e.candidate),
+        description: JSON.stringify(peerConnection.localDescription),
       });
 
     peerConnection.onconnectionstatechange = () => {
@@ -525,7 +527,7 @@ export class Bus extends EventEmitter {
 }
 
 export interface WebRTCGoProxy {
-  onicecandidate(candidate: string): void;
+  onicecandidate(candidate: string, localDescription: string): void;
   onconnectionstatechange(state: string): void;
   onicegatheringstatechange(state: string): void;
   onsignalingstatechange(state: string): void;
@@ -725,7 +727,7 @@ export class WorkerBridge extends EventEmitter {
       // console.log("worker event", eventTypeNames[data.type], data);
       switch (data.type) {
         case EventType.ICE_CANDIDATE:
-          proxy.onicecandidate(data.candidate);
+          proxy.onicecandidate(data.candidate, data.description);
           break;
         case EventType.CONNECTION_STATE_CHANGE:
           proxy.onconnectionstatechange(data.state);

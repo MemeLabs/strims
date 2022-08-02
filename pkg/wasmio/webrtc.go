@@ -46,6 +46,7 @@ type WebRTCProxy struct {
 	answers           chan any
 	offers            chan any
 	iceCandidates     chan *ICECandidateInit
+	localDescription  string
 	connectionState   string
 	iceGatheringState string
 	signalingState    string
@@ -111,6 +112,11 @@ func (p *WebRTCProxy) ICECandidates() <-chan *ICECandidateInit {
 	return p.iceCandidates
 }
 
+// LocalDescription ...
+func (p *WebRTCProxy) LocalDescription() string {
+	return p.localDescription
+}
+
 // ConnectionState ...
 func (p *WebRTCProxy) ConnectionState() string {
 	return p.connectionState
@@ -134,6 +140,8 @@ func (p *WebRTCProxy) Close() {
 
 func (p *WebRTCProxy) onICECandidate(this js.Value, args []js.Value) any {
 	// log.Println("ice candidate", args[0].String())
+	p.localDescription = args[1].String()
+
 	cs := args[0].String()
 	if cs == "null" {
 		p.iceCandidates <- nil
