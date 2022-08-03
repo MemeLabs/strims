@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { ComponentProps, useEffect, useRef, useState } from "react";
+import { ComponentProps, useState } from "react";
 
 import useReady from "./useReady";
 
@@ -21,6 +21,8 @@ export enum VideoReadyState {
   // media can be played through to the end without interruption.
   HAVE_ENOUGH_DATA = 4,
 }
+
+const VOLUME_STORAGE_KEY = "volume";
 
 export interface VideoState {
   readyState: number;
@@ -78,6 +80,13 @@ const useVideo = (
   const [error, setError] = useState<MediaError>(null);
 
   useReady(() => {
+    const savedVolume = localStorage.getItem(VOLUME_STORAGE_KEY);
+    if (savedVolume !== "") {
+      const volume = parseFloat(savedVolume) || 0;
+      ref.current.muted = volume === 0;
+      ref.current.volume = volume;
+    }
+
     setMuted(ref.current.muted);
     setVolume(ref.current.volume);
     setReadyState(ref.current.readyState);
@@ -195,8 +204,10 @@ const useVideo = (
   };
 
   const setVolume = (volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    localStorage.setItem(VOLUME_STORAGE_KEY, clampedVolume.toString());
+
     if (ref.current) {
-      const clampedVolume = Math.max(0, Math.min(1, volume));
       unsafelySetVolume(clampedVolume);
       ref.current.volume = clampedVolume;
       ref.current.muted = clampedVolume === 0;
