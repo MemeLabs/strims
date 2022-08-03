@@ -316,7 +316,7 @@ interface CategoryPanelProps {
 const CategoryPanel = React.memo<CategoryPanelProps>(
   ({ uiConfig, category, width, onSelect, onHover, sizeRef }) => {
     const [doubleClickTimeout, setDoubleClickTimeout] = useState(0);
-    const handlePointerUp = (e: React.PointerEvent, v: string) => {
+    const handlePointerUp = useStableCallback((e: React.PointerEvent, v: string) => {
       if (e.button !== 0) {
         return;
       }
@@ -326,45 +326,46 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
         clearTimeout(doubleClickTimeout);
         onSelect(v, true);
       }
-    };
+    });
 
-    let content: React.ReactElement[];
-    if (category.type === "emote") {
-      const emoteWidths = category.emotes.map((e) => computeEmoteWidth(e) + EMOTE_MARGIN * 2);
-      const rows = balanceRows(emoteWidths, width - VIEWPORT_MARGIN * 2, EMOTE_GAP);
-      const emotes = rows.map((i, j) => category.emotes.slice(rows[j - 1], i));
-      content = emotes.map((emotes, row) => (
-        <li key={row} className="emote_menu__category__list_row">
-          {emotes.map((emote) => (
-            <span
-              key={emote.name}
-              className="emote_menu__category__list_item emote_menu__category__list_item--emote"
-              onPointerUp={(e) => handlePointerUp(e, emote.name)}
-              onMouseEnter={() => onHover({ type: "emote", emote })}
-            >
-              <Emote name={emote.name} shouldAnimateForever />
-            </span>
-          ))}
-        </li>
-      ));
-    } else {
-      content = category.emoji.map((emoji) => {
-        const variant = uiConfig.emojiSkinTone
-          ? emoji.skins?.find((s) => s.unicode.endsWith(uiConfig.emojiSkinTone)) ?? emoji
-          : emoji;
-
-        return (
-          <li
-            key={emoji.unicode}
-            className="emote_menu__category__list_item emote_menu__category__list_item--emoji"
-            onPointerUp={(e) => handlePointerUp(e, variant.unicode)}
-            onMouseEnter={() => onHover({ type: "emoji", emoji: variant })}
-          >
-            <Emoji>{variant.unicode}</Emoji>
+    const content = useMemo(() => {
+      if (category.type === "emote") {
+        const emoteWidths = category.emotes.map((e) => computeEmoteWidth(e) + EMOTE_MARGIN * 2);
+        const rows = balanceRows(emoteWidths, width - VIEWPORT_MARGIN * 2, EMOTE_GAP);
+        const emotes = rows.map((i, j) => category.emotes.slice(rows[j - 1], i));
+        return emotes.map((emotes, row) => (
+          <li key={row} className="emote_menu__category__list_row">
+            {emotes.map((emote) => (
+              <span
+                key={emote.name}
+                className="emote_menu__category__list_item emote_menu__category__list_item--emote"
+                onPointerUp={(e) => handlePointerUp(e, emote.name)}
+                onMouseEnter={() => onHover({ type: "emote", emote })}
+              >
+                <Emote name={emote.name} shouldAnimateForever />
+              </span>
+            ))}
           </li>
-        );
-      });
-    }
+        ));
+      } else {
+        return category.emoji.map((emoji) => {
+          const variant = uiConfig.emojiSkinTone
+            ? emoji.skins?.find((s) => s.unicode.endsWith(uiConfig.emojiSkinTone)) ?? emoji
+            : emoji;
+
+          return (
+            <li
+              key={emoji.unicode}
+              className="emote_menu__category__list_item emote_menu__category__list_item--emoji"
+              onPointerUp={(e) => handlePointerUp(e, variant.unicode)}
+              onMouseEnter={() => onHover({ type: "emoji", emoji: variant })}
+            >
+              <Emoji>{variant.unicode}</Emoji>
+            </li>
+          );
+        });
+      }
+    }, [uiConfig, category, width]);
 
     const ref = useRef<HTMLDivElement>();
     sizeRef.current = useSize(ref);
@@ -384,6 +385,8 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
     );
   }
 );
+
+CategoryPanel.displayName = "CategoryPanel";
 
 interface ScrollerProps {
   uiConfig: chatv1.UIConfig;
@@ -414,25 +417,22 @@ const Scroller: React.FC<ScrollerProps> = ({
   const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
 
   const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
-  const panels = useMemo(() => {
-    const panels: React.ReactNode[] = [];
-    if (viewportSize) {
-      for (const category of categories) {
-        const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
-        sizes.push(size);
-        panels.push(
-          <CategoryPanel
-            key={category.key}
-            category={category}
-            width={viewportSize.width}
-            sizeRef={size}
-            {...panelProps}
-          />
-        );
-      }
+  const panels: React.ReactNode[] = [];
+  if (viewportSize) {
+    for (const category of categories) {
+      const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
+      sizes.push(size);
+      panels.push(
+        <CategoryPanel
+          key={category.key}
+          category={category}
+          width={viewportSize.width}
+          sizeRef={size}
+          {...panelProps}
+        />
+      );
     }
-    return panels;
-  }, [categories, viewportSize]);
+  }
 
   useEffect(() => {
     control.current = {
