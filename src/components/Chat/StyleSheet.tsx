@@ -33,6 +33,21 @@ const toCSSScale = (scale: EmoteScale): number => {
   }
 };
 
+export const computeEmoteWidth = (e: Emote) => {
+  const sample = e.images[0];
+  const sampleScale = toCSSScale(sample.scale);
+  let width = sample.width / sampleScale;
+
+  for (const { effect } of e.effects) {
+    switch (effect.case) {
+      case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+        width = width / effect.spriteAnimation.frameCount;
+    }
+  }
+
+  return width;
+};
+
 export type ExtraRules = { [key: string]: PropList };
 
 export interface StyleSheetProps {

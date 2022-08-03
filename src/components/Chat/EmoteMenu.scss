@@ -71,6 +71,14 @@
       }
     }
 
+    &__list_row {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+
     &__list_item {
       cursor: pointer;
 

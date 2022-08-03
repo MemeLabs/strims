@@ -6,7 +6,7 @@ import "./EmoteMenu.scss";
 import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import { escapeRegExp } from "lodash";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { BiSearch } from "react-icons/bi";
 import {
@@ -29,11 +29,18 @@ import * as chatv1 from "../../apis/strims/chat/v1/chat";
 import { useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import balanceRows from "../../lib/balanceRows";
 import Dropdown from "../Dropdown";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
+import { computeEmoteWidth } from "./StyleSheet";
 
 const DOUBLE_CLICK_TIMEOUT = 200;
+
+// needs to be kept in sync with stylesheets
+const EMOTE_MARGIN = 3;
+const VIEWPORT_MARGIN = 10;
+const EMOTE_GAP = 0;
 
 interface EmoteMenuProps {
   onSelect: (v: string, send: boolean) => void;
@@ -300,13 +307,14 @@ type CategoryItem =
 interface CategoryPanelProps {
   uiConfig: chatv1.UIConfig;
   category: Category;
+  width: number;
   onSelect: (v: string, send: boolean) => void;
   onHover: (v: CategoryItem) => void;
   sizeRef: React.MutableRefObject<DOMRectReadOnly>;
 }
 
 const CategoryPanel = React.memo<CategoryPanelProps>(
-  ({ uiConfig, category, onSelect, onHover, sizeRef }) => {
+  ({ uiConfig, category, width, onSelect, onHover, sizeRef }) => {
     const [doubleClickTimeout, setDoubleClickTimeout] = useState(0);
     const handlePointerUp = (e: React.PointerEvent, v: string) => {
       if (e.button !== 0) {
@@ -322,14 +330,21 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
 
     let content: React.ReactElement[];
     if (category.type === "emote") {
-      content = category.emotes.map((emote) => (
-        <li
-          key={emote.name}
-          className="emote_menu__category__list_item emote_menu__category__list_item--emote"
-          onPointerUp={(e) => handlePointerUp(e, emote.name)}
-          onMouseEnter={() => onHover({ type: "emote", emote })}
-        >
-          <Emote name={emote.name} shouldAnimateForever />
+      const emoteWidths = category.emotes.map((e) => computeEmoteWidth(e) + EMOTE_MARGIN * 2);
+      const rows = balanceRows(emoteWidths, width - VIEWPORT_MARGIN * 2, EMOTE_GAP);
+      const emotes = rows.map((i, j) => category.emotes.slice(rows[j - 1], i));
+      content = emotes.map((emotes, row) => (
+        <li key={row} className="emote_menu__category__list_row">
+          {emotes.map((emote) => (
+            <span
+              key={emote.name}
+              className="emote_menu__category__list_item emote_menu__category__list_item--emote"
+              onPointerUp={(e) => handlePointerUp(e, emote.name)}
+              onMouseEnter={() => onHover({ type: "emote", emote })}
+            >
+              <Emote name={emote.name} shouldAnimateForever />
+            </span>
+          ))}
         </li>
       ));
     } else {
@@ -395,17 +410,30 @@ const Scroller: React.FC<ScrollerProps> = ({
   control,
   ...panelProps
 }) => {
-  const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
-  const panels: React.ReactNode[] = [];
-  for (const category of categories) {
-    const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
-    sizes.push(size);
-    panels.push(
-      <CategoryPanel key={category.key} category={category} sizeRef={size} {...panelProps} />
-    );
-  }
-
   const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
+  const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
+
+  const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
+  const panels = useMemo(() => {
+    const panels: React.ReactNode[] = [];
+    if (viewportSize) {
+      for (const category of categories) {
+        const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
+        sizes.push(size);
+        panels.push(
+          <CategoryPanel
+            key={category.key}
+            category={category}
+            width={viewportSize.width}
+            sizeRef={size}
+            {...panelProps}
+          />
+        );
+      }
+    }
+    return panels;
+  }, [categories, viewportSize]);
+
   useEffect(() => {
     control.current = {
       scrollToIndex: (index: number) => {
