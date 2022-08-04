@@ -29,6 +29,10 @@ class Layout {
     return this.rows.length;
   }
 
+  rowLength(i: number) {
+    return i === 0 ? this.rows[0] : this.rows[i] - this.rows[i - 1];
+  }
+
   rotateLeft(i: number) {
     const w = this.widths[this.rows[i - 1]];
     this.rowWidths[i] -= w;
@@ -50,14 +54,14 @@ class Layout {
   bubbleUp(i: number) {
     this.rotateLeft(i);
     for (let j = i - 1; j > 1; j--) {
-      while (this.rowWidths[j] > this.maxWidth) this.rotateLeft(j);
+      while (this.rowWidths[j] > this.maxWidth && this.rowLength(j) > 1) this.rotateLeft(j);
     }
   }
 
   bubbleDown(i: number) {
     this.rotateRight(i);
     for (let j = i + 1; j < this.rows.length; j++) {
-      while (this.rowWidths[j] > this.maxWidth) this.rotateRight(j);
+      while (this.rowWidths[j] > this.maxWidth && this.rowLength(j) > 1) this.rotateRight(j);
     }
   }
 
@@ -82,8 +86,7 @@ class Layout {
   }
 
   private static getErrRankedIndex(errs: number[], rank: number) {
-    const indices: number[] = [];
-    for (let i = 0; i < errs.length; i++) indices.push(i);
+    const indices = errs.map((_, i) => i);
     indices.sort((a, b) => Math.abs(errs[b]) - Math.abs(errs[a]));
     return indices[rank];
   }

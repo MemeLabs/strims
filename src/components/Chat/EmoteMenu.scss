@@ -61,10 +61,6 @@
       &--emote {
         display: flex;
         flex-direction: column;
-
-        @at-root .emote_menu--search & {
-          justify-content: left;
-        }
       }
     }
 
@@ -73,13 +69,17 @@
       flex-direction: row;
       justify-content: space-between;
       align-items: center;
+
+      &:only-child {
+        justify-content: flex-start;
+      }
     }
 
     &__list_item {
       cursor: pointer;
 
-      .chat__emoji {
-        line-height: 1em;
+      &--emoji {
+        line-height: 1.8rem;
       }
     }
   }

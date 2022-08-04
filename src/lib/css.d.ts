@@ -25,5 +25,9 @@ declare module "csstype" {
 
     "--context-menu-x"?: string | number;
     "--context-menu-y"?: string | number;
+
+    "--menu-x"?: string;
+    "--menu-y"?: string;
+    "--menu-scale"?: string;
   }
 }

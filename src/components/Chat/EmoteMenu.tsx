@@ -336,14 +336,14 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
         return emotes.map((emotes, row) => (
           <li key={row} className="emote_menu__category__list_row">
             {emotes.map((emote) => (
-              <span
+              <Emote
                 key={emote.name}
+                name={emote.name}
+                shouldAnimateForever
                 className="emote_menu__category__list_item emote_menu__category__list_item--emote"
                 onPointerUp={(e) => handlePointerUp(e, emote.name)}
                 onMouseEnter={() => onHover({ type: "emote", emote })}
-              >
-                <Emote name={emote.name} shouldAnimateForever />
-              </span>
+              />
             ))}
           </li>
         ));
@@ -354,14 +354,14 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
             : emoji;
 
           return (
-            <li
+            <Emoji
               key={emoji.unicode}
               className="emote_menu__category__list_item emote_menu__category__list_item--emoji"
               onPointerUp={(e) => handlePointerUp(e, variant.unicode)}
               onMouseEnter={() => onHover({ type: "emoji", emoji: variant })}
             >
-              <Emoji>{variant.unicode}</Emoji>
-            </li>
+              {variant.unicode}
+            </Emoji>
           );
         });
       }
@@ -373,14 +373,14 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
     return (
       <div className="emote_menu__category" ref={ref}>
         <div className="emote_menu__category__header">{category.title}</div>
-        <ul
+        <div
           className={clsx(
             "emote_menu__category__list",
             `emote_menu__category__list--${category.type}`
           )}
         >
           {content}
-        </ul>
+        </div>
       </div>
     );
   }

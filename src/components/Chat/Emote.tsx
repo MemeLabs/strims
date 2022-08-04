@@ -4,23 +4,22 @@
 import "./Emote.scss";
 
 import clsx from "clsx";
-import React, { ReactNode } from "react";
+import React, { ComponentProps } from "react";
 
 import { Modifier } from "../../apis/strims/chat/v1/chat";
 import { useRoom } from "../../contexts/Chat";
 
-type EmoteProps = {
+export interface EmoteProps extends ComponentProps<"span"> {
   name: string;
   modifiers?: string[];
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
   compactSpacing?: boolean;
-  children?: ReactNode;
-  [key: string]: any;
-};
+}
 
 const Emote: React.FC<EmoteProps> = ({
   children,
+  className,
   name,
   modifiers,
   shouldAnimateForever = false,
@@ -60,6 +59,7 @@ const Emote: React.FC<EmoteProps> = ({
         "chat__emote--animate_forever": shouldAnimateForever,
         "chat__emote--compact_spacing": compactSpacing,
         "chat__emote--root": rootDepth === 0,
+        [className]: rootDepth === 0 && className !== undefined,
       })}
     >
       {children}
@@ -83,6 +83,7 @@ const Emote: React.FC<EmoteProps> = ({
               "chat__emote_container--animate_forever": shouldAnimateForever,
               "chat__emote_container--compact_spacing": compactSpacing,
               "chat__emote_container--root": rootDepth === 0 && i === 0,
+              [className]: rootDepth === 0 && i === 0 && className !== undefined,
             }
           )}
         >
