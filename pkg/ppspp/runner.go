@@ -115,6 +115,7 @@ func (r *Runner) stopChannel(s *Swarm, p *peer, rs *runnerSwarm, cr *ChannelRead
 	delete(rs.peers, p)
 	if len(rs.peers) == 0 {
 		rs.stopTicker()
+		s.pubSub.Unsubscribe(rs.scheduler)
 		delete(r.swarms, s)
 	}
 
