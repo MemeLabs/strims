@@ -67,7 +67,11 @@ func (q *timeoutQueue) Push(i timeoutQueueItem) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	q.push(i)
+	if q.now.After(i.Deadline()) {
+		q.expired.PushBack(i)
+	} else {
+		q.push(i)
+	}
 }
 
 func (q *timeoutQueue) Pop() timeoutQueueItem {
