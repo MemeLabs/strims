@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Emote, EmoteImage } from "../../../apis/strims/chat/v1/chat";
 import {
@@ -70,6 +72,9 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDel
 };
 
 const ChatEmoteList: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.chat.title"));
+
   const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getEmotes] = useCall("chatServer", "listEmotes", {
     args: [{ serverId: BigInt(serverId) }],

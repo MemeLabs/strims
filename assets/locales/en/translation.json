@@ -1,5 +1,6 @@
 {
   "Cancel": "Cancel",
+  "title": "Strims",
 
   // video player
   "player": {
@@ -102,9 +103,27 @@
     }
   },
 
+  "settings": {
+    "network.title": "Network Settings - Strims",
+    "bootstrap.title": "Network Bootstrap Settings - Strims",
+    "chat.title": "Chat Settings - Strims",
+    "videoIngress.title": "Video Ingress Settings - Strims",
+    "videoEgress.title": "Video Egress Settings - Strims",
+    "videoChannel.title": "Video Channel Settings - Strims",
+    "autoseed.title": "Autoseed Settings - Strims",
+    "vnic.title": "VNIC Settings - Strims"
+  },
+
+  "landing": {
+    "login.title": "Log In - Strims",
+    "signUp.title": "Sign Up - Strims"
+  },
+
   "directory": {
     "Search": "Search...",
     "Embed": "Embed",
+    "title": "Directory - {network} - Strims",
+    "titleFallback": "Directory - Strims",
 
     "embedType": {
       "AngelThump": "AngelThump stream",

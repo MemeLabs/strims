@@ -3,13 +3,18 @@
 
 import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.videoChannel.title"));
+
   const [{ value }] = useCall("videoChannel", "list");
   const navigate = useNavigate();
   const [{ error, loading }, createChannel] = useLazyCall("videoChannel", "create", {

@@ -3,7 +3,9 @@
 
 import qs from "qs";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
 import LandingPageLayout from "../components/LandingPageLayout";
@@ -12,6 +14,9 @@ import { useSession } from "../contexts/Session";
 import useNextQuery from "../hooks/useNextQuery";
 
 const SignUpPage: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("landing.signUp.title"));
+
   const [session, { createProfile }] = useSession();
   const next = useNextQuery();
 

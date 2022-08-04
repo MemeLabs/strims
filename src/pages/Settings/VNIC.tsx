@@ -3,6 +3,8 @@
 
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { useTitle } from "react-use";
 
 import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic";
 import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
@@ -130,6 +132,9 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
 };
 
 const VNICsPage: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.vnic.title"));
+
   const [{ value }, getConfig] = useCall("vnic", "getConfig");
 
   return (

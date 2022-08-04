@@ -5,6 +5,7 @@ import React, { useContext, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation, useParams } from "react-router-dom";
 
+import VideoTitle from "../components/VideoTitle";
 import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
@@ -47,7 +48,7 @@ const Embed: React.FC = () => {
     };
   }, [routeParams.service, routeParams.id, networkKey]);
 
-  return null;
+  return <VideoTitle />;
 };
 
 export default Embed;

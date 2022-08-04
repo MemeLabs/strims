@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import * as directoryv1 from "../apis/strims/network/v1/directory/directory";
@@ -10,6 +10,7 @@ import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import { formatUri, getListingPlayerSource } from "../lib/directory";
 import { DEVICE_TYPE, DeviceType } from "../lib/userAgent";
+import useReady from "./useReady";
 
 export const useOpenListing = () => {
   const layout = useLayout();
@@ -55,7 +56,7 @@ export const useListings = (args: directoryv1.IFrontendWatchListingsRequest) => 
 
   const [values, setValues] = useState<ListingValues>(defaultListingValues);
 
-  useEffect(() => {
+  useReady(() => {
     setValues(defaultListingValues);
     const events = client.directory.watchListings(args);
     events.on("data", ({ events }) =>
@@ -118,10 +119,12 @@ export const useListings = (args: directoryv1.IFrontendWatchListingsRequest) => 
 
 export const useListing = (networkKey: Uint8Array, listingId: bigint) => {
   const req = useMemo(() => {
-    return {
-      networkKeys: [networkKey],
-      listingId,
-    };
+    if (networkKey && listingId) {
+      return {
+        networkKeys: [networkKey],
+        listingId,
+      };
+    }
   }, [networkKey, listingId]);
   const { networkListings, ...res } = useListings(req);
 

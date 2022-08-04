@@ -4,7 +4,9 @@
 import { Base64 } from "js-base64";
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
+import { useTitle } from "react-use";
 
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
 import { Invitation } from "../../../apis/strims/network/v1/network";
@@ -15,6 +17,9 @@ import { useCall, useClient } from "../../../contexts/FrontendApi";
 import { useNotification } from "../../../contexts/Notification";
 
 const NetworkInviteCreateForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.network.title"));
+
   const client = useClient();
   const { pushTransientNotification } = useNotification();
   const navigate = useNavigate();

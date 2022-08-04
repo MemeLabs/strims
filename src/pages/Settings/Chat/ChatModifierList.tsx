@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Modifier } from "../../../apis/strims/chat/v1/chat";
 import {
@@ -60,6 +62,9 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
 };
 
 const ChatModifierList: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.chat.title"));
+
   const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getModifiers] = useCall("chatServer", "listModifiers", {
     args: [{ serverId: BigInt(serverId) }],

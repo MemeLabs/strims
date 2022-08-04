@@ -2,13 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
 const ChatModifierEditForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.chat.title"));
+
   const { serverId, modifierId } = useParams<"serverId" | "modifierId">();
   const [getRes] = useCall("chatServer", "getModifier", { args: [{ id: BigInt(modifierId) }] });
 

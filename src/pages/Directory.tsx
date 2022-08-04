@@ -3,12 +3,15 @@
 
 import { Base64 } from "js-base64";
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { ListingContentType } from "../apis/strims/network/v1/directory/directory";
 import DirectoryGrid, { DirectoryListing } from "../components/Directory/Grid";
 import { useClient } from "../contexts/FrontendApi";
 import { useListings } from "../hooks/directory";
+import first from "../lib/first";
 
 const TestButton = () => {
   // TODO: feature gates
@@ -33,6 +36,7 @@ const TestButton = () => {
 };
 
 const Directory: React.FC = () => {
+  const { t } = useTranslation();
   const params = useParams<"networkKey">();
 
   const listings = useListings(
@@ -47,6 +51,12 @@ const Directory: React.FC = () => {
       [params.networkKey]
     )
   );
+
+  const networkName = params.networkKey && first(listings.networkListings.values())?.network.name;
+  const title = networkName
+    ? t("directory.title", { network: networkName })
+    : t("directory.titleFallback");
+  useTitle(title);
 
   const gridListings = useMemo(() => {
     const gridListings: DirectoryListing[] = [];

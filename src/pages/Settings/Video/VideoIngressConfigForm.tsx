@@ -4,6 +4,8 @@
 import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { useTitle } from "react-use";
 
 import { VideoIngressConfig } from "../../../apis/strims/video/v1/ingress";
 import {
@@ -27,6 +29,9 @@ interface VideoIngressConfigFormData {
 }
 
 const VideoIngressConfigForm = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.videoIngress.title"));
+
   const [setConfigRes, setConfig] = useLazyCall("videoIngress", "setConfig");
 
   const { handleSubmit, reset, control, formState } = useForm<VideoIngressConfigFormData>({

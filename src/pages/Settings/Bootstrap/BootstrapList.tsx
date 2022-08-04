@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
 import {
@@ -50,6 +52,9 @@ const BootstrapTableItem = ({ client, onDelete }: BootstrapTableItemProps) => {
 };
 
 const BootstrapsList = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.bootstrap.title"));
+
   const [clientsRes, listClients] = useCall("bootstrap", "listClients");
 
   if (clientsRes.loading) {

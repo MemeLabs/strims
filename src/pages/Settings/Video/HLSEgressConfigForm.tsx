@@ -3,6 +3,8 @@
 
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { useTitle } from "react-use";
 
 import { HLSEgressConfig } from "../../../apis/strims/video/v1/hls_egress";
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
@@ -18,6 +20,9 @@ interface HLSEgressConfigFormData {
 }
 
 const HLSEgressConfigForm = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.videoEgress.title"));
+
   const [setConfigRes, setConfig] = useLazyCall("hlsEgress", "setConfig");
 
   const { handleSubmit, reset, control, formState } = useForm<HLSEgressConfigFormData>({

@@ -4,13 +4,18 @@
 import base32Decode from "base32-decode";
 import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import AutoseedRuleForm, { AutoseedRuleFormData } from "./AutoseedRuleForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.autoseed.title"));
+
   const [{ value }] = useCall("autoseed", "listRules");
   const navigate = useNavigate();
   const [{ error, loading }, createRule] = useLazyCall("autoseed", "createRule", {

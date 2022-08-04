@@ -4,12 +4,17 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { useTitle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";
 import { SelectInput } from "../../../components/Form";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
 
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
+  const { t } = useTranslation();
+  useTitle(t("settings.network.title"));
+
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
   const { handleSubmit, control } = useForm<{

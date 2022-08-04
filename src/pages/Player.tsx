@@ -5,6 +5,7 @@ import React, { useContext, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation, useParams } from "react-router-dom";
 
+import VideoTitle from "../components/VideoTitle";
 import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
@@ -44,7 +45,7 @@ const Player: React.FC = () => {
     };
   }, [params.networkKey, query.swarmUri, query.mimeType]);
 
-  return null;
+  return <VideoTitle />;
 };
 
 export default Player;

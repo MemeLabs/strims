@@ -5,13 +5,18 @@ import base32Decode from "base32-decode";
 import base32Encode from "base32-encode";
 import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import AutoseedRuleForm, { AutoseedRuleFormData } from "./AutoseedRuleForm";
 
 const AutoseedRuleEditForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.autoseed.title"));
+
   const { ruleId } = useParams<"ruleId">();
   const [{ value, ...getRes }] = useCall("autoseed", "getRule", {
     args: [{ id: BigInt(ruleId) }],

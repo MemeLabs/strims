@@ -3,7 +3,9 @@
 
 import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -11,6 +13,9 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import VideoChannelForm, { VideoChannelFormData, themeColorOptions } from "./VideoChannelForm";
 
 const VideoChannelEditForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.videoChannel.title"));
+
   const { channelId } = useParams<"channelId">();
   const [{ value, ...getRes }] = useCall("videoChannel", "get", {
     args: [{ id: BigInt(channelId) }],

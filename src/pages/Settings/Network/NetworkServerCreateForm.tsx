@@ -3,7 +3,9 @@
 
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -11,6 +13,9 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { validNamePattern, validNetworkNamePattern } from "../../../lib/validation";
 
 const CreateForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.network.title"));
+
   const navigate = useNavigate();
   const [{ value }] = useCall("network", "list");
   const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {

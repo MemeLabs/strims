@@ -3,7 +3,9 @@
 
 import base32Encode from "base32-encode";
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Rule } from "../../../apis/strims/autoseed/v1/autoseed";
 import {
@@ -43,6 +45,9 @@ const AutoseedRuleTableItem = ({ rule, onDelete }: AutoseedRuleTableItemProps) =
 };
 
 const AutoseedRulesList = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.autoseed.title"));
+
   const [rulesRes, listRules] = useCall("autoseed", "listRules");
 
   if (rulesRes.loading) {

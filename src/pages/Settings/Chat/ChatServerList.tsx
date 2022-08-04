@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Server } from "../../../apis/strims/chat/v1/chat";
 import {
@@ -57,6 +59,9 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
 };
 
 const ChatServerList: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.chat.title"));
+
   const [{ loading, value }, getServers] = useCall("chatServer", "listServers");
 
   if (loading) {

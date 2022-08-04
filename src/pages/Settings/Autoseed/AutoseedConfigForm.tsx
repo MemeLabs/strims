@@ -3,6 +3,8 @@
 
 import React from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { useTitle } from "react-use";
 
 import { Config } from "../../../apis/strims/autoseed/v1/autoseed";
 import { Button, ButtonSet, InputError, ToggleInput } from "../../../components/Form";
@@ -15,6 +17,9 @@ interface AutoseedConfigFormData {
 }
 
 const AutoseedConfigForm = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.autoseed.title"));
+
   const [setConfigRes, setConfig] = useLazyCall("autoseed", "setConfig");
 
   const { handleSubmit, reset, control, formState } = useForm<AutoseedConfigFormData>({

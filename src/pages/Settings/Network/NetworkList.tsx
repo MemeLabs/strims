@@ -3,7 +3,9 @@
 
 import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";
 import {
@@ -84,6 +86,9 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
 };
 
 const ChatServerList: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.network.title"));
+
   const [{ loading, value }, getServers] = useCall("network", "list");
 
   if (loading) {

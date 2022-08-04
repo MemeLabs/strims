@@ -3,8 +3,10 @@
 
 import qs from "qs";
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { FiUser } from "react-icons/fi";
 import { Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { ButtonSet } from "../components/Form";
@@ -48,6 +50,9 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
+  const { t } = useTranslation();
+  useTitle(t("landing.login.title"));
+
   const [selectedProfile, setSelectedProfile] = React.useState<LinkedProfile | null>(null);
   const [session, sessionOps] = useSession();
   const next = useNextQuery();

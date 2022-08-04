@@ -1,9 +1,10 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Base64 } from "js-base64";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -11,6 +12,9 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import BootstrapForm, { BootstrapFormData } from "./BootstrapForm";
 
 const BootstrapEditForm: React.FC = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.bootstrap.title"));
+
   const { ruleId } = useParams<"ruleId">();
   const [{ value, ...getRes }] = useCall("bootstrap", "getClient", {
     args: [{ id: BigInt(ruleId) }],

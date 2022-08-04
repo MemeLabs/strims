@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
+import { useTitle } from "react-use";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
 import {
@@ -51,6 +53,9 @@ const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps
 };
 
 const VideoChannelsList = () => {
+  const { t } = useTranslation();
+  useTitle(t("settings.videoChannel.title"));
+
   const [channelsRes, listChannels] = useCall("videoChannel", "list");
 
   if (channelsRes.loading) {
