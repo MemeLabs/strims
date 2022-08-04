@@ -56,6 +56,7 @@ export const useListings = (args: directoryv1.IFrontendWatchListingsRequest) => 
   const [values, setValues] = useState<ListingValues>(defaultListingValues);
 
   useEffect(() => {
+    setValues(defaultListingValues);
     const events = client.directory.watchListings(args);
     events.on("data", ({ events }) =>
       setValues((prev) => {
