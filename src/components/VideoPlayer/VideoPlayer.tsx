@@ -15,7 +15,6 @@ import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
 import useReady from "../../hooks/useReady";
 import useVideo from "../../hooks/useVideo";
 import { DEVICE_TYPE, DeviceType, OS } from "../../lib/userAgent";
-import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
 interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> {
@@ -69,22 +68,6 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     console.log(">>>", videoState.error);
   }, [videoState.error]);
 
-  const waitingSpinner =
-    videoState.waiting && videoState.loaded ? (
-      <div className="video_player__waiting_spinner">
-        <MdLoop />
-      </div>
-    ) : (
-      <LogoButton
-        visible={!videoState.playing && !videoState.paused}
-        onClick={videoControls.play}
-        flicker={videoState.ended && !videoState.loaded}
-        spin={videoState.waiting && videoState.loaded}
-        disabled={videoState.waiting || !videoState.loaded}
-        blur={true}
-      />
-    );
-
   const handleToggleFullscreen = useCallback(() => {
     if (typeof videoRef.current.webkitSetPresentationMode === "function") {
       videoRef.current.webkitSetPresentationMode("fullscreen");
@@ -132,7 +115,16 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         playsInline
         {...videoProps}
       />
-      {waitingSpinner}
+      <div
+        className={clsx({
+          "video_player__waiting_spinner": true,
+          "video_player__waiting_spinner--waiting": videoState.waiting,
+          "video_player__waiting_spinner--loaded": videoState.loaded,
+          "video_player__waiting_spinner--stalled": !videoState.playing && !videoState.paused,
+        })}
+      >
+        <MdLoop />
+      </div>
       <VideoControls
         videoState={videoState}
         videoControls={videoControls}

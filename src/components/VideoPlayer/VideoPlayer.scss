@@ -20,6 +20,7 @@
 }
 
 .video_player__waiting_spinner {
+  display: none;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -28,6 +29,10 @@
   opacity: 0.8;
   height: 24px;
   width: 24px;
+
+  &--stalled {
+    display: block;
+  }
 
   svg {
     transform: scaleX(-6) scaleY(6);
