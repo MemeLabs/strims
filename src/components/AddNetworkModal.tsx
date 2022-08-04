@@ -1,13 +1,15 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import "./AddNetworkModal.scss";
+
 import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
 import { CreateServerResponse } from "../apis/strims/network/v1/network";
-import { ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
+import { Button, ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";
 
@@ -69,9 +71,9 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
             />
           </div>
           <div className="add_network_modal__footer">
-            <button className="input input__button" disabled={loading}>
+            <Button primary disabled={loading}>
               Create
-            </button>
+            </Button>
           </div>
         </form>
       </div>
