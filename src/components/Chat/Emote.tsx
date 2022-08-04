@@ -59,7 +59,7 @@ const Emote: React.FC<EmoteProps> = ({
         "chat__emote--animate_forever": shouldAnimateForever,
         "chat__emote--compact_spacing": compactSpacing,
         "chat__emote--root": rootDepth === 0,
-        [className]: rootDepth === 0 && className !== undefined,
+        [className]: rootDepth === 0 && className,
       })}
     >
       {children}
@@ -83,7 +83,7 @@ const Emote: React.FC<EmoteProps> = ({
               "chat__emote_container--animate_forever": shouldAnimateForever,
               "chat__emote_container--compact_spacing": compactSpacing,
               "chat__emote_container--root": rootDepth === 0 && i === 0,
-              [className]: rootDepth === 0 && i === 0 && className !== undefined,
+              [className]: rootDepth === 0 && i === 0 && className,
             }
           )}
         >

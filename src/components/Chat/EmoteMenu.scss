@@ -53,14 +53,17 @@
     }
 
     &__list {
-      display: grid;
-      grid-gap: 8px;
-      grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
       margin: 0 12px 0 8px;
+      gap: 8px;
 
       &--emote {
         display: flex;
         flex-direction: column;
+      }
+
+      &--emoji {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
       }
     }
 
@@ -79,7 +82,7 @@
       cursor: pointer;
 
       &--emoji {
-        line-height: 1.8rem;
+        line-height: 1em;
       }
     }
   }

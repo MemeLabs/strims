@@ -37,6 +37,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
   const renderMessage = useCallback(
     ({ index, style, ref }: MessageProps) => (
       <Message
+        key={`${room.id}-${index}`}
         uiConfig={uiConfig}
         message={roomActions.getMessage(index)}
         style={style}

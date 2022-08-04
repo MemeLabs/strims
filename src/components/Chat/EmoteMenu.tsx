@@ -334,7 +334,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
         const rows = balanceRows(emoteWidths, width - VIEWPORT_MARGIN * 2, EMOTE_GAP);
         const emotes = rows.map((i, j) => category.emotes.slice(rows[j - 1], i));
         return emotes.map((emotes, row) => (
-          <li key={row} className="emote_menu__category__list_row">
+          <div key={row} className="emote_menu__category__list_row">
             {emotes.map((emote) => (
               <Emote
                 key={emote.name}
@@ -345,7 +345,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
                 onMouseEnter={() => onHover({ type: "emote", emote })}
               />
             ))}
-          </li>
+          </div>
         ));
       } else {
         return category.emoji.map((emoji) => {
