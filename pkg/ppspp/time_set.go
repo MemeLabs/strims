@@ -51,9 +51,7 @@ func (t *timeSet) Get(bin binmap.Bin) (binmap.Bin, timeutil.Time, bool) {
 
 func (t *timeSet) Prune(bin binmap.Bin) {
 	for t.root != nil && t.root.bin < bin {
-		r := t.root
-		r.left.delete()
-		t.root = r.right
+		t.root = t.root.right
 	}
 	t.root.prune(bin)
 }
@@ -129,7 +127,6 @@ func (r *timeSetNode) unset(b binmap.Bin) (bool, bool) {
 	if ok {
 		r.count -= b.BaseLength()
 		if r.count == 0 {
-			r.delete()
 			return true, true
 		}
 	}
@@ -163,19 +160,9 @@ func (r *timeSetNode) prune(b binmap.Bin) {
 	}
 
 	if r.bin < b {
-		r.left.delete()
 		r.left = nil
 		r.right.prune(b)
 	} else {
 		r.left.prune(b)
 	}
-}
-
-func (r *timeSetNode) delete() {
-	if r == nil {
-		return
-	}
-
-	r.left.delete()
-	r.right.delete()
 }
