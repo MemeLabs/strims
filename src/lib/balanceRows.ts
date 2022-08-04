@@ -49,15 +49,15 @@ class Layout {
 
   bubbleUp(i: number) {
     this.rotateLeft(i);
-    for (let j = i - 1; j > 1 && this.rowWidths[j] > this.maxWidth; j--) {
-      this.rotateLeft(j);
+    for (let j = i - 1; j > 1; j--) {
+      while (this.rowWidths[j] > this.maxWidth) this.rotateLeft(j);
     }
   }
 
   bubbleDown(i: number) {
     this.rotateRight(i);
-    for (let j = i + 1; j < this.rows.length && this.rowWidths[j] > this.maxWidth; j++) {
-      this.rotateRight(j);
+    for (let j = i + 1; j < this.rows.length; j++) {
+      while (this.rowWidths[j] > this.maxWidth) this.rotateRight(j);
     }
   }
 
