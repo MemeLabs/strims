@@ -149,7 +149,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
   );
 
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} className="invite_auth__form">
       <span className="invite_auth__peer">
         {t("inviteAuth.header", { peer: peerCert.subject })}
       </span>

@@ -21,11 +21,14 @@
     box-shadow: var(--shadow-elevation-4);
     border-radius: var(--border-radius-medium);
     box-sizing: border-box;
-    padding: 20px;
     width: 480px;
     margin-left: -240px;
     top: 100px;
     left: 50%;
+    padding: 20px;
+  }
+
+  &__form {
     display: flex;
     flex-direction: column;
     align-items: stretch;
