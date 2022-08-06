@@ -3,7 +3,7 @@
 
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
 import { format } from "d3-format";
-import React, { ReactElement, useEffect } from "react";
+import React, { ReactElement, useEffect, useState } from "react";
 import {
   AreaSeries,
   AreaSeriesPoint,
@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "react-vis";
 
+import { Timestamp } from "../../apis/google/protobuf/timestamp";
 import { Counter, LabelPair, Metric, MetricFamily } from "../../apis/io/prometheus/client/metrics";
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient } from "../../contexts/FrontendApi";
@@ -518,6 +519,168 @@ export const SwarmChart: React.FC = () => {
           showAxes={large}
         />
       ))}
+    </div>
+  );
+};
+
+interface RTCSeries {
+  lastValue: { [id: string]: number };
+  values: { [id: string]: LineSeriesPoint[] };
+}
+
+interface RTCChartValues {
+  tx: RTCSeries;
+  rx: RTCSeries;
+}
+
+const initRTCChartValues = {
+  tx: { lastValue: {}, values: {} },
+  rx: { lastValue: {}, values: {} },
+};
+
+const initRTCChartTotals = {
+  timestamp: 0,
+  bytesReceived: 0,
+  bytesSent: 0,
+  messagesReceived: 0,
+  messagesSent: 0,
+  openConns: 0,
+};
+
+export const RTCChart: React.FC = () => {
+  const [values, setValues] = useState<RTCChartValues>(initRTCChartValues);
+  const [total, setTotal] = useState(initRTCChartTotals);
+
+  useEffect(() => {
+    const sampleRate = 1000;
+    const ivl = setInterval(async () => {
+      const conns = (window as unknown as DebugWindow).__strims_rtc_peer_connections__ ?? [];
+
+      const reports: Promise<RTCStatsReport>[] = [];
+      for (const c of conns) {
+        if (c.iceConnectionState === "connected") {
+          reports.push(c.getStats(null));
+        }
+      }
+      const results = await Promise.allSettled(reports);
+
+      setValues((prev) => {
+        const next = {
+          tx: { lastValue: {}, values: {} },
+          rx: { lastValue: {}, values: {} },
+        };
+
+        const updateNext = (typ: "tx" | "rx", id: string, ts: number, v: number) => {
+          const lastValue = prev[typ].lastValue[id];
+          next[typ].lastValue[id] = v;
+
+          if (lastValue === undefined) {
+            const refSeries = Object.values(prev[typ].values)[0] ?? [];
+            const emptySeries = refSeries.map(({ x }) => ({ x, y: 0 }));
+            emptySeries.push({ x: ts / sampleRate, y: 0 });
+
+            next[typ].values[id] = emptySeries;
+            return;
+          }
+
+          next[typ].values[id] = [
+            ...prev[typ].values[id],
+            {
+              x: ts / sampleRate,
+              y: v - lastValue,
+            },
+          ].slice(-240);
+        };
+
+        for (const res of results) {
+          if (res.status === "fulfilled") {
+            res.value.forEach((report) => {
+              if (report.type === "data-channel" && report.label === "data") {
+                updateNext("tx", report.id, report.timestamp, report.bytesSent);
+                updateNext("rx", report.id, report.timestamp, report.bytesReceived);
+              }
+            });
+          }
+        }
+        return next;
+      });
+
+      setTotal(() => {
+        const next = {
+          timestamp: 0,
+          bytesReceived: 0,
+          bytesSent: 0,
+          messagesReceived: 0,
+          messagesSent: 0,
+          openConns: conns.length,
+        };
+        for (const res of results) {
+          if (res.status === "fulfilled") {
+            res.value.forEach((report) => {
+              if (report.type === "data-channel" && report.label === "data") {
+                next.timestamp = report.timestamp;
+                next.bytesReceived += report.bytesReceived;
+                next.bytesSent += report.bytesSent;
+                next.messagesReceived += report.messagesReceived;
+                next.messagesSent += report.messagesSent;
+              }
+            });
+          }
+        }
+        return next;
+      });
+    }, sampleRate);
+    return () => clearInterval(ivl);
+  }, []);
+
+  const { width, height } = usePortletSize();
+  const large = height > 600;
+  const graphHeight = large ? 80 : 20;
+
+  return (
+    <div>
+      <LineGraph
+        label="tx"
+        values={Object.values(values.tx.values)}
+        height={graphHeight}
+        width={width}
+        showAxes={large}
+      />
+      <LineGraph
+        label="rx"
+        values={Object.values(values.rx.values)}
+        height={graphHeight}
+        width={width}
+        showAxes={large}
+      />
+      <table>
+        <tbody>
+          <tr>
+            <td>timestamp</td>
+            <td>{total.timestamp}</td>
+          </tr>
+          <tr>
+            <td>bytesReceived</td>
+            <td>{total.bytesReceived.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td>bytesSent</td>
+            <td>{total.bytesSent.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td>messagesReceived</td>
+            <td>{total.messagesReceived.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td>messagesSent</td>
+            <td>{total.messagesSent.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td>openConns</td>
+            <td>{total.openConns.toLocaleString()}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 };

@@ -176,6 +176,9 @@ func CreateSessionThing(s kv.BlobStore, sessionKey []byte, profileID uint64, pro
 		ProfileId:  profileID,
 		ProfileKey: profileKey,
 	})
+	if err != nil {
+		return nil, err
+	}
 	b, err = key.Seal(b)
 	if err != nil {
 		return nil, err

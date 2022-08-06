@@ -203,9 +203,11 @@ export class WindowBridge extends EventEmitter {
   private nextDataChannelPortId = 0;
   private dataChannelPorts = new Map<number, PortState>();
   private workers: Worker[] = [];
+  private rtcPeerConnections: RTCPeerConnection[] = [];
 
   constructor(private workerConstructor: new () => Worker) {
     super();
+    (window as unknown as DebugWindow).__strims_rtc_peer_connections__ = this.rtcPeerConnections;
   }
 
   public createWorker(service: string, ...args: any[]): Worker {
@@ -254,6 +256,8 @@ export class WindowBridge extends EventEmitter {
         },
       ],
     });
+
+    this.rtcPeerConnections.push(peerConnection);
 
     const dataChannels: { id: number; port: MessagePort; dataChannel: RTCDataChannel }[] = [];
     const handleDataChannel = (dataChannel: RTCDataChannel) => {
@@ -348,6 +352,8 @@ export class WindowBridge extends EventEmitter {
 
       port.onmessage = null;
       port.close();
+
+      this.rtcPeerConnections.splice(this.rtcPeerConnections.indexOf(peerConnection), 1);
     };
 
     peerConnection.onicecandidate = (e: RTCPeerConnectionIceEvent) =>

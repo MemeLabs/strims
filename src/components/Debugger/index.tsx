@@ -10,10 +10,10 @@ import { FiDownload } from "react-icons/fi";
 import { MetricFamily } from "../../apis/io/prometheus/client/metrics";
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient, useLazyCall } from "../../contexts/FrontendApi";
-import { ActivityChart, SwarmChart } from "./ActivityChart";
+import { ActivityChart, RTCChart, SwarmChart } from "./ActivityChart";
 import Portlet, { PortletProps } from "./Portlet";
 
-type Tab = "activity" | "swarms";
+type Tab = "activity" | "swarms" | "rtc";
 
 type DebuggerProps = Omit<PortletProps, "children">;
 
@@ -43,15 +43,16 @@ const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
     console.log(metricFamilies);
   };
 
-  let content: React.ReactNode = null;
-  switch (selectedTab) {
-    case "activity":
-      content = <ActivityChart />;
-      break;
-    case "swarms":
-      content = <SwarmChart />;
-      break;
-  }
+  const content = (() => {
+    switch (selectedTab) {
+      case "activity":
+        return <ActivityChart />;
+      case "swarms":
+        return <SwarmChart />;
+      case "rtc":
+        return <RTCChart />;
+    }
+  })();
 
   return (
     <Portlet onClose={onClose} isOpen={isOpen}>
@@ -61,6 +62,9 @@ const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
         </button>
         <button className="debugger__tabs__tab" onClick={() => setSelectedTab("swarms")}>
           swarms
+        </button>
+        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("rtc")}>
+          rtc
         </button>
         <button className="debugger__tabs__tab" onClick={() => pprof({ name: "allocs" })}>
           allocs <FiDownload />
