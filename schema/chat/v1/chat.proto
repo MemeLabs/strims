@@ -226,23 +226,6 @@ message UIConfig {
     bytes data = 2;
   }
 
-  message Highlight {
-    string alias = 1;
-    bytes peer_key = 2;
-  }
-
-  message Tag {
-    string alias = 1;
-    bytes peer_key = 2;
-    string color = 3;
-  }
-
-  message Ignore {
-    string alias = 1;
-    bytes peer_key = 2;
-    int64 deadline = 3;
-  }
-
   bool show_time = 1;
   bool show_flair_icons = 2;
   string timestamp_format = 3;
@@ -254,11 +237,8 @@ message UIConfig {
   SoundFile notification_sound_file = 9;
   bool highlight = 10;
   repeated string custom_highlight = 11;
-  repeated Highlight highlights = 12;
-  repeated Tag tags = 13;
   ShowRemoved show_removed = 14;
   bool show_whispers_in_chat = 15;
-  repeated Ignore ignores = 16;
   bool focus_mentioned = 17;
   bool notification_timeout = 18;
   bool ignore_mentions = 19;
@@ -278,6 +258,26 @@ message UIConfig {
   bool compact_emote_spacing = 33;
   bool normalize_alias_case = 34;
   string emoji_skin_tone = 35;
+}
+
+message UIConfigHighlight {
+  uint64 id = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+}
+
+message UIConfigTag {
+  uint64 id = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+  string color = 4;
+}
+
+message UIConfigIgnore {
+  uint64 id = 1;
+  string alias = 2;
+  bytes peer_key = 3;
+  int64 deadline = 4;
 }
 
 message CreateServerRequest {
@@ -551,7 +551,15 @@ message SetUIConfigResponse {}
 
 message WatchUIConfigRequest {}
 message WatchUIConfigResponse {
-  UIConfig ui_config = 1;
+  oneof config {
+    UIConfig ui_config = 1001;
+    UIConfigHighlight ui_config_highlight = 1002;
+    UIConfigHighlight ui_config_highlight_delete = 1003;
+    UIConfigTag ui_config_tag = 1004;
+    UIConfigTag ui_config_tag_delete = 1005;
+    UIConfigIgnore ui_config_ignore = 1006;
+    UIConfigIgnore ui_config_ignore_delete = 1007;
+  }
 }
 
 message IgnoreRequest {

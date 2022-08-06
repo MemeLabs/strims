@@ -34,6 +34,12 @@ const (
 	chatWhisperThreadNS
 	chatWhisperThreadPeerKeyNS
 	chatWhisperRecordWhisperThreadNS
+	chatUIConfigHighlightNS
+	chatUIConfigHighlightKeyNS
+	chatUIConfigTagNS
+	chatUIConfigTagKeyNS
+	chatUIConfigIgnoreNS
+	chatUIConfigIgnoreKeyNS
 )
 
 var ChatServers = NewTable(
@@ -155,6 +161,48 @@ var ChatUIConfig = NewSingleton(
 		},
 	},
 )
+
+var ChatUIConfigHighlights = NewTable(
+	chatUIConfigHighlightNS,
+	&TableOptions[chatv1.UIConfigHighlight, *chatv1.UIConfigHighlight]{
+		ObserveChange: func(m, p *chatv1.UIConfigHighlight) proto.Message {
+			return &chatv1.UIConfigHighlightChangeEvent{UiConfigHighlight: m}
+		},
+		ObserveDelete: func(m *chatv1.UIConfigHighlight) proto.Message {
+			return &chatv1.UIConfigHighlightDeleteEvent{UiConfigHighlight: m}
+		},
+	},
+)
+
+var ChatUIConfigHighlightsByPeerKey = NewUniqueIndex(chatUIConfigHighlightKeyNS, ChatUIConfigHighlights, (*chatv1.UIConfigHighlight).GetPeerKey, nil)
+
+var ChatUIConfigTags = NewTable(
+	chatUIConfigTagNS,
+	&TableOptions[chatv1.UIConfigTag, *chatv1.UIConfigTag]{
+		ObserveChange: func(m, p *chatv1.UIConfigTag) proto.Message {
+			return &chatv1.UIConfigTagChangeEvent{UiConfigTag: m}
+		},
+		ObserveDelete: func(m *chatv1.UIConfigTag) proto.Message {
+			return &chatv1.UIConfigTagDeleteEvent{UiConfigTag: m}
+		},
+	},
+)
+
+var ChatUIConfigTagsByPeerKey = NewUniqueIndex(chatUIConfigTagKeyNS, ChatUIConfigTags, (*chatv1.UIConfigTag).GetPeerKey, nil)
+
+var ChatUIConfigIgnores = NewTable(
+	chatUIConfigIgnoreNS,
+	&TableOptions[chatv1.UIConfigIgnore, *chatv1.UIConfigIgnore]{
+		ObserveChange: func(m, p *chatv1.UIConfigIgnore) proto.Message {
+			return &chatv1.UIConfigIgnoreChangeEvent{UiConfigIgnore: m}
+		},
+		ObserveDelete: func(m *chatv1.UIConfigIgnore) proto.Message {
+			return &chatv1.UIConfigIgnoreDeleteEvent{UiConfigIgnore: m}
+		},
+	},
+)
+
+var ChatUIConfigIgnoresByPeerKey = NewUniqueIndex(chatUIConfigIgnoreKeyNS, ChatUIConfigIgnores, (*chatv1.UIConfigIgnore).GetPeerKey, nil)
 
 var ChatWhisperThreads = NewTable(
 	chatWhisperThreadNS,
@@ -386,4 +434,62 @@ func NewChatWhisperRecord(
 			Entities:   entities,
 		},
 	}, nil
+}
+
+func NewChatUIConfigHighlight(
+	g IDGenerator,
+	alias string,
+	peerKey []byte,
+) (*chatv1.UIConfigHighlight, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.UIConfigHighlight{
+		Id:      id,
+		Alias:   alias,
+		PeerKey: peerKey,
+	}
+	return v, nil
+}
+
+func NewChatUIConfigTag(
+	g IDGenerator,
+	alias string,
+	peerKey []byte,
+	color string,
+) (*chatv1.UIConfigTag, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.UIConfigTag{
+		Id:      id,
+		Alias:   alias,
+		PeerKey: peerKey,
+		Color:   color,
+	}
+	return v, nil
+}
+
+func NewChatUIConfigIgnore(
+	g IDGenerator,
+	alias string,
+	peerKey []byte,
+	deadline int64,
+) (*chatv1.UIConfigIgnore, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chatv1.UIConfigIgnore{
+		Id:       id,
+		Alias:    alias,
+		PeerKey:  peerKey,
+		Deadline: deadline,
+	}
+	return v, nil
 }

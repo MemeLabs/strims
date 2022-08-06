@@ -20,7 +20,7 @@ interface ShellProps {
 }
 
 const Shell: React.FC<ShellProps> = ({ className }) => {
-  const [{ uiConfig }, chatActions] = useChat();
+  const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }, chatActions] = useChat();
   const [room, roomActions] = useRoom();
 
   useEffect(() => {
@@ -46,7 +46,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         ref={ref}
       />
     ),
-    [uiConfig, room.styles]
+    [uiConfig, uiConfigIgnores, room.styles]
   );
 
   return (
@@ -58,7 +58,14 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         "--chat-height": size ? `${size.height}px` : "100%",
       }}
     >
-      <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
+      <StyleSheet
+        liveEmotes={room.liveEmotes}
+        styles={room.styles}
+        uiConfig={uiConfig}
+        uiConfigHighlights={uiConfigHighlights}
+        uiConfigTags={uiConfigTags}
+        uiConfigIgnores={uiConfigIgnores}
+      />
       <div className="chat__messages">
         <Scroller
           renderMessage={renderMessage}

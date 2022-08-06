@@ -28,6 +28,10 @@ import {
   ServerEvent,
   Tag,
   UIConfig,
+  UIConfigHighlight,
+  UIConfigIgnore,
+  UIConfigTag,
+  WatchUIConfigResponse,
   WatchWhispersResponse,
   WhisperRecord,
   WhisperThread,
@@ -108,6 +112,9 @@ const topicThreadKeys = {
 export interface State {
   nextId: number;
   uiConfig: UIConfig;
+  uiConfigHighlights: Map<string, UIConfigHighlight>;
+  uiConfigTags: Map<string, UIConfigTag>;
+  uiConfigIgnores: Map<string, UIConfigIgnore>;
   config: {
     messageGCThreshold: number;
   };
@@ -190,6 +197,9 @@ const initialState: State = {
     userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
     emojiSkinTone: "",
   }),
+  uiConfigHighlights: new Map(),
+  uiConfigTags: new Map(),
+  uiConfigIgnores: new Map(),
   config: {
     messageGCThreshold: 1024,
   },
@@ -222,6 +232,7 @@ const roomCommands = [
   "timestampformat",
   "tag",
   "untag",
+  "resetconfig",
   "exit",
   "hideemote",
   "unhideemote",
@@ -483,14 +494,50 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     };
   };
 
-  const setUiConfig = (state: State, uiConfig: UIConfig) => ({
-    ...state,
-    uiConfig,
-    config: {
-      ...state.config,
-      messageGCThreshold: uiConfig.maxLines,
-    },
-  });
+  const reduceUIConfigEvent = (state: State, res: WatchUIConfigResponse) => {
+    for (const thread of state.rooms.values()) {
+      thread.messageSizeCache.reset();
+    }
+    for (const thread of state.whispers.values()) {
+      thread.messageSizeCache.reset();
+    }
+
+    switch (res.config.case) {
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG:
+        return {
+          ...state,
+          UIConfig: res.config.uiConfig,
+          config: {
+            ...state.config,
+            messageGCThreshold: res.config.uiConfig.maxLines,
+          },
+        };
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT: {
+        const key = formatKey(res.config.uiConfigHighlight.peerKey);
+        return setInStateMap(state, "uiConfigHighlights", key, res.config.uiConfigHighlight);
+      }
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE: {
+        const key = formatKey(res.config.uiConfigHighlightDelete.peerKey);
+        return deleteFromStateMap(state, "uiConfigHighlights", key);
+      }
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG: {
+        const key = formatKey(res.config.uiConfigTag.peerKey);
+        return setInStateMap(state, "uiConfigTags", key, res.config.uiConfigTag);
+      }
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG_DELETE: {
+        const key = formatKey(res.config.uiConfigTagDelete.peerKey);
+        return deleteFromStateMap(state, "uiConfigTags", key);
+      }
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE: {
+        const key = formatKey(res.config.uiConfigIgnore.peerKey);
+        return setInStateMap(state, "uiConfigIgnores", key, res.config.uiConfigIgnore);
+      }
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE_DELETE: {
+        const key = formatKey(res.config.uiConfigIgnoreDelete.peerKey);
+        return deleteFromStateMap(state, "uiConfigIgnores", key);
+      }
+    }
+  };
 
   const reduceWhisperEvent = (
     thread: WhisperThreadState,
@@ -566,7 +613,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   return {
     openRoom,
     openWhispers,
-    setUiConfig,
+    reduceUIConfigEvent,
     handleWhisperEvent,
     openTopicPopout,
     setPopoutTopicCapacity,
@@ -859,6 +906,9 @@ const createRoomActions = (
         const hiddenEmotes = state.uiConfig.hiddenEmotes.filter((e) => e !== name);
         state = mergeUIConfig(state, { hiddenEmotes });
       },
+      resetconfig: () => {
+        state = mergeUIConfig(state, initialState.uiConfig);
+      },
       me: (body: string) => {
         void client.chat.clientSendMessage({
           networkKey,
@@ -941,7 +991,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const uiConfigEvents = client.chat.watchUIConfig();
-    uiConfigEvents.on("data", ({ uiConfig }) => actions.setUiConfig(uiConfig));
+    uiConfigEvents.on("data", actions.reduceUIConfigEvent);
     const whisperEvents = client.chat.watchWhispers();
     whisperEvents.on("data", actions.handleWhisperEvent);
 

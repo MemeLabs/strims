@@ -903,3 +903,18 @@ func (idx *UniqueIndex[V, T]) GetManyIDs(s kv.Store, ks ...[]byte) (vs []uint64,
 	err = eg.Wait()
 	return
 }
+
+func (idx *UniqueIndex[V, T]) Delete(s kv.RWStore, ks ...[]byte) error {
+	return s.Update(func(tx kv.RWTx) error {
+		ids, err := idx.GetManyIDs(tx, ks...)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := idx.i.t.Delete(tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

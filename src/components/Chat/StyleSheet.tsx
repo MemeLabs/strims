@@ -10,6 +10,9 @@ import {
   EmoteFileType,
   EmoteScale,
   UIConfig,
+  UIConfigHighlight,
+  UIConfigIgnore,
+  UIConfigTag,
 } from "../../apis/strims/chat/v1/chat";
 import { ChatStyles } from "../../contexts/Chat";
 
@@ -54,6 +57,9 @@ export interface StyleSheetProps {
   liveEmotes: Emote[];
   styles: ChatStyles;
   uiConfig: UIConfig;
+  uiConfigHighlights?: Map<string, UIConfigHighlight>;
+  uiConfigTags?: Map<string, UIConfigTag>;
+  uiConfigIgnores?: Map<string, UIConfigIgnore>;
   extraEmoteRules?: ExtraRules;
   extraContainerRules?: ExtraRules;
 }
@@ -81,10 +87,17 @@ const deleteMatchingCSSRules = (sheet: CSSStyleSheet, filter: (rule: CSSRule) =>
   }
 };
 
+const defaultUIConfigHighlights: Map<string, UIConfigHighlight> = new Map();
+const defaultUIConfigTags: Map<string, UIConfigTag> = new Map();
+const defaultUIConfigIgnores: Map<string, UIConfigIgnore> = new Map();
+
 const StyleSheet: React.FC<StyleSheetProps> = ({
   liveEmotes,
   styles,
   uiConfig,
+  uiConfigHighlights = defaultUIConfigHighlights,
+  uiConfigTags = defaultUIConfigTags,
+  uiConfigIgnores = defaultUIConfigIgnores,
   extraEmoteRules = {},
   extraContainerRules = {},
 }) => {
@@ -203,25 +216,22 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     const props = new Map<string, PropList>();
 
-    for (const { peerKey, color } of uiConfig.tags) {
+    for (const [key, { color }] of uiConfigTags) {
       const rules: PropList = [["--color-chat-author-tag", color]];
       if (uiConfig.taggedVisibility) {
         rules.push(["--color-background-chat-message", "var(--color-background-chat-tagged)"]);
       }
-      const key = Base64.fromUint8Array(peerKey, true);
       props.set(key, upsertProps(props.get(key), ...rules));
     }
 
-    for (const { peerKey } of uiConfig.highlights) {
+    for (const key of uiConfigHighlights.keys()) {
       const rules: PropList = [
         ["--color-background-chat-message", "var(--color-background-chat-highlight)"],
       ];
-      const key = Base64.fromUint8Array(peerKey, true);
       props.set(key, upsertProps(props.get(key), ...rules));
     }
 
-    for (const { peerKey } of uiConfig.ignores) {
-      const key = Base64.fromUint8Array(peerKey, true);
+    for (const key of uiConfigIgnores.keys()) {
       props.set(key, upsertProps(props.get(key), ["display", "none"]));
     }
 
@@ -246,13 +256,11 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     }
 
     if (uiConfig.ignoreMentions) {
-      for (const { peerKey } of uiConfig.ignores) {
-        ref.current.sheet.insertRule(
-          `.chat__message--mention_${Base64.fromUint8Array(peerKey, true)} { display: none; }`
-        );
+      for (const key of uiConfigIgnores.keys()) {
+        ref.current.sheet.insertRule(`.chat__message--mention_${key} { display: none; }`);
       }
     }
-  }, [styles, uiConfig]);
+  }, [styles, uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores]);
 
   useEffect(() => {
     return () =>

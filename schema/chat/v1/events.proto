@@ -47,6 +47,31 @@ message UIConfigChangeEvent {
   UIConfig ui_config = 1;
 }
 
+message UIConfigHighlightChangeEvent {
+  UIConfigHighlight ui_config_highlight = 1;
+}
+
+message UIConfigHighlightDeleteEvent {
+  UIConfigHighlight ui_config_highlight = 1;
+}
+
+message UIConfigTagChangeEvent {
+  UIConfigTag ui_config_tag = 1;
+}
+
+message UIConfigTagDeleteEvent {
+  UIConfigTag ui_config_tag = 1;
+}
+
+message UIConfigIgnoreChangeEvent {
+  UIConfigIgnore ui_config_ignore = 1;
+}
+
+message UIConfigIgnoreDeleteEvent {
+  UIConfigIgnore ui_config_ignore = 1;
+}
+
+
 message SyncAssetsEvent {
   uint64 server_id = 1;
   bool force_unified_update = 2;

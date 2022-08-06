@@ -15,7 +15,6 @@ import (
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
-	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -30,14 +29,6 @@ func newWhisperServer(
 	profile *profilev1.Profile,
 	dialer network.Dialer,
 ) (*whisperServer, error) {
-	config, err := dao.ChatUIConfig.Get(store)
-	if err != nil {
-		if !errors.Is(err, kv.ErrRecordNotFound) {
-			return nil, err
-		}
-		config = &chatv1.UIConfig{}
-	}
-
 	s := &whisperServer{
 		logger:    logger,
 		store:     store,
@@ -45,7 +36,7 @@ func newWhisperServer(
 		profile:   profile,
 		dialer:    dialer,
 
-		service:         newWhisperService(logger, store, config),
+		service:         newWhisperService(logger, store),
 		deliveryService: newWhisperDeliveryService(logger, store, dialer),
 
 		serverClosers: map[uint64]context.CancelFunc{},
@@ -83,8 +74,6 @@ func (s *whisperServer) Run(ctx context.Context) error {
 		select {
 		case e := <-events:
 			switch e := e.(type) {
-			case *chatv1.UIConfigChangeEvent:
-				s.service.SyncConfig(e.UiConfig)
 			case *chatv1.WhisperRecordChangeEvent:
 				s.deliveryService.HandleWhisper(e.WhisperRecord)
 			case event.NetworkStart:

@@ -418,7 +418,6 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     const sent = isEqual(peerKey, profile.key.public);
     const highlight =
       (uiConfig.highlight && entities.nicks.some((n) => isEqual(n.peerKey, profile.key.public))) ||
-      entities.nicks.some((n) => uiConfig.highlights.some((h) => isEqual(n.peerKey, h.peerKey))) ||
       uiConfig.customHighlight.some((h) => body.includes(h));
 
     return clsx(

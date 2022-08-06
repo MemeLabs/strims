@@ -1600,11 +1600,8 @@ export type IUIConfig = {
   notificationSoundFile?: strims_chat_v1_UIConfig_ISoundFile;
   highlight?: boolean;
   customHighlight?: string[];
-  highlights?: strims_chat_v1_UIConfig_IHighlight[];
-  tags?: strims_chat_v1_UIConfig_ITag[];
   showRemoved?: strims_chat_v1_UIConfig_ShowRemoved;
   showWhispersInChat?: boolean;
-  ignores?: strims_chat_v1_UIConfig_IIgnore[];
   focusMentioned?: boolean;
   notificationTimeout?: boolean;
   ignoreMentions?: boolean;
@@ -1638,11 +1635,8 @@ export class UIConfig {
   notificationSoundFile: strims_chat_v1_UIConfig_SoundFile | undefined;
   highlight: boolean;
   customHighlight: string[];
-  highlights: strims_chat_v1_UIConfig_Highlight[];
-  tags: strims_chat_v1_UIConfig_Tag[];
   showRemoved: strims_chat_v1_UIConfig_ShowRemoved;
   showWhispersInChat: boolean;
-  ignores: strims_chat_v1_UIConfig_Ignore[];
   focusMentioned: boolean;
   notificationTimeout: boolean;
   ignoreMentions: boolean;
@@ -1675,11 +1669,8 @@ export class UIConfig {
     this.notificationSoundFile = v?.notificationSoundFile && new strims_chat_v1_UIConfig_SoundFile(v.notificationSoundFile);
     this.highlight = v?.highlight || false;
     this.customHighlight = v?.customHighlight ? v.customHighlight : [];
-    this.highlights = v?.highlights ? v.highlights.map(v => new strims_chat_v1_UIConfig_Highlight(v)) : [];
-    this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_UIConfig_Tag(v)) : [];
     this.showRemoved = v?.showRemoved || 0;
     this.showWhispersInChat = v?.showWhispersInChat || false;
-    this.ignores = v?.ignores ? v.ignores.map(v => new strims_chat_v1_UIConfig_Ignore(v)) : [];
     this.focusMentioned = v?.focusMentioned || false;
     this.notificationTimeout = v?.notificationTimeout || false;
     this.ignoreMentions = v?.ignoreMentions || false;
@@ -1714,11 +1705,8 @@ export class UIConfig {
     if (m.notificationSoundFile) strims_chat_v1_UIConfig_SoundFile.encode(m.notificationSoundFile, w.uint32(74).fork()).ldelim();
     if (m.highlight) w.uint32(80).bool(m.highlight);
     for (const v of m.customHighlight) w.uint32(90).string(v);
-    for (const v of m.highlights) strims_chat_v1_UIConfig_Highlight.encode(v, w.uint32(98).fork()).ldelim();
-    for (const v of m.tags) strims_chat_v1_UIConfig_Tag.encode(v, w.uint32(106).fork()).ldelim();
     if (m.showRemoved) w.uint32(112).uint32(m.showRemoved);
     if (m.showWhispersInChat) w.uint32(120).bool(m.showWhispersInChat);
-    for (const v of m.ignores) strims_chat_v1_UIConfig_Ignore.encode(v, w.uint32(130).fork()).ldelim();
     if (m.focusMentioned) w.uint32(136).bool(m.focusMentioned);
     if (m.notificationTimeout) w.uint32(144).bool(m.notificationTimeout);
     if (m.ignoreMentions) w.uint32(152).bool(m.ignoreMentions);
@@ -1781,20 +1769,11 @@ export class UIConfig {
         case 11:
         m.customHighlight.push(r.string())
         break;
-        case 12:
-        m.highlights.push(strims_chat_v1_UIConfig_Highlight.decode(r, r.uint32()));
-        break;
-        case 13:
-        m.tags.push(strims_chat_v1_UIConfig_Tag.decode(r, r.uint32()));
-        break;
         case 14:
         m.showRemoved = r.uint32();
         break;
         case 15:
         m.showWhispersInChat = r.bool();
-        break;
-        case 16:
-        m.ignores.push(strims_chat_v1_UIConfig_Ignore.decode(r, r.uint32()));
         break;
         case 17:
         m.focusMentioned = r.bool();
@@ -1906,149 +1885,6 @@ export namespace UIConfig {
     }
   }
 
-  export type IHighlight = {
-    alias?: string;
-    peerKey?: Uint8Array;
-  }
-
-  export class Highlight {
-    alias: string;
-    peerKey: Uint8Array;
-
-    constructor(v?: IHighlight) {
-      this.alias = v?.alias || "";
-      this.peerKey = v?.peerKey || new Uint8Array();
-    }
-
-    static encode(m: Highlight, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.alias.length) w.uint32(10).string(m.alias);
-      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Highlight {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Highlight();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.alias = r.string();
-          break;
-          case 2:
-          m.peerKey = r.bytes();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type ITag = {
-    alias?: string;
-    peerKey?: Uint8Array;
-    color?: string;
-  }
-
-  export class Tag {
-    alias: string;
-    peerKey: Uint8Array;
-    color: string;
-
-    constructor(v?: ITag) {
-      this.alias = v?.alias || "";
-      this.peerKey = v?.peerKey || new Uint8Array();
-      this.color = v?.color || "";
-    }
-
-    static encode(m: Tag, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.alias.length) w.uint32(10).string(m.alias);
-      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
-      if (m.color.length) w.uint32(26).string(m.color);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Tag {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Tag();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.alias = r.string();
-          break;
-          case 2:
-          m.peerKey = r.bytes();
-          break;
-          case 3:
-          m.color = r.string();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IIgnore = {
-    alias?: string;
-    peerKey?: Uint8Array;
-    deadline?: bigint;
-  }
-
-  export class Ignore {
-    alias: string;
-    peerKey: Uint8Array;
-    deadline: bigint;
-
-    constructor(v?: IIgnore) {
-      this.alias = v?.alias || "";
-      this.peerKey = v?.peerKey || new Uint8Array();
-      this.deadline = v?.deadline || BigInt(0);
-    }
-
-    static encode(m: Ignore, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.alias.length) w.uint32(10).string(m.alias);
-      if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
-      if (m.deadline) w.uint32(24).int64(m.deadline);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Ignore {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Ignore();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.alias = r.string();
-          break;
-          case 2:
-          m.peerKey = r.bytes();
-          break;
-          case 3:
-          m.deadline = r.int64();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
   export enum ShowRemoved {
     SHOW_REMOVED_REMOVE = 0,
     SHOW_REMOVED_CENSOR = 1,
@@ -2059,6 +1895,170 @@ export namespace UIConfig {
     USER_PRESENCE_INDICATOR_BAR = 1,
     USER_PRESENCE_INDICATOR_DOT = 2,
     USER_PRESENCE_INDICATOR_ARRAY = 3,
+  }
+}
+
+export type IUIConfigHighlight = {
+  id?: bigint;
+  alias?: string;
+  peerKey?: Uint8Array;
+}
+
+export class UIConfigHighlight {
+  id: bigint;
+  alias: string;
+  peerKey: Uint8Array;
+
+  constructor(v?: IUIConfigHighlight) {
+    this.id = v?.id || BigInt(0);
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: UIConfigHighlight, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigHighlight {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigHighlight();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigTag = {
+  id?: bigint;
+  alias?: string;
+  peerKey?: Uint8Array;
+  color?: string;
+}
+
+export class UIConfigTag {
+  id: bigint;
+  alias: string;
+  peerKey: Uint8Array;
+  color: string;
+
+  constructor(v?: IUIConfigTag) {
+    this.id = v?.id || BigInt(0);
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.color = v?.color || "";
+  }
+
+  static encode(m: UIConfigTag, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    if (m.color.length) w.uint32(34).string(m.color);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigTag {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigTag();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        case 4:
+        m.color = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigIgnore = {
+  id?: bigint;
+  alias?: string;
+  peerKey?: Uint8Array;
+  deadline?: bigint;
+}
+
+export class UIConfigIgnore {
+  id: bigint;
+  alias: string;
+  peerKey: Uint8Array;
+  deadline: bigint;
+
+  constructor(v?: IUIConfigIgnore) {
+    this.id = v?.id || BigInt(0);
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.deadline = v?.deadline || BigInt(0);
+  }
+
+  static encode(m: UIConfigIgnore, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.alias.length) w.uint32(18).string(m.alias);
+    if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
+    if (m.deadline) w.uint32(32).int64(m.deadline);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigIgnore {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigIgnore();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        case 3:
+        m.peerKey = r.bytes();
+        break;
+        case 4:
+        m.deadline = r.int64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
   }
 }
 
@@ -4836,19 +4836,41 @@ export class WatchUIConfigRequest {
 }
 
 export type IWatchUIConfigResponse = {
-  uiConfig?: strims_chat_v1_IUIConfig;
+  config?: WatchUIConfigResponse.IConfig
 }
 
 export class WatchUIConfigResponse {
-  uiConfig: strims_chat_v1_UIConfig | undefined;
+  config: WatchUIConfigResponse.TConfig;
 
   constructor(v?: IWatchUIConfigResponse) {
-    this.uiConfig = v?.uiConfig && new strims_chat_v1_UIConfig(v.uiConfig);
+    this.config = new WatchUIConfigResponse.Config(v?.config);
   }
 
   static encode(m: WatchUIConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.uiConfig) strims_chat_v1_UIConfig.encode(m.uiConfig, w.uint32(10).fork()).ldelim();
+    switch (m.config.case) {
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG:
+      strims_chat_v1_UIConfig.encode(m.config.uiConfig, w.uint32(8010).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT:
+      strims_chat_v1_UIConfigHighlight.encode(m.config.uiConfigHighlight, w.uint32(8018).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE:
+      strims_chat_v1_UIConfigHighlight.encode(m.config.uiConfigHighlightDelete, w.uint32(8026).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG:
+      strims_chat_v1_UIConfigTag.encode(m.config.uiConfigTag, w.uint32(8034).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG_DELETE:
+      strims_chat_v1_UIConfigTag.encode(m.config.uiConfigTagDelete, w.uint32(8042).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE:
+      strims_chat_v1_UIConfigIgnore.encode(m.config.uiConfigIgnore, w.uint32(8050).fork()).ldelim();
+      break;
+      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE_DELETE:
+      strims_chat_v1_UIConfigIgnore.encode(m.config.uiConfigIgnoreDelete, w.uint32(8058).fork()).ldelim();
+      break;
+    }
     return w;
   }
 
@@ -4859,8 +4881,26 @@ export class WatchUIConfigResponse {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 1:
-        m.uiConfig = strims_chat_v1_UIConfig.decode(r, r.uint32());
+        case 1001:
+        m.config = new WatchUIConfigResponse.Config({ uiConfig: strims_chat_v1_UIConfig.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigHighlight: strims_chat_v1_UIConfigHighlight.decode(r, r.uint32()) });
+        break;
+        case 1003:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigHighlightDelete: strims_chat_v1_UIConfigHighlight.decode(r, r.uint32()) });
+        break;
+        case 1004:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigTag: strims_chat_v1_UIConfigTag.decode(r, r.uint32()) });
+        break;
+        case 1005:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigTagDelete: strims_chat_v1_UIConfigTag.decode(r, r.uint32()) });
+        break;
+        case 1006:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigIgnore: strims_chat_v1_UIConfigIgnore.decode(r, r.uint32()) });
+        break;
+        case 1007:
+        m.config = new WatchUIConfigResponse.Config({ uiConfigIgnoreDelete: strims_chat_v1_UIConfigIgnore.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -4869,6 +4909,98 @@ export class WatchUIConfigResponse {
     }
     return m;
   }
+}
+
+export namespace WatchUIConfigResponse {
+  export enum ConfigCase {
+    NOT_SET = 0,
+    UI_CONFIG = 1001,
+    UI_CONFIG_HIGHLIGHT = 1002,
+    UI_CONFIG_HIGHLIGHT_DELETE = 1003,
+    UI_CONFIG_TAG = 1004,
+    UI_CONFIG_TAG_DELETE = 1005,
+    UI_CONFIG_IGNORE = 1006,
+    UI_CONFIG_IGNORE_DELETE = 1007,
+  }
+
+  export type IConfig =
+  { case?: ConfigCase.NOT_SET }
+  |{ case?: ConfigCase.UI_CONFIG, uiConfig: strims_chat_v1_IUIConfig }
+  |{ case?: ConfigCase.UI_CONFIG_HIGHLIGHT, uiConfigHighlight: strims_chat_v1_IUIConfigHighlight }
+  |{ case?: ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE, uiConfigHighlightDelete: strims_chat_v1_IUIConfigHighlight }
+  |{ case?: ConfigCase.UI_CONFIG_TAG, uiConfigTag: strims_chat_v1_IUIConfigTag }
+  |{ case?: ConfigCase.UI_CONFIG_TAG_DELETE, uiConfigTagDelete: strims_chat_v1_IUIConfigTag }
+  |{ case?: ConfigCase.UI_CONFIG_IGNORE, uiConfigIgnore: strims_chat_v1_IUIConfigIgnore }
+  |{ case?: ConfigCase.UI_CONFIG_IGNORE_DELETE, uiConfigIgnoreDelete: strims_chat_v1_IUIConfigIgnore }
+  ;
+
+  export type TConfig = Readonly<
+  { case: ConfigCase.NOT_SET }
+  |{ case: ConfigCase.UI_CONFIG, uiConfig: strims_chat_v1_UIConfig }
+  |{ case: ConfigCase.UI_CONFIG_HIGHLIGHT, uiConfigHighlight: strims_chat_v1_UIConfigHighlight }
+  |{ case: ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE, uiConfigHighlightDelete: strims_chat_v1_UIConfigHighlight }
+  |{ case: ConfigCase.UI_CONFIG_TAG, uiConfigTag: strims_chat_v1_UIConfigTag }
+  |{ case: ConfigCase.UI_CONFIG_TAG_DELETE, uiConfigTagDelete: strims_chat_v1_UIConfigTag }
+  |{ case: ConfigCase.UI_CONFIG_IGNORE, uiConfigIgnore: strims_chat_v1_UIConfigIgnore }
+  |{ case: ConfigCase.UI_CONFIG_IGNORE_DELETE, uiConfigIgnoreDelete: strims_chat_v1_UIConfigIgnore }
+  >;
+
+  class ConfigImpl {
+    uiConfig: strims_chat_v1_UIConfig;
+    uiConfigHighlight: strims_chat_v1_UIConfigHighlight;
+    uiConfigHighlightDelete: strims_chat_v1_UIConfigHighlight;
+    uiConfigTag: strims_chat_v1_UIConfigTag;
+    uiConfigTagDelete: strims_chat_v1_UIConfigTag;
+    uiConfigIgnore: strims_chat_v1_UIConfigIgnore;
+    uiConfigIgnoreDelete: strims_chat_v1_UIConfigIgnore;
+    case: ConfigCase = ConfigCase.NOT_SET;
+
+    constructor(v?: IConfig) {
+      if (v && "uiConfig" in v) {
+        this.case = ConfigCase.UI_CONFIG;
+        this.uiConfig = new strims_chat_v1_UIConfig(v.uiConfig);
+      } else
+      if (v && "uiConfigHighlight" in v) {
+        this.case = ConfigCase.UI_CONFIG_HIGHLIGHT;
+        this.uiConfigHighlight = new strims_chat_v1_UIConfigHighlight(v.uiConfigHighlight);
+      } else
+      if (v && "uiConfigHighlightDelete" in v) {
+        this.case = ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE;
+        this.uiConfigHighlightDelete = new strims_chat_v1_UIConfigHighlight(v.uiConfigHighlightDelete);
+      } else
+      if (v && "uiConfigTag" in v) {
+        this.case = ConfigCase.UI_CONFIG_TAG;
+        this.uiConfigTag = new strims_chat_v1_UIConfigTag(v.uiConfigTag);
+      } else
+      if (v && "uiConfigTagDelete" in v) {
+        this.case = ConfigCase.UI_CONFIG_TAG_DELETE;
+        this.uiConfigTagDelete = new strims_chat_v1_UIConfigTag(v.uiConfigTagDelete);
+      } else
+      if (v && "uiConfigIgnore" in v) {
+        this.case = ConfigCase.UI_CONFIG_IGNORE;
+        this.uiConfigIgnore = new strims_chat_v1_UIConfigIgnore(v.uiConfigIgnore);
+      } else
+      if (v && "uiConfigIgnoreDelete" in v) {
+        this.case = ConfigCase.UI_CONFIG_IGNORE_DELETE;
+        this.uiConfigIgnoreDelete = new strims_chat_v1_UIConfigIgnore(v.uiConfigIgnoreDelete);
+      }
+    }
+  }
+
+  export const Config = ConfigImpl as {
+    new (): Readonly<{ case: ConfigCase.NOT_SET }>;
+    new <T extends IConfig>(v: T): Readonly<
+    T extends { uiConfig: strims_chat_v1_IUIConfig } ? { case: ConfigCase.UI_CONFIG, uiConfig: strims_chat_v1_UIConfig } :
+    T extends { uiConfigHighlight: strims_chat_v1_IUIConfigHighlight } ? { case: ConfigCase.UI_CONFIG_HIGHLIGHT, uiConfigHighlight: strims_chat_v1_UIConfigHighlight } :
+    T extends { uiConfigHighlightDelete: strims_chat_v1_IUIConfigHighlight } ? { case: ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE, uiConfigHighlightDelete: strims_chat_v1_UIConfigHighlight } :
+    T extends { uiConfigTag: strims_chat_v1_IUIConfigTag } ? { case: ConfigCase.UI_CONFIG_TAG, uiConfigTag: strims_chat_v1_UIConfigTag } :
+    T extends { uiConfigTagDelete: strims_chat_v1_IUIConfigTag } ? { case: ConfigCase.UI_CONFIG_TAG_DELETE, uiConfigTagDelete: strims_chat_v1_UIConfigTag } :
+    T extends { uiConfigIgnore: strims_chat_v1_IUIConfigIgnore } ? { case: ConfigCase.UI_CONFIG_IGNORE, uiConfigIgnore: strims_chat_v1_UIConfigIgnore } :
+    T extends { uiConfigIgnoreDelete: strims_chat_v1_IUIConfigIgnore } ? { case: ConfigCase.UI_CONFIG_IGNORE_DELETE, uiConfigIgnoreDelete: strims_chat_v1_UIConfigIgnore } :
+    never
+    >;
+  };
+
 }
 
 export type IIgnoreRequest = {
@@ -5835,6 +5967,24 @@ export type strims_chat_v1_UIConfig = UIConfig;
 /* @internal */
 export type strims_chat_v1_IUIConfig = IUIConfig;
 /* @internal */
+export const strims_chat_v1_UIConfigHighlight = UIConfigHighlight;
+/* @internal */
+export type strims_chat_v1_UIConfigHighlight = UIConfigHighlight;
+/* @internal */
+export type strims_chat_v1_IUIConfigHighlight = IUIConfigHighlight;
+/* @internal */
+export const strims_chat_v1_UIConfigTag = UIConfigTag;
+/* @internal */
+export type strims_chat_v1_UIConfigTag = UIConfigTag;
+/* @internal */
+export type strims_chat_v1_IUIConfigTag = IUIConfigTag;
+/* @internal */
+export const strims_chat_v1_UIConfigIgnore = UIConfigIgnore;
+/* @internal */
+export type strims_chat_v1_UIConfigIgnore = UIConfigIgnore;
+/* @internal */
+export type strims_chat_v1_IUIConfigIgnore = IUIConfigIgnore;
+/* @internal */
 export const strims_chat_v1_CreateServerRequest = CreateServerRequest;
 /* @internal */
 export type strims_chat_v1_CreateServerRequest = CreateServerRequest;
@@ -6470,24 +6620,6 @@ export const strims_chat_v1_UIConfig_SoundFile = UIConfig.SoundFile;
 export type strims_chat_v1_UIConfig_SoundFile = UIConfig.SoundFile;
 /* @internal */
 export type strims_chat_v1_UIConfig_ISoundFile = UIConfig.ISoundFile;
-/* @internal */
-export const strims_chat_v1_UIConfig_Highlight = UIConfig.Highlight;
-/* @internal */
-export type strims_chat_v1_UIConfig_Highlight = UIConfig.Highlight;
-/* @internal */
-export type strims_chat_v1_UIConfig_IHighlight = UIConfig.IHighlight;
-/* @internal */
-export const strims_chat_v1_UIConfig_Tag = UIConfig.Tag;
-/* @internal */
-export type strims_chat_v1_UIConfig_Tag = UIConfig.Tag;
-/* @internal */
-export type strims_chat_v1_UIConfig_ITag = UIConfig.ITag;
-/* @internal */
-export const strims_chat_v1_UIConfig_Ignore = UIConfig.Ignore;
-/* @internal */
-export type strims_chat_v1_UIConfig_Ignore = UIConfig.Ignore;
-/* @internal */
-export type strims_chat_v1_UIConfig_IIgnore = UIConfig.IIgnore;
 /* @internal */
 export const strims_chat_v1_OpenClientResponse_Open = OpenClientResponse.Open;
 /* @internal */

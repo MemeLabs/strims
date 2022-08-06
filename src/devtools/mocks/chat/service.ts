@@ -102,7 +102,7 @@ class ChatService {
     const ch = new PassThrough({ objectMode: true });
 
     this.uiConfigs.on("data", (uiConfig) =>
-      ch.push(new chatv1.WatchUIConfigResponse({ uiConfig }))
+      ch.push(new chatv1.WatchUIConfigResponse({ config: { uiConfig } }))
     );
 
     return ch;

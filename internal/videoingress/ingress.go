@@ -384,7 +384,6 @@ func (s *ingressStream) syncDirectorySnippet() {
 			snippet.Tags = channelSnippet.Tags
 			snippet.Category = channelSnippet.Category
 			snippet.ChannelName = channelSnippet.ChannelName
-			snippet.Live = channelSnippet.Live
 			snippet.IsMature = channelSnippet.IsMature
 			snippet.ChannelLogo = channelSnippet.ChannelLogo
 		case <-t.C:

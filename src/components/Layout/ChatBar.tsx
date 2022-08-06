@@ -23,7 +23,7 @@ interface ChatPopoutProps {
 }
 
 const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
-  const [{ uiConfig }, chatActions] = useChat();
+  const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }, chatActions] = useChat();
   const [room, roomActions] = useRoom();
   const [minimized, toggleMinimized] = useToggle(false);
 
@@ -46,7 +46,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
         ref={ref}
       />
     ),
-    [uiConfig, room.styles]
+    [uiConfig, uiConfigIgnores, room.styles]
   );
 
   const handleHeaderClick = useStableCallback(() => toggleMinimized());
@@ -72,7 +72,14 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
       </div>
       {!minimized && (
         <>
-          <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
+          <StyleSheet
+            liveEmotes={room.liveEmotes}
+            styles={room.styles}
+            uiConfig={uiConfig}
+            uiConfigHighlights={uiConfigHighlights}
+            uiConfigTags={uiConfigTags}
+            uiConfigIgnores={uiConfigIgnores}
+          />
           <div className="chat_popout__messages">
             <Scroller
               renderMessage={renderMessage}

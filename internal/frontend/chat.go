@@ -21,7 +21,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 func init() {
@@ -596,12 +595,53 @@ func (s *chatService) SetUIConfig(ctx context.Context, req *chatv1.SetUIConfigRe
 func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConfigRequest) (<-chan *chatv1.WatchUIConfigResponse, error) {
 	ch := make(chan *chatv1.WatchUIConfigResponse, 1)
 
-	c, err := dao.ChatUIConfig.Get(s.store)
-	if err == nil {
-		ch <- &chatv1.WatchUIConfigResponse{UiConfig: c}
-	} else if !errors.Is(err, kv.ErrRecordNotFound) {
-		return nil, err
-	}
+	go func() {
+		if c, err := dao.ChatUIConfig.Get(s.store); err == nil {
+			ch <- &chatv1.WatchUIConfigResponse{
+				Config: &chatv1.WatchUIConfigResponse_UiConfig{
+					UiConfig: c,
+				},
+			}
+		} else if !errors.Is(err, kv.ErrRecordNotFound) {
+			s.logger.Error("loading ui config failed", zap.Error(err))
+		}
+
+		if cs, err := dao.ChatUIConfigHighlights.GetAll(s.store); err == nil {
+			for _, c := range cs {
+				ch <- &chatv1.WatchUIConfigResponse{
+					Config: &chatv1.WatchUIConfigResponse_UiConfigHighlight{
+						UiConfigHighlight: c,
+					},
+				}
+			}
+		} else {
+			s.logger.Error("loading ui config highlights failed", zap.Error(err))
+		}
+
+		if cs, err := dao.ChatUIConfigTags.GetAll(s.store); err == nil {
+			for _, c := range cs {
+				ch <- &chatv1.WatchUIConfigResponse{
+					Config: &chatv1.WatchUIConfigResponse_UiConfigTag{
+						UiConfigTag: c,
+					},
+				}
+			}
+		} else {
+			s.logger.Error("loading ui config tags failed", zap.Error(err))
+		}
+
+		if cs, err := dao.ChatUIConfigIgnores.GetAll(s.store); err == nil {
+			for _, c := range cs {
+				ch <- &chatv1.WatchUIConfigResponse{
+					Config: &chatv1.WatchUIConfigResponse_UiConfigIgnore{
+						UiConfigIgnore: c,
+					},
+				}
+			}
+		} else {
+			s.logger.Error("loading ui config ignores failed", zap.Error(err))
+		}
+	}()
 
 	go func() {
 		events, done := s.app.Events().Events()
@@ -612,7 +652,47 @@ func (s *chatService) WatchUIConfig(ctx context.Context, req *chatv1.WatchUIConf
 			case e := <-events:
 				switch e := e.(type) {
 				case *chatv1.UIConfigChangeEvent:
-					ch <- &chatv1.WatchUIConfigResponse{UiConfig: e.UiConfig}
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfig{
+							UiConfig: e.UiConfig,
+						},
+					}
+				case *chatv1.UIConfigHighlightChangeEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigHighlight{
+							UiConfigHighlight: e.UiConfigHighlight,
+						},
+					}
+				case *chatv1.UIConfigHighlightDeleteEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigHighlightDelete{
+							UiConfigHighlightDelete: e.UiConfigHighlight,
+						},
+					}
+				case *chatv1.UIConfigTagChangeEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigTag{
+							UiConfigTag: e.UiConfigTag,
+						},
+					}
+				case *chatv1.UIConfigTagDeleteEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigTagDelete{
+							UiConfigTagDelete: e.UiConfigTag,
+						},
+					}
+				case *chatv1.UIConfigIgnoreChangeEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigIgnore{
+							UiConfigIgnore: e.UiConfigIgnore,
+						},
+					}
+				case *chatv1.UIConfigIgnoreDeleteEvent:
+					ch <- &chatv1.WatchUIConfigResponse{
+						Config: &chatv1.WatchUIConfigResponse_UiConfigIgnoreDelete{
+							UiConfigIgnoreDelete: e.UiConfigIgnore,
+						},
+					}
 				}
 			case <-ctx.Done():
 				return
@@ -639,16 +719,16 @@ func (s *chatService) Ignore(ctx context.Context, req *chatv1.IgnoreRequest) (*c
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
 
-	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](cert.Key)); i != -1 {
-			p.Ignores = slices.Delete(p.Ignores, i, i+1)
+	ignore, err := dao.NewChatUIConfigIgnore(s.store, cert.Subject, cert.Key, deadline)
+	if err != nil {
+		return nil, err
+	}
+	err = s.store.Update(func(tx kv.RWTx) error {
+		err := dao.ChatUIConfigIgnoresByPeerKey.Delete(tx, cert.Key)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
 		}
-		p.Ignores = append(p.Ignores, &chatv1.UIConfig_Ignore{
-			Alias:    cert.Subject,
-			PeerKey:  cert.Key,
-			Deadline: deadline,
-		})
-		return nil
+		return dao.ChatUIConfigIgnores.Insert(tx, ignore)
 	})
 	return &chatv1.IgnoreResponse{}, err
 }
@@ -664,12 +744,7 @@ func (s *chatService) Unignore(ctx context.Context, req *chatv1.UnignoreRequest)
 		peerKey = cert.Key
 	}
 
-	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Ignores, peerKeyFilter[*chatv1.UIConfig_Ignore](peerKey)); i != -1 {
-			p.Ignores = slices.Delete(p.Ignores, i, i+1)
-		}
-		return nil
-	})
+	err := dao.ChatUIConfigIgnoresByPeerKey.Delete(s.store, peerKey)
 	return &chatv1.UnignoreResponse{}, err
 }
 
@@ -680,15 +755,16 @@ func (s *chatService) Highlight(ctx context.Context, req *chatv1.HighlightReques
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
 
-	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Highlights, peerKeyFilter[*chatv1.UIConfig_Highlight](cert.Key)); i != -1 {
-			p.Highlights = slices.Delete(p.Highlights, i, i+1)
+	highlight, err := dao.NewChatUIConfigHighlight(s.store, cert.Subject, cert.Key)
+	if err != nil {
+		return nil, err
+	}
+	err = s.store.Update(func(tx kv.RWTx) error {
+		err := dao.ChatUIConfigHighlightsByPeerKey.Delete(tx, cert.Key)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
 		}
-		p.Highlights = append(p.Highlights, &chatv1.UIConfig_Highlight{
-			Alias:   cert.Subject,
-			PeerKey: cert.Key,
-		})
-		return nil
+		return dao.ChatUIConfigHighlights.Insert(tx, highlight)
 	})
 	return &chatv1.HighlightResponse{}, err
 }
@@ -704,12 +780,7 @@ func (s *chatService) Unhighlight(ctx context.Context, req *chatv1.UnhighlightRe
 		peerKey = cert.Key
 	}
 
-	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Highlights, peerKeyFilter[*chatv1.UIConfig_Highlight](peerKey)); i != -1 {
-			p.Highlights = slices.Delete(p.Highlights, i, i+1)
-		}
-		return nil
-	})
+	err := dao.ChatUIConfigHighlightsByPeerKey.Delete(s.store, peerKey)
 	return &chatv1.UnhighlightResponse{}, err
 }
 
@@ -720,16 +791,16 @@ func (s *chatService) Tag(ctx context.Context, req *chatv1.TagRequest) (*chatv1.
 		return nil, fmt.Errorf("finding peer cert failed: %w", err)
 	}
 
-	_, err = dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Tags, peerKeyFilter[*chatv1.UIConfig_Tag](cert.Key)); i != -1 {
-			p.Tags = slices.Delete(p.Tags, i, i+1)
+	tag, err := dao.NewChatUIConfigTag(s.store, cert.Subject, cert.Key, req.Color)
+	if err != nil {
+		return nil, err
+	}
+	err = s.store.Update(func(tx kv.RWTx) error {
+		err := dao.ChatUIConfigTagsByPeerKey.Delete(tx, cert.Key)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+			return err
 		}
-		p.Tags = append(p.Tags, &chatv1.UIConfig_Tag{
-			Alias:   cert.Subject,
-			PeerKey: cert.Key,
-			Color:   req.Color,
-		})
-		return nil
+		return dao.ChatUIConfigTags.Insert(tx, tag)
 	})
 	return &chatv1.TagResponse{}, err
 }
@@ -755,11 +826,6 @@ func (s *chatService) Untag(ctx context.Context, req *chatv1.UntagRequest) (*cha
 		peerKey = cert.Key
 	}
 
-	_, err := dao.ChatUIConfig.Transform(s.store, func(p *chatv1.UIConfig) error {
-		if i := slices.IndexFunc(p.Tags, peerKeyFilter[*chatv1.UIConfig_Tag](peerKey)); i != -1 {
-			p.Tags = slices.Delete(p.Tags, i, i+1)
-		}
-		return nil
-	})
+	err := dao.ChatUIConfigTagsByPeerKey.Delete(s.store, peerKey)
 	return &chatv1.UntagResponse{}, err
 }

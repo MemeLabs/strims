@@ -4,21 +4,18 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/network/dialer"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
-	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -34,12 +31,10 @@ var (
 func newWhisperService(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	config *chatv1.UIConfig,
 ) *whisperService {
 	return &whisperService{
 		logger: logger,
 		store:  store,
-		config: syncutil.NewPointer(config),
 		done:   make(chan struct{}),
 	}
 }
@@ -47,25 +42,26 @@ func newWhisperService(
 type whisperService struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
-	config    atomic.Pointer[chatv1.UIConfig]
 	closeOnce sync.Once
 	done      chan struct{}
 	lock      sync.Mutex
-}
-
-func (d *whisperService) SyncConfig(config *chatv1.UIConfig) {
-	d.config.Swap(config)
 }
 
 func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSendMessageRequest) (*chatv1.WhisperSendMessageResponse, error) {
 	now := timeutil.Now()
 	peerCert := dialer.VPNCertificate(ctx).GetParent()
 
-	ignoreIndex := slices.IndexFunc(d.config.Load().Ignores, func(e *chatv1.UIConfig_Ignore) bool {
-		return bytes.Equal(e.PeerKey, peerCert.Key) && (e.Deadline == 0 || e.Deadline > now.Unix())
-	})
-	if ignoreIndex != -1 {
-		return &chatv1.WhisperSendMessageResponse{}, nil
+	if ignore, err := dao.ChatUIConfigIgnoresByPeerKey.Get(d.store, peerCert.Key); err == nil {
+		if ignore.Deadline == 0 || ignore.Deadline > now.Unix() {
+			return nil, errWhisperInternalError
+		}
+	} else if !errors.Is(err, kv.ErrRecordNotFound) {
+		d.logger.Error(
+			"error loading ignore",
+			logutil.ByteHex("peer", peerCert.Key),
+			zap.Error(err),
+		)
+		return nil, errWhisperInternalError
 	}
 
 	record, err := dao.NewChatWhisperRecord(

@@ -12,6 +12,12 @@ import {
   strims_chat_v1_ITag,
   strims_chat_v1_UIConfig,
   strims_chat_v1_IUIConfig,
+  strims_chat_v1_UIConfigHighlight,
+  strims_chat_v1_IUIConfigHighlight,
+  strims_chat_v1_UIConfigIgnore,
+  strims_chat_v1_IUIConfigIgnore,
+  strims_chat_v1_UIConfigTag,
+  strims_chat_v1_IUIConfigTag,
   strims_chat_v1_WhisperRecord,
   strims_chat_v1_IWhisperRecord,
   strims_chat_v1_WhisperThread,
@@ -342,6 +348,222 @@ export class UIConfigChangeEvent {
   }
 }
 
+export type IUIConfigHighlightChangeEvent = {
+  uiConfigHighlight?: strims_chat_v1_IUIConfigHighlight;
+}
+
+export class UIConfigHighlightChangeEvent {
+  uiConfigHighlight: strims_chat_v1_UIConfigHighlight | undefined;
+
+  constructor(v?: IUIConfigHighlightChangeEvent) {
+    this.uiConfigHighlight = v?.uiConfigHighlight && new strims_chat_v1_UIConfigHighlight(v.uiConfigHighlight);
+  }
+
+  static encode(m: UIConfigHighlightChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigHighlight) strims_chat_v1_UIConfigHighlight.encode(m.uiConfigHighlight, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigHighlightChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigHighlightChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigHighlight = strims_chat_v1_UIConfigHighlight.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigHighlightDeleteEvent = {
+  uiConfigHighlight?: strims_chat_v1_IUIConfigHighlight;
+}
+
+export class UIConfigHighlightDeleteEvent {
+  uiConfigHighlight: strims_chat_v1_UIConfigHighlight | undefined;
+
+  constructor(v?: IUIConfigHighlightDeleteEvent) {
+    this.uiConfigHighlight = v?.uiConfigHighlight && new strims_chat_v1_UIConfigHighlight(v.uiConfigHighlight);
+  }
+
+  static encode(m: UIConfigHighlightDeleteEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigHighlight) strims_chat_v1_UIConfigHighlight.encode(m.uiConfigHighlight, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigHighlightDeleteEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigHighlightDeleteEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigHighlight = strims_chat_v1_UIConfigHighlight.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigTagChangeEvent = {
+  uiConfigTag?: strims_chat_v1_IUIConfigTag;
+}
+
+export class UIConfigTagChangeEvent {
+  uiConfigTag: strims_chat_v1_UIConfigTag | undefined;
+
+  constructor(v?: IUIConfigTagChangeEvent) {
+    this.uiConfigTag = v?.uiConfigTag && new strims_chat_v1_UIConfigTag(v.uiConfigTag);
+  }
+
+  static encode(m: UIConfigTagChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigTag) strims_chat_v1_UIConfigTag.encode(m.uiConfigTag, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigTagChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigTagChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigTag = strims_chat_v1_UIConfigTag.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigTagDeleteEvent = {
+  uiConfigTag?: strims_chat_v1_IUIConfigTag;
+}
+
+export class UIConfigTagDeleteEvent {
+  uiConfigTag: strims_chat_v1_UIConfigTag | undefined;
+
+  constructor(v?: IUIConfigTagDeleteEvent) {
+    this.uiConfigTag = v?.uiConfigTag && new strims_chat_v1_UIConfigTag(v.uiConfigTag);
+  }
+
+  static encode(m: UIConfigTagDeleteEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigTag) strims_chat_v1_UIConfigTag.encode(m.uiConfigTag, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigTagDeleteEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigTagDeleteEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigTag = strims_chat_v1_UIConfigTag.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigIgnoreChangeEvent = {
+  uiConfigIgnore?: strims_chat_v1_IUIConfigIgnore;
+}
+
+export class UIConfigIgnoreChangeEvent {
+  uiConfigIgnore: strims_chat_v1_UIConfigIgnore | undefined;
+
+  constructor(v?: IUIConfigIgnoreChangeEvent) {
+    this.uiConfigIgnore = v?.uiConfigIgnore && new strims_chat_v1_UIConfigIgnore(v.uiConfigIgnore);
+  }
+
+  static encode(m: UIConfigIgnoreChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigIgnore) strims_chat_v1_UIConfigIgnore.encode(m.uiConfigIgnore, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigIgnoreChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigIgnoreChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigIgnore = strims_chat_v1_UIConfigIgnore.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUIConfigIgnoreDeleteEvent = {
+  uiConfigIgnore?: strims_chat_v1_IUIConfigIgnore;
+}
+
+export class UIConfigIgnoreDeleteEvent {
+  uiConfigIgnore: strims_chat_v1_UIConfigIgnore | undefined;
+
+  constructor(v?: IUIConfigIgnoreDeleteEvent) {
+    this.uiConfigIgnore = v?.uiConfigIgnore && new strims_chat_v1_UIConfigIgnore(v.uiConfigIgnore);
+  }
+
+  static encode(m: UIConfigIgnoreDeleteEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.uiConfigIgnore) strims_chat_v1_UIConfigIgnore.encode(m.uiConfigIgnore, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UIConfigIgnoreDeleteEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UIConfigIgnoreDeleteEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.uiConfigIgnore = strims_chat_v1_UIConfigIgnore.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type ISyncAssetsEvent = {
   serverId?: bigint;
   forceUnifiedUpdate?: boolean;
@@ -583,6 +805,42 @@ export const strims_chat_v1_UIConfigChangeEvent = UIConfigChangeEvent;
 export type strims_chat_v1_UIConfigChangeEvent = UIConfigChangeEvent;
 /* @internal */
 export type strims_chat_v1_IUIConfigChangeEvent = IUIConfigChangeEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigHighlightChangeEvent = UIConfigHighlightChangeEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigHighlightChangeEvent = UIConfigHighlightChangeEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigHighlightChangeEvent = IUIConfigHighlightChangeEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigHighlightDeleteEvent = UIConfigHighlightDeleteEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigHighlightDeleteEvent = UIConfigHighlightDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigHighlightDeleteEvent = IUIConfigHighlightDeleteEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigTagChangeEvent = UIConfigTagChangeEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigTagChangeEvent = UIConfigTagChangeEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigTagChangeEvent = IUIConfigTagChangeEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigTagDeleteEvent = UIConfigTagDeleteEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigTagDeleteEvent = UIConfigTagDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigTagDeleteEvent = IUIConfigTagDeleteEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigIgnoreChangeEvent = UIConfigIgnoreChangeEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigIgnoreChangeEvent = UIConfigIgnoreChangeEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigIgnoreChangeEvent = IUIConfigIgnoreChangeEvent;
+/* @internal */
+export const strims_chat_v1_UIConfigIgnoreDeleteEvent = UIConfigIgnoreDeleteEvent;
+/* @internal */
+export type strims_chat_v1_UIConfigIgnoreDeleteEvent = UIConfigIgnoreDeleteEvent;
+/* @internal */
+export type strims_chat_v1_IUIConfigIgnoreDeleteEvent = IUIConfigIgnoreDeleteEvent;
 /* @internal */
 export const strims_chat_v1_SyncAssetsEvent = SyncAssetsEvent;
 /* @internal */
