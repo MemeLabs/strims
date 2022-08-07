@@ -124,4 +124,5 @@ const (
 	directoryNS
 	autoseedNS
 	swarmNS
+	debugNS
 )

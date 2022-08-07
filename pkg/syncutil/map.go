@@ -17,6 +17,14 @@ func (m *Map[K, V]) Get(k K) (v V, ok bool) {
 	return
 }
 
+func (m *Map[K, V]) GetAndDelete(k K) (v V, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, ok = m.m[k]
+	delete(m.m, k)
+	return
+}
+
 func (m *Map[K, V]) Set(k K, v V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

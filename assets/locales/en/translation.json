@@ -111,7 +111,8 @@
     "videoEgress.title": "Video Egress Settings - Strims",
     "videoChannel.title": "Video Channel Settings - Strims",
     "autoseed.title": "Autoseed Settings - Strims",
-    "vnic.title": "VNIC Settings - Strims"
+    "vnic.title": "VNIC Settings - Strims",
+    "debug.title": "Debug Settings - Strims"
   },
 
   "landing": {

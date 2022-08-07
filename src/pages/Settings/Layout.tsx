@@ -66,6 +66,9 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="vnic">
         VNIC
       </NavLink>
+      <NavLink className={linkClassName} onClick={onLinkClick} to="debug">
+        Debug
+      </NavLink>
     </SwipablePanel>
   );
 };

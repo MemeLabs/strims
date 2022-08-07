@@ -16,6 +16,7 @@ const Chat = lazy(() => import("../pages/Settings/Chat"));
 const Video = lazy(() => import("../pages/Settings/Video"));
 const VNIC = lazy(() => import("../pages/Settings/VNIC"));
 const Autoseed = lazy(() => import("../pages/Settings/Autoseed"));
+const Debug = lazy(() => import("../pages/Settings/Debug"));
 
 const Broadcast = lazy(() => import("../pages/Broadcast"));
 const Categories = lazy(() => import("../pages/Categories"));
@@ -34,6 +35,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
     <Route path="video/*" element={<Video />} />
     <Route path="vnic/*" element={<VNIC />} />
     <Route path="autoseed/*" element={<Autoseed />} />
+    <Route path="debug/*" element={<Debug />} />
   </Route>
 );
 

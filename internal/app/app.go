@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/strims/internal/bootstrap"
 	"github.com/MemeLabs/strims/internal/chat"
 	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/debug"
 	"github.com/MemeLabs/strims/internal/directory"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
@@ -32,6 +33,7 @@ type Control interface {
 	Peer() PeerControl
 	Bootstrap() bootstrap.Control
 	Chat() chat.Control
+	Debug() debug.Control
 	Directory() directory.Control
 	Network() network.Control
 	Notification() notification.Control
@@ -59,6 +61,7 @@ func NewControl(
 		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
 		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, transferControl, broker, profile, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)
+		debugControl        = debug.NewControl(ctx, logger, store, observers, transferControl, directoryControl)
 		chatControl         = chat.NewControl(ctx, logger, store, observers, profile, networkControl, transferControl, directoryControl)
 		bootstrapControl    = bootstrap.NewControl(ctx, logger, vpn, store, observers)
 		videocaptureControl = videocapture.NewControl(ctx, logger, transferControl, directoryControl, networkControl)
@@ -72,6 +75,7 @@ func NewControl(
 
 	go chatControl.Run()
 	go directoryControl.Run()
+	go debugControl.Run()
 	go networkControl.Run()
 	go transferControl.Run()
 	go bootstrapControl.Run()
@@ -84,6 +88,7 @@ func NewControl(
 		observers:    observers,
 		chat:         chatControl,
 		directory:    directoryControl,
+		debug:        debugControl,
 		peer:         peerControl,
 		network:      networkControl,
 		notification: notificationControl,
@@ -105,6 +110,7 @@ type control struct {
 	bootstrap    bootstrap.Control
 	chat         chat.Control
 	directory    directory.Control
+	debug        debug.Control
 	network      network.Control
 	notification notification.Control
 	transfer     transfer.Control
@@ -119,6 +125,7 @@ type control struct {
 func (c *control) Events() *event.Observers           { return c.observers }
 func (c *control) Peer() PeerControl                  { return c.peer }
 func (c *control) Directory() directory.Control       { return c.directory }
+func (c *control) Debug() debug.Control               { return c.debug }
 func (c *control) Chat() chat.Control                 { return c.chat }
 func (c *control) Network() network.Control           { return c.network }
 func (c *control) Notification() notification.Control { return c.notification }

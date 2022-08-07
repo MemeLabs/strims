@@ -71,6 +71,7 @@ func FormatDirectoryListingRecordListingKey(networkID uint64, m *networkv1direct
 	case *networkv1directory.Listing_Service_:
 		b.WriteByte(directoryListingService)
 		b.WriteString(c.Service.Type)
+		b.WriteString(c.Service.SwarmUri)
 	}
 	return b.Bytes()
 }

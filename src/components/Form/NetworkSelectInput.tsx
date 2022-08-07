@@ -25,6 +25,7 @@ export interface SelectOption<T> {
 export interface NetworkSelectInputProps<M extends boolean> extends SelectProps<string, M> {
   label: string;
   description?: string;
+  allowEmpty?: boolean;
   onChange?: (value: Value<M>) => void;
 }
 
@@ -39,6 +40,7 @@ const NetworkSelectInput = <T extends FieldValues, M extends boolean>({
   shouldUnregister,
   defaultValue,
   control,
+  allowEmpty = false,
   ...inputProps
 }: NetworkSelectInputProps<M> & CompatibleUseControllerProps<T, Value<M>>): ReactElement => {
   const {
@@ -54,21 +56,27 @@ const NetworkSelectInput = <T extends FieldValues, M extends boolean>({
 
   const [options, setOptions] = useState<SelectOption<string>[]>();
   useCall("network", "list", {
-    onComplete: (res) =>
-      setOptions(
-        res.networks.map((n) => {
-          const certRoot = certificateRoot(n.certificate);
-          return {
-            value: Base64.fromUint8Array(certRoot.key),
-            label: certRoot.subject,
-          };
-        })
-      ),
+    onComplete: (res) => {
+      const options = res.networks.map((n) => {
+        const certRoot = certificateRoot(n.certificate);
+        return {
+          value: Base64.fromUint8Array(certRoot.key),
+          label: certRoot.subject,
+        };
+      });
+      if (allowEmpty) {
+        options.unshift({
+          value: "",
+          label: "None",
+        });
+      }
+      setOptions(options);
+    },
   });
 
   const [value, setValue] = useState<PropsValue<SelectOption<string>>>(null);
   useEffect(() => {
-    if (controlValue && options) {
+    if (options) {
       if (Array.isArray(controlValue)) {
         setValue(options.filter(({ value }) => (controlValue as string[]).includes(value)));
       } else {

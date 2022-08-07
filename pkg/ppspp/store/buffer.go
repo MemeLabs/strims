@@ -325,6 +325,9 @@ func (s *Buffer) ExportCache() ([]byte, error) {
 	if s.tail() != 0 || s.off != 0 {
 		return nil, errors.New("cannot cache truncated swarm buffer")
 	}
+	if s.next.IsNone() {
+		return nil, errors.New("cannot cache empty buffer")
+	}
 
 	b := make([]byte, binByte(s.next, s.chunkSize))
 	copy(b, s.buf)

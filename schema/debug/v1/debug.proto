@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package strims.debug.v1;
 
-option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1;debug";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1;debugv1";
 option java_package = "gg.strims.debug.v1";
 option swift_prefix = "SDG";
 
@@ -44,8 +44,53 @@ enum MetricsFormat {
   METRICS_FORMAT_OPEN_METRICS = 4;
 }
 
+message GetConfigRequest {}
+message GetConfigResponse {
+  Config config = 1;
+}
+
+message SetConfigRequest {
+  Config config = 1;
+}
+message SetConfigResponse {
+  Config config = 1;
+}
+
+message Config {
+  bool enable_mock_streams = 1;
+  bytes mock_stream_network_key = 2;
+}
+
+message MockStreamSegment {
+  uint64 id = 1;
+  int64 timestamp = 2;
+  bytes padding = 3;
+}
+
+message StartMockStreamRequest {
+  uint32 bitrate_kbps = 1;
+  uint32 segment_interval_ms = 2;
+  uint32 timeout_ms = 3;
+  bytes network_key = 4;
+}
+
+message StartMockStreamResponse {
+  uint64 id = 1;
+}
+
+message StopMockStreamRequest {
+  uint64 id = 1;
+}
+
+message StopMockStreamResponse {}
+
+
 service Debug {
   rpc PProf(PProfRequest) returns (PProfResponse);
   rpc ReadMetrics(ReadMetricsRequest) returns (ReadMetricsResponse);
   rpc WatchMetrics(WatchMetricsRequest) returns (stream WatchMetricsResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+  rpc StartMockStream(StartMockStreamRequest) returns (StartMockStreamResponse);
+  rpc StopMockStream(StopMockStreamRequest) returns (StopMockStreamResponse);
 }

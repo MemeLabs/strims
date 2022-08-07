@@ -728,18 +728,22 @@ export namespace Listing {
 
   export type IService = {
     type?: string;
+    swarmUri?: string;
   }
 
   export class Service {
     type: string;
+    swarmUri: string;
 
     constructor(v?: IService) {
       this.type = v?.type || "";
+      this.swarmUri = v?.swarmUri || "";
     }
 
     static encode(m: Service, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.type.length) w.uint32(10).string(m.type);
+      if (m.swarmUri.length) w.uint32(18).string(m.swarmUri);
       return w;
     }
 
@@ -752,6 +756,9 @@ export namespace Listing {
         switch (tag >> 3) {
           case 1:
           m.type = r.string();
+          break;
+          case 2:
+          m.swarmUri = r.string();
           break;
           default:
           r.skipType(tag & 7);

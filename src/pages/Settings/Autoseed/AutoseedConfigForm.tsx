@@ -56,7 +56,7 @@ const AutoseedConfigForm = () => {
       <TableTitleBar label="Autoseed" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
-          <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />
+          <InputError error={setConfigRes.error.message || "Error saving autoseed settings"} />
         )}
         <ToggleInput control={control} label="Enable" name="enable" />
         <ButtonSet>

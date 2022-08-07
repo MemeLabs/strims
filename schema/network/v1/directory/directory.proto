@@ -91,6 +91,7 @@ message Listing {
 
   message Service {
     string type = 1;
+    string swarm_uri = 2;
   }
 
   message Embed {
