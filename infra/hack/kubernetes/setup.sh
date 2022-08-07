@@ -181,8 +181,7 @@ EOF
 		kubectl apply -f -
 
 	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.22/deploy/local-path-storage.yaml
-
-	# curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+	kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 }
 
 if ! command -v sudo &>/dev/null; then
