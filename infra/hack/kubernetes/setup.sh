@@ -128,10 +128,10 @@ function configure_firewall() {
 	sudo ufw allow https
 	sudo ufw allow 1935/tcp comment 'rtmp'
 	sudo ufw allow 5000 comment 'webrtc ephemeral ports'
-
 	sudo ufw allow 51820/udp comment 'wireguard'
 	sudo ufw allow in on wg0
 	sudo ufw allow out on wg0
+	sudo ufw --force enable
 }
 
 function start_cluster() {
