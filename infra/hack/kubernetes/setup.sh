@@ -131,6 +131,8 @@ function configure_firewall() {
 	sudo ufw allow 51820/udp comment 'wireguard'
 	sudo ufw allow in on wg0
 	sudo ufw allow out on wg0
+	sudo ufw allow in on cni0
+	sudo ufw allow out on cni0
 	sudo ufw --force enable
 }
 
