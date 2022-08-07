@@ -4,7 +4,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -38,7 +37,7 @@ var addPeerCmd = &cobra.Command{
 			return err
 		}
 
-		conf, err := backend.AddStaticPeer(context.TODO(), args[0], address, port)
+		conf, err := backend.AddStaticPeer(cmd.Context(), args[0], address, port)
 		if err != nil {
 			return err
 		}
@@ -53,8 +52,8 @@ var removePeerCmd = &cobra.Command{
 	Use:     "remove [name]",
 	Short:   "Remove an external peer by name",
 	Args:    cobra.MinimumNArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
-		return backend.RemoveStaticPeer(context.TODO(), args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return backend.RemoveStaticPeer(cmd.Context(), args[0])
 	},
 }
 
@@ -63,8 +62,8 @@ var configPeerCmd = &cobra.Command{
 	Use:     "config [name]",
 	Short:   "Get the WireGuard config for a specific peer by name",
 	Args:    cobra.MinimumNArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
-		conf, err := backend.GetConfigForPeer(context.TODO(), args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		conf, err := backend.GetConfigForPeer(cmd.Context(), args[0])
 		if err != nil {
 			return err
 		}

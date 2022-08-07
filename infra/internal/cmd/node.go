@@ -88,11 +88,11 @@ var createNodeCmd = &cobra.Command{
 
 var deleteNodeCmd = &cobra.Command{
 	Aliases: []string{"delete"},
-	Use:     "destroy",
-	Short:   "Remove node from cluster and delete",
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		name, _ := cmd.Flags().GetString("name")
-		return backend.DestroyNode(cmd.Context(), name)
+	Use:     "destroy [name]",
+	Short:   "Remove node from cluster and delete by name",
+	Args:    cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return backend.DestroyNode(cmd.Context(), args[0])
 	},
 }
 
@@ -148,9 +148,6 @@ func init() {
 	createNodeCmd.Flags().StringP("user", "u", "", "node user to SSH with (custom only)")
 	createNodeCmd.MarkFlagRequired("provider")
 	createNodeCmd.MarkFlagRequired("type")
-
-	deleteNodeCmd.Flags().StringP("name", "n", "", "name of node to delete")
-	deleteNodeCmd.MarkFlagRequired("name")
 
 	listNodeCmd.Flags().BoolP("inactive", "i", false, "list inactive nodes")
 	// listNodeCmd.Flags().StringP("provider", "p", "", "hosting provider to use")
