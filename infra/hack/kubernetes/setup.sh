@@ -182,6 +182,9 @@ EOF
 		sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' |
 		kubectl apply -f -
 
+	# TODO: master taint is deprecated in 1.25
+	kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule-
+	kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
 	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.22/deploy/local-path-storage.yaml
 	kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 }
