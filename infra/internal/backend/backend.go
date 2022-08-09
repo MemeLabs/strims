@@ -16,6 +16,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/MemeLabs/strims/infra/pkg/node"
 	"github.com/MemeLabs/strims/infra/pkg/wgutil"
 	"github.com/appleboy/easyssh-proxy"
+	"github.com/gofrs/flock"
 	"github.com/golang/geo/s2"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/null/v8"
@@ -107,6 +109,7 @@ type Config struct {
 	SSHIdentityFile string
 	ScriptDirectory string
 	CertificateKey  string
+	Lockfile        string
 }
 
 const (
@@ -175,6 +178,10 @@ func New(cfg Config) (*Backend, error) {
 		return nil, errors.New("CertificateKey is required")
 	}
 
+	if cfg.Lockfile == "" {
+		return nil, errors.New("Lockfile is required")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
@@ -238,52 +245,7 @@ func New(cfg Config) (*Backend, error) {
 		sshIdentityFile: cfg.SSHIdentityFile,
 		scriptDirectory: cfg.ScriptDirectory,
 		certificateKey:  cfg.CertificateKey,
-		peers:           []*wgutil.InterfacePeerConfig{},
-	}
-
-	nodes, err := b.ActiveNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active nodes: %w", err)
-	}
-
-	for _, n := range nodes {
-		wgpub, err := wgutil.PublicFromPrivate(n.WireguardPrivKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create public key from private: %w", err)
-		}
-
-		b.peers = append(b.peers, &wgutil.InterfacePeerConfig{
-			Comment:             n.Name,
-			PublicKey:           wgpub,
-			AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
-			Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], defaultWGPort),
-			PersistentKeepalive: 25,
-		})
-	}
-
-	peers, err := b.getPeers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get external peers: %w", err)
-	}
-
-	for _, p := range peers {
-		wgpub, err := wgutil.PublicFromPrivate(p.WireguardPrivateKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create public key from private: %w", err)
-		}
-
-		lease, err := models.FindWireguardIPLeaseG(ctx, models.WireguardPeerTypeExternalPeer, p.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find lease for peer: %w", err)
-		}
-
-		b.peers = append(b.peers, &wgutil.InterfacePeerConfig{
-			Comment:             p.Comment,
-			PublicKey:           wgpub,
-			AllowedIPs:          fmt.Sprintf("%s/%d", lease.IP, 32),
-			Endpoint:            fmt.Sprintf("%s:%d", p.PublicIPV4, p.WireguardPort),
-			PersistentKeepalive: 25,
-		})
+		lock:            flock.New(cfg.Lockfile),
 	}
 
 	return b, nil
@@ -297,7 +259,7 @@ type Backend struct {
 	scriptDirectory string
 	sshIdentityFile string
 	certificateKey  string
-	peers           []*wgutil.InterfacePeerConfig
+	lock            *flock.Flock
 }
 
 // SSHIdentityFile ...
@@ -326,13 +288,13 @@ func (b *Backend) CreateNode(
 		zap.String("name", name),
 		zap.String("region", region))
 
-	nodes, err := b.ActiveNodes(ctx)
+	nodeCount, err := b.ActiveNodeCount(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active nodes: %w", err)
 	}
 
 	newCluster := false
-	if len(nodes) == 0 {
+	if nodeCount == 0 {
 		if nodeType == node.TypeWorker {
 			return errors.New("unable to provision a worker node without an existing cluster")
 		}
@@ -381,29 +343,37 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.peers = append(b.peers, &wgutil.InterfacePeerConfig{
-		Comment:             n.Name,
-		PublicKey:           wgpub,
-		AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
-		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], defaultWGPort),
-		PersistentKeepalive: 25,
-	})
-
-	b.syncNodes(nodes)
+	b.syncNodes(ctx)
 
 	if err = b.initNode(ctx, n, newCluster); err != nil {
 		return fmt.Errorf("failed to init node: %w", err)
+	}
+
+	if err := b.markNodeActive(ctx, nodeID); err != nil {
+		return fmt.Errorf("failed to mark node active: %w", err)
+	}
+
+	if _, err := b.lock.TryLockContext(ctx, time.Second); err != nil {
+		return fmt.Errorf("failed to acquire lock for final wg sync: %w", err)
+	}
+	defer b.lock.Unlock()
+	if err := b.syncWireguard(ctx, n); err != nil {
+		return fmt.Errorf("failed to mark node active: %w", err)
 	}
 
 	return nil
 }
 
 func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
-	return b.getNodesByActivity(ctx, true)
+	return b.getNodesByState(ctx, models.NodeStateActive)
+}
+
+func (b *Backend) ActiveNodeCount(ctx context.Context) (int64, error) {
+	return b.getNodeCountByState(ctx, models.NodeStateActive)
 }
 
 func (b *Backend) InactiveNodes(ctx context.Context) ([]*node.Node, error) {
-	return b.getNodesByActivity(ctx, false)
+	return b.getNodesByState(ctx, models.NodeStateDestroyed)
 }
 
 func (b *Backend) releaseWGIP(ctx context.Context, lesseeID int64, lesseeType string) error {
@@ -454,7 +424,7 @@ func (b *Backend) leaseWGIP(ctx context.Context, lesseeID int64, lesseeType stri
 }
 
 func (b *Backend) getPeers(ctx context.Context) ([]*models.ExternalPeer, error) {
-	peers, err := models.ExternalPeers().AllG(ctx)
+	peers, err := models.ExternalPeers().All(ctx, b.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get external peers: %w", err)
 	}
@@ -462,14 +432,9 @@ func (b *Backend) getPeers(ctx context.Context) ([]*models.ExternalPeer, error) 
 }
 
 func (b *Backend) AddStaticPeer(ctx context.Context, name, address string, port int) (*wgutil.InterfaceConfig, error) {
-	wgpriv, wgpub, err := wgutil.GenerateKey()
+	wgpriv, _, err := wgutil.GenerateKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create wg keys: %w", err)
-	}
-
-	nodes, err := b.ActiveNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active nodes: %w", err)
 	}
 
 	externalPeer := &models.ExternalPeer{
@@ -479,30 +444,22 @@ func (b *Backend) AddStaticPeer(ctx context.Context, name, address string, port 
 		WireguardPrivateKey: wgpriv,
 	}
 
-	if err = externalPeer.InsertG(ctx, boil.Infer()); err != nil {
+	if err = externalPeer.Insert(ctx, b.db, boil.Infer()); err != nil {
 		return nil, fmt.Errorf("failed to insert peer: %w", err)
 	}
 
-	nextWGIPv4, err := b.leaseWGIP(ctx, externalPeer.ID, models.WireguardPeerTypeExternalPeer)
+	_, err = b.leaseWGIP(ctx, externalPeer.ID, models.WireguardPeerTypeExternalPeer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.peers = append(b.peers, &wgutil.InterfacePeerConfig{
-		Comment:             name,
-		PublicKey:           wgpub,
-		AllowedIPs:          fmt.Sprintf("%s/%d", nextWGIPv4, 32),
-		Endpoint:            fmt.Sprintf("%s:%d", address, port),
-		PersistentKeepalive: 25,
-	})
-
-	b.syncNodes(nodes)
+	b.syncNodes(ctx)
 
 	return b.GetConfigForPeer(ctx, name)
 }
 
 func (b *Backend) RemoveStaticPeer(ctx context.Context, name string) error {
-	peer, err := models.ExternalPeers(models.ExternalPeerWhere.Comment.EQ(name)).OneG(ctx)
+	peer, err := models.ExternalPeers(models.ExternalPeerWhere.Comment.EQ(name)).One(ctx, b.db)
 	if err != nil {
 		return fmt.Errorf("failed to find peer: %w", err)
 	}
@@ -511,47 +468,42 @@ func (b *Backend) RemoveStaticPeer(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to find peer: %w", err)
 	}
 
-	for i, p := range b.peers {
-		if p.Comment == name {
-			b.peers = append(b.peers[:i], b.peers[i+1:]...)
-			b.log.Info("static peer has been removed from wg peers", zap.String("peer_name", name))
-			break
-		}
-	}
-
 	if err = b.releaseWGIP(ctx, peer.ID, models.WireguardPeerTypeExternalPeer); err != nil {
 		return fmt.Errorf("failed to release wg ip: %w", err)
 	}
 
-	nodes, err := b.ActiveNodes(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get active nodes: %w", err)
-	}
-
-	b.syncNodes(nodes)
+	b.syncNodes(ctx)
 
 	return nil
 }
 
-func (b *Backend) getNodesByActivity(ctx context.Context, active bool) ([]*node.Node, error) {
+func (b *Backend) getNodesByState(ctx context.Context, state ...string) ([]*node.Node, error) {
 	var nodes []*node.Node
-	slice, err := models.Nodes(models.NodeWhere.Active.EQ(active)).AllG(ctx)
+	slice, err := models.Nodes(models.NodeWhere.State.IN(state)).All(ctx, b.db)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, n := range slice {
-		nodes = append(nodes, modelToNode(n))
+		node, err := modelToNode(ctx, n)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
 	}
 
 	return nodes, nil
+}
+
+func (b *Backend) getNodeCountByState(ctx context.Context, state string) (int64, error) {
+	return models.Nodes(models.NodeWhere.State.EQ(state)).Count(ctx, b.db)
 }
 
 func (b *Backend) insertNode(ctx context.Context, node *node.Node) (int64, error) {
 	nodeEntry := &models.Node{
 		Type:         node.Type.String(),
 		User:         node.User,
-		Active:       true,
+		State:        models.NodeStateCreated,
 		StartedAt:    node.StartedAt,
 		ProviderID:   node.ProviderID,
 		ProviderName: node.ProviderName,
@@ -569,12 +521,28 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) (int64, error
 		SKUPriceMonthly: float32(node.SKU.PriceMonthly.Value),
 	}
 
-	if err := nodeEntry.InsertG(ctx, boil.Infer()); err != nil {
+	if err := nodeEntry.Insert(ctx, b.db, boil.Infer()); err != nil {
 		return 0, fmt.Errorf("failed to insert node: %w", err)
 	}
 
 	b.log.Info("node has been inserted into the database", zap.String("name", node.Name))
 	return nodeEntry.ID, nil
+}
+
+func (b *Backend) markNodeActive(ctx context.Context, nodeID int64) error {
+	tx, err := b.db.Begin()
+	if err != nil {
+		return err
+	}
+	model, err := models.FindNode(ctx, tx, nodeID)
+	if err != nil {
+		return err
+	}
+	model.State = models.NodeStateActive
+	if _, err := model.Update(ctx, tx, boil.Infer()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) error {
@@ -593,7 +561,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			b.log.Info("connected to node")
 			break
 		}
-		time.Sleep(1 * time.Minute)
+		time.Sleep(10 * time.Second)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
@@ -607,7 +575,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 	}
 
-	if err = b.injectWireguardConfig(ssh, n); err != nil {
+	if err = b.injectWireguardConfig(ctx, ssh, n); err != nil {
 		return fmt.Errorf("failed to write new wg config: %w", err)
 	}
 
@@ -628,12 +596,13 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 
 		// Refresh the upload-certs, they are deleted after two hours
 		if _, err := b.runOnController(
+			ctx,
 			fmt.Sprintf("sudo kubeadm init phase upload-certs --upload-certs --certificate-key %q", b.certificateKey),
 		); err != nil {
 			return fmt.Errorf("failed to upload-certs: %w", err)
 		}
 
-		stdout, err := b.runOnController("sudo kubeadm token create --print-join-command | tr -d '\n'")
+		stdout, err := b.runOnController(ctx, "sudo kubeadm token create --print-join-command | tr -d '\n'")
 		if err != nil {
 			return fmt.Errorf("failed to get kubeadm token: %w", err)
 		}
@@ -688,6 +657,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 
 		if n.Type == node.TypeWorker {
 			if _, err = b.runOnController(
+				ctx,
 				fmt.Sprintf("kubectl label node %q node-role.kubernetes.io/worker=worker", n.Name),
 			); err != nil {
 				return fmt.Errorf("failed to get kubeadm token: %w", err)
@@ -699,15 +669,18 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 	return nil
 }
 
-func (b *Backend) runOnController(cmd string) (string, error) {
+func (b *Backend) runOnController(ctx context.Context, cmd string) (string, error) {
 	controllerModel, err := models.Nodes(
 		models.NodeWhere.Type.EQ(models.NodeTypeController),
-		models.NodeWhere.Active.EQ(true),
-	).OneG(context.TODO())
+		models.NodeWhere.State.EQ(models.NodeStateActive),
+	).One(ctx, b.db)
 	if err != nil {
 		return "", fmt.Errorf("failed to find a controller node: %w", err)
 	}
-	controller := modelToNode(controllerModel)
+	controller, err := modelToNode(ctx, controllerModel)
+	if err != nil {
+		return "", err
+	}
 	return b.run(&easyssh.MakeConfig{
 		User:    controller.User,
 		Server:  controller.Networks.V4[0],
@@ -717,21 +690,40 @@ func (b *Backend) runOnController(cmd string) (string, error) {
 	}, cmd)
 }
 
-func (b *Backend) syncNodes(nodes []*node.Node) {
+func (b *Backend) syncNodes(ctx context.Context) {
+	if _, err := b.lock.TryLockContext(ctx, time.Second); err != nil {
+		b.log.Error("failed to acquire wg flock", zap.Error(err))
+		return
+	}
+	defer b.lock.Unlock()
+
+	nodes, err := b.ActiveNodes(ctx)
+	if err != nil {
+		b.log.Error("failed to get active nodes", zap.Error(err))
+		return
+	}
+
 	if len(nodes) == 0 {
 		b.log.Info("no nodes to sync")
 		return
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(nodes))
 	for _, n := range nodes {
-		if err := b.syncWireguard(n); err != nil {
-			b.log.Error("failed to sync wireguard config for node", zap.String("name", n.Name), zap.Error(err))
-		}
+		n := n
+		go func() {
+			if err := b.syncWireguard(ctx, n); err != nil {
+				b.log.Error("failed to sync wireguard config for node", zap.String("name", n.Name), zap.Error(err))
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	b.log.Info("nodes have been synced")
 }
 
-func (b *Backend) syncWireguard(n *node.Node) error {
+func (b *Backend) syncWireguard(ctx context.Context, n *node.Node) error {
 	ssh := &easyssh.MakeConfig{
 		User:    n.User,
 		Server:  n.Networks.V4[0],
@@ -740,7 +732,7 @@ func (b *Backend) syncWireguard(n *node.Node) error {
 		KeyPath: b.SSHIdentityFile(),
 	}
 
-	if err := b.injectWireguardConfig(ssh, n); err != nil {
+	if err := b.injectWireguardConfig(ctx, ssh, n); err != nil {
 		return fmt.Errorf("failed to write new config: %w", err)
 	}
 
@@ -754,8 +746,8 @@ func (b *Backend) syncWireguard(n *node.Node) error {
 	return nil
 }
 
-func (b *Backend) injectWireguardConfig(ssh *easyssh.MakeConfig, n *node.Node) error {
-	wgConf, err := b.buildWGConfig(n.Networks.V4[0], n.WireguardIPv4, n.WireguardPrivKey, defaultWGPort)
+func (b *Backend) injectWireguardConfig(ctx context.Context, ssh *easyssh.MakeConfig, n *node.Node) error {
+	wgConf, err := b.buildWGConfig(ctx, n.Networks.V4[0], n.WireguardIPv4, n.WireguardPrivKey, defaultWGPort)
 	if err != nil {
 		return fmt.Errorf("failed to build config for node: %w", err)
 	}
@@ -779,13 +771,13 @@ func (b *Backend) injectWireguardConfig(ssh *easyssh.MakeConfig, n *node.Node) e
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	n, err := models.Nodes(
 		models.NodeWhere.Name.EQ(name),
-		models.NodeWhere.Active.EQ(true),
-	).OneG(context.TODO())
+		models.NodeWhere.State.IN([]string{models.NodeStateCreated, models.NodeStateActive}),
+	).One(ctx, b.db)
 	if err != nil {
 		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
 	}
 
-	n.Active = false
+	n.State = models.NodeStateDestroyed
 	n.StoppedAt = null.Int64From(time.Now().UnixNano())
 
 	count, err := n.UpdateG(ctx, boil.Infer())
@@ -795,25 +787,18 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 
 	b.log.Info("node has been updated in db to inactive", zap.String("name", name))
 
-	for i, p := range b.peers {
-		if p.Endpoint == fmt.Sprintf("%s:%d", n.IPV4, defaultWGPort) {
-			b.peers = append(b.peers[:i], b.peers[i+1:]...)
-			b.log.Info("node has been removed from wg peers", zap.String("name", name))
-			break
-		}
-	}
-
 	if err = b.releaseWGIP(ctx, n.ID, models.WireguardPeerTypeNode); err != nil {
 		return fmt.Errorf("failed to release wg ip: %w", err)
 	}
 
-	nodes, err := b.ActiveNodes(ctx)
+	nodeCount, err := b.ActiveNodeCount(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active nodes: %w", err)
 	}
 
-	if len(nodes) >= 1 {
+	if nodeCount >= 1 {
 		if _, err = b.runOnController(
+			ctx,
 			fmt.Sprintf("kubectl drain %s --ignore-daemonsets --delete-emptydir-data --force --timeout=30s && kubectl delete node %s", name, name),
 		); err != nil {
 			b.log.Error("failed to drain and delete node", zap.Error(err))
@@ -821,7 +806,7 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		b.log.Info("node has been deleted from the cluster", zap.String("name", name))
 	}
 
-	b.syncNodes(nodes)
+	b.syncNodes(ctx)
 
 	d, ok := b.NodeDrivers[n.ProviderName]
 	if !ok {
@@ -847,14 +832,60 @@ func ComputeCost(sku *node.SKU, timeOnline time.Duration) float64 {
 	return sku.PriceHourly.Value * float64(timeOnline) / float64(time.Hour)
 }
 
-func (b *Backend) buildWGConfig(pubIPv4, wgIPv4, privKey string, port uint64) (*wgutil.InterfaceConfig, error) {
+func (b *Backend) buildWGConfig(ctx context.Context, pubIPv4, wgIPv4, privKey string, port uint64) (*wgutil.InterfaceConfig, error) {
 	var peers []wgutil.InterfacePeerConfig
-	for _, p := range b.peers {
-		// don't add ourself as a peer
-		if p.Endpoint != fmt.Sprintf("%s:%d", pubIPv4, port) {
-			peers = append(peers, *p)
-		}
+
+	nodes, err := b.getNodesByState(ctx, models.NodeStateCreated, models.NodeStateActive)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active nodes: %w", err)
 	}
+	for _, n := range nodes {
+		if n.WireguardPrivKey == privKey {
+			continue
+		}
+
+		wgpub, err := wgutil.PublicFromPrivate(n.WireguardPrivKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create public key from private: %w", err)
+		}
+
+		peers = append(peers, wgutil.InterfacePeerConfig{
+			Comment:             n.Name,
+			PublicKey:           wgpub,
+			AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
+			Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], defaultWGPort),
+			PersistentKeepalive: 25,
+		})
+	}
+
+	externalPeers, err := b.getPeers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get external peers: %w", err)
+	}
+	for _, p := range externalPeers {
+		if p.WireguardPrivateKey == privKey {
+			continue
+		}
+
+		wgpub, err := wgutil.PublicFromPrivate(p.WireguardPrivateKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create public key from private: %w", err)
+		}
+
+		lease, err := models.FindWireguardIPLeaseG(ctx, models.WireguardPeerTypeExternalPeer, p.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find lease for peer: %w", err)
+		}
+
+		peers = append(peers, wgutil.InterfacePeerConfig{
+			Comment:             p.Comment,
+			PublicKey:           wgpub,
+			AllowedIPs:          fmt.Sprintf("%s/%d", lease.IP, 32),
+			Endpoint:            fmt.Sprintf("%s:%d", p.PublicIPV4, p.WireguardPort),
+			PersistentKeepalive: 25,
+		})
+	}
+
 	return &wgutil.InterfaceConfig{
 		DNS:        "1.1.1.1",
 		PrivateKey: privKey,
@@ -865,7 +896,7 @@ func (b *Backend) buildWGConfig(pubIPv4, wgIPv4, privKey string, port uint64) (*
 }
 
 func (b *Backend) GetConfigForPeer(ctx context.Context, name string) (*wgutil.InterfaceConfig, error) {
-	peer, err := models.ExternalPeers(models.ExternalPeerWhere.Comment.EQ(name)).OneG(ctx)
+	peer, err := models.ExternalPeers(models.ExternalPeerWhere.Comment.EQ(name)).One(ctx, b.db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get external peers: %w", err)
 	}
@@ -875,21 +906,21 @@ func (b *Backend) GetConfigForPeer(ctx context.Context, name string) (*wgutil.In
 		return nil, fmt.Errorf("failed to find lease for peer: %w", err)
 	}
 
-	return b.buildWGConfig(peer.PublicIPV4, lease.IP, peer.WireguardPrivateKey, uint64(peer.WireguardPort))
+	return b.buildWGConfig(ctx, peer.PublicIPV4, lease.IP, peer.WireguardPrivateKey, uint64(peer.WireguardPort))
 }
 
-func modelToNode(n *models.Node) *node.Node {
+func modelToNode(ctx context.Context, n *models.Node) (*node.Node, error) {
 	var nodeType node.NodeType
 	if err := nodeType.Set(n.Type); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	wgip := ""
 	// find lease for node
-	if n.Active {
-		lease, err := models.FindWireguardIPLeaseG(context.TODO(), models.WireguardPeerTypeNode, n.ID)
+	if n.State != models.NodeStateDestroyed {
+		lease, err := models.FindWireguardIPLeaseG(ctx, models.WireguardPeerTypeNode, n.ID)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		wgip = lease.IP
 	}
@@ -907,7 +938,7 @@ func modelToNode(n *models.Node) *node.Node {
 			V4: []string{n.IPV4},
 			V6: []string{n.IPV6},
 		},
-		Status: n.Active,
+		Status: n.State == models.NodeStateActive,
 		Region: &node.Region{
 			Name:   n.RegionName,
 			LatLng: s2.LatLngFromDegrees(n.RegionLat, n.RegionLng),
@@ -927,7 +958,7 @@ func modelToNode(n *models.Node) *node.Node {
 		WireguardIPv4:    wgip,
 		StartedAt:        n.StartedAt,
 		StoppedAt:        n.StoppedAt.Int64,
-	}
+	}, nil
 }
 
 // caller must remove the tmpfile

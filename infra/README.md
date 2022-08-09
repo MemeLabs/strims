@@ -42,6 +42,7 @@ Providers:
 SSHIdentityFile: /root/.ssh/id_ecdsa_example
 ScriptDirectory: ./hack/kubernetes
 CertificateKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Lockfile: ./cli.lock
 ```
 
 ### Nodes

@@ -1,9 +1,10 @@
 CREATE TYPE NODE_TYPE           as ENUM ('controller', 'worker');
+CREATE TYPE NODE_STATE          AS ENUM ('created', 'active', 'destroyed');
 CREATE TYPE WIREGUARD_PEER_TYPE AS ENUM ('node', 'external_peer');
 
 CREATE TABLE IF NOT EXISTS "nodes" (
   "id"                BIGSERIAL PRIMARY KEY,
-  "active"            BOOLEAN NOT NULL,
+  "state"             NODE_STATE NOT NULL DEFAULT 'created',
   "started_at"        BIGINT NOT NULL,
   "stopped_at"        BIGINT,
   "provider_name"     TEXT NOT NULL,

@@ -201,7 +201,8 @@ func (d *DigitalOceanDriver) Create(ctx context.Context, req *CreateRequest) (*N
 		SSHKeys: []godo.DropletCreateSSHKey{
 			{Fingerprint: key.Fingerprint},
 		},
-		IPv6: true,
+		IPv6:             true,
+		WithDropletAgent: godo.Bool(false),
 	})
 	if err != nil {
 		return nil, err
