@@ -6,19 +6,20 @@ function configure_system() {
 	sudo hostnamectl set-hostname "${hostname}"
 
 	DEBIAN_FRONTEND=noninteractive
-	sudo apt-get update
-	sudo apt-get upgrade -y
+	until sudo apt-get update; do sleep 1; done
+	until sudo apt-get upgrade -y; do sleep 1; done
 
 	if ! sudo grep -qa container=lxc /proc/1/environ; then
-		sudo apt autoremove -y --purge \
+		until sudo apt autoremove -y --purge \
 			snapd
+		do sleep 1; done
 
 		sudo rm -rf /var/cache/snapd/
-		sudo apt-get clean
-		sudo apt-mark hold snapd
+		until sudo apt-get clean; do sleep 1; done
+		until sudo apt-mark hold snapd; do sleep 1; done
 	fi
 
-	sudo apt-get install -y \
+	until sudo apt-get install -y \
 		apt-transport-https \
 		ca-certificates \
 		software-properties-common \
@@ -26,6 +27,9 @@ function configure_system() {
 		gnupg2 \
 		pwgen \
 		wireguard
+	do
+		sudo apt-get update
+	done
 
 	# Disable automatic updates
 	sudo sed -i /Update/s/"1"/"0"/ /etc/apt/apt.conf.d/10periodic && sync

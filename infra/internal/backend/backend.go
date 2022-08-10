@@ -546,18 +546,10 @@ func (b *Backend) markNodeActive(ctx context.Context, nodeID int64) error {
 }
 
 func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) error {
-	ssh := &easyssh.MakeConfig{
-		User:    n.User,
-		Server:  n.Networks.V4[0],
-		Port:    "22",
-		Timeout: 60 * time.Second,
-		KeyPath: b.SSHIdentityFile(),
-	}
-
 	b.log.Info("waiting for node to be reachable (up to 5 minutes)")
 	var err error
 	for i := 0; i < 5; i++ {
-		if _, err = b.run(ssh, "whoami", 5*time.Minute); err == nil {
+		if _, err = b.run(n, "whoami", 5*time.Minute); err == nil {
 			b.log.Info("connected to node")
 			break
 		}
@@ -567,26 +559,26 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
-	if err = ssh.Scp(fmt.Sprintf("%s/setup.sh", b.scriptDirectory), "/tmp/setup.sh"); err != nil {
+	if err = b.nodeSSH(n).Scp(fmt.Sprintf("%s/setup.sh", b.scriptDirectory), "/tmp/setup.sh"); err != nil {
 		return fmt.Errorf("failed to copy setup.sh script to node: %w", err)
 	}
 
-	if err = b.stream(ssh, fmt.Sprintf("bash /tmp/setup.sh --hostname %q | tee /tmp/setup.log", n.Name)); err != nil {
+	if err = b.stream(n, fmt.Sprintf("bash /tmp/setup.sh --hostname %q | tee /tmp/setup.log", n.Name)); err != nil {
 		return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 	}
 
-	if err = b.injectWireguardConfig(ctx, ssh, n); err != nil {
+	if err = b.injectWireguardConfig(ctx, n); err != nil {
 		return fmt.Errorf("failed to write new wg config: %w", err)
 	}
 
-	if _, err = b.run(ssh, "sudo systemctl enable --now wg-quick@wg0"); err != nil {
+	if _, err = b.run(n, "sudo systemctl enable --now wg-quick@wg0"); err != nil {
 		return fmt.Errorf("failed to enable wg-quick@wg0 service")
 	}
 
 	if newCluster {
 		b.log.Info("Creating a new cluster")
 		if err = b.stream(
-			ssh,
+			n,
 			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q --public-ip %q | tee -a /tmp/setup.log", b.certificateKey, n.Networks.V4[0]),
 		); err != nil {
 			return fmt.Errorf("failed to exec 'setup.sh': %w", err)
@@ -647,11 +639,11 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		}
 		defer os.Remove(kubeadm.Name())
 
-		if err = ssh.Scp(kubeadm.Name(), "/tmp/kubeadm.yml"); err != nil {
+		if err = b.nodeSSH(n).Scp(kubeadm.Name(), "/tmp/kubeadm.yml"); err != nil {
 			return fmt.Errorf("failed to scp kubeadm.yml to host: %w", err)
 		}
 
-		if err = b.stream(ssh, "sudo kubeadm join --v=5 --config=/tmp/kubeadm.yml"); err != nil {
+		if err = b.stream(n, "sudo kubeadm join --v=5 --config=/tmp/kubeadm.yml"); err != nil {
 			return fmt.Errorf("error running kubeadm join: %w", err)
 		}
 
@@ -681,13 +673,7 @@ func (b *Backend) runOnController(ctx context.Context, cmd string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	return b.run(&easyssh.MakeConfig{
-		User:    controller.User,
-		Server:  controller.Networks.V4[0],
-		Port:    "22",
-		Timeout: 30 * time.Second,
-		KeyPath: b.SSHIdentityFile(),
-	}, cmd)
+	return b.run(controller, cmd)
 }
 
 func (b *Backend) syncNodes(ctx context.Context) {
@@ -724,21 +710,13 @@ func (b *Backend) syncNodes(ctx context.Context) {
 }
 
 func (b *Backend) syncWireguard(ctx context.Context, n *node.Node) error {
-	ssh := &easyssh.MakeConfig{
-		User:    n.User,
-		Server:  n.Networks.V4[0],
-		Port:    "22",
-		Timeout: 60 * time.Second,
-		KeyPath: b.SSHIdentityFile(),
-	}
-
-	if err := b.injectWireguardConfig(ctx, ssh, n); err != nil {
+	if err := b.injectWireguardConfig(ctx, n); err != nil {
 		return fmt.Errorf("failed to write new config: %w", err)
 	}
 
 	// TODO(jbpratt): Once Ubuntu has a newer version of wireguard, swap this
 	// for: 'sudo systemctl reload wg-quick@wg0'
-	if _, err := b.run(ssh, "sudo bash -c \"wg syncconf wg0 <(wg-quick strip wg0)\""); err != nil {
+	if _, err := b.run(n, "sudo bash -c \"wg syncconf wg0 <(wg-quick strip wg0)\""); err != nil {
 		return fmt.Errorf("failed to run syncconf: %w", err)
 	}
 
@@ -746,7 +724,7 @@ func (b *Backend) syncWireguard(ctx context.Context, n *node.Node) error {
 	return nil
 }
 
-func (b *Backend) injectWireguardConfig(ctx context.Context, ssh *easyssh.MakeConfig, n *node.Node) error {
+func (b *Backend) injectWireguardConfig(ctx context.Context, n *node.Node) error {
 	wgConf, err := b.buildWGConfig(ctx, n.Networks.V4[0], n.WireguardIPv4, n.WireguardPrivKey, defaultWGPort)
 	if err != nil {
 		return fmt.Errorf("failed to build config for node: %w", err)
@@ -758,11 +736,11 @@ func (b *Backend) injectWireguardConfig(ctx context.Context, ssh *easyssh.MakeCo
 	}
 	defer os.Remove(tmp.Name())
 
-	if err = ssh.Scp(tmp.Name(), "/tmp/wg0.conf"); err != nil {
+	if err = b.nodeSSH(n).Scp(tmp.Name(), "/tmp/wg0.conf"); err != nil {
 		return fmt.Errorf("failed to scp wg0.conf to node: %w", err)
 	}
 
-	if _, err = b.run(ssh, "sudo cp /tmp/wg0.conf /etc/wireguard/wg0.conf"); err != nil {
+	if _, err = b.run(n, "sudo cp /tmp/wg0.conf /etc/wireguard/wg0.conf"); err != nil {
 		return fmt.Errorf("failed to run mv wg0.conf: %w", err)
 	}
 	return nil
@@ -976,8 +954,18 @@ func tmpfile(content string) (*os.File, error) {
 	return tmp, nil
 }
 
-func (b *Backend) stream(ssh *easyssh.MakeConfig, cmd string) error {
-	stdoutChan, stderrChan, doneChan, errChan, err := ssh.Stream(cmd, 10*time.Minute)
+func (b *Backend) nodeSSH(n *node.Node) *easyssh.MakeConfig {
+	return &easyssh.MakeConfig{
+		User:    n.User,
+		Server:  n.Networks.V4[0],
+		Port:    "22",
+		Timeout: 60 * time.Second,
+		KeyPath: b.SSHIdentityFile(),
+	}
+}
+
+func (b *Backend) stream(n *node.Node, cmd string) error {
+	stdoutChan, stderrChan, doneChan, errChan, err := b.nodeSSH(n).Stream(cmd, 10*time.Minute)
 	if err != nil {
 		return fmt.Errorf("failed to run cmd(%q): %w", cmd, err)
 	}
@@ -1014,8 +1002,8 @@ loop:
 	return nil
 }
 
-func (b *Backend) run(ssh *easyssh.MakeConfig, cmd string, timeout ...time.Duration) (string, error) {
-	stdout, stderr, _, err := ssh.Run(cmd, timeout...)
+func (b *Backend) run(n *node.Node, cmd string, timeout ...time.Duration) (string, error) {
+	stdout, stderr, _, err := b.nodeSSH(n).Run(cmd, timeout...)
 	if err != nil {
 		return "", fmt.Errorf("failed to run command(%q): %q %w", cmd, stderr, err)
 	}
