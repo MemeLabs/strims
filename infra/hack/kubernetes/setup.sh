@@ -1,25 +1,56 @@
 #!/usr/bin/env bash
 
+function retry() {
+	set +x
+
+	local cmd="$*"
+	local until=3
+	local ready=1
+	local count=1
+	local sleep=1
+
+	while [[ $ready -ne 0 ]] && [[ $count -lt $until ]]; do
+		$cmd 2>&1
+		ready=$(echo $?)
+		((count += 1))
+		sleep $sleep
+		echo "Command failed, retrying..."
+	done
+
+	if [[ $ready -eq 0 ]]; then
+		echo "Succeeded after $count attempts!"
+	elif [[ $ready -ne 0 ]] || [[ $count -gt $until ]]; then
+		echo "Failed after $count attempts!"
+		exit 1
+	fi
+
+	set -x
+}
+
 function configure_system() {
 	local hostname="$1"
 
 	sudo hostnamectl set-hostname "${hostname}"
 
+	# Disable automatic updates
+	sudo sed -i /Update/s/"1"/"0"/ /etc/apt/apt.conf.d/10periodic && sync
+	echo 'APT::Periodic::Unattended-Upgrade "0";' | sudo tee -a /etc/apt/apt.conf.d/10periodic
+	# Fail on any errors from apt (to allow for retries)
+	echo 'APT::Update::Error-Mode "any";' | sudo tee /etc/apt/apt.conf.d/10error-mode
+
 	DEBIAN_FRONTEND=noninteractive
-	until sudo apt-get update; do sleep 1; done
-	until sudo apt-get upgrade -y; do sleep 1; done
+	retry sudo apt-get update
+	retry sudo apt-get upgrade -y
 
 	if ! sudo grep -qa container=lxc /proc/1/environ; then
-		until sudo apt autoremove -y --purge \
-			snapd
-		do sleep 1; done
+		retry sudo apt autoremove -y --purge snapd
 
 		sudo rm -rf /var/cache/snapd/
-		until sudo apt-get clean; do sleep 1; done
-		until sudo apt-mark hold snapd; do sleep 1; done
+		retry sudo apt-get clean
+		retry sudo apt-mark hold snapd
 	fi
 
-	until sudo apt-get install -y \
+	retry sudo apt-get install -y \
 		apt-transport-https \
 		ca-certificates \
 		software-properties-common \
@@ -27,13 +58,7 @@ function configure_system() {
 		gnupg2 \
 		pwgen \
 		wireguard
-	do
-		sudo apt-get update
-	done
 
-	# Disable automatic updates
-	sudo sed -i /Update/s/"1"/"0"/ /etc/apt/apt.conf.d/10periodic && sync
-	echo 'APT::Periodic::Unattended-Upgrade "0";' | sudo tee -a /etc/apt/apt.conf.d/10periodic
 	sudo update-ca-certificates
 
 	# Disable swap
@@ -152,7 +177,7 @@ EOF
 		sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' |
 		kubectl apply -f -
 
-	sudo ip link delete cni0
+	sudo ip link delete cni0 || :
 	sudo systemctl restart crio
 
 	# TODO: master taint is deprecated in 1.25
