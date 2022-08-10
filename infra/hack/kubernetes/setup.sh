@@ -68,38 +68,6 @@ function install_tools() {
 
 	sudo apt-mark hold kubelet kubeadm cri-o cri-o-runc cri-tools buildah
 
-# According to the cri-o documentation, this is the correct config but this
-# results in coredns never becoming ready because the pods are unable to reach
-# the upstream dns.
-# https://github.com/cri-o/cri-o/blob/c8bbae9858a084f4244cbd3bb38852d29fc0466b/tutorials/kubernetes.md#flannel-network
-#	sudo tee /etc/cni/net.d/10-crio.conf <<EOF
-#{
-#    "cniVersion": "0.4.0",
-#    "name": "crio",
-#    "type": "flannel"
-#}
-#EOF
-
-	sudo tee /etc/cni/net.d/100-crio-bridge.conf <<EOF
-{
-    "cniVersion": "0.4.0",
-    "name": "crio",
-    "type": "bridge",
-    "bridge": "cni0",
-    "isGateway": true,
-    "ipMasq": true,
-    "hairpinMode": true,
-    "ipam": {
-        "type": "host-local",
-        "routes": [
-            { "dst": "0.0.0.0/0" }
-        ],
-        "ranges": [
-            [{ "subnet": "10.244.0.0/24" }]
-        ]
-    }
-}
-EOF
 	sudo tee /etc/modules-load.d/crio.conf <<EOF
 overlay
 br_netfilter
@@ -114,6 +82,8 @@ EOF
 		sudo modprobe overlay
 		sudo modprobe br_netfilter
 	fi
+
+	sudo rm -f /etc/cni/net.d/*
 
 	sudo sysctl --system
 	sudo systemctl daemon-reload
@@ -154,10 +124,6 @@ nodeRegistration:
   kubeletExtraArgs:
     node-ip: ${wg_ip}
     node-labels: "strims.gg/public-ip=${public_ip},strims.gg/svc=leader"
-  ignorePreflightErrors:
-    - Swap
-    - FileContent--proc-sys-net-bridge-bridge-nf-call-iptables
-    - SystemVerification
 certificateKey: ${ca_key}
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -181,6 +147,9 @@ EOF
 	curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml |
 		sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' |
 		kubectl apply -f -
+
+	sudo ip link delete cni0
+	sudo systemctl restart crio
 
 	# TODO: master taint is deprecated in 1.25
 	kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule-
