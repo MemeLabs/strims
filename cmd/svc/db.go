@@ -43,5 +43,6 @@ func postgresStorageAdapter(logger *zap.Logger, cfg StorageConfig) (kv.BlobStore
 		ConnStr:       connStr,
 		Logger:        logger,
 		EnableLogging: cfg.Postgres.EnableLogging,
+		MaxConns:      cfg.Postgres.MaxConns,
 	})
 }

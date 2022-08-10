@@ -85,6 +85,7 @@ type StorageConfig struct {
 	Postgres struct {
 		ConnStr       Optional[string] `yaml:"connStr"`
 		EnableLogging bool             `yaml:"enableLogging"`
+		MaxConns      int32            `yaml:"maxConns"`
 	} `yaml:"postgres"`
 }
 
@@ -116,6 +117,7 @@ type PeerConfig struct {
 		Postgres struct {
 			ConnStr       Optional[string] `yaml:"connStr"`
 			EnableLogging bool             `yaml:"enableLogging"`
+			MaxConns      int32            `yaml:"maxConns"`
 		} `yaml:"postgres"`
 	} `yaml:"queue"`
 	HTTP    HTTPConfig `yaml:"http"`

@@ -23,6 +23,7 @@ type Config struct {
 	ConnStr       string
 	Logger        *zap.Logger
 	EnableLogging bool
+	MaxConns      int32
 }
 
 func NewStoreConfig(cfg Config) (kv.BlobStore, error) {
@@ -32,6 +33,9 @@ func NewStoreConfig(cfg Config) (kv.BlobStore, error) {
 	}
 	if cfg.EnableLogging && cfg.Logger != nil {
 		pcfg.ConnConfig.Logger = zapadapter.NewLogger(cfg.Logger)
+	}
+	if cfg.MaxConns != 0 {
+		pcfg.MaxConns = cfg.MaxConns
 	}
 
 	conn, err := pgxpool.ConnectConfig(context.Background(), pcfg)

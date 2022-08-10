@@ -36,6 +36,7 @@ func postgresQueueAdapter(logger *zap.Logger, cfg *PeerConfig) (queue.Transport,
 	return postgres.NewTransport(postgres.Config{
 		ConnStr:       connStr,
 		Logger:        logger,
-		EnableLogging: cfg.Storage.Postgres.EnableLogging,
+		EnableLogging: cfg.Queue.Postgres.EnableLogging,
+		MaxConns:      cfg.Queue.Postgres.MaxConns,
 	})
 }
