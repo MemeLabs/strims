@@ -317,6 +317,8 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 			t.certificates.Insert(n)
 			t.dialer.ReplaceOrInsertNetwork(n)
 
+			defer t.observers.EmitLocal(event.NetworkCertUpdate{Network: n})
+
 			for _, peer := range t.peers {
 				if peer.hasNetworkBinding(dao.NetworkKey(n)) {
 					go peer.sendCertificateUpdate(n)

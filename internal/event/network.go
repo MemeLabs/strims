@@ -18,6 +18,11 @@ type NetworkStop struct {
 	Network *networkv1.Network
 }
 
+// NetworkCertUpdate ...
+type NetworkCertUpdate struct {
+	Network *networkv1.Network
+}
+
 // NetworkCertUpdateError ...
 type NetworkCertUpdateError struct {
 	Network *networkv1.Network

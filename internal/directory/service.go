@@ -360,6 +360,12 @@ func (d *directoryService) appendUserEvent(events []*networkv1directory.Event, u
 	})
 }
 
+func (d *directoryService) upsertUser(q *user) *user {
+	u := d.users.GetOrInsert(q)
+	u.Update(q)
+	return u
+}
+
 func (d *directoryService) deleteListing(l *listing) {
 	d.listings.Delete(l)
 
@@ -376,7 +382,7 @@ func (d *directoryService) deleteListing(l *listing) {
 }
 
 func (d *directoryService) deleteSession(s *session) (*user, bool) {
-	u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()})
+	u := d.upsertUser(&user{certificate: s.certificate.GetParent()})
 	u.sessions.Delete(s)
 
 	s.EachViewed(func(l *listing) {
@@ -632,7 +638,7 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.
 	defer d.lock.Unlock()
 
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	u := d.upsertUser(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 	if u.PublishedListingCount() >= publishQuota {
 		return nil, errors.New("exceeded concurrent publish quota")
 	}
@@ -675,7 +681,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1director
 	if s == nil {
 		return nil, ErrSessionNotFound
 	}
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	u := d.upsertUser(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	if !d.removeListingPublisher(l, u, s) {
 		return nil, errors.New("not publishing this listing")
@@ -699,7 +705,7 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1directory.Joi
 	defer d.lock.Unlock()
 
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)})
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	u := d.upsertUser(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 	if u.ViewedListingCount() >= viewQuota {
 		return nil, errors.New("exceeded concurrent view quota")
 	}
@@ -736,7 +742,7 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1directory.Par
 		return nil, ErrSessionNotFound
 	}
 
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	u := d.upsertUser(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	if !d.removeListingViewer(l, u, s) {
 		return nil, errors.New("not viewing this listing")
@@ -756,7 +762,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.Pin
 		return nil, ErrSessionNotFound
 	}
 
-	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
+	u := d.upsertUser(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	s.EachViewed(func(l *listing) {
 		l.recentUsers.Touch(u)
@@ -1046,6 +1052,12 @@ type user struct {
 
 func (u *user) InitID(id uint64) {
 	u.id = id
+}
+
+func (u *user) Update(o *user) {
+	if !proto.Equal(u.certificate, o.certificate) {
+		u.certificate = o.certificate
+	}
 }
 
 func (u *user) PublishedListingCount() int {

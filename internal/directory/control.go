@@ -181,6 +181,8 @@ func (t *control) Run() {
 				t.handleNetworkStart(e.Network)
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
+			case event.NetworkCertUpdate:
+				t.handleNetworkCertUpdate(e.Network)
 			case *networkv1.NetworkChangeEvent:
 				t.handleNetworkChange(e.Network)
 			}
@@ -272,26 +274,35 @@ func (t *control) handleNetworkChange(network *networkv1.Network) {
 	}
 }
 
+func (t *control) handleNetworkCertUpdate(network *networkv1.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if r, ok := t.runners.Get(dao.NetworkKey(network)); ok {
+		go t.pingDirectory(r)
+	}
+}
+
 func (t *control) ping() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	for it := t.runners.Iterate(); it.Next(); {
-		r := it.Value()
+		go t.pingDirectory(it.Value())
+	}
+}
 
-		c, dc, err := t.client(t.ctx, r.NetworkKey())
-		if err != nil {
-			r.Logger().Debug("directory ping failed", zap.Error(err))
-			continue
-		}
+func (t *control) pingDirectory(r *runner) {
+	c, dc, err := t.client(t.ctx, r.NetworkKey())
+	if err != nil {
+		r.Logger().Debug("directory ping failed", zap.Error(err))
+		return
+	}
+	defer c.Close()
 
-		go func() {
-			err := dc.Ping(t.ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
-			if err != nil {
-				r.Logger().Debug("directory ping failed", zap.Error(err))
-			}
-			c.Close()
-		}()
+	err = dc.Ping(t.ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
+	if err != nil {
+		r.Logger().Debug("directory ping failed", zap.Error(err))
 	}
 }
 
