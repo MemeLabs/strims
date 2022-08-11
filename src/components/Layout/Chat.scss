@@ -54,25 +54,8 @@
   }
 }
 
-.layout--tv,
-.layout--pc {
-  .layout_chat__room_carousel {
-    width: calc(100% - 96px);
-  }
-}
-
 .layout--portable {
-  .layout_chat {
-    &__room_carousel {
-      width: 100%;
-    }
-  }
-
   &.layout--min_aspect_ratio_2 {
-    .layout_chat__room_carousel {
-      width: calc(100% - 48px);
-    }
-
     &.layout--landscape_cw.layout--swap,
     &.layout--landscape_ccw.layout--swap {
       .layout_chat__header {
@@ -91,12 +74,6 @@
 
     &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__header {
       padding-left: env(safe-area-inset-left);
-    }
-  }
-
-  &.layout--min_aspect_ratio_1_2.layout--show_video {
-    .layout_chat__room_carousel {
-      width: 100%;
     }
   }
 

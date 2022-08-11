@@ -129,7 +129,7 @@ const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {
   const ref = useRef<HTMLDivElement>();
   const size = useSize(ref);
 
-  const slidesPerView = size ? Math.floor(size?.width / 52) : 1;
+  const slidesPerView = size ? Math.round(size?.width / 52) : 1;
 
   const slides = mainTopics.map((topic) => {
     const key = Base64.fromUint8Array(topic.topicKey, true);
@@ -162,6 +162,7 @@ const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {
       onPointerDownCapture={handlePointerDown}
     >
       <Swiper
+        className="room_carousel__swiper"
         slidesPerView={slidesPerView}
         spaceBetween={4}
         loop={slides.length > slidesPerView}

@@ -3,6 +3,13 @@
 
 .room_carousel {
   font-size: 1rem;
+  flex: 1;
+  position: relative;
+
+  &__swiper {
+    position: absolute;
+    width: 100%;
+  }
 
   &__item {
     touch-action: none;
