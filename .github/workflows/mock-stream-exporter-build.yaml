@@ -1,0 +1,31 @@
+name: mock-stream-exporter-build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/mock-stream-exporter-build.yaml'
+      - 'infra/cmd/mock-stream-exporter/**'
+      - 'go.mod'
+      - 'go.sum'
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Docker login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: docker login https://ghcr.io -u ${username} -p ${password}
+    - name: Build image
+      run: |
+        docker build \
+          -t ghcr.io/memelabs/strims/mock-stream-exporter:latest \
+          -f infra/cmd/mock-stream-exporter/Dockerfile .
+
+    - name: Publish image
+      run: docker push ghcr.io/memelabs/strims/mock-stream-exporter:latest
