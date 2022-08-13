@@ -5,27 +5,7 @@ import React, { ComponentProps } from "react";
 
 import monkey from "../../../assets/directory/monkey.png";
 import { ListingSnippetImage } from "../../apis/strims/network/v1/directory/directory";
-import { Image, ImageType } from "../../apis/strims/type/image";
-import useObjectURL from "../../hooks/useObjectURL";
-
-const toFileType = (t: ImageType) => {
-  switch (t) {
-    case ImageType.IMAGE_TYPE_APNG:
-      return "image/apng";
-    case ImageType.IMAGE_TYPE_AVIF:
-      return "image/avif";
-    case ImageType.IMAGE_TYPE_GIF:
-      return "image/gif";
-    case ImageType.IMAGE_TYPE_JPEG:
-      return "image/jpeg";
-    case ImageType.IMAGE_TYPE_PNG:
-      return "image/png";
-    case ImageType.IMAGE_TYPE_WEBP:
-      return "image/webp";
-  }
-};
-
-const useImage = (image: Image): string => useObjectURL(toFileType(image.type), image.data);
+import { useImage } from "../../hooks/useImage";
 
 interface SnippetImageProps extends ComponentProps<"img"> {
   fallback?: string;
