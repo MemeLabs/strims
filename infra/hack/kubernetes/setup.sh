@@ -178,6 +178,12 @@ EOF
 		sed $'/- --kube-subnet-mgr$/a \ \ \ \ \ \ \ \ - --iface=wg0' |
 		kubectl apply -f -
 
+	# https://kubernetes.io/docs/tasks/administer-cluster/dns-horizontal-autoscaling/
+	kubectl patch deployment coredns -n kube-system -p '{"spec": {"replicas": 1}}'
+	curl https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/dns-horizontal-autoscaler/dns-horizontal-autoscaler.yaml |
+		sed 's/{{.Target}}/deployment\/coredns/' |
+		kubectl apply -f -
+
 	sudo ip link delete cni0 || :
 	sudo systemctl restart crio
 
