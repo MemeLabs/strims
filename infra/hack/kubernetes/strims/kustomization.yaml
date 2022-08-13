@@ -1,0 +1,54 @@
+resources:
+- namespace.yaml
+- rbac.yaml
+- svc-leader.yaml
+- svc-seeder.yaml
+- svc-invites.yaml
+- web.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+# https://github.com/kubernetes-sigs/kustomize/blob/master/examples/secretGeneratorPlugin.md
+secretGenerator:
+  - name: postgres-credentials
+    namespace: strims
+    envs:
+    - sample/postgres.env
+
+# https://github.com/kubernetes-sigs/kustomize/blob/master/examples/configGeneration.md
+configMapGenerator:
+  - name: svc-initdb-scripts
+    namespace: strims
+    files:
+      - init.sql=sample/db.sql
+  - name: svc-leader-config
+    namespace: strims
+    files:
+      - config.yaml=sample/svc-leader-config.yaml
+  - name: svc-seeder-config
+    namespace: strims
+    files:
+      - config.yaml=sample/svc-seeder-config.yaml
+  - name: svc-invites-config
+    namespace: strims
+    files:
+      - config.yaml=sample/svc-invites-config.yaml
+
+helmCharts:
+- name: postgresql
+  namespace: strims
+  includeCRDs: true
+  valuesInline:
+    initdb:
+      scriptsConfigMap: svc-initdb-scripts
+    auth:
+      existingSecret: postgres-credentials
+      username: strims
+      database: strims
+    primary:
+      nodeSelector:
+        strims.gg/svc: leader
+  releaseName: postgresql
+  version: 11.6.19
+  repo: https://charts.bitnami.com/bitnami

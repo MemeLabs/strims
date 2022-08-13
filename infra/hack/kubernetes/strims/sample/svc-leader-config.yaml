@@ -1,0 +1,26 @@
+metrics:
+  address: "0.0.0.0:1971"
+debug:
+  address: "0.0.0.0:6060"
+storage:
+  adapter: "postgres"
+  postgres:
+    connStr: "user=strims password=password host=postgresql.strims.svc.cluster.local sslmode=disable database=strims"
+    enableLogging: false
+queue:
+  adapter: "postgres"
+  postgres:
+    connStr: "user=strims password=password host=postgresql.strims.svc.cluster.local sslmode=disable database=strims"
+http:
+  address: "0.0.0.0:10080"
+session:
+  remote:
+    enabled: true
+  headless: []
+vnic:
+  webrtc:
+    enabled: true
+    tcpMuxAddress: 0.0.0.0:5000
+    udpMuxAddress: 0.0.0.0:5000
+  websocket:
+    enabled: true
