@@ -55,7 +55,7 @@ var videoChannelsByUniqueIndex = NewUniqueIndex(videoChannelKeyNS, VideoChannels
 		key = append(key, o.RemoteShare.ServiceKey...)
 	}
 	return key
-}, nil)
+}, byteIdentity, nil)
 
 // GetVideoChannelIDByOwnerCert ...
 func GetVideoChannelIDByOwnerCert(s kv.Store, cert *certificate.Certificate) (uint64, error) {

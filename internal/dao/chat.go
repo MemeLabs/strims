@@ -134,7 +134,7 @@ func chatProfilePeerKey(m *chatv1.Profile) []byte {
 	return FormatChatProfilePeerKey(m.ServerId, m.PeerKey)
 }
 
-var ChatProfilesByPeerKey = NewUniqueIndex(chatProfilePeerKeyNS, ChatProfiles, chatProfilePeerKey, nil)
+var ChatProfilesByPeerKey = NewUniqueIndex(chatProfilePeerKeyNS, ChatProfiles, chatProfilePeerKey, byteIdentity, nil)
 
 func NewChatProfileCache(s kv.RWStore, opt *CacheStoreOptions) (c ChatProfileCache) {
 	c.CacheStore, c.ByID = newCacheStore[chatv1.Profile](s, ChatProfiles, opt)
@@ -174,7 +174,7 @@ var ChatUIConfigHighlights = NewTable(
 	},
 )
 
-var ChatUIConfigHighlightsByPeerKey = NewUniqueIndex(chatUIConfigHighlightKeyNS, ChatUIConfigHighlights, (*chatv1.UIConfigHighlight).GetPeerKey, nil)
+var ChatUIConfigHighlightsByPeerKey = NewUniqueIndex(chatUIConfigHighlightKeyNS, ChatUIConfigHighlights, (*chatv1.UIConfigHighlight).GetPeerKey, byteIdentity, nil)
 
 var ChatUIConfigTags = NewTable(
 	chatUIConfigTagNS,
@@ -188,7 +188,7 @@ var ChatUIConfigTags = NewTable(
 	},
 )
 
-var ChatUIConfigTagsByPeerKey = NewUniqueIndex(chatUIConfigTagKeyNS, ChatUIConfigTags, (*chatv1.UIConfigTag).GetPeerKey, nil)
+var ChatUIConfigTagsByPeerKey = NewUniqueIndex(chatUIConfigTagKeyNS, ChatUIConfigTags, (*chatv1.UIConfigTag).GetPeerKey, byteIdentity, nil)
 
 var ChatUIConfigIgnores = NewTable(
 	chatUIConfigIgnoreNS,
@@ -202,7 +202,7 @@ var ChatUIConfigIgnores = NewTable(
 	},
 )
 
-var ChatUIConfigIgnoresByPeerKey = NewUniqueIndex(chatUIConfigIgnoreKeyNS, ChatUIConfigIgnores, (*chatv1.UIConfigIgnore).GetPeerKey, nil)
+var ChatUIConfigIgnoresByPeerKey = NewUniqueIndex(chatUIConfigIgnoreKeyNS, ChatUIConfigIgnores, (*chatv1.UIConfigIgnore).GetPeerKey, byteIdentity, nil)
 
 var ChatWhisperThreads = NewTable(
 	chatWhisperThreadNS,
@@ -220,6 +220,7 @@ var ChatWhisperThreadsByPeerKey = NewUniqueIndex(
 	chatWhisperThreadPeerKeyNS,
 	ChatWhisperThreads,
 	(*chatv1.WhisperThread).GetPeerKey,
+	byteIdentity,
 	nil,
 )
 
@@ -247,6 +248,7 @@ var ChatWhisperRecordsByPeerKey = NewSecondaryIndex(
 	chatWhisperRecordPeerKeyNS,
 	ChatWhisperRecords,
 	(*chatv1.WhisperRecord).GetPeerKey,
+	byteIdentity,
 )
 
 func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
@@ -259,6 +261,7 @@ var ChatWhisperRecordsByState = NewSecondaryIndex(
 	chatWhisperRecordStateNS,
 	ChatWhisperRecords,
 	func(m *chatv1.WhisperRecord) []byte { return FormatChatWhisperRecordStateKey(m.State) },
+	byteIdentity,
 )
 
 // NewChatServer ...

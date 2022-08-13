@@ -597,6 +597,8 @@ func (t *Table[V, T]) runDeleteHooks(tx kv.RWTx, k uint64) error {
 	return nil
 }
 
+func byteIdentity(b []byte) []byte { return b }
+
 type ManyToOneOptions struct {
 	CascadeDelete bool
 }
@@ -647,10 +649,9 @@ func ManyToOne[AV, BV any, AT TableRecord[AV], BT TableRecord[BV]](ns namespace,
 		})
 	}
 
-	idk := func(m AT) []byte { return idKey(key(m)) }
-	byKey := NewSecondaryIndex(ns, a, idk)
+	byKey := NewSecondaryIndex(ns, a, key, idKey)
 
-	getAllAByBID := func(s kv.Store, id uint64) ([]AT, error) { return byKey.GetAll(s, idKey(id)) }
+	getAllAByBID := func(s kv.Store, id uint64) ([]AT, error) { return byKey.GetAll(s, id) }
 	getAllAByB := func(s kv.Store, m BT) ([]AT, error) { return getAllAByBID(s, m.GetId()) }
 	getBByA := func(s kv.Store, m AT) (BT, error) { return b.Get(s, key(m)) }
 
@@ -663,7 +664,7 @@ func idKey(id uint64) []byte {
 	return b
 }
 
-func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte) *SecondaryIndex[V, T] {
+func NewSecondaryIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T], key func(m T) K, formatKey func(k K) []byte) *SecondaryIndex[V, T, K] {
 	t.deleteHooks = append(t.deleteHooks, func(s kv.RWStore, m T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.DeleteHook"); ce != nil {
 			defer func() {
@@ -671,7 +672,7 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 					zap.String("type", t.name),
 					zap.Uint64("id", m.GetId()),
 					zap.Stringer("ns", ns),
-					zap.String("key", hashSecondaryIndexKey(key(m), s)),
+					zap.String("key", hashSecondaryIndexKey(formatKey(key(m)), s)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
 				)
@@ -679,7 +680,7 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 		}
 
 		return s.Update(func(tx kv.RWTx) error {
-			return DeleteSecondaryIndex(tx, ns, key(m), m.GetId())
+			return DeleteSecondaryIndex(tx, ns, formatKey(key(m)), m.GetId())
 		})
 	})
 	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
@@ -689,7 +690,7 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 					zap.String("type", t.name),
 					zap.Uint64("id", m.GetId()),
 					zap.Stringer("ns", ns),
-					zap.String("key", hashSecondaryIndexKey(key(m), s)),
+					zap.String("key", hashSecondaryIndexKey(formatKey(key(m)), s)),
 					zap.Duration("duration", ts.Elapsed()),
 					zap.Error(err),
 				)
@@ -697,9 +698,9 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 		}
 
 		return s.Update(func(tx kv.RWTx) error {
-			mk := key(m)
+			mk := formatKey(key(m))
 			if p != nil {
-				pk := key(p)
+				pk := formatKey(key(p))
 				if bytes.Equal(mk, pk) {
 					return nil
 				}
@@ -711,9 +712,10 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 		})
 	})
 
-	return &SecondaryIndex[V, T]{
+	return &SecondaryIndex[V, T, K]{
 		ns: ns,
 		t:  t,
+		k:  formatKey,
 
 		getAllCount:         secondaryIndexGetAllCount.WithLabelValues(typeName[V](), ns.String()),
 		getAllErrCount:      secondaryIndexGetAllErrCount.WithLabelValues(typeName[V](), ns.String()),
@@ -724,9 +726,10 @@ func NewSecondaryIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], ke
 	}
 }
 
-type SecondaryIndex[V any, T TableRecord[V]] struct {
+type SecondaryIndex[V any, T TableRecord[V], K any] struct {
 	ns namespace
 	t  *Table[V, T]
+	k  func(k K) []byte
 
 	getAllCount         prometheus.Counter
 	getAllErrCount      prometheus.Counter
@@ -736,13 +739,14 @@ type SecondaryIndex[V any, T TableRecord[V]] struct {
 	getAllIDsDurationMs prometheus.Observer
 }
 
-func (idx *SecondaryIndex[V, T]) GetAll(s kv.Store, k []byte) (vs []T, err error) {
+func (idx *SecondaryIndex[V, T, K]) GetAll(s kv.Store, k K) (vs []T, err error) {
+	kb := idx.k(k)
 	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAll"); ce != nil {
 		defer func() {
 			ce.Write(
 				zap.String("type", idx.t.name),
 				zap.Stringer("ns", idx.ns),
-				zap.String("key", hashSecondaryIndexKey(k, s)),
+				zap.String("key", hashSecondaryIndexKey(kb, s)),
 				zap.Int("records", len(vs)),
 				zap.Duration("duration", ts.Elapsed()),
 				zap.Error(err),
@@ -753,7 +757,7 @@ func (idx *SecondaryIndex[V, T]) GetAll(s kv.Store, k []byte) (vs []T, err error
 	defer observeDurationMs(idx.getAllDurationMs)()
 
 	err = s.View(func(tx kv.Tx) error {
-		ids, err := ScanSecondaryIndex(tx, idx.ns, k)
+		ids, err := ScanSecondaryIndex(tx, idx.ns, kb)
 		if err != nil {
 			return err
 		}
@@ -773,13 +777,14 @@ func (idx *SecondaryIndex[V, T]) GetAll(s kv.Store, k []byte) (vs []T, err error
 	return
 }
 
-func (idx *SecondaryIndex[V, T]) GetAllIDs(s kv.Store, k []byte) (ids []uint64, err error) {
+func (idx *SecondaryIndex[V, T, K]) GetAllIDs(s kv.Store, k K) (ids []uint64, err error) {
+	kb := idx.k(k)
 	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.GetAllIDs"); ce != nil {
 		defer func() {
 			ce.Write(
 				zap.String("type", idx.t.name),
 				zap.Stringer("ns", idx.ns),
-				zap.String("key", hashSecondaryIndexKey(k, s)),
+				zap.String("key", hashSecondaryIndexKey(kb, s)),
 				zap.Int("records", len(ids)),
 				zap.Duration("duration", ts.Elapsed()),
 				zap.Error(err),
@@ -790,7 +795,7 @@ func (idx *SecondaryIndex[V, T]) GetAllIDs(s kv.Store, k []byte) (ids []uint64, 
 	defer observeDurationMs(idx.getAllIDsDurationMs)()
 
 	err = s.View(func(tx kv.Tx) error {
-		ids, err = ScanSecondaryIndex(tx, idx.ns, k)
+		ids, err = ScanSecondaryIndex(tx, idx.ns, kb)
 		return err
 	})
 	if err != nil {
@@ -805,13 +810,13 @@ type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
-func NewUniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key func(m T) []byte, opt *UniqueIndexOptions[V, T]) *UniqueIndex[V, T] {
+func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T], key func(m T) K, formatKey func(k K) []byte, opt *UniqueIndexOptions[V, T]) *UniqueIndex[V, T, K] {
 	if opt == nil {
 		opt = &UniqueIndexOptions[V, T]{}
 	}
 
 	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
-		k := key(m)
+		k := formatKey(key(m))
 
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "UniqueIndex.SetHook"); ce != nil {
 			defer func() {
@@ -825,7 +830,7 @@ func NewUniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 			}()
 		}
 
-		if p != nil && bytes.Equal(k, key(p)) {
+		if p != nil && bytes.Equal(k, formatKey(key(p))) {
 			return nil
 		}
 
@@ -847,14 +852,14 @@ func NewUniqueIndex[V any, T TableRecord[V]](ns namespace, t *Table[V, T], key f
 		return opt.OnConflict(s, t, m, c)
 	})
 
-	return &UniqueIndex[V, T]{NewSecondaryIndex(ns, t, key)}
+	return &UniqueIndex[V, T, K]{NewSecondaryIndex(ns, t, key, formatKey)}
 }
 
-type UniqueIndex[V any, T TableRecord[V]] struct {
-	i *SecondaryIndex[V, T]
+type UniqueIndex[V any, T TableRecord[V], K any] struct {
+	i *SecondaryIndex[V, T, K]
 }
 
-func (idx *UniqueIndex[V, T]) Get(s kv.Store, k []byte) (v T, err error) {
+func (idx *UniqueIndex[V, T, K]) Get(s kv.Store, k K) (v T, err error) {
 	vs, err := idx.i.GetAll(s, k)
 	if err != nil {
 		return v, err
@@ -865,7 +870,7 @@ func (idx *UniqueIndex[V, T]) Get(s kv.Store, k []byte) (v T, err error) {
 	return vs[0], nil
 }
 
-func (idx *UniqueIndex[V, T]) GetID(s kv.Store, k []byte) (v uint64, err error) {
+func (idx *UniqueIndex[V, T, K]) GetID(s kv.Store, k K) (v uint64, err error) {
 	ids, err := idx.i.GetAllIDs(s, k)
 	if err != nil {
 		return v, err
@@ -876,7 +881,7 @@ func (idx *UniqueIndex[V, T]) GetID(s kv.Store, k []byte) (v uint64, err error) 
 	return ids[0], nil
 }
 
-func (idx *UniqueIndex[V, T]) GetMany(s kv.Store, ks ...[]byte) (vs []T, err error) {
+func (idx *UniqueIndex[V, T, K]) GetMany(s kv.Store, ks ...K) (vs []T, err error) {
 	vs = make([]T, len(ks))
 	var eg errgroup.Group
 	for i, k := range ks {
@@ -890,7 +895,7 @@ func (idx *UniqueIndex[V, T]) GetMany(s kv.Store, ks ...[]byte) (vs []T, err err
 	return
 }
 
-func (idx *UniqueIndex[V, T]) GetManyIDs(s kv.Store, ks ...[]byte) (vs []uint64, err error) {
+func (idx *UniqueIndex[V, T, K]) GetManyIDs(s kv.Store, ks ...K) (vs []uint64, err error) {
 	vs = make([]uint64, len(ks))
 	var eg errgroup.Group
 	for i, k := range ks {
@@ -904,7 +909,7 @@ func (idx *UniqueIndex[V, T]) GetManyIDs(s kv.Store, ks ...[]byte) (vs []uint64,
 	return
 }
 
-func (idx *UniqueIndex[V, T]) Delete(s kv.RWStore, ks ...[]byte) error {
+func (idx *UniqueIndex[V, T, K]) Delete(s kv.RWStore, ks ...K) error {
 	return s.Update(func(tx kv.RWTx) error {
 		ids, err := idx.GetManyIDs(tx, ks...)
 		if err != nil {

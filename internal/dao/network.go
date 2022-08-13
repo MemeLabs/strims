@@ -51,7 +51,7 @@ var Networks = NewTable(
 	},
 )
 
-var NetworksByKey = NewUniqueIndex(networkNetworkKeyNS, Networks, NetworkKey, nil)
+var NetworksByKey = NewUniqueIndex(networkNetworkKeyNS, Networks, NetworkKey, byteIdentity, nil)
 
 // NewNetworkCertificate ...
 func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
@@ -264,6 +264,7 @@ var CertificateLogsBySerialNumber = NewUniqueIndex(
 	networkCertificateLogSerialNS,
 	CertificateLogs,
 	certificateLogSerialNumberKey,
+	byteIdentity,
 	nil,
 )
 
@@ -283,6 +284,7 @@ var CertificateLogsBySubject = NewUniqueIndex(
 	networkCertificateLogSubjectNS,
 	CertificateLogs,
 	certificateLogSubjectKey,
+	byteIdentity,
 	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
 			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
@@ -307,6 +309,7 @@ var CertificateLogsByKey = NewUniqueIndex(
 	networkCertificateLogKeyNS,
 	CertificateLogs,
 	certificateLogKeyKey,
+	byteIdentity,
 	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
 			return DeleteSecondaryIndex(s, networkCertificateLogKeyNS, certificateLogKeyKey(m), p.Id)
@@ -393,6 +396,7 @@ var BootstrapClientsByClientOptions = NewUniqueIndex(
 	networkBootstrapClientClientOptionsNS,
 	BootstrapClients,
 	FormatBootstrapClientClientOptionsKey,
+	byteIdentity,
 	nil,
 )
 
@@ -469,6 +473,7 @@ var NetworkPeersByPublicKey = NewUniqueIndex(
 	func(m *networkv1.Peer) []byte {
 		return FormatNetworkPeerPublicKeyKey(m.NetworkId, m.PublicKey)
 	},
+	byteIdentity,
 	nil,
 )
 

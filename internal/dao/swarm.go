@@ -30,6 +30,7 @@ var swarmCacheMetasByKey = NewUniqueIndex(
 	func(m *swarm.CacheMeta) []byte {
 		return FormatSwarmCacheMetaKey(m.SwarmId, m.SwarmSalt)
 	},
+	byteIdentity,
 	nil,
 )
 

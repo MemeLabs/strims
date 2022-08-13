@@ -102,6 +102,7 @@ var DirectoryListingRecordsByListing = NewUniqueIndex(
 	directoryListingRecordListingNS,
 	DirectoryListingRecords,
 	directoryListingKey,
+	byteIdentity,
 	nil,
 )
 
@@ -147,6 +148,7 @@ var DirectoryUserRecordsByPeerKey = NewUniqueIndex(
 	directoryUserRecordPeerKeyNS,
 	DirectoryUserRecords,
 	directoryUserRecordPeerKeyKey,
+	byteIdentity,
 	nil,
 )
 
