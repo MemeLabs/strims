@@ -58,10 +58,17 @@ func NewControl(
 		transfer:  transferControl,
 		directory: directoryControl,
 
-		events:             observers.Chan(),
-		listingTransferIDs: map[uint64]transfer.ID{},
+		events: observers.Chan(),
 	}
 }
+
+const (
+	_ uint64 = iota
+	mockStreamWrite
+	mockStreamRead
+)
+
+type mockStreamKey struct{ kind, id uint64 }
 
 // Control ...
 type control struct {
@@ -71,11 +78,10 @@ type control struct {
 	transfer  transfer.Control
 	directory directory.Control
 
-	events             chan any
-	lock               sync.Mutex
-	config             *debugv1.Config
-	listingTransferIDs map[uint64]transfer.ID
-	mockStreamClosers  syncutil.Map[uint64, context.CancelFunc]
+	events            chan any
+	lock              sync.Mutex
+	config            *debugv1.Config
+	mockStreamClosers syncutil.Map[mockStreamKey, context.CancelFunc]
 }
 
 // Run ...
@@ -122,21 +128,20 @@ func (c *control) StartMockStream(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c.mockStreamClosers.Set(id, cancel)
+	c.mockStreamClosers.Set(mockStreamKey{mockStreamWrite, id}, cancel)
 	go func() {
 		if err := r.Run(ctx, c.transfer, c.directory); err != nil {
 			c.logger.Debug("mock stream ended", zap.Error(err))
 		}
 		cancel()
-		c.mockStreamClosers.Delete(id)
+		c.mockStreamClosers.Delete(mockStreamKey{mockStreamWrite, id})
 	}()
 
 	return id, nil
 }
 
 func (c *control) StopMockStream(id uint64) {
-	cancel, ok := c.mockStreamClosers.Get(id)
-	if ok {
+	if cancel, ok := c.mockStreamClosers.GetAndDelete(mockStreamKey{mockStreamWrite, id}); ok {
 		cancel()
 	}
 }
@@ -181,9 +186,12 @@ func (c *control) applyConfig(config *debugv1.Config) {
 	c.config = config
 
 	if stopRunning {
-		for lid, tid := range c.listingTransferIDs {
-			c.transfer.Remove(tid)
-			delete(c.listingTransferIDs, lid)
+		for _, k := range c.mockStreamClosers.Keys() {
+			if k.kind == mockStreamRead {
+				if close, ok := c.mockStreamClosers.GetAndDelete(k); ok {
+					close()
+				}
+			}
 		}
 	}
 }
@@ -219,15 +227,26 @@ func (c *control) tryStartSwarm(networkKey []byte, listingID uint64, l *networkv
 		zap.Stringer("swarm", swarm.ID()),
 	)
 
-	go c.readSwarm(swarm)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go c.readSwarm(ctx, swarm)
 
 	transferID := c.transfer.Add(swarm, nil)
 	c.transfer.Publish(transferID, networkKey)
-	c.listingTransferIDs[listingID] = transferID
+
+	c.mockStreamClosers.Set(mockStreamKey{mockStreamRead, listingID}, func() {
+		c.logger.Debug(
+			"closing mock stream reader",
+			zap.Stringer("swarm", swarm.ID()),
+		)
+		c.transfer.Remove(transferID)
+		cancel()
+	})
 }
 
-func (c *control) readSwarm(swarm *ppspp.Swarm) {
+func (c *control) readSwarm(ctx context.Context, swarm *ppspp.Swarm) {
 	r := swarm.Reader()
+	r.SetReadStopper(ctx.Done())
 	cr, err := chunkstream.NewReader(r, int64(r.Offset()))
 	if err != nil {
 		return
@@ -266,9 +285,7 @@ func (c *control) readSwarm(swarm *ppspp.Swarm) {
 }
 
 func (c *control) tryStopSwarm(listingID uint64) {
-	tid, ok := c.listingTransferIDs[listingID]
-	if ok {
-		c.transfer.Remove(tid)
-		delete(c.listingTransferIDs, listingID)
+	if close, ok := c.mockStreamClosers.GetAndDelete(mockStreamKey{mockStreamRead, listingID}); ok {
+		close()
 	}
 }
