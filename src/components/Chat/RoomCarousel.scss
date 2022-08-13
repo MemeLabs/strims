@@ -5,6 +5,7 @@
   font-size: 1rem;
   flex: 1;
   position: relative;
+  z-index: 0;
 
   &__swiper {
     position: absolute;
@@ -12,11 +13,44 @@
   }
 
   &__item {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    pointer-events: none;
+
+    &:before {
+      display: block;
+      content: "";
+      background: transparent;
+      border-radius: 2px;
+      height: 8px;
+      top: 0;
+      transform: translateY(-8px);
+      transition: all var(--timing-medium) ease-in-out;
+      width: 50%;
+      position: absolute;
+      left: 25%;
+    }
+
+    &--selected:before {
+      width: calc(100% - 20px);
+      left: 10px;
+    }
+
+    &--selected:before,
+    &:hover:before {
+      transform: translateY(-4px);
+      background: var(--color-strims-orange-14);
+    }
+  }
+
+  &__gem {
+    pointer-events: all;
     touch-action: none;
     margin: 8px 4px;
     width: 36px;
     height: 36px;
-    border-radius: var(--border-radius-rounded);
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -25,19 +59,26 @@
     cursor: pointer;
     font-size: 0.8rem;
     user-select: none;
-    border: 3px solid transparent;
     box-sizing: border-box;
-    transition: transform var(--timing-short) ease-in-out;
+    transition: transform var(--timing-short) ease-in-out,
+      border-radius var(--timing-medium) ease-in-out;
     transform: translateY(calc(min(var(--drag-offset, 0px), 0px)));
     position: relative;
     --badge-color: #d00;
 
-    &--dragging {
-      transition-duration: 0s;
+    &--with_icon {
+      background: var(--chat-icon);
+      background-size: cover;
+      background-repeat: no-repeat;
     }
 
-    &--selected {
-      border-color: white;
+    &--selected,
+    &:hover {
+      border-radius: var(--border-radius-large);
+    }
+
+    &--dragging {
+      transition-duration: 0s;
     }
 
     &--red {

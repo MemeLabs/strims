@@ -19,6 +19,12 @@ import {
   strims_chat_v1_IListServersRequest,
   strims_chat_v1_ListServersRequest,
   strims_chat_v1_ListServersResponse,
+  strims_chat_v1_IUpdateServerIconRequest,
+  strims_chat_v1_UpdateServerIconRequest,
+  strims_chat_v1_UpdateServerIconResponse,
+  strims_chat_v1_IGetServerIconRequest,
+  strims_chat_v1_GetServerIconRequest,
+  strims_chat_v1_GetServerIconResponse,
   strims_chat_v1_ICreateEmoteRequest,
   strims_chat_v1_CreateEmoteRequest,
   strims_chat_v1_CreateEmoteResponse,
@@ -144,6 +150,8 @@ export interface ChatServerFrontendService {
   deleteServer(req: strims_chat_v1_DeleteServerRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteServerResponse> | strims_chat_v1_DeleteServerResponse;
   getServer(req: strims_chat_v1_GetServerRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetServerResponse> | strims_chat_v1_GetServerResponse;
   listServers(req: strims_chat_v1_ListServersRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListServersResponse> | strims_chat_v1_ListServersResponse;
+  updateServerIcon(req: strims_chat_v1_UpdateServerIconRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateServerIconResponse> | strims_chat_v1_UpdateServerIconResponse;
+  getServerIcon(req: strims_chat_v1_GetServerIconRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetServerIconResponse> | strims_chat_v1_GetServerIconResponse;
   createEmote(req: strims_chat_v1_CreateEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_CreateEmoteResponse> | strims_chat_v1_CreateEmoteResponse;
   updateEmote(req: strims_chat_v1_UpdateEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateEmoteResponse> | strims_chat_v1_UpdateEmoteResponse;
   deleteEmote(req: strims_chat_v1_DeleteEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteEmoteResponse> | strims_chat_v1_DeleteEmoteResponse;
@@ -168,6 +176,8 @@ export class UnimplementedChatServerFrontendService implements ChatServerFronten
   deleteServer(req: strims_chat_v1_DeleteServerRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteServerResponse> | strims_chat_v1_DeleteServerResponse { throw new Error("not implemented"); }
   getServer(req: strims_chat_v1_GetServerRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetServerResponse> | strims_chat_v1_GetServerResponse { throw new Error("not implemented"); }
   listServers(req: strims_chat_v1_ListServersRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListServersResponse> | strims_chat_v1_ListServersResponse { throw new Error("not implemented"); }
+  updateServerIcon(req: strims_chat_v1_UpdateServerIconRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateServerIconResponse> | strims_chat_v1_UpdateServerIconResponse { throw new Error("not implemented"); }
+  getServerIcon(req: strims_chat_v1_GetServerIconRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetServerIconResponse> | strims_chat_v1_GetServerIconResponse { throw new Error("not implemented"); }
   createEmote(req: strims_chat_v1_CreateEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_CreateEmoteResponse> | strims_chat_v1_CreateEmoteResponse { throw new Error("not implemented"); }
   updateEmote(req: strims_chat_v1_UpdateEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateEmoteResponse> | strims_chat_v1_UpdateEmoteResponse { throw new Error("not implemented"); }
   deleteEmote(req: strims_chat_v1_DeleteEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteEmoteResponse> | strims_chat_v1_DeleteEmoteResponse { throw new Error("not implemented"); }
@@ -192,6 +202,8 @@ export const registerChatServerFrontendService = (host: strims_rpc_Service, serv
   host.registerMethod<strims_chat_v1_DeleteServerRequest, strims_chat_v1_DeleteServerResponse>("strims.chat.v1.ChatServerFrontend.DeleteServer", service.deleteServer.bind(service), strims_chat_v1_DeleteServerRequest);
   host.registerMethod<strims_chat_v1_GetServerRequest, strims_chat_v1_GetServerResponse>("strims.chat.v1.ChatServerFrontend.GetServer", service.getServer.bind(service), strims_chat_v1_GetServerRequest);
   host.registerMethod<strims_chat_v1_ListServersRequest, strims_chat_v1_ListServersResponse>("strims.chat.v1.ChatServerFrontend.ListServers", service.listServers.bind(service), strims_chat_v1_ListServersRequest);
+  host.registerMethod<strims_chat_v1_UpdateServerIconRequest, strims_chat_v1_UpdateServerIconResponse>("strims.chat.v1.ChatServerFrontend.UpdateServerIcon", service.updateServerIcon.bind(service), strims_chat_v1_UpdateServerIconRequest);
+  host.registerMethod<strims_chat_v1_GetServerIconRequest, strims_chat_v1_GetServerIconResponse>("strims.chat.v1.ChatServerFrontend.GetServerIcon", service.getServerIcon.bind(service), strims_chat_v1_GetServerIconRequest);
   host.registerMethod<strims_chat_v1_CreateEmoteRequest, strims_chat_v1_CreateEmoteResponse>("strims.chat.v1.ChatServerFrontend.CreateEmote", service.createEmote.bind(service), strims_chat_v1_CreateEmoteRequest);
   host.registerMethod<strims_chat_v1_UpdateEmoteRequest, strims_chat_v1_UpdateEmoteResponse>("strims.chat.v1.ChatServerFrontend.UpdateEmote", service.updateEmote.bind(service), strims_chat_v1_UpdateEmoteRequest);
   host.registerMethod<strims_chat_v1_DeleteEmoteRequest, strims_chat_v1_DeleteEmoteResponse>("strims.chat.v1.ChatServerFrontend.DeleteEmote", service.deleteEmote.bind(service), strims_chat_v1_DeleteEmoteRequest);
@@ -231,6 +243,14 @@ export class ChatServerFrontendClient {
 
   public listServers(req?: strims_chat_v1_IListServersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_ListServersResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.ListServers", new strims_chat_v1_ListServersRequest(req)), strims_chat_v1_ListServersResponse, opts);
+  }
+
+  public updateServerIcon(req?: strims_chat_v1_IUpdateServerIconRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_UpdateServerIconResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.UpdateServerIcon", new strims_chat_v1_UpdateServerIconRequest(req)), strims_chat_v1_UpdateServerIconResponse, opts);
+  }
+
+  public getServerIcon(req?: strims_chat_v1_IGetServerIconRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_GetServerIconResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.GetServerIcon", new strims_chat_v1_GetServerIconRequest(req)), strims_chat_v1_GetServerIconResponse, opts);
   }
 
   public createEmote(req?: strims_chat_v1_ICreateEmoteRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_CreateEmoteResponse> {

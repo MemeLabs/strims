@@ -19,6 +19,10 @@ message ServerDeleteEvent {
   Server server = 1;
 }
 
+message ServerIconChangeEvent {
+  ServerIcon server_icon = 1;
+}
+
 message EmoteChangeEvent {
   Emote emote = 1;
 }

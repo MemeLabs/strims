@@ -18,6 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const dialTimeout = 20 * time.Second
+
 var closedChan = make(chan struct{})
 
 func init() {
@@ -359,7 +361,7 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 	var err error
 	select {
 	case err = <-errs:
-	case <-time.After(20 * time.Second):
+	case <-time.After(dialTimeout):
 		err = errors.New("timeout")
 	case <-t.done:
 	}

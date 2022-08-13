@@ -25,7 +25,13 @@ type assetPublisher struct {
 	size        int
 }
 
-func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag) error {
+func (s *assetPublisher) Sync(
+	config *chatv1.Server,
+	icon *chatv1.ServerIcon,
+	emotes []*chatv1.Emote,
+	modifiers []*chatv1.Modifier,
+	tags []*chatv1.Tag,
+) error {
 	b := &chatv1.AssetBundle{
 		IsDelta: len(s.checksums) != 0,
 	}
@@ -67,6 +73,15 @@ func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote, mod
 	if c != s.checksums[config.Id] {
 		s.checksums[config.Id] = c
 		b.Room = config.Room
+	}
+
+	if icon != nil {
+		delete(removed, icon.Id)
+		c := dao.CRC32Message(icon)
+		if c != s.checksums[icon.Id] {
+			s.checksums[icon.Id] = c
+			b.Icon = icon.Image
+		}
 	}
 
 	for id := range removed {

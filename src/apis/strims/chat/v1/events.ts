@@ -8,6 +8,8 @@ import {
   strims_chat_v1_IModifier,
   strims_chat_v1_Server,
   strims_chat_v1_IServer,
+  strims_chat_v1_ServerIcon,
+  strims_chat_v1_IServerIcon,
   strims_chat_v1_Tag,
   strims_chat_v1_ITag,
   strims_chat_v1_UIConfig,
@@ -86,6 +88,42 @@ export class ServerDeleteEvent {
       switch (tag >> 3) {
         case 1:
         m.server = strims_chat_v1_Server.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IServerIconChangeEvent = {
+  serverIcon?: strims_chat_v1_IServerIcon;
+}
+
+export class ServerIconChangeEvent {
+  serverIcon: strims_chat_v1_ServerIcon | undefined;
+
+  constructor(v?: IServerIconChangeEvent) {
+    this.serverIcon = v?.serverIcon && new strims_chat_v1_ServerIcon(v.serverIcon);
+  }
+
+  static encode(m: ServerIconChangeEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverIcon) strims_chat_v1_ServerIcon.encode(m.serverIcon, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ServerIconChangeEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ServerIconChangeEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverIcon = strims_chat_v1_ServerIcon.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -763,6 +801,12 @@ export const strims_chat_v1_ServerDeleteEvent = ServerDeleteEvent;
 export type strims_chat_v1_ServerDeleteEvent = ServerDeleteEvent;
 /* @internal */
 export type strims_chat_v1_IServerDeleteEvent = IServerDeleteEvent;
+/* @internal */
+export const strims_chat_v1_ServerIconChangeEvent = ServerIconChangeEvent;
+/* @internal */
+export type strims_chat_v1_ServerIconChangeEvent = ServerIconChangeEvent;
+/* @internal */
+export type strims_chat_v1_IServerIconChangeEvent = IServerIconChangeEvent;
 /* @internal */
 export const strims_chat_v1_EmoteChangeEvent = EmoteChangeEvent;
 /* @internal */

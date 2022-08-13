@@ -10,6 +10,7 @@ option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "SCH";
 
 import "type/key.proto";
+import "type/image.proto";
 import "network/v1/directory/directory.proto";
 
 message ServerEvent {
@@ -29,6 +30,12 @@ message Server {
   strims.type.Key key = 3;
   Room room = 4;
   repeated bytes admin_peer_keys = 5;
+}
+
+message ServerIcon {
+  uint64 id = 1;
+  uint64 server_id = 2;
+  type.Image image = 3;
 }
 
 enum EmoteFileType {
@@ -115,6 +122,7 @@ message AssetBundle {
   repeated Emote emotes = 4;
   repeated Modifier modifiers = 5;
   repeated Tag tags = 6;
+  type.Image icon = 7;
 }
 
 message Message {
@@ -308,6 +316,20 @@ message GetServerResponse {
 message ListServersRequest {}
 message ListServersResponse {
   repeated Server servers = 1;
+}
+
+message UpdateServerIconRequest {
+  uint64 server_id = 1;
+  type.Image image = 2;
+}
+message UpdateServerIconResponse {
+  ServerIcon server_icon = 1;
+}
+message GetServerIconRequest {
+  uint64 server_id = 1;
+}
+message GetServerIconResponse {
+  ServerIcon server_icon = 1;
 }
 
 message CreateEmoteRequest {
@@ -604,6 +626,9 @@ service ChatServerFrontend {
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
   rpc GetServer(GetServerRequest) returns (GetServerResponse);
   rpc ListServers(ListServersRequest) returns (ListServersResponse);
+
+  rpc UpdateServerIcon(UpdateServerIconRequest) returns (UpdateServerIconResponse);
+  rpc GetServerIcon(GetServerIconRequest) returns (GetServerIconResponse);
 
   rpc CreateEmote(CreateEmoteRequest) returns (CreateEmoteResponse);
   rpc UpdateEmote(UpdateEmoteRequest) returns (UpdateEmoteResponse);

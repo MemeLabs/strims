@@ -12,6 +12,7 @@ import ChatModifierEditForm from "./ChatModifierEditForm";
 import ChatModifierList from "./ChatModifierList";
 import ChatServerCreateForm from "./ChatServerCreateForm";
 import ChatServerEditForm from "./ChatServerEditForm";
+import ChatServerIconEditForm from "./ChatServerIconEditForm";
 import ChatServerList from "./ChatServerList";
 import ChatTagCreateForm from "./ChatTagCreateForm";
 import ChatTagEditForm from "./ChatTagEditForm";
@@ -22,6 +23,7 @@ const Router: React.FC = () => (
     <Route index element={<ChatServerList />} />
     <Route path="new" element={<ChatServerCreateForm />} />
     <Route path=":serverId" element={<ChatServerEditForm />} />
+    <Route path=":serverId/icon" element={<ChatServerIconEditForm />} />
     <Route path=":serverId/emotes" element={<ChatEmoteList />} />
     <Route path=":serverId/emotes/new" element={<ChatEmoteCreateForm />} />
     <Route path=":serverId/emotes/:emoteId" element={<ChatEmoteEditForm />} />

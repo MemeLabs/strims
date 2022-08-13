@@ -37,6 +37,7 @@ import {
   WhisperThread,
 } from "../apis/strims/chat/v1/chat";
 import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
+import { Image } from "../apis/strims/type/image";
 import { useUserList } from "../hooks/chat";
 import curryDispatchActions from "../lib/curryDispatchActions";
 import MessageSizeCache from "../lib/MessageSizeCache";
@@ -80,6 +81,7 @@ export interface ThreadState {
   errors: Error[];
   state: ThreadInitState;
   label: string;
+  icon: Image;
   unreadCount: number;
   visible: boolean;
 }
@@ -160,6 +162,7 @@ const initialRoomState: ThreadState = {
   errors: [],
   state: ThreadInitState.NEW,
   label: "",
+  icon: null,
   unreadCount: 0,
   visible: true,
 };
@@ -763,7 +766,7 @@ const createRoomActions = (
     const liveEmoteMap = new Map<bigint, Emote>();
     const liveModifierMap = new Map<bigint, Modifier>();
     const liveTagMap = new Map<bigint, Tag>();
-    let room = state.room;
+    let { room, icon } = state;
     for (const b of assetBundles) {
       for (const id of b.removedIds) {
         liveEmoteMap.delete(id);
@@ -774,6 +777,7 @@ const createRoomActions = (
       b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
       b.tags.forEach((e) => liveTagMap.set(e.id, e));
       room = b.room ?? room;
+      icon = b.icon ?? icon;
     }
     const liveEmotes = Array.from(liveEmoteMap.values()).sort((a, b) =>
       a.name.localeCompare(b.name)
@@ -805,6 +809,7 @@ const createRoomActions = (
       ...state,
       room,
       label: room.name,
+      icon,
       assetBundles,
       liveEmotes,
       styles: {

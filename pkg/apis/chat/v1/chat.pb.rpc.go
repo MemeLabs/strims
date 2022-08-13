@@ -13,6 +13,8 @@ func RegisterChatServerFrontendService(host rpc.ServiceRegistry, service ChatSer
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteServer", service.DeleteServer)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetServer", service.GetServer)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListServers", service.ListServers)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateServerIcon", service.UpdateServerIcon)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetServerIcon", service.GetServerIcon)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateEmote", service.CreateEmote)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateEmote", service.UpdateEmote)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteEmote", service.DeleteEmote)
@@ -53,6 +55,14 @@ type ChatServerFrontendService interface {
 		ctx context.Context,
 		req *ListServersRequest,
 	) (*ListServersResponse, error)
+	UpdateServerIcon(
+		ctx context.Context,
+		req *UpdateServerIconRequest,
+	) (*UpdateServerIconResponse, error)
+	GetServerIcon(
+		ctx context.Context,
+		req *GetServerIconRequest,
+	) (*GetServerIconResponse, error)
 	CreateEmote(
 		ctx context.Context,
 		req *CreateEmoteRequest,
@@ -154,6 +164,20 @@ func (s *UnimplementedChatServerFrontendService) ListServers(
 	ctx context.Context,
 	req *ListServersRequest,
 ) (*ListServersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateServerIcon(
+	ctx context.Context,
+	req *UpdateServerIconRequest,
+) (*UpdateServerIconResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) GetServerIcon(
+	ctx context.Context,
+	req *GetServerIconRequest,
+) (*GetServerIconResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -324,6 +348,24 @@ func (c *ChatServerFrontendClient) ListServers(
 	res *ListServersResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListServers", req, res)
+}
+
+// UpdateServerIcon ...
+func (c *ChatServerFrontendClient) UpdateServerIcon(
+	ctx context.Context,
+	req *UpdateServerIconRequest,
+	res *UpdateServerIconResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateServerIcon", req, res)
+}
+
+// GetServerIcon ...
+func (c *ChatServerFrontendClient) GetServerIcon(
+	ctx context.Context,
+	req *GetServerIconRequest,
+	res *GetServerIconResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.GetServerIcon", req, res)
 }
 
 // CreateEmote ...

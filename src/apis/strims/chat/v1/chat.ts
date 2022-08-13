@@ -6,6 +6,10 @@ import {
   strims_type_IKey,
 } from "../../type/key";
 import {
+  strims_type_Image,
+  strims_type_IImage,
+} from "../../type/image";
+import {
   strims_network_v1_directory_Listing,
   strims_network_v1_directory_IListing,
 } from "../../network/v1/directory/directory";
@@ -185,6 +189,56 @@ export class Server {
         break;
         case 5:
         m.adminPeerKeys.push(r.bytes())
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IServerIcon = {
+  id?: bigint;
+  serverId?: bigint;
+  image?: strims_type_IImage;
+}
+
+export class ServerIcon {
+  id: bigint;
+  serverId: bigint;
+  image: strims_type_Image | undefined;
+
+  constructor(v?: IServerIcon) {
+    this.id = v?.id || BigInt(0);
+    this.serverId = v?.serverId || BigInt(0);
+    this.image = v?.image && new strims_type_Image(v.image);
+  }
+
+  static encode(m: ServerIcon, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.serverId) w.uint32(16).uint64(m.serverId);
+    if (m.image) strims_type_Image.encode(m.image, w.uint32(26).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ServerIcon {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ServerIcon();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.serverId = r.uint64();
+        break;
+        case 3:
+        m.image = strims_type_Image.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -773,6 +827,7 @@ export type IAssetBundle = {
   emotes?: strims_chat_v1_IEmote[];
   modifiers?: strims_chat_v1_IModifier[];
   tags?: strims_chat_v1_ITag[];
+  icon?: strims_type_IImage;
 }
 
 export class AssetBundle {
@@ -782,6 +837,7 @@ export class AssetBundle {
   emotes: strims_chat_v1_Emote[];
   modifiers: strims_chat_v1_Modifier[];
   tags: strims_chat_v1_Tag[];
+  icon: strims_type_Image | undefined;
 
   constructor(v?: IAssetBundle) {
     this.isDelta = v?.isDelta || false;
@@ -790,6 +846,7 @@ export class AssetBundle {
     this.emotes = v?.emotes ? v.emotes.map(v => new strims_chat_v1_Emote(v)) : [];
     this.modifiers = v?.modifiers ? v.modifiers.map(v => new strims_chat_v1_Modifier(v)) : [];
     this.tags = v?.tags ? v.tags.map(v => new strims_chat_v1_Tag(v)) : [];
+    this.icon = v?.icon && new strims_type_Image(v.icon);
   }
 
   static encode(m: AssetBundle, w?: Writer): Writer {
@@ -800,6 +857,7 @@ export class AssetBundle {
     for (const v of m.emotes) strims_chat_v1_Emote.encode(v, w.uint32(34).fork()).ldelim();
     for (const v of m.modifiers) strims_chat_v1_Modifier.encode(v, w.uint32(42).fork()).ldelim();
     for (const v of m.tags) strims_chat_v1_Tag.encode(v, w.uint32(50).fork()).ldelim();
+    if (m.icon) strims_type_Image.encode(m.icon, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -827,6 +885,9 @@ export class AssetBundle {
         break;
         case 6:
         m.tags.push(strims_chat_v1_Tag.decode(r, r.uint32()));
+        break;
+        case 7:
+        m.icon = strims_type_Image.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2399,6 +2460,157 @@ export class ListServersResponse {
       switch (tag >> 3) {
         case 1:
         m.servers.push(strims_chat_v1_Server.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateServerIconRequest = {
+  serverId?: bigint;
+  image?: strims_type_IImage;
+}
+
+export class UpdateServerIconRequest {
+  serverId: bigint;
+  image: strims_type_Image | undefined;
+
+  constructor(v?: IUpdateServerIconRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.image = v?.image && new strims_type_Image(v.image);
+  }
+
+  static encode(m: UpdateServerIconRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.image) strims_type_Image.encode(m.image, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerIconRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateServerIconRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.image = strims_type_Image.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateServerIconResponse = {
+  serverIcon?: strims_chat_v1_IServerIcon;
+}
+
+export class UpdateServerIconResponse {
+  serverIcon: strims_chat_v1_ServerIcon | undefined;
+
+  constructor(v?: IUpdateServerIconResponse) {
+    this.serverIcon = v?.serverIcon && new strims_chat_v1_ServerIcon(v.serverIcon);
+  }
+
+  static encode(m: UpdateServerIconResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverIcon) strims_chat_v1_ServerIcon.encode(m.serverIcon, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerIconResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateServerIconResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverIcon = strims_chat_v1_ServerIcon.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetServerIconRequest = {
+  serverId?: bigint;
+}
+
+export class GetServerIconRequest {
+  serverId: bigint;
+
+  constructor(v?: IGetServerIconRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+  }
+
+  static encode(m: GetServerIconRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetServerIconRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetServerIconRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetServerIconResponse = {
+  serverIcon?: strims_chat_v1_IServerIcon;
+}
+
+export class GetServerIconResponse {
+  serverIcon: strims_chat_v1_ServerIcon | undefined;
+
+  constructor(v?: IGetServerIconResponse) {
+    this.serverIcon = v?.serverIcon && new strims_chat_v1_ServerIcon(v.serverIcon);
+  }
+
+  static encode(m: GetServerIconResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverIcon) strims_chat_v1_ServerIcon.encode(m.serverIcon, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetServerIconResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetServerIconResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverIcon = strims_chat_v1_ServerIcon.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -5907,6 +6119,12 @@ export type strims_chat_v1_Server = Server;
 /* @internal */
 export type strims_chat_v1_IServer = IServer;
 /* @internal */
+export const strims_chat_v1_ServerIcon = ServerIcon;
+/* @internal */
+export type strims_chat_v1_ServerIcon = ServerIcon;
+/* @internal */
+export type strims_chat_v1_IServerIcon = IServerIcon;
+/* @internal */
 export const strims_chat_v1_EmoteImage = EmoteImage;
 /* @internal */
 export type strims_chat_v1_EmoteImage = EmoteImage;
@@ -6044,6 +6262,30 @@ export const strims_chat_v1_ListServersResponse = ListServersResponse;
 export type strims_chat_v1_ListServersResponse = ListServersResponse;
 /* @internal */
 export type strims_chat_v1_IListServersResponse = IListServersResponse;
+/* @internal */
+export const strims_chat_v1_UpdateServerIconRequest = UpdateServerIconRequest;
+/* @internal */
+export type strims_chat_v1_UpdateServerIconRequest = UpdateServerIconRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateServerIconRequest = IUpdateServerIconRequest;
+/* @internal */
+export const strims_chat_v1_UpdateServerIconResponse = UpdateServerIconResponse;
+/* @internal */
+export type strims_chat_v1_UpdateServerIconResponse = UpdateServerIconResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateServerIconResponse = IUpdateServerIconResponse;
+/* @internal */
+export const strims_chat_v1_GetServerIconRequest = GetServerIconRequest;
+/* @internal */
+export type strims_chat_v1_GetServerIconRequest = GetServerIconRequest;
+/* @internal */
+export type strims_chat_v1_IGetServerIconRequest = IGetServerIconRequest;
+/* @internal */
+export const strims_chat_v1_GetServerIconResponse = GetServerIconResponse;
+/* @internal */
+export type strims_chat_v1_GetServerIconResponse = GetServerIconResponse;
+/* @internal */
+export type strims_chat_v1_IGetServerIconResponse = IGetServerIconResponse;
 /* @internal */
 export const strims_chat_v1_CreateEmoteRequest = CreateEmoteRequest;
 /* @internal */

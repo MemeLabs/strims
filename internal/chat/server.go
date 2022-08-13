@@ -5,6 +5,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -51,10 +52,14 @@ var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize
 var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
 
-func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
+func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *chatv1.ServerIcon, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
 	err = store.View(func(tx kv.Tx) (err error) {
 		config, err = dao.ChatServers.Get(tx, id)
 		if err != nil {
+			return
+		}
+		icon, err = dao.ChatServerIconsByServerID.Get(tx, id)
+		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return
 		}
 		emotes, err = dao.GetChatEmotesByServerID(tx, id)
@@ -263,7 +268,7 @@ func (s *chatServer) syncAssets(unifiedUpdate bool) {
 	logger := s.logger.With(zap.Uint64("serverID", s.config.Id))
 	logger.Debug("syncing assets for chat server")
 
-	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
+	config, icon, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
 	if err != nil {
 		return
 	}
@@ -271,7 +276,7 @@ func (s *chatServer) syncAssets(unifiedUpdate bool) {
 	if err := s.service.Sync(config, emotes, modifiers, tags); err != nil {
 		logger.Error("syncing assets to service failed", zap.Error(err))
 	}
-	if err := s.assetPublisher.Sync(config, emotes, modifiers, tags); err != nil {
+	if err := s.assetPublisher.Sync(config, icon, emotes, modifiers, tags); err != nil {
 		logger.Error("syncing assets to asset stream failed", zap.Error(err))
 	}
 }

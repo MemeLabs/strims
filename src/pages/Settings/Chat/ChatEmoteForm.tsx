@@ -106,7 +106,17 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         placeholder="Enter a emote name"
       />
       <InputLabel required={true} text="Image" component="div">
-        <ImageInput control={control} name="image" maxSize={10485764} />
+        <ImageInput
+          control={control}
+          name="image"
+          maxSize={10485764}
+          rules={{
+            required: {
+              value: true,
+              message: "Image is required",
+            },
+          }}
+        />
       </InputLabel>
       <SelectInput
         control={control}

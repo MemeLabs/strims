@@ -33,13 +33,15 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit(({ name, icon: { data, ...icon } }) =>
+  const onSubmit = handleSubmit(({ name, icon }) =>
     createNetwork({
       name,
-      icon: {
-        data: Base64.toUint8Array(data),
-        ...icon,
-      },
+      icon: icon
+        ? {
+            ...icon,
+            data: Base64.toUint8Array(icon.data),
+          }
+        : null,
     })
   );
 

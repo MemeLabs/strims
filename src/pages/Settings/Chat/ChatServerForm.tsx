@@ -71,6 +71,11 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
       {id && (
         <>
           <ForwardLink
+            to={`/settings/chat-servers/${id}/icon`}
+            title="Server Icon"
+            description="Some description of server icon..."
+          />
+          <ForwardLink
             to={`/settings/chat-servers/${id}/emotes`}
             title="Emotes"
             description="Some description of emotes..."
