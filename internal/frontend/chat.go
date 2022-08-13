@@ -101,7 +101,6 @@ func (s *chatService) UpdateServerIcon(ctx context.Context, req *chatv1.UpdateSe
 	if errors.Is(err, kv.ErrRecordNotFound) {
 		icon, err = dao.NewChatServerIcon(s.store, req.ServerId, req.Image)
 	} else if err == nil {
-		err = nil
 		icon = &chatv1.ServerIcon{
 			Id:       id,
 			ServerId: req.ServerId,

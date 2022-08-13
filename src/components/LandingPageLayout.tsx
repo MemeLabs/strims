@@ -19,7 +19,7 @@ const LandingPageLayout: React.FC<LandingPageLayoutProps> = ({ className, childr
       <div className="landing_page__header">
         <h1 className="landing_page__header__title">strims@home</h1>
         <span className="landing_page__header__tagline">Watch strims with frens.</span>
-        <div className="landing_page__header__revision">rev. {GIT_HASH.substring(0, 5)}</div>
+        <div className="landing_page__header__revision">rev. {GIT_HASH.substring(0, 7)}</div>
       </div>
       <div className="landing_page__form_container">
         {children}
