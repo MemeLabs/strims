@@ -184,6 +184,11 @@ EOF
 		sed 's/{{.Target}}/deployment\/coredns/' |
 		kubectl apply -f -
 
+	# TODO: fix insecure tls https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/#kubelet-serving-certs
+	curl -L https://github.com/kubernetes-sigs/metrics-server/releases/download/metrics-server-helm-chart-3.8.2/components.yaml |
+		sed $'/- --metric-resolution=15s$/a \ \ \ \ \ \ \ \ - --kubelet-insecure-tls' |
+		kubectl apply -f -
+
 	sudo ip link delete cni0 || :
 	sudo systemctl restart crio
 
