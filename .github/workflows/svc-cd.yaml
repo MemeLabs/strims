@@ -42,3 +42,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/memelabs/strims/svc:latest
+          # https://github.com/moby/buildkit/tree/master#github-actions-cache-experimental
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
