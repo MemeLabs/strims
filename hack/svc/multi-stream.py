@@ -10,7 +10,7 @@ from subprocess import Popen
 
 class strims_ffmpeg:
     def __init__(self, hostAddress="0.0.0.0") -> None:
-        self.hostAddress = hostAddress
+        self.host_address = hostAddress
 
     def startStream(self, streamLink: str, streamKey: str) -> str:
         process = ["ffmpeg"]
