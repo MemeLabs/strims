@@ -42,7 +42,7 @@ class strims_ffmpeg:
                 print(
                     "\033[91m[+] Configuration file is missing data... \033[0m")
         else:
-            for s in range(0, len(strims["streams"])):
+            for stream in strims["streams"]:
                 strimsToOpen.append(self.startStream(
                     strims["streams"][s], strims["keys"][s]))
 
