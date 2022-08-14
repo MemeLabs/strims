@@ -32,8 +32,7 @@ def main() -> int:
     strims_to_open = []
 
     for stream_key in args.key_list:
-        if stream_key is not None:
-            strims_to_open.append(ffmpeg_cmd(test_url, stream_key))
+        strims_to_open.append(ffmpeg_cmd(test_url, stream_key))
 
     procs = [Popen(i) for i in strims_to_open]
     for p in procs:
