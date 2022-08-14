@@ -5,8 +5,9 @@ import time
 from subprocess import Popen
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-k', '--keys', nargs='+', type=str, dest='alist',
+parser.add_argument('-k', '--keys', nargs='+', type=str, dest='key_list',
                     help='<Required> Sets streaming keys', required=True)
+args = parser.parse_args()
 
 
 def ffmpeg_cmd(stream_link: str, stream_key: str) -> str:
@@ -25,12 +26,12 @@ def ffmpeg_cmd(stream_link: str, stream_key: str) -> str:
 
 
 def main() -> int:
-    if shutil.which("ffmpeg") is None and shutil.which("ffprobe") is None:
-        raise Exception("ffmpeg and ffprobe is required")
+    if shutil.which("ffmpeg") is None:
+        raise Exception("ffmpeg is required")
     test_url = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
     strims_to_open = []
 
-    for stream_key in parser.parse_args().alist:
+    for stream_key in args.key_list:
         if stream_key is not None:
             strims_to_open.append(ffmpeg_cmd(test_url, stream_key))
 
