@@ -52,7 +52,7 @@ type Buffer struct {
 	bins      *binmap.Map
 	buf       []byte
 	lock      sync.Mutex
-	readyOnce sync.Once
+	isReady   bool
 	ready     chan struct{}
 	next      binmap.Bin
 	prev      binmap.Bin
@@ -78,7 +78,7 @@ func (s *Buffer) Reset() {
 	s.off = 0
 	s.sem++
 
-	s.readyOnce = sync.Once{}
+	s.isReady = false
 	s.ready = make(chan struct{})
 
 	s.swapReadable(ErrStreamReset)
@@ -99,7 +99,10 @@ func (s *Buffer) Close() {
 }
 
 func (s *Buffer) setReady() {
-	s.readyOnce.Do(func() { close(s.ready) })
+	if !s.isReady {
+		s.isReady = true
+		close(s.ready)
+	}
 }
 
 func (s *Buffer) swapReadable(err error) (prev error) {
@@ -213,14 +216,16 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 }
 
 func (s *Buffer) recover() error {
+	if s.err != ErrBufferUnderrun {
+		return s.err
+	}
+
 	next := s.bins.FindFilledAfter(s.tail())
 	if next.IsNone() {
 		return ErrReadOffsetNotFound
 	}
 
-	s.sem++
 	s.off = binByte(next, s.chunkSize)
-
 	s.prev = next
 	s.head = next + s.size
 	s.bins.FillBefore(next)
@@ -231,10 +236,8 @@ func (s *Buffer) recover() error {
 	}
 	s.next = next
 
-	err := s.swapReadable(nil)
-	if err != nil && err != ErrBufferUnderrun {
-		return err
-	}
+	s.sem++
+	s.swapReadable(nil)
 
 	return nil
 }
@@ -328,7 +331,7 @@ func (s *Buffer) ExportCache() ([]byte, error) {
 	if s.tail() != 0 || s.off != 0 {
 		return nil, errors.New("cannot cache truncated swarm buffer")
 	}
-	if s.next.IsNone() {
+	if s.bins.Empty() {
 		return nil, errors.New("cannot cache empty buffer")
 	}
 
@@ -406,7 +409,7 @@ func (r *BufferReader) Offset() uint64 {
 
 // Recover ...
 func (r *BufferReader) Recover() (uint64, error) {
-	if r.err != nil && r.err != ErrBufferUnderrun {
+	if r.err == nil || r.err != ErrBufferUnderrun {
 		return 0, r.err
 	}
 
