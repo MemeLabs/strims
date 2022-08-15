@@ -78,8 +78,8 @@ func (r *mockStreamRunner) Init(
 		return err
 	}
 
-	transferID := transfer.Add(w.Swarm(), nil)
-	transfer.Publish(transferID, r.NetworkKey)
+	r.transferID = transfer.Add(w.Swarm(), nil)
+	transfer.Publish(r.transferID, r.NetworkKey)
 
 	return nil
 }
