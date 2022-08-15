@@ -113,7 +113,7 @@ func TestBufferWriteRead(t *testing.T) {
 				for _, bin := range c.writeOrder {
 					l := binByte(bin.BaseLeft(), uint64(c.chunkSize)) - off
 					h := binByte(bin.BaseRight()+2, uint64(c.chunkSize)) - off
-					b.Set(bin, binData[l:h])
+					b.Consume(Chunk{bin, binData[l:h]})
 				}
 			}()
 
@@ -135,40 +135,6 @@ func TestBufferWriteRead(t *testing.T) {
 	}
 }
 
-func TestBufferBinOps(t *testing.T) {
-	chunkCount := 1024
-	chunkSize := 2048
-	inputBin := binmap.NewBin(5, 0)
-	readSize := 4096
-
-	b, err := NewBuffer(chunkCount, chunkSize)
-	assert.NoError(t, err, "buffer constructor failed")
-
-	binByteLen := int(inputBin.BaseLength()) * chunkSize
-	binData := make([]byte, binByteLen)
-
-	for i := 0; i < binByteLen; i++ {
-		binData[i] = byte(i / readSize)
-	}
-
-	go func() {
-		b.SetOffset(inputBin)
-
-		off := binByte(inputBin.BaseLeft(), uint64(chunkSize))
-		l := binByte(inputBin.BaseLeft(), uint64(chunkSize)) - off
-		h := binByte(inputBin.BaseRight()+2, uint64(chunkSize)) - off
-		b.Set(inputBin, binData[l:h])
-	}()
-
-	byteOffset := binByte(inputBin.BaseLeft(), uint64(chunkSize))
-	assert.EqualValues(t, int(byteOffset), int(NewBufferReader(b).Offset()), "read offset mismatch")
-
-	assert.Equal(t, false, b.EmptyAt(binmap.NewBin(0, 0)), "EmptyAt returned incorrect value")
-	assert.Equal(t, true, b.FilledAt(binmap.NewBin(0, 0)), "FilledAt returned incorrect value")
-	assert.Equal(t, inputBin, b.Cover(binmap.NewBin(0, 0)), "Cover returned incorrect value")
-	assert.Equal(t, true, b.ReadBin(binmap.NewBin(0, 0), make([]byte, chunkSize)), "ReadBin failed")
-}
-
 func TestMultipleReaders(t *testing.T) {
 	chunkCount := 1024
 	chunkSize := 1024
@@ -181,7 +147,7 @@ func TestMultipleReaders(t *testing.T) {
 
 	src := make([]byte, chunkSize)
 	for i := 0; i < chunkCount; i++ {
-		b.Set(binmap.NewBin(0, uint64(i)), src)
+		b.Consume(Chunk{binmap.NewBin(0, uint64(i)), src})
 	}
 
 	for i := 0; i < 3; i++ {
@@ -202,7 +168,7 @@ func TestBufferRecover(t *testing.T) {
 	dst := make([]byte, 128*16)
 
 	for i := binmap.Bin(0); i < 256; i = i.LayerRight() {
-		b.Set(i, src)
+		b.Consume(Chunk{i, src})
 	}
 
 	r := NewBufferReader(b)
@@ -211,7 +177,7 @@ func TestBufferRecover(t *testing.T) {
 	assert.EqualValues(t, 128*16, n)
 	assert.NoError(t, err)
 
-	b.Set(4096, src)
+	b.Consume(Chunk{4096, src})
 
 	_, err = r.Read(dst)
 	assert.Equal(t, ErrBufferUnderrun, err)
@@ -249,7 +215,7 @@ func TestReaderClose(t *testing.T) {
 
 	src := make([]byte, chunkSize)
 	for i := 0; i < chunkCount; i++ {
-		b.Set(binmap.NewBin(0, uint64(i)), src)
+		b.Consume(Chunk{binmap.NewBin(0, uint64(i)), src})
 	}
 
 	r := NewBufferReader(b)

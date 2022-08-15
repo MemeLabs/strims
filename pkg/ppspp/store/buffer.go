@@ -123,13 +123,6 @@ func (s *Buffer) pushReadable(err error) {
 	}
 }
 
-// Set ...
-func (s *Buffer) Set(b binmap.Bin, d []byte) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.set(b, d)
-}
-
 func (s *Buffer) set(b binmap.Bin, d []byte) {
 	l, r := b.Base()
 	if l < s.tail() {
@@ -156,19 +149,6 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	s.next = next
 
 	s.pushReadable(nil)
-}
-
-// ReadBin ...
-func (s *Buffer) ReadBin(b binmap.Bin, p []byte) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if s.contains(b) {
-		i := s.index(b)
-		copy(p, s.buf[i:i+int(b.BaseLength()*s.chunkSize)])
-		return true
-	}
-	return false
 }
 
 type DataWriter interface {
@@ -242,32 +222,11 @@ func (s *Buffer) recover() error {
 	return nil
 }
 
-// FilledAt ...
-func (s *Buffer) FilledAt(b binmap.Bin) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	return s.bins.FilledAt(b)
-}
-
-// EmptyAt ...
-func (s *Buffer) EmptyAt(b binmap.Bin) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	return s.bins.EmptyAt(b)
-}
-
 // Empty ...
 func (s *Buffer) Empty() bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.bins.Empty()
-}
-
-// Cover ...
-func (s *Buffer) Cover(b binmap.Bin) binmap.Bin {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	return s.bins.Cover(b)
 }
 
 // Bins ...
@@ -288,12 +247,6 @@ func (s *Buffer) Tail() binmap.Bin {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.tail()
-}
-
-func (s *Buffer) Bounds() (head, tail binmap.Bin) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	return s.head, s.tail()
 }
 
 func (s *Buffer) tail() binmap.Bin {
