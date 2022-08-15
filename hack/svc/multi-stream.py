@@ -1,50 +1,103 @@
 import argparse
 import re
+import os
 import shutil
-import time
-from subprocess import Popen
+import sys
+import subprocess
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-k', '--keys', nargs='+', type=str, dest='key_list',
-                    help='<Required> Sets streaming keys', required=True)
-args = parser.parse_args()
+parser.add_argument(
+    "-k",
+    "--keys",
+    action="append",
+    type=str,
+    help="Set streaming keys",
+    required=True,
+)
+parser.add_argument(
+    "-a",
+    "--address",
+    type=str,
+    help="Address of the RTMP server",
+    default="0.0.0.0:1935",
+)
+parser.add_argument(
+    "-s",
+    "--source",
+    type=str,
+    help="Source to stream to the server",
+    default="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+)
 
 
-def ffmpeg_cmd(stream_link: str, stream_key: str) -> str:
+def ffmpeg_cmd(stream_link: str, stream_key: str, address: str) -> str:
+    is_url = re.match(
+        "^(http[s]?:\/\/(www\.)?|ftp:\/\/(www\.)?|www\.){1}([0-9A-Za-z-\.@:%_\+~#=]+)+((\.[a-zA-Z]{2,3})+)(\/(.)*)?(\?(.)*)?",
+        stream_link,
+    )
+
     process = ["ffmpeg"]
-    isUrl = re.match(
-        "^(http[s]?:\/\/(www\.)?|ftp:\/\/(www\.)?|www\.){1}([0-9A-Za-z-\.@:%_\+~#=]+)+((\.[a-zA-Z]{2,3})+)(\/(.)*)?(\?(.)*)?", stream_link)
-    if isUrl:
-        process += ["-reconnect", "1", "-reconnect_at_eof",
-                    "1", "-reconnect_delay_max", "10"]
 
-    process += ["-re", "-y", "-i", stream_link,
-                "-codec:a", "aac", "-c:v", "copy", "-f", "flv", "-flvflags", "no_duration_filesize",
-                f"rtmp://0.0.0.0:1935/live/{stream_key}"]
+    if is_url:
+        process += [
+            "-reconnect",
+            "1",
+            "-reconnect_at_eof",
+            "1",
+            "-reconnect_delay_max",
+            "10",
+        ]
+
+    process += [
+        "-re",
+        "-y",
+        "-i",
+        stream_link,
+        "-codec:a",
+        "aac",
+        "-c:v",
+        "copy",
+        "-f",
+        "flv",
+        "-flvflags",
+        "no_duration_filesize",
+        f"rtmp://{address}/live/{stream_key}",
+    ]
 
     return " ".join(process)
 
 
 def main() -> int:
+    args = parser.parse_args()
+
     if shutil.which("ffmpeg") is None:
         raise Exception("ffmpeg is required")
-    test_url = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-    strims_to_open = []
 
-    for stream_key in args.key_list:
-        strims_to_open.append(ffmpeg_cmd(test_url, stream_key))
+    processes = []
+    for stream_key in args.keys:
+        processes.append(
+            subprocess.Popen(
+                ffmpeg_cmd(args.source, stream_key, args.address),
+                shell=True,
+                # TODO: try to control output
+                # stdout=subprocess.DEVNULL,
+                # stderr=subprocess.STDOUT,
+            )
+        )
 
-    procs = [Popen(i) for i in strims_to_open]
-    for p in procs:
+    for process in processes:
         try:
-            p.wait()
+            process.wait()
         except KeyboardInterrupt:
             try:
-                p.terminate()
+                process.terminate()
             except OSError:
                 pass
-            p.wait()
-            time.sleep(2)
+            process.wait()
+
+    if sys.platform == "linux":
+        os.system("stty sane")
+
     return 0
 
 
