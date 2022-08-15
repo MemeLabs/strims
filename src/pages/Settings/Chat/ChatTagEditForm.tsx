@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -17,7 +17,10 @@ const ChatTagEditForm: React.FC = () => {
   const { serverId, tagId } = useParams<"serverId" | "tagId">();
   const [getRes] = useCall("chatServer", "getTag", { args: [{ id: BigInt(tagId) }] });
 
-  const [updateRes, updateChatTag] = useLazyCall("chatServer", "updateTag");
+  const navigate = useNavigate();
+  const [updateRes, updateChatTag] = useLazyCall("chatServer", "updateTag", {
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}`),
+  });
 
   const onSubmit = (data: ChatTagFormData) =>
     updateChatTag({

@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -20,7 +20,10 @@ const ChatServerEditForm: React.FC = () => {
     args: [{ id: BigInt(serverId) }],
   });
 
-  const [updateRes, updateChatServer] = useLazyCall("chatServer", "updateServer");
+  const navigate = useNavigate();
+  const [updateRes, updateChatServer] = useLazyCall("chatServer", "updateServer", {
+    onComplete: () => navigate("/settings/chat-servers"),
+  });
 
   const onSubmit = (data: ChatServerFormData) =>
     updateChatServer({

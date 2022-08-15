@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { EmoteEffect } from "../../../apis/strims/chat/v1/chat";
@@ -22,7 +22,10 @@ const ChatEmoteEditFormPage: React.FC = () => {
     args: [{ id: BigInt(emoteId) }],
   });
 
-  const [updateRes, updateChatEmote] = useLazyCall("chatServer", "updateEmote");
+  const navigate = useNavigate();
+  const [updateRes, updateChatEmote] = useLazyCall("chatServer", "updateEmote", {
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`),
+  });
 
   const onSubmit = (data: ChatEmoteFormData) =>
     updateChatEmote({

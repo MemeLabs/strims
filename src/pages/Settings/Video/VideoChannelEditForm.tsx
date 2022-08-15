@@ -23,7 +23,7 @@ const VideoChannelEditForm: React.FC = () => {
 
   const navigate = useNavigate();
   const [updateRes, updateVideoChannel] = useLazyCall("videoChannel", "update", {
-    onComplete: () => navigate(`/settings/video/channels`, { replace: true }),
+    onComplete: () => navigate(`/settings/video/channels`),
   });
 
   const onSubmit = React.useCallback(async (data: VideoChannelFormData) => {

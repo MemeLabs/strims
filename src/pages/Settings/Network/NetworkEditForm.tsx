@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -19,7 +19,10 @@ const NetworkEditForm: React.FC = () => {
 
   const network = value?.network;
 
-  const [updateRes, updateAlias] = useLazyCall("network", "updateAlias");
+  const navigate = useNavigate();
+  const [updateRes, updateAlias] = useLazyCall("network", "updateAlias", {
+    onComplete: () => navigate("/settings/networks"),
+  });
 
   if (getRes.loading) {
     return null;

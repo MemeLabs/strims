@@ -19,7 +19,7 @@ const CreateForm: React.FC = () => {
   const navigate = useNavigate();
   const [{ value }] = useCall("network", "list");
   const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {
-    onComplete: () => navigate("/settings/networks"),
+    onComplete: (res) => navigate(`/settings/networks/${res.network.id}`, { replace: true }),
   });
   const { control, handleSubmit } = useForm<{
     name: string;

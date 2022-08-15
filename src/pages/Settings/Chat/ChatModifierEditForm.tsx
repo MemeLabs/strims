@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -17,7 +17,10 @@ const ChatModifierEditForm: React.FC = () => {
   const { serverId, modifierId } = useParams<"serverId" | "modifierId">();
   const [getRes] = useCall("chatServer", "getModifier", { args: [{ id: BigInt(modifierId) }] });
 
-  const [updateRes, updateChatModifier] = useLazyCall("chatServer", "updateModifier");
+  const navigate = useNavigate();
+  const [updateRes, updateChatModifier] = useLazyCall("chatServer", "updateModifier", {
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`),
+  });
 
   const onSubmit = (data: ChatModifierFormData) =>
     updateChatModifier({

@@ -24,7 +24,7 @@ const AutoseedRuleEditForm: React.FC = () => {
 
   const navigate = useNavigate();
   const [updateRes, updateAutoseedRule] = useLazyCall("autoseed", "updateRule", {
-    onComplete: () => navigate(`/settings/autoseed/rules`, { replace: true }),
+    onComplete: () => navigate(`/settings/autoseed/rules`),
   });
 
   const onSubmit = React.useCallback(async (data: AutoseedRuleFormData) => {

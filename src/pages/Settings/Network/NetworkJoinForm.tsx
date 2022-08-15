@@ -19,7 +19,7 @@ const JoinForm: React.FC = () => {
   const navigate = useNavigate();
   const [{ value }] = useCall("network", "list");
   const [{ error, loading }, create] = useLazyCall("network", "createNetworkFromInvitation", {
-    onComplete: () => navigate("/settings/networks"),
+    onComplete: () => navigate("/settings/networks", { replace: true }),
   });
   const { control, handleSubmit } = useForm<{
     invitationB64: string;

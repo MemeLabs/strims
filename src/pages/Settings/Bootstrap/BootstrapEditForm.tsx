@@ -22,7 +22,7 @@ const BootstrapEditForm: React.FC = () => {
 
   const navigate = useNavigate();
   const [updateRes, updateBootstrap] = useLazyCall("bootstrap", "updateClient", {
-    onComplete: () => navigate(`/settings/bootstraps`, { replace: true }),
+    onComplete: () => navigate(`/settings/bootstraps`),
   });
 
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {

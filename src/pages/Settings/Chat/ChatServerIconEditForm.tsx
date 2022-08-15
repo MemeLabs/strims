@@ -26,7 +26,7 @@ const ChatServerIconEditForm: React.FC = () => {
   });
   const navigate = useNavigate();
   const [updateRes, updateServerIcon] = useLazyCall("chatServer", "updateServerIcon", {
-    onComplete: () => navigate(`/settings/chat-servers/${serverId}`, { replace: true }),
+    onComplete: () => navigate(`/settings/chat-servers/${serverId}`),
   });
 
   const onSubmit = (data: ChatServerIconFormData) =>
