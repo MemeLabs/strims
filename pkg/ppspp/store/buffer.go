@@ -31,9 +31,9 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 	}
 
 	return &Buffer{
-		size:      uint64(size),
 		chunkSize: uint64(chunkSize),
 		mask:      uint64(size) - 1,
+		size:      binmap.Bin(size * 2),
 		head:      binmap.Bin(size * 2),
 		bins:      binmap.New(),
 		buf:       make([]byte, size*chunkSize),
@@ -45,9 +45,9 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 
 // Buffer ...
 type Buffer struct {
-	size      uint64
 	chunkSize uint64
 	mask      uint64
+	size      binmap.Bin
 	head      binmap.Bin
 	bins      *binmap.Map
 	buf       []byte
@@ -71,7 +71,7 @@ func (s *Buffer) Reset() {
 		return
 	}
 
-	s.head = binmap.Bin(s.size * 2)
+	s.head = s.size
 	s.bins = binmap.New()
 	s.next = binmap.None
 	s.prev = binmap.None
@@ -206,7 +206,7 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 
 	s.next = next
 	s.prev = prev
-	s.head = prev + binmap.Bin(s.size*2)
+	s.head = prev + s.size
 	s.off = binByte(prev, s.chunkSize)
 	s.bins.FillBefore(prev)
 	s.setReady()
@@ -222,7 +222,7 @@ func (s *Buffer) recover() error {
 	s.off = binByte(next, s.chunkSize)
 
 	s.prev = next
-	s.head = next + binmap.Bin(s.size*2)
+	s.head = next + s.size
 	s.bins.FillBefore(next)
 
 	next = s.bins.FindEmptyAfter(next)
@@ -271,7 +271,10 @@ func (s *Buffer) Cover(b binmap.Bin) binmap.Bin {
 func (s *Buffer) Bins() *binmap.Map {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.bins.Clone()
+
+	b := s.bins.Clone()
+	b.ResetBefore(s.tail())
+	return b
 }
 
 func (s *Buffer) index(b binmap.Bin) int {
@@ -291,7 +294,7 @@ func (s *Buffer) Bounds() (head, tail binmap.Bin) {
 }
 
 func (s *Buffer) tail() binmap.Bin {
-	return s.head - binmap.Bin(s.size*2)
+	return s.head - s.size
 }
 
 func (s *Buffer) contains(b binmap.Bin) bool {
