@@ -1059,7 +1059,8 @@ func (c *peerChannelScheduler) write1() error {
 	if m := c.s.swarm.store.Next(); min > m {
 		min = m
 	}
-	// TODO: skip reqs until firstChunkSet?
+	// TODO: skip chunk requests until firstChunkSet - prove max HAVE bin per
+	// channel by requesting chunk integrity data
 	if !c.s.firstChunkSet && c.peerMaxHaveBin > min {
 		min = c.peerMaxHaveBin
 	}

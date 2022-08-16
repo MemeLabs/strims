@@ -38,7 +38,6 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 		bins:      binmap.New(),
 		buf:       make([]byte, size*chunkSize),
 		next:      binmap.None,
-		prev:      binmap.None,
 		ready:     make(chan struct{}),
 	}, nil
 }
@@ -55,8 +54,6 @@ type Buffer struct {
 	isReady   bool
 	ready     chan struct{}
 	next      binmap.Bin
-	prev      binmap.Bin
-	off       uint64
 	sem       uint64
 	err       error
 	readers   []chan error
@@ -73,9 +70,7 @@ func (s *Buffer) Reset() {
 
 	s.head = s.size
 	s.bins = binmap.New()
-	s.next = binmap.None
-	s.prev = binmap.None
-	s.off = 0
+	s.next = 0
 	s.sem++
 
 	s.isReady = false
@@ -105,12 +100,11 @@ func (s *Buffer) setReady() {
 	}
 }
 
-func (s *Buffer) swapReadable(err error) (prev error) {
-	prev, s.err = s.err, err
+func (s *Buffer) swapReadable(err error) {
+	s.err = err
 	for _, r := range s.readers {
 		swapChanValue(r, err)
 	}
-	return prev
 }
 
 func (s *Buffer) pushReadable(err error) {
@@ -125,7 +119,7 @@ func (s *Buffer) pushReadable(err error) {
 
 func (s *Buffer) set(b binmap.Bin, d []byte) {
 	l, r := b.Base()
-	if l < s.tail() {
+	if l < s.head-s.size {
 		return
 	}
 	if h := r + 2; s.head < h {
@@ -133,22 +127,22 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	}
 
 	copy(s.buf[s.index(b):], d)
-
 	s.bins.Set(b)
-	if !b.Contains(s.next) {
-		if s.next < s.tail() {
-			s.swapReadable(ErrBufferUnderrun)
-		}
+
+	if s.next < s.tail() {
+		s.swapReadable(ErrBufferUnderrun)
 		return
 	}
 
-	next := s.bins.FindEmptyAfter(s.next)
-	if next.IsNone() {
-		next = s.bins.RootBin().BaseRight() + 2
-	}
-	s.next = next
+	if b.Contains(s.next) {
+		next := s.bins.FindEmptyAfter(s.next)
+		if next.IsNone() {
+			next = s.bins.RootBin().BaseRight() + 2
+		}
+		s.next = next
 
-	s.pushReadable(nil)
+		s.pushReadable(nil)
+	}
 }
 
 type DataWriter interface {
@@ -188,9 +182,7 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	}
 
 	s.next = next
-	s.prev = prev
 	s.head = prev + s.size
-	s.off = binByte(prev, s.chunkSize)
 	s.bins.FillBefore(prev)
 	s.setReady()
 }
@@ -205,8 +197,6 @@ func (s *Buffer) recover() error {
 		return ErrReadOffsetNotFound
 	}
 
-	s.off = binByte(next, s.chunkSize)
-	s.prev = next
 	s.head = next + s.size
 	s.bins.FillBefore(next)
 
@@ -250,6 +240,9 @@ func (s *Buffer) Tail() binmap.Bin {
 }
 
 func (s *Buffer) tail() binmap.Bin {
+	if s.next.IsNone() {
+		return binmap.None
+	}
 	return s.head - s.size
 }
 
@@ -270,7 +263,6 @@ func (s *Buffer) ImportCache(b []byte) error {
 	copy(s.buf, b)
 
 	s.next = byteBin(uint64(len(b)), s.chunkSize)
-	s.prev = 0
 
 	s.bins.FillBefore(s.next)
 	s.setReady()
@@ -281,7 +273,7 @@ func (s *Buffer) ExportCache() ([]byte, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.tail() != 0 || s.off != 0 {
+	if s.tail() != 0 {
 		return nil, errors.New("cannot cache truncated swarm buffer")
 	}
 	if s.bins.Empty() {
@@ -297,8 +289,8 @@ func NewBufferReader(buf *Buffer) *BufferReader {
 	r := &BufferReader{
 		buf:      buf,
 		sem:      buf.sem,
-		prev:     buf.prev,
-		off:      buf.off,
+		prev:     buf.tail(),
+		off:      binByte(buf.tail(), buf.chunkSize),
 		err:      buf.err,
 		readable: make(chan error, 1),
 	}
@@ -329,8 +321,8 @@ type BufferReader struct {
 func (r *BufferReader) sync() {
 	if r.sem != r.buf.sem {
 		r.sem = r.buf.sem
-		r.prev = r.buf.prev
-		r.off = r.buf.off
+		r.prev = r.buf.tail()
+		r.off = binByte(r.buf.tail(), r.buf.chunkSize)
 		r.err = r.buf.err
 	}
 }
@@ -344,7 +336,7 @@ func (r *BufferReader) Unread() {
 	}
 
 	r.prev = r.buf.tail()
-	r.off = binByte(r.prev, r.buf.chunkSize)
+	r.off = binByte(r.buf.tail(), r.buf.chunkSize)
 
 	swapChanValue(r.readable, nil)
 }
@@ -391,8 +383,7 @@ func (r *BufferReader) Read(p []byte) (int, error) {
 	}
 
 	r.buf.lock.Lock()
-	r.sync()
-	for r.buf.next == r.prev {
+	for r.buf.next == r.prev || len(r.readable) != 0 {
 		r.buf.lock.Unlock()
 
 		select {
@@ -406,8 +397,8 @@ func (r *BufferReader) Read(p []byte) (int, error) {
 		}
 
 		r.buf.lock.Lock()
-		r.sync()
 	}
+	r.sync()
 	defer r.buf.lock.Unlock()
 
 	l := int(r.off - binByte(r.buf.tail(), r.buf.chunkSize))
