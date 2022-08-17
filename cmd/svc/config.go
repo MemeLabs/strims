@@ -140,6 +140,7 @@ type PeerConfig struct {
 			UDPMuxAddress     Optional[string]   `yaml:"udpMuxAddress"`
 			TCPMuxAddress     Optional[string]   `yaml:"tcpMuxAddress"`
 			TCPReadBufferSize Optional[int]      `yaml:"tcpReadBufferSize"`
+			EnableLogging     bool               `yaml:"enableLogging"`
 		} `yaml:"webrtc"`
 		WebSocket struct {
 			Enabled Optional[bool] `yaml:"enabled"`

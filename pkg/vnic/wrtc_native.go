@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pion/ice/v2"
+	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
@@ -23,12 +24,13 @@ import (
 
 // WebRTCDialerOptions ...
 type WebRTCDialerOptions struct {
-	ICEServers []string
-	PortMin    uint16
-	PortMax    uint16
-	UDPMux     ice.UDPMux
-	TCPMux     ice.TCPMux
-	HostIP     string
+	ICEServers    []string
+	PortMin       uint16
+	PortMax       uint16
+	UDPMux        ice.UDPMux
+	TCPMux        ice.TCPMux
+	HostIP        string
+	EnableLogging bool
 }
 
 func parseIPPort(addr string) (net.IP, int, error) {
@@ -134,6 +136,10 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 		s.SetNAT1To1IPs([]string{d.options.HostIP}, webrtc.ICECandidateTypeHost)
 	}
 
+	if d.options.EnableLogging {
+		s.LoggerFactory = &pionLoggerFactory{d.logger}
+	}
+
 	s.DetachDataChannels()
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
@@ -156,15 +162,6 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		d.logger.Debug("connection state changed", zap.String("state", s.String()))
 		if s == webrtc.PeerConnectionStateDisconnected || s == webrtc.PeerConnectionStateFailed {
 			pc.Close()
-		}
-	})
-
-	// TODO: close this if there's an error gathering ice candidates
-	candidates := make(chan *webrtc.ICECandidate, 64)
-	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-		candidates <- candidate
-		if candidate == nil {
-			close(candidates)
 		}
 	})
 
@@ -290,4 +287,40 @@ type dcLink struct {
 
 func (l dcLink) MTU() int {
 	return dcMTU
+}
+
+type pionLoggerFactory struct {
+	logger *zap.Logger
+}
+
+func (f *pionLoggerFactory) NewLogger(scope string) logging.LeveledLogger {
+	return pionLeveledLogger{f.logger.With(zap.String("scope", scope)).Sugar()}
+}
+
+type pionLeveledLogger struct {
+	*zap.SugaredLogger
+}
+
+func (l pionLeveledLogger) Trace(msg string) {
+	l.SugaredLogger.Debug(msg)
+}
+
+func (l pionLeveledLogger) Tracef(format string, args ...interface{}) {
+	l.SugaredLogger.Debugf(format, args...)
+}
+
+func (l pionLeveledLogger) Debug(msg string) {
+	l.SugaredLogger.Debug(msg)
+}
+
+func (l pionLeveledLogger) Info(msg string) {
+	l.SugaredLogger.Info(msg)
+}
+
+func (l pionLeveledLogger) Warn(msg string) {
+	l.SugaredLogger.Warn(msg)
+}
+
+func (l pionLeveledLogger) Error(msg string) {
+	l.SugaredLogger.Error(msg)
 }
