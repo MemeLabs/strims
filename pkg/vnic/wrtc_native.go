@@ -120,12 +120,13 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 
 	s := webrtc.SettingEngine{}
 
-	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
-	if d.options.UDPMux != nil {
-		s.SetICEUDPMux(d.options.UDPMux)
-	} else {
-		s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
-	}
+	// networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
+	// if d.options.UDPMux != nil {
+	// 	s.SetICEUDPMux(d.options.UDPMux)
+	// } else {
+	// 	s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
+	// }
+	networkTypes := []webrtc.NetworkType{}
 	if d.options.TCPMux != nil {
 		s.SetICETCPMux(d.options.TCPMux)
 		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4, webrtc.NetworkTypeTCP6)
@@ -139,6 +140,8 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 	if d.options.EnableLogging {
 		s.LoggerFactory = &pionLoggerFactory{d.logger}
 	}
+
+	s.SetSCTPMaxReceiveBufferSize(8 * 1024 * 1024)
 
 	s.DetachDataChannels()
 
