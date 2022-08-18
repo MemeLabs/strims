@@ -82,7 +82,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
   }, [selectedProfile]);
 
   if (session.loading) {
-    return <LoadingPlaceholder />;
+    if (session.loading && session.databaseState && !session.conn) {
+      return <LoadingPlaceholder errorNode={true} />;
+    } else {
+      return <LoadingPlaceholder errorNode={false} />;
+    }
   }
   if (session.profile) {
     return <Navigate to={next ?? "/"} />;

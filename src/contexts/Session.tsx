@@ -32,6 +32,7 @@ export interface State {
   linkedProfiles: LinkedProfile[];
   profile: Profile;
   loading: boolean;
+  databaseState: boolean;
   conn?: Conn;
   client?: FrontendClient;
   error?: Error;
@@ -45,7 +46,8 @@ export interface Ops {
 const initialState: State = {
   linkedProfiles: [],
   profile: null,
-  loading: true,
+  loading: false,
+  databaseState: false,
 };
 
 export const SessionContext = createContext<[State, Ops]>(null);
@@ -102,6 +104,7 @@ class LinkedProfilesDB {
 export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
   const [state, setState] = useState<State>(initialState);
   const [db] = useState(() => new LinkedProfilesDB());
+  const dbSatae: boolean = state.conn === undefined ? true : false;
 
   useEffect(() => () => state.conn?.close(), [state.conn]);
 
@@ -128,6 +131,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     setState((prev) => ({
       ...prev,
       loading: true,
+      databaseState: dbSatae,
       error: null,
     }));
 
@@ -164,6 +168,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     setState((prev) => ({
       ...prev,
       loading: true,
+      databaseState: dbSatae,
       error: null,
     }));
 
