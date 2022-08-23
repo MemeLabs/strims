@@ -6,11 +6,14 @@
 package wasmio
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"syscall/js"
 	"time"
+
+	"github.com/MemeLabs/strims/pkg/sliceutil"
 )
 
 const iceGatherTimeout = time.Second * 5
@@ -19,11 +22,10 @@ const dataChannelMTU = 64 * 1024
 // NewWebRTCProxy ...
 func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 	p := &WebRTCProxy{
-		answers:        make(chan any, 1),
-		offers:         make(chan any, 1),
-		iceCandidates:  make(chan *ICECandidateInit, 32),
-		dataChannelIDs: make(map[string]int),
-		dataChannelChs: make([]chan struct{}, 0),
+		descriptionReady: make(chan any, 1),
+		iceCandidates:    make(chan *ICECandidateInit, 32),
+		dataChannelIDs:   make(map[string]int),
+		dataChannelChs:   make([]chan struct{}, 0),
 	}
 
 	proxy := jsObject.New()
@@ -43,8 +45,7 @@ func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 type WebRTCProxy struct {
 	proxy             js.Value
 	funcs             Funcs
-	answers           chan any
-	offers            chan any
+	descriptionReady  chan any
 	iceCandidates     chan *ICECandidateInit
 	localDescription  string
 	connectionState   string
@@ -57,13 +58,13 @@ type WebRTCProxy struct {
 // CreateOffer ...
 func (p *WebRTCProxy) CreateOffer() (*RTCSessionDescription, error) {
 	p.proxy.Call("createOffer")
-	return selectRTCSessionDescription(p.offers)
+	return selectRTCSessionDescription(p.descriptionReady)
 }
 
 // CreateAnswer ...
 func (p *WebRTCProxy) CreateAnswer() (*RTCSessionDescription, error) {
 	p.proxy.Call("createAnswer")
-	return selectRTCSessionDescription(p.answers)
+	return selectRTCSessionDescription(p.descriptionReady)
 }
 
 func selectRTCSessionDescription(ch chan any) (*RTCSessionDescription, error) {
@@ -85,8 +86,9 @@ func selectRTCSessionDescription(ch chan any) (*RTCSessionDescription, error) {
 }
 
 // CreateDataChannel ...
-func (p *WebRTCProxy) CreateDataChannel(label string) {
-	p.proxy.Call("createDataChannel", label)
+func (p *WebRTCProxy) CreateDataChannel(label string, options *RTCDataChannelInit) {
+	s, _ := json.Marshal(options)
+	p.proxy.Call("createDataChannel", label, string(s))
 }
 
 // AddICECandidate ...
@@ -176,12 +178,12 @@ func (p *WebRTCProxy) onSignalingStateChange(this js.Value, args []js.Value) any
 }
 
 func (p *WebRTCProxy) onCreateOffer(this js.Value, args []js.Value) any {
-	sendRTCSessionDescription(p.offers, args)
+	sendRTCSessionDescription(p.descriptionReady, args)
 	return nil
 }
 
 func (p *WebRTCProxy) onCreateAnswer(this js.Value, args []js.Value) any {
-	sendRTCSessionDescription(p.answers, args)
+	sendRTCSessionDescription(p.descriptionReady, args)
 	return nil
 }
 
@@ -213,22 +215,23 @@ func (p *WebRTCProxy) onDataChannel(this js.Value, args []js.Value) any {
 }
 
 // DataChannelID ...
-func (p *WebRTCProxy) DataChannelID(label string) (int, error) {
+func (p *WebRTCProxy) DataChannelID(ctx context.Context, label string) (int, error) {
 	if id, ok := p.dataChannelIDs[label]; ok {
 		return id, nil
 	}
 
 	ch := make(chan struct{}, 1)
-	defer close(ch)
 	p.dataChannelChs = append(p.dataChannelChs, ch)
+	defer func() { p.dataChannelChs = sliceutil.Remove(p.dataChannelChs, ch) }()
+
 	for {
 		select {
 		case <-ch:
 			if id, ok := p.dataChannelIDs[label]; ok {
 				return id, nil
 			}
-		case <-time.After(time.Second * 10):
-			return 0, errors.New("data channel timeout")
+		case <-ctx.Done():
+			return 0, ctx.Err()
 		}
 	}
 }
@@ -258,4 +261,14 @@ type ICECandidateInit struct {
 	SDPMid           *string `json:"sdpMid,omitempty"`
 	SDPMLineIndex    *uint16 `json:"sdpMLineIndex,omitempty"`
 	UsernameFragment string  `json:"usernameFragment"`
+}
+
+// RTCDataChannelInit ...
+type RTCDataChannelInit struct {
+	ID                *uint16 `json:"id,omitempty"`
+	Ordered           *bool   `json:"ordered,omitempty"`
+	MaxPacketLifeTime *uint16 `json:"maxPacketLifeTime,omitempty"`
+	MaxRetransmits    *uint16 `json:"maxRetransmits,omitempty"`
+	Protocol          *string `json:"protocol,omitempty"`
+	Negotiated        *bool   `json:"negotiated,omitempty"`
 }

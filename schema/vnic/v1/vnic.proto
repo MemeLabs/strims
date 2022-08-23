@@ -11,6 +11,11 @@ option swift_prefix = "SVN";
 
 import "type/certificate.proto";
 
+message LinkDescription {
+  string interface = 1;
+  string description = 2;
+}
+
 message PeerInit {
   uint32 protocol_version = 1;
   strims.type.Certificate certificate = 2;

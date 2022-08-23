@@ -6,104 +6,116 @@
 package vnic
 
 import (
+	"context"
 	"encoding/json"
 	"syscall/js"
 
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
+	"github.com/MemeLabs/strims/pkg/pointerutil"
 	"github.com/MemeLabs/strims/pkg/wasmio"
 	"go.uber.org/zap"
 )
 
-// NewWebRTCDialer ...
-func NewWebRTCDialer(logger *zap.Logger, bridge js.Value) *WebRTCDialer {
-	return &WebRTCDialer{logger, bridge}
+func init() { RegisterLinkInterface("webrtc", (*webRTCLinkCandidate)(nil)) }
+
+var _ Interface = (*WebRTCInterface)(nil)
+var _ LinkCandidate = (*webRTCLinkCandidate)(nil)
+
+// NewWebRTCInterface ...
+func NewWebRTCInterface(logger *zap.Logger, bridge js.Value) Interface {
+	return &WebRTCInterface{logger, bridge}
 }
 
-// WebRTCDialer ...
-type WebRTCDialer struct {
+// WebRTCInterface ...
+type WebRTCInterface struct {
 	logger *zap.Logger
 	bridge js.Value
 }
 
-// Dial ...
-func (d *WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
+func (d *WebRTCInterface) CreateLinkCandidate(ctx context.Context, h *Host) (LinkCandidate, error) {
 	pc := wasmio.NewWebRTCProxy(d.bridge)
+	pc.CreateDataChannel("data", &wasmio.RTCDataChannelInit{
+		ID:         pointerutil.To[uint16](1),
+		Negotiated: pointerutil.To(true),
+	})
 
-	link, err := d.dial(m, pc)
-	if err != nil {
-		pc.Close()
-		return nil, err
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			pc.Close()
+		}
+	}()
+
+	c := &webRTCLinkCandidate{
+		ctx:    ctx,
+		host:   h,
+		bridge: d.bridge,
+		pc:     pc,
+		done:   done,
 	}
-	return link, nil
+	return c, nil
 }
 
-func (d *WebRTCDialer) dial(m WebRTCMediator, pc *wasmio.WebRTCProxy) (Link, error) {
-	offerBytes, err := m.GetOffer()
-	if err != nil {
-		return nil, err
-	}
-	if offerBytes != nil {
-		if err := d.sendAnswer(m, pc, offerBytes); err != nil {
-			return nil, err
-		}
+type webRTCLinkCandidate struct {
+	ctx        context.Context
+	host       *Host
+	bridge     js.Value
+	pc         *wasmio.WebRTCProxy
+	remoteDesc bool
+	localDesc  bool
+	done       chan struct{}
+}
+
+func (c *webRTCLinkCandidate) LocalDescription() (d *vnicv1.LinkDescription, err error) {
+	var desc *wasmio.RTCSessionDescription
+	if c.remoteDesc {
+		desc, err = c.pc.CreateAnswer()
 	} else {
-		if err := d.sendOffer(m, pc); err != nil {
-			return nil, err
-		}
+		desc, err = c.pc.CreateOffer()
 	}
-
-	cid, err := pc.DataChannelID("data")
 	if err != nil {
 		return nil, err
 	}
-	return wasmio.NewDataChannelProxy(d.bridge, cid)
+	c.pc.SetLocalDescription(desc)
+	c.localDesc = true
+
+	for range c.pc.ICECandidates() {
+	}
+
+	d = &vnicv1.LinkDescription{
+		Interface:   "webrtc",
+		Description: c.pc.LocalDescription(),
+	}
+	return d, nil
 }
 
-func (d *WebRTCDialer) sendAnswer(m WebRTCMediator, pc *wasmio.WebRTCProxy, offerBytes []byte) error {
-	var offer wasmio.RTCSessionDescription
-	if err := json.Unmarshal(offerBytes, &offer); err != nil {
-		return err
+func (c *webRTCLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
+	var desc wasmio.RTCSessionDescription
+	if err := json.Unmarshal([]byte(d.Description), &desc); err != nil {
+		return false, err
 	}
-	pc.SetRemoteDescription(&offer)
+	c.pc.SetRemoteDescription(&desc)
+	c.remoteDesc = true
 
-	answer, err := pc.CreateAnswer()
-	if err != nil {
-		return err
+	if c.localDesc {
+		return c.awaitLink()
 	}
-	pc.SetLocalDescription(answer)
-
-	for range pc.ICECandidates() {
-	}
-
-	if err := m.SendAnswer([]byte(pc.LocalDescription())); err != nil {
-		return err
-	}
-	return nil
+	go c.awaitLink()
+	return false, nil
 }
 
-func (d *WebRTCDialer) sendOffer(m WebRTCMediator, pc *wasmio.WebRTCProxy) error {
-	pc.CreateDataChannel("data")
-
-	offer, err := pc.CreateOffer()
+func (c *webRTCLinkCandidate) awaitLink() (bool, error) {
+	defer close(c.done)
+	cid, err := c.pc.DataChannelID(c.ctx, "data")
 	if err != nil {
-		return err
+		return false, err
 	}
-	pc.SetLocalDescription(offer)
-
-	for range pc.ICECandidates() {
-	}
-
-	if err := m.SendOffer([]byte(pc.LocalDescription())); err != nil {
-		return err
-	}
-
-	answerBytes, err := m.GetAnswer()
+	dc, err := wasmio.NewDataChannelProxy(c.bridge, cid)
 	if err != nil {
-		return err
+		return false, err
 	}
-	var answer wasmio.RTCSessionDescription
-	if err := json.Unmarshal(answerBytes, &answer); err != nil {
-		return err
-	}
-	pc.SetRemoteDescription(&answer)
-	return nil
+	c.host.AddLink(dc)
+	return true, nil
 }

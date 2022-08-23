@@ -292,10 +292,6 @@ module.exports = (env, argv) => {
             },
             host: "0.0.0.0",
             proxy: {
-              "/test-bootstrap": {
-                target: "ws://localhost:8082",
-                ws: true,
-              },
               "/manage": {
                 target: "ws://localhost:8083",
                 ws: true,

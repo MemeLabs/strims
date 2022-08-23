@@ -7,14 +7,15 @@ package vnic
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
-	"strconv"
-	"time"
+	"sync"
 
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
+	"github.com/MemeLabs/strims/pkg/pointerutil"
 	"github.com/pion/ice/v2"
 	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
@@ -22,8 +23,13 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-// WebRTCDialerOptions ...
-type WebRTCDialerOptions struct {
+func init() { RegisterLinkInterface("webrtc", (*webRTCLinkCandidate)(nil)) }
+
+var _ Interface = (*webRTCInterface)(nil)
+var _ LinkCandidate = (*webRTCLinkCandidate)(nil)
+
+// WebRTCInterfaceOptions ...
+type WebRTCInterfaceOptions struct {
 	ICEServers    []string
 	PortMin       uint16
 	PortMax       uint16
@@ -33,31 +39,12 @@ type WebRTCDialerOptions struct {
 	EnableLogging bool
 }
 
-func parseIPPort(addr string) (net.IP, int, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, 0, fmt.Errorf("malformed address: %w", err)
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return nil, 0, errors.New("malformed ip")
-	}
-	p, err := strconv.Atoi(port)
-	if err != nil {
-		return nil, 0, fmt.Errorf("malformed port: %w", err)
-	}
-	return ip, p, nil
-}
-
 func NewWebRTCUDPMux(address string) (ice.UDPMux, *net.UDPConn, error) {
-	ip, port, err := parseIPPort(address)
+	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		return nil, nil, err
 	}
-	lis, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   ip,
-		Port: port,
-	})
+	lis, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening udp listener: %w", err)
 	}
@@ -65,14 +52,11 @@ func NewWebRTCUDPMux(address string) (ice.UDPMux, *net.UDPConn, error) {
 }
 
 func NewWebRTCTCPMux(address string, readBufferSize int) (ice.TCPMux, *net.TCPListener, error) {
-	ip, port, err := parseIPPort(address)
+	addr, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		return nil, nil, err
 	}
-	lis, err := net.ListenTCP("tcp", &net.TCPAddr{
-		IP:   ip,
-		Port: port,
-	})
+	lis, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening tcp listener: %w", err)
 	}
@@ -87,25 +71,53 @@ var DefaultWebRTCICEServers = []string{
 	"stun:stun4.l.google.com:19302",
 }
 
-// NewWebRTCDialer ...
-func NewWebRTCDialer(logger *zap.Logger, o *WebRTCDialerOptions) *WebRTCDialer {
+// NewWebRTCInterface ...
+func NewWebRTCInterface(logger *zap.Logger, o *WebRTCInterfaceOptions) Interface {
 	if o == nil {
-		o = &WebRTCDialerOptions{}
+		o = &WebRTCInterfaceOptions{}
 	}
-	return &WebRTCDialer{
+
+	s := webrtc.SettingEngine{}
+
+	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
+	if o.UDPMux != nil {
+		s.SetICEUDPMux(o.UDPMux)
+	} else {
+		s.SetEphemeralUDPPortRange(o.PortMin, o.PortMax)
+	}
+	if o.TCPMux != nil {
+		s.SetICETCPMux(o.TCPMux)
+		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4, webrtc.NetworkTypeTCP6)
+	}
+	s.SetNetworkTypes(networkTypes)
+
+	if o.HostIP != "" {
+		s.SetNAT1To1IPs([]string{o.HostIP}, webrtc.ICECandidateTypeHost)
+	}
+
+	if o.EnableLogging {
+		s.LoggerFactory = &pionLoggerFactory{logger}
+	}
+
+	s.SetSCTPMaxReceiveBufferSize(8 * 1024 * 1024)
+	s.DetachDataChannels()
+
+	return &webRTCInterface{
 		logger:  logger,
 		options: o,
+		api:     webrtc.NewAPI(webrtc.WithSettingEngine(s)),
 	}
 }
 
-// WebRTCDialer ...
-type WebRTCDialer struct {
+// webRTCInterface ...
+type webRTCInterface struct {
 	logger  *zap.Logger
-	options *WebRTCDialerOptions
+	options *WebRTCInterfaceOptions
+	api     *webrtc.API
 }
 
-// Dial ...
-func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
+// CreateLinkCandidate ...
+func (d *webRTCInterface) CreateLinkCandidate(ctx context.Context, h *Host) (LinkCandidate, error) {
 	iceServers := d.options.ICEServers
 	if iceServers == nil {
 		iceServers = slices.Clone(DefaultWebRTCICEServers)
@@ -118,156 +130,124 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 		},
 	}
 
-	s := webrtc.SettingEngine{}
-
-	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6}
-	if d.options.UDPMux != nil {
-		s.SetICEUDPMux(d.options.UDPMux)
-	} else {
-		s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
-	}
-	if d.options.TCPMux != nil {
-		s.SetICETCPMux(d.options.TCPMux)
-		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4, webrtc.NetworkTypeTCP6)
-	}
-	s.SetNetworkTypes(networkTypes)
-
-	if d.options.HostIP != "" {
-		s.SetNAT1To1IPs([]string{d.options.HostIP}, webrtc.ICECandidateTypeHost)
-	}
-
-	if d.options.EnableLogging {
-		s.LoggerFactory = &pionLoggerFactory{d.logger}
-	}
-
-	s.DetachDataChannels()
-
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
-
-	pc, err := api.NewPeerConnection(config)
+	pc, err := d.api.NewPeerConnection(config)
 	if err != nil {
 		return nil, err
 	}
 
-	link, err := d.dialWebRTC(m, pc)
-	if err != nil {
-		pc.Close()
-		return nil, err
-	}
-	return link, nil
-}
+	done := make(chan struct{})
+	var doneOnce sync.Once
 
-func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (Link, error) {
-	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
-		d.logger.Debug("connection state changed", zap.String("state", s.String()))
-		if s == webrtc.PeerConnectionStateDisconnected || s == webrtc.PeerConnectionStateFailed {
+	go func() {
+		select {
+		case <-done:
+		case <-ctx.Done():
 			pc.Close()
 		}
+	}()
+
+	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
+		d.logger.Debug("connection state changed", zap.String("state", s.String()))
+		switch s {
+		case webrtc.PeerConnectionStateDisconnected:
+		case webrtc.PeerConnectionStateFailed:
+			pc.Close()
+		case webrtc.PeerConnectionStateClosed:
+			doneOnce.Do(func() { close(done) })
+		}
 	})
 
-	dcReady := make(chan *webrtc.DataChannel, 1)
-	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		d.logger.Debug("DataChannel received")
-		dc.OnOpen(func() {
-			d.logger.Debug("DataChannel opened")
-			dcReady <- dc
-		})
+	dc, err := pc.CreateDataChannel("data", &webrtc.DataChannelInit{
+		ID:         pointerutil.To[uint16](1),
+		Negotiated: pointerutil.To(true),
 	})
-
-	offerBytes, err := m.GetOffer()
 	if err != nil {
 		return nil, err
 	}
-	if offerBytes != nil {
-		var offer webrtc.SessionDescription
-		if err := json.Unmarshal(offerBytes, &offer); err != nil {
-			return nil, err
-		}
+	dc.OnOpen(func() {
+		d.logger.Debug("DataChannel opened")
+		doneOnce.Do(func() { close(done) })
+	})
 
-		if err := pc.SetRemoteDescription(offer); err != nil {
-			return nil, err
-		}
+	c := &webRTCLinkCandidate{
+		ctx:  ctx,
+		host: h,
+		pc:   pc,
+		dc:   dc,
+		done: done,
+	}
+	return c, nil
+}
 
-		answer, err := pc.CreateAnswer(nil)
-		if err != nil {
-			return nil, err
-		}
+type webRTCLinkCandidate struct {
+	ctx       context.Context
+	host      *Host
+	pc        *webrtc.PeerConnection
+	dc        *webrtc.DataChannel
+	done      chan struct{}
+	haveDesc  bool
+	localDesc bool
+}
 
-		gatherComplete := webrtc.GatheringCompletePromise(pc)
-
-		if err := pc.SetLocalDescription(answer); err != nil {
-			return nil, err
-		}
-
-		<-gatherComplete
-
-		answerBytes, err := json.Marshal(pc.LocalDescription())
-		if err != nil {
-			return nil, err
-		}
-		if err := m.SendAnswer(answerBytes); err != nil {
-			return nil, err
-		}
+func (c *webRTCLinkCandidate) LocalDescription() (d *vnicv1.LinkDescription, err error) {
+	var desc webrtc.SessionDescription
+	if c.haveDesc {
+		desc, err = c.pc.CreateAnswer(nil)
 	} else {
-		dc, err := pc.CreateDataChannel("data", nil)
-		if err != nil {
-			return nil, err
-		}
-		dc.OnError(func(err error) {
-			d.logger.Debug("DataChannel error", zap.Error(err))
-		})
-		dc.OnClose(func() {
-			d.logger.Debug("DataChannel closed")
-		})
-		dc.OnOpen(func() {
-			d.logger.Debug("DataChannel opened")
-			dcReady <- dc
-		})
-
-		offer, err := pc.CreateOffer(nil)
-		if err != nil {
-			return nil, err
-		}
-
-		gatherComplete := webrtc.GatheringCompletePromise(pc)
-
-		if err := pc.SetLocalDescription(offer); err != nil {
-			return nil, err
-		}
-
-		<-gatherComplete
-
-		offerBytes, err := json.Marshal(pc.LocalDescription())
-		if err != nil {
-			return nil, err
-		}
-		if err := m.SendOffer(offerBytes); err != nil {
-			return nil, err
-		}
-
-		answerBytes, err := m.GetAnswer()
-		if err != nil {
-			return nil, err
-		}
-		var answer webrtc.SessionDescription
-		if err := json.Unmarshal(answerBytes, &answer); err != nil {
-			return nil, err
-		}
-		if err := pc.SetRemoteDescription(answer); err != nil {
-			return nil, err
-		}
+		desc, err = c.pc.CreateOffer(nil)
+	}
+	if err != nil {
+		return nil, err
 	}
 
+	if err := c.pc.SetLocalDescription(desc); err != nil {
+		return nil, err
+	}
+
+	<-webrtc.GatheringCompletePromise(c.pc)
+
+	sdp, err := json.Marshal(c.pc.LocalDescription())
+	if err != nil {
+		return nil, err
+	}
+
+	d = &vnicv1.LinkDescription{
+		Interface:   "webrtc",
+		Description: string(sdp),
+	}
+	return d, nil
+}
+
+func (c *webRTCLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
+	var desc webrtc.SessionDescription
+	if err := json.Unmarshal([]byte(d.Description), &desc); err != nil {
+		return false, err
+	}
+
+	if err := c.pc.SetRemoteDescription(desc); err != nil {
+		return false, err
+	}
+	c.haveDesc = true
+
+	if c.localDesc {
+		return c.awaitLink()
+	}
+	go c.awaitLink()
+	return false, nil
+}
+
+func (c *webRTCLinkCandidate) awaitLink() (bool, error) {
 	select {
-	case dc := <-dcReady:
-		rwc, err := dc.Detach()
+	case <-c.ctx.Done():
+		return false, c.ctx.Err()
+	case <-c.done:
+		rwc, err := c.dc.Detach()
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 
-		return newDCLink(rwc), nil
-	case <-time.After(time.Second * 10):
-		return nil, fmt.Errorf("data channel receive timeout")
+		c.host.AddLink(newDCLink(rwc))
+		return true, nil
 	}
 }
 

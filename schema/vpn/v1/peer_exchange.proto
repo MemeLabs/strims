@@ -5,31 +5,31 @@ syntax = "proto3";
 
 package strims.vpn.v1;
 
-option go_package = "github.com/MemeLabs/strims/pkg/apis/vpn/v1;vpn";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/vpn/v1;vpnv1";
 option java_package = "gg.strims.vpn.v1";
 option swift_prefix = "SVN";
 
+import "vnic/v1/vnic.proto";
+
 message PeerExchangeMessage {
-  message MediationOffer {
-    uint64 mediation_id = 1;
-    bytes data = 2;
+  message LinkOffer {
+    uint64 exchange_id = 1;
+    repeated vnic.v1.LinkDescription descriptions = 2;
   }
 
-  message MediationAnswer {
-    uint64 mediation_id = 1;
-    bytes data = 2;
+  message LinkAnswer {
+    uint64 exchange_id = 1;
+    repeated vnic.v1.LinkDescription descriptions = 2;
+    string error_message = 3;
   }
-
-  message CallbackRequest {}
 
   message Rejection {
     uint64 mediation_id = 1;
   }
 
   oneof body {
-    MediationOffer mediation_offer = 1001;
-    MediationAnswer mediation_answer = 1002;
-    CallbackRequest callback_request = 1003;
-    Rejection rejection = 1004;
+    LinkOffer link_offer = 1001;
+    LinkAnswer link_answer = 1002;
+    Rejection rejection = 1003;
   }
 }

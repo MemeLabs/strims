@@ -57,7 +57,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(d.logger, vnic.WSInterfaceOptions{ServeMux: mux})
-		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(d.logger, nil))
+		wrtc := vnic.NewWebRTCInterface(d.logger, nil)
 		vnicHost, err := vnic.New(d.logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
 		if err != nil {
 			return nil, err

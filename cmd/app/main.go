@@ -82,13 +82,13 @@ func main() {
 
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
-		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
+		wrtc := vnic.NewWebRTCInterface(
 			logger,
-			&vnic.WebRTCDialerOptions{
+			&vnic.WebRTCInterfaceOptions{
 				PortMin: uint16(webRTCPortMin),
 				PortMax: uint16(webRTCPortMax),
 			},
-		))
+		)
 		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
 		if err != nil {
 			return nil, err

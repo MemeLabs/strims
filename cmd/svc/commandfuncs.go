@@ -75,7 +75,7 @@ func runCmd(fs Flags) error {
 		})
 	}
 
-	webRTCOpts := &vnic.WebRTCDialerOptions{
+	webRTCOpts := &vnic.WebRTCInterfaceOptions{
 		ICEServers:    cfg.VNIC.WebRTC.ICEServers.Get(nil),
 		PortMin:       cfg.VNIC.WebRTC.PortMin,
 		PortMax:       cfg.VNIC.WebRTC.PortMax,
@@ -103,24 +103,46 @@ func runCmd(fs Flags) error {
 		}
 	}
 
-	httpmux := httputil.NewMapServeMux()
+	httpMux := httputil.NewMapServeMux()
+
+	wsOpts := vnic.WSInterfaceOptions{}
+	if cfg.HTTP.Address.Ok() {
+		wsOpts.ServeMux = httpMux
+		wsOpts.Address = cfg.HTTP.Address.MustGet()
+		wsOpts.Secure = cfg.HTTP.TLS.Cert.Ok() && cfg.HTTP.TLS.Key.Ok()
+		wsOpts.ConnOptions = httputil.WSOptions{
+			WriteTimeout: cfg.VNIC.WebSocket.WriteTimeout.Get(cfg.HTTP.WebSocket.WriteTimeout.Get(0)),
+			ReadTimeout:  cfg.VNIC.WebSocket.ReadTimeout.Get(cfg.HTTP.WebSocket.ReadTimeout.Get(0)),
+			PingInterval: cfg.VNIC.WebSocket.PingInterval.Get(cfg.HTTP.WebSocket.PingInterval.Get(0)),
+		}
+		if h := fs.String("public-hostname"); h != "" {
+			wsOpts.PublicHostname = h
+		} else if h := fs.String("host-ip"); h != "" {
+			wsOpts.PublicHostname = h
+		}
+		if p, err := fs.Int("public-http-port"); err != nil {
+			return err
+		} else if p != 0 {
+			wsOpts.PublicPort = uint16(p)
+		}
+	}
+
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		var opts []vnic.HostOption
 		if cfg.VNIC.Label.Ok() {
 			opts = append(opts, vnic.WithLabel(cfg.VNIC.Label.MustGet()))
 		}
-		if cfg.VNIC.WebRTC.Enabled.Get(true) {
-			opts = append(opts, vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, webRTCOpts))))
+		if cfg.VNIC.TCP.Enabled.Get(true) {
+			opts = append(opts, vnic.WithInterface(vnic.NewTCPInterface(logger, vnic.TCPInterfaceOptions{
+				Address: cfg.VNIC.TCP.Address.Get(""),
+				HostIP:  fs.String("host-ip"),
+			})))
 		}
 		if cfg.VNIC.WebSocket.Enabled.Get(true) {
-			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{
-				ServeMux: httpmux,
-				ConnOptions: httputil.WSOptions{
-					WriteTimeout: cfg.VNIC.WebSocket.WriteTimeout.Get(cfg.HTTP.WebSocket.WriteTimeout.Get(0)),
-					ReadTimeout:  cfg.VNIC.WebSocket.ReadTimeout.Get(cfg.HTTP.WebSocket.ReadTimeout.Get(0)),
-					PingInterval: cfg.VNIC.WebSocket.PingInterval.Get(cfg.HTTP.WebSocket.PingInterval.Get(0)),
-				},
-			})))
+			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, wsOpts)))
+		}
+		if cfg.VNIC.WebRTC.Enabled.Get(true) {
+			opts = append(opts, vnic.WithInterface(vnic.NewWebRTCInterface(logger, webRTCOpts)))
 		}
 		host, err := vnic.New(logger, key, opts...)
 		if err != nil {
@@ -141,7 +163,7 @@ func runCmd(fs Flags) error {
 	}
 	closers = append(closers, queue)
 
-	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpmux)
+	sessionManager := session.NewManager(logger, store, queue, newVPN, network.NewBroker(logger), httpMux)
 
 	for _, s := range cfg.Session.Headless {
 		_, err := sessionManager.GetOrCreateSession(s.ID, s.Key)
@@ -157,7 +179,7 @@ func runCmd(fs Flags) error {
 			SessionManager: sessionManager,
 		}
 
-		httpmux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
+		httpMux.HandleFunc("/api", session.KeyHandler(func(ctx context.Context, c *websocket.Conn) {
 			err := srv.Listen(ctx, httputil.NewWSReadWriter(c, httputil.WSOptions{
 				WriteTimeout: cfg.HTTP.WebSocket.WriteTimeout.Get(0),
 				ReadTimeout:  cfg.HTTP.WebSocket.ReadTimeout.Get(0),
@@ -171,7 +193,7 @@ func runCmd(fs Flags) error {
 		eg.Go(func() (err error) {
 			srv := &http.Server{
 				Addr:    cfg.HTTP.Address.MustGet(),
-				Handler: httpmux,
+				Handler: httpMux,
 			}
 			closers = append(closers, srv)
 
