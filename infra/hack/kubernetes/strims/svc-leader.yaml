@@ -36,9 +36,8 @@ spec:
       - name: strims
         image: ghcr.io/memelabs/strims/svc:latest
         imagePullPolicy: Always
-        command: ["sh", "-c"]
         args:
-        - /app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        - run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
         ports:
         - name: metrics
           containerPort: 1971

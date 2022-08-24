@@ -1,5 +1,5 @@
 baseImageOverrides:
-  github.com/MemeLabs/strims/cmd/svc: linuxserver/ffmpeg:latest
+  github.com/MemeLabs/strims/cmd/svc: ghcr.io/memelabs/strims/ffmpeg:latest
 builds:
   - id: svc
     main: ./cmd/svc/
