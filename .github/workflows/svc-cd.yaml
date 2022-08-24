@@ -37,4 +37,10 @@ jobs:
       - name: Build and push
         env:
           KO_DOCKER_REPO: ghcr.io/memelabs/strims
-        run: ko build --tags=${{ contains(github.ref_name, 'dev') && 'dev' || 'latest' }} --platform=linux/amd64,linux/arm64 --base-import-paths ./cmd/svc/
+        run: >
+          ko build          
+          ${{ github.event_name == 'pull_request' && '--local' || '' }}
+          --tags=${{ contains(github.ref_name, 'dev') && 'dev' || 'latest' }}
+          --platform=linux/amd64,linux/arm64
+          --base-import-paths
+          ./cmd/svc/
