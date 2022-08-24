@@ -678,8 +678,13 @@ export class WorkerBridge extends EventEmitter {
     };
   }
 
-  public openWebSocket(uri: string, proxy: ChannelGoProxy): number {
-    const ws = new WebSocket(uri);
+  public openWebSocket(uri: string, proxy: ChannelGoProxy): number | string {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(uri);
+    } catch (e) {
+      return String(e instanceof Error ? e.message : "unknown websocket error");
+    }
 
     const handleVisibilityChange = (e: VisibilityChangeEvent) => {
       if (!e.hidden && (ws.readyState > 1 || e.forceHUP)) {

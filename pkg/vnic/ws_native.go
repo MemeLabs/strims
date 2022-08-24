@@ -33,6 +33,7 @@ type WSInterfaceOptions struct {
 	PublicHostname string
 	PublicPort     uint16
 	Secure         bool
+	AllowInsecure  bool
 	ConnOptions    httputil.WSOptions
 }
 
@@ -52,7 +53,7 @@ type wsInterface struct {
 }
 
 func (f *wsInterface) ValidScheme(scheme string) bool {
-	return scheme == "ws" || scheme == "wss"
+	return scheme == "wss" || (f.options.AllowInsecure && scheme == "ws")
 }
 
 func (f *wsInterface) Listen(h *Host) error {

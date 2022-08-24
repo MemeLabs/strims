@@ -37,7 +37,7 @@ type wsInterface struct {
 
 // ValidScheme ...
 func (f *wsInterface) ValidScheme(scheme string) bool {
-	return scheme == "ws" || scheme == "wss"
+	return scheme == "wss"
 }
 
 func (f *wsInterface) Dial(uri string) (Link, error) {

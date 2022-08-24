@@ -45,7 +45,6 @@ func init() {
 			fs.String("config", "", "Configuration file")
 			fs.String("host-ip", "", "Public IP address")
 			fs.String("public-hostname", "", "Public domain name")
-			fs.String("public-http-port", "", "Public HTTP port")
 			return fs
 		}(),
 	})

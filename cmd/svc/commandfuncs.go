@@ -109,7 +109,8 @@ func runCmd(fs Flags) error {
 	if cfg.HTTP.Address.Ok() {
 		wsOpts.ServeMux = httpMux
 		wsOpts.Address = cfg.HTTP.Address.MustGet()
-		wsOpts.Secure = cfg.HTTP.TLS.Cert.Ok() && cfg.HTTP.TLS.Key.Ok()
+		wsOpts.Secure = (cfg.HTTP.TLS.Cert.Ok() && cfg.HTTP.TLS.Key.Ok()) || cfg.VNIC.WebSocket.PublicTLS.Get(false)
+		wsOpts.AllowInsecure = cfg.VNIC.WebSocket.AllowInsecure
 		wsOpts.ConnOptions = httputil.WSOptions{
 			WriteTimeout: cfg.VNIC.WebSocket.WriteTimeout.Get(cfg.HTTP.WebSocket.WriteTimeout.Get(0)),
 			ReadTimeout:  cfg.VNIC.WebSocket.ReadTimeout.Get(cfg.HTTP.WebSocket.ReadTimeout.Get(0)),
@@ -120,10 +121,8 @@ func runCmd(fs Flags) error {
 		} else if h := fs.String("host-ip"); h != "" {
 			wsOpts.PublicHostname = h
 		}
-		if p, err := fs.Int("public-http-port"); err != nil {
-			return err
-		} else if p != 0 {
-			wsOpts.PublicPort = uint16(p)
+		if cfg.VNIC.WebSocket.PublicPort.Ok() {
+			wsOpts.PublicPort = cfg.VNIC.WebSocket.PublicPort.MustGet()
 		}
 	}
 
