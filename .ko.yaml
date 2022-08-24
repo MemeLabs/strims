@@ -1,0 +1,11 @@
+baseImageOverrides:
+  github.com/MemeLabs/strims/cmd/svc: linuxserver/ffmpeg:latest
+builds:
+  - id: svc
+    main: ./cmd/svc/
+    flags:
+      - -trimpath
+      - -mod=readonly
+    env:
+      - CGO_ENABLED=0
+      - GOAMD64=v3
