@@ -101,7 +101,7 @@ func (s *peerExchange) handleLinkOffer(offer *vpnv1.PeerExchangeMessage_LinkOffe
 
 	connected, err := candidates.SetRemoteDescriptions(offer.Descriptions)
 	if err != nil {
-		return
+		logger.Warn("error setting remote descriptions", zap.Error(err))
 	}
 	if connected {
 		s.sendAnswer(msg.SrcHostID(), offer.ExchangeId, nil, nil)

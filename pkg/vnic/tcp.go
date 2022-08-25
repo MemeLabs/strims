@@ -161,12 +161,8 @@ func (f *tcpLinkCandidate) LocalDescription() (*vnicv1.LinkDescription, error) {
 }
 
 func (f *tcpLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
-	c, err := f.iface.Dial(d.Description)
-	if err != nil {
-		return false, err
-	}
-	f.host.AddLink(c)
-	return true, nil
+	err := f.host.Dial(d.Description)
+	return err == nil, err
 }
 
 type tcpConn struct {
