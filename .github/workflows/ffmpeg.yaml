@@ -17,11 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Docker login
-        uses: docker/login-action@v2
+      - uses: docker/setup-qemu-action@v2
+      - uses: distroless/actions/apko-publish@main
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
-        run: docker run -v "$PWD:/work" -v "$HOME/.docker:/root/.docker" distroless.dev/apko publish hack/ffmpeg/ffmpeg.yaml ghcr.io/memelabs/strims/ffmpeg:latest --debug
+          config: hack/ffmpeg/ffmpeg.yaml
+          tag: ghcr.io/memelabs/strims/ffmpeg:latest
