@@ -1,10 +1,6 @@
-name: ffmpeg
+name: build base ffmpeg image
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/ffmpeg.yaml'
-      - 'hack/ffmpeg/ffmpeg.yaml'
   push:
     branches: ['main']
     paths:
