@@ -1,0 +1,19 @@
+contents:
+  repositories:
+    - https://dl-cdn.alpinelinux.org/alpine/latest-stable/main
+    - https://dl-cdn.alpinelinux.org/alpine/latest-stable/community
+  packages:
+    - alpine-baselayout
+    - ffmpeg
+accounts:
+  groups:
+    - groupname: svc
+      gid: 10000
+  users:
+    - username: svc
+      uid: 10000
+  run-as: svc
+
+archs:
+  - amd64
+  - arm64

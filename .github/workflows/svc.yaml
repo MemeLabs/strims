@@ -1,0 +1,46 @@
+name: svc
+
+on:
+  pull_request:
+  push:
+    paths:
+      - '.github/workflows/svc.yaml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/svc/**'
+      - 'pkg/**'
+      - 'internal/**'
+    branches: [ main, dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+          stable: false
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: install ko
+        run: go install github.com/google/ko@latest
+      - name: Build and push
+        env:
+          KO_DOCKER_REPO: ghcr.io/memelabs/strims
+        run: >
+          ko build
+          ${{ github.event_name == 'pull_request' && '--local' || '' }}
+          --tags=${{ contains(github.ref_name, 'dev') && 'dev' || 'latest' }}
+          --platform=linux/amd64,linux/arm64
+          --base-import-paths
+          ./cmd/svc/
