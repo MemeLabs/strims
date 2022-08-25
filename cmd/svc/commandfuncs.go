@@ -105,12 +105,13 @@ func runCmd(fs Flags) error {
 
 	httpMux := httputil.NewMapServeMux()
 
-	wsOpts := vnic.WSInterfaceOptions{}
+	wsOpts := vnic.WSInterfaceOptions{
+		AllowInsecure: cfg.VNIC.WebSocket.AllowInsecure,
+	}
 	if cfg.HTTP.Address.Ok() {
 		wsOpts.ServeMux = httpMux
 		wsOpts.Address = cfg.HTTP.Address.MustGet()
 		wsOpts.Secure = (cfg.HTTP.TLS.Cert.Ok() && cfg.HTTP.TLS.Key.Ok()) || cfg.VNIC.WebSocket.PublicTLS.Get(false)
-		wsOpts.AllowInsecure = cfg.VNIC.WebSocket.AllowInsecure
 		wsOpts.ConnOptions = httputil.WSOptions{
 			WriteTimeout: cfg.VNIC.WebSocket.WriteTimeout.Get(cfg.HTTP.WebSocket.WriteTimeout.Get(0)),
 			ReadTimeout:  cfg.VNIC.WebSocket.ReadTimeout.Get(cfg.HTTP.WebSocket.ReadTimeout.Get(0)),
