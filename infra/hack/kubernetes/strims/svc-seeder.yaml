@@ -21,7 +21,7 @@ spec:
         imagePullPolicy: Always
         command: ["sh", "-c"]
         args:
-        - /app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        - /ko-app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
         ports:
         - name: metrics
           containerPort: 1971

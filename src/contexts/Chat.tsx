@@ -509,7 +509,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
       case WatchUIConfigResponse.ConfigCase.UI_CONFIG:
         return {
           ...state,
-          UIConfig: res.config.uiConfig,
+          uiConfig: res.config.uiConfig,
           config: {
             ...state.config,
             messageGCThreshold: res.config.uiConfig.maxLines,

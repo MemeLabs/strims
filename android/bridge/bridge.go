@@ -68,7 +68,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(logger, vnic.WSInterfaceOptions{})
-		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
+		wrtc := vnic.NewWebRTCInterface(logger, nil)
 		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
 		if err != nil {
 			return nil, err

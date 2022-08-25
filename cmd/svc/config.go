@@ -145,7 +145,14 @@ type PeerConfig struct {
 		WebSocket struct {
 			Enabled Optional[bool] `yaml:"enabled"`
 			WebSocketConfig
+			AllowInsecure bool             `yaml:"allowInsecure"`
+			PublicPort    Optional[uint16] `yaml:"publicPort"`
+			PublicTLS     Optional[bool]   `yaml:"publicTLS"`
 		} `yaml:"websocket"`
+		TCP struct {
+			Enabled Optional[bool]   `yaml:"enabled"`
+			Address Optional[string] `yaml:"address"`
+		} `yaml:"tcp"`
 	} `yaml:"vnic"`
 }
 

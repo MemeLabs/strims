@@ -6,6 +6,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"net/url"
 	"sync"
 	"time"
 
@@ -142,17 +143,25 @@ func (t *control) startClients() {
 
 func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
 	var err error
-	switch client := client.ClientOptions.(type) {
+	switch opt := client.ClientOptions.(type) {
 	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
-		err = t.vpn.VNIC().Dial(vnic.WebSocketAddr{
-			URL:                   client.WebsocketOptions.Url,
-			InsecureSkipVerifyTLS: client.WebsocketOptions.InsecureSkipVerifyTls,
-		})
+		err = t.startWSClient(opt.WebsocketOptions)
 	}
 
 	if err != nil {
 		t.logger.Debug("starting bootstrap client failed", zap.Error(err))
 	}
+}
+
+func (t *control) startWSClient(opt *networkv1bootstrap.BootstrapClientWebSocketOptions) error {
+	u, err := url.Parse(opt.Url)
+	if err != nil {
+		return err
+	}
+	if opt.InsecureSkipVerifyTls {
+		u.Fragment = "insecure"
+	}
+	return t.vpn.VNIC().Dial(u.String())
 }
 
 // PublishingEnabled ...

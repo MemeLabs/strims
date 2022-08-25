@@ -7,6 +7,7 @@ package wasmio
 
 import (
 	"errors"
+	"fmt"
 	"syscall/js"
 
 	"github.com/MemeLabs/strims/pkg/pool"
@@ -39,7 +40,16 @@ func newChannel(mtu int, bridge js.Value, method string, args ...any) (*channel,
 	proxy.Set("ondata", p.funcs.Register(js.FuncOf(p.onData)))
 	proxy.Set("onclose", p.funcs.Register(js.FuncOf(p.onClose)))
 	proxy.Set("onerror", p.funcs.Register(js.FuncOf(p.onError)))
-	p.id = bridge.Call(method, append(args, proxy)...).Int()
+
+	res := bridge.Call(method, append(args, proxy)...)
+	switch res.Type() {
+	case js.TypeNumber:
+		p.id = res.Int()
+	case js.TypeString:
+		return nil, fmt.Errorf("error opening channel: %s", res.String())
+	default:
+		return nil, errors.New("error opening channel: unexpected return type")
+	}
 
 	<-p.q
 

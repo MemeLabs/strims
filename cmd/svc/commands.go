@@ -44,6 +44,7 @@ func init() {
 			fs := flag.NewFlagSet("run", flag.ExitOnError)
 			fs.String("config", "", "Configuration file")
 			fs.String("host-ip", "", "Public IP address")
+			fs.String("public-hostname", "", "Public domain name")
 			return fs
 		}(),
 	})

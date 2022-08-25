@@ -4,10 +4,12 @@
 package vnic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"reflect"
 	"sync"
 	"time"
@@ -15,12 +17,14 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
@@ -148,6 +152,23 @@ func (h *Host) Close() {
 		p.Close()
 		delete(h.peers, k)
 	}
+}
+
+func (h *Host) LinkCandidates(ctx context.Context) (*LinkCandidatePool, error) {
+	var cs []LinkCandidate
+	var errs []error
+	for _, i := range h.interfaces {
+		c, err := i.CreateLinkCandidate(ctx, h)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			cs = append(cs, c)
+		}
+	}
+	if len(cs) == 0 {
+		return nil, multierr.Combine(errs...)
+	}
+	return &LinkCandidatePool{cs}, nil
 }
 
 // ID ...
@@ -308,35 +329,40 @@ func (h *Host) handlePeer(p *Peer) {
 	}
 }
 
-func (h *Host) dialer(scheme string) Interface {
-	for _, i := range h.interfaces {
-		if i.ValidScheme(scheme) {
-			return i
+func (h *Host) dialer(scheme string) LinkDialer {
+	for _, ii := range h.interfaces {
+		if i, ok := ii.(LinkDialer); ok {
+			if i.ValidScheme(scheme) {
+				return i
+			}
 		}
 	}
 	return nil
 }
 
 // Dial ...
-func (h *Host) Dial(addr InterfaceAddr) error {
-	scheme := addr.Scheme()
+func (h *Host) Dial(uri string) error {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return err
+	}
 
-	dialCount.WithLabelValues(scheme).Inc()
+	dialCount.WithLabelValues(u.Scheme).Inc()
 	h.logger.Debug(
 		"dialing",
-		zap.String("scheme", scheme),
-		zap.Stringer("addr", addr.(fmt.Stringer)),
+		zap.String("scheme", u.Scheme),
+		zap.String("uri", uri),
 	)
 
-	d := h.dialer(scheme)
+	d := h.dialer(u.Scheme)
 	if d == nil {
-		dialErrorCount.WithLabelValues(scheme).Inc()
+		dialErrorCount.WithLabelValues(u.Scheme).Inc()
 		return errors.New("unsupported scheme")
 	}
 
-	c, err := d.Dial(addr)
+	c, err := d.Dial(uri)
 	if err != nil {
-		dialErrorCount.WithLabelValues(scheme).Inc()
+		dialErrorCount.WithLabelValues(u.Scheme).Inc()
 		h.logger.Error("dial error", zap.Error(err))
 		return err
 	}
@@ -359,15 +385,18 @@ func WithInterface(i Interface) HostOption {
 	}
 }
 
-// Interface ...
 type Interface interface {
-	ValidScheme(string) bool
-	Dial(addr InterfaceAddr) (Link, error)
+	CreateLinkCandidate(ctx context.Context, h *Host) (LinkCandidate, error)
 }
 
-// InterfaceAddr ...
-type InterfaceAddr interface {
-	Scheme() string
+type LinkDialer interface {
+	ValidScheme(scheme string) bool
+	Dial(addr string) (Link, error)
+}
+
+type LinkCandidate interface {
+	LocalDescription() (*vnicv1.LinkDescription, error)
+	SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error)
 }
 
 // Link ...

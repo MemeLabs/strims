@@ -197,7 +197,6 @@ func (t *control) Run() {
 }
 
 func (t *control) startNetworks() error {
-
 	networks, err := dao.Networks.GetAll(t.store)
 	if err != nil {
 		t.logger.Fatal("loading networks failed", zap.Error(err))

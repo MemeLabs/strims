@@ -99,7 +99,7 @@ func initDefault(bridge js.Value, bus wasmio.Bus) {
 
 	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		ws := vnic.NewWSInterface(logger, bridge)
-		wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
+		wrtc := vnic.NewWebRTCInterface(logger, bridge)
 		vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
 		if err != nil {
 			return nil, err

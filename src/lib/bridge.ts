@@ -83,6 +83,7 @@ type WebRTCWorkerEvent =
   | {
       type: EventType.CREATE_DATA_CHANNEL;
       label: string;
+      options: string;
     }
   | {
       type: EventType.ADD_ICE_CANDIDATE;
@@ -422,7 +423,12 @@ export class WindowBridge extends EventEmitter {
             });
           break;
         case EventType.CREATE_DATA_CHANNEL:
-          handleDataChannel(peerConnection.createDataChannel(data.label));
+          handleDataChannel(
+            peerConnection.createDataChannel(
+              data.label,
+              JSON.parse(data.options) as RTCDataChannelInit
+            )
+          );
           break;
         case EventType.ADD_ICE_CANDIDATE:
           void peerConnection.addIceCandidate(
@@ -545,7 +551,7 @@ export interface WebRTCGoProxy {
 interface WebRTCProxy {
   createOffer: () => void;
   createAnswer: () => void;
-  createDataChannel: (label: string) => void;
+  createDataChannel: (label: string, options: string) => void;
   addIceCandidate: (candidate: string) => void;
   setLocalDescription: (description: string) => void;
   setRemoteDescription: (description: string) => void;
@@ -672,8 +678,13 @@ export class WorkerBridge extends EventEmitter {
     };
   }
 
-  public openWebSocket(uri: string, proxy: ChannelGoProxy): number {
-    const ws = new WebSocket(uri);
+  public openWebSocket(uri: string, proxy: ChannelGoProxy): number | string {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(uri);
+    } catch (e) {
+      return String(e instanceof Error ? e.message : "unknown websocket error");
+    }
 
     const handleVisibilityChange = (e: VisibilityChangeEvent) => {
       if (!e.hidden && (ws.readyState > 1 || e.forceHUP)) {
@@ -773,10 +784,11 @@ export class WorkerBridge extends EventEmitter {
         port1.postMessage({
           type: EventType.CREATE_ANSWER,
         }),
-      createDataChannel: (label: string) =>
+      createDataChannel: (label: string, options: string) =>
         port1.postMessage({
           type: EventType.CREATE_DATA_CHANNEL,
           label,
+          options,
         }),
       addIceCandidate: (candidate: string) =>
         port1.postMessage({

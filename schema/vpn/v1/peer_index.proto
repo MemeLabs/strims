@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package strims.vpn.v1;
 
-option go_package = "github.com/MemeLabs/strims/pkg/apis/vpn/v1;vpn";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/vpn/v1;vpnv1";
 option java_package = "gg.strims.vpn.v1";
 option swift_prefix = "SVN";
 

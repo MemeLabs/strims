@@ -10,6 +10,12 @@ type Map[K comparable, V any] struct {
 	m  map[K]V
 }
 
+func (m *Map[K, V]) Len() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.m)
+}
+
 func (m *Map[K, V]) Get(k K) (v V, ok bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -23,6 +29,19 @@ func (m *Map[K, V]) GetAndDelete(k K) (v V, ok bool) {
 	v, ok = m.m[k]
 	delete(m.m, k)
 	return
+}
+
+func (m *Map[K, V]) GetOrInsert(k K, iv V) (v V, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.m == nil {
+		m.m = map[K]V{}
+	}
+	if v, ok = m.m[k]; ok {
+		return v, true
+	}
+	m.m[k] = iv
+	return iv, false
 }
 
 func (m *Map[K, V]) Set(k K, v V) {

@@ -294,6 +294,7 @@ const Composer: React.FC<ComposerProps> = ({
       eventOptions: {
         capture: true,
       },
+      keys: false,
     }
   );
 

@@ -6,6 +6,49 @@ import {
   strims_type_ICertificate,
 } from "../../type/certificate";
 
+export type ILinkDescription = {
+  interface?: string;
+  description?: string;
+}
+
+export class LinkDescription {
+  interface: string;
+  description: string;
+
+  constructor(v?: ILinkDescription) {
+    this.interface = v?.interface || "";
+    this.description = v?.description || "";
+  }
+
+  static encode(m: LinkDescription, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.interface.length) w.uint32(10).string(m.interface);
+    if (m.description.length) w.uint32(18).string(m.description);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): LinkDescription {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new LinkDescription();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.interface = r.string();
+        break;
+        case 2:
+        m.description = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IPeerInit = {
   protocolVersion?: number;
   certificate?: strims_type_ICertificate;
@@ -233,6 +276,12 @@ export class SetConfigResponse {
   }
 }
 
+/* @internal */
+export const strims_vnic_v1_LinkDescription = LinkDescription;
+/* @internal */
+export type strims_vnic_v1_LinkDescription = LinkDescription;
+/* @internal */
+export type strims_vnic_v1_ILinkDescription = ILinkDescription;
 /* @internal */
 export const strims_vnic_v1_PeerInit = PeerInit;
 /* @internal */

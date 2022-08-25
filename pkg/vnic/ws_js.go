@@ -6,11 +6,19 @@
 package vnic
 
 import (
+	"context"
 	"syscall/js"
 
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/wasmio"
 	"go.uber.org/zap"
 )
+
+func init() { RegisterLinkInterface("ws", (*wsLinkCandidate)(nil)) }
+
+var _ Interface = (*wsInterface)(nil)
+var _ LinkDialer = (*wsInterface)(nil)
+var _ LinkCandidate = (*wsLinkCandidate)(nil)
 
 // NewWSInterface ...
 func NewWSInterface(logger *zap.Logger, bridge js.Value) Interface {
@@ -27,12 +35,28 @@ type wsInterface struct {
 }
 
 // ValidScheme ...
-func (d *wsInterface) ValidScheme(scheme string) bool {
-	return scheme == "ws" || scheme == "wss"
+func (f *wsInterface) ValidScheme(scheme string) bool {
+	return scheme == "wss"
 }
 
-// Dial ...
-func (d *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
-	url := addr.(WebSocketAddr).String()
-	return wasmio.NewWebSocketProxy(d.bridge, url)
+func (f *wsInterface) Dial(uri string) (Link, error) {
+	return wasmio.NewWebSocketProxy(f.bridge, uri)
+}
+
+func (f *wsInterface) CreateLinkCandidate(ctx context.Context, h *Host) (LinkCandidate, error) {
+	return &wsLinkCandidate{f, h}, nil
+}
+
+type wsLinkCandidate struct {
+	iface *wsInterface
+	host  *Host
+}
+
+func (f *wsLinkCandidate) LocalDescription() (*vnicv1.LinkDescription, error) {
+	return nil, nil
+}
+
+func (f *wsLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
+	err := f.host.Dial(d.Description)
+	return err == nil, err
 }

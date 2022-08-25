@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
+	"github.com/iancoleman/strcase"
+	"github.com/joho/godotenv"
 	"golang.org/x/exp/slices"
 )
 
@@ -26,6 +29,11 @@ func main() {
 }
 
 func run() (int, error) {
+	err := godotenv.Load()
+	if err != nil && !os.IsNotExist(err) {
+		return 1, err
+	}
+
 	args := slices.Clone(os.Args)
 	switch len(args) {
 	case 0:
@@ -45,7 +53,7 @@ func run() (int, error) {
 		fs = flag.NewFlagSet(cn, flag.ExitOnError)
 	}
 
-	err := fs.Parse(args[2:])
+	err = fs.Parse(args[2:])
 	if err != nil {
 		return 1, err
 	}
@@ -58,9 +66,22 @@ func run() (int, error) {
 }
 
 type Flags struct {
-	*flag.FlagSet
+	fs *flag.FlagSet
 }
 
 func (f Flags) String(name string) string {
-	return f.Lookup(name).Value.String()
+	if v := f.fs.Lookup(name).Value.String(); v != "" {
+		return v
+	}
+	if v, ok := os.LookupEnv(strcase.ToScreamingSnake(name)); ok {
+		return v
+	}
+	return ""
+}
+
+func (f Flags) Int(name string) (int, error) {
+	if v := f.String(name); v != "" {
+		return strconv.Atoi(v)
+	}
+	return 0, nil
 }
