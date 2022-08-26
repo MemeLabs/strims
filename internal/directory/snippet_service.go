@@ -18,6 +18,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/event"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -28,7 +29,7 @@ type snippetServer struct {
 	dialer   network.Dialer
 	transfer transfer.Control
 	snippets *snippetMap
-	servers  map[uint64]context.CancelFunc
+	servers  syncutil.Map[uint64, context.CancelFunc]
 }
 
 func (s *snippetServer) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
@@ -66,14 +67,13 @@ func (s *snippetServer) start(ctx context.Context, network *networkv1.Network) {
 		)
 	}()
 
-	s.servers[network.Id] = cancel
+	s.servers.Set(network.Id, cancel)
 
 	// s.dialer.ServerDialer(networkKey []byte, port uint16, publisher dialer.HostAddrPublisher)
 }
 
 func (s *snippetServer) stop(id uint64) {
-	if cancel, ok := s.servers[id]; ok {
-		delete(s.servers, id)
+	if cancel, ok := s.servers.GetAndDelete(id); ok {
 		cancel()
 	}
 }

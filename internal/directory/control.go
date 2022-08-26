@@ -144,7 +144,6 @@ func NewControl(
 			dialer:   network.Dialer(),
 			transfer: transfer,
 			snippets: snippets,
-			servers:  map[uint64]context.CancelFunc{},
 		},
 	}
 }
