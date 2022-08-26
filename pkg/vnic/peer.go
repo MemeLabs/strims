@@ -138,7 +138,7 @@ func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
 		atomic.StoreUint32(&p.closed, 1)
 		p.close()
-		deleteInstrumentedLinkMetrics(p.hostID)
+		deleteInstrumentedLinkMetrics(p.Link, p.hostID)
 
 		p.channelsLock.Lock()
 		defer p.channelsLock.Unlock()
