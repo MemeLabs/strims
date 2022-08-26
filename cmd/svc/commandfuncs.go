@@ -75,6 +75,25 @@ func runCmd(fs Flags) error {
 		})
 	}
 
+	tcpOpts := vnic.TCPInterfaceOptions{
+		Address:         cfg.VNIC.TCP.Address.Get(""),
+		HostIP:          fs.String("host-ip"),
+		KeepAlivePeriod: cfg.VNIC.TCP.KeepAlivePeriod,
+		ReadBufferSize:  cfg.VNIC.TCP.ReadBufferSize,
+		WriteBufferSize: cfg.VNIC.TCP.WriteBufferSize,
+		ReadTimeout:     cfg.VNIC.TCP.ReadTimeout,
+		WriteTimeout:    cfg.VNIC.TCP.WriteTimeout,
+	}
+	if cfg.VNIC.TCP.Enabled.Get(true) && cfg.VNIC.TCP.Address.Ok() {
+		mux, lis, err := vnic.NewTCPMux(logger, cfg.VNIC.TCP.Address.MustGet())
+		if err != nil {
+			return fmt.Errorf("creating tcp mux: %w", err)
+		}
+		logger.Debug("tcp mux started", zap.Stringer("address", lis.Addr()))
+		closers = append(closers, lis)
+		tcpOpts.Mux = mux
+	}
+
 	webRTCOpts := &vnic.WebRTCInterfaceOptions{
 		ICEServers:    cfg.VNIC.WebRTC.ICEServers.Get(nil),
 		PortMin:       cfg.VNIC.WebRTC.PortMin,
@@ -133,10 +152,7 @@ func runCmd(fs Flags) error {
 			opts = append(opts, vnic.WithLabel(cfg.VNIC.Label.MustGet()))
 		}
 		if cfg.VNIC.TCP.Enabled.Get(true) {
-			opts = append(opts, vnic.WithInterface(vnic.NewTCPInterface(logger, vnic.TCPInterfaceOptions{
-				Address: cfg.VNIC.TCP.Address.Get(""),
-				HostIP:  fs.String("host-ip"),
-			})))
+			opts = append(opts, vnic.WithInterface(vnic.NewTCPInterface(logger, tcpOpts)))
 		}
 		if cfg.VNIC.WebSocket.Enabled.Get(true) {
 			opts = append(opts, vnic.WithInterface(vnic.NewWSInterface(logger, wsOpts)))

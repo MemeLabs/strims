@@ -150,8 +150,13 @@ type PeerConfig struct {
 			PublicTLS     Optional[bool]   `yaml:"publicTLS"`
 		} `yaml:"websocket"`
 		TCP struct {
-			Enabled Optional[bool]   `yaml:"enabled"`
-			Address Optional[string] `yaml:"address"`
+			Enabled         Optional[bool]   `yaml:"enabled"`
+			Address         Optional[string] `yaml:"address"`
+			KeepAlivePeriod time.Duration    `yaml:"keepAlivePeriod"`
+			ReadBufferSize  int              `yaml:"readBufferSize"`
+			WriteBufferSize int              `yaml:"writeBufferSize"`
+			ReadTimeout     time.Duration    `yaml:"readTimeout"`
+			WriteTimeout    time.Duration    `yaml:"writeTimeout"`
 		} `yaml:"tcp"`
 	} `yaml:"vnic"`
 }

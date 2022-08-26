@@ -79,6 +79,124 @@ func (x *LinkDescription) GetDescription() string {
 	return ""
 }
 
+type TCPMuxInit struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ProtocolVersion uint32 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	PeerKey         []byte `protobuf:"bytes,2,opt,name=peer_key,json=peerKey,proto3" json:"peer_key,omitempty"`
+}
+
+func (x *TCPMuxInit) Reset() {
+	*x = TCPMuxInit{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vnic_v1_vnic_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TCPMuxInit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TCPMuxInit) ProtoMessage() {}
+
+func (x *TCPMuxInit) ProtoReflect() protoreflect.Message {
+	mi := &file_vnic_v1_vnic_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TCPMuxInit.ProtoReflect.Descriptor instead.
+func (*TCPMuxInit) Descriptor() ([]byte, []int) {
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TCPMuxInit) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *TCPMuxInit) GetPeerKey() []byte {
+	if x != nil {
+		return x.PeerKey
+	}
+	return nil
+}
+
+type AESLinkInit struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ProtocolVersion uint32 `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Key             []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Iv              []byte `protobuf:"bytes,3,opt,name=iv,proto3" json:"iv,omitempty"`
+}
+
+func (x *AESLinkInit) Reset() {
+	*x = AESLinkInit{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vnic_v1_vnic_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AESLinkInit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AESLinkInit) ProtoMessage() {}
+
+func (x *AESLinkInit) ProtoReflect() protoreflect.Message {
+	mi := &file_vnic_v1_vnic_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AESLinkInit.ProtoReflect.Descriptor instead.
+func (*AESLinkInit) Descriptor() ([]byte, []int) {
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AESLinkInit) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
+func (x *AESLinkInit) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *AESLinkInit) GetIv() []byte {
+	if x != nil {
+		return x.Iv
+	}
+	return nil
+}
+
 type PeerInit struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -93,7 +211,7 @@ type PeerInit struct {
 func (x *PeerInit) Reset() {
 	*x = PeerInit{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[1]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -106,7 +224,7 @@ func (x *PeerInit) String() string {
 func (*PeerInit) ProtoMessage() {}
 
 func (x *PeerInit) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[1]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -119,7 +237,7 @@ func (x *PeerInit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerInit.ProtoReflect.Descriptor instead.
 func (*PeerInit) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{1}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PeerInit) GetProtocolVersion() uint32 {
@@ -162,7 +280,7 @@ type Config struct {
 func (x *Config) Reset() {
 	*x = Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[2]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -175,7 +293,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[2]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -188,7 +306,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{2}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Config) GetMaxUploadBytesPerSecond() uint64 {
@@ -214,7 +332,7 @@ type GetConfigRequest struct {
 func (x *GetConfigRequest) Reset() {
 	*x = GetConfigRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[3]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -227,7 +345,7 @@ func (x *GetConfigRequest) String() string {
 func (*GetConfigRequest) ProtoMessage() {}
 
 func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[3]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +358,7 @@ func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{3}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{5}
 }
 
 type GetConfigResponse struct {
@@ -254,7 +372,7 @@ type GetConfigResponse struct {
 func (x *GetConfigResponse) Reset() {
 	*x = GetConfigResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[4]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -267,7 +385,7 @@ func (x *GetConfigResponse) String() string {
 func (*GetConfigResponse) ProtoMessage() {}
 
 func (x *GetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[4]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +398,7 @@ func (x *GetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigResponse.ProtoReflect.Descriptor instead.
 func (*GetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{4}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetConfigResponse) GetConfig() *Config {
@@ -301,7 +419,7 @@ type SetConfigRequest struct {
 func (x *SetConfigRequest) Reset() {
 	*x = SetConfigRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[5]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -314,7 +432,7 @@ func (x *SetConfigRequest) String() string {
 func (*SetConfigRequest) ProtoMessage() {}
 
 func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[5]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -327,7 +445,7 @@ func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConfigRequest.ProtoReflect.Descriptor instead.
 func (*SetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{5}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetConfigRequest) GetConfig() *Config {
@@ -348,7 +466,7 @@ type SetConfigResponse struct {
 func (x *SetConfigResponse) Reset() {
 	*x = SetConfigResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vnic_v1_vnic_proto_msgTypes[6]
+		mi := &file_vnic_v1_vnic_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -361,7 +479,7 @@ func (x *SetConfigResponse) String() string {
 func (*SetConfigResponse) ProtoMessage() {}
 
 func (x *SetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vnic_v1_vnic_proto_msgTypes[6]
+	mi := &file_vnic_v1_vnic_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -374,7 +492,7 @@ func (x *SetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConfigResponse.ProtoReflect.Descriptor instead.
 func (*SetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{6}
+	return file_vnic_v1_vnic_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SetConfigResponse) GetConfig() *Config {
@@ -396,6 +514,17 @@ var file_vnic_v1_vnic_proto_rawDesc = []byte{
 	0x28, 0x09, 0x52, 0x09, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x66, 0x61, 0x63, 0x65, 0x12, 0x20, 0x0a,
 	0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01,
 	0x28, 0x09, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22,
+	0x52, 0x0a, 0x0a, 0x54, 0x43, 0x50, 0x4d, 0x75, 0x78, 0x49, 0x6e, 0x69, 0x74, 0x12, 0x29, 0x0a,
+	0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f,
+	0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f,
+	0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x19, 0x0a, 0x08, 0x70, 0x65, 0x65, 0x72,
+	0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x65, 0x65, 0x72,
+	0x4b, 0x65, 0x79, 0x22, 0x5a, 0x0a, 0x0b, 0x41, 0x45, 0x53, 0x4c, 0x69, 0x6e, 0x6b, 0x49, 0x6e,
+	0x69, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x10, 0x0a,
+	0x03, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12,
+	0x0e, 0x0a, 0x02, 0x69, 0x76, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x02, 0x69, 0x76, 0x22,
 	0xb9, 0x01, 0x0a, 0x08, 0x50, 0x65, 0x65, 0x72, 0x49, 0x6e, 0x69, 0x74, 0x12, 0x29, 0x0a, 0x10,
 	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c,
@@ -459,26 +588,28 @@ func file_vnic_v1_vnic_proto_rawDescGZIP() []byte {
 	return file_vnic_v1_vnic_proto_rawDescData
 }
 
-var file_vnic_v1_vnic_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_vnic_v1_vnic_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_vnic_v1_vnic_proto_goTypes = []interface{}{
 	(*LinkDescription)(nil),         // 0: strims.vnic.v1.LinkDescription
-	(*PeerInit)(nil),                // 1: strims.vnic.v1.PeerInit
-	(*Config)(nil),                  // 2: strims.vnic.v1.Config
-	(*GetConfigRequest)(nil),        // 3: strims.vnic.v1.GetConfigRequest
-	(*GetConfigResponse)(nil),       // 4: strims.vnic.v1.GetConfigResponse
-	(*SetConfigRequest)(nil),        // 5: strims.vnic.v1.SetConfigRequest
-	(*SetConfigResponse)(nil),       // 6: strims.vnic.v1.SetConfigResponse
-	(*certificate.Certificate)(nil), // 7: strims.type.Certificate
+	(*TCPMuxInit)(nil),              // 1: strims.vnic.v1.TCPMuxInit
+	(*AESLinkInit)(nil),             // 2: strims.vnic.v1.AESLinkInit
+	(*PeerInit)(nil),                // 3: strims.vnic.v1.PeerInit
+	(*Config)(nil),                  // 4: strims.vnic.v1.Config
+	(*GetConfigRequest)(nil),        // 5: strims.vnic.v1.GetConfigRequest
+	(*GetConfigResponse)(nil),       // 6: strims.vnic.v1.GetConfigResponse
+	(*SetConfigRequest)(nil),        // 7: strims.vnic.v1.SetConfigRequest
+	(*SetConfigResponse)(nil),       // 8: strims.vnic.v1.SetConfigResponse
+	(*certificate.Certificate)(nil), // 9: strims.type.Certificate
 }
 var file_vnic_v1_vnic_proto_depIdxs = []int32{
-	7, // 0: strims.vnic.v1.PeerInit.certificate:type_name -> strims.type.Certificate
-	2, // 1: strims.vnic.v1.GetConfigResponse.config:type_name -> strims.vnic.v1.Config
-	2, // 2: strims.vnic.v1.SetConfigRequest.config:type_name -> strims.vnic.v1.Config
-	2, // 3: strims.vnic.v1.SetConfigResponse.config:type_name -> strims.vnic.v1.Config
-	3, // 4: strims.vnic.v1.VNICFrontend.GetConfig:input_type -> strims.vnic.v1.GetConfigRequest
-	5, // 5: strims.vnic.v1.VNICFrontend.SetConfig:input_type -> strims.vnic.v1.SetConfigRequest
-	4, // 6: strims.vnic.v1.VNICFrontend.GetConfig:output_type -> strims.vnic.v1.GetConfigResponse
-	6, // 7: strims.vnic.v1.VNICFrontend.SetConfig:output_type -> strims.vnic.v1.SetConfigResponse
+	9, // 0: strims.vnic.v1.PeerInit.certificate:type_name -> strims.type.Certificate
+	4, // 1: strims.vnic.v1.GetConfigResponse.config:type_name -> strims.vnic.v1.Config
+	4, // 2: strims.vnic.v1.SetConfigRequest.config:type_name -> strims.vnic.v1.Config
+	4, // 3: strims.vnic.v1.SetConfigResponse.config:type_name -> strims.vnic.v1.Config
+	5, // 4: strims.vnic.v1.VNICFrontend.GetConfig:input_type -> strims.vnic.v1.GetConfigRequest
+	7, // 5: strims.vnic.v1.VNICFrontend.SetConfig:input_type -> strims.vnic.v1.SetConfigRequest
+	6, // 6: strims.vnic.v1.VNICFrontend.GetConfig:output_type -> strims.vnic.v1.GetConfigResponse
+	8, // 7: strims.vnic.v1.VNICFrontend.SetConfig:output_type -> strims.vnic.v1.SetConfigResponse
 	6, // [6:8] is the sub-list for method output_type
 	4, // [4:6] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -505,7 +636,7 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerInit); i {
+			switch v := v.(*TCPMuxInit); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -517,7 +648,7 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Config); i {
+			switch v := v.(*AESLinkInit); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -529,7 +660,7 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetConfigRequest); i {
+			switch v := v.(*PeerInit); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -541,7 +672,7 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetConfigResponse); i {
+			switch v := v.(*Config); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -553,7 +684,7 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SetConfigRequest); i {
+			switch v := v.(*GetConfigRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -565,6 +696,30 @@ func file_vnic_v1_vnic_proto_init() {
 			}
 		}
 		file_vnic_v1_vnic_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetConfigResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_vnic_v1_vnic_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SetConfigRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_vnic_v1_vnic_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SetConfigResponse); i {
 			case 0:
 				return &v.state
@@ -583,7 +738,7 @@ func file_vnic_v1_vnic_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_vnic_v1_vnic_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -6,6 +6,7 @@ package ed25519util
 import (
 	"crypto/sha512"
 
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/bwesterb/go-ristretto/edwards25519"
 )
 
@@ -36,4 +37,20 @@ func PublicKeyToCurve25519(curve25519Public, publicKey *[32]byte) {
 	x.Mul(&t0, &t1)
 
 	x.BytesInto(curve25519Public)
+}
+
+func KeyToCurve25519(k *key.Key) *key.Key {
+	var ed25519Private [64]byte
+	var ed25519Public [32]byte
+	copy(ed25519Public[:], k.Public)
+	copy(ed25519Private[:], k.Private)
+
+	var curve25519Private, curve25519Public [32]byte
+	PrivateKeyToCurve25519(&curve25519Private, &ed25519Private)
+	PublicKeyToCurve25519(&curve25519Public, &ed25519Public)
+	return &key.Key{
+		Type:    key.KeyType_KEY_TYPE_X25519,
+		Private: curve25519Private[:],
+		Public:  curve25519Public[:],
+	}
 }

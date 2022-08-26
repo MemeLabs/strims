@@ -49,6 +49,99 @@ export class LinkDescription {
   }
 }
 
+export type ITCPMuxInit = {
+  protocolVersion?: number;
+  peerKey?: Uint8Array;
+}
+
+export class TCPMuxInit {
+  protocolVersion: number;
+  peerKey: Uint8Array;
+
+  constructor(v?: ITCPMuxInit) {
+    this.protocolVersion = v?.protocolVersion || 0;
+    this.peerKey = v?.peerKey || new Uint8Array();
+  }
+
+  static encode(m: TCPMuxInit, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.protocolVersion) w.uint32(8).uint32(m.protocolVersion);
+    if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TCPMuxInit {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TCPMuxInit();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.protocolVersion = r.uint32();
+        break;
+        case 2:
+        m.peerKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IAESLinkInit = {
+  protocolVersion?: number;
+  key?: Uint8Array;
+  iv?: Uint8Array;
+}
+
+export class AESLinkInit {
+  protocolVersion: number;
+  key: Uint8Array;
+  iv: Uint8Array;
+
+  constructor(v?: IAESLinkInit) {
+    this.protocolVersion = v?.protocolVersion || 0;
+    this.key = v?.key || new Uint8Array();
+    this.iv = v?.iv || new Uint8Array();
+  }
+
+  static encode(m: AESLinkInit, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.protocolVersion) w.uint32(8).uint32(m.protocolVersion);
+    if (m.key.length) w.uint32(18).bytes(m.key);
+    if (m.iv.length) w.uint32(26).bytes(m.iv);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): AESLinkInit {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new AESLinkInit();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.protocolVersion = r.uint32();
+        break;
+        case 2:
+        m.key = r.bytes();
+        break;
+        case 3:
+        m.iv = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IPeerInit = {
   protocolVersion?: number;
   certificate?: strims_type_ICertificate;
@@ -282,6 +375,18 @@ export const strims_vnic_v1_LinkDescription = LinkDescription;
 export type strims_vnic_v1_LinkDescription = LinkDescription;
 /* @internal */
 export type strims_vnic_v1_ILinkDescription = ILinkDescription;
+/* @internal */
+export const strims_vnic_v1_TCPMuxInit = TCPMuxInit;
+/* @internal */
+export type strims_vnic_v1_TCPMuxInit = TCPMuxInit;
+/* @internal */
+export type strims_vnic_v1_ITCPMuxInit = ITCPMuxInit;
+/* @internal */
+export const strims_vnic_v1_AESLinkInit = AESLinkInit;
+/* @internal */
+export type strims_vnic_v1_AESLinkInit = AESLinkInit;
+/* @internal */
+export type strims_vnic_v1_IAESLinkInit = IAESLinkInit;
 /* @internal */
 export const strims_vnic_v1_PeerInit = PeerInit;
 /* @internal */

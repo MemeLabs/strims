@@ -116,7 +116,7 @@ func (w *WSReadWriter) Write(b []byte) (int, error) {
 	w.writeLock.Lock()
 	defer w.writeLock.Unlock()
 
-	if err := w.conn.SetWriteDeadline(timeutil.Now().Add(w.options.WriteTimeout).Time()); err != nil {
+	if err := w.conn.SetWriteDeadline(time.Now().Add(w.options.WriteTimeout)); err != nil {
 		return 0, err
 	}
 
