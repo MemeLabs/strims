@@ -116,7 +116,7 @@ func (f *tcpInterface) Listen(h *Host) error {
 	}
 
 	f.logger.Debug("tcp vnic listener starting", zap.String("uri", f.uri))
-	f.options.Mux.Handle(h.profileKey, TCPConnHandlerFunc(func(c *net.TCPConn) error {
+	f.options.Mux.Handle(f.peerKey, TCPConnHandlerFunc(func(c *net.TCPConn) error {
 		l, err := f.createTCPConn(c)
 		if err != nil {
 			return err
@@ -260,11 +260,10 @@ func NewTCPMux(logger *zap.Logger, addr string) (*TCPMux, *net.TCPListener, erro
 type TCPMux struct {
 	logger   *zap.Logger
 	handlers syncutil.Map[[32]byte, TCPConnHandler]
-	listener *net.TCPListener
 }
 
-func (m *TCPMux) Handle(k *key.Key, h TCPConnHandler) {
-	m.handlers.Set(*(*[32]byte)(k.Public), h)
+func (m *TCPMux) Handle(k []byte, h TCPConnHandler) {
+	m.handlers.Set(*(*[32]byte)(k), h)
 }
 
 func (m *TCPMux) StopHandling(k []byte) {
