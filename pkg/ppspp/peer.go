@@ -185,10 +185,8 @@ func (p *peer) write() (bool, error) {
 				break
 			}
 
-			if _, err := pw.WriteData(bin, t, peerPriority(i)); err != nil {
-				if err != codec.ErrNotEnoughSpace {
-					return true, err
-				}
+			_, err := pw.WriteData(bin, t, peerPriority(i))
+			if err == codec.ErrNotEnoughSpace {
 				break
 			}
 		}
