@@ -40,14 +40,9 @@ func PublicKeyToCurve25519(curve25519Public, publicKey *[32]byte) {
 }
 
 func KeyToCurve25519(k *key.Key) *key.Key {
-	var ed25519Private [64]byte
-	var ed25519Public [32]byte
-	copy(ed25519Public[:], k.Public)
-	copy(ed25519Private[:], k.Private)
-
 	var curve25519Private, curve25519Public [32]byte
-	PrivateKeyToCurve25519(&curve25519Private, &ed25519Private)
-	PublicKeyToCurve25519(&curve25519Public, &ed25519Public)
+	PrivateKeyToCurve25519(&curve25519Private, (*[64]byte)(k.Private))
+	PublicKeyToCurve25519(&curve25519Public, (*[32]byte)(k.Public))
 	return &key.Key{
 		Type:    key.KeyType_KEY_TYPE_X25519,
 		Private: curve25519Private[:],
