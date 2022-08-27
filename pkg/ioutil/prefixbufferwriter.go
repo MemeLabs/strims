@@ -38,5 +38,5 @@ func (b *PrefixBufferWriter) AvailableBuffer() []byte {
 	}
 
 	b.buf = buf[:b.size]
-	return b.buf[b.size:][:0]
+	return buf[b.size:b.size]
 }
