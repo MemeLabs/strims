@@ -14,7 +14,6 @@ import (
 
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
-	"github.com/MemeLabs/strims/pkg/pool"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"golang.org/x/crypto/curve25519"
 )
@@ -60,6 +59,7 @@ func newAESLink(l Link, key, wiv, riv []byte) (Link, error) {
 	link := &aesLink{
 		writeStream: cipher.NewCFBEncrypter(block, wiv),
 		readStream:  cipher.NewCFBDecrypter(block, riv),
+		buf:         make([]byte, l.MTU()),
 		Link:        l,
 	}
 	return link, nil
@@ -69,6 +69,7 @@ type aesLink struct {
 	readStream  cipher.Stream
 	writeLock   sync.Mutex
 	writeStream cipher.Stream
+	buf         []byte
 	Link
 }
 
@@ -82,12 +83,8 @@ func (c *aesLink) Read(p []byte) (int, error) {
 }
 
 func (c *aesLink) Write(p []byte) (int, error) {
-	b := pool.Get(len(p))
-	defer pool.Put(b)
-
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
-	c.writeStream.XORKeyStream(*b, p)
-
-	return c.Link.Write(*b)
+	c.writeStream.XORKeyStream(c.buf, p)
+	return c.Link.Write(c.buf[:len(p)])
 }
