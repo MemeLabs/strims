@@ -812,7 +812,7 @@ type peerChannelScheduler struct {
 	requestStreams []binmap.Bin
 	extraMessages  []codec.Message
 
-	enqueueNow     uint32
+	enqueueNow     atomic.Bool
 	peerLiveWindow binmap.Bin
 	peerMaxHaveBin binmap.Bin
 	peerHaveBins   *binmap.Map // bins the peer claims to have
@@ -1389,7 +1389,7 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 
 	now := timeutil.Now()
 
-	atomic.StoreUint32(&c.enqueueNow, 1)
+	c.enqueueNow.Store(true)
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -1501,7 +1501,7 @@ func (c *peerChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) erro
 
 	c.p.PushData(c, b, t, peerPriorityLow)
 
-	atomic.StoreUint32(&c.enqueueNow, 1)
+	c.enqueueNow.Store(true)
 
 	return nil
 }
@@ -1543,7 +1543,7 @@ func (c *peerChannelScheduler) HandlePing(nonce uint64) error {
 			Value: nonce,
 		},
 	})
-	atomic.StoreUint32(&c.enqueueNow, 1)
+	c.enqueueNow.Store(true)
 	return nil
 }
 
@@ -1638,7 +1638,7 @@ func (c *peerChannelScheduler) HandleStreamClose(s codec.Stream) error {
 
 // deprecated?
 func (c *peerChannelScheduler) HandleMessageEnd() error {
-	if atomic.CompareAndSwapUint32(&c.enqueueNow, 1, 0) {
+	if c.enqueueNow.CompareAndSwap(true, false) {
 		c.p.EnqueueNow(c)
 	} else {
 		c.p.Enqueue(c)

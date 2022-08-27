@@ -78,7 +78,7 @@ type peer struct {
 
 	lock        sync.Mutex
 	links       llrb.LLRB
-	negotiating uint32
+	negotiating atomic.Bool
 	keyCount    chan uint32
 	bindings    chan []*networkv1.NetworkPeerBinding
 	brokerConn  *vnic.FrameReadWriter
@@ -91,7 +91,7 @@ func (p *peer) HandlePeerNegotiate(keyCount uint32) {
 	default:
 	}
 
-	if atomic.LoadUint32(&p.negotiating) == 0 {
+	if !p.negotiating.Load() {
 		go func() {
 			if err := p.negotiateNetworks(context.Background()); err != nil {
 				p.logger.Debug("network negotiation failed", zap.Error(err))
@@ -230,10 +230,10 @@ func (p *peer) hasNetworkBinding(networkKey []byte) bool {
 }
 
 func (p *peer) negotiateNetworks(ctx context.Context) error {
-	if !atomic.CompareAndSwapUint32(&p.negotiating, 0, 1) {
+	if !p.negotiating.CompareAndSwap(false, true) {
 		return errors.New("cannot begin new negotiation until previous negotiation finishes")
 	}
-	defer atomic.StoreUint32(&p.negotiating, 0)
+	defer p.negotiating.Store(false)
 
 	select {
 	case <-p.certificates.Loaded():
