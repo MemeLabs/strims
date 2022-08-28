@@ -67,6 +67,8 @@ func deleteInstrumentedLinkMetrics(l Link, hostID kademlia.ID) {
 	metricLabels := instrumentedLinkMetricLabels(l, hostID)
 	linkReadBytes.DeleteLabelValues(metricLabels...)
 	linkWriteBytes.DeleteLabelValues(metricLabels...)
+	linkReadCount.DeleteLabelValues(metricLabels...)
+	linkWriteCount.DeleteLabelValues(metricLabels...)
 }
 
 func instrumentedLinkMetricLabels(l Link, hostID kademlia.ID) []string {
