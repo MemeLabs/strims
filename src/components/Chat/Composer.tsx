@@ -114,6 +114,11 @@ const Composer: React.FC<ComposerProps> = ({
       "substring": ({ index }: SearchSourceEntry) => index.indexOf(query) !== -1,
     }[search.queryMode];
 
+    const order = (a: SearchSourceEntry, b: SearchSourceEntry) =>
+      a.index.startsWith(query) === b.index.startsWith(query)
+        ? a.index.localeCompare(b.index)
+        : a.index.indexOf(query) - b.index.indexOf(query);
+
     let count = 0;
     const truncate = (entries: SearchSourceEntry[]) => {
       const res = entries.slice(0, maxAutocompleteResults - count);
@@ -124,7 +129,7 @@ const Composer: React.FC<ComposerProps> = ({
     const matches = search.sources
       .map((s) => ({
         ...s,
-        entries: truncate(s.entries.filter(test)),
+        entries: truncate(s.entries.filter(test).sort(order)),
       }))
       .filter(({ entries }) => entries.length > 0);
     const entries = matches.map(({ entries }) => entries).flat();
