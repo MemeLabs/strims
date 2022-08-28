@@ -9,12 +9,22 @@
       transform: scaleX(1.5) scaleY(0.8);
       margin-left: calc(var(--width) * 0.25);
       margin-right: calc(var(--width) * 0.25);
+
+      &.chat__emote_container--root {
+        margin-left: calc(var(--width) * 0.25 + 3px);
+        margin-right: calc(var(--width) * 0.25 + 3px);
+      }
     }
 
     &--smol {
       transform: scaleX(0.5) scaleY(0.5);
       margin-left: calc(var(--width) * -0.25);
       margin-right: calc(var(--width) * -0.25);
+
+      &.chat__emote_container--root {
+        margin-left: calc(var(--width) * -0.25 + 3px);
+        margin-right: calc(var(--width) * -0.25 + 3px);
+      }
     }
 
     &--smol &--wide {
