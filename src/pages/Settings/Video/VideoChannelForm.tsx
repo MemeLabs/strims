@@ -9,7 +9,10 @@ import {
   Button,
   ButtonSet,
   CreatableSelectInput,
+  ImageInput,
+  ImageValue,
   InputError,
+  InputLabel,
   NetworkSelectInput,
   SelectInput,
   SelectOption,
@@ -18,6 +21,8 @@ import {
 } from "../../../components/Form";
 
 export interface VideoChannelFormData {
+  channelName: string;
+  channelLogo: ImageValue;
   title: string;
   description: string;
   tags: Array<SelectOption<string>>;
@@ -73,6 +78,35 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
       {error && <InputError error={error.message || "Error creating channel"} />}
+      <TextInput
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "Channel name is required",
+          },
+          maxLength: {
+            value: 100,
+            message: "Channel name too long",
+          },
+        }}
+        label="Channel name"
+        placeholder="Channel name"
+        name="channelName"
+      />
+      <InputLabel required={true} text="Channel logo" component="div">
+        <ImageInput
+          control={control}
+          name="channelLogo"
+          maxSize={49152}
+          rules={{
+            required: {
+              value: true,
+              message: "Channel logo is required",
+            },
+          }}
+        />
+      </InputLabel>
       <TextInput
         control={control}
         rules={{

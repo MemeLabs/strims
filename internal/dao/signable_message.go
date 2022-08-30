@@ -10,11 +10,18 @@ import (
 	"hash/crc32"
 	"math"
 	"reflect"
+	"sync"
 
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
-	"github.com/MemeLabs/strims/pkg/pool"
 	"google.golang.org/protobuf/proto"
 )
+
+var signablePool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 1024)
+		return &b
+	},
+}
 
 // CRC32Message ...
 func CRC32Message(m proto.Message) uint32 {
@@ -38,7 +45,7 @@ func SignMessage(m SignableMessage, k *key.Key) error {
 	mv.FieldByName("Key").SetBytes(k.Public)
 
 	b := marshalSignableMessage(m)
-	defer pool.Put(b)
+	defer signablePool.Put(b)
 
 	switch k.Type {
 	case key.KeyType_KEY_TYPE_ED25519:
@@ -55,7 +62,7 @@ func SignMessage(m SignableMessage, k *key.Key) error {
 // VerifyMessage ...
 func VerifyMessage(m SignableMessage) error {
 	b := marshalSignableMessage(m)
-	defer pool.Put(b)
+	defer signablePool.Put(b)
 
 	if len(m.GetKey()) != ed25519.PublicKeySize {
 		return ErrInvalidKeyLength
@@ -75,7 +82,11 @@ func marshalSignableMessage(m SignableMessage) *[]byte {
 
 	e := &signableMessageEncoder{}
 	rv := reflect.ValueOf(m)
-	b := pool.Get(e.len(rv))
+
+	b := signablePool.Get().(*[]byte)
+	if l := e.len(rv); l > len(*b) {
+		*b = make([]byte, l)
+	}
 	e.encode(rv, *b)
 
 	return b
