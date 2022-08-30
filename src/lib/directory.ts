@@ -126,3 +126,47 @@ export const createEmbedFromURL = (url: string): Listing.Embed => {
     }
   }
 };
+
+const fnv1a = (input: string) => {
+  let hash = 2166136261;
+  for (let i = 0, len = input.length; i < len; i++) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return hash >>> 0;
+};
+
+const createRng = (seed: string) => {
+  let n = 0;
+  return () => fnv1a(`${n++}${seed}`) / 0xffffffff;
+};
+
+const generateColor = (rng: () => number) => {
+  const h = Math.round(rng() * 360);
+  const s = Math.round(rng() * 80 + 20);
+  const l = Math.round(rng() * 50 + 20);
+  return `hsl(${h}, ${s}%, ${l}%)`;
+};
+
+export const createListingRng = (listing: Listing) => {
+  switch (listing?.content.case) {
+    case Listing.ContentCase.MEDIA: {
+      let seed: string;
+      try {
+        const url = new URL(listing.content.media.swarmUri);
+        seed = url.searchParams.get("xt").split(":").pop();
+      } catch {
+        seed = listing.content.media.swarmUri;
+      }
+      return createRng(seed);
+    }
+    case Listing.ContentCase.EMBED: {
+      const { id, service } = listing.content.embed;
+      return createRng(`${id}:${service}`);
+    }
+    default:
+      return createRng("default");
+  }
+};
+
+export const getListingColor = (listing: Listing) => generateColor(createListingRng(listing));

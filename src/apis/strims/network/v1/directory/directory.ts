@@ -3385,6 +3385,120 @@ export namespace FrontendGetUsersResponse {
 
 }
 
+export type IFrontendGetListingRequest = {
+  query?: strims_network_v1_directory_IListingQuery;
+  networkKey?: Uint8Array;
+}
+
+export class FrontendGetListingRequest {
+  query: strims_network_v1_directory_ListingQuery | undefined;
+  networkKey: Uint8Array;
+
+  constructor(v?: IFrontendGetListingRequest) {
+    this.query = v?.query && new strims_network_v1_directory_ListingQuery(v.query);
+    this.networkKey = v?.networkKey || new Uint8Array();
+  }
+
+  static encode(m: FrontendGetListingRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.query) strims_network_v1_directory_ListingQuery.encode(m.query, w.uint32(10).fork()).ldelim();
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.query = strims_network_v1_directory_ListingQuery.decode(r, r.uint32());
+        break;
+        case 2:
+        m.networkKey = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IFrontendGetListingResponse = {
+  id?: bigint;
+  listing?: strims_network_v1_directory_IListing;
+  snippet?: strims_network_v1_directory_IListingSnippet;
+  moderation?: strims_network_v1_directory_IListingModeration;
+  userCount?: number;
+  recentUserCount?: number;
+}
+
+export class FrontendGetListingResponse {
+  id: bigint;
+  listing: strims_network_v1_directory_Listing | undefined;
+  snippet: strims_network_v1_directory_ListingSnippet | undefined;
+  moderation: strims_network_v1_directory_ListingModeration | undefined;
+  userCount: number;
+  recentUserCount: number;
+
+  constructor(v?: IFrontendGetListingResponse) {
+    this.id = v?.id || BigInt(0);
+    this.listing = v?.listing && new strims_network_v1_directory_Listing(v.listing);
+    this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
+    this.moderation = v?.moderation && new strims_network_v1_directory_ListingModeration(v.moderation);
+    this.userCount = v?.userCount || 0;
+    this.recentUserCount = v?.recentUserCount || 0;
+  }
+
+  static encode(m: FrontendGetListingResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.listing) strims_network_v1_directory_Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
+    if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
+    if (m.moderation) strims_network_v1_directory_ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+    if (m.userCount) w.uint32(40).uint32(m.userCount);
+    if (m.recentUserCount) w.uint32(48).uint32(m.recentUserCount);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendGetListingResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendGetListingResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.listing = strims_network_v1_directory_Listing.decode(r, r.uint32());
+        break;
+        case 3:
+        m.snippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
+        break;
+        case 4:
+        m.moderation = strims_network_v1_directory_ListingModeration.decode(r, r.uint32());
+        break;
+        case 5:
+        m.userCount = r.uint32();
+        break;
+        case 6:
+        m.recentUserCount = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IFrontendGetListingsRequest = {
   contentTypes?: strims_network_v1_directory_ListingContentType[];
   networkKeys?: Uint8Array[];
@@ -4314,6 +4428,18 @@ export const strims_network_v1_directory_FrontendGetUsersResponse = FrontendGetU
 export type strims_network_v1_directory_FrontendGetUsersResponse = FrontendGetUsersResponse;
 /* @internal */
 export type strims_network_v1_directory_IFrontendGetUsersResponse = IFrontendGetUsersResponse;
+/* @internal */
+export const strims_network_v1_directory_FrontendGetListingRequest = FrontendGetListingRequest;
+/* @internal */
+export type strims_network_v1_directory_FrontendGetListingRequest = FrontendGetListingRequest;
+/* @internal */
+export type strims_network_v1_directory_IFrontendGetListingRequest = IFrontendGetListingRequest;
+/* @internal */
+export const strims_network_v1_directory_FrontendGetListingResponse = FrontendGetListingResponse;
+/* @internal */
+export type strims_network_v1_directory_FrontendGetListingResponse = FrontendGetListingResponse;
+/* @internal */
+export type strims_network_v1_directory_IFrontendGetListingResponse = IFrontendGetListingResponse;
 /* @internal */
 export const strims_network_v1_directory_FrontendGetListingsRequest = FrontendGetListingsRequest;
 /* @internal */

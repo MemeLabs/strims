@@ -406,6 +406,20 @@ message FrontendGetUsersResponse {
   map<uint64, Network> networks = 2;
 }
 
+message FrontendGetListingRequest {
+  ListingQuery query = 1;
+  bytes network_key = 2;
+}
+
+message FrontendGetListingResponse {
+  uint64 id = 1;
+  Listing listing = 2;
+  ListingSnippet snippet = 3;
+  ListingModeration moderation = 4;
+  uint32 user_count = 5;
+  uint32 recent_user_count = 6;
+}
+
 message FrontendGetListingsRequest {
   repeated ListingContentType content_types = 1;
   repeated bytes network_keys = 2;
@@ -482,6 +496,7 @@ service DirectoryFrontend {
   rpc ModerateUser(FrontendModerateUserRequest) returns (FrontendModerateUserResponse);
 
   rpc GetUsers(FrontendGetUsersRequest) returns (FrontendGetUsersResponse);
+  rpc GetListing(FrontendGetListingRequest) returns (FrontendGetListingResponse);
   rpc GetListings(FrontendGetListingsRequest) returns (FrontendGetListingsResponse);
   rpc WatchListings(FrontendWatchListingsRequest) returns (stream FrontendWatchListingsResponse);
   rpc WatchListingUsers(FrontendWatchListingUsersRequest) returns (stream FrontendWatchListingUsersResponse);

@@ -19,10 +19,12 @@ import { useOpenListing } from "../../hooks/directory";
 import useRefs from "../../hooks/useRefs";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import * as directory from "../../lib/directory";
+import { useContextMenu } from "../ContextMenu";
 import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteDetails from "./EmoteDetails";
+import UserContextMenu from "./UserContextMenu";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
@@ -150,9 +152,21 @@ interface MessageNickProps {
 const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase, onClick }) => {
   const handleClick = useStableCallback((e: React.MouseEvent) => onClick(e, entity));
 
+  const { Menu, ...contextMenu } = useContextMenu();
+  const handleContextMenu = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    contextMenu.openMenu(e);
+  });
+
   return (
-    <span className="chat__message__nick" onClick={handleClick}>
+    <span className="chat__message__nick" onClick={handleClick} onContextMenu={handleContextMenu}>
       {normalizeCase ? entity.nick : children}
+      {contextMenu.isOpen && (
+        <Menu>
+          <UserContextMenu {...entity} onClose={contextMenu.closeMenu} />
+        </Menu>
+      )}
     </span>
   );
 };
@@ -362,7 +376,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
       })
     );
     return formatter.body;
-  }, [uiConfig, entities, isMostRecent]);
+  }, [uiConfig, entities]);
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
@@ -426,7 +440,25 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     }
   );
 
+  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleSelectedPeer(peerKey);
+  });
+
+  const { Menu, ...contextMenu } = useContextMenu();
+  const handleAuthorContextMenu = useStableCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    contextMenu.openMenu(e);
+  });
+
   const canCombo = isMostRecent && entities.emotes[0]?.canCombo;
+  const handleBodyClick = useStableCallback((e: React.MouseEvent) => {
+    if (canCombo) {
+      sendMessage(body);
+      e.stopPropagation();
+    }
+  });
 
   const classNames = useMemo(() => {
     const authorKey = Base64.fromUint8Array(peerKey, true);
@@ -455,18 +487,6 @@ const StandardMessage: React.FC<MessageImplProps> = ({
       )
     );
   }, [baseClassName, isContinued, canCombo, entities, uiConfig]);
-
-  const handleAuthorClick = useStableCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    toggleSelectedPeer(peerKey);
-  });
-
-  const handleBodyClick = useStableCallback((e: React.MouseEvent) => {
-    if (canCombo) {
-      sendMessage(body);
-      e.stopPropagation();
-    }
-  });
 
   const content = useMemo(() => {
     const formatter = new MessageFormatter(body);
@@ -508,7 +528,11 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         {uiConfig.showTime && (
           <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
         )}
-        <span className="chat__message__author" onClick={handleAuthorClick}>
+        <span
+          className="chat__message__author"
+          onClick={handleAuthorClick}
+          onContextMenu={handleAuthorContextMenu}
+        >
           {!!uiConfig.userPresenceIndicator && (
             <UserPresenceIndicator
               style={uiConfig.userPresenceIndicator}
@@ -529,6 +553,16 @@ const StandardMessage: React.FC<MessageImplProps> = ({
   return (
     <div {...props} className={classNames} ref={fwRef}>
       {content}
+      {contextMenu.isOpen && (
+        <Menu>
+          <UserContextMenu
+            nick={nick}
+            peerKey={peerKey}
+            viewedListing={viewedListing}
+            onClose={contextMenu.closeMenu}
+          />
+        </Menu>
+      )}
     </div>
   );
 };

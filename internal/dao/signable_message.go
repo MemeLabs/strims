@@ -84,8 +84,10 @@ func marshalSignableMessage(m SignableMessage) *[]byte {
 	rv := reflect.ValueOf(m)
 
 	b := signablePool.Get().(*[]byte)
-	if l := e.len(rv); l > len(*b) {
+	if l := e.len(rv); l > cap(*b) {
 		*b = make([]byte, l)
+	} else {
+		*b = (*b)[:l]
 	}
 	e.encode(rv, *b)
 

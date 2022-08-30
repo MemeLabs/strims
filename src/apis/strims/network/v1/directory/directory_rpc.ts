@@ -49,6 +49,9 @@ import {
   strims_network_v1_directory_IFrontendGetUsersRequest,
   strims_network_v1_directory_FrontendGetUsersRequest,
   strims_network_v1_directory_FrontendGetUsersResponse,
+  strims_network_v1_directory_IFrontendGetListingRequest,
+  strims_network_v1_directory_FrontendGetListingRequest,
+  strims_network_v1_directory_FrontendGetListingResponse,
   strims_network_v1_directory_IFrontendGetListingsRequest,
   strims_network_v1_directory_FrontendGetListingsRequest,
   strims_network_v1_directory_FrontendGetListingsResponse,
@@ -134,6 +137,7 @@ export interface DirectoryFrontendService {
   moderateListing(req: strims_network_v1_directory_FrontendModerateListingRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendModerateListingResponse> | strims_network_v1_directory_FrontendModerateListingResponse;
   moderateUser(req: strims_network_v1_directory_FrontendModerateUserRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendModerateUserResponse> | strims_network_v1_directory_FrontendModerateUserResponse;
   getUsers(req: strims_network_v1_directory_FrontendGetUsersRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetUsersResponse> | strims_network_v1_directory_FrontendGetUsersResponse;
+  getListing(req: strims_network_v1_directory_FrontendGetListingRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingResponse> | strims_network_v1_directory_FrontendGetListingResponse;
   getListings(req: strims_network_v1_directory_FrontendGetListingsRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingsResponse> | strims_network_v1_directory_FrontendGetListingsResponse;
   watchListings(req: strims_network_v1_directory_FrontendWatchListingsRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingsResponse>;
   watchListingUsers(req: strims_network_v1_directory_FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingUsersResponse>;
@@ -148,6 +152,7 @@ export class UnimplementedDirectoryFrontendService implements DirectoryFrontendS
   moderateListing(req: strims_network_v1_directory_FrontendModerateListingRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendModerateListingResponse> | strims_network_v1_directory_FrontendModerateListingResponse { throw new Error("not implemented"); }
   moderateUser(req: strims_network_v1_directory_FrontendModerateUserRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendModerateUserResponse> | strims_network_v1_directory_FrontendModerateUserResponse { throw new Error("not implemented"); }
   getUsers(req: strims_network_v1_directory_FrontendGetUsersRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetUsersResponse> | strims_network_v1_directory_FrontendGetUsersResponse { throw new Error("not implemented"); }
+  getListing(req: strims_network_v1_directory_FrontendGetListingRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingResponse> | strims_network_v1_directory_FrontendGetListingResponse { throw new Error("not implemented"); }
   getListings(req: strims_network_v1_directory_FrontendGetListingsRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingsResponse> | strims_network_v1_directory_FrontendGetListingsResponse { throw new Error("not implemented"); }
   watchListings(req: strims_network_v1_directory_FrontendWatchListingsRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingsResponse> { throw new Error("not implemented"); }
   watchListingUsers(req: strims_network_v1_directory_FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingUsersResponse> { throw new Error("not implemented"); }
@@ -162,6 +167,7 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<strims_network_v1_directory_FrontendModerateListingRequest, strims_network_v1_directory_FrontendModerateListingResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.moderateListing.bind(service), strims_network_v1_directory_FrontendModerateListingRequest);
   host.registerMethod<strims_network_v1_directory_FrontendModerateUserRequest, strims_network_v1_directory_FrontendModerateUserResponse>("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.moderateUser.bind(service), strims_network_v1_directory_FrontendModerateUserRequest);
   host.registerMethod<strims_network_v1_directory_FrontendGetUsersRequest, strims_network_v1_directory_FrontendGetUsersResponse>("strims.network.v1.directory.DirectoryFrontend.GetUsers", service.getUsers.bind(service), strims_network_v1_directory_FrontendGetUsersRequest);
+  host.registerMethod<strims_network_v1_directory_FrontendGetListingRequest, strims_network_v1_directory_FrontendGetListingResponse>("strims.network.v1.directory.DirectoryFrontend.GetListing", service.getListing.bind(service), strims_network_v1_directory_FrontendGetListingRequest);
   host.registerMethod<strims_network_v1_directory_FrontendGetListingsRequest, strims_network_v1_directory_FrontendGetListingsResponse>("strims.network.v1.directory.DirectoryFrontend.GetListings", service.getListings.bind(service), strims_network_v1_directory_FrontendGetListingsRequest);
   host.registerMethod<strims_network_v1_directory_FrontendWatchListingsRequest, strims_network_v1_directory_FrontendWatchListingsResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListings", service.watchListings.bind(service), strims_network_v1_directory_FrontendWatchListingsRequest);
   host.registerMethod<strims_network_v1_directory_FrontendWatchListingUsersRequest, strims_network_v1_directory_FrontendWatchListingUsersResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.watchListingUsers.bind(service), strims_network_v1_directory_FrontendWatchListingUsersRequest);
@@ -200,6 +206,10 @@ export class DirectoryFrontendClient {
 
   public getUsers(req?: strims_network_v1_directory_IFrontendGetUsersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_directory_FrontendGetUsersResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetUsers", new strims_network_v1_directory_FrontendGetUsersRequest(req)), strims_network_v1_directory_FrontendGetUsersResponse, opts);
+  }
+
+  public getListing(req?: strims_network_v1_directory_IFrontendGetListingRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_directory_FrontendGetListingResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.directory.DirectoryFrontend.GetListing", new strims_network_v1_directory_FrontendGetListingRequest(req)), strims_network_v1_directory_FrontendGetListingResponse, opts);
   }
 
   public getListings(req?: strims_network_v1_directory_IFrontendGetListingsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_directory_FrontendGetListingsResponse> {

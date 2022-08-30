@@ -262,6 +262,27 @@ func listingProtoContentType(l *networkv1directory.Listing) networkv1directory.L
 	}
 }
 
+func (s *directoryService) GetListing(ctx context.Context, r *networkv1directory.FrontendGetListingRequest) (*networkv1directory.FrontendGetListingResponse, error) {
+	networkID, err := dao.NetworksByKey.GetID(s.store, r.NetworkKey)
+	if err != nil {
+		return nil, err
+	}
+
+	l, ok := s.app.Directory().GetListingByQuery(networkID, r.Query)
+	if !ok {
+		return nil, errors.New("listing not found")
+	}
+
+	return &networkv1directory.FrontendGetListingResponse{
+		Id:              l.ID,
+		Listing:         l.Listing,
+		Snippet:         l.Snippet,
+		Moderation:      l.Moderation,
+		UserCount:       l.UserCount,
+		RecentUserCount: l.RecentUserCount,
+	}, nil
+}
+
 func (s *directoryService) GetListings(ctx context.Context, r *networkv1directory.FrontendGetListingsRequest) (*networkv1directory.FrontendGetListingsResponse, error) {
 	var networks []*networkv1.Network
 	var err error

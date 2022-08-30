@@ -1,0 +1,65 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.user_context_menu {
+  &__listing {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: 300px;
+
+    &__image {
+      width: 100%;
+      border-radius: var(--border-radius-small);
+      display: block;
+      box-shadow: var(--shadow-elevation-2);
+    }
+
+    &__image_frame {
+      position: relative;
+      width: 100px;
+      border-radius: var(--border-radius-medium);
+
+      background-color: var(--channel-color);
+      margin-right: 0.4rem;
+      padding: 0.2rem;
+    }
+
+    &__label {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    &__channel {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+    }
+
+    &__channel_logo {
+      border-radius: var(--border-radius-rounded);
+      height: 1.4rem;
+      width: 1.4rem;
+      margin-right: 0.2rem;
+    }
+
+    &__viewers {
+      color: var(--color-opac-w-14);
+      position: absolute;
+      bottom: 4px;
+      filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+    }
+
+    &__title,
+    &__channel_name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4em;
+    }
+  }
+}

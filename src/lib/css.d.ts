@@ -30,5 +30,7 @@ declare module "csstype" {
     "--menu-x"?: string;
     "--menu-y"?: string;
     "--menu-scale"?: string;
+
+    "--channel-color"?: string;
   }
 }

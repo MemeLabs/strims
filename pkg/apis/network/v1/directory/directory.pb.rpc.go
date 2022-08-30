@@ -186,6 +186,7 @@ func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service Director
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateListing", service.ModerateListing)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.ModerateUser", service.ModerateUser)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetUsers", service.GetUsers)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetListing", service.GetListing)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetListings", service.GetListings)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchListings", service.WatchListings)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.WatchListingUsers)
@@ -225,6 +226,10 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendGetUsersRequest,
 	) (*FrontendGetUsersResponse, error)
+	GetListing(
+		ctx context.Context,
+		req *FrontendGetListingRequest,
+	) (*FrontendGetListingResponse, error)
 	GetListings(
 		ctx context.Context,
 		req *FrontendGetListingsRequest,
@@ -295,6 +300,13 @@ func (s *UnimplementedDirectoryFrontendService) GetUsers(
 	ctx context.Context,
 	req *FrontendGetUsersRequest,
 ) (*FrontendGetUsersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) GetListing(
+	ctx context.Context,
+	req *FrontendGetListingRequest,
+) (*FrontendGetListingResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -401,6 +413,15 @@ func (c *DirectoryFrontendClient) GetUsers(
 	res *FrontendGetUsersResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.GetUsers", req, res)
+}
+
+// GetListing ...
+func (c *DirectoryFrontendClient) GetListing(
+	ctx context.Context,
+	req *FrontendGetListingRequest,
+	res *FrontendGetListingResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.directory.DirectoryFrontend.GetListing", req, res)
 }
 
 // GetListings ...
