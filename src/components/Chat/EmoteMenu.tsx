@@ -136,7 +136,7 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
             control={scroller}
           />
           <div className="emote_menu__footer">
-            <Preview meme={preview} />
+            <Preview item={preview} />
           </div>
         </div>
       </div>
@@ -243,24 +243,24 @@ const Nav: React.FC<NavProps> = ({ categories, focusIndex, onSelect }) => {
 };
 
 interface PreviewProps {
-  meme: CategoryItem;
+  item: CategoryItem;
 }
 
-const Preview: React.FC<PreviewProps> = ({ meme }) => {
-  if (!meme) {
+const Preview: React.FC<PreviewProps> = ({ item }) => {
+  if (!item) {
     return null;
   }
-  if (meme.type === "emoji") {
+  if (item.type === "emoji") {
     return (
       <div className="emote_menu_preview">
         <div className="emote_menu_preview__image">
-          <Emoji>{meme.emoji.unicode}</Emoji>
+          <Emoji>{item.emoji.unicode}</Emoji>
         </div>
-        <div className="emote_menu_preview__name">{meme.emoji.label}</div>
+        <div className="emote_menu_preview__name">{item.emoji.label}</div>
       </div>
     );
   } else {
-    const { name, contributor } = meme.emote;
+    const { name, contributor } = item.emote;
     return (
       <div className="emote_menu_preview">
         <div className="emote_menu_preview__image">

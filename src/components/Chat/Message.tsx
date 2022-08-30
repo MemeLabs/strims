@@ -7,7 +7,7 @@ import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
 import { isEqual, uniq } from "lodash";
-import React, { ReactNode, useEffect, useMemo, useRef } from "react";
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { Link } from "react-router-dom";
 
@@ -22,6 +22,7 @@ import * as directory from "../../lib/directory";
 import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
+import EmoteDetails from "./EmoteDetails";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
@@ -103,20 +104,33 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   shouldShowModifiers,
   compactSpacing,
   hidden,
-}) =>
-  hidden ? (
+}) => {
+  const [detailsAnchor, setDetailsAnchor] = useState<[number, number]>(null);
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    setDetailsAnchor([e.pageX, e.pageY]);
+  }, []);
+  const handleDetailsClose = useCallback(() => setDetailsAnchor(null), []);
+
+  return hidden ? (
     <span className="chat__hidden_emote">{entity.name}</span>
   ) : (
-    <Emote
-      name={entity.name}
-      modifiers={entity.modifiers}
-      shouldAnimateForever={shouldAnimateForever}
-      shouldShowModifiers={shouldShowModifiers}
-      compactSpacing={compactSpacing}
-    >
-      {children}
-    </Emote>
+    <>
+      <Emote
+        name={entity.name}
+        modifiers={entity.modifiers}
+        shouldAnimateForever={shouldAnimateForever}
+        shouldShowModifiers={shouldShowModifiers}
+        compactSpacing={compactSpacing}
+        onClick={handleClick}
+      >
+        {children}
+      </Emote>
+      {detailsAnchor && (
+        <EmoteDetails name={entity.name} anchor={detailsAnchor} onClose={handleDetailsClose} />
+      )}
+    </>
   );
+};
 
 interface MessageEmojiProps {
   entity: chatv1_Message.Entities.Emoji;
@@ -348,7 +362,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
       })
     );
     return formatter.body;
-  }, [uiConfig, entities]);
+  }, [uiConfig, entities, isMostRecent]);
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
@@ -369,9 +383,10 @@ const ComboMessage: React.FC<MessageImplProps> = ({
 
   const [, { sendMessage }] = useRoom();
 
-  const handleBodyClick = useStableCallback(() => {
+  const handleBodyClick = useStableCallback((e: React.MouseEvent) => {
     if (isMostRecent) {
       sendMessage(body);
+      e.stopPropagation();
     }
   });
 
@@ -380,7 +395,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
-      <span className="chat__combo_message__body" onClick={handleBodyClick}>
+      <span className="chat__combo_message__body" onClickCapture={handleBodyClick}>
         {formattedBody}
         <i className="chat__combo_message__count">{count}</i>
         <i className="chat__combo_message__x">x</i>
@@ -446,9 +461,10 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     toggleSelectedPeer(peerKey);
   });
 
-  const handleBodyClick = useStableCallback(() => {
+  const handleBodyClick = useStableCallback((e: React.MouseEvent) => {
     if (canCombo) {
       sendMessage(body);
+      e.stopPropagation();
     }
   });
 
@@ -502,7 +518,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
           <span className="chat__message__author__text">{nick}</span>
         </span>
         <span className="chat__message__colon">{": "}</span>
-        <span className="chat__message__body" onClick={handleBodyClick}>
+        <span className="chat__message__body" onClickCapture={handleBodyClick}>
           {formatter.body}
         </span>
         <br />

@@ -16,7 +16,8 @@
 
     &.chat__emote--compact_spacing,
     &.chat__emote_container--compact_spacing {
-      margin: calc(-0.6 * var(--height)) 3px calc(-0.4 * var(--height));
+      margin-top: calc(-0.6 * var(--height));
+      margin-bottom: calc(-0.4 * var(--height));
     }
   }
 
