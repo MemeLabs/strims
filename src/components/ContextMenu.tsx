@@ -26,18 +26,13 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
   const size = useSize(ref);
   useClickAway(ref, onClose);
 
-  useEffect(() => {
-    ref.current.classList.remove(`context_menu--open`);
-    const rafId = requestAnimationFrame(() => ref.current?.classList.add(`context_menu--open`));
-    return () => cancelAnimationFrame(rafId);
-  }, [size]);
-
   return (
     <Portal>
       <div
         ref={ref}
         className={clsx({
           "context_menu": true,
+          "context_menu--open": size?.width > 0,
           "context_menu--flip_x": x + size?.width > window.innerWidth,
           "context_menu--flip_y": y + size?.height > window.innerHeight,
         })}
