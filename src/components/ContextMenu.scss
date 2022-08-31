@@ -9,9 +9,25 @@
   z-index: var(--z-index-menu);
   display: flex;
   flex-direction: column;
-  border-radius: var(--border-radius-medium);
+  border-radius: var(--border-radius-small);
   padding: 0.2rem 0;
   box-shadow: var(--shadow-elevation-3);
+  opacity: 0;
+  transition: opacity ease-in-out var(--timing-short);
+
+  &--open {
+    opacity: 1;
+  }
+
+  &--flip_x {
+    left: unset;
+    right: calc(100vw - var(--context-menu-x, 0px));
+  }
+
+  &--flip_y {
+    top: unset;
+    bottom: calc(100vh - var(--context-menu-y, 0px));
+  }
 
   &__item {
     display: block;

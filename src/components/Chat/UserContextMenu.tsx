@@ -72,7 +72,7 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
       <MenuItem onClick={handleHighlightClick}>
         {highlighted ? "Unhighlight" : "Highlight"}
       </MenuItem>
-      <MenuItem onClick={handleIgnoreClick}>Ignore</MenuItem>
+      <MenuItem onClick={handleIgnoreClick}>{ignored ? "Unignore" : "Ignore"}</MenuItem>
       <MenuItem onClick={handleWhisperClick}>Whisper</MenuItem>
     </>
   );
@@ -178,7 +178,7 @@ const TagMenuItem: React.FC<TagMenuItemProps> = ({ nick, peerKey, onClick }) => 
   ));
 
   return (
-    <MenuItem className="user_context_menu__tag">
+    <MenuItem className="user_context_menu__tag" component="div">
       <span className="user_context_menu__tag__label">Tag</span>
       <button className="user_context_menu__tag__untag" onClick={handleTagClick}>
         <FiX />

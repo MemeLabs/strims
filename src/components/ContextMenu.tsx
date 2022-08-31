@@ -4,11 +4,12 @@
 import "./ContextMenu.scss";
 
 import clsx from "clsx";
-import React, { ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import usePortal from "use-portal";
 
 import { useLayout } from "../contexts/Layout";
 import useClickAway, { suppressClickAway } from "../hooks/useClickAway";
+import useSize from "../hooks/useSize";
 
 interface MenuProps {
   onClose: () => void;
@@ -22,13 +23,24 @@ const MenuPortal: React.FC<MenuProps> = ({ children, onClose, x, y }) => {
   const { Portal } = usePortal({ target: root });
 
   const ref = useRef<HTMLDivElement>(null);
+  const size = useSize(ref);
   useClickAway(ref, onClose);
+
+  useEffect(() => {
+    ref.current.classList.remove(`context_menu--open`);
+    const rafId = requestAnimationFrame(() => ref.current?.classList.add(`context_menu--open`));
+    return () => cancelAnimationFrame(rafId);
+  }, [size]);
 
   return (
     <Portal>
       <div
         ref={ref}
-        className="context_menu"
+        className={clsx({
+          "context_menu": true,
+          "context_menu--flip_x": x + size?.width > window.innerWidth,
+          "context_menu--flip_y": y + size?.height > window.innerHeight,
+        })}
         style={{
           "--context-menu-x": `${x}px`,
           "--context-menu-y": `${y}px`,
@@ -73,18 +85,25 @@ export const useContextMenu = () => {
   };
 };
 
-export const MenuItem: React.FC<React.ComponentProps<"button">> = ({
-  children,
+type MenuItemProps<T extends keyof JSX.IntrinsicElements> = React.ComponentProps<T> & {
+  component?: T;
+  disabled?: boolean;
+};
+
+export const MenuItem = <T extends keyof JSX.IntrinsicElements>({
+  component,
   className,
+  children,
   ...props
-}) => (
-  <button
-    className={clsx(className, {
-      "context_menu__item": true,
-      "context_menu__item--disabled": props.disabled,
-    })}
-    {...props}
-  >
-    {children}
-  </button>
-);
+}: MenuItemProps<T>) =>
+  React.createElement(
+    component ?? "button",
+    {
+      className: clsx(className, {
+        "context_menu__item": true,
+        "context_menu__item--disabled": props.disabled,
+      }),
+      ...props,
+    },
+    children
+  );

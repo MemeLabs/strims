@@ -12,16 +12,15 @@
       width: 100%;
       border-radius: var(--border-radius-small);
       display: block;
-      box-shadow: var(--shadow-elevation-2);
     }
 
     &__image_frame {
       position: relative;
       width: 100px;
-      border-radius: var(--border-radius-medium);
+      border-radius: var(--border-radius-small);
 
       background-color: var(--channel-color);
-      margin-right: 0.4rem;
+      margin-right: 0.8rem;
       padding: 0.2rem;
     }
 
@@ -70,6 +69,10 @@
     align-items: center;
     cursor: default;
 
+    &:hover {
+      background: unset;
+    }
+
     &__label {
       flex: 1;
       margin-right: 2em;
@@ -89,7 +92,7 @@
       border-radius: var(--border-radius-rounded);
 
       &:hover {
-        outline: 2px solid var(--color-opac-w-10);
+        outline: 3px solid var(--color-opac-w-10);
       }
     }
 
