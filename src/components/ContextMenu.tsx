@@ -55,15 +55,15 @@ export const useContextMenu = () => {
 
   const closeMenu = useCallback(() => setState({ isOpen: false, x: 0, y: 0 }), []);
 
-  const Menu: React.FC<ContextMenuProps> = useMemo(() => {
-    return isOpen
-      ? ({ children }) => (
-          <MenuPortal onClose={closeMenu} {...position}>
-            {children}
-          </MenuPortal>
-        )
-      : () => null;
-  }, [isOpen]);
+  const Menu: React.FC<ContextMenuProps> = useCallback(
+    ({ children }) =>
+      isOpen && (
+        <MenuPortal onClose={closeMenu} {...position}>
+          {children}
+        </MenuPortal>
+      ),
+    [isOpen]
+  );
 
   return {
     isOpen,

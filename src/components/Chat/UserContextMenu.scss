@@ -62,4 +62,46 @@
       line-height: 1.4em;
     }
   }
+
+  &__tag {
+    display: flex;
+    flex-direction: row;
+    gap: 0.4rem;
+    align-items: center;
+    cursor: default;
+
+    &__label {
+      flex: 1;
+      margin-right: 2em;
+    }
+
+    &__item,
+    &__untag {
+      height: 1em;
+      width: 1em;
+      flex-grow: 0;
+      display: block;
+      cursor: pointer;
+    }
+
+    &__item {
+      background-color: var(--fill-color);
+      border-radius: var(--border-radius-rounded);
+
+      &:hover {
+        outline: 2px solid var(--color-opac-w-10);
+      }
+    }
+
+    &__untag {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-grey-8);
+
+      &:hover {
+        color: var(--color-grey-15);
+      }
+    }
+  }
 }

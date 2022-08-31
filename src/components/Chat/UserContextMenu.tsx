@@ -6,6 +6,7 @@ import "./UserContextMenu.scss";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { useCallback, useMemo } from "react";
+import { FiX } from "react-icons/fi";
 import { HiOutlineUser } from "react-icons/hi";
 
 import monkey from "../../../assets/directory/monkey.png";
@@ -34,7 +35,7 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
   onClose,
 }) => {
   const client = useClient();
-  const [{ uiConfigHighlights }, { openWhispers }] = useChat();
+  const [{ uiConfigHighlights, uiConfigIgnores }, { openWhispers }] = useChat();
   const [, { getNetworkKeys }] = useRoom();
 
   const handleWhisperClick = useStableCallback(() => {
@@ -43,11 +44,12 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
   });
 
   const highlighted = uiConfigHighlights.has(Base64.fromUint8Array(peerKey, true));
+  const ignored = uiConfigIgnores.has(Base64.fromUint8Array(peerKey, true));
   const [networkKey] = getNetworkKeys();
 
   const handleHighlightClick = useStableCallback(() => {
     if (highlighted) {
-      void client.chat.unhighlight({ networkKey, alias: nick });
+      void client.chat.unhighlight({ networkKey, peerKey });
     } else {
       void client.chat.highlight({ networkKey, alias: nick });
     }
@@ -55,18 +57,23 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
   });
 
   const handleIgnoreClick = useStableCallback(() => {
-    void client.chat.ignore({ networkKey, alias: nick });
+    if (ignored) {
+      void client.chat.unignore({ networkKey, peerKey });
+    } else {
+      void client.chat.ignore({ networkKey, alias: nick });
+    }
     onClose();
   });
 
   return (
     <>
       <ListingMenuItem viewedListing={viewedListing} onClick={onClose} />
-      <MenuItem onClick={handleWhisperClick}>Whisper</MenuItem>
+      <TagMenuItem nick={nick} peerKey={peerKey} onClick={onClose} />
       <MenuItem onClick={handleHighlightClick}>
         {highlighted ? "Unhighlight" : "Highlight"}
       </MenuItem>
       <MenuItem onClick={handleIgnoreClick}>Ignore</MenuItem>
+      <MenuItem onClick={handleWhisperClick}>Whisper</MenuItem>
     </>
   );
 };
@@ -137,6 +144,50 @@ const ListingMenuItem: React.FC<ListingMenuItemProps> = ({ viewedListing, onClic
   );
 };
 
+interface TagMenuItemProps {
+  nick: string;
+  peerKey: Uint8Array;
+  onClick: () => void;
+}
+
+const TagMenuItem: React.FC<TagMenuItemProps> = ({ nick, peerKey, onClick }) => {
+  const client = useClient();
+  const [{ uiConfigTags }] = useChat();
+  const [, { getNetworkKeys }] = useRoom();
+
+  const [networkKey] = getNetworkKeys();
+
+  const handleTagClick = useStableCallback((e: React.MouseEvent<HTMLElement>) => {
+    const color = e.currentTarget.dataset["color"];
+    if (color) {
+      void client.chat.tag({ networkKey, alias: nick, color });
+    } else {
+      void client.chat.untag({ networkKey, peerKey });
+    }
+    onClick();
+  });
+
+  const buttons = ["red", "orange", "green", "purple", "blue", "yellow"].map((color) => (
+    <button
+      key={color}
+      className="user_context_menu__tag__item"
+      data-color={color}
+      style={{ "--fill-color": color }}
+      onClick={handleTagClick}
+    />
+  ));
+
+  return (
+    <MenuItem className="user_context_menu__tag">
+      <span className="user_context_menu__tag__label">Tag</span>
+      <button className="user_context_menu__tag__untag" onClick={handleTagClick}>
+        <FiX />
+      </button>
+      {buttons}
+    </MenuItem>
+  );
+};
+
 interface UseUserContextMenuOptions {
   nick: string;
   peerKey: Uint8Array;
@@ -146,8 +197,8 @@ interface UseUserContextMenuOptions {
 export const useUserContextMenu = ({ nick, peerKey, viewedListing }: UseUserContextMenuOptions) => {
   const { Menu, isOpen, openMenu, closeMenu } = useContextMenu();
 
-  const UserContextMenu = useCallback(() => {
-    return (
+  const UserContextMenu = useCallback(
+    () =>
       isOpen && (
         <Menu>
           <UserContextMenuItems
@@ -157,9 +208,9 @@ export const useUserContextMenu = ({ nick, peerKey, viewedListing }: UseUserCont
             onClose={closeMenu}
           />
         </Menu>
-      )
-    );
-  }, [isOpen]);
+      ),
+    [isOpen]
+  );
 
   const [{ profile }] = useSession();
   const disabled = useMemo(() => isEqual(profile.key.public, peerKey), []);
