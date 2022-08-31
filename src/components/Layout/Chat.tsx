@@ -40,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 );
 
 const Chat: React.FC = () => {
-  const { showChat, toggleShowChat } = useLayout();
+  const { showChat, toggleShowChat, swapMainPanels } = useLayout();
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
   const [menuOpen, toggleMenuOpen] = useToggle(!mainActiveTopic);
 
@@ -79,7 +79,7 @@ const Chat: React.FC = () => {
           open={menuOpen}
           onToggle={toggleMenuOpen}
           className="layout_chat__foo"
-          direction="left"
+          direction={swapMainPanels ? "right" : "left"}
           filterDeviceTypes={null}
           preventScroll={true}
         >

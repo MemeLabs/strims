@@ -25,6 +25,10 @@
     cursor: pointer;
     border-radius: 3px;
 
+    @at-root .layout--swap & {
+      transform: scaleX(-1);
+    }
+
     svg {
       display: block;
       padding: 10px;

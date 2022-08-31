@@ -40,6 +40,10 @@
     display: flex;
     flex-direction: row;
     font-size: 1rem;
+
+    @at-root .layout--swap & {
+      flex-direction: row-reverse;
+    }
   }
 
   &__foo {

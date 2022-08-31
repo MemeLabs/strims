@@ -5,6 +5,7 @@ import "./Layout.scss";
 
 import clsx from "clsx";
 import React, { ReactNode, RefCallback, useEffect, useState } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 
 import { useLayout, withLayoutContext } from "../../contexts/Layout";
 import { DEVICE_TYPE, DeviceType, IS_PWA, OS } from "../../lib/userAgent";
@@ -159,6 +160,11 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
   }, []);
 
   const layout = useLayout();
+
+  useHotkeys("alt+y", () => layout.toggleSwapMainPanels(), {
+    enableOnContentEditable: true,
+    enableOnTags: ["INPUT"],
+  });
 
   const { height, width, orientation } = viewportShape;
   const aspectRatio = width / height;
