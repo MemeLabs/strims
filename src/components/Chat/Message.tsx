@@ -19,12 +19,11 @@ import { useOpenListing } from "../../hooks/directory";
 import useRefs from "../../hooks/useRefs";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import * as directory from "../../lib/directory";
-import { useContextMenu } from "../ContextMenu";
 import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteDetails from "./EmoteDetails";
-import UserContextMenu from "./UserContextMenu";
+import { useUserContextMenu } from "./UserContextMenu";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
 const LINK_SHORTEN_THRESHOLD = 75;
@@ -152,21 +151,17 @@ interface MessageNickProps {
 const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase, onClick }) => {
   const handleClick = useStableCallback((e: React.MouseEvent) => onClick(e, entity));
 
-  const { Menu, ...contextMenu } = useContextMenu();
+  const { UserContextMenu, openUserContextMenu } = useUserContextMenu(entity);
   const handleContextMenu = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    contextMenu.openMenu(e);
+    openUserContextMenu(e);
   });
 
   return (
     <span className="chat__message__nick" onClick={handleClick} onContextMenu={handleContextMenu}>
       {normalizeCase ? entity.nick : children}
-      {contextMenu.isOpen && (
-        <Menu>
-          <UserContextMenu {...entity} onClose={contextMenu.closeMenu} />
-        </Menu>
-      )}
+      <UserContextMenu />
     </span>
   );
 };
@@ -445,11 +440,15 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     toggleSelectedPeer(peerKey);
   });
 
-  const { Menu, ...contextMenu } = useContextMenu();
+  const { UserContextMenu, openUserContextMenu } = useUserContextMenu({
+    nick,
+    peerKey,
+    viewedListing,
+  });
   const handleAuthorContextMenu = useStableCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    contextMenu.openMenu(e);
+    openUserContextMenu(e);
   });
 
   const canCombo = isMostRecent && entities.emotes[0]?.canCombo;
@@ -553,16 +552,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
   return (
     <div {...props} className={classNames} ref={fwRef}>
       {content}
-      {contextMenu.isOpen && (
-        <Menu>
-          <UserContextMenu
-            nick={nick}
-            peerKey={peerKey}
-            viewedListing={viewedListing}
-            onClose={contextMenu.closeMenu}
-          />
-        </Menu>
-      )}
+      <UserContextMenu />
     </div>
   );
 };

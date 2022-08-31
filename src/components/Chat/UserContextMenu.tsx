@@ -5,7 +5,7 @@ import "./UserContextMenu.scss";
 
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { HiOutlineUser } from "react-icons/hi";
 
 import monkey from "../../../assets/directory/monkey.png";
@@ -17,17 +17,17 @@ import { useOpenListing } from "../../hooks/directory";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { getDirectoryRefColor } from "../../lib/chat";
 import { formatNumber } from "../../lib/number";
-import { MenuItem } from "../ContextMenu";
+import { MenuItem, useContextMenu } from "../ContextMenu";
 import SnippetImage from "../Directory/SnippetImage";
 
-interface UserContextMenuProps {
+interface UserContextMenuItemsProps {
   nick: string;
   peerKey: Uint8Array;
   viewedListing: Message.DirectoryRef;
   onClose: () => void;
 }
 
-const UserContextMenu: React.FC<UserContextMenuProps> = ({
+const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
   nick,
   peerKey,
   viewedListing,
@@ -36,12 +36,6 @@ const UserContextMenu: React.FC<UserContextMenuProps> = ({
   const client = useClient();
   const [{ uiConfigHighlights }, { openWhispers }] = useChat();
   const [, { getNetworkKeys }] = useRoom();
-  const [{ profile }] = useSession();
-
-  if (isEqual(profile.key.public, peerKey)) {
-    onClose();
-    return null;
-  }
 
   const handleWhisperClick = useStableCallback(() => {
     openWhispers(peerKey, getNetworkKeys(), nick);
@@ -143,4 +137,38 @@ const ListingMenuItem: React.FC<ListingMenuItemProps> = ({ viewedListing, onClic
   );
 };
 
-export default UserContextMenu;
+interface UseUserContextMenuOptions {
+  nick: string;
+  peerKey: Uint8Array;
+  viewedListing: Message.DirectoryRef;
+}
+
+export const useUserContextMenu = ({ nick, peerKey, viewedListing }: UseUserContextMenuOptions) => {
+  const { Menu, isOpen, openMenu, closeMenu } = useContextMenu();
+
+  const UserContextMenu = useCallback(() => {
+    return (
+      isOpen && (
+        <Menu>
+          <UserContextMenuItems
+            nick={nick}
+            peerKey={peerKey}
+            viewedListing={viewedListing}
+            onClose={closeMenu}
+          />
+        </Menu>
+      )
+    );
+  }, [isOpen]);
+
+  const [{ profile }] = useSession();
+  const disabled = useMemo(() => isEqual(profile.key.public, peerKey), []);
+
+  const openUserContextMenu = (e: React.MouseEvent) => {
+    if (!disabled) {
+      openMenu(e);
+    }
+  };
+
+  return { UserContextMenu, openUserContextMenu, disabled };
+};
