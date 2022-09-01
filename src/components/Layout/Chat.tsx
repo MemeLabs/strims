@@ -42,7 +42,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 const Chat: React.FC = () => {
   const { showChat, toggleShowChat, swapMainPanels } = useLayout();
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
-  const [menuOpenToggled, toggleMenuOpen] = useToggle(true);
+  const [menuOpenToggled, toggleMenuOpen] = useToggle(!mainActiveTopic);
 
   const menuLocked = !mainActiveTopic;
   const menuOpen = menuOpenToggled || menuLocked;

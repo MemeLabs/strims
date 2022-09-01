@@ -6,6 +6,7 @@ import "./ChatBar.scss";
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useEffect, useRef } from "react";
+import { IoMdExpand } from "react-icons/io";
 import { MdClose } from "react-icons/md";
 import { useToggle } from "react-use";
 
@@ -50,7 +51,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   );
 
   const handleHeaderClick = useStableCallback(() => toggleMinimized());
-
+  const handleReturnClick = useStableCallback(() => chatActions.returnTopicPopout(topic));
   const handleCloseClick = useStableCallback(() => chatActions.closeTopic(topic));
 
   const className = clsx("chat_popout", {
@@ -65,6 +66,9 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
           {room.unreadCount > 0 ? ` (${room.unreadCount.toLocaleString()})` : ""}
         </div>
         <div className="chat_popout__controls">
+          <button className="chat_popout__control" onClick={handleReturnClick}>
+            <IoMdExpand />
+          </button>
           <button className="chat_popout__control" onClick={handleCloseClick}>
             <MdClose />
           </button>

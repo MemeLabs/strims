@@ -247,6 +247,7 @@ type ChatActions = {
   openRoom: (serverKey: Uint8Array, networkKey: Uint8Array) => void;
   openWhispers: (peerKey: Uint8Array, networkKeys?: Uint8Array[], alias?: string) => void;
   openTopicPopout: (topic: Topic) => void;
+  returnTopicPopout: (topic: Topic) => void;
   setPopoutTopicCapacity: (popoutTopicCapacity: number) => void;
   closeTopic: (topic: Topic) => void;
   setMainActiveTopic: (topic: Topic) => void;
@@ -478,6 +479,20 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     };
   };
 
+  const returnTopicPopout = (state: State, topic: Topic) => {
+    const mainTopics = [...state.mainTopics, topic];
+    const popoutTopics = state.popoutTopics.filter((t) => !isEqual(t, topic));
+
+    selectThread(state, topic)?.messageSizeCache.reset();
+
+    return {
+      ...state,
+      mainTopics,
+      mainActiveTopic: topic,
+      popoutTopics,
+    };
+  };
+
   const setPopoutTopicCapacity = (state: State, popoutTopicCapacity: number) => {
     const mainTopics = [...state.mainTopics];
     const popoutTopics = [...state.popoutTopics];
@@ -619,6 +634,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     reduceUIConfigEvent,
     handleWhisperEvent,
     openTopicPopout,
+    returnTopicPopout,
     setPopoutTopicCapacity,
     closeTopic,
     setMainActiveTopic,
