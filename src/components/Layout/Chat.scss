@@ -46,12 +46,13 @@
     }
   }
 
-  &__foo {
+  &__menu {
     position: absolute;
     box-shadow: var(--shadow-elevation-2);
     background: var(--color-background-layout-chat-menu);
     height: calc(100% + env(safe-area-inset-bottom));
     width: calc(100% - 10px);
+    max-width: 420px;
     z-index: var(--z-index-above);
     right: 0;
     --swipable-peek-size: 0px;
@@ -134,6 +135,12 @@
           transform: scaleX(-1);
         }
       }
+    }
+  }
+
+  &.layout--full_screen_chat {
+    .layout_chat__toggle--off {
+      display: none;
     }
   }
 

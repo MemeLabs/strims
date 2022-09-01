@@ -333,7 +333,8 @@ $chat-width-sm: 260px;
     }
   }
 
-  &.layout--theater_mode {
+  &.layout--theater_mode,
+  &.layout--full_screen_chat {
     --layout-header-height: 0px;
 
     .layout__header {
@@ -343,6 +344,10 @@ $chat-width-sm: 260px;
     .layout__nav {
       display: none;
     }
+  }
+
+  &.layout--full_screen_chat {
+    --layout-chat-width: 100%;
   }
 }
 

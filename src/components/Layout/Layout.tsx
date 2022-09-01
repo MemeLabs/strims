@@ -6,6 +6,7 @@ import "./Layout.scss";
 import clsx from "clsx";
 import React, { ReactNode, RefCallback, useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import { useLocation } from "react-router";
 
 import { useLayout, withLayoutContext } from "../../contexts/Layout";
 import { DEVICE_TYPE, DeviceType, IS_PWA, OS } from "../../lib/userAgent";
@@ -166,6 +167,14 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
     enableOnTags: ["INPUT"],
   });
 
+  useHotkeys("alt+c", () => layout.toggleFullScreenChat(), {
+    enableOnContentEditable: true,
+    enableOnTags: ["INPUT"],
+  });
+
+  const location = useLocation();
+  useEffect(() => layout.toggleFullScreenChat(false), [location]);
+
   const { height, width, orientation } = viewportShape;
   const aspectRatio = width / height;
 
@@ -215,6 +224,7 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
         "layout--swap": layout.swapMainPanels,
         "layout--show_chat": layout.showChat,
         "layout--show_video": layout.showVideo,
+        "layout--full_screen_chat": layout.fullScreenChat,
         "layout--theater_mode": layout.theaterMode,
         "layout--expand_nav": layout.expandNav,
       })}

@@ -78,7 +78,7 @@ const Chat: React.FC = () => {
         <SwipablePanel
           open={menuOpen}
           onToggle={toggleMenuOpen}
-          className="layout_chat__foo"
+          className="layout_chat__menu"
           direction={swapMainPanels ? "right" : "left"}
           filterDeviceTypes={null}
           preventScroll={true}

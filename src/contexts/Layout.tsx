@@ -17,6 +17,7 @@ export interface LayoutContextProps {
   overlayState: OverlayState;
   showChat: boolean;
   showVideo: boolean;
+  fullScreenChat: boolean;
   theaterMode: boolean;
   expandNav: boolean;
   modalOpen: boolean;
@@ -25,6 +26,7 @@ export interface LayoutContextProps {
   toggleOverlayOpen: ToggleFunc;
   toggleShowChat: ToggleFunc;
   toggleShowVideo: ToggleFunc;
+  toggleFullScreenChat: ToggleFunc;
   toggleTheaterMode: ToggleFunc;
   toggleExpandNav: ToggleFunc;
   toggleModalOpen: ToggleFunc;
@@ -48,6 +50,7 @@ export const withLayoutContext = <T,>(
     });
     const [showChat, toggleShowChat] = useToggle(true);
     const [showVideo, toggleShowVideo] = useToggle(false);
+    const [fullScreenChat, toggleFullScreenChat] = useToggle(false);
     const [theaterMode, toggleTheaterMode] = useToggle(false);
     const [expandNav, toggleExpandNav] = useToggle(false);
     const [modalOpen, toggleModalOpen] = useToggle(false);
@@ -65,6 +68,7 @@ export const withLayoutContext = <T,>(
         overlayState,
         showChat,
         showVideo,
+        fullScreenChat,
         theaterMode,
         expandNav,
         modalOpen,
@@ -73,11 +77,22 @@ export const withLayoutContext = <T,>(
         toggleOverlayOpen,
         toggleShowChat,
         toggleShowVideo,
+        toggleFullScreenChat,
         toggleTheaterMode,
         toggleExpandNav,
         toggleModalOpen,
       }),
-      [root, swapMainPanels, overlayState, showChat, showVideo, theaterMode, expandNav, modalOpen]
+      [
+        root,
+        swapMainPanels,
+        overlayState,
+        showChat,
+        showVideo,
+        fullScreenChat,
+        theaterMode,
+        expandNav,
+        modalOpen,
+      ]
     );
 
     return (

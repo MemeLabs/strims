@@ -20,7 +20,7 @@ interface LayoutBodyProps {
 }
 
 export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
-  const { showVideo, overlayState, setOverlayState } = useLayout();
+  const { showVideo, fullScreenChat, overlayState, setOverlayState } = useLayout();
 
   const handleDragStateChange = (state: DragState) => {
     setOverlayState({
@@ -42,16 +42,18 @@ export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
         <NetworkNav />
       </div>
       <main className="foo_1">
-        <div className="content_panel">
-          <Scrollbars autoHide>
-            <div className="scroll_content_test">
-              <Suspense fallback={<LoadingPlaceholder />}>
-                <Outlet />
-                {children}
-              </Suspense>
-            </div>
-          </Scrollbars>
-        </div>
+        {!fullScreenChat && (
+          <div className="content_panel">
+            <Scrollbars autoHide>
+              <div className="scroll_content_test">
+                <Suspense fallback={<LoadingPlaceholder />}>
+                  <Outlet />
+                  {children}
+                </Suspense>
+              </div>
+            </Scrollbars>
+          </div>
+        )}
         <SwipablePanel
           className="foo_2"
           direction="left"
@@ -59,7 +61,7 @@ export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
           onDragStateChange={handleDragStateChange}
           preventScroll={true}
         >
-          {showVideo && (
+          {!fullScreenChat && showVideo && (
             <div className="layout__video">
               <Player>
                 <VideoMeta />
@@ -70,9 +72,11 @@ export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
             <Chat />
           </div>
         </SwipablePanel>
-        <div className="layout__chat_bar">
-          <ChatBar />
-        </div>
+        {!fullScreenChat && (
+          <div className="layout__chat_bar">
+            <ChatBar />
+          </div>
+        )}
       </main>
     </>
   );
