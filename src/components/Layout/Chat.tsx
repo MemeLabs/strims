@@ -42,7 +42,10 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 const Chat: React.FC = () => {
   const { showChat, toggleShowChat, swapMainPanels } = useLayout();
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
-  const [menuOpen, toggleMenuOpen] = useToggle(!mainActiveTopic);
+  const [menuOpenToggled, toggleMenuOpen] = useToggle(true);
+
+  const menuLocked = !mainActiveTopic;
+  const menuOpen = menuOpenToggled || menuLocked;
 
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, () => toggleMenuOpen(false));
@@ -77,8 +80,9 @@ const Chat: React.FC = () => {
       <div className="layout_chat__body">
         <SwipablePanel
           open={menuOpen}
+          locked={menuLocked}
           onToggle={toggleMenuOpen}
-          className="layout_chat__menu"
+          className={clsx("layout_chat__menu", { "layout_chat__menu--locked": menuLocked })}
           direction={swapMainPanels ? "right" : "left"}
           filterDeviceTypes={null}
           preventScroll={true}

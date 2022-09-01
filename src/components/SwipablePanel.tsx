@@ -42,6 +42,7 @@ interface SwipablePaneProps {
   className?: string;
   dragThreshold?: number;
   open?: boolean;
+  locked?: boolean;
   animateInitialState?: boolean;
   handleRef?: EventTarget | React.RefObject<EventTarget>;
   onToggle?: (open: boolean) => void;
@@ -57,6 +58,7 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   className,
   dragThreshold = 200,
   open = true,
+  locked = false,
   animateInitialState = false,
   handleRef,
   onToggle,
@@ -122,6 +124,8 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
 
   useDrag(
     ({ movement: [mx, my], swipe: [sx, sy], dragging }) => {
+      if (locked) return;
+
       let m = 0;
       let s = 0;
       switch (direction) {

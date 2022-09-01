@@ -34,7 +34,7 @@ interface RoomCarouselGemProps extends Topic {
 const RoomCarouselGem: React.FC<RoomCarouselGemProps> = (props) => {
   const { icon, unreadCount, type, topicKey, onChange, selected } = props;
   const topic = { type, topicKey };
-  const [, chatActions] = useChat();
+  const [{ popoutTopicCapacity }, chatActions] = useChat();
 
   const ref = useRef<HTMLDivElement>();
   useDrag(
@@ -102,8 +102,12 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = (props) => {
         {unreadCount > 0 && <Badge count={unreadCount} max={100} />}
       </Gem>
       <Menu>
-        <MenuItem onClick={handleMarkReadClick}>mark as read</MenuItem>
-        <MenuItem onClick={handleOpenPopoutClick}>open mini chat</MenuItem>
+        <MenuItem disabled={unreadCount === 0} onClick={handleMarkReadClick}>
+          mark as read
+        </MenuItem>
+        <MenuItem disabled={popoutTopicCapacity === 0} onClick={handleOpenPopoutClick}>
+          open mini chat
+        </MenuItem>
         <MenuItem onClick={handleCloseClick}>close</MenuItem>
       </Menu>
     </div>

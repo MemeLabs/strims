@@ -348,6 +348,12 @@ $chat-width-sm: 260px;
 
   &.layout--full_screen_chat {
     --layout-chat-width: 100%;
+
+    .foo_2,
+    .layout__chat {
+      display: flex;
+      flex: 1;
+    }
   }
 }
 

@@ -29,6 +29,10 @@
       transform: scaleX(-1);
     }
 
+    @at-root .layout_chat__menu--locked & {
+      display: none;
+    }
+
     svg {
       display: block;
       padding: 10px;

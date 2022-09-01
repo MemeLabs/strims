@@ -47,6 +47,7 @@
     &--disabled:hover {
       background: unset;
       color: var(--color-text-context-menu-item-disabled);
+      cursor: default;
     }
   }
 }
