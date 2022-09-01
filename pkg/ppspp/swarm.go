@@ -23,7 +23,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 	o := NewDefaultSwarmOptions()
 	o.Assign(opt)
 
-	buf, err := store.NewBuffer(o.LiveWindow, o.ChunkSize)
+	buf, err := store.NewBufferWithLayout(o.LiveWindow, o.ChunkSize, o.BufferLayout)
 	if err != nil {
 		return nil, err
 	}

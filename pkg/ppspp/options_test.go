@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,6 +34,7 @@ func TestSwarmOptions(t *testing.T) {
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 				},
 				DeliveryMode: MandatoryDeliveryMode,
+				BufferLayout: store.CircularBufferLayout,
 			},
 			expected: SwarmOptions{
 				Label:              "test",
@@ -47,6 +49,7 @@ func TestSwarmOptions(t *testing.T) {
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 				},
 				DeliveryMode: MandatoryDeliveryMode,
+				BufferLayout: store.CircularBufferLayout,
 			},
 		},
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/MemeLabs/strims/pkg/binmap"
 	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
 	"github.com/MemeLabs/strims/pkg/ppspp/codec"
 	"github.com/MemeLabs/strims/pkg/rope"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -24,33 +25,57 @@ var (
 	ErrReadOffsetNotFound = errors.New("viable read offset not found")
 )
 
+type BufferLayout byte
+
+const (
+	_ BufferLayout = iota
+	CircularBufferLayout
+	ElasticBufferLayout
+)
+
 // NewBuffer ...
-func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
+func NewBuffer(size, chunkSize int) (*Buffer, error) {
+	return NewBufferWithLayout(size, chunkSize, CircularBufferLayout)
+}
+
+func NewBufferWithLayout(size, chunkSize int, layout BufferLayout) (*Buffer, error) {
 	if size&(size-1) != 0 {
 		return nil, errors.New("buffer size must be power of 2")
 	}
 
-	return &Buffer{
+	b := &Buffer{
 		chunkSize: uint64(chunkSize),
 		mask:      uint64(size) - 1,
 		size:      binmap.Bin(size * 2),
 		head:      binmap.Bin(size * 2),
 		bins:      binmap.New(),
-		buf:       make([]byte, size*chunkSize),
+		layout:    layout,
 		next:      binmap.None,
 		ready:     make(chan struct{}),
-	}, nil
+	}
+
+	switch layout {
+	case CircularBufferLayout:
+		b.buf = make([]byte, size*chunkSize)
+	case ElasticBufferLayout:
+		b.buf = make([]byte, mathutil.Max(chunkSize, 1024))
+	default:
+		return nil, errors.New("unsupported buffer layout")
+	}
+
+	return b, nil
 }
 
 // Buffer ...
 type Buffer struct {
 	chunkSize uint64
 	mask      uint64
+	lock      sync.Mutex
 	size      binmap.Bin
 	head      binmap.Bin
 	bins      *binmap.Map
 	buf       []byte
-	lock      sync.Mutex
+	layout    BufferLayout
 	isReady   bool
 	ready     chan struct{}
 	next      binmap.Bin
@@ -121,6 +146,16 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	l, r := b.Base()
 	if l < s.head-s.size {
 		return
+	}
+	if s.layout == ElasticBufferLayout {
+		if r > s.size {
+			return
+		}
+		if n := int((r.BaseOffset() + 1) * s.chunkSize); n > len(s.buf) {
+			buf := s.buf
+			s.buf = make([]byte, mathutil.Max(n, len(s.buf)*4/3))
+			copy(s.buf, buf)
+		}
 	}
 	if h := r + 2; s.head < h {
 		s.head = h
@@ -259,6 +294,10 @@ func (s *Buffer) Next() binmap.Bin {
 func (s *Buffer) ImportCache(b []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	if s.layout == ElasticBufferLayout {
+		s.buf = make([]byte, len(b))
+	}
 
 	copy(s.buf, b)
 

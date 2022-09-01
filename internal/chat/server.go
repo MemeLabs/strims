@@ -20,6 +20,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -41,12 +42,13 @@ var defaultEventSwarmOptions = ppspp.SwarmOptions{
 
 var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          1024,
-	LiveWindow:         16 * 1024, // caps the bundle size at 16mb...
+	LiveWindow:         32 * 1024, // caps the bundle size at 32mb...
 	ChunksPerSignature: 128,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodMerkleTree,
 	},
 	DeliveryMode: ppspp.MandatoryDeliveryMode,
+	BufferLayout: store.ElasticBufferLayout,
 }
 
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize

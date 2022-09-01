@@ -6,6 +6,7 @@ package ppspp
 import (
 	"github.com/MemeLabs/strims/pkg/ppspp/codec"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 )
 
 // SwarmOptions ...
@@ -18,6 +19,7 @@ type SwarmOptions struct {
 	Integrity          integrity.VerifierOptions
 	SchedulingMethod   SchedulingMethod
 	DeliveryMode       DeliveryMode
+	BufferLayout       store.BufferLayout
 }
 
 // Assign ...
@@ -42,6 +44,9 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	}
 	if u.DeliveryMode != 0 {
 		o.DeliveryMode = u.DeliveryMode
+	}
+	if u.BufferLayout != 0 {
+		o.BufferLayout = u.BufferLayout
 	}
 
 	o.Integrity.Assign(u.Integrity)
@@ -89,5 +94,6 @@ func NewDefaultSwarmOptions() SwarmOptions {
 		Integrity:          integrity.NewDefaultVerifierOptions(),
 		SchedulingMethod:   PeerSchedulingMethod,
 		DeliveryMode:       LowLatencyDeliveryMode,
+		BufferLayout:       store.CircularBufferLayout,
 	}
 }
