@@ -42,7 +42,6 @@ $chat-width-sm: 260px;
 
 .layout__header {
   display: none;
-  z-index: calc(var(--z-index-sticky) + 1);
 }
 
 .layout__body {
@@ -77,7 +76,6 @@ $chat-width-sm: 260px;
   background: blue;
   display: flex;
   flex: var(--network-nav-collapsed-width) 0 0;
-  z-index: var(--z-index-sticky);
 
   @at-root .layout--expand_nav & {
     flex: var(--network-nav-expanded-width) 0 0;
@@ -237,7 +235,11 @@ $chat-width-sm: 260px;
     display: flex;
     flex: var(--layout-header-height) 0 0;
     flex-direction: column;
-    background: red;
+    z-index: calc(var(--z-index-sticky) + 1);
+  }
+
+  .layout__nav {
+    z-index: var(--z-index-sticky);
   }
 
   .layout__footer {

@@ -119,6 +119,7 @@ const ChatBar: React.FC = () => {
 
   const capacity = Math.floor(size?.width / 330);
   useEffect(() => setPopoutTopicCapacity(capacity), [capacity]);
+  useEffect(() => () => setPopoutTopicCapacity(0), []);
 
   const topics = popoutTopics.map((topic) => (
     <ThreadProvider key={Base64.fromUint8Array(topic.topicKey, true)} {...topic}>
