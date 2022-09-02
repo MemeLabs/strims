@@ -9,7 +9,6 @@ import (
 
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
-	"github.com/MemeLabs/strims/pkg/apis/type/image"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -42,7 +41,6 @@ const (
 	chatUIConfigIgnoreNS
 	chatUIConfigIgnoreKeyNS
 	chatServerIconNS
-	chatServerIconServerIDKeyNS
 )
 
 var ChatServers = NewTable(
@@ -64,14 +62,6 @@ var ChatServerIcons = NewTable(
 			return &chatv1.ServerIconChangeEvent{ServerIcon: m}
 		},
 	},
-)
-
-var ChatServerIconsByServerID = NewUniqueIndex(
-	chatServerIconServerIDKeyNS,
-	ChatServerIcons,
-	(*chatv1.ServerIcon).GetServerId,
-	func(serverID uint64) []byte { return binary.BigEndian.AppendUint64(nil, serverID) },
-	nil,
 )
 
 var ChatEmotes = NewTable(
@@ -305,25 +295,6 @@ func NewChatServer(
 		NetworkKey: networkKey,
 		Key:        key,
 		Room:       chatRoom,
-	}
-	return v, nil
-}
-
-// NewChatServerIcon ...
-func NewChatServerIcon(
-	g IDGenerator,
-	serverID uint64,
-	image *image.Image,
-) (*chatv1.ServerIcon, error) {
-	id, err := g.GenerateID()
-	if err != nil {
-		return nil, err
-	}
-
-	v := &chatv1.ServerIcon{
-		Id:       id,
-		ServerId: serverID,
-		Image:    image,
 	}
 	return v, nil
 }

@@ -73,7 +73,7 @@ func (s *chatService) DeleteServer(ctx context.Context, req *chatv1.DeleteServer
 		if err := dao.ChatServers.Delete(tx, req.Id); err != nil {
 			return err
 		}
-		err := dao.ChatServerIconsByServerID.Delete(tx, req.Id)
+		err := dao.ChatServerIcons.Delete(tx, req.Id)
 		if errors.Is(err, kv.ErrRecordNotFound) {
 			return nil
 		}
@@ -96,21 +96,10 @@ func (s *chatService) GetServer(ctx context.Context, req *chatv1.GetServerReques
 
 // UpdateServerIcon ...
 func (s *chatService) UpdateServerIcon(ctx context.Context, req *chatv1.UpdateServerIconRequest) (*chatv1.UpdateServerIconResponse, error) {
-	var icon *chatv1.ServerIcon
-	id, err := dao.ChatServerIconsByServerID.GetID(s.store, req.ServerId)
-	if errors.Is(err, kv.ErrRecordNotFound) {
-		icon, err = dao.NewChatServerIcon(s.store, req.ServerId, req.Image)
-	} else if err == nil {
-		icon = &chatv1.ServerIcon{
-			Id:       id,
-			ServerId: req.ServerId,
-			Image:    req.Image,
-		}
+	icon := &chatv1.ServerIcon{
+		Id:    req.ServerId,
+		Image: req.Image,
 	}
-	if err != nil {
-		return nil, err
-	}
-
 	if err := dao.ChatServerIcons.Upsert(s.store, icon); err != nil {
 		return nil, err
 	}
@@ -119,7 +108,7 @@ func (s *chatService) UpdateServerIcon(ctx context.Context, req *chatv1.UpdateSe
 
 // GetServer ...
 func (s *chatService) GetServerIcon(ctx context.Context, req *chatv1.GetServerIconRequest) (*chatv1.GetServerIconResponse, error) {
-	icon, err := dao.ChatServerIconsByServerID.Get(s.store, req.ServerId)
+	icon, err := dao.ChatServerIcons.Get(s.store, req.ServerId)
 	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 		return nil, err
 	}

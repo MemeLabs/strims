@@ -60,7 +60,7 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *ch
 		if err != nil {
 			return
 		}
-		icon, err = dao.ChatServerIconsByServerID.Get(tx, id)
+		icon, err = dao.ChatServerIcons.Get(tx, id)
 		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return
 		}
@@ -240,7 +240,7 @@ func (s *chatServer) watchAssets(ctx context.Context) {
 			case *chatv1.ServerChangeEvent:
 				s.service.SyncConfig(e.Server)
 			case *chatv1.ServerIconChangeEvent:
-				s.trySyncAssets(e.ServerIcon.ServerId, false)
+				s.trySyncAssets(e.ServerIcon.Id, false)
 			case *chatv1.SyncAssetsEvent:
 				s.trySyncAssets(e.ServerId, e.ForceUnifiedUpdate)
 			case *chatv1.EmoteChangeEvent:

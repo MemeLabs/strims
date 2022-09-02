@@ -34,7 +34,6 @@ message Server {
 
 message ServerIcon {
   uint64 id = 1;
-  uint64 server_id = 2;
   type.Image image = 3;
 }
 

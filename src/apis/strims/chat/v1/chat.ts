@@ -201,25 +201,21 @@ export class Server {
 
 export type IServerIcon = {
   id?: bigint;
-  serverId?: bigint;
   image?: strims_type_IImage;
 }
 
 export class ServerIcon {
   id: bigint;
-  serverId: bigint;
   image: strims_type_Image | undefined;
 
   constructor(v?: IServerIcon) {
     this.id = v?.id || BigInt(0);
-    this.serverId = v?.serverId || BigInt(0);
     this.image = v?.image && new strims_type_Image(v.image);
   }
 
   static encode(m: ServerIcon, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.serverId) w.uint32(16).uint64(m.serverId);
     if (m.image) strims_type_Image.encode(m.image, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -233,9 +229,6 @@ export class ServerIcon {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
-        break;
-        case 2:
-        m.serverId = r.uint64();
         break;
         case 3:
         m.image = strims_type_Image.decode(r, r.uint32());
