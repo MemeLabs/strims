@@ -2978,18 +2978,22 @@ export class GetEmoteResponse {
 
 export type IListEmotesRequest = {
   serverId?: bigint;
+  parts?: strims_chat_v1_ListEmotesRequest_Part[];
 }
 
 export class ListEmotesRequest {
   serverId: bigint;
+  parts: strims_chat_v1_ListEmotesRequest_Part[];
 
   constructor(v?: IListEmotesRequest) {
     this.serverId = v?.serverId || BigInt(0);
+    this.parts = v?.parts ? v.parts : [];
   }
 
   static encode(m: ListEmotesRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
+    m.parts.reduce((w, v) => w.uint32(v), w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -3003,12 +3007,23 @@ export class ListEmotesRequest {
         case 1:
         m.serverId = r.uint64();
         break;
+        case 2:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.parts.push(r.uint32());
+        break;
         default:
         r.skipType(tag & 7);
         break;
       }
     }
     return m;
+  }
+}
+
+export namespace ListEmotesRequest {
+  export enum Part {
+    PART_UNDEFINED = 0,
+    PART_META = 1,
+    PART_ASSETS = 2,
   }
 }
 
@@ -6902,6 +6917,10 @@ export type strims_chat_v1_UIConfig_ShowRemoved = UIConfig.ShowRemoved;
 export const strims_chat_v1_UIConfig_UserPresenceIndicator = UIConfig.UserPresenceIndicator;
 /* @internal */
 export type strims_chat_v1_UIConfig_UserPresenceIndicator = UIConfig.UserPresenceIndicator;
+/* @internal */
+export const strims_chat_v1_ListEmotesRequest_Part = ListEmotesRequest.Part;
+/* @internal */
+export type strims_chat_v1_ListEmotesRequest_Part = ListEmotesRequest.Part;
 /* @internal */
 export const strims_chat_v1_WhisperRecord_State = WhisperRecord.State;
 /* @internal */

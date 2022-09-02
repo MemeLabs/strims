@@ -192,7 +192,31 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.ListEmotesResponse{Emotes: emotes}, nil
+	if len(req.Parts) == 0 {
+		return &chatv1.ListEmotesResponse{Emotes: emotes}, nil
+	}
+
+	res := make([]*chatv1.Emote, len(emotes))
+	for i, e := range emotes {
+		r := &chatv1.Emote{
+			Id:       e.Id,
+			ServerId: e.ServerId,
+		}
+		for _, part := range req.Parts {
+			switch part {
+			case chatv1.ListEmotesRequest_PART_META:
+				r.Name = e.Name
+				r.Contributor = e.Contributor
+			case chatv1.ListEmotesRequest_PART_ASSETS:
+				r.Images = e.Images
+				r.Effects = e.Effects
+			default:
+				return nil, errors.New("invalid part")
+			}
+			res[i] = r
+		}
+	}
+	return &chatv1.ListEmotesResponse{Emotes: res}, nil
 }
 
 // CreateModifier ...

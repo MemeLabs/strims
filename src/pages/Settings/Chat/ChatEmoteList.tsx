@@ -1,12 +1,12 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
-import { Emote, EmoteImage } from "../../../apis/strims/chat/v1/chat";
+import { Emote, ListEmotesRequest } from "../../../apis/strims/chat/v1/chat";
 import {
   MenuCell,
   MenuItem,
@@ -16,20 +16,6 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import { fileTypeToMimeType, scaleToDOMScale } from "./utils";
-
-interface ImageProps {
-  src: EmoteImage;
-}
-
-const Image: React.FC<ImageProps> = ({ src }) => {
-  const [url] = useState(() =>
-    URL.createObjectURL(new Blob([src.data], { type: fileTypeToMimeType(src.fileType) }))
-  );
-  useEffect(() => () => URL.revokeObjectURL(url));
-
-  return <img srcSet={`${url} ${scaleToDOMScale(src.scale)}`} />;
-};
 
 export interface ChatEmoteTableProps {
   serverId: bigint;
@@ -77,7 +63,12 @@ const ChatEmoteList: React.FC = () => {
 
   const { serverId } = useParams<"serverId">();
   const [{ loading, value }, getEmotes] = useCall("chatServer", "listEmotes", {
-    args: [{ serverId: BigInt(serverId) }],
+    args: [
+      {
+        serverId: BigInt(serverId),
+        parts: [ListEmotesRequest.Part.PART_META],
+      },
+    ],
   });
 
   if (loading) {

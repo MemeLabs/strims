@@ -367,7 +367,14 @@ message GetEmoteResponse {
   Emote emote = 1;
 }
 message ListEmotesRequest {
+  enum Part {
+    PART_UNDEFINED = 0;
+    PART_META = 1;
+    PART_ASSETS = 2;
+  }
+
   uint64 server_id = 1;
+  repeated Part parts = 2;
 }
 message ListEmotesResponse {
   repeated Emote emotes = 1;
