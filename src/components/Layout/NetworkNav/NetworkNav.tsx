@@ -32,7 +32,7 @@ const ScrollbarView: React.FC<ComponentProps<"div">> = ({ style, ...props }) => 
 const NetworkNav: React.FC = () => {
   const { t } = useTranslation();
   const { expandNav, toggleExpandNav } = useLayout();
-  const { items, config, updateDisplayOrder } = useContext(NetworkContext);
+  const { items, assetBundles, config, updateDisplayOrder } = useContext(NetworkContext);
 
   const orderedItems = useMemo(
     () =>
@@ -95,7 +95,7 @@ const NetworkNav: React.FC = () => {
             <Droppable droppableId="networks">
               {({ innerRef, droppableProps, placeholder }) => (
                 <div ref={innerRef} {...droppableProps}>
-                  {orderedItems.map(({ network, peerCount, icon }, i) => (
+                  {orderedItems.map(({ network, peerCount }, i) => (
                     <Draggable
                       draggableId={`network-${network.id.toString()}`}
                       index={i}
@@ -118,7 +118,11 @@ const NetworkNav: React.FC = () => {
                                 to={`/directory/${Base64.fromUint8Array(certRoot.key, true)}`}
                                 className="network_nav__link"
                               >
-                                <NetworkGem network={network} peerCount={peerCount} icon={icon} />
+                                <NetworkGem
+                                  network={network}
+                                  peerCount={peerCount}
+                                  icon={assetBundles.get(network.id)?.icon}
+                                />
                                 <div className="network_nav__link__text">{certRoot.subject}</div>
                               </Link>
                             </Tooltip>

@@ -3,13 +3,13 @@
 
 import React, { ReactNode, createContext, useCallback, useEffect, useMemo, useState } from "react";
 
-import { AssetBundle, ClientConfig } from "../apis/strims/network/v1/directory/directory";
+import { AssetBundle } from "../apis/strims/network/v1/directory/directory";
 import { Network, NetworkEvent, UIConfig } from "../apis/strims/network/v1/network";
-import { Image } from "../apis/strims/type/image";
 import { useClient } from "./FrontendApi";
 
 interface Value {
   items: Item[];
+  assetBundles: Map<bigint, AssetBundle>;
   config: UIConfig;
   updateDisplayOrder: (networkIds: bigint[]) => void;
 }
@@ -19,8 +19,6 @@ export const NetworkContext = createContext<Value>(null);
 interface Item {
   network: Network;
   peerCount: number;
-  icon?: Image;
-  directory?: ClientConfig;
 }
 
 interface ProviderProps {
@@ -30,6 +28,7 @@ interface ProviderProps {
 export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const client = useClient();
   const [items, setItems] = useState<Item[]>([]);
+  const [assetBundles, setAssetBundles] = useState<Map<bigint, AssetBundle>>(new Map());
   const [config, setConfig] = useState<UIConfig>(null);
 
   const addItem = (item: Item) => setItems((prev) => [...prev, item]);
@@ -43,9 +42,14 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     );
 
   const setAssetBundle = (networkId: bigint, assetBundle: AssetBundle) =>
-    setItems((prev) =>
-      prev.map((item) => (item.network.id === networkId ? { ...item, ...assetBundle } : item))
-    );
+    setAssetBundles((prev) => new Map(prev).set(networkId, assetBundle));
+
+  const removeAssetBundle = (networkId: bigint) =>
+    setAssetBundles((prev) => {
+      const bundles = new Map(prev);
+      bundles.delete(networkId);
+      return bundles;
+    });
 
   const updateDisplayOrder = useCallback(
     (networkIds: bigint[]) =>
@@ -71,6 +75,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
           break;
         case NetworkEvent.BodyCase.NETWORK_STOP:
           removeItem(body.networkStop.networkId);
+          removeAssetBundle(body.networkStop.networkId);
           break;
         case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
           setPeerCount(
@@ -94,8 +99,8 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
   }, []);
 
   const value = useMemo<Value>(
-    () => ({ items: items, config, updateDisplayOrder }),
-    [items, config, updateDisplayOrder]
+    () => ({ items, assetBundles, config, updateDisplayOrder }),
+    [items, assetBundles, config, updateDisplayOrder]
   );
 
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;

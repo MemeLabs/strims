@@ -145,7 +145,7 @@ type directoryServer struct {
 
 func (s *directoryServer) Reader(ctx context.Context) (readers, error) {
 	eventReader := s.eventSwarm.Reader()
-	assetReader := s.eventSwarm.Reader()
+	assetReader := s.assetSwarm.Reader()
 	eventReader.SetReadStopper(ctx.Done())
 	assetReader.SetReadStopper(ctx.Done())
 	return readers{

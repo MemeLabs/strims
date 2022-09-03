@@ -57,15 +57,7 @@ type runner struct {
 }
 
 type readers struct {
-	events, assets  *protoutil.ChunkStreamReader
-	checkpointCache chan struct{}
-}
-
-func (r readers) CheckpointCache() {
-	select {
-	case r.checkpointCache <- struct{}{}:
-	default:
-	}
+	events, assets *protoutil.ChunkStreamReader
 }
 
 func (r *runner) Sync(network *networkv1.Network) {
