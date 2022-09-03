@@ -5,7 +5,6 @@ package integrity
 
 import (
 	"errors"
-	"io"
 	"math/bits"
 	"sync"
 
@@ -379,36 +378,14 @@ type MerkleWriterOptions struct {
 }
 
 // NewMerkleWriter ...
-func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
+func NewMerkleWriter(o *MerkleWriterOptions) ioutil.WriteFlushResetter {
 	mw := &merkleWriter{
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
 	}
-	return &MerkleWriter{
-		bw: bufioutil.NewWriter(mw, o.ChunksPerSignature*o.ChunkSize),
-	}
-}
-
-// MerkleWriter ...
-type MerkleWriter struct {
-	bw *bufioutil.Writer
-}
-
-// Write ...
-func (w *MerkleWriter) Write(p []byte) (int, error) {
-	return w.bw.Write(p)
-}
-
-// Flush ...
-func (w *MerkleWriter) Flush() error {
-	return w.bw.Flush()
-}
-
-// Reset ...
-func (w *MerkleWriter) Reset() {
-	w.bw.Reset()
+	return bufioutil.NewWriter(mw, o.ChunksPerSignature*o.ChunkSize)
 }
 
 type merkleWriter struct {
@@ -416,7 +393,7 @@ type merkleWriter struct {
 	n               uint64
 	swarmVerifier   *MerkleSwarmVerifier
 	signatureSigner SignatureSigner
-	w               io.Writer
+	w               ioutil.WriteFlushResetter
 }
 
 // Write ...
@@ -431,4 +408,10 @@ func (w *merkleWriter) Write(p []byte) (int, error) {
 	w.swarmVerifier.storeSegment(ts, tree, sig)
 
 	return w.w.Write(p)
+}
+
+func (w *merkleWriter) Reset() {
+	w.n = 0
+	w.swarmVerifier.Reset()
+	w.w.Reset()
 }

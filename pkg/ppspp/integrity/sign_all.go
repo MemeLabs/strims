@@ -5,7 +5,6 @@ package integrity
 
 import (
 	"errors"
-	"io"
 	"sync"
 
 	swarmpb "github.com/MemeLabs/strims/pkg/apis/type/swarm"
@@ -241,42 +240,20 @@ type SignAllWriterOptions struct {
 }
 
 // NewSignAllWriter ...
-func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
+func NewSignAllWriter(o *SignAllWriterOptions) ioutil.WriteFlushResetter {
 	sw := &signAllWriter{
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
 	}
-	return &SignAllWriter{
-		bw: bufioutil.NewWriter(sw, o.ChunkSize),
-	}
-}
-
-// SignAllWriter ...
-type SignAllWriter struct {
-	bw *bufioutil.Writer
-}
-
-// Write ...
-func (w *SignAllWriter) Write(p []byte) (int, error) {
-	return w.bw.Write(p)
-}
-
-// Flush ...
-func (w *SignAllWriter) Flush() error {
-	return w.bw.Flush()
-}
-
-// Reset ...
-func (w *SignAllWriter) Reset() {
-	w.bw.Reset()
+	return bufioutil.NewWriter(sw, o.ChunkSize)
 }
 
 type signAllWriter struct {
 	b               binmap.Bin
 	swarmVerifier   *SignAllSwarmVerifier
 	signatureSigner SignatureSigner
-	w               io.Writer
+	w               ioutil.WriteFlushResetter
 }
 
 func (w *signAllWriter) Write(p []byte) (int, error) {
@@ -287,4 +264,10 @@ func (w *signAllWriter) Write(p []byte) (int, error) {
 	w.b += 2
 
 	return w.w.Write(p)
+}
+
+func (w *signAllWriter) Reset() {
+	w.b = 0
+	w.swarmVerifier.Reset()
+	w.w.Reset()
 }
