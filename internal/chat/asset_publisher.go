@@ -4,6 +4,8 @@
 package chat
 
 import (
+	"errors"
+
 	"github.com/MemeLabs/strims/internal/dao"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"github.com/MemeLabs/strims/pkg/protoutil"
@@ -26,12 +28,19 @@ type assetPublisher struct {
 }
 
 func (s *assetPublisher) Sync(
+	unifiedUpdate bool,
 	config *chatv1.Server,
 	icon *chatv1.ServerIcon,
 	emotes []*chatv1.Emote,
 	modifiers []*chatv1.Modifier,
 	tags []*chatv1.Tag,
 ) error {
+	if unifiedUpdate {
+		s.size = 0
+		s.checksums = map[uint64]uint32{}
+		s.eventWriter.Reset()
+	}
+
 	b := &chatv1.AssetBundle{
 		IsDelta: len(s.checksums) != 0,
 	}
@@ -88,15 +97,20 @@ func (s *assetPublisher) Sync(
 		b.RemovedIds = append(b.RemovedIds, id)
 	}
 
-	// TODO
-	// n := s.eventWriter.Size(b)
-	// if s.size + n > buffer size {
-	// 	reset writer (clear swarm buffer)
-	// 	build unified bundle
-	// }
-	// n.size += n
+	n := s.eventWriter.Size(b)
+	if s.size+n > assetWindowSize {
+		if unifiedUpdate {
+			return errors.New("asset bundle size limit exceeded")
+		}
+		return s.Sync(true, config, icon, emotes, modifiers, tags)
+	}
+	s.size += n
 
-	s.logger.Debug("writing asset bundle", zap.Int("size", s.eventWriter.Size(b)))
+	s.logger.Debug(
+		"writing asset bundle",
+		zap.Int("size", n),
+		zap.Int("totalSize", s.size),
+	)
 
 	return s.eventWriter.Write(b)
 }

@@ -40,7 +40,7 @@ const ChatServerIconForm: React.FC<ChatServerIconFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating modifier"} />}
+      {error && <InputError error={error.message || "Error saving icon"} />}
       <InputLabel required={true} text="Image" component="div">
         <ImageInput
           control={control}

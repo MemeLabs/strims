@@ -204,7 +204,6 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 				logger.Error("open chat readers failed", zap.Error(err))
 				return
 			}
-			defer stop()
 
 			eg.Go(func() error {
 				for {
@@ -248,6 +247,8 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 			err = eg.Wait()
 			done := ctx.Err() != nil
+
+			stop()
 
 			logger.Debug(
 				"chat reader closed",

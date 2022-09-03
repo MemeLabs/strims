@@ -53,6 +53,7 @@ var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize
 var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
+var assetWindowSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.LiveWindow
 
 func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *chatv1.ServerIcon, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
 	err = store.View(func(tx kv.Tx) (err error) {
@@ -90,14 +91,14 @@ func newChatServer(
 	directory directory.Control,
 	config *chatv1.Server,
 ) (*chatServer, error) {
-	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", config.Key.Public[:8])}
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_events", ppspp.SwarmID(config.Key.Public[:8]))}
 	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, eventWriter, err := newWriter(config.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_assets", config.Key.Public[:8])}
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_assets", ppspp.SwarmID(config.Key.Public[:8]))}
 	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
 	assetSwarm, assetWriter, err := newWriter(config.Key, assetSwarmOptions)
 	if err != nil {
@@ -280,7 +281,7 @@ func (s *chatServer) syncAssets(unifiedUpdate bool) {
 	if err := s.service.Sync(config, emotes, modifiers, tags); err != nil {
 		logger.Error("syncing assets to service failed", zap.Error(err))
 	}
-	if err := s.assetPublisher.Sync(config, icon, emotes, modifiers, tags); err != nil {
+	if err := s.assetPublisher.Sync(unifiedUpdate, config, icon, emotes, modifiers, tags); err != nil {
 		logger.Error("syncing assets to asset stream failed", zap.Error(err))
 	}
 }

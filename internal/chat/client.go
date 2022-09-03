@@ -22,14 +22,14 @@ func newChatReader(
 	key []byte,
 	networkKey []byte,
 ) (*chatReader, error) {
-	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", key[:8])}
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_events", ppspp.SwarmID(key[:8]))}
 	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_assets", key[:8])}
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_assets", ppspp.SwarmID(key[:8]))}
 	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
 	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
@@ -69,8 +69,6 @@ type chatReader struct {
 	networkKey      []byte
 	eventSwarm      *ppspp.Swarm
 	assetSwarm      *ppspp.Swarm
-	eventReader     *protoutil.ChunkStreamReader
-	assetReader     *protoutil.ChunkStreamReader
 	checkpointCache chan struct{}
 	stopper         servicemanager.Stopper
 }
@@ -122,15 +120,15 @@ func (d *chatReader) Close(ctx context.Context) error {
 }
 
 func (d *chatReader) Reader(ctx context.Context) (readers, error) {
-	eventsReader := d.eventSwarm.Reader()
-	assetsReader := d.assetSwarm.Reader()
-	eventsReader.SetReadStopper(ctx.Done())
-	assetsReader.SetReadStopper(ctx.Done())
-	eventsReader.Unread()
-	assetsReader.Unread()
+	eventReader := d.eventSwarm.Reader()
+	assetReader := d.assetSwarm.Reader()
+	eventReader.SetReadStopper(ctx.Done())
+	assetReader.SetReadStopper(ctx.Done())
+	eventReader.Unread()
+	assetReader.Unread()
 	return readers{
-		events:          protoutil.NewChunkStreamReader(eventsReader, eventChunkSize),
-		assets:          protoutil.NewChunkStreamReader(assetsReader, assetChunkSize),
+		events:          protoutil.NewChunkStreamReader(eventReader, eventChunkSize),
+		assets:          protoutil.NewChunkStreamReader(assetReader, assetChunkSize),
 		checkpointCache: d.checkpointCache,
 	}, nil
 }
