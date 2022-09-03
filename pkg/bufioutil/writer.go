@@ -58,6 +58,13 @@ func (w *Writer) Flush() error {
 	return err
 }
 
+func (w *Writer) Reset() {
+	w.n = 0
+	if r, ok := w.w.(interface{ Reset() }); ok {
+		r.Reset()
+	}
+}
+
 func (w *Writer) Available() int {
 	return len(w.buf) - w.n
 }

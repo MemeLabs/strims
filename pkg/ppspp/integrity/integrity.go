@@ -259,7 +259,7 @@ type SwarmWriterOptions struct {
 }
 
 // NewWriter ...
-func NewWriter(s SignatureSigner, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
+func NewWriter(s SignatureSigner, v SwarmVerifier, w ioutil.WriteFlushResetter, opt SwarmWriterOptions) (ioutil.WriteFlushResetter, error) {
 	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
 		return w, nil

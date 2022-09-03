@@ -12,6 +12,8 @@ import (
 	"errors"
 	"io"
 	"math"
+
+	"github.com/MemeLabs/strims/pkg/ioutil"
 )
 
 // errors ...
@@ -41,7 +43,7 @@ func NewWriter(w io.Writer) (*Writer, error) {
 
 // NewWriterSize ...
 func NewWriterSize(w io.Writer, size int) (c *Writer, err error) {
-	if size > MaxSize {
+	if size <= 0 || size > MaxSize {
 		return nil, ErrSizeRange
 	}
 
@@ -100,6 +102,14 @@ func (c *Writer) Flush() (err error) {
 	c.buf[2] = 0
 	c.buf[3] = 0
 	return
+}
+
+func (c *Writer) Reset() {
+	c.off = headerLen
+	c.woff = 0
+	if r, ok := c.w.(ioutil.Resetter); ok {
+		r.Reset()
+	}
 }
 
 // NewReader ...

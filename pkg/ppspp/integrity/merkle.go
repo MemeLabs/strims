@@ -372,7 +372,7 @@ func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 // MerkleWriterOptions ...
 type MerkleWriterOptions struct {
 	Verifier           *MerkleSwarmVerifier
-	Writer             ioutil.WriteFlusher
+	Writer             ioutil.WriteFlushResetter
 	ChunksPerSignature int
 	ChunkSize          int
 	Signer             SignatureSigner
@@ -404,6 +404,11 @@ func (w *MerkleWriter) Write(p []byte) (int, error) {
 // Flush ...
 func (w *MerkleWriter) Flush() error {
 	return w.bw.Flush()
+}
+
+// Reset ...
+func (w *MerkleWriter) Reset() {
+	w.bw.Reset()
 }
 
 type merkleWriter struct {

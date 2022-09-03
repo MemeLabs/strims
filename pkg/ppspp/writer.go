@@ -39,26 +39,32 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	w, err := integrity.NewWriter(ss, s.verifier, sw, iwo)
+	iw, err := integrity.NewWriter(ss, s.verifier, sw, iwo)
 	if err != nil {
 		return nil, err
 	}
 
-	e := timeutil.Now()
-	if _, err := s.epoch.Sync(e, ss.Sign(e, nil)); err != nil {
-		return nil, err
+	w := &Writer{
+		w:  iw,
+		s:  s,
+		ss: ss,
 	}
-
-	return &Writer{
-		w: w,
-		s: s,
-	}, nil
+	w.initEpoch()
+	return w, nil
 }
 
 // Writer ...
 type Writer struct {
-	w ioutil.WriteFlusher
-	s *Swarm
+	w  ioutil.WriteFlushResetter
+	s  *Swarm
+	ss integrity.SignatureSigner
+}
+
+func (w *Writer) initEpoch() {
+	e := timeutil.Now()
+	if _, err := w.s.epoch.Sync(e, w.ss.Sign(e, nil)); err != nil {
+		panic(err)
+	}
 }
 
 // Swarm ...
@@ -74,6 +80,13 @@ func (w *Writer) Write(p []byte) (int, error) {
 // Flush ...
 func (w *Writer) Flush() error {
 	return w.w.Flush()
+}
+
+// Reset ...
+func (w *Writer) Reset() {
+	w.initEpoch()
+	w.w.Reset()
+	w.s.store.SetOffset(0)
 }
 
 // Close shut down the swarm...

@@ -29,3 +29,5 @@ type testPublisher struct {
 func (s *testPublisher) Publish(c Chunk) {
 	s.chunks = append(s.chunks, c)
 }
+
+func (s *testPublisher) Reset() {}

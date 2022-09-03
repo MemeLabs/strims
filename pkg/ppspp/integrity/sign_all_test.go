@@ -4,7 +4,6 @@
 package integrity
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/rand"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/pkg/binmap"
+	"github.com/MemeLabs/strims/pkg/bufioutil"
 	"github.com/MemeLabs/strims/pkg/ppspp/codec"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/blake2b"
@@ -20,7 +20,7 @@ import (
 
 type testWriter struct {
 	SignedIntegrity codec.SignedIntegrity
-	Integrity       codec.Integrity
+	Integrity       []codec.Integrity
 }
 
 func (w *testWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
@@ -29,7 +29,7 @@ func (w *testWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) 
 }
 
 func (w *testWriter) WriteIntegrity(m codec.Integrity) (int, error) {
-	w.Integrity = m
+	w.Integrity = append(w.Integrity, m)
 	return 0, nil
 }
 
@@ -39,6 +39,7 @@ func TestSignAllVerifier(t *testing.T) {
 
 	const chunkSize = 1024
 	const liveDiscardWindow = 1024
+	const n = 1 << 20
 
 	v0 := NewSignAllSwarmVerifier(&SignAllOptions{
 		LiveDiscardWindow: liveDiscardWindow,
@@ -50,14 +51,14 @@ func TestSignAllVerifier(t *testing.T) {
 	var b bytes.Buffer
 	w := NewSignAllWriter(&SignAllWriterOptions{
 		Verifier:  v0,
-		Writer:    bufio.NewWriterSize(&b, 1024),
+		Writer:    bufioutil.NewWriter(&b, 1024),
 		ChunkSize: chunkSize,
 		Signer:    NewED25519Signer(key.Private),
 	})
-	io.CopyN(w, rand.Reader, 1<<20)
+	io.CopyN(w, rand.Reader, n)
 	d := b.Bytes()
 
-	verify := func(src *SignAllSwarmVerifier) *SignAllSwarmVerifier {
+	verify := func(t *testing.T, src *SignAllSwarmVerifier) *SignAllSwarmVerifier {
 		dst := NewSignAllSwarmVerifier(&SignAllOptions{
 			LiveDiscardWindow: liveDiscardWindow,
 			ChunkSize:         chunkSize,
@@ -66,7 +67,7 @@ func TestSignAllVerifier(t *testing.T) {
 		})
 
 		cv := dst.ChannelVerifier()
-		for i := 0; i < 1<<10; i += chunkSize {
+		for i := 0; i < n/chunkSize; i++ {
 			b := binmap.Bin(i * 2)
 			v := cv.ChunkVerifier(b)
 
@@ -75,7 +76,6 @@ func TestSignAllVerifier(t *testing.T) {
 			assert.Nil(t, err, fmt.Sprintf("failed to write integrity mesages bin %d", b))
 
 			v.SetSignedIntegrity(b, w.SignedIntegrity.Timestamp.Time, w.SignedIntegrity.Signature)
-			v.SetIntegrity(b, w.Integrity.Hash)
 			ok, err := v.Verify(b, d[i*chunkSize:(i+1)*chunkSize])
 			assert.Nil(t, err, fmt.Sprintf("error verifying bin %d", b))
 			assert.True(t, ok, fmt.Sprintf("invalid data at bin %d", b))
@@ -86,7 +86,7 @@ func TestSignAllVerifier(t *testing.T) {
 	src := v0
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("gen: %d", i), func(t *testing.T) {
-			src = verify(src)
+			src = verify(t, src)
 		})
 	}
 }

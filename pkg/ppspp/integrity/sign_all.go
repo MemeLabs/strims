@@ -235,7 +235,7 @@ func (v *SignAllChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 // SignAllWriterOptions ...
 type SignAllWriterOptions struct {
 	Verifier  *SignAllSwarmVerifier
-	Writer    ioutil.WriteFlusher
+	Writer    ioutil.WriteFlushResetter
 	ChunkSize int
 	Signer    SignatureSigner
 }
@@ -265,6 +265,11 @@ func (w *SignAllWriter) Write(p []byte) (int, error) {
 // Flush ...
 func (w *SignAllWriter) Flush() error {
 	return w.bw.Flush()
+}
+
+// Reset ...
+func (w *SignAllWriter) Reset() {
+	w.bw.Reset()
 }
 
 type signAllWriter struct {

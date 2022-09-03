@@ -33,3 +33,14 @@ type BufferedWriteFlusher interface {
 	Available() int
 	AvailableBuffer() []byte
 }
+
+// Resetter ...
+type Resetter interface {
+	Reset()
+}
+
+// WriteFlushResetter ...
+type WriteFlushResetter interface {
+	WriteFlusher
+	Resetter
+}

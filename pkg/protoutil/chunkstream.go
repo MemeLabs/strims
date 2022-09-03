@@ -128,3 +128,7 @@ func (w *ChunkStreamWriter) Write(m protoreflect.ProtoMessage) error {
 	}
 	return w.zpw.Flush()
 }
+
+func (w *ChunkStreamWriter) Reset() {
+	w.zpw.Reset()
+}
