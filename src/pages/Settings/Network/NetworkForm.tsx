@@ -59,11 +59,18 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
         <Button disabled={loading}>Update Network</Button>
       </ButtonSet>
       {showDirectoryFormLink && (
-        <ForwardLink
-          to={`/settings/networks/${networkId}/directory`}
-          title="Directory"
-          description="Directory embed settings..."
-        />
+        <>
+          <ForwardLink
+            to={`/settings/networks/${networkId}/directory`}
+            title="Directory"
+            description="Directory embed settings..."
+          />
+          <ForwardLink
+            to={`/settings/networks/${networkId}/icon`}
+            title="Icon"
+            description="Network icon..."
+          />
+        </>
       )}
     </form>
   );

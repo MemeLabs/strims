@@ -5,6 +5,7 @@ package directory
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/MemeLabs/strims/internal/servicemanager"
 	"github.com/MemeLabs/strims/internal/transfer"
@@ -14,45 +15,53 @@ import (
 )
 
 func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*directoryReader, error) {
-	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), swarmOptions)
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(key[:8]))}
+	eventSwarmOptions.Assign(defaultEventSwarmOptions)
+	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(key[:8]))}
+	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
+	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
 	return &directoryReader{
-		logger:   logger,
-		transfer: transfer,
-		key:      key,
-		swarm:    s,
+		logger:     logger,
+		transfer:   transfer,
+		key:        key,
+		eventSwarm: eventSwarm,
+		assetSwarm: assetSwarm,
 	}, nil
 }
 
 type directoryReader struct {
-	logger      *zap.Logger
-	transfer    transfer.Control
-	key         []byte
-	swarm       *ppspp.Swarm
-	eventReader *protoutil.ChunkStreamReader
-	stopper     servicemanager.Stopper
-}
-
-func (d *directoryReader) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
-	reader := d.swarm.Reader()
-	reader.SetReadStopper(ctx.Done())
-	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunkSize), nil
+	logger     *zap.Logger
+	transfer   transfer.Control
+	key        []byte
+	eventSwarm *ppspp.Swarm
+	assetSwarm *ppspp.Swarm
+	stopper    servicemanager.Stopper
 }
 
 func (d *directoryReader) Run(ctx context.Context) error {
 	done, ctx := d.stopper.Start(ctx)
 	defer done()
 
-	transferID := d.transfer.Add(d.swarm, AddressSalt)
-	d.transfer.Publish(transferID, d.key)
+	eventTransferID := d.transfer.Add(d.eventSwarm, EventSwarmSalt)
+	assetTransferID := d.transfer.Add(d.assetSwarm, AssetSwarmSalt)
+	d.transfer.Publish(eventTransferID, d.key)
+	d.transfer.Publish(assetTransferID, d.key)
 
 	<-ctx.Done()
 
-	d.transfer.Remove(transferID)
-	d.swarm.Close()
+	d.transfer.Remove(eventTransferID)
+	d.transfer.Remove(assetTransferID)
+	d.eventSwarm.Close()
+	d.assetSwarm.Close()
 
 	return ctx.Err()
 }
@@ -64,4 +73,17 @@ func (d *directoryReader) Close(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (d *directoryReader) Reader(ctx context.Context) (readers, error) {
+	eventReader := d.eventSwarm.Reader()
+	assetReader := d.assetSwarm.Reader()
+	eventReader.SetReadStopper(ctx.Done())
+	assetReader.SetReadStopper(ctx.Done())
+	eventReader.Unread()
+	assetReader.Unread()
+	return readers{
+		events: protoutil.NewChunkStreamReader(eventReader, eventChunkSize),
+		assets: protoutil.NewChunkStreamReader(assetReader, assetChunkSize),
+	}, nil
 }

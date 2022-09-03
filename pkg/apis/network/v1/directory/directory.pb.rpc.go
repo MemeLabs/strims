@@ -190,6 +190,7 @@ func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service Director
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.GetListings", service.GetListings)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchListings", service.WatchListings)
 	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.WatchListingUsers)
+	host.RegisterMethod("strims.network.v1.directory.DirectoryFrontend.WatchAssetBundles", service.WatchAssetBundles)
 }
 
 // DirectoryFrontendService ...
@@ -242,6 +243,10 @@ type DirectoryFrontendService interface {
 		ctx context.Context,
 		req *FrontendWatchListingUsersRequest,
 	) (<-chan *FrontendWatchListingUsersResponse, error)
+	WatchAssetBundles(
+		ctx context.Context,
+		req *FrontendWatchAssetBundlesRequest,
+	) (<-chan *FrontendWatchAssetBundlesResponse, error)
 }
 
 // DirectoryFrontendService ...
@@ -328,6 +333,13 @@ func (s *UnimplementedDirectoryFrontendService) WatchListingUsers(
 	ctx context.Context,
 	req *FrontendWatchListingUsersRequest,
 ) (<-chan *FrontendWatchListingUsersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedDirectoryFrontendService) WatchAssetBundles(
+	ctx context.Context,
+	req *FrontendWatchAssetBundlesRequest,
+) (<-chan *FrontendWatchAssetBundlesResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -449,6 +461,15 @@ func (c *DirectoryFrontendClient) WatchListingUsers(
 	res chan *FrontendWatchListingUsersResponse,
 ) error {
 	return c.client.CallStreaming(ctx, "strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", req, res)
+}
+
+// WatchAssetBundles ...
+func (c *DirectoryFrontendClient) WatchAssetBundles(
+	ctx context.Context,
+	req *FrontendWatchAssetBundlesRequest,
+	res chan *FrontendWatchAssetBundlesResponse,
+) error {
+	return c.client.CallStreaming(ctx, "strims.network.v1.directory.DirectoryFrontend.WatchAssetBundles", req, res)
 }
 
 // RegisterDirectorySnippetService ...

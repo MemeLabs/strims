@@ -13,7 +13,6 @@ import (
 	"github.com/MemeLabs/strims/internal/servicemanager"
 	"github.com/MemeLabs/strims/internal/transfer"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
-	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vpn"
@@ -30,8 +29,6 @@ func newRunner(
 	transfer transfer.Control,
 	network *networkv1.Network,
 ) (*runner, error) {
-	logger = logger.With(logutil.ByteHex("directory", dao.NetworkKey(network)))
-
 	a := &runnerAdapter{
 		logger:    logger,
 		vpn:       vpn,
@@ -43,7 +40,7 @@ func newRunner(
 		network: syncutil.NewPointer(network),
 	}
 
-	m, err := servicemanager.New[*protoutil.ChunkStreamReader](logger, ctx, a)
+	m, err := servicemanager.New[readers](logger, ctx, a)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +53,19 @@ func newRunner(
 
 type runner struct {
 	adapter *runnerAdapter
-	*servicemanager.Runner[*protoutil.ChunkStreamReader, *runnerAdapter]
+	*servicemanager.Runner[readers, *runnerAdapter]
+}
+
+type readers struct {
+	events, assets  *protoutil.ChunkStreamReader
+	checkpointCache chan struct{}
+}
+
+func (r readers) CheckpointCache() {
+	select {
+	case r.checkpointCache <- struct{}{}:
+	default:
+	}
 }
 
 func (r *runner) Sync(network *networkv1.Network) {
@@ -86,11 +95,11 @@ func (s *runnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, "directory", s.network.Load().Id)
 }
 
-func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+func (s *runnerAdapter) Client() (servicemanager.Readable[readers], error) {
 	return newDirectoryReader(s.logger, s.transfer, dao.NetworkKey(s.network.Load()))
 }
 
-func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
+func (s *runnerAdapter) Server() (servicemanager.Readable[readers], error) {
 	if s.network.Load().GetServerConfig() == nil {
 		return nil, nil
 	}

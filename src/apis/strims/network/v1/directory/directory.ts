@@ -2161,6 +2161,49 @@ export class EventBroadcast {
   }
 }
 
+export type IAssetBundle = {
+  icon?: strims_type_IImage;
+  directory?: strims_network_v1_directory_IClientConfig;
+}
+
+export class AssetBundle {
+  icon: strims_type_Image | undefined;
+  directory: strims_network_v1_directory_ClientConfig | undefined;
+
+  constructor(v?: IAssetBundle) {
+    this.icon = v?.icon && new strims_type_Image(v.icon);
+    this.directory = v?.directory && new strims_network_v1_directory_ClientConfig(v.directory);
+  }
+
+  static encode(m: AssetBundle, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.icon) strims_type_Image.encode(m.icon, w.uint32(10).fork()).ldelim();
+    if (m.directory) strims_network_v1_directory_ClientConfig.encode(m.directory, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): AssetBundle {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new AssetBundle();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.icon = strims_type_Image.decode(r, r.uint32());
+        break;
+        case 2:
+        m.directory = strims_network_v1_directory_ClientConfig.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IPublishRequest = {
   listing?: strims_network_v1_directory_IListing;
 }
@@ -4055,6 +4098,75 @@ export namespace FrontendWatchListingUsersResponse {
   }
 }
 
+export type IFrontendWatchAssetBundlesRequest = Record<string, any>;
+
+export class FrontendWatchAssetBundlesRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IFrontendWatchAssetBundlesRequest) {
+  }
+
+  static encode(m: FrontendWatchAssetBundlesRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchAssetBundlesRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new FrontendWatchAssetBundlesRequest();
+  }
+}
+
+export type IFrontendWatchAssetBundlesResponse = {
+  networkId?: bigint;
+  networkKey?: Uint8Array;
+  assetBundle?: strims_network_v1_directory_IAssetBundle;
+}
+
+export class FrontendWatchAssetBundlesResponse {
+  networkId: bigint;
+  networkKey: Uint8Array;
+  assetBundle: strims_network_v1_directory_AssetBundle | undefined;
+
+  constructor(v?: IFrontendWatchAssetBundlesResponse) {
+    this.networkId = v?.networkId || BigInt(0);
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.assetBundle = v?.assetBundle && new strims_network_v1_directory_AssetBundle(v.assetBundle);
+  }
+
+  static encode(m: FrontendWatchAssetBundlesResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    if (m.networkKey.length) w.uint32(18).bytes(m.networkKey);
+    if (m.assetBundle) strims_network_v1_directory_AssetBundle.encode(m.assetBundle, w.uint32(26).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): FrontendWatchAssetBundlesResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new FrontendWatchAssetBundlesResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkId = r.uint64();
+        break;
+        case 2:
+        m.networkKey = r.bytes();
+        break;
+        case 3:
+        m.assetBundle = strims_network_v1_directory_AssetBundle.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type ISnippetSubscribeRequest = {
   swarmId?: Uint8Array;
 }
@@ -4230,6 +4342,12 @@ export const strims_network_v1_directory_EventBroadcast = EventBroadcast;
 export type strims_network_v1_directory_EventBroadcast = EventBroadcast;
 /* @internal */
 export type strims_network_v1_directory_IEventBroadcast = IEventBroadcast;
+/* @internal */
+export const strims_network_v1_directory_AssetBundle = AssetBundle;
+/* @internal */
+export type strims_network_v1_directory_AssetBundle = AssetBundle;
+/* @internal */
+export type strims_network_v1_directory_IAssetBundle = IAssetBundle;
 /* @internal */
 export const strims_network_v1_directory_PublishRequest = PublishRequest;
 /* @internal */
@@ -4476,6 +4594,18 @@ export const strims_network_v1_directory_FrontendWatchListingUsersResponse = Fro
 export type strims_network_v1_directory_FrontendWatchListingUsersResponse = FrontendWatchListingUsersResponse;
 /* @internal */
 export type strims_network_v1_directory_IFrontendWatchListingUsersResponse = IFrontendWatchListingUsersResponse;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchAssetBundlesRequest = FrontendWatchAssetBundlesRequest;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchAssetBundlesRequest = FrontendWatchAssetBundlesRequest;
+/* @internal */
+export type strims_network_v1_directory_IFrontendWatchAssetBundlesRequest = IFrontendWatchAssetBundlesRequest;
+/* @internal */
+export const strims_network_v1_directory_FrontendWatchAssetBundlesResponse = FrontendWatchAssetBundlesResponse;
+/* @internal */
+export type strims_network_v1_directory_FrontendWatchAssetBundlesResponse = FrontendWatchAssetBundlesResponse;
+/* @internal */
+export type strims_network_v1_directory_IFrontendWatchAssetBundlesResponse = IFrontendWatchAssetBundlesResponse;
 /* @internal */
 export const strims_network_v1_directory_SnippetSubscribeRequest = SnippetSubscribeRequest;
 /* @internal */

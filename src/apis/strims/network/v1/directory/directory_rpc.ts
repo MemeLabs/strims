@@ -61,6 +61,9 @@ import {
   strims_network_v1_directory_IFrontendWatchListingUsersRequest,
   strims_network_v1_directory_FrontendWatchListingUsersRequest,
   strims_network_v1_directory_FrontendWatchListingUsersResponse,
+  strims_network_v1_directory_IFrontendWatchAssetBundlesRequest,
+  strims_network_v1_directory_FrontendWatchAssetBundlesRequest,
+  strims_network_v1_directory_FrontendWatchAssetBundlesResponse,
   strims_network_v1_directory_ISnippetSubscribeRequest,
   strims_network_v1_directory_SnippetSubscribeRequest,
   strims_network_v1_directory_SnippetSubscribeResponse,
@@ -141,6 +144,7 @@ export interface DirectoryFrontendService {
   getListings(req: strims_network_v1_directory_FrontendGetListingsRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingsResponse> | strims_network_v1_directory_FrontendGetListingsResponse;
   watchListings(req: strims_network_v1_directory_FrontendWatchListingsRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingsResponse>;
   watchListingUsers(req: strims_network_v1_directory_FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingUsersResponse>;
+  watchAssetBundles(req: strims_network_v1_directory_FrontendWatchAssetBundlesRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchAssetBundlesResponse>;
 }
 
 export class UnimplementedDirectoryFrontendService implements DirectoryFrontendService {
@@ -156,6 +160,7 @@ export class UnimplementedDirectoryFrontendService implements DirectoryFrontendS
   getListings(req: strims_network_v1_directory_FrontendGetListingsRequest, call: strims_rpc_Call): Promise<strims_network_v1_directory_FrontendGetListingsResponse> | strims_network_v1_directory_FrontendGetListingsResponse { throw new Error("not implemented"); }
   watchListings(req: strims_network_v1_directory_FrontendWatchListingsRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingsResponse> { throw new Error("not implemented"); }
   watchListingUsers(req: strims_network_v1_directory_FrontendWatchListingUsersRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchListingUsersResponse> { throw new Error("not implemented"); }
+  watchAssetBundles(req: strims_network_v1_directory_FrontendWatchAssetBundlesRequest, call: strims_rpc_Call): GenericReadable<strims_network_v1_directory_FrontendWatchAssetBundlesResponse> { throw new Error("not implemented"); }
 }
 
 export const registerDirectoryFrontendService = (host: strims_rpc_Service, service: DirectoryFrontendService): void => {
@@ -171,6 +176,7 @@ export const registerDirectoryFrontendService = (host: strims_rpc_Service, servi
   host.registerMethod<strims_network_v1_directory_FrontendGetListingsRequest, strims_network_v1_directory_FrontendGetListingsResponse>("strims.network.v1.directory.DirectoryFrontend.GetListings", service.getListings.bind(service), strims_network_v1_directory_FrontendGetListingsRequest);
   host.registerMethod<strims_network_v1_directory_FrontendWatchListingsRequest, strims_network_v1_directory_FrontendWatchListingsResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListings", service.watchListings.bind(service), strims_network_v1_directory_FrontendWatchListingsRequest);
   host.registerMethod<strims_network_v1_directory_FrontendWatchListingUsersRequest, strims_network_v1_directory_FrontendWatchListingUsersResponse>("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", service.watchListingUsers.bind(service), strims_network_v1_directory_FrontendWatchListingUsersRequest);
+  host.registerMethod<strims_network_v1_directory_FrontendWatchAssetBundlesRequest, strims_network_v1_directory_FrontendWatchAssetBundlesResponse>("strims.network.v1.directory.DirectoryFrontend.WatchAssetBundles", service.watchAssetBundles.bind(service), strims_network_v1_directory_FrontendWatchAssetBundlesRequest);
 }
 
 export class DirectoryFrontendClient {
@@ -222,6 +228,10 @@ export class DirectoryFrontendClient {
 
   public watchListingUsers(req?: strims_network_v1_directory_IFrontendWatchListingUsersRequest): GenericReadable<strims_network_v1_directory_FrontendWatchListingUsersResponse> {
     return this.host.expectMany(this.host.call("strims.network.v1.directory.DirectoryFrontend.WatchListingUsers", new strims_network_v1_directory_FrontendWatchListingUsersRequest(req)), strims_network_v1_directory_FrontendWatchListingUsersResponse);
+  }
+
+  public watchAssetBundles(req?: strims_network_v1_directory_IFrontendWatchAssetBundlesRequest): GenericReadable<strims_network_v1_directory_FrontendWatchAssetBundlesResponse> {
+    return this.host.expectMany(this.host.call("strims.network.v1.directory.DirectoryFrontend.WatchAssetBundles", new strims_network_v1_directory_FrontendWatchAssetBundlesRequest(req)), strims_network_v1_directory_FrontendWatchAssetBundlesResponse);
   }
 }
 

@@ -12,6 +12,7 @@ import { CreateServerResponse } from "../apis/strims/network/v1/network";
 import { Button, ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";
+import { fromFormImageValue } from "../lib/image";
 
 interface AddNetworkModalProps {
   onCreate: (res: CreateServerResponse) => void;
@@ -36,12 +37,7 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
   const onSubmit = handleSubmit(({ name, icon }) =>
     createNetwork({
       name,
-      icon: icon
-        ? {
-            ...icon,
-            data: Base64.toUint8Array(icon.data),
-          }
-        : null,
+      icon: icon ? fromFormImageValue(icon) : null,
     })
   );
 

@@ -15,6 +15,7 @@ import (
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/image"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
@@ -96,7 +97,7 @@ func WithAlias(alias string) NewNetworkOption {
 }
 
 // NewNetwork ...
-func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile *profilev1.Profile, opts ...NewNetworkOption) (*networkv1.Network, error) {
+func NewNetwork(g IDGenerator, name string, icon *image.Image, profile *profilev1.Profile, opts ...NewNetworkOption) (*networkv1.Network, error) {
 	o := &NewNetworkOptions{
 		CertificateRequestOptions: []CertificateRequestOption{
 			WithSubject(profile.Name),
@@ -117,8 +118,7 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	}
 
 	network := &networkv1.Network{
-		Id:   id,
-		Icon: icon,
+		Id: id,
 		ServerConfig: &networkv1.ServerConfig{
 			Name: name,
 			Key:  key,
@@ -129,6 +129,7 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 					},
 				},
 			},
+			Icon: icon,
 		},
 	}
 

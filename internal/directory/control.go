@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -19,11 +20,13 @@ import (
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
 // errors ...
@@ -93,6 +96,12 @@ type ListingEvent struct {
 	Listing Listing
 }
 
+type AssetBundleEvent struct {
+	NetworkID   uint64
+	NetworkKey  []byte
+	AssetBundle *networkv1directory.AssetBundle
+}
+
 type Control interface {
 	Run()
 	PushSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet)
@@ -111,6 +120,7 @@ type Control interface {
 	StopNotifyingListingEvent(networkID uint64, ch chan ListingEvent)
 	NotifyListingUserEvent(networkID, listingID uint64, ch chan UserEvent) ([]User, error)
 	StopNotifyingListingUserEvent(networkID, listingID uint64, ch chan UserEvent)
+	WatchAssetBundles(ctx context.Context) <-chan AssetBundleEvent
 }
 
 // NewControl ...
@@ -135,8 +145,9 @@ func NewControl(
 		transfer:  transfer,
 		events:    observers.Chan(),
 
-		runners:         hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
-		syndicateStores: map[uint64]*syndicateStore{},
+		runners:               hashmap.New[[]byte, *runner](hashmap.NewByteInterface[[]byte]()),
+		syndicateStores:       map[uint64]*syndicateStore{},
+		assetBundleEventCache: map[uint64]AssetBundleEvent{},
 
 		snippets: snippets,
 		snippetServer: &snippetServer{
@@ -158,10 +169,11 @@ type control struct {
 	network   network.Control
 	transfer  transfer.Control
 
-	events          chan any
-	lock            sync.Mutex
-	runners         hashmap.Map[[]byte, *runner]
-	syndicateStores map[uint64]*syndicateStore
+	events                chan any
+	lock                  sync.Mutex
+	runners               hashmap.Map[[]byte, *runner]
+	syndicateStores       map[uint64]*syndicateStore
+	assetBundleEventCache map[uint64]AssetBundleEvent
 
 	snippets      *snippetMap
 	snippetServer *snippetServer
@@ -196,17 +208,19 @@ func (t *control) Run() {
 }
 
 func (t *control) handleNetworkStart(network *networkv1.Network) {
+	logger := t.logger.With(logutil.ByteHex("network", dao.NetworkKey(network)))
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	r, err := newRunner(t.ctx, t.logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
+	r, err := newRunner(t.ctx, logger, t.vpn, t.store, t.observers, t.network.Dialer(), t.transfer, network)
 	if err != nil {
-		t.logger.Error("failed to start directory runner", zap.Error(err))
+		logger.Error("failed to start directory runner", zap.Error(err))
 		return
 	}
 	t.runners.Set(dao.NetworkKey(network), r)
 
-	s := newSyndicateStore(t.logger, network)
+	s := newSyndicateStore(logger, network)
 	t.syndicateStores[network.Id] = s
 
 	defer t.observers.EmitLocal(event.DirectorySyndicateStart{Network: network})
@@ -217,6 +231,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 		defer func() {
 			t.lock.Lock()
 			delete(t.syndicateStores, network.Id)
+			delete(t.assetBundleEventCache, network.Id)
 			t.lock.Unlock()
 
 			s.Close()
@@ -225,30 +240,70 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 		}()
 
 		for {
-			er, stop, err := r.Reader(t.ctx)
+			eg, rctx := errgroup.WithContext(t.ctx)
+
+			readers, stop, err := r.Reader(rctx)
 			if err != nil {
-				t.logger.Debug("error getting directory event reader", zap.Error(err))
+				logger.Debug("error getting directory event reader", zap.Error(err))
 				return
 			}
 
-			for {
-				b := &networkv1directory.EventBroadcast{}
-				if err := er.Read(b); err != nil {
-					t.logger.Debug("error reading directory event", zap.Error(err))
-					break
+			eg.Go(func() error {
+				for {
+					b := &networkv1directory.EventBroadcast{}
+					if err := readers.events.Read(b); err != nil {
+						return fmt.Errorf("reading event: %w", err)
+					} else if rctx.Err() != nil {
+						return nil
+					}
+
+					s.HandleEvent(b)
+
+					t.observers.EmitLocal(event.DirectoryEvent{
+						NetworkID:  network.Id,
+						NetworkKey: dao.NetworkKey(network),
+						Broadcast:  b,
+					})
 				}
+			})
 
-				s.HandleEvent(b)
+			eg.Go(func() error {
+				for {
+					b := &networkv1directory.AssetBundle{}
+					if err := readers.assets.Read(b); err != nil {
+						return fmt.Errorf("reading asset bundle: %w", err)
+					} else if rctx.Err() != nil {
+						return nil
+					}
 
-				t.observers.EmitLocal(event.DirectoryEvent{
-					NetworkID:  network.Id,
-					NetworkKey: dao.NetworkKey(network),
-					Broadcast:  b,
-				})
-			}
+					e := AssetBundleEvent{
+						NetworkID:   network.Id,
+						NetworkKey:  dao.NetworkKey(network),
+						AssetBundle: b,
+					}
+
+					t.lock.Lock()
+					t.assetBundleEventCache[network.Id] = e
+					t.lock.Unlock()
+
+					t.observers.EmitLocal(event.DirectoryAssetBundle(e))
+				}
+			})
+
+			err = eg.Wait()
+			done := t.ctx.Err() != nil
 
 			stop()
 			s.Reset()
+
+			logger.Debug(
+				"directory reader closed",
+				zap.Error(err),
+				zap.Bool("done", done),
+			)
+			if done {
+				return
+			}
 		}
 	}()
 }
@@ -505,4 +560,41 @@ func (t *control) StopNotifyingListingUserEvent(networkID, listingID uint64, ch 
 	if ok {
 		s.StopNotifyingUserEvent(listingID, ch)
 	}
+}
+
+func (t *control) WatchAssetBundles(ctx context.Context) <-chan AssetBundleEvent {
+	ch := make(chan AssetBundleEvent, 8)
+
+	go func() {
+		defer close(ch)
+
+		t.lock.Lock()
+		es := maps.Values(t.assetBundleEventCache)
+		t.lock.Unlock()
+
+		for _, e := range es {
+			select {
+			case ch <- e:
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		events, done := t.observers.Events()
+		defer done()
+
+		for {
+			select {
+			case e := <-events:
+				switch e := e.(type) {
+				case event.DirectoryAssetBundle:
+					ch <- AssetBundleEvent(e)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch
 }

@@ -5,6 +5,7 @@ import React, { ComponentProps } from "react";
 
 import monkey from "../../../assets/directory/monkey.png";
 import { ListingSnippetImage } from "../../apis/strims/network/v1/directory/directory";
+import { Image } from "../../apis/strims/type/image";
 import { useImage } from "../../hooks/useImage";
 
 interface SnippetImageProps extends ComponentProps<"img"> {
@@ -13,17 +14,22 @@ interface SnippetImageProps extends ComponentProps<"img"> {
 }
 
 const SnippetImage: React.FC<SnippetImageProps> = ({ fallback = monkey, source, ...imgProps }) => {
-  let url = "";
   switch (source?.sourceOneof?.case) {
     case ListingSnippetImage.SourceOneofCase.URL:
-      url = source.sourceOneof.url;
-      break;
+      return <img src={source.sourceOneof.url || fallback} {...imgProps} />;
     case ListingSnippetImage.SourceOneofCase.IMAGE:
-      url = useImage(source.sourceOneof.image);
-      break;
+      return <SnippetImageWithImage image={source.sourceOneof.image} {...imgProps} />;
+    default:
+      return <img src={fallback} {...imgProps} />;
   }
-
-  return <img src={url || fallback} {...imgProps} />;
 };
+
+interface SnippetImageWithImageProps extends ComponentProps<"img"> {
+  image: Image;
+}
+
+const SnippetImageWithImage: React.FC<SnippetImageWithImageProps> = ({ image, ...imgProps }) => (
+  <img src={useImage(image)} {...imgProps} />
+);
 
 export default SnippetImage;

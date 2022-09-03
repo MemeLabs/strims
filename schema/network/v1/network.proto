@@ -10,20 +10,15 @@ option java_package = "gg.strims.network.v1";
 option swift_prefix = "SNT";
 
 import "type/key.proto";
+import "type/image.proto";
 import "type/certificate.proto";
 import "network/v1/bootstrap/bootstrap.proto";
 import "network/v1/directory/directory.proto";
 import "network/v1/errors/errors.proto";
 
-// TODO: use type.Image
-message NetworkIcon {
-  bytes data = 1;
-  string type = 2;
-}
-
 message CreateServerRequest {
   string name = 1;
-  NetworkIcon icon = 2;
+  type.Image icon = 2;
   string alias = 3;
 }
 
@@ -69,6 +64,8 @@ message ServerConfig {
 
   directory.ServerConfig directory = 6;
 
+  type.Image icon = 7;
+
   // per user invite limit
   // per group invite limit
   // groups/roles?
@@ -78,7 +75,6 @@ message ServerConfig {
 message Network {
   uint64 id = 1;
   strims.type.Certificate certificate = 2;
-  NetworkIcon icon = 3;
   string alias = 4;
   ServerConfig server_config = 5;
   errors.ErrorCode certificate_renewal_error = 6;

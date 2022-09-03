@@ -14,7 +14,6 @@ import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiPlus } from "react-icons/fi";
 import { Link } from "react-router-dom";
 
-import { Network } from "../../../apis/strims/network/v1/network";
 import { useLayout } from "../../../contexts/Layout";
 import { NetworkContext } from "../../../contexts/Network";
 import { certificateRoot } from "../../../lib/certificate";
@@ -29,11 +28,6 @@ const ScrollbarView: React.FC<ComponentProps<"div">> = ({ style, ...props }) => 
     style={{ ...style, overflowX: "hidden", marginBottom: 0 }}
   />
 );
-
-export interface NetworkNavItem {
-  network: Network;
-  peerCount: number;
-}
 
 const NetworkNav: React.FC = () => {
   const { t } = useTranslation();
@@ -101,7 +95,7 @@ const NetworkNav: React.FC = () => {
             <Droppable droppableId="networks">
               {({ innerRef, droppableProps, placeholder }) => (
                 <div ref={innerRef} {...droppableProps}>
-                  {orderedItems.map(({ network, peerCount }, i) => (
+                  {orderedItems.map(({ network, peerCount, icon }, i) => (
                     <Draggable
                       draggableId={`network-${network.id.toString()}`}
                       index={i}
@@ -124,7 +118,7 @@ const NetworkNav: React.FC = () => {
                                 to={`/directory/${Base64.fromUint8Array(certRoot.key, true)}`}
                                 className="network_nav__link"
                               >
-                                <NetworkGem network={network} peerCount={peerCount} />
+                                <NetworkGem network={network} peerCount={peerCount} icon={icon} />
                                 <div className="network_nav__link__text">{certRoot.subject}</div>
                               </Link>
                             </Tooltip>

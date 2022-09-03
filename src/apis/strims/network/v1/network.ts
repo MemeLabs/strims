@@ -6,6 +6,10 @@ import {
   strims_type_IKey,
 } from "../../type/key";
 import {
+  strims_type_Image,
+  strims_type_IImage,
+} from "../../type/image";
+import {
   strims_type_Certificate,
   strims_type_ICertificate,
 } from "../../type/certificate";
@@ -21,70 +25,27 @@ import {
   strims_network_v1_errors_ErrorCode,
 } from "./errors/errors";
 
-export type INetworkIcon = {
-  data?: Uint8Array;
-  type?: string;
-}
-
-export class NetworkIcon {
-  data: Uint8Array;
-  type: string;
-
-  constructor(v?: INetworkIcon) {
-    this.data = v?.data || new Uint8Array();
-    this.type = v?.type || "";
-  }
-
-  static encode(m: NetworkIcon, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.data.length) w.uint32(10).bytes(m.data);
-    if (m.type.length) w.uint32(18).string(m.type);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): NetworkIcon {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new NetworkIcon();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.data = r.bytes();
-        break;
-        case 2:
-        m.type = r.string();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
 export type ICreateServerRequest = {
   name?: string;
-  icon?: strims_network_v1_INetworkIcon;
+  icon?: strims_type_IImage;
   alias?: string;
 }
 
 export class CreateServerRequest {
   name: string;
-  icon: strims_network_v1_NetworkIcon | undefined;
+  icon: strims_type_Image | undefined;
   alias: string;
 
   constructor(v?: ICreateServerRequest) {
     this.name = v?.name || "";
-    this.icon = v?.icon && new strims_network_v1_NetworkIcon(v.icon);
+    this.icon = v?.icon && new strims_type_Image(v.icon);
     this.alias = v?.alias || "";
   }
 
   static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name.length) w.uint32(10).string(m.name);
-    if (m.icon) strims_network_v1_NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
+    if (m.icon) strims_type_Image.encode(m.icon, w.uint32(18).fork()).ldelim();
     if (m.alias.length) w.uint32(26).string(m.alias);
     return w;
   }
@@ -100,7 +61,7 @@ export class CreateServerRequest {
         m.name = r.string();
         break;
         case 2:
-        m.icon = strims_network_v1_NetworkIcon.decode(r, r.uint32());
+        m.icon = strims_type_Image.decode(r, r.uint32());
         break;
         case 3:
         m.alias = r.string();
@@ -417,6 +378,7 @@ export type IServerConfig = {
   rootCertTtlSecs?: bigint;
   peerCertTtlSecs?: bigint;
   directory?: strims_network_v1_directory_IServerConfig;
+  icon?: strims_type_IImage;
 }
 
 export class ServerConfig {
@@ -425,6 +387,7 @@ export class ServerConfig {
   rootCertTtlSecs: bigint;
   peerCertTtlSecs: bigint;
   directory: strims_network_v1_directory_ServerConfig | undefined;
+  icon: strims_type_Image | undefined;
 
   constructor(v?: IServerConfig) {
     this.name = v?.name || "";
@@ -432,6 +395,7 @@ export class ServerConfig {
     this.rootCertTtlSecs = v?.rootCertTtlSecs || BigInt(0);
     this.peerCertTtlSecs = v?.peerCertTtlSecs || BigInt(0);
     this.directory = v?.directory && new strims_network_v1_directory_ServerConfig(v.directory);
+    this.icon = v?.icon && new strims_type_Image(v.icon);
   }
 
   static encode(m: ServerConfig, w?: Writer): Writer {
@@ -441,6 +405,7 @@ export class ServerConfig {
     if (m.rootCertTtlSecs) w.uint32(32).uint64(m.rootCertTtlSecs);
     if (m.peerCertTtlSecs) w.uint32(40).uint64(m.peerCertTtlSecs);
     if (m.directory) strims_network_v1_directory_ServerConfig.encode(m.directory, w.uint32(50).fork()).ldelim();
+    if (m.icon) strims_type_Image.encode(m.icon, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -466,6 +431,9 @@ export class ServerConfig {
         case 6:
         m.directory = strims_network_v1_directory_ServerConfig.decode(r, r.uint32());
         break;
+        case 7:
+        m.icon = strims_type_Image.decode(r, r.uint32());
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -478,7 +446,6 @@ export class ServerConfig {
 export type INetwork = {
   id?: bigint;
   certificate?: strims_type_ICertificate;
-  icon?: strims_network_v1_INetworkIcon;
   alias?: string;
   serverConfig?: strims_network_v1_IServerConfig;
   certificateRenewalError?: strims_network_v1_errors_ErrorCode;
@@ -487,7 +454,6 @@ export type INetwork = {
 export class Network {
   id: bigint;
   certificate: strims_type_Certificate | undefined;
-  icon: strims_network_v1_NetworkIcon | undefined;
   alias: string;
   serverConfig: strims_network_v1_ServerConfig | undefined;
   certificateRenewalError: strims_network_v1_errors_ErrorCode;
@@ -495,7 +461,6 @@ export class Network {
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
-    this.icon = v?.icon && new strims_network_v1_NetworkIcon(v.icon);
     this.alias = v?.alias || "";
     this.serverConfig = v?.serverConfig && new strims_network_v1_ServerConfig(v.serverConfig);
     this.certificateRenewalError = v?.certificateRenewalError || 0;
@@ -505,7 +470,6 @@ export class Network {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
-    if (m.icon) strims_network_v1_NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
     if (m.alias.length) w.uint32(34).string(m.alias);
     if (m.serverConfig) strims_network_v1_ServerConfig.encode(m.serverConfig, w.uint32(42).fork()).ldelim();
     if (m.certificateRenewalError) w.uint32(48).uint32(m.certificateRenewalError);
@@ -524,9 +488,6 @@ export class Network {
         break;
         case 2:
         m.certificate = strims_type_Certificate.decode(r, r.uint32());
-        break;
-        case 3:
-        m.icon = strims_network_v1_NetworkIcon.decode(r, r.uint32());
         break;
         case 4:
         m.alias = r.string();
@@ -1465,12 +1426,6 @@ export class GetUIConfigResponse {
   }
 }
 
-/* @internal */
-export const strims_network_v1_NetworkIcon = NetworkIcon;
-/* @internal */
-export type strims_network_v1_NetworkIcon = NetworkIcon;
-/* @internal */
-export type strims_network_v1_INetworkIcon = INetworkIcon;
 /* @internal */
 export const strims_network_v1_CreateServerRequest = CreateServerRequest;
 /* @internal */

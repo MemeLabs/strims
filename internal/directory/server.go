@@ -6,6 +6,7 @@ package directory
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
@@ -16,11 +17,44 @@ import (
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/ppspp"
+	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+var (
+	AddressSalt    = []byte("directory")
+	ConfigSalt     = []byte("directory:config")
+	EventSwarmSalt = []byte("directory:events")
+	AssetSwarmSalt = []byte("directory:assets")
+)
+
+var defaultEventSwarmOptions = ppspp.SwarmOptions{
+	ChunkSize:          1024,
+	LiveWindow:         2 * 1024,
+	ChunksPerSignature: 1,
+	Integrity: integrity.VerifierOptions{
+		ProtectionMethod: integrity.ProtectionMethodSignAll,
+	},
+	DeliveryMode: ppspp.BestEffortDeliveryMode,
+}
+
+var defaultAssetSwarmOptions = ppspp.SwarmOptions{
+	ChunkSize:          1024,
+	LiveWindow:         2 * 1024,
+	ChunksPerSignature: 128,
+	Integrity: integrity.VerifierOptions{
+		ProtectionMethod: integrity.ProtectionMethodMerkleTree,
+	},
+	DeliveryMode: ppspp.MandatoryDeliveryMode,
+	BufferLayout: store.ElasticBufferLayout,
+}
+
+var eventChunkSize = defaultEventSwarmOptions.ChunkSize
+var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
 
 func newDirectoryServer(
 	logger *zap.Logger,
@@ -36,66 +70,118 @@ func newDirectoryServer(
 		return nil, errors.New("directory server requires network root key")
 	}
 
-	w, err := ppspp.NewWriter(ppspp.WriterOptions{
-		SwarmOptions: swarmOptions,
-		Key:          config.Key,
-	})
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}
+	eventSwarmOptions.Assign(defaultEventSwarmOptions)
+	eventSwarm, eventWriter, err := newWriter(network.ServerConfig.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	ew, err := protoutil.NewChunkStreamWriter(w, swarmOptions.ChunkSize)
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}
+	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
+	assetSwarm, assetWriter, err := newWriter(network.ServerConfig.Key, assetSwarmOptions)
 	if err != nil {
 		return nil, err
+	}
+
+	cache, err := dao.GetSwarmCache(store, network.ServerConfig.Key.Public, AssetSwarmSalt)
+	if err == nil {
+		if err := assetSwarm.ImportCache(cache); err != nil {
+			logger.Debug("cache import failed", zap.Error(err))
+		} else {
+			logger.Debug(
+				"imported chat asset cache",
+				zap.Stringer("swarm", assetSwarm.ID()),
+				zap.Int("size", len(cache.Data)),
+			)
+		}
 	}
 
 	s := &directoryServer{
-		dialer:   dialer,
-		transfer: transfer,
-		key:      config.Key,
-		swarm:    w.Swarm(),
-		service:  newDirectoryService(logger, vpn, store, observers, dialer, network, ew),
+		logger:      logger,
+		store:       store,
+		dialer:      dialer,
+		transfer:    transfer,
+		observers:   observers,
+		network:     network,
+		eventSwarm:  eventSwarm,
+		assetSwarm:  assetSwarm,
+		assetWriter: assetWriter,
+		service:     newDirectoryService(logger, vpn, store, observers, dialer, network, eventWriter),
 	}
 	return s, nil
 }
 
+func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.ChunkStreamWriter, error) {
+	w, err := ppspp.NewWriter(ppspp.WriterOptions{
+		SwarmOptions: opt,
+		Key:          k,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ew, err := protoutil.NewChunkStreamWriter(w, opt.ChunkSize*opt.ChunksPerSignature)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return w.Swarm(), ew, nil
+}
+
 type directoryServer struct {
+	logger      *zap.Logger
+	store       *dao.ProfileStore
 	dialer      network.Dialer
 	transfer    transfer.Control
-	key         *key.Key
-	swarm       *ppspp.Swarm
+	observers   *event.Observers
+	network     *networkv1.Network
+	eventSwarm  *ppspp.Swarm
+	assetSwarm  *ppspp.Swarm
+	assetWriter *protoutil.ChunkStreamWriter
 	service     *directoryService
-	eventReader *protoutil.ChunkStreamReader
 	stopper     servicemanager.Stopper
 }
 
-func (d *directoryServer) Reader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
-	reader := d.swarm.Reader()
-	reader.SetReadStopper(ctx.Done())
-	return protoutil.NewChunkStreamReader(reader, swarmOptions.ChunkSize), nil
+func (s *directoryServer) Reader(ctx context.Context) (readers, error) {
+	eventReader := s.eventSwarm.Reader()
+	assetReader := s.eventSwarm.Reader()
+	eventReader.SetReadStopper(ctx.Done())
+	assetReader.SetReadStopper(ctx.Done())
+	return readers{
+		events: protoutil.NewChunkStreamReader(eventReader, eventChunkSize),
+		assets: protoutil.NewChunkStreamReader(assetReader, assetChunkSize),
+	}, nil
 }
 
 func (s *directoryServer) Run(ctx context.Context) error {
 	done, ctx := s.stopper.Start(ctx)
 	defer done()
 
-	transferID := s.transfer.Add(s.swarm, AddressSalt)
-	s.transfer.Publish(transferID, s.key.Public)
+	eventTransferID := s.transfer.Add(s.eventSwarm, EventSwarmSalt)
+	assetTransferID := s.transfer.Add(s.assetSwarm, AssetSwarmSalt)
+	s.transfer.Publish(eventTransferID, s.network.ServerConfig.Key.Public)
+	s.transfer.Publish(assetTransferID, s.network.ServerConfig.Key.Public)
 
-	server, err := s.dialer.Server(ctx, s.key.Public, s.key, AddressSalt)
+	server, err := s.dialer.Server(ctx, s.network.ServerConfig.Key.Public, s.network.ServerConfig.Key, AddressSalt)
 	if err != nil {
 		return err
 	}
 
 	networkv1directory.RegisterDirectoryService(server, s.service)
 
+	go s.watchAssets(ctx)
+	s.syncAssets()
+
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })
 	eg.Go(func() error { return server.Listen(ctx) })
 	err = eg.Wait()
 
-	s.transfer.Remove(transferID)
-	s.swarm.Close()
+	s.transfer.Remove(eventTransferID)
+	s.transfer.Remove(assetTransferID)
+	s.eventSwarm.Close()
+	s.assetSwarm.Close()
 
 	return err
 }
@@ -106,5 +192,60 @@ func (s *directoryServer) Close(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (s *directoryServer) watchAssets(ctx context.Context) {
+	events, done := s.observers.Events()
+	defer done()
+
+	for {
+		select {
+		case e := <-events:
+			switch e := e.(type) {
+			case *networkv1.NetworkChangeEvent:
+				s.trySyncAssets(e.Network.Id)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *directoryServer) trySyncAssets(serverID uint64) {
+	if serverID == s.network.Id {
+		go s.syncAssets()
+	}
+}
+
+func (s *directoryServer) syncAssets() {
+	s.logger.Debug("syncing assets for directory server")
+
+	network, err := dao.Networks.Get(s.store, s.network.Id)
+	if err != nil {
+		return
+	}
+
+	config := network.GetServerConfig().GetDirectory()
+	bundle := &networkv1directory.AssetBundle{
+		Icon: network.GetServerConfig().GetIcon(),
+		Directory: &networkv1directory.ClientConfig{
+			Integrations: &networkv1directory.ClientConfig_Integrations{
+				Angelthump: config.GetIntegrations().GetAngelthump().GetEnable(),
+				Twitch:     config.GetIntegrations().GetTwitch().GetEnable(),
+				Youtube:    config.GetIntegrations().GetYoutube().GetEnable(),
+				Swarm:      config.GetIntegrations().GetSwarm().GetEnable(),
+			},
+			PublishQuota:    config.GetPublishQuota(),
+			JoinQuota:       config.GetJoinQuota(),
+			MinPingInterval: config.GetMinPingInterval(),
+			MaxPingInterval: config.GetMaxPingInterval(),
+		},
+	}
+
+	s.assetWriter.Reset()
+
+	if err := s.assetWriter.Write(bundle); err != nil {
+		s.logger.Error("syncing assets to asset stream failed", zap.Error(err))
 	}
 }

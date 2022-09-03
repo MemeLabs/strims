@@ -23,7 +23,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/ppspp"
-	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/sortutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
@@ -54,26 +53,12 @@ const (
 	viewQuota             = 10
 )
 
-var (
-	AddressSalt = []byte("directory")
-	ConfigSalt  = []byte("directory:config")
-)
-
 // errors
 var (
 	ErrListingNotFound = errors.New("listing not found")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrUserNotFound    = errors.New("user not found")
 )
-
-var swarmOptions = ppspp.SwarmOptions{
-	ChunkSize:  1024,
-	LiveWindow: 2 * 1024,
-	Integrity: integrity.VerifierOptions{
-		ProtectionMethod: integrity.ProtectionMethodSignAll,
-	},
-	DeliveryMode: ppspp.BestEffortDeliveryMode,
-}
 
 var (
 	publisherSessionCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -149,10 +134,6 @@ type directoryService struct {
 func (d *directoryService) Run(ctx context.Context) error {
 	defer d.Close()
 
-	if err := d.publishConfig(ctx, d.network.Load()); err != nil {
-		return err
-	}
-
 	events, done := d.observers.Events()
 	defer done()
 
@@ -162,7 +143,6 @@ func (d *directoryService) Run(ctx context.Context) error {
 			switch e := e.(type) {
 			case *networkv1.NetworkChangeEvent:
 				d.handleNetworkChange(e.Network)
-				d.publishConfig(ctx, e.Network)
 			}
 		case now := <-d.broadcastTicker.C:
 			if err := d.broadcast(now); err != nil {
@@ -203,38 +183,6 @@ func (d *directoryService) handleNetworkChange(network *networkv1.Network) {
 		}
 		return true
 	})
-}
-
-func (d *directoryService) publishConfig(ctx context.Context, network *networkv1.Network) error {
-	config := network.GetServerConfig().GetDirectory()
-
-	b, err := proto.Marshal(&networkv1directory.ClientConfig{
-		Integrations: &networkv1directory.ClientConfig_Integrations{
-			Angelthump: config.GetIntegrations().GetAngelthump().GetEnable(),
-			Twitch:     config.GetIntegrations().GetTwitch().GetEnable(),
-			Youtube:    config.GetIntegrations().GetYoutube().GetEnable(),
-			Swarm:      config.GetIntegrations().GetSwarm().GetEnable(),
-		},
-		PublishQuota:    config.GetPublishQuota(),
-		JoinQuota:       config.GetJoinQuota(),
-		MinPingInterval: config.GetMinPingInterval(),
-		MaxPingInterval: config.GetMaxPingInterval(),
-	})
-	if err != nil {
-		return err
-	}
-
-	if p := d.configPublisher; p != nil {
-		p.Update(b)
-		return nil
-	}
-
-	n, ok := d.vpn.Node(dao.NetworkKey(network))
-	if !ok {
-		return errors.New("network not found")
-	}
-	d.configPublisher, err = n.HashTable.Set(ctx, network.GetServerConfig().GetKey(), ConfigSalt, b)
-	return err
 }
 
 func (d *directoryService) broadcast(now timeutil.Time) error {

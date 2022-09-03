@@ -1,9 +1,11 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { ReactNode, createContext, useCallback, useMemo, useState } from "react";
+import React, { ReactNode, createContext, useCallback, useEffect, useMemo, useState } from "react";
 
+import { AssetBundle, ClientConfig } from "../apis/strims/network/v1/directory/directory";
 import { Network, NetworkEvent, UIConfig } from "../apis/strims/network/v1/network";
+import { Image } from "../apis/strims/type/image";
 import { useClient } from "./FrontendApi";
 
 interface Value {
@@ -17,6 +19,8 @@ export const NetworkContext = createContext<Value>(null);
 interface Item {
   network: Network;
   peerCount: number;
+  icon?: Image;
+  directory?: ClientConfig;
 }
 
 interface ProviderProps {
@@ -35,7 +39,12 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
 
   const setPeerCount = (networkId: bigint, peerCount: number) =>
     setItems((prev) =>
-      prev.map((item) => (item.network.id === networkId ? { ...item, peerCount: peerCount } : item))
+      prev.map((item) => (item.network.id === networkId ? { ...item, peerCount } : item))
+    );
+
+  const setAssetBundle = (networkId: bigint, assetBundle: AssetBundle) =>
+    setItems((prev) =>
+      prev.map((item) => (item.network.id === networkId ? { ...item, ...assetBundle } : item))
     );
 
   const updateDisplayOrder = useCallback(
@@ -50,7 +59,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     []
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     void client.network.getUIConfig().then(({ config }) => setConfig(config));
 
     const events = client.network.watch();
@@ -73,7 +82,14 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
           setConfig(body.uiConfigUpdate);
       }
     });
+    return () => events.destroy();
+  }, []);
 
+  useEffect(() => {
+    const events = client.directory.watchAssetBundles();
+    events.on("data", ({ networkId, assetBundle }) => {
+      setAssetBundle(networkId, assetBundle);
+    });
     return () => events.destroy();
   }, []);
 

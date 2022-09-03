@@ -34,6 +34,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -612,18 +613,26 @@ func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	ch := make(chan *networkv1.NetworkEvent, 8)
 
 	go func() {
+		defer close(ch)
+
 		t.lock.Lock()
-		for _, n := range t.networks {
-			ch <- &networkv1.NetworkEvent{
+		ns := maps.Values(t.networks)
+		t.lock.Unlock()
+
+		for _, n := range ns {
+			select {
+			case ch <- &networkv1.NetworkEvent{
 				Body: &networkv1.NetworkEvent_NetworkStart_{
 					NetworkStart: &networkv1.NetworkEvent_NetworkStart{
 						Network:   n.network,
 						PeerCount: uint32(n.peerCount),
 					},
 				},
+			}:
+			case <-ctx.Done():
+				return
 			}
 		}
-		t.lock.Unlock()
 
 		events, done := t.observers.Events()
 		defer done()

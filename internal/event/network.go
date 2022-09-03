@@ -64,6 +64,12 @@ type DirectoryEvent struct {
 	Broadcast  *networkv1directory.EventBroadcast
 }
 
+type DirectoryAssetBundle struct {
+	NetworkID   uint64
+	NetworkKey  []byte
+	AssetBundle *networkv1directory.AssetBundle
+}
+
 type DirectorySyndicateStart struct {
 	Network *networkv1.Network
 }

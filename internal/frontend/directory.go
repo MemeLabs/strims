@@ -586,3 +586,19 @@ func (s *directoryService) WatchListingUsers(ctx context.Context, r *networkv1di
 
 	return ch, nil
 }
+
+func (s *directoryService) WatchAssetBundles(ctx context.Context, r *networkv1directory.FrontendWatchAssetBundlesRequest) (<-chan *networkv1directory.FrontendWatchAssetBundlesResponse, error) {
+	ch := make(chan *networkv1directory.FrontendWatchAssetBundlesResponse, 8)
+
+	go func() {
+		for e := range s.app.Directory().WatchAssetBundles(ctx) {
+			ch <- &networkv1directory.FrontendWatchAssetBundlesResponse{
+				NetworkId:   e.NetworkID,
+				NetworkKey:  e.NetworkKey,
+				AssetBundle: e.AssetBundle,
+			}
+		}
+	}()
+
+	return ch, nil
+}

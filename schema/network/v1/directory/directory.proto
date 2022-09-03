@@ -258,6 +258,11 @@ message EventBroadcast {
   repeated Event events = 1;
 }
 
+message AssetBundle {
+  type.Image icon = 1;
+  directory.ClientConfig directory = 2;
+}
+
 message PublishRequest {
   Listing listing = 1;
 }
@@ -485,6 +490,14 @@ message FrontendWatchListingUsersResponse {
   repeated User users = 2;
 }
 
+message FrontendWatchAssetBundlesRequest {}
+
+message FrontendWatchAssetBundlesResponse {
+  uint64 network_id = 1;
+  bytes network_key = 2;
+  AssetBundle asset_bundle = 3;
+}
+
 service DirectoryFrontend {
   rpc Publish(FrontendPublishRequest) returns (FrontendPublishResponse);
   rpc Unpublish(FrontendUnpublishRequest) returns (FrontendUnpublishResponse);
@@ -500,6 +513,7 @@ service DirectoryFrontend {
   rpc GetListings(FrontendGetListingsRequest) returns (FrontendGetListingsResponse);
   rpc WatchListings(FrontendWatchListingsRequest) returns (stream FrontendWatchListingsResponse);
   rpc WatchListingUsers(FrontendWatchListingUsersRequest) returns (stream FrontendWatchListingUsersResponse);
+  rpc WatchAssetBundles(FrontendWatchAssetBundlesRequest) returns (stream FrontendWatchAssetBundlesResponse);
 }
 
 message SnippetSubscribeRequest {

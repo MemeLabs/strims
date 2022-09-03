@@ -12,71 +12,7 @@ import {
   NetworkFrontendService,
   UnimplementedNetworkFrontendService,
 } from "../../../apis/strims/network/v1/network_rpc";
-import imgAOCFace from "../chat/emotes/static/AOCFace.png";
-import imgBasedGod from "../chat/emotes/static/BasedGod.png";
-import imgBOOMER from "../chat/emotes/static/BOOMER.png";
-import imgComfyApe from "../chat/emotes/static/ComfyApe.png";
-import imgComfyAYA from "../chat/emotes/static/ComfyAYA.png";
-import imgComfyCat from "../chat/emotes/static/ComfyCat.png";
-import imgComfyDog from "../chat/emotes/static/ComfyDog.png";
-import imgComfyFeels from "../chat/emotes/static/ComfyFeels.png";
-import imgComfyWeird from "../chat/emotes/static/ComfyWeird.png";
-import imgDOUBT from "../chat/emotes/static/DOUBT.png";
-import imgFeelsStrongMan from "../chat/emotes/static/FeelsStrongMan.png";
-import imghaHAA from "../chat/emotes/static/haHAA.png";
-import imgHmmm from "../chat/emotes/static/Hmmm.png";
-import imgINFESTOR from "../chat/emotes/static/INFESTOR.png";
-import imgMiyanoComfy from "../chat/emotes/static/MiyanoComfy.png";
-import imgmonkaVirus from "../chat/emotes/static/monkaVirus.png";
-import imgMOOBERS from "../chat/emotes/static/MOOBERS.png";
-import imgNeneLaugh from "../chat/emotes/static/NeneLaugh.png";
-import imgNoTears from "../chat/emotes/static/NoTears.png";
-import imgNotLikeThis from "../chat/emotes/static/NotLikeThis.png";
-import imgOnlyPretending from "../chat/emotes/static/OnlyPretending.png";
-import imgORDAH from "../chat/emotes/static/ORDAH.png";
-import imgOverRustle from "../chat/emotes/static/OverRustle.png";
-import imgPAIN from "../chat/emotes/static/PAIN.png";
-import imgPauseChamp from "../chat/emotes/static/PauseChamp.png";
-import imgPepeHands from "../chat/emotes/static/PepeHands.png";
-import imgPepeLaugh from "../chat/emotes/static/PepeLaugh.png";
-import imgPepeMods from "../chat/emotes/static/PepeMods.png";
-import imgPepoComfy from "../chat/emotes/static/PepoComfy.png";
-import imgQUEEN from "../chat/emotes/static/QUEEN.png";
-import imgZOOMER from "../chat/emotes/static/ZOOMER.png";
-
-const images = [
-  imgAOCFace,
-  imgBasedGod,
-  imgBOOMER,
-  imgComfyApe,
-  imgComfyAYA,
-  imgComfyCat,
-  imgComfyDog,
-  imgComfyFeels,
-  imgComfyWeird,
-  imgDOUBT,
-  imgFeelsStrongMan,
-  imghaHAA,
-  imgHmmm,
-  imgINFESTOR,
-  imgMiyanoComfy,
-  imgmonkaVirus,
-  imgMOOBERS,
-  imgNeneLaugh,
-  imgNoTears,
-  imgNotLikeThis,
-  imgOnlyPretending,
-  imgORDAH,
-  imgOverRustle,
-  imgPAIN,
-  imgPauseChamp,
-  imgPepeHands,
-  imgPepeLaugh,
-  imgPepeMods,
-  imgPepoComfy,
-  imgQUEEN,
-  imgZOOMER,
-];
+import images from "../images";
 
 const network = new Network({
   "id": BigInt("3501"),
@@ -107,9 +43,6 @@ const network = new Network({
       },
     },
   },
-  "icon": {
-    "type": "image/png",
-  },
 });
 
 export default class NetworkService
@@ -123,29 +56,21 @@ export default class NetworkService
   public watch(): Readable<networkv1.WatchNetworksResponse> {
     const ch = new PassThrough({ objectMode: true });
 
-    let i = 0;
-    for (const url of images.slice(0, this.limit)) {
-      void (async () => {
-        const res = await fetch(url);
-        const buf = await res.arrayBuffer();
+    for (let i = 0; i < 30; i++) {
+      network.id = BigInt(i);
 
-        i++;
-        network.id = BigInt(i);
-        network.icon.data = new Uint8Array(buf);
-
-        ch.push(
-          new networkv1.WatchNetworksResponse({
-            event: new networkv1.NetworkEvent({
-              body: new networkv1.NetworkEvent.Body({
-                networkStart: new networkv1.NetworkEvent.NetworkStart({
-                  network,
-                  peerCount: Math.pow(2, i),
-                }),
+      ch.push(
+        new networkv1.WatchNetworksResponse({
+          event: new networkv1.NetworkEvent({
+            body: new networkv1.NetworkEvent.Body({
+              networkStart: new networkv1.NetworkEvent.NetworkStart({
+                network,
+                peerCount: Math.pow(2, i),
               }),
             }),
-          })
-        );
-      })();
+          }),
+        })
+      );
     }
 
     return ch;

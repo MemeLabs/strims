@@ -10,6 +10,8 @@ import {
   DirectoryFrontendService,
   UnimplementedDirectoryFrontendService,
 } from "../../../apis/strims/network/v1/directory/directory_rpc";
+import { ImageType } from "../../../apis/strims/type/image";
+import images from "../images";
 import events from "./events";
 
 export default class DirectoryService
@@ -114,6 +116,32 @@ export default class DirectoryService
     console.log("watchListingUsers", req);
     const ch = new PassThrough({ objectMode: true });
     ch.push(new directoryv1.FrontendWatchListingUsersResponse({}));
+    return ch;
+  }
+
+  watchAssetBundles() {
+    const ch = new PassThrough({ objectMode: true });
+
+    let i = 0;
+    for (const url of images) {
+      void (async () => {
+        const res = await fetch(url);
+        const buf = await res.arrayBuffer();
+
+        ch.push(
+          new directoryv1.FrontendWatchAssetBundlesResponse({
+            networkId: BigInt(i++),
+            assetBundle: {
+              icon: {
+                type: ImageType.IMAGE_TYPE_PNG,
+                data: new Uint8Array(buf),
+              },
+            },
+          })
+        );
+      })();
+    }
+
     return ch;
   }
 }
