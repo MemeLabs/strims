@@ -14,3 +14,7 @@ import "network/v1/bootstrap/bootstrap.proto";
 message BootstrapClientChange {
   BootstrapClient bootstrap_client = 1;
 }
+
+message ConfigChangeEvent {
+  Config config = 1;
+}

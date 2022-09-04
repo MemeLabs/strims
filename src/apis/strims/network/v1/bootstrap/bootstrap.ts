@@ -6,6 +6,169 @@ import {
   strims_type_ICertificate,
 } from "../../../type/certificate";
 
+export type IConfig = {
+  enablePublishing?: boolean;
+}
+
+export class Config {
+  enablePublishing: boolean;
+
+  constructor(v?: IConfig) {
+    this.enablePublishing = v?.enablePublishing || false;
+  }
+
+  static encode(m: Config, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.enablePublishing) w.uint32(8).bool(m.enablePublishing);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Config {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Config();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.enablePublishing = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetConfigRequest = Record<string, any>;
+
+export class GetConfigRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IGetConfigRequest) {
+  }
+
+  static encode(m: GetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetConfigRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new GetConfigRequest();
+  }
+}
+
+export type IGetConfigResponse = {
+  config?: strims_network_v1_bootstrap_IConfig;
+}
+
+export class GetConfigResponse {
+  config: strims_network_v1_bootstrap_Config | undefined;
+
+  constructor(v?: IGetConfigResponse) {
+    this.config = v?.config && new strims_network_v1_bootstrap_Config(v.config);
+  }
+
+  static encode(m: GetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) strims_network_v1_bootstrap_Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = strims_network_v1_bootstrap_Config.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISetConfigRequest = {
+  config?: strims_network_v1_bootstrap_IConfig;
+}
+
+export class SetConfigRequest {
+  config: strims_network_v1_bootstrap_Config | undefined;
+
+  constructor(v?: ISetConfigRequest) {
+    this.config = v?.config && new strims_network_v1_bootstrap_Config(v.config);
+  }
+
+  static encode(m: SetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) strims_network_v1_bootstrap_Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetConfigRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SetConfigRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = strims_network_v1_bootstrap_Config.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISetConfigResponse = {
+  config?: strims_network_v1_bootstrap_IConfig;
+}
+
+export class SetConfigResponse {
+  config: strims_network_v1_bootstrap_Config | undefined;
+
+  constructor(v?: ISetConfigResponse) {
+    this.config = v?.config && new strims_network_v1_bootstrap_Config(v.config);
+  }
+
+  static encode(m: SetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) strims_network_v1_bootstrap_Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = strims_network_v1_bootstrap_Config.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IBootstrapClient = {
   id?: bigint;
   clientOptions?: BootstrapClient.IClientOptions
@@ -959,6 +1122,36 @@ export class PublishNetworkToBootstrapPeerResponse {
   }
 }
 
+/* @internal */
+export const strims_network_v1_bootstrap_Config = Config;
+/* @internal */
+export type strims_network_v1_bootstrap_Config = Config;
+/* @internal */
+export type strims_network_v1_bootstrap_IConfig = IConfig;
+/* @internal */
+export const strims_network_v1_bootstrap_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_GetConfigRequest = GetConfigRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_IGetConfigRequest = IGetConfigRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_GetConfigResponse = GetConfigResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_IGetConfigResponse = IGetConfigResponse;
+/* @internal */
+export const strims_network_v1_bootstrap_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_SetConfigRequest = SetConfigRequest;
+/* @internal */
+export type strims_network_v1_bootstrap_ISetConfigRequest = ISetConfigRequest;
+/* @internal */
+export const strims_network_v1_bootstrap_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_SetConfigResponse = SetConfigResponse;
+/* @internal */
+export type strims_network_v1_bootstrap_ISetConfigResponse = ISetConfigResponse;
 /* @internal */
 export const strims_network_v1_bootstrap_BootstrapClient = BootstrapClient;
 /* @internal */

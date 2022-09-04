@@ -4,15 +4,17 @@
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 
-import BootstrapCreateForm from "./BootstrapCreateForm";
-import BootstrapEditForm from "./BootstrapEditForm";
-import BootstrapsList from "./BootstrapList";
+import BootstrapClientList from "./BootstrapClientList";
+import BootstrapCreateClientForm from "./BootstrapCreateClientForm";
+import BootstrapEditClientForm from "./BootstrapEditClientForm";
+import BotostrapConfigForm from "./BotostrapConfigForm";
 
 const Router: React.FC = () => (
   <Routes>
-    <Route index element={<BootstrapsList />} />
-    <Route path="new" element={<BootstrapCreateForm />} />
-    <Route path=":ruleId" element={<BootstrapEditForm />} />
+    <Route index element={<BotostrapConfigForm />} />
+    <Route path="clients" element={<BootstrapClientList />} />
+    <Route path="clients/new" element={<BootstrapCreateClientForm />} />
+    <Route path="clients/:clientId" element={<BootstrapEditClientForm />} />
   </Routes>
 );
 

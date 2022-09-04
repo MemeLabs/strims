@@ -11,6 +11,24 @@ option swift_prefix = "SNB";
 
 import "type/certificate.proto";
 
+message Config {
+  bool enable_publishing = 1;
+}
+
+message GetConfigRequest {}
+
+message GetConfigResponse {
+  Config config = 1;
+}
+
+message SetConfigRequest {
+  Config config = 1;
+}
+
+message SetConfigResponse {
+  Config config = 1;
+}
+
 message BootstrapClient {
   uint64 id = 1;
   oneof client_options {
@@ -104,6 +122,8 @@ message PublishNetworkToBootstrapPeerRequest {
 message PublishNetworkToBootstrapPeerResponse {}
 
 service BootstrapFrontend {
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
   rpc CreateClient(CreateBootstrapClientRequest) returns (CreateBootstrapClientResponse);
   rpc UpdateClient(UpdateBootstrapClientRequest) returns (UpdateBootstrapClientResponse);
   rpc DeleteClient(DeleteBootstrapClientRequest) returns (DeleteBootstrapClientResponse);

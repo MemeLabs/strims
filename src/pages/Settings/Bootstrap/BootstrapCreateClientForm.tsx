@@ -8,7 +8,7 @@ import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import BootstrapForm, { BootstrapFormData } from "./BootstrapForm";
+import BootstrapForm, { BootstrapFormData } from "./BootstrapClientForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
   const { t } = useTranslation();
@@ -17,7 +17,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
   const [{ value }] = useCall("bootstrap", "listClients");
   const navigate = useNavigate();
   const [{ error, loading }, createClient] = useLazyCall("bootstrap", "createClient", {
-    onComplete: () => navigate(`/settings/bootstraps`, { replace: true }),
+    onComplete: () => navigate(`/settings/bootstrap/clients`, { replace: true }),
   });
 
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {
@@ -32,7 +32,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
     <>
       <TableTitleBar
         label="Create Bootstrap"
-        backLink={!!value?.bootstrapClients.values.length && "/settings/bootstraps"}
+        backLink={!!value?.bootstrapClients.values.length && "/settings/bootstrap/clients"}
       />
       <BootstrapForm
         onSubmit={onSubmit}

@@ -42,7 +42,7 @@ const BootstrapTableItem = ({ client, onDelete }: BootstrapTableItemProps) => {
   return (
     <tr>
       <TableCell truncate>
-        <Link to={`/settings/bootstraps/${client.id}`}>{url}</Link>
+        <Link to={`/settings/bootstrap/clients/${client.id}`}>{url}</Link>
       </TableCell>
       <MenuCell>
         <MenuItem label="Delete" onClick={handleDelete} />
@@ -61,7 +61,7 @@ const BootstrapsList = () => {
     return null;
   }
   if (!clientsRes.value?.bootstrapClients.length) {
-    return <Navigate to="/settings/bootstraps/new" />;
+    return <Navigate to="/settings/bootstrap/clients/new" />;
   }
 
   const rows = clientsRes.value?.bootstrapClients?.map((client) => {
@@ -70,9 +70,9 @@ const BootstrapsList = () => {
 
   return (
     <>
-      <TableTitleBar label="Boostraps">
+      <TableTitleBar label="Boostraps" backLink="/settings/bootstrap">
         <TableMenu label="Create">
-          <MenuLink label="Create Client" to="/settings/bootstraps/new" />
+          <MenuLink label="Create Client" to="/settings/bootstrap/clients/new" />
         </TableMenu>
       </TableTitleBar>
       <Table>

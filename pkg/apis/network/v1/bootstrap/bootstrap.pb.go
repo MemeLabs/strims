@@ -24,6 +24,232 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Config struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	EnablePublishing bool `protobuf:"varint,1,opt,name=enable_publishing,json=enablePublishing,proto3" json:"enable_publishing,omitempty"`
+}
+
+func (x *Config) Reset() {
+	*x = Config{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Config) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Config) ProtoMessage() {}
+
+func (x *Config) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Config.ProtoReflect.Descriptor instead.
+func (*Config) Descriptor() ([]byte, []int) {
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Config) GetEnablePublishing() bool {
+	if x != nil {
+		return x.EnablePublishing
+	}
+	return false
+}
+
+type GetConfigRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *GetConfigRequest) Reset() {
+	*x = GetConfigRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConfigRequest) ProtoMessage() {}
+
+func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConfigRequest.ProtoReflect.Descriptor instead.
+func (*GetConfigRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{1}
+}
+
+type GetConfigResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Config *Config `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+}
+
+func (x *GetConfigResponse) Reset() {
+	*x = GetConfigResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConfigResponse) ProtoMessage() {}
+
+func (x *GetConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConfigResponse.ProtoReflect.Descriptor instead.
+func (*GetConfigResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetConfigResponse) GetConfig() *Config {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type SetConfigRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Config *Config `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+}
+
+func (x *SetConfigRequest) Reset() {
+	*x = SetConfigRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetConfigRequest) ProtoMessage() {}
+
+func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetConfigRequest.ProtoReflect.Descriptor instead.
+func (*SetConfigRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SetConfigRequest) GetConfig() *Config {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type SetConfigResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Config *Config `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+}
+
+func (x *SetConfigResponse) Reset() {
+	*x = SetConfigResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetConfigResponse) ProtoMessage() {}
+
+func (x *SetConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetConfigResponse.ProtoReflect.Descriptor instead.
+func (*SetConfigResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SetConfigResponse) GetConfig() *Config {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
 type BootstrapClient struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -38,7 +264,7 @@ type BootstrapClient struct {
 func (x *BootstrapClient) Reset() {
 	*x = BootstrapClient{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[0]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -51,7 +277,7 @@ func (x *BootstrapClient) String() string {
 func (*BootstrapClient) ProtoMessage() {}
 
 func (x *BootstrapClient) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[0]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -64,7 +290,7 @@ func (x *BootstrapClient) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClient.ProtoReflect.Descriptor instead.
 func (*BootstrapClient) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{0}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *BootstrapClient) GetId() uint64 {
@@ -110,7 +336,7 @@ type BootstrapClientWebSocketOptions struct {
 func (x *BootstrapClientWebSocketOptions) Reset() {
 	*x = BootstrapClientWebSocketOptions{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[1]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -123,7 +349,7 @@ func (x *BootstrapClientWebSocketOptions) String() string {
 func (*BootstrapClientWebSocketOptions) ProtoMessage() {}
 
 func (x *BootstrapClientWebSocketOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[1]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -136,7 +362,7 @@ func (x *BootstrapClientWebSocketOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClientWebSocketOptions.ProtoReflect.Descriptor instead.
 func (*BootstrapClientWebSocketOptions) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{1}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BootstrapClientWebSocketOptions) GetUrl() string {
@@ -166,7 +392,7 @@ type CreateBootstrapClientRequest struct {
 func (x *CreateBootstrapClientRequest) Reset() {
 	*x = CreateBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[2]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -179,7 +405,7 @@ func (x *CreateBootstrapClientRequest) String() string {
 func (*CreateBootstrapClientRequest) ProtoMessage() {}
 
 func (x *CreateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[2]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -192,7 +418,7 @@ func (x *CreateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*CreateBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{2}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{7}
 }
 
 func (m *CreateBootstrapClientRequest) GetClientOptions() isCreateBootstrapClientRequest_ClientOptions {
@@ -231,7 +457,7 @@ type CreateBootstrapClientResponse struct {
 func (x *CreateBootstrapClientResponse) Reset() {
 	*x = CreateBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[3]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -244,7 +470,7 @@ func (x *CreateBootstrapClientResponse) String() string {
 func (*CreateBootstrapClientResponse) ProtoMessage() {}
 
 func (x *CreateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[3]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -257,7 +483,7 @@ func (x *CreateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*CreateBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{3}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -281,7 +507,7 @@ type UpdateBootstrapClientRequest struct {
 func (x *UpdateBootstrapClientRequest) Reset() {
 	*x = UpdateBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[4]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -294,7 +520,7 @@ func (x *UpdateBootstrapClientRequest) String() string {
 func (*UpdateBootstrapClientRequest) ProtoMessage() {}
 
 func (x *UpdateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[4]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +533,7 @@ func (x *UpdateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*UpdateBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{4}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UpdateBootstrapClientRequest) GetId() uint64 {
@@ -353,7 +579,7 @@ type UpdateBootstrapClientResponse struct {
 func (x *UpdateBootstrapClientResponse) Reset() {
 	*x = UpdateBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[5]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -366,7 +592,7 @@ func (x *UpdateBootstrapClientResponse) String() string {
 func (*UpdateBootstrapClientResponse) ProtoMessage() {}
 
 func (x *UpdateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[5]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +605,7 @@ func (x *UpdateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*UpdateBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{5}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UpdateBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -400,7 +626,7 @@ type DeleteBootstrapClientRequest struct {
 func (x *DeleteBootstrapClientRequest) Reset() {
 	*x = DeleteBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[6]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -413,7 +639,7 @@ func (x *DeleteBootstrapClientRequest) String() string {
 func (*DeleteBootstrapClientRequest) ProtoMessage() {}
 
 func (x *DeleteBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[6]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -426,7 +652,7 @@ func (x *DeleteBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{6}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteBootstrapClientRequest) GetId() uint64 {
@@ -445,7 +671,7 @@ type DeleteBootstrapClientResponse struct {
 func (x *DeleteBootstrapClientResponse) Reset() {
 	*x = DeleteBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[7]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -458,7 +684,7 @@ func (x *DeleteBootstrapClientResponse) String() string {
 func (*DeleteBootstrapClientResponse) ProtoMessage() {}
 
 func (x *DeleteBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[7]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -471,7 +697,7 @@ func (x *DeleteBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*DeleteBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{7}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{12}
 }
 
 type GetBootstrapClientRequest struct {
@@ -485,7 +711,7 @@ type GetBootstrapClientRequest struct {
 func (x *GetBootstrapClientRequest) Reset() {
 	*x = GetBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[8]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -498,7 +724,7 @@ func (x *GetBootstrapClientRequest) String() string {
 func (*GetBootstrapClientRequest) ProtoMessage() {}
 
 func (x *GetBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[8]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -511,7 +737,7 @@ func (x *GetBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*GetBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{8}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetBootstrapClientRequest) GetId() uint64 {
@@ -532,7 +758,7 @@ type GetBootstrapClientResponse struct {
 func (x *GetBootstrapClientResponse) Reset() {
 	*x = GetBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[9]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -545,7 +771,7 @@ func (x *GetBootstrapClientResponse) String() string {
 func (*GetBootstrapClientResponse) ProtoMessage() {}
 
 func (x *GetBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[9]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +784,7 @@ func (x *GetBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*GetBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{9}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -577,7 +803,7 @@ type ListBootstrapClientsRequest struct {
 func (x *ListBootstrapClientsRequest) Reset() {
 	*x = ListBootstrapClientsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[10]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -590,7 +816,7 @@ func (x *ListBootstrapClientsRequest) String() string {
 func (*ListBootstrapClientsRequest) ProtoMessage() {}
 
 func (x *ListBootstrapClientsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[10]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +829,7 @@ func (x *ListBootstrapClientsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapClientsRequest.ProtoReflect.Descriptor instead.
 func (*ListBootstrapClientsRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{10}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{15}
 }
 
 type ListBootstrapClientsResponse struct {
@@ -617,7 +843,7 @@ type ListBootstrapClientsResponse struct {
 func (x *ListBootstrapClientsResponse) Reset() {
 	*x = ListBootstrapClientsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[11]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -630,7 +856,7 @@ func (x *ListBootstrapClientsResponse) String() string {
 func (*ListBootstrapClientsResponse) ProtoMessage() {}
 
 func (x *ListBootstrapClientsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[11]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,7 +869,7 @@ func (x *ListBootstrapClientsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapClientsResponse.ProtoReflect.Descriptor instead.
 func (*ListBootstrapClientsResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{11}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListBootstrapClientsResponse) GetBootstrapClients() []*BootstrapClient {
@@ -662,7 +888,7 @@ type ListBootstrapPeersRequest struct {
 func (x *ListBootstrapPeersRequest) Reset() {
 	*x = ListBootstrapPeersRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[12]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -675,7 +901,7 @@ func (x *ListBootstrapPeersRequest) String() string {
 func (*ListBootstrapPeersRequest) ProtoMessage() {}
 
 func (x *ListBootstrapPeersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[12]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +914,7 @@ func (x *ListBootstrapPeersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapPeersRequest.ProtoReflect.Descriptor instead.
 func (*ListBootstrapPeersRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{12}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{17}
 }
 
 type ListBootstrapPeersResponse struct {
@@ -702,7 +928,7 @@ type ListBootstrapPeersResponse struct {
 func (x *ListBootstrapPeersResponse) Reset() {
 	*x = ListBootstrapPeersResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[13]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -715,7 +941,7 @@ func (x *ListBootstrapPeersResponse) String() string {
 func (*ListBootstrapPeersResponse) ProtoMessage() {}
 
 func (x *ListBootstrapPeersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[13]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +954,7 @@ func (x *ListBootstrapPeersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapPeersResponse.ProtoReflect.Descriptor instead.
 func (*ListBootstrapPeersResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{13}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListBootstrapPeersResponse) GetPeers() []*BootstrapPeer {
@@ -750,7 +976,7 @@ type BootstrapPeer struct {
 func (x *BootstrapPeer) Reset() {
 	*x = BootstrapPeer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[14]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -763,7 +989,7 @@ func (x *BootstrapPeer) String() string {
 func (*BootstrapPeer) ProtoMessage() {}
 
 func (x *BootstrapPeer) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[14]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -776,7 +1002,7 @@ func (x *BootstrapPeer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapPeer.ProtoReflect.Descriptor instead.
 func (*BootstrapPeer) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{14}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *BootstrapPeer) GetPeerId() uint64 {
@@ -808,7 +1034,7 @@ type BootstrapServiceMessage struct {
 func (x *BootstrapServiceMessage) Reset() {
 	*x = BootstrapServiceMessage{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[15]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -821,7 +1047,7 @@ func (x *BootstrapServiceMessage) String() string {
 func (*BootstrapServiceMessage) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[15]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +1060,7 @@ func (x *BootstrapServiceMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapServiceMessage.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{15}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{20}
 }
 
 func (m *BootstrapServiceMessage) GetBody() isBootstrapServiceMessage_Body {
@@ -899,7 +1125,7 @@ type PublishNetworkToBootstrapPeerRequest struct {
 func (x *PublishNetworkToBootstrapPeerRequest) Reset() {
 	*x = PublishNetworkToBootstrapPeerRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[16]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -912,7 +1138,7 @@ func (x *PublishNetworkToBootstrapPeerRequest) String() string {
 func (*PublishNetworkToBootstrapPeerRequest) ProtoMessage() {}
 
 func (x *PublishNetworkToBootstrapPeerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[16]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1151,7 @@ func (x *PublishNetworkToBootstrapPeerRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PublishNetworkToBootstrapPeerRequest.ProtoReflect.Descriptor instead.
 func (*PublishNetworkToBootstrapPeerRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{16}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *PublishNetworkToBootstrapPeerRequest) GetPeerId() uint64 {
@@ -951,7 +1177,7 @@ type PublishNetworkToBootstrapPeerResponse struct {
 func (x *PublishNetworkToBootstrapPeerResponse) Reset() {
 	*x = PublishNetworkToBootstrapPeerResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[17]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -964,7 +1190,7 @@ func (x *PublishNetworkToBootstrapPeerResponse) String() string {
 func (*PublishNetworkToBootstrapPeerResponse) ProtoMessage() {}
 
 func (x *PublishNetworkToBootstrapPeerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[17]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -977,7 +1203,7 @@ func (x *PublishNetworkToBootstrapPeerResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use PublishNetworkToBootstrapPeerResponse.ProtoReflect.Descriptor instead.
 func (*PublishNetworkToBootstrapPeerResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{17}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{22}
 }
 
 type BootstrapServiceMessage_BrokerOffer struct {
@@ -989,7 +1215,7 @@ type BootstrapServiceMessage_BrokerOffer struct {
 func (x *BootstrapServiceMessage_BrokerOffer) Reset() {
 	*x = BootstrapServiceMessage_BrokerOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[18]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1002,7 +1228,7 @@ func (x *BootstrapServiceMessage_BrokerOffer) String() string {
 func (*BootstrapServiceMessage_BrokerOffer) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_BrokerOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[18]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1241,7 @@ func (x *BootstrapServiceMessage_BrokerOffer) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use BootstrapServiceMessage_BrokerOffer.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_BrokerOffer) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{15, 0}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{20, 0}
 }
 
 type BootstrapServiceMessage_PublishRequest struct {
@@ -1030,7 +1256,7 @@ type BootstrapServiceMessage_PublishRequest struct {
 func (x *BootstrapServiceMessage_PublishRequest) Reset() {
 	*x = BootstrapServiceMessage_PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[19]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1043,7 +1269,7 @@ func (x *BootstrapServiceMessage_PublishRequest) String() string {
 func (*BootstrapServiceMessage_PublishRequest) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[19]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1056,7 +1282,7 @@ func (x *BootstrapServiceMessage_PublishRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use BootstrapServiceMessage_PublishRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_PublishRequest) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{15, 1}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{20, 1}
 }
 
 func (x *BootstrapServiceMessage_PublishRequest) GetName() string {
@@ -1086,7 +1312,7 @@ type BootstrapServiceMessage_PublishResponse struct {
 func (x *BootstrapServiceMessage_PublishResponse) Reset() {
 	*x = BootstrapServiceMessage_PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[20]
+		mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1099,7 +1325,7 @@ func (x *BootstrapServiceMessage_PublishResponse) String() string {
 func (*BootstrapServiceMessage_PublishResponse) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[20]
+	mi := &file_network_v1_bootstrap_bootstrap_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1112,7 +1338,7 @@ func (x *BootstrapServiceMessage_PublishResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use BootstrapServiceMessage_PublishResponse.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_PublishResponse) Descriptor() ([]byte, []int) {
-	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{15, 2}
+	return file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP(), []int{20, 2}
 }
 
 func (m *BootstrapServiceMessage_PublishResponse) GetBody() isBootstrapServiceMessage_PublishResponse_Body {
@@ -1148,7 +1374,27 @@ var file_network_v1_bootstrap_bootstrap_proto_rawDesc = []byte{
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x1b, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
 	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74,
 	0x72, 0x61, 0x70, 0x1a, 0x16, 0x74, 0x79, 0x70, 0x65, 0x2f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66,
-	0x69, 0x63, 0x61, 0x74, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xa0, 0x01, 0x0a, 0x0f,
+	0x69, 0x63, 0x61, 0x74, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x35, 0x0a, 0x06, 0x43,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x2b, 0x0a, 0x11, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x5f,
+	0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08,
+	0x52, 0x10, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x69,
+	0x6e, 0x67, 0x22, 0x12, 0x0a, 0x10, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x50, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e,
+	0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3b, 0x0a, 0x06, 0x63,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
+	0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x52, 0x06, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x4f, 0x0a, 0x10, 0x53, 0x65, 0x74, 0x43,
+	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3b, 0x0a, 0x06,
+	0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31,
+	0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x52, 0x06, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0x50, 0x0a, 0x11, 0x53, 0x65, 0x74,
+	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3b,
+	0x0a, 0x06, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23,
+	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
+	0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x6f, 0x6e,
+	0x66, 0x69, 0x67, 0x52, 0x06, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xa0, 0x01, 0x0a, 0x0f,
 	0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12,
 	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12,
 	0x6b, 0x0a, 0x11, 0x77, 0x65, 0x62, 0x73, 0x6f, 0x63, 0x6b, 0x65, 0x74, 0x5f, 0x6f, 0x70, 0x74,
@@ -1280,75 +1526,89 @@ var file_network_v1_bootstrap_bootstrap_proto_rawDesc = []byte{
 	0x01, 0x28, 0x04, 0x52, 0x09, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x49, 0x64, 0x22, 0x27,
 	0x0a, 0x25, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
 	0x54, 0x6f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x50, 0x65, 0x65, 0x72, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xcc, 0x07, 0x0a, 0x11, 0x42, 0x6f, 0x6f, 0x74,
-	0x73, 0x74, 0x72, 0x61, 0x70, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12, 0x85, 0x01,
-	0x0a, 0x0c, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x39,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
-	0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x72, 0x65,
-	0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65,
-	0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3a, 0x2e, 0x73, 0x74, 0x72, 0x69,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xa4, 0x09, 0x0a, 0x11, 0x42, 0x6f, 0x6f, 0x74,
+	0x73, 0x74, 0x72, 0x61, 0x70, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12, 0x6a, 0x0a,
+	0x09, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62,
+	0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66,
+	0x69, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69,
 	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f,
-	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x42, 0x6f,
-	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x85, 0x01, 0x0a, 0x0c, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6a, 0x0a, 0x09, 0x53, 0x65, 0x74,
+	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73,
+	0x74, 0x72, 0x61, 0x70, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74,
+	0x72, 0x61, 0x70, 0x2e, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x85, 0x01, 0x0a, 0x0c, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65,
 	0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x39, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
 	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73,
-	0x74, 0x72, 0x61, 0x70, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73,
+	0x74, 0x72, 0x61, 0x70, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73,
 	0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x1a, 0x3a, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
 	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e,
-	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43,
+	0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43,
 	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x85, 0x01,
-	0x0a, 0x0c, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x39,
+	0x0a, 0x0c, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x39,
 	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e,
-	0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x44, 0x65, 0x6c,
-	0x65, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65,
+	0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x55, 0x70, 0x64,
+	0x61, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65,
 	0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3a, 0x2e, 0x73, 0x74, 0x72, 0x69,
 	0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f,
-	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x42, 0x6f,
+	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x42, 0x6f,
 	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a, 0x09, 0x47, 0x65, 0x74, 0x43, 0x6c, 0x69, 0x65,
-	0x6e, 0x74, 0x12, 0x36, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
-	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70,
-	0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69,
-	0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x37, 0x2e, 0x73, 0x74, 0x72,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x85, 0x01, 0x0a, 0x0c, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65,
+	0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x39, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73,
+	0x74, 0x72, 0x61, 0x70, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73,
+	0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x3a, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e,
+	0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43,
+	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a,
+	0x09, 0x47, 0x65, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x36, 0x2e, 0x73, 0x74, 0x72,
 	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62,
 	0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x6f, 0x74,
-	0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x82, 0x01, 0x0a, 0x0b, 0x4c, 0x69, 0x73, 0x74, 0x43, 0x6c, 0x69, 0x65,
-	0x6e, 0x74, 0x73, 0x12, 0x38, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74,
-	0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61,
-	0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43,
-	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x39, 0x2e,
-	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
-	0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74,
-	0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7c, 0x0a, 0x09, 0x4c, 0x69, 0x73, 0x74,
-	0x50, 0x65, 0x65, 0x72, 0x73, 0x12, 0x36, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x37, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70,
+	0x2e, 0x47, 0x65, 0x74, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69,
+	0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x82, 0x01, 0x0a, 0x0b,
+	0x4c, 0x69, 0x73, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x38, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e,
+	0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x42, 0x6f,
+	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x39, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
 	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74,
 	0x72, 0x61, 0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61,
-	0x70, 0x50, 0x65, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x37, 0x2e,
+	0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x7c, 0x0a, 0x09, 0x4c, 0x69, 0x73, 0x74, 0x50, 0x65, 0x65, 0x72, 0x73, 0x12, 0x36, 0x2e,
 	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
 	0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74,
 	0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x50, 0x65, 0x65, 0x72, 0x73, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x9d, 0x01, 0x0a, 0x14, 0x50, 0x75, 0x62, 0x6c, 0x69,
-	0x73, 0x68, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x54, 0x6f, 0x50, 0x65, 0x65, 0x72, 0x12,
-	0x41, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
-	0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x50, 0x75,
-	0x62, 0x6c, 0x69, 0x73, 0x68, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x54, 0x6f, 0x42, 0x6f,
-	0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x42, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
-	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70,
-	0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x54,
-	0x6f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x6a, 0x0a, 0x1e, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x37, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74,
+	0x72, 0x61, 0x70, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61,
+	0x70, 0x50, 0x65, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x9d,
+	0x01, 0x0a, 0x14, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72,
+	0x6b, 0x54, 0x6f, 0x50, 0x65, 0x65, 0x72, 0x12, 0x41, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
+	0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74,
+	0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x4e, 0x65, 0x74,
+	0x77, 0x6f, 0x72, 0x6b, 0x54, 0x6f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x50,
+	0x65, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x42, 0x2e, 0x73, 0x74, 0x72,
 	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62,
-	0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x5a, 0x42, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
-	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x74,
-	0x72, 0x69, 0x6d, 0x73, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e, 0x65,
-	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f, 0x76, 0x31, 0x2f, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72,
-	0x61, 0x70, 0x3b, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0xba, 0x02, 0x03, 0x53,
-	0x4e, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68,
+	0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x54, 0x6f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72,
+	0x61, 0x70, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x6a,
+	0x0a, 0x1e, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70,
+	0x5a, 0x42, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d,
+	0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2f, 0x70, 0x6b, 0x67,
+	0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f, 0x76, 0x31,
+	0x2f, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x3b, 0x62, 0x6f, 0x6f, 0x74, 0x73,
+	0x74, 0x72, 0x61, 0x70, 0xba, 0x02, 0x03, 0x53, 0x4e, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -1363,63 +1623,75 @@ func file_network_v1_bootstrap_bootstrap_proto_rawDescGZIP() []byte {
 	return file_network_v1_bootstrap_bootstrap_proto_rawDescData
 }
 
-var file_network_v1_bootstrap_bootstrap_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_network_v1_bootstrap_bootstrap_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_network_v1_bootstrap_bootstrap_proto_goTypes = []interface{}{
-	(*BootstrapClient)(nil),                         // 0: strims.network.v1.bootstrap.BootstrapClient
-	(*BootstrapClientWebSocketOptions)(nil),         // 1: strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
-	(*CreateBootstrapClientRequest)(nil),            // 2: strims.network.v1.bootstrap.CreateBootstrapClientRequest
-	(*CreateBootstrapClientResponse)(nil),           // 3: strims.network.v1.bootstrap.CreateBootstrapClientResponse
-	(*UpdateBootstrapClientRequest)(nil),            // 4: strims.network.v1.bootstrap.UpdateBootstrapClientRequest
-	(*UpdateBootstrapClientResponse)(nil),           // 5: strims.network.v1.bootstrap.UpdateBootstrapClientResponse
-	(*DeleteBootstrapClientRequest)(nil),            // 6: strims.network.v1.bootstrap.DeleteBootstrapClientRequest
-	(*DeleteBootstrapClientResponse)(nil),           // 7: strims.network.v1.bootstrap.DeleteBootstrapClientResponse
-	(*GetBootstrapClientRequest)(nil),               // 8: strims.network.v1.bootstrap.GetBootstrapClientRequest
-	(*GetBootstrapClientResponse)(nil),              // 9: strims.network.v1.bootstrap.GetBootstrapClientResponse
-	(*ListBootstrapClientsRequest)(nil),             // 10: strims.network.v1.bootstrap.ListBootstrapClientsRequest
-	(*ListBootstrapClientsResponse)(nil),            // 11: strims.network.v1.bootstrap.ListBootstrapClientsResponse
-	(*ListBootstrapPeersRequest)(nil),               // 12: strims.network.v1.bootstrap.ListBootstrapPeersRequest
-	(*ListBootstrapPeersResponse)(nil),              // 13: strims.network.v1.bootstrap.ListBootstrapPeersResponse
-	(*BootstrapPeer)(nil),                           // 14: strims.network.v1.bootstrap.BootstrapPeer
-	(*BootstrapServiceMessage)(nil),                 // 15: strims.network.v1.bootstrap.BootstrapServiceMessage
-	(*PublishNetworkToBootstrapPeerRequest)(nil),    // 16: strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerRequest
-	(*PublishNetworkToBootstrapPeerResponse)(nil),   // 17: strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerResponse
-	(*BootstrapServiceMessage_BrokerOffer)(nil),     // 18: strims.network.v1.bootstrap.BootstrapServiceMessage.BrokerOffer
-	(*BootstrapServiceMessage_PublishRequest)(nil),  // 19: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest
-	(*BootstrapServiceMessage_PublishResponse)(nil), // 20: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishResponse
-	(*certificate.Certificate)(nil),                 // 21: strims.type.Certificate
+	(*Config)(nil),                                  // 0: strims.network.v1.bootstrap.Config
+	(*GetConfigRequest)(nil),                        // 1: strims.network.v1.bootstrap.GetConfigRequest
+	(*GetConfigResponse)(nil),                       // 2: strims.network.v1.bootstrap.GetConfigResponse
+	(*SetConfigRequest)(nil),                        // 3: strims.network.v1.bootstrap.SetConfigRequest
+	(*SetConfigResponse)(nil),                       // 4: strims.network.v1.bootstrap.SetConfigResponse
+	(*BootstrapClient)(nil),                         // 5: strims.network.v1.bootstrap.BootstrapClient
+	(*BootstrapClientWebSocketOptions)(nil),         // 6: strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
+	(*CreateBootstrapClientRequest)(nil),            // 7: strims.network.v1.bootstrap.CreateBootstrapClientRequest
+	(*CreateBootstrapClientResponse)(nil),           // 8: strims.network.v1.bootstrap.CreateBootstrapClientResponse
+	(*UpdateBootstrapClientRequest)(nil),            // 9: strims.network.v1.bootstrap.UpdateBootstrapClientRequest
+	(*UpdateBootstrapClientResponse)(nil),           // 10: strims.network.v1.bootstrap.UpdateBootstrapClientResponse
+	(*DeleteBootstrapClientRequest)(nil),            // 11: strims.network.v1.bootstrap.DeleteBootstrapClientRequest
+	(*DeleteBootstrapClientResponse)(nil),           // 12: strims.network.v1.bootstrap.DeleteBootstrapClientResponse
+	(*GetBootstrapClientRequest)(nil),               // 13: strims.network.v1.bootstrap.GetBootstrapClientRequest
+	(*GetBootstrapClientResponse)(nil),              // 14: strims.network.v1.bootstrap.GetBootstrapClientResponse
+	(*ListBootstrapClientsRequest)(nil),             // 15: strims.network.v1.bootstrap.ListBootstrapClientsRequest
+	(*ListBootstrapClientsResponse)(nil),            // 16: strims.network.v1.bootstrap.ListBootstrapClientsResponse
+	(*ListBootstrapPeersRequest)(nil),               // 17: strims.network.v1.bootstrap.ListBootstrapPeersRequest
+	(*ListBootstrapPeersResponse)(nil),              // 18: strims.network.v1.bootstrap.ListBootstrapPeersResponse
+	(*BootstrapPeer)(nil),                           // 19: strims.network.v1.bootstrap.BootstrapPeer
+	(*BootstrapServiceMessage)(nil),                 // 20: strims.network.v1.bootstrap.BootstrapServiceMessage
+	(*PublishNetworkToBootstrapPeerRequest)(nil),    // 21: strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerRequest
+	(*PublishNetworkToBootstrapPeerResponse)(nil),   // 22: strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerResponse
+	(*BootstrapServiceMessage_BrokerOffer)(nil),     // 23: strims.network.v1.bootstrap.BootstrapServiceMessage.BrokerOffer
+	(*BootstrapServiceMessage_PublishRequest)(nil),  // 24: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest
+	(*BootstrapServiceMessage_PublishResponse)(nil), // 25: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishResponse
+	(*certificate.Certificate)(nil),                 // 26: strims.type.Certificate
 }
 var file_network_v1_bootstrap_bootstrap_proto_depIdxs = []int32{
-	1,  // 0: strims.network.v1.bootstrap.BootstrapClient.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
-	1,  // 1: strims.network.v1.bootstrap.CreateBootstrapClientRequest.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
-	0,  // 2: strims.network.v1.bootstrap.CreateBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
-	1,  // 3: strims.network.v1.bootstrap.UpdateBootstrapClientRequest.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
-	0,  // 4: strims.network.v1.bootstrap.UpdateBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
-	0,  // 5: strims.network.v1.bootstrap.GetBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
-	0,  // 6: strims.network.v1.bootstrap.ListBootstrapClientsResponse.bootstrap_clients:type_name -> strims.network.v1.bootstrap.BootstrapClient
-	14, // 7: strims.network.v1.bootstrap.ListBootstrapPeersResponse.peers:type_name -> strims.network.v1.bootstrap.BootstrapPeer
-	18, // 8: strims.network.v1.bootstrap.BootstrapServiceMessage.broker_offer:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.BrokerOffer
-	19, // 9: strims.network.v1.bootstrap.BootstrapServiceMessage.publish_request:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest
-	20, // 10: strims.network.v1.bootstrap.BootstrapServiceMessage.publish_response:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.PublishResponse
-	21, // 11: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest.certificate:type_name -> strims.type.Certificate
-	2,  // 12: strims.network.v1.bootstrap.BootstrapFrontend.CreateClient:input_type -> strims.network.v1.bootstrap.CreateBootstrapClientRequest
-	4,  // 13: strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient:input_type -> strims.network.v1.bootstrap.UpdateBootstrapClientRequest
-	6,  // 14: strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient:input_type -> strims.network.v1.bootstrap.DeleteBootstrapClientRequest
-	8,  // 15: strims.network.v1.bootstrap.BootstrapFrontend.GetClient:input_type -> strims.network.v1.bootstrap.GetBootstrapClientRequest
-	10, // 16: strims.network.v1.bootstrap.BootstrapFrontend.ListClients:input_type -> strims.network.v1.bootstrap.ListBootstrapClientsRequest
-	12, // 17: strims.network.v1.bootstrap.BootstrapFrontend.ListPeers:input_type -> strims.network.v1.bootstrap.ListBootstrapPeersRequest
-	16, // 18: strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer:input_type -> strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerRequest
-	3,  // 19: strims.network.v1.bootstrap.BootstrapFrontend.CreateClient:output_type -> strims.network.v1.bootstrap.CreateBootstrapClientResponse
-	5,  // 20: strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient:output_type -> strims.network.v1.bootstrap.UpdateBootstrapClientResponse
-	7,  // 21: strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient:output_type -> strims.network.v1.bootstrap.DeleteBootstrapClientResponse
-	9,  // 22: strims.network.v1.bootstrap.BootstrapFrontend.GetClient:output_type -> strims.network.v1.bootstrap.GetBootstrapClientResponse
-	11, // 23: strims.network.v1.bootstrap.BootstrapFrontend.ListClients:output_type -> strims.network.v1.bootstrap.ListBootstrapClientsResponse
-	13, // 24: strims.network.v1.bootstrap.BootstrapFrontend.ListPeers:output_type -> strims.network.v1.bootstrap.ListBootstrapPeersResponse
-	17, // 25: strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer:output_type -> strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerResponse
-	19, // [19:26] is the sub-list for method output_type
-	12, // [12:19] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	0,  // 0: strims.network.v1.bootstrap.GetConfigResponse.config:type_name -> strims.network.v1.bootstrap.Config
+	0,  // 1: strims.network.v1.bootstrap.SetConfigRequest.config:type_name -> strims.network.v1.bootstrap.Config
+	0,  // 2: strims.network.v1.bootstrap.SetConfigResponse.config:type_name -> strims.network.v1.bootstrap.Config
+	6,  // 3: strims.network.v1.bootstrap.BootstrapClient.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
+	6,  // 4: strims.network.v1.bootstrap.CreateBootstrapClientRequest.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
+	5,  // 5: strims.network.v1.bootstrap.CreateBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
+	6,  // 6: strims.network.v1.bootstrap.UpdateBootstrapClientRequest.websocket_options:type_name -> strims.network.v1.bootstrap.BootstrapClientWebSocketOptions
+	5,  // 7: strims.network.v1.bootstrap.UpdateBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
+	5,  // 8: strims.network.v1.bootstrap.GetBootstrapClientResponse.bootstrap_client:type_name -> strims.network.v1.bootstrap.BootstrapClient
+	5,  // 9: strims.network.v1.bootstrap.ListBootstrapClientsResponse.bootstrap_clients:type_name -> strims.network.v1.bootstrap.BootstrapClient
+	19, // 10: strims.network.v1.bootstrap.ListBootstrapPeersResponse.peers:type_name -> strims.network.v1.bootstrap.BootstrapPeer
+	23, // 11: strims.network.v1.bootstrap.BootstrapServiceMessage.broker_offer:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.BrokerOffer
+	24, // 12: strims.network.v1.bootstrap.BootstrapServiceMessage.publish_request:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest
+	25, // 13: strims.network.v1.bootstrap.BootstrapServiceMessage.publish_response:type_name -> strims.network.v1.bootstrap.BootstrapServiceMessage.PublishResponse
+	26, // 14: strims.network.v1.bootstrap.BootstrapServiceMessage.PublishRequest.certificate:type_name -> strims.type.Certificate
+	1,  // 15: strims.network.v1.bootstrap.BootstrapFrontend.GetConfig:input_type -> strims.network.v1.bootstrap.GetConfigRequest
+	3,  // 16: strims.network.v1.bootstrap.BootstrapFrontend.SetConfig:input_type -> strims.network.v1.bootstrap.SetConfigRequest
+	7,  // 17: strims.network.v1.bootstrap.BootstrapFrontend.CreateClient:input_type -> strims.network.v1.bootstrap.CreateBootstrapClientRequest
+	9,  // 18: strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient:input_type -> strims.network.v1.bootstrap.UpdateBootstrapClientRequest
+	11, // 19: strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient:input_type -> strims.network.v1.bootstrap.DeleteBootstrapClientRequest
+	13, // 20: strims.network.v1.bootstrap.BootstrapFrontend.GetClient:input_type -> strims.network.v1.bootstrap.GetBootstrapClientRequest
+	15, // 21: strims.network.v1.bootstrap.BootstrapFrontend.ListClients:input_type -> strims.network.v1.bootstrap.ListBootstrapClientsRequest
+	17, // 22: strims.network.v1.bootstrap.BootstrapFrontend.ListPeers:input_type -> strims.network.v1.bootstrap.ListBootstrapPeersRequest
+	21, // 23: strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer:input_type -> strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerRequest
+	2,  // 24: strims.network.v1.bootstrap.BootstrapFrontend.GetConfig:output_type -> strims.network.v1.bootstrap.GetConfigResponse
+	4,  // 25: strims.network.v1.bootstrap.BootstrapFrontend.SetConfig:output_type -> strims.network.v1.bootstrap.SetConfigResponse
+	8,  // 26: strims.network.v1.bootstrap.BootstrapFrontend.CreateClient:output_type -> strims.network.v1.bootstrap.CreateBootstrapClientResponse
+	10, // 27: strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient:output_type -> strims.network.v1.bootstrap.UpdateBootstrapClientResponse
+	12, // 28: strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient:output_type -> strims.network.v1.bootstrap.DeleteBootstrapClientResponse
+	14, // 29: strims.network.v1.bootstrap.BootstrapFrontend.GetClient:output_type -> strims.network.v1.bootstrap.GetBootstrapClientResponse
+	16, // 30: strims.network.v1.bootstrap.BootstrapFrontend.ListClients:output_type -> strims.network.v1.bootstrap.ListBootstrapClientsResponse
+	18, // 31: strims.network.v1.bootstrap.BootstrapFrontend.ListPeers:output_type -> strims.network.v1.bootstrap.ListBootstrapPeersResponse
+	22, // 32: strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer:output_type -> strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_network_v1_bootstrap_bootstrap_proto_init() }
@@ -1429,7 +1701,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapClient); i {
+			switch v := v.(*Config); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1441,7 +1713,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapClientWebSocketOptions); i {
+			switch v := v.(*GetConfigRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1453,7 +1725,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateBootstrapClientRequest); i {
+			switch v := v.(*GetConfigResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1465,7 +1737,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateBootstrapClientResponse); i {
+			switch v := v.(*SetConfigRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1477,7 +1749,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateBootstrapClientRequest); i {
+			switch v := v.(*SetConfigResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1489,7 +1761,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateBootstrapClientResponse); i {
+			switch v := v.(*BootstrapClient); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1501,7 +1773,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteBootstrapClientRequest); i {
+			switch v := v.(*BootstrapClientWebSocketOptions); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1513,7 +1785,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteBootstrapClientResponse); i {
+			switch v := v.(*CreateBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1525,7 +1797,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBootstrapClientRequest); i {
+			switch v := v.(*CreateBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1537,7 +1809,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBootstrapClientResponse); i {
+			switch v := v.(*UpdateBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1549,7 +1821,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapClientsRequest); i {
+			switch v := v.(*UpdateBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1561,7 +1833,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapClientsResponse); i {
+			switch v := v.(*DeleteBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1573,7 +1845,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapPeersRequest); i {
+			switch v := v.(*DeleteBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1585,7 +1857,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapPeersResponse); i {
+			switch v := v.(*GetBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1597,7 +1869,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapPeer); i {
+			switch v := v.(*GetBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1609,7 +1881,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage); i {
+			switch v := v.(*ListBootstrapClientsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1621,7 +1893,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishNetworkToBootstrapPeerRequest); i {
+			switch v := v.(*ListBootstrapClientsResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1633,7 +1905,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishNetworkToBootstrapPeerResponse); i {
+			switch v := v.(*ListBootstrapPeersRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1645,7 +1917,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
+			switch v := v.(*ListBootstrapPeersResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1657,7 +1929,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
+			switch v := v.(*BootstrapPeer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1669,6 +1941,66 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 		file_network_v1_bootstrap_bootstrap_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BootstrapServiceMessage); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_bootstrap_bootstrap_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PublishNetworkToBootstrapPeerRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_bootstrap_bootstrap_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PublishNetworkToBootstrapPeerResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_bootstrap_bootstrap_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_bootstrap_bootstrap_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_bootstrap_bootstrap_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BootstrapServiceMessage_PublishResponse); i {
 			case 0:
 				return &v.state
@@ -1681,21 +2013,21 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			}
 		}
 	}
-	file_network_v1_bootstrap_bootstrap_proto_msgTypes[0].OneofWrappers = []interface{}{
+	file_network_v1_bootstrap_bootstrap_proto_msgTypes[5].OneofWrappers = []interface{}{
 		(*BootstrapClient_WebsocketOptions)(nil),
 	}
-	file_network_v1_bootstrap_bootstrap_proto_msgTypes[2].OneofWrappers = []interface{}{
+	file_network_v1_bootstrap_bootstrap_proto_msgTypes[7].OneofWrappers = []interface{}{
 		(*CreateBootstrapClientRequest_WebsocketOptions)(nil),
 	}
-	file_network_v1_bootstrap_bootstrap_proto_msgTypes[4].OneofWrappers = []interface{}{
+	file_network_v1_bootstrap_bootstrap_proto_msgTypes[9].OneofWrappers = []interface{}{
 		(*UpdateBootstrapClientRequest_WebsocketOptions)(nil),
 	}
-	file_network_v1_bootstrap_bootstrap_proto_msgTypes[15].OneofWrappers = []interface{}{
+	file_network_v1_bootstrap_bootstrap_proto_msgTypes[20].OneofWrappers = []interface{}{
 		(*BootstrapServiceMessage_BrokerOffer_)(nil),
 		(*BootstrapServiceMessage_PublishRequest_)(nil),
 		(*BootstrapServiceMessage_PublishResponse_)(nil),
 	}
-	file_network_v1_bootstrap_bootstrap_proto_msgTypes[20].OneofWrappers = []interface{}{
+	file_network_v1_bootstrap_bootstrap_proto_msgTypes[25].OneofWrappers = []interface{}{
 		(*BootstrapServiceMessage_PublishResponse_Error)(nil),
 	}
 	type x struct{}
@@ -1704,7 +2036,7 @@ func file_network_v1_bootstrap_bootstrap_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_network_v1_bootstrap_bootstrap_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

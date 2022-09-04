@@ -9,25 +9,25 @@ import { useTitle } from "react-use";
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import BootstrapForm, { BootstrapFormData } from "./BootstrapForm";
+import BootstrapForm, { BootstrapFormData } from "./BootstrapClientForm";
 
 const BootstrapEditForm: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.bootstrap.title"));
 
-  const { ruleId } = useParams<"ruleId">();
+  const { clientId } = useParams<"clientId">();
   const [{ value, ...getRes }] = useCall("bootstrap", "getClient", {
-    args: [{ id: BigInt(ruleId) }],
+    args: [{ id: BigInt(clientId) }],
   });
 
   const navigate = useNavigate();
   const [updateRes, updateBootstrap] = useLazyCall("bootstrap", "updateClient", {
-    onComplete: () => navigate(`/settings/bootstraps`),
+    onComplete: () => navigate(`/settings/bootstrap/clients`),
   });
 
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {
     await updateBootstrap({
-      id: BigInt(ruleId),
+      id: BigInt(clientId),
       clientOptions: {
         websocketOptions: data,
       },
@@ -50,7 +50,7 @@ const BootstrapEditForm: React.FC = () => {
 
   return (
     <>
-      <TableTitleBar label="Edit Bootstrap" backLink="/settings/bootstraps" />
+      <TableTitleBar label="Edit Bootstrap" backLink="/settings/bootstrap/clients" />
       <BootstrapForm
         onSubmit={onSubmit}
         error={getRes.error || updateRes.error}

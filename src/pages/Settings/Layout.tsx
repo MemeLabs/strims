@@ -44,7 +44,7 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="networks">
         Networks
       </NavLink>
-      <NavLink className={linkClassName} onClick={onLinkClick} to="bootstraps">
+      <NavLink className={linkClassName} onClick={onLinkClick} to="bootstrap">
         Bootstraps
       </NavLink>
       <NavLink className={linkClassName} onClick={onLinkClick} to="chat-servers">

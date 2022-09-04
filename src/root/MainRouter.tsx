@@ -30,7 +30,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings/*" element={layout}>
     <Route index element={<Navigate replace to="networks" />} />
     <Route path="networks/*" element={<Network />} />
-    <Route path="bootstraps/*" element={<Bootstrap />} />
+    <Route path="bootstrap/*" element={<Bootstrap />} />
     <Route path="chat-servers/*" element={<Chat />} />
     <Route path="video/*" element={<Video />} />
     <Route path="vnic/*" element={<VNIC />} />

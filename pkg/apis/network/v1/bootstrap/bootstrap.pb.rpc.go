@@ -8,6 +8,8 @@ import (
 
 // RegisterBootstrapFrontendService ...
 func RegisterBootstrapFrontendService(host rpc.ServiceRegistry, service BootstrapFrontendService) {
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.GetConfig", service.GetConfig)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.SetConfig", service.SetConfig)
 	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.CreateClient)
 	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.UpdateClient)
 	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", service.DeleteClient)
@@ -19,6 +21,14 @@ func RegisterBootstrapFrontendService(host rpc.ServiceRegistry, service Bootstra
 
 // BootstrapFrontendService ...
 type BootstrapFrontendService interface {
+	GetConfig(
+		ctx context.Context,
+		req *GetConfigRequest,
+	) (*GetConfigResponse, error)
+	SetConfig(
+		ctx context.Context,
+		req *SetConfigRequest,
+	) (*SetConfigResponse, error)
 	CreateClient(
 		ctx context.Context,
 		req *CreateBootstrapClientRequest,
@@ -51,6 +61,20 @@ type BootstrapFrontendService interface {
 
 // BootstrapFrontendService ...
 type UnimplementedBootstrapFrontendService struct{}
+
+func (s *UnimplementedBootstrapFrontendService) GetConfig(
+	ctx context.Context,
+	req *GetConfigRequest,
+) (*GetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedBootstrapFrontendService) SetConfig(
+	ctx context.Context,
+	req *SetConfigRequest,
+) (*SetConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
 
 func (s *UnimplementedBootstrapFrontendService) CreateClient(
 	ctx context.Context,
@@ -111,6 +135,24 @@ type BootstrapFrontendClient struct {
 // NewBootstrapFrontendClient ...
 func NewBootstrapFrontendClient(client rpc.Caller) *BootstrapFrontendClient {
 	return &BootstrapFrontendClient{client}
+}
+
+// GetConfig ...
+func (c *BootstrapFrontendClient) GetConfig(
+	ctx context.Context,
+	req *GetConfigRequest,
+	res *GetConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.GetConfig", req, res)
+}
+
+// SetConfig ...
+func (c *BootstrapFrontendClient) SetConfig(
+	ctx context.Context,
+	req *SetConfigRequest,
+	res *SetConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.SetConfig", req, res)
 }
 
 // CreateClient ...

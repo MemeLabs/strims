@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/api"
@@ -67,10 +68,12 @@ type control struct {
 	nextID            uint64
 	peers             syncutil.Map[uint64, *peer]
 	peerHostClientIDs syncutil.Map[kademlia.ID, uint64]
+	enablePublishing  atomic.Bool
 }
 
 // Run ...
 func (t *control) Run() {
+	go t.loadConfig()
 	go t.startClients()
 
 	for {
@@ -83,6 +86,8 @@ func (t *control) Run() {
 				go t.handlePeerRemove(e.HostID)
 			case *networkv1bootstrap.BootstrapClientChange:
 				go t.startClient(e.BootstrapClient)
+			case *networkv1bootstrap.ConfigChangeEvent:
+				t.enablePublishing.Store(e.Config.EnablePublishing)
 			}
 		case <-t.ctx.Done():
 			return
@@ -132,6 +137,15 @@ func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient)
 // RemovePeer ...
 func (t *control) RemovePeer(id uint64) {
 	t.peers.Delete(id)
+}
+
+func (t *control) loadConfig() {
+	config, err := dao.BootstrapConfig.Get(t.store)
+	if err != nil {
+		t.logger.Fatal("loading bootstrap config failed", zap.Error(err))
+	}
+
+	t.enablePublishing.Store(config.EnablePublishing)
 }
 
 func (t *control) startClients() {
@@ -185,8 +199,7 @@ func (t *control) startWSClient(opt *networkv1bootstrap.BootstrapClientWebSocket
 
 // PublishingEnabled ...
 func (t *control) PublishingEnabled() bool {
-	// TODO: load from db
-	return true
+	return t.enablePublishing.Load()
 }
 
 // Publish ...

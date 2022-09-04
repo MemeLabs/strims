@@ -33,6 +33,23 @@ type bootstrapService struct {
 	app    app.Control
 }
 
+// SetConfig ...
+func (s *bootstrapService) SetConfig(ctx context.Context, r *bootstrap.SetConfigRequest) (*bootstrap.SetConfigResponse, error) {
+	if err := dao.BootstrapConfig.Set(s.store, r.Config); err != nil {
+		return nil, err
+	}
+	return &bootstrap.SetConfigResponse{Config: r.Config}, nil
+}
+
+// GetConfig ...
+func (s *bootstrapService) GetConfig(ctx context.Context, r *bootstrap.GetConfigRequest) (*bootstrap.GetConfigResponse, error) {
+	config, err := dao.BootstrapConfig.Get(s.store)
+	if err != nil {
+		return nil, err
+	}
+	return &bootstrap.GetConfigResponse{Config: config}, nil
+}
+
 // CreateClient ...
 func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.CreateBootstrapClientRequest) (*bootstrap.CreateBootstrapClientResponse, error) {
 	var client *bootstrap.BootstrapClient

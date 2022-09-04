@@ -3,6 +3,12 @@ import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import {
+  strims_network_v1_bootstrap_IGetConfigRequest,
+  strims_network_v1_bootstrap_GetConfigRequest,
+  strims_network_v1_bootstrap_GetConfigResponse,
+  strims_network_v1_bootstrap_ISetConfigRequest,
+  strims_network_v1_bootstrap_SetConfigRequest,
+  strims_network_v1_bootstrap_SetConfigResponse,
   strims_network_v1_bootstrap_ICreateBootstrapClientRequest,
   strims_network_v1_bootstrap_CreateBootstrapClientRequest,
   strims_network_v1_bootstrap_CreateBootstrapClientResponse,
@@ -27,6 +33,8 @@ import {
 } from "./bootstrap";
 
 export interface BootstrapFrontendService {
+  getConfig(req: strims_network_v1_bootstrap_GetConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_GetConfigResponse> | strims_network_v1_bootstrap_GetConfigResponse;
+  setConfig(req: strims_network_v1_bootstrap_SetConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_SetConfigResponse> | strims_network_v1_bootstrap_SetConfigResponse;
   createClient(req: strims_network_v1_bootstrap_CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> | strims_network_v1_bootstrap_CreateBootstrapClientResponse;
   updateClient(req: strims_network_v1_bootstrap_UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_UpdateBootstrapClientResponse> | strims_network_v1_bootstrap_UpdateBootstrapClientResponse;
   deleteClient(req: strims_network_v1_bootstrap_DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_DeleteBootstrapClientResponse> | strims_network_v1_bootstrap_DeleteBootstrapClientResponse;
@@ -37,6 +45,8 @@ export interface BootstrapFrontendService {
 }
 
 export class UnimplementedBootstrapFrontendService implements BootstrapFrontendService {
+  getConfig(req: strims_network_v1_bootstrap_GetConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_GetConfigResponse> | strims_network_v1_bootstrap_GetConfigResponse { throw new Error("not implemented"); }
+  setConfig(req: strims_network_v1_bootstrap_SetConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_SetConfigResponse> | strims_network_v1_bootstrap_SetConfigResponse { throw new Error("not implemented"); }
   createClient(req: strims_network_v1_bootstrap_CreateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> | strims_network_v1_bootstrap_CreateBootstrapClientResponse { throw new Error("not implemented"); }
   updateClient(req: strims_network_v1_bootstrap_UpdateBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_UpdateBootstrapClientResponse> | strims_network_v1_bootstrap_UpdateBootstrapClientResponse { throw new Error("not implemented"); }
   deleteClient(req: strims_network_v1_bootstrap_DeleteBootstrapClientRequest, call: strims_rpc_Call): Promise<strims_network_v1_bootstrap_DeleteBootstrapClientResponse> | strims_network_v1_bootstrap_DeleteBootstrapClientResponse { throw new Error("not implemented"); }
@@ -47,6 +57,8 @@ export class UnimplementedBootstrapFrontendService implements BootstrapFrontendS
 }
 
 export const registerBootstrapFrontendService = (host: strims_rpc_Service, service: BootstrapFrontendService): void => {
+  host.registerMethod<strims_network_v1_bootstrap_GetConfigRequest, strims_network_v1_bootstrap_GetConfigResponse>("strims.network.v1.bootstrap.BootstrapFrontend.GetConfig", service.getConfig.bind(service), strims_network_v1_bootstrap_GetConfigRequest);
+  host.registerMethod<strims_network_v1_bootstrap_SetConfigRequest, strims_network_v1_bootstrap_SetConfigResponse>("strims.network.v1.bootstrap.BootstrapFrontend.SetConfig", service.setConfig.bind(service), strims_network_v1_bootstrap_SetConfigRequest);
   host.registerMethod<strims_network_v1_bootstrap_CreateBootstrapClientRequest, strims_network_v1_bootstrap_CreateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.createClient.bind(service), strims_network_v1_bootstrap_CreateBootstrapClientRequest);
   host.registerMethod<strims_network_v1_bootstrap_UpdateBootstrapClientRequest, strims_network_v1_bootstrap_UpdateBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.updateClient.bind(service), strims_network_v1_bootstrap_UpdateBootstrapClientRequest);
   host.registerMethod<strims_network_v1_bootstrap_DeleteBootstrapClientRequest, strims_network_v1_bootstrap_DeleteBootstrapClientResponse>("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", service.deleteClient.bind(service), strims_network_v1_bootstrap_DeleteBootstrapClientRequest);
@@ -58,6 +70,14 @@ export const registerBootstrapFrontendService = (host: strims_rpc_Service, servi
 
 export class BootstrapFrontendClient {
   constructor(private readonly host: strims_rpc_Host) {}
+
+  public getConfig(req?: strims_network_v1_bootstrap_IGetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_GetConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.GetConfig", new strims_network_v1_bootstrap_GetConfigRequest(req)), strims_network_v1_bootstrap_GetConfigResponse, opts);
+  }
+
+  public setConfig(req?: strims_network_v1_bootstrap_ISetConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_SetConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.SetConfig", new strims_network_v1_bootstrap_SetConfigRequest(req)), strims_network_v1_bootstrap_SetConfigResponse, opts);
+  }
 
   public createClient(req?: strims_network_v1_bootstrap_ICreateBootstrapClientRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_bootstrap_CreateBootstrapClientResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", new strims_network_v1_bootstrap_CreateBootstrapClientRequest(req)), strims_network_v1_bootstrap_CreateBootstrapClientResponse, opts);

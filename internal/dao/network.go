@@ -38,6 +38,7 @@ const (
 	networkPeerInviterNS
 	networkCertificateLogKeyNS
 	networkBootstrapClientClientOptionsNS
+	bootstrapConfigNS
 )
 
 var Networks = NewTable(
@@ -374,6 +375,18 @@ type CertificateLogCache struct {
 func NetworkKey(network *networkv1.Network) []byte {
 	return CertificateRoot(network.Certificate).Key
 }
+
+var BootstrapConfig = NewSingleton(
+	bootstrapConfigNS,
+	&SingletonOptions[networkv1bootstrap.Config, *networkv1bootstrap.Config]{
+		DefaultValue: &networkv1bootstrap.Config{
+			EnablePublishing: false,
+		},
+		ObserveChange: func(m, p *networkv1bootstrap.Config) proto.Message {
+			return &networkv1bootstrap.ConfigChangeEvent{Config: m}
+		},
+	},
+)
 
 var BootstrapClients = NewTable(
 	networkBootstrapClientNS,
