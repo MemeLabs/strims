@@ -145,7 +145,7 @@ func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
 	var err error
 	switch opt := client.ClientOptions.(type) {
 	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
-		err = t.startWSClient(opt.WebsocketOptions)
+		_, err = t.startWSClient(opt.WebsocketOptions)
 	}
 
 	if err != nil {
@@ -153,10 +153,10 @@ func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
 	}
 }
 
-func (t *control) startWSClient(opt *networkv1bootstrap.BootstrapClientWebSocketOptions) error {
+func (t *control) startWSClient(opt *networkv1bootstrap.BootstrapClientWebSocketOptions) (*vnic.Peer, error) {
 	u, err := url.Parse(opt.Url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if opt.InsecureSkipVerifyTls {
 		u.Fragment = "insecure"

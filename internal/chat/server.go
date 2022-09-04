@@ -27,8 +27,8 @@ import (
 )
 
 var ServiceAddressSalt = []byte("chat")
-var EventsAddressSalt = []byte("chat:events")
-var AssetsAddressSalt = []byte("chat:assets")
+var EventsSwarmSalt = []byte("chat:events")
+var AssetsSwarmSalt = []byte("chat:assets")
 
 var defaultEventSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          256,
@@ -158,8 +158,8 @@ func (s *chatServer) Run(ctx context.Context) error {
 	done, ctx := s.stopper.Start(ctx)
 	defer done()
 
-	eventTransferID := s.transfer.Add(s.eventSwarm, EventsAddressSalt)
-	assetTransferID := s.transfer.Add(s.assetSwarm, AssetsAddressSalt)
+	eventTransferID := s.transfer.Add(s.eventSwarm, EventsSwarmSalt)
+	assetTransferID := s.transfer.Add(s.assetSwarm, AssetsSwarmSalt)
 	s.transfer.Publish(eventTransferID, s.config.NetworkKey)
 	s.transfer.Publish(assetTransferID, s.config.NetworkKey)
 

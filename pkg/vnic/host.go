@@ -20,7 +20,6 @@ import (
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
-	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -201,58 +200,62 @@ func (h *Host) Cert() (*certificate.Certificate, error) {
 	return cert, nil
 }
 
-// AddLink ...
-func (h *Host) AddLink(c Link) {
+func (h *Host) AddLink(c Link) (*Peer, error) {
+	logger := h.logger.With(
+		zap.Stringer("type", reflect.TypeOf(c)),
+		zap.Int("mtu", c.MTU()),
+	)
+
+	p, err := h.addLink(logger, c)
+	if err != nil {
+		logger.Warn("peer init failed", zap.Error(err))
+		c.Close()
+	}
+	return p, nil
+}
+
+func (h *Host) addLink(logger *zap.Logger, c Link) (*Peer, error) {
+	cert, err := h.Cert()
+	if err != nil {
+		return nil, &PeerInitError{err}
+	}
+
+	p, err := newPeer(logger, c, h.profileKey, cert)
+	if err != nil {
+		return nil, &PeerInitError{err}
+	}
+
+	h.peersLock.Lock()
+	_, found := h.peers[p.HostID()]
+	if !found {
+		h.peers[p.HostID()] = p
+	}
+	h.peersLock.Unlock()
+
+	if found {
+		return nil, &PeerInitError{errors.New("duplicate peer link found")}
+	}
+
+	p.logger.Debug("created peer")
+
 	go func() {
 		linksActive.Inc()
 		defer linksActive.Dec()
 
-		defer c.Close()
-
-		cert, err := h.Cert()
-		if err != nil {
-			h.logger.Error("peer init error", zap.Error(err))
-			return
-		}
-
-		p, err := newPeer(h.logger, c, h.profileKey, cert)
-		if err != nil {
-			h.logger.Error("peer init error", zap.Error(err))
-			return
-		}
-
-		logger := h.logger.With(
-			logutil.ByteHex("peer", p.Certificate.Key),
-			zap.Stringer("host", p.HostID()),
-			zap.Stringer("type", reflect.TypeOf(c)),
-			zap.Int("mtu", c.MTU()),
-		)
-
-		h.peersLock.Lock()
-		_, found := h.peers[p.HostID()]
-		if !found {
-			h.peers[p.HostID()] = p
-		}
-		h.peersLock.Unlock()
-
-		if found {
-			logger.Debug("closed duplicate link")
-			return
-		}
-
-		logger.Debug("created peer")
-
 		h.handlePeer(p)
 
-		logger.Debug("running peer")
+		p.logger.Debug("running peer")
 		p.run()
 
 		h.peersLock.Lock()
 		delete(h.peers, p.HostID())
 		h.peersLock.Unlock()
 
-		logger.Debug("closed peer")
+		c.Close()
+		p.logger.Debug("closed peer")
 	}()
+
+	return p, nil
 }
 
 // AddPeerHandler ...
@@ -341,10 +344,10 @@ func (h *Host) dialer(scheme string) LinkDialer {
 }
 
 // Dial ...
-func (h *Host) Dial(uri string) error {
+func (h *Host) Dial(uri string) (*Peer, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	dialCount.WithLabelValues(u.Scheme).Inc()
@@ -357,18 +360,29 @@ func (h *Host) Dial(uri string) error {
 	d := h.dialer(u.Scheme)
 	if d == nil {
 		dialErrorCount.WithLabelValues(u.Scheme).Inc()
-		return errors.New("unsupported scheme")
+		return nil, errors.New("unsupported scheme")
 	}
 
 	c, err := d.Dial(uri)
 	if err != nil {
 		dialErrorCount.WithLabelValues(u.Scheme).Inc()
 		h.logger.Error("dial error", zap.Error(err))
-		return err
+		return nil, err
 	}
 
-	h.AddLink(c)
-	return nil
+	return h.AddLink(c)
+}
+
+type PeerInitError struct {
+	error
+}
+
+func (e *PeerInitError) Unwrap() error {
+	return e.error
+}
+
+func (e *PeerInitError) Error() string {
+	return fmt.Sprintf("peer init: %s", e.error)
 }
 
 // Listener ...

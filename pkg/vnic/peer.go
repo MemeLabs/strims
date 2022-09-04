@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/randutil"
 	"github.com/MemeLabs/strims/pkg/version"
@@ -63,7 +64,9 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 	if err := dao.VerifyCertificate(init.Certificate); err != nil {
 		return nil, fmt.Errorf("peer cert verification: %w", err)
 	}
-	if init.Certificate.GetParent() == nil {
+
+	peerCert := init.Certificate.GetParent()
+	if peerCert == nil {
 		return nil, errors.New("invalid peer certificate")
 	}
 
@@ -75,9 +78,12 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 	ctx, cancel := context.WithCancel(context.Background())
 
 	p := &Peer{
-		logger:       logger,
+		logger: logger.With(
+			logutil.ByteHex("peer", peerCert.Key),
+			zap.Stringer("host", hostID),
+		),
 		Link:         instrumentLink(link, hostID),
-		Certificate:  init.Certificate.GetParent(),
+		Certificate:  peerCert,
 		hostID:       hostID,
 		handlers:     map[uint16]FrameHandler{},
 		reservations: map[uint16]struct{}{},

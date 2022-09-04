@@ -4,6 +4,7 @@
 package vnic
 
 import (
+	"errors"
 	"reflect"
 
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
@@ -53,7 +54,11 @@ func (p *LinkCandidatePool) SetRemoteDescriptions(ds []*vnicv1.LinkDescription) 
 		t := linkCandidateTypes[d.Interface]
 		for _, c := range cs[t] {
 			connected, err := c.SetRemoteDescription(d)
-			if err != nil {
+
+			var peerInitErr *PeerInitError
+			if errors.As(err, &peerInitErr) {
+				return false, peerInitErr
+			} else if err != nil {
 				errs = append(errs, err)
 			} else if connected {
 				return connected, nil

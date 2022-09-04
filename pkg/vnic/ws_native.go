@@ -152,6 +152,6 @@ func (f *wsLinkCandidate) LocalDescription() (*vnicv1.LinkDescription, error) {
 }
 
 func (f *wsLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
-	err := f.host.Dial(d.Description)
+	_, err := f.host.Dial(d.Description)
 	return err == nil, err
 }

@@ -244,7 +244,7 @@ func (f *tcpLinkCandidate) LocalDescription() (*vnicv1.LinkDescription, error) {
 }
 
 func (f *tcpLinkCandidate) SetRemoteDescription(d *vnicv1.LinkDescription) (bool, error) {
-	err := f.host.Dial(d.Description)
+	_, err := f.host.Dial(d.Description)
 	return err == nil, err
 }
 

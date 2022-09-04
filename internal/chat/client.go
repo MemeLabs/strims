@@ -36,7 +36,7 @@ func newChatReader(
 		return nil, err
 	}
 
-	cache, err := dao.GetSwarmCache(store, key, AssetsAddressSalt)
+	cache, err := dao.GetSwarmCache(store, key, AssetsSwarmSalt)
 	if err == nil {
 		if err := assetSwarm.ImportCache(cache); err != nil {
 			logger.Debug("cache import failed", zap.Error(err))
@@ -78,15 +78,15 @@ func (d *chatReader) exportCache() error {
 	if err != nil {
 		return err
 	}
-	return dao.SetSwarmCache(d.store, d.assetSwarm.ID(), AssetsAddressSalt, cache)
+	return dao.SetSwarmCache(d.store, d.assetSwarm.ID(), AssetsSwarmSalt, cache)
 }
 
 func (d *chatReader) Run(ctx context.Context) error {
 	done, ctx := d.stopper.Start(ctx)
 	defer done()
 
-	eventTransferID := d.transfer.Add(d.eventSwarm, EventsAddressSalt)
-	assetTransferID := d.transfer.Add(d.assetSwarm, AssetsAddressSalt)
+	eventTransferID := d.transfer.Add(d.eventSwarm, EventsSwarmSalt)
+	assetTransferID := d.transfer.Add(d.assetSwarm, AssetsSwarmSalt)
 	d.transfer.Publish(eventTransferID, d.networkKey)
 	d.transfer.Publish(assetTransferID, d.networkKey)
 
