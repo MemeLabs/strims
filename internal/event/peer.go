@@ -3,12 +3,16 @@
 
 package event
 
+import "github.com/MemeLabs/strims/pkg/kademlia"
+
 // PeerAdd ...
 type PeerAdd struct {
-	ID uint64
+	ID     uint64
+	HostID kademlia.ID
 }
 
 // PeerRemove ...
 type PeerRemove struct {
-	ID uint64
+	ID     uint64
+	HostID kademlia.ID
 }

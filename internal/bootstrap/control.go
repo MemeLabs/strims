@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/api"
@@ -16,9 +15,17 @@ import (
 	network "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
+	"github.com/avast/retry-go"
 	"go.uber.org/zap"
+)
+
+const (
+	dialRetryLimit        = 10
+	dialRetryInitialDelay = time.Second
 )
 
 type Control interface {
@@ -44,7 +51,6 @@ func NewControl(
 		store:  store,
 
 		events: observers.Chan(),
-		peers:  map[uint64]*peer{},
 	}
 }
 
@@ -56,11 +62,11 @@ type control struct {
 	store  *dao.ProfileStore
 
 	events            chan any
-	lock              sync.Mutex
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 	nextID            uint64
-	peers             map[uint64]*peer
+	peers             syncutil.Map[uint64, *peer]
+	peerHostClientIDs syncutil.Map[kademlia.ID, uint64]
 }
 
 // Run ...
@@ -72,9 +78,9 @@ func (t *control) Run() {
 		case e := <-t.events:
 			switch e := e.(type) {
 			case event.PeerAdd:
-				t.handlePeerAdd(e.ID)
+				go t.handlePeerAdd(e.ID)
 			case event.PeerRemove:
-				t.handlePeerRemove()
+				go t.handlePeerRemove(e.HostID)
 			case *networkv1bootstrap.BootstrapClientChange:
 				go t.startClient(e.BootstrapClient)
 			}
@@ -85,25 +91,29 @@ func (t *control) Run() {
 }
 
 func (t *control) handlePeerAdd(id uint64) {
-	peer, ok := t.peers[id]
+	peer, ok := t.peers.Get(id)
 	if !ok {
 		return
 	}
 
-	go func() {
-		var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
-		if err := peer.client.Bootstrap().GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
-			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
-		}
+	var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
+	if err := peer.client.Bootstrap().GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+		t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
+	}
 
-		peer.PublishEnabled.Store(res.Enabled)
-	}()
+	peer.PublishEnabled.Store(res.Enabled)
 }
 
-func (t *control) handlePeerRemove() {
-	// reconnect to bootstraps if the last peer connection closes
-	if t.vpn.VNIC().PeerCount() == 0 {
-		go t.startClients()
+func (t *control) handlePeerRemove(hostID kademlia.ID) {
+	if id, ok := t.peerHostClientIDs.GetAndDelete(hostID); ok {
+		t.logger.Info("reconnecting to bootstrap client")
+
+		client, err := dao.BootstrapClients.Get(t.store, id)
+		if err != nil {
+			t.logger.Warn("loading bootstrap client failed", zap.Error(err))
+		} else {
+			t.startClient(client)
+		}
 	}
 }
 
@@ -114,20 +124,14 @@ func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient)
 		client:   client,
 	}
 
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	t.peers[id] = p
+	t.peers.Set(id, p)
 
 	return p
 }
 
 // RemovePeer ...
 func (t *control) RemovePeer(id uint64) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	delete(t.peers, id)
+	t.peers.Delete(id)
 }
 
 func (t *control) startClients() {
@@ -142,14 +146,29 @@ func (t *control) startClients() {
 }
 
 func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
-	var err error
-	switch opt := client.ClientOptions.(type) {
-	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
-		_, err = t.startWSClient(opt.WebsocketOptions)
-	}
+	var peer *vnic.Peer
+	err := retry.Do(
+		func() (err error) {
+			switch opt := client.ClientOptions.(type) {
+			case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
+				peer, err = t.startWSClient(opt.WebsocketOptions)
+			}
+			return err
+		},
+		retry.RetryIf(func(err error) bool {
+			var peerInitErr *vnic.PeerInitError
+			return !errors.As(err, &peerInitErr)
+		}),
+		retry.Attempts(dialRetryLimit),
+		retry.Context(t.ctx),
+		retry.Delay(dialRetryInitialDelay),
+		retry.DelayType(retry.BackOffDelay),
+	)
 
 	if err != nil {
-		t.logger.Debug("starting bootstrap client failed", zap.Error(err))
+		t.logger.Warn("starting bootstrap client failed", zap.Error(err))
+	} else {
+		t.peerHostClientIDs.Set(peer.HostID(), client.Id)
 	}
 }
 
@@ -172,7 +191,7 @@ func (t *control) PublishingEnabled() bool {
 
 // Publish ...
 func (t *control) Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error {
-	peer, ok := t.peers[peerID]
+	peer, ok := t.peers.Get(peerID)
 	if !ok {
 		return errors.New("peer id not found")
 	}
