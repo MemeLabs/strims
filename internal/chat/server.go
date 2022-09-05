@@ -92,13 +92,13 @@ func newChatServer(
 	directory directory.Control,
 	config *chatv1.Server,
 ) (*chatServer, error) {
-	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_events", ppspp.SwarmID(config.Key.Public[:8]))}, defaultEventSwarmOptions)
+	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%.8s_events", ppspp.SwarmID(config.Key.Public))}, defaultEventSwarmOptions)
 	eventSwarm, eventWriter, err := newWriter(config.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%s_assets", ppspp.SwarmID(config.Key.Public[:8]))}, defaultAssetSwarmOptions)
+	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%.8s_assets", ppspp.SwarmID(config.Key.Public))}, defaultAssetSwarmOptions)
 	assetSwarm, assetWriter, err := newWriter(config.Key, assetSwarmOptions)
 	if err != nil {
 		return nil, err

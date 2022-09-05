@@ -71,19 +71,19 @@ func newDirectoryServer(
 		return nil, errors.New("directory server requires network root key")
 	}
 
-	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}, defaultEventSwarmOptions)
-	eventSwarm, eventWriter, err := newWriter(network.ServerConfig.Key, eventSwarmOptions)
+	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%.8s_events", ppspp.SwarmID(config.Key.Public))}, defaultEventSwarmOptions)
+	eventSwarm, eventWriter, err := newWriter(config.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}, defaultAssetSwarmOptions)
-	assetSwarm, assetWriter, err := newWriter(network.ServerConfig.Key, assetSwarmOptions)
+	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%.8s_assets", ppspp.SwarmID(config.Key.Public))}, defaultAssetSwarmOptions)
+	assetSwarm, assetWriter, err := newWriter(config.Key, assetSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	cache, err := dao.GetSwarmCache(store, network.ServerConfig.Key.Public, AssetSwarmSalt)
+	cache, err := dao.GetSwarmCache(store, config.Key.Public, AssetSwarmSalt)
 	if err == nil {
 		if err := assetSwarm.ImportCache(cache); err != nil {
 			logger.Debug("cache import failed", zap.Error(err))

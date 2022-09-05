@@ -16,13 +16,13 @@ import (
 )
 
 func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*directoryReader, error) {
-	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(key[:8]))}, defaultEventSwarmOptions)
+	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%.8s_events", ppspp.SwarmID(key))}, defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(key[:8]))}, defaultAssetSwarmOptions)
+	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%.8s_assets", ppspp.SwarmID(key))}, defaultAssetSwarmOptions)
 	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
 		return nil, err
