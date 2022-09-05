@@ -207,19 +207,6 @@ type VerifierOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
 }
 
-// Assign ...
-func (o *VerifierOptions) Assign(u VerifierOptions) {
-	if u.ProtectionMethod != 0 {
-		o.ProtectionMethod = u.ProtectionMethod
-	}
-	if u.MerkleHashTreeFunction != 0 {
-		o.MerkleHashTreeFunction = u.MerkleHashTreeFunction
-	}
-	if u.LiveSignatureAlgorithm != 0 {
-		o.LiveSignatureAlgorithm = u.LiveSignatureAlgorithm
-	}
-}
-
 // Writer ...
 type Writer interface {
 	WriteSignedIntegrity(m codec.SignedIntegrity) (int, error)

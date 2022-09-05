@@ -6,6 +6,7 @@ package ppspp
 import (
 	"testing"
 
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/stretchr/testify/assert"
@@ -56,12 +57,7 @@ func TestSwarmOptions(t *testing.T) {
 
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
-			assert := assert.New(t)
-
-			opt := NewDefaultSwarmOptions()
-			opt.Assign(tc.req)
-
-			assert.Equal(tc.expected, opt)
+			assert.New(t).Equal(tc.expected, options.AssignDefaults(tc.req, NewDefaultSwarmOptions()))
 		})
 	}
 }

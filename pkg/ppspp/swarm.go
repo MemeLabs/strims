@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	swarmpb "github.com/MemeLabs/strims/pkg/apis/type/swarm"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
 )
@@ -19,9 +20,8 @@ func NewDefaultSwarm(id SwarmID) (s *Swarm) {
 }
 
 // NewSwarm ...
-func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
-	o := NewDefaultSwarmOptions()
-	o.Assign(opt)
+func NewSwarm(id SwarmID, o SwarmOptions) (*Swarm, error) {
+	o = options.AssignDefaults(o, NewDefaultSwarmOptions())
 
 	buf, err := store.NewBufferWithLayout(o.LiveWindow, o.ChunkSize, o.BufferLayout)
 	if err != nil {

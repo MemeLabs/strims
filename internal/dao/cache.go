@@ -13,6 +13,7 @@ import (
 
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -118,18 +119,6 @@ type CacheStoreOptions struct {
 	Cap        int
 }
 
-func (o *CacheStoreOptions) Assign(u *CacheStoreOptions) {
-	if u.TTL != 0 {
-		o.TTL = u.TTL
-	}
-	if u.GCInterval != 0 {
-		o.GCInterval = u.GCInterval
-	}
-	if u.Cap != 0 {
-		o.Cap = u.Cap
-	}
-}
-
 var DefaultStoreOptions = CacheStoreOptions{
 	TTL:        10 * time.Minute,
 	GCInterval: 1 * time.Second,
@@ -138,9 +127,7 @@ var DefaultStoreOptions = CacheStoreOptions{
 
 func newCacheStore[K, V any, T TableRecord[V]](store kv.RWStore, table *Table[V, T], opt *CacheStoreOptions) (*CacheStore[V, T], CacheAccessor[uint64, V, T]) {
 	o := DefaultStoreOptions
-	if opt != nil {
-		o.Assign(opt)
-	}
+	options.AssignPtr(&o, opt)
 
 	s := &CacheStore[V, T]{
 		store: store,

@@ -22,36 +22,6 @@ type SwarmOptions struct {
 	BufferLayout       store.BufferLayout
 }
 
-// Assign ...
-func (o *SwarmOptions) Assign(u SwarmOptions) {
-	if u.Label != "" {
-		o.Label = u.Label
-	}
-	if u.ChunkSize != 0 {
-		o.ChunkSize = u.ChunkSize
-	}
-	if u.ChunksPerSignature != 0 {
-		o.ChunksPerSignature = u.ChunksPerSignature
-	}
-	if u.StreamCount != 0 {
-		o.StreamCount = u.StreamCount
-	}
-	if u.LiveWindow != 0 {
-		o.LiveWindow = u.LiveWindow
-	}
-	if u.SchedulingMethod != 0 {
-		o.SchedulingMethod = u.SchedulingMethod
-	}
-	if u.DeliveryMode != 0 {
-		o.DeliveryMode = u.DeliveryMode
-	}
-	if u.BufferLayout != 0 {
-		o.BufferLayout = u.BufferLayout
-	}
-
-	o.Integrity.Assign(u.Integrity)
-}
-
 // IntegrityVerifierOptions ...
 func (o SwarmOptions) IntegrityVerifierOptions() integrity.SwarmVerifierOptions {
 	return integrity.SwarmVerifierOptions{

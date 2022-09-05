@@ -21,6 +21,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/ed25519util"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
 	"go.uber.org/zap"
@@ -43,33 +44,6 @@ type TCPInterfaceOptions struct {
 	WriteTimeout    time.Duration
 }
 
-func (o *TCPInterfaceOptions) Assign(u TCPInterfaceOptions) {
-	if u.Address != "" {
-		o.Address = u.Address
-	}
-	if u.HostIP != "" {
-		o.HostIP = u.HostIP
-	}
-	if u.Mux != nil {
-		o.Mux = u.Mux
-	}
-	if u.KeepAlivePeriod != 0 {
-		o.KeepAlivePeriod = u.KeepAlivePeriod
-	}
-	if u.ReadBufferSize != 0 {
-		o.ReadBufferSize = u.ReadBufferSize
-	}
-	if u.WriteBufferSize != 0 {
-		o.WriteBufferSize = u.WriteBufferSize
-	}
-	if u.ReadTimeout != 0 {
-		o.ReadTimeout = u.ReadTimeout
-	}
-	if u.WriteTimeout != 0 {
-		o.WriteTimeout = u.WriteTimeout
-	}
-}
-
 var DefaultTCPInterfaceOptions = TCPInterfaceOptions{
 	KeepAlivePeriod: 20 * time.Second,
 	ReadBufferSize:  2 * 1024 * 1024,
@@ -79,9 +53,8 @@ var DefaultTCPInterfaceOptions = TCPInterfaceOptions{
 }
 
 // NewTCPInterface ...
-func NewTCPInterface(logger *zap.Logger, opt TCPInterfaceOptions) Interface {
-	o := DefaultTCPInterfaceOptions
-	o.Assign(opt)
+func NewTCPInterface(logger *zap.Logger, o TCPInterfaceOptions) Interface {
+	o = options.AssignDefaults(o, DefaultTCPInterfaceOptions)
 
 	return &tcpInterface{
 		logger:  logger,

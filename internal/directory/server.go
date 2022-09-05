@@ -16,6 +16,7 @@ import (
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
@@ -70,15 +71,13 @@ func newDirectoryServer(
 		return nil, errors.New("directory server requires network root key")
 	}
 
-	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}
-	eventSwarmOptions.Assign(defaultEventSwarmOptions)
+	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}, defaultEventSwarmOptions)
 	eventSwarm, eventWriter, err := newWriter(network.ServerConfig.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}
-	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
+	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(network.ServerConfig.Key.Public[:8]))}, defaultAssetSwarmOptions)
 	assetSwarm, assetWriter, err := newWriter(network.ServerConfig.Key, assetSwarmOptions)
 	if err != nil {
 		return nil, err

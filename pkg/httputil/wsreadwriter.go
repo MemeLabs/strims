@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/gorilla/websocket"
 )
@@ -19,18 +20,6 @@ type WSOptions struct {
 	WriteTimeout time.Duration
 	ReadTimeout  time.Duration
 	PingInterval time.Duration
-}
-
-func (o *WSOptions) Assign(u WSOptions) {
-	if u.WriteTimeout != 0 {
-		o.WriteTimeout = u.WriteTimeout
-	}
-	if u.ReadTimeout != 0 {
-		o.ReadTimeout = u.ReadTimeout
-	}
-	if u.PingInterval != 0 {
-		o.PingInterval = u.PingInterval
-	}
 }
 
 var DefaultWSOptions = WSOptions{
@@ -47,9 +36,8 @@ func NewDefaultWSReadWriter(c *websocket.Conn) *WSReadWriter {
 	return NewWSReadWriter(c, DefaultWSOptions)
 }
 
-func NewWSReadWriter(c *websocket.Conn, opt WSOptions) *WSReadWriter {
-	o := DefaultWSOptions
-	o.Assign(opt)
+func NewWSReadWriter(c *websocket.Conn, o WSOptions) *WSReadWriter {
+	o = options.AssignDefaults(o, DefaultWSOptions)
 
 	w := &WSReadWriter{
 		options: o,

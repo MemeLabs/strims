@@ -9,21 +9,20 @@ import (
 
 	"github.com/MemeLabs/strims/internal/servicemanager"
 	"github.com/MemeLabs/strims/internal/transfer"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
 )
 
 func newDirectoryReader(logger *zap.Logger, transfer transfer.Control, key []byte) (*directoryReader, error) {
-	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(key[:8]))}
-	eventSwarmOptions.Assign(defaultEventSwarmOptions)
+	eventSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_events", ppspp.SwarmID(key[:8]))}, defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(key[:8]))}
-	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
+	assetSwarmOptions := options.AssignDefaults(ppspp.SwarmOptions{Label: fmt.Sprintf("directory_%s_assets", ppspp.SwarmID(key[:8]))}, defaultAssetSwarmOptions)
 	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
 		return nil, err

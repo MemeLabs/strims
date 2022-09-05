@@ -6,6 +6,7 @@ package ppspp
 import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/ioutil"
+	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -19,10 +20,7 @@ type WriterOptions struct {
 
 // NewWriter ...
 func NewWriter(o WriterOptions) (*Writer, error) {
-	so := SwarmOptions{
-		SchedulingMethod: SeedSchedulingMethod,
-	}
-	so.Assign(o.SwarmOptions)
+	so := options.AssignDefaults(o.SwarmOptions, SwarmOptions{SchedulingMethod: SeedSchedulingMethod})
 
 	id := NewSwarmID(o.Key.Public)
 	s, err := NewSwarm(id, so)
