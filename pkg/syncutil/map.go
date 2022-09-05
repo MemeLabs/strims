@@ -23,6 +23,13 @@ func (m *Map[K, V]) Get(k K) (v V, ok bool) {
 	return
 }
 
+func (m *Map[K, V]) Has(k K) (ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok = m.m[k]
+	return
+}
+
 func (m *Map[K, V]) GetAndDelete(k K) (v V, ok bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

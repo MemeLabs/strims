@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -20,6 +21,7 @@ import (
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -97,7 +99,6 @@ func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host,
 		logger:     logger,
 		profileKey: profileKey,
 		key:        hostKey,
-		peers:      map[kademlia.ID]*Peer{},
 		qos:        qos.New(),
 	}
 
@@ -129,9 +130,8 @@ type Host struct {
 	interfaces       []Interface
 	peerHandlersLock sync.Mutex
 	peerHandlers     []PeerHandler
-	peersLock        sync.Mutex
-	peers            map[kademlia.ID]*Peer
-	maxPeers         int
+	peers            syncutil.Map[kademlia.ID, *Peer]
+	maxPeers         atomic.Int64
 	qos              *qos.Control
 }
 
@@ -145,12 +145,8 @@ func (h *Host) Close() {
 	}
 	h.interfaces = h.interfaces[:0]
 
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	for k, p := range h.peers {
-		p.Close()
-		delete(h.peers, k)
-	}
+	h.peers.Each(func(_ kademlia.ID, p *Peer) { p.Close() })
+	h.peers.Clear()
 }
 
 func (h *Host) LinkCandidates(ctx context.Context) (*LinkCandidatePool, error) {
@@ -225,18 +221,10 @@ func (h *Host) addLink(logger *zap.Logger, c Link) (*Peer, error) {
 		return nil, &PeerInitError{err}
 	}
 
-	h.peersLock.Lock()
-	_, found := h.peers[p.HostID()]
-	if !found {
-		h.peers[p.HostID()] = p
-	}
-	h.peersLock.Unlock()
-
+	_, found := h.peers.GetOrInsert(p.HostID(), p)
 	if found {
 		return nil, &PeerInitError{errors.New("duplicate peer link found")}
 	}
-
-	p.logger.Debug("created peer")
 
 	go func() {
 		linksActive.Inc()
@@ -244,15 +232,9 @@ func (h *Host) addLink(logger *zap.Logger, c Link) (*Peer, error) {
 
 		h.handlePeer(p)
 
-		p.logger.Debug("running peer")
 		p.run()
 
-		h.peersLock.Lock()
-		delete(h.peers, p.HostID())
-		h.peersLock.Unlock()
-
-		c.Close()
-		p.logger.Debug("closed peer")
+		h.peers.Delete(p.HostID())
 	}()
 
 	return p, nil
@@ -267,55 +249,35 @@ func (h *Host) AddPeerHandler(fn PeerHandler) {
 
 // HasPeer ...
 func (h *Host) HasPeer(hostID kademlia.ID) bool {
-	h.peersLock.Lock()
-	_, ok := h.peers[hostID]
-	h.peersLock.Unlock()
-	return ok
+	return h.peers.Has(hostID)
 }
 
 // GetPeer ...
 func (h *Host) GetPeer(hostID kademlia.ID) (*Peer, bool) {
-	h.peersLock.Lock()
-	p, ok := h.peers[hostID]
-	h.peersLock.Unlock()
-	return p, ok
+	return h.peers.Get(hostID)
 }
 
 // Peers ...
 func (h *Host) Peers() []*Peer {
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-
-	peers := make([]*Peer, 0, len(h.peers))
-	for _, p := range h.peers {
-		peers = append(peers, p)
-	}
-	return peers
+	return h.peers.Values()
 }
 
 // PeerCount ...
 func (h *Host) PeerCount() int {
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	return len(h.peers)
+	return h.peers.Len()
 }
 
 // SetMaxPeers ...
 func (h *Host) SetMaxPeers(n int) {
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-
 	if n <= 0 {
-		n = math.MaxInt
+		n = math.MaxInt32
 	}
-	h.maxPeers = n
+	h.maxPeers.Store(int64(n))
 }
 
 // MaxPeers ...
 func (h *Host) MaxPeers() int {
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	return h.maxPeers
+	return int(h.maxPeers.Load())
 }
 
 // QOS ...

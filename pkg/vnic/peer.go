@@ -113,6 +113,8 @@ type Peer struct {
 }
 
 func (p *Peer) run() {
+	p.logger.Debug("running peer")
+
 	var f Frame
 	for {
 		if _, err := f.ReadFrom(p.Link); err != nil {
@@ -142,6 +144,8 @@ func (p *Peer) run() {
 // Close ...
 func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
+		p.logger.Debug("closing peer")
+
 		atomic.StoreUint32(&p.closed, 1)
 		p.close()
 		deleteInstrumentedLinkMetrics(p.Link, p.hostID)
@@ -152,6 +156,8 @@ func (p *Peer) Close() {
 			delete(p.channels, port)
 			ch.Close()
 		}
+
+		p.Link.Close()
 	})
 }
 
