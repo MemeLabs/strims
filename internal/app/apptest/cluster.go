@@ -171,8 +171,8 @@ func (c *Cluster) Run() error {
 				sortedNodes[j].conns = append(sortedNodes[j].conns, c1)
 
 				wg.Add(2)
-				c.Hosts[i].VNIC.AddLink(c0)
-				sortedNodes[j].VNIC.AddLink(c1)
+				go c.Hosts[i].VNIC.AddLink(c0)
+				go sortedNodes[j].VNIC.AddLink(c1)
 
 				n++
 			}
