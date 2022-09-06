@@ -144,6 +144,11 @@
     position: absolute;
     width: 100%;
     z-index: var(--z-index-menu);
+    visibility: hidden;
+
+    &--open {
+      visibility: visible;
+    }
 
     &__content {
       right: 10px;

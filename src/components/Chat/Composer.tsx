@@ -263,19 +263,22 @@ const Composer: React.FC<ComposerProps> = ({
     return Editor.range(editor, anchor, focus);
   };
 
-  const insertEmote = (v: string, send: boolean) => {
-    toggleMenu(false);
+  const insertEmote = useCallback(
+    (v: string, send: boolean) => {
+      toggleMenu(false);
 
-    if (send) {
-      onMessage(v);
-    } else {
-      if (!editor.selection) {
-        Transforms.select(editor, [0, 0]);
+      if (send) {
+        onMessage(v);
+      } else {
+        if (!editor.selection) {
+          Transforms.select(editor, [0, 0]);
+        }
+
+        Transforms.insertText(editor, v + " ");
       }
-
-      Transforms.insertText(editor, v + " ");
-    }
-  };
+    },
+    [onMessage]
+  );
 
   const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
     insertAutocompleteEntry(entry);
@@ -324,13 +327,17 @@ const Composer: React.FC<ComposerProps> = ({
           </div>
         </div>
       )}
-      {showMenu && (
-        <div className="chat_composer__emote_menu" ref={emoteMenu}>
-          <div className="chat_composer__emote_menu__content">
-            <EmoteMenu onSelect={insertEmote} onClose={toggleMenu} />
-          </div>
+      <div
+        className={clsx({
+          "chat_composer__emote_menu": true,
+          "chat_composer__emote_menu--open": showMenu,
+        })}
+        ref={emoteMenu}
+      >
+        <div className="chat_composer__emote_menu__content">
+          <EmoteMenu onSelect={insertEmote} onClose={toggleMenu} />
         </div>
-      )}
+      </div>
       <div className="chat_composer__editor" ref={ref}>
         <Slate editor={editor} value={value} onChange={onChange}>
           <Editable

@@ -4,6 +4,7 @@
 @font-face {
   font-family: "Twemoji";
   src: url("../../../assets/chat/TwemojiMozilla.ttf") format("truetype");
+  font-display: swap;
 }
 
 .chat__emoji {

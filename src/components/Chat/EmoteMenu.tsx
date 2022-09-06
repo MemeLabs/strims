@@ -406,64 +406,62 @@ interface ScrollbarsInternal {
   view: HTMLElement;
 }
 
-const Scroller: React.FC<ScrollerProps> = ({
-  className,
-  categories,
-  onScroll,
-  control,
-  ...panelProps
-}) => {
-  const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
-  const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
+const Scroller = React.memo<ScrollerProps>(
+  ({ className, categories, onScroll, control, ...panelProps }) => {
+    const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
+    const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
 
-  const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
-  const panels: React.ReactNode[] = [];
-  if (viewportSize) {
-    for (const category of categories) {
-      const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
-      sizes.push(size);
-      panels.push(
-        <CategoryPanel
-          key={category.key}
-          category={category}
-          width={viewportSize.width}
-          sizeRef={size}
-          {...panelProps}
-        />
-      );
-    }
-  }
-
-  useEffect(() => {
-    control.current = {
-      scrollToIndex: (index: number) => {
-        let top = 0;
-        for (let i = 0; i < index; i++) {
-          top += sizes[i].current?.height ?? 0;
-        }
-        scrollbars.current.view.scrollTo({
-          top,
-          behavior: "smooth",
-        });
-      },
-    };
-  }, [control, sizes]);
-
-  const handleScroll = useStableCallback(() => {
-    const top = scrollbars.current.getScrollTop();
-    let sum = 0;
-    for (let i = 0; i < sizes.length; i++) {
-      sum += sizes[i].current?.height ?? 0;
-      if (sum > top) {
-        onScroll(i);
-        break;
+    const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
+    const panels: React.ReactNode[] = [];
+    if (viewportSize) {
+      for (const category of categories) {
+        const size: React.MutableRefObject<DOMRectReadOnly> = { current: null };
+        sizes.push(size);
+        panels.push(
+          <CategoryPanel
+            key={category.key}
+            category={category}
+            width={viewportSize.width}
+            sizeRef={size}
+            {...panelProps}
+          />
+        );
       }
     }
-  });
 
-  return (
-    <Scrollbars ref={scrollbars} onScroll={handleScroll} className={className} autoHide>
-      {panels}
-    </Scrollbars>
-  );
-};
+    useEffect(() => {
+      control.current = {
+        scrollToIndex: (index: number) => {
+          let top = 0;
+          for (let i = 0; i < index; i++) {
+            top += sizes[i].current?.height ?? 0;
+          }
+          scrollbars.current.view.scrollTo({
+            top,
+            behavior: "smooth",
+          });
+        },
+      };
+    }, [control, sizes]);
+
+    const handleScroll = useStableCallback(() => {
+      const top = scrollbars.current.getScrollTop();
+      let sum = 0;
+      for (let i = 0; i < sizes.length; i++) {
+        sum += sizes[i].current?.height ?? 0;
+        if (sum > top) {
+          onScroll(i);
+          break;
+        }
+      }
+    });
+
+    return (
+      <Scrollbars ref={scrollbars} onScroll={handleScroll} className={className} autoHide>
+        {panels}
+      </Scrollbars>
+    );
+  }
+);
+
+Scroller.displayName = "Scroller";
