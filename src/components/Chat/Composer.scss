@@ -144,10 +144,13 @@
     position: absolute;
     width: 100%;
     z-index: var(--z-index-menu);
-    visibility: hidden;
 
-    &--open {
-      visibility: visible;
+    &:not(&--open) {
+      visibility: hidden;
+
+      * {
+        animation: none !important;
+      }
     }
 
     &__content {

@@ -264,7 +264,7 @@ const Preview: React.FC<PreviewProps> = ({ item }) => {
     return (
       <div className="emote_menu_preview">
         <div className="emote_menu_preview__image">
-          <Emote name={name} />
+          <Emote name={name} shouldAnimateForever />
         </div>
         <div>
           <div className="emote_menu_preview__name">{name}</div>
