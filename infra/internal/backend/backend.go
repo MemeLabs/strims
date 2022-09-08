@@ -618,6 +618,9 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			NodeName          string
 			WGIP              string
 			PublicIP          string
+			Provider          string
+			Region            string
+			SKU               string
 		}{
 			ApiServerEndpoint: k8sEndpoint,
 			Token:             k8sToken,
@@ -626,6 +629,9 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			NodeName:          n.Name,
 			WGIP:              n.WireguardIPv4,
 			PublicIP:          n.Networks.V4[0],
+			Provider:          n.ProviderName,
+			Region:            n.Region.Name,
+			SKU:               n.SKU.Name,
 		}
 
 		kubeadmRaw := &bytes.Buffer{}
@@ -1024,7 +1030,7 @@ nodeRegistration:
   criSocket: unix://var/run/crio/crio.sock
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
-    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder"`,
+    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder,strims.gg/provider={{ .Provider }},strims.gg/region={{ .Region }},strims.gg/sku={{ .SKU }}"`,
 	node.TypeController: `
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
@@ -1038,7 +1044,7 @@ nodeRegistration:
   criSocket: unix://var/run/crio/crio.sock
   kubeletExtraArgs:
     node-ip: {{ .WGIP }}
-    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder"
+    node-labels: "strims.gg/public-ip={{ .PublicIP }},strims.gg/svc=seeder,strims.gg/provider={{ .Provider }},strims.gg/region={{ .Region }},strims.gg/sku={{ .SKU }}"
 controlPlane:
   certificateKey: {{ .CaKey }}
   localAPIEndpoint:
