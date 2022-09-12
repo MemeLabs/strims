@@ -179,8 +179,12 @@ func (t *control) startClient(client *networkv1bootstrap.BootstrapClient) {
 		retry.DelayType(retry.BackOffDelay),
 	)
 
-	if err != nil {
-		t.logger.Warn("starting bootstrap client failed", zap.Error(err))
+	if err != nil || peer == nil {
+		t.logger.Warn(
+			"starting bootstrap client failed",
+			zap.Uint64("id", client.Id),
+			zap.Error(err),
+		)
 	} else {
 		t.peerHostClientIDs.Set(peer.HostID(), client.Id)
 	}
