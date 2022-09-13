@@ -6,8 +6,8 @@ import "./ChatBar.scss";
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useEffect, useRef } from "react";
-import { IoMdExpand } from "react-icons/io";
 import { MdClose } from "react-icons/md";
+import { RiSideBarFill } from "react-icons/ri";
 import { useToggle } from "react-use";
 
 import { ThreadInitState, ThreadProvider, Topic, useChat, useRoom } from "../../contexts/Chat";
@@ -67,7 +67,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
         </div>
         <div className="chat_popout__controls">
           <button className="chat_popout__control" onClick={handleReturnClick}>
-            <IoMdExpand />
+            <RiSideBarFill className="chat_popout__return_icon" />
           </button>
           <button className="chat_popout__control" onClick={handleCloseClick}>
             <MdClose />

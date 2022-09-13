@@ -73,6 +73,10 @@
     }
   }
 
+  &__return_icon {
+    transform: scaleX(-1);
+  }
+
   &__messages {
     flex: 1;
     position: relative;
