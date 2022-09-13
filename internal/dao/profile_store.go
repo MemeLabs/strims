@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"google.golang.org/protobuf/proto"
@@ -47,7 +48,10 @@ type ProfileStore struct {
 
 // Init ...
 func (s *ProfileStore) Init() error {
-	return s.store.CreateStoreIfNotExists(s.name)
+	if err := s.store.CreateStoreIfNotExists(s.name); err != nil {
+		return err
+	}
+	return storeVersion.Set(s, &daov1.StoreVersion{Version: CurrentVersion})
 }
 
 // Delete ...
@@ -125,6 +129,11 @@ func (s *ProfileStore) GenerateID() (uint64, error) {
 	s.lastReservedID = res.NextId
 
 	return nextID, nil
+}
+
+func (s *ProfileStore) ReplicaKey() uint32 {
+	// TODO load from... profile?
+	return 0
 }
 
 type profileStoreTx struct {

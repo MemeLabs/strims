@@ -113,7 +113,7 @@ func (n namespace) FormatPrefix(ks ...any) string {
 
 const (
 	_ namespace = iota * 1000
-	mutexNS
+	systemNS
 	profileNS
 	certificateNS
 	networkNS
@@ -125,4 +125,10 @@ const (
 	autoseedNS
 	swarmNS
 	debugNS
+)
+
+const (
+	_ = iota + systemNS
+	mutexNS
+	storeVersionNS
 )

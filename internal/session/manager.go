@@ -80,6 +80,11 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 
 	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: dao.EventEmitterFunc(observers.EmitGlobal)})
 
+	err = dao.Upgrade(context.Background(), t.logger, store)
+	if err != nil {
+		return nil, err
+	}
+
 	profile, err := dao.Profile.Get(store)
 	if err != nil {
 		return nil, err

@@ -88,6 +88,96 @@ export class Mutex {
   }
 }
 
+export type IStoreVersion = {
+  version?: number;
+}
+
+export class StoreVersion {
+  version: number;
+
+  constructor(v?: IStoreVersion) {
+    this.version = v?.version || 0;
+  }
+
+  static encode(m: StoreVersion, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.version) w.uint32(8).uint32(m.version);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): StoreVersion {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new StoreVersion();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.version = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IVersionVector = {
+  versions?: Map<number, bigint> | { [key: number]: bigint };
+}
+
+export class VersionVector {
+  versions: Map<number, bigint>;
+
+  constructor(v?: IVersionVector) {
+    if (v?.versions) this.versions = new Map(v.versions instanceof Map ? v.versions : Object.entries(v.versions).map(([k, v]) => [Number(k), v]));
+    else this.versions = new Map<number, bigint>();
+  }
+
+  static encode(m: VersionVector, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const [k, v] of m.versions) w.uint32(10).fork().uint32(8).uint32(k).uint32(18).uint64(v).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): VersionVector {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new VersionVector();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        {
+          const flen = r.uint32();
+          const fend = r.pos + flen;
+          let key: number;
+          let value: bigint;
+          while (r.pos < fend) {
+            const ftag = r.uint32();
+            switch (ftag >> 3) {
+              case 1:
+              key = r.uint32()
+              break;
+              case 2:
+              value = r.uint64();
+              break;
+            }
+          }
+          m.versions.set(key, value)
+        }
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 /* @internal */
 export const strims_dao_v1_SecondaryIndexKey = SecondaryIndexKey;
 /* @internal */
@@ -100,3 +190,15 @@ export const strims_dao_v1_Mutex = Mutex;
 export type strims_dao_v1_Mutex = Mutex;
 /* @internal */
 export type strims_dao_v1_IMutex = IMutex;
+/* @internal */
+export const strims_dao_v1_StoreVersion = StoreVersion;
+/* @internal */
+export type strims_dao_v1_StoreVersion = StoreVersion;
+/* @internal */
+export type strims_dao_v1_IStoreVersion = IStoreVersion;
+/* @internal */
+export const strims_dao_v1_VersionVector = VersionVector;
+/* @internal */
+export type strims_dao_v1_VersionVector = VersionVector;
+/* @internal */
+export type strims_dao_v1_IVersionVector = IVersionVector;

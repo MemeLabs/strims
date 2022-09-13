@@ -12,6 +12,7 @@ option swift_prefix = "SCH";
 import "type/key.proto";
 import "type/image.proto";
 import "network/v1/directory/directory.proto";
+import "dao/v1/dao.proto";
 
 message ServerEvent {
   oneof body {
@@ -269,12 +270,14 @@ message UIConfig {
 
 message UIConfigHighlight {
   uint64 id = 1;
+  dao.v1.VersionVector version = 4;
   string alias = 2;
   bytes peer_key = 3;
 }
 
 message UIConfigTag {
   uint64 id = 1;
+  dao.v1.VersionVector version = 5;
   string alias = 2;
   bytes peer_key = 3;
   string color = 4;
@@ -282,6 +285,7 @@ message UIConfigTag {
 
 message UIConfigIgnore {
   uint64 id = 1;
+  dao.v1.VersionVector version = 5;
   string alias = 2;
   bytes peer_key = 3;
   int64 deadline = 4;
@@ -716,6 +720,7 @@ service Chat {
 
 message WhisperThread {
   uint64 id = 1;
+  dao.v1.VersionVector version = 8;
   bytes peer_key = 2;
   string alias = 3;
   uint32 unread_count = 4;
@@ -733,6 +738,7 @@ message WhisperRecord {
   }
 
   uint64 id = 1;
+  dao.v1.VersionVector version = 8;
   uint64 thread_id = 2;
   bytes network_key = 3;
   bytes server_key = 4;

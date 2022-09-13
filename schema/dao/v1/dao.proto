@@ -18,3 +18,11 @@ message Mutex {
   int64 eol = 1;
   bytes token = 2;
 }
+
+message StoreVersion {
+  uint32 version = 1;
+}
+
+message VersionVector {
+  map<uint32, uint64> versions = 1;
+}

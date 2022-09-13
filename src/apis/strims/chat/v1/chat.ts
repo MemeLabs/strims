@@ -13,6 +13,10 @@ import {
   strims_network_v1_directory_Listing,
   strims_network_v1_directory_IListing,
 } from "../../network/v1/directory/directory";
+import {
+  strims_dao_v1_VersionVector,
+  strims_dao_v1_IVersionVector,
+} from "../../dao/v1/dao";
 
 export type IServerEvent = {
   body?: ServerEvent.IBody
@@ -1954,17 +1958,20 @@ export namespace UIConfig {
 
 export type IUIConfigHighlight = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   alias?: string;
   peerKey?: Uint8Array;
 }
 
 export class UIConfigHighlight {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   alias: string;
   peerKey: Uint8Array;
 
   constructor(v?: IUIConfigHighlight) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.alias = v?.alias || "";
     this.peerKey = v?.peerKey || new Uint8Array();
   }
@@ -1972,6 +1979,7 @@ export class UIConfigHighlight {
   static encode(m: UIConfigHighlight, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(34).fork()).ldelim();
     if (m.alias.length) w.uint32(18).string(m.alias);
     if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
     return w;
@@ -1986,6 +1994,9 @@ export class UIConfigHighlight {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 4:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.alias = r.string();
@@ -2004,6 +2015,7 @@ export class UIConfigHighlight {
 
 export type IUIConfigTag = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   alias?: string;
   peerKey?: Uint8Array;
   color?: string;
@@ -2011,12 +2023,14 @@ export type IUIConfigTag = {
 
 export class UIConfigTag {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   alias: string;
   peerKey: Uint8Array;
   color: string;
 
   constructor(v?: IUIConfigTag) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.alias = v?.alias || "";
     this.peerKey = v?.peerKey || new Uint8Array();
     this.color = v?.color || "";
@@ -2025,6 +2039,7 @@ export class UIConfigTag {
   static encode(m: UIConfigTag, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(42).fork()).ldelim();
     if (m.alias.length) w.uint32(18).string(m.alias);
     if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
     if (m.color.length) w.uint32(34).string(m.color);
@@ -2040,6 +2055,9 @@ export class UIConfigTag {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 5:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.alias = r.string();
@@ -2061,6 +2079,7 @@ export class UIConfigTag {
 
 export type IUIConfigIgnore = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   alias?: string;
   peerKey?: Uint8Array;
   deadline?: bigint;
@@ -2068,12 +2087,14 @@ export type IUIConfigIgnore = {
 
 export class UIConfigIgnore {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   alias: string;
   peerKey: Uint8Array;
   deadline: bigint;
 
   constructor(v?: IUIConfigIgnore) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.alias = v?.alias || "";
     this.peerKey = v?.peerKey || new Uint8Array();
     this.deadline = v?.deadline || BigInt(0);
@@ -2082,6 +2103,7 @@ export class UIConfigIgnore {
   static encode(m: UIConfigIgnore, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(42).fork()).ldelim();
     if (m.alias.length) w.uint32(18).string(m.alias);
     if (m.peerKey.length) w.uint32(26).bytes(m.peerKey);
     if (m.deadline) w.uint32(32).int64(m.deadline);
@@ -2097,6 +2119,9 @@ export class UIConfigIgnore {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 5:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.alias = r.string();
@@ -5873,6 +5898,7 @@ export class GetMuteResponse {
 
 export type IWhisperThread = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   peerKey?: Uint8Array;
   alias?: string;
   unreadCount?: number;
@@ -5883,6 +5909,7 @@ export type IWhisperThread = {
 
 export class WhisperThread {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   peerKey: Uint8Array;
   alias: string;
   unreadCount: number;
@@ -5892,6 +5919,7 @@ export class WhisperThread {
 
   constructor(v?: IWhisperThread) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.peerKey = v?.peerKey || new Uint8Array();
     this.alias = v?.alias || "";
     this.unreadCount = v?.unreadCount || 0;
@@ -5903,6 +5931,7 @@ export class WhisperThread {
   static encode(m: WhisperThread, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(66).fork()).ldelim();
     if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
     if (m.alias.length) w.uint32(26).string(m.alias);
     if (m.unreadCount) w.uint32(32).uint32(m.unreadCount);
@@ -5921,6 +5950,9 @@ export class WhisperThread {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 8:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.peerKey = r.bytes();
@@ -5951,6 +5983,7 @@ export class WhisperThread {
 
 export type IWhisperRecord = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   threadId?: bigint;
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
@@ -5961,6 +5994,7 @@ export type IWhisperRecord = {
 
 export class WhisperRecord {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   threadId: bigint;
   networkKey: Uint8Array;
   serverKey: Uint8Array;
@@ -5970,6 +6004,7 @@ export class WhisperRecord {
 
   constructor(v?: IWhisperRecord) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.threadId = v?.threadId || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.serverKey = v?.serverKey || new Uint8Array();
@@ -5981,6 +6016,7 @@ export class WhisperRecord {
   static encode(m: WhisperRecord, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(66).fork()).ldelim();
     if (m.threadId) w.uint32(16).uint64(m.threadId);
     if (m.networkKey.length) w.uint32(26).bytes(m.networkKey);
     if (m.serverKey.length) w.uint32(34).bytes(m.serverKey);
@@ -5999,6 +6035,9 @@ export class WhisperRecord {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 8:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.threadId = r.uint64();

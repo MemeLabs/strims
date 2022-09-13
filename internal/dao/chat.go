@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/hashmap"
@@ -397,7 +398,7 @@ func NewChatProfile(
 
 // NewChatWhisperThread ...
 func NewChatWhisperThread(
-	g IDGenerator,
+	g *ProfileStore,
 	peerCert *certificate.Certificate,
 ) (*chatv1.WhisperThread, error) {
 	id, err := g.GenerateID()
@@ -407,6 +408,7 @@ func NewChatWhisperThread(
 
 	v := &chatv1.WhisperThread{
 		Id:      id,
+		Version: versionvector.NewSeed(g.ReplicaKey()),
 		PeerKey: peerCert.Key,
 		Alias:   peerCert.Subject,
 	}
@@ -415,7 +417,7 @@ func NewChatWhisperThread(
 
 // NewChatWhisperRecord ...
 func NewChatWhisperRecord(
-	g IDGenerator,
+	g *ProfileStore,
 	networkKey []byte,
 	serverKey []byte,
 	peerKey []byte,
@@ -435,6 +437,7 @@ func NewChatWhisperRecord(
 
 	return &chatv1.WhisperRecord{
 		Id:         id,
+		Version:    versionvector.NewSeed(g.ReplicaKey()),
 		NetworkKey: networkKey,
 		ServerKey:  serverKey,
 		PeerKey:    peerKey,
@@ -450,7 +453,7 @@ func NewChatWhisperRecord(
 }
 
 func NewChatUIConfigHighlight(
-	g IDGenerator,
+	g *ProfileStore,
 	alias string,
 	peerKey []byte,
 ) (*chatv1.UIConfigHighlight, error) {
@@ -461,6 +464,7 @@ func NewChatUIConfigHighlight(
 
 	v := &chatv1.UIConfigHighlight{
 		Id:      id,
+		Version: versionvector.NewSeed(g.ReplicaKey()),
 		Alias:   alias,
 		PeerKey: peerKey,
 	}
@@ -468,7 +472,7 @@ func NewChatUIConfigHighlight(
 }
 
 func NewChatUIConfigTag(
-	g IDGenerator,
+	g *ProfileStore,
 	alias string,
 	peerKey []byte,
 	color string,
@@ -480,6 +484,7 @@ func NewChatUIConfigTag(
 
 	v := &chatv1.UIConfigTag{
 		Id:      id,
+		Version: versionvector.NewSeed(g.ReplicaKey()),
 		Alias:   alias,
 		PeerKey: peerKey,
 		Color:   color,
@@ -488,7 +493,7 @@ func NewChatUIConfigTag(
 }
 
 func NewChatUIConfigIgnore(
-	g IDGenerator,
+	g *ProfileStore,
 	alias string,
 	peerKey []byte,
 	deadline int64,
@@ -500,6 +505,7 @@ func NewChatUIConfigIgnore(
 
 	v := &chatv1.UIConfigIgnore{
 		Id:       id,
+		Version:  versionvector.NewSeed(g.ReplicaKey()),
 		Alias:    alias,
 		PeerKey:  peerKey,
 		Deadline: deadline,
