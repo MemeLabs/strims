@@ -147,6 +147,8 @@ func (s *directoryServer) Reader(ctx context.Context) (readers, error) {
 	assetReader := s.assetSwarm.Reader()
 	eventReader.SetReadStopper(ctx.Done())
 	assetReader.SetReadStopper(ctx.Done())
+	eventReader.Unread()
+	assetReader.Unread()
 	return readers{
 		events: protoutil.NewChunkStreamReader(eventReader, eventChunkSize),
 		assets: protoutil.NewChunkStreamReader(assetReader, assetChunkSize),
