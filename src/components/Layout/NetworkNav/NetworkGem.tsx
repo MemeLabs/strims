@@ -21,6 +21,7 @@ const NetworkGem: React.FC<NetworkGemProps> = (props) => {
     "network_nav__link__gem": true,
     "network_nav__link__gem--with_icon": !!props.icon,
     "network_nav__link__gem--without_icon": !props.icon,
+    "network_nav__link__gem--no_peers": props.peerCount === 0,
   });
 
   return props.icon ? (

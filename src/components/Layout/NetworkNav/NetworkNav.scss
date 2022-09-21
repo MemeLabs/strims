@@ -89,8 +89,14 @@
     position: relative;
     text-align: center;
     width: 40px;
+    transition: filter var(--timing-medium) ease-in-out;
+    filter: #{"grayscale(0)"};
     --badge-color: var(--color-hinted-grey-7);
     --badge-offset: 0.3rem;
+
+    &--no_peers {
+      filter: #{"grayscale(1)"};
+    }
   }
 
   &--collapsed {
