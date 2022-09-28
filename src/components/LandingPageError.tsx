@@ -1,0 +1,29 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import "./LandingPageLayout.scss";
+
+import clsx from "clsx";
+import React, { ReactNode } from "react";
+
+import { withTheme } from "./Theme";
+
+interface LandingPageErrorProps {
+  className: string;
+  children: ReactNode;
+}
+
+const LandingPageError: React.FC<LandingPageErrorProps> = ({ className, children }) => (
+  <div className={clsx(className, "landing_page")}>
+    <div className="landing_page__body fadeIn">
+      <div className="landing_page__header">
+        <h1 className="landing_page__header__title">strims@home</h1>
+        <span className="landing_page__header__tagline">Watch strims with frens.</span>
+        <div className="landing_page__header__revision">rev. {GIT_HASH.substring(0, 7)}</div>
+      </div>
+      <div className="landing_page__form_container">{children}</div>
+    </div>
+  </div>
+);
+
+export default withTheme(LandingPageError);

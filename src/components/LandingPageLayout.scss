@@ -141,3 +141,16 @@
     }
   }
 }
+
+.fadeIn {
+  animation: fadeIn 1.8s ease-in;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}

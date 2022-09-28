@@ -12,6 +12,7 @@ import { LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { ButtonSet } from "../components/Form";
 import InternalLink from "../components/InternalLink";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
+import LandingPageError from "../components/LandingPageError";
 import LandingPageLayout from "../components/LandingPageLayout";
 import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
@@ -81,9 +82,40 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
     }
   }, [selectedProfile]);
 
+  const handleSubmit = (values: ProfileFormValues) => {
+    void sessionOps.signIn(values.serverAddress, {
+      credentials: {
+        password: {
+          name: values.name,
+          password: values.password,
+          persistLogin: values.persistLogin,
+        },
+      },
+    });
+  };
+
   if (session.loading) {
-    return <LoadingPlaceholder />;
+    if (session.loading && session.databaseState && !session.conn) {
+      return (
+        <LandingPageError>
+          <ProfileForm
+            onSubmit={handleSubmit}
+            error="Unable to establish a connection with the database... Try again."
+            secondaryUri="/login"
+            secondaryLabel="Create profile"
+            submitLabel="Log in"
+            defaultValues={{
+              name: selectedProfile?.name,
+              serverAddress: selectedProfile?.serverAddress,
+            }}
+          />
+        </LandingPageError>
+      );
+    } else {
+      return <LoadingPlaceholder />;
+    }
   }
+
   if (session.profile) {
     return <Navigate to={next ?? "/"} />;
   }
@@ -111,18 +143,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
       </LandingPageLayout>
     );
   }
-
-  const handleSubmit = (values: ProfileFormValues) => {
-    void sessionOps.signIn(values.serverAddress, {
-      credentials: {
-        password: {
-          name: values.name,
-          password: values.password,
-          persistLogin: values.persistLogin,
-        },
-      },
-    });
-  };
 
   return (
     <LandingPageLayout>
