@@ -16,7 +16,7 @@ import (
 type bootstrapService struct {
 	Peer  app.Peer
 	App   app.Control
-	Store *dao.ProfileStore
+	Store dao.Store
 }
 
 func (s *bootstrapService) GetPublishEnabled(ctx context.Context, req *bootstrap.BootstrapPeerGetPublishEnabledRequest) (*bootstrap.BootstrapPeerGetPublishEnabledResponse, error) {

@@ -11,6 +11,7 @@ import NotFound from "../pages/NotFound";
 import SettingsLayout from "../pages/Settings/Layout";
 
 const Network = lazy(() => import("../pages/Settings/Network"));
+const Profile = lazy(() => import("../pages/Settings/Profile"));
 const Bootstrap = lazy(() => import("../pages/Settings/Bootstrap"));
 const Chat = lazy(() => import("../pages/Settings/Chat"));
 const Video = lazy(() => import("../pages/Settings/Video"));
@@ -28,7 +29,8 @@ const Streams = lazy(() => import("../pages/Streams"));
 
 export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings/*" element={layout}>
-    <Route index element={<Navigate replace to="networks" />} />
+    <Route index element={<Navigate replace to="profile" />} />
+    <Route path="profile/*" element={<Profile />} />
     <Route path="networks/*" element={<Network />} />
     <Route path="bootstrap/*" element={<Bootstrap />} />
     <Route path="chat-servers/*" element={<Chat />} />

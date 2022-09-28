@@ -1,0 +1,40 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.replication.v1;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/replication/v1;replicationv1";
+option java_package = "gg.strims.replication.v1";
+option swift_prefix = "SNT";
+
+import "replication/v1/replication.proto";
+import "dao/v1/dao.proto";
+
+message PeerOpenRequest {
+  uint32 version = 1;
+  uint32 min_compatible_version = 2;
+  int64 timestamp = 3;
+
+  bytes key = 10001;
+  bytes signature = 10002;
+}
+
+message PeerOpenResponse {
+  dao.v1.VersionVector checkpoint = 1;
+}
+
+message PeerSendEventsRequest {
+  dao.v1.VersionVector checkpoint = 1;
+  repeated Event events = 2;
+}
+
+message PeerSendEventsResponse {
+  dao.v1.VersionVector checkpoint = 1;
+}
+
+service ReplicationPeer {
+  rpc Open(PeerOpenRequest) returns (PeerOpenResponse);
+  rpc SendEvents(PeerSendEventsRequest) returns (stream PeerSendEventsResponse);
+}

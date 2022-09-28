@@ -7,6 +7,7 @@ import (
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
+	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
 )
 
@@ -16,4 +17,5 @@ type PeerClient interface {
 	CA() *networkv1ca.CAPeerClient
 	Transfer() *transferv1.TransferPeerClient
 	Network() *networkv1.NetworkPeerClient
+	Replication() *replicationv1.ReplicationPeerClient
 }

@@ -22,7 +22,7 @@ import (
 func NewCA(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer *dialer.Dialer,
 	transfer transfer.Control,
@@ -43,7 +43,7 @@ func NewCA(
 type CA struct {
 	ctx       context.Context
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	dialer    *dialer.Dialer
 	transfer  transfer.Control

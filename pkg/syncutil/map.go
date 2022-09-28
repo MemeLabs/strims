@@ -51,6 +51,19 @@ func (m *Map[K, V]) GetOrInsert(k K, iv V) (v V, ok bool) {
 	return iv, false
 }
 
+func (m *Map[K, V]) InsertOrReplace(k K, iv V) (v V, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.m == nil {
+		m.m = map[K]V{}
+	}
+	if v, ok = m.m[k]; !ok {
+		v = iv
+	}
+	m.m[k] = iv
+	return v, ok
+}
+
 func (m *Map[K, V]) Set(k K, v V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

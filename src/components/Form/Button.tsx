@@ -8,10 +8,11 @@ import React, { ComponentProps, ReactNode } from "react";
 
 interface ButtonSetProps {
   children: ReactNode;
+  className?: string;
 }
 
-export const ButtonSet: React.FC<ButtonSetProps> = ({ children }: ButtonProps) => (
-  <div className="input_buttonset">{children}</div>
+export const ButtonSet: React.FC<ButtonSetProps> = ({ children, className }: ButtonProps) => (
+  <div className={clsx("input_buttonset", className)}>{children}</div>
 );
 
 export interface ButtonProps extends ComponentProps<"button"> {

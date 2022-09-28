@@ -68,6 +68,10 @@ func (t Time) UnixNano() int64 {
 	return int64(t)
 }
 
+func (t Time) UnixMilli() int64 {
+	return int64(t) / int64(time.Millisecond)
+}
+
 func (t Time) Time() time.Time {
 	return time.Unix(0, int64(t))
 }

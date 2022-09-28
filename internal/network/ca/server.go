@@ -23,7 +23,7 @@ import (
 
 func newServer(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer *dialer.Dialer,
 	transfer transfer.Control,

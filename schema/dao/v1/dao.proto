@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package strims.dao.v1;
 
-option go_package = "github.com/MemeLabs/strims/pkg/apis/dao/v1;dao";
+option go_package = "github.com/MemeLabs/strims/pkg/apis/dao/v1;daov1";
 option java_package = "gg.strims.dao.v1";
 option swift_prefix = "SDA";
 
@@ -24,5 +24,6 @@ message StoreVersion {
 }
 
 message VersionVector {
-  map<uint32, uint64> versions = 1;
+  map<uint32, uint64> value = 1;
+  int64 updated_at = 2;
 }

@@ -49,6 +49,7 @@ const (
 	SwarmPort
 	PeerRPCClientPort
 	PeerRPCServerPort
+	ReplicationPort
 )
 
 var (
@@ -221,9 +222,9 @@ func (h *Host) addLink(logger *zap.Logger, c Link) (*Peer, error) {
 		return nil, &PeerInitError{err}
 	}
 
-	_, found := h.peers.GetOrInsert(p.HostID(), p)
+	prev, found := h.peers.InsertOrReplace(p.HostID(), p)
 	if found {
-		return nil, &PeerInitError{errors.New("duplicate peer link found")}
+		prev.Close()
 	}
 
 	go func() {

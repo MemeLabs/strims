@@ -35,7 +35,7 @@ func init() {
 // directoryService ...
 type directoryService struct {
 	app    app.Control
-	store  *dao.ProfileStore
+	store  dao.Store
 	logger *zap.Logger
 }
 

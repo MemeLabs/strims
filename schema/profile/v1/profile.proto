@@ -10,6 +10,7 @@ option java_package = "gg.strims.profile.v1";
 option swift_prefix = "SPF";
 
 import "type/key.proto";
+import "dao/v1/dao.proto";
 
 message UpdateProfileRequest {
   string name = 1;
@@ -44,6 +45,13 @@ enum KDFType {
   KDF_TYPE_PBKDF2_SHA256 = 1;
 }
 
+message Device {
+  uint64 id = 1;
+  dao.v1.VersionVector version = 2;
+  string device = 3;
+  string os = 4;
+}
+
 message Profile {
   uint64 id = 1;
   string name = 2;
@@ -53,6 +61,8 @@ message Profile {
 
 message ProfileID {
   uint64 next_id = 1;
+  uint64 last_id = 2;
+  ProfileID next_range = 3;
 }
 
 service ProfileFrontend {

@@ -49,6 +49,22 @@ func DeleteSecondaryIndex(s kv.RWStore, ns namespace, key []byte, id uint64) err
 	})
 }
 
+// PurgeSecondaryIndex ...
+func PurgeSecondaryIndex(s kv.RWStore, ns namespace) error {
+	return s.Update(func(tx kv.RWTx) error {
+		keys := []*daov1.SecondaryIndexKey{}
+		if err := tx.ScanPrefix(ns.FormatPrefix(), &keys); err != nil {
+			return err
+		}
+		for _, k := range keys {
+			if err := DeleteSecondaryIndex(s, ns, k.Key, k.Id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ScanSecondaryIndex ...
 func ScanSecondaryIndex(s kv.Store, ns namespace, key []byte) ([]uint64, error) {
 	keys, err := scanSecondaryIndex(s, ns, key)

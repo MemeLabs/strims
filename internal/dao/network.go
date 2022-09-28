@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
@@ -53,7 +54,60 @@ var Networks = NewTable(
 	},
 )
 
-var NetworksByKey = NewUniqueIndex(networkNetworkKeyNS, Networks, NetworkKey, byteIdentity, nil)
+func resolveNetworkConflict(m, p *networkv1.Network) {
+	if m.Version.UpdatedAt < p.Version.UpdatedAt {
+		m.Alias = p.Alias
+		m.CertificateRenewalError = p.CertificateRenewalError
+	}
+	if m.Certificate.NotAfter < p.Certificate.NotAfter {
+		m.Certificate = p.Certificate
+	}
+	m.ServerConfig = p.ServerConfig
+	versionvector.Update(m.GetVersion(), p.GetVersion())
+}
+
+func init() {
+	RegisterReplicatedTable(
+		Networks,
+		&ReplicatedTableOptions[*networkv1.Network]{
+			OnConflict: func(s kv.RWStore, m *networkv1.Network, p *networkv1.Network) error {
+				resolveNetworkConflict(m, p)
+				return Networks.Update(s, m)
+			},
+			Extract: func(s kv.Store, m, p *networkv1.Network) *networkv1.Network {
+				m.ServerConfig = nil
+				return m
+			},
+			Merge: func(s kv.RWStore, m, p *networkv1.Network) *networkv1.Network {
+				versionvector.Update(m.GetVersion(), p.GetVersion())
+				m.ServerConfig = p.ServerConfig
+				return m
+			},
+		},
+	)
+}
+
+var NetworksByKey = NewUniqueIndex(
+	networkNetworkKeyNS,
+	Networks,
+	NetworkKey,
+	byteIdentity,
+	&UniqueIndexOptions[networkv1.Network, *networkv1.Network]{
+		OnConflict: func(s kv.RWStore, t *Table[networkv1.Network, *networkv1.Network], m, p *networkv1.Network) error {
+			// TODO: we don't currently have good support for replicating records that
+			// have both 1:many edges and unique keys...
+			//
+			// the only case where this would happen is if replia A creates a network
+			// then replica B accepts an invite to the same network before reading A's
+			// replication log.
+			if p.ServerConfig != nil {
+				return ErrUniqueConstraintViolated
+			}
+			resolveNetworkConflict(m, p)
+			return Networks.Delete(s, p.Id)
+		},
+	},
+)
 
 // NewNetworkCertificate ...
 func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
@@ -244,12 +298,12 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate, bootstrapClien
 
 var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS, nil)
 
-var GetCertificateLogsByNetworkID, GetCertificateLogsByNetwork, GetNetworkByCertificateLog = ManyToOne(
+var CertificateLogsByNetwork = ManyToOne(
 	networkCertificateLogNetworkNS,
 	CertificateLogs,
 	Networks,
 	(*networkv1ca.CertificateLog).GetNetworkId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{CascadeDelete: true},
 )
 
 func FormatCertificateLogSerialNumberKey(networkID uint64, serialNumber []byte) []byte {
@@ -397,6 +451,10 @@ var BootstrapClients = NewTable(
 	},
 )
 
+func init() {
+	RegisterReplicatedTable(BootstrapClients, &ReplicatedTableOptions[*networkv1bootstrap.BootstrapClient]{})
+}
+
 func FormatBootstrapClientClientOptionsKey(m *networkv1bootstrap.BootstrapClient) []byte {
 	switch o := m.ClientOptions.(type) {
 	case *networkv1bootstrap.BootstrapClient_WebsocketOptions:
@@ -411,7 +469,11 @@ var BootstrapClientsByClientOptions = NewUniqueIndex(
 	BootstrapClients,
 	FormatBootstrapClientClientOptionsKey,
 	byteIdentity,
-	nil,
+	&UniqueIndexOptions[networkv1bootstrap.BootstrapClient, *networkv1bootstrap.BootstrapClient]{
+		OnConflict: func(s kv.RWStore, t *Table[networkv1bootstrap.BootstrapClient, *networkv1bootstrap.BootstrapClient], m, p *networkv1bootstrap.BootstrapClient) error {
+			return BootstrapClients.Delete(s, p.GetId())
+		},
+	},
 )
 
 // NewWebSocketBootstrapClient ...
@@ -459,15 +521,15 @@ var NetworkUIConfig = NewSingleton(
 
 var NetworkPeers = NewTable[networkv1.Peer](networkPeerNS, nil)
 
-var GetNetworkPeersByNetworkID, GetNetworkPeersByNetwork, GetNetworkByNetworkPeer = ManyToOne(
+var NetworkPeersByNetwork = ManyToOne(
 	networkPeerNetworkNS,
 	NetworkPeers,
 	Networks,
 	(*networkv1.Peer).GetNetworkId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[networkv1.Peer, *networkv1.Peer]{CascadeDelete: true},
 )
 
-var GetNetworkPeersByInviterPeerID, GetNetworkPeersByInviterPeer, GetInviterPeerByNetworkPeer = ManyToOne(
+var NetworkPeersByInviterPeer = ManyToOne(
 	networkPeerInviterNS,
 	NetworkPeers,
 	NetworkPeers,
@@ -506,7 +568,7 @@ func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, inviterPe
 	}, nil
 }
 
-func GetOrCreateNetworkPeer(s *ProfileStore, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
+func GetOrCreateNetworkPeer(s Store, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
 	for retries := 0; retries < 2; retries++ {
 		p, err := NetworkPeersByPublicKey.Get(s, publicKey)
 		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {

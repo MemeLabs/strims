@@ -7,6 +7,18 @@ import (
 	"reflect"
 )
 
+func New[T any](p *T) *T {
+	if p == nil {
+		return new(T)
+	}
+	return p
+}
+
+func NewWithDefaults[T any](p *T, defaults T) *T {
+	AssignPtr(&defaults, p)
+	return &defaults
+}
+
 func AssignDefaults[T any](options, defaults T) T {
 	Assign(&defaults, options)
 	return defaults

@@ -19,8 +19,11 @@ type storeItem struct {
 	value []byte
 }
 
-func (i storeItem) Less(o llrb.Item) bool {
-	return i.key < o.(storeItem).key
+func (i storeItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(storeItem); ok {
+		return i.key < o.key
+	}
+	return !oi.Less(i)
 }
 
 // NewMemStore ...

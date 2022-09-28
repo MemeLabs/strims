@@ -12,8 +12,13 @@ import (
 	"strconv"
 	"strings"
 
+	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/kv"
 )
+
+const CurrentVersion = 2
+const MinCompatibleVersion = 2
 
 // IDGenerator ...
 type IDGenerator interface {
@@ -77,7 +82,7 @@ func (e Errors) IncludesOnly(err error) bool {
 	return true
 }
 
-type namespace int
+type namespace int64
 
 func (n namespace) String() string {
 	return strconv.FormatInt(int64(n), 36)
@@ -131,4 +136,18 @@ const (
 	_ = iota + systemNS
 	mutexNS
 	storeVersionNS
+	replicationLogNS
+	replicationVersionNS
 )
+
+type Store interface {
+	kv.RWStore
+	IDGenerator
+	Salter
+	BlobStore() kv.BlobStore
+	Key() *StorageKey
+	ReplicaID() uint32
+	DispatchEvent(es []*replicationv1.Event) error
+	Subscribe(ch chan []*replicationv1.Event)
+	Dump() ([]*replicationv1.Event, error)
+}

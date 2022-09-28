@@ -60,7 +60,7 @@ var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptio
 func newDirectoryServer(
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
@@ -130,7 +130,7 @@ func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.Chu
 
 type directoryServer struct {
 	logger      *zap.Logger
-	store       *dao.ProfileStore
+	store       dao.Store
 	dialer      network.Dialer
 	transfer    transfer.Control
 	observers   *event.Observers

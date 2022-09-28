@@ -35,8 +35,11 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	profileStore := dao.NewProfileStore(profile.Id, storageKey, blobStore, nil)
-	if err := profileStore.Init(); err != nil {
+	store, err := dao.NewReplicatedStore(dao.NewProfileStore(profile.Id, storageKey, blobStore, nil))
+	if err != nil {
+		return nil, err
+	}
+	if err := store.Init(); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +59,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 	}
 
 	return &Host{
-		Store:     profileStore,
+		Store:     store,
 		Profile:   profile,
 		VNIC:      vnicHost,
 		VPN:       vpnHost,
@@ -67,7 +70,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 
 // Host ...
 type Host struct {
-	Store    *dao.ProfileStore
+	Store    dao.Store
 	Profile  *profilev1.Profile
 	VNIC     *vnic.Host
 	VPN      *vpn.Host

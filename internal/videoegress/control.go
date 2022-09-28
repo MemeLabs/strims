@@ -40,7 +40,7 @@ type Control interface {
 func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	httpmux *httputil.MapServeMux,
 	profile *profilev1.Profile,
@@ -62,7 +62,7 @@ func NewControl(
 type control struct {
 	ctx      context.Context
 	logger   *zap.Logger
-	store    *dao.ProfileStore
+	store    dao.Store
 	httpmux  *httputil.MapServeMux
 	transfer transfer.Control
 	profile  *profilev1.Profile

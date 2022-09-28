@@ -13,6 +13,8 @@ export interface InputLabelProps {
   inputType?: string;
   component?: keyof ReactHTML;
   children: ReactNode;
+  inlineInput?: boolean;
+  onClick: React.MouseEventHandler;
 }
 
 const InputLabel: React.FC<InputLabelProps> = ({
@@ -22,12 +24,15 @@ const InputLabel: React.FC<InputLabelProps> = ({
   description,
   inputType = "default",
   component = "label",
+  inlineInput = false,
+  ...props
 }) => {
   React.createElement;
   const labelClass = clsx({
     "input_label": true,
     "input_label--required": required,
     [`input_label--${inputType}`]: true,
+    "input_label--inline_input": inlineInput,
   });
 
   return React.createElement(component, {
@@ -41,6 +46,7 @@ const InputLabel: React.FC<InputLabelProps> = ({
         </div>
       </>
     ),
+    ...props,
   });
 };
 

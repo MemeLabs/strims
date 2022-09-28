@@ -5,6 +5,10 @@ import {
   strims_type_Certificate,
   strims_type_ICertificate,
 } from "../../../type/certificate";
+import {
+  strims_dao_v1_VersionVector,
+  strims_dao_v1_IVersionVector,
+} from "../../../dao/v1/dao";
 
 export type IConfig = {
   enablePublishing?: boolean;
@@ -171,21 +175,25 @@ export class SetConfigResponse {
 
 export type IBootstrapClient = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   clientOptions?: BootstrapClient.IClientOptions
 }
 
 export class BootstrapClient {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   clientOptions: BootstrapClient.TClientOptions;
 
   constructor(v?: IBootstrapClient) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.clientOptions = new BootstrapClient.ClientOptions(v?.clientOptions);
   }
 
   static encode(m: BootstrapClient, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(26).fork()).ldelim();
     switch (m.clientOptions.case) {
       case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS:
       strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
@@ -203,6 +211,9 @@ export class BootstrapClient {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 3:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.clientOptions = new BootstrapClient.ClientOptions({ websocketOptions: strims_network_v1_bootstrap_BootstrapClientWebSocketOptions.decode(r, r.uint32()) });

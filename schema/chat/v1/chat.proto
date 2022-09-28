@@ -546,13 +546,10 @@ message ListWhispersResponse {
 message WatchWhispersRequest {}
 
 message WatchWhispersResponse {
-  message WhisperThreadDelete {
-    uint64 thread_id = 1;
-  }
+  message WhisperThreadDelete {}
 
   message WhisperDelete {
     uint64 record_id = 1;
-    uint64 thread_id = 2;
   }
 
   bytes peer_key = 1;
@@ -565,13 +562,13 @@ message WatchWhispersResponse {
 }
 
 message MarkWhispersReadRequest {
-  uint64 thread_id = 1;
+  bytes peer_key = 1;
 }
 
 message MarkWhispersReadResponse {}
 
 message DeleteWhisperThreadRequest {
-  uint64 thread_id = 1;
+  bytes peer_key = 1;
 }
 
 message DeleteWhisperThreadResponse {}
@@ -724,17 +721,18 @@ message WhisperThread {
   bytes peer_key = 2;
   string alias = 3;
   uint32 unread_count = 4;
-  repeated int64 last_receive_times = 5;
   int64 last_message_time = 6;
   uint64 last_message_id = 7;
+  bool has_unread = 9;
 }
 
 message WhisperRecord {
   enum State {
-    WHISPER_STATE_RECEIVED = 0;
+    WHISPER_STATE_UNREAD = 0;
     WHISPER_STATE_ENQUEUED = 1;
     WHISPER_STATE_DELIVERED = 2;
     WHISPER_STATE_FAILED = 3;
+    WHISPER_STATE_READ = 4;
   }
 
   uint64 id = 1;

@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
 	"github.com/MemeLabs/strims/internal/notification"
+	"github.com/MemeLabs/strims/internal/replication"
 	"github.com/MemeLabs/strims/internal/transfer"
 	"github.com/MemeLabs/strims/internal/videocapture"
 	"github.com/MemeLabs/strims/internal/videochannel"
@@ -37,6 +38,7 @@ type Control interface {
 	Directory() directory.Control
 	Network() network.Control
 	Notification() notification.Control
+	Replication() replication.Control
 	Transfer() transfer.Control
 	VideoCapture() videocapture.Control
 	VideoChannel() videochannel.Control
@@ -50,7 +52,7 @@ func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	httpmux *httputil.MapServeMux,
 	broker network.Broker,
@@ -58,6 +60,7 @@ func NewControl(
 ) Control {
 	var (
 		notificationControl = notification.NewControl(logger, store, observers)
+		replicationControl  = replication.NewControl(ctx, logger, vpn, store, observers, profile, notificationControl)
 		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
 		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, transferControl, broker, profile, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)
@@ -70,9 +73,10 @@ func NewControl(
 		videoegressControl  = videoegress.NewControl(ctx, logger, store, observers, httpmux, profile, transferControl)
 		vnicControl         = vnic.NewControl(ctx, logger, vpn, store, observers)
 		autoseedControl     = autoseed.NewControl(ctx, logger, store, observers, transferControl)
-		peerControl         = NewPeerControl(observers, networkControl, transferControl, bootstrapControl)
+		peerControl         = NewPeerControl(observers, networkControl, transferControl, bootstrapControl, replicationControl)
 	)
 
+	go replicationControl.Run()
 	go chatControl.Run()
 	go directoryControl.Run()
 	go debugControl.Run()
@@ -92,6 +96,7 @@ func NewControl(
 		peer:         peerControl,
 		network:      networkControl,
 		notification: notificationControl,
+		replication:  replicationControl,
 		transfer:     transferControl,
 		bootstrap:    bootstrapControl,
 		videocapture: videocaptureControl,
@@ -113,6 +118,7 @@ type control struct {
 	debug        debug.Control
 	network      network.Control
 	notification notification.Control
+	replication  replication.Control
 	transfer     transfer.Control
 	videocapture videocapture.Control
 	videochannel videochannel.Control
@@ -129,6 +135,7 @@ func (c *control) Debug() debug.Control               { return c.debug }
 func (c *control) Chat() chat.Control                 { return c.chat }
 func (c *control) Network() network.Control           { return c.network }
 func (c *control) Notification() notification.Control { return c.notification }
+func (c *control) Replication() replication.Control   { return c.replication }
 func (c *control) Transfer() transfer.Control         { return c.transfer }
 func (c *control) Bootstrap() bootstrap.Control       { return c.bootstrap }
 func (c *control) VideoCapture() videocapture.Control { return c.videocapture }

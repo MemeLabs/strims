@@ -23,7 +23,7 @@ func newRunner(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
@@ -75,7 +75,7 @@ func (r *runner) Logger() *zap.Logger {
 type runnerAdapter struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	dialer    network.Dialer
 	transfer  transfer.Control

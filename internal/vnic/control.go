@@ -23,7 +23,7 @@ func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 ) Control {
 	return &control{
@@ -42,7 +42,7 @@ type control struct {
 	ctx    context.Context
 	logger *zap.Logger
 	vpn    *vpn.Host
-	store  *dao.ProfileStore
+	store  dao.Store
 
 	events        chan any
 	lock          sync.Mutex

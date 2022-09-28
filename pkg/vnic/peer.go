@@ -82,14 +82,17 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 			logutil.ByteHex("peer", peerCert.Key),
 			zap.Stringer("host", hostID),
 		),
-		Link:         instrumentLink(link, hostID),
-		Certificate:  peerCert,
-		hostID:       hostID,
-		handlers:     map[uint16]FrameHandler{},
-		reservations: map[uint16]struct{}{},
-		channels:     map[uint16]*FrameReadWriter{},
-		ctx:          ctx,
-		close:        cancel,
+		Link:            instrumentLink(link, hostID),
+		Certificate:     peerCert,
+		ProtocolVersion: init.ProtocolVersion,
+		NodePlatform:    init.NodePlatform,
+		NodeVersion:     init.NodeVersion,
+		hostID:          hostID,
+		handlers:        map[uint16]FrameHandler{},
+		reservations:    map[uint16]struct{}{},
+		channels:        map[uint16]*FrameReadWriter{},
+		ctx:             ctx,
+		close:           cancel,
 	}
 	return p, nil
 }
@@ -99,6 +102,9 @@ type Peer struct {
 	logger           *zap.Logger
 	Link             Link
 	Certificate      *certificate.Certificate
+	ProtocolVersion  uint32
+	NodePlatform     string
+	NodeVersion      string
 	hostID           kademlia.ID
 	handlersLock     sync.Mutex
 	handlers         map[uint16]FrameHandler
@@ -186,6 +192,9 @@ func (p *Peer) SetHandler(port uint16, h FrameHandler) {
 	p.handlersLock.Lock()
 	defer p.handlersLock.Unlock()
 
+	if _, ok := p.handlers[port]; ok {
+		p.logger.Fatal("port already in use", zap.Uint16("port", port))
+	}
 	p.handlers[port] = h
 }
 

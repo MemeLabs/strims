@@ -38,7 +38,7 @@ var caSwarmOptions = ppspp.SwarmOptions{
 // New ...
 func newCAService(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	network *networkv1.Network,
 	ew *protoutil.ChunkStreamWriter,
@@ -57,7 +57,7 @@ func newCAService(
 // service ...
 type service struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 
 	logCache    dao.CertificateLogCache

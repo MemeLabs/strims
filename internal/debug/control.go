@@ -46,7 +46,7 @@ type Control interface {
 func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	transferControl transfer.Control,
 	directoryControl directory.Control,
@@ -74,7 +74,7 @@ type mockStreamKey struct{ kind, id uint64 }
 type control struct {
 	ctx       context.Context
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	transfer  transfer.Control
 	directory directory.Control
 

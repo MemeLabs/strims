@@ -443,8 +443,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const resetTopicUnreadCount = (state: State, topic: Topic) =>
     applyTopicThreadAction(state, topic, (thread) => {
       if (topic.type === "WHISPER") {
-        const threadId = selectWhispers(state, topic.topicKey).thread.id;
-        void client.chat.markWhispersRead({ threadId });
+        void client.chat.markWhispersRead({ peerKey: topic.topicKey });
       }
 
       return { ...thread, unreadCount: 0 };
@@ -575,7 +574,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         return undefined;
       case WatchWhispersResponse.BodyCase.WHISPER_UPDATE: {
         if (thread.visible) {
-          void client.chat.markWhispersRead({ threadId: thread.thread.id });
+          void client.chat.markWhispersRead({ peerKey: thread.thread.peerKey });
         }
 
         const { id, message } = res.body.whisperUpdate;

@@ -10,6 +10,7 @@ option java_package = "gg.strims.network.v1.bootstrap";
 option swift_prefix = "SNB";
 
 import "type/certificate.proto";
+import "dao/v1/dao.proto";
 
 message Config {
   bool enable_publishing = 1;
@@ -31,6 +32,7 @@ message SetConfigResponse {
 
 message BootstrapClient {
   uint64 id = 1;
+  dao.v1.VersionVector version = 3;
   oneof client_options {
     BootstrapClientWebSocketOptions websocket_options = 2;
   }

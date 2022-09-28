@@ -30,8 +30,9 @@ func init() {
 
 // profileService ...
 type profileService struct {
+	profilev1.UnimplementedProfileFrontendService
 	logger *zap.Logger
-	store  *dao.ProfileStore
+	store  dao.Store
 	app    app.Control
 }
 

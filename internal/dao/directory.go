@@ -27,12 +27,12 @@ const (
 
 var DirectoryListingRecords = NewTable[networkv1directory.ListingRecord](directoryListingRecordNS, nil)
 
-var GetDirectoryListingRecordsByNetworkID, GetDirectoryListingRecordsByNetwork, GetNetworkByDirectoryListingRecord = ManyToOne(
+var DirectoryListingRecordsByNetwork = ManyToOne(
 	directoryListingRecordNetworkNS,
 	DirectoryListingRecords,
 	Networks,
 	(*networkv1directory.ListingRecord).GetNetworkId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[networkv1directory.ListingRecord, *networkv1directory.ListingRecord]{CascadeDelete: true},
 )
 
 const (
@@ -125,12 +125,12 @@ type DirectoryListingRecordCache struct {
 
 var DirectoryUserRecords = NewTable[networkv1directory.UserRecord](directoryUserRecordNS, nil)
 
-var GetDirectoryUserRecordsByNetworkID, GetDirectoryUserRecordsByNetwork, GetNetworkByDirectoryUserRecord = ManyToOne(
+var DirectoryUserRecordsByNetwork = ManyToOne(
 	directoryUserRecordNetworkNS,
 	DirectoryUserRecords,
 	Networks,
 	(*networkv1directory.UserRecord).GetNetworkId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[networkv1directory.UserRecord, *networkv1directory.UserRecord]{CascadeDelete: true},
 )
 
 func FormatDirectoryUserRecordPeerKeyKey(networkID uint64, peerKey []byte) []byte {

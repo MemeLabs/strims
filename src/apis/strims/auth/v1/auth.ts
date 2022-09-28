@@ -2,6 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
+  strims_network_v1_bootstrap_BootstrapClient,
+  strims_network_v1_bootstrap_IBootstrapClient,
+} from "../../network/v1/bootstrap/bootstrap";
+import {
+  strims_network_v1_Network,
+  strims_network_v1_INetwork,
+} from "../../network/v1/network";
+import {
+  strims_profile_v1_Device,
+  strims_profile_v1_IDevice,
   strims_profile_v1_Profile,
   strims_profile_v1_IProfile,
   strims_profile_v1_StorageKey,
@@ -639,6 +649,70 @@ export namespace LinkedProfile {
 
 }
 
+export type IPairingToken = {
+  auth?: strims_auth_v1_IServerUserThing;
+  profile?: strims_profile_v1_IProfile;
+  network?: strims_network_v1_INetwork;
+  bootstrap?: strims_network_v1_bootstrap_IBootstrapClient;
+  devices?: strims_profile_v1_IDevice[];
+}
+
+export class PairingToken {
+  auth: strims_auth_v1_ServerUserThing | undefined;
+  profile: strims_profile_v1_Profile | undefined;
+  network: strims_network_v1_Network | undefined;
+  bootstrap: strims_network_v1_bootstrap_BootstrapClient | undefined;
+  devices: strims_profile_v1_Device[];
+
+  constructor(v?: IPairingToken) {
+    this.auth = v?.auth && new strims_auth_v1_ServerUserThing(v.auth);
+    this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
+    this.network = v?.network && new strims_network_v1_Network(v.network);
+    this.bootstrap = v?.bootstrap && new strims_network_v1_bootstrap_BootstrapClient(v.bootstrap);
+    this.devices = v?.devices ? v.devices.map(v => new strims_profile_v1_Device(v)) : [];
+  }
+
+  static encode(m: PairingToken, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.auth) strims_auth_v1_ServerUserThing.encode(m.auth, w.uint32(10).fork()).ldelim();
+    if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
+    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(26).fork()).ldelim();
+    if (m.bootstrap) strims_network_v1_bootstrap_BootstrapClient.encode(m.bootstrap, w.uint32(34).fork()).ldelim();
+    for (const v of m.devices) strims_profile_v1_Device.encode(v, w.uint32(42).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PairingToken {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PairingToken();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.auth = strims_auth_v1_ServerUserThing.decode(r, r.uint32());
+        break;
+        case 2:
+        m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
+        break;
+        case 3:
+        m.network = strims_network_v1_Network.decode(r, r.uint32());
+        break;
+        case 4:
+        m.bootstrap = strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32());
+        break;
+        case 5:
+        m.devices.push(strims_profile_v1_Device.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type ISignInRequest = {
   credentials?: SignInRequest.ICredentials
 }
@@ -751,6 +825,7 @@ export namespace SignInRequest {
     totpPasscode?: string;
     persistSession?: boolean;
     persistLogin?: boolean;
+    pairingToken?: strims_auth_v1_IPairingToken;
   }
 
   export class Password {
@@ -759,6 +834,7 @@ export namespace SignInRequest {
     totpPasscode: string;
     persistSession: boolean;
     persistLogin: boolean;
+    pairingToken: strims_auth_v1_PairingToken | undefined;
 
     constructor(v?: IPassword) {
       this.name = v?.name || "";
@@ -766,6 +842,7 @@ export namespace SignInRequest {
       this.totpPasscode = v?.totpPasscode || "";
       this.persistSession = v?.persistSession || false;
       this.persistLogin = v?.persistLogin || false;
+      this.pairingToken = v?.pairingToken && new strims_auth_v1_PairingToken(v.pairingToken);
     }
 
     static encode(m: Password, w?: Writer): Writer {
@@ -775,6 +852,7 @@ export namespace SignInRequest {
       if (m.totpPasscode.length) w.uint32(26).string(m.totpPasscode);
       if (m.persistSession) w.uint32(32).bool(m.persistSession);
       if (m.persistLogin) w.uint32(40).bool(m.persistLogin);
+      if (m.pairingToken) strims_auth_v1_PairingToken.encode(m.pairingToken, w.uint32(50).fork()).ldelim();
       return w;
     }
 
@@ -799,6 +877,9 @@ export namespace SignInRequest {
           break;
           case 5:
           m.persistLogin = r.bool();
+          break;
+          case 6:
+          m.pairingToken = strims_auth_v1_PairingToken.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -1071,6 +1152,12 @@ export const strims_auth_v1_LinkedProfile = LinkedProfile;
 export type strims_auth_v1_LinkedProfile = LinkedProfile;
 /* @internal */
 export type strims_auth_v1_ILinkedProfile = ILinkedProfile;
+/* @internal */
+export const strims_auth_v1_PairingToken = PairingToken;
+/* @internal */
+export type strims_auth_v1_PairingToken = PairingToken;
+/* @internal */
+export type strims_auth_v1_IPairingToken = IPairingToken;
 /* @internal */
 export const strims_auth_v1_SignInRequest = SignInRequest;
 /* @internal */

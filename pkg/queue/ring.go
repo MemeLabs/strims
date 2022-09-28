@@ -12,11 +12,11 @@ func NewRing[T any](n int) (r Ring[T]) {
 	return
 }
 
-// Ring[T] ...
+// Ring ...
 type Ring[T any] struct {
-	mask int
-	low  int
-	high int
+	mask uint64
+	low  uint64
+	high uint64
 	v    []T
 }
 
@@ -27,7 +27,7 @@ func (r *Ring[T]) Cap() int {
 
 // Len ...
 func (r *Ring[T]) Len() int {
-	return r.high - r.low
+	return int(r.high - r.low)
 }
 
 // Resize ...
@@ -43,7 +43,7 @@ func (r *Ring[T]) Resize(n int) {
 	}
 
 	v := make([]T, n)
-	mask := n - 1
+	mask := uint64(n - 1)
 
 	vi := r.low & mask
 	i := r.low & r.mask
@@ -117,9 +117,9 @@ func (r *Ring[T]) Iterator() *RingIterator[T] {
 	}
 }
 
-// RingIterator[T] ...
+// RingIterator ...
 type RingIterator[T any] struct {
-	i int
+	i uint64
 	r *Ring[T]
 }
 

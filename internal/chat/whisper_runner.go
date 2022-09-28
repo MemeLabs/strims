@@ -17,7 +17,7 @@ import (
 func newWhisperRunner(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	profile *profilev1.Profile,
 	dialer network.Dialer,
@@ -46,7 +46,7 @@ type whisperRunner struct {
 
 type whisperRunnerAdapter struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	profile   *profilev1.Profile
 	dialer    network.Dialer

@@ -34,7 +34,7 @@ const (
 	chatWhisperRecordStateNS
 	chatWhisperThreadNS
 	chatWhisperThreadPeerKeyNS
-	chatWhisperRecordWhisperThreadNS
+	chatWhisperRecordWhisperUnreadNS
 	chatUIConfigHighlightNS
 	chatUIConfigHighlightKeyNS
 	chatUIConfigTagNS
@@ -77,12 +77,12 @@ var ChatEmotes = NewTable(
 	},
 )
 
-var GetChatEmotesByServerID, GetChatEmotesByServer, GetChatServerByEmote = ManyToOne(
+var ChatEmotesByServer = ManyToOne(
 	chatEmoteServerNS,
 	ChatEmotes,
 	ChatServers,
 	(*chatv1.Emote).GetServerId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[chatv1.Emote, *chatv1.Emote]{CascadeDelete: true},
 )
 
 var ChatModifiers = NewTable(
@@ -97,12 +97,12 @@ var ChatModifiers = NewTable(
 	},
 )
 
-var GetChatModifiersByServerID, GetChatModifiersByServer, GetChatServerByModifier = ManyToOne(
+var ChatModifiersByServer = ManyToOne(
 	chatModifierServerNS,
 	ChatModifiers,
 	ChatServers,
 	(*chatv1.Modifier).GetServerId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[chatv1.Modifier, *chatv1.Modifier]{CascadeDelete: true},
 )
 
 var ChatTags = NewTable(
@@ -117,22 +117,22 @@ var ChatTags = NewTable(
 	},
 )
 
-var GetChatTagsByServerID, GetChatTagsByServer, GetChatServerByTag = ManyToOne(
+var ChatTagsByServer = ManyToOne(
 	chatTagServerNS,
 	ChatTags,
 	ChatServers,
 	(*chatv1.Tag).GetServerId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[chatv1.Tag, *chatv1.Tag]{CascadeDelete: true},
 )
 
 var ChatProfiles = NewTable[chatv1.Profile](chatProfileNS, nil)
 
-var GetChatProfilesByServerID, GetChatProfilesByServer, GetChatServerByProfile = ManyToOne(
+var ChatProfilesByServer = ManyToOne(
 	chatProfileServerNS,
 	ChatProfiles,
 	ChatServers,
 	(*chatv1.Profile).GetServerId,
-	&ManyToOneOptions{CascadeDelete: true},
+	&ManyToOneOptions[chatv1.Profile, *chatv1.Profile]{CascadeDelete: true},
 )
 
 func FormatChatProfilePeerKey(serverID uint64, peerKey []byte) []byte {
@@ -224,15 +224,46 @@ var ChatWhisperThreads = NewTable(
 		ObserveDelete: func(m *chatv1.WhisperThread) proto.Message {
 			return &chatv1.WhisperThreadDeleteEvent{WhisperThread: m}
 		},
+		OnDelete: LocalDeleteHook(func(s ReplicatedRWTx, p *chatv1.WhisperThread) error {
+			_, err := ChatWhisperRecordsByPeerKey.DeleteAll(s, p.PeerKey)
+			return err
+		}),
 	},
 )
+
+func resolveChatWhisperThreadConflict(m, p *chatv1.WhisperThread) {
+	versionvector.Update(m.GetVersion(), p.GetVersion())
+	if p.LastMessageTime > m.LastMessageTime {
+		m.Alias = p.Alias
+		m.LastMessageTime = p.LastMessageTime
+		m.LastMessageId = p.LastMessageId
+	}
+	m.HasUnread = m.HasUnread || p.HasUnread
+}
+
+func init() {
+	RegisterReplicatedTable(
+		ChatWhisperThreads,
+		&ReplicatedTableOptions[*chatv1.WhisperThread]{
+			OnConflict: func(s kv.RWStore, m *chatv1.WhisperThread, p *chatv1.WhisperThread) error {
+				resolveChatWhisperThreadConflict(m, p)
+				return ChatWhisperThreads.Update(s, m)
+			},
+		},
+	)
+}
 
 var ChatWhisperThreadsByPeerKey = NewUniqueIndex(
 	chatWhisperThreadPeerKeyNS,
 	ChatWhisperThreads,
 	(*chatv1.WhisperThread).GetPeerKey,
 	byteIdentity,
-	nil,
+	&UniqueIndexOptions[chatv1.WhisperThread, *chatv1.WhisperThread]{
+		OnConflict: func(s kv.RWStore, t *Table[chatv1.WhisperThread, *chatv1.WhisperThread], m, p *chatv1.WhisperThread) error {
+			resolveChatWhisperThreadConflict(m, p)
+			return ChatWhisperThreads.Delete(s, p.Id)
+		},
+	},
 )
 
 var ChatWhisperRecords = NewTable(
@@ -247,19 +278,28 @@ var ChatWhisperRecords = NewTable(
 	},
 )
 
-var GetChatWhisperRecordsByWhisperThreadID, GetChatWhisperRecordsByWhisperThread, GetChatWhisperThreadByWhisperRecord = ManyToOne(
-	chatWhisperRecordWhisperThreadNS,
-	ChatWhisperRecords,
-	ChatWhisperThreads,
-	(*chatv1.WhisperRecord).GetThreadId,
-	&ManyToOneOptions{CascadeDelete: true},
-)
+func init() {
+	RegisterReplicatedTable(ChatWhisperRecords, &ReplicatedTableOptions[*chatv1.WhisperRecord]{})
+}
 
 var ChatWhisperRecordsByPeerKey = NewSecondaryIndex(
 	chatWhisperRecordPeerKeyNS,
 	ChatWhisperRecords,
 	(*chatv1.WhisperRecord).GetPeerKey,
 	byteIdentity,
+	nil,
+)
+
+var UnreadChatWhisperRecordsByPeerKey = NewSecondaryIndex(
+	chatWhisperRecordWhisperUnreadNS,
+	ChatWhisperRecords,
+	(*chatv1.WhisperRecord).GetPeerKey,
+	byteIdentity,
+	&SecondaryIndexOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
+		Condition: func(m *chatv1.WhisperRecord) bool {
+			return m.State == chatv1.WhisperRecord_WHISPER_STATE_UNREAD
+		},
+	},
 )
 
 func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
@@ -273,6 +313,7 @@ var ChatWhisperRecordsByState = NewSecondaryIndex(
 	ChatWhisperRecords,
 	func(m *chatv1.WhisperRecord) []byte { return FormatChatWhisperRecordStateKey(m.State) },
 	byteIdentity,
+	nil,
 )
 
 // NewChatServer ...
@@ -398,7 +439,7 @@ func NewChatProfile(
 
 // NewChatWhisperThread ...
 func NewChatWhisperThread(
-	g *ProfileStore,
+	g IDGenerator,
 	peerCert *certificate.Certificate,
 ) (*chatv1.WhisperThread, error) {
 	id, err := g.GenerateID()
@@ -408,7 +449,7 @@ func NewChatWhisperThread(
 
 	v := &chatv1.WhisperThread{
 		Id:      id,
-		Version: versionvector.NewSeed(g.ReplicaKey()),
+		Version: versionvector.New(),
 		PeerKey: peerCert.Key,
 		Alias:   peerCert.Subject,
 	}
@@ -417,7 +458,7 @@ func NewChatWhisperThread(
 
 // NewChatWhisperRecord ...
 func NewChatWhisperRecord(
-	g *ProfileStore,
+	g IDGenerator,
 	networkKey []byte,
 	serverKey []byte,
 	peerKey []byte,
@@ -432,12 +473,12 @@ func NewChatWhisperRecord(
 
 	state := chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED
 	if bytes.Equal(peerKey, cert.Key) {
-		state = chatv1.WhisperRecord_WHISPER_STATE_RECEIVED
+		state = chatv1.WhisperRecord_WHISPER_STATE_UNREAD
 	}
 
 	return &chatv1.WhisperRecord{
 		Id:         id,
-		Version:    versionvector.NewSeed(g.ReplicaKey()),
+		Version:    versionvector.New(),
 		NetworkKey: networkKey,
 		ServerKey:  serverKey,
 		PeerKey:    peerKey,
@@ -453,7 +494,7 @@ func NewChatWhisperRecord(
 }
 
 func NewChatUIConfigHighlight(
-	g *ProfileStore,
+	g IDGenerator,
 	alias string,
 	peerKey []byte,
 ) (*chatv1.UIConfigHighlight, error) {
@@ -464,7 +505,7 @@ func NewChatUIConfigHighlight(
 
 	v := &chatv1.UIConfigHighlight{
 		Id:      id,
-		Version: versionvector.NewSeed(g.ReplicaKey()),
+		Version: versionvector.New(),
 		Alias:   alias,
 		PeerKey: peerKey,
 	}
@@ -472,7 +513,7 @@ func NewChatUIConfigHighlight(
 }
 
 func NewChatUIConfigTag(
-	g *ProfileStore,
+	g IDGenerator,
 	alias string,
 	peerKey []byte,
 	color string,
@@ -484,7 +525,7 @@ func NewChatUIConfigTag(
 
 	v := &chatv1.UIConfigTag{
 		Id:      id,
-		Version: versionvector.NewSeed(g.ReplicaKey()),
+		Version: versionvector.New(),
 		Alias:   alias,
 		PeerKey: peerKey,
 		Color:   color,
@@ -493,7 +534,7 @@ func NewChatUIConfigTag(
 }
 
 func NewChatUIConfigIgnore(
-	g *ProfileStore,
+	g IDGenerator,
 	alias string,
 	peerKey []byte,
 	deadline int64,
@@ -505,7 +546,7 @@ func NewChatUIConfigIgnore(
 
 	v := &chatv1.UIConfigIgnore{
 		Id:       id,
-		Version:  versionvector.NewSeed(g.ReplicaKey()),
+		Version:  versionvector.New(),
 		Alias:    alias,
 		PeerKey:  peerKey,
 		Deadline: deadline,

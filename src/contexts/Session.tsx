@@ -7,7 +7,12 @@ import { DBSchema, IDBPDatabase, openDB } from "idb";
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
-import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
+import {
+  ISignInRequest,
+  ISignUpRequest,
+  LinkedProfile,
+  PairingToken,
+} from "../apis/strims/auth/v1/auth";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 import { useStableCallbacks } from "../hooks/useStableCallback";
@@ -200,6 +205,28 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       conn,
       client,
     }));
+  };
+
+  const importProfile = async (serverAddress: string, req: ICreateProfileRequest) => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
+    const client = await conn.client(FrontendClient);
+    const res = await client.auth
+      .importProfile(req, { timeout: API_TIMEOUT })
+      .catch((error: Error) => {
+        conn.close();
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error,
+        }));
+      });
+    if (!res) return;
   };
 
   const actions = useStableCallbacks({ createProfile, signIn });

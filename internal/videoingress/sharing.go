@@ -19,7 +19,7 @@ import (
 // ShareAddressSalt ...
 var ShareAddressSalt = []byte("ingressshare")
 
-func newShareService(logger *zap.Logger, node *vpn.Node, store *dao.ProfileStore) *shareService {
+func newShareService(logger *zap.Logger, node *vpn.Node, store dao.Store) *shareService {
 	return &shareService{}
 }
 

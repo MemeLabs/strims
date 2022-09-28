@@ -75,7 +75,6 @@ message UIConfigIgnoreDeleteEvent {
   UIConfigIgnore ui_config_ignore = 1;
 }
 
-
 message SyncAssetsEvent {
   uint64 server_id = 1;
   bool force_unified_update = 2;

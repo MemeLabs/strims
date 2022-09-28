@@ -15,6 +15,7 @@ import "type/certificate.proto";
 import "network/v1/bootstrap/bootstrap.proto";
 import "network/v1/directory/directory.proto";
 import "network/v1/errors/errors.proto";
+import "dao/v1/dao.proto";
 
 message CreateServerRequest {
   string name = 1;
@@ -74,6 +75,7 @@ message ServerConfig {
 
 message Network {
   uint64 id = 1;
+  dao.v1.VersionVector version = 7;
   strims.type.Certificate certificate = 2;
   string alias = 4;
   ServerConfig server_config = 5;

@@ -1,0 +1,96 @@
+.pairing_token_input {
+  &__modal {
+    &__mask {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 100vw;
+      background: var(--color-opac-b-8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    &__window {
+      position: relative;
+      width: 400px;
+      height: 400px;
+      background: white;
+      box-shadow: var(--shadow-elevation-4);
+      padding: 1rem;
+      padding-top: 40px;
+      background: var(--color-slate-8);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    &__close_button {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      cursor: pointer;
+      color: var(--color-grey-3);
+      transition: color 200ms;
+
+      &:hover {
+        color: var(--color-grey-7);
+      }
+    }
+
+    &__textarea {
+      background: var(--color-slate-14);
+      color: var(--color-grey-10);
+      flex: 1;
+      resize: none;
+      padding: 0.5rem;
+      border-radius: var(--border-radius-small);
+      box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+      font-family: monospace;
+
+      &::placeholder {
+        color: var(--color-grey-8);
+      }
+    }
+  }
+
+  &__scanner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 100vw;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-opac-b-8);
+
+    &--open {
+      display: flex;
+    }
+
+    &__close_button {
+      position: absolute;
+      z-index: 1;
+      cursor: pointer;
+      color: var(--color-grey-15);
+      margin: 0 0 340px 275px;
+    }
+  }
+
+  &__result {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  &__ok {
+    fill: var(--color-green-6);
+  }
+
+  &__error {
+    fill: var(--color-red-9);
+  }
+}

@@ -18,6 +18,7 @@ import { InviteLinkClient } from "./strims/network/v1/invite/invite_rpc";
 import { NetworkFrontendClient } from "./strims/network/v1/network_rpc";
 import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc";
 import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc";
+import { ReplicationFrontendClient } from "./strims/replication/v1/replication_rpc";
 import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc";
 import { VideoChannelFrontendClient } from "./strims/video/v1/channel_rpc";
 import { EgressClient as VideoEgressClient } from "./strims/video/v1/egress_rpc";
@@ -36,6 +37,7 @@ export class FrontendClient {
   public network: NetworkFrontendClient;
   public notification: NotificationFrontendClient;
   public profile: ProfileFrontendClient;
+  public replication: ReplicationFrontendClient;
   public videoCapture: VideoCaptureClient;
   public videoChannel: VideoChannelFrontendClient;
   public videoEgress: VideoEgressClient;
@@ -55,6 +57,7 @@ export class FrontendClient {
     this.network = new NetworkFrontendClient(host);
     this.notification = new NotificationFrontendClient(host);
     this.profile = new ProfileFrontendClient(host);
+    this.replication = new ReplicationFrontendClient(host);
     this.videoCapture = new VideoCaptureClient(host);
     this.videoChannel = new VideoChannelFrontendClient(host);
     this.videoEgress = new VideoEgressClient(host);

@@ -82,7 +82,7 @@ var (
 func newDirectoryService(
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer network.Dialer,
 	network *networkv1.Network,
@@ -109,7 +109,7 @@ func newDirectoryService(
 type directoryService struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	dialer    network.Dialer
 

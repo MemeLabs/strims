@@ -23,7 +23,7 @@ func init() {
 
 // notificataionService ...
 type notificataionService struct {
-	store *dao.ProfileStore
+	store dao.Store
 	app   app.Control
 }
 

@@ -40,7 +40,7 @@ const streamUpdateInterval = time.Minute
 func newIngressService(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	transfer transfer.Control,
 	network network.Control,
 	directory directory.Control,
@@ -60,7 +60,7 @@ func newIngressService(
 type ingressService struct {
 	ctx        context.Context
 	logger     *zap.Logger
-	store      *dao.ProfileStore
+	store      dao.Store
 	transfer   transfer.Control
 	network    network.Control
 	directory  directory.Control
@@ -184,7 +184,7 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 func newIngressStream(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	transfer transfer.Control,
 	network network.Control,
 	directory directory.Control,
@@ -251,7 +251,7 @@ func newIngressStream(
 
 type ingressStream struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	transfer  transfer.Control
 	network   network.Control
 	directory directory.Control

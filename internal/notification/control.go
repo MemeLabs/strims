@@ -21,7 +21,7 @@ type Control interface {
 // NewControl ...
 func NewControl(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 ) Control {
 	return &control{
@@ -33,7 +33,7 @@ func NewControl(
 
 type control struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 }
 

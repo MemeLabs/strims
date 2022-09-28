@@ -4815,60 +4815,39 @@ export namespace WatchWhispersResponse {
     >;
   };
 
-  export type IWhisperThreadDelete = {
-    threadId?: bigint;
-  }
+  export type IWhisperThreadDelete = Record<string, any>;
 
   export class WhisperThreadDelete {
-    threadId: bigint;
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IWhisperThreadDelete) {
-      this.threadId = v?.threadId || BigInt(0);
     }
 
     static encode(m: WhisperThreadDelete, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.threadId) w.uint32(8).uint64(m.threadId);
       return w;
     }
 
     static decode(r: Reader | Uint8Array, length?: number): WhisperThreadDelete {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new WhisperThreadDelete();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.threadId = r.uint64();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
+      if (r instanceof Reader && length) r.skip(length);
+      return new WhisperThreadDelete();
     }
   }
 
   export type IWhisperDelete = {
     recordId?: bigint;
-    threadId?: bigint;
   }
 
   export class WhisperDelete {
     recordId: bigint;
-    threadId: bigint;
 
     constructor(v?: IWhisperDelete) {
       this.recordId = v?.recordId || BigInt(0);
-      this.threadId = v?.threadId || BigInt(0);
     }
 
     static encode(m: WhisperDelete, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.recordId) w.uint32(8).uint64(m.recordId);
-      if (m.threadId) w.uint32(16).uint64(m.threadId);
       return w;
     }
 
@@ -4882,9 +4861,6 @@ export namespace WatchWhispersResponse {
           case 1:
           m.recordId = r.uint64();
           break;
-          case 2:
-          m.threadId = r.uint64();
-          break;
           default:
           r.skipType(tag & 7);
           break;
@@ -4897,19 +4873,19 @@ export namespace WatchWhispersResponse {
 }
 
 export type IMarkWhispersReadRequest = {
-  threadId?: bigint;
+  peerKey?: Uint8Array;
 }
 
 export class MarkWhispersReadRequest {
-  threadId: bigint;
+  peerKey: Uint8Array;
 
   constructor(v?: IMarkWhispersReadRequest) {
-    this.threadId = v?.threadId || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
   }
 
   static encode(m: MarkWhispersReadRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.threadId) w.uint32(8).uint64(m.threadId);
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
     return w;
   }
 
@@ -4921,7 +4897,7 @@ export class MarkWhispersReadRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.threadId = r.uint64();
+        m.peerKey = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -4952,19 +4928,19 @@ export class MarkWhispersReadResponse {
 }
 
 export type IDeleteWhisperThreadRequest = {
-  threadId?: bigint;
+  peerKey?: Uint8Array;
 }
 
 export class DeleteWhisperThreadRequest {
-  threadId: bigint;
+  peerKey: Uint8Array;
 
   constructor(v?: IDeleteWhisperThreadRequest) {
-    this.threadId = v?.threadId || BigInt(0);
+    this.peerKey = v?.peerKey || new Uint8Array();
   }
 
   static encode(m: DeleteWhisperThreadRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.threadId) w.uint32(8).uint64(m.threadId);
+    if (m.peerKey.length) w.uint32(10).bytes(m.peerKey);
     return w;
   }
 
@@ -4976,7 +4952,7 @@ export class DeleteWhisperThreadRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.threadId = r.uint64();
+        m.peerKey = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -5902,9 +5878,9 @@ export type IWhisperThread = {
   peerKey?: Uint8Array;
   alias?: string;
   unreadCount?: number;
-  lastReceiveTimes?: bigint[];
   lastMessageTime?: bigint;
   lastMessageId?: bigint;
+  hasUnread?: boolean;
 }
 
 export class WhisperThread {
@@ -5913,9 +5889,9 @@ export class WhisperThread {
   peerKey: Uint8Array;
   alias: string;
   unreadCount: number;
-  lastReceiveTimes: bigint[];
   lastMessageTime: bigint;
   lastMessageId: bigint;
+  hasUnread: boolean;
 
   constructor(v?: IWhisperThread) {
     this.id = v?.id || BigInt(0);
@@ -5923,9 +5899,9 @@ export class WhisperThread {
     this.peerKey = v?.peerKey || new Uint8Array();
     this.alias = v?.alias || "";
     this.unreadCount = v?.unreadCount || 0;
-    this.lastReceiveTimes = v?.lastReceiveTimes ? v.lastReceiveTimes : [];
     this.lastMessageTime = v?.lastMessageTime || BigInt(0);
     this.lastMessageId = v?.lastMessageId || BigInt(0);
+    this.hasUnread = v?.hasUnread || false;
   }
 
   static encode(m: WhisperThread, w?: Writer): Writer {
@@ -5935,9 +5911,9 @@ export class WhisperThread {
     if (m.peerKey.length) w.uint32(18).bytes(m.peerKey);
     if (m.alias.length) w.uint32(26).string(m.alias);
     if (m.unreadCount) w.uint32(32).uint32(m.unreadCount);
-    m.lastReceiveTimes.reduce((w, v) => w.int64(v), w.uint32(42).fork()).ldelim();
     if (m.lastMessageTime) w.uint32(48).int64(m.lastMessageTime);
     if (m.lastMessageId) w.uint32(56).uint64(m.lastMessageId);
+    if (m.hasUnread) w.uint32(72).bool(m.hasUnread);
     return w;
   }
 
@@ -5963,14 +5939,14 @@ export class WhisperThread {
         case 4:
         m.unreadCount = r.uint32();
         break;
-        case 5:
-        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.lastReceiveTimes.push(r.int64());
-        break;
         case 6:
         m.lastMessageTime = r.int64();
         break;
         case 7:
         m.lastMessageId = r.uint64();
+        break;
+        case 9:
+        m.hasUnread = r.bool();
         break;
         default:
         r.skipType(tag & 7);
@@ -6068,10 +6044,11 @@ export class WhisperRecord {
 
 export namespace WhisperRecord {
   export enum State {
-    WHISPER_STATE_RECEIVED = 0,
+    WHISPER_STATE_UNREAD = 0,
     WHISPER_STATE_ENQUEUED = 1,
     WHISPER_STATE_DELIVERED = 2,
     WHISPER_STATE_FAILED = 3,
+    WHISPER_STATE_READ = 4,
   }
 }
 

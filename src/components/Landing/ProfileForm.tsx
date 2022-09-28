@@ -9,6 +9,7 @@ import createUrlRegexp from "url-regex-safe";
 import { validNamePattern } from "../../lib/validation";
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../Form";
 import InternalLink from "../InternalLink";
+import PairingTokenInput from "./PairingTokenInput";
 
 export interface ProfileFormValues {
   name: string;
@@ -17,6 +18,7 @@ export interface ProfileFormValues {
   serverAddress?: string;
   unencrypted: boolean;
   persistLogin: boolean;
+  pairingTokenString: string;
 }
 
 interface ProfileFormProps {
@@ -27,6 +29,7 @@ interface ProfileFormProps {
   secondaryLabel?: string;
   submitLabel: string;
   defaultValues?: Partial<ProfileFormValues>;
+  enablePairing?: boolean;
 }
 
 const ProfileForm: React.FC<ProfileFormProps> = ({
@@ -37,9 +40,10 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
   secondaryLabel,
   submitLabel,
   defaultValues,
+  enablePairing,
 }) => {
   const { control, handleSubmit, watch } = useForm<ProfileFormValues>({
-    mode: "onBlur",
+    mode: "onSubmit",
     defaultValues,
   });
   const advanced = watch("advanced");
@@ -101,6 +105,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
             // defaultValue={`wss://${location.host}/manage`}
           />
           <ToggleInput control={control} label="Stay logged in" name="persistLogin" />
+          {enablePairing && <PairingTokenInput control={control} />}
         </div>
       </div>
       <ButtonSet>

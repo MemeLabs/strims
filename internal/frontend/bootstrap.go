@@ -29,7 +29,7 @@ func init() {
 // bootstrapService ...
 type bootstrapService struct {
 	logger *zap.Logger
-	store  *dao.ProfileStore
+	store  dao.Store
 	app    app.Control
 }
 

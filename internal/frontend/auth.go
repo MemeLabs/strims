@@ -73,9 +73,19 @@ func (s *authService) SignIn(ctx context.Context, req *authv1.SignInRequest) (*a
 	sessionKey := session.ContextSessionKey(ctx)
 	switch c := req.Credentials.(type) {
 	case *authv1.SignInRequest_Password_:
-		profileID, profileKey, err = dao.LoadServerAuthThing(s.store, c.Password.Name, c.Password.Password)
-		if err != nil {
-			return nil, err
+		if c.Password.PairingToken != nil {
+			profileID, profileKey, err = dao.OpenServerAuthThing(c.Password.PairingToken.Auth, c.Password.Password)
+			if err != nil {
+				return nil, err
+			}
+			if err := dao.ImportPairingToken(s.store, c.Password.PairingToken, profileKey); err != nil {
+				return nil, err
+			}
+		} else {
+			profileID, profileKey, err = dao.LoadServerAuthThing(s.store, c.Password.Name, c.Password.Password)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if c.Password.PersistLogin {

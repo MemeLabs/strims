@@ -11,7 +11,9 @@ import (
 	"github.com/MemeLabs/strims/internal/bootstrap"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
+	"github.com/MemeLabs/strims/internal/replication"
 	"github.com/MemeLabs/strims/internal/transfer"
+	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 )
 
@@ -28,43 +30,44 @@ func NewPeerControl(
 	network network.Control,
 	transfer transfer.Control,
 	bootstrap bootstrap.Control,
+	replication replication.Control,
 ) PeerControl {
 	return &peerControl{
-		observers: observers,
-		network:   network,
-		transfer:  transfer,
-		bootstrap: bootstrap,
-		peers:     map[uint64]*peer{},
+		observers:   observers,
+		network:     network,
+		transfer:    transfer,
+		bootstrap:   bootstrap,
+		replication: replication,
 	}
 }
 
 // PeerControl ...
 type peerControl struct {
-	observers *event.Observers
-	network   network.Control
-	transfer  transfer.Control
-	bootstrap bootstrap.Control
+	observers   *event.Observers
+	network     network.Control
+	transfer    transfer.Control
+	bootstrap   bootstrap.Control
+	replication replication.Control
 
 	lock   sync.Mutex
 	nextID uint64
-	peers  map[uint64]*peer
+	peers  syncutil.Map[uint64, Peer]
 }
 
 // Add ...
 func (t *peerControl) Add(vnicPeer *vnic.Peer, client api.PeerClient) Peer {
 	id := atomic.AddUint64(&t.nextID, 1)
 	p := &peer{
-		id:        id,
-		vnic:      vnicPeer,
-		client:    client,
-		network:   t.network.AddPeer(id, vnicPeer, client),
-		transfer:  t.transfer.AddPeer(id, vnicPeer, client),
-		bootstrap: t.bootstrap.AddPeer(id, vnicPeer, client),
+		id:          id,
+		vnic:        vnicPeer,
+		client:      client,
+		network:     t.network.AddPeer(id, vnicPeer, client),
+		transfer:    t.transfer.AddPeer(id, vnicPeer, client),
+		bootstrap:   t.bootstrap.AddPeer(id, vnicPeer, client),
+		replication: t.replication.AddPeer(id, vnicPeer, client),
 	}
 
-	t.lock.Lock()
-	t.peers[p.id] = p
-	t.lock.Unlock()
+	t.peers.Set(id, p)
 
 	t.observers.EmitLocal(event.PeerAdd{
 		ID:     id,
@@ -76,9 +79,7 @@ func (t *peerControl) Add(vnicPeer *vnic.Peer, client api.PeerClient) Peer {
 
 // Remove ...
 func (t *peerControl) Remove(p Peer) {
-	t.lock.Lock()
-	delete(t.peers, p.ID())
-	t.lock.Unlock()
+	t.peers.Delete(p.ID())
 
 	t.network.RemovePeer(p.ID())
 	t.transfer.RemovePeer(p.ID())
@@ -92,24 +93,13 @@ func (t *peerControl) Remove(p Peer) {
 
 // Get ...
 func (t *peerControl) Get(id uint64) Peer {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.peers[id]
+	p, _ := t.peers.Get(id)
+	return p
 }
 
 // List ...
 func (t *peerControl) List() []Peer {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	peers := make([]Peer, len(t.peers))
-	var n int
-	for _, p := range t.peers {
-		peers[n] = p
-		n++
-	}
-
-	return peers
+	return t.peers.Values()
 }
 
 // Peer ...
@@ -124,17 +114,19 @@ type Peer interface {
 
 // Peer ...
 type peer struct {
-	id        uint64
-	client    api.PeerClient
-	vnic      *vnic.Peer
-	network   network.Peer
-	transfer  transfer.Peer
-	bootstrap bootstrap.Peer
+	id          uint64
+	client      api.PeerClient
+	vnic        *vnic.Peer
+	network     network.Peer
+	transfer    transfer.Peer
+	bootstrap   bootstrap.Peer
+	replication replication.Peer
 }
 
-func (p *peer) ID() uint64                { return p.id }
-func (p *peer) Client() api.PeerClient    { return p.client }
-func (p *peer) VNIC() *vnic.Peer          { return p.vnic }
-func (p *peer) Network() network.Peer     { return p.network }
-func (p *peer) Transfer() transfer.Peer   { return p.transfer }
-func (p *peer) Bootstrap() bootstrap.Peer { return p.bootstrap }
+func (p *peer) ID() uint64                    { return p.id }
+func (p *peer) Client() api.PeerClient        { return p.client }
+func (p *peer) VNIC() *vnic.Peer              { return p.vnic }
+func (p *peer) Network() network.Peer         { return p.network }
+func (p *peer) Transfer() transfer.Peer       { return p.transfer }
+func (p *peer) Bootstrap() bootstrap.Peer     { return p.bootstrap }
+func (p *peer) Replication() replication.Peer { return p.replication }

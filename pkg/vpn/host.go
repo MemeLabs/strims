@@ -64,10 +64,6 @@ type Host struct {
 	hashTableStore       *HashTableStore
 }
 
-// TODO: get networks
-// TODO: get peers
-// TODO: get peers by network
-
 // VNIC ...
 func (h *Host) VNIC() *vnic.Host {
 	return h.vnic

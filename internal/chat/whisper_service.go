@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/network/dialer"
@@ -18,19 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	whisperRateLimitMaxCount = 15
-	whisperRateLimitPeriod   = 30 * time.Second
-)
+const whisperMaxUnreadCount = 15
 
-var (
-	errWhisperRateLimit     = errors.New("whisper rate limit exceeded")
-	errWhisperInternalError = errors.New("unable to receive whisper")
-)
+var errWhisperInternalError = errors.New("unable to receive whisper")
 
 func newWhisperService(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 ) *whisperService {
 	return &whisperService{
 		logger: logger,
@@ -41,7 +34,7 @@ func newWhisperService(
 
 type whisperService struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	closeOnce sync.Once
 	done      chan struct{}
 	lock      sync.Mutex
@@ -78,6 +71,14 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 	}
 
 	err = d.store.Update(func(tx kv.RWTx) error {
+		n, err := dao.UnreadChatWhisperRecordsByPeerKey.Count(tx, peerCert.Key)
+		if err != nil {
+			return err
+		}
+		if n > whisperMaxUnreadCount {
+			return errWhisperInternalError
+		}
+
 		thread, err := dao.ChatWhisperThreadsByPeerKey.Get(tx, peerCert.Key)
 		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
@@ -90,16 +91,10 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 		}
 
 		thread.Alias = peerCert.Subject
-		thread.UnreadCount++
-		thread.LastReceiveTimes = updateWhisperLastReceiveTimes(thread.LastReceiveTimes, now)
-		thread.LastMessageTime = now.UnixNano() / int64(timeutil.Precision)
+		thread.LastMessageTime = now.UnixMilli()
 		thread.LastMessageId = record.Id
+		thread.HasUnread = true
 
-		if len(thread.LastReceiveTimes) > whisperRateLimitMaxCount {
-			return errWhisperRateLimit
-		}
-
-		record.ThreadId = thread.Id
 		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
 			return err
 		}
@@ -110,15 +105,4 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 	}
 
 	return &chatv1.WhisperSendMessageResponse{}, nil
-}
-
-func updateWhisperLastReceiveTimes(src []int64, now timeutil.Time) []int64 {
-	threshold := now.Add(-whisperRateLimitPeriod).UnixNano() / int64(timeutil.Precision)
-	dst := make([]int64, 0, len(src)+1)
-	for _, t := range src {
-		if t > threshold {
-			dst = append(dst, t)
-		}
-	}
-	return append(dst, now.UnixNano()/int64(timeutil.Precision))
 }

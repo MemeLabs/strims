@@ -66,15 +66,15 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *ch
 		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return
 		}
-		emotes, err = dao.GetChatEmotesByServerID(tx, id)
+		emotes, err = dao.ChatEmotesByServer.GetAllByRefID(tx, id)
 		if err != nil {
 			return
 		}
-		modifiers, err = dao.GetChatModifiersByServerID(tx, id)
+		modifiers, err = dao.ChatModifiersByServer.GetAllByRefID(tx, id)
 		if err != nil {
 			return
 		}
-		tags, err = dao.GetChatTagsByServerID(tx, id)
+		tags, err = dao.ChatTagsByServer.GetAllByRefID(tx, id)
 		if err != nil {
 			return
 		}
@@ -85,7 +85,7 @@ func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *ch
 
 func newChatServer(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
@@ -140,7 +140,7 @@ func newWriter(k *key.Key, opt ppspp.SwarmOptions) (*ppspp.Swarm, *protoutil.Chu
 
 type chatServer struct {
 	logger         *zap.Logger
-	store          *dao.ProfileStore
+	store          dao.Store
 	observers      *event.Observers
 	dialer         network.Dialer
 	transfer       transfer.Control

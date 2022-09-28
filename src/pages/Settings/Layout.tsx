@@ -41,6 +41,9 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       dragThreshold={100}
       direction="right"
     >
+      <NavLink className={linkClassName} onClick={onLinkClick} to="profile">
+        Profile
+      </NavLink>
       <NavLink className={linkClassName} onClick={onLinkClick} to="networks">
         Networks
       </NavLink>

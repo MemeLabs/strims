@@ -100,7 +100,7 @@ func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	transfer transfer.Control,
 	broker Broker,
@@ -135,7 +135,7 @@ type control struct {
 	ctx          context.Context
 	logger       *zap.Logger
 	vpn          *vpn.Host
-	store        *dao.ProfileStore
+	store        dao.Store
 	observers    *event.Observers
 	broker       Broker
 	profile      *profilev1.Profile

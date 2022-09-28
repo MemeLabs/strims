@@ -48,7 +48,7 @@ func (o *Observer) Emit(v any) {
 			select {
 			case <-t.C:
 				caller, _ := o.callers.Load(chi)
-				log.Printf("froze in channel registered at %s", caller.(string))
+				log.Panicf("froze in channel registered at %s", caller.(string))
 			case <-done:
 			}
 		}()

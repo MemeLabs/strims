@@ -29,7 +29,7 @@ func init() {
 type videoHLSEgressService struct {
 	app    app.Control
 	logger *zap.Logger
-	store  *dao.ProfileStore
+	store  dao.Store
 }
 
 // IsSupported ...

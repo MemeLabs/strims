@@ -21,6 +21,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -38,7 +39,7 @@ func init() {
 // chatService ...
 type chatService struct {
 	app    app.Control
-	store  *dao.ProfileStore
+	store  dao.Store
 	logger *zap.Logger
 }
 
@@ -177,7 +178,7 @@ func (s *chatService) GetEmote(ctx context.Context, req *chatv1.GetEmoteRequest)
 
 // ListEmotes ...
 func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequest) (*chatv1.ListEmotesResponse, error) {
-	emotes, err := dao.GetChatEmotesByServerID(s.store, req.ServerId)
+	emotes, err := dao.ChatEmotesByServer.GetAllByRefID(s.store, req.ServerId)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +264,7 @@ func (s *chatService) GetModifier(ctx context.Context, req *chatv1.GetModifierRe
 
 // ListModifiers ...
 func (s *chatService) ListModifiers(ctx context.Context, req *chatv1.ListModifiersRequest) (*chatv1.ListModifiersResponse, error) {
-	modifiers, err := dao.GetChatModifiersByServerID(s.store, req.ServerId)
+	modifiers, err := dao.ChatModifiersByServer.GetAllByRefID(s.store, req.ServerId)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +322,7 @@ func (s *chatService) GetTag(ctx context.Context, req *chatv1.GetTagRequest) (*c
 
 // ListTags ...
 func (s *chatService) ListTags(ctx context.Context, req *chatv1.ListTagsRequest) (*chatv1.ListTagsResponse, error) {
-	tags, err := dao.GetChatTagsByServerID(s.store, req.ServerId)
+	tags, err := dao.ChatTagsByServer.GetAllByRefID(s.store, req.ServerId)
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +520,6 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		thread.LastMessageTime = timeutil.Now().UnixNano() / int64(timeutil.Precision)
 		thread.LastMessageId = record.Id
 
-		record.ThreadId = thread.Id
 		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
 			return err
 		}
@@ -561,13 +561,8 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 			return
 		}
 
-		for _, t := range threads {
-			ch <- &chatv1.WatchWhispersResponse{
-				PeerKey: t.PeerKey,
-				Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
-					ThreadUpdate: t,
-				},
-			}
+		for _, thread := range threads {
+			s.emitWatchWhispersThreadUpdate(ctx, ch, thread)
 		}
 
 		for {
@@ -575,19 +570,12 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 			case e := <-events:
 				switch e := e.(type) {
 				case *chatv1.WhisperThreadChangeEvent:
-					ch <- &chatv1.WatchWhispersResponse{
-						PeerKey: e.WhisperThread.PeerKey,
-						Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
-							ThreadUpdate: e.WhisperThread,
-						},
-					}
+					s.emitWatchWhispersThreadUpdate(ctx, ch, proto.Clone(e.WhisperThread).(*chatv1.WhisperThread))
 				case *chatv1.WhisperThreadDeleteEvent:
 					ch <- &chatv1.WatchWhispersResponse{
 						PeerKey: e.WhisperThread.PeerKey,
 						Body: &chatv1.WatchWhispersResponse_ThreadDelete{
-							ThreadDelete: &chatv1.WatchWhispersResponse_WhisperThreadDelete{
-								ThreadId: e.WhisperThread.Id,
-							},
+							ThreadDelete: &chatv1.WatchWhispersResponse_WhisperThreadDelete{},
 						},
 					}
 				case *chatv1.WhisperRecordChangeEvent:
@@ -603,7 +591,6 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 						Body: &chatv1.WatchWhispersResponse_WhisperDelete_{
 							WhisperDelete: &chatv1.WatchWhispersResponse_WhisperDelete{
 								RecordId: e.WhisperRecord.Id,
-								ThreadId: e.WhisperRecord.ThreadId,
 							},
 						},
 					}
@@ -617,9 +604,55 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 	return ch, nil
 }
 
+func (s *chatService) emitWatchWhispersThreadUpdate(ctx context.Context, ch chan *chatv1.WatchWhispersResponse, t *chatv1.WhisperThread) {
+	if t.HasUnread {
+		n, err := dao.UnreadChatWhisperRecordsByPeerKey.Count(s.store, t.PeerKey)
+		if err != nil {
+			s.logger.Warn("failed to load unread whisper count", zap.Error(err))
+			return
+		}
+
+		t.UnreadCount = uint32(n)
+	}
+
+	select {
+	case ch <- &chatv1.WatchWhispersResponse{
+		PeerKey: t.PeerKey,
+		Body: &chatv1.WatchWhispersResponse_ThreadUpdate{
+			ThreadUpdate: t,
+		},
+	}:
+	case <-ctx.Done():
+	}
+}
+
 func (s *chatService) MarkWhispersRead(ctx context.Context, req *chatv1.MarkWhispersReadRequest) (*chatv1.MarkWhispersReadResponse, error) {
-	_, err := dao.ChatWhisperThreads.Transform(s.store, req.ThreadId, func(p *chatv1.WhisperThread) error {
-		p.UnreadCount = 0
+	err := s.store.Update(func(tx kv.RWTx) error {
+		id, err := dao.ChatWhisperThreadsByPeerKey.GetID(tx, req.PeerKey)
+		if err != nil {
+			return err
+		}
+		_, err = dao.ChatWhisperThreads.Transform(tx, id, func(p *chatv1.WhisperThread) error {
+			p.HasUnread = false
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		ids, err := dao.UnreadChatWhisperRecordsByPeerKey.GetAllIDs(tx, req.PeerKey)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			_, err := dao.ChatWhisperRecords.Transform(tx, id, func(p *chatv1.WhisperRecord) error {
+				p.State = chatv1.WhisperRecord_WHISPER_STATE_READ
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -629,11 +662,10 @@ func (s *chatService) MarkWhispersRead(ctx context.Context, req *chatv1.MarkWhis
 }
 
 func (s *chatService) DeleteWhisperThread(ctx context.Context, req *chatv1.DeleteWhisperThreadRequest) (*chatv1.DeleteWhisperThreadResponse, error) {
-	err := dao.ChatWhisperThreads.Delete(s.store, req.ThreadId)
+	err := dao.ChatWhisperThreadsByPeerKey.Delete(s.store, req.PeerKey)
 	if err != nil {
 		return nil, err
 	}
-
 	return &chatv1.DeleteWhisperThreadResponse{}, nil
 }
 

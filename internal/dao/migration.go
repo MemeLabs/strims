@@ -11,8 +11,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-const CurrentVersion = 1
-
 var storeVersion = NewSingleton(
 	storeVersionNS,
 	&SingletonOptions[daov1.StoreVersion, *daov1.StoreVersion]{
@@ -33,7 +31,7 @@ func checkStoreVersion(s kv.RWStore) (*daov1.StoreVersion, bool, error) {
 	return v, true, nil
 }
 
-func Upgrade(ctx context.Context, logger *zap.Logger, s *ProfileStore) error {
+func Upgrade(ctx context.Context, logger *zap.Logger, s Store) error {
 	_, needUpgrade, err := checkStoreVersion(s)
 	if !needUpgrade || err != nil {
 		return err
@@ -47,7 +45,7 @@ func Upgrade(ctx context.Context, logger *zap.Logger, s *ProfileStore) error {
 	defer mu.Release()
 
 	return s.Update(func(tx kv.RWTx) error {
-		v, needUpgrade, err := checkStoreVersion(s)
+		v, needUpgrade, err := checkStoreVersion(tx)
 		if !needUpgrade || err != nil {
 			return err
 		}
@@ -69,7 +67,7 @@ func Upgrade(ctx context.Context, logger *zap.Logger, s *ProfileStore) error {
 	})
 }
 
-func upgrade(s *ProfileStore, tx kv.RWTx, v uint32) error {
+func upgrade(s Store, tx kv.RWTx, v uint32) error {
 	switch v {
 	case 0:
 		if err := upgradeAssignVersion(s, tx, ChatWhisperThreads); err != nil {
@@ -88,12 +86,17 @@ func upgrade(s *ProfileStore, tx kv.RWTx, v uint32) error {
 			return err
 		}
 		fallthrough
+	case 1:
+		if err := UnreadChatWhisperRecordsByPeerKey.rebuild(tx); err != nil {
+			return err
+		}
+		fallthrough
 	default:
 		return nil
 	}
 }
 
-func upgradeAssignVersion[M any, R TableRecord[M]](s *ProfileStore, tx kv.RWTx, t *Table[M, R]) error {
+func upgradeAssignVersion[M any, R TableRecord[M]](s Store, tx kv.RWTx, t *Table[M, R]) error {
 	ms, err := t.GetAll(tx)
 	if err != nil {
 		return err
@@ -106,7 +109,7 @@ func upgradeAssignVersion[M any, R TableRecord[M]](s *ProfileStore, tx kv.RWTx, 
 	}
 
 	for _, m := range ms {
-		m.ProtoReflect().Set(d, protoreflect.ValueOf(versionvector.NewSeed(s.ReplicaKey()).ProtoReflect()))
+		m.ProtoReflect().Set(d, protoreflect.ValueOf(versionvector.NewSeed(s.ReplicaID()).ProtoReflect()))
 		if err := t.Update(tx, m); err != nil {
 			return err
 		}

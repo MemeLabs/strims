@@ -254,7 +254,7 @@ const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread, o
   });
 
   const handleDeleteThreadClick = useStableCallback(() => {
-    void client.chat.deleteWhisperThread({ threadId: thread.id });
+    void client.chat.deleteWhisperThread({ peerKey: thread.peerKey });
     closeMenu();
   });
 

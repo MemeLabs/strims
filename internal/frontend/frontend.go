@@ -46,7 +46,7 @@ func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
 type ServiceParams struct {
 	Logger  *zap.Logger
 	Profile *profilev1.Profile
-	Store   *dao.ProfileStore
+	Store   dao.Store
 	Queue   queue.Queue
 	App     app.Control
 }

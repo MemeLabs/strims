@@ -35,7 +35,7 @@ func unmarshalSessionID(id string) (uint64, *dao.StorageKey, error) {
 	return profileID, storageKey, nil
 }
 
-func marshalSessionID(profile *profilev1.Profile, store *dao.ProfileStore) string {
+func marshalSessionID(profile *profilev1.Profile, store dao.Store) string {
 	id := strconv.FormatUint(profile.Id, 36)
 	storageKey := base64.RawURLEncoding.EncodeToString(store.Key().Key())
 	return id + "." + storageKey

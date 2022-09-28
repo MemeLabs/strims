@@ -1,0 +1,49 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.replication.v1;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/replication/v1;replicationv1";
+option java_package = "gg.strims.replication.v1";
+option swift_prefix = "SRE";
+
+import "auth/v1/auth.proto";
+import "dao/v1/dao.proto";
+
+message Version {
+  uint32 replica_id = 1;
+  dao.v1.VersionVector current_version = 2;
+}
+
+message Event {
+  int64 namespace = 1;
+  uint64 id = 2;
+  dao.v1.VersionVector version = 3;
+  bool delete = 4;
+  bytes record = 5;
+}
+
+message EventBundle {
+  repeated Event events = 2;
+}
+
+message EventLog {
+  uint64 id = 1;
+  uint32 replica_id = 2;
+  repeated Event events = 3;
+}
+
+message CreatePairingTokenRequest{
+  uint64 network_id = 1;
+  uint64 bootstrap_id = 2;
+}
+
+message CreatePairingTokenResponse{
+  auth.v1.PairingToken token = 1;
+}
+
+service ReplicationFrontend {
+  rpc CreatePairingToken(CreatePairingTokenRequest) returns (CreatePairingTokenResponse);
+}

@@ -26,7 +26,7 @@ type Control interface {
 func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	transfer transfer.Control,
 ) Control {
@@ -45,7 +45,7 @@ func NewControl(
 type control struct {
 	ctx      context.Context
 	logger   *zap.Logger
-	store    *dao.ProfileStore
+	store    dao.Store
 	transfer transfer.Control
 
 	events  chan any

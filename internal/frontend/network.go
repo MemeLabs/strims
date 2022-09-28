@@ -37,7 +37,7 @@ func init() {
 // networkService ...
 type networkService struct {
 	profile *profilev1.Profile
-	store   *dao.ProfileStore
+	store   dao.Store
 	app     app.Control
 }
 

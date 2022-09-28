@@ -38,7 +38,7 @@ func newChatService(
 	logger *zap.Logger,
 	ew *protoutil.ChunkStreamWriter,
 	observers *event.Observers,
-	store *dao.ProfileStore,
+	store dao.Store,
 	config *chatv1.Server,
 ) *chatService {
 	return &chatService{
@@ -58,7 +58,7 @@ type chatService struct {
 	logger            *zap.Logger
 	eventWriter       *protoutil.ChunkStreamWriter
 	observers         *event.Observers
-	store             *dao.ProfileStore
+	store             dao.Store
 	config            atomic.Pointer[chatv1.Server]
 	listingID         uint64
 	broadcastTicker   *time.Ticker

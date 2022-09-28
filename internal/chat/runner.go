@@ -21,7 +21,7 @@ import (
 func newRunner(
 	ctx context.Context,
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	dialer network.Dialer,
 	transfer transfer.Control,
@@ -75,7 +75,7 @@ func (r readers) CheckpointCache() {
 
 type runnerAdapter struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	dialer    network.Dialer
 	transfer  transfer.Control

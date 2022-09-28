@@ -28,7 +28,7 @@ type Session struct {
 	// maybe attached clients? or a count at least?
 
 	Profile *profilev1.Profile
-	Store   *dao.ProfileStore
+	Store   dao.Store
 	Queue   queue.Queue
 	App     app.Control
 }
@@ -78,7 +78,10 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 	}
 	observers := event.NewObservers(t.logger, queue, storageKey)
 
-	store := dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: dao.EventEmitterFunc(observers.EmitGlobal)})
+	store, err := dao.NewReplicatedStore(dao.NewProfileStore(profileID, storageKey, t.store, &dao.ProfileStoreOptions{EventEmitter: dao.EventEmitterFunc(observers.EmitGlobal)}))
+	if err != nil {
+		return nil, err
+	}
 
 	err = dao.Upgrade(context.Background(), t.logger, store)
 	if err != nil {

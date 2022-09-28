@@ -12,6 +12,7 @@ import (
 	"time"
 
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"google.golang.org/protobuf/proto"
@@ -46,7 +47,7 @@ func CreateServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byt
 		return 0, nil, err
 	}
 
-	userb, err := proto.Marshal(&authv1.ServerUserThing{
+	user := &authv1.ServerUserThing{
 		Name: name,
 		Credentials: &authv1.ServerUserThing_Password_{
 			Password: &authv1.ServerUserThing_Password{
@@ -54,45 +55,68 @@ func CreateServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byt
 				Secret:  secret,
 			},
 		},
-	})
-	if err != nil {
+	}
+
+	if _, err = StoreProfileThing(s, user, profile, profileKey); err != nil {
 		return 0, nil, err
+	}
+	return profile.Id, profileKey, nil
+}
+
+func StoreProfileThing(s kv.BlobStore, user *authv1.ServerUserThing, profile *profilev1.Profile, profileKey []byte) (*ProfileStore, error) {
+	userb, err := proto.Marshal(user)
+	if err != nil {
+		return nil, err
 	}
 
 	if err = s.CreateStoreIfNotExists("profiles"); err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	if err = s.CreateStoreIfNotExists("sessions"); err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	err = s.Update("profiles", func(tx kv.BlobTx) error {
-		_, err := tx.Get(name)
+		_, err := tx.Get(user.Name)
 		if err != kv.ErrRecordNotFound {
 			if err != nil {
 				return err
 			}
 			return errors.New("username already taken")
 		}
-		return tx.Put(name, userb)
+		return tx.Put(user.Name, userb)
 	})
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	profileStorageKey, _ := NewStorageKeyFromBytes(profileKey, nil)
 	store := NewProfileStore(profile.Id, profileStorageKey, s, nil)
 	if err = store.Init(); err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 	if err := Profile.Set(store, profile); err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
-	return profile.Id, profileKey, nil
+	return store, nil
 }
 
-func LoadServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byte, error) {
+func ImportPairingToken(s kv.BlobStore, tok *authv1.PairingToken, profileKey []byte) error {
+	store, err := StoreProfileThing(s, tok.Auth, tok.Profile, profileKey)
+	if err != nil {
+		return err
+	}
+	if err := Networks.Insert(store, tok.Network); err != nil {
+		return err
+	}
+	if err := BootstrapClients.Insert(store, tok.Bootstrap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetServerAuthThing(s kv.BlobStore, name string) (*authv1.ServerUserThing, error) {
 	user := &authv1.ServerUserThing{}
 	err := s.View("profiles", func(tx kv.BlobTx) error {
 		b, err := tx.Get(name)
@@ -102,9 +126,12 @@ func LoadServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byte,
 		return proto.Unmarshal(b, user)
 	})
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
+	return user, nil
+}
 
+func OpenServerAuthThing(user *authv1.ServerUserThing, password string) (uint64, []byte, error) {
 	switch c := user.Credentials.(type) {
 	case *authv1.ServerUserThing_Password_:
 		key, err := NewStorageKeyFromPassword(password, c.Password.AuthKey)
@@ -125,6 +152,14 @@ func LoadServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byte,
 	default:
 		return 0, nil, errors.New("unsupported credentials type")
 	}
+}
+
+func LoadServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byte, error) {
+	user, err := GetServerAuthThing(s, name)
+	if err != nil {
+		return 0, nil, err
+	}
+	return OpenServerAuthThing(user, password)
 }
 
 func NewSessionToken() (*SessionToken, error) {

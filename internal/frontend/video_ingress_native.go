@@ -31,7 +31,7 @@ func init() {
 type videoIngressService struct {
 	profile *profilev1.Profile
 	app     app.Control
-	store   *dao.ProfileStore
+	store   dao.Store
 }
 
 func (s *videoIngressService) IsSupported(ctx context.Context, r *videov1.VideoIngressIsSupportedRequest) (*videov1.VideoIngressIsSupportedResponse, error) {

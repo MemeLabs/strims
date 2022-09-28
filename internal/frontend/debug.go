@@ -36,7 +36,7 @@ func init() {
 type debugService struct {
 	debugv1.UnimplementedDebugService
 
-	store  *dao.ProfileStore
+	store  dao.Store
 	app    app.Control
 	logger *zap.Logger
 

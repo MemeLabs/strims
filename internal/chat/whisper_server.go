@@ -24,7 +24,7 @@ var WhisperAddressSalt = []byte("chat:whisper")
 
 func newWhisperServer(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 	profile *profilev1.Profile,
 	dialer network.Dialer,
@@ -46,7 +46,7 @@ func newWhisperServer(
 
 type whisperServer struct {
 	logger    *zap.Logger
-	store     *dao.ProfileStore
+	store     dao.Store
 	observers *event.Observers
 	profile   *profilev1.Profile
 	dialer    network.Dialer

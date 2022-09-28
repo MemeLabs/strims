@@ -51,7 +51,7 @@ func NewControl(
 	ctx context.Context,
 	logger *zap.Logger,
 	vpn *vpn.Host,
-	store *dao.ProfileStore,
+	store dao.Store,
 	observers *event.Observers,
 ) Control {
 	return &control{
@@ -78,7 +78,7 @@ type control struct {
 	ctx    context.Context
 	logger *zap.Logger
 	vpn    *vpn.Host
-	store  *dao.ProfileStore
+	store  dao.Store
 	qosc   *qos.Class
 
 	lock      sync.Mutex
@@ -98,8 +98,8 @@ func (c *control) Run() {
 	peerSerachTicker := timeutil.DefaultTickEmitter.Ticker(peerSearchTickRate)
 	defer peerSerachTicker.Stop()
 
-	debugTicker := timeutil.DefaultTickEmitter.Ticker(30 * time.Second)
-	defer debugTicker.Stop()
+	// debugTicker := timeutil.DefaultTickEmitter.Ticker(30 * time.Second)
+	// defer debugTicker.Stop()
 
 	for {
 		select {
@@ -116,8 +116,8 @@ func (c *control) Run() {
 			}
 		case t := <-peerSerachTicker.C:
 			c.runPeerSearch(t)
-		case t := <-debugTicker.C:
-			c.debug(t)
+		// case t := <-debugTicker.C:
+		// 	c.debug(t)
 		case <-c.ctx.Done():
 			return
 		}
@@ -125,7 +125,6 @@ func (c *control) Run() {
 }
 
 func (c *control) debug(t timeutil.Time) {
-	return
 	var summary strings.Builder
 	for id, p := range c.peers {
 		snap := p.runnerPeer.MetricsSnapshot(t)

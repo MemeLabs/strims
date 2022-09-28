@@ -9,6 +9,8 @@ option go_package = "github.com/MemeLabs/strims/pkg/apis/auth/v1;authv1";
 option java_package = "gg.strims.auth.v1";
 option swift_prefix = "SAU";
 
+import "network/v1/bootstrap/bootstrap.proto";
+import "network/v1/network.proto";
 import "profile/v1/profile.proto";
 
 message SessionThing {
@@ -78,6 +80,14 @@ message LinkedProfile {
   }
 }
 
+message PairingToken {
+  ServerUserThing auth = 1;
+  profile.v1.Profile profile = 2;
+  network.v1.Network network = 3;
+  network.v1.bootstrap.BootstrapClient bootstrap = 4;
+  repeated profile.v1.Device devices = 5;
+}
+
 message SignInRequest {
   message Password {
     string name = 1;
@@ -85,6 +95,7 @@ message SignInRequest {
     string totp_passcode = 3;
     bool persist_session = 4;
     bool persist_login = 5;
+    PairingToken pairing_token = 6;
   }
 
   message Token {

@@ -34,7 +34,7 @@ var swarmCacheMetasByKey = NewUniqueIndex(
 	nil,
 )
 
-func SetSwarmCache(s *ProfileStore, id, salt []byte, c *swarm.Cache) error {
+func SetSwarmCache(s Store, id, salt []byte, c *swarm.Cache) error {
 	m, err := swarmCacheMetasByKey.Get(s, FormatSwarmCacheMetaKey(id, salt))
 	if err != nil {
 		if err != kv.ErrRecordNotFound {
@@ -71,7 +71,7 @@ func SetSwarmCache(s *ProfileStore, id, salt []byte, c *swarm.Cache) error {
 	})
 }
 
-func GetSwarmCache(s *ProfileStore, id, salt []byte) (*swarm.Cache, error) {
+func GetSwarmCache(s kv.RWStore, id, salt []byte) (*swarm.Cache, error) {
 	m, err := swarmCacheMetasByKey.Get(s, FormatSwarmCacheMetaKey(id, salt))
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func GetSwarmCache(s *ProfileStore, id, salt []byte) (*swarm.Cache, error) {
 	return &c, err
 }
 
-func DeleteSwarmCache(s *ProfileStore, id, salt []byte) error {
+func DeleteSwarmCache(s kv.RWStore, id, salt []byte) error {
 	m, err := swarmCacheMetasByKey.Get(s, FormatSwarmCacheMetaKey(id, salt))
 	if err != nil {
 		return err

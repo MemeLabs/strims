@@ -13,6 +13,12 @@
     padding-left: 0.2rem;
   }
 
+  &--inline_input {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
   &__text {
     display: block;
     text-transform: uppercase;

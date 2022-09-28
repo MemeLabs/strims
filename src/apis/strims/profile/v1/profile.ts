@@ -5,6 +5,10 @@ import {
   strims_type_Key,
   strims_type_IKey,
 } from "../../type/key";
+import {
+  strims_dao_v1_VersionVector,
+  strims_dao_v1_IVersionVector,
+} from "../../dao/v1/dao";
 
 export type IUpdateProfileRequest = {
   name?: string;
@@ -275,6 +279,63 @@ export namespace StorageKey {
 
 }
 
+export type IDevice = {
+  id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
+  device?: string;
+  os?: string;
+}
+
+export class Device {
+  id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
+  device: string;
+  os: string;
+
+  constructor(v?: IDevice) {
+    this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
+    this.device = v?.device || "";
+    this.os = v?.os || "";
+  }
+
+  static encode(m: Device, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(18).fork()).ldelim();
+    if (m.device.length) w.uint32(26).string(m.device);
+    if (m.os.length) w.uint32(34).string(m.os);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Device {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Device();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        break;
+        case 3:
+        m.device = r.string();
+        break;
+        case 4:
+        m.os = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IProfile = {
   id?: bigint;
   name?: string;
@@ -334,18 +395,26 @@ export class Profile {
 
 export type IProfileID = {
   nextId?: bigint;
+  lastId?: bigint;
+  nextRange?: strims_profile_v1_IProfileID;
 }
 
 export class ProfileID {
   nextId: bigint;
+  lastId: bigint;
+  nextRange: strims_profile_v1_ProfileID | undefined;
 
   constructor(v?: IProfileID) {
     this.nextId = v?.nextId || BigInt(0);
+    this.lastId = v?.lastId || BigInt(0);
+    this.nextRange = v?.nextRange && new strims_profile_v1_ProfileID(v.nextRange);
   }
 
   static encode(m: ProfileID, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.nextId) w.uint32(8).uint64(m.nextId);
+    if (m.lastId) w.uint32(16).uint64(m.lastId);
+    if (m.nextRange) strims_profile_v1_ProfileID.encode(m.nextRange, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -358,6 +427,12 @@ export class ProfileID {
       switch (tag >> 3) {
         case 1:
         m.nextId = r.uint64();
+        break;
+        case 2:
+        m.lastId = r.uint64();
+        break;
+        case 3:
+        m.nextRange = strims_profile_v1_ProfileID.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -402,6 +477,12 @@ export const strims_profile_v1_StorageKey = StorageKey;
 export type strims_profile_v1_StorageKey = StorageKey;
 /* @internal */
 export type strims_profile_v1_IStorageKey = IStorageKey;
+/* @internal */
+export const strims_profile_v1_Device = Device;
+/* @internal */
+export type strims_profile_v1_Device = Device;
+/* @internal */
+export type strims_profile_v1_IDevice = IDevice;
 /* @internal */
 export const strims_profile_v1_Profile = Profile;
 /* @internal */

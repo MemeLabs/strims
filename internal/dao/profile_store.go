@@ -6,11 +6,13 @@ package dao
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/options"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -22,14 +24,10 @@ type ProfileStoreOptions struct {
 
 // NewProfileStore ...
 func NewProfileStore(profileID uint64, key *StorageKey, store kv.BlobStore, opt *ProfileStoreOptions) *ProfileStore {
-	if opt == nil {
-		opt = &ProfileStoreOptions{}
-	}
-
 	return &ProfileStore{
 		store: store,
 		key:   key,
-		opt:   opt,
+		opt:   options.New(opt),
 		name:  fmt.Sprintf("profile:%d", profileID),
 	}
 }
@@ -44,6 +42,11 @@ type ProfileStore struct {
 	idLock         sync.Mutex
 	nextID         uint64
 	lastReservedID uint64
+}
+
+// BlobStore ...
+func (s *ProfileStore) BlobStore() kv.BlobStore {
+	return s.store
 }
 
 // Init ...
@@ -131,11 +134,6 @@ func (s *ProfileStore) GenerateID() (uint64, error) {
 	return nextID, nil
 }
 
-func (s *ProfileStore) ReplicaKey() uint32 {
-	// TODO load from... profile?
-	return 0
-}
-
 type profileStoreTx struct {
 	tx       kv.BlobTx
 	sk       *StorageKey
@@ -155,11 +153,27 @@ func (t *profileStoreTx) Update(fn func(tx kv.RWTx) error) error {
 }
 
 func (t *profileStoreTx) Put(key string, m proto.Message) error {
-	return put(t.tx, t.sk, key, m)
+	b, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+	b, err = t.sk.Seal(b)
+	if err != nil {
+		return err
+	}
+	return t.tx.Put(key, b)
 }
 
 func (t *profileStoreTx) Get(key string, m proto.Message) error {
-	return get(t.tx, t.sk, key, m)
+	b, err := t.tx.Get(key)
+	if err != nil {
+		return err
+	}
+	b, err = t.sk.Open(b)
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(b, m)
 }
 
 func (t *profileStoreTx) Delete(key string) error {
@@ -167,11 +181,46 @@ func (t *profileStoreTx) Delete(key string) error {
 }
 
 func (t *profileStoreTx) ScanPrefix(prefix string, messages any) error {
-	return scanPrefix(t.tx, t.sk, prefix, messages)
+	return t.ScanCursor(kv.Cursor{After: prefix, Prefix: prefix}, messages)
 }
 
 func (t *profileStoreTx) ScanCursor(cursor kv.Cursor, messages any) error {
-	return scanCursor(t.tx, t.sk, cursor, messages)
+	bs, err := t.tx.ScanCursor(cursor)
+	if err != nil {
+		return err
+	}
+
+	mv := reflect.ValueOf(messages).Elem()
+	messages = mv.Interface()
+
+	for _, b := range bs {
+		b, err = t.sk.Open(b)
+		if err != nil {
+			return err
+		}
+		messages, err = t.appendUnmarshalled(messages, b)
+		if err != nil {
+			return err
+		}
+	}
+
+	mv.Set(reflect.ValueOf(messages))
+
+	return nil
+}
+
+func (t *profileStoreTx) appendUnmarshalled(messages any, bufs ...[]byte) (any, error) {
+	mt := reflect.TypeOf(messages).Elem().Elem()
+	mv := reflect.ValueOf(messages)
+	for _, b := range bufs {
+		m := reflect.New(mt)
+		if err := proto.Unmarshal(b, m.Interface().(proto.Message)); err != nil {
+			return nil, err
+		}
+		mv = reflect.Append(mv, m)
+	}
+
+	return mv.Interface(), nil
 }
 
 func (t *profileStoreTx) Salt() []byte {

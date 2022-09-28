@@ -1,6 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { Base64 } from "js-base64";
 import qs from "qs";
 import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +9,7 @@ import { FiUser } from "react-icons/fi";
 import { Navigate } from "react-router-dom";
 import { useTitle } from "react-use";
 
-import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import { LinkedProfile, PairingToken } from "../apis/strims/auth/v1/auth";
 import { ButtonSet } from "../components/Form";
 import InternalLink from "../components/InternalLink";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
@@ -113,12 +114,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
   }
 
   const handleSubmit = (values: ProfileFormValues) => {
+    const pairingToken = values.pairingTokenString
+      ? PairingToken.decode(Base64.toUint8Array(values.pairingTokenString))
+      : undefined;
     void sessionOps.signIn(values.serverAddress, {
       credentials: {
         password: {
           name: values.name,
           password: values.password,
           persistLogin: values.persistLogin,
+          pairingToken,
         },
       },
     });
@@ -136,6 +141,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
           name: selectedProfile?.name,
           serverAddress: selectedProfile?.serverAddress,
         }}
+        enablePairing
       />
     </LandingPageLayout>
   );

@@ -18,7 +18,7 @@ import (
 
 func newChatReader(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	transfer transfer.Control,
 	key []byte,
 	networkKey []byte,
@@ -62,7 +62,7 @@ func newChatReader(
 
 type chatReader struct {
 	logger          *zap.Logger
-	store           *dao.ProfileStore
+	store           dao.Store
 	transfer        transfer.Control
 	key             []byte
 	networkKey      []byte

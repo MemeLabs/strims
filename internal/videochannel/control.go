@@ -22,7 +22,7 @@ type Control interface {
 }
 
 // NewControl ...
-func NewControl(store *dao.ProfileStore) Control {
+func NewControl(store dao.Store) Control {
 	return &control{
 		store: store,
 	}
@@ -30,7 +30,7 @@ func NewControl(store *dao.ProfileStore) Control {
 
 // Control ...
 type control struct {
-	store *dao.ProfileStore
+	store dao.Store
 }
 
 // GetChannel ...

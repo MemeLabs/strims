@@ -20,7 +20,7 @@ func init() {
 }
 
 type vnicFrontendService struct {
-	store *dao.ProfileStore
+	store dao.Store
 }
 
 func (s *vnicFrontendService) GetConfig(ctx context.Context, r *vnicv1.GetConfigRequest) (*vnicv1.GetConfigResponse, error) {

@@ -22,7 +22,7 @@ const whisperDeliveryTimeout = 30 * time.Second
 
 func newWhisperDeliveryService(
 	logger *zap.Logger,
-	store *dao.ProfileStore,
+	store dao.Store,
 	dialer network.Dialer,
 ) *whisperDeliveryService {
 	return &whisperDeliveryService{
@@ -37,7 +37,7 @@ func newWhisperDeliveryService(
 
 type whisperDeliveryService struct {
 	logger *zap.Logger
-	store  *dao.ProfileStore
+	store  dao.Store
 	dialer network.Dialer
 
 	enqueued chan *chatv1.WhisperRecord

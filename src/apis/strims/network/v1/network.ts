@@ -24,6 +24,10 @@ import {
 import {
   strims_network_v1_errors_ErrorCode,
 } from "./errors/errors";
+import {
+  strims_dao_v1_VersionVector,
+  strims_dao_v1_IVersionVector,
+} from "../../dao/v1/dao";
 
 export type ICreateServerRequest = {
   name?: string;
@@ -445,6 +449,7 @@ export class ServerConfig {
 
 export type INetwork = {
   id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
   certificate?: strims_type_ICertificate;
   alias?: string;
   serverConfig?: strims_network_v1_IServerConfig;
@@ -453,6 +458,7 @@ export type INetwork = {
 
 export class Network {
   id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
   certificate: strims_type_Certificate | undefined;
   alias: string;
   serverConfig: strims_network_v1_ServerConfig | undefined;
@@ -460,6 +466,7 @@ export class Network {
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.alias = v?.alias || "";
     this.serverConfig = v?.serverConfig && new strims_network_v1_ServerConfig(v.serverConfig);
@@ -469,6 +476,7 @@ export class Network {
   static encode(m: Network, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(58).fork()).ldelim();
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
     if (m.alias.length) w.uint32(34).string(m.alias);
     if (m.serverConfig) strims_network_v1_ServerConfig.encode(m.serverConfig, w.uint32(42).fork()).ldelim();
@@ -485,6 +493,9 @@ export class Network {
       switch (tag >> 3) {
         case 1:
         m.id = r.uint64();
+        break;
+        case 7:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         case 2:
         m.certificate = strims_type_Certificate.decode(r, r.uint32());

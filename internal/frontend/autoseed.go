@@ -23,7 +23,7 @@ func init() {
 // autoseedService ...
 type autoseedService struct {
 	autoseedv1.UnimplementedAutoseedFrontendService
-	store *dao.ProfileStore
+	store dao.Store
 }
 
 func (s *autoseedService) GetConfig(ctx context.Context, r *autoseedv1.GetConfigRequest) (*autoseedv1.GetConfigResponse, error) {

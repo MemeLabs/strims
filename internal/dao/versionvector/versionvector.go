@@ -2,29 +2,39 @@ package versionvector
 
 import (
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"golang.org/x/exp/maps"
 )
 
 // New creates a new version vector proceeding from all the supplied values
 func New(vs ...*daov1.VersionVector) *daov1.VersionVector {
 	d := &daov1.VersionVector{
-		Versions: map[uint32]uint64{},
+		Value: map[uint32]uint64{},
 	}
 	Update(d, vs...)
 	return d
 }
 
-func NewSeed(key uint32) *daov1.VersionVector {
+func NewSeed(id uint32) *daov1.VersionVector {
 	return &daov1.VersionVector{
-		Versions: map[uint32]uint64{key: 1},
+		Value:     map[uint32]uint64{id: 1},
+		UpdatedAt: timeutil.Now().UnixMilli(),
 	}
 }
 
 func Update(d *daov1.VersionVector, vs ...*daov1.VersionVector) {
+	initValue(d)
 	for _, vv := range vs {
-		for i, v := range vv.Versions {
-			if d.Versions[i] < v {
-				d.Versions[i] = v
+		if d.UpdatedAt < vv.UpdatedAt {
+			d.UpdatedAt = vv.UpdatedAt
+		}
+
+		if vv.Value == nil {
+			continue
+		}
+		for i, v := range vv.Value {
+			if d.Value[i] < v {
+				d.Value[i] = v
 			}
 		}
 	}
@@ -32,26 +42,43 @@ func Update(d *daov1.VersionVector, vs ...*daov1.VersionVector) {
 
 func Clone(v *daov1.VersionVector) *daov1.VersionVector {
 	return &daov1.VersionVector{
-		Versions: maps.Clone(v.Versions),
+		Value: maps.Clone(v.Value),
 	}
 }
 
 // Increment the version corresponding to the replica key
-func Increment(v *daov1.VersionVector, key uint32) {
-	v.Versions[key]++
+func Increment(v *daov1.VersionVector, id uint32) {
+	initValue(v)
+	v.Value[id]++
+	v.UpdatedAt = timeutil.Now().UnixMilli()
 }
 
-// Precedes returns true if b descends from a
-func Precedes(a, b *daov1.VersionVector) bool {
-	for i, v := range a.Versions {
-		if b.Versions[i] < v {
-			return false
-		}
+// Compare returns the integer comparison of two version vectors and whether or
+// not they are ordered
+func Compare(a, b *daov1.VersionVector) (int, bool) {
+	initValue(a)
+	initValue(b)
+	var lt, gt bool
+	for i, v := range b.Value {
+		lt = lt || a.Value[i] < v
+		gt = gt || a.Value[i] > v
 	}
-	return true
+	for i, v := range a.Value {
+		lt = lt || b.Value[i] > v
+		gt = gt || b.Value[i] < v
+	}
+	if lt && gt {
+		return 0, false
+	} else if lt {
+		return -1, true
+	} else if gt {
+		return 1, true
+	}
+	return 0, true
 }
 
-// Conflicts returns true if the versions have both been modified independently
-func Conflicts(a, b *daov1.VersionVector) bool {
-	return !(Precedes(a, b) || Precedes(b, a))
+func initValue(v *daov1.VersionVector) {
+	if v.Value == nil {
+		v.Value = map[uint32]uint64{}
+	}
 }
