@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
 	"github.com/MemeLabs/strims/internal/notification"
+	"github.com/MemeLabs/strims/internal/peer"
 	"github.com/MemeLabs/strims/internal/replication"
 	"github.com/MemeLabs/strims/internal/transfer"
 	"github.com/MemeLabs/strims/internal/videocapture"
@@ -31,7 +32,7 @@ import (
 // Control ...
 type Control interface {
 	Events() *event.Observers
-	Peer() PeerControl
+	Peer() peer.Control
 	Bootstrap() bootstrap.Control
 	Chat() chat.Control
 	Debug() debug.Control
@@ -62,7 +63,7 @@ func NewControl(
 		notificationControl = notification.NewControl(logger, store, observers)
 		replicationControl  = replication.NewControl(ctx, logger, vpn, store, observers, profile, notificationControl)
 		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
-		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, transferControl, broker, profile, notificationControl)
+		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, broker, profile, transferControl, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)
 		debugControl        = debug.NewControl(ctx, logger, store, observers, transferControl, directoryControl)
 		chatControl         = chat.NewControl(ctx, logger, store, observers, profile, networkControl, transferControl, directoryControl)
@@ -73,7 +74,7 @@ func NewControl(
 		videoegressControl  = videoegress.NewControl(ctx, logger, store, observers, httpmux, profile, transferControl)
 		vnicControl         = vnic.NewControl(ctx, logger, vpn, store, observers)
 		autoseedControl     = autoseed.NewControl(ctx, logger, store, observers, transferControl)
-		peerControl         = NewPeerControl(observers, networkControl, transferControl, bootstrapControl, replicationControl)
+		peerControl         = peer.NewControl(logger, observers, vpn, replicationControl, transferControl, networkControl, bootstrapControl)
 	)
 
 	go replicationControl.Run()
@@ -87,6 +88,8 @@ func NewControl(
 	go videoegressControl.Run()
 	go autoseedControl.Run()
 	go vnicControl.Run()
+
+	vpn.VNIC().AddPeerHandler(peerControl)
 
 	return &control{
 		observers:    observers,
@@ -111,7 +114,7 @@ func NewControl(
 // Control ...
 type control struct {
 	observers    *event.Observers
-	peer         PeerControl
+	peer         peer.Control
 	bootstrap    bootstrap.Control
 	chat         chat.Control
 	directory    directory.Control
@@ -129,7 +132,7 @@ type control struct {
 }
 
 func (c *control) Events() *event.Observers           { return c.observers }
-func (c *control) Peer() PeerControl                  { return c.peer }
+func (c *control) Peer() peer.Control                 { return c.peer }
 func (c *control) Directory() directory.Control       { return c.directory }
 func (c *control) Debug() debug.Control               { return c.debug }
 func (c *control) Chat() chat.Control                 { return c.chat }

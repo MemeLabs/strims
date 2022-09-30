@@ -11,7 +11,6 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
-	"github.com/MemeLabs/strims/internal/peer"
 	"github.com/MemeLabs/strims/pkg/httputil"
 
 	"go.uber.org/zap"
@@ -33,10 +32,8 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []app.Control, error) {
 	for i, node := range cluster.Hosts {
 		ctrl[i] = app.NewControl(context.Background(), logger, node.VPN, node.Store, &event.Observers{}, httputil.NewMapServeMux(), network.NewBroker(logger), node.Profile)
 
-		qosc := node.VPN.VNIC().QOS().AddClass(1)
-		h := peer.NewPeerHandler(logger, ctrl[i], node.Store, qosc)
 		for _, p := range node.VNIC.Peers() {
-			h(p)
+			ctrl[i].Peer().HandlePeer(p)
 		}
 	}
 

@@ -12,11 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/strims/internal/api"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
-	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
@@ -25,30 +24,25 @@ import (
 	"go.uber.org/zap"
 )
 
-type Peer interface {
-	HandlePeerNegotiate(keyCount uint32)
-	HandlePeerOpen(bindings []*networkv1.NetworkPeerBinding)
-	HandlePeerClose(networkKey []byte)
-	HandlePeerUpdateCertificate(cert *certificate.Certificate) error
-}
-
-var _ Peer = (*peer)(nil)
+var _ networkv1.NetworkPeerService = (*peerService)(nil)
 
 // NewPeer ...
 func newPeer(
 	id uint64,
 	vnicPeer *vnic.Peer,
-	client api.PeerClient,
+	client *networkv1.NetworkPeerClient,
+	caClient *networkv1ca.CAPeerClient,
 	logger *zap.Logger,
 	observers *event.Observers,
 	broker Broker,
 	vpn *vpn.Host,
 	qosc *qos.Class,
 	certificates *certificateMap,
-) *peer {
-	return &peer{
+) *peerService {
+	return &peerService{
 		id:       id,
 		client:   client,
+		caClient: caClient,
 		vnicPeer: vnicPeer,
 		logger: logger.With(
 			zap.Uint64("id", id),
@@ -66,10 +60,11 @@ func newPeer(
 }
 
 // Peer ...
-type peer struct {
+type peerService struct {
 	id           uint64
 	vnicPeer     *vnic.Peer
-	client       api.PeerClient
+	client       *networkv1.NetworkPeerClient
+	caClient     *networkv1ca.CAPeerClient
 	logger       *zap.Logger
 	observers    *event.Observers
 	broker       Broker
@@ -84,10 +79,9 @@ type peer struct {
 	brokerConn  *vnic.FrameReadWriter
 }
 
-// HandlePeerNegotiate ...
-func (p *peer) HandlePeerNegotiate(keyCount uint32) {
+func (p *peerService) Negotiate(ctx context.Context, req *networkv1.NetworkPeerNegotiateRequest) (*networkv1.NetworkPeerNegotiateResponse, error) {
 	select {
-	case p.keyCount <- keyCount:
+	case p.keyCount <- req.KeyCount:
 	default:
 	}
 
@@ -98,48 +92,51 @@ func (p *peer) HandlePeerNegotiate(keyCount uint32) {
 			}
 		}()
 	}
+	return &networkv1.NetworkPeerNegotiateResponse{}, nil
 }
 
-// HandlePeerOpen ...
-func (p *peer) HandlePeerOpen(bindings []*networkv1.NetworkPeerBinding) {
+func (p *peerService) Open(ctx context.Context, req *networkv1.NetworkPeerOpenRequest) (*networkv1.NetworkPeerOpenResponse, error) {
 	select {
-	case p.bindings <- bindings:
+	case p.bindings <- req.Bindings:
 	default:
 	}
+	return &networkv1.NetworkPeerOpenResponse{}, nil
 }
 
-// HandlePeerClose ...
-func (p *peer) HandlePeerClose(networkKey []byte) {
-	p.closeNetworkWithoutNotifyingPeer(networkKey)
+func (p *peerService) Close(ctx context.Context, req *networkv1.NetworkPeerCloseRequest) (*networkv1.NetworkPeerCloseResponse, error) {
+	p.closeNetworkWithoutNotifyingPeer(req.Key)
+	return &networkv1.NetworkPeerCloseResponse{}, nil
 }
 
-// HandlePeerUpdateCertificate ...
-func (p *peer) HandlePeerUpdateCertificate(cert *certificate.Certificate) error {
+func (p *peerService) UpdateCertificate(ctx context.Context, req *networkv1.NetworkPeerUpdateCertificateRequest) (*networkv1.NetworkPeerUpdateCertificateResponse, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if err := dao.VerifyCertificate(cert); err != nil {
-		return err
+	if err := dao.VerifyCertificate(req.Certificate); err != nil {
+		return nil, err
 	}
-	if !isPeerCertificateOwner(p.vnicPeer, cert) {
-		return ErrCertificateOwnerMismatch
+	if !isPeerCertificateOwner(p.vnicPeer, req.Certificate) {
+		return nil, ErrCertificateOwnerMismatch
 	}
-	if !isCertificateTrusted(cert) {
-		return ErrProvisionalCertificate
+	if !isCertificateTrusted(req.Certificate) {
+		return nil, ErrProvisionalCertificate
 	}
 
-	li := p.links.Get(&networkBinding{networkKey: dao.CertificateNetworkKey(cert)})
+	li := p.links.Get(&networkBinding{networkKey: dao.CertificateNetworkKey(req.Certificate)})
 	if li == nil {
-		return ErrNetworkBindingNotFound
+		return nil, ErrNetworkBindingNotFound
 	}
 
 	link := li.(*networkBinding)
 	link.peerCertTrusted = true
 
-	return p.openNetwork(link)
+	if err := p.openNetwork(link); err != nil {
+		return nil, err
+	}
+	return &networkv1.NetworkPeerUpdateCertificateResponse{}, nil
 }
 
-func (p *peer) sendCertificateUpdate(network *networkv1.Network) error {
+func (p *peerService) sendCertificateUpdate(network *networkv1.Network) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -151,7 +148,7 @@ func (p *peer) sendCertificateUpdate(network *networkv1.Network) error {
 	link := li.(*networkBinding)
 	link.localCertTrusted = true
 
-	err := p.client.Network().UpdateCertificate(
+	err := p.client.UpdateCertificate(
 		context.Background(),
 		&networkv1.NetworkPeerUpdateCertificateRequest{Certificate: network.Certificate},
 		&networkv1.NetworkPeerUpdateCertificateResponse{},
@@ -163,7 +160,7 @@ func (p *peer) sendCertificateUpdate(network *networkv1.Network) error {
 	return p.openNetwork(link)
 }
 
-func (p *peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
+func (p *peerService) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -200,12 +197,12 @@ func (p *peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 	return nil
 }
 
-func (p *peer) closeNetwork(networkKey []byte) {
+func (p *peerService) closeNetwork(networkKey []byte) {
 	p.closeNetworkWithoutNotifyingPeer(networkKey)
-	p.client.Network().Close(context.Background(), &networkv1.NetworkPeerCloseRequest{Key: networkKey}, &networkv1.NetworkPeerCloseResponse{})
+	p.client.Close(context.Background(), &networkv1.NetworkPeerCloseRequest{Key: networkKey}, &networkv1.NetworkPeerCloseResponse{})
 }
 
-func (p *peer) networkKeysForLinks() [][]byte {
+func (p *peerService) networkKeysForLinks() [][]byte {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -217,19 +214,19 @@ func (p *peer) networkKeysForLinks() [][]byte {
 	return keys
 }
 
-func (p *peer) close() {
+func (p *peerService) close() {
 	for _, key := range p.networkKeysForLinks() {
 		p.closeNetworkWithoutNotifyingPeer(key)
 	}
 }
 
-func (p *peer) hasNetworkBinding(networkKey []byte) bool {
+func (p *peerService) hasNetworkBinding(networkKey []byte) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	return p.links.Has(&networkBinding{networkKey: networkKey})
 }
 
-func (p *peer) negotiateNetworks(ctx context.Context) error {
+func (p *peerService) negotiateNetworks(ctx context.Context) error {
 	if !p.negotiating.CompareAndSwap(false, true) {
 		return errors.New("cannot begin new negotiation until previous negotiation finishes")
 	}
@@ -242,7 +239,7 @@ func (p *peer) negotiateNetworks(ctx context.Context) error {
 	}
 
 	keys := p.certificates.Keys()
-	err := p.client.Network().Negotiate(ctx, &networkv1.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &networkv1.NetworkPeerNegotiateResponse{})
+	err := p.client.Negotiate(ctx, &networkv1.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &networkv1.NetworkPeerNegotiateResponse{})
 	if err != nil {
 		return fmt.Errorf("sending network negotiation init failed: %w", err)
 	}
@@ -250,7 +247,7 @@ func (p *peer) negotiateNetworks(ctx context.Context) error {
 	return p.exchangeBindings(ctx, keys)
 }
 
-func (p *peer) exchangeBindings(ctx context.Context, keys [][]byte) error {
+func (p *peerService) exchangeBindings(ctx context.Context, keys [][]byte) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("no network negotiation init received: %w", ctx.Err())
@@ -270,7 +267,7 @@ func (p *peer) exchangeBindings(ctx context.Context, keys [][]byte) error {
 	}
 }
 
-func (p *peer) exchangeBindingsAsReceiver(ctx context.Context, keys [][]byte) error {
+func (p *peerService) exchangeBindingsAsReceiver(ctx context.Context, keys [][]byte) error {
 	keys, err := p.broker.ReceiveKeys(p.brokerConn, keys)
 	if err != nil {
 		return fmt.Errorf("network key broker failed: %w", err)
@@ -294,7 +291,7 @@ func (p *peer) exchangeBindingsAsReceiver(ctx context.Context, keys [][]byte) er
 	}
 }
 
-func (p *peer) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) error {
+func (p *peerService) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) error {
 	if err := p.broker.SendKeys(p.brokerConn, keys); err != nil {
 		return fmt.Errorf("network key broker failed: %w", err)
 	}
@@ -319,7 +316,7 @@ func (p *peer) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) erro
 	}
 }
 
-func (p *peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*networkv1.NetworkPeerBinding, error) {
+func (p *peerService) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*networkv1.NetworkPeerBinding, error) {
 	var bindings []*networkv1.NetworkPeerBinding
 
 	for _, key := range keys {
@@ -346,14 +343,14 @@ func (p *peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*netwo
 		)
 	}
 
-	err := p.client.Network().Open(ctx, &networkv1.NetworkPeerOpenRequest{Bindings: bindings}, &networkv1.NetworkPeerOpenResponse{})
+	err := p.client.Open(ctx, &networkv1.NetworkPeerOpenRequest{Bindings: bindings}, &networkv1.NetworkPeerOpenResponse{})
 	if err != nil {
 		return nil, err
 	}
 	return bindings, nil
 }
 
-func (p *peer) verifyNetworkBindings(bindings []*networkv1.NetworkPeerBinding) ([][]byte, error) {
+func (p *peerService) verifyNetworkBindings(bindings []*networkv1.NetworkPeerBinding) ([][]byte, error) {
 	if bindings == nil {
 		return nil, ErrNetworkBindingsEmpty
 	}
@@ -368,7 +365,7 @@ func (p *peer) verifyNetworkBindings(bindings []*networkv1.NetworkPeerBinding) (
 	return keys, nil
 }
 
-func (p *peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*networkv1.NetworkPeerBinding) error {
+func (p *peerService) handleNetworkBindings(networkBindings, peerNetworkBindings []*networkv1.NetworkPeerBinding) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -412,7 +409,7 @@ func (p *peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*net
 	return nil
 }
 
-func (p *peer) openNetwork(link *networkBinding) error {
+func (p *peerService) openNetwork(link *networkBinding) error {
 	if link.open || !link.localCertTrusted || !link.peerCertTrusted {
 		return nil
 	}

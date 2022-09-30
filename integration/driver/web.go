@@ -269,7 +269,7 @@ func (c *chromeContainer) downloadImage(ref string) error {
 }
 
 func (c *chromeContainer) runContainer(conf *container.Config, hostConf *container.HostConfig, name string) (*types.ContainerJSON, error) {
-	resp, err := c.docker.ContainerCreate(context.Background(), conf, hostConf, nil, name)
+	resp, err := c.docker.ContainerCreate(context.Background(), conf, hostConf, nil, nil, name)
 	if err != nil {
 		return nil, err
 	}

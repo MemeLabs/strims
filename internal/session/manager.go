@@ -11,7 +11,6 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
-	"github.com/MemeLabs/strims/internal/peer"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
@@ -99,8 +98,6 @@ func (t *Manager) GetOrCreateSession(profileID uint64, profileKey []byte) (*Sess
 	}
 
 	app := app.NewControl(context.Background(), t.logger, vpn, store, observers, t.httpmux, t.broker, profile)
-	qosc := vpn.VNIC().QOS().AddClass(1)
-	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(t.logger, app, store, qosc))
 
 	session := &Session{
 		Profile: profile,

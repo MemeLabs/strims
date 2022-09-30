@@ -7,7 +7,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/strims/internal/api"
 	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/ppspp"
@@ -15,30 +14,48 @@ import (
 	"go.uber.org/zap"
 )
 
-type Peer interface {
-	AssignPort(id ID, peerChannel uint64) (uint64, bool)
-	Close(id ID)
-	Announce(t *transfer)
-	Remove(t *transfer)
-}
-
-var _ Peer = (*peer)(nil)
+var _ transferv1.TransferPeerService = (*peerService)(nil)
 
 // Peer ...
-type peer struct {
+type peerService struct {
 	logger     *zap.Logger
 	ctx        context.Context
 	runnerPeer *ppspp.RunnerPeer
-	client     api.PeerClient
+	client     *transferv1.TransferPeerClient
 
 	lock        sync.Mutex
 	transfers   map[ID]*peerTransfer
 	nextChannel uint64
 }
 
+func (p *peerService) Announce(ctx context.Context, req *transferv1.TransferPeerAnnounceRequest) (*transferv1.TransferPeerAnnounceResponse, error) {
+	id, err := ParseID(req.Id)
+	if err != nil {
+		return nil, err
+	}
+	channel, ok := p.AssignPort(id, req.Channel)
+	if ok {
+		return &transferv1.TransferPeerAnnounceResponse{
+			Body: &transferv1.TransferPeerAnnounceResponse_Channel{
+				Channel: channel,
+			},
+		}, nil
+	}
+	return &transferv1.TransferPeerAnnounceResponse{}, nil
+}
+
+func (p *peerService) Close(ctx context.Context, req *transferv1.TransferPeerCloseRequest) (*transferv1.TransferPeerCloseResponse, error) {
+	id, err := ParseID(req.Id)
+	if err != nil {
+		return nil, err
+	}
+	p.SendClose(id)
+	return &transferv1.TransferPeerCloseResponse{}, nil
+}
+
 // AssignPort starts a peer transfer when it exists in response to announce from
 // peer
-func (p *peer) AssignPort(id ID, peerChannel uint64) (uint64, bool) {
+func (p *peerService) AssignPort(id ID, peerChannel uint64) (uint64, bool) {
 	pt, ok := p.getPeerTransfer(id)
 	if !ok {
 		return 0, false
@@ -52,15 +69,15 @@ func (p *peer) AssignPort(id ID, peerChannel uint64) (uint64, bool) {
 	return pt.channel, p.startPeerTransfer(pt, peerChannel)
 }
 
-// Close stops a peer transfer when it exists in response to close from peer
-func (p *peer) Close(id ID) {
+// SendClose stops a peer transfer when it exists in response to close from peer
+func (p *peerService) SendClose(id ID) {
 	if pt, ok := p.getPeerTransfer(id); ok {
 		p.stopPeerTransfer(pt, false)
 	}
 }
 
-// Announce creates and notifies peer of the transfer t
-func (p *peer) Announce(t *transfer) {
+// SendAnnounce creates and notifies peer of the transfer t
+func (p *peerService) SendAnnounce(t *transfer) {
 	pt := p.getOrCreatePeerTransfer(t)
 
 	pt.logger.Debug("announcing swarm")
@@ -71,7 +88,7 @@ func (p *peer) Announce(t *transfer) {
 			Channel: pt.channel,
 		}
 		res := &transferv1.TransferPeerAnnounceResponse{}
-		err := p.client.Transfer().Announce(p.ctx, req, res)
+		err := p.client.Announce(p.ctx, req, res)
 		if err != nil {
 			pt.logger.Debug("announce failed", zap.Error(err))
 			return
@@ -84,7 +101,7 @@ func (p *peer) Announce(t *transfer) {
 }
 
 // Remove cleans up the peer transfer for the removed transfer t
-func (p *peer) Remove(t *transfer) {
+func (p *peerService) Remove(t *transfer) {
 	p.lock.Lock()
 	pt, ok := p.transfers[t.id]
 	if ok {
@@ -98,7 +115,7 @@ func (p *peer) Remove(t *transfer) {
 	}
 }
 
-func (p *peer) getPeerTransfer(id ID) (*peerTransfer, bool) {
+func (p *peerService) getPeerTransfer(id ID) (*peerTransfer, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -106,7 +123,7 @@ func (p *peer) getPeerTransfer(id ID) (*peerTransfer, bool) {
 	return pt, ok
 }
 
-func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
+func (p *peerService) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -135,7 +152,7 @@ func (p *peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	return pt
 }
 
-func (p *peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
+func (p *peerService) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
 	pt.lock.Lock()
 	defer pt.lock.Unlock()
 
@@ -168,7 +185,7 @@ func (p *peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
 	return true
 }
 
-func (p *peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
+func (p *peerService) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
 	pt.lock.Lock()
 	defer pt.lock.Unlock()
 
@@ -189,7 +206,7 @@ func (p *peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
 	if notifyPeer {
 		req := &transferv1.TransferPeerCloseRequest{Id: pt.id[:]}
 		res := &transferv1.TransferPeerCloseResponse{}
-		err := p.client.Transfer().Close(context.Background(), req, res)
+		err := p.client.Close(context.Background(), req, res)
 		if err != nil {
 			pt.logger.Debug("unable to notify peer of channel closure", zap.Error(err))
 		}

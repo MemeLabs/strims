@@ -71,7 +71,13 @@ var (
 type HostOption func(h *Host) error
 
 // PeerHandler ...
-type PeerHandler func(p *Peer)
+type PeerHandler interface {
+	HandlePeer(p *Peer)
+}
+
+type PeerHandlerFunc func(p *Peer)
+
+func (f PeerHandlerFunc) HandlePeer(p *Peer) { f(p) }
 
 // WithLabel ...
 func WithLabel(label string) HostOption {
@@ -242,10 +248,10 @@ func (h *Host) addLink(logger *zap.Logger, c Link) (*Peer, error) {
 }
 
 // AddPeerHandler ...
-func (h *Host) AddPeerHandler(fn PeerHandler) {
+func (h *Host) AddPeerHandler(ph PeerHandler) {
 	h.peerHandlersLock.Lock()
 	defer h.peerHandlersLock.Unlock()
-	h.peerHandlers = append(h.peerHandlers, fn)
+	h.peerHandlers = append(h.peerHandlers, ph)
 }
 
 // HasPeer ...
@@ -290,8 +296,8 @@ func (h *Host) handlePeer(p *Peer) {
 	h.peerHandlersLock.Lock()
 	defer h.peerHandlersLock.Unlock()
 
-	for _, fn := range h.peerHandlers {
-		fn(p)
+	for _, ph := range h.peerHandlers {
+		ph.HandlePeer(p)
 	}
 }
 

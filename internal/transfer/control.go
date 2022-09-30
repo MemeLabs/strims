@@ -14,9 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/strims/internal/api"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/peer"
 	transferv1 "github.com/MemeLabs/strims/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kademlia"
@@ -35,9 +36,8 @@ const (
 )
 
 type Control interface {
+	peer.PeerHandler
 	Run()
-	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
-	RemovePeer(id uint64)
 	Add(swarm *ppspp.Swarm, salt []byte) ID
 	Find(swarm ppspp.SwarmID, salt []byte) (ID, *ppspp.Swarm, bool)
 	Remove(id ID)
@@ -61,10 +61,9 @@ func NewControl(
 		store:  store,
 		qosc:   vpn.VNIC().QOS().AddClass(1),
 
-		events:    observers.Chan(),
-		transfers: map[ID]*transfer{},
-		peers:     map[uint64]*peer{},
-		// candidates:  newCandidatePool(logger, vpn),
+		events:      observers.Chan(),
+		transfers:   map[ID]*transfer{},
+		peers:       map[uint64]*peerService{},
 		searchQueue: newSearchQueue(int(peerSearchInterval / peerSearchTickRate)),
 		networks:    hashmap.New[[]byte, *network](hashmap.NewByteInterface[[]byte]()),
 		runner:      ppspp.NewRunner(ctx, logger),
@@ -81,11 +80,10 @@ type control struct {
 	store  dao.Store
 	qosc   *qos.Class
 
-	lock      sync.Mutex
-	events    chan any
-	transfers map[ID]*transfer
-	peers     map[uint64]*peer
-	// candidates  *candidatePool
+	lock        sync.Mutex
+	events      chan any
+	transfers   map[ID]*transfer
+	peers       map[uint64]*peerService
 	searchQueue *searchQueue
 	networks    hashmap.Map[[]byte, *network]
 	runner      *ppspp.Runner
@@ -232,7 +230,7 @@ func (c *control) handleNetworkPeerOpen(peerID uint64, networkKey []byte) {
 	n.peers[peerID] = p
 
 	for _, t := range n.transfers {
-		p.Announce(t)
+		p.SendAnnounce(t)
 	}
 }
 
@@ -251,17 +249,18 @@ func (c *control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 }
 
 // AddPeer ...
-func (c *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
+func (c *control) AddPeer(id uint64, vnicPeer *vnic.Peer, server *rpc.Server, client rpc.Caller) {
 	ctx, close := context.WithCancel(vnicPeer.Context())
 	w := vnic.NewFrameWriter(vnicPeer.Link, vnic.TransferPort, c.qosc)
 	cr, rp := c.runner.RunPeer(vnicPeer.HostID().Bytes(nil), w)
-	p := &peer{
+	p := &peerService{
 		logger:     c.logger.With(zap.Stringer("peer", vnicPeer.HostID())),
 		ctx:        ctx,
 		runnerPeer: rp,
-		client:     client,
+		client:     transferv1.NewTransferPeerClient(client),
 		transfers:  map[ID]*peerTransfer{},
 	}
+	transferv1.RegisterTransferPeerService(server, p)
 	vnicPeer.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
 		err := cr.HandleMessage(f.Body)
 		if err != nil {
@@ -273,8 +272,6 @@ func (c *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient)
 	c.lock.Lock()
 	c.peers[id] = p
 	c.lock.Unlock()
-
-	return p
 }
 
 // RemovePeer ...
@@ -393,7 +390,7 @@ func (c *control) Publish(id ID, networkKey []byte) {
 	n.transfers[id] = t
 
 	for _, p := range n.peers {
-		p.Announce(t)
+		p.SendAnnounce(t)
 	}
 
 	c.searchQueue.Insert(t, n)
@@ -425,7 +422,7 @@ func (c *control) getOrInsertNetwork(networkKey []byte) *network {
 	if !ok {
 		n = &network{
 			key:       networkKey,
-			peers:     map[uint64]*peer{},
+			peers:     map[uint64]*peerService{},
 			transfers: map[ID]*transfer{},
 		}
 		c.networks.Set(networkKey, n)
@@ -445,7 +442,7 @@ type transfer struct {
 // network ...
 type network struct {
 	key       []byte
-	peers     map[uint64]*peer
+	peers     map[uint64]*peerService
 	transfers map[ID]*transfer
 }
 

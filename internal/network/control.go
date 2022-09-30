@@ -10,16 +10,15 @@ import (
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
-	"github.com/MemeLabs/strims/internal/api"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network/ca"
 	"github.com/MemeLabs/strims/internal/network/dialer"
 	"github.com/MemeLabs/strims/internal/notification"
+	"github.com/MemeLabs/strims/internal/peer"
 	"github.com/MemeLabs/strims/internal/transfer"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
-	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	networkv1errors "github.com/MemeLabs/strims/pkg/apis/network/v1/errors"
 	notificationv1 "github.com/MemeLabs/strims/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
@@ -27,7 +26,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
-	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
@@ -58,14 +56,11 @@ type network struct {
 }
 
 type Control interface {
+	peer.PeerHandler
 	CA() CA
 	Dialer() Dialer
 	Run()
-	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
-	RemovePeer(id uint64)
 	Certificate(networkKey []byte) (*certificate.Certificate, bool)
-	Add(network *networkv1.Network) error
-	Remove(id uint64) error
 	SetAlias(id uint64, name string) error
 	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 }
@@ -102,9 +97,9 @@ func NewControl(
 	vpn *vpn.Host,
 	store dao.Store,
 	observers *event.Observers,
-	transfer transfer.Control,
 	broker Broker,
 	profile *profilev1.Profile,
+	transfer transfer.Control,
 	notification notification.Control,
 ) Control {
 	d := dialer.NewDialer(logger, vpn, profile.Key)
@@ -125,7 +120,7 @@ func NewControl(
 		dialer:           d,
 		certRenewTimeout: time.NewTimer(0),
 		networks:         map[uint64]*network{},
-		peers:            map[uint64]*peer{},
+		peers:            map[uint64]*peerService{},
 		certificates:     newCertificateMap(),
 	}
 }
@@ -149,7 +144,7 @@ type control struct {
 	certRenewTimeout  *time.Timer
 	nextCertRenewTime timeutil.Time
 	networks          map[uint64]*network
-	peers             map[uint64]*peer
+	peers             map[uint64]*peerService
 	certificates      *certificateMap
 }
 
@@ -480,14 +475,14 @@ func (t *control) renewCertificate(ctx context.Context, network *networkv1.Netwo
 	})
 }
 
-func (t *control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *peer) error {
+func (t *control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *peerService) error {
 	return t.renewCertificateWithRenewFunc(network, func(csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 		req := &networkv1ca.CAPeerRenewRequest{
 			Certificate:        network.Certificate,
 			CertificateRequest: csr,
 		}
 		res := &networkv1ca.CAPeerRenewResponse{}
-		if err := peer.client.CA().Renew(ctx, req, res); err != nil {
+		if err := peer.caClient.Renew(ctx, req, res); err != nil {
 			return nil, err
 		}
 		return res.Certificate, nil
@@ -495,15 +490,17 @@ func (t *control) renewCertificateWithPeer(ctx context.Context, network *network
 }
 
 // AddPeer ...
-func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
-	p := newPeer(id, vnicPeer, client, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
+func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, s *rpc.Server, c rpc.Caller) {
+	client := networkv1.NewNetworkPeerClient(c)
+	caClient := networkv1ca.NewCAPeerClient(c)
+	p := newPeer(id, vnicPeer, client, caClient, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
+	networkv1.RegisterNetworkPeerService(s, p)
+
+	t.ca.AddPeer(id, vnicPeer, s, c)
 
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
 	t.peers[p.id] = p
-
-	return p
 }
 
 // RemovePeer ...
@@ -564,49 +561,6 @@ func (t *control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 		return ci.certificate, true
 	}
 	return nil, false
-}
-
-// TODO: move to dao
-func (t *control) Add(network *networkv1.Network) (err error) {
-	var logs []*networkv1ca.CertificateLog
-	var adminRecord *networkv1directory.UserRecord
-	if network.GetServerConfig() != nil {
-		for c := network.Certificate; c != nil; c = c.GetParent() {
-			log, err := dao.NewCertificateLog(t.store, network.Id, c)
-			if err != nil {
-				return err
-			}
-			logs = append(logs, log)
-		}
-
-		adminRecord, err = dao.NewDirectoryUserRecord(t.store, network.Id, t.profile.Key.Public)
-		if err != nil {
-			return err
-		}
-	}
-
-	return t.store.Update(func(tx kv.RWTx) error {
-		if err := dao.Networks.Insert(tx, network); err != nil {
-			return err
-		}
-		for _, log := range logs {
-			if err := dao.CertificateLogs.Insert(tx, log); err != nil {
-				return err
-			}
-		}
-
-		if adminRecord != nil {
-			if err := dao.DirectoryUserRecords.Insert(tx, adminRecord); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-}
-
-func (t *control) Remove(id uint64) error {
-	return dao.Networks.Delete(t.store, id)
 }
 
 func (t *control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {

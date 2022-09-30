@@ -6,13 +6,15 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/strims/internal/api"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
+	"github.com/MemeLabs/strims/internal/peer"
 	network "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
@@ -30,11 +32,11 @@ const (
 )
 
 type Control interface {
+	peer.PeerHandler
 	Run()
-	AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer
-	RemovePeer(id uint64)
 	PublishingEnabled() bool
 	Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error
+	ListPeers() []*networkv1bootstrap.BootstrapPeer
 }
 
 // NewControl ...
@@ -66,7 +68,7 @@ type control struct {
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 	nextID            uint64
-	peers             syncutil.Map[uint64, *peer]
+	peers             syncutil.Map[uint64, *peerService]
 	peerHostClientIDs syncutil.Map[kademlia.ID, uint64]
 	enablePublishing  atomic.Bool
 }
@@ -102,11 +104,11 @@ func (t *control) handlePeerAdd(id uint64) {
 	}
 
 	var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
-	if err := peer.client.Bootstrap().GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+	if err := peer.client.GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
 		t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
 	}
 
-	peer.PublishEnabled.Store(res.Enabled)
+	peer.allowSendPublish.Store(res.Enabled)
 }
 
 func (t *control) handlePeerRemove(hostID kademlia.ID) {
@@ -123,15 +125,16 @@ func (t *control) handlePeerRemove(hostID kademlia.ID) {
 }
 
 // AddPeer ...
-func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, client api.PeerClient) Peer {
-	p := &peer{
-		vnicPeer: vnicPeer,
-		client:   client,
+func (t *control) AddPeer(id uint64, vnicPeer *vnic.Peer, server *rpc.Server, client rpc.Caller) {
+	p := &peerService{
+		store:               t.store,
+		allowReceivePublish: &t.enablePublishing,
+		vnicPeer:            vnicPeer,
+		client:              networkv1bootstrap.NewPeerServiceClient(client),
 	}
+	networkv1bootstrap.RegisterPeerServiceService(server, p)
 
 	t.peers.Set(id, p)
-
-	return p
 }
 
 // RemovePeer ...
@@ -213,7 +216,7 @@ func (t *control) Publish(ctx context.Context, peerID uint64, network *network.N
 		return errors.New("peer id not found")
 	}
 
-	if !peer.PublishEnabled.Load() {
+	if !peer.allowSendPublish.Load() {
 		return errors.New("peer does not support network bootstrapping")
 	}
 
@@ -237,5 +240,19 @@ func (t *control) Publish(ctx context.Context, peerID uint64, network *network.N
 	}
 	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
 
-	return peer.client.Bootstrap().Publish(ctx, &networkv1bootstrap.BootstrapPeerPublishRequest{Certificate: cert}, &networkv1bootstrap.BootstrapPeerPublishResponse{})
+	return peer.client.Publish(ctx, &networkv1bootstrap.BootstrapPeerPublishRequest{Certificate: cert}, &networkv1bootstrap.BootstrapPeerPublishResponse{})
+}
+
+func (t *control) ListPeers() []*networkv1bootstrap.BootstrapPeer {
+	var peers []*networkv1bootstrap.BootstrapPeer
+	t.peers.Each(func(k uint64, v *peerService) {
+		if v.allowSendPublish.Load() {
+			cert := v.vnicPeer.Certificate
+			peers = append(peers, &networkv1bootstrap.BootstrapPeer{
+				PeerId: k,
+				Label:  fmt.Sprintf("%s (%x)", cert.Subject, cert.Key),
+			})
+		}
+	})
+	return peers
 }

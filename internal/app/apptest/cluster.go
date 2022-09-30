@@ -145,9 +145,9 @@ func (c *Cluster) Run() error {
 
 	wg := sync.WaitGroup{}
 	for _, node := range c.Hosts {
-		node.VNIC.AddPeerHandler(func(p *vnic.Peer) {
+		node.VNIC.AddPeerHandler(vnic.PeerHandlerFunc(func(p *vnic.Peer) {
 			wg.Done()
-		})
+		}))
 	}
 
 	// init node links
