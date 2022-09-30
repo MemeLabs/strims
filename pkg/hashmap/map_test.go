@@ -52,6 +52,21 @@ func TestIterate(t *testing.T) {
 	}
 }
 
+func TestKeysValues(t *testing.T) {
+	n := 5
+	m := New[[]byte, int](NewByteInterface[[]byte]())
+	for i := 0; i < n; i++ {
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(i))
+		m.Set(b, i)
+	}
+
+	ks := m.Values()
+	assert.Equal(t, n, len(ks), "key count mismatch")
+	vs := m.Values()
+	assert.Equal(t, n, len(vs), "value count mismatch")
+}
+
 type testType struct {
 	_ [24]byte
 }

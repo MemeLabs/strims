@@ -247,7 +247,7 @@ func (l *Map[K, V]) Iterate() Iterator[K, V] {
 }
 
 func (l *Map[K, V]) Keys() []K {
-	ks := make([]K, l.len)
+	ks := make([]K, 0, l.len)
 	for it := l.Iterate(); it.Next(); {
 		ks = append(ks, it.Key())
 	}
@@ -255,7 +255,7 @@ func (l *Map[K, V]) Keys() []K {
 }
 
 func (l *Map[K, V]) Values() []V {
-	vs := make([]V, l.len)
+	vs := make([]V, 0, l.len)
 	for it := l.Iterate(); it.Next(); {
 		vs = append(vs, it.Value())
 	}
