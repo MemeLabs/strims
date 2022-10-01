@@ -124,7 +124,7 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
     >
       <div className="room_menu__header">
         {!mainActiveTopic && (
-          <button className="room_menu__toggle--off" onClick={handleToggleClick}>
+          <button className="room_menu__toggle--on" onClick={handleToggleClick}>
             <BsArrowBarRight />
           </button>
         )}
