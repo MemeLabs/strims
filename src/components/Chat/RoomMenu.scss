@@ -41,6 +41,15 @@
     &:hover {
       background: var(--color-background-chat-toggle-hover);
     }
+    &--off {
+      margin: 0 0.4rem 0.4rem;
+      padding: 0rem;
+      width: 30px;
+    }
+    &--off:hover {
+      background: var(--color-background-chat-toggle-hover);
+      cursor: pointer;
+    }
   }
 
   &__tab_bar {
