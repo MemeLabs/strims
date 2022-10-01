@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network/dialer"
@@ -15,6 +16,7 @@ import (
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/hashmap"
+	"github.com/MemeLabs/strims/pkg/vnic"
 	"go.uber.org/zap"
 )
 
@@ -145,3 +147,9 @@ func (t *CA) FindBySubject(ctx context.Context, networkKey []byte, subject strin
 func (t *CA) FindByKey(ctx context.Context, networkKey []byte, key []byte) (*certificate.Certificate, error) {
 	return t.find(ctx, networkKey, &networkv1ca.CAFindRequest{Query: &networkv1ca.CAFindRequest_Key{Key: key}})
 }
+
+func (t *CA) AddPeer(id uint64, peer *vnic.Peer, s *rpc.Server, c rpc.Caller) {
+	networkv1ca.RegisterCAPeerService(s, &peerService{t})
+}
+
+func (t *CA) RemovePeer(id uint64) {}

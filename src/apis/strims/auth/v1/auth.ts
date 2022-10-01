@@ -14,6 +14,8 @@ import {
   strims_profile_v1_IDevice,
   strims_profile_v1_Profile,
   strims_profile_v1_IProfile,
+  strims_profile_v1_ProfileID,
+  strims_profile_v1_IProfileID,
   strims_profile_v1_StorageKey,
   strims_profile_v1_IStorageKey,
 } from "../../profile/v1/profile";
@@ -652,33 +654,37 @@ export namespace LinkedProfile {
 export type IPairingToken = {
   auth?: strims_auth_v1_IServerUserThing;
   profile?: strims_profile_v1_IProfile;
-  network?: strims_network_v1_INetwork;
-  bootstrap?: strims_network_v1_bootstrap_IBootstrapClient;
+  networks?: strims_network_v1_INetwork[];
+  bootstraps?: strims_network_v1_bootstrap_IBootstrapClient[];
   devices?: strims_profile_v1_IDevice[];
+  profileId?: strims_profile_v1_IProfileID;
 }
 
 export class PairingToken {
   auth: strims_auth_v1_ServerUserThing | undefined;
   profile: strims_profile_v1_Profile | undefined;
-  network: strims_network_v1_Network | undefined;
-  bootstrap: strims_network_v1_bootstrap_BootstrapClient | undefined;
+  networks: strims_network_v1_Network[];
+  bootstraps: strims_network_v1_bootstrap_BootstrapClient[];
   devices: strims_profile_v1_Device[];
+  profileId: strims_profile_v1_ProfileID | undefined;
 
   constructor(v?: IPairingToken) {
     this.auth = v?.auth && new strims_auth_v1_ServerUserThing(v.auth);
     this.profile = v?.profile && new strims_profile_v1_Profile(v.profile);
-    this.network = v?.network && new strims_network_v1_Network(v.network);
-    this.bootstrap = v?.bootstrap && new strims_network_v1_bootstrap_BootstrapClient(v.bootstrap);
+    this.networks = v?.networks ? v.networks.map(v => new strims_network_v1_Network(v)) : [];
+    this.bootstraps = v?.bootstraps ? v.bootstraps.map(v => new strims_network_v1_bootstrap_BootstrapClient(v)) : [];
     this.devices = v?.devices ? v.devices.map(v => new strims_profile_v1_Device(v)) : [];
+    this.profileId = v?.profileId && new strims_profile_v1_ProfileID(v.profileId);
   }
 
   static encode(m: PairingToken, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.auth) strims_auth_v1_ServerUserThing.encode(m.auth, w.uint32(10).fork()).ldelim();
     if (m.profile) strims_profile_v1_Profile.encode(m.profile, w.uint32(18).fork()).ldelim();
-    if (m.network) strims_network_v1_Network.encode(m.network, w.uint32(26).fork()).ldelim();
-    if (m.bootstrap) strims_network_v1_bootstrap_BootstrapClient.encode(m.bootstrap, w.uint32(34).fork()).ldelim();
+    for (const v of m.networks) strims_network_v1_Network.encode(v, w.uint32(26).fork()).ldelim();
+    for (const v of m.bootstraps) strims_network_v1_bootstrap_BootstrapClient.encode(v, w.uint32(34).fork()).ldelim();
     for (const v of m.devices) strims_profile_v1_Device.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.profileId) strims_profile_v1_ProfileID.encode(m.profileId, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -696,13 +702,16 @@ export class PairingToken {
         m.profile = strims_profile_v1_Profile.decode(r, r.uint32());
         break;
         case 3:
-        m.network = strims_network_v1_Network.decode(r, r.uint32());
+        m.networks.push(strims_network_v1_Network.decode(r, r.uint32()));
         break;
         case 4:
-        m.bootstrap = strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32());
+        m.bootstraps.push(strims_network_v1_bootstrap_BootstrapClient.decode(r, r.uint32()));
         break;
         case 5:
         m.devices.push(strims_profile_v1_Device.decode(r, r.uint32()));
+        break;
+        case 6:
+        m.profileId = strims_profile_v1_ProfileID.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

@@ -11,8 +11,8 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
-	"github.com/MemeLabs/strims/pkg/debug"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +39,19 @@ func (s *replicationService) CreatePairingToken(ctx context.Context, r *replicat
 		return nil, err
 	}
 
+	devices, err := dao.Devices.GetAll(s.store)
+	if err != nil {
+		return nil, err
+	}
+
+	newDevice, err := dao.NewDevice(s.store, "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	profile.DeviceId = newDevice.Id
+	devices = append(devices, newDevice)
+
 	auth, err := dao.GetServerAuthThing(s.store.BlobStore(), profile.Name)
 	if err != nil {
 		return nil, err
@@ -54,19 +67,24 @@ func (s *replicationService) CreatePairingToken(ctx context.Context, r *replicat
 		return nil, err
 	}
 
-	network := networks[0]
-	token := &authv1.PairingToken{
-		Auth:    auth,
-		Profile: profile,
-		Network: &networkv1.Network{
-			Id:          network.Id,
-			Certificate: network.Certificate,
-			Alias:       network.Alias,
-		},
-		Bootstrap: bootstraps[0],
+	nextID, lastID, err := dao.ProfileID.Incr(s.store, 1000)
+	if err != nil {
+		return nil, err
 	}
 
-	debug.PrintJSON(token)
+	network := networks[0]
+	network.ServerConfig = nil
+	token := &authv1.PairingToken{
+		Auth:       auth,
+		Profile:    profile,
+		Networks:   []*networkv1.Network{network},
+		Bootstraps: bootstraps,
+		Devices:    devices,
+		ProfileId: &profilev1.ProfileID{
+			NextId: nextID,
+			LastId: lastID,
+		},
+	}
 
 	return &replicationv1.CreatePairingTokenResponse{Token: token}, nil
 }

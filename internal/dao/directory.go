@@ -187,8 +187,9 @@ func NewDirectoryUserRecord(s IDGenerator, networkID uint64, peerKey []byte) (*n
 		return nil, err
 	}
 	return &networkv1directory.UserRecord{
-		Id:        id,
-		NetworkId: networkID,
-		PeerKey:   peerKey,
+		Id:         id,
+		NetworkId:  networkID,
+		PeerKey:    peerKey,
+		Moderation: &networkv1directory.UserModeration{},
 	}, nil
 }

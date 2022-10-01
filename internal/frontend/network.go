@@ -53,7 +53,7 @@ func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateSe
 		return nil, err
 	}
 
-	if err := s.app.Network().Add(network); err != nil {
+	if err := dao.Networks.Insert(s.store, network); err != nil {
 		return nil, err
 	}
 
@@ -82,7 +82,7 @@ func (s *networkService) UpdateServerConfig(ctx context.Context, r *networkv1.Up
 
 // Delete ...
 func (s *networkService) Delete(ctx context.Context, r *networkv1.DeleteNetworkRequest) (*networkv1.DeleteNetworkResponse, error) {
-	if err := s.app.Network().Remove(r.Id); err != nil {
+	if err := dao.Networks.Delete(s.store, r.Id); err != nil {
 		return nil, err
 	}
 	return &networkv1.DeleteNetworkResponse{}, nil
@@ -185,7 +185,7 @@ func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *net
 		bootstrapClients = append(bootstrapClients, c)
 	}
 
-	if err := s.app.Network().Add(network); err != nil {
+	if err := dao.Networks.Insert(s.store, network); err != nil {
 		return nil, err
 	}
 

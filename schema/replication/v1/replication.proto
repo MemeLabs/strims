@@ -31,7 +31,7 @@ message EventBundle {
 
 message EventLog {
   uint64 id = 1;
-  uint32 replica_id = 2;
+  uint64 replica_id = 2;
   repeated Event events = 3;
 }
 

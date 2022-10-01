@@ -46,15 +46,15 @@ type Replicator interface {
 var replicators syncutil.Map[namespace, func() Replicator]
 
 func NewReplicatedStore(s *ProfileStore) (*ReplicatedStore, error) {
-	// panic?
-	// v, err := ReplicationVersion.Get(s)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	p, err := Profile.Get(s)
+	if err != nil {
+		return nil, err
+	}
 
 	rs := &ReplicatedStore{
 		ProfileStore: s,
 		replicators:  map[namespace]Replicator{},
+		replicaID:    p.DeviceId,
 	}
 
 	replicators.Each(func(ns namespace, ctor func() Replicator) {
@@ -68,7 +68,7 @@ type ReplicatedStore struct {
 	*ProfileStore
 	replicators map[namespace]Replicator
 	observers   event.Observer
-	replicaID   uint32
+	replicaID   uint64
 }
 
 func (s *ReplicatedStore) Update(fn func(tx kv.RWTx) error) (err error) {
@@ -92,7 +92,7 @@ func (s *ReplicatedStore) Update(fn func(tx kv.RWTx) error) (err error) {
 	})
 }
 
-func (s *ReplicatedStore) ReplicaID() uint32 {
+func (s *ReplicatedStore) ReplicaID() uint64 {
 	return s.replicaID
 }
 
@@ -232,7 +232,7 @@ func (f *replciationEventFilter) Events() []*replicationv1.Event {
 
 type replicatedStoreTx struct {
 	*profileStoreTx
-	replicaID uint32
+	replicaID uint64
 	events    []*replicationv1.Event
 }
 
@@ -240,7 +240,7 @@ func (t *replicatedStoreTx) Update(fn func(tx kv.RWTx) error) error {
 	return fn(t)
 }
 
-func (t *replicatedStoreTx) ReplicaID() uint32 {
+func (t *replicatedStoreTx) ReplicaID() uint64 {
 	return t.replicaID
 }
 
@@ -250,7 +250,7 @@ func (t *replicatedStoreTx) Replicate(e *replicationv1.Event) {
 
 type ReplicatedRWTx interface {
 	kv.RWTx
-	ReplicaID() uint32
+	ReplicaID() uint64
 	Replicate(m *replicationv1.Event)
 }
 

@@ -83,9 +83,10 @@ message LinkedProfile {
 message PairingToken {
   ServerUserThing auth = 1;
   profile.v1.Profile profile = 2;
-  network.v1.Network network = 3;
-  network.v1.bootstrap.BootstrapClient bootstrap = 4;
+  repeated network.v1.Network networks = 3;
+  repeated network.v1.bootstrap.BootstrapClient bootstraps = 4;
   repeated profile.v1.Device devices = 5;
+  profile.v1.ProfileID profile_id = 6;
 }
 
 message SignInRequest {

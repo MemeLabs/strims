@@ -10,6 +10,7 @@ import (
 func RegisterReplicationPeerService(host rpc.ServiceRegistry, service ReplicationPeerService) {
 	host.RegisterMethod("strims.replication.v1.ReplicationPeer.Open", service.Open)
 	host.RegisterMethod("strims.replication.v1.ReplicationPeer.SendEvents", service.SendEvents)
+	host.RegisterMethod("strims.replication.v1.ReplicationPeer.AllocateProfileIDs", service.AllocateProfileIDs)
 }
 
 // ReplicationPeerService ...
@@ -21,7 +22,11 @@ type ReplicationPeerService interface {
 	SendEvents(
 		ctx context.Context,
 		req *PeerSendEventsRequest,
-	) (<-chan *PeerSendEventsResponse, error)
+	) (*PeerSendEventsResponse, error)
+	AllocateProfileIDs(
+		ctx context.Context,
+		req *PeerAllocateProfileIDsRequest,
+	) (*PeerAllocateProfileIDsResponse, error)
 }
 
 // ReplicationPeerService ...
@@ -37,7 +42,14 @@ func (s *UnimplementedReplicationPeerService) Open(
 func (s *UnimplementedReplicationPeerService) SendEvents(
 	ctx context.Context,
 	req *PeerSendEventsRequest,
-) (<-chan *PeerSendEventsResponse, error) {
+) (*PeerSendEventsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedReplicationPeerService) AllocateProfileIDs(
+	ctx context.Context,
+	req *PeerAllocateProfileIDsRequest,
+) (*PeerAllocateProfileIDsResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -66,7 +78,16 @@ func (c *ReplicationPeerClient) Open(
 func (c *ReplicationPeerClient) SendEvents(
 	ctx context.Context,
 	req *PeerSendEventsRequest,
-	res chan *PeerSendEventsResponse,
+	res *PeerSendEventsResponse,
 ) error {
-	return c.client.CallStreaming(ctx, "strims.replication.v1.ReplicationPeer.SendEvents", req, res)
+	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.SendEvents", req, res)
+}
+
+// AllocateProfileIDs ...
+func (c *ReplicationPeerClient) AllocateProfileIDs(
+	ctx context.Context,
+	req *PeerAllocateProfileIDsRequest,
+	res *PeerAllocateProfileIDsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.AllocateProfileIDs", req, res)
 }

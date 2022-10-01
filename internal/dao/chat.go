@@ -185,6 +185,10 @@ var ChatUIConfigHighlights = NewTable(
 	},
 )
 
+func init() {
+	RegisterReplicatedTable(ChatUIConfigHighlights, &ReplicatedTableOptions[*chatv1.UIConfigHighlight]{})
+}
+
 var ChatUIConfigHighlightsByPeerKey = NewUniqueIndex(chatUIConfigHighlightKeyNS, ChatUIConfigHighlights, (*chatv1.UIConfigHighlight).GetPeerKey, byteIdentity, nil)
 
 var ChatUIConfigTags = NewTable(
@@ -199,6 +203,10 @@ var ChatUIConfigTags = NewTable(
 	},
 )
 
+func init() {
+	RegisterReplicatedTable(ChatUIConfigTags, &ReplicatedTableOptions[*chatv1.UIConfigTag]{})
+}
+
 var ChatUIConfigTagsByPeerKey = NewUniqueIndex(chatUIConfigTagKeyNS, ChatUIConfigTags, (*chatv1.UIConfigTag).GetPeerKey, byteIdentity, nil)
 
 var ChatUIConfigIgnores = NewTable(
@@ -212,6 +220,10 @@ var ChatUIConfigIgnores = NewTable(
 		},
 	},
 )
+
+func init() {
+	RegisterReplicatedTable(ChatUIConfigIgnores, &ReplicatedTableOptions[*chatv1.UIConfigIgnore]{})
+}
 
 var ChatUIConfigIgnoresByPeerKey = NewUniqueIndex(chatUIConfigIgnoreKeyNS, ChatUIConfigIgnores, (*chatv1.UIConfigIgnore).GetPeerKey, byteIdentity, nil)
 

@@ -17,13 +17,17 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 )
 
-const CurrentVersion = 2
-const MinCompatibleVersion = 2
+const CurrentVersion = 5
+const MinCompatibleVersion = 5
 
 // IDGenerator ...
 type IDGenerator interface {
 	GenerateID() (uint64, error)
 }
+
+type IDGeneratorFunc func() (uint64, error)
+
+func (f IDGeneratorFunc) GenerateID() (uint64, error) { return f() }
 
 // GenerateKey ...
 func GenerateKey() (*key.Key, error) {
@@ -146,7 +150,7 @@ type Store interface {
 	Salter
 	BlobStore() kv.BlobStore
 	Key() *StorageKey
-	ReplicaID() uint32
+	ReplicaID() uint64
 	DispatchEvent(es []*replicationv1.Event) error
 	Subscribe(ch chan []*replicationv1.Event)
 	Dump() ([]*replicationv1.Event, error)

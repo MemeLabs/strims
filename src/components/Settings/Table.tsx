@@ -51,7 +51,7 @@ export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, c
 
 export interface TableCellProps {
   truncate?: boolean;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export const TableCell: React.FC<TableCellProps> = ({ truncate, children }) => {

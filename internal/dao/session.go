@@ -57,7 +57,15 @@ func CreateServerAuthThing(s kv.BlobStore, name, password string) (uint64, []byt
 		},
 	}
 
-	if _, err = StoreProfileThing(s, user, profile, profileKey); err != nil {
+	store, err := StoreProfileThing(s, user, profile, profileKey)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	err = store.Update(func(tx kv.RWTx) error {
+		return initProfileDevice(tx)
+	})
+	if err != nil {
 		return 0, nil, err
 	}
 	return profile.Id, profileKey, nil
@@ -107,13 +115,27 @@ func ImportPairingToken(s kv.BlobStore, tok *authv1.PairingToken, profileKey []b
 	if err != nil {
 		return err
 	}
-	if err := Networks.Insert(store, tok.Network); err != nil {
-		return err
-	}
-	if err := BootstrapClients.Insert(store, tok.Bootstrap); err != nil {
-		return err
-	}
-	return nil
+	return store.Update(func(tx kv.RWTx) error {
+		if err := ProfileID.Init(tx, tok.ProfileId); err != nil {
+			return err
+		}
+		for _, m := range tok.Devices {
+			if err := Devices.Insert(tx, m); err != nil {
+				return err
+			}
+		}
+		for _, m := range tok.Networks {
+			if err := Networks.Insert(tx, m); err != nil {
+				return err
+			}
+		}
+		for _, m := range tok.Bootstraps {
+			if err := BootstrapClients.Insert(tx, m); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func GetServerAuthThing(s kv.BlobStore, name string) (*authv1.ServerUserThing, error) {

@@ -155,25 +155,25 @@ export class EventBundle {
 
 export type IEventLog = {
   id?: bigint;
-  replicaId?: number;
+  replicaId?: bigint;
   events?: strims_replication_v1_IEvent[];
 }
 
 export class EventLog {
   id: bigint;
-  replicaId: number;
+  replicaId: bigint;
   events: strims_replication_v1_Event[];
 
   constructor(v?: IEventLog) {
     this.id = v?.id || BigInt(0);
-    this.replicaId = v?.replicaId || 0;
+    this.replicaId = v?.replicaId || BigInt(0);
     this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
   }
 
   static encode(m: EventLog, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.replicaId) w.uint32(16).uint32(m.replicaId);
+    if (m.replicaId) w.uint32(16).uint64(m.replicaId);
     for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -189,7 +189,7 @@ export class EventLog {
         m.id = r.uint64();
         break;
         case 2:
-        m.replicaId = r.uint32();
+        m.replicaId = r.uint64();
         break;
         case 3:
         m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));

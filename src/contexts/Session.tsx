@@ -207,28 +207,6 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     }));
   };
 
-  const importProfile = async (serverAddress: string, req: ICreateProfileRequest) => {
-    setState((prev) => ({
-      ...prev,
-      loading: true,
-      error: null,
-    }));
-
-    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
-    const client = await conn.client(FrontendClient);
-    const res = await client.auth
-      .importProfile(req, { timeout: API_TIMEOUT })
-      .catch((error: Error) => {
-        conn.close();
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error,
-        }));
-      });
-    if (!res) return;
-  };
-
   const actions = useStableCallbacks({ createProfile, signIn });
   const value = useMemo<[State, Ops]>(() => [state, actions], [state]);
 

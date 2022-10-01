@@ -6,7 +6,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -125,16 +124,7 @@ func (s *bootstrapService) ListClients(ctx context.Context, r *bootstrap.ListBoo
 
 // ListPeers ...
 func (s *bootstrapService) ListPeers(ctx context.Context, r *bootstrap.ListBootstrapPeersRequest) (*bootstrap.ListBootstrapPeersResponse, error) {
-	peers := []*bootstrap.BootstrapPeer{}
-	for _, p := range s.app.Peer().List() {
-		cert := p.VNIC().Certificate
-		peers = append(peers, &bootstrap.BootstrapPeer{
-			PeerId: p.ID(),
-			Label:  fmt.Sprintf("%s (%x)", cert.Subject, cert.Key),
-		})
-	}
-
-	return &bootstrap.ListBootstrapPeersResponse{Peers: peers}, nil
+	return &bootstrap.ListBootstrapPeersResponse{Peers: s.app.Bootstrap().ListPeers()}, nil
 }
 
 // PublishNetworkToPeer ...

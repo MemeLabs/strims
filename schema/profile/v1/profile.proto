@@ -57,6 +57,7 @@ message Profile {
   string name = 2;
   bytes secret = 3;
   strims.type.Key key = 4;
+  uint64 device_id = 5;
 }
 
 message ProfileID {
@@ -65,7 +66,31 @@ message ProfileID {
   ProfileID next_range = 3;
 }
 
+message DeleteDeviceRequest {
+  uint64 id = 1;
+}
+
+message DeleteDeviceResponse {}
+
+message GetDeviceRequest {
+  uint64 id = 1;
+}
+
+message GetDeviceResponse {
+  Device device = 1;
+}
+
+message ListDevicesRequest {}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+  Device current_device = 2;
+}
+
 service ProfileFrontend {
   rpc Get(GetProfileRequest) returns (GetProfileResponse);
   rpc Update(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc DeleteDevice(DeleteDeviceRequest) returns (DeleteDeviceResponse);
+  rpc GetDevice(GetDeviceRequest) returns (GetDeviceResponse);
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
 }

@@ -14,7 +14,7 @@ export interface InputLabelProps {
   component?: keyof ReactHTML;
   children: ReactNode;
   inlineInput?: boolean;
-  onClick: React.MouseEventHandler;
+  onClick?: React.MouseEventHandler;
 }
 
 const InputLabel: React.FC<InputLabelProps> = ({

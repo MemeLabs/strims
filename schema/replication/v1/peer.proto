@@ -10,15 +10,13 @@ option java_package = "gg.strims.replication.v1";
 option swift_prefix = "SNT";
 
 import "replication/v1/replication.proto";
+import "profile/v1/profile.proto";
 import "dao/v1/dao.proto";
 
 message PeerOpenRequest {
   uint32 version = 1;
   uint32 min_compatible_version = 2;
-  int64 timestamp = 3;
-
-  bytes key = 10001;
-  bytes signature = 10002;
+  uint64 replica_id = 3;
 }
 
 message PeerOpenResponse {
@@ -34,7 +32,14 @@ message PeerSendEventsResponse {
   dao.v1.VersionVector checkpoint = 1;
 }
 
+message PeerAllocateProfileIDsRequest {}
+
+message PeerAllocateProfileIDsResponse {
+  profile.v1.ProfileID profile_id = 1;
+}
+
 service ReplicationPeer {
   rpc Open(PeerOpenRequest) returns (PeerOpenResponse);
-  rpc SendEvents(PeerSendEventsRequest) returns (stream PeerSendEventsResponse);
+  rpc SendEvents(PeerSendEventsRequest) returns (PeerSendEventsResponse);
+  rpc AllocateProfileIDs(PeerAllocateProfileIDsRequest) returns (PeerAllocateProfileIDsResponse);
 }

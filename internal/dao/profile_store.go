@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
-	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/options"
 	"google.golang.org/protobuf/proto"
@@ -118,18 +117,13 @@ func (s *ProfileStore) GenerateID() (uint64, error) {
 		return id, nil
 	}
 
-	res, err := profileID.Transform(s, func(v *profilev1.ProfileID) error {
-		v.NextId += profileIDReservationSize
-		return nil
-	})
+	nextID, lastID, err := ProfileID.Incr(s, profileIDReservationSize)
 	if err != nil {
 		return 0, err
 	}
 
-	nextID := res.NextId - profileIDReservationSize
-
 	s.nextID = nextID + 1
-	s.lastReservedID = res.NextId
+	s.lastReservedID = lastID
 
 	return nextID, nil
 }

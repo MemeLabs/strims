@@ -341,6 +341,7 @@ export type IProfile = {
   name?: string;
   secret?: Uint8Array;
   key?: strims_type_IKey;
+  deviceId?: bigint;
 }
 
 export class Profile {
@@ -348,12 +349,14 @@ export class Profile {
   name: string;
   secret: Uint8Array;
   key: strims_type_Key | undefined;
+  deviceId: bigint;
 
   constructor(v?: IProfile) {
     this.id = v?.id || BigInt(0);
     this.name = v?.name || "";
     this.secret = v?.secret || new Uint8Array();
     this.key = v?.key && new strims_type_Key(v.key);
+    this.deviceId = v?.deviceId || BigInt(0);
   }
 
   static encode(m: Profile, w?: Writer): Writer {
@@ -362,6 +365,7 @@ export class Profile {
     if (m.name.length) w.uint32(18).string(m.name);
     if (m.secret.length) w.uint32(26).bytes(m.secret);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(34).fork()).ldelim();
+    if (m.deviceId) w.uint32(40).uint64(m.deviceId);
     return w;
   }
 
@@ -383,6 +387,9 @@ export class Profile {
         break;
         case 4:
         m.key = strims_type_Key.decode(r, r.uint32());
+        break;
+        case 5:
+        m.deviceId = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -433,6 +440,195 @@ export class ProfileID {
         break;
         case 3:
         m.nextRange = strims_profile_v1_ProfileID.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteDeviceRequest = {
+  id?: bigint;
+}
+
+export class DeleteDeviceRequest {
+  id: bigint;
+
+  constructor(v?: IDeleteDeviceRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: DeleteDeviceRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteDeviceRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeleteDeviceRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteDeviceResponse = Record<string, any>;
+
+export class DeleteDeviceResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeleteDeviceResponse) {
+  }
+
+  static encode(m: DeleteDeviceResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteDeviceResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeleteDeviceResponse();
+  }
+}
+
+export type IGetDeviceRequest = {
+  id?: bigint;
+}
+
+export class GetDeviceRequest {
+  id: bigint;
+
+  constructor(v?: IGetDeviceRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: GetDeviceRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetDeviceRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetDeviceRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetDeviceResponse = {
+  device?: strims_profile_v1_IDevice;
+}
+
+export class GetDeviceResponse {
+  device: strims_profile_v1_Device | undefined;
+
+  constructor(v?: IGetDeviceResponse) {
+    this.device = v?.device && new strims_profile_v1_Device(v.device);
+  }
+
+  static encode(m: GetDeviceResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.device) strims_profile_v1_Device.encode(m.device, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetDeviceResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetDeviceResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.device = strims_profile_v1_Device.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListDevicesRequest = Record<string, any>;
+
+export class ListDevicesRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IListDevicesRequest) {
+  }
+
+  static encode(m: ListDevicesRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListDevicesRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ListDevicesRequest();
+  }
+}
+
+export type IListDevicesResponse = {
+  devices?: strims_profile_v1_IDevice[];
+  currentDevice?: strims_profile_v1_IDevice;
+}
+
+export class ListDevicesResponse {
+  devices: strims_profile_v1_Device[];
+  currentDevice: strims_profile_v1_Device | undefined;
+
+  constructor(v?: IListDevicesResponse) {
+    this.devices = v?.devices ? v.devices.map(v => new strims_profile_v1_Device(v)) : [];
+    this.currentDevice = v?.currentDevice && new strims_profile_v1_Device(v.currentDevice);
+  }
+
+  static encode(m: ListDevicesResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.devices) strims_profile_v1_Device.encode(v, w.uint32(10).fork()).ldelim();
+    if (m.currentDevice) strims_profile_v1_Device.encode(m.currentDevice, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListDevicesResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListDevicesResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.devices.push(strims_profile_v1_Device.decode(r, r.uint32()));
+        break;
+        case 2:
+        m.currentDevice = strims_profile_v1_Device.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -495,6 +691,42 @@ export const strims_profile_v1_ProfileID = ProfileID;
 export type strims_profile_v1_ProfileID = ProfileID;
 /* @internal */
 export type strims_profile_v1_IProfileID = IProfileID;
+/* @internal */
+export const strims_profile_v1_DeleteDeviceRequest = DeleteDeviceRequest;
+/* @internal */
+export type strims_profile_v1_DeleteDeviceRequest = DeleteDeviceRequest;
+/* @internal */
+export type strims_profile_v1_IDeleteDeviceRequest = IDeleteDeviceRequest;
+/* @internal */
+export const strims_profile_v1_DeleteDeviceResponse = DeleteDeviceResponse;
+/* @internal */
+export type strims_profile_v1_DeleteDeviceResponse = DeleteDeviceResponse;
+/* @internal */
+export type strims_profile_v1_IDeleteDeviceResponse = IDeleteDeviceResponse;
+/* @internal */
+export const strims_profile_v1_GetDeviceRequest = GetDeviceRequest;
+/* @internal */
+export type strims_profile_v1_GetDeviceRequest = GetDeviceRequest;
+/* @internal */
+export type strims_profile_v1_IGetDeviceRequest = IGetDeviceRequest;
+/* @internal */
+export const strims_profile_v1_GetDeviceResponse = GetDeviceResponse;
+/* @internal */
+export type strims_profile_v1_GetDeviceResponse = GetDeviceResponse;
+/* @internal */
+export type strims_profile_v1_IGetDeviceResponse = IGetDeviceResponse;
+/* @internal */
+export const strims_profile_v1_ListDevicesRequest = ListDevicesRequest;
+/* @internal */
+export type strims_profile_v1_ListDevicesRequest = ListDevicesRequest;
+/* @internal */
+export type strims_profile_v1_IListDevicesRequest = IListDevicesRequest;
+/* @internal */
+export const strims_profile_v1_ListDevicesResponse = ListDevicesResponse;
+/* @internal */
+export type strims_profile_v1_ListDevicesResponse = ListDevicesResponse;
+/* @internal */
+export type strims_profile_v1_IListDevicesResponse = IListDevicesResponse;
 /* @internal */
 export const strims_profile_v1_StorageKey_PBKDF2Options = StorageKey.PBKDF2Options;
 /* @internal */

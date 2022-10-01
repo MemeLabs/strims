@@ -5,11 +5,13 @@ import React from "react";
 import { Route, Routes } from "react-router-dom";
 
 import ProfileConfigForm from "./ProfileConfigForm";
+import ProfileDeviceList from "./ProfileDeviceList";
 
 const Router: React.FC = () => {
   return (
     <Routes>
       <Route index element={<ProfileConfigForm />} />
+      <Route path="devices" element={<ProfileDeviceList />} />
     </Routes>
   );
 };

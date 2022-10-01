@@ -3,9 +3,11 @@ package dao
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -90,6 +92,25 @@ func upgrade(s Store, tx kv.RWTx, v uint32) error {
 		if err := UnreadChatWhisperRecordsByPeerKey.rebuild(tx); err != nil {
 			return err
 		}
+		fallthrough
+	case 2:
+		if err := initProfileDevice(tx); err != nil {
+			return err
+		}
+		fallthrough
+	case 3:
+		if err := upgradeAssignVersion(s, tx, Networks); err != nil {
+			return err
+		}
+		if err := upgradeAssignVersion(s, tx, BootstrapClients); err != nil {
+			return err
+		}
+		fallthrough
+	case 4:
+		ProfileID.t.Transform(tx, func(p *profilev1.ProfileID) error {
+			p.LastId = math.MaxUint64
+			return nil
+		})
 		fallthrough
 	default:
 		return nil

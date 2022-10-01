@@ -6,6 +6,10 @@ import {
   strims_replication_v1_IEvent,
 } from "./replication";
 import {
+  strims_profile_v1_ProfileID,
+  strims_profile_v1_IProfileID,
+} from "../../profile/v1/profile";
+import {
   strims_dao_v1_VersionVector,
   strims_dao_v1_IVersionVector,
 } from "../../dao/v1/dao";
@@ -13,33 +17,25 @@ import {
 export type IPeerOpenRequest = {
   version?: number;
   minCompatibleVersion?: number;
-  timestamp?: bigint;
-  key?: Uint8Array;
-  signature?: Uint8Array;
+  replicaId?: bigint;
 }
 
 export class PeerOpenRequest {
   version: number;
   minCompatibleVersion: number;
-  timestamp: bigint;
-  key: Uint8Array;
-  signature: Uint8Array;
+  replicaId: bigint;
 
   constructor(v?: IPeerOpenRequest) {
     this.version = v?.version || 0;
     this.minCompatibleVersion = v?.minCompatibleVersion || 0;
-    this.timestamp = v?.timestamp || BigInt(0);
-    this.key = v?.key || new Uint8Array();
-    this.signature = v?.signature || new Uint8Array();
+    this.replicaId = v?.replicaId || BigInt(0);
   }
 
   static encode(m: PeerOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.version) w.uint32(8).uint32(m.version);
     if (m.minCompatibleVersion) w.uint32(16).uint32(m.minCompatibleVersion);
-    if (m.timestamp) w.uint32(24).int64(m.timestamp);
-    if (m.key.length) w.uint32(80010).bytes(m.key);
-    if (m.signature.length) w.uint32(80018).bytes(m.signature);
+    if (m.replicaId) w.uint32(24).uint64(m.replicaId);
     return w;
   }
 
@@ -57,13 +53,7 @@ export class PeerOpenRequest {
         m.minCompatibleVersion = r.uint32();
         break;
         case 3:
-        m.timestamp = r.int64();
-        break;
-        case 10001:
-        m.key = r.bytes();
-        break;
-        case 10002:
-        m.signature = r.bytes();
+        m.replicaId = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -189,6 +179,61 @@ export class PeerSendEventsResponse {
   }
 }
 
+export type IPeerAllocateProfileIDsRequest = Record<string, any>;
+
+export class PeerAllocateProfileIDsRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IPeerAllocateProfileIDsRequest) {
+  }
+
+  static encode(m: PeerAllocateProfileIDsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PeerAllocateProfileIDsRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new PeerAllocateProfileIDsRequest();
+  }
+}
+
+export type IPeerAllocateProfileIDsResponse = {
+  profileId?: strims_profile_v1_IProfileID;
+}
+
+export class PeerAllocateProfileIDsResponse {
+  profileId: strims_profile_v1_ProfileID | undefined;
+
+  constructor(v?: IPeerAllocateProfileIDsResponse) {
+    this.profileId = v?.profileId && new strims_profile_v1_ProfileID(v.profileId);
+  }
+
+  static encode(m: PeerAllocateProfileIDsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.profileId) strims_profile_v1_ProfileID.encode(m.profileId, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PeerAllocateProfileIDsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PeerAllocateProfileIDsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.profileId = strims_profile_v1_ProfileID.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 /* @internal */
 export const strims_replication_v1_PeerOpenRequest = PeerOpenRequest;
 /* @internal */
@@ -213,3 +258,15 @@ export const strims_replication_v1_PeerSendEventsResponse = PeerSendEventsRespon
 export type strims_replication_v1_PeerSendEventsResponse = PeerSendEventsResponse;
 /* @internal */
 export type strims_replication_v1_IPeerSendEventsResponse = IPeerSendEventsResponse;
+/* @internal */
+export const strims_replication_v1_PeerAllocateProfileIDsRequest = PeerAllocateProfileIDsRequest;
+/* @internal */
+export type strims_replication_v1_PeerAllocateProfileIDsRequest = PeerAllocateProfileIDsRequest;
+/* @internal */
+export type strims_replication_v1_IPeerAllocateProfileIDsRequest = IPeerAllocateProfileIDsRequest;
+/* @internal */
+export const strims_replication_v1_PeerAllocateProfileIDsResponse = PeerAllocateProfileIDsResponse;
+/* @internal */
+export type strims_replication_v1_PeerAllocateProfileIDsResponse = PeerAllocateProfileIDsResponse;
+/* @internal */
+export type strims_replication_v1_IPeerAllocateProfileIDsResponse = IPeerAllocateProfileIDsResponse;

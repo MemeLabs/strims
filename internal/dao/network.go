@@ -21,6 +21,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
@@ -51,6 +52,29 @@ var Networks = NewTable(
 		ObserveDelete: func(m *networkv1.Network) proto.Message {
 			return &networkv1.NetworkDeleteEvent{Network: m}
 		},
+		OnChange: LocalSetHook(func(s ReplicatedRWTx, m, p *networkv1.Network) error {
+			if p != nil || m.GetServerConfig() == nil {
+				return nil
+			}
+
+			for c := m.Certificate; c != nil; c = c.GetParent() {
+				log, err := NewCertificateLog(ProfileID.IDGenerator(s), m.Id, c)
+				if err != nil {
+					return err
+				}
+				if err := CertificateLogs.Insert(s, log); err != nil {
+					return err
+				}
+			}
+
+			directoryUser, err := NewDirectoryUserRecord(ProfileID.IDGenerator(s), m.Id, m.Certificate.Key)
+			if err != nil {
+				return err
+			}
+			directoryUser.Moderation.IsAdmin = wrapperspb.Bool(true)
+			directoryUser.Moderation.IsModerator = wrapperspb.Bool(true)
+			return DirectoryUserRecords.Insert(s, directoryUser)
+		}),
 	},
 )
 

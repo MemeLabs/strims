@@ -125,23 +125,23 @@ export class StoreVersion {
 }
 
 export type IVersionVector = {
-  value?: Map<number, bigint> | { [key: number]: bigint };
+  value?: Map<bigint, bigint>;
   updatedAt?: bigint;
 }
 
 export class VersionVector {
-  value: Map<number, bigint>;
+  value: Map<bigint, bigint>;
   updatedAt: bigint;
 
   constructor(v?: IVersionVector) {
-    if (v?.value) this.value = new Map(v.value instanceof Map ? v.value : Object.entries(v.value).map(([k, v]) => [Number(k), v]));
-    else this.value = new Map<number, bigint>();
+    if (v?.value) this.value = new Map(v.value);
+    else this.value = new Map<bigint, bigint>();
     this.updatedAt = v?.updatedAt || BigInt(0);
   }
 
   static encode(m: VersionVector, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const [k, v] of m.value) w.uint32(10).fork().uint32(8).uint32(k).uint32(18).uint64(v).ldelim();
+    for (const [k, v] of m.value) w.uint32(10).fork().uint32(8).uint64(k).uint32(16).uint64(v).ldelim();
     if (m.updatedAt) w.uint32(16).int64(m.updatedAt);
     return w;
   }
@@ -157,13 +157,13 @@ export class VersionVector {
         {
           const flen = r.uint32();
           const fend = r.pos + flen;
-          let key: number;
+          let key: bigint;
           let value: bigint;
           while (r.pos < fend) {
             const ftag = r.uint32();
             switch (ftag >> 3) {
               case 1:
-              key = r.uint32()
+              key = r.uint64()
               break;
               case 2:
               value = r.uint64();

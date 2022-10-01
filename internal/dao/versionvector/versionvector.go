@@ -9,15 +9,15 @@ import (
 // New creates a new version vector proceeding from all the supplied values
 func New(vs ...*daov1.VersionVector) *daov1.VersionVector {
 	d := &daov1.VersionVector{
-		Value: map[uint32]uint64{},
+		Value: map[uint64]uint64{},
 	}
 	Update(d, vs...)
 	return d
 }
 
-func NewSeed(id uint32) *daov1.VersionVector {
+func NewSeed(id uint64) *daov1.VersionVector {
 	return &daov1.VersionVector{
-		Value:     map[uint32]uint64{id: 1},
+		Value:     map[uint64]uint64{id: 1},
 		UpdatedAt: timeutil.Now().UnixMilli(),
 	}
 }
@@ -47,7 +47,7 @@ func Clone(v *daov1.VersionVector) *daov1.VersionVector {
 }
 
 // Increment the version corresponding to the replica key
-func Increment(v *daov1.VersionVector, id uint32) {
+func Increment(v *daov1.VersionVector, id uint64) {
 	initValue(v)
 	v.Value[id]++
 	v.UpdatedAt = timeutil.Now().UnixMilli()
@@ -79,6 +79,6 @@ func Compare(a, b *daov1.VersionVector) (int, bool) {
 
 func initValue(v *daov1.VersionVector) {
 	if v.Value == nil {
-		v.Value = map[uint32]uint64{}
+		v.Value = map[uint64]uint64{}
 	}
 }
