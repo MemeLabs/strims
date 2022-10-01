@@ -99,9 +99,7 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
     []
   );
 
-  const handleToggleClick = useCallback(() => {
-    toggleShowChat();
-  }, []);
+  const handleToggleClick = useCallback(() => toggleShowChat(), []);
   const list = (() => {
     switch (activeTab) {
       case Tab.Rooms:
@@ -131,9 +129,6 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
           </button>
         )}
 
-        {/* <button className="room_menu__toggle--on" onClick={onClose}>
-          <BsArrowBarRight />
-        </button> */}
         <Tabs onChange={setActiveTab} active={activeTab} tabs={tabs} />
       </div>
       <div className="room_menu__content">{list}</div>
@@ -160,7 +155,6 @@ const RoomsListItem: React.FC<RoomsListItemProps> = ({
   const handleClick = useStableCallback(() => {
     openRoom(serverKey, networkKey);
     onChange({ type: "ROOM", topicKey: serverKey });
-    console.log("rooooms prooopsss", name, openRoom);
   });
 
   return (
