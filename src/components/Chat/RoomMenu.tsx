@@ -6,7 +6,7 @@ import "./RoomMenu.scss";
 import clsx from "clsx";
 import date from "date-and-time";
 import { Base64 } from "js-base64";
-import React, { ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useContext, useMemo, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
@@ -16,7 +16,6 @@ import { WhisperThread } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Topic, useChat } from "../../contexts/Chat";
 import { useCall, useClient } from "../../contexts/FrontendApi";
-import { useLayout } from "../../contexts/Layout";
 import { NetworkContext } from "../../contexts/Network";
 import { useListings } from "../../hooks/directory";
 import useSize from "../../hooks/useSize";
@@ -63,8 +62,6 @@ interface RoomMenuProps extends RoomMenuPropsBase {
 
 export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Rooms);
-  const { toggleShowChat } = useLayout();
-  const [{ mainActiveTopic }] = useChat();
 
   const tabs = useMemo(
     () => [
@@ -99,7 +96,6 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
     []
   );
 
-  const handleToggleClick = useCallback(() => toggleShowChat(), []);
   const list = (() => {
     switch (activeTab) {
       case Tab.Rooms:
@@ -123,11 +119,9 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
       ref={ref}
     >
       <div className="room_menu__header">
-        {!mainActiveTopic && (
-          <button className="room_menu__toggle--on" onClick={handleToggleClick}>
-            <BsArrowBarRight />
-          </button>
-        )}
+        <button className="room_menu__toggle" onClick={onClose}>
+          <BsArrowBarRight />
+        </button>
 
         <Tabs onChange={setActiveTab} active={activeTab} tabs={tabs} />
       </div>
