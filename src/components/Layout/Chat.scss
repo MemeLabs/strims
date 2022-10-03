@@ -56,6 +56,10 @@
     z-index: var(--z-index-above);
     right: 0;
     --swipable-peek-size: 0px;
+
+    &--locked {
+      width: calc(100%);
+    }
   }
 }
 
