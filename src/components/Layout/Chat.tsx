@@ -64,7 +64,10 @@ const Chat: React.FC = () => {
     setMainActiveTopic(topic);
   }, []);
 
-  const handleRoomMenuClose = useCallback(() => toggleMenuOpen(false), []);
+  const handleRoomMenuClose = useCallback(
+    () => (menuLocked ? toggleShowChat() : toggleMenuOpen(false)),
+    [menuLocked]
+  );
 
   return (
     <div
@@ -82,7 +85,9 @@ const Chat: React.FC = () => {
           open={menuOpen}
           locked={menuLocked}
           onToggle={toggleMenuOpen}
-          className={clsx("layout_chat__menu", { "layout_chat__menu--locked": menuLocked })}
+          className={clsx("layout_chat__menu", {
+            "layout_chat__menu--locked": menuLocked,
+          })}
           direction={swapMainPanels ? "right" : "left"}
           filterDeviceTypes={null}
           preventScroll={true}
