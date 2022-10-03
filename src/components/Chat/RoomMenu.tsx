@@ -62,7 +62,6 @@ interface RoomMenuProps extends RoomMenuPropsBase {
 
 export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Rooms);
-
   const tabs = useMemo(
     () => [
       {
@@ -122,7 +121,6 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
         <button className="room_menu__toggle" onClick={onClose}>
           <BsArrowBarRight />
         </button>
-
         <Tabs onChange={setActiveTab} active={activeTab} tabs={tabs} />
       </div>
       <div className="room_menu__content">{list}</div>
