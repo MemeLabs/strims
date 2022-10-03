@@ -4,7 +4,7 @@
 import "./Chat.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { BsArrowBarLeft } from "react-icons/bs";
 import { HiOutlineDotsVertical } from "react-icons/hi";
@@ -40,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 );
 
 const Chat: React.FC = () => {
-  const { showChat, toggleShowChat, swapMainPanels } = useLayout();
+  const { showChat, toggleShowChat, swapMainPanels, setOverlayState } = useLayout();
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
   const [menuOpenToggled, toggleMenuOpen] = useToggle(!mainActiveTopic);
 
@@ -48,7 +48,7 @@ const Chat: React.FC = () => {
   const menuOpen = menuOpenToggled || menuLocked;
 
   const ref = useRef<HTMLDivElement>();
-  useClickAway(ref, () => toggleMenuOpen(false));
+  useClickAway(ref, () => toggleMenuOpen(menuLocked));
 
   useHotkeys("alt+r", () => toggleShowChat(), {
     enableOnContentEditable: true,
@@ -64,10 +64,18 @@ const Chat: React.FC = () => {
     setMainActiveTopic(topic);
   }, []);
 
-  const handleRoomMenuClose = useCallback(
-    () => (menuLocked ? toggleShowChat() : toggleMenuOpen(false)),
-    [menuLocked]
-  );
+  const handleRoomMenuClose = useCallback(() => {
+    if (!menuLocked) {
+      toggleMenuOpen(false);
+    } else if (DEVICE_TYPE === DeviceType.Portable) {
+      setOverlayState({
+        open: false,
+        transitioning: false,
+      });
+    } else {
+      toggleShowChat(false);
+    }
+  }, [menuLocked]);
 
   return (
     <div

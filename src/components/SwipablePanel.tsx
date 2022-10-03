@@ -10,6 +10,7 @@ import React, {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -94,8 +95,10 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
   const [dragState, setDragState] = useState(() => getDragState(open && !animateInitialState));
   const toggleDragState = (open: boolean) => {
     setDragState(getDragState(open));
-    toggleParentChildOpen?.(open);
+    toggleParentChildOpen?.(open && !locked);
   };
+
+  useEffect(() => toggleParentChildOpen?.(open && !locked), [open, locked]);
 
   useLayoutEffect(() => {
     if (dragState.closed == open) {
@@ -124,8 +127,6 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
 
   useDrag(
     ({ movement: [mx, my], swipe: [sx, sy], dragging }) => {
-      if (locked) return;
-
       let m = 0;
       let s = 0;
       switch (direction) {
@@ -164,12 +165,12 @@ const SwipablePanel: React.FC<SwipablePaneProps> = ({
       }
       if (!isEqual(dragState, next)) {
         setDragState(next);
-        toggleParentChildOpen?.(!next.closed);
+        toggleParentChildOpen?.(!next.closed && !locked);
         onDragStateChange?.({ ...next, transitioning: true });
       }
     },
     {
-      enabled: !childOpen,
+      enabled: !childOpen && !locked,
       axis: vertical ? "y" : "x",
       target: handleRef ?? ref,
       eventOptions: {
