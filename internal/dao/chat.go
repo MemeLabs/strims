@@ -186,7 +186,7 @@ var ChatUIConfigHighlights = NewTable(
 )
 
 func init() {
-	RegisterReplicatedTable(ChatUIConfigHighlights, &ReplicatedTableOptions[*chatv1.UIConfigHighlight]{})
+	RegisterReplicatedTable(ChatUIConfigHighlights, nil)
 }
 
 var ChatUIConfigHighlightsByPeerKey = NewUniqueIndex(chatUIConfigHighlightKeyNS, ChatUIConfigHighlights, (*chatv1.UIConfigHighlight).GetPeerKey, byteIdentity, nil)
@@ -204,7 +204,7 @@ var ChatUIConfigTags = NewTable(
 )
 
 func init() {
-	RegisterReplicatedTable(ChatUIConfigTags, &ReplicatedTableOptions[*chatv1.UIConfigTag]{})
+	RegisterReplicatedTable(ChatUIConfigTags, nil)
 }
 
 var ChatUIConfigTagsByPeerKey = NewUniqueIndex(chatUIConfigTagKeyNS, ChatUIConfigTags, (*chatv1.UIConfigTag).GetPeerKey, byteIdentity, nil)
@@ -222,7 +222,7 @@ var ChatUIConfigIgnores = NewTable(
 )
 
 func init() {
-	RegisterReplicatedTable(ChatUIConfigIgnores, &ReplicatedTableOptions[*chatv1.UIConfigIgnore]{})
+	RegisterReplicatedTable(ChatUIConfigIgnores, nil)
 }
 
 var ChatUIConfigIgnoresByPeerKey = NewUniqueIndex(chatUIConfigIgnoreKeyNS, ChatUIConfigIgnores, (*chatv1.UIConfigIgnore).GetPeerKey, byteIdentity, nil)
@@ -291,7 +291,7 @@ var ChatWhisperRecords = NewTable(
 )
 
 func init() {
-	RegisterReplicatedTable(ChatWhisperRecords, &ReplicatedTableOptions[*chatv1.WhisperRecord]{})
+	RegisterReplicatedTable(ChatWhisperRecords, nil)
 }
 
 var ChatWhisperRecordsByPeerKey = NewSecondaryIndex(

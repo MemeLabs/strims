@@ -2,40 +2,40 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
+  strims_replication_v1_Checkpoint,
+  strims_replication_v1_ICheckpoint,
   strims_replication_v1_Event,
   strims_replication_v1_IEvent,
+  strims_replication_v1_EventLog,
+  strims_replication_v1_IEventLog,
 } from "./replication";
 import {
   strims_profile_v1_ProfileID,
   strims_profile_v1_IProfileID,
 } from "../../profile/v1/profile";
-import {
-  strims_dao_v1_VersionVector,
-  strims_dao_v1_IVersionVector,
-} from "../../dao/v1/dao";
 
 export type IPeerOpenRequest = {
-  version?: number;
-  minCompatibleVersion?: number;
+  storeVersion?: number;
   replicaId?: bigint;
+  checkpoints?: strims_replication_v1_ICheckpoint[];
 }
 
 export class PeerOpenRequest {
-  version: number;
-  minCompatibleVersion: number;
+  storeVersion: number;
   replicaId: bigint;
+  checkpoints: strims_replication_v1_Checkpoint[];
 
   constructor(v?: IPeerOpenRequest) {
-    this.version = v?.version || 0;
-    this.minCompatibleVersion = v?.minCompatibleVersion || 0;
+    this.storeVersion = v?.storeVersion || 0;
     this.replicaId = v?.replicaId || BigInt(0);
+    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
   }
 
   static encode(m: PeerOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.version) w.uint32(8).uint32(m.version);
-    if (m.minCompatibleVersion) w.uint32(16).uint32(m.minCompatibleVersion);
-    if (m.replicaId) w.uint32(24).uint64(m.replicaId);
+    if (m.storeVersion) w.uint32(8).uint32(m.storeVersion);
+    if (m.replicaId) w.uint32(16).uint64(m.replicaId);
+    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -47,13 +47,13 @@ export class PeerOpenRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.version = r.uint32();
+        m.storeVersion = r.uint32();
         break;
         case 2:
-        m.minCompatibleVersion = r.uint32();
+        m.replicaId = r.uint64();
         break;
         case 3:
-        m.replicaId = r.uint64();
+        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -65,19 +65,27 @@ export class PeerOpenRequest {
 }
 
 export type IPeerOpenResponse = {
-  checkpoint?: strims_dao_v1_IVersionVector;
+  storeVersion?: number;
+  replicaId?: bigint;
+  checkpoints?: strims_replication_v1_ICheckpoint[];
 }
 
 export class PeerOpenResponse {
-  checkpoint: strims_dao_v1_VersionVector | undefined;
+  storeVersion: number;
+  replicaId: bigint;
+  checkpoints: strims_replication_v1_Checkpoint[];
 
   constructor(v?: IPeerOpenResponse) {
-    this.checkpoint = v?.checkpoint && new strims_dao_v1_VersionVector(v.checkpoint);
+    this.storeVersion = v?.storeVersion || 0;
+    this.replicaId = v?.replicaId || BigInt(0);
+    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
   }
 
   static encode(m: PeerOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.checkpoint) strims_dao_v1_VersionVector.encode(m.checkpoint, w.uint32(10).fork()).ldelim();
+    if (m.storeVersion) w.uint32(8).uint32(m.storeVersion);
+    if (m.replicaId) w.uint32(16).uint64(m.replicaId);
+    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -89,50 +97,13 @@ export class PeerOpenResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.checkpoint = strims_dao_v1_VersionVector.decode(r, r.uint32());
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IPeerSendEventsRequest = {
-  checkpoint?: strims_dao_v1_IVersionVector;
-  events?: strims_replication_v1_IEvent[];
-}
-
-export class PeerSendEventsRequest {
-  checkpoint: strims_dao_v1_VersionVector | undefined;
-  events: strims_replication_v1_Event[];
-
-  constructor(v?: IPeerSendEventsRequest) {
-    this.checkpoint = v?.checkpoint && new strims_dao_v1_VersionVector(v.checkpoint);
-    this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
-  }
-
-  static encode(m: PeerSendEventsRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.checkpoint) strims_dao_v1_VersionVector.encode(m.checkpoint, w.uint32(10).fork()).ldelim();
-    for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(18).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): PeerSendEventsRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new PeerSendEventsRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.checkpoint = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        m.storeVersion = r.uint32();
         break;
         case 2:
-        m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));
+        m.replicaId = r.uint64();
+        break;
+        case 3:
+        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -143,32 +114,147 @@ export class PeerSendEventsRequest {
   }
 }
 
-export type IPeerSendEventsResponse = {
-  checkpoint?: strims_dao_v1_IVersionVector;
+export type IPeerBootstrapRequest = {
+  events?: strims_replication_v1_IEvent[];
+  logs?: strims_replication_v1_IEventLog[];
 }
 
-export class PeerSendEventsResponse {
-  checkpoint: strims_dao_v1_VersionVector | undefined;
+export class PeerBootstrapRequest {
+  events: strims_replication_v1_Event[];
+  logs: strims_replication_v1_EventLog[];
 
-  constructor(v?: IPeerSendEventsResponse) {
-    this.checkpoint = v?.checkpoint && new strims_dao_v1_VersionVector(v.checkpoint);
+  constructor(v?: IPeerBootstrapRequest) {
+    this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
+    this.logs = v?.logs ? v.logs.map(v => new strims_replication_v1_EventLog(v)) : [];
   }
 
-  static encode(m: PeerSendEventsResponse, w?: Writer): Writer {
+  static encode(m: PeerBootstrapRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.checkpoint) strims_dao_v1_VersionVector.encode(m.checkpoint, w.uint32(10).fork()).ldelim();
+    for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.logs) strims_replication_v1_EventLog.encode(v, w.uint32(18).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): PeerSendEventsResponse {
+  static decode(r: Reader | Uint8Array, length?: number): PeerBootstrapRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new PeerSendEventsResponse();
+    const m = new PeerBootstrapRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.checkpoint = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));
+        break;
+        case 2:
+        m.logs.push(strims_replication_v1_EventLog.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IPeerBootstrapResponse = {
+  checkpoint?: strims_replication_v1_ICheckpoint;
+}
+
+export class PeerBootstrapResponse {
+  checkpoint: strims_replication_v1_Checkpoint | undefined;
+
+  constructor(v?: IPeerBootstrapResponse) {
+    this.checkpoint = v?.checkpoint && new strims_replication_v1_Checkpoint(v.checkpoint);
+  }
+
+  static encode(m: PeerBootstrapResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.checkpoint) strims_replication_v1_Checkpoint.encode(m.checkpoint, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PeerBootstrapResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PeerBootstrapResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.checkpoint = strims_replication_v1_Checkpoint.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IPeerSyncRequest = {
+  logs?: strims_replication_v1_IEventLog[];
+}
+
+export class PeerSyncRequest {
+  logs: strims_replication_v1_EventLog[];
+
+  constructor(v?: IPeerSyncRequest) {
+    this.logs = v?.logs ? v.logs.map(v => new strims_replication_v1_EventLog(v)) : [];
+  }
+
+  static encode(m: PeerSyncRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.logs) strims_replication_v1_EventLog.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PeerSyncRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PeerSyncRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.logs.push(strims_replication_v1_EventLog.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IPeerSyncResponse = {
+  checkpoint?: strims_replication_v1_ICheckpoint;
+}
+
+export class PeerSyncResponse {
+  checkpoint: strims_replication_v1_Checkpoint | undefined;
+
+  constructor(v?: IPeerSyncResponse) {
+    this.checkpoint = v?.checkpoint && new strims_replication_v1_Checkpoint(v.checkpoint);
+  }
+
+  static encode(m: PeerSyncResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.checkpoint) strims_replication_v1_Checkpoint.encode(m.checkpoint, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): PeerSyncResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PeerSyncResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.checkpoint = strims_replication_v1_Checkpoint.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -247,17 +333,29 @@ export type strims_replication_v1_PeerOpenResponse = PeerOpenResponse;
 /* @internal */
 export type strims_replication_v1_IPeerOpenResponse = IPeerOpenResponse;
 /* @internal */
-export const strims_replication_v1_PeerSendEventsRequest = PeerSendEventsRequest;
+export const strims_replication_v1_PeerBootstrapRequest = PeerBootstrapRequest;
 /* @internal */
-export type strims_replication_v1_PeerSendEventsRequest = PeerSendEventsRequest;
+export type strims_replication_v1_PeerBootstrapRequest = PeerBootstrapRequest;
 /* @internal */
-export type strims_replication_v1_IPeerSendEventsRequest = IPeerSendEventsRequest;
+export type strims_replication_v1_IPeerBootstrapRequest = IPeerBootstrapRequest;
 /* @internal */
-export const strims_replication_v1_PeerSendEventsResponse = PeerSendEventsResponse;
+export const strims_replication_v1_PeerBootstrapResponse = PeerBootstrapResponse;
 /* @internal */
-export type strims_replication_v1_PeerSendEventsResponse = PeerSendEventsResponse;
+export type strims_replication_v1_PeerBootstrapResponse = PeerBootstrapResponse;
 /* @internal */
-export type strims_replication_v1_IPeerSendEventsResponse = IPeerSendEventsResponse;
+export type strims_replication_v1_IPeerBootstrapResponse = IPeerBootstrapResponse;
+/* @internal */
+export const strims_replication_v1_PeerSyncRequest = PeerSyncRequest;
+/* @internal */
+export type strims_replication_v1_PeerSyncRequest = PeerSyncRequest;
+/* @internal */
+export type strims_replication_v1_IPeerSyncRequest = IPeerSyncRequest;
+/* @internal */
+export const strims_replication_v1_PeerSyncResponse = PeerSyncResponse;
+/* @internal */
+export type strims_replication_v1_PeerSyncResponse = PeerSyncResponse;
+/* @internal */
+export type strims_replication_v1_IPeerSyncResponse = IPeerSyncResponse;
 /* @internal */
 export const strims_replication_v1_PeerAllocateProfileIDsRequest = PeerAllocateProfileIDsRequest;
 /* @internal */

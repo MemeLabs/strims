@@ -151,5 +151,3 @@ func (t *CA) FindByKey(ctx context.Context, networkKey []byte, key []byte) (*cer
 func (t *CA) AddPeer(id uint64, peer *vnic.Peer, s *rpc.Server, c rpc.Caller) {
 	networkv1ca.RegisterCAPeerService(s, &peerService{t})
 }
-
-func (t *CA) RemovePeer(id uint64) {}

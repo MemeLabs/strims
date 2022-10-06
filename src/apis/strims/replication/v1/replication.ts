@@ -10,39 +10,39 @@ import {
   strims_dao_v1_IVersionVector,
 } from "../../dao/v1/dao";
 
-export type IVersion = {
-  replicaId?: number;
-  currentVersion?: strims_dao_v1_IVersionVector;
+export type ICheckpoint = {
+  id?: bigint;
+  version?: strims_dao_v1_IVersionVector;
 }
 
-export class Version {
-  replicaId: number;
-  currentVersion: strims_dao_v1_VersionVector | undefined;
+export class Checkpoint {
+  id: bigint;
+  version: strims_dao_v1_VersionVector | undefined;
 
-  constructor(v?: IVersion) {
-    this.replicaId = v?.replicaId || 0;
-    this.currentVersion = v?.currentVersion && new strims_dao_v1_VersionVector(v.currentVersion);
+  constructor(v?: ICheckpoint) {
+    this.id = v?.id || BigInt(0);
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
   }
 
-  static encode(m: Version, w?: Writer): Writer {
+  static encode(m: Checkpoint, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.replicaId) w.uint32(8).uint32(m.replicaId);
-    if (m.currentVersion) strims_dao_v1_VersionVector.encode(m.currentVersion, w.uint32(18).fork()).ldelim();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(18).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): Version {
+  static decode(r: Reader | Uint8Array, length?: number): Checkpoint {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new Version();
+    const m = new Checkpoint();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.replicaId = r.uint32();
+        m.id = r.uint64();
         break;
         case 2:
-        m.currentVersion = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -156,17 +156,20 @@ export class EventBundle {
 export type IEventLog = {
   id?: bigint;
   replicaId?: bigint;
+  timestamp?: bigint;
   events?: strims_replication_v1_IEvent[];
 }
 
 export class EventLog {
   id: bigint;
   replicaId: bigint;
+  timestamp: bigint;
   events: strims_replication_v1_Event[];
 
   constructor(v?: IEventLog) {
     this.id = v?.id || BigInt(0);
     this.replicaId = v?.replicaId || BigInt(0);
+    this.timestamp = v?.timestamp || BigInt(0);
     this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
   }
 
@@ -174,6 +177,7 @@ export class EventLog {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.replicaId) w.uint32(16).uint64(m.replicaId);
+    if (m.timestamp) w.uint32(32).uint64(m.timestamp);
     for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -190,6 +194,9 @@ export class EventLog {
         break;
         case 2:
         m.replicaId = r.uint64();
+        break;
+        case 4:
+        m.timestamp = r.uint64();
         break;
         case 3:
         m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));
@@ -282,12 +289,67 @@ export class CreatePairingTokenResponse {
   }
 }
 
+export type IListCheckpointsRequest = Record<string, any>;
+
+export class ListCheckpointsRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IListCheckpointsRequest) {
+  }
+
+  static encode(m: ListCheckpointsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListCheckpointsRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ListCheckpointsRequest();
+  }
+}
+
+export type IListCheckpointsResponse = {
+  checkpoints?: strims_replication_v1_ICheckpoint[];
+}
+
+export class ListCheckpointsResponse {
+  checkpoints: strims_replication_v1_Checkpoint[];
+
+  constructor(v?: IListCheckpointsResponse) {
+    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
+  }
+
+  static encode(m: ListCheckpointsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListCheckpointsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListCheckpointsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 /* @internal */
-export const strims_replication_v1_Version = Version;
+export const strims_replication_v1_Checkpoint = Checkpoint;
 /* @internal */
-export type strims_replication_v1_Version = Version;
+export type strims_replication_v1_Checkpoint = Checkpoint;
 /* @internal */
-export type strims_replication_v1_IVersion = IVersion;
+export type strims_replication_v1_ICheckpoint = ICheckpoint;
 /* @internal */
 export const strims_replication_v1_Event = Event;
 /* @internal */
@@ -318,3 +380,15 @@ export const strims_replication_v1_CreatePairingTokenResponse = CreatePairingTok
 export type strims_replication_v1_CreatePairingTokenResponse = CreatePairingTokenResponse;
 /* @internal */
 export type strims_replication_v1_ICreatePairingTokenResponse = ICreatePairingTokenResponse;
+/* @internal */
+export const strims_replication_v1_ListCheckpointsRequest = ListCheckpointsRequest;
+/* @internal */
+export type strims_replication_v1_ListCheckpointsRequest = ListCheckpointsRequest;
+/* @internal */
+export type strims_replication_v1_IListCheckpointsRequest = IListCheckpointsRequest;
+/* @internal */
+export const strims_replication_v1_ListCheckpointsResponse = ListCheckpointsResponse;
+/* @internal */
+export type strims_replication_v1_ListCheckpointsResponse = ListCheckpointsResponse;
+/* @internal */
+export type strims_replication_v1_IListCheckpointsResponse = IListCheckpointsResponse;

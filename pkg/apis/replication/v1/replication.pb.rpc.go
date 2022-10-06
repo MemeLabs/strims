@@ -9,6 +9,7 @@ import (
 // RegisterReplicationFrontendService ...
 func RegisterReplicationFrontendService(host rpc.ServiceRegistry, service ReplicationFrontendService) {
 	host.RegisterMethod("strims.replication.v1.ReplicationFrontend.CreatePairingToken", service.CreatePairingToken)
+	host.RegisterMethod("strims.replication.v1.ReplicationFrontend.ListCheckpoints", service.ListCheckpoints)
 }
 
 // ReplicationFrontendService ...
@@ -17,6 +18,10 @@ type ReplicationFrontendService interface {
 		ctx context.Context,
 		req *CreatePairingTokenRequest,
 	) (*CreatePairingTokenResponse, error)
+	ListCheckpoints(
+		ctx context.Context,
+		req *ListCheckpointsRequest,
+	) (*ListCheckpointsResponse, error)
 }
 
 // ReplicationFrontendService ...
@@ -26,6 +31,13 @@ func (s *UnimplementedReplicationFrontendService) CreatePairingToken(
 	ctx context.Context,
 	req *CreatePairingTokenRequest,
 ) (*CreatePairingTokenResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedReplicationFrontendService) ListCheckpoints(
+	ctx context.Context,
+	req *ListCheckpointsRequest,
+) (*ListCheckpointsResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -48,4 +60,13 @@ func (c *ReplicationFrontendClient) CreatePairingToken(
 	res *CreatePairingTokenResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationFrontend.CreatePairingToken", req, res)
+}
+
+// ListCheckpoints ...
+func (c *ReplicationFrontendClient) ListCheckpoints(
+	ctx context.Context,
+	req *ListCheckpointsRequest,
+	res *ListCheckpointsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationFrontend.ListCheckpoints", req, res)
 }

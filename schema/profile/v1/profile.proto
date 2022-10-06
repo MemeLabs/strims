@@ -50,6 +50,7 @@ message Device {
   dao.v1.VersionVector version = 2;
   string device = 3;
   string os = 4;
+  int64 last_login = 5;
 }
 
 message Profile {

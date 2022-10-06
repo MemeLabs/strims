@@ -527,7 +527,9 @@ func (t *Table[V, T]) Transform(s kv.RWStore, id uint64, fn func(p T) error) (v 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, id)
 		v = proto.Clone(p).(T)
-		if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+		if errors.Is(err, kv.ErrRecordNotFound) {
+			v = new(V)
+		} else if err != nil {
 			return err
 		}
 		if err := fn(v); err != nil {

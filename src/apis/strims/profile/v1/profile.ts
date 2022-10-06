@@ -284,6 +284,7 @@ export type IDevice = {
   version?: strims_dao_v1_IVersionVector;
   device?: string;
   os?: string;
+  lastLogin?: bigint;
 }
 
 export class Device {
@@ -291,12 +292,14 @@ export class Device {
   version: strims_dao_v1_VersionVector | undefined;
   device: string;
   os: string;
+  lastLogin: bigint;
 
   constructor(v?: IDevice) {
     this.id = v?.id || BigInt(0);
     this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.device = v?.device || "";
     this.os = v?.os || "";
+    this.lastLogin = v?.lastLogin || BigInt(0);
   }
 
   static encode(m: Device, w?: Writer): Writer {
@@ -305,6 +308,7 @@ export class Device {
     if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(18).fork()).ldelim();
     if (m.device.length) w.uint32(26).string(m.device);
     if (m.os.length) w.uint32(34).string(m.os);
+    if (m.lastLogin) w.uint32(40).int64(m.lastLogin);
     return w;
   }
 
@@ -326,6 +330,9 @@ export class Device {
         break;
         case 4:
         m.os = r.string();
+        break;
+        case 5:
+        m.lastLogin = r.int64();
         break;
         default:
         r.skipType(tag & 7);

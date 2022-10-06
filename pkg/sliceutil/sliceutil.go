@@ -19,3 +19,17 @@ func RemoveAt[T comparable](vs []T, i int) []T {
 	vs[l] = empty
 	return vs[:l]
 }
+
+func Find[T any](vs []T, fn func(v T) bool) (v T, ok bool) {
+	for _, v := range vs {
+		if fn(v) {
+			return v, true
+		}
+	}
+	return
+}
+
+func Includes[T any](vs []T, fn func(v T) bool) bool {
+	_, ok := Find(vs, fn)
+	return ok
+}

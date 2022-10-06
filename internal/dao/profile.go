@@ -6,10 +6,13 @@ package dao
 import (
 	"errors"
 	"math"
+	"runtime"
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -57,15 +60,7 @@ func (g ProfileIDSingleton) Incr(s kv.RWStore, n uint64) (uint64, uint64, error)
 
 func (g ProfileIDSingleton) FreeCount(s kv.Store) (uint64, error) {
 	p, err := g.t.Get(s)
-	if err != nil {
-		return 0, err
-	}
-
-	var n uint64
-	for ; p != nil; p = p.NextRange {
-		n += p.LastId - p.NextId
-	}
-	return n, nil
+	return countProfileIDs(p), err
 }
 
 func (g ProfileIDSingleton) Init(s kv.RWStore, p *profilev1.ProfileID) error {
@@ -73,10 +68,11 @@ func (g ProfileIDSingleton) Init(s kv.RWStore, p *profilev1.ProfileID) error {
 }
 
 func (g ProfileIDSingleton) Pop(s kv.RWStore, n uint64) (*profilev1.ProfileID, error) {
+	Logger.Debug("ProfileID.Pop", zap.Uint64("count", n))
 	var p *profilev1.ProfileID
 	err := s.Update(func(tx kv.RWTx) error {
 		for n > 0 {
-			nextID, lastID, err := g.Incr(s, n)
+			nextID, lastID, err := g.Incr(tx, n)
 			if err != nil {
 				return err
 			}
@@ -96,6 +92,7 @@ func (g ProfileIDSingleton) Pop(s kv.RWStore, n uint64) (*profilev1.ProfileID, e
 }
 
 func (g ProfileIDSingleton) Push(s kv.RWStore, id *profilev1.ProfileID) error {
+	Logger.Debug("ProfileID.Push", zap.Uint64("count", countProfileIDs(id)))
 	_, err := g.t.Transform(s, func(v *profilev1.ProfileID) error {
 		for v.NextRange != nil {
 			v = v.NextRange
@@ -104,6 +101,14 @@ func (g ProfileIDSingleton) Push(s kv.RWStore, id *profilev1.ProfileID) error {
 		return nil
 	})
 	return err
+}
+
+func countProfileIDs(p *profilev1.ProfileID) uint64 {
+	var n uint64
+	for ; p != nil; p = p.NextRange {
+		n += p.LastId - p.NextId
+	}
+	return n
 }
 
 var ProfileID = ProfileIDSingleton{
@@ -118,14 +123,24 @@ var ProfileID = ProfileIDSingleton{
 	),
 }
 
-var Devices = NewTable[profilev1.Device](profileDeviceNS, nil)
+var Devices = NewTable(
+	profileDeviceNS,
+	&TableOptions[profilev1.Device, *profilev1.Device]{
+		ObserveChange: func(m, p *profilev1.Device) proto.Message {
+			return &profilev1.DeviceChangeEvent{Device: m}
+		},
+		ObserveDelete: func(m *profilev1.Device) proto.Message {
+			return &profilev1.DeviceDeleteEvent{Device: m}
+		},
+	},
+)
 
 func init() {
 	RegisterReplicatedTable(Devices, nil)
 }
 
 func initProfileDevice(s kv.RWStore) error {
-	device, err := NewDevice(ProfileID.IDGenerator(s), "", "")
+	device, err := NewDevice(ProfileID.IDGenerator(s), "", runtime.GOOS)
 	if err != nil {
 		return err
 	}

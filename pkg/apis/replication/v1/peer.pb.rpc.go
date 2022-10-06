@@ -9,7 +9,8 @@ import (
 // RegisterReplicationPeerService ...
 func RegisterReplicationPeerService(host rpc.ServiceRegistry, service ReplicationPeerService) {
 	host.RegisterMethod("strims.replication.v1.ReplicationPeer.Open", service.Open)
-	host.RegisterMethod("strims.replication.v1.ReplicationPeer.SendEvents", service.SendEvents)
+	host.RegisterMethod("strims.replication.v1.ReplicationPeer.Bootstrap", service.Bootstrap)
+	host.RegisterMethod("strims.replication.v1.ReplicationPeer.Sync", service.Sync)
 	host.RegisterMethod("strims.replication.v1.ReplicationPeer.AllocateProfileIDs", service.AllocateProfileIDs)
 }
 
@@ -19,10 +20,14 @@ type ReplicationPeerService interface {
 		ctx context.Context,
 		req *PeerOpenRequest,
 	) (*PeerOpenResponse, error)
-	SendEvents(
+	Bootstrap(
 		ctx context.Context,
-		req *PeerSendEventsRequest,
-	) (*PeerSendEventsResponse, error)
+		req *PeerBootstrapRequest,
+	) (*PeerBootstrapResponse, error)
+	Sync(
+		ctx context.Context,
+		req *PeerSyncRequest,
+	) (*PeerSyncResponse, error)
 	AllocateProfileIDs(
 		ctx context.Context,
 		req *PeerAllocateProfileIDsRequest,
@@ -39,10 +44,17 @@ func (s *UnimplementedReplicationPeerService) Open(
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *UnimplementedReplicationPeerService) SendEvents(
+func (s *UnimplementedReplicationPeerService) Bootstrap(
 	ctx context.Context,
-	req *PeerSendEventsRequest,
-) (*PeerSendEventsResponse, error) {
+	req *PeerBootstrapRequest,
+) (*PeerBootstrapResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedReplicationPeerService) Sync(
+	ctx context.Context,
+	req *PeerSyncRequest,
+) (*PeerSyncResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -74,13 +86,22 @@ func (c *ReplicationPeerClient) Open(
 	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.Open", req, res)
 }
 
-// SendEvents ...
-func (c *ReplicationPeerClient) SendEvents(
+// Bootstrap ...
+func (c *ReplicationPeerClient) Bootstrap(
 	ctx context.Context,
-	req *PeerSendEventsRequest,
-	res *PeerSendEventsResponse,
+	req *PeerBootstrapRequest,
+	res *PeerBootstrapResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.SendEvents", req, res)
+	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.Bootstrap", req, res)
+}
+
+// Sync ...
+func (c *ReplicationPeerClient) Sync(
+	ctx context.Context,
+	req *PeerSyncRequest,
+	res *PeerSyncResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.replication.v1.ReplicationPeer.Sync", req, res)
 }
 
 // AllocateProfileIDs ...

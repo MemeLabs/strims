@@ -11,25 +11,34 @@ option swift_prefix = "SNT";
 
 import "replication/v1/replication.proto";
 import "profile/v1/profile.proto";
-import "dao/v1/dao.proto";
 
 message PeerOpenRequest {
-  uint32 version = 1;
-  uint32 min_compatible_version = 2;
-  uint64 replica_id = 3;
+  uint32 store_version = 1;
+  uint64 replica_id = 2;
+  repeated Checkpoint checkpoints = 3;
 }
 
 message PeerOpenResponse {
-  dao.v1.VersionVector checkpoint = 1;
+  uint32 store_version = 1;
+  uint64 replica_id = 2;
+  repeated Checkpoint checkpoints = 3;
 }
 
-message PeerSendEventsRequest {
-  dao.v1.VersionVector checkpoint = 1;
-  repeated Event events = 2;
+message PeerBootstrapRequest {
+  repeated Event events = 1;
+  repeated EventLog logs = 2;
 }
 
-message PeerSendEventsResponse {
-  dao.v1.VersionVector checkpoint = 1;
+message PeerBootstrapResponse {
+  Checkpoint checkpoint = 1;
+}
+
+message PeerSyncRequest {
+  repeated EventLog logs = 1;
+}
+
+message PeerSyncResponse {
+  Checkpoint checkpoint = 1;
 }
 
 message PeerAllocateProfileIDsRequest {}
@@ -40,6 +49,7 @@ message PeerAllocateProfileIDsResponse {
 
 service ReplicationPeer {
   rpc Open(PeerOpenRequest) returns (PeerOpenResponse);
-  rpc SendEvents(PeerSendEventsRequest) returns (PeerSendEventsResponse);
+  rpc Bootstrap(PeerBootstrapRequest) returns (PeerBootstrapResponse);
+  rpc Sync(PeerSyncRequest) returns (PeerSyncResponse);
   rpc AllocateProfileIDs(PeerAllocateProfileIDsRequest) returns (PeerAllocateProfileIDsResponse);
 }

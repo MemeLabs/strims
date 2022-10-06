@@ -88,3 +88,11 @@ func (s *replicationService) CreatePairingToken(ctx context.Context, r *replicat
 
 	return &replicationv1.CreatePairingTokenResponse{Token: token}, nil
 }
+
+func (s *replicationService) ListCheckpoints(ctx context.Context, r *replicationv1.ListCheckpointsRequest) (*replicationv1.ListCheckpointsResponse, error) {
+	cs, err := dao.ReplicationCheckpoints.GetAll(s.store)
+	if err != nil {
+		return nil, err
+	}
+	return &replicationv1.ListCheckpointsResponse{Checkpoints: cs}, nil
+}

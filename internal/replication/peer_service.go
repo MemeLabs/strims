@@ -5,14 +5,13 @@ package replication
 
 import (
 	"context"
-	"log"
 	"sync"
 
-	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/debug"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"go.uber.org/zap"
@@ -57,14 +56,51 @@ type peerService struct {
 }
 
 func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenRequest) (*replicationv1.PeerOpenResponse, error) {
-	return nil, rpc.ErrNotImplemented
-}
-
-func (p *peerService) SendEvents(ctx context.Context, req *replicationv1.PeerSendEventsRequest) (*replicationv1.PeerSendEventsResponse, error) {
-	if err := p.store.DispatchEvent(req.Events); err != nil {
+	if _, err := dao.ReplicationCheckpoints.MergeAll(p.store, req.Checkpoints); err != nil {
 		return nil, err
 	}
-	return &replicationv1.PeerSendEventsResponse{}, nil
+
+	c, err := dao.ReplicationCheckpoints.GetAll(p.store)
+	if err != nil {
+		return nil, err
+	}
+
+	return &replicationv1.PeerOpenResponse{
+		StoreVersion: dao.CurrentVersion,
+		ReplicaId:    p.profile.DeviceId,
+		Checkpoints:  c,
+	}, nil
+}
+
+func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBootstrapRequest) (*replicationv1.PeerBootstrapResponse, error) {
+	debug.PrintJSON(req)
+
+	c, err := p.store.ApplyEvents(req.Events, dao.NewReplicationCheckpointFromLogs(p.profile.DeviceId, req.Logs))
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.store.Update(func(tx kv.RWTx) (err error) {
+		for _, l := range req.Logs {
+			if err := dao.ReplicationEventLogs.Insert(tx, l); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &replicationv1.PeerBootstrapResponse{Checkpoint: c}, nil
+}
+
+func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncRequest) (*replicationv1.PeerSyncResponse, error) {
+	debug.PrintJSON(req)
+	c, err := p.store.ApplyEventLogs(req.Logs)
+	if err != nil {
+		return nil, err
+	}
+	return &replicationv1.PeerSyncResponse{Checkpoint: c}, nil
 }
 
 func (p *peerService) AllocateProfileIDs(ctx context.Context, req *replicationv1.PeerAllocateProfileIDsRequest) (*replicationv1.PeerAllocateProfileIDsResponse, error) {
@@ -76,60 +112,3 @@ func (p *peerService) AllocateProfileIDs(ctx context.Context, req *replicationv1
 }
 
 func (p *peerService) close() {}
-
-func (p *peerService) test() {
-	prevProfileIDFreeCount, err := dao.ProfileID.FreeCount(p.store)
-	if err != nil {
-		p.logger.Debug("error checking ids", zap.Error(err))
-	}
-
-	if prevProfileIDFreeCount < 1000 {
-		res := &replicationv1.PeerAllocateProfileIDsResponse{}
-		err := p.client.AllocateProfileIDs(context.Background(), &replicationv1.PeerAllocateProfileIDsRequest{}, res)
-		if err != nil {
-			p.logger.Debug("error getting ids", zap.Error(err))
-		}
-		if err := dao.ProfileID.Push(p.store, res.ProfileId); err != nil {
-			p.logger.Debug("error delegating ids", zap.Error(err))
-		}
-	}
-	profileIDFreeCount, err := dao.ProfileID.FreeCount(p.store)
-	if err != nil {
-		p.logger.Debug("error checking ids", zap.Error(err))
-	}
-	log.Println(">>>", prevProfileIDFreeCount, profileIDFreeCount)
-
-	// req := &replicationv1.PeerOpenRequest{
-	// 	Version:              dao.MinCompatibleVersion,
-	// 	MinCompatibleVersion: dao.MinCompatibleVersion,
-	// 	ReplicaId:            p.profile.DeviceId,
-	// }
-	// p.client.Open(context.Background(), req, &replicationv1.PeerOpenResponse{})
-	// log.Println("<<< wowee")
-
-	events, err := p.store.Dump()
-	if err != nil {
-		p.logger.Debug("error dumping memes", zap.Error(err))
-	}
-	req := &replicationv1.PeerSendEventsRequest{
-		Events: events,
-	}
-	debug.PrintJSON(req)
-	err = p.client.SendEvents(context.Background(), req, &replicationv1.PeerSendEventsResponse{})
-	if err != nil {
-		p.logger.Debug("send failed", zap.Error(err))
-	}
-
-	ch := make(chan []*replicationv1.Event)
-	p.store.Subscribe(ch)
-	for e := range ch {
-		req := &replicationv1.PeerSendEventsRequest{
-			Events: e,
-		}
-		debug.PrintJSON(req)
-		err = p.client.SendEvents(context.Background(), req, &replicationv1.PeerSendEventsResponse{})
-		if err != nil {
-			p.logger.Debug("send failed", zap.Error(err))
-		}
-	}
-}

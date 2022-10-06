@@ -476,7 +476,7 @@ var BootstrapClients = NewTable(
 )
 
 func init() {
-	RegisterReplicatedTable(BootstrapClients, &ReplicatedTableOptions[*networkv1bootstrap.BootstrapClient]{})
+	RegisterReplicatedTable(BootstrapClients, nil)
 }
 
 func FormatBootstrapClientClientOptionsKey(m *networkv1bootstrap.BootstrapClient) []byte {

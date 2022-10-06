@@ -61,7 +61,7 @@ func NewControl(
 ) Control {
 	var (
 		notificationControl = notification.NewControl(logger, store, observers)
-		replicationControl  = replication.NewControl(ctx, logger, vpn, store, observers, profile, notificationControl)
+		replicationControl  = replication.NewControl(ctx, logger, vpn, store, observers, profile)
 		transferControl     = transfer.NewControl(ctx, logger, vpn, store, observers)
 		networkControl      = network.NewControl(ctx, logger, vpn, store, observers, broker, profile, transferControl, notificationControl)
 		directoryControl    = directory.NewControl(ctx, logger, vpn, store, observers, networkControl, transferControl)

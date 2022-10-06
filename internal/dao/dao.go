@@ -151,7 +151,8 @@ type Store interface {
 	BlobStore() kv.BlobStore
 	Key() *StorageKey
 	ReplicaID() uint64
-	DispatchEvent(es []*replicationv1.Event) error
-	Subscribe(ch chan []*replicationv1.Event)
+	EventFilter(offset ReplicationEventFilter) ReplicationEventFilter
+	ApplyEvents(es []*replicationv1.Event, c *replicationv1.Checkpoint) (*replicationv1.Checkpoint, error)
+	ApplyEventLogs(ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error)
 	Dump() ([]*replicationv1.Event, error)
 }

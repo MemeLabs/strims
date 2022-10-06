@@ -12,9 +12,9 @@ option swift_prefix = "SRE";
 import "auth/v1/auth.proto";
 import "dao/v1/dao.proto";
 
-message Version {
-  uint32 replica_id = 1;
-  dao.v1.VersionVector current_version = 2;
+message Checkpoint {
+  uint64 id = 1;
+  dao.v1.VersionVector version = 2;
 }
 
 message Event {
@@ -32,6 +32,7 @@ message EventBundle {
 message EventLog {
   uint64 id = 1;
   uint64 replica_id = 2;
+  uint64 timestamp = 4;
   repeated Event events = 3;
 }
 
@@ -44,6 +45,13 @@ message CreatePairingTokenResponse{
   auth.v1.PairingToken token = 1;
 }
 
+message ListCheckpointsRequest {}
+
+message ListCheckpointsResponse {
+  repeated Checkpoint checkpoints = 1;
+}
+
 service ReplicationFrontend {
   rpc CreatePairingToken(CreatePairingTokenRequest) returns (CreatePairingTokenResponse);
+  rpc ListCheckpoints(ListCheckpointsRequest) returns (ListCheckpointsResponse);
 }

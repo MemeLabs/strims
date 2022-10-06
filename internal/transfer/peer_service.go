@@ -49,7 +49,9 @@ func (p *peerService) Close(ctx context.Context, req *transferv1.TransferPeerClo
 	if err != nil {
 		return nil, err
 	}
-	p.SendClose(id)
+	if pt, ok := p.getPeerTransfer(id); ok {
+		p.stopPeerTransfer(pt, false)
+	}
 	return &transferv1.TransferPeerCloseResponse{}, nil
 }
 
@@ -67,13 +69,6 @@ func (p *peerService) AssignPort(id ID, peerChannel uint64) (uint64, bool) {
 	)
 
 	return pt.channel, p.startPeerTransfer(pt, peerChannel)
-}
-
-// SendClose stops a peer transfer when it exists in response to close from peer
-func (p *peerService) SendClose(id ID) {
-	if pt, ok := p.getPeerTransfer(id); ok {
-		p.stopPeerTransfer(pt, false)
-	}
 }
 
 // SendAnnounce creates and notifies peer of the transfer t
