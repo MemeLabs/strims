@@ -2,13 +2,13 @@ package dao
 
 import (
 	"errors"
+	"sort"
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/options"
-	"github.com/MemeLabs/strims/pkg/syncutil"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
@@ -35,7 +35,7 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 		}
 
 		for _, l := range logs {
-			if v, ok := checkpoint.Value[l.ReplicaId]; ok && l.Version >= v {
+			if v, ok := checkpoint.Value[l.ReplicaId]; !ok || l.Version >= v {
 				es = append(es, l)
 			}
 		}
@@ -47,7 +47,7 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 	return es, nil
 }
 
-func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.VersionVector) ([]*replicationv1.EventLog, error) {
+func (t ReplicationEventLogTable) GetCompressedDelta(s kv.RWStore, checkpoint *daov1.VersionVector) ([]*replicationv1.EventLog, error) {
 	var cls []*replicationv1.EventLog
 	err := s.View(func(tx kv.Tx) error {
 		logs, err := t.GetAllAfter(tx, checkpoint)
@@ -59,15 +59,11 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.
 			replicaLogs[l.ReplicaId] = append(replicaLogs[l.ReplicaId], l)
 		}
 
-		for replicaID, ls := range replicaLogs {
-			cl := &replicationv1.EventLog{ReplicaId: replicaID}
-			f := s.EventFilter(nil)
+		for _, ls := range replicaLogs {
+			sort.Slice(ls, func(i, j int) bool { return ls[i].Version > ls[j].Version })
+			var f ReplicationEventFilter
 			for _, l := range ls {
-				if l.Version > cl.Version {
-					cl.Id = l.Id
-					cl.Version = l.Version
-				}
-
+				f = newReplicationEventFilter(f)
 				for _, e := range l.Events {
 					if err := f.AddEvent(tx, e); err != nil {
 						if !errors.Is(err, ErrReplicatorNotFound) {
@@ -83,9 +79,13 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.
 						)
 					}
 				}
+				l.Events = f.Events()
 			}
-			cl.Events = f.Events()
-			cls = append(cls, cl)
+			for _, l := range ls {
+				if len(l.Events) > 0 {
+					cls = append(cls, l)
+				}
+			}
 		}
 		return nil
 	})
@@ -156,12 +156,23 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 	),
 }
 
-func NewVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
+func newVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog, test func(a, b uint64) bool) *daov1.VersionVector {
 	v := versionvector.New()
 	for _, l := range ls {
-		v.Value[l.ReplicaId] = l.Version
+		_, ok := v.Value[l.ReplicaId]
+		if !ok || test(l.Version, v.Value[l.ReplicaId]) {
+			v.Value[l.ReplicaId] = l.Version
+		}
 	}
 	return v
+}
+
+func NewVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
+	return newVersionVectorFromReplicationEventLogs(ls, func(a, b uint64) bool { return a > b })
+}
+
+func NewMinVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
+	return newVersionVectorFromReplicationEventLogs(ls, func(a, b uint64) bool { return a < b })
 }
 
 func NewReplicationCheckpoint(replicaID uint64, v *daov1.VersionVector) *replicationv1.Checkpoint {
@@ -187,7 +198,7 @@ type Replicator interface {
 	Dump(s kv.Store) ([]*replicationv1.Event, error)
 }
 
-var replicators syncutil.Map[namespace, func() Replicator]
+var replicators = map[namespace]Replicator{}
 
 func NewReplicatedStore(s *ProfileStore) (*ReplicatedStore, error) {
 	p, err := Profile.Get(s)
@@ -197,21 +208,15 @@ func NewReplicatedStore(s *ProfileStore) (*ReplicatedStore, error) {
 
 	rs := &ReplicatedStore{
 		ProfileStore: s,
-		replicators:  map[namespace]Replicator{},
 		replicaID:    p.DeviceId,
 	}
-
-	replicators.Each(func(ns namespace, ctor func() Replicator) {
-		rs.replicators[ns] = ctor()
-	})
 
 	return rs, nil
 }
 
 type ReplicatedStore struct {
 	*ProfileStore
-	replicators map[namespace]Replicator
-	replicaID   uint64
+	replicaID uint64
 }
 
 func (s *ReplicatedStore) Update(fn func(tx kv.RWTx) error) (err error) {
@@ -255,14 +260,10 @@ func (s *ReplicatedStore) ReplicaID() uint64 {
 	return s.replicaID
 }
 
-func (s *ReplicatedStore) EventFilter(offset ReplicationEventFilter) ReplicationEventFilter {
-	return newReplicationEventFilter(s.replicators, offset)
-}
-
-func (s *ReplicatedStore) Dump() ([]*replicationv1.Event, error) {
+func DumpReplicationEvents(s kv.RWStore) ([]*replicationv1.Event, error) {
 	var es []*replicationv1.Event
 	err := s.View(func(tx kv.Tx) error {
-		for _, r := range s.replicators {
+		for _, r := range replicators {
 			res, err := r.Dump(tx)
 			if err != nil {
 				return err
@@ -277,9 +278,9 @@ func (s *ReplicatedStore) Dump() ([]*replicationv1.Event, error) {
 	return es, nil
 }
 
-func (s *ReplicatedStore) applyEvents(tx kv.RWTx, es []*replicationv1.Event) error {
+func applyReplicationEvents(tx kv.RWTx, es []*replicationv1.Event) error {
 	for _, e := range es {
-		m, ok := s.replicators[namespace(e.Namespace)]
+		m, ok := replicators[namespace(e.Namespace)]
 		if !ok {
 			return ErrReplicatorNotFound
 		}
@@ -291,13 +292,13 @@ func (s *ReplicatedStore) applyEvents(tx kv.RWTx, es []*replicationv1.Event) err
 	return nil
 }
 
-func (s *ReplicatedStore) ApplyEvents(es []*replicationv1.Event, v *daov1.VersionVector) (*replicationv1.Checkpoint, error) {
+func ApplyReplicationEvents(s Store, es []*replicationv1.Event, v *daov1.VersionVector) (*replicationv1.Checkpoint, error) {
 	var c *replicationv1.Checkpoint
-	err := s.ProfileStore.Update(func(tx kv.RWTx) (err error) {
-		if err := s.applyEvents(tx, es); err != nil {
+	err := s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) (err error) {
+		if err := applyReplicationEvents(tx, es); err != nil {
 			return err
 		}
-		c, err = ReplicationCheckpoints.Merge(tx, NewReplicationCheckpoint(s.replicaID, v))
+		c, err = ReplicationCheckpoints.Merge(tx, NewReplicationCheckpoint(s.ReplicaID(), v))
 		return err
 	})
 	if err != nil {
@@ -306,25 +307,24 @@ func (s *ReplicatedStore) ApplyEvents(es []*replicationv1.Event, v *daov1.Versio
 	return c, nil
 }
 
-func (s *ReplicatedStore) ApplyEventLogs(ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error) {
+func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error) {
 	var c *replicationv1.Checkpoint
-	err := s.ProfileStore.Update(func(tx kv.RWTx) error {
-		c = NewReplicationCheckpoint(s.replicaID, NewVersionVectorFromReplicationEventLogs(ls))
-		pls, err := ReplicationEventLogs.GetAllAfter(tx, c.Version)
+	err := s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) error {
+		pls, err := ReplicationEventLogs.GetAllAfter(tx, NewMinVersionVectorFromReplicationEventLogs(ls))
 		if err != nil {
 			return err
 		}
 
-		of := s.EventFilter(nil)
+		df := newReplicationDeleteFilter(nil)
 		for _, l := range pls {
 			for _, e := range l.Events {
-				if err := of.AddEvent(tx, e); err != nil {
+				if err := df.AddEvent(tx, e); err != nil {
 					return err
 				}
 			}
 		}
 
-		f := s.EventFilter(of)
+		f := newReplicationEventFilter(df)
 		for _, l := range ls {
 			for _, e := range l.Events {
 				if err := f.AddEvent(tx, e); err != nil {
@@ -333,10 +333,10 @@ func (s *ReplicatedStore) ApplyEventLogs(ls []*replicationv1.EventLog) (*replica
 			}
 		}
 
-		if err := s.applyEvents(tx, f.Events()); err != nil {
+		if err := applyReplicationEvents(tx, f.Events()); err != nil {
 			return err
 		}
-		c, err = ReplicationCheckpoints.Merge(tx, c)
+		c, err = ReplicationCheckpoints.Merge(tx, NewReplicationCheckpoint(s.ReplicaID(), NewVersionVectorFromReplicationEventLogs(ls)))
 		if err != nil {
 			return err
 		}
@@ -354,25 +354,64 @@ func (s *ReplicatedStore) ApplyEventLogs(ls []*replicationv1.EventLog) (*replica
 	return c, nil
 }
 
-func newReplicationEventFilter(replicators map[namespace]Replicator, offset ReplicationEventFilter) *replciationEventFilter {
+type replicationEventKey struct {
+	ns namespace
+	id uint64
+}
+
+func newReplicationDeleteFilter(base ReplicationEventFilter) *replicationDeleteFilter {
+	return &replicationDeleteFilter{
+		events: map[replicationEventKey]*replicationv1.Event{},
+		base:   base,
+	}
+}
+
+type replicationDeleteFilter struct {
+	events map[replicationEventKey]*replicationv1.Event
+	base   ReplicationEventFilter
+}
+
+func (f *replicationDeleteFilter) Test(e *replicationv1.Event) bool {
+	if f.base != nil && !f.base.Test(e) {
+		return false
+	}
+	k := replicationEventKey{namespace(e.Namespace), e.Id}
+	_, ok := f.events[k]
+	if !ok && e.Delete {
+		f.events[k] = e
+		return true
+	}
+	return !ok
+}
+
+func (f *replicationDeleteFilter) AddEvent(s kv.Store, e *replicationv1.Event) error {
+	if e.Delete {
+		f.events[replicationEventKey{namespace(e.Namespace), e.Id}] = e
+	}
+	return nil
+}
+
+func (f *replicationDeleteFilter) Events() []*replicationv1.Event {
+	return maps.Values(f.events)
+}
+
+func newReplicationEventFilter(base ReplicationEventFilter) *replciationEventFilter {
 	return &replciationEventFilter{
-		replicators: replicators,
-		filters:     map[namespace]ReplicationEventFilter{},
-		offset:      offset,
+		filters: map[namespace]ReplicationEventFilter{},
+		base:    base,
 	}
 }
 
 type replciationEventFilter struct {
-	replicators map[namespace]Replicator
-	filters     map[namespace]ReplicationEventFilter
-	offset      ReplicationEventFilter
+	filters map[namespace]ReplicationEventFilter
+	base    ReplicationEventFilter
 }
 
 func (f *replciationEventFilter) filter(ns namespace) (ReplicationEventFilter, error) {
 	if nf, ok := f.filters[ns]; ok {
 		return nf, nil
 	}
-	if r, ok := f.replicators[ns]; ok {
+	if r, ok := replicators[ns]; ok {
 		nf := r.EventFilter()
 		f.filters[ns] = nf
 		return nf, nil
@@ -381,7 +420,7 @@ func (f *replciationEventFilter) filter(ns namespace) (ReplicationEventFilter, e
 }
 
 func (f *replciationEventFilter) Test(e *replicationv1.Event) bool {
-	if f.offset != nil && !f.offset.Test(e) {
+	if f.base != nil && !f.base.Test(e) {
 		return false
 	}
 	if nf, ok := f.filters[namespace(e.Namespace)]; ok {
@@ -513,12 +552,10 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 		return nil
 	}))
 
-	replicators.Set(t.ns, func() Replicator {
-		return &TableReplicator[V, T]{
-			t:   t,
-			opt: opt,
-		}
-	})
+	replicators[t.ns] = &TableReplicator[V, T]{
+		t:   t,
+		opt: opt,
+	}
 }
 
 type TableReplicator[V any, T ReplicatedTableRecord[V]] struct {
@@ -528,7 +565,11 @@ type TableReplicator[V any, T ReplicatedTableRecord[V]] struct {
 
 func (t *TableReplicator[V, T]) ApplyEvent(s kv.RWStore, e *replicationv1.Event) error {
 	if e.Delete {
-		return t.t.Delete(s, e.Id)
+		err := t.t.Delete(s, e.Id)
+		if errors.Is(err, kv.ErrRecordNotFound) {
+			return nil
+		}
+		return err
 	}
 
 	next := (T)(new(V))

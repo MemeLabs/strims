@@ -317,12 +317,6 @@ func (t *replicator) handlePeerAdd(peerID uint64) {
 	logger := t.logger.With(zap.Stringer("peer", peer.vnicPeer.HostID()))
 
 	r := newPeerReplicator(t.store, peer.client, t.profile)
-
-	logger.Debug("opening peer replicator")
-	if err := r.Open(t.ctx, t.checkpoints); err != nil {
-		logger.Debug("failed to open replicator", zap.Error(err))
-		return
-	}
 	t.peerReplicators.Set(peerID, r)
 
 	err := r.BeginReplication(t.ctx, t.checkpoints)

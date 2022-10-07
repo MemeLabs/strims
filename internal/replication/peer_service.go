@@ -72,7 +72,7 @@ func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenReque
 }
 
 func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBootstrapRequest) (*replicationv1.PeerBootstrapResponse, error) {
-	c, err := p.store.ApplyEvents(req.Events, dao.NewVersionVectorFromReplicationEventLogs(req.Logs))
+	c, err := dao.ApplyReplicationEvents(p.store, req.Events, dao.NewVersionVectorFromReplicationEventLogs(req.Logs))
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBoot
 }
 
 func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncRequest) (*replicationv1.PeerSyncResponse, error) {
-	c, err := p.store.ApplyEventLogs(req.Logs)
+	c, err := dao.ApplyReplicationEventLogs(p.store, req.Logs)
 	if err != nil {
 		return nil, err
 	}

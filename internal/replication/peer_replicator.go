@@ -29,11 +29,9 @@ type peerReplicator struct {
 	store   dao.Store
 	client  *replicationv1.ReplicationPeerClient
 	profile *profilev1.Profile
-
-	ReplicaID uint64
 }
 
-func (p *peerReplicator) Open(ctx context.Context, cs *checkpointMap) error {
+func (p *peerReplicator) BeginReplication(ctx context.Context, cs *checkpointMap) error {
 	req := &replicationv1.PeerOpenRequest{
 		StoreVersion: dao.CurrentVersion,
 		ReplicaId:    p.profile.DeviceId,
@@ -43,21 +41,14 @@ func (p *peerReplicator) Open(ctx context.Context, cs *checkpointMap) error {
 	if err := p.client.Open(ctx, req, &res); err != nil {
 		return err
 	}
-	p.ReplicaID = res.ReplicaId
+	cs.MergeAll(res.Checkpoints)
 
-	if _, err := dao.ReplicationCheckpoints.MergeAll(p.store, res.Checkpoints); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (p *peerReplicator) BeginReplication(ctx context.Context, cs *checkpointMap) error {
 	if err := p.AllocateProfileIDs(ctx); err != nil {
 		return err
 	}
 
-	pc := cs.Get(p.ReplicaID)
-	if pc == nil {
+	pc := cs.Get(res.ReplicaId)
+	if pc != nil && len(pc.Version.Value) > 1 {
 		if err := p.beginWithSync(ctx, pc); err != nil {
 			return err
 		}
@@ -65,6 +56,10 @@ func (p *peerReplicator) BeginReplication(ctx context.Context, cs *checkpointMap
 		if err := p.beginWithBootstrap(ctx); err != nil {
 			return err
 		}
+	}
+
+	if _, err := dao.ReplicationCheckpoints.MergeAll(p.store, res.Checkpoints); err != nil {
+		return err
 	}
 	return nil
 }
@@ -88,7 +83,7 @@ func (p *peerReplicator) beginWithSync(ctx context.Context, pc *replicationv1.Ch
 }
 
 func (p *peerReplicator) beginWithBootstrap(ctx context.Context) error {
-	events, err := p.store.Dump()
+	events, err := dao.DumpReplicationEvents(p.store)
 	if err != nil {
 		return err
 	}

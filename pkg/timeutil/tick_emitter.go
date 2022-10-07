@@ -139,7 +139,7 @@ func (r *TickEmitter) Debounce(fn func(context.Context), wait time.Duration) Deb
 	var mu sync.Mutex
 	var lastCall Time
 	var lastCtx context.Context
-	var ch <-chan Time
+	var ticks <-chan Time
 	var stop StopFunc
 
 	cleanup := func() {
@@ -147,7 +147,7 @@ func (r *TickEmitter) Debounce(fn func(context.Context), wait time.Duration) Deb
 		defer mu.Unlock()
 		stop()
 		lastCtx = nil
-		ch = nil
+		ticks = nil
 		stop = nil
 	}
 
@@ -162,7 +162,7 @@ func (r *TickEmitter) Debounce(fn func(context.Context), wait time.Duration) Deb
 			select {
 			case <-ctx.Done():
 				return
-			case t, ok := <-ch:
+			case t, ok := <-ticks:
 				if !ok {
 					return
 				}
@@ -186,8 +186,8 @@ func (r *TickEmitter) Debounce(fn func(context.Context), wait time.Duration) Deb
 		lastCall = Now()
 		lastCtx = ctx
 
-		if ch == nil {
-			ch, stop = r.Chan(r.ivl)
+		if ticks == nil {
+			ticks, stop = r.Chan(r.ivl)
 			go run()
 		}
 		return stop
