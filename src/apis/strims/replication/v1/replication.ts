@@ -156,20 +156,20 @@ export class EventBundle {
 export type IEventLog = {
   id?: bigint;
   replicaId?: bigint;
-  timestamp?: bigint;
+  version?: bigint;
   events?: strims_replication_v1_IEvent[];
 }
 
 export class EventLog {
   id: bigint;
   replicaId: bigint;
-  timestamp: bigint;
+  version: bigint;
   events: strims_replication_v1_Event[];
 
   constructor(v?: IEventLog) {
     this.id = v?.id || BigInt(0);
     this.replicaId = v?.replicaId || BigInt(0);
-    this.timestamp = v?.timestamp || BigInt(0);
+    this.version = v?.version || BigInt(0);
     this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
   }
 
@@ -177,7 +177,7 @@ export class EventLog {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.replicaId) w.uint32(16).uint64(m.replicaId);
-    if (m.timestamp) w.uint32(32).uint64(m.timestamp);
+    if (m.version) w.uint32(32).uint64(m.version);
     for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
@@ -196,7 +196,7 @@ export class EventLog {
         m.replicaId = r.uint64();
         break;
         case 4:
-        m.timestamp = r.uint64();
+        m.version = r.uint64();
         break;
         case 3:
         m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));

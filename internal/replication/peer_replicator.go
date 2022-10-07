@@ -5,7 +5,6 @@ package replication
 
 import (
 	"context"
-	"log"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
@@ -23,8 +22,6 @@ func newPeerReplicator(
 		store:   store,
 		client:  client,
 		profile: profile,
-
-		Checkpoints: newCheckpointMap(),
 	}
 }
 
@@ -33,8 +30,7 @@ type peerReplicator struct {
 	client  *replicationv1.ReplicationPeerClient
 	profile *profilev1.Profile
 
-	ReplicaID   uint64
-	Checkpoints *checkpointMap
+	ReplicaID uint64
 }
 
 func (p *peerReplicator) Open(ctx context.Context, cs *checkpointMap) error {
@@ -47,10 +43,7 @@ func (p *peerReplicator) Open(ctx context.Context, cs *checkpointMap) error {
 	if err := p.client.Open(ctx, req, &res); err != nil {
 		return err
 	}
-
 	p.ReplicaID = res.ReplicaId
-	p.Checkpoints.MergeAll(res.Checkpoints)
-	cs.MergeAll(res.Checkpoints)
 
 	if _, err := dao.ReplicationCheckpoints.MergeAll(p.store, res.Checkpoints); err != nil {
 		return err
@@ -58,25 +51,25 @@ func (p *peerReplicator) Open(ctx context.Context, cs *checkpointMap) error {
 	return nil
 }
 
-func (p *peerReplicator) BeginReplication(ctx context.Context, cs []*replicationv1.Checkpoint) error {
+func (p *peerReplicator) BeginReplication(ctx context.Context, cs *checkpointMap) error {
 	if err := p.AllocateProfileIDs(ctx); err != nil {
 		return err
 	}
 
-	pc := p.Checkpoints.Get(p.ReplicaID)
+	pc := cs.Get(p.ReplicaID)
 	if pc == nil {
-		if err := p.beginWithSync(cs, pc); err != nil {
+		if err := p.beginWithSync(ctx, pc); err != nil {
 			return err
 		}
 	} else {
-		if err := p.beginWithBootstrap(cs); err != nil {
+		if err := p.beginWithBootstrap(ctx); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *peerReplicator) beginWithSync(cs []*replicationv1.Checkpoint, pc *replicationv1.Checkpoint) error {
+func (p *peerReplicator) beginWithSync(ctx context.Context, pc *replicationv1.Checkpoint) error {
 	logs, err := dao.ReplicationEventLogs.GetCompressedDelta(p.store, pc.Version)
 	if err != nil {
 		return err
@@ -85,7 +78,7 @@ func (p *peerReplicator) beginWithSync(cs []*replicationv1.Checkpoint, pc *repli
 		Logs: logs,
 	}
 	res := &replicationv1.PeerSyncResponse{}
-	if err := p.client.Sync(context.Background(), req, res); err != nil {
+	if err := p.client.Sync(ctx, req, res); err != nil {
 		return err
 	}
 	if _, err := dao.ReplicationCheckpoints.Merge(p.store, res.Checkpoint); err != nil {
@@ -94,7 +87,7 @@ func (p *peerReplicator) beginWithSync(cs []*replicationv1.Checkpoint, pc *repli
 	return nil
 }
 
-func (p *peerReplicator) beginWithBootstrap(cs []*replicationv1.Checkpoint) error {
+func (p *peerReplicator) beginWithBootstrap(ctx context.Context) error {
 	events, err := p.store.Dump()
 	if err != nil {
 		return err
@@ -108,7 +101,7 @@ func (p *peerReplicator) beginWithBootstrap(cs []*replicationv1.Checkpoint) erro
 		Logs:   logs,
 	}
 	res := &replicationv1.PeerBootstrapResponse{}
-	if err := p.client.Bootstrap(context.Background(), req, res); err != nil {
+	if err := p.client.Bootstrap(ctx, req, res); err != nil {
 		return err
 	}
 	if _, err := dao.ReplicationCheckpoints.Merge(p.store, res.Checkpoint); err != nil {
@@ -119,12 +112,10 @@ func (p *peerReplicator) beginWithBootstrap(cs []*replicationv1.Checkpoint) erro
 
 func (p *peerReplicator) AllocateProfileIDs(ctx context.Context) error {
 	n, err := dao.ProfileID.FreeCount(p.store)
-	log.Println(">>>", n, err)
 	if err != nil || n > 10000 {
 		return err
 	}
 
-	log.Println("gib ids")
 	var res replicationv1.PeerAllocateProfileIDsResponse
 	if err := p.client.AllocateProfileIDs(ctx, &replicationv1.PeerAllocateProfileIDsRequest{}, &res); err != nil {
 		return err
@@ -138,7 +129,7 @@ func (p *peerReplicator) Sync(ctx context.Context, l *replicationv1.EventLog) er
 		Logs: []*replicationv1.EventLog{l},
 	}
 	res := &replicationv1.PeerSyncResponse{}
-	if err := p.client.Sync(context.Background(), req, res); err != nil {
+	if err := p.client.Sync(ctx, req, res); err != nil {
 		return err
 	}
 	if _, err := dao.ReplicationCheckpoints.Merge(p.store, res.Checkpoint); err != nil {

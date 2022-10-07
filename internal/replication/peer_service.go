@@ -10,7 +10,6 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
-	"github.com/MemeLabs/strims/pkg/debug"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
@@ -73,9 +72,7 @@ func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenReque
 }
 
 func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBootstrapRequest) (*replicationv1.PeerBootstrapResponse, error) {
-	debug.PrintJSON(req)
-
-	c, err := p.store.ApplyEvents(req.Events, dao.NewReplicationCheckpointFromLogs(p.profile.DeviceId, req.Logs))
+	c, err := p.store.ApplyEvents(req.Events, dao.NewVersionVectorFromReplicationEventLogs(req.Logs))
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +92,6 @@ func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBoot
 }
 
 func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncRequest) (*replicationv1.PeerSyncResponse, error) {
-	debug.PrintJSON(req)
 	c, err := p.store.ApplyEventLogs(req.Logs)
 	if err != nil {
 		return nil, err

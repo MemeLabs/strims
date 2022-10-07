@@ -32,7 +32,7 @@ message EventBundle {
 message EventLog {
   uint64 id = 1;
   uint64 replica_id = 2;
-  uint64 timestamp = 4;
+  uint64 version = 4;
   repeated Event events = 3;
 }
 

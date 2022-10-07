@@ -9,7 +9,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/options"
 	"github.com/MemeLabs/strims/pkg/syncutil"
-	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
@@ -36,7 +35,7 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 		}
 
 		for _, l := range logs {
-			if ts, ok := checkpoint.Value[l.ReplicaId]; ok && l.Timestamp >= ts {
+			if v, ok := checkpoint.Value[l.ReplicaId]; ok && l.Version >= v {
 				es = append(es, l)
 			}
 		}
@@ -49,8 +48,7 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 }
 
 func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.VersionVector) ([]*replicationv1.EventLog, error) {
-	var events []*replicationv1.EventLog
-
+	var cls []*replicationv1.EventLog
 	err := s.View(func(tx kv.Tx) error {
 		logs, err := t.GetAllAfter(tx, checkpoint)
 		if err != nil {
@@ -61,18 +59,18 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.
 			replicaLogs[l.ReplicaId] = append(replicaLogs[l.ReplicaId], l)
 		}
 
-		var id, ts uint64
 		for replicaID, ls := range replicaLogs {
+			cl := &replicationv1.EventLog{ReplicaId: replicaID}
 			f := s.EventFilter(nil)
 			for _, l := range ls {
-				if l.Timestamp > ts {
-					id = l.Id
-					ts = l.Timestamp
+				if l.Version > cl.Version {
+					cl.Id = l.Id
+					cl.Version = l.Version
 				}
 
 				for _, e := range l.Events {
 					if err := f.AddEvent(tx, e); err != nil {
-						if !errors.Is(err, errReplicatorNotFound) {
+						if !errors.Is(err, ErrReplicatorNotFound) {
 							return err
 						}
 						Logger.Warn(
@@ -86,20 +84,15 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s Store, checkpoint *daov1.
 					}
 				}
 			}
-
-			events = append(events, &replicationv1.EventLog{
-				Id:        id,
-				ReplicaId: replicaID,
-				Timestamp: ts,
-				Events:    f.Events(),
-			})
+			cl.Events = f.Events()
+			cls = append(cls, cl)
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return events, nil
+	return cls, nil
 }
 
 var ReplicationEventLogs = ReplicationEventLogTable{
@@ -108,6 +101,17 @@ var ReplicationEventLogs = ReplicationEventLogTable{
 
 type ReplicationCheckpointTable struct {
 	*Table[replicationv1.Checkpoint, *replicationv1.Checkpoint]
+}
+
+func (t ReplicationCheckpointTable) Increment(s kv.RWStore, id uint64) (*replicationv1.Checkpoint, error) {
+	return t.Transform(s, id, func(p *replicationv1.Checkpoint) error {
+		if p.Version == nil {
+			p.Id = id
+			p.Version = versionvector.New()
+		}
+		versionvector.Increment(p.Version, id)
+		return nil
+	})
 }
 
 func (t ReplicationCheckpointTable) Merge(s kv.RWStore, v *replicationv1.Checkpoint) (*replicationv1.Checkpoint, error) {
@@ -152,16 +156,22 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 	),
 }
 
-func NewReplicationCheckpointFromLogs(replicaID uint64, ls []*replicationv1.EventLog) *replicationv1.Checkpoint {
-	c := &replicationv1.Checkpoint{
-		Id:      replicaID,
-		Version: versionvector.New(),
-	}
+func NewVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
+	v := versionvector.New()
 	for _, l := range ls {
-		c.Version.Value[l.ReplicaId] = l.Timestamp
+		v.Value[l.ReplicaId] = l.Version
 	}
-	return c
+	return v
 }
+
+func NewReplicationCheckpoint(replicaID uint64, v *daov1.VersionVector) *replicationv1.Checkpoint {
+	return &replicationv1.Checkpoint{
+		Id:      replicaID,
+		Version: v,
+	}
+}
+
+var ErrReplicatorNotFound = errors.New("replicator not found")
 
 var _ ReplicatedRWTx = (*replicatedStoreTx)(nil)
 
@@ -226,14 +236,7 @@ func (s *ReplicatedStore) commitEventLog(tx kv.RWTx, events []*replicationv1.Eve
 		return err
 	}
 
-	ts := uint64(timeutil.Now().Unix())
-
-	_, err = ReplicationCheckpoints.Merge(tx, &replicationv1.Checkpoint{
-		Id: s.replicaID,
-		Version: &daov1.VersionVector{
-			Value: map[uint64]uint64{s.replicaID: ts},
-		},
-	})
+	c, err := ReplicationCheckpoints.Increment(tx, s.replicaID)
 	if err != nil {
 		return err
 	}
@@ -241,7 +244,7 @@ func (s *ReplicatedStore) commitEventLog(tx kv.RWTx, events []*replicationv1.Eve
 	l := &replicationv1.EventLog{
 		Id:        id,
 		ReplicaId: s.replicaID,
-		Timestamp: ts,
+		Version:   c.Version.Value[s.replicaID],
 		Events:    events,
 	}
 	tx.(EventEmitter).Emit(l)
@@ -278,7 +281,7 @@ func (s *ReplicatedStore) applyEvents(tx kv.RWTx, es []*replicationv1.Event) err
 	for _, e := range es {
 		m, ok := s.replicators[namespace(e.Namespace)]
 		if !ok {
-			return errors.New("wur replication meme?")
+			return ErrReplicatorNotFound
 		}
 
 		if err := m.ApplyEvent(tx, e); err != nil {
@@ -288,12 +291,13 @@ func (s *ReplicatedStore) applyEvents(tx kv.RWTx, es []*replicationv1.Event) err
 	return nil
 }
 
-func (s *ReplicatedStore) ApplyEvents(es []*replicationv1.Event, c *replicationv1.Checkpoint) (*replicationv1.Checkpoint, error) {
+func (s *ReplicatedStore) ApplyEvents(es []*replicationv1.Event, v *daov1.VersionVector) (*replicationv1.Checkpoint, error) {
+	var c *replicationv1.Checkpoint
 	err := s.ProfileStore.Update(func(tx kv.RWTx) (err error) {
 		if err := s.applyEvents(tx, es); err != nil {
 			return err
 		}
-		c, err = ReplicationCheckpoints.Merge(tx, c)
+		c, err = ReplicationCheckpoints.Merge(tx, NewReplicationCheckpoint(s.replicaID, v))
 		return err
 	})
 	if err != nil {
@@ -305,7 +309,7 @@ func (s *ReplicatedStore) ApplyEvents(es []*replicationv1.Event, c *replicationv
 func (s *ReplicatedStore) ApplyEventLogs(ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error) {
 	var c *replicationv1.Checkpoint
 	err := s.ProfileStore.Update(func(tx kv.RWTx) error {
-		c = NewReplicationCheckpointFromLogs(s.replicaID, ls)
+		c = NewReplicationCheckpoint(s.replicaID, NewVersionVectorFromReplicationEventLogs(ls))
 		pls, err := ReplicationEventLogs.GetAllAfter(tx, c.Version)
 		if err != nil {
 			return err
@@ -350,8 +354,6 @@ func (s *ReplicatedStore) ApplyEventLogs(ls []*replicationv1.EventLog) (*replica
 	return c, nil
 }
 
-var errReplicatorNotFound = errors.New("replicator not found")
-
 func newReplicationEventFilter(replicators map[namespace]Replicator, offset ReplicationEventFilter) *replciationEventFilter {
 	return &replciationEventFilter{
 		replicators: replicators,
@@ -375,9 +377,7 @@ func (f *replciationEventFilter) filter(ns namespace) (ReplicationEventFilter, e
 		f.filters[ns] = nf
 		return nf, nil
 	}
-	// TODO: this should be a non-terminal error otherwise replication will break
-	// when types are deprecated
-	return nil, errReplicatorNotFound
+	return nil, ErrReplicatorNotFound
 }
 
 func (f *replciationEventFilter) Test(e *replicationv1.Event) bool {

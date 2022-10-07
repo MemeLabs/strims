@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/kv"
@@ -152,7 +153,7 @@ type Store interface {
 	Key() *StorageKey
 	ReplicaID() uint64
 	EventFilter(offset ReplicationEventFilter) ReplicationEventFilter
-	ApplyEvents(es []*replicationv1.Event, c *replicationv1.Checkpoint) (*replicationv1.Checkpoint, error)
+	ApplyEvents(es []*replicationv1.Event, c *daov1.VersionVector) (*replicationv1.Checkpoint, error)
 	ApplyEventLogs(ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error)
 	Dump() ([]*replicationv1.Event, error)
 }

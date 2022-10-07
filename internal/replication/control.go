@@ -325,7 +325,7 @@ func (t *replicator) handlePeerAdd(peerID uint64) {
 	}
 	t.peerReplicators.Set(peerID, r)
 
-	err := r.BeginReplication(t.ctx, t.checkpoints.GetAll())
+	err := r.BeginReplication(t.ctx, t.checkpoints)
 	if err != nil {
 		logger.Debug("failed to begin replication", zap.Error(err))
 		return
