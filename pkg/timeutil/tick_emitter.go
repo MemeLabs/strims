@@ -133,6 +133,67 @@ func (r *TickEmitter) Chan(ivl time.Duration) (<-chan Time, StopFunc) {
 	return ch, stop
 }
 
+type DebouncedFunc func(context.Context) StopFunc
+
+func (r *TickEmitter) Debounce(fn func(context.Context), wait time.Duration) DebouncedFunc {
+	var mu sync.Mutex
+	var lastCall Time
+	var lastCtx context.Context
+	var ch <-chan Time
+	var stop StopFunc
+
+	cleanup := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		stop()
+		lastCtx = nil
+		ch = nil
+		stop = nil
+	}
+
+	run := func() {
+		defer cleanup()
+
+		mu.Lock()
+		ctx := lastCtx
+		mu.Unlock()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t, ok := <-ch:
+				if !ok {
+					return
+				}
+
+				mu.Lock()
+				ctx = lastCtx
+				d := t.Sub(lastCall)
+				mu.Unlock()
+
+				if d > wait && ctx.Err() == nil {
+					fn(ctx)
+					return
+				}
+			}
+		}
+	}
+
+	return func(ctx context.Context) StopFunc {
+		mu.Lock()
+		defer mu.Unlock()
+		lastCall = Now()
+		lastCtx = ctx
+
+		if ch == nil {
+			ch, stop = r.Chan(r.ivl)
+			go run()
+		}
+		return stop
+	}
+}
+
 func (r *TickEmitter) unsubscribe(ch chan Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()

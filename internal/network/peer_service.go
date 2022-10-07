@@ -17,6 +17,7 @@ import (
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vnic/qos"
 	"github.com/MemeLabs/strims/pkg/vpn"
@@ -39,7 +40,7 @@ func newPeer(
 	qosc *qos.Class,
 	certificates *certificateMap,
 ) *peerService {
-	return &peerService{
+	s := &peerService{
 		id:       id,
 		client:   client,
 		caClient: caClient,
@@ -57,6 +58,8 @@ func newPeer(
 		bindings:   make(chan []*networkv1.NetworkPeerBinding, 1),
 		brokerConn: vnicPeer.Channel(vnic.NetworkBrokerPort, qosc),
 	}
+	s.negotiateNetworks = timeutil.DefaultTickEmitter.Debounce(s.runNegotiateNetworks, negotiateNetworksDebounceWait)
+	return s
 }
 
 // Peer ...
@@ -70,6 +73,8 @@ type peerService struct {
 	broker       Broker
 	vpn          *vpn.Host
 	certificates *certificateMap
+
+	negotiateNetworks timeutil.DebouncedFunc
 
 	lock        sync.Mutex
 	links       llrb.LLRB
@@ -86,11 +91,7 @@ func (p *peerService) Negotiate(ctx context.Context, req *networkv1.NetworkPeerN
 	}
 
 	if !p.negotiating.Load() {
-		go func() {
-			if err := p.negotiateNetworks(context.Background()); err != nil {
-				p.logger.Debug("network negotiation failed", zap.Error(err))
-			}
-		}()
+		go p.negotiateNetworks(context.Background())
 	}
 	return &networkv1.NetworkPeerNegotiateResponse{}, nil
 }
@@ -226,7 +227,13 @@ func (p *peerService) hasNetworkBinding(networkKey []byte) bool {
 	return p.links.Has(&networkBinding{networkKey: networkKey})
 }
 
-func (p *peerService) negotiateNetworks(ctx context.Context) error {
+func (p *peerService) runNegotiateNetworks(ctx context.Context) {
+	if err := p.doNegotiateNetworks(ctx); err != nil {
+		p.logger.Debug("network negotiation failed", zap.Error(err))
+	}
+}
+
+func (p *peerService) doNegotiateNetworks(ctx context.Context) error {
 	if !p.negotiating.CompareAndSwap(false, true) {
 		return errors.New("cannot begin new negotiation until previous negotiation finishes")
 	}

@@ -55,9 +55,6 @@ type NetworkPeerCountUpdate struct {
 	PeerCount int
 }
 
-// NetworkNegotiationComplete ...
-type NetworkNegotiationComplete struct{}
-
 type DirectoryEvent struct {
 	NetworkID  uint64
 	NetworkKey []byte

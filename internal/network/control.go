@@ -49,6 +49,7 @@ var (
 
 const certRecheckInterval = time.Minute * 5
 const certRenewScheduleAheadDuration = time.Hour * 24 * 7
+const negotiateNetworksDebounceWait = 200 * time.Millisecond
 
 type network struct {
 	network   *networkv1.Network
@@ -243,12 +244,7 @@ func (t *control) handlePeerAdd(peerID uint64) {
 		return
 	}
 
-	go func() {
-		if err := peer.negotiateNetworks(t.ctx); err != nil {
-			t.logger.Debug("network negotiation failed", zap.Error(err))
-		}
-		t.observers.EmitLocal(event.NetworkNegotiationComplete{})
-	}()
+	go peer.negotiateNetworks(t.ctx)
 }
 
 func (t *control) handlePeerBinding(peerID uint64, networkKeys [][]byte) {
@@ -333,14 +329,9 @@ func (t *control) startNetwork(n *networkv1.Network) error {
 
 	defer t.observers.EmitLocal(event.NetworkStart{Network: n})
 
-	// TODO: throttle
 	for _, peer := range t.peers {
 		peer := peer
-		go func() {
-			if err := peer.negotiateNetworks(t.ctx); err != nil {
-				t.logger.Debug("network negotiation failed", zap.Error(err))
-			}
-		}()
+		go peer.negotiateNetworks(t.ctx)
 	}
 
 	return nil
