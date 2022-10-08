@@ -14,3 +14,7 @@ import "replication/v1/replication.proto";
 message CheckpointChangeEvent {
   Checkpoint checkpoint = 1;
 }
+
+message CheckpointDeleteEvent {
+  Checkpoint checkpoint = 1;
+}

@@ -35,7 +35,7 @@ type peerReplicator struct {
 	profile *profilev1.Profile
 }
 
-func (p *peerReplicator) BeginReplication(ctx context.Context, cs *checkpointMap) error {
+func (p *peerReplicator) BeginReplication(ctx context.Context) error {
 	var res replicationv1.PeerOpenResponse
 	if err := p.client.Open(ctx, &replicationv1.PeerOpenRequest{}, &res); err != nil {
 		return err

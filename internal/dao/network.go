@@ -197,7 +197,8 @@ func NewNetwork(g IDGenerator, name string, icon *image.Image, profile *profilev
 	}
 
 	network := &networkv1.Network{
-		Id: id,
+		Id:      id,
+		Version: versionvector.New(),
 		ServerConfig: &networkv1.ServerConfig{
 			Name: name,
 			Key:  key,
@@ -265,6 +266,7 @@ func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV
 
 	return &networkv1.Network{
 		Id:          id,
+		Version:     versionvector.New(),
 		Certificate: peerCert,
 		Alias:       o.Alias,
 	}, nil
@@ -283,6 +285,7 @@ func NewNetworkFromCertificate(g IDGenerator, cert *certificate.Certificate) (*n
 
 	return &networkv1.Network{
 		Id:          id,
+		Version:     versionvector.New(),
 		Certificate: cert,
 	}, nil
 }

@@ -5,6 +5,7 @@ import (
 
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	"github.com/MemeLabs/strims/pkg/timeutil"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
 )
@@ -111,7 +112,9 @@ func initValue(v *daov1.VersionVector) {
 	}
 }
 
-var _ zapcore.ObjectMarshaler = LogObjectMarshaler{}
+func LogObject(key string, v *daov1.VersionVector) zapcore.Field {
+	return zap.Object(key, LogObjectMarshaler{v})
+}
 
 type LogObjectMarshaler struct {
 	Value *daov1.VersionVector

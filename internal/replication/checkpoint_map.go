@@ -9,11 +9,9 @@ import (
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
-	"golang.org/x/exp/maps"
-	"google.golang.org/protobuf/proto"
 )
 
-func newCheckpointMap(cs ...*replicationv1.Checkpoint) *checkpointMap {
+func newCheckpointMap(cs []*replicationv1.Checkpoint) *checkpointMap {
 	m := &checkpointMap{
 		m: map[uint64]*replicationv1.Checkpoint{},
 	}
@@ -28,55 +26,28 @@ type checkpointMap struct {
 	m  map[uint64]*replicationv1.Checkpoint
 }
 
-func (m *checkpointMap) Get(replicaID uint64) *replicationv1.Checkpoint {
+func (m *checkpointMap) Delete(c *replicationv1.Checkpoint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.m[replicaID]
+	delete(m.m, c.Id)
 }
 
-func (m *checkpointMap) GetAll() []*replicationv1.Checkpoint {
+func (m *checkpointMap) Set(c *replicationv1.Checkpoint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return maps.Values(m.m)
+	m.m[c.Id] = c
 }
 
-func (m *checkpointMap) merge(c *replicationv1.Checkpoint) *replicationv1.Checkpoint {
-	p, ok := m.m[c.Id]
-	if ok {
-		if proto.Equal(p, c) {
-			return p
+func (m *checkpointMap) MinVersion() *daov1.VersionVector {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var v *daov1.VersionVector
+	for _, c := range m.m {
+		if v == nil {
+			v = versionvector.Clone(c.Version)
+		} else {
+			versionvector.Downgrade(v, c.Version)
 		}
-	} else {
-		p = c
 	}
-
-	p = proto.Clone(p).(*replicationv1.Checkpoint)
-	versionvector.Upgrade(p.Version, c.Version)
-	m.m[c.Id] = p
-	return p
-}
-
-func (m *checkpointMap) Merge(c *replicationv1.Checkpoint) *replicationv1.Checkpoint {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.merge(c)
-}
-
-func (m *checkpointMap) MergeValue(id uint64, v *daov1.VersionVector) *replicationv1.Checkpoint {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.merge(&replicationv1.Checkpoint{
-		Id:      id,
-		Version: v,
-	})
-}
-
-func (m *checkpointMap) MergeAll(cs []*replicationv1.Checkpoint) []*replicationv1.Checkpoint {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	ps := make([]*replicationv1.Checkpoint, len(cs))
-	for i, c := range cs {
-		ps[i] = m.merge(c)
-	}
-	return ps
+	return v
 }

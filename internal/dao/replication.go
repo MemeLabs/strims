@@ -29,7 +29,7 @@ func (t ReplicationEventLogTable) Insert(s kv.RWStore, l *replicationv1.EventLog
 func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.VersionVector) ([]*replicationv1.EventLog, error) {
 	var es []*replicationv1.EventLog
 	err := s.View(func(tx kv.Tx) error {
-		logs, err := ReplicationEventLogs.GetAll(s)
+		logs, err := ReplicationEventLogs.GetAll(tx)
 		if err != nil {
 			return err
 		}
@@ -45,6 +45,29 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 		return nil, err
 	}
 	return es, nil
+}
+
+func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, checkpoint *daov1.VersionVector) (n int, err error) {
+	err = s.Update(func(tx kv.RWTx) error {
+		logs, err := ReplicationEventLogs.GetAll(tx)
+		if err != nil {
+			return err
+		}
+
+		for _, l := range logs {
+			if v, ok := checkpoint.Value[l.Checkpoint.Id]; ok && replicationEventLogLocalVersion(l) < v {
+				n++
+				if err := t.Table.Delete(tx, l.Id); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return
 }
 
 func (t ReplicationEventLogTable) GetCompressedDelta(s kv.RWStore, checkpoint *daov1.VersionVector) ([]*replicationv1.EventLog, error) {
@@ -153,6 +176,9 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 			},
 			ObserveChange: func(m, p *replicationv1.Checkpoint) proto.Message {
 				return &replicationv1.CheckpointChangeEvent{Checkpoint: m}
+			},
+			ObserveDelete: func(m *replicationv1.Checkpoint) proto.Message {
+				return &replicationv1.CheckpointDeleteEvent{Checkpoint: m}
 			},
 		},
 	),

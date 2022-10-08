@@ -117,42 +117,6 @@ export class Event {
   }
 }
 
-export type IEventBundle = {
-  events?: strims_replication_v1_IEvent[];
-}
-
-export class EventBundle {
-  events: strims_replication_v1_Event[];
-
-  constructor(v?: IEventBundle) {
-    this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
-  }
-
-  static encode(m: EventBundle, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(18).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): EventBundle {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new EventBundle();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 2:
-        m.events.push(strims_replication_v1_Event.decode(r, r.uint32()));
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
 export type IEventLog = {
   id?: bigint;
   checkpoint?: strims_replication_v1_ICheckpoint;
@@ -349,12 +313,6 @@ export const strims_replication_v1_Event = Event;
 export type strims_replication_v1_Event = Event;
 /* @internal */
 export type strims_replication_v1_IEvent = IEvent;
-/* @internal */
-export const strims_replication_v1_EventBundle = EventBundle;
-/* @internal */
-export type strims_replication_v1_EventBundle = EventBundle;
-/* @internal */
-export type strims_replication_v1_IEventBundle = IEventBundle;
 /* @internal */
 export const strims_replication_v1_EventLog = EventLog;
 /* @internal */

@@ -9,6 +9,7 @@ import (
 	"log"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -16,8 +17,10 @@ import (
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/peer"
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
+	"github.com/MemeLabs/strims/pkg/debug"
 	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
@@ -27,6 +30,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+const eventLogGCDebounceWait = time.Second
 
 type Control interface {
 	peer.PeerHandler
@@ -125,9 +130,9 @@ func (t *control) runReplicator(ctx context.Context) error {
 		observers: t.observers,
 		profile:   t.profile,
 
-		checkpoints: newCheckpointMap(),
-		peers:       &t.peers,
+		peers: &t.peers,
 	}
+	r.gcEventLog = timeutil.DefaultTickEmitter.Debounce(r.runEventLogGC, eventLogGCDebounceWait)
 	return r.run()
 }
 
@@ -140,6 +145,8 @@ type replicator struct {
 	profile   *profilev1.Profile
 
 	checkpoints     *checkpointMap
+	gcThreshold     atomic.Pointer[daov1.VersionVector]
+	gcEventLog      timeutil.DebouncedFunc
 	peers           *syncutil.Map[uint64, *peerService]
 	peerReplicators syncutil.Map[uint64, *peerReplicator]
 
@@ -177,7 +184,8 @@ func (t *replicator) run() error {
 	if err != nil {
 		return err
 	}
-	t.checkpoints.MergeAll(cs)
+	t.checkpoints = newCheckpointMap(cs)
+	t.gcThreshold.Store(t.checkpoints.MinVersion())
 
 	for _, id := range t.peers.Keys() {
 		go t.handlePeerAdd(id)
@@ -202,7 +210,9 @@ func (t *replicator) run() error {
 			case *profilev1.DeviceDeleteEvent:
 				t.deviceIDs.Delete(e.Device.Id)
 			case *replicationv1.CheckpointChangeEvent:
-				t.checkpoints.Merge(e.Checkpoint)
+				t.handleCheckpointChange(e.Checkpoint)
+			case *replicationv1.CheckpointDeleteEvent:
+				t.handleCheckpointDelete(e.Checkpoint)
 			case *replicationv1.EventLog:
 				t.handleEventLogChange(e)
 			}
@@ -220,6 +230,34 @@ func (t *replicator) handleNetworkStart(id uint64, key []byte) {
 func (t *replicator) handleNetworkStop(id uint64) {
 	t.stopPublisher(id)
 	t.stopScanner(id)
+}
+
+func (t *replicator) handleCheckpointChange(c *replicationv1.Checkpoint) {
+	t.checkpoints.Set(c)
+	t.gcEventLog(t.ctx)
+}
+
+func (t *replicator) handleCheckpointDelete(c *replicationv1.Checkpoint) {
+	t.checkpoints.Delete(c)
+	t.gcEventLog(t.ctx)
+}
+
+func (t *replicator) runEventLogGC(ctx context.Context) {
+	prev := t.gcThreshold.Load()
+	next := t.checkpoints.MinVersion()
+	if d, _ := versionvector.Compare(prev, next); d < 0 {
+		ts := debug.StartTimer()
+		t.gcThreshold.Store(next)
+		n, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
+		t.logger.Debug(
+			"replication event log prune threshold changed",
+			versionvector.LogObject("prev", prev),
+			versionvector.LogObject("next", next),
+			zap.Int("count", n),
+			zap.Duration("duration", ts.Elapsed()),
+			zap.Error(err),
+		)
+	}
 }
 
 func (t *replicator) handleEventLogChange(l *replicationv1.EventLog) {
@@ -321,10 +359,8 @@ func (t *replicator) handlePeerAdd(peerID uint64) {
 	r := newPeerReplicator(logger, t.store, peer.client, t.profile)
 	t.peerReplicators.Set(peerID, r)
 
-	err := r.BeginReplication(t.ctx, t.checkpoints)
-	if err != nil {
+	if err := r.BeginReplication(t.ctx); err != nil {
 		logger.Debug("failed to begin replication", zap.Error(err))
-		return
 	}
 }
 

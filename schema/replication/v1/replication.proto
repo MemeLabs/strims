@@ -25,10 +25,6 @@ message Event {
   bytes record = 5;
 }
 
-message EventBundle {
-  repeated Event events = 2;
-}
-
 message EventLog {
   uint64 id = 1;
   Checkpoint checkpoint = 2;
