@@ -13,6 +13,7 @@ import (
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/peer"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
@@ -24,6 +25,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Control interface {
@@ -222,7 +224,7 @@ func (t *replicator) handleNetworkStop(id uint64) {
 
 func (t *replicator) handleEventLogChange(l *replicationv1.EventLog) {
 	t.peerReplicators.Each(func(k uint64, v *peerReplicator) {
-		go v.Sync(t.ctx, l)
+		go v.Sync(t.ctx, []*replicationv1.EventLog{l})
 	})
 }
 
@@ -316,7 +318,7 @@ func (t *replicator) handlePeerAdd(peerID uint64) {
 
 	logger := t.logger.With(zap.Stringer("peer", peer.vnicPeer.HostID()))
 
-	r := newPeerReplicator(t.store, peer.client, t.profile)
+	r := newPeerReplicator(logger, t.store, peer.client, t.profile)
 	t.peerReplicators.Set(peerID, r)
 
 	err := r.BeginReplication(t.ctx, t.checkpoints)
@@ -334,4 +336,16 @@ func (t *replicator) handlePeerRemove(peerID uint64) {
 
 func formatSalt(replicaID uint64) []byte {
 	return strconv.AppendUint([]byte("replication:"), replicaID, 36)
+}
+
+var _ zapcore.ObjectMarshaler = checkpointLogObjectMarshaler{}
+
+type checkpointLogObjectMarshaler struct {
+	c *replicationv1.Checkpoint
+}
+
+func (l checkpointLogObjectMarshaler) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddUint64("id", l.c.Id)
+	e.AddObject("version", versionvector.LogObjectMarshaler{Value: l.c.Version})
+	return nil
 }

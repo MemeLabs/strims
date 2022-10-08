@@ -12,16 +12,12 @@ option swift_prefix = "SNT";
 import "replication/v1/replication.proto";
 import "profile/v1/profile.proto";
 
-message PeerOpenRequest {
-  uint32 store_version = 1;
-  uint64 replica_id = 2;
-  repeated Checkpoint checkpoints = 3;
-}
+message PeerOpenRequest {}
 
 message PeerOpenResponse {
   uint32 store_version = 1;
   uint64 replica_id = 2;
-  repeated Checkpoint checkpoints = 3;
+  Checkpoint checkpoint = 3;
 }
 
 message PeerBootstrapRequest {

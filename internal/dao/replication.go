@@ -35,7 +35,7 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 		}
 
 		for _, l := range logs {
-			if v, ok := checkpoint.Value[l.ReplicaId]; !ok || l.Version >= v {
+			if v, ok := checkpoint.Value[l.Checkpoint.Id]; !ok || replicationEventLogLocalVersion(l) >= v {
 				es = append(es, l)
 			}
 		}
@@ -56,11 +56,13 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s kv.RWStore, checkpoint *d
 		}
 		replicaLogs := map[uint64][]*replicationv1.EventLog{}
 		for _, l := range logs {
-			replicaLogs[l.ReplicaId] = append(replicaLogs[l.ReplicaId], l)
+			replicaLogs[l.Checkpoint.Id] = append(replicaLogs[l.Checkpoint.Id], l)
 		}
 
 		for _, ls := range replicaLogs {
-			sort.Slice(ls, func(i, j int) bool { return ls[i].Version > ls[j].Version })
+			sort.Slice(ls, func(i, j int) bool {
+				return replicationEventLogLocalVersion(ls[i]) > replicationEventLogLocalVersion(ls[j])
+			})
 			var f ReplicationEventFilter
 			for _, l := range ls {
 				f = newReplicationEventFilter(f)
@@ -72,7 +74,7 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s kv.RWStore, checkpoint *d
 						Logger.Warn(
 							"omitting replication event",
 							zap.Uint64("logID", l.Id),
-							zap.Uint64("replicaID", l.ReplicaId),
+							zap.Uint64("replicaID", l.Checkpoint.Id),
 							zap.Stringer("ns", namespace(e.Namespace)),
 							zap.Uint64("id", e.Id),
 							zap.Error(err),
@@ -145,7 +147,7 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 		&TableOptions[replicationv1.Checkpoint, *replicationv1.Checkpoint]{
 			OnChange: func(s kv.RWStore, m, p *replicationv1.Checkpoint) error {
 				if p != nil {
-					versionvector.Update(m.Version, p.Version)
+					versionvector.Upgrade(m.Version, p.Version)
 				}
 				return nil
 			},
@@ -156,23 +158,31 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 	),
 }
 
-func newVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog, test func(a, b uint64) bool) *daov1.VersionVector {
-	v := versionvector.New()
-	for _, l := range ls {
-		_, ok := v.Value[l.ReplicaId]
-		if !ok || test(l.Version, v.Value[l.ReplicaId]) {
-			v.Value[l.ReplicaId] = l.Version
+func newVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog, update func(d *daov1.VersionVector, vs ...*daov1.VersionVector)) *daov1.VersionVector {
+	switch len(ls) {
+	case 0:
+		return versionvector.New()
+	case 1:
+		return versionvector.New(ls[0].Checkpoint.Version)
+	default:
+		v := versionvector.New(ls[0].Checkpoint.Version)
+		for i := 1; i < len(ls); i++ {
+			update(v, ls[i].Checkpoint.Version)
 		}
+		return v
 	}
-	return v
 }
 
 func NewVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
-	return newVersionVectorFromReplicationEventLogs(ls, func(a, b uint64) bool { return a > b })
+	return newVersionVectorFromReplicationEventLogs(ls, versionvector.Upgrade)
 }
 
 func NewMinVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
-	return newVersionVectorFromReplicationEventLogs(ls, func(a, b uint64) bool { return a < b })
+	return newVersionVectorFromReplicationEventLogs(ls, versionvector.Downgrade)
+}
+
+func replicationEventLogLocalVersion(l *replicationv1.EventLog) uint64 {
+	return l.Checkpoint.Version.Value[l.Checkpoint.Id]
 }
 
 func NewReplicationCheckpoint(replicaID uint64, v *daov1.VersionVector) *replicationv1.Checkpoint {
@@ -247,10 +257,9 @@ func (s *ReplicatedStore) commitEventLog(tx kv.RWTx, events []*replicationv1.Eve
 	}
 
 	l := &replicationv1.EventLog{
-		Id:        id,
-		ReplicaId: s.replicaID,
-		Version:   c.Version.Value[s.replicaID],
-		Events:    events,
+		Id:         id,
+		Checkpoint: c,
+		Events:     events,
 	}
 	tx.(EventEmitter).Emit(l)
 	return ReplicationEventLogs.Insert(tx, l)
@@ -324,6 +333,7 @@ func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (*replicat
 			}
 		}
 
+		cs := map[uint64]*replicationv1.Checkpoint{}
 		f := newReplicationEventFilter(df)
 		for _, l := range ls {
 			for _, e := range l.Events {
@@ -331,9 +341,18 @@ func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (*replicat
 					return err
 				}
 			}
+
+			if c, ok := cs[l.Checkpoint.Id]; !ok {
+				cs[l.Checkpoint.Id] = NewReplicationCheckpoint(l.Checkpoint.Id, versionvector.New(l.Checkpoint.Version))
+			} else {
+				versionvector.Upgrade(c.Version, l.Checkpoint.Version)
+			}
 		}
 
 		if err := applyReplicationEvents(tx, f.Events()); err != nil {
+			return err
+		}
+		if _, err = ReplicationCheckpoints.MergeAll(tx, maps.Values(cs)); err != nil {
 			return err
 		}
 		c, err = ReplicationCheckpoints.Merge(tx, NewReplicationCheckpoint(s.ReplicaID(), NewVersionVectorFromReplicationEventLogs(ls)))
@@ -511,12 +530,12 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 			if m.GetVersion().UpdatedAt < p.GetVersion().UpdatedAt {
 				m, p = p, m
 			}
-			versionvector.Update(m.GetVersion(), p.GetVersion())
+			versionvector.Upgrade(m.GetVersion(), p.GetVersion())
 			return t.Update(s, m)
 		},
 		Extract: func(s kv.Store, m, p T) T { return m },
 		Merge: func(s kv.RWStore, m, p T) T {
-			versionvector.Update(m.GetVersion(), p.GetVersion())
+			versionvector.Upgrade(m.GetVersion(), p.GetVersion())
 			return m
 		},
 	})
@@ -598,6 +617,7 @@ func (t *TableReplicator[V, T]) EventFilter() ReplicationEventFilter {
 		t:      t.t,
 		opt:    t.opt,
 		events: map[uint64]*replicationv1.Event{},
+		orders: map[*replicationv1.Event]int{},
 	}
 }
 
@@ -627,6 +647,8 @@ type TableReplicatorEventFilter[V any, T ReplicatedTableRecord[V]] struct {
 	t      *Table[V, T]
 	opt    *ReplicatedTableOptions[T]
 	events map[uint64]*replicationv1.Event
+	orders map[*replicationv1.Event]int
+	order  int
 }
 
 func (t *TableReplicatorEventFilter[V, T]) Test(e *replicationv1.Event) bool {
@@ -644,7 +666,7 @@ func (t *TableReplicatorEventFilter[V, T]) Test(e *replicationv1.Event) bool {
 func (t *TableReplicatorEventFilter[V, T]) AddEvent(s kv.Store, e *replicationv1.Event) error {
 	if index, ok := t.events[e.Id]; ok {
 		if index.Delete {
-			versionvector.Update(index.Version, e.Version)
+			versionvector.Upgrade(index.Version, e.Version)
 			return nil
 		}
 
@@ -660,6 +682,8 @@ func (t *TableReplicatorEventFilter[V, T]) AddEvent(s kv.Store, e *replicationv1
 		return t.load(s, e.Id)
 	}
 	t.events[e.Id] = e
+	t.orders[e] = t.order
+	t.order++
 	return nil
 }
 
@@ -684,9 +708,13 @@ func (t *TableReplicatorEventFilter[V, T]) load(s kv.Store, id uint64) error {
 	}
 
 	t.events[id] = e
+	t.orders[e] = t.order
+	t.order++
 	return nil
 }
 
 func (t *TableReplicatorEventFilter[V, T]) Events() []*replicationv1.Event {
-	return maps.Values(t.events)
+	es := maps.Values(t.events)
+	sort.Slice(es, func(i, j int) bool { return t.orders[es[i]] < t.orders[es[j]] })
+	return es
 }

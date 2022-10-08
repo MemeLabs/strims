@@ -87,7 +87,7 @@ func resolveNetworkConflict(m, p *networkv1.Network) {
 		m.Certificate = p.Certificate
 	}
 	m.ServerConfig = p.ServerConfig
-	versionvector.Update(m.GetVersion(), p.GetVersion())
+	versionvector.Upgrade(m.GetVersion(), p.GetVersion())
 }
 
 func init() {
@@ -103,7 +103,7 @@ func init() {
 				return m
 			},
 			Merge: func(s kv.RWStore, m, p *networkv1.Network) *networkv1.Network {
-				versionvector.Update(m.GetVersion(), p.GetVersion())
+				versionvector.Upgrade(m.GetVersion(), p.GetVersion())
 				m.ServerConfig = p.ServerConfig
 				return m
 			},

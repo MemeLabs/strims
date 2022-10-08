@@ -244,7 +244,7 @@ var ChatWhisperThreads = NewTable(
 )
 
 func resolveChatWhisperThreadConflict(m, p *chatv1.WhisperThread) {
-	versionvector.Update(m.GetVersion(), p.GetVersion())
+	versionvector.Upgrade(m.GetVersion(), p.GetVersion())
 	if p.LastMessageTime > m.LastMessageTime {
 		m.Alias = p.Alias
 		m.LastMessageTime = p.LastMessageTime

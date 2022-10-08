@@ -30,6 +30,10 @@ func Unix(sec, nsec int64) Time {
 	return Time(sec*int64(time.Second) + nsec)
 }
 
+func UnixMilli(msec int64) Time {
+	return Time(msec * int64(time.Millisecond))
+}
+
 func NewFromTime(t time.Time) Time {
 	return Time(t.UnixNano())
 }

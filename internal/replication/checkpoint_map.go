@@ -51,7 +51,7 @@ func (m *checkpointMap) merge(c *replicationv1.Checkpoint) *replicationv1.Checkp
 	}
 
 	p = proto.Clone(p).(*replicationv1.Checkpoint)
-	versionvector.Update(p.Version, c.Version)
+	versionvector.Upgrade(p.Version, c.Version)
 	m.m[c.Id] = p
 	return p
 }

@@ -14,78 +14,47 @@ import {
   strims_profile_v1_IProfileID,
 } from "../../profile/v1/profile";
 
-export type IPeerOpenRequest = {
-  storeVersion?: number;
-  replicaId?: bigint;
-  checkpoints?: strims_replication_v1_ICheckpoint[];
-}
+export type IPeerOpenRequest = Record<string, any>;
 
 export class PeerOpenRequest {
-  storeVersion: number;
-  replicaId: bigint;
-  checkpoints: strims_replication_v1_Checkpoint[];
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IPeerOpenRequest) {
-    this.storeVersion = v?.storeVersion || 0;
-    this.replicaId = v?.replicaId || BigInt(0);
-    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
   }
 
   static encode(m: PeerOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.storeVersion) w.uint32(8).uint32(m.storeVersion);
-    if (m.replicaId) w.uint32(16).uint64(m.replicaId);
-    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): PeerOpenRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new PeerOpenRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.storeVersion = r.uint32();
-        break;
-        case 2:
-        m.replicaId = r.uint64();
-        break;
-        case 3:
-        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
+    if (r instanceof Reader && length) r.skip(length);
+    return new PeerOpenRequest();
   }
 }
 
 export type IPeerOpenResponse = {
   storeVersion?: number;
   replicaId?: bigint;
-  checkpoints?: strims_replication_v1_ICheckpoint[];
+  checkpoint?: strims_replication_v1_ICheckpoint;
 }
 
 export class PeerOpenResponse {
   storeVersion: number;
   replicaId: bigint;
-  checkpoints: strims_replication_v1_Checkpoint[];
+  checkpoint: strims_replication_v1_Checkpoint | undefined;
 
   constructor(v?: IPeerOpenResponse) {
     this.storeVersion = v?.storeVersion || 0;
     this.replicaId = v?.replicaId || BigInt(0);
-    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
+    this.checkpoint = v?.checkpoint && new strims_replication_v1_Checkpoint(v.checkpoint);
   }
 
   static encode(m: PeerOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.storeVersion) w.uint32(8).uint32(m.storeVersion);
     if (m.replicaId) w.uint32(16).uint64(m.replicaId);
-    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(26).fork()).ldelim();
+    if (m.checkpoint) strims_replication_v1_Checkpoint.encode(m.checkpoint, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -103,7 +72,7 @@ export class PeerOpenResponse {
         m.replicaId = r.uint64();
         break;
         case 3:
-        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
+        m.checkpoint = strims_replication_v1_Checkpoint.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

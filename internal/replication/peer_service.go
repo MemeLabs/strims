@@ -55,11 +55,7 @@ type peerService struct {
 }
 
 func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenRequest) (*replicationv1.PeerOpenResponse, error) {
-	if _, err := dao.ReplicationCheckpoints.MergeAll(p.store, req.Checkpoints); err != nil {
-		return nil, err
-	}
-
-	c, err := dao.ReplicationCheckpoints.GetAll(p.store)
+	c, err := dao.ReplicationCheckpoints.Get(p.store, p.profile.DeviceId)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +63,7 @@ func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenReque
 	return &replicationv1.PeerOpenResponse{
 		StoreVersion: dao.CurrentVersion,
 		ReplicaId:    p.profile.DeviceId,
-		Checkpoints:  c,
+		Checkpoint:   c,
 	}, nil
 }
 
@@ -88,6 +84,12 @@ func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBoot
 	if err != nil {
 		return nil, err
 	}
+	p.logger.Debug(
+		"sent replication bootstrap",
+		zap.Int("events", len(req.Events)),
+		zap.Int("logs", len(req.Logs)),
+		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
+	)
 	return &replicationv1.PeerBootstrapResponse{Checkpoint: c}, nil
 }
 
@@ -96,6 +98,11 @@ func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncReque
 	if err != nil {
 		return nil, err
 	}
+	p.logger.Debug(
+		"sent replication sync",
+		zap.Int("logs", len(req.Logs)),
+		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
+	)
 	return &replicationv1.PeerSyncResponse{Checkpoint: c}, nil
 }
 
