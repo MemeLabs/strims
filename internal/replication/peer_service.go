@@ -14,11 +14,12 @@ import (
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
+	"github.com/MemeLabs/strims/pkg/mathutil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"go.uber.org/zap"
 )
 
-const profileIDAllocCount = 10000
+const profileIDAllocCount uint64 = 10000
 
 var _ replicationv1.ReplicationPeerService = (*peerService)(nil)
 
@@ -127,7 +128,16 @@ func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncReque
 }
 
 func (p *peerService) AllocateProfileIDs(ctx context.Context, req *replicationv1.PeerAllocateProfileIDsRequest) (*replicationv1.PeerAllocateProfileIDsResponse, error) {
-	id, err := dao.ProfileID.Pop(p.store, profileIDAllocCount)
+	var id *profilev1.ProfileID
+	err := p.store.Update(func(tx kv.RWTx) error {
+		n, err := dao.ProfileID.FreeCount(tx)
+		if err != nil {
+			return err
+		}
+
+		id, err = dao.ProfileID.Pop(tx, mathutil.Min(profileIDAllocCount, n/2))
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
