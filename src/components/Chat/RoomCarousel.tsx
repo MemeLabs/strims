@@ -99,7 +99,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = (props) => {
   return (
     <div className={className}>
       <Gem {...props} ref={ref} onClick={handleClick} onContextMenu={handleContextMenu}>
-        {unreadCount > 0 && <Badge count={unreadCount} max={100} />}
+        <Badge hidden={unreadCount === 0} count={unreadCount} max={100} />
       </Gem>
       <Menu>
         <MenuItem disabled={unreadCount === 0} onClick={handleMarkReadClick}>

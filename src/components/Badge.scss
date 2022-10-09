@@ -17,4 +17,11 @@
   right: calc(-1 * var(--badge-offset, 0.4rem));
   bottom: calc(-1 * var(--badge-offset, 0.4rem));
   box-shadow: var(--shadow-elevation-1);
+  opacity: 1;
+  transition: opacity 0s 100ms ease-in-out;
+
+  &--hidden {
+    transition: opacity 0s 0s ease-in-out;
+    opacity: 0;
+  }
 }
