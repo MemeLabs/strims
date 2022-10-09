@@ -960,7 +960,7 @@ type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
-func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T], key func(m T) K, formatKey func(k K) []byte, opt *UniqueIndexOptions[V, T]) *UniqueIndex[V, T, K] {
+func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T], key func(m T) K, formatKey func(k K) []byte, opt *UniqueIndexOptions[V, T]) (idx *UniqueIndex[V, T, K]) {
 	opt = options.New(opt)
 
 	t.onChange(func(s kv.RWStore, m, p T) (err error) {
@@ -978,7 +978,7 @@ func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T]
 			}()
 		}
 
-		if p != nil && bytes.Equal(k, formatKey(key(p))) {
+		if !idx.si.condition(m) || (p != nil && idx.si.condition(p) && bytes.Equal(k, formatKey(key(p)))) {
 			return nil
 		}
 
@@ -1004,15 +1004,15 @@ func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T]
 }
 
 type UniqueIndex[V any, T TableRecord[V], K any] struct {
-	i *SecondaryIndex[V, T, K]
+	si *SecondaryIndex[V, T, K]
 }
 
 func (idx *UniqueIndex[V, T, K]) rebuild(s kv.RWStore) error {
-	return idx.i.rebuild(s)
+	return idx.si.rebuild(s)
 }
 
 func (idx *UniqueIndex[V, T, K]) Get(s kv.Store, k K) (v T, err error) {
-	vs, err := idx.i.GetAll(s, k)
+	vs, err := idx.si.GetAll(s, k)
 	if err != nil {
 		return v, err
 	}
@@ -1023,7 +1023,7 @@ func (idx *UniqueIndex[V, T, K]) Get(s kv.Store, k K) (v T, err error) {
 }
 
 func (idx *UniqueIndex[V, T, K]) GetID(s kv.Store, k K) (v uint64, err error) {
-	ids, err := idx.i.GetAllIDs(s, k)
+	ids, err := idx.si.GetAllIDs(s, k)
 	if err != nil {
 		return v, err
 	}
@@ -1068,7 +1068,7 @@ func (idx *UniqueIndex[V, T, K]) Delete(s kv.RWStore, ks ...K) error {
 			return err
 		}
 		for _, id := range ids {
-			if err := idx.i.t.Delete(tx, id); err != nil {
+			if err := idx.si.t.Delete(tx, id); err != nil {
 				return err
 			}
 		}
