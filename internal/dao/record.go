@@ -956,6 +956,7 @@ func (idx *SecondaryIndex[V, T, K]) DeleteAll(s kv.RWStore, k K) (ids []uint64, 
 var ErrUniqueConstraintViolated = errors.New("unique constraint violated")
 
 type UniqueIndexOptions[V any, T TableRecord[V]] struct {
+	SecondaryIndexOptions[V, T]
 	OnConflict func(s kv.RWStore, t *Table[V, T], m, p T) error
 }
 
@@ -999,11 +1000,15 @@ func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T]
 		return opt.OnConflict(s, t, m, c)
 	})
 
-	return &UniqueIndex[V, T, K]{NewSecondaryIndex(ns, t, key, formatKey, nil)}
+	return &UniqueIndex[V, T, K]{NewSecondaryIndex(ns, t, key, formatKey, &opt.SecondaryIndexOptions)}
 }
 
 type UniqueIndex[V any, T TableRecord[V], K any] struct {
 	i *SecondaryIndex[V, T, K]
+}
+
+func (idx *UniqueIndex[V, T, K]) rebuild(s kv.RWStore) error {
+	return idx.i.rebuild(s)
 }
 
 func (idx *UniqueIndex[V, T, K]) Get(s kv.Store, k K) (v T, err error) {
