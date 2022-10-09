@@ -234,9 +234,8 @@ func (t *replicator) handleCheckpointChange(c *replicationv1.Checkpoint) {
 		if peerID, ok := t.peerIDsByReplicaID.GetAndDelete(c.Id); ok {
 			t.peerReplicators.Delete(peerID)
 		}
-	} else {
-		t.gcEventLog(t.ctx)
 	}
+	t.gcEventLog(t.ctx)
 }
 
 func (t *replicator) runEventLogGC(ctx context.Context) {

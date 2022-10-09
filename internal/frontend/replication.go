@@ -11,7 +11,6 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
-	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"go.uber.org/zap"
 )
@@ -67,7 +66,7 @@ func (s *replicationService) CreatePairingToken(ctx context.Context, r *replicat
 		return nil, err
 	}
 
-	nextID, lastID, err := dao.ProfileID.Incr(s.store, 1000)
+	profileID, err := dao.ProfileID.Pop(s.store, 1000)
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +79,7 @@ func (s *replicationService) CreatePairingToken(ctx context.Context, r *replicat
 		Networks:   []*networkv1.Network{network},
 		Bootstraps: bootstraps,
 		Devices:    devices,
-		ProfileId: &profilev1.ProfileID{
-			NextId: nextID,
-			LastId: lastID,
-		},
+		ProfileId:  profileID,
 	}
 
 	return &replicationv1.CreatePairingTokenResponse{Token: token}, nil

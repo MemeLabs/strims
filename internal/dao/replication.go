@@ -213,6 +213,7 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 			OnChange: func(s kv.RWStore, m, p *replicationv1.Checkpoint) error {
 				if p != nil {
 					versionvector.Upgrade(m.Version, p.Version)
+					m.Deleted = m.Deleted || p.Deleted
 				}
 				return nil
 			},
@@ -344,7 +345,7 @@ func (s *ReplicatedStore) ReplicaID() uint64 {
 	return s.replicaID
 }
 
-func DumpReplicationEvents(s kv.RWStore) ([]*replicationv1.Event, error) {
+func DumpReplicationEvents(s kv.Store) ([]*replicationv1.Event, error) {
 	var es []*replicationv1.Event
 	err := s.View(func(tx kv.Tx) error {
 		for _, r := range replicators {

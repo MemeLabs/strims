@@ -110,21 +110,25 @@ export class PeerOpenResponse {
 export type IPeerBootstrapRequest = {
   events?: strims_replication_v1_IEvent[];
   logs?: strims_replication_v1_IEventLog[];
+  checkpoints?: strims_replication_v1_ICheckpoint[];
 }
 
 export class PeerBootstrapRequest {
   events: strims_replication_v1_Event[];
   logs: strims_replication_v1_EventLog[];
+  checkpoints: strims_replication_v1_Checkpoint[];
 
   constructor(v?: IPeerBootstrapRequest) {
     this.events = v?.events ? v.events.map(v => new strims_replication_v1_Event(v)) : [];
     this.logs = v?.logs ? v.logs.map(v => new strims_replication_v1_EventLog(v)) : [];
+    this.checkpoints = v?.checkpoints ? v.checkpoints.map(v => new strims_replication_v1_Checkpoint(v)) : [];
   }
 
   static encode(m: PeerBootstrapRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     for (const v of m.events) strims_replication_v1_Event.encode(v, w.uint32(10).fork()).ldelim();
     for (const v of m.logs) strims_replication_v1_EventLog.encode(v, w.uint32(18).fork()).ldelim();
+    for (const v of m.checkpoints) strims_replication_v1_Checkpoint.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -140,6 +144,9 @@ export class PeerBootstrapRequest {
         break;
         case 2:
         m.logs.push(strims_replication_v1_EventLog.decode(r, r.uint32()));
+        break;
+        case 3:
+        m.checkpoints.push(strims_replication_v1_Checkpoint.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);

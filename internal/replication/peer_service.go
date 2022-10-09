@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
@@ -77,12 +78,11 @@ func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenReque
 }
 
 func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBootstrapRequest) (*replicationv1.PeerBootstrapResponse, error) {
-	c, err := dao.ApplyReplicationEvents(p.store, req.Events, dao.NewVersionVectorFromReplicationEventLogs(req.Logs))
-	if err != nil {
-		return nil, err
-	}
+	err := p.store.Update(func(tx kv.RWTx) (err error) {
+		if _, err := dao.ReplicationCheckpoints.MergeAll(tx, req.Checkpoints); err != nil {
+			return err
+		}
 
-	err = p.store.Update(func(tx kv.RWTx) (err error) {
 		for _, l := range req.Logs {
 			if err := dao.ReplicationEventLogs.Insert(tx, l); err != nil {
 				return err
@@ -93,8 +93,19 @@ func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBoot
 	if err != nil {
 		return nil, err
 	}
+
+	v := versionvector.New()
+	for _, c := range req.Checkpoints {
+		versionvector.Upgrade(v, c.Version)
+	}
+
+	c, err := dao.ApplyReplicationEvents(p.store, req.Events, v)
+	if err != nil {
+		return nil, err
+	}
+
 	p.logger.Debug(
-		"sent replication bootstrap",
+		"received replication bootstrap",
 		zap.Int("events", len(req.Events)),
 		zap.Int("logs", len(req.Logs)),
 		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
@@ -108,7 +119,7 @@ func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncReque
 		return nil, err
 	}
 	p.logger.Debug(
-		"sent replication sync",
+		"received replication sync",
 		zap.Int("logs", len(req.Logs)),
 		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
 	)

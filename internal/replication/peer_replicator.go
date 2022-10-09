@@ -79,26 +79,31 @@ func (p *peerReplicator) beginWithSync(ctx context.Context, pc *replicationv1.Ch
 }
 
 func (p *peerReplicator) beginWithBootstrap(ctx context.Context) error {
-	events, err := dao.DumpReplicationEvents(p.store)
-	if err != nil {
-		return err
-	}
-	logs, err := dao.ReplicationEventLogs.GetAll(p.store)
-	if err != nil {
-		return err
-	}
-	req := &replicationv1.PeerBootstrapRequest{
-		Events: events,
-		Logs:   logs,
-	}
+	req := &replicationv1.PeerBootstrapRequest{}
+	p.store.View(func(tx kv.Tx) (err error) {
+		req.Events, err = dao.DumpReplicationEvents(tx)
+		if err != nil {
+			return err
+		}
+		req.Logs, err = dao.ReplicationEventLogs.GetAll(tx)
+		if err != nil {
+			return err
+		}
+		req.Checkpoints, err = dao.ReplicationCheckpoints.GetAll(tx)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
 	res := &replicationv1.PeerBootstrapResponse{}
 	if err := p.client.Bootstrap(ctx, req, res); err != nil {
 		return err
 	}
 	p.logger.Debug(
-		"received replication bootstrap",
-		zap.Int("events", len(events)),
-		zap.Int("logs", len(logs)),
+		"sent replication bootstrap",
+		zap.Int("events", len(req.Events)),
+		zap.Int("logs", len(req.Logs)),
 		zap.Object("checkpoint", checkpointLogObjectMarshaler{res.Checkpoint}),
 	)
 	return nil
@@ -124,7 +129,7 @@ func (p *peerReplicator) Sync(ctx context.Context, logs []*replicationv1.EventLo
 		return err
 	}
 	p.logger.Debug(
-		"received replication sync",
+		"sent replication sync",
 		zap.Int("logs", len(logs)),
 		zap.Object("checkpoint", checkpointLogObjectMarshaler{res.Checkpoint}),
 	)

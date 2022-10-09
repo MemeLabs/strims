@@ -26,6 +26,7 @@ message PeerOpenResponse {
 message PeerBootstrapRequest {
   repeated Event events = 1;
   repeated EventLog logs = 2;
+  repeated Checkpoint checkpoints = 3;
 }
 
 message PeerBootstrapResponse {
