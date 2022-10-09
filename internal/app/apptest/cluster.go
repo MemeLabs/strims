@@ -35,11 +35,15 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := dao.NewReplicatedStore(dao.NewProfileStore(profile.Id, storageKey, blobStore, nil))
-	if err != nil {
+	profileStore := dao.NewProfileStore(profile.Id, storageKey, blobStore, nil)
+	if err := profileStore.Init(); err != nil {
 		return nil, err
 	}
-	if err := store.Init(); err != nil {
+	if err := dao.Profile.Set(profileStore, profile); err != nil {
+		return nil, err
+	}
+	store, err := dao.NewReplicatedStore(profileStore)
+	if err != nil {
 		return nil, err
 	}
 

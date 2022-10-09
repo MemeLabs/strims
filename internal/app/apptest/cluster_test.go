@@ -21,7 +21,7 @@ func TestSend(t *testing.T) {
 		NodeCount:    2,
 		PeersPerNode: 1,
 	}
-	cluster.Run()
+	assert.NoError(t, cluster.Run())
 
 	var wg sync.WaitGroup
 
