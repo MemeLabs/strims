@@ -13,21 +13,25 @@ import {
 export type ICheckpoint = {
   id?: bigint;
   version?: strims_dao_v1_IVersionVector;
+  deleted?: boolean;
 }
 
 export class Checkpoint {
   id: bigint;
   version: strims_dao_v1_VersionVector | undefined;
+  deleted: boolean;
 
   constructor(v?: ICheckpoint) {
     this.id = v?.id || BigInt(0);
     this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
+    this.deleted = v?.deleted || false;
   }
 
   static encode(m: Checkpoint, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(18).fork()).ldelim();
+    if (m.deleted) w.uint32(24).bool(m.deleted);
     return w;
   }
 
@@ -43,6 +47,9 @@ export class Checkpoint {
         break;
         case 2:
         m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        break;
+        case 3:
+        m.deleted = r.bool();
         break;
         default:
         r.skipType(tag & 7);

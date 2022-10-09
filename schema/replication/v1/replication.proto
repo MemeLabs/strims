@@ -15,6 +15,7 @@ import "dao/v1/dao.proto";
 message Checkpoint {
   uint64 id = 1;
   dao.v1.VersionVector version = 2;
+  bool deleted = 3;
 }
 
 message Event {

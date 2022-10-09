@@ -36,16 +36,16 @@ var (
 		Help: "The run time of dao ops",
 	}, []string{"type", "method"})
 	secondaryIndexOpCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_dao_secondary_index_get_all_count",
-		Help: "The total number of dao secondary index scans",
+		Name: "strims_dao_secondary_op_count",
+		Help: "The total number of dao secondary index ops",
 	}, []string{"type", "namespace", "method"})
 	secondaryIndexOpErrCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_dao_secondary_index_get_all_err_count",
-		Help: "The total number of dao secondary index scan errors",
+		Name: "strims_dao_secondary_op_err_count",
+		Help: "The total number of dao secondary index errors",
 	}, []string{"type", "namespace", "method"})
 	secondaryIndexOpDurationMs = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "strims_dao_secondary_index_get_all_duration_ms",
-		Help: "The run time of dao secondary index scans",
+		Name: "strims_dao_secondary_op_duration_ms",
+		Help: "The run time of dao secondary index ops",
 	}, []string{"type", "namespace", "method"})
 	writeThroughCacheReadCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "strims_dao_write_through_cache_read_count",
@@ -138,7 +138,7 @@ func NewSingleton[V any, T Record[V]](ns namespace, opt *SingletonOptions[V, T])
 	}
 
 	if opt.ObserveChange != nil {
-		t.setHooks = append(t.setHooks, changeObserver(opt.ObserveChange))
+		t.onChange(changeObserver(opt.ObserveChange))
 	}
 
 	return t
@@ -159,6 +159,10 @@ type Singleton[V any, T Record[V]] struct {
 	transformCount      prometheus.Counter
 	transformErrCount   prometheus.Counter
 	transformDurationMs prometheus.Observer
+}
+
+func (t *Singleton[V, T]) onChange(h setHook[V, T]) {
+	t.setHooks = append(t.setHooks, h)
 }
 
 func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
@@ -315,16 +319,16 @@ func NewTable[V any, T TableRecord[V]](ns namespace, opt *TableOptions[V, T]) *T
 	}
 
 	if opt.OnChange != nil {
-		t.setHooks = append(t.setHooks, opt.OnChange)
+		t.onChange(opt.OnChange)
 	}
 	if opt.OnDelete != nil {
-		t.deleteHooks = append(t.deleteHooks, opt.OnDelete)
+		t.onDelete(opt.OnDelete)
 	}
 	if opt.ObserveChange != nil {
-		t.setHooks = append(t.setHooks, changeObserver(opt.ObserveChange))
+		t.onChange(changeObserver(opt.ObserveChange))
 	}
 	if opt.ObserveDelete != nil {
-		t.deleteHooks = append(t.deleteHooks, deleteObserver(opt.ObserveDelete))
+		t.onDelete(deleteObserver(opt.ObserveDelete))
 	}
 
 	return t
@@ -357,6 +361,14 @@ type Table[V any, T TableRecord[V]] struct {
 	deleteCount         prometheus.Counter
 	deleteErrCount      prometheus.Counter
 	deleteDurationMs    prometheus.Observer
+}
+
+func (t *Table[V, T]) onChange(h setHook[V, T]) {
+	t.setHooks = append(t.setHooks, h)
+}
+
+func (t *Table[V, T]) onDelete(h deleteHook[V, T]) {
+	t.deleteHooks = append(t.deleteHooks, h)
 }
 
 func (t *Table[V, T]) Get(s kv.Store, k uint64) (v T, err error) {
@@ -615,7 +627,7 @@ func ManyToOne[AV, BV any, AT TableRecord[AV], BT TableRecord[BV]](ns namespace,
 	opt = options.New(opt)
 
 	if opt.CascadeDelete {
-		b.deleteHooks = append(b.deleteHooks, func(s kv.RWStore, m BT) error {
+		b.onDelete(func(s kv.RWStore, m BT) error {
 			return s.Update(func(tx kv.RWTx) (err error) {
 				var ids []uint64
 
@@ -701,7 +713,7 @@ func NewSecondaryIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V,
 		Condition: func(m T) bool { return true },
 	})
 
-	t.deleteHooks = append(t.deleteHooks, func(s kv.RWStore, m T) (err error) {
+	t.onDelete(func(s kv.RWStore, m T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.DeleteHook"); ce != nil {
 			defer func() {
 				ce.Write(
@@ -719,7 +731,7 @@ func NewSecondaryIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V,
 			return DeleteSecondaryIndex(tx, ns, formatKey(key(m)), m.GetId())
 		})
 	})
-	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
+	t.onChange(func(s kv.RWStore, m, p T) (err error) {
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "SecondaryIndex.SetHook"); ce != nil {
 			defer func() {
 				ce.Write(
@@ -950,7 +962,7 @@ type UniqueIndexOptions[V any, T TableRecord[V]] struct {
 func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T], key func(m T) K, formatKey func(k K) []byte, opt *UniqueIndexOptions[V, T]) *UniqueIndex[V, T, K] {
 	opt = options.New(opt)
 
-	t.setHooks = append(t.setHooks, func(s kv.RWStore, m, p T) (err error) {
+	t.onChange(func(s kv.RWStore, m, p T) (err error) {
 		k := formatKey(key(m))
 
 		if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "UniqueIndex.SetHook"); ce != nil {

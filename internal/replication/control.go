@@ -20,7 +20,6 @@ import (
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
-	"github.com/MemeLabs/strims/pkg/debug"
 	"github.com/MemeLabs/strims/pkg/kademlia"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/syncutil"
@@ -84,9 +83,7 @@ func (t *control) AddPeer(id uint64, peer *vnic.Peer, s *rpc.Server, c rpc.Calle
 
 // RemovePeer ...
 func (t *control) RemovePeer(id uint64) {
-	if p, ok := t.peers.GetAndDelete(id); ok {
-		p.close()
-	}
+	t.peers.Delete(id)
 }
 
 // Run ...
@@ -144,11 +141,12 @@ type replicator struct {
 	observers *event.Observers
 	profile   *profilev1.Profile
 
-	checkpoints     *checkpointMap
-	gcThreshold     atomic.Pointer[daov1.VersionVector]
-	gcEventLog      timeutil.DebouncedFunc
-	peers           *syncutil.Map[uint64, *peerService]
-	peerReplicators syncutil.Map[uint64, *peerReplicator]
+	checkpoints        *checkpointMap
+	gcThreshold        atomic.Pointer[daov1.VersionVector]
+	gcEventLog         timeutil.DebouncedFunc
+	peers              *syncutil.Map[uint64, *peerService]
+	peerReplicators    syncutil.Map[uint64, *peerReplicator]
+	peerIDsByReplicaID syncutil.Map[uint64, uint64]
 
 	publisherStopFuncs syncutil.Map[uint64, timeutil.StopFunc]
 	scannerStopFuncs   syncutil.Map[uint64, timeutil.StopFunc]
@@ -211,8 +209,6 @@ func (t *replicator) run() error {
 				t.deviceIDs.Delete(e.Device.Id)
 			case *replicationv1.CheckpointChangeEvent:
 				t.handleCheckpointChange(e.Checkpoint)
-			case *replicationv1.CheckpointDeleteEvent:
-				t.handleCheckpointDelete(e.Checkpoint)
 			case *replicationv1.EventLog:
 				t.handleEventLogChange(e)
 			}
@@ -234,27 +230,25 @@ func (t *replicator) handleNetworkStop(id uint64) {
 
 func (t *replicator) handleCheckpointChange(c *replicationv1.Checkpoint) {
 	t.checkpoints.Set(c)
-	t.gcEventLog(t.ctx)
-}
-
-func (t *replicator) handleCheckpointDelete(c *replicationv1.Checkpoint) {
-	t.checkpoints.Delete(c)
-	t.gcEventLog(t.ctx)
+	if c.Deleted {
+		if peerID, ok := t.peerIDsByReplicaID.GetAndDelete(c.Id); ok {
+			t.peerReplicators.Delete(peerID)
+		}
+	} else {
+		t.gcEventLog(t.ctx)
+	}
 }
 
 func (t *replicator) runEventLogGC(ctx context.Context) {
 	prev := t.gcThreshold.Load()
 	next := t.checkpoints.MinVersion()
 	if d, _ := versionvector.Compare(prev, next); d < 0 {
-		ts := debug.StartTimer()
 		t.gcThreshold.Store(next)
-		n, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
+		_, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
 		t.logger.Debug(
-			"replication event log prune threshold changed",
+			"replication event log gc threshold changed",
 			versionvector.LogObject("prev", prev),
 			versionvector.LogObject("next", next),
-			zap.Int("count", n),
-			zap.Duration("duration", ts.Elapsed()),
 			zap.Error(err),
 		)
 	}
@@ -349,24 +343,24 @@ func (t *replicator) scanAllNetworks() error {
 }
 
 func (t *replicator) handlePeerAdd(peerID uint64) {
-	peer, ok := t.peers.Get(peerID)
+	p, ok := t.peers.Get(peerID)
 	if !ok {
 		return
 	}
 
-	logger := t.logger.With(zap.Stringer("peer", peer.vnicPeer.HostID()))
-
-	r := newPeerReplicator(logger, t.store, peer.client, t.profile)
-	t.peerReplicators.Set(peerID, r)
-
-	if err := r.BeginReplication(t.ctx); err != nil {
-		logger.Debug("failed to begin replication", zap.Error(err))
+	r, err := newPeerReplicator(t.ctx, p.logger, t.store, p.client, t.profile)
+	if err != nil {
+		p.logger.Debug("failed to begin replication", zap.Error(err))
+		return
 	}
+
+	t.peerReplicators.Set(peerID, r)
+	t.peerIDsByReplicaID.Set(r.replicaID, peerID)
 }
 
 func (t *replicator) handlePeerRemove(peerID uint64) {
-	if r, ok := t.peerReplicators.GetAndDelete(peerID); ok {
-		r.Close()
+	if p, ok := t.peerReplicators.GetAndDelete(peerID); ok {
+		t.peerIDsByReplicaID.Delete(p.replicaID)
 	}
 }
 

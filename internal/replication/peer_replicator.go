@@ -5,56 +5,69 @@ package replication
 
 import (
 	"context"
+	"errors"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
-	"github.com/MemeLabs/strims/pkg/debug"
+	"github.com/MemeLabs/strims/pkg/kv"
 	"go.uber.org/zap"
 )
 
-// NewPeer ...
 func newPeerReplicator(
+	ctx context.Context,
 	logger *zap.Logger,
 	store dao.Store,
 	client *replicationv1.ReplicationPeerClient,
 	profile *profilev1.Profile,
-) *peerReplicator {
-	return &peerReplicator{
+) (*peerReplicator, error) {
+	p := &peerReplicator{
 		logger:  logger,
 		store:   store,
 		client:  client,
 		profile: profile,
 	}
-}
 
-type peerReplicator struct {
-	logger  *zap.Logger
-	store   dao.Store
-	client  *replicationv1.ReplicationPeerClient
-	profile *profilev1.Profile
-}
-
-func (p *peerReplicator) BeginReplication(ctx context.Context) error {
+	req := &replicationv1.PeerOpenRequest{
+		StoreVersion: dao.CurrentVersion,
+		ReplicaId:    p.profile.DeviceId,
+	}
 	var res replicationv1.PeerOpenResponse
-	if err := p.client.Open(ctx, &replicationv1.PeerOpenRequest{}, &res); err != nil {
-		return err
+	if err := p.client.Open(ctx, req, &res); err != nil {
+		return p, err
+	}
+	p.replicaID = res.ReplicaId
+
+	c, err := dao.ReplicationCheckpoints.Get(p.store, res.ReplicaId)
+	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+		return p, err
+	}
+	if c.GetDeleted() {
+		return p, errors.New("cannot sync to deleted replica")
 	}
 
 	if err := p.AllocateProfileIDs(ctx); err != nil {
-		return err
+		return p, err
 	}
 
 	if res.Checkpoint != nil && len(res.Checkpoint.Version.Value) > 1 {
 		if err := p.beginWithSync(ctx, res.Checkpoint); err != nil {
-			return err
+			return p, err
 		}
 	} else {
 		if err := p.beginWithBootstrap(ctx); err != nil {
-			return err
+			return p, err
 		}
 	}
-	return nil
+	return p, nil
+}
+
+type peerReplicator struct {
+	logger    *zap.Logger
+	store     dao.Store
+	client    *replicationv1.ReplicationPeerClient
+	profile   *profilev1.Profile
+	replicaID uint64
 }
 
 func (p *peerReplicator) beginWithSync(ctx context.Context, pc *replicationv1.Checkpoint) error {
@@ -101,7 +114,6 @@ func (p *peerReplicator) AllocateProfileIDs(ctx context.Context) error {
 	if err := p.client.AllocateProfileIDs(ctx, &replicationv1.PeerAllocateProfileIDsRequest{}, &res); err != nil {
 		return err
 	}
-	debug.PrintJSON(&res)
 	return dao.ProfileID.Push(p.store, res.ProfileId)
 }
 
@@ -117,8 +129,4 @@ func (p *peerReplicator) Sync(ctx context.Context, logs []*replicationv1.EventLo
 		zap.Object("checkpoint", checkpointLogObjectMarshaler{res.Checkpoint}),
 	)
 	return nil
-}
-
-func (p *peerReplicator) Close() {
-	// do we have anything to do here...?
 }

@@ -16,7 +16,7 @@ func newCheckpointMap(cs []*replicationv1.Checkpoint) *checkpointMap {
 		m: map[uint64]*replicationv1.Checkpoint{},
 	}
 	for _, c := range cs {
-		m.m[c.Id] = c
+		m.Set(c)
 	}
 	return m
 }
@@ -26,16 +26,14 @@ type checkpointMap struct {
 	m  map[uint64]*replicationv1.Checkpoint
 }
 
-func (m *checkpointMap) Delete(c *replicationv1.Checkpoint) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.m, c.Id)
-}
-
 func (m *checkpointMap) Set(c *replicationv1.Checkpoint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.m[c.Id] = c
+	if c.Deleted {
+		delete(m.m, c.Id)
+	} else {
+		m.m[c.Id] = c
+	}
 }
 
 func (m *checkpointMap) MinVersion() *daov1.VersionVector {

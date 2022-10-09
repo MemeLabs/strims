@@ -6,12 +6,32 @@ import (
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/options"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
+)
+
+var (
+	replicationOpCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_replication_op_count",
+		Help: "The total number of dao replication ops",
+	}, []string{"method"})
+	replicationOpErrCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "strims_dao_replication_op_err_count",
+		Help: "The total number of dao replication errors",
+	}, []string{"method"})
+	replicationOpDurationMs = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "strims_dao_replication_op_duration_ms",
+		Help: "The run time of dao replication ops",
+	}, []string{"method"})
 )
 
 type ReplicationEventLogTable struct {
@@ -47,7 +67,26 @@ func (t ReplicationEventLogTable) GetAllAfter(s kv.Store, checkpoint *daov1.Vers
 	return es, nil
 }
 
-func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, checkpoint *daov1.VersionVector) (n int, err error) {
+var (
+	replicationGarbageCollectCount      = replicationOpCount.WithLabelValues("garbage_collect")
+	replicationGarbageCollectErrCount   = replicationOpErrCount.WithLabelValues("garbage_collect")
+	replicationGarbageCollectDurationMs = replicationOpDurationMs.WithLabelValues("garbage_collect")
+)
+
+func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, threshold *daov1.VersionVector) (n int, err error) {
+	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "ReplicationEventLogTable.GarbageCollect"); ce != nil {
+		defer func() {
+			ce.Write(
+				versionvector.LogObject("threshold", threshold),
+				zap.Int("count", n),
+				zap.Duration("duration", ts.Elapsed()),
+				zap.Error(err),
+			)
+		}()
+	}
+	replicationGarbageCollectCount.Inc()
+	defer observeDurationMs(replicationGarbageCollectDurationMs)()
+
 	err = s.Update(func(tx kv.RWTx) error {
 		logs, err := ReplicationEventLogs.GetAll(tx)
 		if err != nil {
@@ -55,7 +94,7 @@ func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, checkpoint *daov1
 		}
 
 		for _, l := range logs {
-			if v, ok := checkpoint.Value[l.Checkpoint.Id]; ok && replicationEventLogLocalVersion(l) < v {
+			if v, ok := threshold.Value[l.Checkpoint.Id]; ok && replicationEventLogLocalVersion(l) < v {
 				n++
 				if err := t.Table.Delete(tx, l.Id); err != nil {
 					return err
@@ -65,6 +104,7 @@ func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, checkpoint *daov1
 		return nil
 	})
 	if err != nil {
+		replicationGarbageCollectErrCount.Inc()
 		return 0, err
 	}
 	return
@@ -95,7 +135,7 @@ func (t ReplicationEventLogTable) GetCompressedDelta(s kv.RWStore, checkpoint *d
 							return err
 						}
 						Logger.Warn(
-							"omitting replication event",
+							"skipping replication event",
 							zap.Uint64("logID", l.Id),
 							zap.Uint64("replicaID", l.Checkpoint.Id),
 							zap.Stringer("ns", namespace(e.Namespace)),
@@ -177,11 +217,18 @@ var ReplicationCheckpoints = ReplicationCheckpointTable{
 			ObserveChange: func(m, p *replicationv1.Checkpoint) proto.Message {
 				return &replicationv1.CheckpointChangeEvent{Checkpoint: m}
 			},
-			ObserveDelete: func(m *replicationv1.Checkpoint) proto.Message {
-				return &replicationv1.CheckpointDeleteEvent{Checkpoint: m}
-			},
 		},
 	),
+}
+
+func init() {
+	Devices.onDelete(func(s kv.RWStore, m *profilev1.Device) error {
+		return ReplicationCheckpoints.Upsert(s, &replicationv1.Checkpoint{
+			Id:      m.Id,
+			Version: versionvector.New(),
+			Deleted: true,
+		})
+	})
 }
 
 func newVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog, update func(d *daov1.VersionVector, vs ...*daov1.VersionVector)) *daov1.VersionVector {
@@ -317,7 +364,12 @@ func applyReplicationEvents(tx kv.RWTx, es []*replicationv1.Event) error {
 	for _, e := range es {
 		m, ok := replicators[namespace(e.Namespace)]
 		if !ok {
-			return ErrReplicatorNotFound
+			Logger.Warn(
+				"skipping replication event",
+				zap.Stringer("ns", namespace(e.Namespace)),
+				zap.Uint64("id", e.Id),
+			)
+			continue
 		}
 
 		if err := m.ApplyEvent(tx, e); err != nil {
@@ -327,9 +379,18 @@ func applyReplicationEvents(tx kv.RWTx, es []*replicationv1.Event) error {
 	return nil
 }
 
-func ApplyReplicationEvents(s Store, es []*replicationv1.Event, v *daov1.VersionVector) (*replicationv1.Checkpoint, error) {
-	var c *replicationv1.Checkpoint
-	err := s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) (err error) {
+func ApplyReplicationEvents(s Store, es []*replicationv1.Event, v *daov1.VersionVector) (c *replicationv1.Checkpoint, err error) {
+	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "ApplyReplicationEvents"); ce != nil {
+		defer func() {
+			ce.Write(
+				zap.Int("count", len(es)),
+				zap.Duration("duration", ts.Elapsed()),
+				zap.Error(err),
+			)
+		}()
+	}
+
+	err = s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) (err error) {
 		if err := applyReplicationEvents(tx, es); err != nil {
 			return err
 		}
@@ -342,9 +403,26 @@ func ApplyReplicationEvents(s Store, es []*replicationv1.Event, v *daov1.Version
 	return c, nil
 }
 
-func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (*replicationv1.Checkpoint, error) {
-	var c *replicationv1.Checkpoint
-	err := s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) error {
+var (
+	replicationApplyEventLogsCount      = replicationOpCount.WithLabelValues("apply_event_logs")
+	replicationApplyEventLogsErrCount   = replicationOpErrCount.WithLabelValues("apply_event_logs")
+	replicationApplyEventLogsDurationMs = replicationOpDurationMs.WithLabelValues("apply_event_logs")
+)
+
+func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (c *replicationv1.Checkpoint, err error) {
+	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "ApplyReplicationEventLogs"); ce != nil {
+		defer func() {
+			ce.Write(
+				zap.Int("logs", len(ls)),
+				zap.Duration("duration", ts.Elapsed()),
+				zap.Error(err),
+			)
+		}()
+	}
+	replicationApplyEventLogsCount.Inc()
+	defer observeDurationMs(replicationApplyEventLogsDurationMs)()
+
+	err = s.(*ReplicatedStore).ProfileStore.Update(func(tx kv.RWTx) error {
 		pls, err := ReplicationEventLogs.GetAllAfter(tx, NewMinVersionVectorFromReplicationEventLogs(ls))
 		if err != nil {
 			return err
@@ -394,6 +472,7 @@ func ApplyReplicationEventLogs(s Store, ls []*replicationv1.EventLog) (*replicat
 		return nil
 	})
 	if err != nil {
+		replicationApplyEventLogsErrCount.Inc()
 		return nil, err
 	}
 	return c, nil
@@ -566,7 +645,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 		},
 	})
 
-	t.setHooks = append(t.setHooks, LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
+	t.onChange(LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
 		versionvector.Increment(m.GetVersion(), s.ReplicaID())
 
 		m = proto.Clone(m).(T)
@@ -584,7 +663,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 		return nil
 	}))
 
-	t.deleteHooks = append(t.deleteHooks, LocalDeleteHook(func(s ReplicatedRWTx, p T) (err error) {
+	t.onDelete(LocalDeleteHook(func(s ReplicatedRWTx, p T) (err error) {
 		versionvector.Increment(p.GetVersion(), s.ReplicaID())
 
 		s.Replicate(&replicationv1.Event{

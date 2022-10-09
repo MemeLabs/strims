@@ -14,22 +14,46 @@ import {
   strims_profile_v1_IProfileID,
 } from "../../profile/v1/profile";
 
-export type IPeerOpenRequest = Record<string, any>;
+export type IPeerOpenRequest = {
+  storeVersion?: number;
+  replicaId?: bigint;
+}
 
 export class PeerOpenRequest {
+  storeVersion: number;
+  replicaId: bigint;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IPeerOpenRequest) {
+    this.storeVersion = v?.storeVersion || 0;
+    this.replicaId = v?.replicaId || BigInt(0);
   }
 
   static encode(m: PeerOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
+    if (m.storeVersion) w.uint32(8).uint32(m.storeVersion);
+    if (m.replicaId) w.uint32(16).uint64(m.replicaId);
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): PeerOpenRequest {
-    if (r instanceof Reader && length) r.skip(length);
-    return new PeerOpenRequest();
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new PeerOpenRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.storeVersion = r.uint32();
+        break;
+        case 2:
+        m.replicaId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
   }
 }
 

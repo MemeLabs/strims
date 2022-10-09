@@ -5,6 +5,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -55,6 +56,14 @@ type peerService struct {
 }
 
 func (p *peerService) Open(ctx context.Context, req *replicationv1.PeerOpenRequest) (*replicationv1.PeerOpenResponse, error) {
+	pc, err := dao.ReplicationCheckpoints.Get(p.store, req.ReplicaId)
+	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
+		return nil, err
+	}
+	if pc.GetDeleted() {
+		return nil, errors.New("cannot sync to deleted replica")
+	}
+
 	c, err := dao.ReplicationCheckpoints.Get(p.store, p.profile.DeviceId)
 	if err != nil {
 		return nil, err
@@ -113,5 +122,3 @@ func (p *peerService) AllocateProfileIDs(ctx context.Context, req *replicationv1
 	}
 	return &replicationv1.PeerAllocateProfileIDsResponse{ProfileId: id}, nil
 }
-
-func (p *peerService) close() {}
