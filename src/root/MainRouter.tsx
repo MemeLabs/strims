@@ -41,21 +41,24 @@ export const createSettingsRoutes = (layout: ReactElement) => (
   </Route>
 );
 
-const MainRouter: React.FC = () => (
-  <Routes {...useBackgroundRoute()}>
-    {createSettingsRoutes(<SettingsLayout />)}
-    <Route path="*" element={<LayoutBody />}>
-      <Route index element={<Home />} />
-      <Route path="invite/:code" element={<Invite />} />
-      <Route path="directory/:networkKey" element={<Directory />} />
-      <Route path="player/:networkKey" element={<Player />} />
-      <Route path="embed/:service/:id" element={<Embed />} />
-      <Route path="categories" element={<Categories />} />
-      <Route path="broadcast" element={<Broadcast />} />
-      <Route path="streams" element={<Streams />} />
-      <Route path="*" element={<NotFound />} />
-    </Route>
-  </Routes>
-);
+const MainRouter: React.FC = () => {
+  const { backgroundLocation } = useBackgroundRoute();
+  return (
+    <Routes location={backgroundLocation}>
+      {createSettingsRoutes(<SettingsLayout />)}
+      <Route path="*" element={<LayoutBody />}>
+        <Route index element={<Home />} />
+        <Route path="invite/:code" element={<Invite />} />
+        <Route path="directory/:networkKey" element={<Directory />} />
+        <Route path="player/:networkKey" element={<Player />} />
+        <Route path="embed/:service/:id" element={<Embed />} />
+        <Route path="categories" element={<Categories />} />
+        <Route path="broadcast" element={<Broadcast />} />
+        <Route path="streams" element={<Streams />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+};
 
 export default MainRouter;

@@ -12,9 +12,9 @@ import SignUp from "../pages/SignUp";
 const Main = lazy(() => import("./Main"));
 
 const RootRouter: React.FC = () => {
-  const { location } = useBackgroundRoute();
+  const { backgroundLocation } = useBackgroundRoute();
   return (
-    <Routes location={location}>
+    <Routes location={backgroundLocation}>
       <Route path="/login" element={<Login />} />
       <Route path="/login/new" element={<Login newLogin />} />
       <Route path="/signup" element={<SignUp />} />

@@ -5,12 +5,14 @@ import React, { ReactNode, createContext, useCallback, useContext, useMemo, useS
 import { Location, useLocation, useNavigate } from "react-router";
 
 export interface State {
-  location: Location;
+  backgroundLocation: Location;
+  foregroundLocation: Location;
   enabled: boolean;
 }
 
 const initialState: State = {
-  location: null,
+  backgroundLocation: null,
+  foregroundLocation: null,
   enabled: false,
 };
 
@@ -33,11 +35,12 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     (enabled: boolean) =>
       setState((prev) => {
         if (prev.enabled && !enabled) {
-          navigate(prev.location);
+          navigate(prev.backgroundLocation);
         }
 
         return {
-          location: enabled ? location : null,
+          backgroundLocation: enabled ? location : null,
+          foregroundLocation: location,
           enabled,
         };
       }),
@@ -47,7 +50,8 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
   const value = useMemo<BackgroundRouteContextValue>(
     () => ({
       ...state,
-      location: state.location || location,
+      backgroundLocation: state.backgroundLocation || location,
+      foregroundLocation: location,
       toggle: toggleModalOpen,
     }),
     [state, location]

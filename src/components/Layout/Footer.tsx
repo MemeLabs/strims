@@ -65,7 +65,7 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
 
   return (
     <Modal title={title} onClose={handleModalClose}>
-      <Routes>
+      <Routes location={backgroundRoute.foregroundLocation}>
         {createSettingsRoutes(
           <Layout
             nav={

@@ -17,9 +17,9 @@ const Login = lazy(() => import("../pages/Login"));
 const Storybook = lazy(() => import("../pages/Storybook"));
 
 const Router: React.FC = () => {
-  const { location } = useBackgroundRoute();
+  const { backgroundLocation } = useBackgroundRoute();
   return (
-    <Routes location={location}>
+    <Routes location={backgroundLocation}>
       <Route index element={<Home />} />
       <Route path="/capconn" element={<CapConn />} />
       <Route path="/test" element={<Test />} />
