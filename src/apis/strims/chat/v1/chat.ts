@@ -5966,6 +5966,7 @@ export type IWhisperRecord = {
   peerKey?: Uint8Array;
   state?: strims_chat_v1_WhisperRecord_State;
   message?: strims_chat_v1_IMessage;
+  peerMessageId?: bigint;
 }
 
 export class WhisperRecord {
@@ -5977,6 +5978,7 @@ export class WhisperRecord {
   peerKey: Uint8Array;
   state: strims_chat_v1_WhisperRecord_State;
   message: strims_chat_v1_Message | undefined;
+  peerMessageId: bigint;
 
   constructor(v?: IWhisperRecord) {
     this.id = v?.id || BigInt(0);
@@ -5987,6 +5989,7 @@ export class WhisperRecord {
     this.peerKey = v?.peerKey || new Uint8Array();
     this.state = v?.state || 0;
     this.message = v?.message && new strims_chat_v1_Message(v.message);
+    this.peerMessageId = v?.peerMessageId || BigInt(0);
   }
 
   static encode(m: WhisperRecord, w?: Writer): Writer {
@@ -5999,6 +6002,7 @@ export class WhisperRecord {
     if (m.peerKey.length) w.uint32(42).bytes(m.peerKey);
     if (m.state) w.uint32(48).uint32(m.state);
     if (m.message) strims_chat_v1_Message.encode(m.message, w.uint32(58).fork()).ldelim();
+    if (m.peerMessageId) w.uint32(72).uint64(m.peerMessageId);
     return w;
   }
 
@@ -6033,6 +6037,9 @@ export class WhisperRecord {
         case 7:
         m.message = strims_chat_v1_Message.decode(r, r.uint32());
         break;
+        case 9:
+        m.peerMessageId = r.uint64();
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -6055,21 +6062,25 @@ export namespace WhisperRecord {
 export type IWhisperSendMessageRequest = {
   serverKey?: Uint8Array;
   body?: string;
+  id?: bigint;
 }
 
 export class WhisperSendMessageRequest {
   serverKey: Uint8Array;
   body: string;
+  id: bigint;
 
   constructor(v?: IWhisperSendMessageRequest) {
     this.serverKey = v?.serverKey || new Uint8Array();
     this.body = v?.body || "";
+    this.id = v?.id || BigInt(0);
   }
 
   static encode(m: WhisperSendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverKey.length) w.uint32(10).bytes(m.serverKey);
     if (m.body.length) w.uint32(18).string(m.body);
+    if (m.id) w.uint32(24).uint64(m.id);
     return w;
   }
 
@@ -6085,6 +6096,9 @@ export class WhisperSendMessageRequest {
         break;
         case 2:
         m.body = r.string();
+        break;
+        case 3:
+        m.id = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

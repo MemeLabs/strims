@@ -42,6 +42,7 @@ const (
 	chatUIConfigIgnoreNS
 	chatUIConfigIgnoreKeyNS
 	chatServerIconNS
+	chatWhisperRecordPeerMessageIDKeyNS
 )
 
 var ChatServers = NewTable(
@@ -328,6 +329,26 @@ var ChatWhisperRecordsByState = NewSecondaryIndex(
 	nil,
 )
 
+func FormatChatWhisperRecordPeerMessageIDKey(m *chatv1.WhisperRecord) []byte {
+	b := make([]byte, 8, 8+len(m.PeerKey))
+	binary.BigEndian.PutUint64(b, m.PeerMessageId)
+	return append(b, m.PeerKey...)
+}
+
+var ChatWhisperRecordsByPeerMessageID = NewUniqueIndex(
+	chatWhisperRecordPeerMessageIDKeyNS,
+	ChatWhisperRecords,
+	FormatChatWhisperRecordPeerMessageIDKey,
+	byteIdentity,
+	&UniqueIndexOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
+		SecondaryIndexOptions: SecondaryIndexOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
+			Condition: func(m *chatv1.WhisperRecord) bool {
+				return m.PeerMessageId != 0
+			},
+		},
+	},
+)
+
 // NewChatServer ...
 func NewChatServer(
 	g IDGenerator,
@@ -477,6 +498,7 @@ func NewChatWhisperRecord(
 	cert *certificate.Certificate,
 	body string,
 	entities *chatv1.Message_Entities,
+	peerMessageID uint64,
 ) (*chatv1.WhisperRecord, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -502,6 +524,7 @@ func NewChatWhisperRecord(
 			Body:       body,
 			Entities:   entities,
 		},
+		PeerMessageId: peerMessageID,
 	}, nil
 }
 

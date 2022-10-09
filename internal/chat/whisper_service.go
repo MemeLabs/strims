@@ -65,9 +65,17 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 		peerCert,
 		req.Body,
 		ExtractMessageEntities(req.Body),
+		req.Id,
 	)
 	if err != nil {
 		return nil, errWhisperInternalError
+	}
+
+	err = dao.ChatWhisperRecords.Insert(d.store, record)
+	if errors.Is(err, dao.ErrUniqueConstraintViolated) {
+		return &chatv1.WhisperSendMessageResponse{}, nil
+	} else if err != nil {
+		return nil, err
 	}
 
 	err = d.store.Update(func(tx kv.RWTx) error {
@@ -84,7 +92,7 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 			return err
 		}
 		if thread == nil {
-			thread, err = dao.NewChatWhisperThread(d.store, peerCert)
+			thread, err = dao.NewChatWhisperThread(dao.ProfileID.IDGenerator(tx), peerCert)
 			if err != nil {
 				return err
 			}
@@ -95,9 +103,6 @@ func (d *whisperService) SendMessage(ctx context.Context, req *chatv1.WhisperSen
 		thread.LastMessageId = record.Id
 		thread.HasUnread = true
 
-		if err := dao.ChatWhisperRecords.Insert(tx, record); err != nil {
-			return err
-		}
 		return dao.ChatWhisperThreads.Upsert(tx, thread)
 	})
 	if err != nil {

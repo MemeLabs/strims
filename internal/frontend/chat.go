@@ -499,6 +499,7 @@ func (s *chatService) Whisper(ctx context.Context, req *chatv1.WhisperRequest) (
 		cert,
 		req.Body,
 		chat.ExtractMessageEntities(req.Body),
+		0,
 	)
 	if err != nil {
 		return nil, err

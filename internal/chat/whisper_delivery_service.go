@@ -126,5 +126,9 @@ func (s *whisperDeliveryService) send1(r *chatv1.WhisperRecord) error {
 	}
 	defer client.Close()
 
-	return chatv1.NewWhisperClient(client).SendMessage(ctx, &chatv1.WhisperSendMessageRequest{Body: r.Message.Body}, &chatv1.WhisperSendMessageResponse{})
+	req := &chatv1.WhisperSendMessageRequest{
+		Body: r.Message.Body,
+		Id:   r.Id,
+	}
+	return chatv1.NewWhisperClient(client).SendMessage(ctx, req, &chatv1.WhisperSendMessageResponse{})
 }
