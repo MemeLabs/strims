@@ -96,7 +96,7 @@ func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, threshold *daov1.
 		}
 
 		for _, l := range logs {
-			if v, ok := threshold.Value[l.Checkpoint.Id]; ok && replicationEventLogLocalVersion(l) < v {
+			if v, ok := threshold.Value[l.Checkpoint.Id]; ok && replicationEventLogLocalVersion(l) <= v {
 				n++
 				if err := t.Table.Delete(tx, l.Id); err != nil {
 					return err
