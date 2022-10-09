@@ -2,6 +2,7 @@ package dao
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
@@ -17,6 +18,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 var (
@@ -614,8 +616,17 @@ func LocalDeleteHook[V any, T Record[V]](fn func(s ReplicatedRWTx, p T) error) d
 	}
 }
 
+func versionFieldDescriptor[T proto.Message]() (protoreflect.FieldDescriptor, error) {
+	var m T
+	d := m.ProtoReflect().Descriptor().Fields().ByTextName("version")
+	if d == nil {
+		return nil, fmt.Errorf("version field not found in type %T", m)
+	}
+	return d, nil
+}
+
 type ReplicatedRecord interface {
-	GetVersion() *daov1.VersionVector
+	versionvector.VersionedMessage
 }
 
 type ReplicatedTableRecord[V any] interface {
@@ -645,8 +656,22 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 		},
 	})
 
+	versionFieldDescriptor, err := versionvector.ProtoFieldDescriptor[T]()
+	if err != nil {
+		panic(err)
+	}
+
+	getOrInitVersion := func(m T) *daov1.VersionVector {
+		v := m.GetVersion()
+		if v == nil {
+			v = versionvector.New()
+			m.ProtoReflect().Set(versionFieldDescriptor, protoreflect.ValueOf(versionvector.New().ProtoReflect()))
+		}
+		return v
+	}
+
 	t.onChange(LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
-		versionvector.Increment(m.GetVersion(), s.ReplicaID())
+		versionvector.Increment(getOrInitVersion(m), s.ReplicaID())
 
 		m = proto.Clone(m).(T)
 		b, err := proto.Marshal(opt.Extract(s, m, p))
@@ -664,7 +689,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 	}))
 
 	t.onDelete(LocalDeleteHook(func(s ReplicatedRWTx, p T) (err error) {
-		versionvector.Increment(p.GetVersion(), s.ReplicaID())
+		versionvector.Increment(getOrInitVersion(p), s.ReplicaID())
 
 		s.Replicate(&replicationv1.Event{
 			Namespace: int64(t.ns),

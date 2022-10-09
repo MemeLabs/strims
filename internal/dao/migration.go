@@ -117,16 +117,15 @@ func upgrade(s Store, tx kv.RWTx, v uint32) error {
 	}
 }
 
-func upgradeAssignVersion[M any, R TableRecord[M]](s Store, tx kv.RWTx, t *Table[M, R]) error {
+func upgradeAssignVersion[M any, R ReplicatedTableRecord[M]](s Store, tx kv.RWTx, t *Table[M, R]) error {
 	ms, err := t.GetAll(tx)
 	if err != nil {
 		return err
 	}
 
-	var r R
-	d := r.ProtoReflect().Descriptor().Fields().ByTextName("version")
-	if d == nil {
-		return fmt.Errorf("upgrade failed: version field not found in type %T", r)
+	d, err := versionvector.ProtoFieldDescriptor[R]()
+	if err != nil {
+		return fmt.Errorf("upgrade failed: %w", err)
 	}
 
 	for _, m := range ms {
