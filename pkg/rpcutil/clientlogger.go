@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -34,7 +35,7 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 			"rpc error",
 			zap.Stringer("duration", timeutil.Now().Sub(start)),
 			zap.String("method", method),
-			zap.Reflect("req", req),
+			logutil.Proto("req", req),
 			zap.Error(err),
 		)
 		return err
@@ -44,8 +45,8 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 		"rpc response",
 		zap.Stringer("duration", timeutil.Now().Sub(start)),
 		zap.String("method", method),
-		zap.Reflect("req", req),
-		zap.Reflect("res", res),
+		logutil.Proto("req", req),
+		logutil.Proto("res", res),
 	)
 	return nil
 }
@@ -57,7 +58,7 @@ func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req pro
 
 	logger := c.logger.With(
 		zap.String("method", method),
-		zap.Reflect("req", req),
+		logutil.Proto("req", req),
 	)
 
 	go func() {
@@ -85,7 +86,7 @@ func (c *ClientLogger) CallStreaming(ctx context.Context, method string, req pro
 
 		switch i {
 		case 0:
-			logger.Debug("rpc stream response", zap.Reflect("res", v.Interface()))
+			logger.Debug("rpc stream response", logutil.Proto("res", v.Interface().(proto.Message)))
 			resOut.Send(v)
 		case 1:
 			err := v.Interface().(error)
