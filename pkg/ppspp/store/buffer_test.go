@@ -120,7 +120,7 @@ func TestBufferWriteRead(t *testing.T) {
 			r := NewBufferReader(b)
 
 			byteOffset := binByte(c.inputBin.BaseLeft(), uint64(c.chunkSize))
-			assert.EqualValues(t, int(byteOffset), int(r.Offset()), "read offset mismatch")
+			assert.Equal(t, byteOffset, r.Offset(), "read offset mismatch")
 
 			for i := 0; i < binByteLen/c.readSize; i++ {
 				n, err := r.Read(readData)
@@ -229,7 +229,7 @@ func TestReaderClose(t *testing.T) {
 
 	go func() {
 		r.SetReadStopper(ctx.Done())
-		_, err = r.Read(nil)
+		_, err := r.Read(nil)
 		assert.ErrorIs(t, err, ErrClosed, "blocked reader should return close")
 		close(done)
 	}()

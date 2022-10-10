@@ -325,6 +325,7 @@ func (s *Buffer) ExportCache() ([]byte, error) {
 }
 
 func NewBufferReader(buf *Buffer) *BufferReader {
+	buf.lock.Lock()
 	r := &BufferReader{
 		buf:      buf,
 		sem:      buf.sem,
@@ -333,12 +334,10 @@ func NewBufferReader(buf *Buffer) *BufferReader {
 		err:      buf.err,
 		readable: make(chan error, 1),
 	}
-
-	runtime.SetFinalizer(r, bufferReaderFinalizer)
-
-	buf.lock.Lock()
 	buf.readers = append(buf.readers, r.readable)
 	buf.lock.Unlock()
+
+	runtime.SetFinalizer(r, bufferReaderFinalizer)
 
 	return r
 }
@@ -393,12 +392,12 @@ func (r *BufferReader) Offset() uint64 {
 
 // Recover ...
 func (r *BufferReader) Recover() (uint64, error) {
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
 	if r.err == nil || r.err != ErrBufferUnderrun {
 		return 0, r.err
 	}
-
-	r.buf.lock.Lock()
-	defer r.buf.lock.Unlock()
 
 	if r.sem == r.buf.sem {
 		if err := r.buf.recover(); err != nil {
@@ -417,18 +416,22 @@ func (r *BufferReader) SetReadStopper(ch ioutil.Stopper) {
 }
 
 func (r *BufferReader) Read(p []byte) (int, error) {
-	if r.err != nil {
-		return 0, r.err
+	r.buf.lock.Lock()
+
+	if err := r.err; err != nil {
+		r.buf.lock.Unlock()
+		return 0, err
 	}
 
-	r.buf.lock.Lock()
 	for r.buf.next == r.prev || len(r.readable) != 0 {
 		r.buf.lock.Unlock()
 
 		select {
 		case err := <-r.readable:
 			if err != nil {
+				r.buf.lock.Lock()
 				r.err = err
+				r.buf.lock.Unlock()
 				return 0, err
 			}
 		case <-r.stopper:
@@ -438,7 +441,6 @@ func (r *BufferReader) Read(p []byte) (int, error) {
 		r.buf.lock.Lock()
 	}
 	r.sync()
-	defer r.buf.lock.Unlock()
 
 	l := int(r.off - binByte(r.buf.tail(), r.buf.chunkSize))
 	h := int(binByte(r.buf.next-r.buf.tail(), r.buf.chunkSize))
@@ -449,16 +451,17 @@ func (r *BufferReader) Read(p []byte) (int, error) {
 	r.off += uint64(n)
 	r.prev = byteBin(r.off, r.buf.chunkSize)
 
+	r.buf.lock.Unlock()
 	return n, nil
 }
 
 func (r *BufferReader) Close() error {
+	r.buf.lock.Lock()
+	defer r.buf.lock.Unlock()
+
 	if r.err != nil {
 		return r.err
 	}
-
-	r.buf.lock.Lock()
-	defer r.buf.lock.Unlock()
 
 	for i, c := range r.buf.readers {
 		if c == r.readable {
