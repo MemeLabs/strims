@@ -7,12 +7,7 @@ import { DBSchema, IDBPDatabase, openDB } from "idb";
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
-import {
-  ISignInRequest,
-  ISignUpRequest,
-  LinkedProfile,
-  PairingToken,
-} from "../apis/strims/auth/v1/auth";
+import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 import { useStableCallbacks } from "../hooks/useStableCallback";
@@ -37,6 +32,8 @@ export interface State {
   linkedProfiles: LinkedProfile[];
   profile: Profile;
   loading: boolean;
+  serverAddress?: string;
+  provisionalClient?: Promise<FrontendClient>;
   conn?: Conn;
   client?: FrontendClient;
   error?: Error;
@@ -109,8 +106,26 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
   const [db] = useState(() => new LinkedProfilesDB());
 
   useEffect(() => () => state.conn?.close(), [state.conn]);
+  useEffect(() => void createClient(), []);
 
   // TODO: init state from... default? current? profile
+
+  const createClient = async (serverAddress: string = "") => {
+    if (state.serverAddress === serverAddress) {
+      return await state.provisionalClient;
+    }
+
+    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
+    const provisionalClient = conn.client(FrontendClient);
+    setState((prev) => ({
+      ...prev,
+      serverAddress,
+      provisionalClient,
+      conn,
+    }));
+
+    return await provisionalClient;
+  };
 
   const mergeProfiles = (...profiles: LinkedProfile[]) => {
     setState((prev) => ({
@@ -136,10 +151,8 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       error: null,
     }));
 
-    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
-    const client = await conn.client(FrontendClient);
+    const client = await createClient(serverAddress);
     const res = await client.auth.signUp(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
-      conn.close();
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -160,7 +173,6 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       ...prev,
       loading: false,
       profile: res.profile,
-      conn,
       client,
     }));
   };
@@ -172,10 +184,8 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       error: null,
     }));
 
-    const conn = serverAddress ? apiDialer.remote(serverAddress) : apiDialer.local();
-    const client = await conn.client(FrontendClient);
+    const client = await createClient(serverAddress);
     const res = await client.auth.signIn(req, { timeout: API_TIMEOUT }).catch((error: Error) => {
-      conn.close();
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -202,7 +212,6 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       ...prev,
       loading: false,
       profile: res.profile,
-      conn,
       client,
     }));
   };
