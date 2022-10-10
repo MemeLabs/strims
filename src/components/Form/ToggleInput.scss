@@ -11,7 +11,7 @@
     overflow: hidden;
     position: relative;
     width: 2rem;
-    transform: translateZ(0);
+    transform: translate3d(0, 0, 0);
   }
 
   &__switch {
@@ -33,7 +33,7 @@
         var(--color-background-input-toggle) 50%,
         var(--color-background-input) 50%
       );
-      transform: translateZ(0) translateX(-2rem);
+      transform: translate3d(-2rem, 0, 0);
       width: 4rem;
     }
 
@@ -44,17 +44,17 @@
         background: var(--color-foreground-toggle);
         border-radius: 0.5rem;
         box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
-        transform: translateZ(0) translateX(0);
+        transform: translate3d(0, 0, 0);
         width: 1rem;
       }
     }
   }
 
   :checked + &__switch:before {
-    transform: translateZ(0) translateX(-0.5rem);
+    transform: translate3d(-0.5rem, 0, 0);
   }
   :checked + &__switch &__switch__track:after {
-    transform: translateZ(0) translateX(1rem);
+    transform: translate3d(1rem, 0, 0);
   }
 
   :disabled + &__switch:before {
