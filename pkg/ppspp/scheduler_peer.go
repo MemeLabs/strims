@@ -1643,6 +1643,10 @@ func (c *peerChannelScheduler) HandleMessageEnd() error {
 	} else {
 		c.p.Enqueue(c)
 	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	c.ledbat.DigestDelaySamples()
 
 	return nil
