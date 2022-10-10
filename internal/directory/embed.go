@@ -85,7 +85,7 @@ func (l *embedLoader) Load(ctx context.Context, sets map[networkv1directory.List
 
 				embeds, err := loader.Load(ctx, batchIDs)
 				if err != nil {
-					l.logger.Debug(
+					l.logger.Error(
 						"directory embed loader failed",
 						zap.Stringer("service", service),
 						zap.Error(err),

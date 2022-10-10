@@ -87,7 +87,7 @@ func (t *control) Run() {
 		t.startWhisperServerRunner()
 
 		if err := t.startServerRunners(); err != nil {
-			t.logger.Debug("starting chat server runners failed", zap.Error(err))
+			t.logger.Error("starting chat server runners failed", zap.Error(err))
 		}
 	}()
 
@@ -250,7 +250,7 @@ func (t *control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 			stop()
 
-			logger.Debug(
+			logger.Info(
 				"chat reader closed",
 				zap.Error(err),
 				zap.Bool("done", done),

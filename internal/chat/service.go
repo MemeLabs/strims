@@ -242,7 +242,7 @@ func (d *chatService) Mute(ctx context.Context, req *chatv1.MuteRequest) (*chatv
 		},
 	)
 	if err != nil {
-		d.logger.Debug("transform failed", zap.Error(err))
+		d.logger.Error("storing mute failed", zap.Error(err))
 		return nil, fmt.Errorf("updating profile failed: %w", err)
 	}
 
@@ -264,7 +264,7 @@ func (d *chatService) Unmute(ctx context.Context, req *chatv1.UnmuteRequest) (*c
 		},
 	)
 	if err != nil {
-		d.logger.Debug("transform failed", zap.Error(err))
+		d.logger.Error("storing unmute failed", zap.Error(err))
 		return nil, fmt.Errorf("updating profile failed: %w", err)
 	}
 

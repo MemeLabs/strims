@@ -53,7 +53,7 @@ func (c *control) Watch(ctx context.Context) <-chan *notificationv1.Event {
 
 		ns, err := dao.Notifications.GetAll(c.store)
 		if err != nil {
-			c.logger.Debug("loading notifications failed", zap.Error(err))
+			c.logger.Warn("loading notifications failed", zap.Error(err))
 		}
 
 		for _, n := range ns {

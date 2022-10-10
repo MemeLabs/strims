@@ -558,7 +558,7 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 
 		threads, err := dao.ChatWhisperThreads.GetAll(s.store)
 		if err != nil {
-			s.logger.Debug("error loading whisper threads", zap.Error(err))
+			s.logger.Error("error loading whisper threads", zap.Error(err))
 			return
 		}
 
@@ -609,7 +609,7 @@ func (s *chatService) emitWatchWhispersThreadUpdate(ctx context.Context, ch chan
 	if t.HasUnread {
 		n, err := dao.UnreadChatWhisperRecordsByPeerKey.Count(s.store, t.PeerKey)
 		if err != nil {
-			s.logger.Warn("failed to load unread whisper count", zap.Error(err))
+			s.logger.Error("failed to load unread whisper count", zap.Error(err))
 			return
 		}
 

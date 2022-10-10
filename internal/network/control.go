@@ -269,7 +269,7 @@ func (t *control) handlePeerBinding(peerID uint64, networkKeys [][]byte) {
 
 		go func() {
 			if err := t.renewCertificateWithPeer(t.ctx, n.network, peer); err != nil {
-				t.logger.Debug(
+				t.logger.Warn(
 					"certificate renew via peer failed",
 					zap.Stringer("peer", peer.vnicPeer.HostID()),
 					logutil.ByteHex("network", dao.NetworkKey(n.network)),
@@ -385,7 +385,7 @@ func (t *control) dispatchCertificateRenewNotification(network *networkv1.Networ
 		)
 	}
 	if err != nil {
-		t.logger.Debug(
+		t.logger.Warn(
 			"creating notification failed",
 			zap.Error(err),
 		)
@@ -516,7 +516,7 @@ func (t *control) renewExpiredCerts() {
 		if now.After(nextCertificateRenewTime(n.network)) || isCertificateSubjectMismatched(n.network) {
 			go func() {
 				if err := t.renewCertificate(t.ctx, n.network); err != nil {
-					t.logger.Debug(
+					t.logger.Warn(
 						"network certificate renewal failed",
 						logutil.ByteHex("network", dao.NetworkKey(n.network)),
 						zap.Error(err),

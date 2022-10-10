@@ -92,7 +92,7 @@ func (t *control) Run() {
 
 	for t.ctx.Err() == nil {
 		if err := t.tryRunReplicator(); err != nil {
-			t.logger.Debug("replicator failed", zap.Error(err))
+			t.logger.Warn("replicator failed", zap.Error(err))
 		}
 	}
 }
@@ -244,7 +244,7 @@ func (t *replicator) runEventLogGC(ctx context.Context) {
 	if d, _ := versionvector.Compare(prev, next); d < 0 {
 		t.gcThreshold.Store(next)
 		_, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
-		t.logger.Debug(
+		t.logger.Warn(
 			"replication event log gc threshold changed",
 			versionvector.LogObject("prev", prev),
 			versionvector.LogObject("next", next),

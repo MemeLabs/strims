@@ -102,7 +102,7 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 		c,
 	)
 	if err != nil {
-		s.logger.Info(
+		s.logger.Warn(
 			"setting up stream failed",
 			zap.String("key", a.Key),
 			zap.Error(err),
@@ -153,7 +153,7 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 		c,
 	)
 	if err != nil {
-		s.logger.Info(
+		s.logger.Debug(
 			"setting up stream failed",
 			zap.String("key", a.Key),
 			zap.Error(err),
@@ -161,7 +161,7 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 		return nil, err
 	}
 
-	stream.logger.Info("rtmp stream opened")
+	stream.logger.Debug("rtmp stream opened")
 
 	s.lock.Lock()
 	s.streams[stream.channelID] = stream

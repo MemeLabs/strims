@@ -433,7 +433,7 @@ func (p *peerIndexPublisher) publish(t timeutil.Time) {
 		},
 	}
 	if err := p.network.BroadcastProtoWithFlags(vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mnorelay); err != nil {
-		p.logger.Debug(
+		p.logger.Warn(
 			"error publishing peer index item",
 			zap.Error(err),
 		)
@@ -453,7 +453,7 @@ func (p *peerIndexPublisher) unpublish() {
 		},
 	}
 	if err := p.network.BroadcastProtoWithFlags(vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mnorelay); err != nil {
-		p.logger.Debug(
+		p.logger.Warn(
 			"error unpublishing peer index item",
 			zap.Error(err),
 		)

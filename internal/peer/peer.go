@@ -78,7 +78,7 @@ func (t *control) HandlePeer(peer *vnic.Peer) {
 		ReadWriteFlusher: rw0,
 	})
 	if err != nil {
-		logger.Info("creating peer rpc client failed", zap.Error(err))
+		logger.Error("creating peer rpc client failed", zap.Error(err))
 		return
 	}
 

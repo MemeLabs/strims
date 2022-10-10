@@ -96,10 +96,10 @@ func (s *whisperDeliveryService) send(r *chatv1.WhisperRecord) {
 	var state chatv1.WhisperRecord_State
 	if err := s.send1(r); err != nil {
 		state = chatv1.WhisperRecord_WHISPER_STATE_FAILED
-		logger.Debug("whisper delivery failed", zap.Error(err))
+		logger.Warn("whisper delivery failed", zap.Error(err))
 	} else {
 		state = chatv1.WhisperRecord_WHISPER_STATE_DELIVERED
-		logger.Debug("delivered whisper", zap.Error(err))
+		logger.Warn("delivered whisper", zap.Error(err))
 	}
 
 	_, err := dao.ChatWhisperRecords.Transform(s.store, r.Id, func(p *chatv1.WhisperRecord) error {
@@ -110,7 +110,7 @@ func (s *whisperDeliveryService) send(r *chatv1.WhisperRecord) {
 		return nil
 	})
 	if err != nil {
-		logger.Debug("storing whisper state failed", zap.Error(err))
+		logger.Error("storing whisper state failed", zap.Error(err))
 	}
 
 	s.finished <- struct{}{}

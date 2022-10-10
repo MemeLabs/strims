@@ -54,9 +54,7 @@ func main() {
 		opt := wasmio.WorkerOptions{
 			LogLevel: zap.DebugLevel,
 		}
-		if len(args) > 2 {
-			opt.FromJSValue(args[2])
-		}
+		opt.FromJSValue(args[2])
 
 		init, ok := map[string]func(js.Value, wasmio.Bus, wasmio.WorkerOptions){
 			"default": initDefault,

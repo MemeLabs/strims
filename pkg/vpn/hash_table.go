@@ -526,7 +526,7 @@ func (p *HashTablePublisher) publish(t timeutil.Time) {
 		},
 	}
 	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mbroadcast); err != nil {
-		p.logger.Debug(
+		p.logger.Warn(
 			"error publishing hash table item",
 			zap.Error(err),
 		)
@@ -549,7 +549,7 @@ func (p *HashTablePublisher) unpublish() {
 		},
 	}
 	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mbroadcast); err != nil {
-		p.logger.Debug(
+		p.logger.Warn(
 			"error unpublishing hash table item",
 			zap.Error(err),
 		)

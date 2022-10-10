@@ -105,7 +105,7 @@ func (t *control) handlePeerAdd(id uint64) {
 
 	var res networkv1bootstrap.BootstrapPeerGetPublishEnabledResponse
 	if err := peer.client.GetPublishEnabled(t.ctx, &networkv1bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
-		t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
+		t.logger.Warn("bootstrap publish enabled check failed", zap.Error(err))
 	}
 
 	peer.allowSendPublish.Store(res.Enabled)

@@ -229,7 +229,7 @@ func (p *peerService) hasNetworkBinding(networkKey []byte) bool {
 
 func (p *peerService) runNegotiateNetworks(ctx context.Context) {
 	if err := p.doNegotiateNetworks(ctx); err != nil {
-		p.logger.Debug("network negotiation failed", zap.Error(err))
+		p.logger.Warn("network negotiation failed", zap.Error(err))
 	}
 }
 

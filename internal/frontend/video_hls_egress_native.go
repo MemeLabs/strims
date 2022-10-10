@@ -56,7 +56,7 @@ func (s *videoHLSEgressService) SetConfig(ctx context.Context, r *videov1.HLSEgr
 func (s *videoHLSEgressService) OpenStream(ctx context.Context, r *videov1.HLSEgressOpenStreamRequest) (*videov1.HLSEgressOpenStreamResponse, error) {
 	uri, err := s.app.VideoEgress().OpenHLSStream(r.SwarmUri, r.NetworkKeys)
 	if err != nil {
-		s.logger.Debug("opening stream failed", zap.Error(err))
+		s.logger.Info("opening stream failed", zap.Error(err))
 		return nil, err
 	}
 

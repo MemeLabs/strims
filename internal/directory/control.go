@@ -244,7 +244,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 
 			readers, stop, err := r.Reader(rctx)
 			if err != nil {
-				logger.Debug("error getting directory event reader", zap.Error(err))
+				logger.Warn("error getting directory event reader", zap.Error(err))
 				return
 			}
 
@@ -296,7 +296,7 @@ func (t *control) handleNetworkStart(network *networkv1.Network) {
 			stop()
 			s.Reset()
 
-			logger.Debug(
+			logger.Info(
 				"directory reader closed",
 				zap.Error(err),
 				zap.Bool("done", done),
@@ -349,14 +349,14 @@ func (t *control) ping() {
 func (t *control) pingDirectory(r *runner) {
 	c, dc, err := t.client(t.ctx, r.NetworkKey())
 	if err != nil {
-		r.Logger().Debug("directory ping failed", zap.Error(err))
+		r.Logger().Warn("directory ping failed", zap.Error(err))
 		return
 	}
 	defer c.Close()
 
 	err = dc.Ping(t.ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
 	if err != nil {
-		r.Logger().Debug("directory ping failed", zap.Error(err))
+		r.Logger().Warn("directory ping failed", zap.Error(err))
 	}
 }
 

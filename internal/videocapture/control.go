@@ -198,7 +198,7 @@ func (c *control) publishStream(s *stream) {
 		go func(k []byte) {
 			id, err := c.publishDirectoryListing(k, s)
 			if err != nil {
-				c.logger.Debug(
+				c.logger.Error(
 					"publishing video capture failed",
 					logutil.ByteHex("network", k),
 					zap.Error(err),

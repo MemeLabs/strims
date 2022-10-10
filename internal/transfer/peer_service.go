@@ -85,7 +85,7 @@ func (p *peerService) SendAnnounce(t *transfer) {
 		res := &transferv1.TransferPeerAnnounceResponse{}
 		err := p.client.Announce(p.ctx, req, res)
 		if err != nil {
-			pt.logger.Debug("announce failed", zap.Error(err))
+			pt.logger.Warn("announce failed", zap.Error(err))
 			return
 		}
 
@@ -162,7 +162,7 @@ func (p *peerService) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bo
 
 	err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(peerChannel))
 	if err != nil {
-		pt.logger.Debug("unable to start swarm channel", zap.Error(err))
+		pt.logger.Error("unable to start swarm channel", zap.Error(err))
 		return false
 	}
 	pt.open = true

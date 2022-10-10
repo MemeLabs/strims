@@ -69,7 +69,7 @@ func (p protoMapMarshaller) MarshalLogObject(e zapcore.ObjectEncoder) error {
 		case protoreflect.StringKind:
 			k = vi.String()
 		}
-		marshalProtoField(k, p.f.MapKey(), vi, e)
+		marshalProtoField(k, p.f.MapValue(), vi, e)
 		return true
 	})
 	return nil

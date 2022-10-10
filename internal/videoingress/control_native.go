@@ -232,7 +232,7 @@ func (c *control) startIngressShareServer(ctx context.Context, networkKey []byte
 func (c *control) stopIngressServer() {
 	if c.ingressServer != nil {
 		if err := c.ingressServer.Close(); err != nil {
-			c.logger.Debug("ingress server returned errors while closing", zap.Error(err))
+			c.logger.Warn("ingress server returned errors while closing", zap.Error(err))
 		}
 		c.ingressServer = nil
 	}
@@ -262,11 +262,11 @@ func (c *control) startIngressServer() {
 	// c.ingressServer = c.createServer()
 
 	go func() {
-		c.logger.Debug(
+		c.logger.Info(
 			"starting ingress server",
 			zap.String("address", c.ingressConfig.ServerAddr),
 		)
 		err := c.ingressServer.Listen()
-		c.logger.Debug("ingress server closed", zap.Error(err))
+		c.logger.Info("ingress server closed", zap.Error(err))
 	}()
 }

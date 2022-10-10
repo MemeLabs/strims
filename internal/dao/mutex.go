@@ -82,7 +82,7 @@ func (m *Mutex) poll(ctx context.Context, cancel context.CancelFunc, ch chan err
 		case <-ctx.Done():
 			if m.held {
 				if err := m.Release(); err != nil {
-					m.logger.Debug("releasing mutex failed", zap.Error(err))
+					m.logger.Warn("releasing mutex failed", zap.Error(err))
 				}
 			} else {
 				ch <- ctx.Err()

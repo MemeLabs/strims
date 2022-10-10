@@ -44,7 +44,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 
 		transferID, r, err := s.app.VideoEgress().OpenStream(ctx, r.SwarmUri, r.NetworkKeys)
 		if err != nil {
-			logger.Debug("opening stream failed", zap.Error(err))
+			logger.Error("opening stream failed", zap.Error(err))
 
 			ch <- &videov1.EgressOpenStreamResponse{
 				Body: &videov1.EgressOpenStreamResponse_Error_{
@@ -108,7 +108,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 					d.Discontinuity = true
 					n = 0
 				default:
-					logger.Debug("stream closed", zap.Error(err))
+					logger.Info("stream closed", zap.Error(err))
 
 					ch <- &videov1.EgressOpenStreamResponse{
 						Body: &videov1.EgressOpenStreamResponse_Error_{

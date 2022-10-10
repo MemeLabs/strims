@@ -99,7 +99,7 @@ func (t *control) loadConfig() {
 
 	config, err := dao.HLSEgressConfig.Get(t.store)
 	if err != nil {
-		t.logger.Debug("error loading hls egress config", zap.Error(err))
+		t.logger.Info("error loading hls egress config", zap.Error(err))
 		return
 	}
 	t.syncConfig(config)

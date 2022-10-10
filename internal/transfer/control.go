@@ -159,7 +159,7 @@ func (c *control) loadNetworkPeers(t *transfer, n *network) error {
 
 	s, err := node.PeerIndex.Search(ctx, t.swarm.ID(), t.salt)
 	if err != nil {
-		c.logger.Debug(
+		c.logger.Warn(
 			"searching for peers failed",
 			zap.Error(err),
 		)

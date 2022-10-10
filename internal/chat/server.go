@@ -201,7 +201,7 @@ func (s *chatServer) Run(ctx context.Context) error {
 	s.assetSwarm.Close()
 
 	if err := s.directory.Unpublish(context.Background(), listingID, s.config.NetworkKey); err != nil {
-		s.logger.Info("unpublishing chat server from directory failed", zap.Error(err))
+		s.logger.Warn("unpublishing chat server from directory failed", zap.Error(err))
 	}
 
 	return err
