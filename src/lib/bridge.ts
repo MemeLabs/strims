@@ -62,6 +62,7 @@ type WorkerEvent =
       type: EventType.OPEN_WORKER;
       port: WorkerMessagePort;
       service: string;
+      options: WorkerOptions;
     }
   | {
       type: EventType.OPEN_BUS;
@@ -211,7 +212,7 @@ export class WindowBridge extends EventEmitter {
     (window as unknown as DebugWindow).__strims_rtc_peer_connections__ = this.rtcPeerConnections;
   }
 
-  public createWorker(service: string, ...args: any[]): Worker {
+  public createWorker(service: string, options: WorkerOptions): Worker {
     const worker = new this.workerConstructor();
     worker.onmessage = ({ data }: MessageEvent<WorkerEvent>) => {
       switch (data.type) {
@@ -222,7 +223,7 @@ export class WindowBridge extends EventEmitter {
           this.openDataChannel(data.port, data.id);
           break;
         case EventType.OPEN_WORKER:
-          this.openWorker(data.port, data.service);
+          this.openWorker(data.port, data.service, data.options);
           break;
         case EventType.OPEN_BUS:
           this.openBus(data.port, data.label);
@@ -236,7 +237,7 @@ export class WindowBridge extends EventEmitter {
     worker.postMessage({
       service,
       baseURI: location.origin,
-      args,
+      options,
     });
     this.workers.push(worker);
     return worker;
@@ -468,9 +469,9 @@ export class WindowBridge extends EventEmitter {
     setTimeout(() => portState.open(), 100);
   }
 
-  private openWorker(port: WorkerMessagePort, service: string) {
+  private openWorker(port: WorkerMessagePort, service: string, options: WorkerOptions) {
     this.once(`busport:${service}`, (p: MessagePort) => port.postMessage({ port: p }, [p]));
-    const worker = this.createWorker(service);
+    const worker = this.createWorker(service, options);
 
     port.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
@@ -609,6 +610,10 @@ class ReadQueue {
     this.data = undefined;
     return data;
   }
+}
+
+export interface WorkerOptions {
+  logLevel: number;
 }
 
 export class WorkerBridge extends EventEmitter {
@@ -892,7 +897,7 @@ export class WorkerBridge extends EventEmitter {
     return cid;
   }
 
-  public openWorker(service: string, proxy: ServiceGoProxy): void {
+  public openWorker(service: string, proxy: ServiceGoProxy, options: WorkerOptions): void {
     const { port1, port2 } = new MessageChannel() as GenericChannel<
       WorkerWindowEvent,
       WorkerWorkerEvent
@@ -940,6 +945,7 @@ export class WorkerBridge extends EventEmitter {
         type: EventType.OPEN_WORKER,
         port: port2,
         service,
+        options,
       },
       [port2]
     );

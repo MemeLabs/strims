@@ -35,7 +35,9 @@ class WorkerConn {
     this.bus = new Promise<Duplex>((resolve) => {
       this.bridge.once("busopen:default", (b: Duplex) => resolve(b));
     });
-    this.bridge.createWorker("default");
+    this.bridge.createWorker("default", {
+      logLevel: parseInt(window.localStorage.getItem("log_level")) >> 0,
+    });
   }
 
   async client<T>(C: ClientConstructor<T>): Promise<T> {

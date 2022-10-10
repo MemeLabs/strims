@@ -51,7 +51,14 @@ func main() {
 		service := args[0].String()
 		bridge := args[1]
 
-		init, ok := map[string]func(js.Value, wasmio.Bus){
+		opt := wasmio.WorkerOptions{
+			LogLevel: zap.DebugLevel,
+		}
+		if len(args) > 2 {
+			opt.FromJSValue(args[2])
+		}
+
+		init, ok := map[string]func(js.Value, wasmio.Bus, wasmio.WorkerOptions){
 			"default": initDefault,
 			"broker":  initBroker,
 		}[service]
@@ -59,7 +66,7 @@ func main() {
 			return nil, errors.New("unknown service")
 		}
 
-		go init(bridge, wasmio.NewBus(bridge, service))
+		go init(bridge, wasmio.NewBus(bridge, service), opt)
 
 		return nil, nil
 	})
@@ -69,7 +76,7 @@ func main() {
 	select {}
 }
 
-func newLogger(bridge js.Value) *zap.Logger {
+func newLogger(bridge js.Value, level zapcore.Level) *zap.Logger {
 	encoderCfg := zapcore.EncoderConfig{
 		MessageKey:     "msg",
 		LevelKey:       "level",
@@ -81,18 +88,18 @@ func newLogger(bridge js.Value) *zap.Logger {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 	sink := wasmio.NewZapSink(bridge)
-	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), sink, zap.DebugLevel)
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), sink, level)
 	return zap.New(core, zap.WithCaller(true))
 }
 
-func initDefault(bridge js.Value, bus wasmio.Bus) {
-	logger := newLogger(bridge)
+func initDefault(bridge js.Value, bus wasmio.Bus, opt wasmio.WorkerOptions) {
+	logger := newLogger(bridge, opt.LogLevel)
 	dao.Logger = logger
 
 	store := wasmio.NewKVStore(bridge)
 	queue := memory.NewTransport()
 
-	broker, err := network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
+	broker, err := network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker", opt))
 	if err != nil {
 		logger.Fatal("broker proxy init failed", zap.Error(err))
 	}
@@ -123,8 +130,8 @@ func initDefault(bridge js.Value, bus wasmio.Bus) {
 	}
 }
 
-func initBroker(bridge js.Value, bus wasmio.Bus) {
-	logger := newLogger(bridge)
+func initBroker(bridge js.Value, bus wasmio.Bus, opt wasmio.WorkerOptions) {
+	logger := newLogger(bridge, opt.LogLevel)
 	dao.Logger = logger
 
 	server := rpc.NewServer(logger, &rpc.RWDialer{
