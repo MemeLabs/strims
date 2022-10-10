@@ -666,7 +666,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 		v := m.GetVersion()
 		if v == nil {
 			v = versionvector.New()
-			m.ProtoReflect().Set(versionFieldDescriptor, protoreflect.ValueOf(versionvector.New().ProtoReflect()))
+			m.ProtoReflect().Set(versionFieldDescriptor, protoreflect.ValueOf(v.ProtoReflect()))
 		}
 		return v
 	}
