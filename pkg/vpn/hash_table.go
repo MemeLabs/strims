@@ -471,8 +471,10 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 		close:   cancel,
 	}
 
-	go p.publish(timeutil.Now())
-	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, hashTableSetInterval, p.publish, p.unpublish)
+	go func() {
+		p.publish(timeutil.Now())
+		timeutil.DefaultTickEmitter.SubscribeCtx(ctx, hashTableSetInterval, p.publish, p.unpublish)
+	}()
 
 	return p, nil
 }

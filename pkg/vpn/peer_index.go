@@ -398,8 +398,10 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 		network: network,
 	}
 
-	go p.publish(timeutil.Now())
-	timeutil.DefaultTickEmitter.SubscribeCtx(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
+	go func() {
+		p.publish(timeutil.Now())
+		timeutil.DefaultTickEmitter.SubscribeCtx(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
+	}()
 
 	return p, nil
 }
