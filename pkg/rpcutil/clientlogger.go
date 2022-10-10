@@ -8,8 +8,8 @@ import (
 	"reflect"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/pkg/debug"
 	"github.com/MemeLabs/strims/pkg/logutil"
-	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,13 +27,13 @@ type ClientLogger struct {
 }
 
 func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.Message, res proto.Message) error {
-	start := timeutil.Now()
+	t := debug.StartTimer()
 
 	err := c.c.CallUnary(ctx, method, req, res)
 	if err != nil {
 		c.logger.Debug(
 			"rpc error",
-			zap.Stringer("duration", timeutil.Now().Sub(start)),
+			zap.Stringer("duration", t.Elapsed()),
 			zap.String("method", method),
 			logutil.Proto("req", req),
 			zap.Error(err),
@@ -43,7 +43,7 @@ func (c *ClientLogger) CallUnary(ctx context.Context, method string, req proto.M
 
 	c.logger.Debug(
 		"rpc response",
-		zap.Stringer("duration", timeutil.Now().Sub(start)),
+		zap.Stringer("duration", t.Elapsed()),
 		zap.String("method", method),
 		logutil.Proto("req", req),
 		logutil.Proto("res", res),
