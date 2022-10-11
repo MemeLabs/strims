@@ -1647,6 +1647,7 @@ export namespace Profile {
 }
 
 export type IUIConfig = {
+  version?: strims_dao_v1_IVersionVector;
   showTime?: boolean;
   showFlairIcons?: boolean;
   timestampFormat?: string;
@@ -1679,9 +1680,11 @@ export type IUIConfig = {
   compactEmoteSpacing?: boolean;
   normalizeAliasCase?: boolean;
   emojiSkinTone?: string;
+  replicate?: boolean;
 }
 
 export class UIConfig {
+  version: strims_dao_v1_VersionVector | undefined;
   showTime: boolean;
   showFlairIcons: boolean;
   timestampFormat: string;
@@ -1714,8 +1717,10 @@ export class UIConfig {
   compactEmoteSpacing: boolean;
   normalizeAliasCase: boolean;
   emojiSkinTone: string;
+  replicate: boolean;
 
   constructor(v?: IUIConfig) {
+    this.version = v?.version && new strims_dao_v1_VersionVector(v.version);
     this.showTime = v?.showTime || false;
     this.showFlairIcons = v?.showFlairIcons || false;
     this.timestampFormat = v?.timestampFormat || "";
@@ -1748,10 +1753,12 @@ export class UIConfig {
     this.compactEmoteSpacing = v?.compactEmoteSpacing || false;
     this.normalizeAliasCase = v?.normalizeAliasCase || false;
     this.emojiSkinTone = v?.emojiSkinTone || "";
+    this.replicate = v?.replicate || false;
   }
 
   static encode(m: UIConfig, w?: Writer): Writer {
     if (!w) w = new Writer();
+    if (m.version) strims_dao_v1_VersionVector.encode(m.version, w.uint32(290).fork()).ldelim();
     if (m.showTime) w.uint32(8).bool(m.showTime);
     if (m.showFlairIcons) w.uint32(16).bool(m.showFlairIcons);
     if (m.timestampFormat.length) w.uint32(26).string(m.timestampFormat);
@@ -1784,6 +1791,7 @@ export class UIConfig {
     if (m.compactEmoteSpacing) w.uint32(264).bool(m.compactEmoteSpacing);
     if (m.normalizeAliasCase) w.uint32(272).bool(m.normalizeAliasCase);
     if (m.emojiSkinTone.length) w.uint32(282).string(m.emojiSkinTone);
+    if (m.replicate) w.uint32(296).bool(m.replicate);
     return w;
   }
 
@@ -1794,6 +1802,9 @@ export class UIConfig {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
+        case 36:
+        m.version = strims_dao_v1_VersionVector.decode(r, r.uint32());
+        break;
         case 1:
         m.showTime = r.bool();
         break;
@@ -1889,6 +1900,9 @@ export class UIConfig {
         break;
         case 35:
         m.emojiSkinTone = r.string();
+        break;
+        case 37:
+        m.replicate = r.bool();
         break;
         default:
         r.skipType(tag & 7);

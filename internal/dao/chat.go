@@ -174,6 +174,21 @@ var ChatUIConfig = NewSingleton(
 	},
 )
 
+func init() {
+	RegisterReplicatedSingleton(
+		ChatUIConfig,
+		&ReplicatorOptions[*chatv1.UIConfig]{
+			Merge: func(s kv.RWStore, m, p *chatv1.UIConfig) *chatv1.UIConfig {
+				if !m.Replicate || !p.Replicate {
+					m, p = p, m
+				}
+				versionvector.Upgrade(m.GetVersion(), p.GetVersion())
+				return m
+			},
+		},
+	)
+}
+
 var ChatUIConfigHighlights = NewTable(
 	chatUIConfigHighlightNS,
 	&TableOptions[chatv1.UIConfigHighlight, *chatv1.UIConfigHighlight]{
@@ -257,7 +272,7 @@ func resolveChatWhisperThreadConflict(m, p *chatv1.WhisperThread) {
 func init() {
 	RegisterReplicatedTable(
 		ChatWhisperThreads,
-		&ReplicatedTableOptions[*chatv1.WhisperThread]{
+		&ReplicatorOptions[*chatv1.WhisperThread]{
 			OnConflict: func(s kv.RWStore, m *chatv1.WhisperThread, p *chatv1.WhisperThread) error {
 				resolveChatWhisperThreadConflict(m, p)
 				return ChatWhisperThreads.Update(s, m)

@@ -89,6 +89,8 @@
       "Emotes": "Emotes",
       "Combos": "Combos",
       "Modifiers": "Modifiers",
+      "Settings": "Settings",
+      "Keep synced": "Keep synced",
 
       // viewer state indicator options
       "Disable": "Disable",

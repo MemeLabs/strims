@@ -93,7 +93,7 @@ func resolveNetworkConflict(m, p *networkv1.Network) {
 func init() {
 	RegisterReplicatedTable(
 		Networks,
-		&ReplicatedTableOptions[*networkv1.Network]{
+		&ReplicatorOptions[*networkv1.Network]{
 			OnConflict: func(s kv.RWStore, m *networkv1.Network, p *networkv1.Network) error {
 				resolveNetworkConflict(m, p)
 				return Networks.Update(s, m)

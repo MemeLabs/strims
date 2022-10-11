@@ -53,6 +53,7 @@ interface SettingsFormData {
     value: UIConfig.UserPresenceIndicator;
     label: string;
   };
+  replicate: boolean;
 }
 
 const primitivePropNames = [
@@ -81,6 +82,7 @@ const primitivePropNames = [
   "shortenLinks",
   "compactEmoteSpacing",
   "normalizeAliasCase",
+  "replicate",
 ] as const;
 
 const SettingsDrawer: React.FC = () => {
@@ -351,6 +353,17 @@ const SettingsDrawer: React.FC = () => {
             control={control}
             label={t("chat.settings.Modifiers")}
             name="emoteModifiers"
+            onChange={handleChange}
+          />
+        </fieldset>
+        <fieldset>
+          <legend>
+            <Trans>chat.settings.Settings</Trans>
+          </legend>
+          <ToggleInput
+            control={control}
+            label={t("chat.settings.Keep synced")}
+            name="replicate"
             onChange={handleChange}
           />
         </fieldset>

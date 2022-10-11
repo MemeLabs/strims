@@ -152,7 +152,6 @@ interface TagMenuItemProps {
 
 const TagMenuItem: React.FC<TagMenuItemProps> = ({ nick, peerKey, onClick }) => {
   const client = useClient();
-  const [{ uiConfigTags }] = useChat();
   const [, { getNetworkKeys }] = useRoom();
 
   const [networkKey] = getNetworkKeys();

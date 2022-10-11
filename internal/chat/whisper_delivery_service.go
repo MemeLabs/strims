@@ -99,7 +99,7 @@ func (s *whisperDeliveryService) send(r *chatv1.WhisperRecord) {
 		logger.Warn("whisper delivery failed", zap.Error(err))
 	} else {
 		state = chatv1.WhisperRecord_WHISPER_STATE_DELIVERED
-		logger.Warn("delivered whisper", zap.Error(err))
+		logger.Debug("delivered whisper")
 	}
 
 	_, err := dao.ChatWhisperRecords.Transform(s.store, r.Id, func(p *chatv1.WhisperRecord) error {

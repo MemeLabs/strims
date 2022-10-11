@@ -2,7 +2,6 @@ package dao
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
@@ -617,15 +616,6 @@ func LocalDeleteHook[V any, T Record[V]](fn func(s ReplicatedRWTx, p T) error) d
 	}
 }
 
-func versionFieldDescriptor[T proto.Message]() (protoreflect.FieldDescriptor, error) {
-	var m T
-	d := m.ProtoReflect().Descriptor().Fields().ByTextName("version")
-	if d == nil {
-		return nil, fmt.Errorf("version field not found in type %T", m)
-	}
-	return d, nil
-}
-
 type ReplicatedRecord interface {
 	versionvector.VersionedMessage
 }
@@ -635,14 +625,14 @@ type ReplicatedTableRecord[V any] interface {
 	ReplicatedRecord
 }
 
-type ReplicatedTableOptions[T ReplicatedRecord] struct {
+type ReplicatorOptions[T ReplicatedRecord] struct {
 	OnConflict func(s kv.RWStore, m, p T) error
 	Extract    func(s kv.Store, m, p T) T
 	Merge      func(s kv.RWStore, m, p T) T
 }
 
-func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], opt *ReplicatedTableOptions[T]) {
-	opt = options.NewWithDefaults(opt, ReplicatedTableOptions[T]{
+func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], opt *ReplicatorOptions[T]) {
+	opt = options.NewWithDefaults(opt, ReplicatorOptions[T]{
 		OnConflict: func(s kv.RWStore, m, p T) error {
 			if m.GetVersion().UpdatedAt < p.GetVersion().UpdatedAt {
 				m, p = p, m
@@ -710,7 +700,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 
 type TableReplicator[V any, T ReplicatedTableRecord[V]] struct {
 	t   *Table[V, T]
-	opt *ReplicatedTableOptions[T]
+	opt *ReplicatorOptions[T]
 }
 
 func (t *TableReplicator[V, T]) ApplyEvent(s kv.RWStore, e *replicationv1.Event) error {
@@ -776,7 +766,7 @@ func (t *TableReplicator[V, T]) Dump(s kv.Store) ([]*replicationv1.Event, error)
 
 type TableReplicatorEventFilter[V any, T ReplicatedTableRecord[V]] struct {
 	t      *Table[V, T]
-	opt    *ReplicatedTableOptions[T]
+	opt    *ReplicatorOptions[T]
 	events map[uint64]*replicationv1.Event
 	orders map[*replicationv1.Event]int
 	order  int
@@ -848,4 +838,174 @@ func (t *TableReplicatorEventFilter[V, T]) Events() []*replicationv1.Event {
 	es := maps.Values(t.events)
 	sort.Slice(es, func(i, j int) bool { return t.orders[es[i]] < t.orders[es[j]] })
 	return es
+}
+
+type ReplicatedSingletonRecord[V any] interface {
+	Record[V]
+	ReplicatedRecord
+}
+
+func RegisterReplicatedSingleton[V any, T ReplicatedSingletonRecord[V]](t *Singleton[V, T], opt *ReplicatorOptions[T]) {
+	opt = options.NewWithDefaults(opt, ReplicatorOptions[T]{
+		OnConflict: func(s kv.RWStore, m, p T) error {
+			if m.GetVersion().UpdatedAt < p.GetVersion().UpdatedAt {
+				m, p = p, m
+			}
+			versionvector.Upgrade(m.GetVersion(), p.GetVersion())
+			return t.Set(s, m)
+		},
+		Extract: func(s kv.Store, m, p T) T { return m },
+		Merge: func(s kv.RWStore, m, p T) T {
+			versionvector.Upgrade(m.GetVersion(), p.GetVersion())
+			return m
+		},
+	})
+
+	versionFieldDescriptor, err := versionvector.ProtoFieldDescriptor[T]()
+	if err != nil {
+		panic(err)
+	}
+
+	getOrInitVersion := func(m T) *daov1.VersionVector {
+		v := m.GetVersion()
+		if v == nil {
+			v = versionvector.New()
+			m.ProtoReflect().Set(versionFieldDescriptor, protoreflect.ValueOf(v.ProtoReflect()))
+		}
+		return v
+	}
+
+	t.onChange(LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
+		versionvector.Increment(getOrInitVersion(m), s.ReplicaID())
+
+		m = proto.Clone(m).(T)
+		b, err := proto.Marshal(opt.Extract(s, m, p))
+		if err != nil {
+			return err
+		}
+		s.Replicate(&replicationv1.Event{
+			Namespace: int64(t.ns),
+			Version:   m.GetVersion(),
+			Record:    b,
+		})
+
+		return nil
+	}))
+
+	replicators[t.ns] = &SingletonReplicator[V, T]{
+		t:   t,
+		opt: opt,
+	}
+}
+
+type SingletonReplicator[V any, T ReplicatedSingletonRecord[V]] struct {
+	t   *Singleton[V, T]
+	opt *ReplicatorOptions[T]
+}
+
+func (t *SingletonReplicator[V, T]) ApplyEvent(s kv.RWStore, e *replicationv1.Event) error {
+	next := (T)(new(V))
+	if err := proto.Unmarshal(e.Record, next); err != nil {
+		return err
+	}
+
+	index, err := t.t.Get(s)
+	if errors.Is(err, kv.ErrRecordNotFound) {
+		return t.t.Set(s, next)
+	} else if err != nil {
+		return err
+	}
+
+	d, ordered := versionvector.Compare(index.GetVersion(), next.GetVersion())
+	if !ordered {
+		return t.opt.OnConflict(s, next, index)
+	} else if d < 0 {
+		return t.t.Set(s, t.opt.Merge(s, next, index))
+	}
+	return nil
+}
+
+func (t *SingletonReplicator[V, T]) EventFilter() ReplicationEventFilter {
+	return &SingletonReplicatorEventFilter[V, T]{
+		t:   t.t,
+		opt: t.opt,
+	}
+}
+
+func (t *SingletonReplicator[V, T]) Dump(s kv.Store) ([]*replicationv1.Event, error) {
+	r, err := t.t.Get(s)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := proto.Marshal(t.opt.Extract(s, r, nil))
+	if err != nil {
+		return nil, err
+	}
+
+	return []*replicationv1.Event{
+		{
+			Namespace: int64(t.t.ns),
+			Version:   r.GetVersion(),
+			Record:    b,
+		},
+	}, nil
+}
+
+type SingletonReplicatorEventFilter[V any, T ReplicatedSingletonRecord[V]] struct {
+	t     *Singleton[V, T]
+	opt   *ReplicatorOptions[T]
+	event *replicationv1.Event
+}
+
+func (t *SingletonReplicatorEventFilter[V, T]) Test(e *replicationv1.Event) bool {
+	if t.event != nil {
+		d, ordered := versionvector.Compare(t.event.Version, e.Version)
+		return !ordered || d < 0
+	}
+	return true
+}
+
+func (t *SingletonReplicatorEventFilter[V, T]) AddEvent(s kv.Store, e *replicationv1.Event) error {
+	if t.event != nil {
+		d, ordered := versionvector.Compare(t.event.Version, e.Version)
+		if !ordered {
+			return t.load(s)
+		} else if d > 0 {
+			return nil
+		}
+	}
+
+	if e.Record == nil {
+		return t.load(s)
+	}
+	t.event = e
+	return nil
+}
+
+func (t *SingletonReplicatorEventFilter[V, T]) load(s kv.Store) error {
+	e := &replicationv1.Event{
+		Namespace: int64(t.t.ns),
+	}
+
+	r, err := t.t.Get(s)
+	if err != nil {
+		return err
+	}
+
+	e.Version = r.GetVersion()
+	e.Record, err = proto.Marshal(t.opt.Extract(s, r, nil))
+	if err != nil {
+		return err
+	}
+
+	t.event = e
+	return nil
+}
+
+func (t *SingletonReplicatorEventFilter[V, T]) Events() []*replicationv1.Event {
+	if t.event == nil {
+		return nil
+	}
+	return []*replicationv1.Event{t.event}
 }

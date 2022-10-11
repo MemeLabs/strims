@@ -5,7 +5,7 @@
 // see: https://github.com/reactjs/rfcs/blob/useevent/text/0000-useevent.md
 // discussion: https://github.com/facebook/react/issues/14099
 
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 export const useStableCallback = <P extends any[], R>(
   callback: (...args: P) => R

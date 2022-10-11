@@ -242,13 +242,14 @@ func (t *replicator) runEventLogGC(ctx context.Context) {
 	next := t.checkpoints.MinVersion()
 	if d, _ := versionvector.Compare(prev, next); d < 0 {
 		t.gcThreshold.Store(next)
-		_, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
-		t.logger.Warn(
+		t.logger.Debug(
 			"replication event log gc threshold changed",
 			logutil.Proto("prev", prev),
 			logutil.Proto("next", next),
-			zap.Error(err),
 		)
+		if _, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next); err != nil {
+			t.logger.Warn("replication gc failed", zap.Error(err))
+		}
 	}
 }
 
