@@ -59,15 +59,13 @@ func (p protoMapMarshaller) MarshalLogObject(e zapcore.ObjectEncoder) error {
 		var k string
 		switch p.f.MapKey().Kind() {
 		case protoreflect.BoolKind:
-			k = strconv.FormatBool(vi.Bool())
+			k = strconv.FormatBool(ki.Bool())
 		case protoreflect.Int32Kind, protoreflect.Int64Kind, protoreflect.Sint32Kind, protoreflect.Sint64Kind, protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
-			k = strconv.FormatInt(vi.Int(), 10)
+			k = strconv.FormatInt(ki.Int(), 10)
 		case protoreflect.Uint32Kind, protoreflect.Uint64Kind, protoreflect.Fixed32Kind, protoreflect.Fixed64Kind:
-			k = strconv.FormatUint(vi.Uint(), 10)
-		case protoreflect.FloatKind, protoreflect.DoubleKind:
-			k = strconv.FormatFloat(vi.Float(), 'f', -1, 64)
+			k = strconv.FormatUint(ki.Uint(), 10)
 		case protoreflect.StringKind:
-			k = vi.String()
+			k = ki.String()
 		}
 		marshalProtoField(k, p.f.MapValue(), vi, e)
 		return true
