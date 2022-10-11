@@ -109,7 +109,7 @@ func (p *peerService) Bootstrap(ctx context.Context, req *replicationv1.PeerBoot
 		"received replication bootstrap",
 		zap.Int("events", len(req.Events)),
 		zap.Int("logs", len(req.Logs)),
-		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
+		logutil.Proto("checkpoint", c),
 	)
 	return &replicationv1.PeerBootstrapResponse{Checkpoint: c}, nil
 }
@@ -122,7 +122,7 @@ func (p *peerService) Sync(ctx context.Context, req *replicationv1.PeerSyncReque
 	p.logger.Debug(
 		"received replication sync",
 		zap.Int("logs", len(req.Logs)),
-		zap.Object("checkpoint", checkpointLogObjectMarshaler{c}),
+		logutil.Proto("checkpoint", c),
 	)
 	return &replicationv1.PeerSyncResponse{Checkpoint: c}, nil
 }

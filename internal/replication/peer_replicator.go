@@ -11,6 +11,7 @@ import (
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -104,7 +105,7 @@ func (p *peerReplicator) beginWithBootstrap(ctx context.Context) error {
 		"sent replication bootstrap",
 		zap.Int("events", len(req.Events)),
 		zap.Int("logs", len(req.Logs)),
-		zap.Object("checkpoint", checkpointLogObjectMarshaler{res.Checkpoint}),
+		logutil.Proto("checkpoint", res.Checkpoint),
 	)
 	return nil
 }
@@ -131,7 +132,7 @@ func (p *peerReplicator) Sync(ctx context.Context, logs []*replicationv1.EventLo
 	p.logger.Debug(
 		"sent replication sync",
 		zap.Int("logs", len(logs)),
-		zap.Object("checkpoint", checkpointLogObjectMarshaler{res.Checkpoint}),
+		logutil.Proto("checkpoint", res.Checkpoint),
 	)
 	return nil
 }

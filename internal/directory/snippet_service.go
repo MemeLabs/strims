@@ -55,12 +55,12 @@ func (s *snippetServer) start(ctx context.Context, network *networkv1.Network) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	go func() {
-		s.logger.Info(
+		s.logger.Debug(
 			"starting directory snippet server",
 			logutil.ByteHex("network", networkKey),
 		)
 		err := server.Listen(ctx)
-		s.logger.Info(
+		s.logger.Debug(
 			"directory snippet server closed",
 			logutil.ByteHex("network", networkKey),
 			zap.Error(err),

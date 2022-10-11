@@ -27,7 +27,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const eventLogGCDebounceWait = time.Second
@@ -246,8 +245,8 @@ func (t *replicator) runEventLogGC(ctx context.Context) {
 		_, err := dao.ReplicationEventLogs.GarbageCollect(t.store, next)
 		t.logger.Warn(
 			"replication event log gc threshold changed",
-			versionvector.LogObject("prev", prev),
-			versionvector.LogObject("next", next),
+			logutil.Proto("prev", prev),
+			logutil.Proto("next", next),
 			zap.Error(err),
 		)
 	}
@@ -365,16 +364,4 @@ func (t *replicator) handlePeerRemove(peerID uint64) {
 
 func formatSalt(replicaID uint64) []byte {
 	return strconv.AppendUint([]byte("replication:"), replicaID, 36)
-}
-
-var _ zapcore.ObjectMarshaler = checkpointLogObjectMarshaler{}
-
-type checkpointLogObjectMarshaler struct {
-	c *replicationv1.Checkpoint
-}
-
-func (l checkpointLogObjectMarshaler) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddUint64("id", l.c.Id)
-	e.AddObject("version", versionvector.LogObjectMarshaler{Value: l.c.Version})
-	return nil
 }

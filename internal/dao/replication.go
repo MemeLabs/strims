@@ -79,7 +79,7 @@ func (t ReplicationEventLogTable) GarbageCollect(s kv.RWStore, threshold *daov1.
 	if ce, ts := logutil.CheckWithTimer(Logger, zapcore.DebugLevel, "ReplicationEventLogTable.GarbageCollect"); ce != nil {
 		defer func() {
 			ce.Write(
-				versionvector.LogObject("threshold", threshold),
+				logutil.Proto("threshold", threshold),
 				zap.Int("count", n),
 				zap.Duration("duration", ts.Elapsed()),
 				zap.Error(err),

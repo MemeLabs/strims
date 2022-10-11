@@ -1,12 +1,8 @@
 package versionvector
 
 import (
-	"strconv"
-
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	"github.com/MemeLabs/strims/pkg/timeutil"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/maps"
 )
 
@@ -110,21 +106,4 @@ func initValue(v *daov1.VersionVector) {
 	if v.Value == nil {
 		v.Value = map[uint64]uint64{}
 	}
-}
-
-func LogObject(key string, v *daov1.VersionVector) zapcore.Field {
-	return zap.Object(key, LogObjectMarshaler{v})
-}
-
-type LogObjectMarshaler struct {
-	Value *daov1.VersionVector
-}
-
-func (l LogObjectMarshaler) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("updatedAt", timeutil.UnixMilli(l.Value.UpdatedAt).String())
-	e.OpenNamespace("value")
-	for i, v := range l.Value.Value {
-		e.AddUint64(strconv.FormatUint(i, 10), v)
-	}
-	return nil
 }
