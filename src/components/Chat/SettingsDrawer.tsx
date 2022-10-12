@@ -5,7 +5,7 @@ import "./SettingsDrawer.scss";
 
 import { Base64 } from "js-base64";
 import { pick } from "lodash";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
@@ -176,9 +176,11 @@ const SettingsDrawer: React.FC = () => {
 
   useEffect(() => handleChange, []);
 
+  const ref = useRef<HTMLFormElement>(null);
+
   return (
     <Scrollbars autoHide={true}>
-      <form className="chat__settings_form">
+      <form className="chat__settings_form" ref={ref}>
         {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
         <fieldset>
           <legend>
@@ -258,6 +260,7 @@ const SettingsDrawer: React.FC = () => {
             options={userPresenceIndicatorOptions}
             onChange={handleChange}
             isSearchable={false}
+            menuPortalTarget={ref.current}
           />
           <SelectInput
             control={control}
@@ -266,6 +269,7 @@ const SettingsDrawer: React.FC = () => {
             options={showRemovedOptions}
             onChange={handleChange}
             isSearchable={false}
+            menuPortalTarget={ref.current}
           />
         </fieldset>
         <fieldset>

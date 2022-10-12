@@ -23,11 +23,13 @@ export interface SelectInputProps<T extends SelectOption<any>, M extends boolean
   extends SelectProps<T, M> {
   label: string;
   description?: string;
+  menuPortalTarget?: HTMLElement;
 }
 
 const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M extends boolean>({
   label,
   description,
+  menuPortalTarget,
   className,
   name,
   rules,
@@ -59,7 +61,7 @@ const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M exten
     >
       <Select
         classNamePrefix="input_select"
-        menuPortalTarget={root}
+        menuPortalTarget={menuPortalTarget ?? root}
         menuPlacement="auto"
         {...inputProps}
         {...field}
