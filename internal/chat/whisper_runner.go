@@ -52,6 +52,10 @@ type whisperRunnerAdapter struct {
 	dialer    network.Dialer
 }
 
+func (s *whisperRunnerAdapter) CanServe() bool {
+	return true
+}
+
 func (s *whisperRunnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, "whisper")
 }

@@ -6,7 +6,6 @@ package servicemanager
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/MemeLabs/strims/internal/dao"
@@ -15,6 +14,7 @@ import (
 )
 
 type Adapter[R any] interface {
+	CanServe() bool
 	Mutex() *dao.Mutex
 	Client() (Readable[R], error)
 	Server() (Readable[R], error)
@@ -39,12 +39,8 @@ func New[R any, T Adapter[R]](
 		adapter: adapter,
 	}
 
-	server, err := adapter.Server()
-	if err != nil {
-		return nil, fmt.Errorf("failed to start server: %w", err)
-	}
-	if server != nil && !reflect.ValueOf(server).IsNil() {
-		go r.runServer(server)
+	if adapter.CanServe() {
+		go r.runServer()
 	}
 
 	return r, nil
@@ -135,7 +131,7 @@ func (r *Runner[R, T]) closeClient(c Readable[R]) {
 	}
 }
 
-func (r *Runner[R, T]) runServer(s Readable[R]) {
+func (r *Runner[R, T]) runServer() {
 	for r.ctx.Err() == nil {
 		mu := r.adapter.Mutex()
 		ctx, err := mu.Lock(r.ctx)
@@ -144,16 +140,21 @@ func (r *Runner[R, T]) runServer(s Readable[R]) {
 			return
 		}
 
-		r.lock.Lock()
-		if r.ref != nil {
-			r.ref.closeOnce.Do(func() { r.closeClient(r.ref.readable) })
-		}
-		r.ref = &ref[R]{readable: s, count: 1}
-		r.lock.Unlock()
+		s, err := r.adapter.Server()
+		if err != nil {
+			r.logger.Debug("failed to start server: %w", zap.Error(err))
+		} else {
+			r.lock.Lock()
+			if r.ref != nil {
+				r.ref.closeOnce.Do(func() { r.closeClient(r.ref.readable) })
+			}
+			r.ref = &ref[R]{readable: s, count: 1}
+			r.lock.Unlock()
 
-		r.logger.Debug("server starting", logutil.Type("server", s))
-		if err := s.Run(ctx); err != nil {
-			r.logger.Debug("server closed", zap.Error(err), logutil.Type("server", s))
+			r.logger.Debug("server starting", logutil.Type("server", s))
+			if err := s.Run(ctx); err != nil {
+				r.logger.Debug("server closed", zap.Error(err), logutil.Type("server", s))
+			}
 		}
 
 		r.lock.Lock()

@@ -74,6 +74,10 @@ type runnerAdapter struct {
 	network atomic.Pointer[networkv1.Network]
 }
 
+func (s *runnerAdapter) CanServe() bool {
+	return s.network.Load().GetServerConfig() != nil
+}
+
 func (s *runnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, "ca", s.network.Load().Id)
 }
@@ -83,8 +87,5 @@ func (s *runnerAdapter) Client() (servicemanager.Readable[*protoutil.ChunkStream
 }
 
 func (s *runnerAdapter) Server() (servicemanager.Readable[*protoutil.ChunkStreamReader], error) {
-	if s.network.Load().GetServerConfig() == nil {
-		return nil, nil
-	}
 	return newServer(s.logger, s.store, s.observers, s.dialer, s.transfer, s.network.Load())
 }

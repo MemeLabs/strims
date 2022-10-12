@@ -86,6 +86,10 @@ type runnerAdapter struct {
 	config     *chatv1.Server
 }
 
+func (s *runnerAdapter) CanServe() bool {
+	return s.config != nil
+}
+
 func (s *runnerAdapter) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, "chat", s.config.Id)
 }

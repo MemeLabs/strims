@@ -102,6 +102,10 @@ type MockService struct {
 	store  *dao.ProfileStore
 }
 
+func (s *MockService) CanServe() bool {
+	return true
+}
+
 func (s *MockService) Mutex() *dao.Mutex {
 	return dao.NewMutex(s.logger, s.store, "test")
 }
