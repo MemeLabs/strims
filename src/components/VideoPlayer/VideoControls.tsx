@@ -225,7 +225,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
         {props.showPiPButton && (
           <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />
         )}
-        {props.showTheaterButton && (
+        {props.showTheaterButton && !props.fullscreen && (
           <TheaterButton enabled={props.theaterMode} toggle={props.toggleTheaterMode} />
         )}
         {props.showFullscreenButton && (
