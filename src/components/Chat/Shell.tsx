@@ -38,6 +38,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
         key={`${room.id}-${index}`}
         uiConfig={uiConfig}
         message={roomActions.getMessage(index)}
+        messageState={roomActions.getMessageState(index)}
         style={style}
         isMostRecent={index === roomActions.getMessageCount() - 1}
         isContinued={roomActions.getMessageIsContinued(index)}

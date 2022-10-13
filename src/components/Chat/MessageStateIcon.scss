@@ -1,0 +1,17 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.chat {
+  &__message_state_icon {
+    height: 1rem;
+    width: 1rem;
+    float: right;
+    margin-top: 2px;
+
+    &--enqueued {
+    }
+
+    &--failed {
+    }
+  }
+}

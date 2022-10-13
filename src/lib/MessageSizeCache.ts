@@ -8,6 +8,7 @@ class MessageSizeCache {
   private margins: number[] = [];
   private heights: number[] = [];
   private offsets: FenwickTree;
+  private lastSet = 0;
   public onchange?: () => void;
 
   constructor(private size: number, private estimate: number) {
@@ -39,6 +40,7 @@ class MessageSizeCache {
     this.margins.fill(0);
     this.heights.fill(this.estimate);
     this.offsets = new FenwickTree(this.heights);
+    this.lastSet = 0;
   }
 
   public unset(i: number) {
@@ -53,6 +55,49 @@ class MessageSizeCache {
     this.margins.copyWithin(0, n * 2).fill(0, (this.size - n) * 2);
     this.heights.copyWithin(0, n).fill(this.estimate, this.size - n);
     this.offsets = new FenwickTree(this.heights);
+    this.lastSet -= n;
+  }
+
+  public remove(i: number, n: number = 1) {
+    if (i > this.lastSet) {
+      return;
+    }
+    this.settled.copyWithin(i, i + n, this.lastSet);
+    this.settled.fill(false, this.lastSet - n, this.lastSet);
+    this.margins.copyWithin(i * 2, (i + n) * 2, this.lastSet * 2);
+    this.margins.fill(0, this.lastSet * 2 - n * 2, this.lastSet * 2);
+    this.heights.copyWithin(i, i + n, this.lastSet);
+    this.heights.fill(this.estimate, this.lastSet - n, this.lastSet);
+    this.lastSet -= n;
+
+    let offsetChanged = false;
+    for (let j = i; j < this.lastSet + n; j++) {
+      offsetChanged ||= this.syncOffset(j);
+    }
+    if (offsetChanged) {
+      this.onchange?.();
+    }
+  }
+
+  public insert(i: number, n: number = 1) {
+    if (i > this.lastSet) {
+      return;
+    }
+    this.settled.copyWithin(i + n, i);
+    this.settled.fill(false, i, i + n);
+    this.margins.copyWithin((i + n) * 2, i * 2);
+    this.margins.fill(0, i * 2, (i + n) * 2);
+    this.heights.copyWithin(i + n, i);
+    this.heights.fill(this.estimate, i, i + n);
+    this.lastSet += n;
+
+    let offsetChanged = false;
+    for (let j = i; j < this.lastSet; j++) {
+      offsetChanged ||= this.syncOffset(j);
+    }
+    if (offsetChanged) {
+      this.onchange?.();
+    }
   }
 
   public set(i: number, settled: boolean, height: number, marginTop: number, marginBottom: number) {
@@ -60,6 +105,7 @@ class MessageSizeCache {
     this.margins[i * 2] = marginTop;
     this.margins[i * 2 + 1] = marginBottom;
     this.heights[i] = height;
+    this.lastSet = Math.max(this.lastSet, i);
 
     const offsetChanged = this.syncOffset(i);
     const nextOffsetChange = i + 1 < this.size && this.syncOffset(i + 1);

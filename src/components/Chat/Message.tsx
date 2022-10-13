@@ -11,7 +11,7 @@ import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } f
 import { FiExternalLink } from "react-icons/fi";
 import { Link } from "react-router-dom";
 
-import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
+import { MessageState, UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";
 import { useRoom } from "../../contexts/Chat";
 import { useSession } from "../../contexts/Session";
@@ -23,6 +23,7 @@ import ExternalLink from "../ExternalLink";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteDetails from "./EmoteDetails";
+import MessageStateIcon from "./MessageStateIcon";
 import { useUserContextMenu } from "./UserContextMenu";
 import { UserPresenceIndicator } from "./UserPresenceIndicator";
 
@@ -334,6 +335,7 @@ const MessageTime: React.FC<MessageTimeProps> = ({ timestamp, format }) => {
 interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   uiConfig: UIConfig;
   message: chatv1_Message;
+  messageState?: MessageState;
   isMostRecent?: boolean;
   isContinued?: boolean;
 }
@@ -418,6 +420,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
 const StandardMessage: React.FC<MessageImplProps> = ({
   uiConfig,
   message: { nick, peerKey, viewedListing, serverTime, body, entities },
+  messageState,
   className: baseClassName,
   isMostRecent,
   isContinued,
@@ -476,6 +479,8 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         "chat__message--self": entities.selfMessage,
         "chat__message--tagged": entities.tags.length > 0,
         "chat__message--sent": sent,
+        "chat__message--enqueued": messageState === MessageState.MESSAGE_STATE_ENQUEUED,
+        "chat__message--failed": messageState === MessageState.MESSAGE_STATE_FAILED,
         "chat__message--highlight": !sent && highlight,
       },
       uniq(entities.tags.map(({ name }) => `chat__message--tag_${name}`)),
@@ -485,7 +490,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         )
       )
     );
-  }, [baseClassName, isContinued, canCombo, entities, uiConfig]);
+  }, [baseClassName, isContinued, canCombo, entities, uiConfig, messageState]);
 
   const content = useMemo(() => {
     const formatter = new MessageFormatter(body);
@@ -524,6 +529,10 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     }
     return (
       <>
+        {(messageState === MessageState.MESSAGE_STATE_ENQUEUED ||
+          messageState === MessageState.MESSAGE_STATE_FAILED) && (
+          <MessageStateIcon messageState={messageState} />
+        )}
         {uiConfig.showTime && (
           <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
         )}
@@ -547,7 +556,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
         <br />
       </>
     );
-  }, [uiConfig, entities]);
+  }, [uiConfig, entities, messageState]);
 
   return (
     <div {...props} className={classNames} ref={fwRef}>

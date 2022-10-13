@@ -728,22 +728,22 @@ message WhisperThread {
   bool has_unread = 9;
 }
 
-message WhisperRecord {
-  enum State {
-    WHISPER_STATE_UNREAD = 0;
-    WHISPER_STATE_ENQUEUED = 1;
-    WHISPER_STATE_DELIVERED = 2;
-    WHISPER_STATE_FAILED = 3;
-    WHISPER_STATE_READ = 4;
-  }
+enum MessageState {
+  MESSAGE_STATE_UNREAD = 0;
+  MESSAGE_STATE_ENQUEUED = 1;
+  MESSAGE_STATE_DELIVERED = 2;
+  MESSAGE_STATE_FAILED = 3;
+  MESSAGE_STATE_READ = 4;
+}
 
+message WhisperRecord {
   uint64 id = 1;
   dao.v1.VersionVector version = 8;
   uint64 thread_id = 2;
   bytes network_key = 3;
   bytes server_key = 4;
   bytes peer_key = 5;
-  State state = 6;
+  MessageState state = 6;
   Message message = 7;
   uint64 peer_message_id = 9;
 }

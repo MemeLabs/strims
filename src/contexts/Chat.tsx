@@ -22,6 +22,7 @@ import {
   EmoteEffect,
   IUIConfig,
   Message,
+  MessageState,
   Modifier,
   OpenClientResponse,
   Room,
@@ -39,6 +40,8 @@ import {
 import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
 import { Image } from "../apis/strims/type/image";
 import { useUserList } from "../hooks/chat";
+import { useStableCallback } from "../hooks/useStableCallback";
+import { compareBigInts } from "../lib/bigint";
 import curryDispatchActions from "../lib/curryDispatchActions";
 import MessageSizeCache from "../lib/MessageSizeCache";
 import { applyActionInStateMap, deleteFromStateMap, setInStateMap } from "../lib/stateMap";
@@ -90,7 +93,8 @@ export interface WhisperThreadState extends ThreadState {
   networkKeys: Uint8Array[];
   peerKey: Uint8Array;
   thread: WhisperThread;
-  messageIndex: Map<bigint, Message>;
+  records: Map<bigint, WhisperRecord>;
+  messageStates: MessageState[];
 }
 
 export interface RoomThreadState extends ThreadState {
@@ -259,6 +263,7 @@ const ChatContext = React.createContext<[State, ChatActions, StateDispatcher]>(n
 type ThreadActions = {
   sendMessage: (body: string) => void;
   getMessage: (index: number) => Message;
+  getMessageState: (index: number) => MessageState;
   getMessageCount: () => number;
   getMessageIsContinued: (index: number) => boolean;
   getNetworkKeys: () => Uint8Array[];
@@ -298,6 +303,15 @@ const reduceMessage = <T extends ThreadState>(room: T, state: State, message: Me
     ...room,
     messages,
     unreadCount: room.visible ? 0 : room.unreadCount + 1,
+  };
+};
+
+const mapWhisperRecordsToMessages = (it: Iterable<WhisperRecord>) => {
+  const records = Array.from(it);
+  records.sort((a, b) => compareBigInts(a.message.serverTime, b.message.serverTime));
+  return {
+    messages: records.map(({ message }) => message),
+    messageStates: records.map(({ state }) => state),
   };
 };
 
@@ -397,7 +411,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         networkKeys,
         thread: thread ?? new WhisperThread({ alias }),
         state: thread ? ThreadInitState.OPEN : ThreadInitState.INITIALIZED,
-        messageIndex: new Map(),
+        records: new Map(),
+        messageStates: [],
         visible: true,
       }),
       mainTopics: [...state.mainTopics, topic],
@@ -577,21 +592,38 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           void client.chat.markWhispersRead({ peerKey: thread.thread.peerKey });
         }
 
-        const { id, message } = res.body.whisperUpdate;
-        const messageIndex = new Map(thread.messageIndex).set(id, message);
+        const record = res.body.whisperUpdate;
+        const prev = thread.records.get(record.id);
+        if (prev) {
+          thread.messageSizeCache.remove(thread.messages.indexOf(prev.message));
+        }
+
+        const records = new Map(thread.records).set(record.id, record);
+        const next = mapWhisperRecordsToMessages(records.values());
+
+        thread.messageSizeCache.insert(next.messages.indexOf(record.message));
+
         return {
           ...thread,
-          messageIndex,
-          messages: Array.from(messageIndex.values()),
+          records,
+          ...next,
         };
       }
       case WatchWhispersResponse.BodyCase.WHISPER_DELETE: {
-        const messageIndex = new Map(thread.messageIndex);
-        messageIndex.delete(res.body.whisperDelete.recordId);
+        const { recordId } = res.body.whisperDelete;
+        const prev = thread.records.get(recordId);
+        if (!prev) {
+          return thread;
+        }
+
+        thread.messageSizeCache.remove(thread.messages.indexOf(prev.message));
+
+        const records = new Map(thread.records);
+        records.delete(recordId);
         return {
           ...thread,
-          messageIndex,
-          messages: Array.from(messageIndex.values()),
+          records,
+          ...mapWhisperRecordsToMessages(records.values()),
         };
       }
       default:
@@ -657,9 +689,9 @@ const createWhisperActions = (
       ...whisper,
       thread,
       label: thread.alias,
-      messageIndex: new Map(whispers.map(({ id, message }) => [id, message])),
-      messages: whispers.map(({ message }) => message),
+      records: new Map(whispers.map((record) => [record.id, record])),
       state: ThreadInitState.OPEN,
+      ...mapWhisperRecordsToMessages(whispers),
     }));
 
   const handleWhisperError = (state: State, error: Error) =>
@@ -1077,13 +1109,13 @@ const RoomThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...props 
 
   const nicks = useUserList(thread.networkKey, thread.serverKey);
   const messageAccessors = useMessageAccessors(thread.messages);
-
+  const getMessageState = useCallback(() => MessageState.MESSAGE_STATE_DELIVERED, []);
   const getNetworkKeys = useCallback(() => [thread.networkKey], [thread.networkKey]);
 
   const value = useMemo<[ThreadState, ThreadActions]>(
     () => [
       { ...thread, nicks },
-      { ...actions, ...messageAccessors, getNetworkKeys },
+      { ...actions, ...messageAccessors, getMessageState, getNetworkKeys },
     ],
     [thread, nicks]
   );
@@ -1101,11 +1133,11 @@ const WhisperThreadProvider: React.FC<ThreadProviderProps> = ({ children, ...pro
   );
 
   const messageAccessors = useMessageAccessors(thread.messages);
-
+  const getMessageState = useStableCallback((index: number) => thread.messageStates[index]);
   const getNetworkKeys = useCallback(() => thread.networkKeys, [thread.networkKeys]);
 
   const value = useMemo<[ThreadState, ThreadActions]>(
-    () => [thread, { ...actions, ...messageAccessors, getNetworkKeys }],
+    () => [thread, { ...actions, ...messageAccessors, getMessageState, getNetworkKeys }],
     [thread]
   );
   return <ThreadContext.Provider value={value}>{children}</ThreadContext.Provider>;

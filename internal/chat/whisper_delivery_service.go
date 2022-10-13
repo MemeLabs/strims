@@ -50,7 +50,7 @@ func (s *whisperDeliveryService) Run(ctx context.Context) error {
 
 	rs, err := dao.ChatWhisperRecordsByState.GetAll(
 		s.store,
-		dao.FormatChatWhisperRecordStateKey(chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED),
+		dao.FormatChatWhisperRecordStateKey(chatv1.MessageState_MESSAGE_STATE_ENQUEUED),
 	)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (s *whisperDeliveryService) Run(ctx context.Context) error {
 }
 
 func (s *whisperDeliveryService) HandleWhisper(r *chatv1.WhisperRecord) {
-	if r.State == chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED {
+	if r.State == chatv1.MessageState_MESSAGE_STATE_ENQUEUED {
 		s.enqueued <- r
 	}
 }
@@ -93,12 +93,12 @@ func (s *whisperDeliveryService) send(r *chatv1.WhisperRecord) {
 		zap.Uint64("whisper", r.Id),
 	)
 
-	var state chatv1.WhisperRecord_State
+	var state chatv1.MessageState
 	if err := s.send1(r); err != nil {
-		state = chatv1.WhisperRecord_WHISPER_STATE_FAILED
+		state = chatv1.MessageState_MESSAGE_STATE_FAILED
 		logger.Warn("whisper delivery failed", zap.Error(err))
 	} else {
-		state = chatv1.WhisperRecord_WHISPER_STATE_DELIVERED
+		state = chatv1.MessageState_MESSAGE_STATE_DELIVERED
 		logger.Debug("delivered whisper")
 	}
 

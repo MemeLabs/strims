@@ -41,6 +41,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
       <Message
         uiConfig={uiConfig}
         message={roomActions.getMessage(index)}
+        messageState={roomActions.getMessageState(index)}
         style={style}
         isMostRecent={index === roomActions.getMessageCount() - 1}
         isContinued={roomActions.getMessageIsContinued(index)}

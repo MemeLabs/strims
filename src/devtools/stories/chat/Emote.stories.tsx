@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { useUpdateEffect } from "react-use";
 
 import { FrontendClient } from "../../../apis/client";
-import { AssetBundle, EmoteScale, Message } from "../../../apis/strims/chat/v1/chat";
+import { AssetBundle, EmoteScale, Message, MessageState } from "../../../apis/strims/chat/v1/chat";
 import {
   registerChatFrontendService,
   registerChatServerFrontendService,
@@ -264,6 +264,7 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
             ref={ref}
             uiConfig={uiConfig}
             message={room.messages[index]}
+            messageState={MessageState.MESSAGE_STATE_DELIVERED}
             style={style}
             isMostRecent={false}
           />
@@ -392,6 +393,7 @@ const ComboMessages: React.FC<ComboMessagesProps> = ({
           ref={ref}
           uiConfig={uiConfig}
           message={room.messages[index]}
+          messageState={MessageState.MESSAGE_STATE_DELIVERED}
           style={style}
           isMostRecent={!done && index === room.messages.length - 1}
         />

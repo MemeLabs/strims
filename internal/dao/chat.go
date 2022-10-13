@@ -325,12 +325,12 @@ var UnreadChatWhisperRecordsByPeerKey = NewSecondaryIndex(
 	byteIdentity,
 	&SecondaryIndexOptions[chatv1.WhisperRecord, *chatv1.WhisperRecord]{
 		Condition: func(m *chatv1.WhisperRecord) bool {
-			return m.State == chatv1.WhisperRecord_WHISPER_STATE_UNREAD
+			return m.State == chatv1.MessageState_MESSAGE_STATE_UNREAD
 		},
 	},
 )
 
-func FormatChatWhisperRecordStateKey(s chatv1.WhisperRecord_State) []byte {
+func FormatChatWhisperRecordStateKey(s chatv1.MessageState) []byte {
 	b := make([]byte, 4)
 	binary.BigEndian.PutUint32(b, uint32(s))
 	return b
@@ -520,9 +520,9 @@ func NewChatWhisperRecord(
 		return nil, err
 	}
 
-	state := chatv1.WhisperRecord_WHISPER_STATE_ENQUEUED
+	state := chatv1.MessageState_MESSAGE_STATE_ENQUEUED
 	if bytes.Equal(peerKey, cert.Key) {
-		state = chatv1.WhisperRecord_WHISPER_STATE_UNREAD
+		state = chatv1.MessageState_MESSAGE_STATE_UNREAD
 	}
 
 	return &chatv1.WhisperRecord{

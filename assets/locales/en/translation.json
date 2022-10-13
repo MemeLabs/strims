@@ -40,6 +40,8 @@
 
   "chat": {
     "More messages below": "More messages below",
+    "Sending": "Sending...",
+    "Message delivery failed": "Message delivery failed",
 
     "composer": {
       "members": "members",

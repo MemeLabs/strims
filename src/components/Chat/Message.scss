@@ -70,6 +70,11 @@
       cursor: pointer;
     }
 
+    &--failed {
+      background: var(--color-red-5);
+      border-right: 4px solid var(--color-red-9);
+    }
+
     &__time {
       margin-right: 3px;
       color: var(--color-text-chat-time);

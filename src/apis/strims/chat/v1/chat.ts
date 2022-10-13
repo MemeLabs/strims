@@ -5978,7 +5978,7 @@ export type IWhisperRecord = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
   peerKey?: Uint8Array;
-  state?: strims_chat_v1_WhisperRecord_State;
+  state?: strims_chat_v1_MessageState;
   message?: strims_chat_v1_IMessage;
   peerMessageId?: bigint;
 }
@@ -5990,7 +5990,7 @@ export class WhisperRecord {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
   peerKey: Uint8Array;
-  state: strims_chat_v1_WhisperRecord_State;
+  state: strims_chat_v1_MessageState;
   message: strims_chat_v1_Message | undefined;
   peerMessageId: bigint;
 
@@ -6060,16 +6060,6 @@ export class WhisperRecord {
       }
     }
     return m;
-  }
-}
-
-export namespace WhisperRecord {
-  export enum State {
-    WHISPER_STATE_UNREAD = 0,
-    WHISPER_STATE_ENQUEUED = 1,
-    WHISPER_STATE_DELIVERED = 2,
-    WHISPER_STATE_FAILED = 3,
-    WHISPER_STATE_READ = 4,
   }
 }
 
@@ -6151,6 +6141,13 @@ export enum EmoteScale {
   EMOTE_SCALE_1X = 0,
   EMOTE_SCALE_2X = 1,
   EMOTE_SCALE_4X = 2,
+}
+export enum MessageState {
+  MESSAGE_STATE_UNREAD = 0,
+  MESSAGE_STATE_ENQUEUED = 1,
+  MESSAGE_STATE_DELIVERED = 2,
+  MESSAGE_STATE_FAILED = 3,
+  MESSAGE_STATE_READ = 4,
 }
 /* @internal */
 export const strims_chat_v1_ServerEvent = ServerEvent;
@@ -6947,6 +6944,10 @@ export const strims_chat_v1_EmoteScale = EmoteScale;
 /* @internal */
 export type strims_chat_v1_EmoteScale = EmoteScale;
 /* @internal */
+export const strims_chat_v1_MessageState = MessageState;
+/* @internal */
+export type strims_chat_v1_MessageState = MessageState;
+/* @internal */
 export const strims_chat_v1_UIConfig_ShowRemoved = UIConfig.ShowRemoved;
 /* @internal */
 export type strims_chat_v1_UIConfig_ShowRemoved = UIConfig.ShowRemoved;
@@ -6958,7 +6959,3 @@ export type strims_chat_v1_UIConfig_UserPresenceIndicator = UIConfig.UserPresenc
 export const strims_chat_v1_ListEmotesRequest_Part = ListEmotesRequest.Part;
 /* @internal */
 export type strims_chat_v1_ListEmotesRequest_Part = ListEmotesRequest.Part;
-/* @internal */
-export const strims_chat_v1_WhisperRecord_State = WhisperRecord.State;
-/* @internal */
-export type strims_chat_v1_WhisperRecord_State = WhisperRecord.State;

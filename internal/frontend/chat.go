@@ -647,7 +647,7 @@ func (s *chatService) MarkWhispersRead(ctx context.Context, req *chatv1.MarkWhis
 		}
 		for _, id := range ids {
 			_, err := dao.ChatWhisperRecords.Transform(tx, id, func(p *chatv1.WhisperRecord) error {
-				p.State = chatv1.WhisperRecord_WHISPER_STATE_READ
+				p.State = chatv1.MessageState_MESSAGE_STATE_READ
 				return nil
 			})
 			if err != nil {
