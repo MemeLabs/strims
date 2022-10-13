@@ -27,11 +27,9 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onChange }) => (
   <div className="layout_chat__header">
-    {DEVICE_TYPE !== DeviceType.Portable && (
-      <button className="layout_chat__toggle layout_chat__toggle--off" onClick={onToggleClick}>
-        <BsArrowBarLeft />
-      </button>
-    )}
+    <button className="layout_chat__toggle layout_chat__toggle--off" onClick={onToggleClick}>
+      <BsArrowBarLeft />
+    </button>
     <RoomCarousel className="layout_chat__room_carousel" onChange={onChange} />
     <button className="layout_chat__toggle" onClick={onMenuToggleClick}>
       <HiOutlineDotsVertical />
@@ -55,7 +53,16 @@ const Chat: React.FC = () => {
     enableOnTags: ["INPUT"],
   });
 
-  const handleToggleClick = useCallback(() => toggleShowChat(), []);
+  const handleToggleClick = useCallback(() => {
+    if (DEVICE_TYPE === DeviceType.Portable) {
+      setOverlayState(({ open }) => ({
+        open: !open,
+        transitioning: false,
+      }));
+    } else {
+      toggleShowChat();
+    }
+  }, []);
 
   const handleMenuToggleClick = useCallback(() => toggleMenuOpen(), []);
 
@@ -68,10 +75,10 @@ const Chat: React.FC = () => {
     if (!menuLocked) {
       toggleMenuOpen(false);
     } else if (DEVICE_TYPE === DeviceType.Portable) {
-      setOverlayState({
-        open: false,
+      setOverlayState(({ open }) => ({
+        open: !open,
         transitioning: false,
-      });
+      }));
     } else {
       toggleShowChat(false);
     }

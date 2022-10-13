@@ -19,6 +19,7 @@
     display: block;
     cursor: pointer;
     border-radius: var(--border-radius-small);
+    pointer-events: all;
 
     svg {
       display: block;
@@ -95,6 +96,10 @@
   &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__foo {
     width: calc(100% - env(safe-area-inset-left));
   }
+
+  &.layout--meme_open .layout_chat__toggle {
+    transform: scaleX(-1);
+  }
 }
 
 .layout--tv,
@@ -116,7 +121,7 @@
   }
 
   .layout_chat__toggle--off {
-    transform: rotate(180deg);
+    transform: scaleX(-1);
   }
 
   &.layout--meme_open .layout_chat__toggle--off {

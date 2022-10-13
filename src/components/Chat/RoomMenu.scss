@@ -24,8 +24,12 @@
     display: block;
     cursor: pointer;
     border-radius: 3px;
+    pointer-events: all;
 
     @at-root .layout--swap & {
+      transform: scaleX(-1);
+    }
+    @at-root .layout--portable:not(.layout--meme_open) & {
       transform: scaleX(-1);
     }
 
