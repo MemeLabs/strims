@@ -529,8 +529,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
     }
     return (
       <>
-        {(messageState === MessageState.MESSAGE_STATE_ENQUEUED ||
-          messageState === MessageState.MESSAGE_STATE_FAILED) && (
+        {messageState === MessageState.MESSAGE_STATE_FAILED && (
           <MessageStateIcon messageState={messageState} />
         )}
         {uiConfig.showTime && (

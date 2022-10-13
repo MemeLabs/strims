@@ -5,7 +5,7 @@ import "./MessageStateIcon.scss";
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { BiMessageSquareDots, BiMessageSquareError } from "react-icons/bi";
+import { BiMessageSquareError } from "react-icons/bi";
 
 import { MessageState } from "../../apis/strims/chat/v1/chat";
 
@@ -17,13 +17,6 @@ const MessageStateIcon: React.FC<MessageStateIconProps> = ({ messageState }) => 
   const { t } = useTranslation();
 
   switch (messageState) {
-    case MessageState.MESSAGE_STATE_ENQUEUED:
-      return (
-        <BiMessageSquareDots
-          title={t("chat.Sending")}
-          className="chat__message_state_icon chat__message_state_icon--enqueued"
-        />
-      );
     case MessageState.MESSAGE_STATE_FAILED:
       return (
         <BiMessageSquareError
