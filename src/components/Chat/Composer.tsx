@@ -191,19 +191,17 @@ const Composer: React.FC<ComposerProps> = ({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === Key.Enter) {
-        event.preventDefault();
-        emitMessage();
-      }
-
-      if (!search) {
-        return;
-      }
-
       switch (event.key) {
+        case Key.Enter:
+          event.preventDefault();
+          emitMessage();
+          break;
         case Key.ArrowDown:
         case Key.ArrowUp:
         case Key.Tab: {
+          if (!search) {
+            return;
+          }
           event.preventDefault();
           setSelectedMatch(({ index, entry }) => {
             const d = event.key === Key.ArrowUp ? -1 : entry ? 1 : 0;
@@ -225,6 +223,17 @@ const Composer: React.FC<ComposerProps> = ({
         case Key.Escape: {
           event.preventDefault();
           setSearch(null);
+          break;
+        }
+        case Key.Delete:
+        case Key.Backspace: {
+          const leaves = decorate(Editor.node(editor, editor.selection));
+          const emote = leaves.find((e) => e.emote && Range.includes(e, editor.selection));
+          if (emote) {
+            event.preventDefault();
+            Transforms.delete(editor, { at: emote });
+            setSearch(null);
+          }
           break;
         }
       }
