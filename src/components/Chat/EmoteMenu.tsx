@@ -317,13 +317,30 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
   ({ uiConfig, category, width, onSelect, onHover, sizeRef }) => {
     const [doubleClickTimeout, setDoubleClickTimeout] = useState(0);
     const handlePointerUp = useStableCallback((e: React.PointerEvent, v: string) => {
+      e.preventDefault();
+
+      if (e.pointerType === "touch") {
+        if (e.pressure > 0.05) {
+          onSelect(v, true);
+          return;
+        }
+        onSelect(v, false);
+        return;
+      }
+
       if (e.button !== 0) {
         return;
       }
       if (doubleClickTimeout === 0) {
-        setDoubleClickTimeout(window.setTimeout(() => onSelect(v, false), DOUBLE_CLICK_TIMEOUT));
+        setDoubleClickTimeout(
+          window.setTimeout(() => {
+            setDoubleClickTimeout(0);
+            onSelect(v, false);
+          }, DOUBLE_CLICK_TIMEOUT)
+        );
       } else {
         clearTimeout(doubleClickTimeout);
+        setDoubleClickTimeout(0);
         onSelect(v, true);
       }
     });
