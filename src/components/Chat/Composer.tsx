@@ -264,8 +264,10 @@ const Composer: React.FC<ComposerProps> = ({
   };
 
   const insertEmote = useCallback(
-    (v: string, send: boolean) => {
-      toggleMenu(false);
+    (v: string, send: boolean, close: boolean) => {
+      if (close) {
+        toggleMenu(false);
+      }
 
       if (send) {
         onMessage(v);

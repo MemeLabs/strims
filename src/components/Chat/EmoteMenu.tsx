@@ -35,7 +35,8 @@ import Emoji from "./Emoji";
 import Emote from "./Emote";
 import { computeEmoteWidth } from "./StyleSheet";
 
-const DOUBLE_CLICK_TIMEOUT = 200;
+const EMOTE_DOUBLE_CLICK_TIMEOUT = 200;
+const EMOTE_SEND_PRESSURE_THRESHOLD = 0.04;
 
 // needs to be kept in sync with stylesheets
 const EMOTE_MARGIN = 3;
@@ -43,7 +44,7 @@ const VIEWPORT_MARGIN = 10;
 const EMOTE_GAP = 0;
 
 interface EmoteMenuProps {
-  onSelect: (v: string, send: boolean) => void;
+  onSelect: (v: string, send: boolean, close: boolean) => void;
   onClose: () => void;
 }
 
@@ -308,7 +309,7 @@ interface CategoryPanelProps {
   uiConfig: chatv1.UIConfig;
   category: Category;
   width: number;
-  onSelect: (v: string, send: boolean) => void;
+  onSelect: (v: string, send: boolean, close: boolean) => void;
   onHover: (v: CategoryItem) => void;
   sizeRef: React.MutableRefObject<DOMRectReadOnly>;
 }
@@ -320,11 +321,11 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
       e.preventDefault();
 
       if (e.pointerType === "touch") {
-        if (e.pressure > 0.05) {
-          onSelect(v, true);
+        if (e.pressure > EMOTE_SEND_PRESSURE_THRESHOLD) {
+          onSelect(v, true, true);
           return;
         }
-        onSelect(v, false);
+        onSelect(v, false, false);
         return;
       }
 
@@ -335,13 +336,13 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
         setDoubleClickTimeout(
           window.setTimeout(() => {
             setDoubleClickTimeout(0);
-            onSelect(v, false);
-          }, DOUBLE_CLICK_TIMEOUT)
+            onSelect(v, false, !e.shiftKey);
+          }, EMOTE_DOUBLE_CLICK_TIMEOUT)
         );
       } else {
         clearTimeout(doubleClickTimeout);
         setDoubleClickTimeout(0);
-        onSelect(v, true);
+        onSelect(v, true, true);
       }
     });
 
@@ -410,7 +411,7 @@ interface ScrollerProps {
   className?: string;
   categories: Category[];
   onScroll: (index: number) => void;
-  onSelect: (v: string, send: boolean) => void;
+  onSelect: (v: string, send: boolean, close: boolean) => void;
   onHover: (v: CategoryItem) => void;
   control: React.MutableRefObject<ScrollerControl>;
 }
