@@ -203,6 +203,7 @@ const initialState: State = {
     normalizeAliasCase: true,
     userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
     emojiSkinTone: "",
+    replicate: true,
   }),
   uiConfigHighlights: new Map(),
   uiConfigTags: new Map(),
