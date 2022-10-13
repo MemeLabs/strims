@@ -135,7 +135,7 @@ const Composer: React.FC<ComposerProps> = ({
     const entries = matches.map(({ entries }) => entries).flat();
 
     setMatch([matches, entries]);
-    setSelectedMatch({ index: 0, entry: entries[0] });
+    setSelectedMatch(defaultSelectedMatch);
   }, [search]);
 
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
@@ -200,36 +200,25 @@ const Composer: React.FC<ComposerProps> = ({
         return;
       }
 
-      const getSelectedMatch = (i: number) => ({
-        index: i,
-        entry: matchEntries[i % matchEntries.length],
-      });
-
       switch (event.key) {
-        case Key.ArrowDown: {
-          event.preventDefault();
-          setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
-          return;
-        }
-        case Key.ArrowUp: {
-          event.preventDefault();
-          setSelectedMatch(({ index }) => getSelectedMatch(index - 1));
-          return;
-        }
+        case Key.ArrowDown:
+        case Key.ArrowUp:
         case Key.Tab: {
           event.preventDefault();
-
-          if (!selectedMatch.entry) {
-            return;
-          }
-
-          const target = insertAutocompleteEntry(selectedMatch.entry);
-          setLastSearch({
-            ...search,
-            target,
-            lastEntry: selectedMatch.entry,
+          setSelectedMatch(({ index, entry }) => {
+            const d = event.key === Key.ArrowUp ? -1 : entry ? 1 : 0;
+            index = (index + d + matchEntries.length) % matchEntries.length;
+            entry = matchEntries[index];
+            if (entry) {
+              const target = insertAutocompleteEntry(entry);
+              setLastSearch({
+                ...search,
+                target,
+                lastEntry: entry,
+              });
+            }
+            return { index, entry };
           });
-          setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           setIsTypingSlow(true);
           return;
         }
