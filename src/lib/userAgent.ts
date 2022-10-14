@@ -25,3 +25,6 @@ export const [DEVICE_TYPE, OS] = ((): [DeviceType, string] => {
 })();
 
 export const IS_PWA = !window.matchMedia("(display-mode: browser)").matches;
+
+export const IS_IOS = OS === "iOS";
+export const IS_ANDROID = OS === "Android";

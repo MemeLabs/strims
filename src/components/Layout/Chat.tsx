@@ -4,7 +4,7 @@
 import "./Chat.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { BsArrowBarLeft } from "react-icons/bs";
 import { HiOutlineDotsVertical } from "react-icons/hi";

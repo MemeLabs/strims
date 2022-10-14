@@ -7,7 +7,7 @@ import { useDrag } from "@use-gesture/react";
 import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import emojiPattern from "emojibase-regex/emoji";
-import { pick } from "lodash";
+import { once, pick } from "lodash";
 import Prism from "prismjs";
 import React, {
   KeyboardEvent,
@@ -34,12 +34,14 @@ import {
   createEditor,
 } from "slate";
 import { withHistory } from "slate-history";
-import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
+import { Editable, ReactEditor, RenderLeafProps, Slate, withReact } from "slate-react";
 import { Key } from "ts-key-enum";
 import createUrlRegExp from "url-regex-safe";
 
 import { useChat } from "../../contexts/Chat";
 import useClickAway from "../../hooks/useClickAway";
+import first from "../../lib/first";
+import { IS_ANDROID } from "../../lib/userAgent";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import EmoteMenu from "./EmoteMenu";
@@ -94,7 +96,6 @@ const Composer: React.FC<ComposerProps> = ({
   const search = lastSearch || currentSearch;
 
   const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
-  const [value, setValue] = useState<Descendant[]>(initialValue);
 
   const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers, emoji?.emoji);
 
@@ -151,19 +152,25 @@ const Composer: React.FC<ComposerProps> = ({
     [grammar]
   );
 
-  const onChange = useCallback(
-    (newValue: Descendant[]) => {
-      setValue(newValue);
-      setSearch(getSearchState(editor, grammar, searchSources));
-    },
-    [editor, grammar, searchSources]
-  );
+  const cleanup = useRef<() => void>(null);
+  const onChange = useCallback(() => {
+    cleanup.current?.();
+    setSearch(getSearchState(editor, grammar, searchSources));
+  }, [editor, grammar, searchSources]);
+
+  const clear = () => {
+    ComposerEditor.clear(editor);
+    if (ComposerEditor.androidHasPendingDiffs(editor)) {
+      cleanup.current = once(clear);
+      ComposerEditor.androidScheduleFlush(editor);
+    }
+  };
 
   const emitMessage = () => {
     const body = ComposerEditor.text(editor).trim();
     if (body) {
       onMessage(body);
-      ComposerEditor.clear(editor);
+      clear();
     }
   };
 
@@ -171,7 +178,10 @@ const Composer: React.FC<ComposerProps> = ({
     (e) => (e.substitution ?? e.value) !== currentSearch?.query
   );
   const [isTypingSlow, setIsTypingSlow] = useState(false);
-  const [, , resetFastTimeout] = useTimeoutFn(() => setIsTypingSlow(true), slowTypingDelay);
+  const [, , resetFastTimeout] = useTimeoutFn(() => {
+    ComposerEditor.androidScheduleFlush(editor);
+    setIsTypingSlow(true);
+  }, slowTypingDelay);
   const [, , resetSlowTimeout] = useTimeoutFn(() => setIsTypingSlow(false), autocompleteHideDelay);
   useEffect(() => setIsTypingSlow((prev) => prev && haveMoreSuggestions), [haveMoreSuggestions]);
   const [isFocused, setIsFocused] = useState(false);
@@ -227,6 +237,7 @@ const Composer: React.FC<ComposerProps> = ({
         }
         case Key.Delete:
         case Key.Backspace: {
+          ComposerEditor.androidScheduleFlush(editor);
           const leaves = decorate(Editor.node(editor, editor.selection));
           const emote = leaves.find((e) => e.emote && Range.includes(e, editor.selection));
           if (emote) {
@@ -339,7 +350,7 @@ const Composer: React.FC<ComposerProps> = ({
         </div>
       </div>
       <div className="chat_composer__editor" ref={ref}>
-        <Slate editor={editor} value={value} onChange={onChange}>
+        <Slate editor={editor} value={initialValue} onChange={onChange}>
           <Editable
             className="chat_composer__textbox"
             decorate={decorate}
@@ -796,32 +807,38 @@ const getSearchState = (
 
 const ComposerEditor = {
   clear: (editor: Editor) => {
-    const [[node, path]] = Editor.nodes(editor, { match: (n) => Text.isText(n) });
-    if (!Text.isText(node)) {
-      return;
-    }
-
-    Transforms.select(
-      editor,
-      Editor.range(
-        editor,
-        {
-          offset: 0,
-          path,
-        },
-        {
-          offset: node.text.length,
-          path,
-        }
-      )
-    );
-    Transforms.delete(editor);
-    Transforms.move(editor);
+    Transforms.delete(editor, {
+      at: {
+        anchor: Editor.start(editor, []),
+        focus: Editor.end(editor, []),
+      },
+    });
   },
 
   text: (editor: Editor) => {
-    const [[node]] = Editor.nodes(editor, { match: (n) => Text.isText(n) });
-    return Text.isText(node) ? node.text : "";
+    const node = first(Editor.nodes(editor, { match: (n) => Text.isText(n) }))?.[0];
+    let text = Text.isText(node) ? node.text : "";
+
+    if (IS_ANDROID) {
+      const diff = ReactEditor.androidPendingDiffs(editor)?.[0]?.diff;
+      if (diff) {
+        const l = text.substring(0, diff.start);
+        const r = text.substring(diff.end);
+        text = l + diff.text + r;
+      }
+    }
+
+    return text;
+  },
+
+  androidHasPendingDiffs: (editor: Editor) => {
+    return IS_ANDROID && !!ReactEditor.androidPendingDiffs(editor)?.length;
+  },
+
+  androidScheduleFlush: (editor: Editor) => {
+    if (ComposerEditor.androidHasPendingDiffs(editor)) {
+      ReactEditor.androidScheduleFlush(editor);
+    }
   },
 };
 

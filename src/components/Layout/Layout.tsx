@@ -9,7 +9,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation } from "react-router";
 
 import { useLayout, withLayoutContext } from "../../contexts/Layout";
-import { DEVICE_TYPE, DeviceType, IS_PWA, OS } from "../../lib/userAgent";
+import { DEVICE_TYPE, DeviceType, IS_IOS, IS_PWA } from "../../lib/userAgent";
 import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
 import Footer from "./Footer";
@@ -36,7 +36,7 @@ const getViewportShape = (prev?: ViewportShape): ViewportShape => {
   // resize event in portrait mode.
   let safariViewportBug = prev?.safariViewportBug ?? false;
   let useFixedSize = true;
-  if (IS_PWA && OS === "iOS") {
+  if (IS_PWA && IS_IOS) {
     if (prev?.orientation !== 0 && orientation !== 0 && prev?.height !== height) {
       safariViewportBug = prev?.height > height;
     }
