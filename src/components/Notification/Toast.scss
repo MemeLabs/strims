@@ -5,7 +5,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  z-index: 1000;
+  z-index: var(--z-index-notification);
 
   &__item {
     display: flex;
