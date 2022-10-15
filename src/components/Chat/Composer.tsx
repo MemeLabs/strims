@@ -188,19 +188,17 @@ const Composer: React.FC<ComposerProps> = ({
   const showAutocomplete =
     uiConfig.autocompleteHelper && isFocused && isTypingSlow && haveMoreSuggestions;
 
-  const handleKeyPress = useCallback(() => {
-    resetFastTimeout();
-    resetSlowTimeout();
-  }, []);
-
   const handleFocus = useCallback(() => {
     setIsTypingSlow(haveMoreSuggestions);
     setIsFocused(true);
   }, [haveMoreSuggestions]);
   const handleBlur = useCallback(() => setIsFocused(false), []);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKey = useCallback(
+    (event: KeyboardEvent) => {
+      resetFastTimeout();
+      resetSlowTimeout();
+
       switch (event.key) {
         case Key.Enter:
           event.preventDefault();
@@ -247,12 +245,36 @@ const Composer: React.FC<ComposerProps> = ({
           }
           break;
         }
+        case Key.Unidentified: {
+          // on old versions of android keyboard events do not reliably contain
+          // valid key values (https://stackoverflow.com/questions/36753548). we
+          // can detect delete compositions by checking for empty diffs with non
+          // zero widths and we can check if an emote is being deleted by
+          // checking if the diff intersects the emote range...
+          const diffs = ReactEditor.androidPendingDiffs(editor);
+          if (!diffs || !diffs.some(({ diff }) => diff.text === "" && diff.end - diff.start > 0)) {
+            break;
+          }
+          const [{ diff, path }] = diffs;
+          const range = {
+            anchor: { path, offset: diff.start },
+            focus: { path, offset: diff.end },
+          };
+          const leaves = decorate(Editor.node(editor, editor.selection));
+          const emote = leaves.find((e) => e.emote && Range.includes(e, range));
+          if (emote) {
+            ComposerEditor.androidScheduleFlush(editor);
+            cleanup.current = once(() => Transforms.delete(editor, { at: emote }));
+            setSearch(null);
+          }
+          break;
+        }
       }
 
       setLastSearch(null);
       setSelectedMatch(defaultSelectedMatch);
     },
-    [matchEntries, selectedMatch, search, currentSearch]
+    [matchEntries, search, decorate]
   );
 
   const insertAutocompleteEntry = (entry: SearchSourceEntry): Range => {
@@ -281,11 +303,7 @@ const Composer: React.FC<ComposerProps> = ({
       if (send) {
         onMessage(v);
       } else {
-        if (!editor.selection) {
-          Transforms.select(editor, [0, 0]);
-        }
-
-        Transforms.insertText(editor, v + " ");
+        Editor.insertText(editor, v + " ");
       }
     },
     [onMessage]
@@ -354,8 +372,7 @@ const Composer: React.FC<ComposerProps> = ({
           <Editable
             className="chat_composer__textbox"
             decorate={decorate}
-            onKeyDown={handleKeyDown}
-            onKeyPress={handleKeyPress}
+            {...{ [IS_ANDROID ? "onKeyUp" : "onKeyDown"]: handleKey }}
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder={t("chat.composer.Write a message")}
