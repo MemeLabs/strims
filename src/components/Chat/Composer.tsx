@@ -10,7 +10,9 @@ import emojiPattern from "emojibase-regex/emoji";
 import { once, pick } from "lodash";
 import Prism from "prismjs";
 import React, {
+  CompositionEventHandler,
   KeyboardEvent,
+  KeyboardEventHandler,
   MouseEventHandler,
   useCallback,
   useEffect,
@@ -340,6 +342,14 @@ const Composer: React.FC<ComposerProps> = ({
   const emoteMenuButton = useRef<HTMLButtonElement>();
   useClickAway([emoteMenu, emoteMenuButton], () => toggleMenu(false), { enable: showMenu });
 
+  const handleKeyDown: KeyboardEventHandler = (e) => console.log("KeyDown", e);
+  const handleKeyUp: KeyboardEventHandler = (e) => console.log("KeyUp", e);
+  const handleOnBeforeInput = (e: InputEvent) => console.log("OnBeforeInput", e);
+  const handleCompositionStart: CompositionEventHandler = (e) => console.log("CompositionStart", e);
+  const handleCompositionUpdate: CompositionEventHandler = (e) =>
+    console.log("CompositionUpdate", e);
+  const handleCompositionEnd: CompositionEventHandler = (e) => console.log("CompositionEnd", e);
+
   return (
     <div className="chat_composer">
       {showAutocomplete && (
@@ -372,7 +382,13 @@ const Composer: React.FC<ComposerProps> = ({
           <Editable
             className="chat_composer__textbox"
             decorate={decorate}
-            {...{ [IS_ANDROID ? "onKeyUp" : "onKeyDown"]: handleKey }}
+            // {...{ [IS_ANDROID ? "onKeyUp" : "onKeyDown"]: handleKey }}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onDOMBeforeInput={handleOnBeforeInput}
+            onCompositionStart={handleCompositionStart}
+            onCompositionUpdate={handleCompositionUpdate}
+            onCompositionEnd={handleCompositionEnd}
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder={t("chat.composer.Write a message")}
