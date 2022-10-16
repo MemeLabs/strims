@@ -15,6 +15,7 @@ type EntityToken = {
   nick?: boolean;
   self?: boolean;
   greentext?: boolean;
+  content?: Prism.TokenStream;
 };
 
 type Text = BaseText & EntityToken;

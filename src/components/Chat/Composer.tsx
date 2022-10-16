@@ -255,7 +255,7 @@ const Composer: React.FC<ComposerProps> = ({
     [matchEntries, search, decorate]
   );
 
-  const handleCompositionUpdate = useCallback(
+  const handleComposition = useCallback(
     (e: CompositionEvent) => {
       // match compositions that end in a line break and emit them
       if (e.data.endsWith("\n")) {
@@ -264,20 +264,17 @@ const Composer: React.FC<ComposerProps> = ({
         return;
       }
 
-      // match empty diffs with non zero widths that intersects an emote and
-      // delete the emote
+      // match diffs that intersect an emote and delete the emote
       const diffs = ReactEditor.androidPendingDiffs(editor);
-      if (diffs && diffs.some(({ diff }) => diff.text === "" && diff.end - diff.start > 0)) {
-        const [{ diff, path }] = diffs;
-        const range = {
-          anchor: { path, offset: diff.start },
-          focus: { path, offset: diff.end },
-        };
+      if (diffs?.length > 0) {
+        const [{ diff }] = diffs;
         const leaves = decorate(Editor.node(editor, editor.selection));
-        const emote = leaves.find((e) => e.emote && Range.includes(e, range));
-        if (emote) {
-          ComposerEditor.androidScheduleFlush(editor);
+        const emote = leaves.find(
+          (e) => e.emote && diff.start < e.focus.offset && diff.end > e.anchor.offset
+        );
+        if (emote && !diff.text.includes(emote.content as string)) {
           cleanup.current = once(() => Transforms.delete(editor, { at: emote }));
+          ComposerEditor.androidScheduleFlush(editor);
           setSearch(null);
         }
         return;
@@ -386,7 +383,8 @@ const Composer: React.FC<ComposerProps> = ({
             onFocus={handleFocus}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            onCompositionUpdate={IS_ANDROID ? handleCompositionUpdate : undefined}
+            onCompositionStart={IS_ANDROID ? handleComposition : undefined}
+            onCompositionUpdate={IS_ANDROID ? handleComposition : undefined}
           />
         </Slate>
         <button className="chat_composer__button" ref={emoteMenuButton} onClick={toggleMenu}>
@@ -596,6 +594,7 @@ const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
       if (typeof token !== "string") {
         ranges.push({
           [token.type]: true,
+          content: token.content,
           anchor: { path, offset: offset },
           focus: { path, offset: offset + token.length },
         });
