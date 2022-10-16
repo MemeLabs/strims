@@ -245,6 +245,20 @@ const Composer: React.FC<ComposerProps> = ({
           }
           break;
         }
+        case Key.ArrowLeft:
+        case Key.ArrowRight: {
+          const leaves = decorate(Editor.node(editor, editor.selection));
+          const emote = leaves.find((e) => e.emote && Range.includes(e, editor.selection));
+          if (emote) {
+            const focus = event.key === Key.ArrowLeft ? emote.anchor : emote.focus;
+            if (event.shiftKey) {
+              Transforms.select(editor, { ...editor.selection, focus });
+            } else {
+              Transforms.select(editor, focus);
+            }
+          }
+          break;
+        }
         case Key.Unidentified:
           return;
       }
