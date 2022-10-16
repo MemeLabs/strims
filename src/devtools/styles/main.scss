@@ -81,6 +81,21 @@ body {
   background: blue;
 }
 
+.chat_composer_mockup {
+  --chat-width: 395px;
+  --chat-height: 600px;
+  width: 395px;
+  height: 100%;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-items: flex-end;
+
+  &__filler {
+    flex: 1;
+  }
+}
+
 .video_mockup {
   display: flex;
   flex-direction: column;
@@ -117,16 +132,43 @@ body {
     box-shadow: rgba(0, 0, 0, 0.2) 0 0 5px;
     border-radius: 4px;
     position: relative;
-    height: calc(100vh - 60px) !important;
-    width: calc(100vw - 160px - env(safe-area-inset-left)) !important;
-    overflow: auto !important;
+    height: calc(100vh - 60px);
+    width: calc(100vw - 160px - env(safe-area-inset-left));
+    overflow: auto;
     background: var(--color-background-layout-body);
+  }
+
+  &__toolbar {
+    background: white;
+    position: absolute;
+    right: 0;
+    top: 0;
+    border-bottom-left-radius: 4px;
+    z-index: 1000;
+  }
+
+  &__toolbar_button svg {
+    height: 1.4rem;
+    width: 1.4rem;
+    cursor: pointer;
   }
 
   .layout {
     position: absolute;
     height: 100%;
     width: 100%;
+  }
+
+  &--fullscreen {
+    .storybook__content {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      border-radius: 0;
+    }
   }
 }
 

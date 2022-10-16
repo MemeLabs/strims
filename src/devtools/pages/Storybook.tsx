@@ -3,6 +3,7 @@
 
 import clsx from "clsx";
 import React, { ReactNode, Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { MdFullscreen } from "react-icons/md";
 import { Location, Navigate, Route, Routes, useLocation } from "react-router";
 import { NavLink } from "react-router-dom";
 import { useToggle } from "react-use";
@@ -193,16 +194,27 @@ const LoadingMessage = () => <p className="loading_message">loading</p>;
 const Storybook: React.FC = () => {
   const [node, extend] = useStorybookNav();
   const location = useLocation();
+  const [fullscreen, toggleFullscreen] = useToggle(false);
 
   return (
     <>
       <Nav />
-      <div className="storybook">
+      <div
+        className={clsx({
+          "storybook": true,
+          "storybook--fullscreen": fullscreen,
+        })}
+      >
         <div className="storybook__nav">
           <StorybookNav node={node} extend={extend} />
         </div>
         <ThemeProvider>
           <StoryContainer>
+            <div className="storybook__toolbar">
+              <button className="storybook__toolbar_button" onClick={toggleFullscreen}>
+                <MdFullscreen />
+              </button>
+            </div>
             <Suspense fallback={<LoadingMessage />}>
               <Routes>{storybookRoutes(location, node, extend)}</Routes>
             </Suspense>
