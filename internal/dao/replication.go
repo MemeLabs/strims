@@ -234,18 +234,15 @@ func init() {
 }
 
 func newVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog, update func(d *daov1.VersionVector, vs ...*daov1.VersionVector)) *daov1.VersionVector {
-	switch len(ls) {
-	case 0:
+	if len(ls) == 0 {
 		return versionvector.New()
-	case 1:
-		return versionvector.New(ls[0].Checkpoint.Version)
-	default:
-		v := versionvector.New(ls[0].Checkpoint.Version)
-		for i := 1; i < len(ls); i++ {
-			update(v, ls[i].Checkpoint.Version)
-		}
-		return v
 	}
+
+	v := versionvector.New(ls[0].Checkpoint.Version)
+	for i := 1; i < len(ls); i++ {
+		update(v, ls[i].Checkpoint.Version)
+	}
+	return v
 }
 
 func NewVersionVectorFromReplicationEventLogs(ls []*replicationv1.EventLog) *daov1.VersionVector {
