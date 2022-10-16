@@ -84,7 +84,7 @@ const Composer: React.FC<ComposerProps> = ({
   tags,
   commands,
   maxAutocompleteResults = 10,
-  slowTypingDelay = 600,
+  slowTypingDelay = 400,
   autocompleteHideDelay = 15000,
 }) => {
   const { t } = useTranslation();
