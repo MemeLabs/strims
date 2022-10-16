@@ -6,7 +6,7 @@ import React, { ReactNode, Suspense, lazy, useCallback, useEffect, useState } fr
 import { MdFullscreen } from "react-icons/md";
 import { Location, Navigate, Route, Routes, useLocation } from "react-router";
 import { NavLink } from "react-router-dom";
-import { useToggle } from "react-use";
+import { useSessionStorage, useToggle } from "react-use";
 
 import { WithThemeProps, withTheme } from "../../components/Theme";
 import { WithRootRefProps, withLayoutContext } from "../../contexts/Layout";
@@ -194,7 +194,8 @@ const LoadingMessage = () => <p className="loading_message">loading</p>;
 const Storybook: React.FC = () => {
   const [node, extend] = useStorybookNav();
   const location = useLocation();
-  const [fullscreen, toggleFullscreen] = useToggle(false);
+  const [fullscreen, setFullscreen] = useSessionStorage("storybook_fullscreen", false);
+  const toggleFullscreen = useCallback(() => setFullscreen(!fullscreen), [fullscreen]);
 
   return (
     <>
