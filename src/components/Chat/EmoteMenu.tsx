@@ -30,6 +30,7 @@ import { useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import balanceRows from "../../lib/balanceRows";
+import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import Dropdown from "../Dropdown";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
@@ -166,6 +167,12 @@ interface SearchProps {
 const Search: React.FC<SearchProps> = ({ onChange }) => {
   const ref = useRef<HTMLInputElement>();
   const handleChange = useStableCallback(() => onChange(ref.current.value));
+  const handleFocus = useStableCallback(() => {
+    if (DEVICE_TYPE == DeviceType.Portable) {
+      ref.current.value = "";
+      onChange("");
+    }
+  });
 
   return (
     <div className="emote_menu_search">
@@ -173,6 +180,7 @@ const Search: React.FC<SearchProps> = ({ onChange }) => {
         className="emote_menu_search__input"
         ref={ref}
         onChange={handleChange}
+        onFocus={handleFocus}
         placeholder="Find an emote"
       />
       <BiSearch className="emote_menu_search__icon" />
