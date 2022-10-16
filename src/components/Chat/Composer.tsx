@@ -10,9 +10,8 @@ import emojiPattern from "emojibase-regex/emoji";
 import { once, pick } from "lodash";
 import Prism from "prismjs";
 import React, {
-  CompositionEventHandler,
+  CompositionEvent,
   KeyboardEvent,
-  KeyboardEventHandler,
   MouseEventHandler,
   useCallback,
   useEffect,
@@ -196,7 +195,7 @@ const Composer: React.FC<ComposerProps> = ({
   }, [haveMoreSuggestions]);
   const handleBlur = useCallback(() => setIsFocused(false), []);
 
-  const handleKey = useCallback(
+  const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       resetFastTimeout();
       resetSlowTimeout();
@@ -237,7 +236,6 @@ const Composer: React.FC<ComposerProps> = ({
         }
         case Key.Delete:
         case Key.Backspace: {
-          ComposerEditor.androidScheduleFlush(editor);
           const leaves = decorate(Editor.node(editor, editor.selection));
           const emote = leaves.find((e) => e.emote && Range.includes(e, editor.selection));
           if (emote) {
@@ -247,36 +245,45 @@ const Composer: React.FC<ComposerProps> = ({
           }
           break;
         }
-        case Key.Unidentified: {
-          // on old versions of android keyboard events do not reliably contain
-          // valid key values (https://stackoverflow.com/questions/36753548). we
-          // can detect delete compositions by checking for empty diffs with non
-          // zero widths and we can check if an emote is being deleted by
-          // checking if the diff intersects the emote range...
-          const diffs = ReactEditor.androidPendingDiffs(editor);
-          if (!diffs || !diffs.some(({ diff }) => diff.text === "" && diff.end - diff.start > 0)) {
-            break;
-          }
-          const [{ diff, path }] = diffs;
-          const range = {
-            anchor: { path, offset: diff.start },
-            focus: { path, offset: diff.end },
-          };
-          const leaves = decorate(Editor.node(editor, editor.selection));
-          const emote = leaves.find((e) => e.emote && Range.includes(e, range));
-          if (emote) {
-            ComposerEditor.androidScheduleFlush(editor);
-            cleanup.current = once(() => Transforms.delete(editor, { at: emote }));
-            setSearch(null);
-          }
-          break;
-        }
+        case Key.Unidentified:
+          return;
       }
 
       setLastSearch(null);
       setSelectedMatch(defaultSelectedMatch);
     },
     [matchEntries, search, decorate]
+  );
+
+  const handleCompositionUpdate = useCallback(
+    (e: CompositionEvent) => {
+      // match compositions that end in a line break and emit them
+      if (e.data.endsWith("\n")) {
+        emitMessage();
+        setSearch(null);
+        return;
+      }
+
+      // match empty diffs with non zero widths that intersects an emote and
+      // delete the emote
+      const diffs = ReactEditor.androidPendingDiffs(editor);
+      if (diffs && diffs.some(({ diff }) => diff.text === "" && diff.end - diff.start > 0)) {
+        const [{ diff, path }] = diffs;
+        const range = {
+          anchor: { path, offset: diff.start },
+          focus: { path, offset: diff.end },
+        };
+        const leaves = decorate(Editor.node(editor, editor.selection));
+        const emote = leaves.find((e) => e.emote && Range.includes(e, range));
+        if (emote) {
+          ComposerEditor.androidScheduleFlush(editor);
+          cleanup.current = once(() => Transforms.delete(editor, { at: emote }));
+          setSearch(null);
+        }
+        return;
+      }
+    },
+    [decorate]
   );
 
   const insertAutocompleteEntry = (entry: SearchSourceEntry): Range => {
@@ -342,14 +349,6 @@ const Composer: React.FC<ComposerProps> = ({
   const emoteMenuButton = useRef<HTMLButtonElement>();
   useClickAway([emoteMenu, emoteMenuButton], () => toggleMenu(false), { enable: showMenu });
 
-  const handleKeyDown: KeyboardEventHandler = (e) => console.log("KeyDown", e);
-  const handleKeyUp: KeyboardEventHandler = (e) => console.log("KeyUp", e);
-  const handleOnBeforeInput = (e: InputEvent) => console.log("OnBeforeInput", e);
-  const handleCompositionStart: CompositionEventHandler = (e) => console.log("CompositionStart", e);
-  const handleCompositionUpdate: CompositionEventHandler = (e) =>
-    console.log("CompositionUpdate", e);
-  const handleCompositionEnd: CompositionEventHandler = (e) => console.log("CompositionEnd", e);
-
   return (
     <div className="chat_composer">
       {showAutocomplete && (
@@ -381,18 +380,13 @@ const Composer: React.FC<ComposerProps> = ({
         <Slate editor={editor} value={initialValue} onChange={onChange}>
           <Editable
             className="chat_composer__textbox"
+            placeholder={t("chat.composer.Write a message")}
             decorate={decorate}
-            // {...{ [IS_ANDROID ? "onKeyUp" : "onKeyDown"]: handleKey }}
-            onKeyDown={handleKeyDown}
-            onKeyUp={handleKeyUp}
-            onDOMBeforeInput={handleOnBeforeInput}
-            onCompositionStart={handleCompositionStart}
-            onCompositionUpdate={handleCompositionUpdate}
-            onCompositionEnd={handleCompositionEnd}
+            renderLeaf={renderLeaf}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder={t("chat.composer.Write a message")}
-            renderLeaf={renderLeaf}
+            onKeyDown={handleKeyDown}
+            onCompositionUpdate={IS_ANDROID ? handleCompositionUpdate : undefined}
           />
         </Slate>
         <button className="chat_composer__button" ref={emoteMenuButton} onClick={toggleMenu}>
