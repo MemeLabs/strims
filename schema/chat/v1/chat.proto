@@ -38,6 +38,17 @@ message ServerIcon {
   type.Image image = 3;
 }
 
+message StyleSheet {
+  message Asset {
+    string name = 1;
+    type.Image image = 2;
+  }
+
+  string scss = 1;
+  string css = 2;
+  repeated Asset assets = 3;
+}
+
 enum EmoteFileType {
   FILE_TYPE_UNDEFINED = 0;
   FILE_TYPE_PNG = 1;
@@ -60,7 +71,7 @@ message EmoteImage {
 
 message EmoteEffect {
   message CustomCSS {
-    string css = 1;
+    StyleSheet style_sheet = 1;
   }
 
   message SpriteAnimation {
@@ -105,6 +116,7 @@ message Modifier {
   bool internal = 5;
   uint32 extra_wrap_count = 6;
   double proc_chance = 7;
+  StyleSheet style_sheet = 8;
 }
 
 message Tag {
@@ -392,6 +404,7 @@ message CreateModifierRequest {
   bool internal = 4;
   uint32 extra_wrap_count = 5;
   double proc_chance = 6;
+  StyleSheet style_sheet = 7;
 }
 message CreateModifierResponse {
   Modifier modifier = 1;
@@ -404,6 +417,7 @@ message UpdateModifierRequest {
   bool internal = 5;
   uint32 extra_wrap_count = 6;
   double proc_chance = 7;
+  StyleSheet style_sheet = 8;
 }
 message UpdateModifierResponse {
   Modifier modifier = 1;

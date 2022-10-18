@@ -1,6 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import * as csstree from "css-tree";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
@@ -8,12 +9,14 @@ import {
   EmoteEffect,
   EmoteFileType,
   EmoteScale,
+  Modifier,
   UIConfig,
   UIConfigHighlight,
   UIConfigIgnore,
   UIConfigTag,
 } from "../../apis/strims/chat/v1/chat";
 import { ChatStyles } from "../../contexts/Chat";
+import { createImageObjectURL } from "../../lib/image";
 
 const toMimeType = (fileType: EmoteFileType): string => {
   switch (fileType) {
@@ -53,6 +56,7 @@ export const computeEmoteWidth = (e: Emote) => {
 export type ExtraRules = { [key: string]: PropList };
 
 export interface StyleSheetProps {
+  id: number;
   liveEmotes: Emote[];
   styles: ChatStyles;
   uiConfig: UIConfig;
@@ -65,6 +69,11 @@ export interface StyleSheetProps {
 
 interface EmoteState {
   uris: string[];
+  name: string;
+}
+
+interface ModifierState {
+  uris: Map<string, string>;
   name: string;
 }
 
@@ -91,6 +100,7 @@ const defaultUIConfigTags: Map<string, UIConfigTag> = new Map();
 const defaultUIConfigIgnores: Map<string, UIConfigIgnore> = new Map();
 
 const StyleSheet: React.FC<StyleSheetProps> = ({
+  id,
   liveEmotes,
   styles,
   uiConfig,
@@ -102,6 +112,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 }) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
+  const scope = `chat--${id}`;
 
   useLayoutEffect(() => {
     setEmotes((prev) => {
@@ -183,10 +194,10 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         }
 
         ref.current.sheet.insertRule(
-          `.${name} {${[...rules, ...containerRules].map((r) => r.join(":")).join(";")}}`
+          `#${scope} .${name} {${[...rules, ...containerRules].map((r) => r.join(":")).join(";")}}`
         );
         ref.current.sheet.insertRule(
-          `.${name}_container {${containerRules.map((r) => r.join(":")).join(";")}}`
+          `#${scope} .${name}_container {${containerRules.map((r) => r.join(":")).join(";")}}`
         );
 
         next.set(e, { name, uris });
@@ -195,6 +206,133 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       return next;
     });
   }, [liveEmotes, styles]);
+
+  const [, setModifiers] = useState(new Map<Modifier, ModifierState>());
+
+  useLayoutEffect(() => {
+    const isNodeType = (target: csstree.CssNode["type"]) => {
+      return ({ type }: csstree.CssNode) => type === target;
+    };
+
+    const sanitizeSelector = (node: csstree.Selector, name: string) => {
+      const { first } = node.children;
+      if (first.type !== "ClassSelector") {
+        return first.type === "Percentage";
+      }
+      if (first.name !== name) {
+        return false;
+      }
+
+      first.name = `chat__emote_container--${name}`;
+      node.children.prependList(
+        new csstree.List<csstree.CssNode>().fromArray([
+          csstree.fromPlainObject({
+            type: "IdSelector",
+            name: scope,
+          }),
+          csstree.fromPlainObject({
+            type: "Combinator",
+            name: " ",
+          }),
+        ])
+      );
+      return true;
+    };
+
+    const sanitizeDeclaration = (node: csstree.Declaration) => {
+      if (node.property !== "position") {
+        return true;
+      }
+
+      const value = csstree.find(node, isNodeType("Identifier")) as csstree.Identifier;
+      return value?.name === "relative" || value?.name === "absolute";
+    };
+
+    const sanitizeUrl = (node: csstree.Url, uris: Map<string, string>) => {
+      if (typeof node.value === "string") {
+        const ok = uris.has(node.value);
+        node.value = uris.get(node.value) as unknown as csstree.Raw;
+        return ok;
+      }
+      return false;
+    };
+
+    const sanitizeFunction = (node: csstree.FunctionNode, uris: Map<string, string>) => {
+      if (node.name !== "image-set") {
+        return true;
+      }
+
+      const isValue = ({ type }: csstree.CssNode) => type === "String" || type === "Raw";
+      const values = csstree.findAll(node, isValue) as (csstree.StringNode | csstree.Raw)[];
+      for (const value of values) {
+        if (!uris.has(value.value)) {
+          return false;
+        }
+        value.value = `"${uris.get(value.value)}"`;
+      }
+      return true;
+    };
+
+    const sanitizeStyleSheet = (css: string = "", name: string, uris: Map<string, string>) => {
+      let ok = true;
+
+      const ast = csstree.parse(css);
+      csstree.walk(ast, (node) => {
+        switch (node.type) {
+          case "Selector":
+            ok &&= sanitizeSelector(node, name);
+            break;
+          case "Declaration":
+            ok &&= sanitizeDeclaration(node);
+            break;
+          case "Url":
+            ok &&= sanitizeUrl(node, uris);
+            break;
+          case "Function":
+            ok &&= sanitizeFunction(node, uris);
+            break;
+        }
+      });
+      if (!ok) {
+        return [];
+      }
+
+      const sheet = csstree.find(ast, isNodeType("StyleSheet")) as csstree.StyleSheet;
+      return ok ? sheet.children.toArray().map((node) => csstree.generate(node)) : [];
+    };
+
+    setModifiers((prev) => {
+      const next = new Map(prev);
+      const modifiers = Array.from(styles.modifiers.values());
+      const added = modifiers.filter((e) => !prev.has(e));
+      const removed = Array.from(prev.entries()).filter(([e]) => !modifiers.includes(e));
+
+      for (const [m, { name, uris }] of removed) {
+        for (const uri of uris.values()) {
+          URL.revokeObjectURL(uri);
+        }
+        next.delete(m);
+        deleteMatchingCSSRules(ref.current.sheet, (r) =>
+          r.cssText.includes(`chat__emote_container--${name}`)
+        );
+      }
+      for (const m of added) {
+        const { name, styleSheet } = m;
+        const uris = new Map(
+          styleSheet?.assets.map(({ name, image }) => [name, createImageObjectURL(image)])
+        );
+
+        const rules = sanitizeStyleSheet(styleSheet?.css, name, uris);
+        for (const rule of rules) {
+          ref.current.sheet.insertRule(rule);
+        }
+
+        next.set(m, { name, uris });
+      }
+
+      return next;
+    });
+  }, [styles]);
 
   useLayoutEffect(() => {
     deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--tag_"));
@@ -206,7 +344,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       }
 
       ref.current.sheet.insertRule(
-        `.chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
+        `#${scope} .chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
       );
     }
 
@@ -236,7 +374,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     for (const [key, rules] of props) {
       ref.current.sheet.insertRule(
-        `.chat__message--author_${key} {${rules.map((r) => r.join(":")).join(";")}}`
+        `#${scope} .chat__message--author_${key} {${rules.map((r) => r.join(":")).join(";")}}`
       );
     }
 
@@ -248,7 +386,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
           keys.push(`.chat__message--mention_${key}`);
         }
       }
-      const selector = `.chat__message:not(${keys.join(", ")})`;
+      const selector = `#${scope} .chat__message:not(${keys.join(", ")})`;
       ref.current.sheet.insertRule(
         `${selector} { --opacity-chat-message: var(--opacity-chat-unselected); }`
       );
@@ -256,7 +394,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     if (uiConfig.ignoreMentions) {
       for (const key of uiConfigIgnores.keys()) {
-        ref.current.sheet.insertRule(`.chat__message--mention_${key} { display: none; }`);
+        ref.current.sheet.insertRule(`#${scope} .chat__message--mention_${key} { display: none; }`);
       }
     }
   }, [styles, uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores]);

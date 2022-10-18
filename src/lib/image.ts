@@ -14,6 +14,7 @@ const imageTypeToFileType: { [imageType: number]: string } = {
   [ImageType.IMAGE_TYPE_JPEG]: "image/jpeg",
   [ImageType.IMAGE_TYPE_PNG]: "image/png",
   [ImageType.IMAGE_TYPE_WEBP]: "image/webp",
+  [ImageType.IMAGE_TYPE_SVG]: "image/svg+xml",
 };
 const fileTypeToImageType = invert(imageTypeToFileType);
 
@@ -33,3 +34,6 @@ export const toFormImageValue = ({ data, type, ...v }: Image): ImageValue => ({
   type: toFileType(type),
   ...v,
 });
+
+export const createImageObjectURL = ({ data, type }: Image) =>
+  URL.createObjectURL(new Blob([data], { type: toFileType(type) }));

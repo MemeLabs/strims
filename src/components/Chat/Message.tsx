@@ -358,6 +358,7 @@ interface MessageImplProps extends MessageProps {
 const ComboMessage: React.FC<MessageImplProps> = ({
   uiConfig,
   message: { serverTime, body, entities },
+  messageState,
   className: baseClassName,
   isMostRecent,
   fwRef,

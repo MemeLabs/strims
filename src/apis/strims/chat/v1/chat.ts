@@ -246,6 +246,102 @@ export class ServerIcon {
   }
 }
 
+export type IStyleSheet = {
+  scss?: string;
+  css?: string;
+  assets?: strims_chat_v1_StyleSheet_IAsset[];
+}
+
+export class StyleSheet {
+  scss: string;
+  css: string;
+  assets: strims_chat_v1_StyleSheet_Asset[];
+
+  constructor(v?: IStyleSheet) {
+    this.scss = v?.scss || "";
+    this.css = v?.css || "";
+    this.assets = v?.assets ? v.assets.map(v => new strims_chat_v1_StyleSheet_Asset(v)) : [];
+  }
+
+  static encode(m: StyleSheet, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.scss.length) w.uint32(10).string(m.scss);
+    if (m.css.length) w.uint32(18).string(m.css);
+    for (const v of m.assets) strims_chat_v1_StyleSheet_Asset.encode(v, w.uint32(26).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): StyleSheet {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new StyleSheet();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.scss = r.string();
+        break;
+        case 2:
+        m.css = r.string();
+        break;
+        case 3:
+        m.assets.push(strims_chat_v1_StyleSheet_Asset.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace StyleSheet {
+  export type IAsset = {
+    name?: string;
+    image?: strims_type_IImage;
+  }
+
+  export class Asset {
+    name: string;
+    image: strims_type_Image | undefined;
+
+    constructor(v?: IAsset) {
+      this.name = v?.name || "";
+      this.image = v?.image && new strims_type_Image(v.image);
+    }
+
+    static encode(m: Asset, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.name.length) w.uint32(10).string(m.name);
+      if (m.image) strims_type_Image.encode(m.image, w.uint32(18).fork()).ldelim();
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Asset {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Asset();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.name = r.string();
+          break;
+          case 2:
+          m.image = strims_type_Image.decode(r, r.uint32());
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+}
+
 export type IEmoteImage = {
   data?: Uint8Array;
   fileType?: strims_chat_v1_EmoteFileType;
@@ -417,19 +513,19 @@ export namespace EmoteEffect {
   };
 
   export type ICustomCSS = {
-    css?: string;
+    styleSheet?: strims_chat_v1_IStyleSheet;
   }
 
   export class CustomCSS {
-    css: string;
+    styleSheet: strims_chat_v1_StyleSheet | undefined;
 
     constructor(v?: ICustomCSS) {
-      this.css = v?.css || "";
+      this.styleSheet = v?.styleSheet && new strims_chat_v1_StyleSheet(v.styleSheet);
     }
 
     static encode(m: CustomCSS, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.css.length) w.uint32(10).string(m.css);
+      if (m.styleSheet) strims_chat_v1_StyleSheet.encode(m.styleSheet, w.uint32(10).fork()).ldelim();
       return w;
     }
 
@@ -441,7 +537,7 @@ export namespace EmoteEffect {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.css = r.string();
+          m.styleSheet = strims_chat_v1_StyleSheet.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -683,6 +779,7 @@ export type IModifier = {
   internal?: boolean;
   extraWrapCount?: number;
   procChance?: number;
+  styleSheet?: strims_chat_v1_IStyleSheet;
 }
 
 export class Modifier {
@@ -693,6 +790,7 @@ export class Modifier {
   internal: boolean;
   extraWrapCount: number;
   procChance: number;
+  styleSheet: strims_chat_v1_StyleSheet | undefined;
 
   constructor(v?: IModifier) {
     this.id = v?.id || BigInt(0);
@@ -702,6 +800,7 @@ export class Modifier {
     this.internal = v?.internal || false;
     this.extraWrapCount = v?.extraWrapCount || 0;
     this.procChance = v?.procChance || 0;
+    this.styleSheet = v?.styleSheet && new strims_chat_v1_StyleSheet(v.styleSheet);
   }
 
   static encode(m: Modifier, w?: Writer): Writer {
@@ -713,6 +812,7 @@ export class Modifier {
     if (m.internal) w.uint32(40).bool(m.internal);
     if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
     if (m.procChance) w.uint32(57).double(m.procChance);
+    if (m.styleSheet) strims_chat_v1_StyleSheet.encode(m.styleSheet, w.uint32(66).fork()).ldelim();
     return w;
   }
 
@@ -743,6 +843,9 @@ export class Modifier {
         break;
         case 7:
         m.procChance = r.double();
+        break;
+        case 8:
+        m.styleSheet = strims_chat_v1_StyleSheet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3102,6 +3205,7 @@ export type ICreateModifierRequest = {
   internal?: boolean;
   extraWrapCount?: number;
   procChance?: number;
+  styleSheet?: strims_chat_v1_IStyleSheet;
 }
 
 export class CreateModifierRequest {
@@ -3111,6 +3215,7 @@ export class CreateModifierRequest {
   internal: boolean;
   extraWrapCount: number;
   procChance: number;
+  styleSheet: strims_chat_v1_StyleSheet | undefined;
 
   constructor(v?: ICreateModifierRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -3119,6 +3224,7 @@ export class CreateModifierRequest {
     this.internal = v?.internal || false;
     this.extraWrapCount = v?.extraWrapCount || 0;
     this.procChance = v?.procChance || 0;
+    this.styleSheet = v?.styleSheet && new strims_chat_v1_StyleSheet(v.styleSheet);
   }
 
   static encode(m: CreateModifierRequest, w?: Writer): Writer {
@@ -3129,6 +3235,7 @@ export class CreateModifierRequest {
     if (m.internal) w.uint32(32).bool(m.internal);
     if (m.extraWrapCount) w.uint32(40).uint32(m.extraWrapCount);
     if (m.procChance) w.uint32(49).double(m.procChance);
+    if (m.styleSheet) strims_chat_v1_StyleSheet.encode(m.styleSheet, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -3156,6 +3263,9 @@ export class CreateModifierRequest {
         break;
         case 6:
         m.procChance = r.double();
+        break;
+        case 7:
+        m.styleSheet = strims_chat_v1_StyleSheet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -3210,6 +3320,7 @@ export type IUpdateModifierRequest = {
   internal?: boolean;
   extraWrapCount?: number;
   procChance?: number;
+  styleSheet?: strims_chat_v1_IStyleSheet;
 }
 
 export class UpdateModifierRequest {
@@ -3220,6 +3331,7 @@ export class UpdateModifierRequest {
   internal: boolean;
   extraWrapCount: number;
   procChance: number;
+  styleSheet: strims_chat_v1_StyleSheet | undefined;
 
   constructor(v?: IUpdateModifierRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -3229,6 +3341,7 @@ export class UpdateModifierRequest {
     this.internal = v?.internal || false;
     this.extraWrapCount = v?.extraWrapCount || 0;
     this.procChance = v?.procChance || 0;
+    this.styleSheet = v?.styleSheet && new strims_chat_v1_StyleSheet(v.styleSheet);
   }
 
   static encode(m: UpdateModifierRequest, w?: Writer): Writer {
@@ -3240,6 +3353,7 @@ export class UpdateModifierRequest {
     if (m.internal) w.uint32(40).bool(m.internal);
     if (m.extraWrapCount) w.uint32(48).uint32(m.extraWrapCount);
     if (m.procChance) w.uint32(57).double(m.procChance);
+    if (m.styleSheet) strims_chat_v1_StyleSheet.encode(m.styleSheet, w.uint32(66).fork()).ldelim();
     return w;
   }
 
@@ -3270,6 +3384,9 @@ export class UpdateModifierRequest {
         break;
         case 7:
         m.procChance = r.double();
+        break;
+        case 8:
+        m.styleSheet = strims_chat_v1_StyleSheet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -6174,6 +6291,12 @@ export type strims_chat_v1_ServerIcon = ServerIcon;
 /* @internal */
 export type strims_chat_v1_IServerIcon = IServerIcon;
 /* @internal */
+export const strims_chat_v1_StyleSheet = StyleSheet;
+/* @internal */
+export type strims_chat_v1_StyleSheet = StyleSheet;
+/* @internal */
+export type strims_chat_v1_IStyleSheet = IStyleSheet;
+/* @internal */
 export const strims_chat_v1_EmoteImage = EmoteImage;
 /* @internal */
 export type strims_chat_v1_EmoteImage = EmoteImage;
@@ -6815,6 +6938,12 @@ export const strims_chat_v1_WhisperSendMessageResponse = WhisperSendMessageRespo
 export type strims_chat_v1_WhisperSendMessageResponse = WhisperSendMessageResponse;
 /* @internal */
 export type strims_chat_v1_IWhisperSendMessageResponse = IWhisperSendMessageResponse;
+/* @internal */
+export const strims_chat_v1_StyleSheet_Asset = StyleSheet.Asset;
+/* @internal */
+export type strims_chat_v1_StyleSheet_Asset = StyleSheet.Asset;
+/* @internal */
+export type strims_chat_v1_StyleSheet_IAsset = StyleSheet.IAsset;
 /* @internal */
 export const strims_chat_v1_EmoteEffect_CustomCSS = EmoteEffect.CustomCSS;
 /* @internal */

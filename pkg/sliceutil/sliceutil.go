@@ -33,13 +33,3 @@ func Includes[T any](vs []T, fn func(v T) bool) bool {
 	_, ok := Find(vs, fn)
 	return ok
 }
-
-func Filter[T any](vs []T, fn func(i int) bool) []T {
-	c := make([]T, 0, len(vs))
-	for i, v := range vs {
-		if fn(i) {
-			c = append(c, v)
-		}
-	}
-	return c
-}

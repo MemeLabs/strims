@@ -67,7 +67,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
   emote.effects.forEach(({ effect }) => {
     switch (effect.case) {
       case EmoteEffect.EffectCase.CUSTOM_CSS:
-        data.css = effect.customCss.css;
+        // data.css = effect.customCss.css;
         break;
       case EmoteEffect.EffectCase.SPRITE_ANIMATION:
         data.animated = true;

@@ -24,4 +24,5 @@ enum ImageType {
   IMAGE_TYPE_JPEG = 4; // image/jpeg
   IMAGE_TYPE_PNG = 5;  // image/png
   IMAGE_TYPE_WEBP = 6; // image/webp
+  IMAGE_TYPE_SVG = 7; // image/svg
 }

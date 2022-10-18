@@ -78,6 +78,7 @@ const Chat: React.FC<ChatProps> = ({ children, messages, shouldRenderStyleSheet 
                   <ThreadConsumer>
                     {([room]) => (
                       <StyleSheet
+                        id={room.id}
                         liveEmotes={room.liveEmotes}
                         styles={room.styles}
                         uiConfig={uiConfig}
@@ -257,7 +258,12 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
 
   return (
     <>
-      <StyleSheet liveEmotes={room.liveEmotes} styles={room.styles} uiConfig={uiConfig} />
+      <StyleSheet
+        id={room.id}
+        liveEmotes={room.liveEmotes}
+        styles={room.styles}
+        uiConfig={uiConfig}
+      />
       <ChatScroller
         renderMessage={({ index, style, ref }: MessageProps) => (
           <ChatMessage

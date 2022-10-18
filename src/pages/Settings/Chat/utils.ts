@@ -59,7 +59,7 @@ export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
     effects.push({
       effect: {
         customCss: {
-          css: data.css,
+          // css: data.css,
         },
       },
     });

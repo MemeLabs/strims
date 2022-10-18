@@ -3,6 +3,7 @@
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
+import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React from "react";
 
@@ -62,9 +63,10 @@ const ComposerTestContent: React.FC = () => {
   const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }] = useChat();
   const [room, roomActions] = useRoom();
   return (
-    <div className="chat_composer_mockup">
+    <div id={`chat--${room.id}`} className={clsx("chat_composer_mockup")}>
       <div className="chat_composer_mockup__filler" />
       <StyleSheet
+        id={room.id}
         liveEmotes={room.liveEmotes}
         styles={room.styles}
         uiConfig={uiConfig}

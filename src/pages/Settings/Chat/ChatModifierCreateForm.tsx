@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import { fromStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
@@ -23,10 +24,11 @@ const ChatModifierCreateFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`, { replace: true }),
   });
 
-  const onSubmit = (data: ChatModifierFormData) =>
+  const onSubmit = async (data: ChatModifierFormData) =>
     createChatModifier({
       serverId: BigInt(serverId),
       ...data,
+      styleSheet: await fromStyleSheetFormValue(data),
     });
 
   const backLink = value?.modifiers.length

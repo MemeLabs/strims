@@ -6,6 +6,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import {
+  fromStyleSheetFormValue,
+  toStyleSheetFormValue,
+} from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
@@ -22,16 +26,23 @@ const ChatModifierEditForm: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`),
   });
 
-  const onSubmit = (data: ChatModifierFormData) =>
+  const onSubmit = async (data: ChatModifierFormData) =>
     updateChatModifier({
       id: BigInt(modifierId),
       serverId: BigInt(serverId),
       ...data,
+      styleSheet: await fromStyleSheetFormValue(data),
     });
 
   if (getRes.loading) {
     return null;
   }
+
+  const { modifier } = getRes.value;
+  const values = {
+    ...modifier,
+    ...toStyleSheetFormValue(modifier.styleSheet),
+  };
 
   return (
     <>
@@ -43,7 +54,7 @@ const ChatModifierEditForm: React.FC = () => {
         onSubmit={onSubmit}
         error={getRes.error || updateRes.error}
         loading={getRes.loading || updateRes.loading}
-        values={getRes.value?.modifier}
+        values={values}
         submitLabel="Update Modifier"
       />
     </>

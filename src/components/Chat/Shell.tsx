@@ -51,6 +51,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
   return (
     <div
       ref={ref}
+      id={`chat--${room.id}`}
       className={clsx(className, "chat")}
       style={{
         "--chat-width": size ? `${size.width}px` : "100%",
@@ -58,6 +59,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
       }}
     >
       <StyleSheet
+        id={room.id}
         liveEmotes={room.liveEmotes}
         styles={room.styles}
         uiConfig={uiConfig}

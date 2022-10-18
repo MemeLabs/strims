@@ -219,6 +219,7 @@ func (s *chatService) CreateModifier(ctx context.Context, req *chatv1.CreateModi
 		req.Internal,
 		req.ExtraWrapCount,
 		req.ProcChance,
+		req.StyleSheet,
 	)
 	if err != nil {
 		return nil, err
@@ -237,6 +238,7 @@ func (s *chatService) UpdateModifier(ctx context.Context, req *chatv1.UpdateModi
 		v.Internal = req.Internal
 		v.ExtraWrapCount = req.ExtraWrapCount
 		v.ProcChance = req.ProcChance
+		v.StyleSheet = req.StyleSheet
 		return nil
 	})
 	if err != nil {

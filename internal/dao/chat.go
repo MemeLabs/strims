@@ -423,6 +423,7 @@ func NewChatModifier(
 	internal bool,
 	extraWrapCount uint32,
 	procChance float64,
+	styleSheet *chatv1.StyleSheet,
 ) (*chatv1.Modifier, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -437,6 +438,7 @@ func NewChatModifier(
 		Internal:       internal,
 		ExtraWrapCount: extraWrapCount,
 		ProcChance:     procChance,
+		StyleSheet:     styleSheet,
 	}
 	return v, nil
 }
