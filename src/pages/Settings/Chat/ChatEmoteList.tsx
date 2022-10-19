@@ -6,7 +6,6 @@ import "./ChatEmoteList.scss";
 import { escapeRegExp } from "lodash";
 import React, {
   ChangeEvent,
-  MouseEvent,
   MutableRefObject,
   ReactNode,
   useCallback,

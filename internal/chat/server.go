@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/directory"
@@ -23,6 +24,8 @@ import (
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
 	"github.com/MemeLabs/strims/pkg/ppspp/store"
 	"github.com/MemeLabs/strims/pkg/protoutil"
+	"github.com/MemeLabs/strims/pkg/timeutil"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -55,6 +58,8 @@ var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize
 var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
 var assetWindowSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.LiveWindow
+
+const syncAssetsDebounceWait = 250 * time.Millisecond
 
 func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, icon *chatv1.ServerIcon, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
 	err = store.View(func(tx kv.Tx) (err error) {
@@ -116,8 +121,9 @@ func newChatServer(
 		assetSwarm:     assetSwarm,
 		service:        newChatService(logger, eventWriter, observers, store, config),
 		assetPublisher: newAssetPublisher(logger, assetWriter),
+		unifiedUpdate:  atomic.NewBool(true),
 	}
-
+	s.syncAssets = timeutil.DefaultTickEmitter.Debounce(s.runSyncAssets, syncAssetsDebounceWait)
 	return s, nil
 }
 
@@ -151,6 +157,8 @@ type chatServer struct {
 	service        *chatService
 	assetPublisher *assetPublisher
 	stopper        servicemanager.Stopper
+	unifiedUpdate  *atomic.Bool
+	syncAssets     timeutil.DebouncedFunc
 }
 
 func (s *chatServer) Run(ctx context.Context) error {
@@ -170,7 +178,7 @@ func (s *chatServer) Run(ctx context.Context) error {
 	chatv1.RegisterChatService(server, s.service)
 
 	go s.watchAssets(ctx)
-	s.syncAssets(true)
+	s.syncAssets(ctx)
 
 	listingID, err := s.directory.Publish(
 		ctx,
@@ -240,21 +248,21 @@ func (s *chatServer) watchAssets(ctx context.Context) {
 			case *chatv1.ServerChangeEvent:
 				s.service.SyncConfig(e.Server)
 			case *chatv1.ServerIconChangeEvent:
-				s.trySyncAssets(e.ServerIcon.Id, false)
+				s.trySyncAssets(ctx, e.ServerIcon.Id, false)
 			case *chatv1.SyncAssetsEvent:
-				s.trySyncAssets(e.ServerId, e.ForceUnifiedUpdate)
+				s.trySyncAssets(ctx, e.ServerId, e.ForceUnifiedUpdate)
 			case *chatv1.EmoteChangeEvent:
-				s.trySyncAssets(e.Emote.ServerId, false)
+				s.trySyncAssets(ctx, e.Emote.ServerId, false)
 			case *chatv1.EmoteDeleteEvent:
-				s.trySyncAssets(e.Emote.ServerId, false)
+				s.trySyncAssets(ctx, e.Emote.ServerId, false)
 			case *chatv1.ModifierChangeEvent:
-				s.trySyncAssets(e.Modifier.ServerId, false)
+				s.trySyncAssets(ctx, e.Modifier.ServerId, false)
 			case *chatv1.ModifierDeleteEvent:
-				s.trySyncAssets(e.Modifier.ServerId, false)
+				s.trySyncAssets(ctx, e.Modifier.ServerId, false)
 			case *chatv1.TagChangeEvent:
-				s.trySyncAssets(e.Tag.ServerId, false)
+				s.trySyncAssets(ctx, e.Tag.ServerId, false)
 			case *chatv1.TagDeleteEvent:
-				s.trySyncAssets(e.Tag.ServerId, false)
+				s.trySyncAssets(ctx, e.Tag.ServerId, false)
 			}
 		case <-ctx.Done():
 			return
@@ -262,15 +270,20 @@ func (s *chatServer) watchAssets(ctx context.Context) {
 	}
 }
 
-func (s *chatServer) trySyncAssets(serverID uint64, unifiedUpdate bool) {
+func (s *chatServer) trySyncAssets(ctx context.Context, serverID uint64, unifiedUpdate bool) {
 	if serverID == s.config.Id {
-		go s.syncAssets(unifiedUpdate)
+		if unifiedUpdate {
+			s.unifiedUpdate.Store(true)
+		}
+		s.syncAssets(ctx)
 	}
 }
 
-func (s *chatServer) syncAssets(unifiedUpdate bool) {
+func (s *chatServer) runSyncAssets(ctx context.Context) {
 	logger := s.logger.With(zap.Uint64("serverID", s.config.Id))
-	logger.Debug("syncing assets for chat server")
+
+	unifiedUpdate := s.unifiedUpdate.Swap(false)
+	logger.Debug("syncing assets for chat server", zap.Bool("unifiedUpdate", unifiedUpdate))
 
 	config, icon, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
 	if err != nil {

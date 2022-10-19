@@ -99,8 +99,5 @@ func (s *runnerAdapter) Client() (servicemanager.Readable[readers], error) {
 }
 
 func (s *runnerAdapter) Server() (servicemanager.Readable[readers], error) {
-	if s.config == nil {
-		return nil, nil
-	}
 	return newChatServer(s.logger, s.store, s.observers, s.dialer, s.transfer, s.directory, s.config)
 }
