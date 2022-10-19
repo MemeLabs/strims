@@ -53,6 +53,8 @@ const ChatEmoteEditFormPage: React.FC = () => {
     },
     contributor: emote.contributor?.name,
     contributorLink: emote.contributor?.link,
+    labels: emote.labels.map((label) => ({ label, value: label })),
+    enable: emote.enable,
     css: "",
     animated: false,
     animationFrameCount: 0,

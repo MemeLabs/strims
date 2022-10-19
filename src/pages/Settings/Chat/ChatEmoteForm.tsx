@@ -40,6 +40,8 @@ export interface ChatEmoteFormData {
   animationLoopForever: boolean;
   animationAlternateDirection: boolean;
   defaultModifiers: SelectOption<string>[];
+  labels: SelectOption<string>[];
+  enable: boolean;
 }
 
 const scaleOptions = [
@@ -88,6 +90,12 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   const modifierOptions: SelectOption<string>[] = useMemo(
     () => listModifiersRes.value?.modifiers.map(({ name }) => ({ label: name, value: name })),
     [listModifiersRes.value]
+  );
+
+  const [listLabelsRes] = useCall("chatServer", "listEmoteLabels", { args: [{ serverId }] });
+  const labelOptions: SelectOption<string>[] = useMemo(
+    () => listLabelsRes.value?.labels.map((label) => ({ label, value: label })),
+    [listLabelsRes.value]
   );
 
   return (
@@ -176,6 +184,8 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         placeholder="Modifiers"
         options={modifierOptions}
       />
+      <CreatableSelectInput control={control} name="labels" label="Labels" options={labelOptions} />
+      <ToggleInput control={control} label="enable" name="enable" />
       <ButtonSet>
         <Button disabled={loading}>{submitLabel}</Button>
       </ButtonSet>

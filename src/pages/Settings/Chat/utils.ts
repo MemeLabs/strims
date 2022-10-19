@@ -90,5 +90,7 @@ export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
       },
     ],
     effects,
+    labels: data.labels.map(({ value }) => value),
+    enable: data.enable,
   };
 };

@@ -314,6 +314,8 @@ const EmoteTester: React.FC = () => {
           animationLoopForever: false,
           animationAlternateDirection: false,
           defaultModifiers: [],
+          labels: [],
+          enable: true,
         })
       );
   }, []);
