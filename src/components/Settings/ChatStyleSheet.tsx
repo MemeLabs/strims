@@ -159,8 +159,8 @@ export const toStyleSheetFormValue = (styleSheet?: StyleSheet): ChatStyleSheetFo
     assetCount: styleSheet?.assets?.length >> 0,
   };
   for (let i = 0 as AssetIndex; i < styleSheet?.assets?.length; i++) {
-    data[`asset_${i}_name`] = styleSheet?.assets[i].name;
-    data[`asset_${i}_image`] = toFormImageValue(styleSheet?.assets[i].image);
+    data[`asset_${i}_name`] = styleSheet.assets[i].name;
+    data[`asset_${i}_image`] = toFormImageValue(styleSheet.assets[i].image);
   }
   return data;
 };

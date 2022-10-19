@@ -4,7 +4,7 @@
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { CompactEmoji, MessagesDataset, ShortcodesDataset } from "emojibase";
 import { Base64 } from "js-base64";
-import { isEqual, uniqueId } from "lodash";
+import { isEqual } from "lodash";
 import React, {
   ReactNode,
   useCallback,

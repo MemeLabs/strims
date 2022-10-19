@@ -63,7 +63,7 @@ const ComposerTestContent: React.FC = () => {
   const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }] = useChat();
   const [room, roomActions] = useRoom();
   return (
-    <div id={`chat--${room.id}`} className={clsx("chat_composer_mockup")}>
+    <div id={`chat-${room.id}`} className={clsx("chat_composer_mockup")}>
       <div className="chat_composer_mockup__filler" />
       <StyleSheet
         id={room.id}

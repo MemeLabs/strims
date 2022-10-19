@@ -112,7 +112,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 }) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
-  const scope = `chat--${id}`;
+  const scope = `chat-${id}`;
 
   useLayoutEffect(() => {
     setEmotes((prev) => {
@@ -268,15 +268,14 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         if (!uris.has(value.value)) {
           return false;
         }
-        value.value = `"${uris.get(value.value)}"`;
+        value.value = uris.get(value.value);
       }
       return true;
     };
 
     const sanitizeStyleSheet = (css: string = "", name: string, uris: Map<string, string>) => {
-      let ok = true;
-
       const ast = csstree.parse(css);
+      let ok = true;
       csstree.walk(ast, (node) => {
         switch (node.type) {
           case "Selector":
@@ -313,7 +312,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         }
         next.delete(m);
         deleteMatchingCSSRules(ref.current.sheet, (r) =>
-          r.cssText.includes(`chat__emote_container--${name}`)
+          r.cssText.includes(`#${scope} chat__emote_container--${name}`)
         );
       }
       for (const m of added) {

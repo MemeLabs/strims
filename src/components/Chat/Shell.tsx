@@ -51,7 +51,7 @@ const Shell: React.FC<ShellProps> = ({ className }) => {
   return (
     <div
       ref={ref}
-      id={`chat--${room.id}`}
+      id={`chat-${room.id}`}
       className={clsx(className, "chat")}
       style={{
         "--chat-width": size ? `${size.width}px` : "100%",

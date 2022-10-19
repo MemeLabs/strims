@@ -60,7 +60,7 @@ const ChatPopout: React.FC<ChatPopoutProps> = ({ topic }) => {
   });
 
   return (
-    <div id={`chat--${room.id}`} className={className}>
+    <div id={`chat-${room.id}`} className={className}>
       <div className="chat_popout__header" onClick={handleHeaderClick}>
         <div className="chat_popout__title">
           {room.label}
