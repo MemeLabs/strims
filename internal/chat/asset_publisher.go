@@ -11,13 +11,14 @@ import (
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	"github.com/MemeLabs/strims/pkg/protoutil"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func newAssetPublisher(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *assetPublisher {
 	return &assetPublisher{
 		logger:      logger,
 		eventWriter: ew,
-		checksums:   map[uint64]uint32{},
+		checksums:   map[checksumKey]uint32{},
 	}
 }
 
@@ -25,7 +26,7 @@ type assetPublisher struct {
 	logger      *zap.Logger
 	eventWriter *protoutil.ChunkStreamWriter
 	mu          sync.Mutex
-	checksums   map[uint64]uint32
+	checksums   map[checksumKey]uint32
 	size        int
 }
 
@@ -42,7 +43,7 @@ func (s *assetPublisher) Sync(
 
 	if unifiedUpdate {
 		s.size = 0
-		s.checksums = map[uint64]uint32{}
+		s.checksums = map[checksumKey]uint32{}
 		s.eventWriter.Reset()
 	}
 
@@ -50,58 +51,64 @@ func (s *assetPublisher) Sync(
 		IsDelta: len(s.checksums) != 0,
 	}
 
-	removed := map[uint64]struct{}{}
-	for id := range s.checksums {
-		removed[id] = struct{}{}
+	removed := map[checksumKey]struct{}{}
+	for k := range s.checksums {
+		removed[k] = struct{}{}
 	}
 
 	for _, e := range emotes {
+		k := newChecksumKey(e)
 		if e.Enable {
-			delete(removed, e.Id)
+			delete(removed, k)
 			c := dao.CRC32Message(e)
-			if c != s.checksums[e.Id] {
-				s.checksums[e.Id] = c
+			if c != s.checksums[k] {
+				s.checksums[k] = c
 				b.Emotes = append(b.Emotes, e)
 			}
 		}
 	}
 
 	for _, e := range modifiers {
-		delete(removed, e.Id)
+		k := newChecksumKey(e)
+		delete(removed, k)
 		c := dao.CRC32Message(e)
-		if c != s.checksums[e.Id] {
-			s.checksums[e.Id] = c
+		if c != s.checksums[k] {
+			s.checksums[k] = c
 			b.Modifiers = append(b.Modifiers, e)
 		}
 	}
 
 	for _, e := range tags {
-		delete(removed, e.Id)
+		k := newChecksumKey(e)
+		delete(removed, k)
 		c := dao.CRC32Message(e)
-		if c != s.checksums[e.Id] {
-			s.checksums[e.Id] = c
+		if c != s.checksums[k] {
+			s.checksums[k] = c
 			b.Tags = append(b.Tags, e)
 		}
 	}
 
-	delete(removed, config.Id)
+	k := newChecksumKey(config)
+	delete(removed, k)
 	c := dao.CRC32Message(config)
-	if c != s.checksums[config.Id] {
-		s.checksums[config.Id] = c
+	if c != s.checksums[k] {
+		s.checksums[k] = c
 		b.Room = config.Room
 	}
 
 	if icon != nil {
-		delete(removed, icon.Id)
+		k := newChecksumKey(icon)
+		delete(removed, k)
 		c := dao.CRC32Message(icon)
-		if c != s.checksums[icon.Id] {
-			s.checksums[icon.Id] = c
+		if c != s.checksums[k] {
+			s.checksums[k] = c
 			b.Icon = icon.Image
 		}
 	}
 
-	for id := range removed {
-		b.RemovedIds = append(b.RemovedIds, id)
+	for k := range removed {
+		b.RemovedIds = append(b.RemovedIds, k.id)
+		delete(s.checksums, k)
 	}
 
 	n := s.eventWriter.Size(b)
@@ -120,4 +127,13 @@ func (s *assetPublisher) Sync(
 	)
 
 	return s.eventWriter.Write(b)
+}
+
+func newChecksumKey[V any, T dao.TableRecord[V]](m T) checksumKey {
+	return checksumKey{m.ProtoReflect().Descriptor(), m.GetId()}
+}
+
+type checksumKey struct {
+	d  protoreflect.Descriptor
+	id uint64
 }
