@@ -24,9 +24,11 @@ type Set[T comparable] struct {
 }
 
 func (s *Set[T]) Insert(v T) {
-	if _, ok := s.values[v]; !ok {
-		s.values[v] = struct{}{}
-	}
+	s.values[v] = struct{}{}
+}
+
+func (s *Set[T]) Remove(v T) {
+	delete(s.values, v)
 }
 
 func (s *Set[T]) Has(v T) bool {
