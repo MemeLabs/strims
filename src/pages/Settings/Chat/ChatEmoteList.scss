@@ -1,0 +1,15 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.chat_emote_list {
+  &__enable_cell {
+    width: 10px;
+    padding: 0;
+  }
+
+  &__enable_indicator {
+    fill: var(--color-green-8);
+    width: 2rem;
+    height: 2rem;
+  }
+}
