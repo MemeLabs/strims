@@ -177,6 +177,11 @@ func (v *MerkleSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
 		return errors.New("no supported integrity cache found")
 	}
 
+	b := binmap.NewBin(v.treeHeight-1, uint64(len(ic.Timestamps)-1))
+	if len(c.Data) < int(b.BaseOffset()+b.BaseLength())*v.chunkSize {
+		return errors.New("integrity cache incomplete")
+	}
+
 	for i, t := range ic.Timestamps {
 		ts := timeutil.Time(t)
 		b := binmap.NewBin(v.treeHeight-1, uint64(i))

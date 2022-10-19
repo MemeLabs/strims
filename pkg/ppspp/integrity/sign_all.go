@@ -114,6 +114,10 @@ func (v *SignAllSwarmVerifier) ImportCache(c *swarmpb.Cache) error {
 		return errors.New("no supported integrity cache found")
 	}
 
+	if len(ic.Signatures) < len(ic.Timestamps)*v.signatureVerifier.Size() {
+		return errors.New("integrity cache incomplete")
+	}
+
 	for i, t := range ic.Timestamps {
 		chunk := c.Data[i*v.chunkSize : (i+1)*v.chunkSize]
 		sig := ic.Signatures[i*v.signatureVerifier.Size() : (i+1)*v.signatureVerifier.Size()]
