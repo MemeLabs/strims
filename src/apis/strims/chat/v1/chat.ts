@@ -17,6 +17,10 @@ import {
   strims_dao_v1_VersionVector,
   strims_dao_v1_IVersionVector,
 } from "../../dao/v1/dao";
+import {
+  google_protobuf_BoolValue,
+  google_protobuf_IBoolValue,
+} from "../../../google/protobuf/wrappers";
 
 export type IServerEvent = {
   body?: ServerEvent.IBody
@@ -707,6 +711,8 @@ export type IEmote = {
   images?: strims_chat_v1_IEmoteImage[];
   effects?: strims_chat_v1_IEmoteEffect[];
   contributor?: strims_chat_v1_IEmoteContributor;
+  labels?: string[];
+  enable?: boolean;
 }
 
 export class Emote {
@@ -716,6 +722,8 @@ export class Emote {
   images: strims_chat_v1_EmoteImage[];
   effects: strims_chat_v1_EmoteEffect[];
   contributor: strims_chat_v1_EmoteContributor | undefined;
+  labels: string[];
+  enable: boolean;
 
   constructor(v?: IEmote) {
     this.id = v?.id || BigInt(0);
@@ -724,6 +732,8 @@ export class Emote {
     this.images = v?.images ? v.images.map(v => new strims_chat_v1_EmoteImage(v)) : [];
     this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
     this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
+    this.labels = v?.labels ? v.labels : [];
+    this.enable = v?.enable || false;
   }
 
   static encode(m: Emote, w?: Writer): Writer {
@@ -734,6 +744,8 @@ export class Emote {
     for (const v of m.images) strims_chat_v1_EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
     for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
     if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
+    for (const v of m.labels) w.uint32(58).string(v);
+    if (m.enable) w.uint32(64).bool(m.enable);
     return w;
   }
 
@@ -761,6 +773,12 @@ export class Emote {
         break;
         case 6:
         m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
+        break;
+        case 7:
+        m.labels.push(r.string())
+        break;
+        case 8:
+        m.enable = r.bool();
         break;
         default:
         r.skipType(tag & 7);
@@ -2763,6 +2781,8 @@ export type ICreateEmoteRequest = {
   css?: string;
   effects?: strims_chat_v1_IEmoteEffect[];
   contributor?: strims_chat_v1_IEmoteContributor;
+  labels?: string[];
+  enable?: boolean;
 }
 
 export class CreateEmoteRequest {
@@ -2772,6 +2792,8 @@ export class CreateEmoteRequest {
   css: string;
   effects: strims_chat_v1_EmoteEffect[];
   contributor: strims_chat_v1_EmoteContributor | undefined;
+  labels: string[];
+  enable: boolean;
 
   constructor(v?: ICreateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -2780,6 +2802,8 @@ export class CreateEmoteRequest {
     this.css = v?.css || "";
     this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
     this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
+    this.labels = v?.labels ? v.labels : [];
+    this.enable = v?.enable || false;
   }
 
   static encode(m: CreateEmoteRequest, w?: Writer): Writer {
@@ -2790,6 +2814,8 @@ export class CreateEmoteRequest {
     if (m.css.length) w.uint32(34).string(m.css);
     for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
     if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
+    for (const v of m.labels) w.uint32(58).string(v);
+    if (m.enable) w.uint32(64).bool(m.enable);
     return w;
   }
 
@@ -2817,6 +2843,12 @@ export class CreateEmoteRequest {
         break;
         case 6:
         m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
+        break;
+        case 7:
+        m.labels.push(r.string())
+        break;
+        case 8:
+        m.enable = r.bool();
         break;
         default:
         r.skipType(tag & 7);
@@ -2871,6 +2903,8 @@ export type IUpdateEmoteRequest = {
   css?: string;
   effects?: strims_chat_v1_IEmoteEffect[];
   contributor?: strims_chat_v1_IEmoteContributor;
+  labels?: string[];
+  enable?: boolean;
 }
 
 export class UpdateEmoteRequest {
@@ -2881,6 +2915,8 @@ export class UpdateEmoteRequest {
   css: string;
   effects: strims_chat_v1_EmoteEffect[];
   contributor: strims_chat_v1_EmoteContributor | undefined;
+  labels: string[];
+  enable: boolean;
 
   constructor(v?: IUpdateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -2890,6 +2926,8 @@ export class UpdateEmoteRequest {
     this.css = v?.css || "";
     this.effects = v?.effects ? v.effects.map(v => new strims_chat_v1_EmoteEffect(v)) : [];
     this.contributor = v?.contributor && new strims_chat_v1_EmoteContributor(v.contributor);
+    this.labels = v?.labels ? v.labels : [];
+    this.enable = v?.enable || false;
   }
 
   static encode(m: UpdateEmoteRequest, w?: Writer): Writer {
@@ -2901,6 +2939,8 @@ export class UpdateEmoteRequest {
     if (m.css.length) w.uint32(42).string(m.css);
     for (const v of m.effects) strims_chat_v1_EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
     if (m.contributor) strims_chat_v1_EmoteContributor.encode(m.contributor, w.uint32(58).fork()).ldelim();
+    for (const v of m.labels) w.uint32(66).string(v);
+    if (m.enable) w.uint32(72).bool(m.enable);
     return w;
   }
 
@@ -2931,6 +2971,12 @@ export class UpdateEmoteRequest {
         break;
         case 7:
         m.contributor = strims_chat_v1_EmoteContributor.decode(r, r.uint32());
+        break;
+        case 8:
+        m.labels.push(r.string())
+        break;
+        case 9:
+        m.enable = r.bool();
         break;
         default:
         r.skipType(tag & 7);
@@ -3195,6 +3241,89 @@ export class ListEmotesResponse {
       }
     }
     return m;
+  }
+}
+
+export type IUpdateEmotesRequest = {
+  serverId?: bigint;
+  ids?: bigint[];
+  addLabels?: string[];
+  removeLabels?: string[];
+  enable?: google_protobuf_IBoolValue;
+}
+
+export class UpdateEmotesRequest {
+  serverId: bigint;
+  ids: bigint[];
+  addLabels: string[];
+  removeLabels: string[];
+  enable: google_protobuf_BoolValue | undefined;
+
+  constructor(v?: IUpdateEmotesRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.ids = v?.ids ? v.ids : [];
+    this.addLabels = v?.addLabels ? v.addLabels : [];
+    this.removeLabels = v?.removeLabels ? v.removeLabels : [];
+    this.enable = v?.enable && new google_protobuf_BoolValue(v.enable);
+  }
+
+  static encode(m: UpdateEmotesRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    m.ids.reduce((w, v) => w.uint64(v), w.uint32(18).fork()).ldelim();
+    for (const v of m.addLabels) w.uint32(26).string(v);
+    for (const v of m.removeLabels) w.uint32(34).string(v);
+    if (m.enable) google_protobuf_BoolValue.encode(m.enable, w.uint32(42).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateEmotesRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateEmotesRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.ids.push(r.uint64());
+        break;
+        case 3:
+        m.addLabels.push(r.string())
+        break;
+        case 4:
+        m.removeLabels.push(r.string())
+        break;
+        case 5:
+        m.enable = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateEmotesResponse = Record<string, any>;
+
+export class UpdateEmotesResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IUpdateEmotesResponse) {
+  }
+
+  static encode(m: UpdateEmotesResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateEmotesResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new UpdateEmotesResponse();
   }
 }
 
@@ -4114,6 +4243,78 @@ export class SyncAssetsResponse {
         break;
         case 2:
         m.updateSize = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListEmoteLabelsRequest = {
+  serverId?: bigint;
+}
+
+export class ListEmoteLabelsRequest {
+  serverId: bigint;
+
+  constructor(v?: IListEmoteLabelsRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+  }
+
+  static encode(m: ListEmoteLabelsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListEmoteLabelsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListEmoteLabelsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListEmoteLabelsResponse = {
+  labels?: string[];
+}
+
+export class ListEmoteLabelsResponse {
+  labels: string[];
+
+  constructor(v?: IListEmoteLabelsResponse) {
+    this.labels = v?.labels ? v.labels : [];
+  }
+
+  static encode(m: ListEmoteLabelsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.labels) w.uint32(10).string(v);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListEmoteLabelsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListEmoteLabelsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.labels.push(r.string())
         break;
         default:
         r.skipType(tag & 7);
@@ -6519,6 +6720,18 @@ export type strims_chat_v1_ListEmotesResponse = ListEmotesResponse;
 /* @internal */
 export type strims_chat_v1_IListEmotesResponse = IListEmotesResponse;
 /* @internal */
+export const strims_chat_v1_UpdateEmotesRequest = UpdateEmotesRequest;
+/* @internal */
+export type strims_chat_v1_UpdateEmotesRequest = UpdateEmotesRequest;
+/* @internal */
+export type strims_chat_v1_IUpdateEmotesRequest = IUpdateEmotesRequest;
+/* @internal */
+export const strims_chat_v1_UpdateEmotesResponse = UpdateEmotesResponse;
+/* @internal */
+export type strims_chat_v1_UpdateEmotesResponse = UpdateEmotesResponse;
+/* @internal */
+export type strims_chat_v1_IUpdateEmotesResponse = IUpdateEmotesResponse;
+/* @internal */
 export const strims_chat_v1_CreateModifierRequest = CreateModifierRequest;
 /* @internal */
 export type strims_chat_v1_CreateModifierRequest = CreateModifierRequest;
@@ -6650,6 +6863,18 @@ export const strims_chat_v1_SyncAssetsResponse = SyncAssetsResponse;
 export type strims_chat_v1_SyncAssetsResponse = SyncAssetsResponse;
 /* @internal */
 export type strims_chat_v1_ISyncAssetsResponse = ISyncAssetsResponse;
+/* @internal */
+export const strims_chat_v1_ListEmoteLabelsRequest = ListEmoteLabelsRequest;
+/* @internal */
+export type strims_chat_v1_ListEmoteLabelsRequest = ListEmoteLabelsRequest;
+/* @internal */
+export type strims_chat_v1_IListEmoteLabelsRequest = IListEmoteLabelsRequest;
+/* @internal */
+export const strims_chat_v1_ListEmoteLabelsResponse = ListEmoteLabelsResponse;
+/* @internal */
+export type strims_chat_v1_ListEmoteLabelsResponse = ListEmoteLabelsResponse;
+/* @internal */
+export type strims_chat_v1_IListEmoteLabelsResponse = IListEmoteLabelsResponse;
 /* @internal */
 export const strims_chat_v1_OpenClientRequest = OpenClientRequest;
 /* @internal */

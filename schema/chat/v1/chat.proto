@@ -13,6 +13,7 @@ import "type/key.proto";
 import "type/image.proto";
 import "network/v1/directory/directory.proto";
 import "dao/v1/dao.proto";
+import "google/protobuf/wrappers.proto";
 
 message ServerEvent {
   oneof body {
@@ -106,6 +107,8 @@ message Emote {
   repeated EmoteImage images = 4;
   repeated EmoteEffect effects = 5;
   EmoteContributor contributor = 6;
+  repeated string labels = 7;
+  bool enable = 8;
 }
 
 message Modifier {
@@ -356,6 +359,8 @@ message CreateEmoteRequest {
   string css = 4;
   repeated EmoteEffect effects = 5;
   EmoteContributor contributor = 6;
+  repeated string labels = 7;
+  bool enable = 8;
 }
 message CreateEmoteResponse {
   Emote emote = 1;
@@ -368,6 +373,8 @@ message UpdateEmoteRequest {
   string css = 5;
   repeated EmoteEffect effects = 6;
   EmoteContributor contributor = 7;
+  repeated string labels = 8;
+  bool enable = 9;
 }
 message UpdateEmoteResponse {
   Emote emote = 1;
@@ -396,6 +403,14 @@ message ListEmotesRequest {
 message ListEmotesResponse {
   repeated Emote emotes = 1;
 }
+message UpdateEmotesRequest {
+  uint64 server_id = 1;
+  repeated uint64 ids = 2;
+  repeated string add_labels = 3;
+  repeated string remove_labels = 4;
+  google.protobuf.BoolValue enable = 5;
+}
+message UpdateEmotesResponse {}
 
 message CreateModifierRequest {
   uint64 server_id = 1;
@@ -484,6 +499,13 @@ message SyncAssetsRequest {
 message SyncAssetsResponse {
   uint64 version = 1;
   uint32 update_size = 2;
+}
+
+message ListEmoteLabelsRequest {
+  uint64 server_id = 1;
+}
+message ListEmoteLabelsResponse {
+  repeated string Labels = 1;
 }
 
 message OpenClientRequest {
@@ -658,6 +680,8 @@ service ChatServerFrontend {
   rpc DeleteEmote(DeleteEmoteRequest) returns (DeleteEmoteResponse);
   rpc GetEmote(GetEmoteRequest) returns (GetEmoteResponse);
   rpc ListEmotes(ListEmotesRequest) returns (ListEmotesResponse);
+  rpc UpdateEmotes(UpdateEmotesRequest) returns (UpdateEmotesResponse);
+  rpc ListEmoteLabels(ListEmoteLabelsRequest) returns (ListEmoteLabelsResponse);
 
   rpc CreateModifier(CreateModifierRequest) returns (CreateModifierResponse);
   rpc UpdateModifier(UpdateModifierRequest) returns (UpdateModifierResponse);

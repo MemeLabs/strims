@@ -112,6 +112,18 @@ func upgrade(s Store, tx kv.RWTx, v uint32) error {
 			return nil
 		})
 		fallthrough
+	case 5:
+		emotes, err := ChatEmotes.GetAll(tx)
+		if err != nil {
+			return err
+		}
+		for _, e := range emotes {
+			e.Enable = true
+			if err := ChatEmotes.Update(tx, e); err != nil {
+				return err
+			}
+		}
+		fallthrough
 	default:
 		return nil
 	}

@@ -40,6 +40,12 @@ import {
   strims_chat_v1_IListEmotesRequest,
   strims_chat_v1_ListEmotesRequest,
   strims_chat_v1_ListEmotesResponse,
+  strims_chat_v1_IUpdateEmotesRequest,
+  strims_chat_v1_UpdateEmotesRequest,
+  strims_chat_v1_UpdateEmotesResponse,
+  strims_chat_v1_IListEmoteLabelsRequest,
+  strims_chat_v1_ListEmoteLabelsRequest,
+  strims_chat_v1_ListEmoteLabelsResponse,
   strims_chat_v1_ICreateModifierRequest,
   strims_chat_v1_CreateModifierRequest,
   strims_chat_v1_CreateModifierResponse,
@@ -157,6 +163,8 @@ export interface ChatServerFrontendService {
   deleteEmote(req: strims_chat_v1_DeleteEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteEmoteResponse> | strims_chat_v1_DeleteEmoteResponse;
   getEmote(req: strims_chat_v1_GetEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetEmoteResponse> | strims_chat_v1_GetEmoteResponse;
   listEmotes(req: strims_chat_v1_ListEmotesRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListEmotesResponse> | strims_chat_v1_ListEmotesResponse;
+  updateEmotes(req: strims_chat_v1_UpdateEmotesRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateEmotesResponse> | strims_chat_v1_UpdateEmotesResponse;
+  listEmoteLabels(req: strims_chat_v1_ListEmoteLabelsRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListEmoteLabelsResponse> | strims_chat_v1_ListEmoteLabelsResponse;
   createModifier(req: strims_chat_v1_CreateModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_CreateModifierResponse> | strims_chat_v1_CreateModifierResponse;
   updateModifier(req: strims_chat_v1_UpdateModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateModifierResponse> | strims_chat_v1_UpdateModifierResponse;
   deleteModifier(req: strims_chat_v1_DeleteModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteModifierResponse> | strims_chat_v1_DeleteModifierResponse;
@@ -183,6 +191,8 @@ export class UnimplementedChatServerFrontendService implements ChatServerFronten
   deleteEmote(req: strims_chat_v1_DeleteEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteEmoteResponse> | strims_chat_v1_DeleteEmoteResponse { throw new Error("not implemented"); }
   getEmote(req: strims_chat_v1_GetEmoteRequest, call: strims_rpc_Call): Promise<strims_chat_v1_GetEmoteResponse> | strims_chat_v1_GetEmoteResponse { throw new Error("not implemented"); }
   listEmotes(req: strims_chat_v1_ListEmotesRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListEmotesResponse> | strims_chat_v1_ListEmotesResponse { throw new Error("not implemented"); }
+  updateEmotes(req: strims_chat_v1_UpdateEmotesRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateEmotesResponse> | strims_chat_v1_UpdateEmotesResponse { throw new Error("not implemented"); }
+  listEmoteLabels(req: strims_chat_v1_ListEmoteLabelsRequest, call: strims_rpc_Call): Promise<strims_chat_v1_ListEmoteLabelsResponse> | strims_chat_v1_ListEmoteLabelsResponse { throw new Error("not implemented"); }
   createModifier(req: strims_chat_v1_CreateModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_CreateModifierResponse> | strims_chat_v1_CreateModifierResponse { throw new Error("not implemented"); }
   updateModifier(req: strims_chat_v1_UpdateModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_UpdateModifierResponse> | strims_chat_v1_UpdateModifierResponse { throw new Error("not implemented"); }
   deleteModifier(req: strims_chat_v1_DeleteModifierRequest, call: strims_rpc_Call): Promise<strims_chat_v1_DeleteModifierResponse> | strims_chat_v1_DeleteModifierResponse { throw new Error("not implemented"); }
@@ -209,6 +219,8 @@ export const registerChatServerFrontendService = (host: strims_rpc_Service, serv
   host.registerMethod<strims_chat_v1_DeleteEmoteRequest, strims_chat_v1_DeleteEmoteResponse>("strims.chat.v1.ChatServerFrontend.DeleteEmote", service.deleteEmote.bind(service), strims_chat_v1_DeleteEmoteRequest);
   host.registerMethod<strims_chat_v1_GetEmoteRequest, strims_chat_v1_GetEmoteResponse>("strims.chat.v1.ChatServerFrontend.GetEmote", service.getEmote.bind(service), strims_chat_v1_GetEmoteRequest);
   host.registerMethod<strims_chat_v1_ListEmotesRequest, strims_chat_v1_ListEmotesResponse>("strims.chat.v1.ChatServerFrontend.ListEmotes", service.listEmotes.bind(service), strims_chat_v1_ListEmotesRequest);
+  host.registerMethod<strims_chat_v1_UpdateEmotesRequest, strims_chat_v1_UpdateEmotesResponse>("strims.chat.v1.ChatServerFrontend.UpdateEmotes", service.updateEmotes.bind(service), strims_chat_v1_UpdateEmotesRequest);
+  host.registerMethod<strims_chat_v1_ListEmoteLabelsRequest, strims_chat_v1_ListEmoteLabelsResponse>("strims.chat.v1.ChatServerFrontend.ListEmoteLabels", service.listEmoteLabels.bind(service), strims_chat_v1_ListEmoteLabelsRequest);
   host.registerMethod<strims_chat_v1_CreateModifierRequest, strims_chat_v1_CreateModifierResponse>("strims.chat.v1.ChatServerFrontend.CreateModifier", service.createModifier.bind(service), strims_chat_v1_CreateModifierRequest);
   host.registerMethod<strims_chat_v1_UpdateModifierRequest, strims_chat_v1_UpdateModifierResponse>("strims.chat.v1.ChatServerFrontend.UpdateModifier", service.updateModifier.bind(service), strims_chat_v1_UpdateModifierRequest);
   host.registerMethod<strims_chat_v1_DeleteModifierRequest, strims_chat_v1_DeleteModifierResponse>("strims.chat.v1.ChatServerFrontend.DeleteModifier", service.deleteModifier.bind(service), strims_chat_v1_DeleteModifierRequest);
@@ -271,6 +283,14 @@ export class ChatServerFrontendClient {
 
   public listEmotes(req?: strims_chat_v1_IListEmotesRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_ListEmotesResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.ListEmotes", new strims_chat_v1_ListEmotesRequest(req)), strims_chat_v1_ListEmotesResponse, opts);
+  }
+
+  public updateEmotes(req?: strims_chat_v1_IUpdateEmotesRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_UpdateEmotesResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.UpdateEmotes", new strims_chat_v1_UpdateEmotesRequest(req)), strims_chat_v1_UpdateEmotesResponse, opts);
+  }
+
+  public listEmoteLabels(req?: strims_chat_v1_IListEmoteLabelsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_ListEmoteLabelsResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatServerFrontend.ListEmoteLabels", new strims_chat_v1_ListEmoteLabelsRequest(req)), strims_chat_v1_ListEmoteLabelsResponse, opts);
   }
 
   public createModifier(req?: strims_chat_v1_ICreateModifierRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_chat_v1_CreateModifierResponse> {

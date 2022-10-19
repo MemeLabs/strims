@@ -20,6 +20,8 @@ func RegisterChatServerFrontendService(host rpc.ServiceRegistry, service ChatSer
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteEmote", service.DeleteEmote)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetEmote", service.GetEmote)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListEmotes", service.ListEmotes)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateEmotes", service.UpdateEmotes)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListEmoteLabels", service.ListEmoteLabels)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateModifier", service.CreateModifier)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateModifier", service.UpdateModifier)
 	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteModifier", service.DeleteModifier)
@@ -83,6 +85,14 @@ type ChatServerFrontendService interface {
 		ctx context.Context,
 		req *ListEmotesRequest,
 	) (*ListEmotesResponse, error)
+	UpdateEmotes(
+		ctx context.Context,
+		req *UpdateEmotesRequest,
+	) (*UpdateEmotesResponse, error)
+	ListEmoteLabels(
+		ctx context.Context,
+		req *ListEmoteLabelsRequest,
+	) (*ListEmoteLabelsResponse, error)
 	CreateModifier(
 		ctx context.Context,
 		req *CreateModifierRequest,
@@ -213,6 +223,20 @@ func (s *UnimplementedChatServerFrontendService) ListEmotes(
 	ctx context.Context,
 	req *ListEmotesRequest,
 ) (*ListEmotesResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) UpdateEmotes(
+	ctx context.Context,
+	req *UpdateEmotesRequest,
+) (*UpdateEmotesResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedChatServerFrontendService) ListEmoteLabels(
+	ctx context.Context,
+	req *ListEmoteLabelsRequest,
+) (*ListEmoteLabelsResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -411,6 +435,24 @@ func (c *ChatServerFrontendClient) ListEmotes(
 	res *ListEmotesResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListEmotes", req, res)
+}
+
+// UpdateEmotes ...
+func (c *ChatServerFrontendClient) UpdateEmotes(
+	ctx context.Context,
+	req *UpdateEmotesRequest,
+	res *UpdateEmotesResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateEmotes", req, res)
+}
+
+// ListEmoteLabels ...
+func (c *ChatServerFrontendClient) ListEmoteLabels(
+	ctx context.Context,
+	req *ListEmoteLabelsRequest,
+	res *ListEmoteLabelsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListEmoteLabels", req, res)
 }
 
 // CreateModifier ...
