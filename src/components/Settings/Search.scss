@@ -1,0 +1,29 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.settings_search {
+  display: flex;
+  flex-direction: row;
+  border-radius: var(--border-radius-small);
+  overflow: hidden;
+  align-items: center;
+  padding: 0.4rem;
+  border: 1px solid var(--color-opac-w-3);
+  background-color: var(--color-background-input);
+
+  &__input {
+    color: var(--color-text-input);
+    background: transparent;
+    display: flex;
+    flex: 1;
+  }
+
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1rem;
+    width: 1rem;
+    color: var(--color-icon-input);
+  }
+}
