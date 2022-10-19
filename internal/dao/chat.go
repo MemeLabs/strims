@@ -397,6 +397,8 @@ func NewChatEmote(
 	images []*chatv1.EmoteImage,
 	effects []*chatv1.EmoteEffect,
 	contributor *chatv1.EmoteContributor,
+	labels []string,
+	enable bool,
 ) (*chatv1.Emote, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -410,6 +412,8 @@ func NewChatEmote(
 		Images:      images,
 		Effects:     effects,
 		Contributor: contributor,
+		Labels:      labels,
+		Enable:      enable,
 	}
 	return v, nil
 }

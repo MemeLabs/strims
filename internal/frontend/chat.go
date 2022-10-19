@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -19,6 +20,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/chanutil"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/set"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -38,6 +40,9 @@ func init() {
 
 // chatService ...
 type chatService struct {
+	chatv1.UnimplementedChatFrontendService
+	chatv1.UnimplementedChatServerFrontendService
+
 	app    app.Control
 	store  dao.Store
 	logger *zap.Logger
@@ -134,6 +139,8 @@ func (s *chatService) CreateEmote(ctx context.Context, req *chatv1.CreateEmoteRe
 		req.Images,
 		req.Effects,
 		req.Contributor,
+		req.Labels,
+		req.Enable,
 	)
 	if err != nil {
 		return nil, err
@@ -151,6 +158,8 @@ func (s *chatService) UpdateEmote(ctx context.Context, req *chatv1.UpdateEmoteRe
 		v.Images = req.Images
 		v.Contributor = req.Contributor
 		v.Effects = req.Effects
+		v.Labels = req.Labels
+		v.Enable = req.Enable
 		return nil
 	})
 	if err != nil {
@@ -197,6 +206,8 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 			case chatv1.ListEmotesRequest_PART_META:
 				r.Name = e.Name
 				r.Contributor = e.Contributor
+				r.Labels = e.Labels
+				r.Enable = e.Enable
 			case chatv1.ListEmotesRequest_PART_ASSETS:
 				r.Images = e.Images
 				r.Effects = e.Effects
@@ -207,6 +218,54 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 		}
 	}
 	return &chatv1.ListEmotesResponse{Emotes: res}, nil
+}
+
+// UpdateEmotes ...
+func (s *chatService) UpdateEmotes(ctx context.Context, req *chatv1.UpdateEmotesRequest) (*chatv1.UpdateEmotesResponse, error) {
+	err := s.store.Update(func(tx kv.RWTx) error {
+		for _, id := range req.Ids {
+			_, err := dao.ChatEmotes.Transform(tx, id, func(v *chatv1.Emote) error {
+				labels := set.NewFromSlice(v.Labels)
+				for _, l := range req.AddLabels {
+					labels.Insert(l)
+				}
+				for _, l := range req.RemoveLabels {
+					labels.Remove(l)
+				}
+				v.Labels = labels.Slice()
+				sort.Strings(v.Labels)
+
+				if req.Enable != nil {
+					v.Enable = req.Enable.Value
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.UpdateEmotesResponse{}, nil
+}
+
+// ListEmoteLabels ...
+func (s *chatService) ListEmoteLabels(ctx context.Context, req *chatv1.ListEmoteLabelsRequest) (*chatv1.ListEmoteLabelsResponse, error) {
+	emotes, err := dao.ChatEmotesByServer.GetAllByRefID(s.store, req.ServerId)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := set.New[string](len(emotes))
+	for _, e := range emotes {
+		for _, l := range e.Labels {
+			labels.Insert(l)
+		}
+	}
+	return &chatv1.ListEmoteLabelsResponse{Labels: labels.Slice()}, nil
 }
 
 // CreateModifier ...
