@@ -5,6 +5,7 @@ package chat
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/MemeLabs/strims/internal/dao"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
@@ -23,6 +24,7 @@ func newAssetPublisher(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *ass
 type assetPublisher struct {
 	logger      *zap.Logger
 	eventWriter *protoutil.ChunkStreamWriter
+	mu          sync.Mutex
 	checksums   map[uint64]uint32
 	size        int
 }
@@ -35,6 +37,9 @@ func (s *assetPublisher) Sync(
 	modifiers []*chatv1.Modifier,
 	tags []*chatv1.Tag,
 ) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if unifiedUpdate {
 		s.size = 0
 		s.checksums = map[uint64]uint32{}
@@ -51,11 +56,13 @@ func (s *assetPublisher) Sync(
 	}
 
 	for _, e := range emotes {
-		delete(removed, e.Id)
-		c := dao.CRC32Message(e)
-		if c != s.checksums[e.Id] {
-			s.checksums[e.Id] = c
-			b.Emotes = append(b.Emotes, e)
+		if e.Enable {
+			delete(removed, e.Id)
+			c := dao.CRC32Message(e)
+			if c != s.checksums[e.Id] {
+				s.checksums[e.Id] = c
+				b.Emotes = append(b.Emotes, e)
+			}
 		}
 	}
 
