@@ -123,8 +123,13 @@ const create = <C extends Client>(): Api<C> => {
         });
       }
 
+      let callArgs = Array.from(args);
+      if (callArgs.length === 0) {
+        callArgs = options.args || [];
+      }
+
       // eslint-disable-next-line
-      const value = (method as any).apply(service, args) as MethodResultType<C[S][M]>;
+      const value = (method as any).apply(service, callArgs) as MethodResultType<C[S][M]>;
       if (value instanceof Promise) {
         setState((prev) => ({
           ...prev,
