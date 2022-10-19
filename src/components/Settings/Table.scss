@@ -5,17 +5,15 @@
   display: table;
   width: 100%;
   max-width: 1000px;
-  // border-collapse: collapse;
   border-spacing: 0;
 
   tr {
     display: table-row;
   }
 
-  td,
+  &__cell,
   th {
     text-align: left;
-    display: table-cell;
     background: var(--color-background-table);
     border-bottom: 1px solid var(--color-opac-w-2);
     padding: 10px;
@@ -47,10 +45,12 @@
   tbody tr:last-child {
     border-bottom: none;
 
-    td:first-child {
+    .thing_table__cell:first-child,
+    th:first-child {
       border-bottom-left-radius: var(--border-radius-small);
     }
-    td:last-child {
+    .thing_table__cell:last-child,
+    th:last-child {
       border-bottom-right-radius: var(--border-radius-small);
     }
   }
@@ -90,7 +90,10 @@
     }
 
     &__controls {
+      display: flex;
       justify-content: flex-end;
+      align-items: center;
+      gap: 0.4rem;
     }
   }
 
@@ -199,4 +202,8 @@
     width: 800px;
     z-index: 999;
   }
+}
+
+.thing_table_checkbox_cell {
+  width: 10px;
 }

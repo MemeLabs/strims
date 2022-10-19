@@ -13,6 +13,7 @@ import {
   MenuItem,
   MenuLink,
   Table,
+  TableCell,
   TableMenu,
   TableTitleBar,
 } from "../../../components/Settings/Table";
@@ -49,12 +50,14 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
 
     return (
       <tr key={network.id.toString()}>
-        <td>
+        <TableCell>
           <Link to={network.id.toString()}>
             {certificateRoot(network.certificate).subject || "unknown"}
           </Link>
-        </td>
-        <td>{new Date(Number(network.certificate.notAfter) * 1000).toLocaleString()}</td>
+        </TableCell>
+        <TableCell>
+          {new Date(Number(network.certificate.notAfter) * 1000).toLocaleString()}
+        </TableCell>
         <MenuCell>
           <MenuItem label="Delete" onClick={handleDelete} />
           <MenuItem label="Create Invite" onClick={handleCreateInvite} />

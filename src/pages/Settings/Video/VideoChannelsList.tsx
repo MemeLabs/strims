@@ -38,11 +38,11 @@ const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps
 
   return (
     <tr>
-      <td>
+      <TableCell>
         <Link to={`/settings/video/channels/${channel.id}`}>
           {channel.directoryListingSnippet?.title}
         </Link>
-      </td>
+      </TableCell>
       <TableCell truncate>{channelURLRes.value?.url}</TableCell>
       <MenuCell>
         <MenuItem label="Copy Stream Key" onClick={handleCopyKey} />

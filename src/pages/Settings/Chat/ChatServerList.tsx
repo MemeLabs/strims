@@ -12,6 +12,7 @@ import {
   MenuItem,
   MenuLink,
   Table,
+  TableCell,
   TableMenu,
   TableTitleBar,
 } from "../../../components/Settings/Table";
@@ -36,9 +37,9 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
 
     return (
       <tr key={server.id.toString()}>
-        <td>
+        <TableCell>
           <Link to={`/settings/chat-servers/${server.id}`}>{server.room.name || "no title"}</Link>
-        </td>
+        </TableCell>
         <MenuCell>
           <MenuItem label="Delete" onClick={handleDelete} />
         </MenuCell>

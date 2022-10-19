@@ -33,9 +33,9 @@ const AutoseedRuleTableItem = ({ rule, onDelete }: AutoseedRuleTableItemProps) =
 
   return (
     <tr>
-      <td>
+      <TableCell>
         <Link to={`/settings/autoseed/rules/${rule.id}`}>{rule.label}</Link>
-      </td>
+      </TableCell>
       <TableCell truncate>{base32Encode(rule.swarmId, "RFC4648", { padding: false })}</TableCell>
       <MenuCell>
         <MenuItem label="Delete" onClick={handleDelete} />

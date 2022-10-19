@@ -12,6 +12,7 @@ import {
   MenuItem,
   MenuLink,
   Table,
+  TableCell,
   TableMenu,
   TableTitleBar,
 } from "../../../components/Settings/Table";
@@ -37,11 +38,11 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
 
     return (
       <tr key={modifier.id.toString()}>
-        <td>
+        <TableCell>
           <Link to={`/settings/chat-servers/${serverId}/modifiers/${modifier.id}`}>
             {modifier.name}
           </Link>
-        </td>
+        </TableCell>
         <MenuCell>
           <MenuItem label="Delete" onClick={handleDelete} />
         </MenuCell>

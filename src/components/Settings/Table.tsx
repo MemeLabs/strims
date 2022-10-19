@@ -105,9 +105,9 @@ interface MenuCellProps {
 }
 
 export const MenuCell: React.FC<MenuCellProps> = ({ children }) => (
-  <td className="thing_table__row_menu">
+  <TableCell className="thing_table__row_menu">
     <Dropdown baseClassName="thing_table_item_dropdown" anchor={<BsThreeDots />} items={children} />
-  </td>
+  </TableCell>
 );
 
 export interface TableTitleBarProps {
@@ -130,15 +130,20 @@ export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, c
   </div>
 );
 
-export interface TableCellProps {
+export interface TableCellProps extends ComponentProps<"td"> {
   truncate?: boolean;
   children?: ReactNode;
 }
 
-export const TableCell: React.FC<TableCellProps> = ({ truncate, children }) => {
+export const TableCell: React.FC<TableCellProps> = ({
+  truncate,
+  children,
+  className,
+  ...props
+}) => {
   if (truncate) {
     return (
-      <td>
+      <td className={clsx("thing_table__cell", className)} {...props}>
         <div className="thing_table__truncate">
           <span className="thing_table__truncate__reference">{children}</span>
           <span className="thing_table__truncate__display">{children}</span>
@@ -147,7 +152,11 @@ export const TableCell: React.FC<TableCellProps> = ({ truncate, children }) => {
     );
   }
 
-  return <td>{children}</td>;
+  return (
+    <td className={clsx("thing_table__cell", className)} {...props}>
+      {children}
+    </td>
+  );
 };
 
 export interface TableMenuProps {
