@@ -1,8 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Base64 } from "js-base64";
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useTitle } from "react-use";
@@ -17,24 +16,18 @@ import {
   TableMenu,
   TableTitleBar,
 } from "../../../components/Settings/Table";
-import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
-import { useSession } from "../../../contexts/Session";
+import { useCall, useClient } from "../../../contexts/FrontendApi";
 import { certificateRoot } from "../../../lib/certificate";
 import PublishNetworkModal from "./PublishNetworkModal";
 
-interface ChatServerTableProps {
+interface NetworkTableProps {
   networks: Network[];
   onDelete: () => void;
 }
 
-const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete }) => {
-  const [{ error }, deleteChatServer] = useLazyCall("network", "delete", {
-    onComplete: onDelete,
-  });
+const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
   const client = useClient();
-  const [{ profile }] = useSession();
-
-  const [publishNetwork, setPublishNetwork] = React.useState<Network>();
+  const [publishNetwork, setPublishNetwork] = useState<Network>();
 
   if (!networks) {
     return null;
@@ -42,7 +35,10 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
 
   const rows = networks.map((network) => {
     const navigate = useNavigate();
-    const handleDelete = () => deleteChatServer({ id: network.id });
+    const handleDelete = async () => {
+      await client.network.delete({ id: network.id });
+      onDelete();
+    };
 
     const handleCreateInvite = () => navigate(`${network.id}/invite`);
 
@@ -88,7 +84,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ networks, onDelete })
   );
 };
 
-const ChatServerList: React.FC = () => {
+const NetworkList: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.network.title"));
 
@@ -97,9 +93,6 @@ const ChatServerList: React.FC = () => {
   if (loading) {
     return null;
   }
-  // if (!value?.networks.length) {
-  //   return <Navigate to="/settings/networks/new" replace />;
-  // }
   return (
     <>
       <TableTitleBar label="Networks">
@@ -108,9 +101,9 @@ const ChatServerList: React.FC = () => {
           <MenuLink label="Add invite code" to="/settings/networks/join" />
         </TableMenu>
       </TableTitleBar>
-      <ChatServerTable networks={value.networks} onDelete={() => getServers()} />
+      <NetworkTable networks={value.networks} onDelete={() => getServers()} />
     </>
   );
 };
 
-export default ChatServerList;
+export default NetworkList;

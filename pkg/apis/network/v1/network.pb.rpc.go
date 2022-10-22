@@ -19,6 +19,10 @@ func RegisterNetworkFrontendService(host rpc.ServiceRegistry, service NetworkFro
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.UpdateDisplayOrder", service.UpdateDisplayOrder)
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.UpdateAlias", service.UpdateAlias)
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.GetUIConfig", service.GetUIConfig)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.ListPeers", service.ListPeers)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.GrantPeerInvitation", service.GrantPeerInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.TogglePeerBan", service.TogglePeerBan)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", service.ResetPeerRenameCooldown)
 }
 
 // NetworkFrontendService ...
@@ -67,6 +71,22 @@ type NetworkFrontendService interface {
 		ctx context.Context,
 		req *GetUIConfigRequest,
 	) (*GetUIConfigResponse, error)
+	ListPeers(
+		ctx context.Context,
+		req *ListPeersRequest,
+	) (*ListPeersResponse, error)
+	GrantPeerInvitation(
+		ctx context.Context,
+		req *GrantPeerInvitationRequest,
+	) (*GrantPeerInvitationResponse, error)
+	TogglePeerBan(
+		ctx context.Context,
+		req *TogglePeerBanRequest,
+	) (*TogglePeerBanResponse, error)
+	ResetPeerRenameCooldown(
+		ctx context.Context,
+		req *ResetPeerRenameCooldownRequest,
+	) (*ResetPeerRenameCooldownResponse, error)
 }
 
 // NetworkFrontendService ...
@@ -146,6 +166,34 @@ func (s *UnimplementedNetworkFrontendService) GetUIConfig(
 	ctx context.Context,
 	req *GetUIConfigRequest,
 ) (*GetUIConfigResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) ListPeers(
+	ctx context.Context,
+	req *ListPeersRequest,
+) (*ListPeersResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) GrantPeerInvitation(
+	ctx context.Context,
+	req *GrantPeerInvitationRequest,
+) (*GrantPeerInvitationResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) TogglePeerBan(
+	ctx context.Context,
+	req *TogglePeerBanRequest,
+) (*TogglePeerBanResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) ResetPeerRenameCooldown(
+	ctx context.Context,
+	req *ResetPeerRenameCooldownRequest,
+) (*ResetPeerRenameCooldownResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -258,4 +306,40 @@ func (c *NetworkFrontendClient) GetUIConfig(
 	res *GetUIConfigResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.GetUIConfig", req, res)
+}
+
+// ListPeers ...
+func (c *NetworkFrontendClient) ListPeers(
+	ctx context.Context,
+	req *ListPeersRequest,
+	res *ListPeersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.ListPeers", req, res)
+}
+
+// GrantPeerInvitation ...
+func (c *NetworkFrontendClient) GrantPeerInvitation(
+	ctx context.Context,
+	req *GrantPeerInvitationRequest,
+	res *GrantPeerInvitationResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.GrantPeerInvitation", req, res)
+}
+
+// TogglePeerBan ...
+func (c *NetworkFrontendClient) TogglePeerBan(
+	ctx context.Context,
+	req *TogglePeerBanRequest,
+	res *TogglePeerBanResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.TogglePeerBan", req, res)
+}
+
+// ResetPeerRenameCooldown ...
+func (c *NetworkFrontendClient) ResetPeerRenameCooldown(
+	ctx context.Context,
+	req *ResetPeerRenameCooldownRequest,
+	res *ResetPeerRenameCooldownResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", req, res)
 }

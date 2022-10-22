@@ -13,6 +13,8 @@ enum ErrorCode {
   UNDEFINED = 0;
   UNKNOWN = 1;
 
-  CERTIFICATE_SUBJECT_IN_USE = 2;
-  // TODO: invalid/expired invite, inviter quota, etc...
+  ALIAS_IN_USE = 2;
+  ALIAS_CHANGE_COOLDOWN_VIOLATIED = 3;
+  INVITATION_QUOTA_EXCEEDED = 4;
+  INVITER_BANNED = 5;
 }

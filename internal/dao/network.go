@@ -4,7 +4,6 @@
 package dao
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/timeutil"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -41,6 +41,9 @@ const (
 	networkCertificateLogKeyNS
 	networkBootstrapClientClientOptionsNS
 	bootstrapConfigNS
+	networkAliasReservationNS
+	networkAliasReservationsByNetworkIDNS
+	networkAliasReservationsByAliasNS
 )
 
 var Networks = NewTable(
@@ -323,6 +326,14 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate, bootstrapClien
 	return invitation, nil
 }
 
+func CertificateChain(cert *certificate.Certificate) []*certificate.Certificate {
+	var chain []*certificate.Certificate
+	for ; cert != nil; cert = cert.GetParent() {
+		chain = append(chain, cert)
+	}
+	return chain
+}
+
 var CertificateLogs = NewTable[networkv1ca.CertificateLog](networkCertificateLogNS, nil)
 
 var CertificateLogsByNetwork = ManyToOne(
@@ -370,10 +381,7 @@ var CertificateLogsBySubject = NewUniqueIndex(
 	byteIdentity,
 	&UniqueIndexOptions[networkv1ca.CertificateLog, *networkv1ca.CertificateLog]{
 		OnConflict: func(s kv.RWStore, t *Table[networkv1ca.CertificateLog, *networkv1ca.CertificateLog], m, p *networkv1ca.CertificateLog) error {
-			if bytes.Equal(m.Certificate.Key, p.Certificate.Key) {
-				return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
-			}
-			return ErrCertificateSubjectInUse
+			return DeleteSecondaryIndex(s, networkCertificateLogSubjectNS, certificateLogSubjectKey(m), p.Id)
 		},
 	},
 )
@@ -581,7 +589,7 @@ var NetworkPeersByPublicKey = NewUniqueIndex(
 )
 
 // NewNetworkPeer ...
-func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
+func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, alias string, inviterPeerID uint64) (*networkv1.Peer, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
@@ -591,28 +599,50 @@ func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, inviterPe
 		Id:            id,
 		NetworkId:     networkID,
 		PublicKey:     publicKey,
+		Alias:         alias,
 		InviterPeerId: inviterPeerID,
+		InviteQuota:   3,
+		CreatedAt:     timeutil.Now().Unix(),
 	}, nil
 }
 
-func GetOrCreateNetworkPeer(s Store, networkID uint64, publicKey []byte, inviterPeerID uint64) (*networkv1.Peer, error) {
-	for retries := 0; retries < 2; retries++ {
-		p, err := NetworkPeersByPublicKey.Get(s, publicKey)
-		if err == nil || !errors.Is(err, kv.ErrRecordNotFound) {
-			return p, err
-		}
+var NetworkAliasReservations = NewTable[networkv1.AliasReservation](networkAliasReservationNS, nil)
 
-		p, err = NewNetworkPeer(s, networkID, publicKey, inviterPeerID)
-		if err != nil {
-			return nil, err
-		}
+var NetworkAliasReservationsByNetworkID = ManyToOne(
+	networkAliasReservationsByNetworkIDNS,
+	NetworkAliasReservations,
+	Networks,
+	(*networkv1.AliasReservation).GetNetworkId,
+	nil,
+)
 
-		err = NetworkPeers.Insert(s, p)
-		if err == nil {
-			return p, nil
-		} else if !errors.Is(err, ErrUniqueConstraintViolated) {
-			return nil, err
-		}
+func FormatNetworkAliasReservationAliasKey(networkID uint64, alias string) []byte {
+	b := make([]byte, 8, 8+len(alias))
+	binary.BigEndian.PutUint64(b, networkID)
+	return append(b, alias...)
+}
+
+var NetworkAliasReservationsByAlias = NewUniqueIndex(
+	networkAliasReservationsByAliasNS,
+	NetworkAliasReservations,
+	func(m *networkv1.AliasReservation) []byte {
+		return FormatNetworkAliasReservationAliasKey(m.NetworkId, m.Alias)
+	},
+	byteIdentity,
+	nil,
+)
+
+func NewNetworkAliasReservation(g IDGenerator, networkID uint64, alias string, peerKey []byte) (*networkv1.AliasReservation, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("unexpected error creating peer record")
+
+	return &networkv1.AliasReservation{
+		Id:            id,
+		NetworkId:     networkID,
+		Alias:         alias,
+		PeerKey:       peerKey,
+		ReservedUntil: timeutil.MaxTime.Unix(),
+	}, nil
 }

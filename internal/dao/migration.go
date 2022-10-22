@@ -7,7 +7,9 @@ import (
 
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -120,6 +122,51 @@ func upgrade(s Store, tx kv.RWTx, v uint32) error {
 		for _, e := range emotes {
 			e.Enable = true
 			if err := ChatEmotes.Update(tx, e); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 6:
+		type logPair struct {
+			first, last *networkv1ca.CertificateLog
+		}
+		peerLogs := hashmap.NewBytesTo[*logPair]()
+		ls, err := CertificateLogs.GetAll(tx)
+		if err != nil {
+			return err
+		}
+		for _, l := range ls {
+			prev, ok := peerLogs.Get(l.Certificate.Key)
+			if !ok {
+				peerLogs.Set(l.Certificate.Key, &logPair{l, l})
+			} else {
+				if prev.first.Certificate.NotBefore > l.Certificate.NotBefore {
+					prev.first = l
+				}
+				if prev.last.Certificate.NotAfter < l.Certificate.NotAfter {
+					prev.last = l
+				}
+			}
+		}
+		profile, err := Profile.Get(tx)
+		if err != nil {
+			return err
+		}
+		for it := peerLogs.Iterate(); it.Next(); {
+			l := it.Value().last
+			p, err := NewNetworkPeer(ProfileID.IDGenerator(tx), l.NetworkId, l.Certificate.Key, l.Certificate.Subject, profile.Id)
+			if err != nil {
+				return err
+			}
+			p.CreatedAt = int64(it.Value().first.Certificate.NotBefore)
+			if err := NetworkPeers.Insert(tx, p); err != nil {
+				return err
+			}
+			r, err := NewNetworkAliasReservation(ProfileID.IDGenerator(tx), l.NetworkId, l.Certificate.Subject, l.Certificate.Key)
+			if err != nil {
+				return err
+			}
+			if err := NetworkAliasReservations.Insert(tx, r); err != nil {
 				return err
 			}
 		}

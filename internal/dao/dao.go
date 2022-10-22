@@ -16,7 +16,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 )
 
-const CurrentVersion = 6
+const CurrentVersion = 7
 const MinCompatibleVersion = 5
 
 // IDGenerator ...

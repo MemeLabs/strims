@@ -37,6 +37,18 @@ import {
   strims_network_v1_IGetUIConfigRequest,
   strims_network_v1_GetUIConfigRequest,
   strims_network_v1_GetUIConfigResponse,
+  strims_network_v1_IListPeersRequest,
+  strims_network_v1_ListPeersRequest,
+  strims_network_v1_ListPeersResponse,
+  strims_network_v1_IGrantPeerInvitationRequest,
+  strims_network_v1_GrantPeerInvitationRequest,
+  strims_network_v1_GrantPeerInvitationResponse,
+  strims_network_v1_ITogglePeerBanRequest,
+  strims_network_v1_TogglePeerBanRequest,
+  strims_network_v1_TogglePeerBanResponse,
+  strims_network_v1_IResetPeerRenameCooldownRequest,
+  strims_network_v1_ResetPeerRenameCooldownRequest,
+  strims_network_v1_ResetPeerRenameCooldownResponse,
 } from "./network";
 
 export interface NetworkFrontendService {
@@ -51,6 +63,10 @@ export interface NetworkFrontendService {
   updateDisplayOrder(req: strims_network_v1_UpdateDisplayOrderRequest, call: strims_rpc_Call): Promise<strims_network_v1_UpdateDisplayOrderResponse> | strims_network_v1_UpdateDisplayOrderResponse;
   updateAlias(req: strims_network_v1_UpdateAliasRequest, call: strims_rpc_Call): Promise<strims_network_v1_UpdateAliasResponse> | strims_network_v1_UpdateAliasResponse;
   getUIConfig(req: strims_network_v1_GetUIConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_GetUIConfigResponse> | strims_network_v1_GetUIConfigResponse;
+  listPeers(req: strims_network_v1_ListPeersRequest, call: strims_rpc_Call): Promise<strims_network_v1_ListPeersResponse> | strims_network_v1_ListPeersResponse;
+  grantPeerInvitation(req: strims_network_v1_GrantPeerInvitationRequest, call: strims_rpc_Call): Promise<strims_network_v1_GrantPeerInvitationResponse> | strims_network_v1_GrantPeerInvitationResponse;
+  togglePeerBan(req: strims_network_v1_TogglePeerBanRequest, call: strims_rpc_Call): Promise<strims_network_v1_TogglePeerBanResponse> | strims_network_v1_TogglePeerBanResponse;
+  resetPeerRenameCooldown(req: strims_network_v1_ResetPeerRenameCooldownRequest, call: strims_rpc_Call): Promise<strims_network_v1_ResetPeerRenameCooldownResponse> | strims_network_v1_ResetPeerRenameCooldownResponse;
 }
 
 export class UnimplementedNetworkFrontendService implements NetworkFrontendService {
@@ -65,6 +81,10 @@ export class UnimplementedNetworkFrontendService implements NetworkFrontendServi
   updateDisplayOrder(req: strims_network_v1_UpdateDisplayOrderRequest, call: strims_rpc_Call): Promise<strims_network_v1_UpdateDisplayOrderResponse> | strims_network_v1_UpdateDisplayOrderResponse { throw new Error("not implemented"); }
   updateAlias(req: strims_network_v1_UpdateAliasRequest, call: strims_rpc_Call): Promise<strims_network_v1_UpdateAliasResponse> | strims_network_v1_UpdateAliasResponse { throw new Error("not implemented"); }
   getUIConfig(req: strims_network_v1_GetUIConfigRequest, call: strims_rpc_Call): Promise<strims_network_v1_GetUIConfigResponse> | strims_network_v1_GetUIConfigResponse { throw new Error("not implemented"); }
+  listPeers(req: strims_network_v1_ListPeersRequest, call: strims_rpc_Call): Promise<strims_network_v1_ListPeersResponse> | strims_network_v1_ListPeersResponse { throw new Error("not implemented"); }
+  grantPeerInvitation(req: strims_network_v1_GrantPeerInvitationRequest, call: strims_rpc_Call): Promise<strims_network_v1_GrantPeerInvitationResponse> | strims_network_v1_GrantPeerInvitationResponse { throw new Error("not implemented"); }
+  togglePeerBan(req: strims_network_v1_TogglePeerBanRequest, call: strims_rpc_Call): Promise<strims_network_v1_TogglePeerBanResponse> | strims_network_v1_TogglePeerBanResponse { throw new Error("not implemented"); }
+  resetPeerRenameCooldown(req: strims_network_v1_ResetPeerRenameCooldownRequest, call: strims_rpc_Call): Promise<strims_network_v1_ResetPeerRenameCooldownResponse> | strims_network_v1_ResetPeerRenameCooldownResponse { throw new Error("not implemented"); }
 }
 
 export const registerNetworkFrontendService = (host: strims_rpc_Service, service: NetworkFrontendService): void => {
@@ -79,6 +99,10 @@ export const registerNetworkFrontendService = (host: strims_rpc_Service, service
   host.registerMethod<strims_network_v1_UpdateDisplayOrderRequest, strims_network_v1_UpdateDisplayOrderResponse>("strims.network.v1.NetworkFrontend.UpdateDisplayOrder", service.updateDisplayOrder.bind(service), strims_network_v1_UpdateDisplayOrderRequest);
   host.registerMethod<strims_network_v1_UpdateAliasRequest, strims_network_v1_UpdateAliasResponse>("strims.network.v1.NetworkFrontend.UpdateAlias", service.updateAlias.bind(service), strims_network_v1_UpdateAliasRequest);
   host.registerMethod<strims_network_v1_GetUIConfigRequest, strims_network_v1_GetUIConfigResponse>("strims.network.v1.NetworkFrontend.GetUIConfig", service.getUIConfig.bind(service), strims_network_v1_GetUIConfigRequest);
+  host.registerMethod<strims_network_v1_ListPeersRequest, strims_network_v1_ListPeersResponse>("strims.network.v1.NetworkFrontend.ListPeers", service.listPeers.bind(service), strims_network_v1_ListPeersRequest);
+  host.registerMethod<strims_network_v1_GrantPeerInvitationRequest, strims_network_v1_GrantPeerInvitationResponse>("strims.network.v1.NetworkFrontend.GrantPeerInvitation", service.grantPeerInvitation.bind(service), strims_network_v1_GrantPeerInvitationRequest);
+  host.registerMethod<strims_network_v1_TogglePeerBanRequest, strims_network_v1_TogglePeerBanResponse>("strims.network.v1.NetworkFrontend.TogglePeerBan", service.togglePeerBan.bind(service), strims_network_v1_TogglePeerBanRequest);
+  host.registerMethod<strims_network_v1_ResetPeerRenameCooldownRequest, strims_network_v1_ResetPeerRenameCooldownResponse>("strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", service.resetPeerRenameCooldown.bind(service), strims_network_v1_ResetPeerRenameCooldownRequest);
 }
 
 export class NetworkFrontendClient {
@@ -126,6 +150,22 @@ export class NetworkFrontendClient {
 
   public getUIConfig(req?: strims_network_v1_IGetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_GetUIConfigResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkFrontend.GetUIConfig", new strims_network_v1_GetUIConfigRequest(req)), strims_network_v1_GetUIConfigResponse, opts);
+  }
+
+  public listPeers(req?: strims_network_v1_IListPeersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_ListPeersResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkFrontend.ListPeers", new strims_network_v1_ListPeersRequest(req)), strims_network_v1_ListPeersResponse, opts);
+  }
+
+  public grantPeerInvitation(req?: strims_network_v1_IGrantPeerInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_GrantPeerInvitationResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkFrontend.GrantPeerInvitation", new strims_network_v1_GrantPeerInvitationRequest(req)), strims_network_v1_GrantPeerInvitationResponse, opts);
+  }
+
+  public togglePeerBan(req?: strims_network_v1_ITogglePeerBanRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_TogglePeerBanResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkFrontend.TogglePeerBan", new strims_network_v1_TogglePeerBanRequest(req)), strims_network_v1_TogglePeerBanResponse, opts);
+  }
+
+  public resetPeerRenameCooldown(req?: strims_network_v1_IResetPeerRenameCooldownRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_network_v1_ResetPeerRenameCooldownResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", new strims_network_v1_ResetPeerRenameCooldownRequest(req)), strims_network_v1_ResetPeerRenameCooldownResponse, opts);
   }
 }
 

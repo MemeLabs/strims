@@ -88,6 +88,19 @@ message Peer {
   bytes public_key = 3;
   uint64 inviter_peer_id = 4;
   uint32 invite_quota = 5;
+  int64 created_at = 6;
+  bool is_admin = 7;
+  bool is_banned = 8;
+  string alias = 9;
+  int64 alias_changed_at = 10;
+}
+
+message AliasReservation {
+  uint64 id = 1;
+  uint64 network_id = 2;
+  string alias = 3;
+  bytes peer_key = 4;
+  int64 reserved_until = 5;
 }
 
 message CreateInvitationRequest {
@@ -179,6 +192,36 @@ message GetUIConfigResponse {
   UIConfig config = 1;
 }
 
+message ListPeersRequest {
+  uint64 network_id = 1;
+}
+message ListPeersResponse {
+  repeated Peer peers = 1;
+}
+
+message GrantPeerInvitationRequest {
+  uint64 id = 1;
+  uint32 count = 2;
+}
+message GrantPeerInvitationResponse {
+  Peer peer = 1;
+}
+
+message TogglePeerBanRequest {
+  uint64 id = 1;
+  bool value = 2;
+}
+message TogglePeerBanResponse {
+  Peer peer = 1;
+}
+
+message ResetPeerRenameCooldownRequest {
+  uint64 id = 1;
+}
+message ResetPeerRenameCooldownResponse {
+  Peer peer = 1;
+}
+
 service NetworkFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse);
@@ -191,4 +234,8 @@ service NetworkFrontend {
   rpc UpdateDisplayOrder(UpdateDisplayOrderRequest) returns (UpdateDisplayOrderResponse);
   rpc UpdateAlias(UpdateAliasRequest) returns (UpdateAliasResponse);
   rpc GetUIConfig(GetUIConfigRequest) returns (GetUIConfigResponse);
+  rpc ListPeers(ListPeersRequest) returns (ListPeersResponse);
+  rpc GrantPeerInvitation(GrantPeerInvitationRequest) returns (GrantPeerInvitationResponse);
+  rpc TogglePeerBan(TogglePeerBanRequest) returns (TogglePeerBanResponse);
+  rpc ResetPeerRenameCooldown(ResetPeerRenameCooldownRequest) returns (ResetPeerRenameCooldownResponse);
 }

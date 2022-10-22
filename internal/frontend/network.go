@@ -251,3 +251,45 @@ func (s *networkService) GetUIConfig(ctx context.Context, r *networkv1.GetUIConf
 	}
 	return &networkv1.GetUIConfigResponse{Config: c}, nil
 }
+
+// ListPeers ...
+func (s *networkService) ListPeers(ctx context.Context, r *networkv1.ListPeersRequest) (*networkv1.ListPeersResponse, error) {
+	ls, err := dao.NetworkPeersByNetwork.GetAllByRefID(s.store, r.NetworkId)
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.ListPeersResponse{Peers: ls}, nil
+}
+
+func (s *networkService) GrantPeerInvitation(ctx context.Context, r *networkv1.GrantPeerInvitationRequest) (*networkv1.GrantPeerInvitationResponse, error) {
+	p, err := dao.NetworkPeers.Transform(s.store, r.Id, func(p *networkv1.Peer) error {
+		p.InviteQuota += r.Count
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.GrantPeerInvitationResponse{Peer: p}, nil
+}
+
+func (s *networkService) TogglePeerBan(ctx context.Context, r *networkv1.TogglePeerBanRequest) (*networkv1.TogglePeerBanResponse, error) {
+	p, err := dao.NetworkPeers.Transform(s.store, r.Id, func(p *networkv1.Peer) error {
+		p.IsBanned = r.Value
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.TogglePeerBanResponse{Peer: p}, nil
+}
+
+func (s *networkService) ResetPeerRenameCooldown(ctx context.Context, r *networkv1.ResetPeerRenameCooldownRequest) (*networkv1.ResetPeerRenameCooldownResponse, error) {
+	p, err := dao.NetworkPeers.Transform(s.store, r.Id, func(p *networkv1.Peer) error {
+		p.AliasChangedAt = 0
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.ResetPeerRenameCooldownResponse{Peer: p}, nil
+}

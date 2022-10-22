@@ -524,6 +524,11 @@ export type IPeer = {
   publicKey?: Uint8Array;
   inviterPeerId?: bigint;
   inviteQuota?: number;
+  createdAt?: bigint;
+  isAdmin?: boolean;
+  isBanned?: boolean;
+  alias?: string;
+  aliasChangedAt?: bigint;
 }
 
 export class Peer {
@@ -532,6 +537,11 @@ export class Peer {
   publicKey: Uint8Array;
   inviterPeerId: bigint;
   inviteQuota: number;
+  createdAt: bigint;
+  isAdmin: boolean;
+  isBanned: boolean;
+  alias: string;
+  aliasChangedAt: bigint;
 
   constructor(v?: IPeer) {
     this.id = v?.id || BigInt(0);
@@ -539,6 +549,11 @@ export class Peer {
     this.publicKey = v?.publicKey || new Uint8Array();
     this.inviterPeerId = v?.inviterPeerId || BigInt(0);
     this.inviteQuota = v?.inviteQuota || 0;
+    this.createdAt = v?.createdAt || BigInt(0);
+    this.isAdmin = v?.isAdmin || false;
+    this.isBanned = v?.isBanned || false;
+    this.alias = v?.alias || "";
+    this.aliasChangedAt = v?.aliasChangedAt || BigInt(0);
   }
 
   static encode(m: Peer, w?: Writer): Writer {
@@ -548,6 +563,11 @@ export class Peer {
     if (m.publicKey.length) w.uint32(26).bytes(m.publicKey);
     if (m.inviterPeerId) w.uint32(32).uint64(m.inviterPeerId);
     if (m.inviteQuota) w.uint32(40).uint32(m.inviteQuota);
+    if (m.createdAt) w.uint32(48).int64(m.createdAt);
+    if (m.isAdmin) w.uint32(56).bool(m.isAdmin);
+    if (m.isBanned) w.uint32(64).bool(m.isBanned);
+    if (m.alias.length) w.uint32(74).string(m.alias);
+    if (m.aliasChangedAt) w.uint32(80).int64(m.aliasChangedAt);
     return w;
   }
 
@@ -572,6 +592,85 @@ export class Peer {
         break;
         case 5:
         m.inviteQuota = r.uint32();
+        break;
+        case 6:
+        m.createdAt = r.int64();
+        break;
+        case 7:
+        m.isAdmin = r.bool();
+        break;
+        case 8:
+        m.isBanned = r.bool();
+        break;
+        case 9:
+        m.alias = r.string();
+        break;
+        case 10:
+        m.aliasChangedAt = r.int64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IAliasReservation = {
+  id?: bigint;
+  networkId?: bigint;
+  alias?: string;
+  peerKey?: Uint8Array;
+  reservedUntil?: bigint;
+}
+
+export class AliasReservation {
+  id: bigint;
+  networkId: bigint;
+  alias: string;
+  peerKey: Uint8Array;
+  reservedUntil: bigint;
+
+  constructor(v?: IAliasReservation) {
+    this.id = v?.id || BigInt(0);
+    this.networkId = v?.networkId || BigInt(0);
+    this.alias = v?.alias || "";
+    this.peerKey = v?.peerKey || new Uint8Array();
+    this.reservedUntil = v?.reservedUntil || BigInt(0);
+  }
+
+  static encode(m: AliasReservation, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.networkId) w.uint32(16).uint64(m.networkId);
+    if (m.alias.length) w.uint32(26).string(m.alias);
+    if (m.peerKey.length) w.uint32(34).bytes(m.peerKey);
+    if (m.reservedUntil) w.uint32(40).int64(m.reservedUntil);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): AliasReservation {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new AliasReservation();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.networkId = r.uint64();
+        break;
+        case 3:
+        m.alias = r.string();
+        break;
+        case 4:
+        m.peerKey = r.bytes();
+        break;
+        case 5:
+        m.reservedUntil = r.int64();
         break;
         default:
         r.skipType(tag & 7);
@@ -1437,6 +1536,308 @@ export class GetUIConfigResponse {
   }
 }
 
+export type IListPeersRequest = {
+  networkId?: bigint;
+}
+
+export class ListPeersRequest {
+  networkId: bigint;
+
+  constructor(v?: IListPeersRequest) {
+    this.networkId = v?.networkId || BigInt(0);
+  }
+
+  static encode(m: ListPeersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListPeersRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListPeersRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListPeersResponse = {
+  peers?: strims_network_v1_IPeer[];
+}
+
+export class ListPeersResponse {
+  peers: strims_network_v1_Peer[];
+
+  constructor(v?: IListPeersResponse) {
+    this.peers = v?.peers ? v.peers.map(v => new strims_network_v1_Peer(v)) : [];
+  }
+
+  static encode(m: ListPeersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.peers) strims_network_v1_Peer.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListPeersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListPeersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peers.push(strims_network_v1_Peer.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGrantPeerInvitationRequest = {
+  id?: bigint;
+  count?: number;
+}
+
+export class GrantPeerInvitationRequest {
+  id: bigint;
+  count: number;
+
+  constructor(v?: IGrantPeerInvitationRequest) {
+    this.id = v?.id || BigInt(0);
+    this.count = v?.count || 0;
+  }
+
+  static encode(m: GrantPeerInvitationRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.count) w.uint32(16).uint32(m.count);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GrantPeerInvitationRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GrantPeerInvitationRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.count = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGrantPeerInvitationResponse = {
+  peer?: strims_network_v1_IPeer;
+}
+
+export class GrantPeerInvitationResponse {
+  peer: strims_network_v1_Peer | undefined;
+
+  constructor(v?: IGrantPeerInvitationResponse) {
+    this.peer = v?.peer && new strims_network_v1_Peer(v.peer);
+  }
+
+  static encode(m: GrantPeerInvitationResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peer) strims_network_v1_Peer.encode(m.peer, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GrantPeerInvitationResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GrantPeerInvitationResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peer = strims_network_v1_Peer.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ITogglePeerBanRequest = {
+  id?: bigint;
+  value?: boolean;
+}
+
+export class TogglePeerBanRequest {
+  id: bigint;
+  value: boolean;
+
+  constructor(v?: ITogglePeerBanRequest) {
+    this.id = v?.id || BigInt(0);
+    this.value = v?.value || false;
+  }
+
+  static encode(m: TogglePeerBanRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.value) w.uint32(16).bool(m.value);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TogglePeerBanRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TogglePeerBanRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.value = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ITogglePeerBanResponse = {
+  peer?: strims_network_v1_IPeer;
+}
+
+export class TogglePeerBanResponse {
+  peer: strims_network_v1_Peer | undefined;
+
+  constructor(v?: ITogglePeerBanResponse) {
+    this.peer = v?.peer && new strims_network_v1_Peer(v.peer);
+  }
+
+  static encode(m: TogglePeerBanResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peer) strims_network_v1_Peer.encode(m.peer, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TogglePeerBanResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TogglePeerBanResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peer = strims_network_v1_Peer.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IResetPeerRenameCooldownRequest = {
+  id?: bigint;
+}
+
+export class ResetPeerRenameCooldownRequest {
+  id: bigint;
+
+  constructor(v?: IResetPeerRenameCooldownRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: ResetPeerRenameCooldownRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ResetPeerRenameCooldownRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ResetPeerRenameCooldownRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IResetPeerRenameCooldownResponse = {
+  peer?: strims_network_v1_IPeer;
+}
+
+export class ResetPeerRenameCooldownResponse {
+  peer: strims_network_v1_Peer | undefined;
+
+  constructor(v?: IResetPeerRenameCooldownResponse) {
+    this.peer = v?.peer && new strims_network_v1_Peer(v.peer);
+  }
+
+  static encode(m: ResetPeerRenameCooldownResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.peer) strims_network_v1_Peer.encode(m.peer, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ResetPeerRenameCooldownResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ResetPeerRenameCooldownResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.peer = strims_network_v1_Peer.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 /* @internal */
 export const strims_network_v1_CreateServerRequest = CreateServerRequest;
 /* @internal */
@@ -1515,6 +1916,12 @@ export const strims_network_v1_Peer = Peer;
 export type strims_network_v1_Peer = Peer;
 /* @internal */
 export type strims_network_v1_IPeer = IPeer;
+/* @internal */
+export const strims_network_v1_AliasReservation = AliasReservation;
+/* @internal */
+export type strims_network_v1_AliasReservation = AliasReservation;
+/* @internal */
+export type strims_network_v1_IAliasReservation = IAliasReservation;
 /* @internal */
 export const strims_network_v1_CreateInvitationRequest = CreateInvitationRequest;
 /* @internal */
@@ -1611,6 +2018,54 @@ export const strims_network_v1_GetUIConfigResponse = GetUIConfigResponse;
 export type strims_network_v1_GetUIConfigResponse = GetUIConfigResponse;
 /* @internal */
 export type strims_network_v1_IGetUIConfigResponse = IGetUIConfigResponse;
+/* @internal */
+export const strims_network_v1_ListPeersRequest = ListPeersRequest;
+/* @internal */
+export type strims_network_v1_ListPeersRequest = ListPeersRequest;
+/* @internal */
+export type strims_network_v1_IListPeersRequest = IListPeersRequest;
+/* @internal */
+export const strims_network_v1_ListPeersResponse = ListPeersResponse;
+/* @internal */
+export type strims_network_v1_ListPeersResponse = ListPeersResponse;
+/* @internal */
+export type strims_network_v1_IListPeersResponse = IListPeersResponse;
+/* @internal */
+export const strims_network_v1_GrantPeerInvitationRequest = GrantPeerInvitationRequest;
+/* @internal */
+export type strims_network_v1_GrantPeerInvitationRequest = GrantPeerInvitationRequest;
+/* @internal */
+export type strims_network_v1_IGrantPeerInvitationRequest = IGrantPeerInvitationRequest;
+/* @internal */
+export const strims_network_v1_GrantPeerInvitationResponse = GrantPeerInvitationResponse;
+/* @internal */
+export type strims_network_v1_GrantPeerInvitationResponse = GrantPeerInvitationResponse;
+/* @internal */
+export type strims_network_v1_IGrantPeerInvitationResponse = IGrantPeerInvitationResponse;
+/* @internal */
+export const strims_network_v1_TogglePeerBanRequest = TogglePeerBanRequest;
+/* @internal */
+export type strims_network_v1_TogglePeerBanRequest = TogglePeerBanRequest;
+/* @internal */
+export type strims_network_v1_ITogglePeerBanRequest = ITogglePeerBanRequest;
+/* @internal */
+export const strims_network_v1_TogglePeerBanResponse = TogglePeerBanResponse;
+/* @internal */
+export type strims_network_v1_TogglePeerBanResponse = TogglePeerBanResponse;
+/* @internal */
+export type strims_network_v1_ITogglePeerBanResponse = ITogglePeerBanResponse;
+/* @internal */
+export const strims_network_v1_ResetPeerRenameCooldownRequest = ResetPeerRenameCooldownRequest;
+/* @internal */
+export type strims_network_v1_ResetPeerRenameCooldownRequest = ResetPeerRenameCooldownRequest;
+/* @internal */
+export type strims_network_v1_IResetPeerRenameCooldownRequest = IResetPeerRenameCooldownRequest;
+/* @internal */
+export const strims_network_v1_ResetPeerRenameCooldownResponse = ResetPeerRenameCooldownResponse;
+/* @internal */
+export type strims_network_v1_ResetPeerRenameCooldownResponse = ResetPeerRenameCooldownResponse;
+/* @internal */
+export type strims_network_v1_IResetPeerRenameCooldownResponse = IResetPeerRenameCooldownResponse;
 /* @internal */
 export const strims_network_v1_NetworkEvent_NetworkStart = NetworkEvent.NetworkStart;
 /* @internal */

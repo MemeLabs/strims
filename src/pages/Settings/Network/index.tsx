@@ -10,6 +10,7 @@ import NetworkIconEditForm from "./NetworkIconEditForm";
 import NetworkInviteCreateForm from "./NetworkInviteCreateForm";
 import NetworkJoinForm from "./NetworkJoinForm";
 import NetworkList from "./NetworkList";
+import NetworkPeerList from "./NetworkPeerList";
 import NetworkServerCreateForm from "./NetworkServerCreateForm";
 
 const Router: React.FC = () => (
@@ -21,6 +22,7 @@ const Router: React.FC = () => (
     <Route path=":networkId/directory" element={<NetworkDirectoryEditForm />} />
     <Route path=":networkId/icon" element={<NetworkIconEditForm />} />
     <Route path=":networkId/invite" element={<NetworkInviteCreateForm />} />
+    <Route path=":networkId/certificate-logs" element={<NetworkPeerList />} />
   </Routes>
 );
 

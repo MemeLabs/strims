@@ -73,6 +73,10 @@ func New[K, V any](iface Interface[K]) Map[K, V] {
 	}
 }
 
+func NewBytesTo[V any]() Map[[]byte, V] {
+	return New[[]byte, V](NewByteInterface[[]byte]())
+}
+
 func computeLenBounds(size int) lenBounds {
 	min := float64(size) * minFillFactor
 	max := float64(size) * maxFillFactor
