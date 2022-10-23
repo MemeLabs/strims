@@ -23,6 +23,9 @@ func RegisterNetworkFrontendService(host rpc.ServiceRegistry, service NetworkFro
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.GrantPeerInvitation", service.GrantPeerInvitation)
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.TogglePeerBan", service.TogglePeerBan)
 	host.RegisterMethod("strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", service.ResetPeerRenameCooldown)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.DeletePeer", service.DeletePeer)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.ListAliasReservations", service.ListAliasReservations)
+	host.RegisterMethod("strims.network.v1.NetworkFrontend.ResetAliasReservationCooldown", service.ResetAliasReservationCooldown)
 }
 
 // NetworkFrontendService ...
@@ -87,6 +90,18 @@ type NetworkFrontendService interface {
 		ctx context.Context,
 		req *ResetPeerRenameCooldownRequest,
 	) (*ResetPeerRenameCooldownResponse, error)
+	DeletePeer(
+		ctx context.Context,
+		req *DeletePeerRequest,
+	) (*DeletePeerResponse, error)
+	ListAliasReservations(
+		ctx context.Context,
+		req *ListAliasReservationsRequest,
+	) (*ListAliasReservationsResponse, error)
+	ResetAliasReservationCooldown(
+		ctx context.Context,
+		req *ResetAliasReservationCooldownRequest,
+	) (*ResetAliasReservationCooldownResponse, error)
 }
 
 // NetworkFrontendService ...
@@ -194,6 +209,27 @@ func (s *UnimplementedNetworkFrontendService) ResetPeerRenameCooldown(
 	ctx context.Context,
 	req *ResetPeerRenameCooldownRequest,
 ) (*ResetPeerRenameCooldownResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) DeletePeer(
+	ctx context.Context,
+	req *DeletePeerRequest,
+) (*DeletePeerResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) ListAliasReservations(
+	ctx context.Context,
+	req *ListAliasReservationsRequest,
+) (*ListAliasReservationsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
+func (s *UnimplementedNetworkFrontendService) ResetAliasReservationCooldown(
+	ctx context.Context,
+	req *ResetAliasReservationCooldownRequest,
+) (*ResetAliasReservationCooldownResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
@@ -342,4 +378,31 @@ func (c *NetworkFrontendClient) ResetPeerRenameCooldown(
 	res *ResetPeerRenameCooldownResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown", req, res)
+}
+
+// DeletePeer ...
+func (c *NetworkFrontendClient) DeletePeer(
+	ctx context.Context,
+	req *DeletePeerRequest,
+	res *DeletePeerResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.DeletePeer", req, res)
+}
+
+// ListAliasReservations ...
+func (c *NetworkFrontendClient) ListAliasReservations(
+	ctx context.Context,
+	req *ListAliasReservationsRequest,
+	res *ListAliasReservationsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.ListAliasReservations", req, res)
+}
+
+// ResetAliasReservationCooldown ...
+func (c *NetworkFrontendClient) ResetAliasReservationCooldown(
+	ctx context.Context,
+	req *ResetAliasReservationCooldownRequest,
+	res *ResetAliasReservationCooldownResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkFrontend.ResetAliasReservationCooldown", req, res)
 }

@@ -4,15 +4,18 @@
 package dao
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"time"
 
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	networkv1ca "github.com/MemeLabs/strims/pkg/apis/network/v1/ca"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	networkv1errors "github.com/MemeLabs/strims/pkg/apis/network/v1/errors"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/image"
@@ -44,6 +47,12 @@ const (
 	networkAliasReservationNS
 	networkAliasReservationsByNetworkIDNS
 	networkAliasReservationsByAliasNS
+)
+
+// TODO: move to network server config
+const (
+	NetworkAliasChangeCooldown      = 30 * 24 * time.Hour
+	NetworkAliasReservationCooldown = 180 * 24 * time.Hour
 )
 
 var Networks = NewTable(
@@ -606,11 +615,39 @@ func NewNetworkPeer(g IDGenerator, networkID uint64, publicKey []byte, alias str
 	}, nil
 }
 
-var NetworkAliasReservations = NewTable[networkv1.AliasReservation](networkAliasReservationNS, nil)
+type NetworkAliasReservationTable struct {
+	*Table[networkv1.AliasReservation, *networkv1.AliasReservation]
+}
 
-var NetworkAliasReservationsByNetworkID = ManyToOne(
+func (t *NetworkAliasReservationTable) Reserve(s kv.RWStore, id uint64, peerKey []byte) error {
+	_, err := t.Table.Transform(s, id, func(p *networkv1.AliasReservation) error {
+		if bytes.Equal(p.PeerKey, peerKey) {
+			return nil
+		}
+		if !timeutil.Now().After(timeutil.Unix(p.ReservedUntil, 0)) {
+			return rpc.WrapError(errors.New("alias in use"), networkv1errors.ErrorCode_ALIAS_IN_USE)
+		}
+		p.PeerKey = peerKey
+		p.ReservedUntil = timeutil.MaxTime.Unix()
+		return nil
+	})
+	return err
+}
+
+func (t *NetworkAliasReservationTable) Release(s kv.RWStore, id uint64, cooldown time.Duration) error {
+	_, err := t.Table.Transform(s, id, func(p *networkv1.AliasReservation) error {
+		p.PeerKey = nil
+		p.ReservedUntil = timeutil.Now().Add(cooldown).Unix()
+		return nil
+	})
+	return err
+}
+
+var NetworkAliasReservations = NetworkAliasReservationTable{NewTable[networkv1.AliasReservation](networkAliasReservationNS, nil)}
+
+var NetworkAliasReservationsByNetwork = ManyToOne(
 	networkAliasReservationsByNetworkIDNS,
-	NetworkAliasReservations,
+	NetworkAliasReservations.Table,
 	Networks,
 	(*networkv1.AliasReservation).GetNetworkId,
 	nil,
@@ -624,7 +661,7 @@ func FormatNetworkAliasReservationAliasKey(networkID uint64, alias string) []byt
 
 var NetworkAliasReservationsByAlias = NewUniqueIndex(
 	networkAliasReservationsByAliasNS,
-	NetworkAliasReservations,
+	NetworkAliasReservations.Table,
 	func(m *networkv1.AliasReservation) []byte {
 		return FormatNetworkAliasReservationAliasKey(m.NetworkId, m.Alias)
 	},

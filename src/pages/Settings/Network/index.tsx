@@ -4,6 +4,7 @@
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 
+import NetworkAliasReservationList from "./NetworkAliasReservationList";
 import NetworkDirectoryEditForm from "./NetworkDirectoryEditForm";
 import NetworkEditForm from "./NetworkEditForm";
 import NetworkIconEditForm from "./NetworkIconEditForm";
@@ -22,7 +23,8 @@ const Router: React.FC = () => (
     <Route path=":networkId/directory" element={<NetworkDirectoryEditForm />} />
     <Route path=":networkId/icon" element={<NetworkIconEditForm />} />
     <Route path=":networkId/invite" element={<NetworkInviteCreateForm />} />
-    <Route path=":networkId/certificate-logs" element={<NetworkPeerList />} />
+    <Route path=":networkId/peers" element={<NetworkPeerList />} />
+    <Route path=":networkId/alias-reservations" element={<NetworkAliasReservationList />} />
   </Routes>
 );
 

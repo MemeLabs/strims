@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
@@ -25,11 +24,6 @@ import (
 	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
-)
-
-const (
-	aliasChangeCooldown      = 30 * 24 * time.Hour
-	aliasReservationCooldown = 180 * 24 * time.Hour
 )
 
 // AddressSalt ...
@@ -202,7 +196,7 @@ func (s *service) updatePeer(tx kv.RWTx, peer *networkv1.Peer, cert *certificate
 
 	now := timeutil.Now()
 
-	if !now.After(timeutil.Unix(peer.AliasChangedAt, 0).Add(aliasChangeCooldown)) {
+	if !now.After(timeutil.Unix(peer.AliasChangedAt, 0).Add(dao.NetworkAliasChangeCooldown)) {
 		return rpc.WrapError(errors.New("alias was changed too recently"), networkv1errors.ErrorCode_ALIAS_CHANGE_COOLDOWN_VIOLATIED)
 	}
 
@@ -214,12 +208,7 @@ func (s *service) updatePeer(tx kv.RWTx, peer *networkv1.Peer, cert *certificate
 	if err != nil {
 		return err
 	}
-	_, err = dao.NetworkAliasReservations.Transform(tx, rid, func(p *networkv1.AliasReservation) error {
-		p.PeerKey = nil
-		p.ReservedUntil = now.Add(aliasReservationCooldown).Unix()
-		return nil
-	})
-	if err != nil {
+	if err := dao.NetworkAliasReservations.Release(tx, rid, dao.NetworkAliasReservationCooldown); err != nil {
 		return err
 	}
 
@@ -229,25 +218,18 @@ func (s *service) updatePeer(tx kv.RWTx, peer *networkv1.Peer, cert *certificate
 }
 
 func (s *service) reserveAlias(tx kv.RWTx, now timeutil.Time, cert *certificate.Certificate) error {
-	r, err := dao.NetworkAliasReservationsByAlias.Get(tx, dao.FormatNetworkAliasReservationAliasKey(s.networkID(), cert.Subject))
-	if err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
-		return err
+	id, err := dao.NetworkAliasReservationsByAlias.GetID(tx, dao.FormatNetworkAliasReservationAliasKey(s.networkID(), cert.Subject))
+	if err == nil {
+		return dao.NetworkAliasReservations.Reserve(tx, id, cert.Key)
 	}
-	if r == nil {
-		r, err = dao.NewNetworkAliasReservation(dao.ProfileID.IDGenerator(tx), s.networkID(), cert.Subject, cert.Key)
+	if errors.Is(err, kv.ErrRecordNotFound) {
+		r, err := dao.NewNetworkAliasReservation(dao.ProfileID.IDGenerator(tx), s.networkID(), cert.Subject, cert.Key)
 		if err != nil {
 			return err
 		}
 		return dao.NetworkAliasReservations.Insert(tx, r)
-	} else if !bytes.Equal(r.PeerKey, cert.Key) {
-		if !now.After(timeutil.Unix(r.ReservedUntil, 0)) {
-			return rpc.WrapError(errors.New("alias in use"), networkv1errors.ErrorCode_ALIAS_IN_USE)
-		}
-		r.PeerKey = cert.Key
-		r.ReservedUntil = timeutil.MaxTime.Unix()
-		return dao.NetworkAliasReservations.Update(tx, r)
 	}
-	return nil
+	return err
 }
 
 // Find ...

@@ -254,11 +254,11 @@ func (s *networkService) GetUIConfig(ctx context.Context, r *networkv1.GetUIConf
 
 // ListPeers ...
 func (s *networkService) ListPeers(ctx context.Context, r *networkv1.ListPeersRequest) (*networkv1.ListPeersResponse, error) {
-	ls, err := dao.NetworkPeersByNetwork.GetAllByRefID(s.store, r.NetworkId)
+	vs, err := dao.NetworkPeersByNetwork.GetAllByRefID(s.store, r.NetworkId)
 	if err != nil {
 		return nil, err
 	}
-	return &networkv1.ListPeersResponse{Peers: ls}, nil
+	return &networkv1.ListPeersResponse{Peers: vs}, nil
 }
 
 func (s *networkService) GrantPeerInvitation(ctx context.Context, r *networkv1.GrantPeerInvitationRequest) (*networkv1.GrantPeerInvitationResponse, error) {
@@ -292,4 +292,50 @@ func (s *networkService) ResetPeerRenameCooldown(ctx context.Context, r *network
 		return nil, err
 	}
 	return &networkv1.ResetPeerRenameCooldownResponse{Peer: p}, nil
+}
+
+func (s *networkService) DeletePeer(ctx context.Context, r *networkv1.DeletePeerRequest) (*networkv1.DeletePeerResponse, error) {
+	err := s.store.Update(func(tx kv.RWTx) error {
+		p, err := dao.NetworkPeers.Get(tx, r.Id)
+		if err != nil {
+			return err
+		}
+		if err := dao.NetworkPeers.Delete(tx, r.Id); err != nil {
+			return err
+		}
+
+		rid, err := dao.NetworkAliasReservationsByAlias.GetID(tx, dao.FormatNetworkAliasReservationAliasKey(p.NetworkId, p.Alias))
+		if err != nil {
+			return err
+		}
+		return dao.NetworkAliasReservations.Release(tx, rid, dao.NetworkAliasReservationCooldown)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.DeletePeerResponse{}, nil
+}
+
+// ListAliasReservations ...
+func (s *networkService) ListAliasReservations(ctx context.Context, r *networkv1.ListAliasReservationsRequest) (*networkv1.ListAliasReservationsResponse, error) {
+	vs, err := dao.NetworkAliasReservationsByNetwork.GetAllByRefID(s.store, r.NetworkId)
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.ListAliasReservationsResponse{AliasReservations: vs}, nil
+}
+
+// ResetAliasReservationCooldown ...
+func (s *networkService) ResetAliasReservationCooldown(ctx context.Context, r *networkv1.ResetAliasReservationCooldownRequest) (*networkv1.ResetAliasReservationCooldownResponse, error) {
+	_, err := dao.NetworkAliasReservations.Transform(s.store, r.Id, func(p *networkv1.AliasReservation) error {
+		if p.PeerKey != nil {
+			return errors.New("cannot reset cooldown for active reservation")
+		}
+		p.ReservedUntil = 0
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &networkv1.ResetAliasReservationCooldownResponse{}, nil
 }

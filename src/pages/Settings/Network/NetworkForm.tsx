@@ -71,9 +71,14 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
             description="Network icon..."
           />
           <ForwardLink
-            to={`/settings/networks/${networkId}/certificate-logs`}
+            to={`/settings/networks/${networkId}/peers`}
             title="Peers"
             description="Peers..."
+          />
+          <ForwardLink
+            to={`/settings/networks/${networkId}/alias-reservations`}
+            title="Alias reservations"
+            description="Alias reservations..."
           />
         </>
       )}

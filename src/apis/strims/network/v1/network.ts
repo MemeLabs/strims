@@ -1838,6 +1838,188 @@ export class ResetPeerRenameCooldownResponse {
   }
 }
 
+export type IDeletePeerRequest = {
+  id?: bigint;
+}
+
+export class DeletePeerRequest {
+  id: bigint;
+
+  constructor(v?: IDeletePeerRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: DeletePeerRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeletePeerRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeletePeerRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeletePeerResponse = Record<string, any>;
+
+export class DeletePeerResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeletePeerResponse) {
+  }
+
+  static encode(m: DeletePeerResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeletePeerResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeletePeerResponse();
+  }
+}
+
+export type IListAliasReservationsRequest = {
+  networkId?: bigint;
+}
+
+export class ListAliasReservationsRequest {
+  networkId: bigint;
+
+  constructor(v?: IListAliasReservationsRequest) {
+    this.networkId = v?.networkId || BigInt(0);
+  }
+
+  static encode(m: ListAliasReservationsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListAliasReservationsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListAliasReservationsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.networkId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListAliasReservationsResponse = {
+  aliasReservations?: strims_network_v1_IAliasReservation[];
+}
+
+export class ListAliasReservationsResponse {
+  aliasReservations: strims_network_v1_AliasReservation[];
+
+  constructor(v?: IListAliasReservationsResponse) {
+    this.aliasReservations = v?.aliasReservations ? v.aliasReservations.map(v => new strims_network_v1_AliasReservation(v)) : [];
+  }
+
+  static encode(m: ListAliasReservationsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.aliasReservations) strims_network_v1_AliasReservation.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListAliasReservationsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListAliasReservationsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.aliasReservations.push(strims_network_v1_AliasReservation.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IResetAliasReservationCooldownRequest = {
+  id?: bigint;
+}
+
+export class ResetAliasReservationCooldownRequest {
+  id: bigint;
+
+  constructor(v?: IResetAliasReservationCooldownRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: ResetAliasReservationCooldownRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ResetAliasReservationCooldownRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ResetAliasReservationCooldownRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IResetAliasReservationCooldownResponse = Record<string, any>;
+
+export class ResetAliasReservationCooldownResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IResetAliasReservationCooldownResponse) {
+  }
+
+  static encode(m: ResetAliasReservationCooldownResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ResetAliasReservationCooldownResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ResetAliasReservationCooldownResponse();
+  }
+}
+
 /* @internal */
 export const strims_network_v1_CreateServerRequest = CreateServerRequest;
 /* @internal */
@@ -2066,6 +2248,42 @@ export const strims_network_v1_ResetPeerRenameCooldownResponse = ResetPeerRename
 export type strims_network_v1_ResetPeerRenameCooldownResponse = ResetPeerRenameCooldownResponse;
 /* @internal */
 export type strims_network_v1_IResetPeerRenameCooldownResponse = IResetPeerRenameCooldownResponse;
+/* @internal */
+export const strims_network_v1_DeletePeerRequest = DeletePeerRequest;
+/* @internal */
+export type strims_network_v1_DeletePeerRequest = DeletePeerRequest;
+/* @internal */
+export type strims_network_v1_IDeletePeerRequest = IDeletePeerRequest;
+/* @internal */
+export const strims_network_v1_DeletePeerResponse = DeletePeerResponse;
+/* @internal */
+export type strims_network_v1_DeletePeerResponse = DeletePeerResponse;
+/* @internal */
+export type strims_network_v1_IDeletePeerResponse = IDeletePeerResponse;
+/* @internal */
+export const strims_network_v1_ListAliasReservationsRequest = ListAliasReservationsRequest;
+/* @internal */
+export type strims_network_v1_ListAliasReservationsRequest = ListAliasReservationsRequest;
+/* @internal */
+export type strims_network_v1_IListAliasReservationsRequest = IListAliasReservationsRequest;
+/* @internal */
+export const strims_network_v1_ListAliasReservationsResponse = ListAliasReservationsResponse;
+/* @internal */
+export type strims_network_v1_ListAliasReservationsResponse = ListAliasReservationsResponse;
+/* @internal */
+export type strims_network_v1_IListAliasReservationsResponse = IListAliasReservationsResponse;
+/* @internal */
+export const strims_network_v1_ResetAliasReservationCooldownRequest = ResetAliasReservationCooldownRequest;
+/* @internal */
+export type strims_network_v1_ResetAliasReservationCooldownRequest = ResetAliasReservationCooldownRequest;
+/* @internal */
+export type strims_network_v1_IResetAliasReservationCooldownRequest = IResetAliasReservationCooldownRequest;
+/* @internal */
+export const strims_network_v1_ResetAliasReservationCooldownResponse = ResetAliasReservationCooldownResponse;
+/* @internal */
+export type strims_network_v1_ResetAliasReservationCooldownResponse = ResetAliasReservationCooldownResponse;
+/* @internal */
+export type strims_network_v1_IResetAliasReservationCooldownResponse = IResetAliasReservationCooldownResponse;
 /* @internal */
 export const strims_network_v1_NetworkEvent_NetworkStart = NetworkEvent.NetworkStart;
 /* @internal */

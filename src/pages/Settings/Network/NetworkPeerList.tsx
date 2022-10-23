@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
@@ -26,6 +26,11 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
   const [publishNetwork, setPublishNetwork] = useState<Network>();
   const client = useClient();
 
+  const sortedPeers = useMemo(
+    () => (peers ? peers.sort((a, b) => a.alias.localeCompare(b.alias)) : []),
+    [peers]
+  );
+
   if (!peers) {
     return null;
   }
@@ -42,8 +47,12 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
     await client.network.resetPeerRenameCooldown({ id });
     onChange();
   };
+  const handleDelete = async (id: bigint) => {
+    await client.network.deletePeer({ id });
+    onChange();
+  };
 
-  const rows = peers.map((peer) => {
+  const rows = sortedPeers.map((peer) => {
     return (
       <tr key={peer.id.toString()}>
         <TableCell>
@@ -61,6 +70,7 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
             label="Reset rename cooldown"
             onClick={() => handleResetRenameCooldown(peer.id)}
           />
+          <MenuItem label="Delete" onClick={() => handleDelete(peer.id)} />
         </MenuCell>
       </tr>
     );
@@ -88,7 +98,7 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
   );
 };
 
-const PeerList: React.FC = () => {
+const NetworkPeerList: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.network.title"));
 
@@ -108,4 +118,4 @@ const PeerList: React.FC = () => {
   );
 };
 
-export default PeerList;
+export default NetworkPeerList;

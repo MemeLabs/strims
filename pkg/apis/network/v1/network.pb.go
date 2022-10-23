@@ -2161,6 +2161,270 @@ func (x *ResetPeerRenameCooldownResponse) GetPeer() *Peer {
 	return nil
 }
 
+type DeletePeerRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *DeletePeerRequest) Reset() {
+	*x = DeletePeerRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[38]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DeletePeerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePeerRequest) ProtoMessage() {}
+
+func (x *DeletePeerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[38]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePeerRequest.ProtoReflect.Descriptor instead.
+func (*DeletePeerRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *DeletePeerRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type DeletePeerResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *DeletePeerResponse) Reset() {
+	*x = DeletePeerResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[39]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DeletePeerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePeerResponse) ProtoMessage() {}
+
+func (x *DeletePeerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[39]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePeerResponse.ProtoReflect.Descriptor instead.
+func (*DeletePeerResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{39}
+}
+
+type ListAliasReservationsRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	NetworkId uint64 `protobuf:"varint,1,opt,name=network_id,json=networkId,proto3" json:"network_id,omitempty"`
+}
+
+func (x *ListAliasReservationsRequest) Reset() {
+	*x = ListAliasReservationsRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[40]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListAliasReservationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAliasReservationsRequest) ProtoMessage() {}
+
+func (x *ListAliasReservationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[40]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAliasReservationsRequest.ProtoReflect.Descriptor instead.
+func (*ListAliasReservationsRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListAliasReservationsRequest) GetNetworkId() uint64 {
+	if x != nil {
+		return x.NetworkId
+	}
+	return 0
+}
+
+type ListAliasReservationsResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	AliasReservations []*AliasReservation `protobuf:"bytes,1,rep,name=alias_reservations,json=aliasReservations,proto3" json:"alias_reservations,omitempty"`
+}
+
+func (x *ListAliasReservationsResponse) Reset() {
+	*x = ListAliasReservationsResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[41]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ListAliasReservationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAliasReservationsResponse) ProtoMessage() {}
+
+func (x *ListAliasReservationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[41]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAliasReservationsResponse.ProtoReflect.Descriptor instead.
+func (*ListAliasReservationsResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ListAliasReservationsResponse) GetAliasReservations() []*AliasReservation {
+	if x != nil {
+		return x.AliasReservations
+	}
+	return nil
+}
+
+type ResetAliasReservationCooldownRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *ResetAliasReservationCooldownRequest) Reset() {
+	*x = ResetAliasReservationCooldownRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[42]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ResetAliasReservationCooldownRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetAliasReservationCooldownRequest) ProtoMessage() {}
+
+func (x *ResetAliasReservationCooldownRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[42]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetAliasReservationCooldownRequest.ProtoReflect.Descriptor instead.
+func (*ResetAliasReservationCooldownRequest) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ResetAliasReservationCooldownRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type ResetAliasReservationCooldownResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *ResetAliasReservationCooldownResponse) Reset() {
+	*x = ResetAliasReservationCooldownResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_network_v1_network_proto_msgTypes[43]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ResetAliasReservationCooldownResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetAliasReservationCooldownResponse) ProtoMessage() {}
+
+func (x *ResetAliasReservationCooldownResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_network_v1_network_proto_msgTypes[43]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetAliasReservationCooldownResponse.ProtoReflect.Descriptor instead.
+func (*ResetAliasReservationCooldownResponse) Descriptor() ([]byte, []int) {
+	return file_network_v1_network_proto_rawDescGZIP(), []int{43}
+}
+
 type NetworkEvent_NetworkStart struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2173,7 +2437,7 @@ type NetworkEvent_NetworkStart struct {
 func (x *NetworkEvent_NetworkStart) Reset() {
 	*x = NetworkEvent_NetworkStart{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_network_proto_msgTypes[38]
+		mi := &file_network_v1_network_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2186,7 +2450,7 @@ func (x *NetworkEvent_NetworkStart) String() string {
 func (*NetworkEvent_NetworkStart) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkStart) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_network_proto_msgTypes[38]
+	mi := &file_network_v1_network_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2227,7 +2491,7 @@ type NetworkEvent_NetworkStop struct {
 func (x *NetworkEvent_NetworkStop) Reset() {
 	*x = NetworkEvent_NetworkStop{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_network_proto_msgTypes[39]
+		mi := &file_network_v1_network_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2240,7 +2504,7 @@ func (x *NetworkEvent_NetworkStop) String() string {
 func (*NetworkEvent_NetworkStop) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkStop) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_network_proto_msgTypes[39]
+	mi := &file_network_v1_network_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2275,7 +2539,7 @@ type NetworkEvent_NetworkPeerCountUpdate struct {
 func (x *NetworkEvent_NetworkPeerCountUpdate) Reset() {
 	*x = NetworkEvent_NetworkPeerCountUpdate{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_network_v1_network_proto_msgTypes[40]
+		mi := &file_network_v1_network_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2288,7 +2552,7 @@ func (x *NetworkEvent_NetworkPeerCountUpdate) String() string {
 func (*NetworkEvent_NetworkPeerCountUpdate) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkPeerCountUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_network_v1_network_proto_msgTypes[40]
+	mi := &file_network_v1_network_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2599,7 +2863,28 @@ var file_network_v1_network_proto_rawDesc = []byte{
 	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2b, 0x0a, 0x04, 0x70, 0x65, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01,
 	0x28, 0x0b, 0x32, 0x17, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77,
 	0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x65, 0x65, 0x72, 0x52, 0x04, 0x70, 0x65, 0x65,
-	0x72, 0x32, 0xad, 0x0c, 0x0a, 0x0f, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x46, 0x72, 0x6f,
+	0x72, 0x22, 0x23, 0x0a, 0x11, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x65, 0x65, 0x72, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x14, 0x0a, 0x12, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65,
+	0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x3d, 0x0a, 0x1c,
+	0x4c, 0x69, 0x73, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x09, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x49, 0x64, 0x22, 0x73, 0x0a, 0x1d, 0x4c,
+	0x69, 0x73, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x52, 0x0a, 0x12,
+	0x61, 0x6c, 0x69, 0x61, 0x73, 0x5f, 0x72, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x6c, 0x69,
+	0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x11, 0x61,
+	0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73,
+	0x22, 0x36, 0x0a, 0x24, 0x52, 0x65, 0x73, 0x65, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65,
+	0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x43, 0x6f, 0x6f, 0x6c, 0x64, 0x6f, 0x77,
+	0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x27, 0x0a, 0x25, 0x52, 0x65, 0x73, 0x65,
+	0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x43, 0x6f, 0x6f, 0x6c, 0x64, 0x6f, 0x77, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x32, 0x99, 0x0f, 0x0a, 0x0f, 0x4e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x46, 0x72, 0x6f,
 	0x6e, 0x74, 0x65, 0x6e, 0x64, 0x12, 0x5f, 0x0a, 0x0c, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x53,
 	0x65, 0x72, 0x76, 0x65, 0x72, 0x12, 0x26, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
 	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65,
@@ -2698,13 +2983,35 @@ var file_network_v1_network_proto_rawDesc = []byte{
 	0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76,
 	0x31, 0x2e, 0x52, 0x65, 0x73, 0x65, 0x74, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x6e, 0x61, 0x6d,
 	0x65, 0x43, 0x6f, 0x6f, 0x6c, 0x64, 0x6f, 0x77, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x42, 0x56, 0x0a, 0x14, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
-	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75,
-	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73,
-	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e,
-	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f, 0x76, 0x31, 0x3b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72,
-	0x6b, 0x76, 0x31, 0xba, 0x02, 0x03, 0x53, 0x4e, 0x54, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
+	0x65, 0x12, 0x59, 0x0a, 0x0a, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x65, 0x65, 0x72, 0x12,
+	0x24, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b,
+	0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65,
+	0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7a, 0x0a, 0x15,
+	0x4c, 0x69, 0x73, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x2f, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x6c,
+	0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41,
+	0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x92, 0x01, 0x0a, 0x1d, 0x52, 0x65, 0x73,
+	0x65, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69,
+	0x6f, 0x6e, 0x43, 0x6f, 0x6f, 0x6c, 0x64, 0x6f, 0x77, 0x6e, 0x12, 0x37, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x52,
+	0x65, 0x73, 0x65, 0x74, 0x41, 0x6c, 0x69, 0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x43, 0x6f, 0x6f, 0x6c, 0x64, 0x6f, 0x77, 0x6e, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x38, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74,
+	0x77, 0x6f, 0x72, 0x6b, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x65, 0x74, 0x41, 0x6c, 0x69,
+	0x61, 0x73, 0x52, 0x65, 0x73, 0x65, 0x72, 0x76, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x43, 0x6f, 0x6f,
+	0x6c, 0x64, 0x6f, 0x77, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x56, 0x0a,
+	0x14, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2e, 0x76, 0x31, 0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f,
+	0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x74, 0x72, 0x69, 0x6d,
+	0x73, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x61, 0x70, 0x69, 0x73, 0x2f, 0x6e, 0x65, 0x74, 0x77, 0x6f,
+	0x72, 0x6b, 0x2f, 0x76, 0x31, 0x3b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x76, 0x31, 0xba,
+	0x02, 0x03, 0x53, 0x4e, 0x54, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -2719,79 +3026,85 @@ func file_network_v1_network_proto_rawDescGZIP() []byte {
 	return file_network_v1_network_proto_rawDescData
 }
 
-var file_network_v1_network_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
+var file_network_v1_network_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_network_v1_network_proto_goTypes = []interface{}{
-	(*CreateServerRequest)(nil),                 // 0: strims.network.v1.CreateServerRequest
-	(*CreateServerResponse)(nil),                // 1: strims.network.v1.CreateServerResponse
-	(*UpdateServerConfigRequest)(nil),           // 2: strims.network.v1.UpdateServerConfigRequest
-	(*UpdateServerConfigResponse)(nil),          // 3: strims.network.v1.UpdateServerConfigResponse
-	(*DeleteNetworkRequest)(nil),                // 4: strims.network.v1.DeleteNetworkRequest
-	(*DeleteNetworkResponse)(nil),               // 5: strims.network.v1.DeleteNetworkResponse
-	(*GetNetworkRequest)(nil),                   // 6: strims.network.v1.GetNetworkRequest
-	(*GetNetworkResponse)(nil),                  // 7: strims.network.v1.GetNetworkResponse
-	(*ListNetworksRequest)(nil),                 // 8: strims.network.v1.ListNetworksRequest
-	(*ListNetworksResponse)(nil),                // 9: strims.network.v1.ListNetworksResponse
-	(*ServerConfig)(nil),                        // 10: strims.network.v1.ServerConfig
-	(*Network)(nil),                             // 11: strims.network.v1.Network
-	(*Peer)(nil),                                // 12: strims.network.v1.Peer
-	(*AliasReservation)(nil),                    // 13: strims.network.v1.AliasReservation
-	(*CreateInvitationRequest)(nil),             // 14: strims.network.v1.CreateInvitationRequest
-	(*CreateInvitationResponse)(nil),            // 15: strims.network.v1.CreateInvitationResponse
-	(*Invitation)(nil),                          // 16: strims.network.v1.Invitation
-	(*InvitationV0)(nil),                        // 17: strims.network.v1.InvitationV0
-	(*CreateNetworkFromInvitationRequest)(nil),  // 18: strims.network.v1.CreateNetworkFromInvitationRequest
-	(*CreateNetworkFromInvitationResponse)(nil), // 19: strims.network.v1.CreateNetworkFromInvitationResponse
-	(*NetworkEvent)(nil),                        // 20: strims.network.v1.NetworkEvent
-	(*UIConfig)(nil),                            // 21: strims.network.v1.UIConfig
-	(*WatchNetworksRequest)(nil),                // 22: strims.network.v1.WatchNetworksRequest
-	(*WatchNetworksResponse)(nil),               // 23: strims.network.v1.WatchNetworksResponse
-	(*UpdateDisplayOrderRequest)(nil),           // 24: strims.network.v1.UpdateDisplayOrderRequest
-	(*UpdateDisplayOrderResponse)(nil),          // 25: strims.network.v1.UpdateDisplayOrderResponse
-	(*UpdateAliasRequest)(nil),                  // 26: strims.network.v1.UpdateAliasRequest
-	(*UpdateAliasResponse)(nil),                 // 27: strims.network.v1.UpdateAliasResponse
-	(*GetUIConfigRequest)(nil),                  // 28: strims.network.v1.GetUIConfigRequest
-	(*GetUIConfigResponse)(nil),                 // 29: strims.network.v1.GetUIConfigResponse
-	(*ListPeersRequest)(nil),                    // 30: strims.network.v1.ListPeersRequest
-	(*ListPeersResponse)(nil),                   // 31: strims.network.v1.ListPeersResponse
-	(*GrantPeerInvitationRequest)(nil),          // 32: strims.network.v1.GrantPeerInvitationRequest
-	(*GrantPeerInvitationResponse)(nil),         // 33: strims.network.v1.GrantPeerInvitationResponse
-	(*TogglePeerBanRequest)(nil),                // 34: strims.network.v1.TogglePeerBanRequest
-	(*TogglePeerBanResponse)(nil),               // 35: strims.network.v1.TogglePeerBanResponse
-	(*ResetPeerRenameCooldownRequest)(nil),      // 36: strims.network.v1.ResetPeerRenameCooldownRequest
-	(*ResetPeerRenameCooldownResponse)(nil),     // 37: strims.network.v1.ResetPeerRenameCooldownResponse
-	(*NetworkEvent_NetworkStart)(nil),           // 38: strims.network.v1.NetworkEvent.NetworkStart
-	(*NetworkEvent_NetworkStop)(nil),            // 39: strims.network.v1.NetworkEvent.NetworkStop
-	(*NetworkEvent_NetworkPeerCountUpdate)(nil), // 40: strims.network.v1.NetworkEvent.NetworkPeerCountUpdate
-	(*image.Image)(nil),                         // 41: strims.type.Image
-	(*key.Key)(nil),                             // 42: strims.type.Key
-	(*directory.ServerConfig)(nil),              // 43: strims.network.v1.directory.ServerConfig
-	(*v1.VersionVector)(nil),                    // 44: strims.dao.v1.VersionVector
-	(*certificate.Certificate)(nil),             // 45: strims.type.Certificate
-	(errors.ErrorCode)(0),                       // 46: strims.network.v1.errors.ErrorCode
-	(*bootstrap.BootstrapClient)(nil),           // 47: strims.network.v1.bootstrap.BootstrapClient
+	(*CreateServerRequest)(nil),                   // 0: strims.network.v1.CreateServerRequest
+	(*CreateServerResponse)(nil),                  // 1: strims.network.v1.CreateServerResponse
+	(*UpdateServerConfigRequest)(nil),             // 2: strims.network.v1.UpdateServerConfigRequest
+	(*UpdateServerConfigResponse)(nil),            // 3: strims.network.v1.UpdateServerConfigResponse
+	(*DeleteNetworkRequest)(nil),                  // 4: strims.network.v1.DeleteNetworkRequest
+	(*DeleteNetworkResponse)(nil),                 // 5: strims.network.v1.DeleteNetworkResponse
+	(*GetNetworkRequest)(nil),                     // 6: strims.network.v1.GetNetworkRequest
+	(*GetNetworkResponse)(nil),                    // 7: strims.network.v1.GetNetworkResponse
+	(*ListNetworksRequest)(nil),                   // 8: strims.network.v1.ListNetworksRequest
+	(*ListNetworksResponse)(nil),                  // 9: strims.network.v1.ListNetworksResponse
+	(*ServerConfig)(nil),                          // 10: strims.network.v1.ServerConfig
+	(*Network)(nil),                               // 11: strims.network.v1.Network
+	(*Peer)(nil),                                  // 12: strims.network.v1.Peer
+	(*AliasReservation)(nil),                      // 13: strims.network.v1.AliasReservation
+	(*CreateInvitationRequest)(nil),               // 14: strims.network.v1.CreateInvitationRequest
+	(*CreateInvitationResponse)(nil),              // 15: strims.network.v1.CreateInvitationResponse
+	(*Invitation)(nil),                            // 16: strims.network.v1.Invitation
+	(*InvitationV0)(nil),                          // 17: strims.network.v1.InvitationV0
+	(*CreateNetworkFromInvitationRequest)(nil),    // 18: strims.network.v1.CreateNetworkFromInvitationRequest
+	(*CreateNetworkFromInvitationResponse)(nil),   // 19: strims.network.v1.CreateNetworkFromInvitationResponse
+	(*NetworkEvent)(nil),                          // 20: strims.network.v1.NetworkEvent
+	(*UIConfig)(nil),                              // 21: strims.network.v1.UIConfig
+	(*WatchNetworksRequest)(nil),                  // 22: strims.network.v1.WatchNetworksRequest
+	(*WatchNetworksResponse)(nil),                 // 23: strims.network.v1.WatchNetworksResponse
+	(*UpdateDisplayOrderRequest)(nil),             // 24: strims.network.v1.UpdateDisplayOrderRequest
+	(*UpdateDisplayOrderResponse)(nil),            // 25: strims.network.v1.UpdateDisplayOrderResponse
+	(*UpdateAliasRequest)(nil),                    // 26: strims.network.v1.UpdateAliasRequest
+	(*UpdateAliasResponse)(nil),                   // 27: strims.network.v1.UpdateAliasResponse
+	(*GetUIConfigRequest)(nil),                    // 28: strims.network.v1.GetUIConfigRequest
+	(*GetUIConfigResponse)(nil),                   // 29: strims.network.v1.GetUIConfigResponse
+	(*ListPeersRequest)(nil),                      // 30: strims.network.v1.ListPeersRequest
+	(*ListPeersResponse)(nil),                     // 31: strims.network.v1.ListPeersResponse
+	(*GrantPeerInvitationRequest)(nil),            // 32: strims.network.v1.GrantPeerInvitationRequest
+	(*GrantPeerInvitationResponse)(nil),           // 33: strims.network.v1.GrantPeerInvitationResponse
+	(*TogglePeerBanRequest)(nil),                  // 34: strims.network.v1.TogglePeerBanRequest
+	(*TogglePeerBanResponse)(nil),                 // 35: strims.network.v1.TogglePeerBanResponse
+	(*ResetPeerRenameCooldownRequest)(nil),        // 36: strims.network.v1.ResetPeerRenameCooldownRequest
+	(*ResetPeerRenameCooldownResponse)(nil),       // 37: strims.network.v1.ResetPeerRenameCooldownResponse
+	(*DeletePeerRequest)(nil),                     // 38: strims.network.v1.DeletePeerRequest
+	(*DeletePeerResponse)(nil),                    // 39: strims.network.v1.DeletePeerResponse
+	(*ListAliasReservationsRequest)(nil),          // 40: strims.network.v1.ListAliasReservationsRequest
+	(*ListAliasReservationsResponse)(nil),         // 41: strims.network.v1.ListAliasReservationsResponse
+	(*ResetAliasReservationCooldownRequest)(nil),  // 42: strims.network.v1.ResetAliasReservationCooldownRequest
+	(*ResetAliasReservationCooldownResponse)(nil), // 43: strims.network.v1.ResetAliasReservationCooldownResponse
+	(*NetworkEvent_NetworkStart)(nil),             // 44: strims.network.v1.NetworkEvent.NetworkStart
+	(*NetworkEvent_NetworkStop)(nil),              // 45: strims.network.v1.NetworkEvent.NetworkStop
+	(*NetworkEvent_NetworkPeerCountUpdate)(nil),   // 46: strims.network.v1.NetworkEvent.NetworkPeerCountUpdate
+	(*image.Image)(nil),                           // 47: strims.type.Image
+	(*key.Key)(nil),                               // 48: strims.type.Key
+	(*directory.ServerConfig)(nil),                // 49: strims.network.v1.directory.ServerConfig
+	(*v1.VersionVector)(nil),                      // 50: strims.dao.v1.VersionVector
+	(*certificate.Certificate)(nil),               // 51: strims.type.Certificate
+	(errors.ErrorCode)(0),                         // 52: strims.network.v1.errors.ErrorCode
+	(*bootstrap.BootstrapClient)(nil),             // 53: strims.network.v1.bootstrap.BootstrapClient
 }
 var file_network_v1_network_proto_depIdxs = []int32{
-	41, // 0: strims.network.v1.CreateServerRequest.icon:type_name -> strims.type.Image
+	47, // 0: strims.network.v1.CreateServerRequest.icon:type_name -> strims.type.Image
 	11, // 1: strims.network.v1.CreateServerResponse.network:type_name -> strims.network.v1.Network
 	10, // 2: strims.network.v1.UpdateServerConfigRequest.server_config:type_name -> strims.network.v1.ServerConfig
 	11, // 3: strims.network.v1.UpdateServerConfigResponse.network:type_name -> strims.network.v1.Network
 	11, // 4: strims.network.v1.GetNetworkResponse.network:type_name -> strims.network.v1.Network
 	11, // 5: strims.network.v1.ListNetworksResponse.networks:type_name -> strims.network.v1.Network
-	42, // 6: strims.network.v1.ServerConfig.key:type_name -> strims.type.Key
-	43, // 7: strims.network.v1.ServerConfig.directory:type_name -> strims.network.v1.directory.ServerConfig
-	41, // 8: strims.network.v1.ServerConfig.icon:type_name -> strims.type.Image
-	44, // 9: strims.network.v1.Network.version:type_name -> strims.dao.v1.VersionVector
-	45, // 10: strims.network.v1.Network.certificate:type_name -> strims.type.Certificate
+	48, // 6: strims.network.v1.ServerConfig.key:type_name -> strims.type.Key
+	49, // 7: strims.network.v1.ServerConfig.directory:type_name -> strims.network.v1.directory.ServerConfig
+	47, // 8: strims.network.v1.ServerConfig.icon:type_name -> strims.type.Image
+	50, // 9: strims.network.v1.Network.version:type_name -> strims.dao.v1.VersionVector
+	51, // 10: strims.network.v1.Network.certificate:type_name -> strims.type.Certificate
 	10, // 11: strims.network.v1.Network.server_config:type_name -> strims.network.v1.ServerConfig
-	46, // 12: strims.network.v1.Network.certificate_renewal_error:type_name -> strims.network.v1.errors.ErrorCode
+	52, // 12: strims.network.v1.Network.certificate_renewal_error:type_name -> strims.network.v1.errors.ErrorCode
 	16, // 13: strims.network.v1.CreateInvitationResponse.invitation:type_name -> strims.network.v1.Invitation
-	42, // 14: strims.network.v1.InvitationV0.key:type_name -> strims.type.Key
-	45, // 15: strims.network.v1.InvitationV0.certificate:type_name -> strims.type.Certificate
-	47, // 16: strims.network.v1.InvitationV0.bootstrap_clients:type_name -> strims.network.v1.bootstrap.BootstrapClient
+	48, // 14: strims.network.v1.InvitationV0.key:type_name -> strims.type.Key
+	51, // 15: strims.network.v1.InvitationV0.certificate:type_name -> strims.type.Certificate
+	53, // 16: strims.network.v1.InvitationV0.bootstrap_clients:type_name -> strims.network.v1.bootstrap.BootstrapClient
 	11, // 17: strims.network.v1.CreateNetworkFromInvitationResponse.network:type_name -> strims.network.v1.Network
-	38, // 18: strims.network.v1.NetworkEvent.network_start:type_name -> strims.network.v1.NetworkEvent.NetworkStart
-	39, // 19: strims.network.v1.NetworkEvent.network_stop:type_name -> strims.network.v1.NetworkEvent.NetworkStop
-	40, // 20: strims.network.v1.NetworkEvent.network_peer_count_update:type_name -> strims.network.v1.NetworkEvent.NetworkPeerCountUpdate
+	44, // 18: strims.network.v1.NetworkEvent.network_start:type_name -> strims.network.v1.NetworkEvent.NetworkStart
+	45, // 19: strims.network.v1.NetworkEvent.network_stop:type_name -> strims.network.v1.NetworkEvent.NetworkStop
+	46, // 20: strims.network.v1.NetworkEvent.network_peer_count_update:type_name -> strims.network.v1.NetworkEvent.NetworkPeerCountUpdate
 	21, // 21: strims.network.v1.NetworkEvent.ui_config_update:type_name -> strims.network.v1.UIConfig
 	11, // 22: strims.network.v1.NetworkEvent.network_update:type_name -> strims.network.v1.Network
 	20, // 23: strims.network.v1.WatchNetworksResponse.event:type_name -> strims.network.v1.NetworkEvent
@@ -2801,42 +3114,49 @@ var file_network_v1_network_proto_depIdxs = []int32{
 	12, // 27: strims.network.v1.GrantPeerInvitationResponse.peer:type_name -> strims.network.v1.Peer
 	12, // 28: strims.network.v1.TogglePeerBanResponse.peer:type_name -> strims.network.v1.Peer
 	12, // 29: strims.network.v1.ResetPeerRenameCooldownResponse.peer:type_name -> strims.network.v1.Peer
-	11, // 30: strims.network.v1.NetworkEvent.NetworkStart.network:type_name -> strims.network.v1.Network
-	0,  // 31: strims.network.v1.NetworkFrontend.CreateServer:input_type -> strims.network.v1.CreateServerRequest
-	2,  // 32: strims.network.v1.NetworkFrontend.UpdateServerConfig:input_type -> strims.network.v1.UpdateServerConfigRequest
-	4,  // 33: strims.network.v1.NetworkFrontend.Delete:input_type -> strims.network.v1.DeleteNetworkRequest
-	6,  // 34: strims.network.v1.NetworkFrontend.Get:input_type -> strims.network.v1.GetNetworkRequest
-	8,  // 35: strims.network.v1.NetworkFrontend.List:input_type -> strims.network.v1.ListNetworksRequest
-	14, // 36: strims.network.v1.NetworkFrontend.CreateInvitation:input_type -> strims.network.v1.CreateInvitationRequest
-	18, // 37: strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation:input_type -> strims.network.v1.CreateNetworkFromInvitationRequest
-	22, // 38: strims.network.v1.NetworkFrontend.Watch:input_type -> strims.network.v1.WatchNetworksRequest
-	24, // 39: strims.network.v1.NetworkFrontend.UpdateDisplayOrder:input_type -> strims.network.v1.UpdateDisplayOrderRequest
-	26, // 40: strims.network.v1.NetworkFrontend.UpdateAlias:input_type -> strims.network.v1.UpdateAliasRequest
-	28, // 41: strims.network.v1.NetworkFrontend.GetUIConfig:input_type -> strims.network.v1.GetUIConfigRequest
-	30, // 42: strims.network.v1.NetworkFrontend.ListPeers:input_type -> strims.network.v1.ListPeersRequest
-	32, // 43: strims.network.v1.NetworkFrontend.GrantPeerInvitation:input_type -> strims.network.v1.GrantPeerInvitationRequest
-	34, // 44: strims.network.v1.NetworkFrontend.TogglePeerBan:input_type -> strims.network.v1.TogglePeerBanRequest
-	36, // 45: strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown:input_type -> strims.network.v1.ResetPeerRenameCooldownRequest
-	1,  // 46: strims.network.v1.NetworkFrontend.CreateServer:output_type -> strims.network.v1.CreateServerResponse
-	3,  // 47: strims.network.v1.NetworkFrontend.UpdateServerConfig:output_type -> strims.network.v1.UpdateServerConfigResponse
-	5,  // 48: strims.network.v1.NetworkFrontend.Delete:output_type -> strims.network.v1.DeleteNetworkResponse
-	7,  // 49: strims.network.v1.NetworkFrontend.Get:output_type -> strims.network.v1.GetNetworkResponse
-	9,  // 50: strims.network.v1.NetworkFrontend.List:output_type -> strims.network.v1.ListNetworksResponse
-	15, // 51: strims.network.v1.NetworkFrontend.CreateInvitation:output_type -> strims.network.v1.CreateInvitationResponse
-	19, // 52: strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation:output_type -> strims.network.v1.CreateNetworkFromInvitationResponse
-	23, // 53: strims.network.v1.NetworkFrontend.Watch:output_type -> strims.network.v1.WatchNetworksResponse
-	25, // 54: strims.network.v1.NetworkFrontend.UpdateDisplayOrder:output_type -> strims.network.v1.UpdateDisplayOrderResponse
-	27, // 55: strims.network.v1.NetworkFrontend.UpdateAlias:output_type -> strims.network.v1.UpdateAliasResponse
-	29, // 56: strims.network.v1.NetworkFrontend.GetUIConfig:output_type -> strims.network.v1.GetUIConfigResponse
-	31, // 57: strims.network.v1.NetworkFrontend.ListPeers:output_type -> strims.network.v1.ListPeersResponse
-	33, // 58: strims.network.v1.NetworkFrontend.GrantPeerInvitation:output_type -> strims.network.v1.GrantPeerInvitationResponse
-	35, // 59: strims.network.v1.NetworkFrontend.TogglePeerBan:output_type -> strims.network.v1.TogglePeerBanResponse
-	37, // 60: strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown:output_type -> strims.network.v1.ResetPeerRenameCooldownResponse
-	46, // [46:61] is the sub-list for method output_type
-	31, // [31:46] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	13, // 30: strims.network.v1.ListAliasReservationsResponse.alias_reservations:type_name -> strims.network.v1.AliasReservation
+	11, // 31: strims.network.v1.NetworkEvent.NetworkStart.network:type_name -> strims.network.v1.Network
+	0,  // 32: strims.network.v1.NetworkFrontend.CreateServer:input_type -> strims.network.v1.CreateServerRequest
+	2,  // 33: strims.network.v1.NetworkFrontend.UpdateServerConfig:input_type -> strims.network.v1.UpdateServerConfigRequest
+	4,  // 34: strims.network.v1.NetworkFrontend.Delete:input_type -> strims.network.v1.DeleteNetworkRequest
+	6,  // 35: strims.network.v1.NetworkFrontend.Get:input_type -> strims.network.v1.GetNetworkRequest
+	8,  // 36: strims.network.v1.NetworkFrontend.List:input_type -> strims.network.v1.ListNetworksRequest
+	14, // 37: strims.network.v1.NetworkFrontend.CreateInvitation:input_type -> strims.network.v1.CreateInvitationRequest
+	18, // 38: strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation:input_type -> strims.network.v1.CreateNetworkFromInvitationRequest
+	22, // 39: strims.network.v1.NetworkFrontend.Watch:input_type -> strims.network.v1.WatchNetworksRequest
+	24, // 40: strims.network.v1.NetworkFrontend.UpdateDisplayOrder:input_type -> strims.network.v1.UpdateDisplayOrderRequest
+	26, // 41: strims.network.v1.NetworkFrontend.UpdateAlias:input_type -> strims.network.v1.UpdateAliasRequest
+	28, // 42: strims.network.v1.NetworkFrontend.GetUIConfig:input_type -> strims.network.v1.GetUIConfigRequest
+	30, // 43: strims.network.v1.NetworkFrontend.ListPeers:input_type -> strims.network.v1.ListPeersRequest
+	32, // 44: strims.network.v1.NetworkFrontend.GrantPeerInvitation:input_type -> strims.network.v1.GrantPeerInvitationRequest
+	34, // 45: strims.network.v1.NetworkFrontend.TogglePeerBan:input_type -> strims.network.v1.TogglePeerBanRequest
+	36, // 46: strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown:input_type -> strims.network.v1.ResetPeerRenameCooldownRequest
+	38, // 47: strims.network.v1.NetworkFrontend.DeletePeer:input_type -> strims.network.v1.DeletePeerRequest
+	40, // 48: strims.network.v1.NetworkFrontend.ListAliasReservations:input_type -> strims.network.v1.ListAliasReservationsRequest
+	42, // 49: strims.network.v1.NetworkFrontend.ResetAliasReservationCooldown:input_type -> strims.network.v1.ResetAliasReservationCooldownRequest
+	1,  // 50: strims.network.v1.NetworkFrontend.CreateServer:output_type -> strims.network.v1.CreateServerResponse
+	3,  // 51: strims.network.v1.NetworkFrontend.UpdateServerConfig:output_type -> strims.network.v1.UpdateServerConfigResponse
+	5,  // 52: strims.network.v1.NetworkFrontend.Delete:output_type -> strims.network.v1.DeleteNetworkResponse
+	7,  // 53: strims.network.v1.NetworkFrontend.Get:output_type -> strims.network.v1.GetNetworkResponse
+	9,  // 54: strims.network.v1.NetworkFrontend.List:output_type -> strims.network.v1.ListNetworksResponse
+	15, // 55: strims.network.v1.NetworkFrontend.CreateInvitation:output_type -> strims.network.v1.CreateInvitationResponse
+	19, // 56: strims.network.v1.NetworkFrontend.CreateNetworkFromInvitation:output_type -> strims.network.v1.CreateNetworkFromInvitationResponse
+	23, // 57: strims.network.v1.NetworkFrontend.Watch:output_type -> strims.network.v1.WatchNetworksResponse
+	25, // 58: strims.network.v1.NetworkFrontend.UpdateDisplayOrder:output_type -> strims.network.v1.UpdateDisplayOrderResponse
+	27, // 59: strims.network.v1.NetworkFrontend.UpdateAlias:output_type -> strims.network.v1.UpdateAliasResponse
+	29, // 60: strims.network.v1.NetworkFrontend.GetUIConfig:output_type -> strims.network.v1.GetUIConfigResponse
+	31, // 61: strims.network.v1.NetworkFrontend.ListPeers:output_type -> strims.network.v1.ListPeersResponse
+	33, // 62: strims.network.v1.NetworkFrontend.GrantPeerInvitation:output_type -> strims.network.v1.GrantPeerInvitationResponse
+	35, // 63: strims.network.v1.NetworkFrontend.TogglePeerBan:output_type -> strims.network.v1.TogglePeerBanResponse
+	37, // 64: strims.network.v1.NetworkFrontend.ResetPeerRenameCooldown:output_type -> strims.network.v1.ResetPeerRenameCooldownResponse
+	39, // 65: strims.network.v1.NetworkFrontend.DeletePeer:output_type -> strims.network.v1.DeletePeerResponse
+	41, // 66: strims.network.v1.NetworkFrontend.ListAliasReservations:output_type -> strims.network.v1.ListAliasReservationsResponse
+	43, // 67: strims.network.v1.NetworkFrontend.ResetAliasReservationCooldown:output_type -> strims.network.v1.ResetAliasReservationCooldownResponse
+	50, // [50:68] is the sub-list for method output_type
+	32, // [32:50] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_network_v1_network_proto_init() }
@@ -3302,7 +3622,7 @@ func file_network_v1_network_proto_init() {
 			}
 		}
 		file_network_v1_network_proto_msgTypes[38].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkStart); i {
+			switch v := v.(*DeletePeerRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3314,7 +3634,7 @@ func file_network_v1_network_proto_init() {
 			}
 		}
 		file_network_v1_network_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkStop); i {
+			switch v := v.(*DeletePeerResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3326,6 +3646,78 @@ func file_network_v1_network_proto_init() {
 			}
 		}
 		file_network_v1_network_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListAliasReservationsRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ListAliasReservationsResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ResetAliasReservationCooldownRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ResetAliasReservationCooldownResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NetworkEvent_NetworkStart); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NetworkEvent_NetworkStop); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_network_v1_network_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*NetworkEvent_NetworkPeerCountUpdate); i {
 			case 0:
 				return &v.state
@@ -3355,7 +3747,7 @@ func file_network_v1_network_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_network_v1_network_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   41,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

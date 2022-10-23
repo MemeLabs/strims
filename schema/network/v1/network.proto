@@ -222,6 +222,23 @@ message ResetPeerRenameCooldownResponse {
   Peer peer = 1;
 }
 
+message DeletePeerRequest {
+  uint64 id = 1;
+}
+message DeletePeerResponse {}
+
+message ListAliasReservationsRequest {
+  uint64 network_id = 1;
+}
+message ListAliasReservationsResponse {
+  repeated AliasReservation alias_reservations = 1;
+}
+
+message ResetAliasReservationCooldownRequest {
+  uint64 id = 1;
+}
+message ResetAliasReservationCooldownResponse {}
+
 service NetworkFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse);
@@ -238,4 +255,7 @@ service NetworkFrontend {
   rpc GrantPeerInvitation(GrantPeerInvitationRequest) returns (GrantPeerInvitationResponse);
   rpc TogglePeerBan(TogglePeerBanRequest) returns (TogglePeerBanResponse);
   rpc ResetPeerRenameCooldown(ResetPeerRenameCooldownRequest) returns (ResetPeerRenameCooldownResponse);
+  rpc DeletePeer(DeletePeerRequest) returns (DeletePeerResponse);
+  rpc ListAliasReservations(ListAliasReservationsRequest) returns (ListAliasReservationsResponse);
+  rpc ResetAliasReservationCooldown(ResetAliasReservationCooldownRequest) returns (ResetAliasReservationCooldownResponse);
 }
