@@ -62,11 +62,7 @@ const AutoseedConfigForm = () => {
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
         </ButtonSet>
-        <ForwardLink
-          to={`/settings/autoseed/rules`}
-          title="Autoseed rules"
-          description="Some description of autoseed rules..."
-        />
+        <ForwardLink to={`/settings/autoseed/rules`} title="Autoseed rules" />
       </form>
     </>
   );

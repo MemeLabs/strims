@@ -1,12 +1,12 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
-import { AliasReservation, Network } from "../../../apis/strims/network/v1/network";
+import { AliasReservation } from "../../../apis/strims/network/v1/network";
 import {
   MenuCell,
   MenuItem,
@@ -15,7 +15,6 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
-import PublishNetworkModal from "./PublishNetworkModal";
 
 interface NetworkTableProps {
   aliasReservations: AliasReservation[];
@@ -23,7 +22,6 @@ interface NetworkTableProps {
 }
 
 const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations, onChange }) => {
-  const [publishNetwork, setPublishNetwork] = useState<Network>();
   const client = useClient();
 
   const sortedAliasReservations = useMemo(
@@ -65,13 +63,8 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
     );
   });
 
-  const modal = publishNetwork && (
-    <PublishNetworkModal network={publishNetwork} onClose={() => setPublishNetwork(null)} />
-  );
-
   return (
     <>
-      {modal}
       <Table>
         <thead>
           <tr>

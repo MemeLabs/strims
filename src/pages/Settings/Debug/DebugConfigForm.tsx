@@ -79,11 +79,7 @@ const DebugConfigForm = () => {
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
         </ButtonSet>
-        <ForwardLink
-          to={`/settings/debug/mock-stream`}
-          title="Mock streams"
-          description="Some description of mock streams..."
-        />
+        <ForwardLink to={`/settings/debug/mock-stream`} title="Mock streams" />
       </form>
     </>
   );

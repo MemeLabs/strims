@@ -124,11 +124,7 @@ const VideoIngressConfigForm = () => {
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
         </ButtonSet>
-        <ForwardLink
-          to="/settings/video/channels"
-          title="Channels"
-          description="Some description of channels..."
-        />
+        <ForwardLink to="/settings/video/channels" title="Channels" />
       </form>
     </>
   );

@@ -68,35 +68,19 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
         label="Network"
         placeholder="Select network"
       />
-      {id && (
-        <>
-          <ForwardLink
-            to={`/settings/chat-servers/${id}/icon`}
-            title="Server Icon"
-            description="Some description of server icon..."
-          />
-          <ForwardLink
-            to={`/settings/chat-servers/${id}/emotes`}
-            title="Emotes"
-            description="Some description of emotes..."
-          />
-          <ForwardLink
-            to={`/settings/chat-servers/${id}/modifiers`}
-            title="Emote modifiers"
-            description="Some description of emote modifiers..."
-          />
-          <ForwardLink
-            to={`/settings/chat-servers/${id}/tags`}
-            title="Tags"
-            description="Some description of tags..."
-          />
-        </>
-      )}
       <ButtonSet>
         <Button disabled={loading || formState.isSubmitting || !formState.isDirty}>
           {submitLabel}
         </Button>
       </ButtonSet>
+      {id && (
+        <>
+          <ForwardLink to={`/settings/chat-servers/${id}/icon`} title="Server Icon" />
+          <ForwardLink to={`/settings/chat-servers/${id}/emotes`} title="Emotes" />
+          <ForwardLink to={`/settings/chat-servers/${id}/modifiers`} title="Emote modifiers" />
+          <ForwardLink to={`/settings/chat-servers/${id}/tags`} title="Tags" />
+        </>
+      )}
     </form>
   );
 };

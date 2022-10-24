@@ -45,11 +45,7 @@ const BootstrapConfigForm = ({ onCreate, config }: BootstrapConfigFormProps) => 
       <ButtonSet>
         <Button disabled={loading}>Store Config</Button>
       </ButtonSet>
-      <ForwardLink
-        to={`/settings/bootstrap/clients`}
-        title="Bootstrap clients"
-        description="Some description of bootstrap clients..."
-      />
+      <ForwardLink to={`/settings/bootstrap/clients`} title="Bootstrap clients" />
     </form>
   );
 };

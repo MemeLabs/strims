@@ -5,8 +5,8 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
-import InternalLink from "../../../components/InternalLink";
 import { TableTitleBar } from "../../../components/Settings/Table";
+import ForwardLink from "../ForwardLink";
 
 const ProfileConfigForm = () => {
   const { t } = useTranslation();
@@ -16,8 +16,8 @@ const ProfileConfigForm = () => {
     <>
       <TableTitleBar label="Profile" />
       <div className="thing_form">
-        <InternalLink to="/settings/profile/pairing-token">Generate pairing token</InternalLink>
-        <InternalLink to="/settings/profile/devices">Devices</InternalLink>
+        <ForwardLink to="/settings/profile/pairing-token" title="Generate pairing token" />
+        <ForwardLink to="/settings/profile/devices" title="Devices" />
       </div>
     </>
   );

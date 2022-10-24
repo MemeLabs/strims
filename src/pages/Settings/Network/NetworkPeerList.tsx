@@ -1,12 +1,12 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
-import { Network, Peer } from "../../../apis/strims/network/v1/network";
+import { Peer } from "../../../apis/strims/network/v1/network";
 import {
   MenuCell,
   MenuItem,
@@ -15,7 +15,6 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
-import PublishNetworkModal from "./PublishNetworkModal";
 
 interface NetworkTableProps {
   peers: Peer[];
@@ -23,7 +22,6 @@ interface NetworkTableProps {
 }
 
 const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
-  const [publishNetwork, setPublishNetwork] = useState<Network>();
   const client = useClient();
 
   const sortedPeers = useMemo(
@@ -76,13 +74,8 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
     );
   });
 
-  const modal = publishNetwork && (
-    <PublishNetworkModal network={publishNetwork} onClose={() => setPublishNetwork(null)} />
-  );
-
   return (
     <>
-      {modal}
       <Table>
         <thead>
           <tr>
