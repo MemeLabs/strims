@@ -4,6 +4,7 @@
 import React from "react";
 import { Route, Routes } from "react-router-dom";
 
+import ChatEmoteBulkCreateForm from "./ChatEmoteBulkCreateForm";
 import ChatEmoteCreateForm from "./ChatEmoteCreateForm";
 import ChatEmoteEditForm from "./ChatEmoteEditForm";
 import ChatEmoteList from "./ChatEmoteList";
@@ -26,6 +27,7 @@ const Router: React.FC = () => (
     <Route path=":serverId/icon" element={<ChatServerIconEditForm />} />
     <Route path=":serverId/emotes" element={<ChatEmoteList />} />
     <Route path=":serverId/emotes/new" element={<ChatEmoteCreateForm />} />
+    <Route path=":serverId/emotes/new-bulk" element={<ChatEmoteBulkCreateForm />} />
     <Route path=":serverId/emotes/:emoteId" element={<ChatEmoteEditForm />} />
     <Route path=":serverId/modifiers" element={<ChatModifierList />} />
     <Route path=":serverId/modifiers/new" element={<ChatModifierCreateForm />} />

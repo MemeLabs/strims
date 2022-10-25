@@ -39,6 +39,26 @@ export const scaleToDOMScale = (type: EmoteScale): string => {
   }
 };
 
+export const scaleOptions = [
+  {
+    value: EmoteScale.EMOTE_SCALE_1X,
+    label: "1x",
+  },
+  {
+    value: EmoteScale.EMOTE_SCALE_2X,
+    label: "2x",
+  },
+  {
+    value: EmoteScale.EMOTE_SCALE_4X,
+    label: "4x",
+  },
+];
+
+export interface ScaleOption {
+  value: EmoteScale;
+  label: string;
+}
+
 export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
   const effects: IEmoteEffect[] = [];
   if (data.animated) {
@@ -90,7 +110,7 @@ export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
       },
     ],
     effects,
-    labels: data.labels.map(({ value }) => value),
+    labels: data.labels?.map(({ value }) => value),
     enable: data.enable,
   };
 };

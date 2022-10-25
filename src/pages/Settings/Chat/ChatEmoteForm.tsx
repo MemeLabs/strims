@@ -21,14 +21,12 @@ import {
   ToggleInput,
 } from "../../../components/Form";
 import { useCall } from "../../../contexts/FrontendApi";
+import { ScaleOption, scaleOptions } from "./utils";
 
 export interface ChatEmoteFormData {
   name: string;
   image: ImageValue;
-  scale: {
-    value: EmoteScale;
-    label: string;
-  };
+  scale: ScaleOption;
   contributor: string;
   contributorLink: string;
   css: string;
@@ -43,21 +41,6 @@ export interface ChatEmoteFormData {
   labels: SelectOption<string>[];
   enable: boolean;
 }
-
-const scaleOptions = [
-  {
-    value: EmoteScale.EMOTE_SCALE_1X,
-    label: "1x",
-  },
-  {
-    value: EmoteScale.EMOTE_SCALE_2X,
-    label: "2x",
-  },
-  {
-    value: EmoteScale.EMOTE_SCALE_4X,
-    label: "4x",
-  },
-];
 
 export interface ChatEmoteFormProps {
   onSubmit: (data: ChatEmoteFormData) => void;

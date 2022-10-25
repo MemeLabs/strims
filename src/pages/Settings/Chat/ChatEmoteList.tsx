@@ -151,7 +151,8 @@ const ChatEmoteList: React.FC = () => {
           Disable Selected
         </Button>
         <TableMenu label="Create">
-          <MenuLink label="Create Emote" to={`/settings/chat-servers/${serverId}/emotes/new`} />
+          <MenuLink label="Create emote" to={`/settings/chat-servers/${serverId}/emotes/new`} />
+          <MenuLink label="Create several emotes" to={`/settings/chat-servers/${serverId}/emotes/new-bulk`} />
         </TableMenu>
       </TableTitleBar>
       <ChatEmoteTable
