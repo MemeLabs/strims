@@ -101,6 +101,10 @@
     display: flex;
     flex-direction: column;
 
+    &--loading &__link {
+      display: none;
+    }
+
     &__link {
       padding: 8px;
       margin: 4px;

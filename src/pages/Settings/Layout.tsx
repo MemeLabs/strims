@@ -4,7 +4,7 @@
 import "./Layout.scss";
 
 import clsx from "clsx";
-import React, { ReactElement, Suspense, useCallback } from "react";
+import React, { ReactElement, Suspense, useCallback, useEffect } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { NavLink, Outlet } from "react-router-dom";
 
@@ -29,13 +29,11 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
 
   const onLinkClick = useCallback(() => onToggle?.(), []);
 
-  if (videoIngressIsSupported.loading || hlsEgressIsSupported.loading) {
-    return null;
-  }
-
   return (
     <SwipablePanel
-      className="settings__nav"
+      className={clsx("settings__nav", {
+        "settings__nav--loading": videoIngressIsSupported.loading || hlsEgressIsSupported.loading,
+      })}
       open={open}
       onToggle={onToggle}
       dragThreshold={100}
@@ -53,12 +51,12 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
       <NavLink className={linkClassName} onClick={onLinkClick} to="chat-servers">
         Chat Servers
       </NavLink>
-      {videoIngressIsSupported.value.supported && (
+      {videoIngressIsSupported.value?.supported && (
         <NavLink className={linkClassName} onClick={onLinkClick} to="video/ingress">
           Video Ingress
         </NavLink>
       )}
-      {hlsEgressIsSupported.value.supported && (
+      {hlsEgressIsSupported.value?.supported && (
         <NavLink className={linkClassName} onClick={onLinkClick} to="video/egress">
           Video Egress
         </NavLink>
@@ -78,21 +76,26 @@ export const Nav: React.FC<NavProps> = ({ open, onToggle }) => {
 
 interface SettingsLayoutProps {
   nav?: ReactElement;
+  onClose?: () => void;
 }
 
-const SettingsLayout: React.FC<SettingsLayoutProps> = ({ nav = <Nav /> }) => (
-  <div className="settings">
-    {nav}
-    <div className="settings__body">
-      <Suspense fallback={<LoadingPlaceholder />}>
-        <Scrollbars autoHide={true}>
-          <main className="settings__content">
-            <Outlet />
-          </main>
-        </Scrollbars>
-      </Suspense>
+const SettingsLayout: React.FC<SettingsLayoutProps> = ({ nav = <Nav />, onClose }) => {
+  useEffect(() => () => onClose?.(), []);
+
+  return (
+    <div className="settings">
+      {nav}
+      <div className="settings__body">
+        <Suspense fallback={<LoadingPlaceholder />}>
+          <Scrollbars autoHide={true}>
+            <main className="settings__content">
+              <Outlet />
+            </main>
+          </Scrollbars>
+        </Suspense>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default SettingsLayout;

@@ -4,15 +4,20 @@
 import "./Header.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { FiActivity, FiUser } from "react-icons/fi";
-import { MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
-import { Link } from "react-router-dom";
+import { MdClose, MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
+import { Link, Routes, useNavigate, useResolvedPath } from "react-router-dom";
+import { useToggle } from "react-use";
+import usePortal from "use-portal";
 
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
+import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
 import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
+import Layout from "../../pages/Settings/Layout";
+import { createSettingsRoutes } from "../../root/MainRouter";
 import Debugger from "../Debugger";
 import DirectorySearch from "../Directory/Search";
 
@@ -43,6 +48,10 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
       "layout_header__primary_nav__link": true,
       "layout_header__primary_nav__link--active": isActive,
     });
+
+  const [showSettings, toggleShowSettings] = useToggle(false);
+  const handleSettingsOpen = useCallback(() => toggleShowSettings(true), []);
+  const handleSettingsClose = useCallback(() => toggleShowSettings(false), []);
 
   return (
     <header className="layout_header">
@@ -83,16 +92,49 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
           <FiBell />
         </button> */}
         <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
-        <Link
+        {showSettings && <SettingsModal onClose={handleSettingsClose} />}
+        <button
           className="layout_header__user_nav__link"
-          to="/settings"
+          onClick={handleSettingsOpen}
           title={t("layout.header.Settings")}
         >
           <FiUser />
-        </Link>
+        </button>
       </div>
     </header>
   );
 };
 
 export default Header;
+
+interface ModalProps {
+  onClose: () => void;
+}
+
+const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
+  const layout = useLayout();
+  const { Portal } = usePortal({ target: layout.root });
+
+  const backgroundRoute = useBackgroundRoute();
+  const path = useResolvedPath("settings");
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    backgroundRoute.toggle(true);
+    navigate(path);
+    return () => backgroundRoute.toggle(false);
+  }, []);
+
+  return (
+    <Portal>
+      <div className="layout_header__settings">
+        <button className="layout_header__settings__close" onClick={onClose}>
+          <MdClose />
+        </button>
+        <Routes location={backgroundRoute.foregroundLocation}>
+          {createSettingsRoutes(<Layout onClose={onClose} />)}
+        </Routes>
+      </div>
+    </Portal>
+  );
+};

@@ -141,4 +141,47 @@
       overflow: hidden;
     }
   }
+
+  &__settings {
+    z-index: var(--z-index-modal);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 100vh;
+    width: 100vw;
+    background: var(--color-slate-8);
+    display: flex;
+    --settings-padding: calc((100vw - 1200px) / 2);
+
+    .settings__nav {
+      padding-top: 40px;
+      padding-left: var(--settings-padding);
+    }
+
+    .settings__content {
+      padding-top: 40px;
+      padding-right: calc(max(var(--settings-padding), 80px));
+    }
+
+    &__close {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      border: 2px solid var(--color-grey-8);
+      border-radius: var(--border-radius-rounded);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 30px;
+      width: 30px;
+      cursor: pointer;
+      z-index: 1;
+
+      svg {
+        height: 20px;
+        width: 20px;
+        color: solid var(--color-grey-8);
+      }
+    }
+  }
 }
