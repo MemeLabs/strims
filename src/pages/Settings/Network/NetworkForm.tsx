@@ -54,6 +54,7 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
         label="Alternate Name"
         name="alias"
         placeholder="Enter an alternate name for this network"
+        description="Your name in chat and private messages."
       />
       <ButtonSet>
         <Button disabled={loading}>Update Network</Button>

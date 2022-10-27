@@ -167,6 +167,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
         label={t("inviteAuth.Alias")}
         name="alias"
         placeholder={t("inviteAuth.Enter an alternate name for this network")}
+        description={t("inviteAuth.Your name in chat and private messages.")}
       />
       {bootstrapClients.length > 0 && (
         <InputLabel
