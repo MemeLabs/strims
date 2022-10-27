@@ -5,7 +5,6 @@ import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { useMemo } from "react";
 import { useForm } from "react-hook-form";
 
-import { EmoteScale } from "../../../apis/strims/chat/v1/chat";
 import {
   Button,
   ButtonSet,

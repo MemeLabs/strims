@@ -15,6 +15,8 @@ import { withTheme } from "../Theme";
 import Footer from "./Footer";
 import Header from "./Header";
 
+export type Breakpoint = "sm" | "md" | "lg" | "xl";
+
 const FORCE_FIXED_SIZE = DEVICE_TYPE !== DeviceType.PC;
 
 interface ViewportShape {

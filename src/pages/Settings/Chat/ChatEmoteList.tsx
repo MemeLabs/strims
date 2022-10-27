@@ -13,7 +13,7 @@ import React, {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { BsDot } from "react-icons/bs";
+import { BsDot, BsThreeDots } from "react-icons/bs";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
@@ -25,10 +25,12 @@ import {
   CheckboxCell,
   CheckboxHeader,
   MenuCell,
+  MenuHr,
   MenuItem,
   MenuLink,
   Table,
   TableCell,
+  TableHeader,
   TableMenu,
   TableState,
   TableTitleBar,
@@ -74,7 +76,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
         <TableCell>
           <Link to={`/settings/chat-servers/${serverId}/emotes/${emote.id}`}>{emote.name}</Link>
         </TableCell>
-        <TableCell>
+        <TableCell showFor="md">
           {emote.labels.map((l) => (
             <Label key={l}>{l}</Label>
           ))}
@@ -92,7 +94,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
           <CheckboxHeader name="id" />
           <th></th>
           <th>Title</th>
-          <th></th>
+          <TableHeader showFor="md"></TableHeader>
           <th></th>
         </tr>
       </thead>
@@ -144,15 +146,15 @@ const ChatEmoteList: React.FC = () => {
     <>
       <TableTitleBar label="Emotes" backLink={`/settings/chat-servers/${serverId}`}>
         <Search onChange={handleSearchChange} placeholder="Search" />
-        <Button borderless onClick={handleEnableClick}>
-          Enable Selected
-        </Button>
-        <Button borderless onClick={handleDisableClick}>
-          Disable Selected
-        </Button>
-        <TableMenu label="Create">
+        <TableMenu label={<BsThreeDots />}>
+          <MenuItem label="Enable selected" onClick={handleEnableClick} />
+          <MenuItem label="Disable selected" onClick={handleDisableClick} />
+          <MenuHr />
           <MenuLink label="Create emote" to={`/settings/chat-servers/${serverId}/emotes/new`} />
-          <MenuLink label="Create several emotes" to={`/settings/chat-servers/${serverId}/emotes/new-bulk`} />
+          <MenuLink
+            label="Create several emotes"
+            to={`/settings/chat-servers/${serverId}/emotes/new-bulk`}
+          />
         </TableMenu>
       </TableTitleBar>
       <ChatEmoteTable

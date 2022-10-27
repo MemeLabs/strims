@@ -3,9 +3,14 @@
 
 .thing_table {
   display: table;
-  width: 100%;
-  max-width: 1000px;
-  border-spacing: 0;
+
+  &,
+  &__title_bar {
+    width: 100%;
+    min-width: 300px;
+    max-width: 1000px;
+    border-spacing: 0;
+  }
 
   tr {
     display: table-row;
@@ -24,6 +29,20 @@
     }
     &:last-child {
       border-right: 1px solid var(--color-opac-w-2);
+    }
+  }
+
+  $breakpoints: "sm", "md", "lg", "xl";
+  @each $breakpoint in $breakpoints {
+    &__cell,
+    &__header {
+      &--show_for_#{$breakpoint} {
+        display: none;
+
+        @at-root .layout--min_width_#{$breakpoint} & {
+          display: table-cell;
+        }
+      }
     }
   }
 
@@ -69,12 +88,27 @@
     justify-content: space-between;
     margin: 5px 0;
     align-items: center;
-    max-width: 1000px;
     height: 2rem;
+    gap: 0.4rem;
 
-    &__header {
+    &__header,
+    &__controls {
       display: flex;
+      flex: 1;
       align-items: center;
+    }
+
+    &__title {
+      white-space: nowrap;
+    }
+
+    &__controls {
+      flex-basis: 300px;
+      justify-content: flex-end;
+      align-self: stretch;
+      align-items: stretch;
+      gap: 0.4rem;
+      min-width: 0;
     }
 
     &__back {
@@ -87,13 +121,6 @@
       &:hover {
         background-color: var(--color-opac-w-2);
       }
-    }
-
-    &__controls {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 0.4rem;
     }
   }
 
@@ -143,19 +170,27 @@
     text-align: left;
     padding: 5px;
     white-space: nowrap;
+    cursor: pointer;
 
     &:hover {
       background: green;
     }
   }
+
+  &__hr {
+    border-bottom: 1px solid var(--color-slate-12);
+  }
 }
 
 .thing_table_dropdown {
   justify-self: right;
-  display: inline-block;
+  display: flex;
+  min-width: unset;
 
   &__anchor {
-    padding: 5px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
     border: 1px solid var(--color-opac-w-3);
     background: var(--color-background-input);
     border-radius: var(--border-radius-small);
@@ -166,7 +201,7 @@
   width: 28px;
 
   &__anchor {
-    height: 28px;
+    padding: 5px;
     border-radius: var(--border-radius-small);
     display: flex;
     align-items: center;

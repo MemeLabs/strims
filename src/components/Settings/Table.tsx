@@ -20,6 +20,7 @@ import { Link } from "react-router-dom";
 
 import { setRef } from "../../lib/ref";
 import Dropdown from "../Dropdown";
+import { Breakpoint } from "../Layout/Layout";
 
 export interface TableState {
   checkboxes: Map<string, Set<bigint>>;
@@ -133,17 +134,23 @@ export const TableTitleBar: React.FC<TableTitleBarProps> = ({ label, backLink, c
 export interface TableCellProps extends ComponentProps<"td"> {
   truncate?: boolean;
   children?: ReactNode;
+  showFor?: Breakpoint;
 }
 
 export const TableCell: React.FC<TableCellProps> = ({
   truncate,
   children,
-  className,
+  className: baseClassName,
+  showFor,
   ...props
 }) => {
+  const className = clsx("thing_table__cell", baseClassName, {
+    [`thing_table__cell--show_for_${showFor}`]: !!showFor,
+  });
+
   if (truncate) {
     return (
-      <td className={clsx("thing_table__cell", className)} {...props}>
+      <td className={className} {...props}>
         <div className="thing_table__truncate">
           <span className="thing_table__truncate__reference">{children}</span>
           <span className="thing_table__truncate__display">{children}</span>
@@ -153,14 +160,35 @@ export const TableCell: React.FC<TableCellProps> = ({
   }
 
   return (
-    <td className={clsx("thing_table__cell", className)} {...props}>
+    <td className={className} {...props}>
       {children}
     </td>
   );
 };
 
+export interface TableHeaderProps extends ComponentProps<"th"> {
+  showFor?: Breakpoint;
+}
+
+export const TableHeader: React.FC<TableHeaderProps> = ({
+  children,
+  className: baseClassName,
+  showFor,
+  ...props
+}) => {
+  const className = clsx("thing_table__header", baseClassName, {
+    [`thing_table__header--show_for_${showFor}`]: !!showFor,
+  });
+
+  return (
+    <th className={className} {...props}>
+      {children}
+    </th>
+  );
+};
+
 export interface TableMenuProps {
-  label: string;
+  label: ReactNode;
   children: ReactNode;
 }
 
@@ -191,6 +219,8 @@ export const MenuLink: React.FC<MenuLinkProps> = ({ label, className, to }) => (
     {label}
   </Link>
 );
+
+export const MenuHr: React.FC = () => <hr className="thing_table_item_dropdown__hr" />;
 
 export interface CheckboxCellProps {
   name: string;
