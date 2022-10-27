@@ -28,7 +28,6 @@ import { mimeTypeToFileType } from "./utils";
 
 type EmoteIndex = 0 | 1 | 2 | 3 | 4;
 type Values<T> = T[keyof T];
-
 type EmoteNameInputs = Partial<Record<Values<{ [I in EmoteIndex]: `emote_${I}_name` }>, string>>;
 type EmoteImageInputs = Partial<
   Record<Values<{ [I in EmoteIndex]: `emote_${I}_image` }>, ImageValue>
@@ -94,12 +93,12 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     },
   });
 
-  const createEmote = useCallback((name: string, image: ImageValue) => {
+  const createEmote = (name: string, image: ImageValue) => {
     const index = (getValues().count >> 0) as EmoteIndex;
     setValue(`emote_${index}_name`, name);
     setValue(`emote_${index}_image`, image);
     setValue("count", index + 1);
-  }, []);
+  };
 
   const handleEmoteDelete = useCallback((i: EmoteIndex) => {
     const values = getValues();
@@ -111,23 +110,8 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     setValue("count", values.count - 1);
   }, []);
 
-  const count = watch("count");
-
-  const emoteInputs: ReactNode[] = [];
-  for (let i = 0; i < count; i++) {
-    emoteInputs.push(
-      <EmoteInput control={control} key={i} index={i as EmoteIndex} onDelete={handleEmoteDelete} />
-    );
-  }
-
-  const handleDrop = async (files: File[]) => {
-    if (files.length === 0) {
-      return;
-    }
-
+  const handleDrop = useCallback(async (files: File[]) => {
     for (const file of files) {
-      const url = URL.createObjectURL(file);
-
       const data = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
@@ -136,8 +120,9 @@ const ChatEmoteCreateFormPage: React.FC = () => {
       });
 
       const img = new Image();
-      img.src = url;
+      img.src = URL.createObjectURL(file);
       img.onload = () => {
+        URL.revokeObjectURL(img.src);
         const name = file.name.replace(/\.\w+$/, "");
         const image = {
           data: Base64.fromUint8Array(new Uint8Array(data)),
@@ -148,7 +133,15 @@ const ChatEmoteCreateFormPage: React.FC = () => {
         createEmote(name, image);
       };
     }
-  };
+  }, []);
+
+  const count = watch("count");
+  const emoteInputs: ReactNode[] = [];
+  for (let i = 0; i < count; i++) {
+    emoteInputs.push(
+      <EmoteInput control={control} key={i} index={i as EmoteIndex} onDelete={handleEmoteDelete} />
+    );
+  }
 
   return (
     <>
