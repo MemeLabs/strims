@@ -110,7 +110,7 @@ module.exports = (env, argv) => {
       ios: true,
       icons: [
         {
-          src: path.resolve("assets/splat.png"),
+          src: path.resolve("assets/sggL.png"),
           sizes: [96, 128, 192, 256, 384, 512],
         },
       ],
