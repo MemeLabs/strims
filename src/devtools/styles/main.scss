@@ -239,7 +239,12 @@ body {
 }
 
 .emote_tester__form {
-  width: 500px;
+  width: 500px !important;
+  height: calc(100vh - 100px) !important;
+
+  @at-root .storybook--fullscreen & {
+    height: calc(100vh - 40px) !important;
+  }
 }
 
 .directory_mockup {

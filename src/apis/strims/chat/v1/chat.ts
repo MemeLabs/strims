@@ -518,18 +518,26 @@ export namespace EmoteEffect {
 
   export type ICustomCSS = {
     styleSheet?: strims_chat_v1_IStyleSheet;
+    extraWrapCount?: number;
+    wrapAdjacent?: boolean;
   }
 
   export class CustomCSS {
     styleSheet: strims_chat_v1_StyleSheet | undefined;
+    extraWrapCount: number;
+    wrapAdjacent: boolean;
 
     constructor(v?: ICustomCSS) {
       this.styleSheet = v?.styleSheet && new strims_chat_v1_StyleSheet(v.styleSheet);
+      this.extraWrapCount = v?.extraWrapCount || 0;
+      this.wrapAdjacent = v?.wrapAdjacent || false;
     }
 
     static encode(m: CustomCSS, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.styleSheet) strims_chat_v1_StyleSheet.encode(m.styleSheet, w.uint32(10).fork()).ldelim();
+      if (m.extraWrapCount) w.uint32(16).uint32(m.extraWrapCount);
+      if (m.wrapAdjacent) w.uint32(24).bool(m.wrapAdjacent);
       return w;
     }
 
@@ -542,6 +550,12 @@ export namespace EmoteEffect {
         switch (tag >> 3) {
           case 1:
           m.styleSheet = strims_chat_v1_StyleSheet.decode(r, r.uint32());
+          break;
+          case 2:
+          m.extraWrapCount = r.uint32();
+          break;
+          case 3:
+          m.wrapAdjacent = r.bool();
           break;
           default:
           r.skipType(tag & 7);

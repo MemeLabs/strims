@@ -839,11 +839,24 @@ const createRoomActions = (
         };
         effects.forEach((e) => {
           switch (e.effect.case) {
+            case EmoteEffect.EffectCase.CUSTOM_CSS: {
+              const modifier = new Modifier({
+                id,
+                name: `css_${id}`,
+                priority: -1,
+                internal: true,
+                extraWrapCount: e.effect.customCss.extraWrapCount,
+                styleSheet: e.effect.customCss.styleSheet,
+              });
+              liveModifierMap.set(id, modifier);
+              style.modifiers.push(modifier.name);
+              break;
+            }
             case EmoteEffect.EffectCase.SPRITE_ANIMATION:
               style.animated = true;
               break;
             case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
-              style.modifiers = e.effect.defaultModifiers.modifiers;
+              style.modifiers.push(...e.effect.defaultModifiers.modifiers);
               break;
           }
         });

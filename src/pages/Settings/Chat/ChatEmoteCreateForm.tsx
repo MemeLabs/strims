@@ -24,10 +24,10 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true }),
   });
 
-  const onSubmit = (data: ChatEmoteFormData) =>
-    createChatEmote({
+  const onSubmit = async (data: ChatEmoteFormData) =>
+    await createChatEmote({
       serverId: BigInt(serverId),
-      ...toEmoteProps(data),
+      ...(await toEmoteProps(data)),
     });
 
   const backLink = value?.emotes.length

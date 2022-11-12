@@ -4,6 +4,7 @@
 import { Base64 } from "js-base64";
 
 import { EmoteFileType, EmoteScale, IEmote, IEmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import { fromStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { ChatEmoteFormData } from "./ChatEmoteForm";
 
 export const mimeTypeToFileType = (type: string): EmoteFileType => {
@@ -59,7 +60,7 @@ export interface ScaleOption {
   label: string;
 }
 
-export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
+export const toEmoteProps = async (data: ChatEmoteFormData): Promise<IEmote> => {
   const effects: IEmoteEffect[] = [];
   if (data.animated) {
     effects.push({
@@ -75,11 +76,13 @@ export const toEmoteProps = (data: ChatEmoteFormData): IEmote => {
       },
     });
   }
-  if (data.css) {
+  if (data.scss || data.assetCount > 0 || data.extraWrapCount > 0 || data.wrapAdjacent) {
     effects.push({
       effect: {
         customCss: {
-          // css: data.css,
+          styleSheet: await fromStyleSheetFormValue(data),
+          extraWrapCount: data.extraWrapCount,
+          wrapAdjacent: data.wrapAdjacent,
         },
       },
     });

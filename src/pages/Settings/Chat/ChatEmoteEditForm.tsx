@@ -8,6 +8,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { EmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import { toStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
@@ -27,11 +28,11 @@ const ChatEmoteEditFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`),
   });
 
-  const onSubmit = (data: ChatEmoteFormData) =>
-    updateChatEmote({
+  const onSubmit = async (data: ChatEmoteFormData) =>
+    await updateChatEmote({
       serverId: BigInt(serverId),
       id: BigInt(emoteId),
-      ...toEmoteProps(data),
+      ...(await toEmoteProps(data)),
     });
 
   if (getRes.loading) {
@@ -55,7 +56,10 @@ const ChatEmoteEditFormPage: React.FC = () => {
     contributorLink: emote.contributor?.link,
     labels: emote.labels.map((label) => ({ label, value: label })),
     enable: emote.enable,
-    css: "",
+    assetCount: 0,
+    scss: "",
+    extraWrapCount: 0,
+    wrapAdjacent: false,
     animated: false,
     animationFrameCount: 0,
     animationDuration: 0,
@@ -69,7 +73,9 @@ const ChatEmoteEditFormPage: React.FC = () => {
   emote.effects.forEach(({ effect }) => {
     switch (effect.case) {
       case EmoteEffect.EffectCase.CUSTOM_CSS:
-        // data.css = effect.customCss.css;
+        Object.assign(data, toStyleSheetFormValue(effect.customCss.styleSheet));
+        data.extraWrapCount = effect.customCss.extraWrapCount;
+        data.wrapAdjacent = effect.customCss.wrapAdjacent;
         break;
       case EmoteEffect.EffectCase.SPRITE_ANIMATION:
         data.animated = true;

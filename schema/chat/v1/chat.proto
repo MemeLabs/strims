@@ -73,6 +73,8 @@ message EmoteImage {
 message EmoteEffect {
   message CustomCSS {
     StyleSheet style_sheet = 1;
+    uint32 extra_wrap_count = 2;
+    bool wrap_adjacent = 3;
   }
 
   message SpriteAnimation {

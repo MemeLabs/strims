@@ -95,6 +95,15 @@ const deleteMatchingCSSRules = (sheet: CSSStyleSheet, filter: (rule: CSSRule) =>
   }
 };
 
+const insertRule = (sheet: CSSStyleSheet, rule: string) => {
+  try {
+    sheet.insertRule(rule);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(e);
+  }
+};
+
 const defaultUIConfigHighlights: Map<string, UIConfigHighlight> = new Map();
 const defaultUIConfigTags: Map<string, UIConfigTag> = new Map();
 const defaultUIConfigIgnores: Map<string, UIConfigIgnore> = new Map();
@@ -193,10 +202,12 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
           containerRules = upsertProps(containerRules, ...extraContainerRules[e.name]);
         }
 
-        ref.current.sheet.insertRule(
+        insertRule(
+          ref.current.sheet,
           `#${scope} .${name} {${[...rules, ...containerRules].map((r) => r.join(":")).join(";")}}`
         );
-        ref.current.sheet.insertRule(
+        insertRule(
+          ref.current.sheet,
           `#${scope} .${name}_container {${containerRules.map((r) => r.join(":")).join(";")}}`
         );
 
@@ -219,7 +230,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       if (first.type !== "ClassSelector") {
         return first.type === "Percentage";
       }
-      if (first.name !== name) {
+      if (first.name !== "this") {
         return false;
       }
 
@@ -239,13 +250,28 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       return true;
     };
 
-    const sanitizeDeclaration = (node: csstree.Declaration) => {
-      if (node.property !== "position") {
-        return true;
+    const sanitizeDeclaration = (node: csstree.Declaration, animations: Map<string, string>) => {
+      switch (node.property) {
+        case "position": {
+          const value = csstree.find(node, isNodeType("Identifier")) as csstree.Identifier;
+          return value?.name === "relative" || value?.name === "absolute";
+        }
+        case "animation":
+        case "animation-name": {
+          csstree.walk(node.value, (node) => {
+            if (node.type === "Identifier" && animations.has(node.name)) {
+              node.name = animations.get(node.name);
+            }
+          });
+          return true;
+        }
+        case "animation-duration":
+        case "animation-delay":
+          // TODO: apply animation speed/iteration changes
+          return true;
+        default:
+          return true;
       }
-
-      const value = csstree.find(node, isNodeType("Identifier")) as csstree.Identifier;
-      return value?.name === "relative" || value?.name === "absolute";
     };
 
     const sanitizeUrl = (node: csstree.Url, uris: Map<string, string>) => {
@@ -275,6 +301,23 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
     const sanitizeStyleSheet = (css: string = "", name: string, uris: Map<string, string>) => {
       const ast = csstree.parse(css);
+
+      const animations = new Map<string, string>();
+      csstree.walk(ast, (node) => {
+        if (
+          node.type === "Atrule" &&
+          node.name === "keyframes" &&
+          node.prelude.type === "AtrulePrelude"
+        ) {
+          const identifier = node.prelude.children.first;
+          if (identifier.type === "Identifier") {
+            const sanitizedName = `anim_${scope}_${name}--${identifier.name}`;
+            animations.set(identifier.name, sanitizedName);
+            identifier.name = sanitizedName;
+          }
+        }
+      });
+
       let ok = true;
       csstree.walk(ast, (node) => {
         switch (node.type) {
@@ -282,7 +325,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
             ok &&= sanitizeSelector(node, name);
             break;
           case "Declaration":
-            ok &&= sanitizeDeclaration(node);
+            ok &&= sanitizeDeclaration(node, animations);
             break;
           case "Url":
             ok &&= sanitizeUrl(node, uris);
@@ -311,8 +354,11 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
           URL.revokeObjectURL(uri);
         }
         next.delete(m);
-        deleteMatchingCSSRules(ref.current.sheet, (r) =>
-          r.cssText.includes(`#${scope} chat__emote_container--${name}`)
+        deleteMatchingCSSRules(
+          ref.current.sheet,
+          (r) =>
+            r.cssText.includes(`#${scope} .chat__emote_container--${name}`) ||
+            r.cssText.includes(`@keyframes anim_${scope}_${name}--`)
         );
       }
       for (const m of added) {
@@ -323,7 +369,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
         const rules = sanitizeStyleSheet(styleSheet?.css, name, uris);
         for (const rule of rules) {
-          ref.current.sheet.insertRule(rule);
+          insertRule(ref.current.sheet, rule);
         }
 
         next.set(m, { name, uris });
@@ -342,7 +388,8 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         rules = upsertProps(rules, ["display", "none"]);
       }
 
-      ref.current.sheet.insertRule(
+      insertRule(
+        ref.current.sheet,
         `#${scope} .chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
       );
     }
@@ -372,7 +419,8 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     }
 
     for (const [key, rules] of props) {
-      ref.current.sheet.insertRule(
+      insertRule(
+        ref.current.sheet,
         `#${scope} .chat__message--author_${key} {${rules.map((r) => r.join(":")).join(";")}}`
       );
     }
@@ -386,14 +434,18 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         }
       }
       const selector = `#${scope} .chat__message:not(${keys.join(", ")})`;
-      ref.current.sheet.insertRule(
+      insertRule(
+        ref.current.sheet,
         `${selector} { --opacity-chat-message: var(--opacity-chat-unselected); }`
       );
     }
 
     if (uiConfig.ignoreMentions) {
       for (const key of uiConfigIgnores.keys()) {
-        ref.current.sheet.insertRule(`#${scope} .chat__message--mention_${key} { display: none; }`);
+        insertRule(
+          ref.current.sheet,
+          `#${scope} .chat__message--mention_${key} { display: none; }`
+        );
       }
     }
   }, [styles, uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores]);

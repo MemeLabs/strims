@@ -4,7 +4,9 @@
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import { Base64 } from "js-base64";
+import { isEqual } from "lodash";
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
+import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
 import { useUpdateEffect } from "react-use";
 
@@ -114,7 +116,7 @@ const Modifiers: React.FC = () => {
       <div className="emotes__grid">
         <Chat>
           {emoteNames.map((emote) => (
-            <div key={emote} className="emotes__grid__cell">
+            <div key={emote} id="chat-1" className="emotes__grid__cell">
               <Emote
                 name={emote}
                 shouldAnimateForever
@@ -242,17 +244,19 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ formData }) =
       return;
     }
 
-    service.emitAssetBundle(
-      new AssetBundle({
-        isDelta: true,
-        emotes: [
-          {
-            ...toEmoteProps(formData),
-            "id": BigInt(9999),
-            "name": "test",
-          },
-        ],
-      })
+    void toEmoteProps(formData).then((emote) =>
+      service.emitAssetBundle(
+        new AssetBundle({
+          isDelta: true,
+          emotes: [
+            {
+              ...emote,
+              "id": BigInt(9999),
+              "name": "test",
+            },
+          ],
+        })
+      )
     );
   }, [service, formData]);
 
@@ -305,7 +309,10 @@ const EmoteTester: React.FC = () => {
           },
           contributor: "",
           contributorLink: "",
-          css: "",
+          assetCount: 0,
+          scss: "",
+          extraWrapCount: 0,
+          wrapAdjacent: false,
           animated: false,
           animationFrameCount: 0,
           animationDuration: 0,
@@ -320,21 +327,20 @@ const EmoteTester: React.FC = () => {
       );
   }, []);
 
+  const handleChange = (next: ChatEmoteFormData) =>
+    setFormData((prev) => (isEqual(prev, next) ? prev : next));
+
   return (
-    <div className="emote_tester">
+    <div id="chat-1" className="emote_tester">
       <Chat messages={messages} shouldRenderStyleSheet={false}>
         <div className="emote_tester__messages chat">
           <EmoteTesterMessages formData={formData} />
         </div>
-        <div className="emote_tester__form">
+        <Scrollbars className="emote_tester__form">
           {formData && (
-            <ChatEmoteForm
-              values={formData}
-              onSubmit={(values) => setFormData(values)}
-              submitLabel="Update Emote"
-            />
+            <ChatEmoteForm values={formData} onChange={handleChange} submitLabel="Update Emote" />
           )}
-        </div>
+        </Scrollbars>
       </Chat>
     </div>
   );
@@ -435,7 +441,7 @@ const Combo: React.FC = () => {
   const values = watch();
 
   return (
-    <div className="combo">
+    <div id="chat-1" className="combo">
       <div className="combo__messages chat">
         <Chat messages={messages}>
           <ComboMessages
@@ -459,7 +465,7 @@ const Menu: React.FC = () => {
   const onClose = () => console.log("close");
 
   return (
-    <div className="chat_mockup">
+    <div id="chat-1" className="chat_mockup">
       <Chat>
         <EmoteMenu onSelect={onSelect} onClose={onClose} />
       </Chat>

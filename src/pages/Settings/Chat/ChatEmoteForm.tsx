@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
-import React, { useMemo } from "react";
-import { useForm } from "react-hook-form";
+import React, { useEffect, useMemo } from "react";
+import { FormProvider, useForm } from "react-hook-form";
 
 import {
   Button,
@@ -15,20 +15,24 @@ import {
   InputLabel,
   SelectInput,
   SelectOption,
-  TextAreaInput,
   TextInput,
   ToggleInput,
 } from "../../../components/Form";
+import {
+  ChatStyleSheetFormData,
+  ChatStyleSheetInput,
+} from "../../../components/Settings/ChatStyleSheet";
 import { useCall } from "../../../contexts/FrontendApi";
 import { ScaleOption, scaleOptions } from "./utils";
 
-export interface ChatEmoteFormData {
+export interface ChatEmoteFormData extends ChatStyleSheetFormData {
   name: string;
   image: ImageValue;
   scale: ScaleOption;
   contributor: string;
   contributorLink: string;
-  css: string;
+  extraWrapCount: number;
+  wrapAdjacent: boolean;
   animated: boolean;
   animationFrameCount: number;
   animationDuration: number;
@@ -42,7 +46,8 @@ export interface ChatEmoteFormData {
 }
 
 export interface ChatEmoteFormProps {
-  onSubmit: (data: ChatEmoteFormData) => void;
+  onSubmit?: (data: ChatEmoteFormData) => void;
+  onChange?: (data: ChatEmoteFormData) => void;
   error?: Error;
   loading?: boolean;
   serverId?: bigint;
@@ -50,21 +55,30 @@ export interface ChatEmoteFormProps {
   submitLabel: string;
 }
 
+const noop = () => undefined;
+
 const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
-  onSubmit,
+  onSubmit = noop,
+  onChange = noop,
   error = null,
   loading = false,
   serverId = BigInt(0),
   values = {},
   submitLabel,
 }) => {
-  const { handleSubmit, control, watch } = useForm<ChatEmoteFormData>({
+  const formMethods = useForm<ChatEmoteFormData>({
     mode: "onBlur",
     defaultValues: {
       scale: scaleOptions[0],
       ...values,
     },
   });
+  const { handleSubmit, control, watch } = formMethods;
+
+  if (onChange) {
+    const values = watch();
+    useEffect(() => onChange(values), [values]);
+  }
 
   const animated = watch("animated");
 
@@ -81,97 +95,120 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   );
 
   return (
-    <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating chat server"} />}
-      <TextInput
-        control={control}
-        rules={{
-          required: {
-            value: true,
-            message: "Name is required",
-          },
-        }}
-        name="name"
-        label="Name"
-        placeholder="Enter a emote name"
-      />
-      <InputLabel required={true} text="Image" component="div">
-        <ImageInput
+    <FormProvider {...formMethods}>
+      <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+        {error && <InputError error={error.message || "Error creating chat server"} />}
+        <TextInput
           control={control}
-          name="image"
-          maxSize={10485764}
           rules={{
             required: {
               value: true,
-              message: "Image is required",
+              message: "Name is required",
             },
           }}
+          name="name"
+          label="Name"
+          placeholder="Enter a emote name"
         />
-      </InputLabel>
-      <SelectInput
-        control={control}
-        name="scale"
-        label="Scale"
-        options={scaleOptions}
-        isSearchable={false}
-      />
-      <TextInput control={control} label="contributor" name="contributor" />
-      <TextInput control={control} label="contributor link" name="contributorLink" />
-      <TextAreaInput control={control} label="css" name="css" />
-      <ToggleInput control={control} label="animated" name="animated" />
-      <TextInput
-        control={control}
-        label="frame count"
-        name="animationFrameCount"
-        type="number"
-        disabled={!animated}
-      />
-      <TextInput
-        control={control}
-        label="duration (ms)"
-        name="animationDuration"
-        type="number"
-        disabled={!animated}
-      />
-      <TextInput
-        control={control}
-        label="loops"
-        name="animationIterationCount"
-        type="number"
-        disabled={!animated}
-      />
-      <TextInput
-        control={control}
-        label="end on frame"
-        name="animationEndOnFrame"
-        type="number"
-        disabled={!animated}
-      />
-      <ToggleInput
-        control={control}
-        label="loop forever"
-        name="animationLoopForever"
-        disabled={!animated}
-      />
-      <ToggleInput
-        control={control}
-        label="alternate directions"
-        name="animationAlternateDirection"
-        disabled={!animated}
-      />
-      <CreatableSelectInput
-        control={control}
-        name="defaultModifiers"
-        label="Default modifiers"
-        placeholder="Modifiers"
-        options={modifierOptions}
-      />
-      <CreatableSelectInput control={control} name="labels" label="Labels" options={labelOptions} />
-      <ToggleInput control={control} label="enable" name="enable" />
-      <ButtonSet>
-        <Button disabled={loading}>{submitLabel}</Button>
-      </ButtonSet>
-    </form>
+        <InputLabel required={true} text="Image" component="div">
+          <ImageInput
+            control={control}
+            name="image"
+            maxSize={10485764}
+            rules={{
+              required: {
+                value: true,
+                message: "Image is required",
+              },
+            }}
+          />
+        </InputLabel>
+        <SelectInput
+          control={control}
+          name="scale"
+          label="Scale"
+          options={scaleOptions}
+          isSearchable={false}
+        />
+        <TextInput control={control} label="contributor" name="contributor" />
+        <TextInput control={control} label="contributor link" name="contributorLink" />
+
+        <TextInput
+          control={control}
+          rules={{
+            min: 0,
+            max: {
+              value: 10,
+              message: "Rendering too many elements will degrade performance",
+            },
+          }}
+          type="number"
+          name="extraWrapCount"
+          label="Extra Wrappers"
+          placeholder="Enter a number of extra wrapper elements to render"
+        />
+        <ToggleInput control={control} label="wrap adjacent emotes" name="wrapAdjacent" />
+        <ChatStyleSheetInput />
+        <ToggleInput control={control} label="animated" name="animated" />
+        <TextInput
+          control={control}
+          label="frame count"
+          name="animationFrameCount"
+          type="number"
+          disabled={!animated}
+        />
+        <TextInput
+          control={control}
+          label="duration (ms)"
+          name="animationDuration"
+          type="number"
+          disabled={!animated}
+        />
+        <TextInput
+          control={control}
+          label="loops"
+          name="animationIterationCount"
+          type="number"
+          disabled={!animated}
+        />
+        <TextInput
+          control={control}
+          label="end on frame"
+          name="animationEndOnFrame"
+          type="number"
+          disabled={!animated}
+        />
+        <ToggleInput
+          control={control}
+          label="loop forever"
+          name="animationLoopForever"
+          disabled={!animated}
+        />
+        <ToggleInput
+          control={control}
+          label="alternate directions"
+          name="animationAlternateDirection"
+          disabled={!animated}
+        />
+        <CreatableSelectInput
+          control={control}
+          name="defaultModifiers"
+          label="Default modifiers"
+          placeholder="Modifiers"
+          options={modifierOptions}
+        />
+        <CreatableSelectInput
+          control={control}
+          name="labels"
+          label="Labels"
+          options={labelOptions}
+        />
+        <ToggleInput control={control} label="enable" name="enable" />
+        <ButtonSet>
+          <Button disabled={loading}>{submitLabel}</Button>
+        </ButtonSet>
+      </form>
+    </FormProvider>
   );
 };
 

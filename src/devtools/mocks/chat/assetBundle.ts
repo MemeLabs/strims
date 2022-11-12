@@ -2741,6 +2741,16 @@ const src = {
       "effects": [
         {
           "effect": {
+            "customCss": {
+              "styleSheet": {
+                "css":
+                  ".this {\n  animation: ree-anim 200ms 5;\n}\n\n@keyframes ree-anim {\n  0% {\n    transform: translateX(0);\n  }\n  100% {\n    transform: translateX(3px);\n  }\n}",
+              },
+            },
+          },
+        },
+        {
+          "effect": {
             "spriteAnimation": {
               "frameCount": 39,
               "durationMs": 3900,
