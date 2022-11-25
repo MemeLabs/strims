@@ -1,0 +1,16 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  labels:
+    strims.gg/svc: leader
+  extraPortMappings:
+  # http
+  - containerPort: 30002
+    hostPort: 30002
+  # webrtc
+  - containerPort: 30003
+    hostPort: 30003
+  # rtmp
+  - containerPort: 1935
+    hostPort: 1935
