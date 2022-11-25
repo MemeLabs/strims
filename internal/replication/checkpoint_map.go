@@ -47,5 +47,8 @@ func (m *checkpointMap) MinVersion() *daov1.VersionVector {
 			versionvector.Downgrade(v, c.Version)
 		}
 	}
+	if v == nil {
+		return versionvector.New()
+	}
 	return v
 }
