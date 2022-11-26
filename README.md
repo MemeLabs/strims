@@ -1,6 +1,11 @@
-# strims
-
-distributed live streaming
+<br />
+<div align="center">
+  <img src=".github/gopher.png" align="right"
+       alt="A cute gopher eating popcorn" width="200" height="275">
+  <h1>strims</h1>
+  <small>distributed live streaming</small>
+</div>
+<br />
 
 [headless service](#headless-service)
 
