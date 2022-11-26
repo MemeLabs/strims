@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-package main
+package config
 
 import (
 	"encoding/base64"
@@ -58,7 +58,7 @@ func (v *Bytes) UnmarshalYAML(node *yaml.Node) (err error) {
 	return err
 }
 
-func loadConfig[T any](path string) (*T, error) {
+func LoadConfig[T any](path string) (*T, error) {
 	var cfg T
 
 	if path == "" {

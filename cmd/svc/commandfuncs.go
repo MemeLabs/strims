@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/MemeLabs/strims/cmd/svc/config"
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/frontend"
 	"github.com/MemeLabs/strims/internal/invite"
@@ -30,7 +31,7 @@ import (
 )
 
 func runCmd(fs Flags) error {
-	cfg, err := loadConfig[PeerConfig](fs.String("config"))
+	cfg, err := config.LoadConfig[config.PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
@@ -239,7 +240,7 @@ func runCmd(fs Flags) error {
 }
 
 func addProfileCmd(fs Flags) error {
-	cfg, err := loadConfig[PeerConfig](fs.String("config"))
+	cfg, err := config.LoadConfig[config.PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
@@ -261,7 +262,7 @@ func addProfileCmd(fs Flags) error {
 }
 
 func serveInvitesCmd(fs Flags) error {
-	cfg, err := loadConfig[InviteServerConfig](fs.String("config"))
+	cfg, err := config.LoadConfig[config.InviteServerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}

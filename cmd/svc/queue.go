@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/MemeLabs/strims/cmd/svc/config"
 	"github.com/MemeLabs/strims/pkg/queue"
 	"github.com/MemeLabs/strims/pkg/queue/memory"
 	"github.com/MemeLabs/strims/pkg/queue/postgres"
 	"go.uber.org/zap"
 )
 
-func openQueue(logger *zap.Logger, cfg *PeerConfig) (queue.Transport, error) {
+func openQueue(logger *zap.Logger, cfg *config.PeerConfig) (queue.Transport, error) {
 	switch cfg.Queue.Adapter.Get("memory") {
 	case "memory":
 		return memoryQueueAdapter(cfg)
@@ -24,11 +25,11 @@ func openQueue(logger *zap.Logger, cfg *PeerConfig) (queue.Transport, error) {
 	}
 }
 
-func memoryQueueAdapter(cfg *PeerConfig) (queue.Transport, error) {
+func memoryQueueAdapter(cfg *config.PeerConfig) (queue.Transport, error) {
 	return memory.NewTransport(), nil
 }
 
-func postgresQueueAdapter(logger *zap.Logger, cfg *PeerConfig) (queue.Transport, error) {
+func postgresQueueAdapter(logger *zap.Logger, cfg *config.PeerConfig) (queue.Transport, error) {
 	connStr := cfg.Queue.Postgres.ConnStr.Get("")
 	if connStr == "" {
 		return nil, errors.New("postgres conn string empty")
