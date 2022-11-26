@@ -31,7 +31,7 @@ import (
 )
 
 func runCmd(fs Flags) error {
-	cfg, err := config.LoadConfig[config.PeerConfig](fs.String("config"))
+	cfg, err := config.Load[config.PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func runCmd(fs Flags) error {
 }
 
 func addProfileCmd(fs Flags) error {
-	cfg, err := config.LoadConfig[config.PeerConfig](fs.String("config"))
+	cfg, err := config.Load[config.PeerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func addProfileCmd(fs Flags) error {
 }
 
 func serveInvitesCmd(fs Flags) error {
-	cfg, err := config.LoadConfig[config.InviteServerConfig](fs.String("config"))
+	cfg, err := config.Load[config.InviteServerConfig](fs.String("config"))
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -47,6 +48,13 @@ func (v *Optional[T]) UnmarshalYAML(node *yaml.Node) error {
 	return node.Decode(&v.v)
 }
 
+func (v Optional[T]) MarshalYAML() (interface{}, error) {
+	if !v.ok {
+		return nil, nil
+	}
+	return v.v, nil
+}
+
 type Bytes []byte
 
 func (v Bytes) String() string {
@@ -58,7 +66,14 @@ func (v *Bytes) UnmarshalYAML(node *yaml.Node) (err error) {
 	return err
 }
 
-func LoadConfig[T any](path string) (*T, error) {
+func (v Bytes) MarshalYAML() (interface{}, error) {
+	if v == nil {
+		return nil, nil
+	}
+	return base64.StdEncoding.EncodeToString(v), nil
+}
+
+func Load[T any](path string) (*T, error) {
 	var cfg T
 
 	if path == "" {
@@ -75,6 +90,14 @@ func LoadConfig[T any](path string) (*T, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func Marshal[T any](cfg T) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := yaml.NewEncoder(&buf).Encode(cfg); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type StorageConfig struct {
