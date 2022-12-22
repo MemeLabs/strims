@@ -5,7 +5,6 @@ contents:
   packages:
     - alpine-baselayout
     - ffmpeg
-    - yq
 accounts:
   groups:
     - groupname: svc
