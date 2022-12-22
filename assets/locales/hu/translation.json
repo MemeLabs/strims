@@ -127,7 +127,7 @@
   "directory": {
     "Search": "Keresés...",
     "Embed": "Beágyazás",
-    "title": "Könyvtár - {hálózat} - Strims",
+    "title": "Könyvtár - {network} - Strims",
     "titleFallback": "Könyvtár - Strims",
 
     "embedType": {
@@ -141,7 +141,7 @@
   "inviteAuth": {
     "header": "{peer} meghívott, hogy csatlakozz",
     "Error creating membership": "Hiba a tagság készítése közben",
-    "bootstrapServers": "{számolás, többes szám, =1 {Bootstrap szerver} más {Bootstrap szerverek}}",
+    "bootstrapServers": "{count, plural, =1 {Bootstrap szerver} other {Bootstrap szerverek}}",
     "Alias": "Álnév",
     "Name contains invalid characters": "A név érvénytelen karaktereket tartalmaz",
     "Enter an alternate name for this network": "Helyes nevet adj meg a hálózatnak",

@@ -127,7 +127,7 @@
   "directory": {
     "Search": "找...",
     "Embed": "嵌",
-    "title": "目录 - {网络} - Strims",
+    "title": "目录 - {network} - Strims",
     "titleFallback": "目录 - Strims",
 
     "embedType": {
@@ -139,9 +139,9 @@
   },
 
   "inviteAuth": {
-    "header": "{朋友}请你参加",
+    "header": "{peer}请你参加",
     "Error creating membership": "错误创造会籍",
-    "bootstrapServers": "{数, 复数, =1 {Bootstrap 服务器} 别 {Bootstrap 服务器}}",
+    "bootstrapServers": "{count, plural, =1 {Bootstrap 服务器} other {Bootstrap 服务器}}",
     "Alias": "化名",
     "Name contains invalid characters": "名字有不能用的字",
     "Enter an alternate name for this network": "输入网络的备用名称",
