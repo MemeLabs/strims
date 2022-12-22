@@ -11,7 +11,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"reflect"
@@ -119,7 +118,6 @@ const (
 
 var (
 	driverConfigType = reflect.TypeOf((*DriverConfig)(nil)).Elem()
-	timeType         = reflect.TypeOf(time.Time{})
 )
 
 // DecoderConfigOptions ...
@@ -269,7 +267,7 @@ func (b *Backend) SSHIdentityFile() string {
 
 // SSHPublicKey ...
 func (b *Backend) SSHPublicKey() string {
-	d, err := ioutil.ReadFile(b.SSHIdentityFile() + ".pub")
+	d, err := os.ReadFile(b.SSHIdentityFile() + ".pub")
 	if err != nil {
 		b.log.Fatal("error reading ssh public key", zap.Error(err))
 	}
@@ -858,7 +856,7 @@ func (b *Backend) buildWGConfig(ctx context.Context, pubIPv4, wgIPv4, privKey st
 
 		lease, err := models.FindWireguardIPLeaseG(ctx, models.WireguardPeerTypeExternalPeer, p.ID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find lease for peer: %w", err)
+			return nil, fmt.Errorf("error finding lease for peer %d: %w", p.ID, err)
 		}
 
 		peers = append(peers, wgutil.InterfacePeerConfig{
@@ -947,7 +945,7 @@ func modelToNode(ctx context.Context, n *models.Node) (*node.Node, error) {
 
 // caller must remove the tmpfile
 func tmpfile(content string) (*os.File, error) {
-	tmp, err := ioutil.TempFile("", "goppspp")
+	tmp, err := os.CreateTemp("", "goppspp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tmp file: %w", err)
 	}
