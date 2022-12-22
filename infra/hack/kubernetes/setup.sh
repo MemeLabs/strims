@@ -12,9 +12,13 @@ function retry() {
 	while [[ $ready -ne 0 ]] && [[ $count -lt $until ]]; do
 		$cmd 2>&1
 		ready=$(echo $?)
-		((count += 1))
-		sleep $sleep
-		echo "Command failed, retrying..."
+		if [[ $ready -eq 0 ]]; then
+			break
+		else
+			((count += 1))
+			sleep $sleep
+			echo "Command failed, retrying..."
+		fi
 	done
 
 	if [[ $ready -eq 0 ]]; then
@@ -66,27 +70,28 @@ function configure_system() {
 	sudo swapoff -a
 
 	# Wireguard requires this to configure DNS https://superuser.com/a/1544697
-	sudo ln -s /usr/bin/resolvectl /usr/local/bin/resolvconf
+	sudo ln -sfn /usr/bin/resolvectl /usr/local/bin/resolvconf
 }
 
 function install_tools() {
-	CRIO_VERSION=1.24
+	CRIO_VERSION=1.25
 	VERSION_ID=$(grep VERSION_ID </etc/os-release | awk -F'=' '{print $2}' | tr -d \")
 	OS=xUbuntu_$VERSION_ID
 	KEYRINGS_DIR=/usr/share/keyrings
-	DEBIAN_FRONTEND=noninteractive
-
-	echo "deb [signed-by=$KEYRINGS_DIR/google-apt-key.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
-
-	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list >/dev/null
-	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg] http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$CRIO_VERSION.list >/dev/null
+	export DEBIAN_FRONTEND=noninteractive
 
 	sudo mkdir -p $KEYRINGS_DIR
 	curl -L https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o $KEYRINGS_DIR/google-apt-key.gpg
 	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-archive-keyring.gpg
 	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg
 
-	sudo apt-get update
+	sudo apt-get clean
+
+	echo "deb [signed-by=$KEYRINGS_DIR/google-apt-key.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
+	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list >/dev/null
+	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg] http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$CRIO_VERSION.list >/dev/null
+
+	retry sudo apt-get update
 	sudo apt-get install -y \
 		buildah \
 		cri-o \
@@ -192,10 +197,8 @@ EOF
 	sudo ip link delete cni0 || :
 	sudo systemctl restart crio
 
-	# TODO: master taint is deprecated in 1.25
-	kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule-
 	kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
-	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.22/deploy/local-path-storage.yaml
+	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.23/deploy/local-path-storage.yaml
 	kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 }
 
