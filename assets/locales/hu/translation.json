@@ -1,0 +1,154 @@
+{
+  "Cancel": "Mégse",
+  "title": "Strims",
+
+  // video player
+  "player": {
+    "Exit theater mode": "Nagyképernyő elhagyása",
+    "Theater mode": "Nagyképernyő",
+    "Exit full screen": "Teljes képernyő elhagyása",
+    "Full screen": "Teljes képernyő",
+    "Mute": "Némít",
+    "Unmute": "Visszahangosítás",
+    "Pause": "Szünet",
+    "Play": "Lejátszás",
+    "Miniplayer": "Mini Lejátszó",
+    "Close": "Bezárás"
+  },
+
+  "layout": {
+    "header": {
+      "Home": "Kezdőlap",
+      "Categories": "Kategóriák",
+      "Streams": "Streamek",
+      "Broadcast": "Adás",
+
+      "Search": "Keresés...",
+      "Close chat": "Csevegő bezárása",
+      "Open chat": "Csevegő megnyitása",
+      "Settings": "Beállítások",
+      "Activity monitor": "Tevékenységfigyelő"
+    },
+
+    "networkNav": {
+      "Networks": "Hálózatok",
+      "Expand": "Kiterjeszt",
+      "Collapse": "Szűkít",
+      "Add network": "Hálózat hozzáadása"
+    }
+  },
+
+  "chat": {
+    "More messages below": "Több üzenet lejjebb",
+    "Sending": "Küldés...",
+    "Message delivery failed": "Hiba az üzenet továbbítása közben",
+
+    "composer": {
+      "members": "tagok",
+      "tags": "címkék",
+      "commands": "parancsok",
+      "emotes": "hangulatjelek",
+      "modifiers": "hangulatjel módosítók",
+      "emoji": "emoji",
+      "Write a message": "Küldj egy üzenetet..."
+    },
+
+    "drawers": {
+      "Emotes": "Hangulatjelek",
+      "Whispers": "Suttogások",
+      "Settings": "Beállítások",
+      "Users": "Felhasználók"
+    },
+
+    "settings": {
+      "Messages": "Üzenetek",
+      "Whispers": "Suttogások",
+      "Highlights, focus, and tags": "Kiemelők, fókuszálás, és címkék",
+      "Autocomplete": "Auto-kitöltés",
+      "Message formatters": "Üzenet formázók",
+
+      "Show flair": "Mutasd a flaireket",
+      "Show time": "Mutasd az időt",
+      "Harsh ignore": "Teljes mellőzés",
+      "Hide messages tagged nsfw or nsfl": " Nsfw-vel vagy nsfl-el címkézett üzenetek elrejtése",
+      "Loop animated emotes forever": "Animált hangulatjelek végtelenítése",
+      "Disable spoilers": "Spoilerek letiltása",
+      "Shorten long links": "Hosszú linkek rövidítése",
+      "Compact emote spacing": "Kompakt hangulatjel írás",
+      "Normalize alias capitalization": "Álnév nagybetűk normalizálása",
+      "Maximum messages": "Maximum üzenetmennyiség",
+      "Stream viewer indicators": "Streamet nézők megjelölése",
+      "Banned messages": "Letiltott üzenetek",
+      "In-line messages": "Sorközi üzenetek",
+      "Highlight when mentioned": "Üzenet kiemelése ha megemlítenek",
+      "Include mentions when focused": "Fókuszált mód is tartalmazzon megemlítéseket",
+      "Increase visibility of tagged users": "Megjelölt felhasználók kiemelt láthatósága",
+      "Custom highlights": "Egyedi kiemelések",
+      "Comma separated": "Vessző külön...",
+      "Autocomplete helper": "Autokitöltés segítő",
+      "Show emote previews": "Mutass hangulatjel előnézetet",
+      "Greentext": "Zöld üzenet",
+      "Emotes": "Hangulatjelek",
+      "Combos": "Kombók",
+      "Modifiers": "Módosítók",
+      "Settings": "Beállítások",
+      "Keep synced": "Tartsd szinkronizálva",
+
+      // viewer state indicator options
+      "Disable": "Letiltás",
+      "Bar": "Sáv",
+      "Dot": "Pont",
+      "Array": "Sor",
+
+      // banned messages options
+      "Remove": "Távolítsd el",
+      "Censor": "Cenzúrázd",
+      "Do nothing": "Ne csinálj semmit"
+    }
+  },
+
+  "settings": {
+    "network.title": "Hálózati Beállítások - Strims",
+    "bootstrap.title": "Hálózati Bootstrap Beálllítások - Strims",
+    "chat.title": "Csevegő beállítások - Strims",
+    "videoIngress.title": "Videó Ingress Beállítások - Strims",
+    "videoEgress.title": "Videó Egress Beállítások - Strims",
+    "videoChannel.title": "Videó Csatorna beállítások - Strims",
+    "autoseed.title": "Autoseed Beállítások - Strims",
+    "vnic.title": "VNIC Beállítások - Strims",
+    "debug.title": "Hibakeresési Beállítások - Strims"
+  },
+
+  "landing": {
+    "login.title": "Bejelentkezés - Strims",
+    "signUp.title": "Regisztráció - Strims"
+  },
+
+  "directory": {
+    "Search": "Keresés...",
+    "Embed": "Beágyazás",
+    "title": "Könyvtár - {hálózat} - Strims",
+    "titleFallback": "Könyvtár - Strims",
+
+    "embedType": {
+      "AngelThump": "AngelThump stream",
+      "Twitch": "Twitch stream",
+      "Twitch VOD": "Twitch VOD",
+      "YouTube": "YouTube videó"
+    }
+  },
+
+  "inviteAuth": {
+    "header": "{peer} meghívott, hogy csatlakozz",
+    "Error creating membership": "Hiba a tagság készítése közben",
+    "bootstrapServers": "{számolás, többes szám, =1 {Bootstrap szerver} más {Bootstrap szerverek}}",
+    "Alias": "Álnév",
+    "Name contains invalid characters": "A név érvénytelen karaktereket tartalmaz",
+    "Enter an alternate name for this network": "Helyes nevet adj meg a hálózatnak",
+    "Your name in chat and private messages.": "A neved a csevegőben és privát beszélgetésekben.",
+    "Continue": "Folytatás",
+    "Reject invitation": "Meghívó visszautasítása",
+    "Loading": "Betöltés...",
+    "error": "Hiba történt a meghívó betöltése közben."
+  }
+}
