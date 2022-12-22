@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -21,6 +22,7 @@ import (
 	"github.com/MemeLabs/strims/internal/network"
 	"github.com/MemeLabs/strims/internal/session"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/vnic"
 	"github.com/MemeLabs/strims/pkg/vpn"
@@ -255,8 +257,25 @@ func addProfileCmd(fs Flags) error {
 	if err != nil {
 		return err
 	}
-	log.Println(id)
-	log.Println(base64.StdEncoding.EncodeToString(key))
+
+	jsonOutput, err := fs.Bool("json")
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		data := struct {
+			ID  uint64 `json:"id"`
+			Key string `json:"key"`
+		}{
+			ID:  id,
+			Key: base64.StdEncoding.EncodeToString(key),
+		}
+		fmt.Println(string(errutil.Must(json.MarshalIndent(data, "", "  "))))
+	} else {
+		log.Println(id)
+		log.Println(base64.StdEncoding.EncodeToString(key))
+	}
 
 	return nil
 }
