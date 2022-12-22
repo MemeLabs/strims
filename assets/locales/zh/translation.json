@@ -1,0 +1,154 @@
+{
+  "Cancel": "回",
+  "title": "Strims",
+
+  // video player
+  "player": {
+    "Exit theater mode": "推出影院模式",
+    "Theater mode": "影院模式",
+    "Exit full screen": "推出全屏",
+    "Full screen": "全屏",
+    "Mute": "静音",
+    "Unmute": "声音",
+    "Pause": "停",
+    "Play": "开始",
+    "Miniplayer": "小屏",
+    "Close": "关"
+  },
+
+  "layout": {
+    "header": {
+      "Home": "首页",
+      "Categories": "全类",
+      "Streams": "直播",
+      "Broadcast": "广播",
+
+      "Search": "找...",
+      "Close chat": "关聊天室",
+      "Open chat": "开聊天室",
+      "Settings": "设定",
+      "Activity monitor": "活动监测"
+    },
+
+    "networkNav": {
+      "Networks": "网",
+      "Expand": "扩大",
+      "Collapse": "倒",
+      "Add network": "加网"
+    }
+  },
+
+  "chat": {
+    "More messages below": "更多信息在下面",
+    "Sending": "正在发...",
+    "Message delivery failed": "不能发信息",
+
+    "composer": {
+      "members": "成员",
+      "tags": "标签",
+      "commands": "令",
+      "emotes": "表情符号",
+      "modifiers": "修饰语",
+      "emoji": "绘文字",
+      "Write a message": "写个短信..."
+    },
+
+    "drawers": {
+      "Emotes": "表情符号",
+      "Whispers": "私讯",
+      "Settings": "设定",
+      "Users": "用户"
+    },
+
+    "settings": {
+      "Messages": "信息",
+      "Whispers": "私讯",
+      "Highlights, focus, and tags": "亮点，重点和标签",
+      "Autocomplete": "自动完成",
+      "Message formatters": "信息版式",
+
+      "Show flair": "表示饰",
+      "Show time": "表示时间",
+      "Harsh ignore": "厉害忽视",
+      "Hide messages tagged nsfw or nsfl": "不表示信息有nsfw和nsfl标签",
+      "Loop animated emotes forever": "重复动的表情符号不停",
+      "Disable spoilers": "不用剧透",
+      "Shorten long links": "缩短长网址",
+      "Compact emote spacing": "稠密表情符号",
+      "Normalize alias capitalization": "正化化名资本化",
+      "Maximum messages": "最多信息",
+      "Stream viewer indicators": "直播观众指示符",
+      "Banned messages": "禁信息",
+      "In-line messages": "一样行信息",
+      "Highlight when mentioned": "提起你亮点",
+      "Include mentions when focused": "重点包括提起",
+      "Increase visibility of tagged users": "用户有标签可见多",
+      "Custom highlights": "定制亮点",
+      "Comma separated": "逗号分隔...",
+      "Autocomplete helper": "自动完成帮忙",
+      "Show emote previews": "表示表情符号试验",
+      "Greentext": "绿字",
+      "Emotes": "表情符号",
+      "Combos": "连击",
+      "Modifiers": "修饰语",
+      "Settings": "设定",
+      "Keep synced": "保持同步",
+
+      // viewer state indicator options
+      "Disable": "不用",
+      "Bar": "杠",
+      "Dot": "点",
+      "Array": "矩阵",
+
+      // banned messages options
+      "Remove": "擦",
+      "Censor": "审查",
+      "Do nothing": "留"
+    }
+  },
+
+  "settings": {
+    "network.title": "网络设定 - Strims",
+    "bootstrap.title": "网络Bootstrap设定 - Strims",
+    "chat.title": "聊天室设定 - Strims",
+    "videoIngress.title": "视频进口设定 - Strims",
+    "videoEgress.title": "视频出口设定 - Strims",
+    "videoChannel.title": "视频频道设定 - Strims",
+    "autoseed.title": "自动种子设定 - Strims",
+    "vnic.title": "虚拟网络接口卡 设定 - Strims",
+    "debug.title": "调试设定 - Strims"
+  },
+
+  "landing": {
+    "login.title": "登录 - Strims",
+    "signUp.title": "报名 - Strims"
+  },
+
+  "directory": {
+    "Search": "找...",
+    "Embed": "嵌",
+    "title": "目录 - {网络} - Strims",
+    "titleFallback": "目录 - Strims",
+
+    "embedType": {
+      "AngelThump": "AngelThump 直播",
+      "Twitch": "Twitch 直播",
+      "Twitch VOD": "Twitch VOD",
+      "YouTube": "YouTube 视频"
+    }
+  },
+
+  "inviteAuth": {
+    "header": "{朋友}请你参加",
+    "Error creating membership": "错误创造会籍",
+    "bootstrapServers": "{数, 复数, =1 {Bootstrap 服务器} 别 {Bootstrap 服务器}}",
+    "Alias": "化名",
+    "Name contains invalid characters": "名字有不能用的字",
+    "Enter an alternate name for this network": "输入网络的备用名称",
+    "Your name in chat and private messages.": "你聊天室和私讯内的名字",
+    "Continue": "继续",
+    "Reject invitation": "拒绝请帖",
+    "Loading": "在加载...",
+    "error": "加载请帖时有出错"
+  }
+}
