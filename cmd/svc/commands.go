@@ -64,7 +64,6 @@ func init() {
 			fs.String("config", "", "Configuration file")
 			fs.String("username", "", "Profile username")
 			fs.String("password", "", "Profile password")
-			fs.Bool("json", false, "Print output as json")
 			return fs
 		}(),
 	})

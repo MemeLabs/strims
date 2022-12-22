@@ -85,10 +85,3 @@ func (f Flags) Int(name string) (int, error) {
 	}
 	return 0, nil
 }
-
-func (f Flags) Bool(name string) (bool, error) {
-	if v := f.String(name); v != "" {
-		return strconv.ParseBool(v)
-	}
-	return false, nil
-}
