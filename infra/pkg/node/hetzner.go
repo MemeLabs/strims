@@ -13,7 +13,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/hcloud"
 )
 
-const hetznerOS = "ubuntu-20.04"
+const hetznerOS = "ubuntu-22.04"
 
 // NewHetznerDriver ...
 func NewHetznerDriver(token string) *HetznerDriver {

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const scalewayOS = "Ubuntu 20.04 Focal Fossa"
+const scalewayOS = "Ubuntu 22.04 Jammy Jellyfish"
 
 var scalewayRegions = []*Region{
 	{

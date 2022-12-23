@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const ovhOS = "Ubuntu 20.04"
+const ovhOS = "Ubuntu 22.04"
 
 var ovhCurrency = map[string]string{
 	"CA": "CAD",

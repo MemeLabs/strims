@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	heficedOS                 = "Ubuntu LTS 20.04"
+	heficedOS                 = "Ubuntu LTS 22.04"
 	heficedAPIEndpoint string = "https://api.heficed.com/"
 )
 

@@ -24,7 +24,7 @@ import (
 // 20% hourly billing premium over 30 days
 const dreamHostHourlyBillingRate = 6.0 / 5 / 30 / 24
 
-const dreamHostOS = "Ubuntu-20.04"
+const dreamHostOS = "Ubuntu-22.04"
 
 var dreamHostRegion = Region{
 	Name:   "RegionOne",

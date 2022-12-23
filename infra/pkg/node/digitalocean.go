@@ -15,7 +15,7 @@ import (
 	"github.com/golang/geo/s2"
 )
 
-const digitalOceanOS = "ubuntu-20-04-x64"
+const digitalOceanOS = "ubuntu-22-04-x64"
 
 var digitalOceanRegions = []*Region{
 	{
