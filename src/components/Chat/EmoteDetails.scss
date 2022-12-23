@@ -22,8 +22,8 @@
   font-size: 1.2rem;
 
   .chat__emote {
-    width: calc(var(--width) * 2);
-    height: calc(var(--height) * 2);
+    margin: calc(var(--height) / 2) calc(var(--width) / 2);
+    transform: scale(2);
     background-size: cover;
     flex-shrink: 0;
   }
@@ -40,6 +40,11 @@
   &__contributor {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  &__code {
+    font-size: 0.9rem;
+    color: var(--color-grey-3);
   }
 
   &__contributor {

@@ -128,7 +128,12 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
         {children}
       </Emote>
       {detailsAnchor && (
-        <EmoteDetails name={entity.name} anchor={detailsAnchor} onClose={handleDetailsClose} />
+        <EmoteDetails
+          name={entity.name}
+          modifiers={entity.modifiers}
+          anchor={detailsAnchor}
+          onClose={handleDetailsClose}
+        />
       )}
     </>
   );

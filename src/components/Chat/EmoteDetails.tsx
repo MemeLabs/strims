@@ -3,7 +3,7 @@
 
 import "./EmoteDetails.scss";
 
-import React, { useRef } from "react";
+import React, { ReactNode, useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { MdClose } from "react-icons/md";
 import usePortal from "use-portal";
@@ -16,23 +16,25 @@ import Emote from "./Emote";
 
 interface EmoteDetailsProps {
   name: string;
+  modifiers: string[];
   anchor: [number, number];
   onClose: () => void;
 }
 
-const EmoteDetails: React.FC<EmoteDetailsProps> = ({ name, anchor, onClose }) => {
+const EmoteDetails: React.FC<EmoteDetailsProps> = ({ name, modifiers, anchor, onClose }) => {
   const layout = useLayout();
   const { Portal } = usePortal({ target: layout.root });
 
   const ref = useRef<HTMLDivElement>();
   useClickAway(ref, onClose);
 
-  const [{ liveEmotes }] = useRoom();
-  const emote = liveEmotes.find((e) => e.name === name);
+  const [room] = useRoom();
+  const emote = room.liveEmotes.find((e) => e.name === name);
 
   return (
     <Portal>
       <div
+        id={`chat-${room.id}`}
         className="emote_details"
         style={{
           "--menu-x": `${anchor[0]}px`,
@@ -48,12 +50,15 @@ const EmoteDetails: React.FC<EmoteDetailsProps> = ({ name, anchor, onClose }) =>
         </Emote>
         <div className="emote_details__label">
           <span className="emote_details__name">{emote.name}</span>
+          {!!modifiers.length && (
+            <span className="emote_details__code">
+              {name}:{modifiers.join(":")}
+            </span>
+          )}
           {emote.contributor && (
             <div className="emote_details__contributor">
               <span className="emote_details__contributor__label">by:</span>
-              <span className="emote_details__contributor__name">
-                {emote.contributor.name}
-              </span>
+              <span className="emote_details__contributor__name">{emote.contributor.name}</span>
               {emote.contributor.link && (
                 <ExternalLink
                   className="emote_details__contributor__link"
