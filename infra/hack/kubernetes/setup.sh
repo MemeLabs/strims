@@ -61,16 +61,14 @@ function configure_system() {
 		curl \
 		gnupg2 \
 		pwgen \
-		wireguard
+		wireguard \
+		resolvconf
 
 	sudo update-ca-certificates
 
 	# Disable swap
 	sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 	sudo swapoff -a
-
-	# Wireguard requires this to configure DNS https://superuser.com/a/1544697
-	sudo ln -sfn /usr/bin/resolvectl /usr/local/bin/resolvconf
 }
 
 function install_tools() {
@@ -85,13 +83,11 @@ function install_tools() {
 	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-archive-keyring.gpg
 	curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/"$OS"/Release.key | sudo gpg --dearmor -o $KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg
 
-	sudo apt-get clean
-
 	echo "deb [signed-by=$KEYRINGS_DIR/google-apt-key.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
 	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list >/dev/null
 	echo "deb [signed-by=$KEYRINGS_DIR/libcontainers-crio-archive-keyring.gpg] http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$CRIO_VERSION/$OS/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$CRIO_VERSION.list >/dev/null
 
-	retry sudo apt-get update
+	sudo apt-get update
 	sudo apt-get install -y \
 		buildah \
 		cri-o \
@@ -99,7 +95,6 @@ function install_tools() {
 		cri-tools \
 		kubelet \
 		kubeadm
-
 	sudo apt-mark hold kubelet kubeadm cri-o cri-o-runc cri-tools buildah
 
 	sudo tee /etc/modules-load.d/crio.conf <<EOF

@@ -869,7 +869,6 @@ func (b *Backend) buildWGConfig(ctx context.Context, pubIPv4, wgIPv4, privKey st
 	}
 
 	return &wgutil.InterfaceConfig{
-		DNS:        "1.1.1.1",
 		PrivateKey: privKey,
 		Address:    fmt.Sprintf("%s/%d", wgIPv4, 24),
 		ListenPort: port,
