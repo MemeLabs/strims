@@ -74,7 +74,7 @@ function configure_system() {
 }
 
 function install_tools() {
-	CRIO_VERSION=1.25
+	CRIO_VERSION=1.26
 	VERSION_ID=$(grep VERSION_ID </etc/os-release | awk -F'=' '{print $2}' | tr -d \")
 	OS=xUbuntu_$VERSION_ID
 	KEYRINGS_DIR=/usr/share/keyrings
