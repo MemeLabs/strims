@@ -1,0 +1,20 @@
+name: build kubectl image
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - '.github/workflows/kubectl.yaml'
+      - 'hack/kubectl/kubectl.yaml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/setup-qemu-action@v2
+      - uses: distroless/actions/apko-publish@main
+        with:
+          config: hack/kubectl/kubectl.yaml
+          tag: ghcr.io/memelabs/strims/kubectl:latest

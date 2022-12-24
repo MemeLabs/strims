@@ -1,0 +1,18 @@
+contents:
+  repositories:
+    - https://dl-cdn.alpinelinux.org/alpine/latest-stable/main
+    - https://dl-cdn.alpinelinux.org/alpine/edge/testing
+  packages:
+    - alpine-baselayout
+    - kubectl
+accounts:
+  groups:
+    - groupname: kubectl
+      gid: 10000
+  users:
+    - username: kubectl
+      uid: 10000
+  run-as: svc
+archs:
+  - amd64
+  - arm64
