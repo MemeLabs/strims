@@ -1,6 +1,7 @@
 name: svc
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     paths:
@@ -10,7 +11,7 @@ on:
       - 'cmd/svc/**'
       - 'pkg/**'
       - 'internal/**'
-    branches: [ main, dev ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -37,7 +38,4 @@ jobs:
         run: >
           ko build
           ${{ github.event_name == 'pull_request' && '--local' || '' }}
-          --tags=${{ contains(github.ref_name, 'dev') && 'dev' || 'latest' }}
-          --platform=linux/amd64,linux/arm64
-          --base-import-paths
-          ./cmd/svc/
+          --tags=latest --platform=linux/amd64,linux/arm64 --base-import-paths ./cmd/svc/
