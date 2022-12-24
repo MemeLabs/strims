@@ -12,7 +12,7 @@ accounts:
   users:
     - username: kubectl
       uid: 10000
-  run-as: svc
+  run-as: kubectl
 archs:
   - amd64
   - arm64
