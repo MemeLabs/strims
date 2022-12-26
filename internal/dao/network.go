@@ -79,6 +79,22 @@ var Networks = NewTable(
 				}
 			}
 
+			peer, err := NewNetworkPeer(ProfileID.IDGenerator(s), m.Id, m.Certificate.Key, m.Certificate.Subject, 0)
+			if err != nil {
+				return err
+			}
+			if err := NetworkPeers.Insert(s, peer); err != nil {
+				return err
+			}
+
+			aliasReservation, err := NewNetworkAliasReservation(ProfileID.IDGenerator(s), m.Id, m.Certificate.Subject, m.Certificate.Key)
+			if err != nil {
+				return err
+			}
+			if err := NetworkAliasReservations.Insert(s, aliasReservation); err != nil {
+				return err
+			}
+
 			directoryUser, err := NewDirectoryUserRecord(ProfileID.IDGenerator(s), m.Id, m.Certificate.Key)
 			if err != nil {
 				return err
