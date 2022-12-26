@@ -63,6 +63,36 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+func TestDuplicateVerify(t *testing.T) {
+	bin := binmap.NewBin(4, 0)
+	chunkSize := 1024
+	data := make([]byte, bin.BaseLength()*uint64(chunkSize))
+	if _, err := io.ReadFull(rng(), data); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewTree(bin, chunkSize, sha256.New)
+	r.Fill(bin, data)
+
+	r0 := NewTree(bin, chunkSize, sha256.New)
+	r0.Set(bin, r.Get(bin))
+	r0.setVerified(bin)
+	r0.Set(11, r.Get(11))
+	r0.Set(23, r.Get(23))
+	_, err := r0.Verify(3, data[0:4*chunkSize], nil)
+	assert.Nil(t, err, "unexpected error")
+
+	r1 := NewTree(bin, chunkSize, sha256.New)
+	verified, err := r1.Verify(7, data[0:8*chunkSize], r0)
+	assert.Nil(t, err, "unexpected error")
+	assert.True(t, verified, "expected successful validation")
+
+	r0.Merge(r1)
+	for i := binmap.Bin(0); i < 8; i++ {
+		assert.True(t, r0.isVerified(i))
+	}
+}
+
 func TestVerifyMerge(t *testing.T) {
 	const chunkSize = 1024
 	bin := binmap.NewBin(5, 0)

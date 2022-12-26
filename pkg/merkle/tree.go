@@ -23,7 +23,7 @@ func NewTree(rootBin binmap.Bin, chunkSize int, hashFunc func() hash.Hash) *Tree
 		chunkSize: chunkSize,
 		rootBin:   rootBin,
 		baseLeft:  rootBin.BaseLeft(),
-		verified:  make([]uint64, (rootBin.BaseLength()+63)/64*2),
+		verified:  make([]uint64, (rootBin.BaseLength()*2+63)/64),
 		digests:   make([]byte, int(rootBin.BaseLength()*2-1)*h.Size()),
 	}
 }
