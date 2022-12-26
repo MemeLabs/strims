@@ -991,7 +991,7 @@ func NewUniqueIndex[V any, T TableRecord[V], K any](ns namespace, t *Table[V, T]
 		}
 
 		if opt.OnConflict == nil {
-			return ErrUniqueConstraintViolated
+			return fmt.Errorf("UniqueIndex[%d]: %w", ns, ErrUniqueConstraintViolated)
 		}
 		c, err := t.Get(s, ids[0])
 		if err != nil {
