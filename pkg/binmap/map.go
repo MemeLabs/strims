@@ -273,9 +273,9 @@ func (m *Map) ResetBefore(b Bin) {
 	}
 }
 
-func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
+func (m *Map) setLowLayerBitmap(target Bin, v bitmap) {
 	binBitmap := binBitmaps[target&bitmapLayerBits]
-	bitmap := _bitmap & binBitmap
+	bitmap := v & binBitmap
 
 	if !m.rootBin.Contains(target) {
 		if bitmap.Empty() {
@@ -348,7 +348,7 @@ func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 	}
 }
 
-func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
+func (m *Map) setHighLayerBitmap(target Bin, v bitmap) {
 	if target.Contains(m.rootBin) {
 		c, mc := m.cell(rootRef)
 		if mc.LeftRef() {
@@ -360,8 +360,8 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 
 		m.rootBin = target
 		mc.Reset()
-		c.SetLeftBitmap(_bitmap)
-		c.SetRightBitmap(_bitmap)
+		c.SetLeftBitmap(v)
+		c.SetRightBitmap(v)
 
 		return
 	}
@@ -369,7 +369,7 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 	preBin := target.Parent()
 
 	if !m.rootBin.Contains(preBin) {
-		if _bitmap.Empty() {
+		if v.Empty() {
 			return
 		}
 
@@ -391,12 +391,12 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 			m.freeCell(c.LeftRef())
 		} else {
 			bm = c.LeftBitmap()
-			if bm == _bitmap {
+			if bm == v {
 				return
 			}
 		}
 		if b == preBin {
-			c.SetLeftBitmap(_bitmap)
+			c.SetLeftBitmap(v)
 			m.packCells()
 			return
 		}
@@ -406,12 +406,12 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 			m.freeCell(c.RightRef())
 		} else {
 			bm = c.RightBitmap()
-			if bm == _bitmap {
+			if bm == v {
 				return
 			}
 		}
 		if b == preBin {
-			c.SetRightBitmap(_bitmap)
+			c.SetRightBitmap(v)
 			m.packCells()
 			return
 		}
@@ -443,9 +443,9 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 
 	c = m.dataCell(r)
 	if target < b {
-		c.SetLeftBitmap(_bitmap)
+		c.SetLeftBitmap(v)
 	} else {
-		c.SetRightBitmap(_bitmap)
+		c.SetRightBitmap(v)
 	}
 }
 
