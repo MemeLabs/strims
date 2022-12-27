@@ -19,10 +19,10 @@ import (
 	"github.com/MemeLabs/strims/pkg/chunkstream"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/syncutil"
+	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
 var mockStreamLatency = promauto.NewGaugeVec(prometheus.GaugeOpts{

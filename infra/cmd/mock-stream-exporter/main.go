@@ -12,8 +12,8 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/protobuf/pkg/bytereader"
+	"github.com/golang/protobuf/proto"
 	dto "github.com/prometheus/client_model/go"
-	"google.golang.org/protobuf/proto"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
