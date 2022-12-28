@@ -1,0 +1,22 @@
+helmCharts:
+- name: kube-prometheus-stack
+  namespace: monitoring-system
+  includeCRDs: true
+  valuesInline:
+    namespaceOverride: monitoring-system
+    cleanPrometheusOperatorObjectNames: true
+    alertmanager:
+      enabled: false
+      resources: {}
+    prometheusOperator:
+      resources: {}
+    prometheus:
+      prometheusSpec:
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        additionalScrapeConfigs: []
+        storageSpec: {}
+        retention: 5d
+        resources: {}
+  releaseName: kube-prometheus-stack
+  repo: https://prometheus-community.github.io/helm-charts
