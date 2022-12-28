@@ -113,7 +113,7 @@ func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 			Currency: "EUR",
 		},
 		PriceMonthly: &Price{
-			Value:    float64(serverType.MonthlyPrice),
+			Value:    float64(serverType.HourlyPrice) * 720,
 			Currency: "EUR",
 		},
 	}
