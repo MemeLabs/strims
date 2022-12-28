@@ -299,6 +299,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       return true;
     };
 
+    const isCharsetRule = (node: csstree.CssNode) =>
+      node.type === "Atrule" && node.name === "charset";
+
     const sanitizeStyleSheet = (css: string = "", name: string, uris: Map<string, string>) => {
       const ast = csstree.parse(css);
 
@@ -340,7 +343,8 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       }
 
       const sheet = csstree.find(ast, isNodeType("StyleSheet")) as csstree.StyleSheet;
-      return ok ? sheet.children.toArray().map((node) => csstree.generate(node)) : [];
+      const nodes = sheet.children.toArray().filter((node) => !isCharsetRule(node));
+      return nodes.map((node) => csstree.generate(node));
     };
 
     setModifiers((prev) => {
