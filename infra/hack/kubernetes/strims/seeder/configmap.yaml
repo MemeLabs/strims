@@ -10,8 +10,8 @@ data:
       address: 0.0.0.0:30001
     storage:
       adapter: bbolt
-        bbolt:
-          path: /bbolt/.strims
+      bbolt:
+        path: /bbolt/.strims
     session:
       remote:
         enabled: true
