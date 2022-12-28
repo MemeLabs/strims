@@ -10,6 +10,7 @@ import (
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/image"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -107,7 +108,7 @@ func TestDiffSnippetsWithEqualValues(t *testing.T) {
 
 func TestMergeSnippet(t *testing.T) {
 	a, b, _ := getTestSnippets()
-	c := proto.Clone(a).(*networkv1directory.ListingSnippet)
+	c := protoutil.Clone(a)
 	mergeSnippet(c, diffSnippets(a, b))
 	assert.True(t, proto.Equal(c, b))
 }

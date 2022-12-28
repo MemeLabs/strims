@@ -22,6 +22,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/hashmap"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -343,7 +344,7 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate, bootstrapClien
 	}
 
 	for _, c := range bootstrapClients {
-		cc := proto.Clone(c).(*networkv1bootstrap.BootstrapClient)
+		cc := protoutil.Clone(c)
 		cc.Id = 0
 		invitation.BootstrapClients = append(invitation.BootstrapClients, cc)
 	}
@@ -440,7 +441,7 @@ func NewCertificateLog(s IDGenerator, networkID uint64, cert *certificate.Certif
 		return nil, err
 	}
 
-	c := proto.Clone(cert).(*certificate.Certificate)
+	c := protoutil.Clone(cert)
 	if p := c.GetParent(); p != nil {
 		c.ParentOneof = &certificate.Certificate_ParentSerialNumber{
 			ParentSerialNumber: p.SerialNumber,

@@ -58,3 +58,8 @@ func WriteStream(w io.Writer, m proto.Message) error {
 	}
 	return nil
 }
+
+// Clone ...
+func Clone[T proto.Message](m T) T {
+	return proto.Clone(m).(T)
+}

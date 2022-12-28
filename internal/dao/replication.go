@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/options"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -40,7 +41,7 @@ type ReplicationEventLogTable struct {
 }
 
 func (t ReplicationEventLogTable) Insert(s kv.RWStore, l *replicationv1.EventLog) error {
-	l = proto.Clone(l).(*replicationv1.EventLog)
+	l = protoutil.Clone(l)
 	for _, e := range l.Events {
 		e.Record = nil
 	}
@@ -661,7 +662,7 @@ func RegisterReplicatedTable[V any, T ReplicatedTableRecord[V]](t *Table[V, T], 
 	t.onChange(LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
 		versionvector.Increment(getOrInitVersion(m), s.ReplicaID())
 
-		m = proto.Clone(m).(T)
+		m = protoutil.Clone(m)
 		b, err := proto.Marshal(opt.Extract(s, m, p))
 		if err != nil {
 			return err
@@ -875,7 +876,7 @@ func RegisterReplicatedSingleton[V any, T ReplicatedSingletonRecord[V]](t *Singl
 	t.onChange(LocalSetHook(func(s ReplicatedRWTx, m, p T) (err error) {
 		versionvector.Increment(getOrInitVersion(m), s.ReplicaID())
 
-		m = proto.Clone(m).(T)
+		m = protoutil.Clone(m)
 		b, err := proto.Marshal(opt.Extract(s, m, p))
 		if err != nil {
 			return err

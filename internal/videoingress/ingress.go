@@ -27,11 +27,11 @@ import (
 	"github.com/MemeLabs/strims/pkg/ioutil"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/ppspp/integrity"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/rtmpingress"
 	"github.com/MemeLabs/strims/pkg/syncutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
 // TODO: move to server config
@@ -231,7 +231,7 @@ func newIngressStream(
 	s.transferID = s.transfer.Add(s.swarm, []byte{})
 	s.transfer.Publish(s.transferID, s.channelNetworkKey())
 
-	snippet := proto.Clone(channel.DirectoryListingSnippet).(*networkv1directory.ListingSnippet)
+	snippet := protoutil.Clone(channel.DirectoryListingSnippet)
 	if err := dao.SignMessage(snippet, channel.Key); err != nil {
 		return nil, fmt.Errorf("signing snippet: %w", err)
 	}

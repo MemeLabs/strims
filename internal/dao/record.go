@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/logutil"
 	"github.com/MemeLabs/strims/pkg/options"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -184,7 +185,7 @@ func (t *Singleton[V, T]) Get(s kv.Store) (v T, err error) {
 		return tx.Get(t.ns.String(), v)
 	})
 	if err == kv.ErrRecordNotFound && t.defaultValue != nil {
-		return proto.Clone(t.defaultValue).(T), nil
+		return protoutil.Clone(t.defaultValue), nil
 	}
 	if err != nil {
 		t.getErrCount.Inc()
@@ -257,7 +258,7 @@ func (t *Singleton[V, T]) Transform(s kv.RWStore, fn func(p T) error) (v T, err 
 		} else if err != nil {
 			return err
 		}
-		v = proto.Clone(p).(T)
+		v = protoutil.Clone(p)
 		if err := fn(v); err != nil {
 			return err
 		}
@@ -538,7 +539,7 @@ func (t *Table[V, T]) Transform(s kv.RWStore, id uint64, fn func(p T) error) (v 
 
 	err = s.Update(func(tx kv.RWTx) error {
 		p, err := t.Get(tx, id)
-		v = proto.Clone(p).(T)
+		v = protoutil.Clone(p)
 		if errors.Is(err, kv.ErrRecordNotFound) {
 			v = new(V)
 		} else if err != nil {

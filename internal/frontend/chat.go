@@ -20,10 +20,10 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/chanutil"
 	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/protoutil"
 	"github.com/MemeLabs/strims/pkg/set"
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -632,7 +632,7 @@ func (s *chatService) WatchWhispers(ctx context.Context, req *chatv1.WatchWhispe
 			case e := <-events:
 				switch e := e.(type) {
 				case *chatv1.WhisperThreadChangeEvent:
-					s.emitWatchWhispersThreadUpdate(ctx, ch, proto.Clone(e.WhisperThread).(*chatv1.WhisperThread))
+					s.emitWatchWhispersThreadUpdate(ctx, ch, protoutil.Clone(e.WhisperThread))
 				case *chatv1.WhisperThreadDeleteEvent:
 					ch <- &chatv1.WatchWhispersResponse{
 						PeerKey: e.WhisperThread.PeerKey,
