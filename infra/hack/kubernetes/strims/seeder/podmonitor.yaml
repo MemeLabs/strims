@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: seeder
+spec:
+  selector:
+    matchLabels:
+      strims.gg/app: seeder
+  podMetricsEndpoints:
+  - port: metrics

@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invites
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: node-reader
+      nodeSelector:
+        strims.gg/svc: leader
+      containers:
+      - name: strims
+        image: ghcr.io/memelabs/strims/svc:latest
+        imagePullPolicy: Always
+        args: ["serve-invites", "-config", "/etc/strims/config.yaml"]
+        ports:
+        - name: metrics
+          containerPort: 30000
+        - name: debug
+          containerPort: 30001
+        - name: http
+          containerPort: 30005
+        volumeMounts:
+        - name: config-vol
+          mountPath: /etc/strims
+      volumes:
+      - name: config-vol
+        configMap:
+          name: invites

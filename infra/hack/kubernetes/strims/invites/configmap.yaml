@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: invites
+data:
+  config.yaml: |-
+    metrics:
+      address: 0.0.0.0:30000
+    debug:
+      address: 0.0.0.0:30001
+    storage:
+      adapter: postgres
+      postgres:
+        connStr: "user=strims password=password host=database.strims.svc.cluster.local sslmode=disable database=strims"
+        enableLogging: false
+    http:
+      address: 0.0.0.0:30005

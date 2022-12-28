@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leader
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: node-reader
+      nodeSelector:
+        strims.gg/svc: leader
+      initContainers:
+      - name: init
+        image: ghcr.io/memelabs/strims/kubectl:latest
+        command: ["sh", "-c"]
+        args:
+        - kubectl get node $NODE_NAME -o jsonpath='{.metadata.labels.strims\.gg/public-ip}' > /node-labels/public-ip
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: node-labels-vol
+          mountPath: /node-labels
+      containers:
+      - name: strims
+        image: ghcr.io/memelabs/strims/svc:latest
+        imagePullPolicy: Always
+        command: ["sh", "-c"]
+        args:
+        - /ko-app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        ports:
+        - name: metrics
+          containerPort: 30000
+        - name: debug
+          containerPort: 30001
+        - name: http
+          containerPort: 30002
+          hostPort: 30002
+        - name: webrtc-tcp
+          containerPort: 30003
+          hostPort: 30003
+        - name: webrtc-udp
+          containerPort: 30003
+          hostPort: 30003
+          protocol: UDP
+        - name: rtmp
+          containerPort: 1935
+          hostPort: 1935
+        volumeMounts:
+        - name: config-vol
+          mountPath: /etc/strims
+        - name: node-labels-vol
+          mountPath: /node-labels
+      volumes:
+      - name: config-vol
+        configMap:
+          name: leader
+      - name: node-labels-vol
+        emptyDir: {}

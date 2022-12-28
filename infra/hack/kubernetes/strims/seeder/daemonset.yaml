@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: seeder
+spec:
+  template:
+    spec:
+      serviceAccountName: node-reader
+      nodeSelector:
+        strims.gg/svc: seeder
+      initContainers:
+      - name: init
+        image: ghcr.io/memelabs/strims/kubectl:latest
+        command: ["sh", "-c"]
+        args:
+        - kubectl get node $NODE_NAME -o jsonpath='{.metadata.labels.strims\.gg/public-ip}' > /node-labels/public-ip
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: node-labels-vol
+          mountPath: /node-labels
+      containers:
+      - name: strims
+        image: ghcr.io/memelabs/strims/svc:latest
+        imagePullPolicy: Always
+        command: ["sh", "-c"]
+        args:
+        - /ko-app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        ports:
+        - name: metrics
+          containerPort: 30000
+        - name: debug
+          containerPort: 30001
+        - name: webrtc-tcp
+          containerPort: 30003
+          hostPort: 30003
+        - name: webrtc-udp
+          containerPort: 30003
+          hostPort: 30003
+          protocol: UDP
+        - name: rtmp
+          containerPort: 30004
+          hostPort: 30004
+        volumeMounts:
+        - name: config-vol
+          mountPath: /etc/strims
+        - name: node-labels-vol
+          mountPath: /node-labels
+        - name: bbolt-db
+          mountPath: /bbolt
+      volumes:
+      - name: config-vol
+        configMap:
+          name: seeder
+      - name: node-labels-vol
+        emptyDir: {}
+      - name: bbolt-db
+        emptyDir: {}

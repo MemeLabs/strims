@@ -1,0 +1,7 @@
+resources:
+- configmap.yaml
+- deployment.yaml
+- service.yaml
+- podmonitor.yaml
+commonLabels:
+  strims.gg/app: invites

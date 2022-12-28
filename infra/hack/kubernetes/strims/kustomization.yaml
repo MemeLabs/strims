@@ -1,0 +1,9 @@
+namespace: strims
+resources:
+- namespace.yaml
+- rbac.yaml
+- database
+- invites
+- web
+- leader
+- seeder

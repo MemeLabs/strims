@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database
+data:
+  POSTGRES_DB: strims
+  POSTGRES_USER: strims
+  POSTGRES_PASSWORD: password

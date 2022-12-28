@@ -1,0 +1,7 @@
+resources:
+- configmap.yaml
+- pvc.yaml
+- deployment.yaml
+- service.yaml
+commonLabels:
+  strims.gg/app: database

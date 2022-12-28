@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seeder
+data:
+  config.yaml: |-
+    metrics:
+      address: 0.0.0.0:30000
+    debug:
+      address: 0.0.0.0:30001
+    storage:
+      adapter: bbolt
+        bbolt:
+          path: /bbolt/.strims
+    session:
+      remote:
+        enabled: true
+      headless: []
+    vnic:
+      webrtc:
+        tcpMuxAddress: 0.0.0.0:30003
+        udpMuxAddress: 0.0.0.0:30003

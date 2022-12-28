@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: invites
+spec:
+  selector:
+    matchLabels:
+      strims.gg/app: invites
+  podMetricsEndpoints:
+  - port: metrics

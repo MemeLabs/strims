@@ -1,0 +1,6 @@
+resources:
+- configmap.yaml
+- daemonset.yaml
+- podmonitor.yaml
+commonLabels:
+  strims.gg/app: seeder

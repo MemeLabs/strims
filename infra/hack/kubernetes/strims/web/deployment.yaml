@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+      - name: strims
+        image: ghcr.io/memelabs/strims/web:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 80

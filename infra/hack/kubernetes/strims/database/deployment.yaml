@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+spec:
+  replicas: 1
+  template:
+    spec:
+      nodeSelector:
+        strims.gg/svc: leader
+      containers:
+      - name: postgres
+        image: docker.io/postgres:15
+        ports:
+        - containerPort: 5432
+          hostPort: 30006
+        envFrom:
+        - configMapRef:
+            name: database
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: database
+      volumes:
+      - name: database
+        persistentVolumeClaim:
+          claimName: database
