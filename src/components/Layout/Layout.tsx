@@ -166,12 +166,12 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
   useHotkeys("alt+y", () => layout.toggleSwapMainPanels(), {
     enableOnContentEditable: true,
-    enableOnTags: ["INPUT"],
+    enableOnFormTags: ["INPUT"],
   });
 
   useHotkeys("alt+c", () => layout.toggleFullScreenChat(), {
     enableOnContentEditable: true,
-    enableOnTags: ["INPUT"],
+    enableOnFormTags: ["INPUT"],
   });
 
   const location = useLocation();

@@ -25,7 +25,7 @@ const Embed: React.FC = () => {
 
   useHotkeys("alt+t", () => toggleTheaterMode(), {
     enableOnContentEditable: true,
-    enableOnTags: ["INPUT"],
+    enableOnFormTags: ["INPUT"],
   });
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);

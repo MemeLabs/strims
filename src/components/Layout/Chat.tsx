@@ -50,7 +50,7 @@ const Chat: React.FC = () => {
 
   useHotkeys("alt+r", () => toggleShowChat(), {
     enableOnContentEditable: true,
-    enableOnTags: ["INPUT"],
+    enableOnFormTags: ["INPUT"],
   });
 
   const handleToggleClick = useCallback(() => {
