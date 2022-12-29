@@ -164,6 +164,12 @@ kind: ClusterConfiguration
 controlPlaneEndpoint: ${wg_ip}:6443
 networking:
   podSubnet: 10.244.0.0/16
+controllerManager:
+  extraArgs:
+    bind-address: 0.0.0.0
+scheduler:
+  extraArgs:
+    bind-address: 0.0.0.0
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
