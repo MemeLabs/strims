@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	_ "embed"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -281,6 +280,10 @@ func (b *Backend) CreateNode(
 	billingType node.BillingType,
 	nodeType node.NodeType,
 ) error {
+	if name == "" {
+		name = generateHostname(driver.Provider(), region)
+	}
+
 	b.log.Info("creating node",
 		zap.String("provider", driver.Provider()),
 		zap.String("name", name),
@@ -478,12 +481,13 @@ func (b *Backend) RemoveStaticPeer(ctx context.Context, name string) error {
 func (b *Backend) getNodesByState(ctx context.Context, state ...string) ([]*node.Node, error) {
 	var nodes []*node.Node
 	slice, err := models.Nodes(models.NodeWhere.State.IN(state)).All(ctx, b.db)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 
 	for _, n := range slice {
-		node, err := modelToNode(ctx, n)
+		var node *node.Node
+		node, err = modelToNode(ctx, n)
 		if err != nil {
 			return nil, err
 		}
@@ -901,7 +905,7 @@ func modelToNode(ctx context.Context, n *models.Node) (*node.Node, error) {
 	if n.State != models.NodeStateDestroyed {
 		lease, err := models.FindWireguardIPLeaseG(ctx, models.WireguardPeerTypeNode, n.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error finding wg ip lease for node %d: %w", n.ID, err)
 		}
 		wgip = lease.IP
 	}
@@ -1011,6 +1015,14 @@ func (b *Backend) run(n *node.Node, cmd string, timeout ...time.Duration) (strin
 		return "", fmt.Errorf("failed to run command(%q): %q %w", cmd, stderr, err)
 	}
 	return stdout, nil
+}
+
+func generateHostname(provider, region string) string {
+	name := make([]byte, 4)
+	if _, err := rand.Read(name); err != nil {
+		panic(err)
+	}
+	return strings.ToLower(fmt.Sprintf("%s-%s-%x", provider, region, name))
 }
 
 var joinKubeadmConfigTpls = map[node.NodeType]string{
