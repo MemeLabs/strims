@@ -585,14 +585,14 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		b.log.Info("Joining an existing cluster")
 
 		// Refresh the upload-certs, they are deleted after two hours
-		if _, err := b.runOnController(
+		if _, err := b.RunOnController(
 			ctx,
 			fmt.Sprintf("sudo kubeadm init phase upload-certs --upload-certs --certificate-key %q", b.certificateKey),
 		); err != nil {
 			return fmt.Errorf("failed to upload-certs: %w", err)
 		}
 
-		stdout, err := b.runOnController(ctx, "sudo kubeadm token create --print-join-command | tr -d '\n'")
+		stdout, err := b.RunOnController(ctx, "sudo kubeadm token create --print-join-command | tr -d '\n'")
 		if err != nil {
 			return fmt.Errorf("failed to get kubeadm token: %w", err)
 		}
@@ -652,7 +652,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		}
 
 		if n.Type == node.TypeWorker {
-			if _, err = b.runOnController(
+			if _, err = b.RunOnController(
 				ctx,
 				fmt.Sprintf("kubectl label node %q node-role.kubernetes.io/worker=worker", n.Name),
 			); err != nil {
@@ -665,7 +665,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 	return nil
 }
 
-func (b *Backend) runOnController(ctx context.Context, cmd string) (string, error) {
+func (b *Backend) RunOnController(ctx context.Context, cmd string) (string, error) {
 	controllerModel, err := models.Nodes(
 		models.NodeWhere.Type.EQ(models.NodeTypeController),
 		models.NodeWhere.State.EQ(models.NodeStateActive),
@@ -779,7 +779,7 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	}
 
 	if nodeCount >= 1 {
-		if _, err = b.runOnController(
+		if _, err = b.RunOnController(
 			ctx,
 			fmt.Sprintf("kubectl drain %s --ignore-daemonsets --delete-emptydir-data --force --timeout=30s && kubectl delete node %s", name, name),
 		); err != nil {
