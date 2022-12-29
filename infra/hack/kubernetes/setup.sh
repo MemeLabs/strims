@@ -208,6 +208,11 @@ EOF
 	kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
 	kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.23/deploy/local-path-storage.yaml
 	kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+	kubectl -n kube-system get cm/kube-proxy -o yaml | sed 's/metricsBindAddress: .*/metricsBindAddress: 0.0.0.0:10249/' | kubectl apply -f -
+	kubectl -n kube-system patch ds kube-proxy -p "{\"spec\":{\"template\":{\"metadata\":{\"labels\":{\"updateTime\":\"$(date +'%s')\"}}}}}"
+
+	kustomize build --enable-helm https://github.com/MemeLabs/strims.git/infra/hack/kubernetes/monitoring | kubectl create -f -
 }
 
 if ! command -v sudo &>/dev/null; then

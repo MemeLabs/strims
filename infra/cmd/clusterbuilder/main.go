@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	be "github.com/MemeLabs/strims/infra/internal/backend"
 	"github.com/MemeLabs/strims/infra/pkg/node"
@@ -139,15 +138,6 @@ func create(ctx context.Context) error {
 	if err := eg.Wait(); err != nil {
 		return err
 	}
-
-	if _, err = backend.RunOnController(
-		ctx,
-		"sh -c \"kustomize build --enable-helm https://github.com/MemeLabs/strims.git/infra/hack/kubernetes/monitoring | kubectl create -f -\"",
-	); err != nil {
-		return err
-	}
-
-	time.Sleep(5 * time.Second)
 
 	if _, err = backend.RunOnController(
 		ctx,
