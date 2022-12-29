@@ -97,6 +97,10 @@ function install_tools() {
 		kubeadm
 	sudo apt-mark hold kubelet kubeadm cri-o cri-o-runc cri-tools buildah
 
+	curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+	curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+	sudo install -o root -g root -m 0755 kustomize /usr/bin/kustomize
+
 	sudo tee /etc/modules-load.d/crio.conf <<EOF
 overlay
 br_netfilter
