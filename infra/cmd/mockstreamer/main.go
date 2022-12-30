@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -20,9 +22,14 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 var (
+	nodeLabel    string
 	controllerIP string
 	metricsPort  int
 	debugPort    int
@@ -39,6 +46,7 @@ func main() {
 }
 
 func run() error {
+	flag.StringVar(&nodeLabel, "node-label", "strims.gg/svc=seeder", "node label to run clients on")
 	flag.StringVar(&controllerIP, "controller-ip", "10.0.0.1", "IP of the node exposing svc")
 	flag.IntVar(&metricsPort, "metrics-port", 30000, "svc metrics port")
 	flag.IntVar(&debugPort, "debug-port", 30001, "svc debug port")
@@ -46,19 +54,41 @@ func run() error {
 	flag.IntVar(&webrtcPort, "webrtc-port", 30003, "svc webrtc port")
 	flag.IntVar(&rtmpPort, "rtmp-port", 1935, "svc RTMP port")
 	flag.IntVar(&invitesPort, "invites-port", 30005, "svc invites port")
+
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		flag.StringVar(&kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	}
 	flag.Parse()
+
+	if kubeconfig == "" {
+		kubeconfig = os.Getenv("KUBECONFIG")
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return err
+	}
+
+	client := kubernetes.NewForConfigOrDie(config)
+
+	ctx := context.TODO()
+	list, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: nodeLabel})
+	if err != nil {
+		return err
+	}
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return err
 	}
 
-	host, err := newClient(logger)
+	host, err := newClient(logger, controllerIP)
 	if err != nil {
 		return err
 	}
-
-	ctx := context.TODO()
 
 	log.Println("signing up...")
 	signUpRequest := &authv1.SignUpRequest{Name: "host1", Password: "password"}
@@ -100,53 +130,57 @@ func run() error {
 	invitation := createInvitationResponse.GetInvitation()
 
 	eg := errgroup.Group{}
-	eg.Go(func() error {
-		client, err := newClient(logger)
-		if err != nil {
-			return err
-		}
+	for _, n := range list.Items {
+		node := n
+		eg.Go(func() error {
+			client, err := newClient(logger, node.Status.Addresses[0].Address)
+			if err != nil {
+				return err
+			}
 
-		log.Println("signing up as majora")
-		request := &authv1.SignUpRequest{Name: "majora", Password: "password"}
-		if err = client.Auth.SignUp(ctx, request, &authv1.SignUpResponse{}); err != nil {
-			return err
-		}
+			log.Printf("signing up as %s", node.GetName())
+			request := &authv1.SignUpRequest{Name: node.GetName(), Password: "password"}
+			if err = client.Auth.SignUp(ctx, request, &authv1.SignUpResponse{}); err != nil {
+				return err
+			}
 
-		log.Println("creating network from invitation")
-		createNetworkFromInvitationReq := &networkv1.CreateNetworkFromInvitationRequest{
-			Invitation: &networkv1.CreateNetworkFromInvitationRequest_InvitationBytes{
-				InvitationBytes: errutil.Must(proto.Marshal(invitation)),
-			},
-		}
-		if err = client.Network.CreateNetworkFromInvitation(ctx, createNetworkFromInvitationReq, &networkv1.CreateNetworkFromInvitationResponse{}); err != nil {
-			return err
-		}
-
-		log.Println("creating bootstrap client")
-		bootstrapClient := &networkv1bootstrap.CreateBootstrapClientRequest{
-			ClientOptions: &networkv1bootstrap.CreateBootstrapClientRequest_WebsocketOptions{
-				WebsocketOptions: &networkv1bootstrap.BootstrapClientWebSocketOptions{
-					Url: fmt.Sprintf("ws://%s:%d/%x", controllerIP, wsPort, profile.GetKey().GetPublic()),
+			log.Println("creating network from invitation")
+			createNetworkFromInvitationReq := &networkv1.CreateNetworkFromInvitationRequest{
+				Invitation: &networkv1.CreateNetworkFromInvitationRequest_InvitationBytes{
+					InvitationBytes: errutil.Must(proto.Marshal(invitation)),
 				},
-			},
-		}
-		if err = client.Bootstrap.CreateClient(ctx, bootstrapClient, &networkv1bootstrap.CreateBootstrapClientResponse{}); err != nil {
-			return err
-		}
+			}
+			if err = client.Network.CreateNetworkFromInvitation(ctx, createNetworkFromInvitationReq, &networkv1.CreateNetworkFromInvitationResponse{}); err != nil {
+				return err
+			}
 
-		debugConfigReq := &debugv1.SetConfigRequest{
-			Config: &debugv1.Config{
-				EnableMockStreams:    true,
-				MockStreamNetworkKey: dao.NetworkKey(createServerResponse.Network),
-			},
-		}
-		if err = client.Debug.SetConfig(ctx, debugConfigReq, &debugv1.SetConfigResponse{}); err != nil {
-			return err
-		}
+			log.Println("creating bootstrap client")
+			bootstrapClient := &networkv1bootstrap.CreateBootstrapClientRequest{
+				ClientOptions: &networkv1bootstrap.CreateBootstrapClientRequest_WebsocketOptions{
+					WebsocketOptions: &networkv1bootstrap.BootstrapClientWebSocketOptions{
+						Url:                   fmt.Sprintf("ws://%s:%d/%x", controllerIP, wsPort, profile.GetKey().GetPublic()),
+						InsecureSkipVerifyTls: true,
+					},
+				},
+			}
+			if err = client.Bootstrap.CreateClient(ctx, bootstrapClient, &networkv1bootstrap.CreateBootstrapClientResponse{}); err != nil {
+				return err
+			}
 
-		return nil
-	})
+			debugConfigReq := &debugv1.SetConfigRequest{
+				Config: &debugv1.Config{
+					EnableMockStreams:    true,
+					MockStreamNetworkKey: dao.NetworkKey(createServerResponse.Network),
+				},
+			}
+			if err = client.Debug.SetConfig(ctx, debugConfigReq, &debugv1.SetConfigResponse{}); err != nil {
+				return err
+			}
 
+			return nil
+		})
+
+	}
 	if err = eg.Wait(); err != nil {
 		return err
 	}
@@ -161,7 +195,7 @@ func run() error {
 		TimeoutMs:         5 * 60 * 1000,
 		NetworkKey:        dao.NetworkKey(createServerResponse.Network),
 	}
-	if err := host.Debug.StartMockStream(ctx, startMockStreamReq, &debugv1.StartMockStreamResponse{}); err != nil {
+	if err = host.Debug.StartMockStream(ctx, startMockStreamReq, &debugv1.StartMockStreamResponse{}); err != nil {
 		return err
 	}
 
@@ -170,8 +204,8 @@ func run() error {
 	return nil
 }
 
-func newClient(logger *zap.Logger) (*apis.FrontendClient, error) {
-	c, resp, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws://%s:%d/api", controllerIP, wsPort), nil)
+func newClient(logger *zap.Logger, hostIP string) (*apis.FrontendClient, error) {
+	c, resp, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws://%s:%d/api", hostIP, wsPort), nil)
 	if err != nil {
 		if resp != nil {
 			return nil, fmt.Errorf("failed to dial with %d status code: %w", resp.StatusCode, err)
