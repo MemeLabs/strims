@@ -174,6 +174,10 @@ controllerManager:
 scheduler:
   extraArgs:
     bind-address: 0.0.0.0
+etcd:
+  local:
+    extraArgs:
+      listen-metrics-urls: http://0.0.0.0:2381
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
