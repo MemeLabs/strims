@@ -19,6 +19,8 @@ data:
         enabled: true
       headless: []
     vnic:
+      websocket:
+        allowInsecure: true
       webrtc:
         tcpMuxAddress: 0.0.0.0:30003
         udpMuxAddress: 0.0.0.0:30003
