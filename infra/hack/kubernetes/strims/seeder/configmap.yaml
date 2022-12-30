@@ -12,6 +12,8 @@ data:
       adapter: bbolt
       bbolt:
         path: /bbolt/.strims
+    http:
+      address: 0.0.0.0:30002
     session:
       remote:
         enabled: true

@@ -34,6 +34,9 @@ spec:
           containerPort: 30000
         - name: debug
           containerPort: 30001
+        - name: http
+          containerPort: 30002
+          hostPort: 30002
         - name: webrtc-tcp
           containerPort: 30003
           hostPort: 30003
