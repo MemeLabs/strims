@@ -34,6 +34,8 @@ type FrontendClient struct {
 	VideoIngress *videov1.VideoIngressClient
 	HLSEgress    *videov1.HLSEgressClient
 	VNIC         *vnicv1.VNICFrontendClient
+
+	client *rpc.Client
 }
 
 func NewFrontendClient(c *rpc.Client) *FrontendClient {
@@ -55,5 +57,10 @@ func NewFrontendClient(c *rpc.Client) *FrontendClient {
 		VideoIngress: videov1.NewVideoIngressClient(c),
 		HLSEgress:    videov1.NewHLSEgressClient(c),
 		VNIC:         vnicv1.NewVNICFrontendClient(c),
+		client:       c,
 	}
+}
+
+func (c *FrontendClient) Close() {
+	c.client.Close()
 }
