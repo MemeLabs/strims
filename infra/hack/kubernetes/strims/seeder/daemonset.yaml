@@ -29,6 +29,18 @@ spec:
         command: ["sh", "-c"]
         args:
         - /ko-app/svc run -config /etc/strims/config.yaml -host-ip "$(cat /node-labels/public-ip)";
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 30002
+          initialDelaySeconds: 5
+          periodSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 30002
+          initialDelaySeconds: 5
+          periodSeconds: 3
         ports:
         - name: metrics
           containerPort: 30000
