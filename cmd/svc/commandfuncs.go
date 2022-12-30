@@ -204,6 +204,9 @@ func runCmd(fs Flags) error {
 			}))
 			logger.Debug("remote client closed", zap.Error(err))
 		}))
+	}
+
+	if cfg.EnableHealthCheck.Get(true) {
 		httpMux.HandleFunc("/healthcheck", func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprintf(w, "OK")
 		})

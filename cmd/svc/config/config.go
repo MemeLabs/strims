@@ -143,8 +143,9 @@ type PeerConfig struct {
 			MaxConns      int32            `yaml:"maxConns"`
 		} `yaml:"postgres"`
 	} `yaml:"queue"`
-	HTTP    HTTPConfig `yaml:"http"`
-	Session struct {
+	HTTP              HTTPConfig     `yaml:"http"`
+	EnableHealthCheck Optional[bool] `yaml:"enableHealthCheck"`
+	Session           struct {
 		Remote struct {
 			Enabled Optional[bool] `yaml:"enabled"`
 		} `yaml:"remote"`
