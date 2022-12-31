@@ -6,7 +6,7 @@ spec:
   replicas: 1
   template:
     spec:
-      serviceAccountName: node-reader
+      serviceAccountName: strims-node-reader
       nodeSelector:
         strims.gg/svc: leader
       containers:

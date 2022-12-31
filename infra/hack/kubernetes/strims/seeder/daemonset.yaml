@@ -5,7 +5,7 @@ metadata:
 spec:
   template:
     spec:
-      serviceAccountName: node-reader
+      serviceAccountName: strims-node-reader
       nodeSelector:
         strims.gg/svc: seeder
       initContainers:
