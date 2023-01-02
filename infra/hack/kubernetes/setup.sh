@@ -42,6 +42,10 @@ function configure_system() {
 	# Fail on any errors from apt (to allow for retries)
 	echo 'APT::Update::Error-Mode "any";' | sudo tee /etc/apt/apt.conf.d/10error-mode
 
+	if command -v cloud-init &>/dev/null; then
+		cloud-init status --wait
+	fi
+
 	DEBIAN_FRONTEND=noninteractive
 	retry sudo apt-get update
 	retry sudo apt-get upgrade -y
@@ -61,8 +65,10 @@ function configure_system() {
 		curl \
 		gnupg2 \
 		pwgen \
-		wireguard \
-		resolvconf
+		wireguard
+
+	# Wireguard requires this to configure DNS https://superuser.com/a/1544697
+	sudo ln -sfn /usr/bin/resolvectl /usr/local/bin/resolvconf
 
 	sudo update-ca-certificates
 
@@ -133,7 +139,8 @@ function configure_firewall() {
 	sudo ufw allow http
 	sudo ufw allow https
 	sudo ufw allow 1935/tcp comment 'rtmp'
-	sudo ufw allow 5000 comment 'webrtc ephemeral ports'
+	sudo ufw allow 30002
+	sudo ufw allow 30003
 	sudo ufw allow 51820/udp comment 'wireguard'
 	sudo ufw allow 3478/udp comment 'coturn stun'
 	sudo ufw allow in on wg0
