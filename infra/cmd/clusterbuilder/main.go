@@ -147,6 +147,7 @@ func create(ctx context.Context) error {
 		}
 
 		for i := 0; i < c.Count; i++ {
+			time.Sleep(time.Duration(i*100) * time.Millisecond)
 			eg.Go(func() error {
 				nodeName := generateHostname(driver.Provider(), conf.Region)
 				f, err := os.Create(filepath.Join(installDir, nodeName+"_install.log"))
