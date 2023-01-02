@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	be "github.com/MemeLabs/strims/infra/internal/backend"
 	"github.com/MemeLabs/strims/infra/pkg/node"
@@ -76,6 +81,11 @@ func main() {
 }
 
 func create(ctx context.Context) error {
+	installDir := filepath.Join("install_logs", strconv.FormatInt(time.Now().UTC().UnixNano(), 8))
+	if err := os.MkdirAll(installDir, os.ModePerm); err != nil {
+		return err
+	}
+
 	nodes, err := backend.ActiveNodes(ctx)
 	if err != nil {
 		return err
@@ -94,8 +104,9 @@ func create(ctx context.Context) error {
 		Region   string `yaml:"region"`
 		SKU      string `yaml:"sku"`
 		Count    int    `yaml:"count"`
+		Spot     bool   `yaml:"spot"`
 	}
-	if err := yaml.Unmarshal(data, &confItems); err != nil {
+	if err = yaml.Unmarshal(data, &confItems); err != nil {
 		return fmt.Errorf("error reading in config items: %v", err)
 	}
 
@@ -111,16 +122,23 @@ func create(ctx context.Context) error {
 		}
 
 		if !controlPlaneCreated {
-			if err := backend.CreateNode(
+			nodeName := generateHostname(driver.Provider(), conf.Region)
+			f, err := os.Create(filepath.Join(installDir, nodeName+"_install.log"))
+			if err != nil {
+				return err
+			}
+			if err = backend.CreateNode(
 				egCtx,
 				driver,
-				"",
+				nodeName,
 				conf.Region,
 				conf.SKU,
 				driver.DefaultUser(),
 				"",
 				node.Hourly,
 				node.TypeController,
+				false,
+				f,
 			); err != nil {
 				log.Fatal(err)
 			}
@@ -130,21 +148,37 @@ func create(ctx context.Context) error {
 
 		for i := 0; i < c.Count; i++ {
 			eg.Go(func() error {
-				return backend.CreateNode(egCtx, driver, "", conf.Region, conf.SKU, driver.DefaultUser(), "", node.Hourly, node.TypeWorker)
+				nodeName := generateHostname(driver.Provider(), conf.Region)
+				f, err := os.Create(filepath.Join(installDir, nodeName+"_install.log"))
+				if err != nil {
+					return err
+				}
+				err = backend.CreateNode(
+					egCtx,
+					driver,
+					nodeName,
+					conf.Region,
+					conf.SKU,
+					driver.DefaultUser(),
+					"",
+					node.Hourly,
+					node.TypeWorker,
+					conf.Spot,
+					f,
+				)
+				if err != nil {
+					// don't fail if we are unable to provision a node
+					log.Println(err)
+				}
+				return nil
 			})
 		}
 	}
 
-	if err := eg.Wait(); err != nil {
+	if err = eg.Wait(); err != nil {
 		return err
 	}
 
-	if _, err = backend.RunOnController(
-		ctx,
-		"kubectl apply -k https://github.com/MemeLabs/strims.git/infra/hack/kubernetes/strims",
-	); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -156,15 +190,24 @@ func destroy(ctx context.Context) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, n := range nodes {
-		node := n
+		nod := n
+		// if nod.Type == node.TypeWorker { }
 		eg.Go(func() error {
-			return backend.DestroyNode(ctx, node.Name)
+			return backend.DestroyNode(ctx, nod.Name)
 		})
 	}
 
-	if err := eg.Wait(); err != nil {
+	if err = eg.Wait(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func generateHostname(provider, region string) string {
+	name := make([]byte, 4)
+	if _, err := rand.Read(name); err != nil {
+		panic(err)
+	}
+	return strings.ToLower(fmt.Sprintf("%s-%s-%x", provider, region, name))
 }

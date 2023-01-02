@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"reflect"
@@ -279,6 +280,8 @@ func (b *Backend) CreateNode(
 	name, region, sku, user, ipv4 string,
 	billingType node.BillingType,
 	nodeType node.NodeType,
+	spot bool,
+	w io.Writer,
 ) error {
 	if name == "" {
 		name = generateHostname(driver.Provider(), region)
@@ -311,6 +314,7 @@ func (b *Backend) CreateNode(
 		SKU:         sku,
 		SSHKey:      b.SSHPublicKey(),
 		BillingType: billingType,
+		Spot:        spot,
 	}
 
 	n, err := driver.Create(ctx, req)
@@ -329,14 +333,14 @@ func (b *Backend) CreateNode(
 
 	wgpriv, wgpub, err := wgutil.GenerateKey()
 	if err != nil {
-		return fmt.Errorf("failed to create wg keys: %w", err)
+		return fmt.Errorf("failed to create wg keys for node %s: %w", n.Name, err)
 	}
 	n.WireguardPrivKey = wgpriv
 	b.log.Info("generated wireguard keys for node", zap.String("wg_pub_key", wgpub))
 
 	nodeID, err := b.insertNode(ctx, n)
 	if err != nil {
-		return fmt.Errorf("failed to insert node: %w", err)
+		return fmt.Errorf("failed to insert node %s: %w", n.Name, err)
 	}
 
 	n.WireguardIPv4, err = b.leaseWGIP(ctx, nodeID, models.WireguardPeerTypeNode)
@@ -346,20 +350,23 @@ func (b *Backend) CreateNode(
 
 	b.syncNodes(ctx)
 
-	if err = b.initNode(ctx, n, newCluster); err != nil {
-		return fmt.Errorf("failed to init node: %w", err)
+	b.log.Info("initalizing node", zap.String("name", n.Name))
+	if err = b.initNode(ctx, w, n, newCluster); err != nil {
+		return fmt.Errorf("failed to init node %s: %w", n.Name, err)
 	}
 
-	if err := b.markNodeActive(ctx, nodeID); err != nil {
-		return fmt.Errorf("failed to mark node active: %w", err)
+	b.log.Info("marking node as active", zap.String("name", n.Name))
+	if err = b.markNodeActive(ctx, nodeID); err != nil {
+		return fmt.Errorf("failed to mark node %s as active: %w", n.Name, err)
 	}
 
-	if _, err := b.lock.TryLockContext(ctx, time.Second); err != nil {
+	if _, err = b.lock.TryLockContext(ctx, time.Second); err != nil {
 		return fmt.Errorf("failed to acquire lock for final wg sync: %w", err)
 	}
 	defer b.lock.Unlock()
-	if err := b.syncWireguard(ctx, n); err != nil {
-		return fmt.Errorf("failed to mark node active: %w", err)
+
+	if err = b.syncWireguard(ctx, n); err != nil {
+		return fmt.Errorf("failed to sync wireguard for node %s: %w", n.Name, err)
 	}
 
 	return nil
@@ -547,12 +554,12 @@ func (b *Backend) markNodeActive(ctx context.Context, nodeID int64) error {
 	return tx.Commit()
 }
 
-func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) error {
-	b.log.Info("waiting for node to be reachable (up to 5 minutes)")
+func (b *Backend) initNode(ctx context.Context, w io.Writer, n *node.Node, newCluster bool) error {
+	b.log.Info("waiting for node to be reachable (up to 5 minutes)", zap.String("name", n.Name))
 	var err error
 	for i := 0; i < 5; i++ {
 		if _, err = b.run(n, "whoami", 5*time.Minute); err == nil {
-			b.log.Info("connected to node")
+			b.log.Info("connected to node", zap.String("name", n.Name))
 			break
 		}
 		time.Sleep(10 * time.Second)
@@ -565,7 +572,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 		return fmt.Errorf("failed to copy setup.sh script to node: %w", err)
 	}
 
-	if err = b.stream(n, fmt.Sprintf("bash /tmp/setup.sh --hostname %q | tee /tmp/setup.log", n.Name)); err != nil {
+	if err = b.stream(w, n, fmt.Sprintf("bash /tmp/setup.sh --hostname %q | tee /tmp/setup.log", n.Name)); err != nil {
 		return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 	}
 
@@ -578,15 +585,16 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 	}
 
 	if newCluster {
-		b.log.Info("Creating a new cluster")
+		b.log.Info("creating a new cluster")
 		if err = b.stream(
+			w,
 			n,
 			fmt.Sprintf("bash /tmp/setup.sh --new --ca-key %q --public-ip %q | tee -a /tmp/setup.log", b.certificateKey, n.Networks.V4[0]),
 		); err != nil {
 			return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 		}
 	} else {
-		b.log.Info("Joining an existing cluster")
+		b.log.Info("joining an existing cluster")
 
 		// Refresh the upload-certs, they are deleted after two hours
 		if _, err := b.RunOnController(
@@ -651,7 +659,7 @@ func (b *Backend) initNode(ctx context.Context, n *node.Node, newCluster bool) e
 			return fmt.Errorf("failed to scp kubeadm.yml to host: %w", err)
 		}
 
-		if err = b.stream(n, "sudo kubeadm join --v=5 --config=/tmp/kubeadm.yml"); err != nil {
+		if err = b.stream(w, n, "sudo kubeadm join --v=5 --config=/tmp/kubeadm.yml"); err != nil {
 			return fmt.Errorf("error running kubeadm join: %w", err)
 		}
 
@@ -971,7 +979,7 @@ func (b *Backend) nodeSSH(n *node.Node) *easyssh.MakeConfig {
 	}
 }
 
-func (b *Backend) stream(n *node.Node, cmd string) error {
+func (b *Backend) stream(w io.Writer, n *node.Node, cmd string) error {
 	stdoutChan, stderrChan, doneChan, errChan, err := b.nodeSSH(n).Stream(cmd, 10*time.Minute)
 	if err != nil {
 		return fmt.Errorf("failed to run cmd(%q): %w", cmd, err)
@@ -986,14 +994,14 @@ loop:
 			break loop
 		case outline := <-stdoutChan:
 			if outline != "" {
-				b.log.Info(outline)
+				w.Write([]byte(outline + "\n"))
 			}
 		case errline := <-stderrChan:
 			if errline != "" {
 				if strings.HasPrefix(errline, "+") {
-					b.log.Info(errline)
+					w.Write([]byte(errline + "\n"))
 				} else {
-					b.log.Error(errline)
+					w.Write([]byte(errline + "\n"))
 				}
 			}
 		case err = <-errChan:

@@ -57,6 +57,7 @@ type CreateRequest struct {
 	SSHKey string
 	// hourly(0) | monthly(1)
 	BillingType BillingType
+	Spot        bool
 }
 
 // ListRequest ...

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/MemeLabs/strims/infra/pkg/node"
@@ -34,6 +35,11 @@ var createNodeCmd = &cobra.Command{
 		hostname, err := cmd.Flags().GetString("hostname")
 		if (hostname == "" && provider == "custom") || err != nil {
 			return errors.New("must provide a hostname for custom nodes")
+		}
+
+		spot, err := cmd.Flags().GetBool("spot")
+		if err != nil {
+			return err
 		}
 
 		var region, sku, ipv4, user string
@@ -64,12 +70,12 @@ var createNodeCmd = &cobra.Command{
 			}
 
 			if !node.ValidRegion(region, regions) {
-				return fmt.Errorf("invalid region for %q", provider)
+				return fmt.Errorf("%s region not found for provider %q", region, provider)
 			}
 
 			skus, err := driver.SKUs(cmd.Context(), &node.SKUsRequest{Region: region})
 			if err != nil {
-				return fmt.Errorf("failed to get skus for %q", provider)
+				return fmt.Errorf("failed to get skus for %q: %w", provider, err)
 			}
 
 			if !node.ValidSKU(sku, skus) {
@@ -82,7 +88,7 @@ var createNodeCmd = &cobra.Command{
 			}
 		}
 
-		return backend.CreateNode(cmd.Context(), driver, hostname, region, sku, user, ipv4, node.Hourly, nodeType)
+		return backend.CreateNode(cmd.Context(), driver, hostname, region, sku, user, ipv4, node.Hourly, nodeType, spot, os.Stdout)
 	},
 }
 
@@ -146,6 +152,7 @@ func init() {
 	createNodeCmd.Flags().StringP("hostname", "n", "", "hostname of new node (required for custom, optional otherwise)")
 	createNodeCmd.Flags().StringP("address", "a", "", "accessible IPv4 address (custom only)")
 	createNodeCmd.Flags().StringP("user", "u", "", "node user to SSH with (custom only)")
+	createNodeCmd.Flags().Bool("spot", false, "")
 	createNodeCmd.MarkFlagRequired("provider")
 	createNodeCmd.MarkFlagRequired("type")
 
