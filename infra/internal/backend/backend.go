@@ -594,7 +594,7 @@ func (b *Backend) initNode(ctx context.Context, w io.Writer, n *node.Node, newCl
 			return fmt.Errorf("failed to exec 'setup.sh': %w", err)
 		}
 	} else {
-		b.log.Info("joining an existing cluster")
+		b.log.Info("joining an existing cluster", zap.String("name", n.Name))
 
 		// Refresh the upload-certs, they are deleted after two hours
 		if _, err := b.RunOnController(
@@ -693,7 +693,7 @@ func (b *Backend) RunOnController(ctx context.Context, cmd string) (string, erro
 }
 
 func (b *Backend) syncNodes(ctx context.Context) {
-	if _, err := b.lock.TryLockContext(ctx, time.Second); err != nil {
+	if _, err := b.lock.TryLockContext(ctx, 3*time.Second); err != nil {
 		b.log.Error("failed to acquire wg flock", zap.Error(err))
 		return
 	}
@@ -730,9 +730,7 @@ func (b *Backend) syncWireguard(ctx context.Context, n *node.Node) error {
 		return fmt.Errorf("failed to write new config: %w", err)
 	}
 
-	// TODO(jbpratt): Once Ubuntu has a newer version of wireguard, swap this
-	// for: 'sudo systemctl reload wg-quick@wg0'
-	if _, err := b.run(n, "sudo bash -c \"wg syncconf wg0 <(wg-quick strip wg0)\""); err != nil {
+	if _, err := b.run(n, "sudo systemctl reload wg-quick@wg0"); err != nil {
 		return fmt.Errorf("failed to run syncconf: %w", err)
 	}
 
