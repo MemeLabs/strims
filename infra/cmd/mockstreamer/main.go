@@ -286,7 +286,7 @@ func run() error {
 			if err != nil {
 				return err
 			}
-			return os.WriteFile(filepath.Join(archiveDir, pod.GetName()+".log"), []byte(logs), 0o0644)
+			return os.WriteFile(filepath.Join(archiveDir, fmt.Sprintf("%s-%s.log", pod.GetName(), pod.Spec.NodeName)), []byte(logs), 0o0644)
 		})
 	}
 
