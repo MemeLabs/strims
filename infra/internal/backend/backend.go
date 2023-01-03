@@ -94,6 +94,12 @@ type HeficedConfig struct {
 
 func (c *HeficedConfig) isDriverConfig() {}
 
+type GCPConfig struct {
+	Config string
+}
+
+func (c *GCPConfig) isDriverConfig() {}
+
 // Config ...
 type Config struct {
 	LogLevel int
@@ -150,6 +156,8 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 					driverConfig = &DreamHostConfig{}
 				case "Heficed":
 					driverConfig = &HeficedConfig{}
+				case "GCP":
+					driverConfig = &GCPConfig{}
 				default:
 					return nil, fmt.Errorf("unsupported driver: %s", driverName)
 				}
@@ -229,6 +237,12 @@ func New(cfg Config) (*Backend, error) {
 			drivers[name] = driver
 		case *HeficedConfig:
 			driver, err := node.NewHeficedDriver(dc.ClientID, dc.ClientSecret, dc.TenantID)
+			if err != nil {
+				return nil, err
+			}
+			drivers[name] = driver
+		case *GCPConfig:
+			driver, err := node.NewGCPDriver([]byte(dc.Config))
 			if err != nil {
 				return nil, err
 			}
