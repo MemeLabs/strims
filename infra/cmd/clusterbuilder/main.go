@@ -110,6 +110,12 @@ func create(ctx context.Context) error {
 		return fmt.Errorf("error reading in config items: %v", err)
 	}
 
+	nodeCount := 0
+	for _, c := range confItems {
+		nodeCount += c.Count
+	}
+	log.Printf("Creating a cluster with %d nodes", nodeCount)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	controlPlaneCreated := false
@@ -147,7 +153,7 @@ func create(ctx context.Context) error {
 		}
 
 		for i := 0; i < c.Count; i++ {
-			time.Sleep(time.Duration(i*100) * time.Millisecond)
+			time.Sleep(time.Duration(i*1000) * time.Millisecond)
 			eg.Go(func() error {
 				nodeName := generateHostname(driver.Provider(), conf.Region)
 				f, err := os.Create(filepath.Join(installDir, nodeName+"_install.log"))
