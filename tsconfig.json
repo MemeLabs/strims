@@ -1,28 +1,32 @@
 {
   "compilerOptions": {
-    "outDir": "dist",
-    "sourceMap": true,
+    // type checking only; webpack transpiles with swc and mocha with tsx
+    "noEmit": true,
+    // swc and tsx compile each file in isolation
+    "isolatedModules": true,
+    // react-i18next 12's declarations blow up the checker in TS 6+
+    "skipLibCheck": true,
+    "strict": false,
     "noImplicitAny": false,
     "module": "ESNext",
     "target": "es6",
     "jsx": "react",
     "allowJs": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
-    "lib": ["dom", "es6", "es2020", "esnext.asynciterable", "webworker"]
+    "lib": ["dom", "es6", "es2020", "esnext.asynciterable", "webworker"],
+    "types": ["node", "mocha", "webpack-env", "dom-mediacapture-record"],
+    "paths": {
+      // swiper 8's package.json exports have no types condition
+      "swiper": ["./node_modules/swiper/swiper.d.ts"]
+    }
   },
   "include": [
-    ".eslintrc.js",
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.js",
   ],
-  "exclude": ["dist", "node_modules"],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS"
-    }
-  }
+  "exclude": ["dist", "node_modules"]
 }

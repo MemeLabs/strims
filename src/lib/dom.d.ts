@@ -3,6 +3,10 @@
 
 type VideoPresentationMode = "inline" | "picture-in-picture" | "fullscreen";
 
+interface MediaTrackConstraintSet {
+  suppressLocalAudioPlayback?: ConstrainBoolean;
+}
+
 interface HTMLVideoElement {
   webkitSetPresentationMode: (mode: VideoPresentationMode) => void;
 }

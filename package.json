@@ -23,12 +23,15 @@
     "devtools": "go run -mod=readonly ./cmd/devtools",
     "dev:devtools": "nodemon --watch pkg --watch internal --watch cmd/devtools -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/devtools || exit 1'",
     "dev:build": "webpack --mode development",
-    "build": "webpack --mode production"
+    "build": "tsc && webpack --mode production",
+    "typecheck": "tsc",
+    "lint": "oxlint src"
   },
   "devDependencies": {
     "@memelabs/protobuf": "^0.3.5",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.10",
     "@react-hook/resize-observer": "^1.2.6",
+    "@swc/core": "^1.16.18",
     "@types/assert": "^1.5.6",
     "@types/css-tree": "^2.0.0",
     "@types/d3-format": "^3.0.1",
@@ -36,7 +39,8 @@
     "@types/dom-mediacapture-record": "^1.0.14",
     "@types/history": "^5.0.0",
     "@types/lodash": "^4.14.191",
-    "@types/mocha": "^10.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.5",
     "@types/prismjs": "^1.26.0",
     "@types/qrcode": "^1.5.0",
     "@types/qs": "^6.9.7",
@@ -55,9 +59,6 @@
     "@types/url-regex-safe": "^1.0.0",
     "@types/webpack": "^5.28.0",
     "@types/webpack-env": "^1.18.0",
-    "@typescript-eslint/eslint-plugin": "^5.47.1",
-    "@typescript-eslint/eslint-plugin-tslint": "^5.47.1",
-    "@typescript-eslint/parser": "^5.47.1",
     "@use-gesture/react": "^10.2.23",
     "assert": "^2.0.0",
     "autoprefixer": "^10.4.13",
@@ -80,10 +81,6 @@
     "emojibase-data": "^7.0.1",
     "emojibase-regex": "^6.0.1",
     "escape-string-regexp": "^5.0.0",
-    "eslint": "^8.30.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-jsdoc": "^39.6.4",
     "eslint-plugin-prefer-arrow": "^1.2.3",
     "farce": "^0.4.5",
     "fenwicktreejs": "^1.0.3",
@@ -105,11 +102,13 @@
     "lodash": "^4.17.21",
     "mediastream-to-webm": "^1.0.2",
     "mini-css-extract-plugin": "^2.7.2",
-    "mocha": "^10.2.0",
+    "mocha": "^12.0.3",
     "mux.js": "^6.2.0",
     "nodemon": "^2.0.20",
     "npm-force-resolutions": "0.0.10",
     "npm-run-all": "^4.1.5",
+    "oxlint": "^1.88.0",
+    "oxlint-tsgolint": "^7.0.2004",
     "parse-prometheus-text-format": "^1.1.1",
     "postcss": "^8.4.20",
     "postcss-loader": "^7.0.2",
@@ -136,7 +135,6 @@
     "react-i18next": "^12.1.1",
     "react-icons": "^4.7.1",
     "react-refresh": "^0.14.0",
-    "react-refresh-typescript": "^2.0.7",
     "react-router": "^6.6.1",
     "react-router-dom": "^6.6.1",
     "react-select": "^5.7.0",
@@ -152,16 +150,14 @@
     "slate-react": "^0.88.0",
     "stream-browserify": "^3.0.0",
     "style-loader": "^3.3.1",
+    "swc-loader": "^0.2.7",
     "swiper": "^8.4.5",
     "terser-webpack-plugin": "^5.3.6",
     "ts-ebml": "^2.0.2",
     "ts-key-enum": "^2.0.12",
-    "ts-loader": "^9.4.2",
-    "ts-node": "^10.9.1",
     "tsconfig-paths-webpack-plugin": "^4.0.0",
-    "tslint": "^6.1.3",
-    "tslint-eslint-rules": "^5.4.0",
-    "typescript": "^4.9.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
     "ua-parser-js": "^1.0.32",
     "upng-js": "^2.1.0",
     "url-loader": "^4.1.1",
@@ -185,5 +181,22 @@
       "parser": "typescript"
     }
   },
-  "dependencies": {}
+  "overrides": {
+    "react-custom-scrollbars": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    },
+    "react-motion": {
+      "react": "$react"
+    },
+    "react-vis": {
+      "react": "$react"
+    },
+    "use-fullscreen": {
+      "react": "$react"
+    },
+    "service-worker-loader": {
+      "webpack": "$webpack"
+    }
+  }
 }

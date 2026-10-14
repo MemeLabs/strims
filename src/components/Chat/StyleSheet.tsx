@@ -138,7 +138,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
       }
       for (const e of added) {
         const uris = e.images.map(({ data, fileType }) =>
-          URL.createObjectURL(new Blob([data], { type: toMimeType(fileType) }))
+          URL.createObjectURL(
+            new Blob([data as Uint8Array<ArrayBuffer>], { type: toMimeType(fileType) })
+          )
         );
         const { name } = styles.emotes.get(e.name);
         const imageSet = e.images.map(({ scale }, i) => `url(${uris[i]}) ${toCSSScale(scale)}x`);

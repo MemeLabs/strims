@@ -39,7 +39,7 @@ export class WSReadWriter {
   }
 
   public write(data: Uint8Array): void {
-    void this.ws.then((ws) => ws.send(data));
+    void this.ws.then((ws) => ws.send(data as Uint8Array<ArrayBuffer>));
   }
 
   public close(): void {

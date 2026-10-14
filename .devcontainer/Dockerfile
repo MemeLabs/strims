@@ -8,7 +8,7 @@ ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-ARG NODE_VERSION=14.x
+ARG NODE_VERSION=26.11.1
 ARG GO_VERSION=1.19
 ARG PROTOC_VERSION=3.20.1
 ARG MEMELABS_PB_VERSION=0.3.5
@@ -59,8 +59,8 @@ RUN \
   && mkdir -p "/${USERNAME}/go/src" "/${USERNAME}/go/bin" "/${USERNAME}/go/pkg/mod" \
   && chmod -R 777 "/${USERNAME}/go" \
   # Install node.js
-  && curl -sL "https://deb.nodesource.com/setup_${NODE_VERSION}" | bash - \
-  && apt-get install -y nodejs \
+  && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
+    | tar -xz -C /usr/local --strip-components=1 \
   # Install protoc
   && curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
   && unzip "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d /usr/local \

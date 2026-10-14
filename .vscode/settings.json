@@ -1,38 +1,31 @@
 {
-  // eslint extension options
-  "eslint.validate": [
-    "javascript",
-    "javascriptreact",
-    "typescript",
-    "typescriptreact",
-  ],
   // prettier extension setting
   "[javascript]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": true
+      "source.fixAll.oxc": "explicit"
     }
   },
   "[javascriptreact]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": true
+      "source.fixAll.oxc": "explicit"
     }
   },
   "[typescript]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": true
+      "source.fixAll.oxc": "explicit"
     }
   },
   "[typescriptreact]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": true
+      "source.fixAll.oxc": "explicit"
     }
   },
   "[scss]": {
@@ -78,7 +71,9 @@
       "--tsrpc_out=src/apis",
     ]
   },
-  "typescript.tsdk": "node_modules/typescript/lib",
+  // TypeScript 7 (native) from node_modules via the TypeScript Native Preview extension
+  "typescript.experimental.useTsgo": true,
+  "typescript.native-preview.tsdk": "node_modules/typescript",
   "go.toolsEnvVars": {
     // "GOOS": "js",
     // "GOARCH": "wasm"

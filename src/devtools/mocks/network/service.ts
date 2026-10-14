@@ -12,6 +12,7 @@ import {
   NetworkFrontendService,
   UnimplementedNetworkFrontendService,
 } from "../../../apis/strims/network/v1/network_rpc";
+import { KeyUsage } from "../../../apis/strims/type/certificate";
 import images from "../images";
 
 const network = new Network({
@@ -19,7 +20,7 @@ const network = new Network({
   "certificate": {
     "key": Base64.toUint8Array("1cFuxhf5HI5d6XQgypXXfqI8LducWmeJtHpUIADR1aU="),
     "keyType": 1,
-    "keyUsage": 5,
+    "keyUsage": KeyUsage.KEY_USAGE_PEER | KeyUsage.KEY_USAGE_SIGN,
     "subject": "alias",
     "notBefore": BigInt("1633572461"),
     "notAfter": BigInt("1696648061"),

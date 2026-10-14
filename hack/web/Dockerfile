@@ -2,7 +2,7 @@ FROM ubuntu:focal AS build
 
 ARG VERSION=development
 
-ARG NODE_VERSION=14.x
+ARG NODE_VERSION=26.11.1
 ARG GO_VERSION=1.19
 
 ENV GOROOT=/usr/local/go
@@ -24,8 +24,8 @@ RUN \
   && mkdir -p "${GOPATH}/src" "${GOPATH}/bin" "${GOPATH}/pkg/mod" \
   && chmod -R 777 "${GOPATH}" \
   # Install node.js
-  && curl -sL "https://deb.nodesource.com/setup_${NODE_VERSION}" | bash - \
-  && apt-get install -y nodejs
+  && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
+    | tar -xz -C /usr/local --strip-components=1
 
 RUN mkdir /ui
 WORKDIR /ui
@@ -45,7 +45,6 @@ COPY vendor_modules ./vendor_modules
 COPY pkg ./pkg
 COPY internal ./internal
 COPY \
-  .eslintrc.js \
   package-lock.json \
   package.json \
   tsconfig.json \
@@ -54,7 +53,7 @@ COPY \
 
 RUN \
   # Build ui
-  npm install --unsafe-perm \
+  npm ci \
   && npm run build \
   && find dist/web -type f | xargs gzip -k9 \
   && find dist/web -not -name "*.gz" -type f | xargs brotli

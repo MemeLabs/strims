@@ -58,7 +58,7 @@ export class Source {
   }
 
   public appendBuffer(b: ArrayBufferView | ArrayBuffer): void {
-    this.sourceBufferTasks.insert(() => this.sourceBuffer.appendBuffer(b));
+    this.sourceBufferTasks.insert(() => this.sourceBuffer.appendBuffer(b as BufferSource));
   }
 
   public bounds(): [number, number] {

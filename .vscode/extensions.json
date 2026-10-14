@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "typescriptteam.native-preview",
+    "oxc.oxc-vscode",
+    "esbenp.prettier-vscode",
+    "golang.go"
+  ]
+}

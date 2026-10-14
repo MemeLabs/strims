@@ -36,4 +36,4 @@ export const toFormImageValue = ({ data, type, ...v }: Image): ImageValue => ({
 });
 
 export const createImageObjectURL = ({ data, type }: Image) =>
-  URL.createObjectURL(new Blob([data], { type: toFileType(type) }));
+  URL.createObjectURL(new Blob([data as Uint8Array<ArrayBuffer>], { type: toFileType(type) }));

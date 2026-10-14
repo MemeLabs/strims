@@ -24,7 +24,7 @@ import { useDebounce } from "react-use";
 
 import useClickAway from "../../hooks/useClickAway";
 import { useStableCallback } from "../../hooks/useStableCallback";
-import { VideoControls, VideoState } from "../../hooks/useVideo";
+import type { VideoControls, VideoState } from "../../hooks/useVideo";
 import VideoProgressBar from "./VideoProgressBar";
 import VideoVolume from "./VideoVolume";
 

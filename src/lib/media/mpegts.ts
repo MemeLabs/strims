@@ -53,7 +53,7 @@ export class Decoder {
 
 export class Relay {
   public playlist: Playlist;
-  private buffer: Uint8Array[] = [];
+  private buffer: Uint8Array<ArrayBuffer>[] = [];
 
   public constructor() {
     this.playlist = new Playlist();
@@ -65,7 +65,7 @@ export class Relay {
   }
 
   public write(b: Uint8Array): void {
-    this.buffer.push(b);
+    this.buffer.push(b as Uint8Array<ArrayBuffer>);
   }
 
   public flush(): void {

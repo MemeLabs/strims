@@ -28,10 +28,10 @@ export interface TableState {
 }
 
 interface TableActions {
-  registerCheckbox(name: string, id: bigint): void;
-  unregisterCheckbox(name: string, id: bigint): void;
-  setCheckboxValue(name: string, id: bigint, value: boolean): void;
-  setAllCheckboxValues(name: string, value: boolean): void;
+  registerCheckbox: (name: string, id: bigint) => void;
+  unregisterCheckbox: (name: string, id: bigint) => void;
+  setCheckboxValue: (name: string, id: bigint, value: boolean) => void;
+  setAllCheckboxValues: (name: string, value: boolean) => void;
 }
 
 const defaultTableState: TableState = {

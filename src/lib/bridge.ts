@@ -522,7 +522,7 @@ export class Bus extends EventEmitter {
   }
 
   public write(data: ArrayBuffer | Uint8Array): void {
-    const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+    const buffer = (data instanceof ArrayBuffer ? data : data.buffer) as ArrayBuffer;
 
     this.port.postMessage(
       {
@@ -729,7 +729,7 @@ export class WorkerBridge extends EventEmitter {
     };
 
     const cid = this.channelOpen({
-      write: (data: Uint8Array) => ws.send(data),
+      write: (data: Uint8Array) => ws.send(data as Uint8Array<ArrayBuffer>),
       read: () => queue.get(),
       close: () => {
         onclose();
@@ -872,7 +872,7 @@ export class WorkerBridge extends EventEmitter {
     );
 
     const cid = this.channelOpen({
-      write: ({ buffer }: Uint8Array) => {
+      write: ({ buffer }: Uint8Array<ArrayBuffer>) => {
         void ready.then((port) =>
           port.postMessage(
             {
@@ -907,7 +907,7 @@ export class WorkerBridge extends EventEmitter {
 
     port1.onmessage = ({ data: { port } }) => {
       const cid = this.channelOpen({
-        write: ({ buffer }: Uint8Array) => {
+        write: ({ buffer }: Uint8Array<ArrayBuffer>) => {
           port.postMessage(
             {
               type: EventType.DATA,
@@ -979,7 +979,7 @@ export class WorkerBridge extends EventEmitter {
     );
 
     const cid = this.channelOpen({
-      write: ({ buffer }: Uint8Array) =>
+      write: ({ buffer }: Uint8Array<ArrayBuffer>) =>
         port1.postMessage(
           {
             type: EventType.DATA,

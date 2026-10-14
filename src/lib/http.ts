@@ -14,7 +14,7 @@ export class HTTPReadWriter extends Transform {
       headers: {
         "Content-Type": "application/protobuf",
       },
-      body: chunk,
+      body: chunk as Uint8Array<ArrayBuffer>,
     })
       .then((res) => res.arrayBuffer())
       .then((data) => this.push(new Uint8Array(data)));

@@ -66,7 +66,11 @@ const ImageInput = <T extends FieldValues>({
   React.useEffect(() => {
     if (value) {
       const { data, type } = value as ImageValue;
-      setPreviewUrl(URL.createObjectURL(new Blob([Base64.toUint8Array(data)], { type })));
+      setPreviewUrl(
+        URL.createObjectURL(
+          new Blob([Base64.toUint8Array(data) as Uint8Array<ArrayBuffer>], { type })
+        )
+      );
     }
   }, []);
 
@@ -81,7 +85,7 @@ const ImageInput = <T extends FieldValues>({
 
     const data = await new Promise<ArrayBuffer>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
       reader.onerror = () => reject();
       reader.readAsArrayBuffer(file);
     });

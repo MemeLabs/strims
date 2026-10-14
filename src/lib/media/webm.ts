@@ -66,8 +66,9 @@ export class Encoder {
   private handleLoadEnd(): void {
     this.fileReaderTasks.runNext();
 
-    const buf = new Uint8Array(this.fileReader.result as ArrayBuffer);
-    let elms = this.ebmlDecoder.decode(buf);
+    const result = this.fileReader.result as ArrayBuffer;
+    const buf = new Uint8Array(result);
+    let elms = this.ebmlDecoder.decode(result);
     // console.log(elms);
     let clusterIndex = elms.findIndex(({ name }) => name === "Cluster");
 

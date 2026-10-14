@@ -24,7 +24,9 @@ const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
   const [, pprof] = useLazyCall("debug", "pProf", {
     onComplete: ({ data, name }) => {
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([data], { type: "application/binary" }));
+      a.href = URL.createObjectURL(
+        new Blob([data as Uint8Array<ArrayBuffer>], { type: "application/binary" })
+      );
       a.download = `${name}-${new Date().toISOString()}.profile`;
       a.click();
       URL.revokeObjectURL(a.href);

@@ -114,7 +114,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     for (const file of files) {
       const data = await new Promise<ArrayBuffer>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
         reader.onerror = () => reject();
         reader.readAsArrayBuffer(file);
       });

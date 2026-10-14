@@ -35,7 +35,7 @@ export class Decoder {
 
 export class Relay {
   public playlist: Playlist;
-  private buffer: ArrayBuffer[] = [];
+  private buffer: Uint8Array<ArrayBuffer>[] = [];
   private headerRead: boolean = false;
   private initWritten: boolean = false;
   private initLength: number;
@@ -58,11 +58,11 @@ export class Relay {
       this.headerRead = true;
     }
 
-    this.buffer.push(b);
+    this.buffer.push(b as Uint8Array<ArrayBuffer>);
   }
 
   public flush(): void {
-    const initBuffer: ArrayBuffer[] = [];
+    const initBuffer: Uint8Array<ArrayBuffer>[] = [];
     for (let n = this.initLength; n > 0; ) {
       const b = this.buffer[0];
 

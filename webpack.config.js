@@ -4,7 +4,6 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const ReactRefreshTypeScript = require("react-refresh-typescript");
 const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const WebpackPwaManifest = require("webpack-pwa-manifest");
@@ -15,18 +14,29 @@ const { ChunkManifestPlugin } = require("./webpack/lib/ChunkManifestPlugin");
 module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
 
+  // swc only strips types; type checking is done separately by tsc
+  const swcLoader = (tsx) => ({
+    loader: "swc-loader",
+    options: {
+      jsc: {
+        parser: { syntax: "typescript", tsx },
+        target: "es2015",
+        transform: {
+          useDefineForClassFields: false,
+          react: {
+            runtime: "classic",
+            development: !isProduction,
+            refresh: !isProduction,
+          },
+        },
+      },
+    },
+  });
+
   const scriptModuleRule = {
     test: /\.tsx?$/,
     exclude: /node_modules/,
-    use: {
-      loader: "ts-loader",
-      options: {
-        getCustomTransformers: () => ({
-          before: [ReactRefreshTypeScript()],
-        }),
-        happyPackMode: true,
-      },
-    },
+    oneOf: [{ test: /\.tsx$/, use: swcLoader(true) }, { use: swcLoader(false) }],
   };
 
   const styleModuleRule = {
@@ -154,8 +164,6 @@ module.exports = (env, argv) => {
 
   if (isProduction) {
     plugins.unshift(new CleanWebpackPlugin());
-
-    scriptModuleRule.use = ["ts-loader"];
 
     styleModuleRule.use.unshift(MiniCssExtractPlugin.loader);
 
