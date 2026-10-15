@@ -28,8 +28,6 @@ Port the application services that sit on the core crates. The Go versions
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
-- STREAM_CLOSE outside the hybrid releases every requested bin of the stream
-  since the subscription start, including bins requested from other channels.
 - `PeerDataQueue`: re-queuing a bin whose dead entry is still in the ring pops
   the old entry, which can drop a High-priority push as stale.
 - `Epoch::import_cache` doesn't verify the cached signature.

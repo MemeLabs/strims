@@ -304,6 +304,78 @@ fn unsolicited_stream_open_is_ignored() {
 }
 
 #[test]
+fn stream_close_keeps_chunks_requested_from_other_channels() {
+    let mut f = fixture(SwarmOptions::default());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let o = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    f.sched.handle_have(o, Bin::new(1, 0), now());
+    assert_eq!(requests_at(&mut f, o, now()), vec![Bin(0), Bin(2)]);
+
+    // The source gets only what nobody was asked for.
+    assert!(f.sched.do_stream_sub(p, 0, Bin(0)));
+    f.sched.handle_have(p, Bin::new(2, 0), now());
+    assert!(f.sched.s.request_bins.filled_at(Bin::new(2, 0)));
+
+    f.sched
+        .handle_stream_close(p, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    let r = &f.sched.s.request_bins;
+    assert!(r.filled_at(Bin(0)) && r.filled_at(Bin(2)));
+    assert!(r.empty_at(Bin(4)) && r.empty_at(Bin(6)));
+    assert_eq!(f.sched.stats().stream_sources, 0);
+}
+
+#[test]
+fn stream_close_from_a_replaced_source_keeps_the_new_one() {
+    let mut f = fixture(SwarmOptions::default());
+    let mut q = MockQueue::default();
+    let a = ready_channel(&mut f, &mut q);
+    let b = add_ready(&mut f, &mut q, 1);
+    assert!(f.sched.do_stream_sub(a, 0, Bin(0)));
+    assert!(f.sched.do_stream_sub(b, 0, Bin(4)));
+    f.sched.handle_have(b, Bin::new(2, 0), now());
+    assert!(f.sched.s.request_bins.filled_at(Bin::new(1, 1)));
+
+    f.sched
+        .handle_stream_close(a, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    assert!(f.sched.s.request_bins.filled_at(Bin::new(1, 1)));
+    assert_eq!(f.sched.s.streams[0].source.map(|src| src.channel), Some(b));
+    assert_eq!(f.sched.stats().stream_sources, 1);
+
+    f.sched
+        .handle_stream_close(b, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    assert!(f.sched.s.request_bins.empty_at(Bin::new(1, 1)));
+    assert_eq!(f.sched.stats().stream_sources, 0);
+}
+
+#[test]
+fn invalid_data_hands_a_source_chunk_to_pull() {
+    let mut f = fixture(SwarmOptions::default());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let o = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(p, 0, Bin(0)));
+    f.sched.handle_have(p, Bin::new(1, 0), now());
+    f.sched
+        .handle_data(p, Bin(2), now(), false, false, now(), Bin(0), &mut q);
+    assert!(f.sched.s.request_bins.empty_at(Bin(2)));
+    f.sched.handle_have(o, Bin::new(1, 0), now());
+    assert_eq!(requests_at(&mut f, o, now()), vec![Bin(2)]);
+
+    // The source's close leaves the pull request alone.
+    f.sched
+        .handle_stream_close(p, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    assert!(f.sched.s.request_bins.filled_at(Bin(2)));
+    assert!(f.sched.s.request_bins.empty_at(Bin(0)));
+}
+
+#[test]
 fn invalid_streams_are_errors() {
     let mut f = fixture(eight_streams());
     let mut q = MockQueue::default();

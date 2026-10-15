@@ -54,12 +54,12 @@
 //! from the same or a later bin only moves the subscription. STREAM_CANCEL
 //! unsubscribes. STREAM_OPEN is accepted only for a stream we requested
 //! from that peer, and makes the peer the stream's source. Outside
-//! [`PushMode::Hybrid`], a source's announced chunks are marked requested
-//! with no deadline and stay with it until it sends STREAM_CLOSE or the
-//! channel closes; such a source exists only after
-//! [`Runner::request_stream`]. In `Hybrid` the [`push`] module manages
-//! subscriptions, and every chunk expected by push has a deadline after
-//! which pull takes it back.
+//! [`PushMode::Hybrid`], a source's announced chunks that nobody else was
+//! asked for are marked requested with no deadline and stay with it until
+//! it sends STREAM_CLOSE or the channel closes; such a source exists only
+//! after [`Runner::request_stream`]. In `Hybrid` the [`push`] module
+//! manages subscriptions, and every chunk expected by push has a deadline
+//! after which pull takes it back.
 //!
 //! # Bounds on peer input
 //!
@@ -81,7 +81,8 @@
 //! - extra messages are deduplicated: a handshake, a restart, one pong and
 //!   one message per stream and direction;
 //! - STREAM_REQUEST walks only the stream's own bins, and none on a repeat;
-//!   STREAM_CLOSE walks from the store's window;
+//!   STREAM_CLOSE walks only the bins left to sources, from the store's
+//!   window;
 //! - invalid data releases its bin only inside our window.
 //!
 //! [`Ledbat::set_min_cwnd`]: crate::ledbat::Ledbat::set_min_cwnd
@@ -280,6 +281,10 @@ pub(crate) struct SwarmState {
     /// Bins requested from someone or had. Bound: filled before the store's
     /// window; the rest is the window plus outstanding requests.
     pub(crate) request_bins: Map,
+    /// Bins left to a stream's source outside the hybrid: requested on its
+    /// behalf, with no deadline. Bound: a subset of `request_bins` (pruned
+    /// behind the store's window at GC, cleared on arrival).
+    source_bins: Map,
     pub(crate) streams: Vec<PeerSchedulerStream>,
     /// Streams with a source: the source marking walk in `handle_have`
     /// runs only while there are any.
@@ -362,6 +367,15 @@ impl SwarmState {
                 extra: false,
                 since: Time::EPOCH,
             });
+        }
+    }
+
+    /// Leaves chunk `b` to its stream's source, unless we have it or it was
+    /// requested from another channel.
+    fn leave_to_source(&mut self, b: Bin) {
+        if self.request_bins.empty_at(b) {
+            self.request_bins.set(b);
+            self.source_bins.set(b);
         }
     }
 
@@ -623,27 +637,37 @@ impl PeerChannelScheduler {
         }
     }
 
-    /// Ends our subscription to `stream` from this peer: its requested bins
-    /// we lack go back to pull. The walk starts at the store's window, so it
-    /// costs at most a window.
+    /// Ends our subscription to `stream` from this peer. If the peer is the
+    /// stream's source, the bins left to it that we lack go back to pull;
+    /// chunks requested from other channels stay theirs. The walk covers
+    /// only the bins left to sources from the store's window, so it costs
+    /// at most a window.
     fn close_stream(&mut self, s: &mut SwarmState, stream: Stream, window_start: Bin) {
-        let Some(&start) = self.request_streams.get(usize::from(stream)) else {
+        let Some(r) = self.request_streams.get_mut(usize::from(stream)) else {
             return;
         };
-        if stream >= s.stream_count || start.is_none() {
+        if r.is_none() {
             return;
         }
-        let lo = start.max(window_start);
-        let mut cur = Cursor::filled_at(s.request_bins.root_bin());
-        let mut next = cur.next_base_after(&s.request_bins, lo);
-        while let Some(x) = next {
-            if start <= x && s.bin_stream(x) == stream && s.have_bins.empty_at(x) {
-                s.request_bins.reset(x);
-            }
-            next = cur.next_base(&s.request_bins);
+        *r = Bin::NONE;
+        let is_source = s
+            .streams
+            .get(usize::from(stream))
+            .and_then(|st| st.source)
+            .is_some_and(|src| src.channel == self.peer);
+        if !is_source {
+            return;
         }
-        if let Some(r) = self.request_streams.get_mut(usize::from(stream)) {
-            *r = Bin::NONE;
+        let mut cur = Cursor::filled_at(s.source_bins.root_bin());
+        let mut next = cur.next_base_after(&s.source_bins, window_start);
+        while let Some(x) = next {
+            if s.bin_stream(x) == stream {
+                s.source_bins.reset(x);
+                if s.have_bins.empty_at(x) {
+                    s.request_bins.reset(x);
+                }
+            }
+            next = cur.next_base(&s.source_bins);
         }
         s.reset_stream_source(stream);
     }
@@ -1007,6 +1031,7 @@ impl PeerSwarmScheduler {
                 peer_have_chunk_rate: Sma::new(15, Duration::SECOND, now),
                 peer_max_have_bin: Bin(0),
                 request_bins: have_bins.clone(),
+                source_bins: Map::new(),
                 have_bins,
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
@@ -1085,6 +1110,7 @@ impl PeerSwarmScheduler {
 
         let store = swarm.store();
         self.s.request_bins.fill_before(store.window_start());
+        self.s.source_bins.reset_before(store.window_start());
         self.gc_push(store.window_start());
 
         // Request times go at the read position or the window start,
@@ -1111,6 +1137,7 @@ impl PeerSwarmScheduler {
         s.have_bins = Map::new();
         s.have_bin_max = Bin(0);
         s.request_bins = Map::new();
+        s.source_bins = Map::new();
         s.streams = vec![PeerSchedulerStream::default(); usize::from(s.stream_count)];
         s.stream_sources = 0;
         s.first_chunk_set = false;
@@ -1155,6 +1182,7 @@ impl PeerSwarmScheduler {
         }
         s.wasted_chunks = s.wasted_chunks.saturating_add(wasted);
         s.push_consumed(bin, bin.base_length().saturating_sub(wasted), now);
+        s.source_bins.reset(bin);
 
         s.have_bins.set(bin);
         // Keep one window of history behind the store's window: the HAVEs
@@ -1231,7 +1259,8 @@ impl PeerSwarmScheduler {
     /// Subscribes to `stream` from `peer`, starting at `start_bin`
     /// (`Runner::request_stream`). Outside the hybrid the peer becomes the
     /// stream's source at once, and the stream's bins up to the highest
-    /// HAVE, within the tracked HAVE history, are marked requested.
+    /// HAVE, within the tracked HAVE history, are left to it; chunks
+    /// requested from other channels stay theirs.
     ///
     /// Refused until the peer's handshake arrived: a STREAM_OPEN before it
     /// is [`StreamOpenOutcome::BeforeHandshake`], so the request would go
@@ -1266,7 +1295,7 @@ impl PeerSwarmScheduler {
         }
         let mut b = min;
         while b <= s.peer_max_have_bin.0 {
-            s.request_bins.set(Bin(b));
+            s.leave_to_source(Bin(b));
             b += so;
         }
         true
@@ -1365,6 +1394,7 @@ impl PeerSwarmScheduler {
                 && !s.have_bins.filled_at(b)
             {
                 s.request_bins.reset(b);
+                s.source_bins.reset(b);
                 c.backoff_bins.set(b);
                 c.backoff_until = now + REQUEST_BACKOFF;
                 for &p in self.channels.keys() {
@@ -1477,7 +1507,7 @@ impl PeerSwarmScheduler {
                     {
                         // Left to the source with no deadline, until it
                         // closes the stream or its channel.
-                        s.request_bins.set(x);
+                        s.leave_to_source(x);
                     }
                     x += 2;
                 }
@@ -1686,6 +1716,8 @@ impl PeerSwarmScheduler {
             // from other channels stay theirs.
             self.push_close(peer, stream, now, q);
         } else {
+            // Only the source's chunks go to pull: chunks requested from
+            // other channels stay theirs.
             c.close_stream(s, stream, window_start);
         }
         Ok(())
