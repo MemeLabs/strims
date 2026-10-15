@@ -69,7 +69,15 @@ implementation along with the interop tests that exist only for it.
     under vnic QoS, and swarms share one meter but admit independently.
     strims-node could report link capacity;
   - cancel a missed chunk at the parent to cut duplicates;
-  - interior stream assignment is first-come.
+  - interior stream assignment is first-come;
+  - slow parents are detected late, so `sim_push_slow_parent`'s p99 can still
+    pass 1 s on some seeds. The upload meter's 2 s busy window takes about
+    1.5 s to reach `SHED_UTILIZATION`, a child's deadline stretches with its
+    parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
+    shield a new parent. Shedding on push queue wait helps slow parents but
+    hurts `sim_push_parent_dies` and sparse meshes;
+  - a seed admits every subscriber at startup, before its store rate has
+    ramped up.
 - **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
   test-only hook in `strims-node`. Automated attempts to build it were stopped
   by a safety check. Waiting on the user.
