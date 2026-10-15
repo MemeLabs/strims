@@ -67,6 +67,10 @@ pub enum RunnerError {
     /// The peer already uses this channel id for another swarm.
     #[error("channel id in use")]
     ChannelInUse,
+    /// The peer's handshake hasn't arrived on the channel, so it can't
+    /// request streams yet (`ChannelSchedulerStats::handshake_received`).
+    #[error("peer handshake pending")]
+    HandshakePending,
     /// A decode error in a frame.
     #[error(transparent)]
     Codec(#[from] codec::Error),
@@ -417,7 +421,7 @@ fn handle_payload(
             Message::StreamCancel(s) => sched.handle_stream_cancel(peer, s.stream)?,
             Message::StreamOpen(s) => {
                 match sched.handle_stream_open(peer, s.stream, s.bin, now, q)? {
-                    StreamOpenOutcome::Accepted => {}
+                    StreamOpenOutcome::Accepted | StreamOpenOutcome::BeforeHandshake => {}
                     StreamOpenOutcome::Stale => {
                         let m = &mut ch.metrics_in;
                         m.stale_stream_open = m.stale_stream_open.saturating_add(1);
@@ -740,6 +744,8 @@ impl Runner {
     /// once, and the bins of the stream it announced are left to it. In
     /// `Hybrid` this is a manual graft: the request goes out at once, and
     /// the peer becomes the stream's parent when it opens the stream.
+    /// [`RunnerError::HandshakePending`] until the peer's handshake arrived
+    /// on the channel.
     pub fn request_stream(
         &mut self,
         peer: PeerKey,
@@ -753,10 +759,11 @@ impl Runner {
             events,
             ..
         } = self;
-        let sched = swarms
-            .get_mut(swarm)
-            .and_then(|rs| rs.scheduler.as_mut())
-            .ok_or(RunnerError::UnknownSwarm)?;
+        let rs = swarms.get_mut(swarm).ok_or(RunnerError::UnknownSwarm)?;
+        let sched = rs.scheduler.as_mut().ok_or(RunnerError::UnknownSwarm)?;
+        if rs.channels.contains_key(&peer) && !sched.handshake_received(peer) {
+            return Err(RunnerError::HandshakePending);
+        }
         if !sched.do_stream_sub(peer, stream, start) {
             return Err(SchedulerError::InvalidStream(stream).into());
         }

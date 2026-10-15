@@ -482,6 +482,23 @@ fn new_peers_get_an_initial_weight() {
 }
 
 #[test]
+fn request_stream_waits_for_the_handshake() {
+    // A STREAM_OPEN before the seed's handshake would be ignored, so the
+    // request waits for the handshake.
+    let mut p = Pair::new(options());
+    let (peer, swarm) = (p.leech.peer, p.leech.swarm);
+    assert_eq!(
+        p.leech.runner.request_stream(peer, swarm, 0, Bin(0)),
+        Err(RunnerError::HandshakePending)
+    );
+    p.tick(100);
+    assert_eq!(
+        p.leech.runner.request_stream(peer, swarm, 0, Bin(0)),
+        Ok(())
+    );
+}
+
+#[test]
 fn stream_subscription_pushes_data() {
     // STREAM_REQUEST -> STREAM_OPEN -> pushes, through
     // `Runner::request_stream`.

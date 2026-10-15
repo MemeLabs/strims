@@ -177,9 +177,13 @@ pub enum SchedulerError {
 /// What [`PeerSwarmScheduler::handle_stream_open`] made of a STREAM_OPEN.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StreamOpenOutcome {
-    /// The peer is the stream's source now, or the open came before the
-    /// channel's handshake and was ignored without counting.
+    /// The peer is the stream's source now.
     Accepted,
+    /// The channel has no handshake from the peer, yet or since the stream
+    /// restarted, or there is no channel: no request of ours can be waiting
+    /// for the open. Ignored without counting: after a restart, answers to
+    /// requests from the old stream land here.
+    BeforeHandshake,
     /// It answers a request we cancelled before the answer arrived: a race
     /// between honest peers, ignored (`ChannelMetrics::stale_stream_open`).
     Stale,
@@ -1228,8 +1232,12 @@ impl PeerSwarmScheduler {
     /// (`Runner::request_stream`). Outside the hybrid the peer becomes the
     /// stream's source at once, and the stream's bins up to the highest
     /// HAVE, within the tracked HAVE history, are marked requested.
+    ///
+    /// Refused until the peer's handshake arrived: a STREAM_OPEN before it
+    /// is [`StreamOpenOutcome::BeforeHandshake`], so the request would go
+    /// unanswered.
     pub(crate) fn do_stream_sub(&mut self, peer: PeerKey, stream: Stream, start_bin: Bin) -> bool {
-        if !self.channels.contains_key(&peer)
+        if !self.handshake_received(peer)
             || self.s.check_stream(stream).is_err()
             || start_bin >= MAX_BIN
         {
@@ -1291,12 +1299,17 @@ impl PeerSwarmScheduler {
         Some((&mut self.s, c))
     }
 
-    /// Whether to take data from `peer`: any data, once its handshake
-    /// arrived. Unrequested data is verified and stored like any other.
-    pub(crate) fn expect_data(&self, peer: PeerKey, _b: Bin) -> bool {
+    /// Whether `peer`'s handshake arrived on its channel.
+    pub(crate) fn handshake_received(&self, peer: PeerKey) -> bool {
         self.channels
             .get(&peer)
             .is_some_and(|c| c.handshake_received)
+    }
+
+    /// Whether to take data from `peer`: any data, once its handshake
+    /// arrived. Unrequested data is verified and stored like any other.
+    pub(crate) fn expect_data(&self, peer: PeerKey, _b: Bin) -> bool {
+        self.handshake_received(peer)
     }
 
     /// The peer's handshake arrived: requests and data may flow.
@@ -1602,10 +1615,10 @@ impl PeerSwarmScheduler {
         q: &mut impl PeerTaskQueue,
     ) -> Result<StreamOpenOutcome, SchedulerError> {
         let Some((s, c)) = self.channel(peer) else {
-            return Ok(StreamOpenOutcome::Accepted);
+            return Ok(StreamOpenOutcome::BeforeHandshake);
         };
         if !c.handshake_received {
-            return Ok(StreamOpenOutcome::Accepted);
+            return Ok(StreamOpenOutcome::BeforeHandshake);
         }
         s.check_stream(stream)?;
         let asked = c
@@ -1638,13 +1651,14 @@ impl PeerSwarmScheduler {
         if !self.push_open_acceptable(peer, stream, b, now, q) {
             return Ok(StreamOpenOutcome::Rejected);
         }
-        let Some((s, c)) = self.channel(peer) else {
-            return Ok(StreamOpenOutcome::Accepted);
-        };
-        if let Some(r) = c.request_streams.get_mut(usize::from(stream)) {
+        if let Some(r) = self
+            .channels
+            .get_mut(&peer)
+            .and_then(|c| c.request_streams.get_mut(usize::from(stream)))
+        {
             *r = b;
         }
-        s.set_stream_source(stream, peer, b);
+        self.s.set_stream_source(stream, peer, b);
         self.push_open(peer, stream, b, now, q);
         Ok(StreamOpenOutcome::Accepted)
     }

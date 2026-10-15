@@ -123,8 +123,7 @@ fn channel_start_queues_it_and_close_removes_it() {
 fn stream_subscription_marks_its_bins_requested() {
     let mut f = fixture(eight_streams());
     let mut q = MockQueue::default();
-    let p = f.peers[0];
-    f.sched.add_channel(p, now(), &mut q);
+    let p = ready_channel(&mut f, &mut q);
 
     let peer_have_bin = Bin::new(6, 0);
     let request_bin = Bin::new(5, 0);
@@ -1169,5 +1168,63 @@ fn an_open_that_crossed_our_cancel_is_stale_not_rejected() {
             Ok(StreamOpenOutcome::Rejected)
         );
         f.sched.run(now(), &mut swarm, &mut q);
+    }
+}
+
+#[test]
+fn a_stream_sub_waits_for_the_handshake() {
+    // A STREAM_OPEN before the peer's handshake is ignored, so a request
+    // sent before it could go unanswered.
+    for options in [eight_streams(), hybrid(8)] {
+        let hybrid = options.push_mode == PushMode::Hybrid;
+        let mut f = fixture(options);
+        let mut q = MockQueue::default();
+        let p = f.peers[0];
+        f.sched.add_channel(p, now(), &mut q);
+        let requests = |f: &mut Fixture| {
+            next_messages(f, p, now())
+                .iter()
+                .filter(|m| matches!(m, Message::StreamRequest(_)))
+                .count()
+        };
+
+        assert!(!f.sched.do_stream_sub(p, 0, Bin(0)), "hybrid {hybrid}");
+        assert_eq!(f.sched.channels[&p].request_streams[0], Bin::NONE);
+        assert_eq!(f.sched.stats().stream_sources, 0);
+        assert_eq!(f.sched.push_stats().requests_sent, 0);
+        assert_eq!(requests(&mut f), 0, "hybrid {hybrid}");
+
+        f.sched.handle_handshake(p, 1 << 16);
+        assert!(f.sched.do_stream_sub(p, 0, Bin(0)), "hybrid {hybrid}");
+        assert_eq!(requests(&mut f), 1, "hybrid {hybrid}");
+    }
+}
+
+#[test]
+fn an_open_before_the_handshake_is_ignored() {
+    // Without the peer's handshake no request of ours can be waiting for
+    // the open. After a restart, opens answering the old stream's requests
+    // arrive here, so they don't count as rejected either.
+    for options in [eight_streams(), hybrid(8)] {
+        let hybrid = options.push_mode == PushMode::Hybrid;
+        let mut f = fixture(options);
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        assert!(f.sched.do_stream_sub(p, 0, Bin(0)));
+        f.sched.reset(now(), &mut q);
+
+        // A channel with no handshake yet, and a peer with no channel.
+        let fresh = f.peers[1];
+        f.sched.add_channel(fresh, now(), &mut q);
+        for peer in [p, fresh, f.peers[2]] {
+            assert_eq!(
+                f.sched.handle_stream_open(peer, 0, Bin(0), now(), &mut q),
+                Ok(StreamOpenOutcome::BeforeHandshake),
+                "hybrid {hybrid}"
+            );
+        }
+        assert_eq!(f.sched.channels[&p].request_streams[0], Bin::NONE);
+        assert_eq!(f.sched.stats().stream_sources, 0);
+        assert!(f.sched.push_stats().parents.iter().all(Option::is_none));
     }
 }
