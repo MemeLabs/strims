@@ -452,34 +452,6 @@ fn cache_round_trip() {
 }
 
 #[test]
-fn max_message_bytes_per_protection_method() {
-    let o = SwarmVerifierOptions {
-        live_discard_window: 1 << 16,
-        chunk_size: 1024,
-        chunks_per_signature: 64,
-        verifier_options: VerifierOptions::default_options(),
-    };
-    // 1 + 64 + 2 + 6 * (1 + 32 + 1)
-    assert_eq!(o.max_message_bytes(), 271);
-    let o = SwarmVerifierOptions {
-        verifier_options: VerifierOptions {
-            protection_method: ProtectionMethod::SIGN_ALL,
-            ..o.verifier_options
-        },
-        ..o
-    };
-    assert_eq!(o.max_message_bytes(), 67);
-    let o = SwarmVerifierOptions {
-        verifier_options: VerifierOptions {
-            protection_method: ProtectionMethod::NONE,
-            ..o.verifier_options
-        },
-        ..o
-    };
-    assert_eq!(o.max_message_bytes(), 0);
-}
-
-#[test]
 fn unsupported_options() {
     let key = test_key(5);
     let v = LiveSignatureAlgorithm::ED25519

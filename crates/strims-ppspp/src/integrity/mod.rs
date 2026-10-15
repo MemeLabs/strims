@@ -45,7 +45,7 @@ use strims_base::time::Time;
 use strims_binmap::{Bin, Map};
 use strims_proto::types::{Cache, cache};
 
-use crate::codec::{self, MessageWriter, uvarint_len, varint_len};
+use crate::codec::{self, MessageWriter};
 
 pub use ed25519::{ED25519_SIGNATURE_SIZE, Ed25519Signer, Ed25519Verifier};
 pub use merkle::{MerkleChannelVerifier, MerkleOptions, MerkleSwarmVerifier};
@@ -102,8 +102,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// True if a message writer ran out of space. The scheduler stops
-    /// filling the frame and retries the bin later.
+    /// True if a message writer ran out of space.
     pub fn is_not_enough_space(&self) -> bool {
         matches!(self, Error::Codec(codec::Error::NotEnoughSpace))
     }
@@ -250,30 +249,6 @@ pub struct SwarmVerifierOptions {
     pub chunk_size: usize,
     pub chunks_per_signature: usize,
     pub verifier_options: VerifierOptions,
-}
-
-impl SwarmVerifierOptions {
-    /// The scheduler's per-bin estimate of the integrity messages sent
-    /// with a bin. Varint lengths are sized for zero values, so the estimate
-    /// can fall a few bytes short; writers then fail with `NotEnoughSpace`
-    /// without writing, and the scheduler retries the bin.
-    pub fn max_message_bytes(&self) -> usize {
-        let o = &self.verifier_options;
-        let sig = o.live_signature_algorithm.signature_size().unwrap_or(0);
-        let signed = uvarint_len(0) + varint_len(0);
-        match o.protection_method {
-            ProtectionMethod::SIGN_ALL => codec::MESSAGE_TYPE_LEN + sig + signed,
-            ProtectionMethod::MERKLE_TREE => {
-                let hash = o.merkle_hash_tree_function.hash_size().unwrap_or(0);
-                let uncles = self.chunks_per_signature.trailing_zeros() as usize;
-                codec::MESSAGE_TYPE_LEN
-                    + sig
-                    + signed
-                    + uncles * (codec::MESSAGE_TYPE_LEN + hash + uvarint_len(0))
-            }
-            _ => 0,
-        }
-    }
 }
 
 /// Bytes for the largest supported signature.

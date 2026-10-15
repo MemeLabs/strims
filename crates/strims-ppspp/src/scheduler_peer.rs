@@ -290,7 +290,6 @@ pub(crate) struct SwarmState {
     /// runs only while there are any.
     stream_sources: usize,
 
-    integrity_overhead: usize,
     chunk_size: usize,
     /// The live window in bins (twice the chunks).
     live_window: Bin,
@@ -1037,7 +1036,6 @@ impl PeerSwarmScheduler {
                 wasted_chunks: 0,
                 streams: vec![PeerSchedulerStream::default(); usize::from(stream_count)],
                 stream_sources: 0,
-                integrity_overhead: o.integrity_verifier_options().max_message_bytes(),
                 chunk_size: o.chunk_size,
                 live_window: Bin(window * 2),
                 window,
@@ -1765,10 +1763,10 @@ impl PeerSwarmScheduler {
         c.write1(s, now, cw)
     }
 
-    /// Writes integrity and data for `b`, or the parts of `b` that fit,
-    /// putting the rest back at the front of the queue. `frame_empty` says
-    /// nothing else is in the frame: a chunk that doesn't fit then never
-    /// will, and is dropped.
+    /// Writes integrity and data for `b`, or for the leftmost part of `b`
+    /// that fits, putting the rest back at the front of the queue.
+    /// `frame_empty` says nothing else is in the frame: a chunk that doesn't
+    /// fit then never will, and is dropped.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn write_data(
         &mut self,
@@ -1789,13 +1787,18 @@ impl PeerSwarmScheduler {
             return Err(WriteDataError::Dropped);
         };
         let mut b = b;
-        let n = cw.available();
-        let need = |b: Bin| {
-            (b.base_length() as usize)
-                .saturating_mul(s.chunk_size)
-                .saturating_add(s.integrity_overhead)
-        };
-        while n < need(b) {
+        loop {
+            // The chunks are a lower bound on what `b` takes. The integrity
+            // depends on what the peer has, so writing it is what tells
+            // whether `b` fits; a write that runs out of space is discarded.
+            let chunks = (b.base_length() as usize).saturating_mul(s.chunk_size);
+            if chunks <= cw.available() {
+                match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
+                    Ok(()) => return Ok(()),
+                    Err(WriteDataError::NotEnoughSpace) => cw.reset(),
+                    Err(e) => return Err(e),
+                }
+            }
             if b.is_base() {
                 if frame_empty {
                     return Err(WriteDataError::Dropped);
@@ -1805,31 +1808,6 @@ impl PeerSwarmScheduler {
             }
             q.push_front_data(peer, s.key, b.right(), t, pri);
             b = b.left();
-        }
-
-        match swarm.write_integrity(b, &c.peer_have_bins, cw) {
-            Ok(_) => {}
-            Err(e) if e.is_not_enough_space() => {
-                cw.reset();
-                if frame_empty {
-                    return Err(WriteDataError::Dropped);
-                }
-                q.push_front_data(peer, s.key, b, t, pri);
-                return Err(WriteDataError::NotEnoughSpace);
-            }
-            Err(_) => return Err(WriteDataError::Dropped),
-        }
-        match swarm.write_data(b, now, cw) {
-            Ok(_) => Ok(()),
-            Err(store::Error::Codec(codec::Error::NotEnoughSpace)) => {
-                cw.reset();
-                if frame_empty {
-                    return Err(WriteDataError::Dropped);
-                }
-                q.push_front_data(peer, s.key, b, t, pri);
-                Err(WriteDataError::NotEnoughSpace)
-            }
-            Err(_) => Err(WriteDataError::Dropped),
         }
     }
 
@@ -1870,6 +1848,29 @@ impl PeerSwarmScheduler {
             stream_sources: s.stream_sources,
             subscribers: s.streams.iter().map(|st| st.subscribers.len()).sum(),
         }
+    }
+}
+
+/// Writes the integrity for a peer that has `peer_have`, then the data, for
+/// `b`. `NotEnoughSpace` leaves part of it in `cw`.
+fn write_bin(
+    swarm: &Swarm,
+    b: Bin,
+    peer_have: &Map,
+    now: Time,
+    cw: &mut MeteredWriter<'_>,
+) -> Result<(), WriteDataError> {
+    match swarm.write_integrity(b, peer_have, cw) {
+        Ok(_) => {}
+        Err(e) if e.is_not_enough_space() => return Err(WriteDataError::NotEnoughSpace),
+        Err(_) => return Err(WriteDataError::Dropped),
+    }
+    match swarm.write_data(b, now, cw) {
+        Ok(_) => Ok(()),
+        Err(store::Error::Codec(codec::Error::NotEnoughSpace)) => {
+            Err(WriteDataError::NotEnoughSpace)
+        }
+        Err(_) => Err(WriteDataError::Dropped),
     }
 }
 

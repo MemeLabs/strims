@@ -58,7 +58,11 @@ pub(crate) struct Fixture {
 /// keys.
 pub(crate) fn fixture(options: SwarmOptions) -> Fixture {
     let key = strims_crypto::key_from_seed(&[5; 32]);
-    let swarm = Swarm::new(SwarmId::new(&key.public), options).unwrap();
+    fixture_with(Swarm::new(SwarmId::new(&key.public), options).unwrap())
+}
+
+/// A scheduler for `swarm`, with four peer keys.
+fn fixture_with(swarm: Swarm) -> Fixture {
     let mut keys: SlotMap<SwarmKey, ()> = SlotMap::with_key();
     let key = keys.insert(());
     let mut peers: SlotMap<PeerKey, ()> = SlotMap::with_key();
@@ -1342,4 +1346,79 @@ fn an_open_before_the_handshake_is_ignored() {
         assert_eq!(f.sched.stats().stream_sources, 0);
         assert!(f.sched.push_stats().parents.iter().all(Option::is_none));
     }
+}
+
+#[test]
+fn bins_whose_integrity_overflows_an_empty_frame_are_split() {
+    // SIGN_ALL sends a signature per chunk. The frame holds both chunks of
+    // a two-chunk bin but only one signature, so the bin's left chunk goes
+    // out and its right chunk goes back to the queue.
+    let (mut writer, mut swarm) = crate::Writer::new(
+        crate::WriterOptions {
+            swarm_options: SwarmOptions {
+                integrity: crate::integrity::VerifierOptions {
+                    protection_method: ProtectionMethod::SIGN_ALL,
+                    ..crate::integrity::VerifierOptions::default_options()
+                },
+                ..Default::default()
+            },
+            key: strims_crypto::key_from_seed(&[5; 32]),
+        },
+        now(),
+    )
+    .unwrap();
+    let chunk_size = swarm.options().chunk_size;
+    writer
+        .write(&mut swarm, now(), &vec![7; 2 * chunk_size])
+        .unwrap();
+    let mut f = fixture_with(swarm);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+
+    let mut scratch = vec![0u8; 2 * chunk_size];
+    let mut w = crate::codec::Writer::new(&mut scratch);
+    let one_chunk = f
+        .swarm
+        .write_integrity(Bin(0), &Map::new(), &mut w)
+        .unwrap()
+        + f.swarm.write_data(Bin(0), now(), &mut w).unwrap();
+    let header = crate::codec::ChannelHeader {
+        channel: 1,
+        length: 0,
+    }
+    .byte_len();
+    let mut buf = vec![0u8; header + one_chunk + chunk_size];
+    let mut cw = MeteredWriter::new(&mut buf, 1);
+    let b = Bin::new(1, 0);
+    assert_eq!(
+        f.sched.write_data(
+            p,
+            b,
+            now(),
+            PeerPriority::Low,
+            now(),
+            &f.swarm,
+            &mut cw,
+            true,
+            &mut q
+        ),
+        Ok(())
+    );
+    assert_eq!(q.pushed_front, vec![(p, b.right(), PeerPriority::Low)]);
+
+    let (n, _) = cw.finish(&mut ChannelMetrics::default());
+    let cfg = f.swarm.reader_config();
+    let msgs: Vec<_> = crate::codec::FrameReader::new(&buf[..n])
+        .flat_map(|c| Reader::new(cfg, c.unwrap().1).map(Result::unwrap))
+        .collect();
+    assert!(
+        matches!(
+            msgs[..],
+            [
+                Message::SignedIntegrity(crate::codec::SignedIntegrity { bin: Bin(0), .. }),
+                Message::Data(crate::codec::Data { bin: Bin(0), .. }),
+            ]
+        ),
+        "{msgs:?}"
+    );
 }
