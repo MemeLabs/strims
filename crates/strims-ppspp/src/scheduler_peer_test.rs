@@ -1072,6 +1072,49 @@ fn hybrid_thicket_constraint_and_admission() {
 }
 
 #[test]
+fn pull_load_does_not_shed_subscribers() {
+    let mut f = fixture(SwarmOptions {
+        scheduling_method: SchedulingMethod::SEED,
+        ..hybrid(1)
+    });
+    let mut q = MockQueue::default();
+    ready_channel(&mut f, &mut q);
+    for i in 1..4 {
+        add_ready(&mut f, &mut q, i);
+    }
+    for i in 0..4 {
+        f.sched
+            .handle_stream_request(f.peers[i], 0, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    assert_eq!(f.sched.push_stats().children, 4);
+    // About 320 chunks a second: a subscriber costs about 400 KB/s.
+    let mut t = now();
+    for i in 0..11 {
+        t = now() + Duration::from_millis(100 + 200 * i);
+        f.sched.s.push_consumed(Bin(0), 64, t);
+    }
+
+    // An uplink saturated by pull answers, with room for the pushes.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000_000,
+        busy: 0.95,
+    });
+    f.sched.run_push(t, &mut q);
+    assert_eq!(f.sched.push_stats().children, 4);
+
+    // Pushes over the interior target: enough subscribers are closed to
+    // bring them under it.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 1_390_000,
+        busy: 0.95,
+    });
+    f.sched.run_push(t, &mut q);
+    let st = f.sched.push_stats();
+    assert_eq!((st.children, st.sheds_sent), (2, 2));
+}
+
+#[test]
 fn hybrid_deadlines_release_to_pull_and_silence_prunes() {
     let mut f = fixture(hybrid(1));
     let mut q = MockQueue::default();

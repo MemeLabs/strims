@@ -1336,9 +1336,10 @@ impl PeerSwarmScheduler {
         let Some(cap) = p.upload.capacity() else {
             return;
         };
+        // Pull answers don't count: closing a subscriber turns its pushes
+        // into pulls, so it can't relieve them.
         let committed = children as f64 * rate;
-        let load = (p.upload.rate as f64).max(committed);
-        let excess = load - cap * INTERIOR_UTILIZATION;
+        let excess = committed - cap * INTERIOR_UTILIZATION;
         if excess <= 0.0 {
             return;
         }
