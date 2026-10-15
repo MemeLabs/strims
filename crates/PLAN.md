@@ -28,9 +28,6 @@ Port the application services that sit on the core crates. The Go versions
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
-- Stream ranking: `check_streams` sorts `ranks` most-lagging-first, but
-  `write1` indexes it by stream, so with several streams a stream's rank is
-  unrelated to its lag. Fix it or drop ranking.
 - `handle_stream_open` returns `Accepted` for an open that arrives before the
   handshake or on an unknown channel.
 - STREAM_CLOSE outside the hybrid releases every requested bin of the stream

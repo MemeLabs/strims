@@ -216,8 +216,8 @@ pub struct ChannelStats {
 /// - **Timers.** Call [`Runner::handle_timeout`] at
 ///   [`Runner::poll_timeout`]. The runner ticks every [`TICK_INTERVAL`]
 ///   while any channel runs (request timeouts, restarts, garbage
-///   collection, stream ranking, the first read offset, deferred write
-///   cycles) and updates upload weights every
+///   collection, the first read offset, deferred write cycles) and
+///   updates upload weights every
 ///   [`PEER_QOS_UPDATE_INTERVAL`]. In [`PushMode::Hybrid`] it can also
 ///   return an earlier push deadline. `None` means no channel runs.
 /// - **Events.** Drain [`Runner::poll_event`] after every call that takes
@@ -440,7 +440,7 @@ fn handle_payload(
 
 impl Runner {
     /// A runner without swarms or peers. `rng` seeds the schedulers'
-    /// stream ranks, request orders and timer phases.
+    /// request orders and timer phases.
     pub fn new(rng: DetRng) -> Runner {
         Runner {
             swarms: SlotMap::with_key(),
@@ -977,8 +977,8 @@ impl Runner {
     }
 
     /// Runs the tick if it is due: every scheduler's run (request
-    /// timeouts, restarts, garbage collection, stream ranking, the first
-    /// read offset), deferred write cycles, and every
+    /// timeouts, restarts, garbage collection, the first read offset),
+    /// deferred write cycles, and every
     /// [`PEER_QOS_UPDATE_INTERVAL`] the peers' upload weights. In
     /// [`PushMode::Hybrid`] every call also releases push-expected chunks
     /// whose deadline passed to pull.

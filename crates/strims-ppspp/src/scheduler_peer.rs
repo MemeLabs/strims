@@ -12,11 +12,10 @@
 //! # Pull
 //!
 //! Each channel requests chunks its peer HAVEs and nobody was asked for
-//! (`request_bins`), ordered by stream rank, up to its request window: a
-//! [`RequestController`] chosen by `SwarmOptions::request_controller`. A
+//! (`request_bins`), oldest request group first, up to its request window:
+//! a [`RequestController`] chosen by `SwarmOptions::request_controller`. A
 //! request not answered within the window's request timeout is cancelled
-//! and becomes requestable again. Streams are ranked every 5 s by the lag
-//! of the HAVEs of the peers that could carry them.
+//! and becomes requestable again.
 //!
 //! Constraints on what a channel asks for:
 //!
@@ -78,7 +77,7 @@
 //!   window, so the HAVEs we send never claim more than a window behind it;
 //! - a channel has at most [`max_pending_requests`] request deadlines, and a
 //!   request round collects at most a frame of requests plus one request
-//!   group per rank;
+//!   group;
 //! - extra messages are deduplicated: a handshake, a restart, one pong and
 //!   one message per stream and direction;
 //! - STREAM_REQUEST walks only the stream's own bins, and none on a repeat;
@@ -92,7 +91,7 @@
 use indexmap::IndexMap;
 use slotmap::Key;
 use strims_base::rng::DetRng;
-use strims_base::stats::{Sma, Welford};
+use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, IntersectionIter, Map};
 
@@ -119,8 +118,6 @@ use push::{PushChannel, PushState};
 
 /// How often the scheduler prunes state behind the window.
 pub(crate) const SCHEDULER_GC_INTERVAL: Duration = Duration::from_secs(5);
-/// How often streams are ranked.
-pub(crate) const SCHEDULER_STREAM_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 /// How long a channel waits for the peer's handshake before it sends
 /// RESTART (again).
 pub(crate) const SCHEDULER_RESTART_COOLDOWN: Duration = Duration::from_secs(1);
@@ -159,7 +156,7 @@ fn request_key(order: &[u8], b: Bin) -> (u64, u8) {
 
 /// The smallest REQUEST: type byte, one-byte bin and timestamp varints.
 const MIN_REQUEST_LEN: usize = 3;
-/// Candidate bins kept allocated per rank between request rounds.
+/// Candidate bins kept allocated between request rounds.
 const CANDIDATE_CAPACITY: usize = 256;
 
 /// The most request deadlines a channel tracks: one live window of
@@ -295,11 +292,7 @@ pub(crate) struct SwarmState {
     pub(crate) first_chunk_set: bool,
 
     next_gc_time: Time,
-    next_stream_check_time: Time,
 
-    /// A permutation of the streams, sorted by `check_streams`; `write1`
-    /// reads `ranks[stream]` as that stream's rank. Bound: one per stream.
-    ranks: Vec<Stream>,
     /// A random permutation of the chunk offsets in a request group: the
     /// order in which this node requests a group's chunks.
     /// Bound: [`REQUEST_GROUP`] entries.
@@ -439,12 +432,9 @@ pub(crate) struct PeerChannelScheduler {
     pub(crate) peer: PeerKey,
 
     choked: bool,
-    /// Bound: one per stream.
-    stream_have_lag: Vec<Welford>,
     /// When we requested each bin. Bound: requested bins, pruned behind the
     /// store's read position.
     request_times: TimeSet,
-    data_rtt: Sma,
 
     /// Bins to send HAVEs for. Bound: our window.
     have_bins: Map,
@@ -481,11 +471,8 @@ pub(crate) struct PeerChannelScheduler {
     ping_nonce: u64,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
-    /// group per rank, and [`CANDIDATE_CAPACITY`] each between rounds.
-    candidate_bins: Vec<Vec<Bin>>,
-    /// Scratch for `write1`: ranks with enough candidates. Bound: one per
-    /// stream.
-    candidate_full: Vec<bool>,
+    /// group, and [`CANDIDATE_CAPACITY`] between rounds.
+    candidate_bins: Vec<Bin>,
 
     /// The hybrid's view of the peer as a parent, with
     /// [`PushMode::Hybrid`] only.
@@ -499,13 +486,7 @@ impl PeerChannelScheduler {
         PeerChannelScheduler {
             peer,
             choked: false,
-            stream_have_lag: vec![Welford::default(); streams],
             request_times: TimeSet::default(),
-            data_rtt: Sma::new(
-                (SCHEDULER_STREAM_CHECK_INTERVAL.as_nanos() / 100_000_000) as usize,
-                Duration::from_millis(100),
-                now,
-            ),
             have_bins: s.have_bins.clone(),
             cancel_bins: Map::new(),
             request_bins: BinQueue::default(),
@@ -526,8 +507,7 @@ impl PeerChannelScheduler {
             handshake_received: false,
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
-            candidate_bins: vec![Vec::new(); streams],
-            candidate_full: Vec::with_capacity(streams),
+            candidate_bins: Vec::new(),
             push: s.push.as_ref().map(|_| PushChannel::new(streams)),
         }
     }
@@ -541,7 +521,6 @@ impl PeerChannelScheduler {
     /// Forgets the old stream after a swarm reset (a new epoch).
     fn reset(&mut self, s: &SwarmState, now: Time) {
         let streams = usize::from(s.stream_count);
-        self.stream_have_lag = vec![Welford::default(); streams];
         self.request_times = TimeSet::default();
         self.have_bins = Map::new();
         self.cancel_bins = Map::new();
@@ -847,7 +826,7 @@ impl PeerChannelScheduler {
 
     /// Writes requests: as many as the request window, the frame and
     /// [`max_pending_requests`] allow, from [`Self::request_floor`] on, by
-    /// stream rank and request group.
+    /// request group.
     fn write1(
         &mut self,
         s: &mut SwarmState,
@@ -866,9 +845,7 @@ impl PeerChannelScheduler {
             min = self.peer_max_have_bin;
         }
 
-        for v in &mut self.candidate_bins {
-            v.clear();
-        }
+        self.candidate_bins.clear();
 
         let chunk = s.chunk_size.max(1) as i64;
         self.controller
@@ -879,7 +856,7 @@ impl PeerChannelScheduler {
         // A request is at least `MIN_REQUEST_LEN` bytes: no more than this
         // many fit the frame.
         let fit = cw.available() / MIN_REQUEST_LEN;
-        let mut n = usize::try_from(budget)
+        let n = usize::try_from(budget)
             .unwrap_or(usize::MAX)
             .min(room)
             .min(fit);
@@ -891,54 +868,30 @@ impl PeerChannelScheduler {
             self.backoff_bins.reset(root);
         }
 
-        // Collect candidates per rank up to the end of the request group of
-        // the `n`th: no rank uses more than `n`, and this node's order
-        // within a group needs the whole group.
-        {
-            let ranks = self.candidate_bins.len();
-            let mut full = 0;
-            self.candidate_full.clear();
-            self.candidate_full.resize(ranks, false);
-            let mut it = IntersectionIter::new(
-                s.request_bins
-                    .iterate_empty_at(self.peer_have_bins.root_bin()),
-                self.peer_have_bins.iterate_filled(),
-            );
-            let mut next = it.next_after(min);
-            'walk: while let Some(x) = next {
-                let (mut b, br) = x.base();
-                while b <= br {
-                    if self.backoff_bins.filled_at(b) {
-                        b += 2;
-                        continue;
+        // Collect candidates up to the end of the request group of the
+        // `n`th: this node's order within a group needs the whole group.
+        let mut it = IntersectionIter::new(
+            s.request_bins
+                .iterate_empty_at(self.peer_have_bins.root_bin()),
+            self.peer_have_bins.iterate_filled(),
+        );
+        let mut next = it.next_after(min);
+        'walk: while let Some(x) = next {
+            let (mut b, br) = x.base();
+            while b <= br {
+                if !self.backoff_bins.filled_at(b) {
+                    let v = &self.candidate_bins;
+                    let open = v.len() < n
+                        || v.get(n - 1)
+                            .is_some_and(|&nth| request_group(nth) == request_group(b));
+                    if !open {
+                        break 'walk;
                     }
-                    let stream = usize::from(s.bin_stream(b));
-                    let rank = s.ranks.get(stream).map_or(0, |&r| usize::from(r));
-                    if let (Some(v), Some(done)) = (
-                        self.candidate_bins.get_mut(rank),
-                        self.candidate_full.get_mut(rank),
-                    ) && !*done
-                    {
-                        // A rank is full at `n` candidates, or, ordering
-                        // requests within groups, once the group of its
-                        // `n`th is complete.
-                        let open = v.len() < n
-                            || v.get(n - 1)
-                                .is_some_and(|&nth| request_group(nth) == request_group(b));
-                        if open {
-                            v.push(b);
-                        } else {
-                            *done = true;
-                            full += 1;
-                            if full == ranks {
-                                break 'walk;
-                            }
-                        }
-                    }
-                    b += 2;
+                    self.candidate_bins.push(b);
                 }
-                next = it.next();
+                b += 2;
             }
+            next = it.next();
         }
 
         // Every node that hears of a chunk from the same peer at the same
@@ -946,35 +899,26 @@ impl PeerChannelScheduler {
         // a peer that can't send to all of them then spends its upload on
         // copies of a few chunks, and nobody has anything to relay. In a
         // node's own order within each group, they ask for different ones.
-        let order = &s.request_order;
-        for v in &mut self.candidate_bins {
-            if v.len() > n {
-                v.sort_unstable_by_key(|&b| request_key(order, b));
-            }
+        if self.candidate_bins.len() > n {
+            let order = &s.request_order;
+            self.candidate_bins
+                .sort_unstable_by_key(|&b| request_key(order, b));
         }
 
         let size = (s.chunk_size as i64).max(1);
-        'each_rank: for bins in &self.candidate_bins {
-            for &b in bins {
-                cw.write(&Message::Request(Request {
-                    bin: b,
-                    timestamp: now,
-                }))?;
-                s.request_bins.set(b);
-                self.request_times.set(b, now);
-                self.request_bins.push(b, timeout);
-                self.controller
-                    .on_sent(now, (b.base_length() as i64).saturating_mul(size));
-                n -= 1;
-                if n == 0 {
-                    break 'each_rank;
-                }
-            }
+        for &b in self.candidate_bins.iter().take(n) {
+            cw.write(&Message::Request(Request {
+                bin: b,
+                timestamp: now,
+            }))?;
+            s.request_bins.set(b);
+            self.request_times.set(b, now);
+            self.request_bins.push(b, timeout);
+            self.controller
+                .on_sent(now, (b.base_length() as i64).saturating_mul(size));
         }
-        for v in &mut self.candidate_bins {
-            v.clear();
-            v.shrink_to(CANDIDATE_CAPACITY);
-        }
+        self.candidate_bins.clear();
+        self.candidate_bins.shrink_to(CANDIDATE_CAPACITY);
         Ok(())
     }
 }
@@ -1028,8 +972,8 @@ fn rand_millis(rng: &mut DetRng, n: u64) -> Duration {
 }
 
 impl PeerSwarmScheduler {
-    /// A scheduler for `swarm`; `rng` draws the stream ranks, the request
-    /// order and the timer phases.
+    /// A scheduler for `swarm`; `rng` draws the request order and the timer
+    /// phases.
     pub(crate) fn new(
         swarm: &Swarm,
         key: SwarmKey,
@@ -1044,8 +988,6 @@ impl PeerSwarmScheduler {
         };
         let stream_count = u16::try_from(o.stream_count).unwrap_or(u16::MAX).max(1);
         let have_bins = swarm.store().bins();
-        let mut ranks: Vec<Stream> = (0..stream_count).collect();
-        shuffle(&mut ranks, rng);
         let mut request_order: Vec<u8> = (0..REQUEST_GROUP as u8).collect();
         shuffle(&mut request_order, rng);
         let window = o.live_window as u64;
@@ -1074,8 +1016,6 @@ impl PeerSwarmScheduler {
                 first_chunk_set: o.scheduling_method == SchedulingMethod::SEED
                     || !swarm.store().is_empty(),
                 next_gc_time: now + rand_millis(rng, 5000),
-                next_stream_check_time: now + rand_millis(rng, 3000),
-                ranks,
                 request_order,
                 mode: o.push_mode,
                 controller: o.request_controller.resolve(),
@@ -1087,17 +1027,12 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// The tick: GC, stream ranking, request timeouts, restarts, the
-    /// hybrid's parent checks, and the first read position.
+    /// The tick: GC, request timeouts, restarts, the hybrid's parent
+    /// checks, and the first read position.
     pub(crate) fn run(&mut self, now: Time, swarm: &mut Swarm, q: &mut impl PeerTaskQueue) {
         if now > self.s.next_gc_time {
             self.s.next_gc_time = now + SCHEDULER_GC_INTERVAL;
             self.gc(swarm);
-        }
-
-        if now > self.s.next_stream_check_time {
-            self.s.next_stream_check_time = now + SCHEDULER_STREAM_CHECK_INTERVAL;
-            self.check_streams(now);
         }
 
         let mut timed_out = false;
@@ -1133,64 +1068,6 @@ impl PeerSwarmScheduler {
                 q.enqueue(peer, self.s.key);
             }
         }
-    }
-
-    /// Sorts `ranks` by the lag of the streams' HAVEs across the channels
-    /// that could carry them, most lagging first. `write1` indexes `ranks`
-    /// by stream, so the rank a stream gets is a permutation of this order,
-    /// not its place in it.
-    fn check_streams(&mut self, now: Time) {
-        let s = &mut self.s;
-        let stream_rate =
-            s.peer_have_chunk_rate.rate(Duration::SECOND, now) / u64::from(s.stream_count);
-        if stream_rate == 0 {
-            return;
-        }
-
-        let streams = usize::from(s.stream_count);
-        let mut lag = vec![Welford::default(); streams];
-        let mut candidate_lags: Vec<Vec<Welford>> = Vec::new();
-        for (&peer, c) in &mut self.channels {
-            let mut cap = (c.data_rtt.sample_rate(Duration::SECOND, now) / stream_rate).min(1);
-            let mut clag = vec![Welford::default(); streams];
-            for (j, l) in clag.iter_mut().enumerate() {
-                let assigned = s
-                    .streams
-                    .get(j)
-                    .and_then(|st| st.source)
-                    .is_some_and(|src| src.channel == peer);
-                if assigned {
-                    cap += 1;
-                }
-                if let Some(h) = c.stream_have_lag.get_mut(j) {
-                    if !c.choked || assigned {
-                        *l = *h;
-                    }
-                    h.reset();
-                }
-            }
-            if cap > 0 {
-                candidate_lags.push(clag);
-            }
-        }
-        if candidate_lags.is_empty() {
-            return;
-        }
-
-        let mut temp = Vec::with_capacity(candidate_lags.len());
-        for (i, l) in lag.iter_mut().enumerate() {
-            temp.clear();
-            temp.extend(candidate_lags.iter().filter_map(|c| c.get(i).copied()));
-            *l = Welford::merge(&temp);
-        }
-
-        // Most lagging first. A stable sort over a total order keeps the
-        // ranks deterministic, NaN included.
-        s.ranks.sort_by(|&a, &b| {
-            let la = lag.get(usize::from(a)).map_or(0.0, |w| w.mean());
-            let lb = lag.get(usize::from(b)).map_or(0.0, |w| w.mean());
-            lb.total_cmp(&la)
-        });
     }
 
     /// Prunes bin times, the request map, the hybrid's maps and request
@@ -1492,9 +1369,6 @@ impl PeerSwarmScheduler {
         let size = (b.base_length() as i64).saturating_mul(s.chunk_size as i64);
         c.controller.on_delivered(now, size);
         if let Some((_, ts)) = c.request_times.get(b) {
-            let rtt = now - ts;
-            c.data_rtt
-                .add_n(b.base_length(), rtt.as_nanos().max(0) as u64, now);
             c.controller.on_answered(now, size, ts, t);
             // Answered: a second copy doesn't ack again, and the timeout
             // doesn't settle it.
@@ -1538,21 +1412,19 @@ impl PeerSwarmScheduler {
         let br = b.base_right();
         let new_max = c.peer_max_have_bin.max(br);
         let lo = s.history_start(new_max);
-        let mut found = false;
+        let found;
         {
             let mut it = c.peer_have_bins.iterate_empty_at(b);
             let mut next = it.next_base_after(b.base_left().max(lo));
-            while let Some(x) = next {
-                let first = s.bin_time(x);
-                let stream = usize::from(s.bin_stream(x));
-                if let Some(l) = c.stream_have_lag.get_mut(stream) {
-                    l.update((now - first).as_nanos() as f64);
+            found = next.is_some();
+            // Only the hybrid's per-stream HAVE lag needs every new bin.
+            if s.push.is_some() {
+                while let Some(x) = next {
+                    let lag = now - s.bin_time(x);
+                    let stream = usize::from(s.bin_stream(x));
+                    Self::push_have_lag(&mut c.push, stream, lag, now);
+                    next = it.next_base();
                 }
-                if s.push.is_some() {
-                    Self::push_have_lag(&mut c.push, stream, now - first, now);
-                }
-                found = true;
-                next = it.next_base();
             }
         }
         // Eager modes request what the HAVE offers at once, not at the

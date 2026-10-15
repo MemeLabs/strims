@@ -222,8 +222,10 @@ fn ready_channel(f: &mut Fixture, q: &mut MockQueue) -> PeerKey {
 
 #[test]
 fn huge_have_costs_a_bounded_walk() {
-    // One HAVE for a layer-40 bin must not walk its 2^40 chunks.
-    let mut f = fixture(SwarmOptions::default());
+    // One HAVE for a layer-40 bin must not walk its 2^40 chunks. The
+    // hybrid walks a HAVE's new bins for its per-stream lag; an unbounded
+    // walk would not finish.
+    let mut f = fixture(hybrid(1));
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
 
@@ -234,9 +236,6 @@ fn huge_have_costs_a_bounded_walk() {
     let lo = f.sched.s.history_start(c.peer_max_have_bin);
     assert!(c.peer_have_bins.filled_at(Bin(lo.0)));
     assert!(c.peer_have_bins.empty_at(Bin(lo.0 - 2)));
-    // The stream lag walk visited at most the tracked span.
-    let visited = c.stream_have_lag[0].count() as u64;
-    assert!(visited <= HISTORY_WINDOWS * (1 << 16), "{visited}");
 
     // Bins outside the bin space are refused.
     assert!(!f.sched.handle_have(p, Bin::ALL, now()));
@@ -816,6 +815,34 @@ fn nodes_ask_a_shared_peer_for_different_chunks() {
     let mut requests = requests_at(&mut f, p, now());
     requests.sort();
     assert_eq!(requests, (0..8).map(|i| Bin(2 * i)).collect::<Vec<_>>());
+}
+
+#[test]
+fn requests_take_the_oldest_groups_across_streams() {
+    // A chunk's deadline follows its position, whatever its stream: a
+    // round that can't take every candidate asks for the oldest group's
+    // chunks of all streams before any later group's.
+    let mut f = fixture(SwarmOptions {
+        live_window: 1 << 10,
+        stream_count: 8,
+        ..Default::default()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.sched.s.first_chunk_set = true;
+    // Four groups announced, 32 chunks per stream; the window allows 32
+    // requests.
+    assert!(f.sched.handle_have(p, Bin::new(8, 0), now()));
+    let requests = requests_at(&mut f, p, now());
+    assert_eq!(requests.len(), 32);
+    assert!(
+        requests.iter().all(|b| b.base_offset() < REQUEST_GROUP),
+        "{requests:?}"
+    );
+    let mut streams: Vec<_> = requests.iter().map(|&b| f.sched.s.bin_stream(b)).collect();
+    streams.sort();
+    streams.dedup();
+    assert!(streams.len() > 1, "{streams:?}");
 }
 
 #[test]
