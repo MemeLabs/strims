@@ -28,8 +28,6 @@ Port the application services that sit on the core crates. The Go versions
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
-- `PeerDataQueue`: re-queuing a bin whose dead entry is still in the ring pops
-  the old entry, which can drop a High-priority push as stale.
 - `Epoch::import_cache` doesn't verify the cached signature.
 - `max_message_bytes` underestimates varint lengths.
 - Require monotonic sign-all timestamps until v3 binds the bin.
