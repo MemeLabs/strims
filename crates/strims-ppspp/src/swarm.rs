@@ -283,12 +283,13 @@ impl Swarm {
         }
     }
 
-    /// Loads a cache, whose URI must match this swarm's.
+    /// Loads a cache, whose URI must match this swarm's and whose epoch the
+    /// swarm key signed. A refused URI or epoch leaves the swarm unchanged.
     pub fn import_cache(&mut self, c: &Cache) -> Result<(), SwarmError> {
         if c.uri != self.uri().to_string() {
             return Err(SwarmError::IncompatibleCache);
         }
-        self.epoch.import_cache(c.epoch.as_ref());
+        self.epoch.import_cache(c.epoch.as_ref())?;
         self.verifier.import_cache(c)?;
         self.store.import_cache(&c.data)?;
         Ok(())
@@ -441,8 +442,8 @@ mod tests {
         out
     }
 
-    /// A cache round-trips into a fresh swarm; a swarm with other options
-    /// refuses it.
+    /// A cache round-trips into a fresh swarm. A swarm refuses a cache with
+    /// a forged epoch or with other options.
     #[test]
     fn cache() {
         let key = strims_crypto::key_from_seed(&[11; 32]);
@@ -461,6 +462,17 @@ mod tests {
         assert_eq!(w.write(&mut ws, now(), &b), Ok(b.len()));
 
         let c = ws.export_cache().unwrap();
+
+        // a forged epoch is refused before anything is imported
+        let mut forged = c.clone();
+        forged.epoch.as_mut().unwrap().timestamp += 1_000_000;
+        let mut s = Swarm::new_default(SwarmId::new(&key.public)).unwrap();
+        assert_eq!(
+            s.import_cache(&forged),
+            Err(SwarmError::Epoch(EpochError::InvalidSignature))
+        );
+        assert!(s.epoch().value().0.is_nil());
+        assert!(s.store().is_empty());
 
         // import
         let mut s = Swarm::new_default(SwarmId::new(&key.public)).unwrap();

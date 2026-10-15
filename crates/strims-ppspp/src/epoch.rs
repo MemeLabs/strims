@@ -40,18 +40,24 @@ impl Epoch {
         }
     }
 
-    /// Loads the epoch from a cache. The signature is not checked; a
-    /// missing epoch imports as time 0.
-    pub fn import_cache(&mut self, c: Option<&cache::Epoch>) {
-        self.timestamp = Time::from_unix_nanos(c.map_or(0, |c| c.timestamp));
-        let mut sig = vec![0; self.verifier.size()];
-        if let Some(c) = c {
-            let n = sig.len().min(c.signature.len());
-            if let (Some(dst), Some(src)) = (sig.get_mut(..n), c.signature.get(..n)) {
-                dst.copy_from_slice(src);
-            }
+    /// Loads the epoch from a cache. The swarm key must have signed it; a
+    /// missing or nil epoch imports as no epoch. A refused epoch leaves the
+    /// current one in place.
+    pub fn import_cache(&mut self, c: Option<&cache::Epoch>) -> Result<(), EpochError> {
+        let t = c.map_or(Time::NIL, |c| Time::from_unix_nanos(c.timestamp));
+        if t.is_nil() {
+            self.timestamp = Time::NIL;
+            self.signature = vec![0; self.verifier.size()];
+            return Ok(());
         }
-        self.signature = sig;
+        let sig = c.map_or(&[][..], |c| &c.signature);
+        if sig.len() != self.verifier.size() || !self.verifier.verify(t, &[], sig, &mut Vec::new())
+        {
+            return Err(EpochError::InvalidSignature);
+        }
+        self.timestamp = t;
+        self.signature = sig.to_vec();
+        Ok(())
     }
 
     /// The epoch for a cache.
@@ -87,7 +93,7 @@ impl Epoch {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
     use crate::integrity::LiveSignatureAlgorithm;
@@ -110,11 +116,49 @@ mod tests {
         let t2 = Time::from_unix_millis(1001);
         assert_eq!(e.sync(t2, s1.as_slice()), Err(EpochError::InvalidSignature));
         assert_eq!(e.value(), (t1, s1.as_slice()));
+    }
+
+    #[test]
+    fn import_cache_requires_the_swarm_signature() {
+        let key = strims_crypto::key_from_seed(&[9; 32]);
+        let alg = LiveSignatureAlgorithm::ED25519;
+        let signer = alg.signer(&key.private).unwrap();
+        let mut e = Epoch::new(alg.verifier(&key.public).unwrap());
+        let t1 = Time::from_unix_millis(1000);
+        let s1 = signer.sign(t1, &[], &mut Vec::new());
+        assert_eq!(e.sync(t1, s1.as_slice()), Ok(true));
+        let good = e.export_cache();
 
         let mut f = Epoch::new(alg.verifier(&key.public).unwrap());
-        f.import_cache(Some(&e.export_cache()));
+        assert_eq!(f.import_cache(Some(&good)), Ok(()));
         assert_eq!(f.value(), e.value());
-        f.import_cache(None);
-        assert_eq!(f.value(), (Time::EPOCH, &[0u8; 64][..]));
+
+        // forged or damaged epochs are refused and change nothing
+        let later = cache::Epoch {
+            timestamp: Time::from_unix_millis(1001).unix_nanos(),
+            ..good.clone()
+        };
+        let mut flipped = good.clone();
+        flipped.signature[0] ^= 1;
+        let mut short = good.clone();
+        short.signature.pop();
+        for bad in [later, flipped, short] {
+            assert_eq!(
+                f.import_cache(Some(&bad)),
+                Err(EpochError::InvalidSignature)
+            );
+            assert_eq!(f.value(), e.value());
+        }
+
+        // no epoch, or a nil one, imports as no epoch
+        let nil = cache::Epoch {
+            timestamp: Time::NIL.unix_nanos(),
+            ..good
+        };
+        for c in [None, Some(&nil)] {
+            f.import_cache(Some(&e.export_cache())).unwrap();
+            assert_eq!(f.import_cache(c), Ok(()));
+            assert_eq!(f.value(), (Time::NIL, &[0u8; 64][..]));
+        }
     }
 }
