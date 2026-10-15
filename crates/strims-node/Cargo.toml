@@ -1,0 +1,45 @@
+[package]
+name = "strims-node"
+description = "Tokio driver composing vnic, vpn and ppspp over TCP, WebSocket and WebRTC, natively or under turmoil"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Simulated network and clock for deterministic whole-node tests.
+turmoil = ["dep:turmoil"]
+
+[dependencies]
+strims-base.workspace = true
+strims-binmap.workspace = true
+strims-proto.workspace = true
+strims-crypto.workspace = true
+strims-kademlia.workspace = true
+strims-qos.workspace = true
+strims-vnic.workspace = true
+strims-vpn.workspace = true
+strims-ppspp.workspace = true
+strims-webrtc.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+slotmap.workspace = true
+bytes.workspace = true
+hex.workspace = true
+rand_core.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+socket2 = { version = "0.6", features = ["all"] }
+getrandom = "0.3"
+turmoil = { workspace = true, optional = true }
+
+[dev-dependencies]
+sha2.workspace = true
+# `process` and `rt-multi-thread`: the Go interop tests drive Go helpers as
+# subprocesses and run their Rust nodes on a multi-thread runtime.
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "sync", "test-util", "process"] }
+
+[lints]
+workspace = true

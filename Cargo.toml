@@ -1,0 +1,112 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/strims-base",
+  "crates/strims-binmap",
+  "crates/strims-proto",
+  "crates/strims-crypto",
+  "crates/strims-qos",
+  "crates/strims-kademlia",
+  "crates/strims-mpc",
+  "crates/strims-ppspp",
+  "crates/strims-vnic",
+  "crates/strims-vpn",
+  "crates/strims-webrtc",
+  "crates/strims-node",
+  "crates/strims-sim",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+repository = "https://github.com/MemeLabs/strims"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# determinism guardrails, configured in clippy.toml
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# peer input must never panic the node
+unwrap_used = "warn"
+expect_used = "warn"
+indexing_slicing = "warn"
+panic = "warn"
+
+[workspace.dependencies]
+# internal
+strims-base = { path = "crates/strims-base" }
+strims-binmap = { path = "crates/strims-binmap" }
+strims-proto = { path = "crates/strims-proto" }
+strims-crypto = { path = "crates/strims-crypto" }
+strims-qos = { path = "crates/strims-qos" }
+strims-kademlia = { path = "crates/strims-kademlia" }
+strims-mpc = { path = "crates/strims-mpc" }
+strims-ppspp = { path = "crates/strims-ppspp" }
+strims-vnic = { path = "crates/strims-vnic" }
+strims-vpn = { path = "crates/strims-vpn" }
+strims-webrtc = { path = "crates/strims-webrtc" }
+strims-node = { path = "crates/strims-node" }
+strims-sim = { path = "crates/strims-sim" }
+
+# general
+thiserror = "2"
+tracing = "0.1"
+bytes = "1"
+smallvec = "1"
+slotmap = "1"
+indexmap = "2"
+hex = "0.4"
+
+# randomness: never thread_rng / OsRng in core crates (see crates/CONVENTIONS.md)
+rand_core = "0.10"
+rand = { version = "0.10", default-features = false, features = ["alloc"] }
+rand_chacha = { version = "0.10", default-features = false }
+
+# protobuf
+prost = "0.14"
+prost-types = "0.14"
+prost-build = "0.14"
+protox = "0.10"
+
+# crypto
+ed25519-dalek = "3"
+x25519-dalek = "3"
+curve25519-dalek = "5"
+aes = "0.9"
+aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }  # default features pull getrandom, which breaks wasm32
+cfb-mode = "0.9"
+blake2 = "0.11"
+blake3 = "1"
+sha1 = "0.11"
+sha2 = "0.11"
+sha3 = "0.12"
+md-5 = "0.11"
+
+# drivers and simulation (never in core crates)
+tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "sync"] }
+turmoil = "0.7"
+tokio-tungstenite = "0.30"
+str0m = "0.24"
+
+# testing
+proptest = "1"
+
+# Optimize dependencies (not workspace crates) in dev builds. Unoptimized
+# ed25519 costs about 7.5 ms per verified vpn message, which dominates debug
+# interop and simulation runtimes.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[profile.release-wasm]
+inherits = "release"
+opt-level = "z"

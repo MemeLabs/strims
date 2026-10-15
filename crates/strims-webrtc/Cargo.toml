@@ -1,0 +1,38 @@
+[package]
+name = "strims-webrtc"
+description = "Sans-IO WebRTC data-channel links for vnic, built on str0m"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-vnic.workspace = true
+thiserror.workspace = true
+slotmap.workspace = true
+rand_core.workspace = true
+
+# Native only: browsers use RTCPeerConnection through the JS bridge.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# No crypto feature: the crate supplies its own pure-Rust provider (src/crypto.rs).
+str0m = { workspace = true, default-features = false }
+# str0m's DTLS stack, with only its RustCrypto backend (no aws-lc, no rcgen).
+dimpl = { version = "0.7.5", default-features = false, features = ["rust-crypto"] }
+# The RustCrypto generation dimpl uses, so nothing is built twice.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+sha1 = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+aes = "0.8"
+aes-gcm = "0.10"
+ctr = "0.9"
+# The thread-local generator str0m draws from (see `seed_str0m_thread_rng`).
+fastrand = "2"
+
+[dev-dependencies]
+hex.workspace = true
+strims-crypto.workspace = true
+
+[lints]
+workspace = true

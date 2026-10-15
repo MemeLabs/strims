@@ -1,0 +1,24 @@
+[package]
+name = "strims-proto"
+description = "Generated protobuf types for schema/"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build/main.rs"
+
+[dependencies]
+prost.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+prost-types.workspace = true
+protox.workspace = true
+# same major as prost-build's own identifier conversion (see build/stable.rs)
+heck = "0.5"
+
+[dev-dependencies]
+hex.workspace = true
+
+[lints]
+workspace = true

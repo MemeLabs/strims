@@ -1,0 +1,26 @@
+[package]
+name = "strims-vnic"
+description = "Sans-IO virtual NIC: peers, frames, ports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-proto.workspace = true
+strims-crypto.workspace = true
+strims-qos.workspace = true
+strims-kademlia.workspace = true
+thiserror.workspace = true
+slotmap.workspace = true
+prost.workspace = true
+rand_core.workspace = true
+aes.workspace = true
+cfb-mode.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+# Determinism guardrails for the sans-IO core crates (see crates/CONVENTIONS.md).
+# Driver crates that legitimately touch the OS (strims-node, strims-wasm, ...)
+# opt out at the call site with #[allow(clippy::disallowed_methods)] and a comment.
+
+disallowed-methods = [
+  { path = "std::time::Instant::now", reason = "core crates take `now: strims_base::time::Time` as an argument" },
+  { path = "std::time::SystemTime::now", reason = "core crates take `now: strims_base::time::Time` as an argument" },
+  { path = "std::thread::spawn", reason = "core crates are single-threaded state machines" },
+  { path = "std::thread::sleep", reason = "core crates never block" },
+  { path = "std::env::var", reason = "configuration is passed in explicitly" },
+]
+
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "iteration order varies per process; use BTreeMap, IndexMap or slotmap" },
+  { path = "std::collections::HashSet", reason = "iteration order varies per process; use BTreeSet or IndexSet" },
+  { path = "std::sync::Mutex", reason = "core crates are single-threaded; take &mut self" },
+  { path = "std::sync::RwLock", reason = "core crates are single-threaded; take &mut self" },
+  { path = "std::time::Instant", reason = "use strims_base::time::Time" },
+]

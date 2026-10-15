@@ -1,0 +1,4479 @@
+scenario 0
+set 1 583
+findfilledafter 1 118895 = 18446744073709551615
+emptyat 1 2690 = 1
+set 1 1367
+set 1 1623
+findfilledafter 1 4085 = 18446744073709551615
+findfilledafter 1 43615 = 18446744073709551615
+reset 0 791
+reset 0 919
+emptyat 0 20095 = 1
+findfilledafter 0 1308 = 18446744073709551615
+set 0 4047
+set 0 4111
+cover 0 5727 = 5631
+filledat 0 190 = 0
+set 0 4799
+set 0 4927
+findemptyafter 0 59391 = 59391
+findfilledafter 0 4015 = 4032
+set 1 805306367
+findemptyafter 1 1799 = 1792
+emptyat 1 1435 = 1
+set 0 4895
+set 0 5407
+filledat 0 7999 = 0
+emptyat 0 3933 = 1
+set 0 691
+emptyat 0 1599 = 1
+findfilledafter 0 26847 = 18446744073709551615
+reset 0 63487
+findemptyafter 0 7679 = 7168
+filledat 0 143 = 0
+reset 1 639
+reset 1 1151
+findfilledafter 1 2935 = 536870912
+cover 1 6 = 511
+set 0 1147
+set 0 1659
+emptyat 0 112639 = 1
+emptyat 0 2547 = 1
+reset 0 5951
+reset 0 6207
+emptyat 0 1543 = 1
+filledat 0 2215 = 0
+set 1 12287
+findemptyafter 1 1648 = 1648
+findemptyafter 1 2415 = 2400
+set 0 3939
+findfilledafter 0 9223372036854775807 = 18446744073709551615
+findfilledafter 0 4863 = 4736
+set 1 1613
+cover 1 2492 = 3071
+findemptyafter 1 4351 = 4096
+reset 1 3250
+findemptyafter 1 2403 = 2400
+findemptyafter 1 2427 = 2424
+fillbefore 0 2235
+emptyat 0 4895 = 0
+filledat 0 1479 = 1
+set 0 3980
+set 0 4236
+findfilledafter 0 1821 = 1820
+findemptyafter 0 9223372036854775807 = 2235
+set 1 2423
+filledat 1 1691 = 0
+findfilledafter 1 28159 = 536870912
+resetbefore 1 1435
+cover 1 1357 = 1279
+emptyat 1 1760 = 1
+reset 0 3298534883327
+findemptyafter 0 1149 = 2232
+findemptyafter 0 13855 = 13855
+set 0 119039
+set 0 119551
+emptyat 0 9223372036854775807 = 0
+cover 0 3825 = 3711
+resetbefore 1 73503
+resetbefore 1 73631
+filledat 1 2053 = 0
+cover 1 343597383679 = 1610612735
+fillbefore 1 2015
+findemptyafter 1 94207 = 90112
+findemptyafter 1 2368 = 2368
+reset 0 2071
+reset 0 2327
+cover 0 7039 = 7167
+findemptyafter 0 9223372036854775807 = 2071
+findempty 0 = 2071
+findfilled 0 = 1023
+findlastfilled 0 = 119806
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 11663427799351986731
+iter 0 empty 63 next 0 = -
+iter 0 empty 447 base 0 = -
+iter 0 empty 15 after 524 = -
+iter 0 empty 131071 baseafter 22 = 2064,2066,2068,2070,2072,2074,2076,2078,2232,2234,2236,2238,2240,2242,2244,2246,2248,2250,2252,2254
+findempty 1 = 2015
+findfilled 1 = 511
+findlastfilled 1 = 1073741822
+root 1 = 536870911
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 549940681502144595
+iter 1 filled 536870911 next 0 = 511,1279,1663,1855,1951,805306367
+iter 1 empty 127 base 0 = -
+iter 1 filled 1073741823 after 348 = 349,367,447,767,1279,1663,1855,1951,805306367
+iter 1 empty 79 baseafter 870 = -
+inter filled filled 1073741823 next 0 = 511,1279,1663,1855,1951
+inter empty filled 131071 next 0 = -
+inter empty empty 65535 base 0 = 2064,2066,2068,2070,2072,2074,2076,2078,2232,2234,2236,2238,2240,2242,2244,2246,2248,2250,2252,2254
+inter empty empty 536870911 after 824 = 2071,2235,2271,2431,2815,3327,3711,3871,3919,3947,3959,3971,3977,3982,3991,4015,4079,4143,4191,4227
+scenario 1
+fillbefore 0 3327
+findfilledafter 0 26388279066623 = 18446744073709551615
+emptyat 0 171798691839 = 1
+fillbefore 0 1983
+filledat 0 3191 = 0
+findfilledafter 0 46719 = 18446744073709551615
+set 0 974
+set 0 1230
+filledat 0 2687 = 1
+emptyat 0 3711 = 1
+reset 1 786431
+findfilledafter 1 1843 = 18446744073709551615
+filledat 1 211 = 0
+reset 1 1543
+emptyat 1 6655 = 1
+findfilledafter 1 302 = 18446744073709551615
+fillbefore 0 4055
+fillbefore 0 4119
+findemptyafter 0 79035 = 79035
+filledat 0 42949672959 = 0
+resetbefore 0 2435
+resetbefore 0 2563
+findemptyafter 0 3290 = 4112
+findemptyafter 0 1827 = 1824
+fillbefore 1 19725
+findfilledafter 1 2233 = 2232
+emptyat 1 2495 = 0
+fillbefore 1 786431
+filledat 1 70783 = 1
+filledat 1 7423 = 1
+set 1 1311
+set 1 1823
+cover 1 4047 = 9223372036854775807
+findfilledafter 1 546 = 546
+reset 0 3393
+filledat 0 6388 = 0
+cover 0 57275 = 12287
+set 0 3591
+cover 0 2847 = 2815
+emptyat 0 54783 = 1
+reset 1 18446744073709551615
+reset 1 18446744073709551615
+emptyat 1 75 = 0
+emptyat 1 3501 = 0
+reset 1 3492
+reset 1 3556
+cover 1 923 = 1023
+emptyat 1 73919 = 0
+reset 0 3831
+emptyat 0 4575 = 1
+emptyat 0 97279 = 1
+set 1 237
+set 1 301
+findemptyafter 1 935 = 3492
+filledat 1 18 = 1
+reset 1 1389
+reset 1 1453
+filledat 1 6847 = 1
+emptyat 1 2828 = 0
+reset 1 831
+emptyat 1 2319 = 0
+findemptyafter 1 3159 = 3492
+set 1 2023
+emptyat 1 4191 = 0
+cover 1 511 = 18446744073709551615
+set 0 215
+set 0 471
+cover 0 2403 = 2303
+findemptyafter 0 3438 = 3824
+set 1 1709
+findemptyafter 1 2495 = 3492
+filledat 1 2287 = 1
+resetbefore 1 2815
+resetbefore 1 3327
+findfilledafter 1 3983 = 3968
+filledat 1 120831 = 1
+reset 0 42949672959
+findfilledafter 0 2569 = 2568
+emptyat 0 2707 = 0
+set 1 3247
+set 1 3375
+cover 1 1689 = 1023
+emptyat 1 225 = 1
+set 0 26111
+cover 0 7807 = 7167
+findemptyafter 0 941 = 940
+findempty 0 = 63
+findfilled 0 = 215
+findlastfilled 0 = 26622
+root 0 = 16383
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 6798764454447445840
+iter 0 empty 16383 next 0 = 63,159,199,239,319,415,455,495,767,1535,2303,3393,3831,4119,4143,4191,4287,4479,4863,5631
+iter 0 filled 32767 base 0 = 208,210,212,214,216,218,220,222,464,466,468,470,472,474,476,478,2560,2562,2564,2566
+iter 0 empty 1279 after 13 = 1279
+iter 0 filled 32767 baseafter 1378 = 2560,2562,2564,2566,2568,2570,2572,2574,2576,2578,2580,2582,2584,2586,2588,2590,2592,2594,2596,2598
+findempty 1 = 1023
+findfilled 1 = 3199
+findlastfilled 1 = 524286
+root 1 = 262143
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 10684133073910385096
+iter 1 empty 262143 next 0 = 1023,2559,3492,3556
+iter 1 empty 524287 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 524287 after 78 = 78,87,111,191,383,767,1535,2559,3492,3556,786431
+iter 1 filled 262143 baseafter 1524 = 3072,3074,3076,3078,3080,3082,3084,3086,3088,3090,3092,3094,3096,3098,3100,3102,3104,3106,3108,3110
+inter filled empty 262143 next 0 = 215,471,2815,3492,3556
+inter filled filled 32767 next 0 = 3199,3359,3397,3403,3415,3439,3471,3489,3494,3499,3511,3535,3553,3558,3563,3575,3647,3743,3791,3815
+inter empty empty 319 base 0 = 256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,292,294
+inter filled empty 255 after 1454 = -
+scenario 2
+reset 0 2707
+findemptyafter 0 110079 = 110079
+findfilledafter 0 782 = 18446744073709551615
+set 0 4863
+cover 0 829 = 2047
+cover 0 767 = 2047
+reset 0 52863
+reset 0 53119
+filledat 0 782 = 0
+findfilledafter 0 2127 = 4608
+set 0 12287
+emptyat 0 3503 = 1
+emptyat 0 1455 = 1
+reset 1 2031
+emptyat 1 1817 = 1
+filledat 1 3968 = 0
+set 1 1243
+set 1 1307
+findfilledafter 1 3513 = 18446744073709551615
+findfilledafter 1 131 = 1240
+reset 1 2095
+reset 1 2607
+findfilledafter 1 4013 = 18446744073709551615
+findemptyafter 1 51987 = 51987
+reset 0 3583
+emptyat 0 1265 = 1
+emptyat 0 2097151 = 0
+set 0 491
+filledat 0 1869 = 0
+filledat 0 9223372036854775807 = 0
+fillbefore 0 1865
+cover 0 343597383679 = 24575
+findemptyafter 0 3775 = 3712
+set 1 3221225471
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+findfilledafter 1 7679 = 2147483648
+resetbefore 1 255
+emptyat 1 767 = 1
+findemptyafter 1 8703 = 8192
+set 1 3519
+set 1 3647
+findfilledafter 1 4047 = 2147483648
+emptyat 1 49535 = 1
+reset 1 4607
+findemptyafter 1 3214 = 3214
+findfilledafter 1 2999 = 3456
+reset 1 3847
+emptyat 1 1167 = 1
+filledat 1 7903 = 0
+set 1 4607
+cover 1 2399 = 2559
+findemptyafter 1 109927 = 109920
+reset 0 84
+emptyat 0 6271 = 1
+findfilledafter 0 1799 = 1792
+resetbefore 0 4735
+findfilledafter 0 3199 = 4608
+cover 0 43980465111039 = 24575
+set 1 1487
+set 1 1743
+filledat 1 587 = 0
+filledat 1 1331 = 0
+resetbefore 0 3457
+resetbefore 0 3521
+filledat 0 711 = 0
+emptyat 0 3583 = 1
+reset 0 133
+reset 0 261
+filledat 0 3823 = 0
+emptyat 0 18446744073709551615 = 1
+reset 1 1039
+reset 1 1167
+findemptyafter 1 2175 = 2048
+cover 1 899 = 511
+reset 0 1792
+reset 0 1856
+cover 0 3083 = 2047
+findemptyafter 0 1797 = 1796
+reset 1 3105
+cover 1 1735 = 1743
+filledat 1 3647 = 1
+set 0 1535
+filledat 0 3567 = 0
+filledat 0 699 = 0
+findempty 0 = 511
+findfilled 0 = 1535
+findlastfilled 0 = 16382
+root 0 = 8191
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 16496242303420194528
+iter 0 filled 447 next 0 = -
+iter 0 filled 79 base 0 = -
+iter 0 empty 8191 after 417 = 417,421,427,439,479,767,3071,4351,5631,7167
+iter 0 filled 8191 baseafter 1230 = 1230,1232,1234,1236,1238,1240,1242,1244,1246,1248,1250,1252,1254,1256,1258,1260,1262,1264,1266,1268
+findempty 1 = 511
+findfilled 1 = 1243
+findlastfilled 1 = 4294967294
+root 1 = 2147483647
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 12343029953269685202
+iter 1 filled 383 next 0 = -
+iter 1 filled 4294967295 base 0 = 1240,1242,1244,1246,1304,1306,1308,1310,1472,1474,1476,1478,1480,1482,1484,1486,1488,1490,1492,1494
+iter 1 filled 47 after 1267 = -
+iter 1 filled 2147483647 baseafter 1376 = 1472,1474,1476,1478,1480,1482,1484,1486,1488,1490,1492,1494,1496,1498,1500,1502,1728,1730,1732,1734
+inter filled empty 2147483647 next 0 = 1087,1183,1223,1235,1263,1287,1299,1327,1375,1439,1519,1599,1695,1775,1919,12287
+inter filled empty 8191 next 0 = 1087,1183,1223,1235,1263,1287,1299,1327,1375,1439,1519,1599,1695,1775,1919,12287
+inter filled filled 159 base 0 = -
+inter empty filled 63 after 1530 = -
+scenario 3
+set 1 18446744073709551615
+findemptyafter 1 51 = 48
+cover 1 995 = 191
+reset 0 255
+findemptyafter 0 7935 = 7935
+emptyat 0 843 = 1
+set 0 2799
+emptyat 0 1559 = 1
+emptyat 0 9223372036854775807 = 0
+set 0 2121
+filledat 0 7615 = 0
+emptyat 0 3817 = 1
+set 0 526
+set 0 654
+findemptyafter 0 1065 = 1064
+emptyat 0 783 = 1
+set 1 1170
+set 1 1682
+emptyat 1 2887 = 1
+findfilledafter 1 1279 = 1170
+set 1 7615
+set 1 8127
+filledat 1 1344 = 0
+findfilledafter 1 1369 = 1682
+set 0 6271
+emptyat 0 87717 = 1
+cover 0 3564 = 3583
+reset 0 510
+cover 0 915 = 895
+findfilledafter 0 6463 = 18446744073709551615
+resetbefore 0 19583
+findfilledafter 0 3787 = 18446744073709551615
+cover 0 3451 = 9223372036854775807
+reset 1 1515
+reset 1 1771
+cover 1 3999 = 3071
+findfilledafter 1 5727 = 7552
+reset 0 2979
+filledat 0 1825 = 0
+findemptyafter 0 3967 = 3840
+reset 0 60927
+cover 0 3327 = 4095
+cover 0 402653183 = 24575
+fillbefore 0 7551
+cover 0 1375 = 2047
+findfilledafter 0 751 = 736
+fillbefore 0 76799
+emptyat 0 1967 = 0
+findemptyafter 0 640 = 75776
+set 1 3377
+cover 1 3623 = 3839
+findemptyafter 1 1327 = 1312
+reset 1 125511
+emptyat 1 1717 = 1
+findemptyafter 1 25151 = 25151
+set 1 3439
+cover 1 1535 = 18446744073709551615
+findemptyafter 1 3369 = 3368
+set 1 7775
+set 1 7839
+findemptyafter 1 7039 = 6912
+emptyat 1 34659 = 1
+set 1 18446744073709551615
+set 1 18446744073709551615
+filledat 1 651 = 0
+filledat 1 50559 = 0
+set 0 127
+set 0 383
+findfilledafter 0 2452 = 2452
+filledat 0 319 = 1
+fillbefore 1 2695
+findemptyafter 1 771 = 2688
+findfilledafter 1 1187 = 1184
+set 1 21990232555519
+cover 1 3355 = 3343
+emptyat 1 4577 = 1
+set 1 2868
+set 1 2932
+findemptyafter 1 2303 = 2688
+filledat 1 1367 = 1
+resetbefore 1 13194139533311
+filledat 1 6271 = 0
+emptyat 1 18446744073709551615 = 1
+findempty 0 = 76799
+findfilled 0 = 32767
+findlastfilled 0 = 75774
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 15874483702895224503
+iter 0 filled 159 next 0 = 159
+iter 0 empty 131071 base 0 = 75776,75778,75780,75782,75784,75786,75788,75790,75792,75794,75796,75798,75800,75802,75804,75806,75808,75810,75812,75814
+iter 0 filled 223 after 251 = 251
+iter 0 empty 65535 baseafter 422 = 75776,75778,75780,75782,75784,75786,75788,75790,75792,75794,75796,75798,75800,75802,75804,75806,75808,75810,75812,75814
+findempty 1 = 8796093022207
+findfilled 1 = 21990232555519
+findlastfilled 1 = 26388279066622
+root 1 = 17592186044415
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 4831647091398757211
+iter 1 filled 191 next 0 = -
+iter 1 filled 127 base 0 = -
+iter 1 filled 17592186044415 after 3891 = 3888,21990232555519
+iter 1 filled 17592186044415 baseafter 1726 = 17592186044416,17592186044418,17592186044420,17592186044422,17592186044424,17592186044426,17592186044428,17592186044430,17592186044432,17592186044434,17592186044436,17592186044438,17592186044440,17592186044442,17592186044444,17592186044446,17592186044448,17592186044450,17592186044452,17592186044454
+inter empty empty 47 next 0 = -
+inter filled empty 131071 next 0 = 32767,69631,74751
+inter filled filled 447 base 0 = -
+inter filled empty 63 after 1674 = -
+scenario 4
+set 1 8127
+set 1 8255
+findfilledafter 1 2535 = 8064
+cover 1 1375 = 2047
+set 1 135
+findfilledafter 1 6655 = 8064
+findfilledafter 1 111615 = 18446744073709551615
+resetbefore 1 2993
+emptyat 1 9223372036854775807 = 0
+cover 1 4223 = 5119
+set 1 2255
+set 1 2319
+cover 1 3991 = 3583
+findfilledafter 1 655 = 2240
+set 1 1839
+set 1 1903
+findfilledafter 1 1275 = 1824
+findemptyafter 1 93903 = 93903
+reset 0 2695
+cover 0 895 = 191
+findfilledafter 0 187 = 18446744073709551615
+reset 1 3399
+emptyat 1 39167 = 1
+findfilledafter 1 82687 = 18446744073709551615
+fillbefore 1 761
+findfilledafter 1 645 = 644
+findemptyafter 1 2123 = 2120
+resetbefore 0 393215
+findfilledafter 0 4194303 = 18446744073709551615
+filledat 0 40375 = 0
+reset 1 3148
+reset 1 3276
+filledat 1 5759 = 0
+emptyat 1 3603 = 1
+reset 1 1083
+cover 1 3863 = 3583
+findemptyafter 1 3093 = 3092
+reset 0 2707
+emptyat 0 3235 = 1
+filledat 0 4799 = 0
+resetbefore 0 42527
+resetbefore 0 42655
+cover 0 1535 = 65535
+findfilledafter 0 15359 = 18446744073709551615
+resetbefore 0 207
+resetbefore 0 271
+findemptyafter 0 1159 = 1152
+filledat 0 2975 = 0
+set 1 4607
+emptyat 1 2618 = 1
+cover 1 51199 = 24575
+fillbefore 1 1915
+cover 1 127487 = 24575
+emptyat 1 9223372036854775807 = 0
+reset 0 631
+reset 0 695
+emptyat 0 1925 = 1
+findfilledafter 0 70591 = 18446744073709551615
+set 0 7679
+emptyat 0 1559 = 1
+cover 0 18431 = 24575
+set 0 1967
+findemptyafter 0 431 = 416
+findemptyafter 0 10175 = 10112
+set 1 2481
+findemptyafter 1 2227 = 2224
+findfilledafter 1 2642 = 4096
+set 0 4671
+findfilledafter 0 3519 = 4608
+findemptyafter 0 3455 = 3328
+fillbefore 0 2239
+fillbefore 0 2751
+filledat 0 107145 = 0
+cover 0 129579 = 98303
+reset 1 7935
+findemptyafter 1 1519 = 1920
+emptyat 1 1333 = 0
+set 1 975
+set 1 1103
+findemptyafter 1 2510 = 2510
+findemptyafter 1 3074 = 3074
+reset 0 2639
+reset 0 2895
+cover 0 2178 = 2303
+findfilledafter 0 3210 = 4608
+findempty 0 = 2639
+findfilled 0 = 1023
+findlastfilled 0 = 8190
+root 0 = 131071
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 15976660664766911870
+iter 0 empty 262143 next 0 = 2639,2751,2943,3583,4351,4799,4991,5631,6655,12287,24575,49151,98303,196607,393215
+iter 0 empty 63 base 0 = -
+iter 0 empty 262143 after 1289 = 1288,2639,2751,2943,3583,4351,4799,4991,5631,6655,12287,24575,49151,98303,196607,393215
+iter 0 empty 191 baseafter 236 = -
+findempty 1 = 1983
+findfilled 1 = 511
+findlastfilled 1 = 8318
+root 1 = 8191
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 17013984913356853233
+iter 1 filled 8191 next 0 = 511,1279,1663,1855,2255,2319,2481,4607,8255
+iter 1 empty 319 base 0 = -
+iter 1 empty 16383 after 929 = 928,1983,2111,2207,2287,2351,2399,2447,2471,2485,2491,2527,2815,3583,5631,7167,8383,8575,8959,9727
+iter 1 filled 16383 baseafter 1410 = 1410,1412,1414,1416,1418,1420,1422,1424,1426,1428,1430,1432,1434,1436,1438,1440,1442,1444,1446,1448
+inter empty filled 131071 next 0 = 4351,4799,4991,8255
+inter filled empty 111 next 0 = -
+inter filled filled 8191 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter empty empty 8191 after 1540 = 2639,2751,2943,3583,5631,6655,8383,8575,8959,9727,11263,14335
+scenario 5
+reset 0 327
+reset 0 583
+findemptyafter 0 1955 = 1955
+findfilledafter 0 3402 = 18446744073709551615
+reset 1 5183
+reset 1 5311
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+cover 1 2131 = 191
+reset 0 86015
+findfilledafter 0 2735 = 18446744073709551615
+cover 0 2284 = 191
+set 1 1219
+set 1 1347
+cover 1 2903 = 3071
+findemptyafter 1 965 = 964
+set 0 2211
+set 0 2467
+findfilledafter 0 108031 = 18446744073709551615
+filledat 0 94207 = 0
+reset 1 2473
+emptyat 1 2607 = 1
+emptyat 1 671 = 1
+resetbefore 1 3232
+filledat 1 735 = 0
+filledat 1 4085 = 0
+fillbefore 0 2661
+findfilledafter 0 1395 = 1392
+findemptyafter 0 1263 = 2660
+set 0 2595
+set 0 3107
+findfilledafter 0 51563 = 18446744073709551615
+emptyat 0 3959 = 1
+set 1 3441
+set 1 3505
+findemptyafter 1 1695 = 1664
+emptyat 1 692 = 1
+set 1 3774
+cover 1 100911 = 6143
+findfilledafter 1 5375 = 18446744073709551615
+set 1 2778
+set 1 3290
+cover 1 57535 = 6143
+cover 1 735 = 1023
+set 1 2486
+findemptyafter 1 6271 = 6271
+findemptyafter 1 402653183 = 402653183
+set 1 19
+cover 1 3239 = 3231
+findfilledafter 1 1215 = 2486
+set 1 1663
+cover 1 7263 = 6143
+cover 1 3885 = 3967
+reset 0 2704
+reset 0 3216
+findfilledafter 0 71131 = 18446744073709551615
+filledat 0 3431 = 0
+set 0 1567
+cover 0 1175 = 1023
+emptyat 0 3784 = 1
+set 0 86015
+emptyat 0 2160 = 0
+filledat 0 2063 = 1
+set 1 1031
+filledat 1 969 = 0
+cover 1 979 = 767
+reset 0 3903
+filledat 0 3488 = 0
+findemptyafter 0 2071 = 2660
+set 1 207
+emptyat 1 127294 = 1
+emptyat 1 1981 = 1
+set 1 1727
+set 1 1983
+findfilledafter 1 102719 = 18446744073709551615
+findemptyafter 1 3463 = 3456
+fillbefore 0 4351
+findfilledafter 0 58495 = 81920
+findfilledafter 0 3286 = 3286
+reset 1 7935
+emptyat 1 3784 = 1
+cover 1 9223372036854775807 = 18446744073709551615
+fillbefore 1 1547
+fillbefore 1 1803
+filledat 1 2175 = 0
+findfilledafter 1 2121 = 2486
+findempty 0 = 6143
+findfilled 0 = 2047
+findlastfilled 0 = 90110
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 4927850038020470886
+iter 0 filled 131071 next 0 = 2047,86015
+iter 0 empty 131071 base 0 = 4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118,4120,4122,4124,4126,4128,4130,4132,4134
+iter 0 empty 131071 after 1705 = 1704,6143,12287,24575,49151,73727,94207,114687,196607
+iter 0 empty 15 baseafter 1120 = -
+findempty 1 = 1803
+findfilled 1 = 511
+findlastfilled 1 = 3774
+root 1 = 2047
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 17749334893520773754
+iter 1 filled 2047 next 0 = 511,1279,1663,1795,1983,2486,2778,3290,3441,3505,3774
+iter 1 filled 2047 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 2047 after 754 = 754,757,763,895,1279,1663,1795,1983,2486,2778,3290,3441,3505,3774
+iter 1 filled 95 baseafter 470 = -
+inter filled empty 111 next 0 = -
+inter filled empty 4095 next 0 = 1803,1815,1839,1887,2175,2367,2447,2471,2481,2484,2491,2527,2623,2719,2759,2771,2776,2781,2799,2943
+inter empty empty 131071 base 0 = 4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118,4120,4122,4124,4126,4128,4130,4132,4134
+inter filled filled 2047 after 22 = 22,27,47,95,191,383,767,1279,1663,1795,1983,2486,2778,3290,3441,3505,3774
+scenario 6
+set 0 987
+cover 0 58879 = 1535
+findemptyafter 0 109495 = 109495
+set 0 3327
+cover 0 85899345919 = 6143
+emptyat 0 73013 = 1
+set 1 3529
+set 1 3657
+findemptyafter 1 1374389534719 = 1374389534719
+findfilledafter 1 7103 = 18446744073709551615
+set 0 1239
+cover 0 2675 = 2559
+findemptyafter 0 3723 = 3720
+reset 1 4023
+filledat 1 1984 = 0
+emptyat 1 3095 = 1
+reset 1 1943
+findemptyafter 1 1279 = 1024
+cover 1 128295 = 6143
+reset 1 122159
+emptyat 1 1050 = 1
+findemptyafter 1 3203 = 3200
+set 0 2779
+cover 0 511 = 18446744073709551615
+cover 0 3887 = 3839
+reset 1 4607
+findfilledafter 1 123341 = 18446744073709551615
+findemptyafter 1 6847 = 6847
+fillbefore 1 431
+findfilledafter 1 3647 = 3656
+findfilledafter 1 994 = 3528
+reset 1 2367
+findfilledafter 1 7231 = 18446744073709551615
+emptyat 1 3471 = 1
+set 0 231
+set 0 487
+findfilledafter 0 3915 = 18446744073709551615
+findemptyafter 0 61439 = 61439
+reset 0 351
+filledat 0 895 = 0
+filledat 0 719 = 0
+set 0 2967
+cover 0 2139 = 2303
+findemptyafter 0 23 = 16
+resetbefore 0 6719
+resetbefore 0 6847
+cover 0 876 = 9223372036854775807
+findemptyafter 0 274877906943 = 9223372036854775807
+resetbefore 1 2524
+resetbefore 1 2588
+findemptyafter 1 3483 = 3480
+filledat 1 1295 = 0
+set 0 107519
+findfilledafter 0 7423 = 106496
+findfilledafter 0 7103 = 106496
+reset 1 1895
+reset 1 1959
+filledat 1 454 = 0
+filledat 1 3259 = 0
+set 0 3457
+set 0 3521
+filledat 0 383 = 0
+findemptyafter 0 1753 = 1752
+reset 1 2639
+reset 1 2895
+emptyat 1 415 = 1
+cover 1 4069 = 3967
+fillbefore 0 117974
+fillbefore 0 118486
+filledat 0 7807 = 1
+findemptyafter 0 427 = 118486
+resetbefore 0 2943
+cover 0 1471 = 1023
+cover 0 3199 = 3583
+set 0 2303
+filledat 0 5183 = 1
+emptyat 0 98751 = 0
+reset 0 3249
+filledat 0 2719 = 0
+findfilledafter 0 3695 = 3680
+reset 0 1535
+emptyat 0 536870911 = 0
+filledat 0 1581 = 0
+findempty 0 = 1023
+findfilled 0 = 2303
+findlastfilled 0 = 118484
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 14950287736088148237
+iter 0 filled 223 next 0 = -
+iter 0 empty 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 65535 after 916 = 2303,2943,3135,3215,3239,3253,3259,3295,3455,3839,6143,12287,24575,49151,81919,106495,115711,117247,118015,118335
+iter 0 filled 131071 baseafter 828 = 2048,2050,2052,2054,2056,2058,2060,2062,2064,2066,2068,2070,2072,2074,2076,2078,2080,2082,2084,2086
+findempty 1 = 1023
+findfilled 1 = 3529
+findlastfilled 1 = 3658
+root 1 = 2047
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 14911936778372182934
+iter 1 filled 159 next 0 = -
+iter 1 empty 383 base 0 = 256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,292,294
+iter 1 empty 4095 after 1265 = 1265,1269,1275,1407,1791,2559,3199,3391,3487,3523,3533,3543,3567,3615,3651,3661,3671,3695,3775,3967
+iter 1 empty 2047 baseafter 784 = 784,786,788,790,792,794,796,798,800,802,804,806,808,810,812,814,816,818,820,822
+inter empty filled 131071 next 0 = -
+inter filled filled 4095 next 0 = 3529,3657
+inter filled empty 2047 base 0 = 2048,2050,2052,2054,2056,2058,2060,2062,2064,2066,2068,2070,2072,2074,2076,2078,2080,2082,2084,2086
+inter filled empty 65535 after 1164 = 2303,2943,3135,3215,3239,3253,3259,3295,3391,3487,3523,3533,3543,3567,3615,3651,3661,3671,3695,3775
+scenario 7
+reset 0 3025
+filledat 0 45951 = 0
+filledat 0 5119 = 0
+set 1 2555
+set 1 2811
+findemptyafter 1 3167 = 3136
+findemptyafter 1 3097 = 3096
+set 0 3535
+set 0 3599
+findemptyafter 0 2700 = 2700
+findemptyafter 0 511 = 0
+set 0 1582
+findemptyafter 0 1401 = 1400
+filledat 0 2543 = 0
+set 0 815
+set 0 879
+findemptyafter 0 4 = 4
+emptyat 0 7295 = 1
+set 1 1205
+set 1 1717
+cover 1 2959 = 2943
+filledat 1 7487 = 0
+reset 0 1059
+emptyat 0 767 = 0
+emptyat 0 6783 = 1
+set 0 1843
+findfilledafter 0 1535 = 1582
+filledat 0 8063 = 0
+reset 0 2813
+findfilledafter 0 1571 = 1582
+emptyat 0 1991 = 1
+set 1 2637
+set 1 2893
+findfilledafter 1 2535 = 2552
+cover 1 3828 = 3583
+resetbefore 0 634
+findemptyafter 0 1335 = 1328
+filledat 0 1829 = 0
+reset 1 5567
+cover 1 1579 = 1599
+findemptyafter 1 3583 = 3072
+set 0 2559
+cover 0 8319 = 6143
+findemptyafter 0 4015 = 4000
+set 1 117439
+set 1 117951
+findfilledafter 1 1835 = 2552
+findfilledafter 1 85119 = 117376
+fillbefore 1 2685
+findfilledafter 1 2287 = 2272
+findemptyafter 1 2607 = 2684
+set 1 151
+emptyat 1 1436 = 0
+cover 1 3327 = 3583
+reset 1 2645
+findemptyafter 1 3723 = 3720
+findfilledafter 1 3663 = 117376
+set 1 5375
+cover 1 1740 = 1023
+findfilledafter 1 239 = 224
+resetbefore 0 1703
+resetbefore 0 1831
+findfilledafter 0 1839 = 1840
+findfilledafter 0 1023 = 1840
+set 0 81919
+cover 0 1067 = 1279
+emptyat 0 3583 = 0
+set 0 1374389534719
+emptyat 0 2637 = 0
+cover 0 3742 = 3775
+resetbefore 0 6655
+emptyat 0 4223 = 1
+filledat 0 9223372036854775807 = 0
+fillbefore 1 951
+fillbefore 1 1015
+filledat 1 3439 = 0
+findemptyafter 1 3857 = 3856
+resetbefore 0 21
+resetbefore 0 85
+findemptyafter 0 3759 = 3744
+findfilledafter 0 1887 = 65536
+reset 0 3087
+reset 0 3215
+emptyat 0 3519 = 1
+findfilledafter 0 2636 = 65536
+findempty 0 = 32767
+findfilled 0 = 81919
+findlastfilled 0 = 1649267441662
+root 0 = 1099511627775
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 11545911028530795002
+iter 0 empty 255 next 0 = 255
+iter 0 empty 1099511627775 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 111 after 1481 = -
+iter 0 empty 2199023255551 baseafter 1644 = 1644,1646,1648,1650,1652,1654,1656,1658,1660,1662,1664,1666,1668,1670,1672,1674,1676,1678,1680,1682
+findempty 1 = 2645
+findfilled 1 = 1023
+findlastfilled 1 = 118014
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 17155699249680855925
+iter 1 empty 65535 next 0 = 2645,2685,2719,2767,2791,2803,2847,2883,2889,2903,2927,3007,3583,4607,5887,7167,12287,24575,49151,81919
+iter 1 empty 383 base 0 = -
+iter 1 filled 131071 after 434 = 434,437,443,479,767,1535,2303,2591,2631,2641,2651,2663,2675,2681,2811,2893,5375,117439,117951
+iter 1 empty 65535 baseafter 512 = 2644,2646,2684,2686,2688,2690,2692,2694,2696,2698,2700,2702,2704,2706,2708,2710,2712,2714,2716,2718
+inter filled filled 131071 next 0 = -
+inter empty empty 2199023255551 next 0 = 2645,2685,2719,2767,2791,2803,2847,2883,2889,2903,2927,3007,3583,4607,5887,7167,12287,24575,49151,106495
+inter filled empty 47 base 0 = -
+inter empty filled 131071 after 948 = 949,955,991,1535,2303,2591,2631,2641,2651,2663,2675,2681,2811,2893,5375,117439,117951
+scenario 8
+fillbefore 0 2685
+findfilledafter 0 3107 = 18446744073709551615
+cover 0 2559 = 18446744073709551615
+set 0 2479
+cover 0 18446744073709551615 = 6143
+findemptyafter 0 5631 = 5631
+set 0 368
+filledat 0 2861 = 0
+findfilledafter 0 2751 = 18446744073709551615
+resetbefore 1 423
+resetbefore 1 551
+cover 1 1658 = 767
+findemptyafter 1 7423 = 7423
+resetbefore 0 1997
+resetbefore 0 2125
+findfilledafter 0 3492 = 18446744073709551615
+cover 0 18446744073709551615 = 6143
+resetbefore 1 1391
+filledat 1 9223372036854775807 = 0
+filledat 1 2607 = 0
+resetbefore 1 1479
+resetbefore 1 1543
+emptyat 1 3761 = 1
+findfilledafter 1 3707 = 18446744073709551615
+set 1 2044
+set 1 2300
+findemptyafter 1 2127 = 2112
+findfilledafter 1 2643 = 18446744073709551615
+set 0 123127
+findfilledafter 0 2380 = 2380
+cover 0 847 = 1023
+resetbefore 1 36735
+findemptyafter 1 1809 = 1808
+emptyat 1 1391 = 1
+reset 1 3407
+findemptyafter 1 5055 = 4992
+findemptyafter 1 37887 = 37887
+set 1 2703
+set 1 2959
+emptyat 1 823 = 1
+filledat 1 2399 = 0
+set 1 2095
+emptyat 1 3327 = 1
+filledat 1 3471 = 0
+set 1 1615
+set 1 1679
+findfilledafter 1 3410 = 18446744073709551615
+filledat 1 3327 = 0
+resetbefore 1 2404
+emptyat 1 121343 = 1
+filledat 1 3995 = 0
+reset 0 112
+reset 0 368
+filledat 0 143 = 0
+emptyat 0 12287 = 1
+set 1 2496
+set 1 2752
+cover 1 2361 = 2367
+findemptyafter 1 1700 = 1700
+resetbefore 1 1695
+resetbefore 1 1759
+filledat 1 7391 = 0
+cover 1 3727 = 3583
+set 0 1793
+set 0 1857
+filledat 0 1687 = 0
+findfilledafter 0 3075 = 123120
+reset 0 3015
+reset 0 3079
+filledat 0 4398046511103 = 0
+findemptyafter 0 3196 = 3196
+reset 0 4559
+reset 0 4687
+findemptyafter 0 1547 = 1544
+findfilledafter 0 1905 = 2124
+set 0 699
+set 0 763
+emptyat 0 555 = 1
+findfilledafter 0 1649 = 1792
+resetbefore 0 1447
+filledat 0 2337 = 1
+emptyat 0 2063 = 1
+resetbefore 1 104447
+cover 1 3419 = 9223372036854775807
+cover 1 33039 = 9223372036854775807
+reset 0 127
+findfilledafter 0 3619 = 123120
+findemptyafter 0 1496 = 1496
+findempty 0 = 511
+findfilled 0 = 1793
+findlastfilled 0 = 123134
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 7269160926798928374
+iter 0 empty 131071 next 0 = 511,1279,1663,1797,1803,1815,1839,1861,1867,1879,1903,1983,2079,2115,2121,2685,2751,2943,3583,6143
+iter 0 empty 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 65535 after 3219 = 3216,123127
+iter 0 empty 191 baseafter 356 = -
+findempty 1 = 9223372036854775807
+findfilled 1 = 18446744073709551615
+findlastfilled 1 = 18446744073709551615
+root 1 = 32767
+empty 1 = 1
+filled 1 = 0
+dumphash 1 = 14947451967552795283
+iter 1 empty 319 next 0 = 319
+iter 1 empty 447 base 0 = 384,386,388,390,392,394,396,398,400,402,404,406,408,410,412,414,416,418,420,422
+iter 1 empty 32767 after 3315 = 3315,3323,3455,3839,6143,12287,24575,49151
+iter 1 empty 47 baseafter 652 = -
+inter filled empty 131071 next 0 = 1793,1857,2125,2135,2159,2239,2431,2591,2639,2663,2675,2681,123127
+inter empty filled 95 next 0 = -
+inter empty filled 32767 base 0 = -
+inter filled filled 131071 after 1794 = -
+scenario 9
+set 1 1053
+filledat 1 2913 = 0
+filledat 1 2835 = 0
+reset 1 7711
+reset 1 7967
+findfilledafter 1 3133 = 18446744073709551615
+findfilledafter 1 6175 = 18446744073709551615
+resetbefore 1 2251
+cover 1 98751 = 3071
+cover 1 3711 = 3071
+reset 0 1227
+reset 0 1483
+cover 0 1265 = 191
+findfilledafter 0 2199023255551 = 18446744073709551615
+set 0 29
+emptyat 0 82431 = 1
+cover 0 9223372036854775807 = 18446744073709551615
+reset 1 1495
+cover 1 5887 = 3071
+findfilledafter 1 8223 = 18446744073709551615
+set 1 335
+filledat 1 6399 = 0
+findfilledafter 1 6335 = 18446744073709551615
+reset 1 5663
+findemptyafter 1 1163 = 1160
+findemptyafter 1 124567 = 124567
+set 0 2111
+set 0 2623
+emptyat 0 2487 = 1
+findfilledafter 0 1535 = 2048
+set 1 509
+filledat 1 1257 = 0
+filledat 1 511 = 0
+fillbefore 0 1313
+cover 0 1151 = 1151
+cover 0 691 = 511
+set 1 116877
+set 1 116941
+cover 1 107263 = 106495
+cover 1 3087 = 3071
+fillbefore 1 87103
+emptyat 1 3583 = 0
+findfilledafter 1 2135 = 2128
+set 0 2408
+filledat 0 1551 = 0
+emptyat 0 1735 = 1
+fillbefore 0 118783
+findfilledafter 0 1089 = 1088
+filledat 0 3519 = 1
+reset 1 933
+findfilledafter 1 27019 = 27016
+filledat 1 6655 = 1
+set 1 1215
+filledat 1 43043 = 1
+cover 1 420 = 255
+set 0 412316860415
+filledat 0 6847 = 1
+findfilledafter 0 4735 = 4608
+fillbefore 1 897
+fillbefore 1 1409
+filledat 1 42303 = 1
+cover 1 182 = 32767
+resetbefore 1 387
+resetbefore 1 899
+filledat 1 3407 = 1
+emptyat 1 7711 = 0
+reset 1 8095
+findemptyafter 1 3823 = 8064
+findfilledafter 1 3668 = 3668
+set 0 66319
+findfilledafter 0 255 = 0
+findemptyafter 0 511 = 114688
+resetbefore 0 3436
+resetbefore 0 3692
+findfilledafter 0 49151 = 32768
+emptyat 0 1311 = 1
+reset 0 2711
+reset 0 2839
+cover 0 2111 = 2559
+findfilledafter 0 7967 = 7936
+set 1 1892
+filledat 1 6047 = 1
+filledat 1 4863 = 1
+findempty 0 = 1023
+findfilled 0 = 3693
+findlastfilled 0 = 549755813886
+root 0 = 274877906943
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 6237264619433122695
+iter 0 filled 549755813887 next 0 = 3693,3703,3775,3967,6143,12287,24575,49151,81919,106495,412316860415
+iter 0 empty 274877906943 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 274877906943 after 310 = 3693,3703,3775,3967,6143,12287,24575,49151,81919,106495,412316860415
+iter 0 empty 274877906943 baseafter 356 = 356,358,360,362,364,366,368,370,372,374,376,378,380,382,384,386,388,390,392,394
+findempty 1 = 255
+findfilled 1 = 959
+findlastfilled 1 = 116942
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 16671321780538256799
+iter 1 empty 65535 next 0 = 255,639,831,8095,87551,89087,94207,106495,115711,116799,116867,116873,116887,116911,116931,116937,116951,116975,117119,117503
+iter 1 filled 131071 base 0 = 896,898,900,902,904,906,908,910,912,914,916,918,920,922,924,926,928,930,932,934
+iter 1 empty 447 after 2851 = -
+iter 1 filled 131071 baseafter 1364 = 1364,1366,1368,1370,1372,1374,1376,1378,1380,1382,1384,1386,1388,1390,1392,1394,1396,1398,1400,1402
+inter filled filled 274877906943 next 0 = 3693,3703,3775,3967,5119,6655,7423,7807,7999,8159,12287,24575,49151,73727,83967,86527
+inter empty filled 111 next 0 = -
+inter filled filled 65535 base 0 = 3692,3694,3696,3698,3700,3702,3704,3706,3708,3710,3712,3714,3716,3718,3720,3722,3724,3726,3728,3730
+inter empty empty 65535 after 496 = 503,639,831,115711,116799,116867,116873,116887,116911,116931,116937,116951,116975,117119,117503,118271,120831,126975
+scenario 10
+reset 1 18446744073709551615
+reset 1 18446744073709551615
+filledat 1 37887 = 0
+cover 1 4415 = 191
+reset 1 4351
+cover 1 1163 = 191
+emptyat 1 125 = 1
+resetbefore 0 87551
+filledat 0 398 = 0
+findfilledafter 0 5503 = 18446744073709551615
+reset 0 1621
+reset 0 2133
+findfilledafter 0 99327 = 18446744073709551615
+emptyat 0 128503 = 1
+reset 0 3633
+emptyat 0 1719 = 1
+emptyat 0 114175 = 1
+set 1 3335
+set 1 3463
+emptyat 1 2999 = 1
+cover 1 1903 = 1023
+fillbefore 0 4294967295
+cover 0 833 = 9223372036854775807
+findfilledafter 0 231 = 18446744073709551615
+set 1 1819
+filledat 1 33799 = 0
+filledat 1 2719 = 0
+set 0 435
+filledat 0 9223372036854775807 = 0
+findfilledafter 0 3063 = 18446744073709551615
+set 0 2887
+findfilledafter 0 3883 = 18446744073709551615
+findfilledafter 0 1184 = 2880
+reset 0 3711
+findemptyafter 0 1591 = 1584
+emptyat 0 2359 = 1
+fillbefore 0 2095
+filledat 0 2063 = 1
+filledat 0 3805 = 0
+resetbefore 1 1423
+resetbefore 1 1679
+findemptyafter 1 3295 = 3264
+findemptyafter 1 3255 = 3248
+reset 1 2935
+reset 1 3447
+emptyat 1 1503 = 1
+cover 1 135167 = 6143
+set 0 3438
+filledat 0 7903 = 0
+findemptyafter 0 3125 = 3124
+set 1 6399
+cover 1 3095 = 3199
+emptyat 1 116735 = 1
+set 1 1167
+set 1 1423
+findfilledafter 1 3213 = 3328
+filledat 1 402653183 = 0
+fillbefore 1 1416
+cover 1 1295 = 1343
+findemptyafter 1 1339 = 1440
+set 1 2515
+filledat 1 455 = 1
+findfilledafter 1 711 = 704
+set 0 3735
+emptyat 0 18446744073709551615 = 1
+filledat 0 495 = 1
+reset 1 3389
+reset 1 3453
+findemptyafter 1 2075 = 2072
+findfilledafter 1 3910 = 6144
+fillbefore 1 909
+filledat 1 135167 = 0
+filledat 1 720 = 1
+reset 0 2503
+cover 0 28671 = 24575
+emptyat 0 9223372036854775807 = 0
+set 1 1741
+filledat 1 7935 = 0
+filledat 1 9223372036854775807 = 0
+set 1 8742
+filledat 1 5 = 1
+findfilledafter 1 3352 = 3456
+findempty 0 = 2095
+findfilled 0 = 1023
+findlastfilled 0 = 3742
+root 0 = 32767
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 6555996431711594023
+iter 0 empty 223 next 0 = -
+iter 0 filled 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 1279 after 861 = -
+iter 0 filled 255 baseafter 370 = 370,372,374,376,378,380,382,384,386,388,390,392,394,396,398,400,402,404,406,408
+findempty 1 = 1455
+findfilled 1 = 511
+findlastfilled 1 = 8742
+root 1 = 8191
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 5619552034036483882
+iter 1 filled 47 next 0 = 47
+iter 1 filled 1791 base 0 = 1740,1742,1816,1818,1820,1822
+iter 1 filled 16383 after 1629 = 1628,1741,1819,2515,3335,3463,6399,8742
+iter 1 empty 16383 baseafter 94 = 1440,1442,1444,1446,1448,1450,1452,1454,1456,1458,1460,1462,1464,1466,1468,1470,1472,1474,1476,1478
+inter empty empty 65535 next 0 = 2095,2143,2239,2367,2463,2503,2523,2543,2687,2847,2903,2927,3007,3199,3351,3375,3407,3427,3433,3436
+inter filled filled 65535 next 0 = 511,1151,1343,1423,1741,1819
+inter empty empty 65535 base 0 = 2080,2082,2084,2086,2088,2090,2092,2094,2096,2098,2100,2102,2104,2106,2108,2110,2112,2114,2116,2118
+inter empty empty 16383 after 1988 = 2095,2143,2239,2367,2463,2503,2523,2543,2687,2847,2903,2927,3007,3199,3351,3375,3407,3427,3433,3436
+scenario 11
+resetbefore 1 55
+filledat 1 3415 = 0
+findfilledafter 1 334 = 18446744073709551615
+reset 1 2889
+findfilledafter 1 745 = 18446744073709551615
+findfilledafter 1 9223372036854775807 = 18446744073709551615
+resetbefore 1 431
+resetbefore 1 943
+findemptyafter 1 4159 = 4159
+findfilledafter 1 612 = 18446744073709551615
+resetbefore 0 6655
+emptyat 0 327 = 1
+emptyat 0 3015 = 1
+set 0 59903
+filledat 0 11191 = 0
+filledat 0 3145727 = 0
+reset 0 687
+reset 0 1199
+filledat 0 809 = 0
+emptyat 0 442 = 1
+set 1 81919
+filledat 1 1769 = 0
+findemptyafter 1 669 = 668
+set 0 3419
+emptyat 0 421 = 1
+cover 0 1199 = 1023
+reset 1 251
+cover 1 2153 = 32767
+filledat 1 85899345919 = 0
+fillbefore 0 4479
+emptyat 0 75 = 0
+filledat 0 126203 = 0
+set 0 2863
+findemptyafter 0 2815 = 4352
+emptyat 0 2163 = 0
+set 1 359
+cover 1 559 = 767
+findfilledafter 1 3583 = 65536
+set 0 2856
+findemptyafter 0 8319 = 8192
+filledat 0 2931 = 1
+set 0 3861
+set 0 4373
+filledat 0 3023 = 1
+cover 0 25769803775 = 98303
+set 1 8095
+set 1 8351
+filledat 1 271 = 0
+findemptyafter 1 2280 = 2280
+reset 0 7935
+emptyat 0 239 = 0
+findemptyafter 0 423 = 4352
+set 1 1991
+filledat 1 2760 = 0
+findfilledafter 1 1755 = 1984
+set 1 1376
+set 1 1440
+findfilledafter 1 767 = 1376
+findfilledafter 1 3151 = 8064
+reset 0 122367
+cover 0 20415 = 24575
+emptyat 0 8063 = 1
+set 1 335544319
+findfilledafter 1 3859 = 8064
+filledat 1 48639 = 0
+reset 1 3337
+reset 1 3593
+findfilledafter 1 95 = 352
+findfilledafter 1 3567 = 8064
+reset 0 4002
+filledat 0 24063 = 0
+emptyat 0 3199 = 0
+set 0 79663
+findemptyafter 0 807 = 4002
+filledat 0 3601 = 1
+set 1 77823
+cover 1 2263 = 3071
+filledat 1 1903 = 0
+set 0 8703
+findfilledafter 0 4543 = 8192
+findemptyafter 0 2843 = 4002
+findempty 0 = 4002
+findfilled 0 = 1023
+findlastfilled 0 = 79678
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 17857999078378853743
+iter 0 empty 65535 next 0 = 4002,4359,4369,4379,4399,4447,4543,4863,5631,7167,9727,11263,14335,24575,40959,53247,58367,60927,63487,69631
+iter 0 filled 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 131071 after 816 = 4002,4359,4369,4379,4399,4447,4543,4863,5631,7167,9727,11263,14335,24575,40959,53247,58367,60927,63487,69631
+iter 0 empty 131071 baseafter 1018 = 4002,4352,4354,4356,4358,4360,4362,4364,4366,4368,4370,4376,4378,4380,4382,4384,4386,4388,4390,4392
+findempty 1 = 127
+findfilled 1 = 359
+findlastfilled 1 = 402653182
+root 1 = 268435455
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 17763531067459795348
+iter 1 filled 268435455 next 0 = 359,1376,1440,1991,8095,8351,81919,335544319
+iter 1 empty 268435455 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 536870911 after 60 = 359,1376,1440,1991,8095,8351,81919,335544319
+iter 1 empty 536870911 baseafter 2028 = 2028,2030,2032,2034,2036,2038,2040,2042,2044,2046,2048,2050,2052,2054,2056,2058,2060,2062,2064,2066
+inter empty filled 268435455 next 0 = 8095,69631,75775,78335,79103,79487,79631,79711,79807,80895,90111,335544319
+inter filled filled 268435455 next 0 = 359,1376,1440,1991,8351,79663
+inter empty empty 131071 base 0 = 4002,4352,4354,4356,4358,4360,4362,4364,4366,4368,4370,4376,4378,4380,4382,4384,4386,4388,4390,4392
+inter filled filled 268435455 after 1772 = 1991,8351,79663
+scenario 12
+set 1 103
+filledat 1 55027 = 0
+findfilledafter 1 249 = 18446744073709551615
+set 0 127
+cover 0 57351 = 383
+findfilledafter 0 3679 = 18446744073709551615
+set 1 2587
+findfilledafter 1 71 = 96
+cover 1 93639 = 6143
+fillbefore 0 3831
+findemptyafter 0 1536 = 3824
+cover 0 9223372036854775807 = 18446744073709551615
+set 1 3007
+findfilledafter 1 1255 = 2584
+findemptyafter 1 3300 = 3300
+set 1 18446744073709551615
+findemptyafter 1 3999 = 3968
+cover 1 1186 = 1535
+resetbefore 1 17583
+resetbefore 1 17711
+filledat 1 3391 = 0
+findemptyafter 1 1105 = 1104
+set 0 8703
+findfilledafter 0 30463 = 18446744073709551615
+emptyat 0 1679 = 0
+reset 1 773
+findfilledafter 1 1215 = 18446744073709551615
+cover 1 7807 = 4095
+reset 1 2207
+reset 1 2719
+filledat 1 1535 = 0
+findfilledafter 1 431 = 18446744073709551615
+set 1 55
+cover 1 1343 = 1535
+filledat 1 2559 = 0
+set 0 2319
+set 0 2575
+emptyat 0 1734 = 0
+findemptyafter 0 2159 = 3824
+resetbefore 0 1729
+emptyat 0 2319 = 0
+filledat 0 69631 = 0
+fillbefore 1 8063
+findfilledafter 1 767 = 512
+filledat 1 89807 = 0
+reset 1 1359
+reset 1 1423
+emptyat 1 9223372036854775807 = 0
+findfilledafter 1 457 = 456
+set 0 1411
+set 0 1923
+cover 0 895 = 511
+findemptyafter 0 6303 = 6272
+set 1 1977
+set 1 2041
+cover 1 1279 = 18446744073709551615
+findemptyafter 1 4052 = 7936
+set 1 117247
+filledat 1 2111 = 1
+findemptyafter 1 6207 = 7936
+set 0 17592186044415
+findemptyafter 0 1563 = 35184372088832
+findfilledafter 0 2337 = 2336
+set 0 18446744073709551615
+set 0 18446744073709551615
+filledat 0 175921860444159 = 0
+cover 0 2275 = 9223372036854775807
+set 1 6911
+set 1 7423
+filledat 1 4991 = 1
+findfilledafter 1 2231 = 2224
+reset 1 4001
+cover 1 4991 = 5119
+findfilledafter 1 2112 = 2112
+set 1 2813
+findemptyafter 1 1985 = 4000
+findemptyafter 1 2815 = 4000
+reset 0 1477
+reset 0 1989
+findemptyafter 0 18446744073709551615 = 18446744073709551615
+cover 0 2575 = 3071
+set 1 343597383679
+findemptyafter 1 7103 = 7936
+emptyat 1 19847 = 1
+findempty 0 = 1477
+findfilled 0 = 511
+findlastfilled 0 = 35184372088830
+root 0 = 17592186044415
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 15639177357819582376
+iter 0 empty 639 next 0 = -
+iter 0 empty 35184372088831 base 0 = 1476,1478,1988,1990,35184372088832,35184372088834,35184372088836,35184372088838,35184372088840,35184372088842,35184372088844,35184372088846,35184372088848,35184372088850,35184372088852,35184372088854,35184372088856,35184372088858,35184372088860,35184372088862
+iter 0 empty 35184372088831 after 219 = 216,1477,1989,52776558133247
+iter 0 filled 159 baseafter 406 = -
+findempty 1 = 1359
+findfilled 1 = 511
+findlastfilled 1 = 412316860414
+root 1 = 274877906943
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 12751709875155480217
+iter 1 empty 639 next 0 = -
+iter 1 filled 895 base 0 = 768,770,772,774,776,778,780,782,784,786,788,790,792,794,796,798,800,802,804,806
+iter 1 empty 549755813887 after 980 = 1359,1423,4001,8063,12287,24575,49151,81919,106495,115711,118271,120831,126975,196607,393215,786431,1572863,3145727,6291455,12582911
+iter 1 filled 255 baseafter 274 = 274,276,278,280,282,284,286,288,290,292,294,296,298,300,302,304,306,308,310,312
+inter filled empty 31 next 0 = -
+inter empty empty 274877906943 next 0 = -
+inter empty filled 159 base 0 = -
+inter empty filled 35184372088831 after 1724 = 1989
+scenario 13
+reset 0 94911
+reset 0 95167
+cover 0 67839 = 191
+findfilledafter 0 1615 = 18446744073709551615
+set 0 18446744073709551615
+emptyat 0 2223 = 1
+findfilledafter 0 1455 = 18446744073709551615
+set 0 2473
+set 0 2537
+findfilledafter 0 121647 = 18446744073709551615
+cover 0 1937 = 1023
+reset 1 1535
+findfilledafter 1 3663 = 18446744073709551615
+findemptyafter 1 1626 = 1626
+set 1 6335
+set 1 6847
+findfilledafter 1 3799 = 6272
+cover 1 215 = 2047
+set 1 20319
+set 1 20575
+cover 1 1771 = 2047
+filledat 1 52972 = 0
+fillbefore 1 6399
+findfilledafter 1 6655 = 6272
+cover 1 3179 = 2047
+set 0 2479
+findfilledafter 0 1247 = 2464
+cover 0 1130 = 1023
+reset 0 7615
+reset 0 8127
+findfilledafter 0 4831 = 18446744073709551615
+cover 0 2343 = 2367
+resetbefore 1 40847
+emptyat 1 35184372088831 = 1
+findemptyafter 1 3027 = 3024
+resetbefore 1 3599
+resetbefore 1 3663
+findemptyafter 1 3375 = 3360
+findfilledafter 1 533 = 18446744073709551615
+set 1 8703
+findemptyafter 1 1431 = 1424
+cover 1 1499 = 4095
+resetbefore 1 1919
+emptyat 1 943 = 1
+filledat 1 771 = 0
+resetbefore 1 3907
+resetbefore 1 4419
+emptyat 1 107885 = 1
+emptyat 1 18446744073709551615 = 1
+set 1 1793
+findemptyafter 1 1715 = 1712
+emptyat 1 2043 = 1
+reset 0 22527
+filledat 0 1447 = 0
+findfilledafter 0 36223 = 18446744073709551615
+set 1 64511
+findfilledafter 1 459 = 1792
+findemptyafter 1 399 = 384
+set 1 100735
+filledat 1 2191 = 0
+cover 1 263 = 511
+set 0 5759
+set 0 6015
+cover 0 2795 = 2815
+findemptyafter 0 917 = 916
+reset 0 65535
+findemptyafter 0 2967 = 2960
+emptyat 0 1855 = 1
+reset 0 130303
+cover 0 2111 = 32767
+findemptyafter 0 1583 = 1568
+reset 0 2799
+emptyat 0 71807 = 1
+emptyat 0 2280 = 1
+set 0 2329
+set 0 2457
+cover 0 1970 = 1023
+emptyat 0 3283 = 1
+set 0 1117
+findfilledafter 0 10737418239 = 18446744073709551615
+filledat 0 127855 = 0
+reset 1 591
+filledat 1 2415 = 0
+findemptyafter 1 1815 = 1808
+findempty 0 = 511
+findfilled 0 = 1117
+findlastfilled 0 = 2458
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 17398484367020670282
+iter 0 empty 383 next 0 = 383
+iter 0 empty 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 131071 after 3475 = 3475,3483,3503,3551,3839,6143,12287,24575,49151,98303,196607
+iter 0 empty 127 baseafter 198 = 198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236
+findempty 1 = 511
+findfilled 1 = 1793
+findlastfilled 1 = 100862
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 577305765477436751
+iter 1 filled 131071 next 0 = 1793,8703,64511,100735
+iter 1 empty 159 base 0 = 128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166
+iter 1 empty 65535 after 1365 = 1365,1371,1391,1471,1663,1797,1803,1815,1839,1887,1983,3071,6143,9727,11263,14335,24575,40959,53247,59391
+iter 1 empty 65535 baseafter 1038 = 1038,1040,1042,1044,1046,1048,1050,1052,1054,1056,1058,1060,1062,1064,1066,1068,1070,1072,1074,1076
+inter filled filled 131071 next 0 = -
+inter filled empty 65535 next 0 = 1117,2329,2457
+inter empty filled 131071 base 0 = 1792,1794,8192,8194,8196,8198,8200,8202,8204,8206,8208,8210,8212,8214,8216,8218,8220,8222,8224,8226
+inter filled filled 47 after 1182 = -
+scenario 14
+set 0 6079
+set 0 6207
+findfilledafter 0 100863 = 18446744073709551615
+emptyat 0 2559 = 1
+reset 1 2447
+reset 1 2511
+findemptyafter 1 1453 = 1453
+findemptyafter 1 1363 = 1363
+reset 0 3126
+emptyat 0 1309 = 1
+findemptyafter 0 2565 = 2564
+set 0 1661
+set 0 1917
+findfilledafter 0 7807 = 18446744073709551615
+findemptyafter 0 18111 = 18111
+reset 1 2965
+filledat 1 1967 = 0
+filledat 1 3559 = 0
+reset 1 2815
+filledat 1 2099 = 0
+cover 1 40852 = 191
+set 1 1215
+findfilledafter 1 263 = 1152
+filledat 1 9223372036854775807 = 0
+set 1 4863
+emptyat 1 197 = 1
+filledat 1 831 = 0
+set 1 1338
+findfilledafter 1 871 = 1152
+findfilledafter 1 42949672959 = 18446744073709551615
+set 0 975
+emptyat 0 1374389534719 = 1
+findfilledafter 0 6687 = 18446744073709551615
+set 0 895
+emptyat 0 6399 = 0
+emptyat 0 171798691839 = 1
+reset 0 28831
+reset 0 28895
+findfilledafter 0 2923 = 6016
+findemptyafter 0 3839 = 3584
+set 0 3473
+set 0 3601
+emptyat 0 799 = 0
+findemptyafter 0 2045 = 2044
+fillbefore 0 3507
+findemptyafter 0 7807 = 7680
+filledat 0 1535 = 1
+set 1 3451
+emptyat 1 2333 = 1
+emptyat 1 1188 = 0
+reset 0 3735
+reset 0 3799
+findemptyafter 0 18446744073709551615 = 18446744073709551615
+emptyat 0 5631 = 0
+set 0 3806
+emptyat 0 4607 = 1
+findfilledafter 0 75679 = 18446744073709551615
+resetbefore 1 329
+resetbefore 1 841
+findemptyafter 1 3623 = 3616
+findfilledafter 1 464 = 1152
+set 0 3223
+cover 0 2467 = 2559
+cover 0 5631 = 18446744073709551615
+fillbefore 0 3120
+filledat 0 549755813887 = 0
+findfilledafter 0 3319 = 3312
+set 0 7935
+findfilledafter 0 2943 = 2816
+cover 0 5823 = 5759
+set 1 2627
+emptyat 1 50561 = 1
+filledat 1 3011 = 0
+resetbefore 0 2487
+emptyat 0 511 = 1
+filledat 0 2175 = 0
+set 1 88979
+findfilledafter 1 1963 = 2624
+cover 1 1503 = 1471
+set 1 93135
+set 1 93647
+cover 1 2071 = 2303
+findfilledafter 1 29695 = 88976
+findempty 0 = 1023
+findfilled 0 = 2487
+findlastfilled 0 = 8190
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 997715748096959162
+iter 0 filled 447 next 0 = -
+iter 0 filled 8191 base 0 = 2480,2482,2484,2486,2488,2490,2492,2494,2496,2498,2500,2502,2504,2506,2508,2510,2512,2514,2516,2518
+iter 0 filled 895 after 2243 = -
+iter 0 empty 4095 baseafter 786 = 786,788,790,792,794,796,798,800,802,804,806,808,810,812,814,816,818,820,822,824
+findempty 1 = 511
+findfilled 1 = 1215
+findlastfilled 1 = 93662
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 9743018216512711675
+iter 1 filled 65535 next 0 = 1215,1338,2627,3451,4863,88979,93135,93647
+iter 1 empty 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 65535 after 325 = 325,331,343,367,447,767,1087,1295,1319,1331,1336,1341,1375,1471,1791,2303,2591,2635,2647,2671
+iter 1 empty 131071 baseafter 1868 = 1868,1870,1872,1874,1876,1878,1880,1882,1884,1886,1888,1890,1892,1894,1896,1898,1900,1902,1904,1906
+inter empty empty 319 next 0 = 319
+inter empty empty 767 next 0 = 767
+inter empty empty 4095 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter filled empty 95 after 1922 = -
+scenario 15
+fillbefore 0 3818
+fillbefore 0 3946
+emptyat 0 1794 = 0
+findemptyafter 0 1962 = 3946
+fillbefore 0 1152
+fillbefore 0 1280
+cover 0 2799 = 2559
+emptyat 0 79 = 0
+reset 1 3135
+filledat 1 4079 = 0
+findfilledafter 1 5631 = 18446744073709551615
+set 0 57279
+filledat 0 2176 = 1
+filledat 0 2857 = 1
+set 1 52203
+findemptyafter 1 2330 = 2330
+findemptyafter 1 335544319 = 335544319
+reset 1 3845
+reset 1 3909
+findfilledafter 1 2823 = 52200
+findfilledafter 1 1389 = 52200
+resetbefore 0 4607
+emptyat 0 3909 = 1
+findfilledafter 0 2107 = 57216
+set 1 2513
+findemptyafter 1 2575 = 2560
+emptyat 1 2233 = 1
+set 1 1308
+findemptyafter 1 4479 = 4352
+findemptyafter 1 2613 = 2612
+set 1 3159
+set 1 3223
+findfilledafter 1 2874 = 3152
+findfilledafter 1 5983 = 52200
+reset 0 39679
+emptyat 0 1372 = 1
+emptyat 0 1366 = 1
+reset 1 99325
+findfilledafter 1 91135 = 18446744073709551615
+emptyat 1 2989 = 1
+reset 1 18446744073709551615
+reset 1 18446744073709551615
+findfilledafter 1 3731 = 52200
+findfilledafter 1 114551 = 18446744073709551615
+resetbefore 1 1292
+resetbefore 1 1356
+cover 1 18446744073709551615 = 98303
+filledat 1 1391 = 0
+reset 0 1579
+findemptyafter 0 771 = 768
+filledat 0 5631 = 0
+fillbefore 1 3266
+fillbefore 1 3394
+emptyat 1 2039 = 0
+findfilledafter 1 1623 = 1616
+set 0 79359
+findemptyafter 0 911 = 896
+findemptyafter 0 2231 = 2224
+fillbefore 0 911
+filledat 0 9223372036854775807 = 0
+findemptyafter 0 2038 = 2038
+set 1 1735
+cover 1 3475 = 3519
+emptyat 1 4064 = 1
+set 1 1708
+set 1 1964
+filledat 1 50887 = 0
+cover 1 1139 = 1023
+set 1 3942
+set 1 4070
+cover 1 2511 = 2559
+filledat 1 2225 = 1
+reset 1 39
+reset 1 295
+cover 1 5497558138879 = 98303
+filledat 1 1919 = 1
+set 1 4511
+set 1 5023
+emptyat 1 829 = 0
+filledat 1 1255 = 1
+set 0 1191
+set 0 1255
+findfilledafter 0 2663 = 57216
+filledat 0 367 = 1
+resetbefore 0 1547
+resetbefore 0 1675
+cover 0 3055 = 16383
+findfilledafter 0 99380 = 18446744073709551615
+findempty 0 = 16383
+findfilled 0 = 57279
+findlastfilled 0 = 79870
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 2281953648188109057
+iter 0 empty 255 next 0 = 255
+iter 0 empty 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 79 after 1555 = -
+iter 0 filled 131071 baseafter 452 = 57216,57218,57220,57222,57224,57226,57228,57230,57232,57234,57236,57238,57240,57242,57244,57246,57248,57250,57252,57254
+findempty 1 = 39
+findfilled 1 = 15
+findlastfilled 1 = 52206
+root 1 = 32767
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 458609124102901899
+iter 1 filled 65535 next 0 = 15,55,95,191,271,311,351,447,767,1535,2559,3199,3359,3392,3942,4070,4511,5023,52203
+iter 1 empty 32767 base 0 = 32,34,36,38,40,42,44,46,288,290,292,294,296,298,300,302,3394,3396,3398,3400
+iter 1 empty 32767 after 713 = 712,3394,3397,3403,3415,3439,3519,3711,3871,3919,3937,3940,3947,3959,3999,4047,4065,4068,4075,4087
+iter 1 filled 65535 baseafter 1760 = 1760,1762,1764,1766,1768,1770,1772,1774,1776,1778,1780,1782,1784,1786,1788,1790,1792,1794,1796,1798
+inter empty empty 65535 next 0 = 39,295,3394,3397,3403,3415,3439,3519,3711,3871,3919,3937,3940,3947,3959,3999,4047,4065,4068,4075
+inter empty empty 65535 next 0 = 39,295,3394,3397,3403,3415,3439,3519,3711,3871,3919,3937,3940,3947,3959,3999,4047,4065,4068,4075
+inter empty empty 79 base 0 = -
+inter filled filled 32767 after 1686 = -
+scenario 16
+set 1 127
+findfilledafter 1 5119 = 18446744073709551615
+findfilledafter 1 935 = 18446744073709551615
+set 1 1539
+cover 1 2405 = 3071
+findemptyafter 1 127 = 256
+fillbefore 1 3503
+findemptyafter 1 4735 = 4735
+findemptyafter 1 90623 = 90623
+reset 1 28159
+cover 1 455 = 1023
+emptyat 1 2299 = 0
+reset 0 2287
+cover 0 2383 = 191
+findfilledafter 0 1023 = 18446744073709551615
+set 0 525
+set 0 781
+findfilledafter 0 1435 = 18446744073709551615
+findemptyafter 0 1535 = 1535
+set 1 126302
+findfilledafter 1 1783 = 1776
+findemptyafter 1 1663 = 3488
+reset 1 113042
+reset 1 113106
+cover 1 4735 = 6143
+cover 1 3642 = 3839
+fillbefore 1 1463
+fillbefore 1 1591
+findfilledafter 1 8319 = 126302
+emptyat 1 47541 = 1
+set 1 7679
+filledat 1 3111 = 1
+filledat 1 3986 = 0
+set 0 6495
+set 0 7007
+filledat 0 2154 = 0
+cover 0 116535 = 12287
+reset 1 2829
+filledat 1 1151 = 1
+findfilledafter 1 1406 = 1406
+fillbefore 1 1543
+emptyat 1 1234 = 0
+findfilledafter 1 3154 = 3154
+set 0 235
+findfilledafter 0 559 = 780
+cover 0 1288 = 1535
+reset 0 58367
+filledat 0 3599 = 0
+findfilledafter 0 258 = 524
+resetbefore 0 545
+cover 0 511 = 18446744073709551615
+emptyat 0 2863 = 1
+set 0 1408
+findfilledafter 0 18446744073709551615 = 18446744073709551615
+cover 0 913 = 959
+reset 0 3087
+findfilledafter 0 2804 = 6464
+filledat 0 2943 = 0
+fillbefore 1 27
+findfilledafter 1 119215 = 126302
+filledat 1 3065 = 1
+set 1 4351
+findfilledafter 1 98063 = 126302
+findemptyafter 1 1033 = 2828
+resetbefore 0 2719
+emptyat 0 4607 = 1
+emptyat 0 2839 = 1
+resetbefore 0 2851
+resetbefore 0 3363
+emptyat 0 665 = 1
+emptyat 0 2464 = 1
+reset 1 2695
+reset 1 2823
+findfilledafter 1 2571 = 2568
+findemptyafter 1 3839 = 3584
+reset 0 4223
+reset 0 4735
+cover 0 1023 = 2047
+findemptyafter 0 28671 = 28671
+resetbefore 1 23395
+filledat 1 18446744073709551615 = 0
+emptyat 1 6655 = 1
+findempty 0 = 2047
+findfilled 0 = 6495
+findlastfilled 0 = 7038
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 12472260225407587772
+iter 0 empty 8191 next 0 = 2047,5119,6271,6431,6591,6783,6943,7103,7679,12287
+iter 0 filled 8191 base 0 = 6464,6466,6468,6470,6472,6474,6476,6478,6480,6482,6484,6486,6488,6490,6492,6494,6496,6498,6500,6502
+iter 0 filled 895 after 1121 = -
+iter 0 empty 4095 baseafter 1710 = 1710,1712,1714,1716,1718,1720,1722,1724,1726,1728,1730,1732,1734,1736,1738,1740,1742,1744,1746,1748
+findempty 1 = 32767
+findfilled 1 = 126302
+findlastfilled 1 = 126302
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 11083440796187058886
+iter 1 empty 31 next 0 = 31
+iter 1 filled 65535 base 0 = 126302
+iter 1 filled 65535 after 827 = 824,126302
+iter 1 filled 131071 baseafter 1404 = 126302
+inter filled empty 4095 next 0 = 6495,7007
+inter filled filled 4095 next 0 = -
+inter filled filled 65535 base 0 = -
+inter empty empty 8191 after 44 = 45,55,95,191,383,767,1535,3071,5119,6271,6431,6591,6783,6943,7103,7679,12287
+scenario 17
+reset 0 28671
+emptyat 0 72191 = 1
+cover 0 303 = 191
+resetbefore 0 4639
+resetbefore 0 5151
+emptyat 0 1952 = 1
+cover 0 6943 = 6143
+reset 1 33359
+findfilledafter 1 28383 = 18446744073709551615
+findfilledafter 1 4091 = 18446744073709551615
+reset 1 254
+reset 1 510
+emptyat 1 69913 = 1
+cover 1 3735 = 191
+set 0 95935
+findfilledafter 0 1683 = 95872
+filledat 0 951 = 0
+resetbefore 0 19
+findemptyafter 0 2472 = 2472
+cover 0 2375 = 32767
+reset 1 4607
+cover 1 2575 = 191
+findfilledafter 1 759 = 18446744073709551615
+resetbefore 0 1610612735
+filledat 0 4351 = 0
+cover 0 18446744073709551615 = 1610612735
+resetbefore 1 3817
+resetbefore 1 4073
+findemptyafter 1 6111 = 6111
+emptyat 1 3567 = 1
+set 1 298
+set 1 362
+emptyat 1 2747 = 1
+filledat 1 1007 = 0
+fillbefore 0 2455
+filledat 0 2400 = 1
+cover 0 4607 = 6143
+reset 1 5759
+findfilledafter 1 193 = 298
+findfilledafter 1 2007 = 18446744073709551615
+set 1 959
+set 1 1087
+cover 1 3653 = 3071
+cover 1 8447 = 3071
+set 1 29183
+findemptyafter 1 223 = 192
+findfilledafter 1 3949 = 28672
+set 1 331
+set 1 587
+cover 1 3699 = 3071
+findemptyafter 1 2503 = 2496
+reset 1 1618
+cover 1 3839 = 3071
+findemptyafter 1 2007 = 2000
+set 1 5503
+filledat 1 2439 = 0
+emptyat 1 4607 = 1
+set 1 67839
+emptyat 1 1416 = 1
+filledat 1 4479 = 0
+set 0 3247
+set 0 3759
+emptyat 0 3850 = 1
+findemptyafter 0 1945 = 2448
+set 0 747
+findemptyafter 0 855 = 2448
+findemptyafter 0 5599 = 5568
+set 1 1416
+findemptyafter 1 3719 = 3712
+filledat 1 3603 = 0
+set 1 1173
+set 1 1685
+findemptyafter 1 41343 = 41216
+cover 1 2857 = 3071
+set 0 6975
+findemptyafter 0 2219 = 2448
+findemptyafter 0 43980465111039 = 43980465111039
+reset 1 1851
+filledat 1 51517 = 0
+filledat 1 1870 = 0
+fillbefore 0 3312
+findfilledafter 0 2087 = 2080
+filledat 0 3719 = 0
+findempty 0 = 3319
+findfilled 0 = 1023
+findlastfilled 0 = 7038
+root 0 = 536870911
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 4606383193947419862
+iter 0 empty 536870911 next 0 = 3319,3455,3647,3727,3807,3967,5119,6399,6783,7103,7679,12287,24575,49151,98303,196607,393215,786431,1572863,3145727
+iter 0 filled 447 base 0 = 384,386,388,390,392,394,396,398,400,402,404,406,408,410,412,414,416,418,420,422
+iter 0 filled 536870911 after 470 = 470,475,495,767,1535,2559,3135,3231,3279,3303,3759,6975
+iter 0 empty 1073741823 baseafter 518 = 3312,3314,3316,3318,3320,3322,3324,3326,3328,3330,3332,3334,3336,3338,3340,3342,3344,3346,3348,3350
+findempty 1 = 127
+findfilled 1 = 298
+findlastfilled 1 = 68094
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 2505166391350378194
+iter 1 empty 255 next 0 = 127,271,291,296,301,311,323,343,355,360,365,375,447
+iter 1 empty 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 65535 after 3715 = 3712,5503,29183,67839
+iter 1 empty 319 baseafter 942 = -
+inter empty filled 65535 next 0 = 5503,29183,67839
+inter empty filled 536870911 next 0 = 5503,29183,67839
+inter empty empty 65535 base 0 = 3312,3314,3316,3318,3320,3322,3324,3326,3328,3330,3332,3334,3336,3338,3340,3342,3344,3346,3348,3350
+inter empty filled 79 after 234 = -
+scenario 18
+resetbefore 0 90
+filledat 0 5631 = 0
+emptyat 0 39919 = 1
+set 0 797
+set 0 1053
+findemptyafter 0 3679 = 3679
+findfilledafter 0 414 = 796
+set 1 1001
+findfilledafter 1 3079 = 18446744073709551615
+findemptyafter 1 43007 = 43007
+set 1 3103
+filledat 1 5183 = 0
+findfilledafter 1 3855 = 18446744073709551615
+reset 0 311
+emptyat 0 3367 = 1
+filledat 0 220 = 0
+set 1 3663
+set 1 3791
+cover 1 7679 = 6143
+cover 1 3399 = 3455
+reset 1 2795
+reset 1 3051
+filledat 1 7039 = 0
+cover 1 1862 = 1535
+reset 1 3503
+reset 1 3759
+findfilledafter 1 767 = 1000
+emptyat 1 2087 = 1
+reset 0 3327
+findfilledafter 0 2647 = 18446744073709551615
+findemptyafter 0 40447 = 40447
+reset 1 235
+findemptyafter 1 47644 = 47644
+findemptyafter 1 299 = 296
+set 1 5439
+set 1 5567
+findemptyafter 1 5407 = 5632
+cover 1 1304 = 1535
+fillbefore 1 3183
+findfilledafter 1 4607 = 5376
+findemptyafter 1 3254 = 3254
+set 0 1975
+findemptyafter 0 733 = 732
+emptyat 0 591 = 1
+set 1 895
+findemptyafter 1 375 = 3168
+cover 1 76 = 1023
+fillbefore 1 3583
+emptyat 1 8447 = 1
+cover 1 1139 = 1023
+set 0 2763
+set 0 2827
+filledat 0 1719 = 0
+cover 0 1911 = 1855
+set 0 124935
+set 0 125191
+cover 0 5439 = 6143
+filledat 0 1791 = 0
+resetbefore 0 98175
+cover 0 1983 = 32767
+emptyat 0 2511 = 1
+set 1 1415
+findemptyafter 1 6655 = 6144
+findfilledafter 1 1773 = 1772
+set 0 2991
+set 0 3503
+cover 0 3839 = 3839
+filledat 0 671088639 = 0
+set 1 7103
+emptyat 1 1407 = 0
+emptyat 1 1519 = 0
+set 1 1853
+findfilledafter 1 76607 = 18446744073709551615
+emptyat 1 1303 = 0
+resetbefore 1 1727
+filledat 1 2371 = 1
+filledat 1 3811 = 0
+fillbefore 0 1557
+fillbefore 0 1813
+cover 0 1223 = 1279
+findemptyafter 0 1724 = 1812
+fillbefore 1 882
+findfilledafter 1 7295 = 18446744073709551615
+findemptyafter 1 1601 = 1600
+findempty 0 = 1813
+findfilled 0 = 511
+findlastfilled 0 = 125198
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 16250656579864325872
+iter 0 empty 639 next 0 = -
+iter 0 empty 65535 base 0 = 1812,1814,1816,1818,1820,1822,1824,1826,1828,1830,1832,1834,1836,1838,1840,1842,1844,1846,1848,1850
+iter 0 empty 15 after 3715 = -
+iter 0 filled 65535 baseafter 206 = 206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238,240,242,244
+findempty 1 = 882
+findfilled 1 = 255
+findlastfilled 1 = 7166
+root 1 = 4095
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 16317293065414831543
+iter 1 empty 447 next 0 = -
+iter 1 empty 4095 base 0 = 882,884,886,888,890,892,894,896,898,900,902,904,906,908,910,912,914,916,918,920
+iter 1 filled 639 after 757 = 757,763
+iter 1 empty 4095 baseafter 2008 = 3168,3170,3172,3174,3176,3178,3180,3182,3184,3186,3188,3190,3192,3194,3196,3198,3200,3202,3204,3206
+inter empty empty 65535 next 0 = 3183,3263,3391,3471,3551,3615,3695,3743,3823,3967,4607,5247,5887,6399,6783,6975,7679,12287,24575,49151
+inter filled filled 8191 next 0 = 255,639,799,847,871,880,1727,1799,1809,2991
+inter filled filled 111 base 0 = 96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126
+inter filled empty 31 after 1712 = -
+scenario 19
+set 1 6491
+emptyat 1 2607 = 1
+cover 1 1688 = 2047
+set 0 31983
+set 0 32111
+findfilledafter 0 6687 = 31968
+findemptyafter 0 669 = 668
+fillbefore 0 3935
+findemptyafter 0 129023 = 129023
+findfilledafter 0 1303 = 1296
+set 0 1535
+emptyat 0 8447 = 1
+findemptyafter 0 3343 = 3904
+set 0 8159
+cover 0 2683 = 2559
+filledat 0 109 = 1
+set 1 3087
+set 1 3215
+cover 1 18446744073709551615 = 12287
+cover 1 2559 = 2559
+reset 1 2222
+emptyat 1 1167 = 1
+emptyat 1 27 = 1
+reset 0 7231
+cover 0 1655 = 1023
+filledat 0 37183 = 0
+set 1 3208
+set 1 3464
+emptyat 1 2687 = 1
+cover 1 922 = 1023
+set 1 2933
+filledat 1 124407 = 0
+cover 1 9475 = 12287
+set 0 524287
+emptyat 0 5631 = 0
+filledat 0 775 = 1
+fillbefore 1 884
+fillbefore 1 1012
+cover 1 2303 = 2303
+findfilledafter 1 1819 = 2932
+reset 1 3131
+cover 1 44775 = 12287
+filledat 1 667 = 1
+reset 0 2103
+filledat 0 104 = 1
+emptyat 0 527 = 0
+reset 0 2255
+reset 0 2767
+filledat 0 1279 = 1
+filledat 0 7679 = 1
+reset 1 18446744073709551615
+reset 1 18446744073709551615
+cover 1 3135 = 18446744073709551615
+filledat 1 18446744073709551615 = 0
+fillbefore 0 1149
+fillbefore 0 1213
+cover 0 2055 = 2063
+findemptyafter 0 7423 = 1048576
+reset 1 1935
+filledat 1 1031 = 0
+filledat 1 1723 = 0
+fillbefore 0 1619
+cover 0 2815 = 18446744073709551615
+emptyat 0 3750 = 0
+set 0 3011
+set 0 3267
+cover 0 4351 = 6143
+cover 0 61443 = 49151
+reset 1 3605
+reset 1 3861
+emptyat 1 1319 = 1
+findfilledafter 1 3887 = 6488
+set 0 6783
+findfilledafter 0 70783 = 70656
+findfilledafter 0 1407 = 1280
+reset 0 3841
+emptyat 0 4863 = 0
+cover 0 3585 = 3711
+reset 0 3563
+reset 0 4075
+filledat 0 483 = 1
+findfilledafter 0 1847 = 1840
+reset 1 18446744073709551615
+reset 1 18446744073709551615
+cover 1 281474976710655 = 18446744073709551615
+emptyat 1 2403 = 1
+findempty 0 = 2103
+findfilled 0 = 1023
+findlastfilled 0 = 1048574
+root 0 = 524287
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 13208782894550860377
+iter 0 filled 1048575 next 0 = 1023,2063,2087,2143,2207,2287,2431,2623,2719,2799,2943,3199,3391,3487,3535,3555,3575,3711,3845,3851
+iter 0 filled 524287 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 159 after 3275 = -
+iter 0 empty 159 baseafter 152 = -
+findempty 1 = 1013
+findfilled 1 = 255
+findlastfilled 1 = 6494
+root 1 = 4095
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 4417581025145814151
+iter 1 filled 4095 next 0 = 255,639,831,927,975,999,1009,2933,3087,3215,3464,6491
+iter 1 filled 4095 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 4095 after 458 = 1013,1019,1535,2303,2687,2847,2895,2919,2929,2939,3007,3119,3167,3247,3295,3391,3459,3466,3469,3479
+iter 1 empty 8191 baseafter 542 = 1012,1014,1016,1018,1020,1022,1024,1026,1028,1030,1032,1034,1036,1038,1040,1042,1044,1046,1048,1050
+inter empty filled 4095 next 0 = -
+inter empty filled 8191 next 0 = -
+inter empty empty 63 base 0 = -
+inter empty filled 524287 after 454 = -
+scenario 20
+set 0 8703
+findemptyafter 0 187 = 184
+findemptyafter 0 2407 = 2400
+set 1 1549
+emptyat 1 12071 = 1
+filledat 1 3557 = 0
+set 0 1458
+set 0 1970
+cover 0 1803 = 1855
+findemptyafter 0 530 = 530
+set 0 1390
+set 0 1454
+findemptyafter 0 3260 = 3260
+findfilledafter 0 511 = 1390
+set 0 2825
+findfilledafter 0 6143 = 8192
+cover 0 2223 = 2303
+set 0 797
+cover 0 7807 = 6143
+emptyat 0 1935 = 1
+resetbefore 1 34359738367
+findemptyafter 1 947 = 944
+filledat 1 1039 = 0
+reset 0 3436
+reset 0 3948
+cover 0 2089 = 2303
+emptyat 0 18446744073709551615 = 1
+set 0 2359
+set 0 2871
+filledat 0 70141 = 0
+findfilledafter 0 113663 = 18446744073709551615
+reset 1 911
+filledat 1 1583 = 0
+cover 1 8255 = 3071
+set 0 8159
+findfilledafter 0 1993 = 2352
+findfilledafter 0 3839 = 8128
+reset 1 2183
+reset 1 2695
+filledat 1 4398046511103 = 0
+cover 1 493 = 511
+reset 1 3135
+reset 1 3263
+findemptyafter 1 2463 = 2463
+findfilledafter 1 103 = 1548
+reset 0 2419
+findemptyafter 0 403 = 400
+findemptyafter 0 3359 = 3328
+reset 1 110955
+reset 1 111019
+cover 1 5855 = 3071
+filledat 1 2863 = 0
+reset 1 2303
+emptyat 1 739 = 1
+cover 1 2017 = 1919
+resetbefore 0 1959
+resetbefore 0 2471
+filledat 0 2244 = 0
+findemptyafter 0 18446744073709551615 = 18446744073709551615
+set 1 2173
+set 1 2429
+cover 1 75910 = 6143
+filledat 1 5151 = 0
+set 0 655
+set 0 911
+cover 0 63 = 255
+emptyat 0 2943 = 0
+reset 0 2347
+reset 0 2475
+findfilledafter 0 1551 = 2824
+findemptyafter 0 107671 = 107671
+set 0 393
+findemptyafter 0 3212 = 3212
+findemptyafter 0 5663 = 5632
+fillbefore 1 1151
+fillbefore 1 1663
+filledat 1 701 = 1
+findfilledafter 1 4074 = 18446744073709551615
+reset 1 3583
+findfilledafter 1 2159 = 2172
+emptyat 1 2895 = 1
+fillbefore 1 7935
+filledat 1 3221225471 = 0
+findfilledafter 1 2583 = 2576
+reset 1 1533
+reset 1 1661
+filledat 1 1791 = 0
+cover 1 1765 = 1727
+findempty 0 = 127
+findfilled 0 = 393
+findlastfilled 0 = 9214
+root 0 = 8191
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 14381853707713026707
+iter 0 empty 8191 next 0 = 127,319,387,397,407,431,479,575,687,735,831,943,991,1535,2303,2687,2819,2829,2839,2855
+iter 0 empty 16383 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 8191 after 150 = 393,655,911,2825,2871,8159,8703
+iter 0 empty 47 baseafter 1298 = -
+findempty 1 = 1533
+findfilled 1 = 511
+findlastfilled 1 = 7678
+root 1 = 4095
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 14030968265282793969
+iter 1 filled 47 next 0 = 47
+iter 1 empty 255 base 0 = -
+iter 1 empty 95 after 3811 = -
+iter 1 empty 4095 baseafter 4 = 1532,1534,1660,1662,7680,7682,7684,7686,7688,7690,7692,7694,7696,7698,7700,7702,7704,7706,7708,7710
+inter filled filled 4095 next 0 = 393,655,911,2825,2871
+inter empty empty 4095 next 0 = 1533,1661,7807,7999,8095
+inter filled empty 4095 base 0 = 8128,8130,8132,8134,8136,8138,8140,8142,8144,8146,8148,8150,8152,8154,8156,8158,8160,8162,8164,8166
+inter empty filled 4095 after 1112 = 1115,1135,1215,1343,1439,1487,1511,1523,1529,1567,1615,1639,1651,1657,1727,1919,2303,2687,2819,2829
+scenario 21
+set 0 3509
+set 0 3637
+filledat 0 4063 = 0
+filledat 0 549755813887 = 0
+set 1 1535
+filledat 1 2971 = 0
+cover 1 3575 = 3071
+resetbefore 0 2162
+emptyat 0 2575 = 1
+emptyat 0 831 = 1
+resetbefore 0 8703
+findfilledafter 0 1807 = 18446744073709551615
+cover 0 4079 = 9223372036854775807
+reset 0 1663
+reset 0 1919
+filledat 0 2703 = 0
+findemptyafter 0 1910 = 1910
+reset 0 1251
+reset 0 1315
+findemptyafter 0 6943 = 6912
+cover 0 1551 = 9223372036854775807
+set 1 1485
+set 1 1549
+filledat 1 9223372036854775807 = 0
+emptyat 1 66930 = 1
+reset 1 1439
+reset 1 1567
+emptyat 1 3200 = 1
+filledat 1 34381 = 0
+reset 0 2251
+cover 0 89016 = 12287
+findemptyafter 0 3788 = 3788
+set 0 59795
+set 0 60307
+filledat 0 18446744073709551615 = 0
+emptyat 0 3203 = 1
+fillbefore 0 2671
+fillbefore 0 2927
+findemptyafter 0 134217727 = 2927
+cover 0 1209 = 1023
+set 0 8447
+cover 0 108327 = 98303
+findemptyafter 0 1599 = 2912
+set 1 8319
+findfilledafter 1 7231 = 8192
+filledat 1 3119 = 0
+set 1 24575
+filledat 1 469 = 0
+cover 1 5887 = 6143
+resetbefore 1 2383
+findemptyafter 1 887 = 880
+cover 1 66 = 4095
+set 1 571
+emptyat 1 7039 = 1
+cover 1 2037 = 1535
+resetbefore 1 2058
+resetbefore 1 2186
+findemptyafter 1 1231 = 1216
+filledat 1 331 = 0
+set 0 767
+findfilledafter 0 1255 = 1248
+emptyat 0 3354 = 1
+reset 0 3663
+reset 0 3727
+cover 0 1279 = 1023
+findfilledafter 0 9223372036854775807 = 18446744073709551615
+set 0 3711
+findfilledafter 0 1187 = 1184
+emptyat 0 2175 = 0
+reset 1 1359
+reset 1 1871
+cover 1 120575 = 49151
+filledat 1 407 = 0
+reset 1 1048575
+emptyat 1 2441 = 1
+cover 1 2199 = 9223372036854775807
+reset 1 869
+emptyat 1 4194303 = 1
+emptyat 1 4079 = 1
+reset 0 439
+findemptyafter 0 3143 = 3136
+findemptyafter 0 75367 = 75367
+set 1 1344
+set 1 1600
+filledat 1 3843 = 0
+emptyat 1 4991 = 1
+findempty 0 = 439
+findfilled 0 = 127
+findlastfilled 0 = 60310
+root 0 = 32767
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 4416940639467489817
+iter 0 empty 63 next 0 = -
+iter 0 empty 32767 base 0 = 432,434,436,438,440,442,444,446,2912,2914,2916,2918,2920,2922,2924,2926,2928,2930,2932,2934
+iter 0 empty 895 after 305 = -
+iter 0 empty 1791 baseafter 1756 = -
+findempty 1 = 511
+findfilled 1 = 1344
+findlastfilled 1 = 1600
+root 1 = 1048575
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 5706633336073076132
+iter 1 empty 2097151 next 0 = 511,1151,1311,1346,1349,1355,1367,1391,1471,1567,1602,1605,1611,1623,1647,1727,1919,3071,6143,12287
+iter 1 empty 127 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 2097151 after 3235 = 3232
+iter 1 empty 1048575 baseafter 112 = 112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150
+inter empty empty 255 next 0 = 439
+inter empty empty 32767 next 0 = 439,2927,3007,3327,3967,6143,8959,9727,11263,14335,24575,40959,53247,58367,59519,59711,59783,59803,59823,59871
+inter filled empty 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter filled filled 2097151 after 1172 = 1344,1600
+scenario 22
+set 1 685
+set 1 1197
+filledat 1 3172 = 0
+filledat 1 3655 = 0
+fillbefore 1 391
+cover 1 1099 = 1087
+cover 1 393215 = 3071
+fillbefore 0 4031
+findemptyafter 0 3695 = 3968
+findfilledafter 0 3971 = 18446744073709551615
+set 1 4351
+filledat 1 10995116277759 = 0
+cover 1 2350 = 3071
+set 1 111
+filledat 1 3823 = 0
+findemptyafter 1 2303 = 2048
+resetbefore 1 2267
+findemptyafter 1 1165 = 1164
+emptyat 1 1983 = 1
+fillbefore 0 3183
+fillbefore 0 3247
+findfilledafter 0 2559 = 2048
+filledat 0 2559 = 1
+set 1 4059
+cover 1 3967 = 18446744073709551615
+filledat 1 2395 = 0
+fillbefore 0 3752
+fillbefore 0 3880
+cover 0 6527 = 6143
+filledat 0 3983 = 0
+reset 1 3546
+reset 1 4058
+filledat 1 94207 = 0
+emptyat 1 2611 = 1
+reset 0 303
+reset 0 367
+findemptyafter 0 4079 = 4064
+cover 0 3421 = 3327
+set 0 236
+set 0 492
+emptyat 0 465 = 0
+emptyat 0 48601 = 1
+set 0 2140
+findemptyafter 0 519 = 3968
+filledat 0 1129 = 1
+set 1 3839
+emptyat 1 23 = 1
+findfilledafter 1 9223372036854775807 = 18446744073709551615
+set 0 3643
+set 0 3707
+emptyat 0 550 = 0
+findemptyafter 0 3107 = 3968
+set 1 5055
+set 1 5567
+findemptyafter 1 64319 = 64319
+emptyat 1 939 = 1
+fillbefore 1 449
+cover 1 3092 = 3327
+filledat 1 1791 = 0
+resetbefore 1 711
+resetbefore 1 839
+filledat 1 1279 = 0
+cover 1 3063 = 2559
+set 0 1083
+set 0 1339
+emptyat 0 2687 = 0
+emptyat 0 3651 = 0
+set 0 144
+findemptyafter 0 1106 = 3968
+findemptyafter 0 416 = 3968
+fillbefore 1 3855
+cover 1 2147483647 = 18446744073709551615
+emptyat 1 1355 = 0
+reset 1 7679
+findfilledafter 1 2187 = 2184
+findemptyafter 1 6655 = 6144
+fillbefore 0 42095
+fillbefore 0 42351
+findfilledafter 0 127127 = 18446744073709551615
+filledat 0 2623 = 1
+resetbefore 1 3827
+resetbefore 1 4083
+findemptyafter 1 5119 = 4608
+filledat 1 2781 = 0
+reset 1 3772
+reset 1 3900
+emptyat 1 1389 = 1
+findfilledafter 1 969 = 4080
+findempty 0 = 42351
+findfilled 0 = 16383
+findlastfilled 0 = 42334
+root 0 = 32767
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 816536468377882703
+iter 0 filled 65535 next 0 = 16383,36863,41471,42111,42271,42319
+iter 0 filled 1791 base 0 = 1536,1538,1540,1542,1544,1546,1548,1550,1552,1554,1556,1558,1560,1562,1564,1566,1568,1570,1572,1574
+iter 0 empty 32767 after 41 = 40,42351,42431,42751,44031,47103,57343
+iter 0 filled 65535 baseafter 710 = 710,712,714,716,718,720,722,724,726,728,730,732,734,736,738,740,742,744,746,748
+findempty 1 = 1023
+findfilled 1 = 4087
+findlastfilled 1 = 5630
+root 1 = 4095
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 667318335093993123
+iter 1 empty 4095 next 0 = 1023,2559,3327,3711,3903,3999,4047,4071,4735,4927,5247,5439,5887,7167
+iter 1 empty 4095 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 4095 after 204 = 4087,4351,5055,5567
+iter 1 filled 4095 baseafter 1000 = 4080,4082,4084,4086,4088,4090,4092,4094,4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118
+inter filled empty 32767 next 0 = 1023,2559,3327,3711,3903,3999,4047,4071,4735,4927,5247,5439,5887,7167,12287,24575,36863,41471,42111,42271
+inter empty filled 4095 next 0 = -
+inter filled empty 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter empty empty 4095 after 360 = -
+scenario 23
+reset 1 3127
+reset 1 3191
+filledat 1 895 = 0
+cover 1 2633 = 191
+reset 0 3943
+reset 0 4007
+findfilledafter 0 2555 = 18446744073709551615
+emptyat 0 1271 = 1
+reset 1 4543
+filledat 1 1407 = 0
+filledat 1 675 = 0
+set 1 469
+filledat 1 34 = 0
+emptyat 1 951 = 1
+set 0 6687
+cover 0 3636 = 2047
+findemptyafter 0 783 = 768
+reset 0 1407
+reset 0 1919
+findemptyafter 0 821 = 820
+emptyat 0 7551 = 1
+set 0 1887
+set 0 1951
+emptyat 0 3133 = 1
+filledat 0 2983 = 0
+reset 0 18446744073709551615
+cover 0 5759 = 5119
+emptyat 0 3317 = 1
+resetbefore 0 1523
+filledat 0 2623 = 0
+cover 0 29391 = 12287
+set 1 2909
+set 1 3165
+emptyat 1 2621 = 1
+findfilledafter 1 125631 = 18446744073709551615
+reset 0 43263
+cover 0 658 = 511
+findemptyafter 0 2713 = 2712
+reset 0 1471
+filledat 0 1340 = 0
+findfilledafter 0 2796 = 6656
+set 0 8127
+filledat 0 217 = 0
+cover 0 61439 = 12287
+resetbefore 0 2602
+emptyat 0 5887 = 1
+findfilledafter 0 3007 = 6656
+set 1 2417
+cover 1 75263 = 6143
+findemptyafter 1 4351 = 4351
+reset 1 103
+reset 1 615
+emptyat 1 2224 = 1
+findemptyafter 1 2914 = 2914
+fillbefore 0 8191
+emptyat 0 5215 = 1
+findfilledafter 0 7 = 6656
+reset 0 1279
+cover 0 428 = 2047
+emptyat 0 217 = 1
+resetbefore 1 2359
+resetbefore 1 2487
+cover 1 5407 = 6143
+filledat 1 2337 = 0
+fillbefore 1 412316860415
+filledat 1 4095 = 1
+findemptyafter 1 364 = 274877906944
+set 1 1023
+filledat 1 6527 = 1
+findfilledafter 1 42015 = 41984
+set 1 3403
+filledat 1 3147 = 1
+filledat 1 2115 = 1
+set 0 663
+findemptyafter 0 2687 = 2560
+filledat 0 5055 = 0
+set 0 1071
+set 0 1583
+emptyat 0 1647 = 1
+filledat 0 3656 = 0
+set 1 3899
+set 1 4411
+cover 1 39935 = 68719476735
+findemptyafter 1 7711 = 274877906944
+findempty 0 = 255
+findfilled 0 = 663
+findlastfilled 0 = 8190
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 16858007194115366686
+iter 0 empty 8191 next 0 = 255,575,647,687,735,895,1039,1119,1215,1407,1551,1631,1727,1919,3071,5119,6399,6751,6847,7039
+iter 0 empty 4095 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 95 after 324 = -
+iter 0 filled 8191 baseafter 878 = 1056,1058,1060,1062,1064,1066,1068,1070,1072,1074,1076,1078,1080,1082,1084,1086,1568,1570,1572,1574
+findempty 1 = 412316860415
+findfilled 1 = 137438953471
+findlastfilled 1 = 274877906942
+root 1 = 137438953471
+empty 1 = 0
+filled 1 = 1
+dumphash 1 = 1644126280368947191
+iter 1 filled 274877906943 next 0 = 137438953471
+iter 1 filled 274877906943 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 274877906943 after 573 = 573,607,703,895,1535,3071,6143,12287,24575,49151,98303,196607,393215,786431,1572863,3145727,6291455,12582911,25165823,50331647
+iter 1 filled 137438953471 baseafter 200 = 200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238
+inter filled filled 47 next 0 = -
+inter empty empty 137438953471 next 0 = -
+inter filled filled 8191 base 0 = 656,658,660,662,664,666,668,670,1056,1058,1060,1062,1064,1066,1068,1070,1072,1074,1076,1078
+inter empty filled 31 after 58 = 58,61
+scenario 24
+set 0 2783
+filledat 0 18431 = 0
+findfilledafter 0 1511 = 2752
+reset 1 375
+reset 1 503
+filledat 1 915 = 0
+emptyat 1 9223372036854775807 = 1
+set 0 6655
+cover 0 25699 = 12287
+cover 0 64335 = 12287
+reset 0 8703
+emptyat 0 6527 = 0
+findfilledafter 0 52863 = 18446744073709551615
+set 0 1513
+set 0 1769
+filledat 0 3985 = 0
+findfilledafter 0 97663 = 18446744073709551615
+set 0 3751
+set 0 3879
+findemptyafter 0 3559 = 3552
+emptyat 0 1831 = 1
+resetbefore 1 35583
+cover 1 4703 = 9223372036854775807
+cover 1 2187 = 9223372036854775807
+set 0 1711
+set 0 2223
+findfilledafter 0 5439 = 6144
+findemptyafter 0 7679 = 7168
+resetbefore 1 87620
+resetbefore 1 87684
+findemptyafter 1 2119 = 2112
+findfilledafter 1 101759 = 18446744073709551615
+reset 1 110383
+cover 1 88063 = 98303
+findfilledafter 1 3363 = 18446744073709551615
+set 0 6463
+set 0 6975
+findfilledafter 0 3261 = 3744
+findemptyafter 0 18446744073709551615 = 18446744073709551615
+set 1 2997
+set 1 3509
+findemptyafter 1 54495 = 54464
+emptyat 1 927 = 1
+set 0 78315
+findfilledafter 0 2014 = 2208
+emptyat 0 3041 = 1
+set 0 3463
+set 0 3527
+cover 0 8095 = 7679
+emptyat 0 2127 = 1
+resetbefore 1 10737418239
+cover 1 1279 = 2147483647
+findfilledafter 1 2951 = 18446744073709551615
+reset 0 3175
+reset 0 3239
+findemptyafter 0 31295 = 31232
+cover 0 71 = 511
+resetbefore 1 767
+emptyat 1 3199 = 1
+findfilledafter 1 128111 = 18446744073709551615
+fillbefore 1 52776558133247
+cover 1 102995 = 9223372036854775807
+cover 1 34919 = 9223372036854775807
+set 1 54287
+set 1 54351
+findemptyafter 1 1167 = 35184372088832
+cover 1 132095 = 8796093022207
+set 0 749
+findemptyafter 0 2177 = 2176
+findemptyafter 0 4063 = 4032
+set 1 1519
+filledat 1 5503 = 1
+cover 1 4047 = 9223372036854775807
+resetbefore 0 52991
+emptyat 0 7871 = 1
+emptyat 0 3839 = 1
+set 1 2951
+set 1 3015
+emptyat 1 5343 = 0
+findemptyafter 1 2359 = 35184372088832
+reset 1 3276
+emptyat 1 1766 = 0
+cover 1 5503 = 6143
+fillbefore 0 24303
+fillbefore 0 24367
+findemptyafter 0 130431 = 130304
+cover 0 2847 = 8191
+findempty 0 = 24367
+findfilled 0 = 8191
+findlastfilled 0 = 78318
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 10557520358042958182
+iter 0 filled 131071 next 0 = 8191,18431,21503,23039,23807,24191,24335,78315
+iter 0 filled 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 filled 65535 after 195 = 195,203,215,239,383,767,1535,3071,6143,12287,18431,21503,23039,23807,24191,24335,78315
+iter 0 empty 111 baseafter 298 = -
+findempty 1 = 3276
+findfilled 1 = 1023
+findlastfilled 1 = 35184372088830
+root 1 = 17592186044415
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 14481830838059738656
+iter 1 empty 35184372088831 next 0 = 3276,52776558133247
+iter 1 filled 17592186044415 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 35184372088831 after 805 = 805,811,823,863,959,1535,2559,3135,3231,3267,3273,3278,3287,3311,3455,3839,6143,12287,24575,49151
+iter 1 filled 17592186044415 baseafter 1466 = 1466,1468,1470,1472,1474,1476,1478,1480,1482,1484,1486,1488,1490,1492,1494,1496,1498,1500,1502,1504
+inter filled empty 35184372088831 next 0 = 3276
+inter empty filled 65535 next 0 = 24367,24415,24511,28671,49151,69631,75775,77951,78143,78239,78287,78307,78327,78591,79359,80895,90111,114687
+inter empty empty 35184372088831 base 0 = 35184372088832,35184372088834,35184372088836,35184372088838,35184372088840,35184372088842,35184372088844,35184372088846,35184372088848,35184372088850,35184372088852,35184372088854,35184372088856,35184372088858,35184372088860,35184372088862,35184372088864,35184372088866,35184372088868,35184372088870
+inter filled filled 65535 after 382 = 382,447,767,1535,2559,3135,3231,3267,3273,3278,3287,3311,3455,3839,6143,12287,18431,21503,23039,23807
+scenario 25
+set 1 5183
+findemptyafter 1 482 = 482
+filledat 1 95999 = 0
+set 0 1903
+findfilledafter 0 3327 = 18446744073709551615
+emptyat 0 2024 = 1
+set 0 2287
+set 0 2351
+findemptyafter 0 2643 = 2640
+emptyat 0 1846 = 1
+set 1 1535
+findemptyafter 1 3967 = 3840
+findfilledafter 1 1255 = 1248
+set 1 1296
+set 1 1552
+filledat 1 7935 = 0
+emptyat 1 1775 = 0
+set 1 1871
+cover 1 511 = 511
+cover 1 18446744073709551615 = 12287
+set 1 1698
+set 1 1954
+filledat 1 65487 = 0
+cover 1 9223372036854775807 = 18446744073709551615
+set 0 4095
+cover 0 3215 = 9223372036854775807
+filledat 0 2663 = 1
+set 0 294
+set 0 422
+emptyat 0 1143 = 0
+findemptyafter 0 5439 = 8192
+set 0 663
+set 0 791
+emptyat 0 571 = 0
+emptyat 0 3013 = 0
+resetbefore 1 23551
+findfilledafter 1 5887 = 18446744073709551615
+findfilledafter 1 2204 = 18446744073709551615
+set 1 67583
+filledat 1 796 = 0
+filledat 1 1951 = 0
+set 1 1719
+set 1 1975
+filledat 1 2007 = 0
+cover 1 327679 = 196607
+set 0 2827
+set 0 2955
+findfilledafter 0 127 = 0
+findfilledafter 0 3221 = 3220
+fillbefore 0 4028
+fillbefore 0 4156
+emptyat 0 111901 = 1
+cover 0 3377 = 9223372036854775807
+set 0 730
+emptyat 0 1375 = 0
+filledat 0 2504 = 1
+reset 0 13194139533311
+findfilledafter 0 2047 = 0
+cover 0 12031 = 12287
+set 0 1103
+set 0 1359
+findfilledafter 0 6815 = 6784
+findfilledafter 0 4447 = 4416
+reset 0 1791
+emptyat 0 8447 = 1
+findfilledafter 0 325 = 324
+set 1 7103
+set 1 7231
+cover 1 781 = 511
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+reset 0 831
+findemptyafter 0 2906 = 8192
+filledat 0 3549 = 1
+set 1 2975
+emptyat 1 45055 = 1
+cover 1 419 = 511
+reset 0 3843
+cover 0 7679 = 6143
+filledat 0 3919 = 1
+resetbefore 1 4072
+resetbefore 1 4328
+findemptyafter 1 7231 = 7296
+findemptyafter 1 2295 = 2288
+set 1 2271
+set 1 2783
+cover 1 4015 = 3583
+findfilledafter 1 2681 = 2752
+findempty 0 = 831
+findfilled 0 = 255
+findlastfilled 0 = 8190
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 13671799239249716537
+iter 0 filled 8191 next 0 = 255,639,959,1279,2559,3327,3711,3851,3863,3887,3935,4031,6143
+iter 0 empty 4095 base 0 = 768,770,772,774,776,778,780,782,784,786,788,790,792,794,796,798,800,802,804,806
+iter 0 empty 767 after 3131 = -
+iter 0 empty 8191 baseafter 1344 = 1536,1538,1540,1542,1544,1546,1548,1550,1552,1554,1556,1558,1560,1562,1564,1566,1568,1570,1572,1574
+findempty 1 = 1023
+findfilled 1 = 2271
+findlastfilled 1 = 69630
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 10075780664295756897
+iter 1 empty 65535 next 0 = 1023,2111,2207,2431,2623,2719,2943,3583,5119,6399,6783,6975,7359,7551,7935,12287,24575,49151,71679,77823
+iter 1 empty 95 base 0 = 64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102
+iter 1 filled 159 after 861 = -
+iter 1 filled 1791 baseafter 1836 = -
+inter empty empty 767 next 0 = 831
+inter empty filled 255 next 0 = -
+inter empty empty 4095 base 0 = 768,770,772,774,776,778,780,782,784,786,788,790,792,794,796,798,800,802,804,806
+inter empty filled 319 after 694 = -
+scenario 26
+reset 0 21183
+findemptyafter 0 3523 = 3523
+filledat 0 1505 = 0
+fillbefore 1 1999
+cover 1 2399 = 3071
+filledat 1 284 = 1
+set 0 1540
+set 0 1604
+findemptyafter 0 4287 = 4287
+cover 0 4287 = 3071
+reset 1 1870
+reset 1 1934
+findemptyafter 1 2507 = 2507
+cover 1 2319 = 3071
+set 0 1064
+findfilledafter 0 3781 = 18446744073709551615
+emptyat 0 979 = 1
+reset 1 3159
+cover 1 3282 = 3071
+filledat 1 285 = 1
+set 1 37855
+findemptyafter 1 2223 = 2208
+findfilledafter 1 59391 = 18446744073709551615
+reset 0 579
+emptyat 0 2671 = 1
+filledat 0 3119 = 0
+set 1 56655
+set 1 57167
+cover 1 3801 = 3071
+cover 1 132095 = 98303
+fillbefore 0 1327
+cover 0 4863 = 3071
+cover 0 36863 = 3071
+set 1 1163
+set 1 1227
+cover 1 639 = 511
+emptyat 1 511 = 0
+set 1 3871
+set 1 4127
+cover 1 4607 = 18446744073709551615
+emptyat 1 2399 = 1
+set 0 655
+emptyat 0 6975 = 1
+emptyat 0 1679 = 1
+resetbefore 1 60453
+findfilledafter 1 879 = 18446744073709551615
+filledat 1 960 = 0
+set 1 151
+set 1 215
+findemptyafter 1 3327 = 3072
+findemptyafter 1 5919 = 5888
+set 0 7679
+cover 0 2824 = 3071
+emptyat 0 102399 = 1
+set 1 20479
+findfilledafter 1 159 = 144
+findemptyafter 1 3152 = 3152
+set 1 1476
+set 1 1604
+emptyat 1 3008 = 1
+emptyat 1 2305 = 1
+reset 1 4093
+emptyat 1 118591 = 1
+emptyat 1 55413 = 1
+reset 1 4607
+cover 1 617 = 767
+findfilledafter 1 79359 = 18446744073709551615
+reset 1 527
+cover 1 8063 = 6143
+findfilledafter 1 2391 = 16384
+set 1 723
+set 1 1235
+filledat 1 3559 = 0
+findfilledafter 1 3715 = 16384
+set 1 3867
+set 1 3995
+emptyat 1 2257 = 1
+cover 1 4159 = 6143
+resetbefore 1 1531
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+cover 1 7775 = 6143
+set 1 255
+cover 1 3583 = 18446744073709551615
+findemptyafter 1 102901 = 102901
+findempty 0 = 1327
+findfilled 0 = 511
+findlastfilled 0 = 8190
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 11912816814333709156
+iter 0 filled 8191 next 0 = 511,1151,1295,1540,1604,7679
+iter 0 empty 447 base 0 = -
+iter 0 filled 8191 after 3075 = 3072,7679
+iter 0 empty 159 baseafter 1260 = -
+findempty 1 = 767
+findfilled 1 = 255
+findlastfilled 1 = 24574
+root 1 = 32767
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 9313905427367560929
+iter 1 empty 65535 next 0 = 767,1279,1567,1601,1606,1611,1623,1647,1727,1919,2559,3327,3711,3847,3859,3887,3935,3975,3987,4015
+iter 1 filled 223 base 0 = 192,194,196,198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230
+iter 1 empty 65535 after 390 = 767,1279,1567,1601,1606,1611,1623,1647,1727,1919,2559,3327,3711,3847,3859,3887,3935,3975,3987,4015
+iter 1 empty 65535 baseafter 722 = 722,724,726,728,730,732,734,736,738,740,742,744,746,748,750,752,754,756,758,760
+inter empty empty 65535 next 0 = 1327,1375,1471,1537,1542,1547,1559,1583,1601,1606,1611,1623,1647,1727,1919,2559,3327,3711,3847,3859
+inter empty filled 895 next 0 = -
+inter empty filled 32767 base 0 = 3864,3866,3868,3870,3992,3994,3996,3998,16384,16386,16388,16390,16392,16394,16396,16398,16400,16402,16404,16406
+inter empty filled 4095 after 1594 = 3867,3995
+scenario 27
+set 0 1303
+findemptyafter 0 120456 = 120456
+filledat 0 111263 = 0
+set 0 3137
+findfilledafter 0 3299 = 18446744073709551615
+cover 0 3983 = 3839
+set 0 20479
+findfilledafter 0 3127 = 3136
+findfilledafter 0 4351 = 16384
+set 1 4703
+set 1 4767
+cover 1 2431 = 2047
+emptyat 1 3419 = 1
+fillbefore 1 112127
+filledat 1 2503 = 1
+findemptyafter 1 7743 = 111616
+reset 1 15
+cover 1 4863 = 6143
+findfilledafter 1 1695 = 1664
+set 1 12287
+emptyat 1 2179 = 0
+findfilledafter 1 2431 = 2304
+reset 0 707
+reset 0 963
+emptyat 0 1229 = 1
+findfilledafter 0 701 = 1296
+set 0 511
+cover 0 1687 = 1791
+filledat 0 3117 = 0
+resetbefore 1 1775
+findemptyafter 1 131583 = 131583
+findfilledafter 1 18446744073709551615 = 18446744073709551615
+set 0 8063
+emptyat 0 112639 = 1
+cover 0 62687 = 49151
+fillbefore 0 4863
+filledat 0 1503 = 1
+findemptyafter 0 2019 = 4608
+resetbefore 1 2540
+resetbefore 1 3052
+cover 1 394 = 1023
+findemptyafter 1 39547 = 111616
+fillbefore 1 1871
+cover 1 6079 = 6143
+emptyat 1 9223372036854775807 = 0
+set 0 2202
+emptyat 0 71743 = 1
+findemptyafter 0 7679 = 7168
+reset 1 7231
+reset 1 7359
+filledat 1 63 = 1
+findemptyafter 1 7615 = 111616
+set 1 1221
+set 1 1349
+findemptyafter 1 63309 = 111616
+emptyat 1 2831 = 1
+reset 0 3324
+reset 0 3388
+cover 0 50331647 = 49151
+findfilledafter 0 2919 = 2912
+set 0 3667
+set 0 3795
+findfilledafter 0 5887 = 7936
+findfilledafter 0 1667 = 1664
+resetbefore 1 453
+resetbefore 1 965
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+findfilledafter 1 335 = 964
+reset 1 1628
+findemptyafter 1 383 = 256
+filledat 1 1111 = 1
+set 0 1119
+findemptyafter 0 3327 = 3324
+filledat 0 98573 = 0
+set 1 628
+findfilledafter 1 18446744073709551615 = 18446744073709551615
+findfilledafter 1 3407 = 3392
+resetbefore 1 811
+resetbefore 1 939
+findemptyafter 1 24035 = 111616
+emptyat 1 143 = 1
+resetbefore 0 2149
+cover 0 4351 = 4351
+emptyat 0 7423 = 1
+findempty 0 = 1023
+findfilled 0 = 2149
+findlastfilled 0 = 24574
+root 0 = 16383
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 8031796741036299487
+iter 0 empty 32767 next 0 = 1023,2079,2127,2145,3324,3388,4863,5631,6655,7423,7807,12287,28671,49151
+iter 0 filled 639 base 0 = -
+iter 0 empty 319 after 390 = -
+iter 0 empty 32767 baseafter 1238 = 1238,1240,1242,1244,1246,1248,1250,1252,1254,1256,1258,1260,1262,1264,1266,1268,1270,1272,1274,1276
+findempty 1 = 255
+findfilled 1 = 965
+findlastfilled 1 = 111614
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 7204441207942702376
+iter 1 empty 65535 next 0 = 255,639,831,927,961,1628,1887,1983,2303,2687,2879,2975,3023,3043,3049,7295,112127,113663,122879
+iter 1 empty 319 base 0 = 256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,292,294
+iter 1 filled 131071 after 2539 = 2536,3053,3063,3583,5119,6655,7551,7935,12287,24575,49151,81919,102399,108543,111103
+iter 1 filled 131071 baseafter 908 = 964,966,968,970,972,974,976,978,980,982,984,986,988,990,992,994,996,998,1000,1002
+inter filled filled 16383 next 0 = 3053,3063,3135,3231,3279,3303,3315,3321,3326,3343,3367,3379,3385,3390,3423,3519,3839,4351,8063,20479
+inter filled filled 32767 next 0 = 3053,3063,3135,3231,3279,3303,3315,3321,3326,3343,3367,3379,3385,3390,3423,3519,3839,4351,8063,20479
+inter empty empty 16383 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter filled empty 65535 after 246 = 2149,2155,2167,2239,2431,2687,2879,2975,3023,3043,3049
+scenario 28
+reset 1 3592
+reset 1 3656
+emptyat 1 12287 = 1
+findfilledafter 1 511 = 18446744073709551615
+reset 0 549755813887
+findemptyafter 0 227 = 224
+findemptyafter 0 3737 = 3736
+resetbefore 0 631
+resetbefore 0 695
+emptyat 0 103 = 1
+findemptyafter 0 2187 = 2184
+reset 0 846
+findfilledafter 0 951 = 18446744073709551615
+cover 0 3047 = 9223372036854775807
+fillbefore 1 2959
+emptyat 1 3711 = 1
+cover 1 140737488355327 = 18446744073709551615
+set 0 786431
+findemptyafter 0 2785 = 2784
+cover 0 125570 = 262143
+set 1 2192
+set 1 2320
+findfilledafter 1 725 = 724
+findemptyafter 1 1972 = 2944
+reset 0 128607
+reset 0 129119
+cover 0 24831 = 262143
+findfilledafter 0 3751 = 524288
+reset 0 7807
+findfilledafter 0 3519 = 524288
+filledat 0 2980 = 0
+resetbefore 0 399
+emptyat 0 2455 = 1
+findfilledafter 0 791 = 524288
+reset 0 60415
+filledat 0 239 = 0
+findfilledafter 0 403 = 524288
+set 1 844424930131967
+findfilledafter 1 2415 = 2400
+findemptyafter 1 2103 = 2944
+reset 0 1442
+reset 0 1570
+emptyat 0 2731 = 1
+filledat 0 65815 = 0
+set 0 2171
+set 0 2683
+findfilledafter 0 1411 = 2168
+cover 0 1325 = 1023
+fillbefore 0 1969
+fillbefore 0 2481
+findfilledafter 0 631 = 624
+findemptyafter 0 9223372036854775807 = 2487
+reset 0 61
+filledat 0 795 = 1
+filledat 0 2831 = 0
+set 1 447
+set 1 959
+findemptyafter 1 3935 = 3904
+findfilledafter 1 2859 = 2856
+resetbefore 0 1175
+filledat 0 549755813887 = 0
+findemptyafter 0 3583 = 3072
+fillbefore 1 66095
+cover 1 71340 = 71679
+filledat 1 3009 = 1
+set 0 3111
+set 0 3239
+emptyat 0 3427 = 1
+findemptyafter 0 3182 = 3182
+set 0 35471
+set 0 35599
+cover 0 5631 = 6143
+findemptyafter 0 8703 = 8192
+reset 1 3215
+reset 1 3279
+cover 1 2415 = 2559
+cover 1 287 = 1023
+set 1 173
+set 1 685
+emptyat 1 32959 = 0
+emptyat 1 884 = 0
+reset 0 1727
+reset 0 1855
+findemptyafter 0 1239 = 1664
+findfilledafter 0 46437 = 524288
+reset 1 3735
+reset 1 3991
+findfilledafter 1 3687 = 3680
+cover 1 1035 = 1023
+findempty 0 = 511
+findfilled 0 = 1175
+findlastfilled 0 = 1048574
+root 0 = 549755813887
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 10784520404150926013
+iter 0 empty 31 next 0 = 31
+iter 0 empty 383 base 0 = 256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,292,294
+iter 0 filled 15 after 1243 = -
+iter 0 filled 383 baseafter 390 = -
+findempty 1 = 3215
+findfilled 1 = 1023
+findlastfilled 1 = 1125899906842622
+root 1 = 562949953421311
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 15742410918953153501
+iter 1 empty 1279 next 0 = -
+iter 1 filled 223 base 0 = 192,194,196,198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230
+iter 1 empty 562949953421311 after 345 = 344,3215,3279,3735,3991,66095,66143,66239,66431,67071,68607,71679,77823,90111,114687,196607,393215,786431,1572863,3145727
+iter 1 filled 1125899906842623 baseafter 1278 = 1278,1280,1282,1284,1286,1288,1290,1292,1294,1296,1298,1300,1302,1304,1306,1308,1310,1312,1314,1316
+inter filled empty 562949953421311 next 0 = 786431
+inter filled empty 1125899906842623 next 0 = 786431
+inter filled filled 562949953421311 base 0 = 1168,1170,1172,1174,1176,1178,1180,1182,1184,1186,1188,1190,1192,1194,1196,1198,1200,1202,1204,1206
+inter filled filled 1125899906842623 after 2044 = 2045,2175,2367,2447,2471,2683,3111,3239,35471,35599
+scenario 29
+set 1 1455
+set 1 1519
+emptyat 1 1138 = 1
+findemptyafter 1 231 = 224
+reset 1 50331647
+findfilledafter 1 2130 = 18446744073709551615
+findfilledafter 1 2075 = 18446744073709551615
+reset 0 34815
+findemptyafter 0 1535 = 1535
+emptyat 0 1955 = 1
+reset 0 898
+reset 0 1026
+filledat 0 607 = 0
+filledat 0 2870 = 0
+resetbefore 1 3951
+resetbefore 1 4079
+findfilledafter 1 3919 = 18446744073709551615
+emptyat 1 467 = 1
+reset 0 2359
+reset 0 2615
+cover 0 791 = 191
+emptyat 0 1635 = 1
+set 0 4543
+findfilledafter 0 18446744073709551615 = 18446744073709551615
+filledat 0 2695 = 0
+set 0 3503
+set 0 3631
+cover 0 3927 = 3967
+emptyat 0 767 = 1
+reset 0 562949953421311
+emptyat 0 69559 = 1
+findemptyafter 0 3831 = 3824
+resetbefore 1 3613
+resetbefore 1 3677
+cover 1 6911 = 3071
+emptyat 1 63 = 1
+fillbefore 0 6783
+cover 0 2365 = 2047
+cover 0 1352 = 2047
+reset 0 29695
+findfilledafter 0 402653183 = 18446744073709551615
+findfilledafter 0 2619 = 2616
+set 0 3977
+set 0 4105
+findfilledafter 0 3063 = 3056
+cover 0 2575 = 2047
+set 0 32679
+set 0 33191
+findemptyafter 0 6527 = 6656
+filledat 0 3023 = 1
+resetbefore 0 4863
+cover 0 1369 = 2047
+emptyat 0 3007 = 1
+fillbefore 1 89902
+fillbefore 1 90030
+findfilledafter 1 13194139533311 = 18446744073709551615
+emptyat 1 3075 = 0
+set 1 799
+set 1 1055
+emptyat 1 2436 = 0
+findfilledafter 1 2567 = 2560
+set 0 3575
+set 0 3703
+findemptyafter 0 3479 = 3472
+emptyat 0 391 = 1
+set 1 1374
+emptyat 1 7679 = 0
+findfilledafter 1 5247 = 5120
+reset 0 2191
+cover 0 964 = 1023
+findfilledafter 0 1619 = 3568
+reset 0 5631
+filledat 0 417 = 0
+findemptyafter 0 51095 = 51088
+reset 0 83967
+findemptyafter 0 719 = 704
+emptyat 0 42949672959 = 1
+set 1 3871
+set 1 3999
+filledat 1 1784 = 1
+emptyat 1 4895 = 0
+fillbefore 1 2063
+filledat 1 383 = 1
+emptyat 1 2411 = 0
+reset 1 3412
+reset 1 3540
+emptyat 1 4067 = 0
+cover 1 51199 = 49151
+findempty 0 = 1023
+findfilled 0 = 3575
+findlastfilled 0 = 33198
+root 0 = 562949953421311
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 123500144994754804
+iter 0 empty 15 next 0 = 15
+iter 0 filled 562949953421311 base 0 = 3568,3570,3572,3574,3576,3578,3580,3582,3696,3698,3700,3702,3704,3706,3708,3710,4608,4610,4612,4614
+iter 0 empty 1125899906842623 after 462 = 462,471,495,767,1535,2559,3199,3391,3487,3535,3559,3615,3663,3687,3775,3967,4351,5631,6911,7679
+iter 0 filled 1125899906842623 baseafter 432 = 3568,3570,3572,3574,3576,3578,3580,3582,3696,3698,3700,3702,3704,3706,3708,3710,4608,4610,4612,4614
+findempty 1 = 3412
+findfilled 1 = 1023
+findlastfilled 1 = 90028
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 6561047612942667503
+iter 1 filled 447 next 0 = 447
+iter 1 empty 65535 base 0 = 3412,3540,90030,90032,90034,90036,90038,90040,90042,90044,90046,90048,90050,90052,90054,90056,90058,90060,90062,90064
+iter 1 empty 65535 after 548 = 3412,3540,90030,90039,90079,94207,114687
+iter 1 empty 65535 baseafter 1150 = 3412,3540,90030,90032,90034,90036,90038,90040,90042,90044,90046,90048,90050,90052,90054,90056,90058,90060,90062,90064
+inter empty filled 159 next 0 = 159
+inter empty filled 1125899906842623 next 0 = 1023,2559,3199,3359,3399,3409,3414,3419,3439,3487,3527,3537,3542,3547,3559,3615,3663,3687,3775,3967
+inter filled empty 767 base 0 = -
+inter filled filled 1791 after 1076 = -
+scenario 30
+reset 1 2063
+reset 1 2191
+filledat 1 4479 = 0
+filledat 1 2299 = 0
+reset 0 2617
+reset 0 2745
+filledat 0 2543 = 0
+emptyat 0 4191 = 1
+set 0 1303
+findfilledafter 0 895 = 1296
+findfilledafter 0 3089 = 18446744073709551615
+reset 0 3263
+findemptyafter 0 1029 = 1028
+findfilledafter 0 3047 = 18446744073709551615
+set 0 133119
+emptyat 0 2877 = 1
+filledat 0 183 = 0
+fillbefore 1 69631
+findfilledafter 1 7295 = 7168
+cover 1 6975 = 16383
+reset 1 2559
+findemptyafter 1 5823 = 65536
+findemptyafter 1 66559 = 66559
+set 0 402653183
+cover 0 81535 = 98303
+findemptyafter 0 1269 = 1268
+set 0 1456
+set 0 1712
+emptyat 0 9223372036854775807 = 0
+filledat 0 98 = 0
+reset 0 33791
+cover 0 3286 = 3071
+emptyat 0 203 = 1
+set 0 50043
+set 0 50107
+cover 0 1515 = 1503
+filledat 0 4287 = 0
+set 0 3223
+cover 0 1487 = 1503
+findemptyafter 0 3874 = 3874
+set 1 4607
+findemptyafter 1 3193 = 65536
+findfilledafter 1 2095 = 3072
+reset 0 2029
+findemptyafter 0 3663 = 3648
+findemptyafter 0 3535 = 3520
+set 1 4863
+filledat 1 1283 = 1
+emptyat 1 1309 = 0
+set 0 247
+filledat 0 3729 = 0
+cover 0 30471 = 24575
+reset 1 2792
+emptyat 1 1301 = 0
+filledat 1 3221 = 1
+resetbefore 0 2413
+resetbefore 0 2541
+emptyat 0 1788 = 1
+filledat 0 1552 = 0
+reset 1 8447
+findfilledafter 1 3739 = 3736
+findfilledafter 1 102399 = 18446744073709551615
+set 1 8223
+set 1 8351
+findfilledafter 1 447 = 384
+cover 1 9223372036854775807 = 18446744073709551615
+set 1 394
+findfilledafter 1 609 = 608
+filledat 1 825 = 1
+resetbefore 1 7935
+cover 1 23935 = 24575
+findfilledafter 1 3347 = 7680
+set 0 4223
+set 0 4735
+cover 0 5631 = 5631
+filledat 0 3407 = 0
+fillbefore 0 3311
+findfilledafter 0 1719 = 1712
+filledat 0 2303 = 1
+set 0 1279
+set 0 1791
+findemptyafter 0 42227 = 42224
+emptyat 0 3839 = 1
+findempty 0 = 3311
+findfilled 0 = 1023
+findlastfilled 0 = 536870910
+root 0 = 268435455
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 13972231055185036464
+iter 0 filled 536870911 next 0 = 1023,2559,3135,3231,3279,4223,4735,50043,50107,133119,402653183
+iter 0 filled 536870911 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 268435455 after 1221 = 1220,3311,3455,3839,4479,4991,5631,7167,12287,24575,40959,49407,49791,49951,49999,50023,50035,50063,50087,50099
+iter 0 empty 63 baseafter 1642 = -
+findempty 1 = 2047
+findfilled 1 = 7935
+findlastfilled 1 = 65534
+root 1 = 32767
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 1527716099867640018
+iter 1 empty 159 next 0 = 159
+iter 1 filled 32767 base 0 = 7680,7682,7684,7686,7688,7690,7692,7694,7696,7698,7700,7702,7704,7706,7708,7710,7712,7714,7716,7718
+iter 1 empty 32767 after 504 = 507,767,1535,3071,5119,6655,7423,8287,8415,8575
+iter 1 empty 65535 baseafter 654 = 654,656,658,660,662,664,666,668,670,672,674,676,678,680,682,684,686,688,690,692
+inter empty empty 268435455 next 0 = 3311,3455,3839,4479,4991,5631,6655,7423,8287,8415,8575,98303,137215,143359,155647,180223,229375,393215,786431,1572863
+inter empty filled 65535 next 0 = 7935,8223,8351,8959,9727,11263,14335,24575,40959,49407,49791,49951,49999,50023,50035,50063,50087,50099,50143,50687
+inter filled empty 32767 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter empty filled 268435455 after 888 = 7935,8223,8351,8959,9727,11263,14335,24575,40959,49407,49791,49951,49999,50023,50035,50063,50087,50099,50143,50687
+scenario 31
+resetbefore 0 1571
+resetbefore 0 1635
+filledat 0 9223372036854775807 = 0
+findemptyafter 0 159 = 128
+reset 1 1703
+findemptyafter 1 72679 = 72679
+cover 1 1919 = 191
+resetbefore 0 3996
+cover 0 2799 = 3071
+cover 0 2130 = 3071
+reset 1 8703
+filledat 1 1923 = 0
+cover 1 335 = 191
+set 0 1793
+findfilledafter 0 7423 = 18446744073709551615
+findfilledafter 0 2516 = 18446744073709551615
+resetbefore 1 5887
+emptyat 1 1787 = 1
+findemptyafter 1 2815 = 2560
+resetbefore 0 83575
+emptyat 0 3377 = 1
+filledat 0 47 = 0
+set 0 1477
+set 0 1541
+findfilledafter 0 4479 = 18446744073709551615
+findfilledafter 0 20479 = 18446744073709551615
+set 1 1943
+cover 1 1267 = 1279
+findemptyafter 1 3335 = 3328
+reset 1 2537
+reset 1 3049
+emptyat 1 5919 = 1
+findemptyafter 1 79871 = 79871
+set 0 3988
+findfilledafter 0 3711 = 3988
+findfilledafter 0 4607 = 18446744073709551615
+set 0 524287
+emptyat 0 1149 = 0
+filledat 0 2505 = 1
+set 1 87039
+findemptyafter 1 3369 = 3368
+cover 1 1361 = 1279
+set 0 3631
+set 0 3759
+findemptyafter 0 3107 = 1048576
+emptyat 0 7935 = 0
+set 1 1495
+cover 1 511 = 511
+emptyat 1 2621 = 1
+set 0 1775
+findfilledafter 0 767 = 512
+emptyat 0 3275 = 0
+reset 0 3327
+filledat 0 1231 = 1
+emptyat 0 3815 = 0
+set 1 1151
+findemptyafter 1 3009 = 3008
+emptyat 1 2511 = 1
+set 1 820
+set 1 1332
+findemptyafter 1 3007 = 2944
+emptyat 1 161 = 1
+reset 1 1608
+reset 1 1672
+emptyat 1 3975 = 1
+filledat 1 619 = 0
+fillbefore 1 7647
+findemptyafter 1 5119 = 7616
+findfilledafter 1 3071 = 2048
+set 1 50705
+findfilledafter 1 2075 = 2072
+cover 1 1811 = 2047
+set 0 53983
+filledat 0 113 = 1
+filledat 0 33489 = 1
+reset 1 25165823
+emptyat 1 4027 = 0
+findfilledafter 1 2479 = 2464
+reset 1 16684
+findfilledafter 1 251 = 248
+findfilledafter 1 3253 = 3252
+findempty 0 = 3327
+findfilled 0 = 1023
+findlastfilled 0 = 1048574
+root 0 = 524287
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 14160888285449533874
+iter 0 empty 524287 next 0 = 3327
+iter 0 empty 159 base 0 = -
+iter 0 filled 524287 after 2451 = 2451,2459,2479,2527,2815,3839,6143,12287,24575,49151,98303,196607,393215,786431
+iter 0 empty 159 baseafter 1568 = -
+findempty 1 = 7647
+findfilled 1 = 2047
+findlastfilled 1 = 88062
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 6660770280288843239
+iter 1 filled 65535 next 0 = 2047,5119,6655,7295,7487,7583,50705,87039
+iter 1 filled 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 255 after 1733 = -
+iter 1 filled 131071 baseafter 478 = 478,480,482,484,486,488,490,492,494,496,498,500,502,504,506,508,510,512,514,516
+inter filled filled 895 next 0 = 895
+inter empty filled 131071 next 0 = 3327
+inter filled filled 524287 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter filled empty 63 after 1884 = -
+scenario 32
+resetbefore 1 18446744073709551615
+emptyat 1 2513 = 1
+emptyat 1 7295 = 1
+set 1 1279
+emptyat 1 2979 = 1
+findfilledafter 1 4607 = 18446744073709551615
+reset 1 2047
+filledat 1 339 = 0
+findemptyafter 1 2775 = 2768
+reset 0 3183
+findemptyafter 0 98495 = 98495
+findemptyafter 0 1411 = 1411
+set 0 39
+set 0 103
+findfilledafter 0 1447 = 18446744073709551615
+filledat 0 895 = 0
+set 1 2847
+findfilledafter 1 6655 = 18446744073709551615
+findemptyafter 1 483 = 480
+set 0 1919
+findfilledafter 0 143 = 1792
+findemptyafter 0 2802 = 2802
+set 0 2119
+cover 0 6271 = 6143
+findemptyafter 0 3923 = 3920
+set 1 3327
+set 1 3839
+cover 1 17179869183 = 18446744073709551615
+findfilledafter 1 911 = 2816
+reset 0 1611
+reset 0 2123
+emptyat 0 2611 = 1
+emptyat 0 2687 = 1
+set 1 6655
+findemptyafter 1 3847 = 4096
+findemptyafter 1 3446 = 4096
+set 0 27647
+filledat 0 5055 = 0
+cover 0 6591 = 6143
+reset 1 1144
+reset 1 1656
+cover 1 3817 = 3583
+cover 1 198 = 1023
+set 0 1715
+set 0 1779
+emptyat 0 40703 = 1
+emptyat 0 1175 = 1
+set 1 7487
+findemptyafter 1 511 = 0
+cover 1 1467 = 1023
+fillbefore 1 43007
+emptyat 1 3925 = 0
+cover 1 9223372036854775807 = 18446744073709551615
+reset 0 788
+reset 0 1044
+emptyat 0 1199 = 1
+findfilledafter 0 383 = 1712
+reset 0 4607
+emptyat 0 1006 = 1
+emptyat 0 739 = 1
+reset 0 75960
+filledat 0 3249 = 0
+findfilledafter 0 7551 = 26624
+fillbefore 1 5343
+fillbefore 1 5471
+findfilledafter 1 2781 = 2780
+cover 1 1031 = 16383
+set 0 1791
+cover 0 1521 = 1279
+cover 0 2175 = 18446744073709551615
+resetbefore 1 167772159
+filledat 1 8127 = 0
+findemptyafter 1 3341 = 3340
+resetbefore 1 6291455
+cover 1 175 = 9223372036854775807
+cover 1 2012 = 9223372036854775807
+set 0 3695
+cover 0 4015 = 3967
+findemptyafter 0 3301 = 3300
+set 0 2967
+filledat 0 367 = 0
+filledat 0 5919 = 0
+findempty 0 = 15
+findfilled 0 = 39
+findlastfilled 0 = 28670
+root 0 = 16383
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 2240878163829126385
+iter 0 empty 111 next 0 = 119
+iter 0 filled 32767 base 0 = 32,34,36,38,40,42,44,46,96,98,100,102,104,106,108,110,1536,1538,1540,1542
+iter 0 filled 1279 after 610 = -
+iter 0 filled 16383 baseafter 1832 = 1832,1834,1836,1838,1840,1842,1844,1846,1848,1850,1852,1854,1856,1858,1860,1862,1864,1866,1868,1870
+findempty 1 = 9223372036854775807
+findfilled 1 = 18446744073709551615
+findlastfilled 1 = 18446744073709551615
+root 1 = 67108863
+empty 1 = 1
+filled 1 = 0
+dumphash 1 = 5493908696664889114
+iter 1 empty 223 next 0 = 223
+iter 1 filled 67108863 base 0 = -
+iter 1 filled 319 after 2027 = -
+iter 1 empty 67108863 baseafter 2006 = 2006,2008,2010,2012,2014,2016,2018,2020,2022,2024,2026,2028,2030,2032,2034,2036,2038,2040,2042,2044
+inter empty empty 16383 next 0 = 15,55,79,119,191,383,767,1279,2079,2123,2135,2159,2239,2431,2687,2879,2951,2991,3039,3327
+inter filled empty 32767 next 0 = 39,103,1791,2115,2967,3695,27647
+inter filled filled 16383 base 0 = -
+inter filled filled 79 after 1580 = -
+scenario 33
+set 0 1615
+set 0 1679
+filledat 0 1535 = 0
+filledat 0 359 = 0
+set 0 1817
+filledat 0 3203 = 0
+findemptyafter 0 70783 = 70783
+set 1 8223
+filledat 1 268 = 0
+filledat 1 4351 = 0
+set 1 3863
+filledat 1 2511 = 0
+filledat 1 1751 = 0
+set 1 2687
+findfilledafter 1 81312 = 18446744073709551615
+filledat 1 3711 = 0
+set 0 155
+set 0 219
+findemptyafter 0 3959 = 3959
+filledat 0 2871 = 0
+fillbefore 1 1628
+filledat 1 2361 = 0
+filledat 1 12287 = 0
+resetbefore 0 72
+cover 0 581 = 767
+emptyat 0 3855 = 1
+set 0 2152
+emptyat 0 3583 = 1
+filledat 0 1919 = 0
+set 1 8159
+findemptyafter 1 5343 = 5312
+emptyat 1 2091 = 1
+set 1 2967
+findemptyafter 1 3191 = 3184
+findfilledafter 1 2465 = 2560
+fillbefore 1 1003
+fillbefore 1 1259
+findemptyafter 1 92011 = 92011
+filledat 1 1171 = 1
+set 1 35495
+set 1 35623
+emptyat 1 18446744073709551615 = 1
+emptyat 1 2858 = 1
+set 0 6399
+emptyat 0 4051 = 1
+emptyat 0 1863 = 1
+set 0 105047
+findfilledafter 0 2473 = 6144
+filledat 0 2559 = 0
+set 0 3056
+set 0 3568
+findemptyafter 0 3357 = 3356
+cover 0 15595 = 12287
+resetbefore 1 1919
+emptyat 1 907 = 1
+findemptyafter 1 399 = 384
+reset 0 2740
+filledat 0 171 = 0
+findemptyafter 0 3207 = 3200
+fillbefore 0 7615
+fillbefore 0 8127
+findemptyafter 0 6527 = 8064
+findfilledafter 0 108463 = 18446744073709551615
+resetbefore 0 711
+resetbefore 0 967
+cover 0 3895 = 3071
+emptyat 0 143 = 1
+reset 1 1407
+filledat 1 6399 = 0
+emptyat 1 59007 = 1
+set 0 1197
+set 0 1325
+emptyat 0 1651 = 0
+cover 0 3711 = 3071
+set 0 35
+set 0 99
+cover 0 6591 = 6655
+filledat 0 3911 = 1
+set 1 1223
+findfilledafter 1 28743 = 35488
+filledat 1 3253 = 0
+set 1 91135
+findfilledafter 1 567 = 1216
+findfilledafter 1 5311 = 8128
+findempty 0 = 15
+findfilled 0 = 35
+findlastfilled 0 = 105054
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 10543047684190895156
+iter 0 empty 31 next 0 = 15,43,55
+iter 0 filled 131071 base 0 = 32,34,36,38,96,98,100,102,960,962,964,966,968,970,972,974,976,978,980,982
+iter 0 empty 223 after 694 = -
+iter 0 empty 1279 baseafter 916 = -
+findempty 1 = 511
+findfilled 1 = 1223
+findlastfilled 1 = 92158
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 9915863227047052366
+iter 1 empty 131071 next 0 = 511,1087,1183,1239,1263,1407,1791,2303,2879,2951,2991,3039,3327,3711,3847,3887,3935,4031,5119,6655
+iter 1 filled 131071 base 0 = 1216,1218,1220,1222,1224,1226,1228,1230,2560,2562,2564,2566,2568,2570,2572,2574,2576,2578,2580,2582
+iter 1 empty 65535 after 230 = 230,235,247,383,767,1087,1183,1239,1263,1407,1791,2303,2879,2951,2991,3039,3327,3711,3847,3887
+iter 1 empty 65535 baseafter 1094 = 1094,1096,1098,1100,1102,1104,1106,1108,1110,1112,1114,1116,1118,1120,1122,1124,1126,1128,1130,1132
+inter empty empty 47 next 0 = 43,55
+inter empty filled 191 next 0 = -
+inter filled filled 47 base 0 = -
+inter empty filled 65535 after 430 = 8159,8223,35495,35623,91135
+scenario 34
+reset 0 5983
+reset 0 6239
+findfilledafter 0 3263 = 18446744073709551615
+cover 0 9215 = 191
+set 0 6655
+emptyat 0 2599 = 1
+findemptyafter 0 1332 = 1332
+reset 0 495
+reset 0 751
+filledat 0 2235 = 0
+filledat 0 3555 = 0
+set 1 1587
+set 1 2099
+cover 1 3059 = 2815
+filledat 1 2495 = 0
+reset 0 118783
+cover 0 524287 = 18446744073709551615
+emptyat 0 5439 = 1
+reset 0 45055
+findemptyafter 0 412316860415 = 412316860415
+findemptyafter 0 119231 = 119231
+reset 0 557
+reset 0 1069
+findemptyafter 0 1667 = 1664
+findfilledafter 0 92216 = 18446744073709551615
+fillbefore 0 8703
+findemptyafter 0 4398046511103 = 12287
+filledat 0 2753 = 1
+reset 1 7743
+findfilledafter 1 190 = 1584
+emptyat 1 975 = 1
+resetbefore 1 3329
+findfilledafter 1 79 = 18446744073709551615
+findfilledafter 1 2800 = 18446744073709551615
+reset 1 2559
+filledat 1 7551 = 0
+filledat 1 5567 = 0
+fillbefore 0 2297
+findemptyafter 0 2041 = 8192
+findfilledafter 0 1095 = 1088
+set 0 2041
+findfilledafter 0 853 = 852
+findemptyafter 0 4011 = 8192
+reset 0 2895
+findemptyafter 0 2421 = 2880
+cover 0 3839 = 3583
+set 0 3939
+findemptyafter 0 141 = 2880
+filledat 0 2831 = 1
+set 0 2299
+set 0 2363
+cover 0 1923 = 1023
+findemptyafter 0 847 = 2880
+reset 1 83
+emptyat 1 467 = 1
+emptyat 1 1980 = 1
+set 1 125687
+set 1 125751
+filledat 1 32375 = 0
+cover 1 118783 = 118783
+reset 0 1105
+reset 0 1169
+filledat 0 1509 = 1
+findfilledafter 0 535 = 528
+set 0 1015
+filledat 0 31 = 1
+cover 0 5375 = 6143
+reset 1 85039
+filledat 1 2399 = 0
+findemptyafter 1 1511 = 1504
+reset 1 4863
+findemptyafter 1 7679 = 7168
+cover 1 697 = 32767
+fillbefore 0 4089
+emptyat 0 5631 = 0
+findemptyafter 0 2304 = 8192
+resetbefore 1 3952
+resetbefore 1 4080
+findfilledafter 1 3551 = 125680
+emptyat 1 83359 = 1
+reset 0 511
+findfilledafter 0 4735 = 4608
+findfilledafter 0 2623 = 2560
+findempty 0 = 511
+findfilled 0 = 1535
+findlastfilled 0 = 8190
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 4020634594100163059
+iter 0 filled 319 next 0 = -
+iter 0 filled 4095 base 0 = 1024,1026,1028,1030,1032,1034,1036,1038,1040,1042,1044,1046,1048,1050,1052,1054,1056,1058,1060,1062
+iter 0 empty 4095 after 216 = 219,239,383,767
+iter 0 empty 8191 baseafter 648 = 648,650,652,654,656,658,660,662,664,666,668,670,672,674,676,678,680,682,684,686
+findempty 1 = 32767
+findfilled 1 = 125687
+findlastfilled 1 = 125758
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 13679561602577730901
+iter 1 empty 65535 next 0 = 32767,81919,106495,118783,123903,125183,125503,125599,125647,125671,125711,125735,125791,125887,126463,129023
+iter 1 empty 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 639 after 686 = 686,695,735
+iter 1 filled 65535 baseafter 152 = 125680,125682,125684,125686,125688,125690,125692,125694,125744,125746,125748,125750,125752,125754,125756,125758
+inter empty filled 65535 next 0 = 125687,125751
+inter filled filled 79 next 0 = -
+inter empty filled 8191 base 0 = -
+inter empty filled 4095 after 282 = -
+scenario 35
+fillbefore 0 18446744073709551615
+fillbefore 0 18446744073709551615
+emptyat 0 3847 = 1
+findemptyafter 0 3455 = 3455
+reset 0 7679
+filledat 0 9223372036854775807 = 0
+findfilledafter 0 80383 = 18446744073709551615
+set 1 1199
+filledat 1 2019 = 0
+findemptyafter 1 2688 = 2688
+set 1 51455
+emptyat 1 3170 = 1
+cover 1 6911 = 6143
+reset 1 4991
+cover 1 38687 = 40959
+findfilledafter 1 7295 = 51200
+reset 0 1393
+reset 0 1905
+cover 0 7487 = 191
+cover 0 6559 = 191
+reset 1 2991
+emptyat 1 3133 = 1
+emptyat 1 2543 = 1
+set 0 3621
+set 0 4133
+cover 0 3087 = 3327
+findfilledafter 0 2238 = 3620
+reset 0 2711
+findemptyafter 0 2959 = 2944
+cover 0 3783 = 3775
+set 0 3887
+set 0 4015
+emptyat 0 1167 = 1
+findemptyafter 0 1939 = 1936
+reset 1 3298534883327
+emptyat 1 5311 = 1
+findemptyafter 1 511 = 0
+fillbefore 1 3595
+findemptyafter 1 9223372036854775807 = 3595
+findfilledafter 1 5 = 4
+fillbefore 0 2079
+filledat 0 1075 = 1
+emptyat 0 31979 = 1
+resetbefore 1 4703
+resetbefore 1 5215
+cover 1 66855 = 98303
+findfilledafter 1 2874 = 51200
+set 0 2861
+set 0 2925
+findfilledafter 0 406 = 406
+cover 0 2207 = 2303
+reset 0 603
+reset 0 859
+cover 0 1819 = 1535
+cover 0 3227 = 3327
+resetbefore 0 2359
+filledat 0 9223372036854775807 = 0
+findemptyafter 0 3967 = 3840
+set 1 18431
+filledat 1 2735 = 0
+findemptyafter 1 18446744073709551615 = 18446744073709551615
+fillbefore 0 3810
+fillbefore 0 3938
+findfilledafter 0 3351 = 3344
+emptyat 0 2271 = 0
+reset 0 88991
+filledat 0 37119 = 0
+emptyat 0 3173 = 0
+reset 1 495
+reset 1 623
+findemptyafter 1 103463 = 103463
+findfilledafter 1 2763 = 16384
+resetbefore 0 1957
+cover 0 18446744073709551615 = 12287
+findemptyafter 0 102399 = 102399
+reset 1 1791
+filledat 1 737 = 0
+findfilledafter 1 1533 = 16384
+set 1 3689
+filledat 1 53247 = 0
+findemptyafter 1 3844 = 3844
+set 1 3556
+set 1 3684
+emptyat 1 1543 = 1
+cover 1 6207 = 6143
+findempty 0 = 511
+findfilled 0 = 1957
+findlastfilled 0 = 4134
+root 0 = 4095
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 3185852274860656911
+iter 0 empty 4095 next 0 = 511,1279,1663,1855,1935,1953,3938,3941,3947,3959,3983,4063,4111,4129,4139,4151,4191,4287,4479,4863
+iter 0 empty 4095 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 8191 after 1010 = 1010,1013,1019,1279,1663,1855,1935,1953,3938,3941,3947,3959,3983,4063,4111,4129,4139,4151,4191,4287
+iter 0 filled 8191 baseafter 892 = 1956,1958,1960,1962,1964,1966,1968,1970,1972,1974,1976,1978,1980,1982,1984,1986,1988,1990,1992,1994
+findempty 1 = 1023
+findfilled 1 = 3556
+findlastfilled 1 = 51710
+root 1 = 32767
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 5566393560573843296
+iter 1 empty 95 next 0 = 95
+iter 1 empty 32767 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 65535 after 312 = 315,351,447,767,1535,2559,3199,3391,3487,3535,3553,3558,3563,3575,3615,3663,3681,3686,3693,3703
+iter 1 empty 32767 baseafter 882 = 882,884,886,888,890,892,894,896,898,900,902,904,906,908,910,912,914,916,918,920
+inter filled empty 65535 next 0 = 1957,1963,1975,2015,2559,3199,3391,3487,3535,3553,3558,3563,3575,3615,3663,3681,3686,3693,3703,3775
+inter filled filled 8191 next 0 = 3556,3684,3689
+inter filled empty 65535 base 0 = 1956,1958,1960,1962,1964,1966,1968,1970,1972,1974,1976,1978,1980,1982,1984,1986,1988,1990,1992,1994
+inter empty empty 383 after 878 = -
+scenario 36
+fillbefore 1 1535
+filledat 1 2495 = 0
+findemptyafter 1 697 = 1024
+set 0 1141
+set 0 1653
+findemptyafter 0 2242 = 2242
+filledat 0 7455 = 0
+set 0 1834
+set 0 1898
+findfilledafter 0 120 = 1140
+emptyat 0 6655 = 1
+fillbefore 1 5855
+fillbefore 1 6367
+emptyat 1 2215 = 0
+emptyat 1 79 = 0
+set 0 63031
+set 0 63543
+findemptyafter 0 1909 = 1908
+emptyat 0 2490 = 1
+set 0 75118
+cover 0 1432 = 1407
+filledat 0 6709 = 0
+reset 1 1919
+filledat 1 4076 = 1
+findemptyafter 1 120831 = 120831
+fillbefore 0 735
+fillbefore 0 1247
+filledat 0 1226 = 0
+findfilledafter 0 2264 = 63024
+set 0 2559
+cover 0 86129 = 90111
+findfilledafter 0 2447 = 2432
+fillbefore 1 4607
+cover 1 1667 = 2047
+findemptyafter 1 763 = 6336
+fillbefore 1 2159
+cover 1 2487 = 2047
+findemptyafter 1 2407 = 6336
+reset 1 86
+findemptyafter 1 5215 = 6336
+findfilledafter 1 7391 = 18446744073709551615
+set 1 1143
+set 1 1207
+findemptyafter 1 118655 = 118655
+cover 1 2175 = 3071
+set 1 213
+cover 1 4079 = 3071
+filledat 1 1675 = 1
+set 0 2141
+cover 0 2023 = 1983
+cover 0 471 = 511
+fillbefore 1 3503
+cover 1 3814 = 2047
+findfilledafter 1 383 = 256
+set 1 5023
+filledat 1 971 = 1
+emptyat 1 7615 = 1
+reset 0 2575
+reset 0 3087
+findfilledafter 0 4079 = 63024
+emptyat 0 2617 = 0
+set 1 1518
+set 1 1582
+findemptyafter 1 1563 = 6336
+emptyat 1 2135 = 0
+set 0 281
+findfilledafter 0 399 = 384
+cover 0 5407 = 6143
+set 1 37823
+set 1 37951
+findemptyafter 1 3743 = 6336
+emptyat 1 3774 = 0
+reset 1 375
+reset 1 631
+cover 1 361 = 359
+findemptyafter 1 126398 = 126398
+reset 0 823
+reset 0 1079
+filledat 0 1434 = 0
+cover 0 271 = 255
+set 1 92031
+findemptyafter 1 105603 = 105600
+cover 1 3827 = 3071
+set 0 954
+set 0 1082
+findfilledafter 0 3763 = 63024
+findfilledafter 0 99327 = 18446744073709551615
+findempty 0 = 823
+findfilled 0 = 255
+findlastfilled 0 = 75118
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 4894348261680885185
+iter 0 filled 65535 next 0 = 255,639,783,807,863,959,1039,1063,1082,1119,1183,1653,1834,1898,2303,2607,2655,2751,2943,63031
+iter 0 filled 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 0 empty 447 after 496 = -
+iter 0 empty 767 baseafter 784 = 816,818,820,822,824,826,828,830
+findempty 1 = 375
+findfilled 1 = 127
+findlastfilled 1 = 92158
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 13881116829089034682
+iter 1 empty 65535 next 0 = 375,631,6367,6527,6911,7679,12287,24575,34815,37119,37503,37695,38079,38271,38655,39935,45055,57343,73727,86015
+iter 1 empty 65535 base 0 = 368,370,372,374,376,378,380,382,624,626,628,630,632,634,636,638,6336,6338,6340,6342
+iter 1 filled 131071 after 101 = 101,107,119,191,287,335,359,447,543,591,615,703,895,1535,3071,5119,6207,6303,37823,37951
+iter 1 empty 255 baseafter 1826 = -
+inter filled filled 65535 next 0 = 127,287,335,359,447,543,591,615,703,783,807,863,959,1039,1063,1082,1119,1183,1653,1834
+inter filled filled 159 next 0 = 159
+inter filled filled 65535 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter empty filled 65535 after 1976 = 1979,2015,2575,3583,5119,6207,6303,37823,37951,92031
+scenario 37
+reset 0 1037
+findemptyafter 0 1182 = 1182
+findemptyafter 0 3607 = 3607
+set 0 3422
+set 0 3678
+cover 0 4071 = 3967
+findfilledafter 0 2887 = 3422
+set 1 3770
+findfilledafter 1 2559 = 3770
+emptyat 1 71679 = 1
+set 1 451
+findfilledafter 1 3003 = 3770
+cover 1 2357 = 2559
+set 0 3460
+set 0 3972
+cover 0 107231 = 6143
+findemptyafter 0 12287 = 12287
+reset 1 2683
+reset 1 3195
+filledat 1 2139 = 0
+emptyat 1 1907 = 1
+reset 0 2255
+reset 0 2383
+cover 0 7 = 1023
+findfilledafter 0 4703 = 18446744073709551615
+set 0 99863
+set 0 100119
+cover 0 42623 = 49151
+findfilledafter 0 2997 = 3422
+set 1 2933
+filledat 1 5215 = 0
+cover 1 87960930222079 = 6143
+reset 1 141
+findfilledafter 1 135167 = 18446744073709551615
+cover 1 330 = 319
+fillbefore 0 3815
+fillbefore 0 3879
+emptyat 0 2327 = 0
+filledat 0 1737 = 1
+reset 0 8223
+reset 0 8479
+findemptyafter 0 2543 = 3872
+findemptyafter 0 2807 = 3872
+reset 1 3429
+emptyat 1 389 = 1
+findfilledafter 1 2040 = 2932
+set 1 45055
+emptyat 1 125391 = 1
+filledat 1 6655 = 0
+set 0 1895
+findemptyafter 0 7935 = 7680
+filledat 0 1962 = 1
+set 0 2643
+cover 0 4511 = 6143
+findfilledafter 0 1235 = 1232
+reset 0 895
+reset 0 1407
+cover 0 71207 = 81919
+findfilledafter 0 852 = 1024
+resetbefore 0 6655
+findemptyafter 0 2903 = 2896
+findfilledafter 0 81 = 99856
+set 0 2623
+set 0 2879
+emptyat 0 8447 = 1
+emptyat 0 6719 = 1
+resetbefore 0 1383
+resetbefore 0 1511
+findemptyafter 0 3567 = 3552
+emptyat 0 1999 = 1
+set 1 1511
+filledat 1 5471 = 0
+emptyat 1 2255 = 1
+set 1 2795
+set 1 3051
+cover 1 3407 = 3327
+emptyat 1 1943 = 1
+reset 1 2978
+reset 1 3042
+cover 1 247 = 127
+filledat 1 1825 = 0
+set 0 8447
+findfilledafter 0 5695 = 8192
+emptyat 0 3959 = 1
+resetbefore 0 3871
+emptyat 0 1499 = 1
+findfilledafter 0 671 = 8192
+findempty 0 = 4095
+findfilled 0 = 8447
+findlastfilled 0 = 100126
+root 0 = 65535
+empty 0 = 0
+filled 0 = 0
+dumphash 0 = 5102951023680940002
+iter 0 filled 65535 next 0 = 8447,99863,100119
+iter 0 filled 65535 base 0 = 8192,8194,8196,8198,8200,8202,8204,8206,8208,8210,8212,8214,8216,8218,8220,8222,8224,8226,8228,8230
+iter 0 filled 131071 after 790 = 8447,99863,100119
+iter 0 empty 65535 baseafter 650 = 650,652,654,656,658,660,662,664,666,668,670,672,674,676,678,680,682,684,686,688
+findempty 1 = 127
+findfilled 1 = 451
+findlastfilled 1 = 49150
+root 1 = 32767
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 10046042201022096760
+iter 1 filled 65535 next 0 = 451,1511,2795,2933,3051,3770,45055
+iter 1 empty 63 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 empty 32767 after 1281 = 1281,1285,1291,1303,1327,1375,1439,1487,1527,1791,2303,2623,2719,2767,2787,2807,2847,2895,2919,2929
+iter 1 filled 65535 baseafter 1504 = 1504,1506,1508,1510,1512,1514,1516,1518,2792,2794,2796,2798,2932,2934,3048,3050,3052,3054,3770,40960
+inter empty empty 65535 next 0 = 127,319,415,459,471,495,767,1151,1343,1439,1487,1527,1791,2303,2623,2719,2767,2787,2807,2847
+inter empty empty 65535 next 0 = 127,319,415,459,471,495,767,1151,1343,1439,1487,1527,1791,2303,2623,2719,2767,2787,2807,2847
+inter filled filled 131071 base 0 = -
+inter filled filled 79 after 1000 = -
+scenario 38
+reset 1 3313
+reset 1 3569
+filledat 1 5887 = 0
+emptyat 1 279 = 1
+set 1 53215
+filledat 1 4735 = 0
+filledat 1 3255 = 0
+resetbefore 1 499
+resetbefore 1 563
+findfilledafter 1 1471 = 53184
+filledat 1 18446744073709551615 = 0
+set 1 223
+set 1 351
+filledat 1 3007 = 0
+findemptyafter 1 1053 = 1052
+set 1 455
+emptyat 1 100607 = 1
+filledat 1 3955 = 0
+set 0 1279
+cover 0 2559 = 3071
+findemptyafter 0 3671 = 3671
+set 1 2763
+cover 1 3260 = 3583
+findfilledafter 1 1775 = 2760
+set 1 2915
+set 1 2979
+cover 1 823 = 767
+findfilledafter 1 5242879 = 18446744073709551615
+set 1 103079215103
+findemptyafter 1 2495 = 2432
+filledat 1 8319 = 0
+set 1 126604
+set 1 126860
+emptyat 1 3839 = 1
+findemptyafter 1 1975 = 1968
+set 1 113211
+set 1 113723
+findfilledafter 1 8703 = 53184
+emptyat 1 41943039 = 1
+reset 0 1048575
+cover 0 687194767359 = 3145727
+emptyat 0 1023 = 1
+resetbefore 0 786431
+findemptyafter 0 3043 = 3040
+filledat 0 4063 = 0
+reset 0 737
+reset 0 1249
+emptyat 0 2687 = 1
+cover 0 18446744073709551615 = 3145727
+set 0 2087
+set 0 2215
+findemptyafter 0 134217727 = 1023
+findemptyafter 0 6143 = 4096
+set 1 2191
+cover 1 2703 = 2719
+findfilledafter 1 1855 = 2176
+resetbefore 0 8447
+findemptyafter 0 3300 = 3300
+findfilledafter 0 107663 = 18446744073709551615
+fillbefore 1 991
+fillbefore 1 1119
+emptyat 1 3711 = 1
+cover 1 966 = 511
+set 1 2335
+cover 1 431 = 511
+cover 1 887 = 511
+reset 1 6655
+emptyat 1 440 = 0
+emptyat 1 1244 = 1
+resetbefore 0 2023
+findfilledafter 0 2268 = 18446744073709551615
+filledat 0 3319 = 0
+set 1 7679
+findfilledafter 1 87545 = 113208
+cover 1 2767 = 18446744073709551615
+set 1 2203
+findemptyafter 1 7423 = 8192
+findfilledafter 1 1291 = 2176
+set 1 2559
+findfilledafter 1 9223372036854775807 = 18446744073709551615
+emptyat 1 1989 = 1
+resetbefore 1 3798
+resetbefore 1 4310
+cover 1 57 = 2047
+cover 1 231 = 2047
+findempty 0 = 9223372036854775807
+findfilled 0 = 18446744073709551615
+findlastfilled 0 = 18446744073709551615
+root 0 = 1048575
+empty 0 = 1
+filled 0 = 0
+dumphash 0 = 4024206754861787988
+iter 0 empty 31 next 0 = 31
+iter 0 empty 319 base 0 = 256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286,288,290,292,294
+iter 0 filled 319 after 3043 = -
+iter 0 empty 1048575 baseafter 1632 = 1632,1634,1636,1638,1640,1642,1644,1646,1648,1650,1652,1654,1656,1658,1660,1662,1664,1666,1668,1670
+findempty 1 = 2047
+findfilled 1 = 7679
+findlastfilled 1 = 137438953470
+root 1 = 68719476735
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 6034147431803807834
+iter 1 filled 447 next 0 = -
+iter 1 empty 68719476735 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 137438953471 after 1235 = 1232,7679,53215,113211,113723,126604,126860,103079215103
+iter 1 filled 137438953471 baseafter 336 = 7168,7170,7172,7174,7176,7178,7180,7182,7184,7186,7188,7190,7192,7194,7196,7198,7200,7202,7204,7206
+inter filled filled 159 next 0 = -
+inter empty empty 137438953471 next 0 = 2047,5119,6655,12287,24575,40959,50175,51711,52479,52863,53055,53151,55295,61439,81919,102399,108543,111615,112895,113167
+inter empty empty 1048575 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+inter empty empty 767 after 1532 = -
+scenario 39
+set 1 623
+filledat 1 6399 = 0
+emptyat 1 535 = 1
+set 1 114967
+set 1 115031
+filledat 1 111271 = 0
+cover 1 3230 = 3071
+reset 0 3583
+cover 0 6911 = 191
+emptyat 0 4831 = 1
+set 0 1051
+set 0 1115
+findfilledafter 0 28493 = 18446744073709551615
+filledat 0 2887 = 0
+set 1 511
+filledat 1 8447 = 0
+filledat 1 1732 = 0
+reset 0 1995
+reset 0 2251
+emptyat 0 1959 = 1
+filledat 0 8796093022207 = 0
+set 1 3445
+set 1 3509
+findemptyafter 1 3199 = 3072
+filledat 1 2253 = 0
+set 1 1813
+set 1 1877
+filledat 1 3919 = 0
+cover 1 5247 = 6143
+resetbefore 1 8223
+resetbefore 1 8351
+emptyat 1 6047 = 1
+emptyat 1 1579 = 1
+set 0 951
+filledat 0 2943 = 0
+filledat 0 42949672959 = 0
+set 0 3471
+set 0 3599
+findfilledafter 0 1471 = 3456
+findfilledafter 0 609 = 944
+resetbefore 0 511
+cover 0 71614 = 6143
+emptyat 0 3514 = 1
+fillbefore 0 1559
+fillbefore 0 1687
+filledat 0 4575 = 0
+findemptyafter 0 3281 = 3280
+set 0 4294967295
+findfilledafter 0 1655 = 1648
+cover 0 2511 = 9223372036854775807
+reset 1 7295
+reset 1 7807
+filledat 1 2857 = 0
+filledat 1 799 = 0
+resetbefore 1 2843
+resetbefore 1 2971
+emptyat 1 3247 = 1
+findemptyafter 1 5727 = 5696
+set 0 783
+set 0 911
+findfilledafter 0 1511 = 1504
+cover 0 18446744073709551615 = 12884901887
+reset 1 1239
+emptyat 1 7615 = 1
+findfilledafter 1 322 = 114960
+reset 1 20871
+emptyat 1 55295 = 1
+emptyat 1 3914 = 1
+fillbefore 0 663
+fillbefore 0 791
+filledat 0 3375 = 1
+findemptyafter 0 3607 = 8589934592
+set 1 3311
+set 1 3439
+findfilledafter 1 255 = 3296
+filledat 1 5663 = 0
+set 1 2751
+set 1 3007
+filledat 1 849 = 0
+filledat 1 2083 = 0
+set 1 2671
+set 1 2735
+cover 1 633 = 1023
+findfilledafter 1 12287 = 114960
+set 1 111
+findemptyafter 1 145 = 144
+filledat 1 3327 = 0
+reset 1 1888
+reset 1 2144
+filledat 1 3219 = 0
+findemptyafter 1 9223372036854775807 = 31
+findempty 0 = 12884901887
+findfilled 0 = 4294967295
+findlastfilled 0 = 8589934590
+root 0 = 4294967295
+empty 0 = 0
+filled 0 = 1
+dumphash 0 = 2278535726623736996
+iter 0 filled 383 next 0 = 383
+iter 0 empty 8589934591 base 0 = 8589934592,8589934594,8589934596,8589934598,8589934600,8589934602,8589934604,8589934606,8589934608,8589934610,8589934612,8589934614,8589934616,8589934618,8589934620,8589934622,8589934624,8589934626,8589934628,8589934630
+iter 0 empty 8589934591 after 896 = 12884901887
+iter 0 filled 8589934591 baseafter 26 = 26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64
+findempty 1 = 31
+findfilled 1 = 111
+findlastfilled 1 = 115038
+root 1 = 65535
+empty 1 = 0
+filled 1 = 0
+dumphash 1 = 9991012642620508059
+iter 1 filled 131071 next 0 = 111,2671,2751,3007,3311,3439,114967,115031
+iter 1 empty 131071 base 0 = 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+iter 1 filled 65535 after 891 = 888,2671,2751,3007,3311,3439,114967,115031
+iter 1 empty 131071 baseafter 94 = 94,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164
+inter filled empty 4294967295 next 0 = 31,79,191,383,767,1535,2303,2591,2639,2879,3135,3231,3279,3359,3407,3519,3839,6143,12287,24575
+inter empty filled 4294967295 next 0 = -
+inter empty filled 131071 base 0 = -
+inter filled empty 65535 after 1956 = 1957,1963,1975,2015,2303,2591,2639,2879,3135,3231,3279,3359,3407,3519,3839,6143,12287,24575,49151,81919

@@ -1,0 +1,14 @@
+[package]
+name = "strims-base"
+description = "Shared deterministic primitives: time, durations, seeded rngs, stats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+rand_core.workspace = true
+rand_chacha.workspace = true
+
+[lints]
+workspace = true

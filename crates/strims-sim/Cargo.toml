@@ -1,0 +1,25 @@
+[package]
+name = "strims-sim"
+description = "Deterministic turmoil scenarios for whole strims nodes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-node = { workspace = true, features = ["turmoil"] }
+strims-ppspp.workspace = true
+strims-proto.workspace = true
+strims-vpn.workspace = true
+hex.workspace = true
+rand_core.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+turmoil.workspace = true
+tracking-allocator = "0.4"
+
+[lints]
+workspace = true

@@ -10,3 +10,6 @@ dist
 **/*key.json
 *.prof
 .env
+
+# rust
+/target

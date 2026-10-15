@@ -1,0 +1,18 @@
+[package]
+name = "strims-binmap"
+description = "Logarithmic bin numbering and compact bin bitmaps"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+strims-base.workspace = true
+rand_core.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

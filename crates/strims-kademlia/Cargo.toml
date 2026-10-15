@@ -1,0 +1,19 @@
+[package]
+name = "strims-kademlia"
+description = "Kademlia ids and k-buckets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+strims-base.workspace = true
+rand_core.workspace = true
+proptest.workspace = true
+hex.workspace = true
+
+[lints]
+workspace = true

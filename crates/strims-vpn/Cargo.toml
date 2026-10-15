@@ -1,0 +1,28 @@
+[package]
+name = "strims-vpn"
+description = "Sans-IO overlay network, DHT, peer index and peer exchange"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-proto.workspace = true
+strims-crypto.workspace = true
+strims-qos.workspace = true
+strims-kademlia.workspace = true
+strims-vnic.workspace = true
+thiserror.workspace = true
+slotmap.workspace = true
+prost.workspace = true
+rand_core.workspace = true
+# The workspace entry enables `getrandom`, which breaks wasm32-unknown-unknown.
+aes-gcm.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+
+[lints]
+workspace = true
