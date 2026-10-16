@@ -11,7 +11,8 @@ use strims_proto::replication::v1::Checkpoint;
 use crate::vv;
 
 /// The latest checkpoint of each live replica. Deleted replicas drop
-/// out.
+/// out. A replica known only by its device record counts as having seen
+/// nothing, so logs aren't collected before it has them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CheckpointMap(BTreeMap<u64, Checkpoint>);
 
@@ -32,6 +33,16 @@ impl CheckpointMap {
         } else {
             self.0.insert(c.id, c);
         }
+    }
+
+    /// Counts `replica` as having seen nothing if its checkpoint isn't
+    /// known.
+    pub fn ensure(&mut self, replica: u64) {
+        self.0.entry(replica).or_insert_with(|| Checkpoint {
+            id: replica,
+            version: Some(VersionVector::default()),
+            deleted: false,
+        });
     }
 
     /// The live replicas' checkpoints.

@@ -296,9 +296,11 @@ fn every_key_is_the_one_this_crate_derives() {
     assert!(lease.eol > g.now.unix_nanos());
 }
 
-fn normalize(
-    logs: &[EventLog],
-) -> BTreeMap<u64, (Vec<u8>, Vec<(i64, u64, bool, Vec<u8>, Vec<u8>)>)> {
+/// An event as (namespace, id, delete, encoded version, canonical record).
+type EventKey = (i64, u64, bool, Vec<u8>, Vec<u8>);
+
+/// Logs by id: the encoded checkpoint and the sorted events.
+fn normalize(logs: &[EventLog]) -> BTreeMap<u64, (Vec<u8>, Vec<EventKey>)> {
     logs.iter()
         .map(|l| {
             let mut events: Vec<_> = l

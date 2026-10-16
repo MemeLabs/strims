@@ -16,6 +16,7 @@ members = [
   "crates/strims-kv",
   "crates/strims-kv-redb",
   "crates/strims-dao",
+  "crates/strims-replication",
   "crates/strims-node",
   "crates/strims-sim",
 ]
@@ -58,6 +59,7 @@ strims-rpc = { path = "crates/strims-rpc" }
 strims-kv = { path = "crates/strims-kv" }
 strims-kv-redb = { path = "crates/strims-kv-redb" }
 strims-dao = { path = "crates/strims-dao" }
+strims-replication = { path = "crates/strims-replication" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 

@@ -1982,6 +1982,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-replication"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "prost",
+ "rand_core 0.10.1",
+ "strims-base",
+ "strims-crypto",
+ "strims-dao",
+ "strims-kademlia",
+ "strims-kv",
+ "strims-proto",
+ "strims-rpc",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strims-rpc"
 version = "0.1.0"
 dependencies = [

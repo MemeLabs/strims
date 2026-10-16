@@ -1,0 +1,30 @@
+[package]
+name = "strims-replication"
+description = "Replication of a profile's store between its devices"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-dao.workspace = true
+strims-kademlia.workspace = true
+strims-kv.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+prost.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rand_core.workspace = true
+futures-core.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+strims-crypto.workspace = true
+futures-sink.workspace = true
+# tests drive connections on a real executor with paused time
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true
