@@ -13,9 +13,12 @@
 use rand_core::Rng;
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
+use strims_kv::Kv;
 use strims_proto::dao::v1::Mutex;
 
+use crate::error::Error;
 use crate::key::{Namespace, Part};
+use crate::store::{ProfileStore, get_record};
 
 /// How long a lease lasts without a refresh.
 pub const TTL: Duration = Duration::from_secs(10);
@@ -73,6 +76,41 @@ pub fn is_holder(existing: &Mutex, token: &Token) -> bool {
 pub fn recheck_delay(rng: &mut DetRng) -> Duration {
     let span = (RECHECK_MAX - RECHECK_MIN).as_millis().max(1) as u64;
     RECHECK_MIN + Duration::from_millis((rng.next_u64() % span) as i64)
+}
+
+/// Takes or refreshes the lease at `key` for `token`, in one transaction.
+/// Fails with [`Error::LeaseBusy`] while another holder's lease lasts.
+pub async fn try_lock<K: Kv>(
+    store: &ProfileStore<K>,
+    key: &str,
+    token: &Token,
+    now: Time,
+) -> Result<(), Error> {
+    let mut tx = store.write(now).await?;
+    let existing: Option<Mutex> = get_record(&mut tx, key).await?;
+    let m = try_acquire(existing.as_ref(), token, now).map_err(|Busy| Error::LeaseBusy)?;
+    tx.put_record(key, &m).await?;
+    tx.commit().await
+}
+
+/// Gives up the lease at `key` if `token` holds it. Resolves to whether
+/// it did.
+pub async fn release<K: Kv>(
+    store: &ProfileStore<K>,
+    key: &str,
+    token: &Token,
+    now: Time,
+) -> Result<bool, Error> {
+    let mut tx = store.write(now).await?;
+    let existing: Option<Mutex> = get_record(&mut tx, key).await?;
+    match existing {
+        Some(m) if is_holder(&m, token) => {
+            tx.delete_key(key).await?;
+            tx.commit().await?;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
 }
 
 #[cfg(test)]

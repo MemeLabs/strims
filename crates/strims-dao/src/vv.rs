@@ -23,11 +23,14 @@ pub fn seed(replica: u64, now: Time) -> VersionVector {
     }
 }
 
-/// Records a write by `replica` at `now`.
+/// Records a write by `replica` at `now`. The write's time is `now`, or
+/// a millisecond after the version's time if that is later, so a write is
+/// always timed after every write it follows. Picking the latest of
+/// concurrent writes by time then agrees with causality.
 pub fn increment(v: &mut VersionVector, replica: u64, now: Time) {
     let n = v.value.entry(replica).or_insert(0);
     *n = n.saturating_add(1);
-    v.updated_at = now.unix_millis();
+    v.updated_at = v.updated_at.saturating_add(1).max(now.unix_millis());
 }
 
 /// Raises `d` to at least `v` at every replica, and to `v`'s time if later.
@@ -107,6 +110,8 @@ mod tests {
         increment(&mut v, 3, Time::from_unix_millis(20));
         increment(&mut v, 4, Time::from_unix_millis(30));
         assert_eq!(v, vv(&[(3, 2), (4, 1)], 30));
+        increment(&mut v, 4, Time::from_unix_millis(5));
+        assert_eq!(v, vv(&[(3, 2), (4, 2)], 31));
         assert_eq!(seed(5, Time::from_unix_millis(7)), vv(&[(5, 1)], 7));
     }
 
