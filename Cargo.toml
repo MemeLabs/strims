@@ -15,6 +15,7 @@ members = [
   "crates/strims-rpc",
   "crates/strims-kv",
   "crates/strims-kv-redb",
+  "crates/strims-dao",
   "crates/strims-node",
   "crates/strims-sim",
 ]
@@ -56,6 +57,7 @@ strims-webrtc = { path = "crates/strims-webrtc" }
 strims-rpc = { path = "crates/strims-rpc" }
 strims-kv = { path = "crates/strims-kv" }
 strims-kv-redb = { path = "crates/strims-kv-redb" }
+strims-dao = { path = "crates/strims-dao" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 
@@ -67,6 +69,7 @@ smallvec = "1"
 slotmap = "1"
 indexmap = "2"
 hex = "0.4"
+data-encoding = "2"
 
 # randomness: never thread_rng / OsRng in core crates (see crates/CONVENTIONS.md)
 rand_core = "0.10"
@@ -97,6 +100,7 @@ sha1 = "0.11"
 sha2 = "0.11"
 sha3 = "0.12"
 md-5 = "0.11"
+pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 
 # drivers and simulation (never in core crates)
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "sync"] }

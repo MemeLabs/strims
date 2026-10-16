@@ -1,0 +1,32 @@
+[package]
+name = "strims-dao"
+description = "Encrypted profile store: records, indexes, change events and replication logs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-kv.workspace = true
+strims-proto.workspace = true
+prost.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rand_core.workspace = true
+slotmap.workspace = true
+data-encoding.workspace = true
+aes-gcm.workspace = true
+blake2.workspace = true
+sha2.workspace = true
+pbkdf2.workspace = true
+futures-core.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+hex.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true
