@@ -501,10 +501,13 @@ fn responses_to_unknown_calls_are_dropped() {
 
 #[test]
 fn a_slow_stream_reader_overflows_its_call_only() {
+    // room for two items of 6 bytes, at 70 each
     let mut client = Endpoint::new(Config {
-        max_queued_responses: 2,
+        max_message_bytes: 100,
+        max_queued_response_bytes: 0,
         ..Config::default()
     });
+    assert_eq!(client.config().max_queued_response_bytes, 164);
     let slow = client.start_call(WATCH, true, &pprof("")).unwrap();
     let other = client.start_call(PPROF, false, &pprof("")).unwrap();
     sent(&mut client);
@@ -540,36 +543,32 @@ fn a_slow_stream_reader_overflows_its_call_only() {
 }
 
 #[test]
-fn queued_response_bytes_are_bounded_across_calls() {
+fn a_lone_response_always_fits() {
     let mut client = Endpoint::new(Config {
         max_message_bytes: 100,
-        max_queued_response_bytes: 0, // raised to max_message_bytes
+        max_queued_response_bytes: 0,
         ..Config::default()
     });
-    let a = client.start_call(WATCH, true, &pprof("")).unwrap();
-    let b = client.start_call(PPROF, false, &pprof("")).unwrap();
-    client
-        .handle_input(&delimited(&callback(
-            a.get(),
-            Kind::CallKindDefault,
-            vec![0; 60],
-        )))
-        .unwrap();
-    client
-        .handle_input(&delimited(&callback(
-            b.get(),
-            Kind::CallKindDefault,
-            vec![0; 60],
-        )))
-        .unwrap();
-    assert_eq!(client.queued_response_bytes(), 60);
+    let stream = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let unary = client.start_call(PPROF, false, &pprof("")).unwrap();
+    sent(&mut client);
+    for _ in 0..2 {
+        let res = callback(stream.get(), Kind::CallKindDefault, vec![0; 60]);
+        client.handle_input(&delimited(&res)).unwrap();
+    }
+    // as large as fits in a Call of max_message_bytes
+    let res = callback(unary.get(), Kind::CallKindDefault, vec![0; 80]);
+    assert!(res.encoded_len() <= 100);
+    client.handle_input(&delimited(&res)).unwrap();
+    // the stream overflowed on its second item; the unary call didn't,
+    // though both together are past the limit
+    assert_eq!(sent(&mut client).len(), 1);
     assert_eq!(
-        responses(&mut client, b),
-        [Response::Failed(CallError::Overflow)]
+        client.queued_response_bytes(),
+        (60 + RESPONSE_OVERHEAD) + RESPONSE_OVERHEAD + (80 + RESPONSE_OVERHEAD)
     );
-    // unary calls end at their response, so there's no cancel
-    assert_eq!(sent(&mut client).len(), 2);
-    client.cancel(a);
+    assert_eq!(responses(&mut client, unary), [Response::Item(vec![0; 80])]);
+    client.cancel(stream);
     assert_eq!(client.queued_response_bytes(), 0);
 }
 
@@ -828,7 +827,7 @@ proptest! {
             framing: if message { Framing::Message } else { Framing::Delimited },
             max_message_bytes: 512,
             max_inbound_calls: 4,
-            max_queued_responses: 2,
+            max_queued_response_bytes: 0,
             ..Config::default()
         };
         let mut e = Endpoint::new(config);
@@ -846,7 +845,9 @@ proptest! {
             prop_assert!(e.decoder.buffered() <= 512 + crate::wire::MAX_VARINT_LEN);
             prop_assert!(e.inbound.len() <= 4);
             for out in e.outbound.values() {
-                prop_assert!(out.responses.len() <= 3);
+                prop_assert!(
+                    out.queued <= e.config.max_queued_response_bytes + RESPONSE_OVERHEAD
+                );
             }
             while let Some(ev) = e.poll_event() {
                 if let Event::Request { call, .. } = ev {

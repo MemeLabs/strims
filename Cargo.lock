@@ -1915,11 +1915,15 @@ dependencies = [
 name = "strims-rpc"
 version = "0.1.0"
 dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
  "hex",
  "proptest",
  "prost",
  "strims-proto",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

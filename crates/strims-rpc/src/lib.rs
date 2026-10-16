@@ -24,8 +24,19 @@
 //! - [`Endpoint`] is a sans-IO state machine for one side of one transport:
 //!   framing, the call tables, and every bound on what a peer can make it
 //!   hold. It has no timers: deadlines belong to callers, who cancel.
+//! - [`connect`] runs an endpoint over a transport as a future, serving a
+//!   [`Router`] of generated services and calling through a [`Client`].
+//!   [`peer_connection`] does the same over a node's channel pair.
 //! - Errors a handler returns reach the caller as
 //!   [`strims_proto::service::CallError::Remote`], with their code.
+//!
+//! # Executors
+//!
+//! The async layer is built on `futures` alone: no runtime, no threads, no
+//! timers. Connections, clients and handlers are `!Send`; a connection
+//! drives its handlers inside its own future, so spawn it as a local task
+//! (a browser worker, a tokio `LocalSet`). Callers impose deadlines by
+//! dropping a call, which cancels it.
 //!
 //! # Hostile peers
 //!
@@ -33,10 +44,21 @@
 //! a [`Config`] limit, and malformed Calls are skipped. A Call over the
 //! size limit closes the endpoint: the stream can't be resynchronised.
 
+mod client;
+mod connection;
 pub mod endpoint;
 pub mod frame;
+mod peer;
+mod router;
+mod shared;
 pub mod wire;
 
-pub use endpoint::{CallId, Config, Endpoint, Error, Event, InboundId, Metrics, Response};
+pub use client::{Client, ClientStream};
+pub use connection::{Connection, ConnectionError, connect};
+pub use endpoint::{
+    CallId, Config, Endpoint, Error, Event, InboundId, Metrics, RESPONSE_OVERHEAD, Response,
+};
 pub use frame::{FrameDecoder, FrameError};
+pub use peer::{PeerConnection, peer_connection};
+pub use router::Router;
 pub use wire::Framing;

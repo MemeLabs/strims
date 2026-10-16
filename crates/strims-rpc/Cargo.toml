@@ -10,10 +10,15 @@ license.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 prost.workspace = true
 thiserror.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
 hex.workspace = true
 proptest.workspace = true
+# tests drive connections on a real executor
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
 
 [lints]
 workspace = true

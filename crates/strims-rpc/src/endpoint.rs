@@ -49,12 +49,12 @@ pub struct Config {
     /// The endpoint's own open calls. More fail with
     /// [`CallError::TooManyCalls`].
     pub max_outbound_calls: usize,
-    /// Responses queued for one call until [`Endpoint::poll_response`]
-    /// takes them. More fail the call with [`CallError::Overflow`].
-    pub max_queued_responses: usize,
-    /// Response bytes queued across all calls. More fail the call they're
-    /// for with [`CallError::Overflow`]. Never below `max_message_bytes`,
-    /// so a lone response always fits.
+    /// Response bytes queued for one call until [`Endpoint::poll_response`]
+    /// takes them, counting [`RESPONSE_OVERHEAD`] per response. More fail
+    /// the call with [`CallError::Overflow`] and cancel it, so a slow
+    /// reader loses only its own call. Never below `max_message_bytes` plus
+    /// the overhead, so a lone response always fits. All calls together
+    /// hold at most `max_outbound_calls` times this.
     pub max_queued_response_bytes: usize,
     /// Queued transmit bytes at which [`Endpoint::is_congested`] holds. The
     /// driver then stops reading input and stops pulling server streams,
@@ -73,7 +73,6 @@ impl Default for Config {
             max_send_bytes: 512 * 1024,
             max_inbound_calls: 128,
             max_outbound_calls: 128,
-            max_queued_responses: 16,
             max_queued_response_bytes: 1024 * 1024,
             transmit_high_water: 256 * 1024,
         }
@@ -97,6 +96,10 @@ impl Config {
         }
     }
 }
+
+/// What a queued response costs beyond its bytes, so that empty responses
+/// are bounded too.
+pub const RESPONSE_OVERHEAD: usize = 64;
 
 /// One of the endpoint's own calls: the id it was sent with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -201,8 +204,19 @@ pub struct Metrics {
 struct Outbound {
     streaming: bool,
     responses: VecDeque<Response>,
+    /// The cost of `responses`; see [`Config::max_queued_response_bytes`].
+    queued: usize,
     /// A terminal response is queued; nothing more is accepted.
     done: bool,
+}
+
+/// What a queued response counts against its call's limit.
+fn response_cost(r: &Response) -> usize {
+    RESPONSE_OVERHEAD
+        + match r {
+            Response::Item(b) => b.len(),
+            _ => 0,
+        }
 }
 
 /// One side of an RPC transport. See the module docs.
@@ -220,7 +234,7 @@ pub struct Endpoint {
     inbound_ids: BTreeMap<InboundId, u64>,
     /// Open calls. Bounded by `max_outbound_calls`.
     outbound: BTreeMap<u64, Outbound>,
-    /// Bytes of `Response::Item`s queued across `outbound`.
+    /// The cost of the responses queued across `outbound`.
     queued_response_bytes: usize,
     /// Bounded by the requests in service, the open calls, and the input
     /// handled since the owner last drained it.
@@ -237,7 +251,7 @@ impl Endpoint {
     pub fn new(mut config: Config) -> Endpoint {
         config.max_queued_response_bytes = config
             .max_queued_response_bytes
-            .max(config.max_message_bytes);
+            .max(config.max_message_bytes + RESPONSE_OVERHEAD);
         Endpoint {
             decoder: FrameDecoder::new(config.max_message_bytes),
             config,
@@ -376,31 +390,28 @@ impl Endpoint {
             }
         };
         let id = call.parent_id;
-        let len = match &response {
-            Response::Item(b) => Some(b.len()),
-            _ => None,
-        };
-        let terminal = len.is_none() || !out.streaming;
-        let overflow = len.is_some_and(|len| {
-            out.responses.len() >= self.config.max_queued_responses
-                || self.queued_response_bytes + len > self.config.max_queued_response_bytes
-        });
+        let is_item = matches!(response, Response::Item(_));
+        let terminal = !is_item || !out.streaming;
+        let cost = response_cost(&response);
+        // terminal responses other than items may take the call one entry
+        // past its limit
+        let overflow = is_item && out.queued + cost > self.config.max_queued_response_bytes;
         if out.responses.is_empty() {
             self.events.push_back(Event::Response { call: CallId(id) });
         }
-        if overflow {
-            // the terminal entry may take one slot past the bound
-            out.responses
-                .push_back(Response::Failed(CallError::Overflow));
-            out.done = true;
+        let response = if overflow {
             self.metrics.overflows += 1;
-            if !terminal {
-                self.queue_cancel(id);
-            }
+            Response::Failed(CallError::Overflow)
         } else {
-            self.queued_response_bytes += len.unwrap_or(0);
-            out.responses.push_back(response);
-            out.done = terminal;
+            response
+        };
+        let cost = response_cost(&response);
+        out.queued += cost;
+        self.queued_response_bytes += cost;
+        out.responses.push_back(response);
+        out.done = terminal || overflow;
+        if overflow && !terminal {
+            self.queue_cancel(id);
         }
     }
 
@@ -518,6 +529,7 @@ impl Endpoint {
             Outbound {
                 streaming,
                 responses: VecDeque::new(),
+                queued: 0,
                 done: false,
             },
         );
@@ -531,9 +543,9 @@ impl Endpoint {
     pub fn poll_response(&mut self, call: CallId) -> Option<Response> {
         let out = self.outbound.get_mut(&call.0)?;
         let r = out.responses.pop_front()?;
-        if let Response::Item(b) = &r {
-            self.queued_response_bytes -= b.len();
-        }
+        let cost = response_cost(&r);
+        out.queued -= cost;
+        self.queued_response_bytes -= cost;
         if out.done && out.responses.is_empty() {
             self.outbound.remove(&call.0);
         }
@@ -546,11 +558,7 @@ impl Endpoint {
         let Some(out) = self.outbound.remove(&call.0) else {
             return;
         };
-        for r in &out.responses {
-            if let Response::Item(b) = r {
-                self.queued_response_bytes -= b.len();
-            }
-        }
+        self.queued_response_bytes -= out.queued;
         if !out.done && !self.closed {
             self.queue_cancel(call.0);
         }
@@ -624,8 +632,10 @@ impl Endpoint {
                 if out.responses.is_empty() {
                     self.events.push_back(Event::Response { call: CallId(*id) });
                 }
-                out.responses
-                    .push_back(Response::Failed(CallError::Disconnected));
+                let r = Response::Failed(CallError::Disconnected);
+                out.queued += response_cost(&r);
+                self.queued_response_bytes += response_cost(&r);
+                out.responses.push_back(r);
                 out.done = true;
             }
         }
@@ -637,7 +647,8 @@ impl Endpoint {
 }
 
 impl Endpoint {
-    /// Bytes of responses waiting in [`Endpoint::poll_response`].
+    /// The cost of the responses waiting in [`Endpoint::poll_response`],
+    /// counted as for [`Config::max_queued_response_bytes`].
     pub fn queued_response_bytes(&self) -> usize {
         self.queued_response_bytes
     }

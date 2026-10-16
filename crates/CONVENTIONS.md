@@ -44,6 +44,26 @@ fn poll_event(&mut self) -> Option<Event>;
   `Rc<RefCell<_>>` graphs.
 - Core crates don't call into each other's state machines; the driver
   composes them.
+- Core crates use `strims-proto` without its `services` feature, which
+  declares the generated RPC interfaces.
+
+## Architecture: app layer
+
+App-layer crates (`strims-rpc`, then the services on it) are async, so the
+native and browser drivers can run them:
+
+- Protocol state lives in sans-IO state machines under the core rules;
+  the async code around them stays thin.
+- The async code uses only `futures-core`, `futures-util` and
+  `futures-sink`: no tokio, threads, timers or OS access. Drivers own the
+  executor, and the browser's futures can't be `Send`, so app-layer futures
+  aren't either. Spawn them as local tasks.
+- Deadlines belong to callers, who drop a future to cancel it.
+- A connection may share one `Rc<RefCell<_>>` between its handles and the
+  future that drives it. A borrow never spans an `.await`, a wake, or a
+  call into user code (including drops of user values).
+- Handlers run inside their connection's future: they must not block or
+  panic.
 
 ## Determinism
 
