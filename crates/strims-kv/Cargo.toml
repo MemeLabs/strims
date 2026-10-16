@@ -1,0 +1,20 @@
+[package]
+name = "strims-kv"
+description = "Transactional key-value storage interface and in-memory backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# the backend-independent test suite, for backend crates' tests
+conformance = []
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+futures-util = { workspace = true, features = ["alloc"] }
+
+[lints]
+workspace = true

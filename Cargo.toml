@@ -13,6 +13,8 @@ members = [
   "crates/strims-vpn",
   "crates/strims-webrtc",
   "crates/strims-rpc",
+  "crates/strims-kv",
+  "crates/strims-kv-redb",
   "crates/strims-node",
   "crates/strims-sim",
 ]
@@ -52,6 +54,8 @@ strims-vnic = { path = "crates/strims-vnic" }
 strims-vpn = { path = "crates/strims-vpn" }
 strims-webrtc = { path = "crates/strims-webrtc" }
 strims-rpc = { path = "crates/strims-rpc" }
+strims-kv = { path = "crates/strims-kv" }
+strims-kv-redb = { path = "crates/strims-kv-redb" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 
@@ -99,6 +103,9 @@ tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "
 turmoil = "0.7"
 tokio-tungstenite = "0.30"
 str0m = "0.24"
+
+# storage (native drivers only)
+redb = "4.4"
 
 # testing
 proptest = "1"

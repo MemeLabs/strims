@@ -1,0 +1,18 @@
+[package]
+name = "strims-kv-redb"
+description = "File-backed strims-kv store on redb, for native drivers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-kv.workspace = true
+redb.workspace = true
+
+[dev-dependencies]
+strims-kv = { workspace = true, features = ["conformance"] }
+futures-util = { workspace = true, features = ["alloc"] }
+
+[lints]
+workspace = true

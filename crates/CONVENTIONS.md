@@ -59,6 +59,8 @@ native and browser drivers can run them:
   executor, and the browser's futures can't be `Send`, so app-layer futures
   aren't either. Spawn them as local tasks.
 - Deadlines belong to callers, who drop a future to cancel it.
+- Storage goes through `strims-kv`. Backends that touch the OS
+  (`strims-kv-redb`) are native-only and belong to drivers.
 - A connection may share one `Rc<RefCell<_>>` between its handles and the
   future that drives it. A borrow never spans an `.await`, a wake, or a
   call into user code (including drops of user values).
@@ -123,7 +125,7 @@ From the repo root:
 - `cargo fmt --all`
 - `cargo clippy --workspace --all-targets --features strims-node/turmoil`
 - `cargo test --workspace`
-- `cargo check --workspace --exclude strims-node --exclude strims-sim --target wasm32-unknown-unknown`
+- `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --target wasm32-unknown-unknown`
 
 Every `.rs` file starts with:
 

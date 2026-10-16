@@ -1467,6 +1467,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39178e0a867f9e3eaa6292a4ab1dd3613f2519c5b564341e1e7b29b270736cc4"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "regex"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1820,6 +1829,23 @@ dependencies = [
  "rand_core 0.10.1",
  "strims-base",
  "thiserror",
+]
+
+[[package]]
+name = "strims-kv"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "thiserror",
+]
+
+[[package]]
+name = "strims-kv-redb"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "redb",
+ "strims-kv",
 ]
 
 [[package]]
