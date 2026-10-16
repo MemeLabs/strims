@@ -55,7 +55,7 @@ impl Caller for Client {
     fn call_unary<M: UnaryMethod>(
         &self,
         req: &M::Request,
-    ) -> impl Future<Output = Result<M::Response, CallError>> {
+    ) -> impl Future<Output = Result<M::Response, CallError>> + use<M> {
         let (call, error) = match self.start(M::NAME, false, req) {
             Ok(call) => (Some(call), None),
             Err(e) => (None, Some(e)),
@@ -70,7 +70,7 @@ impl Caller for Client {
     fn call_streaming<M: StreamingMethod>(
         &self,
         req: &M::Request,
-    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> {
+    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> + use<M> {
         let stream = self.start(M::NAME, true, req).map(|call| ClientStream {
             call,
             _item: PhantomData,

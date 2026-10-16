@@ -259,7 +259,7 @@ impl Caller for Echo {
     fn call_unary<M: UnaryMethod>(
         &self,
         _req: &M::Request,
-    ) -> impl Future<Output = Result<M::Response, CallError>> {
+    ) -> impl Future<Output = Result<M::Response, CallError>> + use<M> {
         self.calls.borrow_mut().push(M::NAME);
         std::future::ready(Ok(M::Response::default()))
     }
@@ -267,7 +267,7 @@ impl Caller for Echo {
     fn call_streaming<M: StreamingMethod>(
         &self,
         _req: &M::Request,
-    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> {
+    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> + use<M> {
         self.calls.borrow_mut().push(M::NAME);
         let items = VecDeque::from([Ok(M::Response::default()), Err(CallError::Disconnected)]);
         std::future::ready(Ok(Items(items)))
@@ -308,4 +308,17 @@ fn errors_display_their_message() {
         CallError::Remote(Error::new(5, "boom")).to_string(),
         "remote error (code 5): boom"
     );
+}
+
+#[test]
+fn client_calls_outlive_their_requests() {
+    let client = DebugClient::new(Echo::default());
+    let call = client.p_prof(&PProfRequest {
+        name: "temporary".into(),
+        ..Default::default()
+    });
+    let stream = client.watch_metrics(&WatchMetricsRequest::default());
+    drop(client);
+    ready(call).unwrap();
+    ready(stream).unwrap();
 }

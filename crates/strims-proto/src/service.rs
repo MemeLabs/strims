@@ -182,8 +182,10 @@ pub trait Registry {
 /// Something that makes calls: a connection's client, or a wrapper around
 /// one.
 ///
-/// Dropping a call's future, or its stream, before it ends cancels the
-/// call. Callers impose their own deadlines that way.
+/// A call's future borrows neither the caller nor the request:
+/// implementations take what they need when the call is made. Dropping a
+/// call's future, or its stream, before it ends cancels the call. Callers
+/// impose their own deadlines that way.
 pub trait Caller {
     /// The responses of a server-streaming call.
     type Stream<T: prost::Message + Default + 'static>: Stream<Item = Result<T, CallError>>
@@ -194,12 +196,12 @@ pub trait Caller {
     fn call_unary<M: UnaryMethod>(
         &self,
         req: &M::Request,
-    ) -> impl Future<Output = Result<M::Response, CallError>>;
+    ) -> impl Future<Output = Result<M::Response, CallError>> + use<Self, M>;
 
     /// Calls the server-streaming `M`. The future resolves once the call is
     /// started; its stream yields the responses.
     fn call_streaming<M: StreamingMethod>(
         &self,
         req: &M::Request,
-    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>>;
+    ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> + use<Self, M>;
 }

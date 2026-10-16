@@ -305,7 +305,7 @@ fn write_service(
         };
         writeln!(
             buf,
-            "    pub fn {}(&self, req: &{}) -> impl {fut}<Output = {result}<{output}, {svc}::CallError>> {{",
+            "    pub fn {}(&self, req: &{}) -> impl {fut}<Output = {result}<{output}, {svc}::CallError>> + use<C> {{",
             m.name, m.input_type
         )?;
         writeln!(
