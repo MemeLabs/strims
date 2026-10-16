@@ -1,0 +1,19 @@
+[package]
+name = "strims-rpc"
+description = "RPC runtime for the generated strims-proto services"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-proto = { workspace = true, features = ["services"] }
+prost.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

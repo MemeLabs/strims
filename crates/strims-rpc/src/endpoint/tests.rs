@@ -1,0 +1,863 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// Tests panic on failure by design.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
+use proptest::prelude::*;
+use strims_proto::debug::v1::{PProfRequest, PProfResponse, WatchMetricsResponse};
+
+use super::*;
+use crate::wire::put_uvarint;
+
+const PPROF: &str = "strims.debug.v1.Debug.PProf";
+const WATCH: &str = "strims.debug.v1.Debug.WatchMetrics";
+
+/// Moves everything `from` has to send into `to`, cutting byte streams
+/// every `chunk` bytes.
+fn pump(from: &mut Endpoint, to: &mut Endpoint, chunk: usize) {
+    let mut stream = Vec::new();
+    while let Some(frame) = from.poll_transmit() {
+        match to.config().framing {
+            Framing::Delimited => stream.extend_from_slice(&frame),
+            Framing::Message => to.handle_input(&frame).unwrap(),
+        }
+    }
+    for c in stream.chunks(chunk.max(1)) {
+        to.handle_input(c).unwrap();
+    }
+}
+
+fn events(e: &mut Endpoint) -> Vec<Event> {
+    std::iter::from_fn(|| e.poll_event()).collect()
+}
+
+fn responses(e: &mut Endpoint, call: CallId) -> Vec<Response> {
+    std::iter::from_fn(|| e.poll_response(call)).collect()
+}
+
+/// The single request among `e`'s events.
+fn request(e: &mut Endpoint) -> (InboundId, u64, String, Vec<u8>) {
+    match events(e).as_slice() {
+        [
+            Event::Request {
+                call,
+                id,
+                method,
+                argument,
+                ..
+            },
+        ] => (*call, *id, method.clone(), argument.clone()),
+        other => panic!("expected one request, got {other:?}"),
+    }
+}
+
+/// Decodes the Calls `e` has to send.
+fn sent(e: &mut Endpoint) -> Vec<Call> {
+    let framing = e.config().framing;
+    std::iter::from_fn(|| e.poll_transmit())
+        .map(|f| {
+            let body = match framing {
+                Framing::Delimited => {
+                    let (len, n) = crate::wire::get_uvarint(&f).unwrap().unwrap();
+                    assert_eq!(f.len(), n + len as usize);
+                    f[n..].to_vec()
+                }
+                Framing::Message => f,
+            };
+            Call::decode(body.as_slice()).unwrap()
+        })
+        .collect()
+}
+
+fn delimited(call: &Call) -> Vec<u8> {
+    let body = call.encode_to_vec();
+    let mut out = Vec::new();
+    put_uvarint(&mut out, body.len() as u64);
+    out.extend_from_slice(&body);
+    out
+}
+
+fn callback(parent_id: u64, kind: Kind, argument: Vec<u8>) -> Call {
+    Call {
+        id: 1000 + parent_id,
+        parent_id,
+        method: CALLBACK.into(),
+        kind: kind as i32,
+        argument,
+        headers: Default::default(),
+    }
+}
+
+fn pprof(name: &str) -> PProfRequest {
+    PProfRequest {
+        name: name.into(),
+        ..Default::default()
+    }
+}
+
+fn item(n: u8) -> WatchMetricsResponse {
+    WatchMetricsResponse { data: vec![n; 4] }
+}
+
+fn item_response(n: u8) -> Response {
+    Response::Item(item(n).encode_to_vec())
+}
+
+#[test]
+fn unary_calls_round_trip_across_any_cut() {
+    for chunk in [1, 2, 3, 7, 1000] {
+        let mut client = Endpoint::new(Config::default());
+        let mut server = Endpoint::new(Config::default());
+
+        let call = client.start_call(PPROF, false, &pprof("heap")).unwrap();
+        pump(&mut client, &mut server, chunk);
+        let (req, id, method, arg) = request(&mut server);
+        assert_eq!((id, method.as_str()), (call.get(), PPROF));
+        assert_eq!(PProfRequest::decode(arg.as_slice()).unwrap(), pprof("heap"));
+
+        let res = PProfResponse {
+            name: "heap".into(),
+            data: vec![1, 2, 3],
+        };
+        assert!(server.reply_value(req, &res));
+        assert!(!server.is_serving(req));
+        pump(&mut server, &mut client, chunk);
+
+        assert_eq!(events(&mut client), [Event::Response { call }]);
+        assert_eq!(
+            responses(&mut client, call),
+            [Response::Item(res.encode_to_vec())]
+        );
+        assert_eq!(client.poll_response(call), None);
+    }
+}
+
+#[test]
+fn streams_deliver_items_then_end() {
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config::default());
+    let call = client.start_call(WATCH, true, &pprof("")).unwrap();
+    pump(&mut client, &mut server, 5);
+    let (req, ..) = request(&mut server);
+
+    for n in 0..3 {
+        assert!(server.reply_item(req, &item(n)));
+    }
+    assert!(server.reply_close(req));
+    pump(&mut server, &mut client, 5);
+
+    // one event for the queue going non-empty
+    assert_eq!(events(&mut client), [Event::Response { call }]);
+    assert_eq!(
+        responses(&mut client, call),
+        [
+            item_response(0),
+            item_response(1),
+            item_response(2),
+            Response::End
+        ]
+    );
+    assert_eq!(client.queued_response_bytes(), 0);
+}
+
+#[test]
+fn stream_errors_arrive_before_or_after_items() {
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config::default());
+    let before = client.start_call(WATCH, true, &pprof("a")).unwrap();
+    let after = client.start_call(WATCH, true, &pprof("b")).unwrap();
+    pump(&mut client, &mut server, 64);
+    let reqs: Vec<InboundId> = events(&mut server)
+        .into_iter()
+        .map(|e| match e {
+            Event::Request { call, .. } => call,
+            e => panic!("{e:?}"),
+        })
+        .collect();
+
+    assert!(server.reply_error(reqs[0], &RpcError::new(4, "denied")));
+    assert!(server.reply_item(reqs[1], &item(9)));
+    assert!(server.reply_error(reqs[1], &RpcError::new(-2, "broke")));
+    pump(&mut server, &mut client, 64);
+
+    assert_eq!(
+        responses(&mut client, before),
+        [Response::Failed(CallError::Remote(RpcError::new(
+            4, "denied"
+        )))]
+    );
+    assert_eq!(
+        responses(&mut client, after),
+        [
+            item_response(9),
+            Response::Failed(CallError::Remote(RpcError::new(-2, "broke")))
+        ]
+    );
+}
+
+#[test]
+fn a_cancel_names_the_call_and_silences_the_server() {
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config::default());
+    let call = client.start_call(WATCH, true, &pprof("")).unwrap();
+    pump(&mut client, &mut server, 64);
+    let (req, ..) = request(&mut server);
+
+    client.cancel(call);
+    let cancels = sent(&mut client);
+    assert_eq!(cancels.len(), 1);
+    assert_eq!(cancels[0].method, CANCEL);
+    assert_eq!(cancels[0].kind, Kind::CallKindCancel as i32);
+    assert_eq!(cancels[0].parent_id, call.get());
+    assert!(cancels[0].argument.is_empty());
+
+    // replay the cancel into the server
+    server.handle_input(&delimited(&cancels[0])).unwrap();
+    assert_eq!(events(&mut server), [Event::Cancelled { call: req }]);
+    assert!(!server.reply_item(req, &item(1)));
+    assert!(!server.reply_close(req));
+    assert_eq!(server.poll_transmit(), None);
+
+    // responses already in flight are dropped
+    client
+        .handle_input(&delimited(&callback(
+            call.get(),
+            Kind::CallKindDefault,
+            item(1).encode_to_vec(),
+        )))
+        .unwrap();
+    assert_eq!(events(&mut client), []);
+    assert_eq!(client.metrics().dropped, 1);
+}
+
+#[test]
+fn cancels_are_recognised_by_method_whatever_their_kind() {
+    let mut server = Endpoint::new(Config::default());
+    let req = Call {
+        id: 3,
+        method: PPROF.into(),
+        ..Default::default()
+    };
+    server.handle_input(&delimited(&req)).unwrap();
+    let (handle, ..) = request(&mut server);
+    let cancel = Call {
+        id: 4,
+        parent_id: 3,
+        method: CANCEL.into(),
+        kind: Kind::CallKindDefault as i32,
+        ..Default::default()
+    };
+    server.handle_input(&delimited(&cancel)).unwrap();
+    assert_eq!(events(&mut server), [Event::Cancelled { call: handle }]);
+}
+
+#[test]
+fn a_cancelled_request_id_can_be_reused_without_crossing_replies() {
+    let mut server = Endpoint::new(Config::default());
+    let req = Call {
+        id: 3,
+        method: PPROF.into(),
+        ..Default::default()
+    };
+    let cancel = Call {
+        id: 4,
+        parent_id: 3,
+        method: CANCEL.into(),
+        ..Default::default()
+    };
+    server.handle_input(&delimited(&req)).unwrap();
+    server.handle_input(&delimited(&cancel)).unwrap();
+    server.handle_input(&delimited(&req)).unwrap();
+    let evs = events(&mut server);
+    let (Event::Request { call: old, .. }, Event::Request { call: new, .. }) = (&evs[0], &evs[2])
+    else {
+        panic!("{evs:?}");
+    };
+    assert_ne!(old, new);
+    assert!(!server.reply_value(*old, &PProfResponse::default()));
+    assert!(server.reply_value(*new, &PProfResponse::default()));
+    assert_eq!(sent(&mut server).len(), 1);
+}
+
+#[test]
+fn a_client_only_endpoint_drops_requests() {
+    let mut client = Endpoint::new(Config {
+        serve: false,
+        ..Config::default()
+    });
+    let req = Call {
+        id: 1,
+        method: PPROF.into(),
+        ..Default::default()
+    };
+    client.handle_input(&delimited(&req)).unwrap();
+    assert_eq!(events(&mut client), []);
+    assert_eq!(client.poll_transmit(), None);
+    assert_eq!(client.metrics().dropped, 1);
+}
+
+#[test]
+fn duplicate_and_zero_request_ids_are_dropped() {
+    let mut server = Endpoint::new(Config::default());
+    let req = |id| Call {
+        id,
+        method: PPROF.into(),
+        ..Default::default()
+    };
+    server.handle_input(&delimited(&req(5))).unwrap();
+    server.handle_input(&delimited(&req(5))).unwrap();
+    server.handle_input(&delimited(&req(0))).unwrap();
+    // a zero-length frame is a Call with every field zero
+    server.handle_input(&[0]).unwrap();
+    assert_eq!(events(&mut server).len(), 1);
+    assert_eq!(server.metrics().dropped, 3);
+}
+
+#[test]
+fn response_kinds_map_to_call_errors() {
+    let cases = [
+        (false, Kind::CallKindUndefined as i32, CallError::Undefined),
+        (false, Kind::CallKindClose as i32, CallError::Closed),
+        (true, Kind::CallKindCancel as i32, CallError::UnknownKind(2)),
+        (true, 7, CallError::UnknownKind(7)),
+    ];
+    for (streaming, kind, want) in cases {
+        let mut client = Endpoint::new(Config::default());
+        let call = client.start_call(WATCH, streaming, &pprof("")).unwrap();
+        let mut res = callback(call.get(), Kind::CallKindDefault, Vec::new());
+        res.kind = kind;
+        client.handle_input(&delimited(&res)).unwrap();
+        assert_eq!(responses(&mut client, call), [Response::Failed(want)]);
+    }
+
+    // an error that doesn't decode
+    let mut client = Endpoint::new(Config::default());
+    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    client
+        .handle_input(&delimited(&callback(
+            call.get(),
+            Kind::CallKindError,
+            vec![0xff],
+        )))
+        .unwrap();
+    assert!(matches!(
+        responses(&mut client, call).as_slice(),
+        [Response::Failed(CallError::Decode(_))]
+    ));
+}
+
+#[test]
+fn requests_over_the_inbound_limit_are_answered_with_an_error() {
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config {
+        max_inbound_calls: 2,
+        ..Config::default()
+    });
+    let calls: Vec<CallId> = (0..3)
+        .map(|_| client.start_call(PPROF, false, &pprof("")).unwrap())
+        .collect();
+    pump(&mut client, &mut server, 64);
+    assert_eq!(events(&mut server).len(), 2);
+    assert_eq!(server.metrics().requests_rejected, 1);
+    pump(&mut server, &mut client, 64);
+    assert_eq!(
+        responses(&mut client, calls[2]),
+        [Response::Failed(CallError::Remote(RpcError::new(
+            0,
+            "too many concurrent calls"
+        )))]
+    );
+}
+
+#[test]
+fn calls_over_the_outbound_limit_fail_locally() {
+    let mut client = Endpoint::new(Config {
+        max_outbound_calls: 1,
+        ..Config::default()
+    });
+    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    assert_eq!(
+        client.start_call(PPROF, false, &pprof("")),
+        Err(CallError::TooManyCalls)
+    );
+    client.cancel(call);
+    client.start_call(PPROF, false, &pprof("")).unwrap();
+}
+
+/// A request Call of exactly `len` bytes.
+fn request_of_len(len: usize) -> Call {
+    let mut c = Call {
+        id: 1,
+        method: PPROF.into(),
+        ..Default::default()
+    };
+    let base = c.encoded_len();
+    // the argument field adds a key, a length prefix and the bytes
+    let mut arg = len - base - 2;
+    while base + 1 + crate::wire::uvarint_len(arg as u64) + arg > len {
+        arg -= 1;
+    }
+    c.argument = vec![0; arg];
+    assert_eq!(c.encoded_len(), len);
+    c
+}
+
+#[test]
+fn a_call_of_the_maximum_length_passes_and_one_byte_more_closes() {
+    let config = Config {
+        max_message_bytes: 1000,
+        ..Config::default()
+    };
+    let mut server = Endpoint::new(config.clone());
+    server
+        .handle_input(&delimited(&request_of_len(1000)))
+        .unwrap();
+    assert_eq!(events(&mut server).len(), 1);
+
+    let mut client = Endpoint::new(config);
+    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let err = client.handle_input(&delimited(&request_of_len(1001)));
+    assert_eq!(
+        err,
+        Err(Error::Frame(FrameError::TooLarge {
+            len: 1001,
+            max: 1000
+        }))
+    );
+    assert!(client.is_closed());
+    assert_eq!(
+        responses(&mut client, call),
+        [Response::Failed(CallError::Disconnected)]
+    );
+    assert_eq!(client.handle_input(&[0]), Err(Error::Closed));
+}
+
+#[test]
+fn an_overlong_length_prefix_closes() {
+    let mut server = Endpoint::new(Config::default());
+    assert_eq!(
+        server.handle_input(&[0x80; 11]),
+        Err(Error::Frame(FrameError::MalformedLength))
+    );
+    assert!(server.is_closed());
+}
+
+#[test]
+fn malformed_calls_are_skipped() {
+    let mut server = Endpoint::new(Config::default());
+    let mut data = vec![2, 0xff, 0xff];
+    data.extend(delimited(&Call {
+        id: 1,
+        method: PPROF.into(),
+        ..Default::default()
+    }));
+    server.handle_input(&data).unwrap();
+    assert_eq!(events(&mut server).len(), 1);
+    assert_eq!(server.metrics().malformed, 1);
+}
+
+#[test]
+fn every_call_sent_gets_a_fresh_id_from_one() {
+    let mut a = Endpoint::new(Config::default());
+    let mut b = Endpoint::new(Config::default());
+    let c1 = a.start_call(PPROF, false, &pprof("")).unwrap();
+    let c2 = a.start_call(PPROF, false, &pprof("")).unwrap();
+    assert_eq!((c1.get(), c2.get()), (1, 2));
+    pump(&mut a, &mut b, 64);
+    let reqs: Vec<InboundId> = events(&mut b)
+        .into_iter()
+        .map(|e| match e {
+            Event::Request { call, .. } => call,
+            e => panic!("{e:?}"),
+        })
+        .collect();
+    // b's own call and its answers share b's counter
+    b.start_call(PPROF, false, &pprof("")).unwrap();
+    b.reply_value(reqs[1], &PProfResponse::default());
+    b.reply_value(reqs[0], &PProfResponse::default());
+    let calls = sent(&mut b);
+    let ids: Vec<(u64, u64, &str)> = calls
+        .iter()
+        .map(|c| (c.id, c.parent_id, c.method.as_str()))
+        .collect();
+    assert_eq!(ids, [(1, 0, PPROF), (2, 2, CALLBACK), (3, 1, CALLBACK)]);
+}
+
+#[test]
+fn responses_to_unknown_calls_are_dropped() {
+    let mut client = Endpoint::new(Config::default());
+    client
+        .handle_input(&delimited(&callback(42, Kind::CallKindDefault, vec![1])))
+        .unwrap();
+    assert_eq!(events(&mut client), []);
+    assert_eq!(client.metrics().dropped, 1);
+}
+
+#[test]
+fn a_slow_stream_reader_overflows_its_call_only() {
+    let mut client = Endpoint::new(Config {
+        max_queued_responses: 2,
+        ..Config::default()
+    });
+    let slow = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let other = client.start_call(PPROF, false, &pprof("")).unwrap();
+    sent(&mut client);
+    for n in 0..4 {
+        let res = callback(slow.get(), Kind::CallKindDefault, item(n).encode_to_vec());
+        client.handle_input(&delimited(&res)).unwrap();
+    }
+    // the cancel goes out at once
+    let cancels = sent(&mut client);
+    assert_eq!(cancels.len(), 1);
+    assert_eq!(
+        (cancels[0].method.as_str(), cancels[0].parent_id),
+        (CANCEL, slow.get())
+    );
+    assert_eq!(
+        responses(&mut client, slow),
+        [
+            item_response(0),
+            item_response(1),
+            Response::Failed(CallError::Overflow)
+        ]
+    );
+    assert_eq!(client.metrics().overflows, 1);
+
+    let res = callback(
+        other.get(),
+        Kind::CallKindDefault,
+        PProfResponse::default().encode_to_vec(),
+    );
+    client.handle_input(&delimited(&res)).unwrap();
+    assert_eq!(responses(&mut client, other), [Response::Item(vec![])]);
+    assert_eq!(client.queued_response_bytes(), 0);
+}
+
+#[test]
+fn queued_response_bytes_are_bounded_across_calls() {
+    let mut client = Endpoint::new(Config {
+        max_message_bytes: 100,
+        max_queued_response_bytes: 0, // raised to max_message_bytes
+        ..Config::default()
+    });
+    let a = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let b = client.start_call(PPROF, false, &pprof("")).unwrap();
+    client
+        .handle_input(&delimited(&callback(
+            a.get(),
+            Kind::CallKindDefault,
+            vec![0; 60],
+        )))
+        .unwrap();
+    client
+        .handle_input(&delimited(&callback(
+            b.get(),
+            Kind::CallKindDefault,
+            vec![0; 60],
+        )))
+        .unwrap();
+    assert_eq!(client.queued_response_bytes(), 60);
+    assert_eq!(
+        responses(&mut client, b),
+        [Response::Failed(CallError::Overflow)]
+    );
+    // unary calls end at their response, so there's no cancel
+    assert_eq!(sent(&mut client).len(), 2);
+    client.cancel(a);
+    assert_eq!(client.queued_response_bytes(), 0);
+}
+
+#[test]
+fn oversized_replies_become_errors() {
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config {
+        max_send_bytes: 100,
+        ..Config::default()
+    });
+    let unary = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let stream = client.start_call(WATCH, true, &pprof("")).unwrap();
+    pump(&mut client, &mut server, 64);
+    let reqs: Vec<InboundId> = events(&mut server)
+        .into_iter()
+        .map(|e| match e {
+            Event::Request { call, .. } => call,
+            e => panic!("{e:?}"),
+        })
+        .collect();
+    let big = PProfResponse {
+        name: String::new(),
+        data: vec![0; 200],
+    };
+    assert!(!server.reply_value(reqs[0], &big));
+    assert!(server.reply_item(reqs[1], &item(1)));
+    let big_item = WatchMetricsResponse { data: vec![0; 200] };
+    assert!(!server.reply_item(reqs[1], &big_item));
+    assert!(!server.is_serving(reqs[1]));
+    assert_eq!(server.metrics().oversized_replies, 2);
+    pump(&mut server, &mut client, 64);
+
+    let too_large = |len| {
+        Response::Failed(CallError::Remote(RpcError::new(
+            0,
+            format!("response too large: {len} bytes"),
+        )))
+    };
+    assert_eq!(responses(&mut client, unary), [too_large(220)]);
+    assert_eq!(
+        responses(&mut client, stream),
+        [item_response(1), too_large(220)]
+    );
+}
+
+#[test]
+fn oversized_requests_fail_locally() {
+    let mut client = Endpoint::new(Config {
+        max_send_bytes: 100,
+        ..Config::default()
+    });
+    let err = client.start_call(PPROF, false, &pprof(&"x".repeat(200)));
+    assert_eq!(err, Err(CallError::TooLarge { len: 237, max: 100 }));
+    assert_eq!(client.poll_transmit(), None);
+}
+
+#[test]
+fn message_framing_carries_one_unprefixed_call_per_message() {
+    let config = Config {
+        framing: Framing::Message,
+        ..Config::default()
+    };
+    let mut client = Endpoint::new(config.clone());
+    let mut server = Endpoint::new(config);
+    let call = client.start_call(PPROF, false, &pprof("a")).unwrap();
+    let frame = client.poll_transmit().unwrap();
+    assert_eq!(
+        Call::decode(frame.as_slice()).unwrap().method,
+        PPROF,
+        "no prefix"
+    );
+    server.handle_input(&frame).unwrap();
+    let (req, ..) = request(&mut server);
+    server.reply_value(req, &PProfResponse::default());
+    pump(&mut server, &mut client, 1);
+    assert_eq!(responses(&mut client, call), [Response::Item(vec![])]);
+}
+
+#[test]
+fn message_framing_rejects_oversized_messages() {
+    let mut server = Endpoint::new(Config {
+        framing: Framing::Message,
+        max_message_bytes: 10,
+        ..Config::default()
+    });
+    assert_eq!(
+        server.handle_input(&[0; 11]),
+        Err(Error::MessageTooLarge { len: 11, max: 10 })
+    );
+}
+
+/// The `rpc_*` vectors that `crates/strims-proto/golden` records from the
+/// Go library.
+fn golden(name: &str) -> Vec<u8> {
+    let vectors = include_str!("../../../strims-proto/golden/vectors.hex");
+    let line = vectors
+        .lines()
+        .find(|l| l.split(' ').next() == Some(name))
+        .unwrap_or_else(|| panic!("no vector {name}"));
+    hex::decode(line.split(' ').nth(1).unwrap()).unwrap()
+}
+
+#[test]
+fn go_encoded_calls_are_understood() {
+    let config = Config {
+        framing: Framing::Message,
+        ..Config::default()
+    };
+
+    // a request and its cancel (sent with the default kind)
+    let mut server = Endpoint::new(config.clone());
+    server.handle_input(&golden("rpc_call_request")).unwrap();
+    let (req, id, method, arg) = request(&mut server);
+    assert_eq!((id, method.as_str()), (1, PPROF));
+    assert_eq!(PProfRequest::decode(arg.as_slice()).unwrap().name, "heap");
+    server
+        .handle_input(&golden("rpc_call_cancel_default_kind"))
+        .unwrap();
+    assert_eq!(events(&mut server), [Event::Cancelled { call: req }]);
+
+    // answers to call 1
+    let answers = [
+        ("rpc_call_callback", None),
+        (
+            "rpc_call_error",
+            Some(CallError::Remote(RpcError::new(5, "boom"))),
+        ),
+        ("rpc_call_undefined", Some(CallError::Undefined)),
+        ("rpc_call_close", Some(CallError::Closed)),
+    ];
+    for (name, want) in answers {
+        let mut client = Endpoint::new(config.clone());
+        let call = client.start_call(PPROF, false, &pprof("heap")).unwrap();
+        client.handle_input(&golden(name)).unwrap();
+        let got = responses(&mut client, call);
+        match want {
+            None => {
+                let [Response::Item(b)] = got.as_slice() else {
+                    panic!("{name}: {got:?}");
+                };
+                assert_eq!(PProfResponse::decode(b.as_slice()).unwrap().data.len(), 40);
+            }
+            Some(e) => assert_eq!(got, [Response::Failed(e)], "{name}"),
+        }
+    }
+
+    // our request encodes as Go's
+    let mut client = Endpoint::new(config);
+    let req = PProfRequest {
+        name: "heap".into(),
+        debug: true,
+        gc: false,
+    };
+    client.start_call(PPROF, false, &req).unwrap();
+    assert_eq!(client.poll_transmit().unwrap(), golden("rpc_call_request"));
+}
+
+/// Runs a fixed exchange and returns every byte both sides sent.
+fn script() -> Vec<u8> {
+    let mut log = Vec::new();
+    let mut client = Endpoint::new(Config::default());
+    let mut server = Endpoint::new(Config::default());
+    let calls: Vec<CallId> = (0..5)
+        .map(|i| {
+            client
+                .start_call(
+                    if i % 2 == 0 { PPROF } else { WATCH },
+                    i % 2 == 1,
+                    &pprof("s"),
+                )
+                .unwrap()
+        })
+        .collect();
+    while let Some(f) = client.poll_transmit() {
+        log.extend_from_slice(&f);
+        server.handle_input(&f).unwrap();
+    }
+    for e in events(&mut server) {
+        if let Event::Request { call, method, .. } = e {
+            if method == WATCH {
+                server.reply_item(call, &item(1));
+                server.reply_close(call);
+            } else {
+                server.reply_value(call, &PProfResponse::default());
+            }
+        }
+    }
+    client.cancel(calls[1]);
+    for e in [&mut server, &mut client] {
+        while let Some(f) = e.poll_transmit() {
+            log.extend_from_slice(&f);
+        }
+    }
+    log
+}
+
+#[test]
+fn the_same_exchange_sends_the_same_bytes() {
+    assert_eq!(script(), script());
+}
+
+#[test]
+fn closing_fails_calls_and_cancels_requests() {
+    let mut a = Endpoint::new(Config::default());
+    let mut b = Endpoint::new(Config::default());
+    let call = a.start_call(WATCH, true, &pprof("")).unwrap();
+    b.start_call(PPROF, false, &pprof("")).unwrap();
+    pump(&mut b, &mut a, 64);
+    let (req, ..) = request(&mut a);
+
+    a.close();
+    assert!(a.is_closed());
+    assert_eq!(a.poll_transmit(), None);
+    assert_eq!(
+        events(&mut a),
+        [Event::Response { call }, Event::Cancelled { call: req }]
+    );
+    assert_eq!(
+        responses(&mut a, call),
+        [Response::Failed(CallError::Disconnected)]
+    );
+    assert!(!a.reply_value(req, &PProfResponse::default()));
+    assert_eq!(
+        a.start_call(PPROF, false, &pprof("")),
+        Err(CallError::Disconnected)
+    );
+}
+
+#[test]
+fn congestion_starts_at_the_high_water_mark() {
+    let mut client = Endpoint::new(Config {
+        transmit_high_water: 100,
+        ..Config::default()
+    });
+    client
+        .start_call(PPROF, false, &pprof(&"x".repeat(40)))
+        .unwrap();
+    assert!(!client.is_congested());
+    client
+        .start_call(PPROF, false, &pprof(&"x".repeat(40)))
+        .unwrap();
+    assert!(client.is_congested());
+    client.poll_transmit();
+    assert!(!client.is_congested());
+    assert_eq!(client.transmit_buffered(), 76);
+}
+
+proptest! {
+    #[test]
+    fn endpoint_survives_arbitrary_input(
+        data in proptest::collection::vec(any::<u8>(), 0..2048),
+        cuts in proptest::collection::vec(1usize..64, 1..16),
+        message in any::<bool>(),
+    ) {
+        let config = Config {
+            framing: if message { Framing::Message } else { Framing::Delimited },
+            max_message_bytes: 512,
+            max_inbound_calls: 4,
+            max_queued_responses: 2,
+            ..Config::default()
+        };
+        let mut e = Endpoint::new(config);
+        let calls: Vec<CallId> = (0..3)
+            .map(|i| e.start_call(WATCH, i != 0, &pprof("")).unwrap())
+            .collect();
+        let mut rest = data.as_slice();
+        for cut in cuts.iter().cycle() {
+            if rest.is_empty() || e.is_closed() {
+                break;
+            }
+            let (head, tail) = rest.split_at((*cut).min(rest.len()));
+            rest = tail;
+            let _ = e.handle_input(head);
+            prop_assert!(e.decoder.buffered() <= 512 + crate::wire::MAX_VARINT_LEN);
+            prop_assert!(e.inbound.len() <= 4);
+            for out in e.outbound.values() {
+                prop_assert!(out.responses.len() <= 3);
+            }
+            while let Some(ev) = e.poll_event() {
+                if let Event::Request { call, .. } = ev {
+                    e.reply_value(call, &PProfResponse::default());
+                }
+            }
+            while e.poll_transmit().is_some() {}
+        }
+        for call in calls {
+            while e.poll_response(call).is_some() {}
+        }
+        prop_assert_eq!(e.queued_response_bytes(), 0);
+    }
+}

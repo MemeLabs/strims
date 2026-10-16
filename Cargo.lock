@@ -1912,6 +1912,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-rpc"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "proptest",
+ "prost",
+ "strims-proto",
+ "thiserror",
+]
+
+[[package]]
 name = "strims-sim"
 version = "0.1.0"
 dependencies = [

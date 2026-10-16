@@ -12,6 +12,7 @@ members = [
   "crates/strims-vnic",
   "crates/strims-vpn",
   "crates/strims-webrtc",
+  "crates/strims-rpc",
   "crates/strims-node",
   "crates/strims-sim",
 ]
@@ -50,6 +51,7 @@ strims-ppspp = { path = "crates/strims-ppspp" }
 strims-vnic = { path = "crates/strims-vnic" }
 strims-vpn = { path = "crates/strims-vpn" }
 strims-webrtc = { path = "crates/strims-webrtc" }
+strims-rpc = { path = "crates/strims-rpc" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 
