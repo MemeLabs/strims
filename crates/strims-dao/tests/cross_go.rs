@@ -1,0 +1,474 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! A store this crate writes, checked by the Go dao (`go run -tags golden
+//! ./crates/strims-dao/golden -verify <file>`): sign-in and session
+//! records, records and index lookups through the Go API, a pairing token
+//! import, and the store's replication logs applied to a Go replica.
+//! Skipped when `go` isn't on PATH.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    // The test runs a Go subprocess and reads the clock for session expiry.
+    clippy::disallowed_methods
+)]
+
+use std::fmt::Write as _;
+use std::future::Future;
+use std::path::PathBuf;
+use std::process::Command;
+use std::rc::Rc;
+
+use futures_util::{FutureExt, StreamExt};
+use prost::Message;
+use strims_base::rng::det_rng;
+use strims_base::time::Time;
+use strims_dao::auth::{self, ProfileKey};
+use strims_dao::replication::allocate_ids;
+use strims_dao::schema::chat::{
+    ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
+    WhisperThreads, state_key,
+};
+use strims_dao::schema::network::{BootstrapClients, Networks};
+use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
+use strims_dao::schema::system::{Checkpoints, EventLogs};
+use strims_dao::seal::StorageKey;
+use strims_dao::{ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, lease};
+use strims_kv::MemoryKv;
+use strims_proto::auth::v1::PairingToken;
+use strims_proto::chat::v1::{
+    MessageState, UiConfig, UiConfigHighlight, UiConfigIgnore, UiConfigTag, WhisperRecord,
+    WhisperThread,
+};
+use strims_proto::network::v1::bootstrap::{
+    BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
+};
+use strims_proto::network::v1::{Network, ServerConfig};
+use strims_proto::profile::v1::Device;
+use strims_proto::replication::v1::EventLog;
+use strims_proto::types::Certificate;
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn go_available() -> bool {
+    match Command::new("go").arg("version").output() {
+        Ok(o) if o.status.success() => true,
+        _ => {
+            eprintln!("skipping: `go` is not on PATH");
+            false
+        }
+    }
+}
+
+fn block<T>(f: impl Future<Output = T>) -> T {
+    f.now_or_never()
+        .expect("memory store operations are ready immediately")
+}
+
+struct Lines(String);
+
+impl Lines {
+    fn put(&mut self, name: &str, values: &[&[u8]]) {
+        self.0.push_str(name);
+        for v in values {
+            if v.is_empty() {
+                self.0.push_str(" =");
+            } else {
+                write!(self.0, " {}", hex::encode(v)).unwrap();
+            }
+        }
+        self.0.push('\n');
+    }
+}
+
+fn record_lines<T: Table>(tx: &mut ReadTx<MemoryKv>, out: &mut Lines) {
+    for r in block(T::get_all(tx)).unwrap() {
+        out.put(
+            "record",
+            &[
+                &(T::NS.0 as u64).to_be_bytes(),
+                &T::id(&r).to_be_bytes(),
+                &r.encode_to_vec(),
+            ],
+        );
+    }
+}
+
+fn index_line<T: Table>(
+    tx: &mut ReadTx<MemoryKv>,
+    ix: &strims_dao::Index<T::Record>,
+    key: &[u8],
+    out: &mut Lines,
+) {
+    let mut ids = block(T::index_ids(tx, ix, key)).unwrap();
+    ids.sort();
+    let ids: Vec<u8> = ids.iter().flat_map(|id| id.to_be_bytes()).collect();
+    out.put("index", &[&(ix.ns.0 as u64).to_be_bytes(), key, &ids]);
+}
+
+#[test]
+fn go_reads_a_store_this_crate_writes() {
+    if !go_available() {
+        return;
+    }
+    let now = Time::from_system(std::time::SystemTime::now());
+    let kv = MemoryKv::new();
+    let mut rng = det_rng(42);
+    let (pk, store) = block(auth::sign_up(
+        &kv,
+        "bob",
+        "correct horse",
+        "linux",
+        &mut rng,
+        now,
+    ))
+    .unwrap();
+    let session_key = StorageKey::from_bytes([77; 32]);
+    let session = block(auth::create_session(&kv, &session_key, &pk, &mut rng, now)).unwrap();
+
+    let rs = block(ReplicatedStore::new(store.clone())).unwrap();
+    let mut events = rs.events().subscribe();
+    let network_key = strims_crypto::generate_key(&mut rng);
+    block(async {
+        let mut tx = rs.write(now).await.unwrap();
+        let id = tx.generate_id().await.unwrap();
+        Networks::insert(
+            &mut tx,
+            Network {
+                id,
+                certificate: Some(Certificate {
+                    key: network_key.public.clone(),
+                    subject: "net".into(),
+                    not_after: 4_000_000_000,
+                    ..Default::default()
+                }),
+                alias: "owned".into(),
+                server_config: Some(ServerConfig {
+                    name: "net".into(),
+                    key: Some(network_key.clone()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        for url in ["wss://a.example/ws", "wss://b.example/ws"] {
+            let id = tx.generate_id().await.unwrap();
+            BootstrapClients::insert(
+                &mut tx,
+                BootstrapClient {
+                    id,
+                    client_options: Some(bootstrap_client::ClientOptions::WebsocketOptions(
+                        BootstrapClientWebSocketOptions {
+                            url: url.into(),
+                            insecure_skip_verify_tls: false,
+                        },
+                    )),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+        ChatUiConfig::set(
+            &mut tx,
+            UiConfig {
+                replicate: true,
+                show_time: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx = rs.write(now).await.unwrap();
+        let mut highlights = vec![];
+        for (alias, key) in [("one", b"peer-1"), ("two", b"peer-2")] {
+            let id = tx.generate_id().await.unwrap();
+            highlights.push(id);
+            ChatUiConfigHighlights::insert(
+                &mut tx,
+                UiConfigHighlight {
+                    id,
+                    alias: alias.into(),
+                    peer_key: key.to_vec(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+        ChatUiConfigHighlights::delete(&mut tx, highlights[1])
+            .await
+            .unwrap();
+        let id = tx.generate_id().await.unwrap();
+        ChatUiConfigTags::insert(
+            &mut tx,
+            UiConfigTag {
+                id,
+                alias: "tag".into(),
+                peer_key: b"peer-3".to_vec(),
+                color: "#00ff00".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let id = tx.generate_id().await.unwrap();
+        ChatUiConfigIgnores::insert(
+            &mut tx,
+            UiConfigIgnore {
+                id,
+                alias: "ignored".into(),
+                peer_key: b"peer-4".to_vec(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        for last in [10, 20] {
+            let id = tx.generate_id().await.unwrap();
+            WhisperThreads::insert(
+                &mut tx,
+                WhisperThread {
+                    id,
+                    peer_key: b"peer-5".to_vec(),
+                    alias: format!("at {last}"),
+                    last_message_time: last,
+                    has_unread: last == 10,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+        for (state, peer_message_id) in [
+            (MessageState::Unread, 5),
+            (MessageState::Enqueued, 0),
+            (MessageState::Read, 6),
+        ] {
+            let id = tx.generate_id().await.unwrap();
+            WhisperRecords::insert(
+                &mut tx,
+                WhisperRecord {
+                    id,
+                    peer_key: b"peer-5".to_vec(),
+                    state: state as i32,
+                    peer_message_id,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+        let id = tx.generate_id().await.unwrap();
+        Devices::insert(
+            &mut tx,
+            Device {
+                id,
+                device: "phone".into(),
+                os: "android".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    });
+    let mut token = [0u8; 16];
+    token[0] = 1;
+    block(lease::try_lock(
+        rs.store(),
+        &lease::key(&["replication"]),
+        &token,
+        now,
+    ))
+    .unwrap();
+
+    let mut logs: Vec<EventLog> = vec![];
+    while let Some(Some(Recv::Event(e))) = events.next().now_or_never() {
+        if let StoreEvent::EventLog(l) = Rc::unwrap_or_clone(e) {
+            logs.push(l);
+        }
+    }
+    assert_eq!(logs.len(), 2);
+
+    let mut out = Lines(String::new());
+    for (table, entries) in kv.dump() {
+        for (k, v) in entries {
+            out.put("kv", &[table.as_bytes(), k.as_bytes(), &v]);
+        }
+    }
+    out.put(
+        "auth",
+        &[b"bob", b"correct horse", &pk.id.to_be_bytes(), &pk.key],
+    );
+    out.put(
+        "session",
+        &[
+            session_key.bytes(),
+            &session.eol.to_be_bytes(),
+            &session.token,
+            &pk.id.to_be_bytes(),
+            &pk.key,
+        ],
+    );
+
+    let mut tx = block(store.read()).unwrap();
+    let profile = block(Profile::get(&mut tx)).unwrap().unwrap();
+    out.put(
+        "record",
+        &[
+            &2001u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &profile.encode_to_vec(),
+        ],
+    );
+    let ranges = block(ProfileIds::get(&mut tx)).unwrap().unwrap();
+    out.put(
+        "record",
+        &[
+            &2002u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &ranges.encode_to_vec(),
+        ],
+    );
+    let ui = block(ChatUiConfig::get(&mut tx)).unwrap().unwrap();
+    out.put(
+        "record",
+        &[
+            &6008u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &ui.encode_to_vec(),
+        ],
+    );
+    record_lines::<Devices>(&mut tx, &mut out);
+    record_lines::<Networks>(&mut tx, &mut out);
+    record_lines::<BootstrapClients>(&mut tx, &mut out);
+    record_lines::<ChatUiConfigHighlights>(&mut tx, &mut out);
+    record_lines::<ChatUiConfigTags>(&mut tx, &mut out);
+    record_lines::<ChatUiConfigIgnores>(&mut tx, &mut out);
+    record_lines::<WhisperThreads>(&mut tx, &mut out);
+    record_lines::<WhisperRecords>(&mut tx, &mut out);
+    record_lines::<EventLogs>(&mut tx, &mut out);
+    record_lines::<Checkpoints>(&mut tx, &mut out);
+
+    index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
+    index_line::<BootstrapClients>(
+        &mut tx,
+        &BootstrapClients::BY_CLIENT_OPTIONS,
+        b"wss://b.example/ws",
+        &mut out,
+    );
+    index_line::<ChatUiConfigHighlights>(
+        &mut tx,
+        &ChatUiConfigHighlights::BY_PEER_KEY,
+        b"peer-1",
+        &mut out,
+    );
+    index_line::<ChatUiConfigHighlights>(
+        &mut tx,
+        &ChatUiConfigHighlights::BY_PEER_KEY,
+        b"peer-2",
+        &mut out,
+    );
+    index_line::<ChatUiConfigTags>(&mut tx, &ChatUiConfigTags::BY_PEER_KEY, b"peer-3", &mut out);
+    index_line::<ChatUiConfigIgnores>(
+        &mut tx,
+        &ChatUiConfigIgnores::BY_PEER_KEY,
+        b"peer-4",
+        &mut out,
+    );
+    index_line::<WhisperThreads>(&mut tx, &WhisperThreads::BY_PEER_KEY, b"peer-5", &mut out);
+    index_line::<WhisperRecords>(&mut tx, &WhisperRecords::BY_PEER_KEY, b"peer-5", &mut out);
+    index_line::<WhisperRecords>(
+        &mut tx,
+        &WhisperRecords::UNREAD_BY_PEER_KEY,
+        b"peer-5",
+        &mut out,
+    );
+    index_line::<WhisperRecords>(
+        &mut tx,
+        &WhisperRecords::BY_STATE,
+        &state_key(MessageState::Read as i32),
+        &mut out,
+    );
+    let networks = block(Networks::get_all(&mut tx)).unwrap();
+    let bootstraps = block(BootstrapClients::get_all(&mut tx)).unwrap();
+    let devices = block(Devices::get_all(&mut tx)).unwrap();
+    drop(tx);
+
+    let mut applied: Vec<Vec<u8>> = vec![0xbeefu64.to_be_bytes().to_vec()];
+    applied.extend(logs.iter().map(|l| l.encode_to_vec()));
+    out.put(
+        "apply",
+        &applied.iter().map(Vec::as_slice).collect::<Vec<_>>(),
+    );
+
+    let new_device = 0x1234u64;
+    let pairing = PairingToken {
+        auth: block(auth::get_user(&kv, "bob")).unwrap(),
+        profile: Some(strims_proto::profile::v1::Profile {
+            device_id: new_device,
+            ..profile
+        }),
+        networks: networks
+            .into_iter()
+            .map(|n| Network {
+                server_config: None,
+                ..n
+            })
+            .collect(),
+        bootstraps,
+        devices,
+        profile_id: block(allocate_ids(rs.store(), 1000, now)).unwrap(),
+    };
+    out.put(
+        "pairing",
+        &[&pairing.encode_to_vec(), &pk.key, b"correct horse"],
+    );
+
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("strims-dao-cross-go.hex");
+    std::fs::write(&path, out.0).unwrap();
+    let run = Command::new("go")
+        .args([
+            "run",
+            "-tags",
+            "golden",
+            "./crates/strims-dao/golden",
+            "-verify",
+        ])
+        .arg(&path)
+        .current_dir(repo_root())
+        .output()
+        .expect("run go");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        run.status.success() && stdout.trim() == "ok",
+        "go verify failed:\n{stdout}\n{stderr}"
+    );
+
+    // The pairing token this test sends is one this crate imports too.
+    let paired = MemoryKv::new();
+    let paired_store = block(auth::import_pairing_token(
+        &paired,
+        &pairing,
+        &ProfileKey { ..pk.clone() },
+        &mut rng,
+        now,
+    ))
+    .unwrap();
+    let mut tx = block(paired_store.read()).unwrap();
+    assert_eq!(
+        block(Profile::get(&mut tx)).unwrap().unwrap().device_id,
+        new_device
+    );
+}

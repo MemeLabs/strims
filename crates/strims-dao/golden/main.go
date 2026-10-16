@@ -9,8 +9,14 @@
 //
 //	go run -tags golden ./crates/strims-dao/golden
 //
-// Each line of vectors.hex is "<name> <hex> [<hex> ...]"; "=" is an empty
-// value. Sealed values use random nonces, so they differ on each run.
+// Each line of vectors.hex and store.hex is "<name> <hex> [<hex> ...]";
+// "=" is an empty value. Sealed values, keys and ids are random, so they
+// differ on each run. store.hex holds a profile store written through the
+// dao API: its kv contents, its records as the dao reads them, and a
+// compressed replication delta.
+//
+// With -verify <file>, checks a store another implementation wrote, as
+// the file describes it, and prints "ok".
 package main
 
 import (
@@ -111,6 +117,11 @@ func indexHash() {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "-verify" {
+		verify(os.Args[2])
+		return
+	}
+
 	path := filepath.Join("crates", "strims-dao", "golden", "vectors.hex")
 	f := must(os.Create(path))
 	defer f.Close()
@@ -120,4 +131,10 @@ func main() {
 	kdf()
 	seal()
 	indexHash()
+
+	sf := must(os.Create(filepath.Join("crates", "strims-dao", "golden", "store.hex")))
+	defer sf.Close()
+	sw := bufio.NewWriter(sf)
+	defer sw.Flush()
+	storeScenario(sw)
 }

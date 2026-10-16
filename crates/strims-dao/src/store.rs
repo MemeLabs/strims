@@ -29,7 +29,7 @@ use strims_proto::replication::v1::{Event, EventLog};
 use crate::error::Error;
 use crate::events::{EventBus, StoreEvent};
 use crate::ids;
-use crate::key::{Namespace, Part, index_hash, profile_table};
+use crate::key::{Namespace, index_entry_key, index_prefix, profile_table};
 use crate::schema::profile::{Profile, ProfileIds};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use crate::seal::StorageKey;
@@ -468,16 +468,6 @@ pub(crate) fn strip_records(mut log: EventLog) -> EventLog {
         e.record.clear();
     }
     log
-}
-
-/// The key of index `ns`'s entry mapping `key` to record `id`.
-pub(crate) fn index_entry_key(ns: Namespace, salt: &[u8], key: &[u8], id: u64) -> String {
-    ns.format(&[Part::Str(&index_hash(salt, key)), Part::Id(id)])
-}
-
-/// The prefix of index `ns`'s entries for `key`.
-pub(crate) fn index_prefix(ns: Namespace, salt: &[u8], key: &[u8]) -> String {
-    ns.format_prefix(&[Part::Str(&index_hash(salt, key))])
 }
 
 /// The record at `key`.

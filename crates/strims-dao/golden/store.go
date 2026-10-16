@@ -1,0 +1,401 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//go:build golden
+
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/dao/versionvector"
+	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
+	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
+	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/kv"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
+	"github.com/MemeLabs/strims/pkg/timeutil"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
+)
+
+func u64(v uint64) []byte { return binary.BigEndian.AppendUint64(nil, v) }
+
+func marshal(m proto.Message) []byte {
+	return must(proto.MarshalOptions{Deterministic: true}.Marshal(m))
+}
+
+func must0(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+// storeScenario writes a profile store through the dao API and records
+// its kv contents, the records as the dao reads them back, and a
+// compressed replication delta.
+func storeScenario(w *bufio.Writer) {
+	out := func(name string, values ...[]byte) {
+		parts := []string{name}
+		for _, v := range values {
+			if len(v) == 0 {
+				parts = append(parts, "=")
+			} else {
+				parts = append(parts, hex.EncodeToString(v))
+			}
+		}
+		fmt.Fprintln(w, strings.Join(parts, " "))
+	}
+
+	blob := kvtest.NewMemStore().(*kvtest.Store)
+	out("now", u64(uint64(timeutil.Now().UnixNano())))
+
+	id, key, err := dao.CreateServerAuthThing(blob, "alice", "hunter2")
+	must0(err)
+	out("auth", []byte("alice"), []byte("hunter2"), u64(id), key)
+
+	sessionKey := seq(200, 32)
+	tok := must(dao.CreateSessionThing(blob, sessionKey, id, key))
+	out("session", sessionKey, u64(tok.EOL), tok.Token)
+
+	sk := must(dao.NewStorageKeyFromBytes(key, nil))
+	ps := dao.NewProfileStore(id, sk, blob, nil)
+	rs := must(dao.NewReplicatedStore(ps))
+	profile := must(dao.Profile.Get(rs))
+
+	// Networks: one this profile runs, one it joined.
+	owned := must(dao.NewNetwork(rs, "owned", nil, profile))
+	must0(dao.Networks.Insert(rs, owned))
+	otherKey := must(dao.GenerateKey())
+	joinedCert := must(dao.NewSelfSignedCertificate(otherKey, certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN, time.Hour, dao.WithSubject("joined")))
+	joined := &networkv1.Network{Id: must(rs.GenerateID()), Version: versionvector.New(), Certificate: joinedCert, Alias: "joined"}
+	must0(dao.Networks.Insert(rs, joined))
+	must(dao.Networks.Transform(rs, joined.Id, func(n *networkv1.Network) error {
+		n.Alias = "renamed"
+		return nil
+	}))
+
+	// Bootstrap clients.
+	b1 := must(dao.NewWebSocketBootstrapClient(rs, "wss://one.example/ws", false))
+	must0(dao.BootstrapClients.Insert(rs, b1))
+	b2 := must(dao.NewWebSocketBootstrapClient(rs, "wss://two.example/ws", true))
+	must0(dao.BootstrapClients.Insert(rs, b2))
+
+	// Chat settings.
+	must0(dao.ChatUIConfig.Set(rs, &chatv1.UIConfig{Replicate: true, ShowTime: true, Highlight: true}))
+	h1 := must(dao.NewChatUIConfigHighlight(rs, "first", []byte("peer-a")))
+	must0(dao.ChatUIConfigHighlights.Insert(rs, h1))
+	h2 := must(dao.NewChatUIConfigHighlight(rs, "second", []byte("peer-b")))
+	must0(dao.ChatUIConfigHighlights.Insert(rs, h2))
+	must(dao.ChatUIConfigHighlights.Transform(rs, h1.Id, func(h *chatv1.UIConfigHighlight) error {
+		h.Alias = "first renamed"
+		return nil
+	}))
+	must0(dao.ChatUIConfigHighlights.Delete(rs, h2.Id))
+	must0(dao.ChatUIConfigTags.Insert(rs, must(dao.NewChatUIConfigTag(rs, "tagged", []byte("peer-c"), "#ff0000"))))
+	must0(dao.ChatUIConfigIgnores.Insert(rs, must(dao.NewChatUIConfigIgnore(rs, "ignored", []byte("peer-d"), 0))))
+
+	// Whispers: a second thread with a peer absorbs the first.
+	peerKey := must(dao.GenerateKey())
+	peerCert := must(dao.NewSelfSignedCertificate(peerKey, certificate.KeyUsage_KEY_USAGE_PEER, time.Hour, dao.WithSubject("peer")))
+	t1 := must(dao.NewChatWhisperThread(rs, peerCert))
+	t1.LastMessageTime = 100
+	t1.HasUnread = true
+	must0(dao.ChatWhisperThreads.Insert(rs, t1))
+	t2 := must(dao.NewChatWhisperThread(rs, peerCert))
+	must0(dao.ChatWhisperThreads.Insert(rs, t2))
+
+	ownCert := &certificate.Certificate{Key: profile.Key.Public, Subject: profile.Name}
+	r1 := must(dao.NewChatWhisperRecord(rs, joinedCert.Key, nil, peerCert.Key, peerCert, "hi", nil, 5))
+	must0(dao.ChatWhisperRecords.Insert(rs, r1))
+	r2 := must(dao.NewChatWhisperRecord(rs, joinedCert.Key, nil, peerCert.Key, ownCert, "hello", nil, 0))
+	must0(dao.ChatWhisperRecords.Insert(rs, r2))
+	r3 := must(dao.NewChatWhisperRecord(rs, joinedCert.Key, nil, peerCert.Key, peerCert, "again", nil, 6))
+	must0(dao.ChatWhisperRecords.Insert(rs, r3))
+	must(dao.ChatWhisperRecords.Transform(rs, r3.Id, func(r *chatv1.WhisperRecord) error {
+		r.State = chatv1.MessageState_MESSAGE_STATE_READ
+		return nil
+	}))
+
+	// Devices: one added, one added then deleted.
+	phone := must(dao.NewDevice(rs, "phone", "android"))
+	must0(dao.Devices.Insert(rs, phone))
+	old := must(dao.NewDevice(rs, "old", "windows"))
+	must0(dao.Devices.Insert(rs, old))
+	must0(dao.Devices.Delete(rs, old.Id))
+
+	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
+	must0(err)
+
+	for table, entries := range blob.Dump() {
+		keys := make([]string, 0, len(entries))
+		for k := range entries {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			out("kv", []byte(table), []byte(k), entries[k])
+		}
+	}
+
+	// The records as the dao reads them.
+	record := func(ns uint64, id uint64, m proto.Message) { out("record", u64(ns), u64(id), marshal(m)) }
+	record(2001, 0, profile)
+	record(2002, 0, profileIDs(rs))
+	record(6008, 0, must(dao.ChatUIConfig.Get(rs)))
+	for _, m := range must(dao.Devices.GetAll(rs)) {
+		record(2003, m.Id, m)
+	}
+	for _, m := range must(dao.Networks.GetAll(rs)) {
+		record(4001, m.Id, m)
+	}
+	for _, m := range must(dao.BootstrapClients.GetAll(rs)) {
+		record(4007, m.Id, m)
+	}
+	for _, m := range must(dao.ChatUIConfigHighlights.GetAll(rs)) {
+		record(6018, m.Id, m)
+	}
+	for _, m := range must(dao.ChatUIConfigTags.GetAll(rs)) {
+		record(6020, m.Id, m)
+	}
+	for _, m := range must(dao.ChatUIConfigIgnores.GetAll(rs)) {
+		record(6022, m.Id, m)
+	}
+	for _, m := range must(dao.ChatWhisperThreads.GetAll(rs)) {
+		record(6015, m.Id, m)
+	}
+	for _, m := range must(dao.ChatWhisperRecords.GetAll(rs)) {
+		record(6012, m.Id, m)
+	}
+	for _, m := range must(dao.ReplicationEventLogs.GetAll(rs)) {
+		record(1003, m.Id, m)
+	}
+	for _, m := range must(dao.ReplicationCheckpoints.GetAll(rs)) {
+		record(1004, m.Id, m)
+	}
+
+	// A peer that has seen the first three of this replica's logs.
+	remote := &daov1.VersionVector{Value: map[uint64]uint64{rs.ReplicaID(): 3}}
+	out("delta_remote", marshal(remote))
+	for _, l := range must(dao.ReplicationEventLogs.GetCompressedDelta(rs, remote)) {
+		out("delta", marshal(l))
+	}
+}
+
+// verify checks a store another implementation wrote, as described by
+// the lines of path, and exits non-zero on the first mismatch.
+func verify(path string) {
+	f := must(os.Open(path))
+	defer f.Close()
+
+	blob := kvtest.NewMemStore()
+	type check struct {
+		kind   string
+		values [][]byte
+	}
+	var checks []check
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1<<20), 1<<26)
+	for scanner.Scan() {
+		parts := strings.Split(scanner.Text(), " ")
+		values := make([][]byte, len(parts)-1)
+		for i, p := range parts[1:] {
+			if p != "=" {
+				values[i] = must(hex.DecodeString(p))
+			}
+		}
+		if parts[0] == "kv" {
+			table := string(values[0])
+			must0(blob.CreateStoreIfNotExists(table))
+			must0(blob.Update(table, func(tx kv.BlobTx) error { return tx.Put(string(values[1]), values[2]) }))
+			continue
+		}
+		checks = append(checks, check{parts[0], values})
+	}
+	must0(scanner.Err())
+
+	fail := func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "verify: "+format+"\n", args...)
+		os.Exit(1)
+	}
+	var rs *dao.ReplicatedStore
+	for _, c := range checks {
+		v := c.values
+		switch c.kind {
+		case "auth":
+			id, key, err := dao.LoadServerAuthThing(blob, string(v[0]), string(v[1]))
+			must0(err)
+			if id != binary.BigEndian.Uint64(v[2]) || !bytes.Equal(key, v[3]) {
+				fail("auth: got profile %d", id)
+			}
+			sk := must(dao.NewStorageKeyFromBytes(key, nil))
+			rs = must(dao.NewReplicatedStore(dao.NewProfileStore(id, sk, blob, nil)))
+		case "session":
+			id, key, err := dao.LoadSessionThing(blob, v[0], &dao.SessionToken{EOL: binary.BigEndian.Uint64(v[1]), Token: v[2]})
+			must0(err)
+			if id != binary.BigEndian.Uint64(v[3]) || !bytes.Equal(key, v[4]) {
+				fail("session: got profile %d", id)
+			}
+		case "record":
+			ns, id := binary.BigEndian.Uint64(v[0]), binary.BigEndian.Uint64(v[1])
+			got := getRecord(rs, ns, id)
+			want := got.ProtoReflect().New().Interface()
+			must0(proto.Unmarshal(v[2], want))
+			if !proto.Equal(got, want) {
+				fail("record %d/%d: got %v, want %v", ns, id, got, want)
+			}
+		case "index":
+			ns := binary.BigEndian.Uint64(v[0])
+			var want []uint64
+			for i := 0; i < len(v[2]); i += 8 {
+				want = append(want, binary.BigEndian.Uint64(v[2][i:]))
+			}
+			got := indexIDs(rs, ns, v[1])
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				fail("index %d %x: got %v, want %v", ns, v[1], got, want)
+			}
+		case "apply":
+			// Logs from the store's replica, applied to a new replica of
+			// the same profile.
+			var logs []*replicationv1.EventLog
+			for _, b := range v[1:] {
+				l := &replicationv1.EventLog{}
+				must0(proto.Unmarshal(b, l))
+				logs = append(logs, l)
+			}
+			target := newReplica(rs, binary.BigEndian.Uint64(v[0]))
+			_, err := dao.ApplyReplicationEventLogs(target, logs)
+			must0(err)
+			for _, m := range must(dao.ChatUIConfigHighlights.GetAll(rs)) {
+				got := must(dao.ChatUIConfigHighlights.Get(target, m.Id))
+				if got.Alias != m.Alias {
+					fail("applied highlight %d: got %q, want %q", m.Id, got.Alias, m.Alias)
+				}
+			}
+		case "pairing":
+			tok := &authv1.PairingToken{}
+			must0(proto.Unmarshal(v[0], tok))
+			paired := kvtest.NewMemStore()
+			must0(dao.ImportPairingToken(paired, tok, v[1]))
+			id, _, err := dao.LoadServerAuthThing(paired, tok.Auth.Name, string(v[2]))
+			must0(err)
+			sk := must(dao.NewStorageKeyFromBytes(v[1], nil))
+			p := must(dao.Profile.Get(dao.NewProfileStore(id, sk, paired, nil)))
+			if p.DeviceId != tok.Profile.DeviceId {
+				fail("pairing: got device %d", p.DeviceId)
+			}
+		default:
+			fail("unknown check %q", c.kind)
+		}
+	}
+	fmt.Println("ok")
+}
+
+// profileIDs reads the id range record, which the dao exposes only
+// through its allocator.
+func profileIDs(s kv.Store) *profilev1.ProfileID {
+	p := &profilev1.ProfileID{}
+	must0(s.View(func(tx kv.Tx) error { return tx.Get(strconv.FormatInt(2002, 36), p) }))
+	return p
+}
+
+// newReplica creates a store for another device of rs's profile.
+func newReplica(rs *dao.ReplicatedStore, device uint64) *dao.ReplicatedStore {
+	profile := proto.Clone(must(dao.Profile.Get(rs))).(*profilev1.Profile)
+	profile.DeviceId = device
+	blob := kvtest.NewMemStore()
+	user := &authv1.ServerUserThing{Name: profile.Name + "-replica"}
+	ps := must(dao.StoreProfileThing(blob, user, profile, rs.Key().Key()))
+	must0(dao.ProfileID.Init(ps, &profilev1.ProfileID{NextId: device << 32, LastId: (device + 1) << 32}))
+	return must(dao.NewReplicatedStore(ps))
+}
+
+func getRecord(s kv.Store, ns, id uint64) proto.Message {
+	switch ns {
+	case 2001:
+		return must(dao.Profile.Get(s))
+	case 2002:
+		return profileIDs(s)
+	case 6008:
+		return must(dao.ChatUIConfig.Get(s))
+	case 2003:
+		return must(dao.Devices.Get(s, id))
+	case 4001:
+		return must(dao.Networks.Get(s, id))
+	case 4007:
+		return must(dao.BootstrapClients.Get(s, id))
+	case 6018:
+		return must(dao.ChatUIConfigHighlights.Get(s, id))
+	case 6020:
+		return must(dao.ChatUIConfigTags.Get(s, id))
+	case 6022:
+		return must(dao.ChatUIConfigIgnores.Get(s, id))
+	case 6015:
+		return must(dao.ChatWhisperThreads.Get(s, id))
+	case 6012:
+		return must(dao.ChatWhisperRecords.Get(s, id))
+	case 1003:
+		return must(dao.ReplicationEventLogs.Get(s, id))
+	case 1004:
+		return must(dao.ReplicationCheckpoints.Get(s, id))
+	}
+	panic(fmt.Sprintf("unknown namespace %d", ns))
+}
+
+func ids[T interface{ GetId() uint64 }](ms []T, err error) []uint64 {
+	must0(err)
+	out := []uint64{}
+	for _, m := range ms {
+		out = append(out, m.GetId())
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func one[T interface{ GetId() uint64 }](m T, err error) []uint64 {
+	if errors.Is(err, kv.ErrRecordNotFound) {
+		return []uint64{}
+	}
+	must0(err)
+	return []uint64{m.GetId()}
+}
+
+func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
+	switch ns {
+	case 4002:
+		return one(dao.NetworksByKey.Get(s, key))
+	case 4014:
+		return one(dao.BootstrapClientsByClientOptions.Get(s, key))
+	case 6019:
+		return one(dao.ChatUIConfigHighlightsByPeerKey.Get(s, key))
+	case 6021:
+		return one(dao.ChatUIConfigTagsByPeerKey.Get(s, key))
+	case 6023:
+		return one(dao.ChatUIConfigIgnoresByPeerKey.Get(s, key))
+	case 6016:
+		return one(dao.ChatWhisperThreadsByPeerKey.Get(s, key))
+	case 6013:
+		return ids(dao.ChatWhisperRecordsByPeerKey.GetAll(s, key))
+	case 6017:
+		return ids(dao.UnreadChatWhisperRecordsByPeerKey.GetAll(s, key))
+	case 6014:
+		return ids(dao.ChatWhisperRecordsByState.GetAll(s, key))
+	}
+	panic(fmt.Sprintf("unknown index %d", ns))
+}

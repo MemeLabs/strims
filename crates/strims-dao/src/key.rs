@@ -150,6 +150,18 @@ pub fn index_hash(salt: &[u8], key: &[u8]) -> String {
     BASE64_NOPAD.encode(&mac.finalize().into_bytes())
 }
 
+/// The key of index `ns`'s entry mapping `key` to record `id`, in a store
+/// whose key is `salt`.
+pub fn index_entry_key(ns: Namespace, salt: &[u8], key: &[u8], id: u64) -> String {
+    ns.format(&[Part::Str(&index_hash(salt, key)), Part::Id(id)])
+}
+
+/// The prefix of index `ns`'s entries for `key`, in a store whose key is
+/// `salt`.
+pub fn index_prefix(ns: Namespace, salt: &[u8], key: &[u8]) -> String {
+    ns.format_prefix(&[Part::Str(&index_hash(salt, key))])
+}
+
 /// The name of profile `id`'s table.
 pub fn profile_table(id: u64) -> String {
     format!("profile:{id}")
