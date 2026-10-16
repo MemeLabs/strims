@@ -16,6 +16,7 @@
 use core::fmt;
 
 use ed25519_dalek::Signer;
+use sha2::{Digest, Sha256};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_proto::types::{
@@ -106,6 +107,70 @@ pub fn sign_certificate_request(
         .to_bytes()
         .to_vec();
     Ok(cert)
+}
+
+/// The certificate a host presents on a network: `host_key` (an ed25519
+/// public key) signed by the profile key, with usage `KEY_USAGE_SIGN`, the
+/// validity period of `membership`, and `membership` as its parent.
+///
+/// `membership` is the profile's certificate on the network, which must be
+/// for `profile_key` and allow signing. The result is a function of its
+/// inputs: the serial number is the first 16 bytes of SHA-256 over the
+/// membership serial number and the host key.
+pub fn host_certificate(
+    host_key: &[u8],
+    profile_key: &Key,
+    membership: &Certificate,
+) -> Result<Certificate, Error> {
+    if host_key.len() != ED25519_PUBLIC_KEY_SIZE {
+        return Err(Error::InvalidKeyLength);
+    }
+    if membership.key != profile_key.public {
+        return Err(Error::IssuerMismatch);
+    }
+    if membership.key_usage & KeyUsage::Sign as i32 == 0 {
+        return Err(Error::UnsupportedKeyUsage);
+    }
+    let digest = Sha256::new()
+        .chain_update(&membership.serial_number)
+        .chain_update(host_key)
+        .finalize();
+    let mut cert = Certificate {
+        key: host_key.to_vec(),
+        key_type: KeyType::Ed25519 as i32,
+        key_usage: KeyUsage::Sign as i32,
+        subject: String::new(),
+        not_before: membership.not_before,
+        not_after: membership.not_after,
+        serial_number: digest
+            .get(..SERIAL_NUMBER_SIZE)
+            .unwrap_or_default()
+            .to_vec(),
+        signature: Vec::new(),
+        parent_oneof: None,
+    };
+    let signing = key::signing_key(profile_key)?;
+    cert.signature = signing
+        .sign(&serialize_certificate(&cert))
+        .to_bytes()
+        .to_vec();
+    cert.parent_oneof = Some(ParentOneof::Parent(Box::new(membership.clone())));
+    Ok(cert)
+}
+
+/// The period in which every certificate in the chain is valid: the latest
+/// not-before and the earliest not-after, both inclusive, as
+/// [`verify_certificate`] reads them. Empty when the first follows the
+/// second.
+pub fn chain_validity(cert: &Certificate) -> (Time, Time) {
+    let (mut not_before, mut not_after) = (0, u64::MAX);
+    let mut next = Some(cert);
+    while let Some(cert) = next {
+        not_before = not_before.max(cert.not_before);
+        not_after = not_after.min(cert.not_after);
+        next = certificate_parent(cert);
+    }
+    (from_unix_seconds(not_before), from_unix_seconds(not_after))
 }
 
 /// Whole Unix seconds; times before the epoch clamp to zero.
@@ -509,6 +574,58 @@ mod tests {
             errs.errors(),
             &[Error::UnsupportedKeyUsage, Error::InvalidSignature]
         );
+    }
+
+    #[test]
+    fn host_certificates_extend_a_membership_chain() {
+        let (_, network_key, member_key, leaf_key) = chain();
+        let (leaf, ..) = chain();
+        let member = certificate_parent(&leaf).unwrap();
+        let host = host_certificate(&leaf_key.public, &member_key, member).unwrap();
+        verify_certificate(&host, now()).unwrap();
+        assert_eq!(host.key, leaf_key.public);
+        assert_eq!(host.key_usage, SIGN);
+        assert_eq!(certificate_parent(&host), Some(member));
+        assert_eq!(
+            certificate_network_key(&host),
+            network_key.public.as_slice()
+        );
+        assert_eq!(
+            (host.not_before, host.not_after),
+            (member.not_before, member.not_after)
+        );
+        assert_eq!(host.serial_number.len(), SERIAL_NUMBER_SIZE);
+        assert_eq!(
+            host_certificate(&leaf_key.public, &member_key, member).unwrap(),
+            host
+        );
+
+        assert_eq!(
+            host_certificate(&leaf_key.public, &leaf_key, member),
+            Err(Error::IssuerMismatch)
+        );
+        assert_eq!(
+            host_certificate(&leaf_key.public[..31], &member_key, member),
+            Err(Error::InvalidKeyLength)
+        );
+        let peer_only = Certificate {
+            key_usage: PEER,
+            ..member.clone()
+        };
+        assert_eq!(
+            host_certificate(&leaf_key.public, &member_key, &peer_only),
+            Err(Error::UnsupportedKeyUsage)
+        );
+    }
+
+    #[test]
+    fn chain_validity_is_the_intersection_of_the_chain() {
+        let (leaf, ..) = chain();
+        let (not_before, not_after) = chain_validity(&leaf);
+        assert_eq!(not_before, Time::from_unix(1_700_000_000 - 3600, 0));
+        assert_eq!(not_after, Time::from_unix(1_700_000_000 + 86_400, 0));
+        verify_certificate(&leaf, not_before).unwrap();
+        verify_certificate(&leaf, not_after).unwrap();
     }
 
     #[test]

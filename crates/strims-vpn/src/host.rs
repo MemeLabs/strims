@@ -37,7 +37,7 @@ use crate::buf::{BufArena, BufPool};
 use crate::cache::BoundedMap;
 use crate::hash_table::{HashTableService, HashTableStore};
 use crate::message::{
-    M_BROADCAST, M_COMPRESS, M_ENCRYPT, M_NORELAY, M_STD_FLAGS, MAX_MESSAGE_HOPS,
+    M_BROADCAST, M_COMPRESS, M_ENCRYPT, M_NORELAY, M_STD_FLAGS, MAX_MESSAGE_HOPS, MAX_TRAILER_LEN,
     MESSAGE_HEADER_LEN, MessageHeader, MessageId, MessageView, TRAILER_ENTRY_LEN, encode_message,
     encode_relay,
 };
@@ -71,6 +71,11 @@ pub const RECORD_PUSH_INTERVAL: Duration = Duration::from_secs(10);
 /// The largest frame body of every standard link (TCP, MTU 65535).
 pub const DEFAULT_MAX_MESSAGE_LEN: usize =
     strims_vnic::tcp::TCP_MTU - strims_vnic::FRAME_HEADER_LEN;
+
+/// The largest encrypted body that fits [`DEFAULT_MAX_MESSAGE_LEN`] with
+/// [`MAX_MESSAGE_HOPS`] trailer entries, so every relay can forward it.
+pub const MAX_RELAYED_BODY_LEN: usize =
+    DEFAULT_MAX_MESSAGE_LEN - MESSAGE_HEADER_LEN - MAX_TRAILER_LEN - CIPHER_OVERHEAD;
 
 /// What to do with the trailer signatures of received messages.
 ///
@@ -270,6 +275,8 @@ pub struct Delivery<H> {
     pub verified: Option<bool>,
     /// Decrypted. Return it with [`Host::recycle`] to avoid allocations.
     pub body: Vec<u8>,
+    /// When this host received it.
+    pub received: Time,
 }
 
 /// Notifications for the driver and the app.
@@ -1345,6 +1352,7 @@ impl<H: Copy> Host<H> {
                     hops: msg.hops,
                     verified: msg.verified,
                     body: plain,
+                    received: now,
                 }));
                 return Ok(());
             }

@@ -9,7 +9,10 @@
 //! [`CANCEL`] with the call's id as `parent_id`, recognised by method alone
 //! since peers send it with kind `CANCEL` or `DEFAULT`.
 
+use std::collections::BTreeMap;
+
 use prost::Message;
+use strims_proto::rpc::Call;
 use strims_proto::rpc::call::Kind;
 
 /// The method of every answer.
@@ -123,8 +126,35 @@ pub fn encode_call(
     kind: Kind,
     arg: &impl Message,
 ) -> usize {
+    encode_call_with_headers(out, framing, id, parent_id, method, kind, arg, &[])
+}
+
+/// The encoded `headers` field of a Call, for
+/// [`encode_call_with_headers`]: the bytes prost writes for the map, which
+/// it writes after every other field.
+pub fn encode_headers(headers: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
+    Call {
+        headers: headers.clone(),
+        ..Call::default()
+    }
+    .encode_to_vec()
+}
+
+/// [`encode_call`] with `headers` from [`encode_headers`] appended. The
+/// Call is `headers.len()` bytes longer than [`call_len`] says.
+#[allow(clippy::too_many_arguments)]
+pub fn encode_call_with_headers(
+    out: &mut Vec<u8>,
+    framing: Framing,
+    id: u64,
+    parent_id: u64,
+    method: &str,
+    kind: Kind,
+    arg: &impl Message,
+    headers: &[u8],
+) -> usize {
     let arg_len = arg.encoded_len();
-    let len = call_len(id, parent_id, method, kind, arg_len);
+    let len = call_len(id, parent_id, method, kind, arg_len) + headers.len();
     if framing == Framing::Delimited {
         out.reserve(uvarint_len(len as u64) + len);
         put_uvarint(out, len as u64);
@@ -153,6 +183,7 @@ pub fn encode_call(
         put_uvarint(out, arg_len as u64);
         arg.encode_raw(out);
     }
+    out.extend_from_slice(headers);
     len
 }
 
@@ -162,7 +193,7 @@ mod tests {
 
     use super::*;
     use strims_proto::debug::v1::PProfRequest;
-    use strims_proto::rpc::{Call, Close, Error};
+    use strims_proto::rpc::{Close, Error};
 
     /// `encode_call` against prost's encoding of the same Call, in both
     /// framings.
@@ -229,6 +260,54 @@ mod tests {
             ..Default::default()
         };
         check(128, 16_384, &"m".repeat(200), Kind::CallKindUndefined, &big);
+    }
+
+    #[test]
+    fn calls_with_headers_encode_as_prost_does() {
+        let headers = BTreeMap::from([
+            ("certificate".to_owned(), vec![7; 300]),
+            ("empty".to_owned(), Vec::new()),
+            (String::new(), vec![1]),
+        ]);
+        let encoded = encode_headers(&headers);
+        let req = PProfRequest {
+            name: "heap".into(),
+            ..Default::default()
+        };
+        for (id, parent_id, method, kind) in [
+            (1, 0, "strims.debug.v1.Debug.PProf", Kind::CallKindDefault),
+            (9, 1, CALLBACK, Kind::CallKindClose),
+            (10, 1, CANCEL, Kind::CallKindCancel),
+        ] {
+            let want = Call {
+                id,
+                parent_id,
+                method: method.to_owned(),
+                kind: kind as i32,
+                argument: req.encode_to_vec(),
+                headers: headers.clone(),
+            }
+            .encode_to_vec();
+            let mut out = Vec::new();
+            let len = encode_call_with_headers(
+                &mut out,
+                Framing::Message,
+                id,
+                parent_id,
+                method,
+                kind,
+                &req,
+                &encoded,
+            );
+            assert_eq!(hex::encode(&out), hex::encode(&want));
+            assert_eq!(len, want.len());
+            assert_eq!(
+                call_len(id, parent_id, method, kind, req.encoded_len()) + encoded.len(),
+                want.len()
+            );
+            assert_eq!(Call::decode(out.as_slice()).unwrap().headers, headers);
+        }
+        assert!(encode_headers(&BTreeMap::new()).is_empty());
     }
 
     #[test]

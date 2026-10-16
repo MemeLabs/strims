@@ -72,8 +72,12 @@
 //!   more when encrypted) and 104 bytes per trailer entry, within
 //!   [`Config::max_message_len`]. `send` checks this with one entry. Each
 //!   relay adds an entry, up to five, so a message meant to cross five hops
-//!   keeps its body within `max_message_len - 42 - 5 * 104`. A copy too
-//!   large for a link is dropped and counted in [`Metrics::too_large`].
+//!   keeps its body within `max_message_len - 42 - 5 * 104` (less 28 when
+//!   encrypted: [`MAX_RELAYED_BODY_LEN`] for the standard frame size). A
+//!   copy too large for a link is dropped and counted in
+//!   [`Metrics::too_large`].
+//! - **Addresses.** A service's [`HostAddr`] is published in the hash table
+//!   as an encoded `NetworkAddress`.
 //! - **Services** report through events: hash table values until
 //!   [`Event::HashTableGetClosed`], peer index hosts (each once per search)
 //!   until [`Event::PeerIndexSearchClosed`], and an [`ExchangeOutcome`] per
@@ -118,6 +122,7 @@
 //! Publishers, gets, searches and outgoing exchanges are bounded by the
 //! owner's calls.
 
+mod addr;
 mod announce;
 mod buf;
 mod cache;
@@ -133,12 +138,13 @@ pub mod peer_index;
 mod timeout_queue;
 mod topology;
 
+pub use addr::HostAddr;
 pub use announce::LINK_ANNOUNCE_PORT;
 pub use channel::Channel;
 pub use hash_table::{HashTableGetOptions, hash_table_record_hash};
 pub use host::{
-    Config, Delivery, Event, Host, Metrics, RECORD_PUSH_DELAY, RECORD_PUSH_INTERVAL, Routing,
-    VerifyMode,
+    Config, DEFAULT_MAX_MESSAGE_LEN, Delivery, Event, Host, MAX_RELAYED_BODY_LEN, Metrics,
+    RECORD_PUSH_DELAY, RECORD_PUSH_INTERVAL, Routing, VerifyMode,
 };
 pub use message::{
     M_BROADCAST, M_COMPRESS, M_ENCRYPT, M_NORELAY, M_STD_FLAGS, MessageHeader, MessageId,

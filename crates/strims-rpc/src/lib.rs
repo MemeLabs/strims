@@ -26,7 +26,9 @@
 //!   hold. It has no timers: deadlines belong to callers, who cancel.
 //! - [`connect`] runs an endpoint over a transport as a future, serving a
 //!   [`Router`] of generated services and calling through a [`Client`].
-//!   [`peer_connection`] does the same over a node's channel pair.
+//!   [`peer_connection`] does the same over a node's channel pair, and
+//!   [`vpn::connect`] over a vpn port, where many remotes share the
+//!   endpoint and every Call carries the sender's certificate.
 //! - Errors a handler returns reach the caller as
 //!   [`strims_proto::service::CallError::Remote`], with their code.
 //!
@@ -51,12 +53,14 @@ pub mod frame;
 mod peer;
 mod router;
 mod shared;
+pub mod vpn;
 pub mod wire;
 
 pub use client::{Client, ClientStream};
 pub use connection::{Connection, ConnectionError, connect};
 pub use endpoint::{
-    CallId, Config, Endpoint, Error, Event, InboundId, Metrics, RESPONSE_OVERHEAD, Response,
+    CallId, Config, Endpoint, Error, Event, InboundId, Metrics, RESPONSE_OVERHEAD, RemoteId,
+    Response,
 };
 pub use frame::{FrameDecoder, FrameError};
 pub use peer::{PeerConnection, peer_connection};

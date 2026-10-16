@@ -7,17 +7,19 @@ use std::fmt;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use futures_core::Stream;
 use prost::Message;
 use strims_proto::service::{CallError, Caller, StreamingMethod, UnaryMethod};
 
-use crate::endpoint::{CallId, Response};
+use crate::endpoint::{CallId, RemoteId, Response};
 use crate::shared::{SharedRef, with_endpoint};
 
 /// Makes calls through a connection; see [`crate::connect`]. Clones share
-/// the connection.
+/// the connection and call the same remote: the connection's peer, or the
+/// address a [`VpnClient`](crate::vpn::VpnClient) gave it.
 ///
 /// A request is queued when its call is made, so calls go out in the order
 /// they're made. Dropping a call's future or stream before it ends cancels
@@ -26,6 +28,9 @@ use crate::shared::{SharedRef, with_endpoint};
 #[derive(Clone)]
 pub struct Client {
     shared: SharedRef,
+    to: RemoteId,
+    /// Keeps the remote's address while the client exists.
+    _pin: Option<Rc<()>>,
 }
 
 impl fmt::Debug for Client {
@@ -36,11 +41,22 @@ impl fmt::Debug for Client {
 
 impl Client {
     pub(crate) fn new(shared: SharedRef) -> Client {
-        Client { shared }
+        Client::to_remote(shared, RemoteId::STREAM, None)
+    }
+
+    pub(crate) fn to_remote(shared: SharedRef, to: RemoteId, pin: Option<Rc<()>>) -> Client {
+        Client {
+            shared,
+            to,
+            _pin: pin,
+        }
     }
 
     fn start(&self, method: &str, streaming: bool, req: &impl Message) -> Result<Call, CallError> {
-        let id = with_endpoint(&self.shared, |e| e.start_call(method, streaming, req))?;
+        let to = self.to;
+        let id = with_endpoint(&self.shared, |e| {
+            e.start_call_to(to, method, streaming, req)
+        })?;
         Ok(Call {
             shared: self.shared.clone(),
             id,

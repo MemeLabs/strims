@@ -9,8 +9,12 @@
     clippy::indexing_slicing
 )]
 
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
 use proptest::prelude::*;
 use strims_proto::debug::v1::{PProfRequest, PProfResponse, WatchMetricsResponse};
+use strims_proto::types::Certificate;
 
 use super::*;
 use crate::wire::put_uvarint;
@@ -660,6 +664,183 @@ fn message_framing_rejects_oversized_messages() {
     );
 }
 
+// --- remotes ------------------------------------------------------------------
+
+fn message_config() -> Config {
+    Config {
+        framing: Framing::Message,
+        ..Config::default()
+    }
+}
+
+fn request_call(id: u64, method: &str, arg: &impl Message) -> Call {
+    Call {
+        id,
+        method: method.into(),
+        argument: arg.encode_to_vec(),
+        ..Default::default()
+    }
+}
+
+/// Decodes the Calls `e` has to send, with where they go.
+fn sent_to(e: &mut Endpoint) -> Vec<(RemoteId, Call)> {
+    std::iter::from_fn(|| e.poll_transmit_to())
+        .map(|(r, f)| (r, Call::decode(f.as_slice()).unwrap()))
+        .collect()
+}
+
+const A: RemoteId = RemoteId(1);
+const B: RemoteId = RemoteId(2);
+
+#[test]
+fn requests_are_keyed_by_remote_and_caller_id() {
+    let mut server = Endpoint::new(message_config());
+    let cert = Rc::new(Certificate {
+        key: vec![1; 32],
+        ..Default::default()
+    });
+    server.handle_call(A, request_call(7, PPROF, &pprof("a")), Some(cert.clone()));
+    server.handle_call(B, request_call(7, PPROF, &pprof("b")), None);
+    // a duplicate from the same remote is dropped
+    server.handle_call(A, request_call(7, PPROF, &pprof("a")), None);
+    assert_eq!(server.metrics().dropped, 1);
+
+    let reqs: Vec<_> = events(&mut server)
+        .into_iter()
+        .map(|e| match e {
+            Event::Request {
+                call,
+                from,
+                id,
+                certificate,
+                ..
+            } => (call, from, id, certificate),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(reqs.len(), 2);
+    assert_eq!(
+        (reqs[0].1, reqs[0].2, reqs[0].3.clone()),
+        (A, 7, Some(cert))
+    );
+    assert_eq!((reqs[1].1, reqs[1].2, reqs[1].3.clone()), (B, 7, None));
+
+    // a cancel reaches only its own remote's request
+    server.handle_call(
+        B,
+        Call {
+            id: 8,
+            parent_id: 7,
+            method: CANCEL.into(),
+            ..Default::default()
+        },
+        None,
+    );
+    assert_eq!(events(&mut server), [Event::Cancelled { call: reqs[1].0 }]);
+    assert!(server.reply_value(reqs[0].0, &PProfResponse::default()));
+    let out = sent_to(&mut server);
+    assert_eq!(out.len(), 1);
+    assert_eq!((out[0].0, out[0].1.parent_id), (A, 7));
+}
+
+#[test]
+fn responses_from_another_remote_are_dropped() {
+    let mut client = Endpoint::new(message_config());
+    let call = client.start_call_to(A, PPROF, false, &pprof("")).unwrap();
+    let (to, req) = sent_to(&mut client).remove(0);
+    assert_eq!(to, A);
+    let value = PProfResponse::default().encode_to_vec();
+    client.handle_call(
+        B,
+        callback(req.id, Kind::CallKindDefault, value.clone()),
+        None,
+    );
+    assert_eq!(client.metrics().dropped, 1);
+    assert_eq!(client.poll_response(call), None);
+    client.handle_call(
+        A,
+        callback(req.id, Kind::CallKindDefault, value.clone()),
+        None,
+    );
+    assert_eq!(responses(&mut client, call), [Response::Item(value)]);
+}
+
+#[test]
+fn one_remote_cannot_hold_every_request_slot() {
+    let mut server = Endpoint::new(Config {
+        max_inbound_calls: 4,
+        max_inbound_calls_per_remote: 2,
+        ..message_config()
+    });
+    for id in 1..=3 {
+        server.handle_call(A, request_call(id, PPROF, &pprof("")), None);
+    }
+    server.handle_call(B, request_call(1, PPROF, &pprof("")), None);
+    assert_eq!(server.metrics().requests, 3);
+    assert_eq!(server.metrics().requests_rejected, 1);
+    let rejected: Vec<_> = sent_to(&mut server)
+        .into_iter()
+        .map(|(r, c)| (r, c.parent_id, c.kind))
+        .collect();
+    assert_eq!(rejected, [(A, 3, Kind::CallKindError as i32)]);
+}
+
+#[test]
+fn a_remote_is_idle_once_its_last_reply_is_sent() {
+    let mut server = Endpoint::new(message_config());
+    assert!(server.is_remote_idle(A));
+    server.handle_call(A, request_call(1, PPROF, &pprof("")), None);
+    assert!(!server.is_remote_idle(A));
+    let (req, ..) = request(&mut server);
+    server.reply_value(req, &PProfResponse::default());
+    assert!(!server.is_remote_idle(A), "the reply is still queued");
+    assert_eq!(sent_to(&mut server).len(), 1);
+    assert!(server.is_remote_idle(A));
+
+    let mut client = Endpoint::new(message_config());
+    let call = client.start_call_to(B, PPROF, false, &pprof("")).unwrap();
+    let (_, req) = sent_to(&mut client).remove(0);
+    assert!(!client.is_remote_idle(B), "the call is open");
+    client.handle_call(B, callback(req.id, Kind::CallKindDefault, vec![]), None);
+    assert!(!client.is_remote_idle(B), "the response is unread");
+    responses(&mut client, call);
+    assert!(client.is_remote_idle(B));
+}
+
+#[test]
+fn headers_go_on_every_call_and_count_towards_the_send_limit() {
+    let headers = BTreeMap::from([("certificate".to_owned(), vec![5; 100])]);
+    let mut client = Endpoint::new(message_config());
+    let mut server = Endpoint::new(message_config());
+    client.set_headers(&headers);
+    server.set_headers(&headers);
+
+    let call = client.start_call_to(A, WATCH, true, &pprof("")).unwrap();
+    for (_, c) in sent_to(&mut client) {
+        server.handle_call(A, c, None);
+    }
+    let (req, ..) = request(&mut server);
+    server.reply_item(req, &item(1));
+    let out = sent_to(&mut server);
+    client.cancel(call);
+    let cancel = sent_to(&mut client);
+    assert_eq!(cancel[0].1.method, CANCEL);
+    for (_, c) in out.iter().chain(&cancel) {
+        assert_eq!(c.headers, headers);
+    }
+
+    let len = client.send_len(0, PPROF, Kind::CallKindDefault, pprof("").encoded_len());
+    let mut tight = Endpoint::new(Config {
+        max_send_bytes: len - 1,
+        ..message_config()
+    });
+    tight.set_headers(&headers);
+    assert_eq!(
+        tight.start_call(PPROF, false, &pprof("")),
+        Err(CallError::TooLarge { len, max: len - 1 })
+    );
+}
+
 /// The `rpc_*` vectors that `crates/strims-proto/golden` records from the
 /// Go library.
 fn golden(name: &str) -> Vec<u8> {
@@ -816,6 +997,23 @@ fn congestion_starts_at_the_high_water_mark() {
     assert_eq!(client.transmit_buffered(), 76);
 }
 
+/// The per-remote counts, recomputed from the call tables.
+fn recount(e: &Endpoint) -> BTreeMap<RemoteId, RemoteRefs> {
+    let mut m: BTreeMap<RemoteId, RemoteRefs> = BTreeMap::new();
+    for &(r, _) in e.inbound.keys() {
+        let c = m.entry(r).or_default();
+        c.refs += 1;
+        c.inbound += 1;
+    }
+    for out in e.outbound.values() {
+        m.entry(out.remote).or_default().refs += 1;
+    }
+    for (r, _) in &e.transmit {
+        m.entry(*r).or_default().refs += 1;
+    }
+    m
+}
+
 proptest! {
     #[test]
     fn endpoint_survives_arbitrary_input(
@@ -832,7 +1030,7 @@ proptest! {
         };
         let mut e = Endpoint::new(config);
         let calls: Vec<CallId> = (0..3)
-            .map(|i| e.start_call(WATCH, i != 0, &pprof("")).unwrap())
+            .map(|i| e.start_call_to(RemoteId(i), WATCH, i != 0, &pprof("")).unwrap())
             .collect();
         let mut rest = data.as_slice();
         for cut in cuts.iter().cycle() {
@@ -841,9 +1039,18 @@ proptest! {
             }
             let (head, tail) = rest.split_at((*cut).min(rest.len()));
             rest = tail;
-            let _ = e.handle_input(head);
+            match Call::decode(head) {
+                // decoded Calls arrive from one of a few remotes
+                Ok(call) if message => {
+                    e.handle_call(RemoteId(*cut as u64 % 3), call, None);
+                }
+                _ => {
+                    let _ = e.handle_input(head);
+                }
+            }
             prop_assert!(e.decoder.buffered() <= 512 + crate::wire::MAX_VARINT_LEN);
             prop_assert!(e.inbound.len() <= 4);
+            prop_assert_eq!(&e.remotes, &recount(&e));
             for out in e.outbound.values() {
                 prop_assert!(
                     out.queued <= e.config.max_queued_response_bytes + RESPONSE_OVERHEAD
@@ -854,11 +1061,13 @@ proptest! {
                     e.reply_value(call, &PProfResponse::default());
                 }
             }
+            prop_assert_eq!(&e.remotes, &recount(&e));
             while e.poll_transmit().is_some() {}
         }
         for call in calls {
             while e.poll_response(call).is_some() {}
         }
         prop_assert_eq!(e.queued_response_bytes(), 0);
+        prop_assert_eq!(&e.remotes, &recount(&e));
     }
 }

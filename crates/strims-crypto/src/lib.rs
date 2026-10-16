@@ -24,9 +24,10 @@ pub mod signable;
 
 pub use cert::{
     CERT_PREDATE_DURATION, CertificateErrors, DEFAULT_CERT_TTL, cert_is_expired,
-    certificate_network_key, certificate_parent, certificate_root, new_certificate_request,
-    new_self_signed_certificate, serialize_certificate, serialize_certificate_request,
-    sign_certificate_request, verify_certificate, verify_certificate_request,
+    certificate_network_key, certificate_parent, certificate_root, chain_validity,
+    host_certificate, new_certificate_request, new_self_signed_certificate, serialize_certificate,
+    serialize_certificate_request, sign_certificate_request, verify_certificate,
+    verify_certificate_request,
 };
 pub use curve25519::{
     X25519_SIZE, aes_link_key, key_to_curve25519, message_cipher_key, private_key_to_curve25519,
@@ -58,6 +59,9 @@ pub enum Error {
     /// A certificate request isn't signed by its own key.
     #[error("invalid certificate request signature")]
     InvalidCertificateRequestSignature,
+    /// A certificate's issuer isn't the signing key.
+    #[error("certificate issuer mismatch")]
+    IssuerMismatch,
     /// A certificate isn't signed by its parent, or by itself if it has none.
     #[error("invalid certificate signature")]
     InvalidSignature,

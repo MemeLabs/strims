@@ -18,6 +18,7 @@ use prost::Message;
 use strims_proto::service::Error;
 
 use crate::endpoint::{CallId, Endpoint, InboundId};
+use crate::vpn::Port;
 
 pub(crate) type SharedRef = Rc<RefCell<Shared>>;
 
@@ -32,6 +33,8 @@ pub(crate) struct Shared {
     /// Server streams waiting for the transmit queue to drain. One entry
     /// per request in service at most.
     pub(crate) congested: Vec<Waker>,
+    /// The addresses and caller checks of a vpn port.
+    pub(crate) vpn: Option<Port>,
 }
 
 impl Shared {
@@ -41,6 +44,7 @@ impl Shared {
             call_wakers: BTreeMap::new(),
             driver: None,
             congested: Vec::new(),
+            vpn: None,
         }))
     }
 }

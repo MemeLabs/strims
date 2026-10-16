@@ -26,10 +26,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 
 use futures_core::Stream;
 
 pub use crate::rpc::Error;
+use crate::types::Certificate;
 
 /// An RPC method of a proto service.
 pub trait Method: 'static {
@@ -80,20 +82,34 @@ impl std::error::Error for Error {}
 pub type ServerStream<T> = Pin<Box<dyn Stream<Item = Result<T, Error>>>>;
 
 /// What a handler knows about the call it serves.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Context {
     id: u64,
     headers: BTreeMap<String, Vec<u8>>,
+    certificate: Option<Rc<Certificate>>,
 }
+
+// Certificate has no float fields, so its equality is total.
+impl Eq for Context {}
 
 impl Context {
     /// The context of the caller's call `id`, with the call's headers.
     pub fn new(id: u64, headers: BTreeMap<String, Vec<u8>>) -> Context {
-        Context { id, headers }
+        Context {
+            id,
+            headers,
+            certificate: None,
+        }
     }
 
-    /// The caller's id for the call. Ids are unique per caller and
-    /// connection, not globally.
+    /// The context with the caller's verified certificate.
+    pub fn with_certificate(mut self, certificate: Option<Rc<Certificate>>) -> Context {
+        self.certificate = certificate;
+        self
+    }
+
+    /// The caller's id for the call. Ids are unique per remote caller, not
+    /// globally.
     pub fn id(&self) -> u64 {
         self.id
     }
@@ -101,6 +117,12 @@ impl Context {
     /// The value of the call's header `name`.
     pub fn header(&self, name: &str) -> Option<&[u8]> {
         self.headers.get(name).map(Vec::as_slice)
+    }
+
+    /// The caller's certificate, when the transport authenticates callers.
+    /// Its chain was verified when the call arrived.
+    pub fn certificate(&self) -> Option<&Certificate> {
+        self.certificate.as_deref()
     }
 }
 

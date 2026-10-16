@@ -1922,7 +1922,11 @@ dependencies = [
  "hex",
  "proptest",
  "prost",
+ "strims-base",
+ "strims-crypto",
+ "strims-kademlia",
  "strims-proto",
+ "strims-vpn",
  "thiserror",
  "tokio",
 ]

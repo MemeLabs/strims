@@ -14,16 +14,28 @@
 //! [`Endpoint::poll_transmit`] returns each Call as an owned buffer rather
 //! than filling the caller's: a Call must leave whole, as one message on
 //! message transports, and it is encoded once, when it is queued.
+//!
+//! # Remotes
+//!
+//! A stream transport has one remote, [`RemoteId::STREAM`]. A message
+//! transport that reaches many (a vpn port) names each with a [`RemoteId`]
+//! and passes decoded Calls to [`Endpoint::handle_call`]: requests are keyed
+//! by (remote, caller id), a response is accepted only from the remote its
+//! call went to, and [`Endpoint::poll_transmit_to`] says where each Call
+//! goes. [`Endpoint::is_remote_idle`] tells the owner when a remote holds
+//! nothing, so it can forget the remote's address.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::rc::Rc;
 
 use prost::Message;
 use strims_proto::rpc::call::Kind;
 use strims_proto::rpc::{Call, Close};
 use strims_proto::service::{CallError, Error as RpcError};
+use strims_proto::types::Certificate;
 
 use crate::frame::{FrameDecoder, FrameError};
-use crate::wire::{CALLBACK, CANCEL, Framing, call_len, encode_call};
+use crate::wire::{CALLBACK, CANCEL, Framing, call_len, encode_call_with_headers, encode_headers};
 
 /// Endpoint limits. Every queue that the peer can grow is bounded by one
 /// of them.
@@ -46,6 +58,9 @@ pub struct Config {
     pub max_send_bytes: usize,
     /// Requests in service at once. More are answered with an error.
     pub max_inbound_calls: usize,
+    /// Requests in service at once from one remote. More are answered with
+    /// an error, so one remote can't hold every slot.
+    pub max_inbound_calls_per_remote: usize,
     /// The endpoint's own open calls. More fail with
     /// [`CallError::TooManyCalls`].
     pub max_outbound_calls: usize,
@@ -72,6 +87,7 @@ impl Default for Config {
             max_message_bytes: 512 * 1024,
             max_send_bytes: 512 * 1024,
             max_inbound_calls: 128,
+            max_inbound_calls_per_remote: usize::MAX,
             max_outbound_calls: 128,
             max_queued_response_bytes: 1024 * 1024,
             transmit_high_water: 256 * 1024,
@@ -101,6 +117,15 @@ impl Config {
 /// are bounded too.
 pub const RESPONSE_OVERHEAD: usize = 64;
 
+/// The remote end of calls; see the module docs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RemoteId(pub u64);
+
+impl RemoteId {
+    /// The single remote of a stream transport.
+    pub const STREAM: RemoteId = RemoteId(0);
+}
+
 /// One of the endpoint's own calls: the id it was sent with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CallId(u64);
@@ -124,6 +149,8 @@ pub enum Event {
     Request {
         /// The request's handle.
         call: InboundId,
+        /// Where it came from.
+        from: RemoteId,
         /// The caller's id for it.
         id: u64,
         /// The method's full name.
@@ -132,6 +159,8 @@ pub enum Event {
         argument: Vec<u8>,
         /// The request's headers.
         headers: BTreeMap<String, Vec<u8>>,
+        /// The caller's certificate, if the transport verified one.
+        certificate: Option<Rc<Certificate>>,
     },
     /// The caller cancelled a request. Its replies are dropped from now on.
     Cancelled {
@@ -191,8 +220,9 @@ pub struct Metrics {
     /// Received Calls that didn't decode.
     pub malformed: u64,
     /// Received Calls dropped: requests while not serving, requests with id
-    /// 0 or a duplicate id, responses to calls that aren't open, cancels
-    /// of requests that aren't in service.
+    /// 0 or a duplicate id, responses to calls that aren't open or from
+    /// another remote, cancels of requests that aren't in service, and
+    /// Calls handed to a closed endpoint.
     pub dropped: u64,
     /// Calls failed with [`CallError::Overflow`].
     pub overflows: u64,
@@ -202,6 +232,7 @@ pub struct Metrics {
 
 #[derive(Debug)]
 struct Outbound {
+    remote: RemoteId,
     streaming: bool,
     responses: VecDeque<Response>,
     /// The cost of `responses`; see [`Config::max_queued_response_bytes`].
@@ -219,6 +250,15 @@ fn response_cost(r: &Response) -> usize {
         }
 }
 
+/// What the endpoint holds for one remote.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct RemoteRefs {
+    /// Requests in service, open calls and queued Calls.
+    refs: usize,
+    /// Requests in service.
+    inbound: usize,
+}
+
 /// One side of an RPC transport. See the module docs.
 #[derive(Debug)]
 pub struct Endpoint {
@@ -227,11 +267,11 @@ pub struct Endpoint {
     /// The id of the next Call sent. Every Call gets a fresh one.
     next_id: u64,
     next_inbound: u64,
-    /// Requests in service, by the caller's id. Bounded by
+    /// Requests in service, by remote and the caller's id. Bounded by
     /// `max_inbound_calls`.
-    inbound: BTreeMap<u64, InboundId>,
-    /// The caller's id of each request in service.
-    inbound_ids: BTreeMap<InboundId, u64>,
+    inbound: BTreeMap<(RemoteId, u64), InboundId>,
+    /// The remote and caller's id of each request in service.
+    inbound_ids: BTreeMap<InboundId, (RemoteId, u64)>,
     /// Open calls. Bounded by `max_outbound_calls`.
     outbound: BTreeMap<u64, Outbound>,
     /// The cost of the responses queued across `outbound`.
@@ -240,8 +280,13 @@ pub struct Endpoint {
     /// handled since the owner last drained it.
     events: VecDeque<Event>,
     /// Encoded Calls to send. See [`Config::transmit_high_water`].
-    transmit: VecDeque<Vec<u8>>,
+    transmit: VecDeque<(RemoteId, Vec<u8>)>,
     transmit_bytes: usize,
+    /// One entry per remote that has a request in service, an open call or
+    /// a queued Call, so bounded by those.
+    remotes: BTreeMap<RemoteId, RemoteRefs>,
+    /// The encoded headers of every Call sent; see [`Endpoint::set_headers`].
+    headers: Vec<u8>,
     closed: bool,
     metrics: Metrics,
 }
@@ -264,6 +309,8 @@ impl Endpoint {
             events: VecDeque::new(),
             transmit: VecDeque::new(),
             transmit_bytes: 0,
+            remotes: BTreeMap::new(),
+            headers: Vec::new(),
             closed: false,
             metrics: Metrics::default(),
         }
@@ -284,6 +331,55 @@ impl Endpoint {
         self.closed
     }
 
+    /// Sets the headers of every Call sent from now on: requests, answers
+    /// and cancels. They count towards [`Config::max_send_bytes`].
+    pub fn set_headers(&mut self, headers: &BTreeMap<String, Vec<u8>>) {
+        self.headers = encode_headers(headers);
+    }
+
+    /// Whether `remote` has no request in service, no open call and no
+    /// queued Call.
+    pub fn is_remote_idle(&self, remote: RemoteId) -> bool {
+        !self.remotes.contains_key(&remote)
+    }
+
+    fn retain(&mut self, remote: RemoteId) {
+        self.remotes.entry(remote).or_default().refs += 1;
+    }
+
+    fn release(&mut self, remote: RemoteId) {
+        if let Some(r) = self.remotes.get_mut(&remote) {
+            r.refs = r.refs.saturating_sub(1);
+            if r.refs == 0 {
+                self.remotes.remove(&remote);
+            }
+        }
+    }
+
+    fn add_inbound(&mut self, remote: RemoteId, id: u64, handle: InboundId) {
+        self.inbound.insert((remote, id), handle);
+        self.inbound_ids.insert(handle, (remote, id));
+        let r = self.remotes.entry(remote).or_default();
+        r.refs += 1;
+        r.inbound += 1;
+    }
+
+    fn remove_inbound(&mut self, remote: RemoteId, id: u64) -> Option<InboundId> {
+        let handle = self.inbound.remove(&(remote, id))?;
+        self.inbound_ids.remove(&handle);
+        if let Some(r) = self.remotes.get_mut(&remote) {
+            r.inbound = r.inbound.saturating_sub(1);
+        }
+        self.release(remote);
+        Some(handle)
+    }
+
+    fn remove_outbound(&mut self, id: u64) -> Option<Outbound> {
+        let out = self.outbound.remove(&id)?;
+        self.release(out.remote);
+        Some(out)
+    }
+
     // --- input ------------------------------------------------------------
 
     /// Handles received bytes: any part of the stream under
@@ -296,7 +392,7 @@ impl Endpoint {
         let res = match self.config.framing {
             Framing::Delimited => {
                 let mut decoder = std::mem::replace(&mut self.decoder, FrameDecoder::new(0));
-                let res = decoder.decode(data, &mut |frame| self.handle_call(frame));
+                let res = decoder.decode(data, &mut |frame| self.handle_frame(frame));
                 self.decoder = decoder;
                 res.map_err(Error::from)
             }
@@ -307,7 +403,7 @@ impl Endpoint {
                 })
             }
             Framing::Message => {
-                self.handle_call(data);
+                self.handle_frame(data);
                 Ok(())
             }
         };
@@ -317,62 +413,84 @@ impl Endpoint {
         res
     }
 
-    fn handle_call(&mut self, frame: &[u8]) {
+    fn handle_frame(&mut self, frame: &[u8]) {
         self.metrics.calls_received += 1;
         let Ok(call) = Call::decode(frame) else {
             self.metrics.malformed += 1;
             return;
         };
+        self.dispatch(RemoteId::STREAM, call, None);
+    }
+
+    /// Handles a decoded Call from `from`, with the caller's certificate if
+    /// the transport verified one. Never closes the endpoint; a closed
+    /// endpoint drops the Call.
+    pub fn handle_call(
+        &mut self,
+        from: RemoteId,
+        call: Call,
+        certificate: Option<Rc<Certificate>>,
+    ) {
+        self.metrics.calls_received += 1;
+        if self.closed {
+            self.metrics.dropped += 1;
+            return;
+        }
+        self.dispatch(from, call, certificate);
+    }
+
+    fn dispatch(&mut self, from: RemoteId, call: Call, certificate: Option<Rc<Certificate>>) {
         if call.method == CANCEL {
-            self.handle_cancel(call.parent_id);
+            self.handle_cancel(from, call.parent_id);
         } else if call.parent_id != 0 {
-            self.handle_response(call);
+            self.handle_response(from, call);
         } else {
-            self.handle_request(call);
+            self.handle_request(from, call, certificate);
         }
     }
 
-    fn handle_cancel(&mut self, id: u64) {
-        match self.inbound.remove(&id) {
-            Some(call) => {
-                self.inbound_ids.remove(&call);
-                self.events.push_back(Event::Cancelled { call });
-            }
+    fn handle_cancel(&mut self, from: RemoteId, id: u64) {
+        match self.remove_inbound(from, id) {
+            Some(call) => self.events.push_back(Event::Cancelled { call }),
             None => self.metrics.dropped += 1,
         }
     }
 
-    fn handle_request(&mut self, call: Call) {
-        if !self.config.serve || call.id == 0 || self.inbound.contains_key(&call.id) {
+    fn handle_request(&mut self, from: RemoteId, call: Call, certificate: Option<Rc<Certificate>>) {
+        if !self.config.serve || call.id == 0 || self.inbound.contains_key(&(from, call.id)) {
             self.metrics.dropped += 1;
             return;
         }
-        if self.inbound.len() >= self.config.max_inbound_calls {
+        let remote_inbound = self.remotes.get(&from).map_or(0, |r| r.inbound);
+        if self.inbound.len() >= self.config.max_inbound_calls
+            || remote_inbound >= self.config.max_inbound_calls_per_remote
+        {
             self.metrics.requests_rejected += 1;
             let e = RpcError::new(0, "too many concurrent calls");
-            self.queue_callback(call.id, Kind::CallKindError, &e);
+            self.queue_callback(from, call.id, Kind::CallKindError, &e);
             return;
         }
         let handle = InboundId(self.next_inbound);
         self.next_inbound += 1;
-        self.inbound.insert(call.id, handle);
-        self.inbound_ids.insert(handle, call.id);
+        self.add_inbound(from, call.id, handle);
         self.metrics.requests += 1;
         self.events.push_back(Event::Request {
             call: handle,
+            from,
             id: call.id,
             method: call.method,
             argument: call.argument,
             headers: call.headers,
+            certificate,
         });
     }
 
-    fn handle_response(&mut self, call: Call) {
+    fn handle_response(&mut self, from: RemoteId, call: Call) {
         let Some(out) = self.outbound.get_mut(&call.parent_id) else {
             self.metrics.dropped += 1;
             return;
         };
-        if out.done {
+        if out.done || out.remote != from {
             self.metrics.dropped += 1;
             return;
         }
@@ -410,8 +528,9 @@ impl Endpoint {
         self.queued_response_bytes += cost;
         out.responses.push_back(response);
         out.done = terminal || overflow;
+        let remote = out.remote;
         if overflow && !terminal {
-            self.queue_cancel(id);
+            self.queue_cancel(remote, id);
         }
     }
 
@@ -420,9 +539,15 @@ impl Endpoint {
     /// The next Call to send: one whole frame, prefixed under
     /// [`Framing::Delimited`].
     pub fn poll_transmit(&mut self) -> Option<Vec<u8>> {
-        let b = self.transmit.pop_front()?;
+        self.poll_transmit_to().map(|(_, b)| b)
+    }
+
+    /// [`Endpoint::poll_transmit`] with the remote the Call goes to.
+    pub fn poll_transmit_to(&mut self) -> Option<(RemoteId, Vec<u8>)> {
+        let (remote, b) = self.transmit.pop_front()?;
         self.transmit_bytes -= b.len();
-        Some(b)
+        self.release(remote);
+        Some((remote, b))
     }
 
     /// Bytes waiting in [`Endpoint::poll_transmit`].
@@ -447,40 +572,50 @@ impl Endpoint {
         id
     }
 
-    fn queue(&mut self, frame: Vec<u8>) {
+    fn queue(&mut self, remote: RemoteId, frame: Vec<u8>) {
         self.metrics.calls_sent += 1;
         self.transmit_bytes += frame.len();
-        self.transmit.push_back(frame);
+        self.transmit.push_back((remote, frame));
+        self.retain(remote);
     }
 
-    fn queue_callback(&mut self, parent_id: u64, kind: Kind, arg: &impl Message) {
-        let id = self.next_id();
+    /// The length of a Call with these fields and the endpoint's headers.
+    fn send_len(&self, parent_id: u64, method: &str, kind: Kind, arg_len: usize) -> usize {
+        call_len(self.next_id, parent_id, method, kind, arg_len) + self.headers.len()
+    }
+
+    fn encode(
+        &self,
+        id: u64,
+        parent_id: u64,
+        method: &str,
+        kind: Kind,
+        arg: &impl Message,
+    ) -> Vec<u8> {
         let mut frame = Vec::new();
-        encode_call(
+        encode_call_with_headers(
             &mut frame,
             self.config.framing,
             id,
             parent_id,
-            CALLBACK,
+            method,
             kind,
             arg,
+            &self.headers,
         );
-        self.queue(frame);
+        frame
     }
 
-    fn queue_cancel(&mut self, parent_id: u64) {
+    fn queue_callback(&mut self, remote: RemoteId, parent_id: u64, kind: Kind, arg: &impl Message) {
         let id = self.next_id();
-        let mut frame = Vec::new();
-        encode_call(
-            &mut frame,
-            self.config.framing,
-            id,
-            parent_id,
-            CANCEL,
-            Kind::CallKindCancel,
-            &Close {},
-        );
-        self.queue(frame);
+        let frame = self.encode(id, parent_id, CALLBACK, kind, arg);
+        self.queue(remote, frame);
+    }
+
+    fn queue_cancel(&mut self, remote: RemoteId, parent_id: u64) {
+        let id = self.next_id();
+        let frame = self.encode(id, parent_id, CANCEL, Kind::CallKindCancel, &Close {});
+        self.queue(remote, frame);
     }
 
     // --- calls ------------------------------------------------------------
@@ -493,19 +628,24 @@ impl Endpoint {
         streaming: bool,
         req: &impl Message,
     ) -> Result<CallId, CallError> {
+        self.start_call_to(RemoteId::STREAM, method, streaming, req)
+    }
+
+    /// [`Endpoint::start_call`] to `to`.
+    pub fn start_call_to(
+        &mut self,
+        to: RemoteId,
+        method: &str,
+        streaming: bool,
+        req: &impl Message,
+    ) -> Result<CallId, CallError> {
         if self.closed {
             return Err(CallError::Disconnected);
         }
         if self.outbound.len() >= self.config.max_outbound_calls {
             return Err(CallError::TooManyCalls);
         }
-        let len = call_len(
-            self.next_id,
-            0,
-            method,
-            Kind::CallKindDefault,
-            req.encoded_len(),
-        );
+        let len = self.send_len(0, method, Kind::CallKindDefault, req.encoded_len());
         if len > self.config.max_send_bytes {
             return Err(CallError::TooLarge {
                 len,
@@ -513,20 +653,13 @@ impl Endpoint {
             });
         }
         let id = self.next_id();
-        let mut frame = Vec::new();
-        encode_call(
-            &mut frame,
-            self.config.framing,
-            id,
-            0,
-            method,
-            Kind::CallKindDefault,
-            req,
-        );
-        self.queue(frame);
+        let frame = self.encode(id, 0, method, Kind::CallKindDefault, req);
+        self.queue(to, frame);
+        self.retain(to);
         self.outbound.insert(
             id,
             Outbound {
+                remote: to,
                 streaming,
                 responses: VecDeque::new(),
                 queued: 0,
@@ -547,7 +680,7 @@ impl Endpoint {
         out.queued -= cost;
         self.queued_response_bytes -= cost;
         if out.done && out.responses.is_empty() {
-            self.outbound.remove(&call.0);
+            self.remove_outbound(call.0);
         }
         Some(r)
     }
@@ -555,33 +688,32 @@ impl Endpoint {
     /// Ends a call early: drops its queued responses and, unless its last
     /// response already arrived, tells the server.
     pub fn cancel(&mut self, call: CallId) {
-        let Some(out) = self.outbound.remove(&call.0) else {
+        let Some(out) = self.remove_outbound(call.0) else {
             return;
         };
         self.queued_response_bytes -= out.queued;
         if !out.done && !self.closed {
-            self.queue_cancel(call.0);
+            self.queue_cancel(out.remote, call.0);
         }
     }
 
     // --- replies ----------------------------------------------------------
 
     fn reply(&mut self, call: InboundId, kind: Kind, arg: &impl Message, last: bool) -> bool {
-        let Some(&parent_id) = self.inbound_ids.get(&call) else {
+        let Some(&(remote, parent_id)) = self.inbound_ids.get(&call) else {
             return false;
         };
-        let len = call_len(self.next_id, parent_id, CALLBACK, kind, arg.encoded_len());
+        let len = self.send_len(parent_id, CALLBACK, kind, arg.encoded_len());
         let fits = len <= self.config.max_send_bytes;
         if fits {
-            self.queue_callback(parent_id, kind, arg);
+            self.queue_callback(remote, parent_id, kind, arg);
         } else {
             self.metrics.oversized_replies += 1;
             let e = RpcError::new(0, format!("response too large: {len} bytes"));
-            self.queue_callback(parent_id, Kind::CallKindError, &e);
+            self.queue_callback(remote, parent_id, Kind::CallKindError, &e);
         }
         if last || !fits {
-            self.inbound_ids.remove(&call);
-            self.inbound.remove(&parent_id);
+            self.remove_inbound(remote, parent_id);
         }
         fits
     }
@@ -643,6 +775,11 @@ impl Endpoint {
             self.events.push_back(Event::Cancelled { call });
         }
         self.inbound_ids.clear();
+        // only the open calls remain, until their responses are taken
+        self.remotes.clear();
+        for out in self.outbound.values() {
+            self.remotes.entry(out.remote).or_default().refs += 1;
+        }
     }
 }
 
