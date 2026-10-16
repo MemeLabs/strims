@@ -35,7 +35,9 @@ use strims_proto::service::{CallError, Error as RpcError};
 use strims_proto::types::Certificate;
 
 use crate::frame::{FrameDecoder, FrameError};
-use crate::wire::{CALLBACK, CANCEL, Framing, call_len, encode_call_with_headers, encode_headers};
+use crate::wire::{
+    Argument, CALLBACK, CANCEL, Framing, call_len, encode_call_with_headers, encode_headers,
+};
 
 /// Endpoint limits. Every queue that the peer can grow is bounded by one
 /// of them.
@@ -234,6 +236,8 @@ pub struct Metrics {
 struct Outbound {
     remote: RemoteId,
     streaming: bool,
+    /// The request's position in the order of queued Calls.
+    request_seq: u64,
     responses: VecDeque<Response>,
     /// The cost of `responses`; see [`Config::max_queued_response_bytes`].
     queued: usize,
@@ -282,6 +286,13 @@ pub struct Endpoint {
     /// Encoded Calls to send. See [`Config::transmit_high_water`].
     transmit: VecDeque<(RemoteId, Vec<u8>)>,
     transmit_bytes: usize,
+    /// Calls queued to `transmit`, ever. `transmit` is FIFO, so a Call is
+    /// still queued while fewer than its position have been transmitted.
+    queued_calls: u64,
+    /// Calls taken from `transmit`, ever.
+    transmitted_calls: u64,
+    /// Bytes passed to [`Endpoint::handle_input`].
+    received_bytes: u64,
     /// One entry per remote that has a request in service, an open call or
     /// a queued Call, so bounded by those.
     remotes: BTreeMap<RemoteId, RemoteRefs>,
@@ -309,6 +320,9 @@ impl Endpoint {
             events: VecDeque::new(),
             transmit: VecDeque::new(),
             transmit_bytes: 0,
+            queued_calls: 0,
+            transmitted_calls: 0,
+            received_bytes: 0,
             remotes: BTreeMap::new(),
             headers: Vec::new(),
             closed: false,
@@ -389,6 +403,7 @@ impl Endpoint {
         if self.closed {
             return Err(Error::Closed);
         }
+        self.received_bytes = self.received_bytes.saturating_add(data.len() as u64);
         let res = match self.config.framing {
             Framing::Delimited => {
                 let mut decoder = std::mem::replace(&mut self.decoder, FrameDecoder::new(0));
@@ -546,6 +561,7 @@ impl Endpoint {
     pub fn poll_transmit_to(&mut self) -> Option<(RemoteId, Vec<u8>)> {
         let (remote, b) = self.transmit.pop_front()?;
         self.transmit_bytes -= b.len();
+        self.transmitted_calls += 1;
         self.release(remote);
         Some((remote, b))
     }
@@ -574,6 +590,7 @@ impl Endpoint {
 
     fn queue(&mut self, remote: RemoteId, frame: Vec<u8>) {
         self.metrics.calls_sent += 1;
+        self.queued_calls += 1;
         self.transmit_bytes += frame.len();
         self.transmit.push_back((remote, frame));
         self.retain(remote);
@@ -590,7 +607,7 @@ impl Endpoint {
         parent_id: u64,
         method: &str,
         kind: Kind,
-        arg: &impl Message,
+        arg: &impl Argument,
     ) -> Vec<u8> {
         let mut frame = Vec::new();
         encode_call_with_headers(
@@ -621,12 +638,13 @@ impl Endpoint {
     // --- calls ------------------------------------------------------------
 
     /// Starts a call of `method`, a server stream if `streaming`, and
-    /// queues its request.
+    /// queues its request: a message, or bytes already encoded
+    /// ([`Encoded`](crate::wire::Encoded)).
     pub fn start_call(
         &mut self,
         method: &str,
         streaming: bool,
-        req: &impl Message,
+        req: &impl Argument,
     ) -> Result<CallId, CallError> {
         self.start_call_to(RemoteId::STREAM, method, streaming, req)
     }
@@ -637,7 +655,7 @@ impl Endpoint {
         to: RemoteId,
         method: &str,
         streaming: bool,
-        req: &impl Message,
+        req: &impl Argument,
     ) -> Result<CallId, CallError> {
         if self.closed {
             return Err(CallError::Disconnected);
@@ -645,7 +663,7 @@ impl Endpoint {
         if self.outbound.len() >= self.config.max_outbound_calls {
             return Err(CallError::TooManyCalls);
         }
-        let len = self.send_len(0, method, Kind::CallKindDefault, req.encoded_len());
+        let len = self.send_len(0, method, Kind::CallKindDefault, req.argument_len());
         if len > self.config.max_send_bytes {
             return Err(CallError::TooLarge {
                 len,
@@ -654,6 +672,7 @@ impl Endpoint {
         }
         let id = self.next_id();
         let frame = self.encode(id, 0, method, Kind::CallKindDefault, req);
+        let request_seq = self.queued_calls;
         self.queue(to, frame);
         self.retain(to);
         self.outbound.insert(
@@ -661,6 +680,7 @@ impl Endpoint {
             Outbound {
                 remote: to,
                 streaming,
+                request_seq,
                 responses: VecDeque::new(),
                 queued: 0,
                 done: false,
@@ -695,6 +715,29 @@ impl Endpoint {
         if !out.done && !self.closed {
             self.queue_cancel(out.remote, call.0);
         }
+    }
+
+    /// Whether the call's request is still waiting in
+    /// [`Endpoint::poll_transmit`]. False once the call has ended or the
+    /// endpoint has closed.
+    pub fn is_request_queued(&self, call: CallId) -> bool {
+        !self.closed
+            && self
+                .outbound
+                .get(&call.0)
+                .is_some_and(|out| self.transmitted_calls <= out.request_seq)
+    }
+
+    /// Bytes received so far: the total passed to
+    /// [`Endpoint::handle_input`].
+    pub fn received_bytes(&self) -> u64 {
+        self.received_bytes
+    }
+
+    /// Whether part of a Call has arrived and the rest hasn't. Only a
+    /// [`Framing::Delimited`] stream splits Calls across inputs.
+    pub fn is_receiving(&self) -> bool {
+        self.decoder.buffered() > 0
     }
 
     // --- replies ----------------------------------------------------------

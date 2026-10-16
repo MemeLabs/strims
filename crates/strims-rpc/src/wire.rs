@@ -111,6 +111,39 @@ pub fn call_len(id: u64, parent_id: u64, method: &str, kind: Kind, arg_len: usiz
     n
 }
 
+/// A Call's argument: any message, encoded in place, or [`Encoded`] bytes.
+pub trait Argument {
+    /// The argument's encoded length.
+    fn argument_len(&self) -> usize;
+
+    /// Appends the encoded argument to `out`.
+    fn write_argument(&self, out: &mut Vec<u8>);
+}
+
+impl<M: Message> Argument for M {
+    fn argument_len(&self) -> usize {
+        self.encoded_len()
+    }
+
+    fn write_argument(&self, out: &mut Vec<u8>) {
+        self.encode_raw(out);
+    }
+}
+
+/// An argument that is already encoded, written as it is.
+#[derive(Clone, Copy, Debug)]
+pub struct Encoded<'a>(pub &'a [u8]);
+
+impl Argument for Encoded<'_> {
+    fn argument_len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn write_argument(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(self.0);
+    }
+}
+
 /// Appends a Call carrying `arg` to `out`, prefixed with its length under
 /// [`Framing::Delimited`], and returns the Call's length (without the
 /// prefix).
@@ -124,7 +157,7 @@ pub fn encode_call(
     parent_id: u64,
     method: &str,
     kind: Kind,
-    arg: &impl Message,
+    arg: &impl Argument,
 ) -> usize {
     encode_call_with_headers(out, framing, id, parent_id, method, kind, arg, &[])
 }
@@ -150,10 +183,10 @@ pub fn encode_call_with_headers(
     parent_id: u64,
     method: &str,
     kind: Kind,
-    arg: &impl Message,
+    arg: &impl Argument,
     headers: &[u8],
 ) -> usize {
-    let arg_len = arg.encoded_len();
+    let arg_len = arg.argument_len();
     let len = call_len(id, parent_id, method, kind, arg_len) + headers.len();
     if framing == Framing::Delimited {
         out.reserve(uvarint_len(len as u64) + len);
@@ -181,7 +214,7 @@ pub fn encode_call_with_headers(
     if arg_len != 0 {
         put_key(out, 5, LEN);
         put_uvarint(out, arg_len as u64);
-        arg.encode_raw(out);
+        arg.write_argument(out);
     }
     out.extend_from_slice(headers);
     len
@@ -260,6 +293,32 @@ mod tests {
             ..Default::default()
         };
         check(128, 16_384, &"m".repeat(200), Kind::CallKindUndefined, &big);
+    }
+
+    #[test]
+    fn encoded_arguments_are_written_as_they_are() {
+        let req = PProfRequest {
+            name: "heap".into(),
+            debug: true,
+            gc: true,
+        };
+        let bytes = req.encode_to_vec();
+        for framing in [Framing::Message, Framing::Delimited] {
+            let mut want = Vec::new();
+            encode_call(&mut want, framing, 3, 0, "m", Kind::CallKindDefault, &req);
+            let mut out = Vec::new();
+            let len = encode_call(
+                &mut out,
+                framing,
+                3,
+                0,
+                "m",
+                Kind::CallKindDefault,
+                &Encoded(&bytes),
+            );
+            assert_eq!(out, want);
+            assert_eq!(len, call_len(3, 0, "m", Kind::CallKindDefault, bytes.len()));
+        }
     }
 
     #[test]

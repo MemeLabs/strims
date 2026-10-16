@@ -12,6 +12,10 @@
 //! - n2 dials n0 over WebSocket and never takes its pair, so n0's calls
 //!   overflow the channel's input buffer and n2 closes the pair.
 //!
+//! In a second world, n1 calls n0 through a `RetryClient` for an answer
+//! that takes several attempt timeouts to cross n0's capped upload, and
+//! n0 serves it once.
+//!
 //! Every host appends what it sees, stamped with simulated time, to one
 //! trace. The same seed must give the same trace hash, and another seed a
 //! different one.
@@ -42,8 +46,9 @@ use strims_proto::debug::v1::{
 };
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_proto::types::Key;
-use strims_rpc::{Client, Config, Router, peer_connection};
+use strims_rpc::{Client, Config, RetryClient, RetryPolicy, Router, Timer, peer_connection};
 use tokio::task::spawn_local;
+use tokio::time::Sleep;
 
 const TCP_PORT: u16 = 7000;
 const WS_PORT: u16 = 7001;
@@ -60,8 +65,40 @@ type Clients = Rc<RefCell<BTreeMap<HostId, Client>>>;
 #[derive(Clone)]
 struct World {
     seed: u64,
+    /// Every node's upload rate limit, in bytes per second.
+    upload_cap: u64,
     trace: Trace,
     ids: Rc<RefCell<BTreeMap<u8, HostId>>>,
+    /// PProf requests served, by every host.
+    pprofs: Rc<Cell<u64>>,
+}
+
+impl World {
+    fn new(seed: u64, upload_cap: u64) -> World {
+        World {
+            seed,
+            upload_cap,
+            trace: Rc::default(),
+            ids: Rc::default(),
+            pprofs: Rc::default(),
+        }
+    }
+}
+
+/// A node's clock as an RPC client's timer.
+#[derive(Clone)]
+struct SimTimer(SimClock);
+
+impl Timer for SimTimer {
+    type Sleep = Sleep;
+
+    fn now(&self) -> Time {
+        self.0.now()
+    }
+
+    fn sleep_until(&self, deadline: Time) -> Sleep {
+        tokio::time::sleep_until(self.0.deadline(deadline))
+    }
 }
 
 impl World {
@@ -97,6 +134,7 @@ impl World {
 #[derive(Default)]
 struct TestService {
     cancelled: Rc<Cell<u64>>,
+    pprofs: Rc<Cell<u64>>,
 }
 
 struct CancelGuard(Rc<Cell<u64>>);
@@ -113,6 +151,7 @@ fn data(n: usize) -> Vec<u8> {
 
 impl DebugService for TestService {
     async fn p_prof(&self, _: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
+        self.pprofs.set(self.pprofs.get() + 1);
         let name = if req.name.len() > 64 {
             req.name.len().to_string()
         } else {
@@ -185,7 +224,7 @@ impl Host {
         config.ws_listen = Some(format!("0.0.0.0:{WS_PORT}"));
         config.public_ip = Some(ip);
         config.allow_insecure_ws = true;
-        config.rate_limit = Some(UPLOAD_CAP);
+        config.rate_limit = Some(w.upload_cap);
         let clock = SimClock::turmoil(epoch());
         let (node, events) = Node::spawn(config, TurmoilNet, clock).await.unwrap();
         w.ids.borrow_mut().insert(i, node.host_id());
@@ -196,7 +235,11 @@ impl Host {
             trace: w.trace.clone(),
             clients: Rc::default(),
         };
-        spawn_local(h.handle_events(events, serve));
+        let service = Rc::new(TestService {
+            pprofs: w.pprofs.clone(),
+            ..TestService::default()
+        });
+        spawn_local(h.handle_events(events, serve, service));
         h
     }
 
@@ -208,6 +251,7 @@ impl Host {
         &self,
         mut events: NodeEvents,
         serve: bool,
+        service: Rc<TestService>,
     ) -> impl Future<Output = ()> + use<> {
         let (name, node, clock, trace, clients) = (
             self.name.clone(),
@@ -216,7 +260,6 @@ impl Host {
             self.trace.clone(),
             self.clients.clone(),
         );
-        let service = Rc::new(TestService::default());
         async move {
             while let Some(e) = events.recv().await {
                 match e {
@@ -256,10 +299,14 @@ impl Host {
     }
 
     async fn client(&self, peer: HostId) -> DebugClient<Client> {
+        DebugClient::new(self.rpc_client(peer).await)
+    }
+
+    async fn rpc_client(&self, peer: HostId) -> Client {
         tokio::time::timeout(STEP, async {
             loop {
                 if let Some(c) = self.clients.borrow().get(&peer) {
-                    return DebugClient::new(c.clone());
+                    return c.clone();
                 }
                 tokio::time::sleep(StdDuration::from_millis(1)).await;
             }
@@ -404,23 +451,63 @@ async fn quiet_host(w: World) -> turmoil::Result {
     Ok(())
 }
 
-fn run(seed: u64) -> Vec<String> {
-    let w = World {
-        seed,
-        trace: Rc::default(),
-        ids: Rc::default(),
-    };
-    let mut sim = turmoil::Builder::new()
+fn sim(seed: u64) -> turmoil::Sim<'static> {
+    turmoil::Builder::new()
         .rng_seed(seed)
         .epoch(std::time::UNIX_EPOCH + StdDuration::from_secs(1_700_000_000))
         .simulation_duration(StdDuration::from_secs(120))
         .min_message_latency(StdDuration::from_millis(1))
         .max_message_latency(StdDuration::from_millis(15))
-        .build();
+        .build()
+}
+
+fn run(seed: u64) -> Vec<String> {
+    let w = World::new(seed, UPLOAD_CAP);
+    let mut sim = sim(seed);
     let ws = w.clone();
     sim.host("n0", move || server_host(ws.clone()));
     sim.client("n1", script_host(w.clone()));
     sim.client("n2", quiet_host(w.clone()));
+    sim.run().unwrap();
+    w.trace.borrow().clone()
+}
+
+/// The answer that crosses n0's capped upload: about four seconds at
+/// [`CAPPED_UPLOAD`].
+const SLOW_ANSWER: usize = 256 * 1024;
+const CAPPED_UPLOAD: u64 = 64 * 1024;
+
+async fn capped_server(w: World) -> turmoil::Result {
+    let _h = Host::start(&w, 0, true).await;
+    std::future::pending::<()>().await;
+    Ok(())
+}
+
+async fn retrying_caller(w: World) -> turmoil::Result {
+    let h = Host::start(&w, 1, true).await;
+    let n0 = h.node.dial(&w.uri("tcp", TCP_PORT, 0)).await.unwrap();
+    let policy = RetryPolicy::peer();
+    let debug = DebugClient::new(RetryClient::new(
+        h.rpc_client(n0).await,
+        SimTimer(h.clock),
+        policy,
+    ));
+    let start = h.clock.now();
+    let res = debug.p_prof(&pprof(SLOW_ANSWER.to_string())).await.unwrap();
+    let took = h.clock.now() - start;
+    assert_eq!(res.data, data(SLOW_ANSWER));
+    assert!(took > policy.attempt_timeout * 3, "answered in {took}");
+    assert_eq!(w.pprofs.get(), 1);
+    h.log(format!("answered in {} ms", took.as_millis()));
+    Ok(())
+}
+
+fn run_capped(seed: u64) -> Vec<String> {
+    let w = World::new(seed, CAPPED_UPLOAD);
+    let mut sim = sim(seed);
+    let ws = w.clone();
+    sim.host("n0", move || capped_server(ws.clone()));
+    sim.client("n1", retrying_caller(w.clone()));
     sim.run().unwrap();
     w.trace.borrow().clone()
 }
@@ -444,4 +531,17 @@ fn peer_rpc_runs_over_the_channel_pair() {
     assert_eq!(digest(&a), digest(&b), "same seed, different traces");
     let c = run(8);
     assert_ne!(digest(&a), digest(&c), "different seeds, same trace");
+}
+
+#[test]
+fn a_large_answer_on_a_capped_link_is_requested_once() {
+    let a = run_capped(7);
+    for l in &a {
+        eprintln!("{l}");
+    }
+    assert_eq!(
+        digest(&a),
+        digest(&run_capped(7)),
+        "same seed, different traces"
+    );
 }

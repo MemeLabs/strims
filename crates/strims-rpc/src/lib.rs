@@ -29,6 +29,8 @@
 //!   [`peer_connection`] does the same over a node's channel pair, and
 //!   [`vpn::connect`] over a vpn port, where many remotes share the
 //!   endpoint and every Call carries the sender's certificate.
+//! - A [`RetryClient`] calls through a [`Client`] with deadlines and
+//!   retries, on the driver's [`Timer`] ([`retry`]).
 //! - Errors a handler returns reach the caller as
 //!   [`strims_proto::service::CallError::Remote`], with their code.
 //!
@@ -38,7 +40,7 @@
 //! timers. Connections, clients and handlers are `!Send`; a connection
 //! drives its handlers inside its own future, so spawn it as a local task
 //! (a browser worker, a tokio `LocalSet`). Callers impose deadlines by
-//! dropping a call, which cancels it.
+//! dropping a call, which cancels it, or with a [`RetryClient`].
 //!
 //! # Hostile peers
 //!
@@ -51,6 +53,7 @@ mod connection;
 pub mod endpoint;
 pub mod frame;
 mod peer;
+pub mod retry;
 mod router;
 mod shared;
 pub mod vpn;
@@ -64,5 +67,6 @@ pub use endpoint::{
 };
 pub use frame::{FrameDecoder, FrameError};
 pub use peer::{PeerConnection, peer_connection};
+pub use retry::{RetryClient, RetryPolicy, Timer};
 pub use router::Router;
 pub use wire::Framing;

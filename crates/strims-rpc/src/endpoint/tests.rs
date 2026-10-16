@@ -17,7 +17,7 @@ use strims_proto::debug::v1::{PProfRequest, PProfResponse, WatchMetricsResponse}
 use strims_proto::types::Certificate;
 
 use super::*;
-use crate::wire::put_uvarint;
+use crate::wire::{Encoded, put_uvarint};
 
 const PPROF: &str = "strims.debug.v1.Debug.PProf";
 const WATCH: &str = "strims.debug.v1.Debug.WatchMetrics";
@@ -491,6 +491,63 @@ fn every_call_sent_gets_a_fresh_id_from_one() {
         .map(|c| (c.id, c.parent_id, c.method.as_str()))
         .collect();
     assert_eq!(ids, [(1, 0, PPROF), (2, 2, CALLBACK), (3, 1, CALLBACK)]);
+}
+
+#[test]
+fn encoded_requests_go_out_as_their_messages_do() {
+    let mut e = Endpoint::new(Config::default());
+    let req = pprof("heap");
+    e.start_call(PPROF, false, &req).unwrap();
+    e.start_call(PPROF, false, &Encoded(&req.encode_to_vec()))
+        .unwrap();
+    let calls = sent(&mut e);
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[1].method, calls[0].method);
+    assert_eq!(calls[1].argument, calls[0].argument);
+}
+
+#[test]
+fn a_request_is_queued_until_it_is_transmitted() {
+    let mut e = Endpoint::new(Config::default());
+    let c1 = e.start_call(PPROF, false, &pprof("1")).unwrap();
+    let c2 = e.start_call(PPROF, false, &pprof("2")).unwrap();
+    assert!(e.is_request_queued(c1) && e.is_request_queued(c2));
+    e.poll_transmit().unwrap();
+    assert!(!e.is_request_queued(c1) && e.is_request_queued(c2));
+
+    // a cancel queued between requests holds its own place
+    e.cancel(c1);
+    let c3 = e.start_call(PPROF, false, &pprof("3")).unwrap();
+    let queued: Vec<(bool, bool)> = std::iter::from_fn(|| {
+        e.poll_transmit()?;
+        Some((e.is_request_queued(c2), e.is_request_queued(c3)))
+    })
+    .collect();
+    assert_eq!(queued, [(false, true), (false, true), (false, false)]);
+
+    let c4 = e.start_call(PPROF, false, &pprof("4")).unwrap();
+    assert!(e.is_request_queued(c4));
+    e.close();
+    assert!(!e.is_request_queued(c4));
+}
+
+#[test]
+fn part_of_a_call_counts_as_receiving() {
+    let mut client = Endpoint::new(Config::default());
+    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    client.poll_transmit().unwrap();
+    let answer = delimited(&callback(call.get(), Kind::CallKindDefault, vec![7; 300]));
+    let (head, tail) = answer.split_at(100);
+    assert!(!client.is_receiving());
+    client.handle_input(&head[..1]).unwrap();
+    assert!(client.is_receiving());
+    client.handle_input(&head[1..]).unwrap();
+    assert!(client.is_receiving());
+    assert_eq!(client.received_bytes(), 100);
+    client.handle_input(tail).unwrap();
+    assert!(!client.is_receiving());
+    assert_eq!(client.received_bytes(), answer.len() as u64);
+    assert_eq!(events(&mut client), [Event::Response { call }]);
 }
 
 #[test]

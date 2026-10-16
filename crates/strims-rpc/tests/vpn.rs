@@ -42,10 +42,13 @@ use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 use strims_rpc::vpn::{self, CERTIFICATE_HEADER, VpnClient, VpnConfig, VpnError};
 use strims_rpc::wire::CALLBACK;
-use strims_rpc::{Client, Router};
+use strims_rpc::{Client, RetryClient, RetryPolicy, Router};
 use strims_vpn::{Delivery, HostAddr, M_BROADCAST, M_ENCRYPT, NetworkId};
 use tokio::task::{LocalSet, spawn_local};
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout};
+
+mod common;
+use common::TokioTimer;
 
 const SIGN: i32 = KeyUsage::Sign as i32;
 const PEER: i32 = KeyUsage::Peer as i32;
@@ -128,6 +131,8 @@ struct NetState {
     /// Every Call sent: from, to, the Call.
     log: Vec<(HostAddr, HostAddr, Call)>,
     now: Time,
+    /// The next this many Calls sent are lost.
+    lose: usize,
 }
 
 /// Delivers each sent Call to the port it names, as vpn would: encrypted,
@@ -158,6 +163,11 @@ impl Net {
 
     fn set_now(&self, now: Time) {
         self.0.borrow_mut().now = now;
+    }
+
+    /// Loses the next `n` Calls sent.
+    fn lose(&self, n: usize) {
+        self.0.borrow_mut().lose = n;
     }
 
     fn delivery(&self, from: HostAddr, to: HostAddr, body: Vec<u8>) -> Delivery<u16> {
@@ -233,7 +243,16 @@ impl Sink<(HostAddr, Vec<u8>)> for PortWriter {
 
     fn start_send(self: Pin<&mut Self>, (to, body): (HostAddr, Vec<u8>)) -> Result<(), Closed> {
         let call = Call::decode(body.as_slice()).unwrap();
-        self.net.0.borrow_mut().log.push((self.addr, to, call));
+        let lost = {
+            let mut s = self.net.0.borrow_mut();
+            s.log.push((self.addr, to, call));
+            let lost = s.lose > 0;
+            s.lose = s.lose.saturating_sub(1);
+            lost
+        };
+        if lost {
+            return Ok(());
+        }
         let d = self.net.delivery(self.addr, to, body);
         self.net.inject(d);
         Ok(())
@@ -399,6 +418,54 @@ async fn calls_reach_servers_and_handlers_see_the_caller() {
             .unwrap();
         assert_eq!(res.data, server.profile.public);
         assert_eq!(service.calls.get(), 3);
+    })
+    .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_lost_request_is_sent_again() {
+    local(async {
+        let rng = &mut det_rng(9);
+        let network = Network::new(rng);
+        let (server, client) = (Host::new(&network, rng), Host::new(&network, rng));
+        let net = Net::new();
+        let service = Rc::new(TestService::default());
+        start(
+            &net,
+            &server,
+            100,
+            Some(service.clone()),
+            VpnConfig::default(),
+        );
+        let (vpn_client, _) = start(&net, &client, 200, None, VpnConfig::default());
+        let to_server = RetryClient::new(
+            vpn_client.to(server.addr(100)),
+            TokioTimer::new(epoch()),
+            RetryPolicy::vpn(),
+        );
+
+        net.lose(1);
+        let begin = Instant::now();
+        let res = DebugClient::new(to_server).p_prof(&pprof("a")).await;
+        assert_eq!(res.unwrap().name, "a");
+        // a 10 s attempt, then a 1 s delay
+        assert_eq!(begin.elapsed(), StdDuration::from_secs(11));
+        assert_eq!(service.calls.get(), 1);
+        let sent: Vec<(HostAddr, String)> = net
+            .log()
+            .into_iter()
+            .map(|(from, _, call)| (from, call.method))
+            .collect();
+        let pprof = "strims.debug.v1.Debug.PProf".to_owned();
+        assert_eq!(
+            sent,
+            [
+                (client.addr(200), pprof.clone()),
+                (client.addr(200), "CANCEL".to_owned()),
+                (client.addr(200), pprof),
+                (server.addr(100), CALLBACK.to_owned()),
+            ]
+        );
     })
     .await;
 }

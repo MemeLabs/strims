@@ -16,6 +16,7 @@ use strims_proto::service::{CallError, Caller, StreamingMethod, UnaryMethod};
 
 use crate::endpoint::{CallId, RemoteId, Response};
 use crate::shared::{SharedRef, with_endpoint};
+use crate::wire::Argument;
 
 /// Makes calls through a connection; see [`crate::connect`]. Clones share
 /// the connection and call the same remote: the connection's peer, or the
@@ -52,7 +53,12 @@ impl Client {
         }
     }
 
-    fn start(&self, method: &str, streaming: bool, req: &impl Message) -> Result<Call, CallError> {
+    pub(crate) fn start(
+        &self,
+        method: &str,
+        streaming: bool,
+        req: &impl Argument,
+    ) -> Result<Call, CallError> {
         let to = self.to;
         let id = with_endpoint(&self.shared, |e| {
             e.start_call_to(to, method, streaming, req)
@@ -96,13 +102,48 @@ impl Caller for Client {
 }
 
 /// An open call: cancelled on drop unless it ended.
-struct Call {
+pub(crate) struct Call {
     shared: SharedRef,
     id: CallId,
     done: bool,
 }
 
+/// How far an open call has got; see [`Call::progress`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Progress {
+    /// The request hasn't left the connection.
+    pub(crate) queued: bool,
+    /// Part of a Call has arrived on the connection and the rest hasn't.
+    pub(crate) receiving: bool,
+    /// Bytes the connection has received.
+    pub(crate) received: u64,
+}
+
 impl Call {
+    pub(crate) fn progress(&self) -> Progress {
+        let s = self.shared.borrow();
+        Progress {
+            queued: s.endpoint.is_request_queued(self.id),
+            receiving: s.endpoint.is_receiving(),
+            received: s.endpoint.received_bytes(),
+        }
+    }
+
+    /// A unary call's result, or `Pending` with `cx` registered to wake.
+    pub(crate) fn poll_unary<T: Message + Default>(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<T, CallError>> {
+        let res = match self.poll_response(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Response::Item(b)) => T::decode(b.as_slice()).map_err(CallError::Decode),
+            Poll::Ready(Response::End) => Err(CallError::Closed),
+            Poll::Ready(Response::Failed(e)) => Err(e),
+        };
+        self.done = true;
+        Poll::Ready(res)
+    }
+
     /// The call's next response, or `Pending` with `cx` registered to wake.
     fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<Response> {
         // the replaced waker is dropped after the borrow
@@ -161,15 +202,7 @@ impl<T: Message + Default> Future for UnaryCall<T> {
         let Some(call) = self.call.as_mut() else {
             return Poll::Ready(Err(CallError::Disconnected));
         };
-        let res = match call.poll_response(cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Response::Item(b)) => {
-                call.done = true;
-                T::decode(b.as_slice()).map_err(CallError::Decode)
-            }
-            Poll::Ready(Response::End) => Err(CallError::Closed),
-            Poll::Ready(Response::Failed(e)) => Err(e),
-        };
+        let res = std::task::ready!(call.poll_unary(cx));
         self.call = None;
         Poll::Ready(res)
     }

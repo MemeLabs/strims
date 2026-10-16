@@ -153,6 +153,8 @@ pub enum CallError {
     },
     /// The connection has its maximum number of calls open.
     TooManyCalls,
+    /// The caller's deadline passed before an answer arrived.
+    Timeout,
 }
 
 impl fmt::Display for CallError {
@@ -169,6 +171,7 @@ impl fmt::Display for CallError {
                 write!(f, "request of {len} bytes exceeds the {max}-byte limit")
             }
             CallError::TooManyCalls => f.write_str("too many open calls"),
+            CallError::Timeout => f.write_str("call timed out"),
         }
     }
 }

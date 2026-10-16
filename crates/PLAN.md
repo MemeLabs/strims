@@ -8,9 +8,6 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- A deadline-and-retry `Caller` for peer and vpn clients. Retries on a
-  short per-attempt deadline can repeat a request whose large answer is
-  still arriving on a slow link.
 - Storage (dao, kv, replication) and sessions.
 - Transfer: swarm announce and binding over peer RPC. This replaces the
   driver's explicit `run_swarm` binding.

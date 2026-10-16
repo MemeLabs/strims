@@ -49,7 +49,8 @@
 //! The reader yields the port's [`Delivery`]s; the writer takes each Call
 //! with its destination and sends it encrypted (`M_STD_FLAGS`) from the
 //! port. The transport is lossy: a lost request leaves its call waiting
-//! until the caller's deadline drops it.
+//! until the caller's deadline drops it. A [`RetryClient`](crate::RetryClient)
+//! with [`RetryPolicy::vpn`](crate::RetryPolicy::vpn) sends it again.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
