@@ -20,7 +20,12 @@
 //   - a transfer-like ppspp wiring (internal/transfer/control.go AddPeer):
 //     a ppspp.Runner, and per peer a FrameWriter on TransferPort in its own
 //     QoS class, RunPeer, and a TransferPort handler. Swarms run with fixed
-//     channel ids through RunnerPeer.RunSwarm.
+//     channel ids through RunnerPeer.RunSwarm;
+//   - with -peer-rpc, internal/peer's RPC wiring: per peer a ChannelPair on
+//     PeerRPCClientPort and PeerRPCServerPort in its own QoS class, an
+//     rpc.Client on the first and an rpc.Server on the second, serving the
+//     test Debug service in crates/strims-rpc/golden/debugsvc. The rpc-*
+//     verbs call the peer's.
 //
 // It is controlled over stdin with one command per line,
 //
@@ -37,6 +42,9 @@
 //	written <swarm> <bytes>
 //	read-done <swarm> <start> <length> <sha256 hex> <mismatches>
 //	read-error <swarm> <offset> <message hex>
+//
+// An rpc-* verb whose call fails with an RPC error answers "ok <id> <code>
+// <message hex>".
 //
 // Byte strings are hex. Diagnostics go to stderr. Stream bytes are
 // streamByte(absolute offset), the same function the Rust test uses.
@@ -71,6 +79,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/crates/strims-rpc/golden/debugsvc"
+	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
@@ -173,6 +184,9 @@ func idHex(id kademlia.ID) string {
 type peerState struct {
 	peer *vnic.Peer
 	rp   *ppspp.RunnerPeer
+	// With -peer-rpc: the peer's Debug service, and the raw client under it.
+	debug  *debugv1.DebugClient
+	caller *rpc.Client
 }
 
 type swarmState struct {
@@ -186,6 +200,10 @@ type node struct {
 	vpnPort     uint16
 	runner      *ppspp.Runner
 	transferQOS *qos.Class
+	// With -peer-rpc: the RPC channels' QoS class and the served service.
+	rpcQOS *qos.Class
+	debug  *debugsvc.Service
+	logger *zap.Logger
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -205,6 +223,19 @@ func (n *node) handlePeer(p *vnic.Peer) {
 	})
 
 	ps := &peerState{peer: p, rp: rp}
+	if n.rpcQOS != nil {
+		rw0, rw1 := p.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort, n.rpcQOS)
+		c, err := rpc.NewClient(n.logger, &rpc.RWFDialer{Logger: n.logger, ReadWriteFlusher: rw0})
+		if err != nil {
+			logf("rpc client: %v", err)
+		} else {
+			ps.caller = c
+			ps.debug = debugv1.NewDebugClient(c)
+		}
+		s := rpc.NewServer(n.logger, &rpc.RWFDialer{Logger: n.logger, ReadWriteFlusher: rw1})
+		debugv1.RegisterDebugService(s, n.debug)
+		go s.Listen(context.Background())
+	}
 	n.mu.Lock()
 	n.peers[id] = ps
 	n.mu.Unlock()
@@ -218,6 +249,9 @@ func (n *node) handlePeer(p *vnic.Peer) {
 		<-p.Done()
 		rp.Stop()
 		w.Close()
+		if ps.caller != nil {
+			ps.caller.Close()
+		}
 		n.mu.Lock()
 		current := n.peers[id] == ps
 		if current {
@@ -650,8 +684,160 @@ func (n *node) command(verb string, args []string) (string, error) {
 		go readStream(args[0], s.swarm, total)
 		return "", nil
 
+	case "rpc-pprof", "rpc-watch", "rpc-watch-cancel", "rpc-read-deadline", "rpc-cancels",
+		"rpc-config", "rpc-negative", "rpc-raw":
+		// rpc-<verb> <peer> [<args>]
+		if err := need(1); err != nil {
+			return "", err
+		}
+		ps, err := n.peer(args[0])
+		if err != nil {
+			return "", err
+		}
+		if ps.debug == nil {
+			return "", errors.New("no peer rpc")
+		}
+		return rpcCommand(ctx, verb, ps, args[1:])
+
 	case "exit":
 		os.Exit(0)
+	}
+	return "", fmt.Errorf("unknown command %q", verb)
+}
+
+// rpcError formats an RPC error as "<code> <message hex>".
+func rpcError(err error) (string, error) {
+	var e interface{ ErrorCode() int32 }
+	if !errors.As(err, &e) {
+		return "", err
+	}
+	return fmt.Sprintf("%d %s", rpc.ErrorCode(err), hexs(err.Error())), nil
+}
+
+// watch runs a WatchMetrics call, handing items to f until it returns
+// false, and returns the call's error.
+func watch(ctx context.Context, c *debugv1.DebugClient, interval int32, f func(*debugv1.WatchMetricsResponse) bool) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan *debugv1.WatchMetricsResponse)
+	done := make(chan error, 1)
+	go func() {
+		done <- c.WatchMetrics(ctx, &debugv1.WatchMetricsRequest{IntervalMs: interval}, ch)
+	}()
+	for item := range ch {
+		if !f(item) {
+			cancel()
+			for range ch {
+			}
+			break
+		}
+	}
+	return <-done
+}
+
+// rpcCommand calls the peer's Debug service:
+//
+//	rpc-pprof <peer> <size> <name length>: "<name> <data length> <ok|bad>"
+//	  (the name spells size, or is name length bytes long when nonzero)
+//	rpc-watch <peer> <n>: "<items> <data hex>"
+//	rpc-watch-cancel <peer> <k>: cancels an endless stream after k items
+//	rpc-read-deadline <peer> <ms>: a ReadMetrics call that times out
+//	rpc-cancels <peer>: the peer service's count of cancelled calls
+//	rpc-config <peer>, rpc-negative <peer>: the RPC error
+//	rpc-raw <peer> <method>: a call of any method; the RPC error
+func rpcCommand(ctx context.Context, verb string, ps *peerState, args []string) (string, error) {
+	c := ps.debug
+	arg := func(i int) (int, error) {
+		if len(args) <= i {
+			return 0, fmt.Errorf("%s: missing argument %d", verb, i+1)
+		}
+		return strconv.Atoi(args[i])
+	}
+	switch verb {
+	case "rpc-pprof":
+		size, err := arg(0)
+		if err != nil {
+			return "", err
+		}
+		nameLen, err := arg(1)
+		if err != nil {
+			return "", err
+		}
+		name := strconv.Itoa(size)
+		if nameLen > 0 {
+			name = strings.Repeat("y", nameLen)
+		}
+		res := &debugv1.PProfResponse{}
+		if err := c.PProf(ctx, &debugv1.PProfRequest{Name: name}, res); err != nil {
+			return "", err
+		}
+		ok := "ok"
+		if string(res.Data) != string(debugsvc.Data(size)) {
+			ok = "bad"
+		}
+		return fmt.Sprintf("%s %d %s", res.Name, len(res.Data), ok), nil
+
+	case "rpc-watch":
+		k, err := arg(0)
+		if err != nil {
+			return "", err
+		}
+		var got []byte
+		err = watch(ctx, c, int32(k), func(r *debugv1.WatchMetricsResponse) bool {
+			got = append(got, r.Data...)
+			return true
+		})
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%d %s", len(got), hexs(string(got))), nil
+
+	case "rpc-watch-cancel":
+		k, err := arg(0)
+		if err != nil {
+			return "", err
+		}
+		seen := 0
+		err = watch(ctx, c, 0, func(*debugv1.WatchMetricsResponse) bool {
+			seen++
+			return seen < k
+		})
+		if !errors.Is(err, context.Canceled) {
+			return "", fmt.Errorf("call ended with %v", err)
+		}
+		return "canceled", nil
+
+	case "rpc-read-deadline":
+		ms, err := arg(0)
+		if err != nil {
+			return "", err
+		}
+		tctx, cancel := context.WithTimeout(ctx, time.Duration(ms)*time.Millisecond)
+		defer cancel()
+		err = c.ReadMetrics(tctx, &debugv1.ReadMetricsRequest{}, &debugv1.ReadMetricsResponse{})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return "", fmt.Errorf("call ended with %v", err)
+		}
+		return "deadline", nil
+
+	case "rpc-cancels":
+		res := &debugv1.StartMockStreamResponse{}
+		if err := c.StartMockStream(ctx, &debugv1.StartMockStreamRequest{}, res); err != nil {
+			return "", err
+		}
+		return strconv.FormatUint(res.Id, 10), nil
+
+	case "rpc-config":
+		return rpcError(c.GetConfig(ctx, &debugv1.GetConfigRequest{}, &debugv1.GetConfigResponse{}))
+
+	case "rpc-negative":
+		return rpcError(watch(ctx, c, -1, func(*debugv1.WatchMetricsResponse) bool { return true }))
+
+	case "rpc-raw":
+		if len(args) < 1 {
+			return "", errors.New("rpc-raw: missing method")
+		}
+		return rpcError(ps.caller.CallUnary(ctx, args[0], &debugv1.PProfRequest{}, &debugv1.PProfResponse{}))
 	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
@@ -722,6 +908,7 @@ func main() {
 	verbose := flag.Bool("v", false, "log to stderr")
 	listen := flag.Bool("listen", true, "serve the TCP and WebSocket interfaces (false: dial only)")
 	webRTC := flag.Bool("webrtc", false, "add the WebRTC interface on a loopback UDP mux")
+	peerRPC := flag.Bool("peer-rpc", false, "run RPC on every peer's channel pair (ports 4 and 5)")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -734,13 +921,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC bool) error {
+func run(profileSeed, hostSeed, networkKey string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -831,6 +1018,11 @@ func run(profileSeed, hostSeed, networkKey string, vpnPort uint16, label string,
 		transferQOS: h.QOS().AddClass(1),
 		peers:       map[kademlia.ID]*peerState{},
 		swarms:      map[string]*swarmState{},
+		logger:      logger,
+	}
+	if peerRPC {
+		n.rpcQOS = h.QOS().AddClass(1)
+		n.debug = &debugsvc.Service{}
 	}
 	h.AddPeerHandler(vnic.PeerHandlerFunc(n.handlePeer))
 

@@ -10,20 +10,8 @@
 //	go run -tags golden ./crates/strims-rpc/golden server
 //	go run -tags golden ./crates/strims-rpc/golden client
 //
-// The test service, served the same way by both sides:
-//
-//   - PProf answers with Name (or its length, if longer than 64 bytes) and
-//     Data of the length Name spells in decimal (0 otherwise), byte i
-//     being i*7;
-//   - WatchMetrics streams IntervalMs items with Data [i], then closes;
-//     with 0 it streams until cancelled, and a negative value fails with
-//     code 3;
-//   - ReadMetrics answers only when cancelled;
-//   - GetConfig fails with code 7, "no config";
-//   - StartMockStream answers with the number of calls cancelled so far;
-//   - the other methods aren't implemented.
-//
-// The client exits with status 1 after printing failed checks to stderr.
+// Both sides serve the test service in ./debugsvc. The client exits with
+// status 1 after printing failed checks to stderr.
 package main
 
 import (
@@ -33,10 +21,10 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"github.com/MemeLabs/strims/crates/strims-rpc/golden/debugsvc"
 	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
 	"go.uber.org/zap"
 )
@@ -46,70 +34,12 @@ type stdio struct {
 	io.Writer
 }
 
-type debugService struct {
-	debugv1.UnimplementedDebugService
-	cancelled atomic.Int64
-}
-
-func data(n int) []byte {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(i * 7)
-	}
-	return b
-}
-
-func (s *debugService) PProf(ctx context.Context, req *debugv1.PProfRequest) (*debugv1.PProfResponse, error) {
-	name := req.Name
-	if len(name) > 64 {
-		name = strconv.Itoa(len(name))
-	}
-	n, _ := strconv.Atoi(req.Name)
-	return &debugv1.PProfResponse{Name: name, Data: data(n)}, nil
-}
-
-func (s *debugService) ReadMetrics(ctx context.Context, req *debugv1.ReadMetricsRequest) (*debugv1.ReadMetricsResponse, error) {
-	<-ctx.Done()
-	s.cancelled.Add(1)
-	return nil, ctx.Err()
-}
-
-func (s *debugService) WatchMetrics(ctx context.Context, req *debugv1.WatchMetricsRequest) (<-chan *debugv1.WatchMetricsResponse, error) {
-	if req.IntervalMs < 0 {
-		return nil, rpc.WrapError(errors.New("negative interval"), int32(3))
-	}
-	ch := make(chan *debugv1.WatchMetricsResponse)
-	go func() {
-		for i := 0; req.IntervalMs == 0 || i < int(req.IntervalMs); i++ {
-			select {
-			case ch <- &debugv1.WatchMetricsResponse{Data: []byte{byte(i)}}:
-			case <-ctx.Done():
-				s.cancelled.Add(1)
-				return
-			}
-			if req.IntervalMs == 0 {
-				time.Sleep(time.Millisecond)
-			}
-		}
-		close(ch)
-	}()
-	return ch, nil
-}
-
-func (s *debugService) GetConfig(ctx context.Context, req *debugv1.GetConfigRequest) (*debugv1.GetConfigResponse, error) {
-	return nil, rpc.WrapError(errors.New("no config"), int32(7))
-}
-
-func (s *debugService) StartMockStream(ctx context.Context, req *debugv1.StartMockStreamRequest) (*debugv1.StartMockStreamResponse, error) {
-	return &debugv1.StartMockStreamResponse{Id: uint64(s.cancelled.Load())}, nil
-}
-
 func serve(logger *zap.Logger) error {
 	server := rpc.NewServer(logger, &rpc.RWDialer{
 		Logger:     logger,
 		ReadWriter: stdio{os.Stdin, os.Stdout},
 	})
-	debugv1.RegisterDebugService(server, &debugService{})
+	debugv1.RegisterDebugService(server, &debugsvc.Service{})
 	err := server.Listen(context.Background())
 	if errors.Is(err, io.EOF) {
 		return nil
@@ -194,7 +124,7 @@ func runClient(logger *zap.Logger) error {
 			if err := c.PProf(ctx, &debugv1.PProfRequest{Name: strconv.Itoa(n)}, res); err != nil {
 				return err
 			}
-			if res.Name != strconv.Itoa(n) || string(res.Data) != string(data(n)) {
+			if res.Name != strconv.Itoa(n) || string(res.Data) != string(debugsvc.Data(n)) {
 				return fmt.Errorf("got name %q and %d bytes", res.Name, len(res.Data))
 			}
 			return nil

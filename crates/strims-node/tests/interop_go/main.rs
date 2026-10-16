@@ -18,6 +18,7 @@
 //! | `webrtc_exchange_rust_offers`, `webrtc_exchange_go_offers` | a pion node and a Rust node without listeners get a direct WebRTC link through peer exchange; vpn and a ppspp stream over it |
 //! | `ppspp_chain_go_rust_go`, `ppspp_chain_rust_go_rust` | seed in one implementation, relay in the other, byte-exact |
 //! | `ppspp_capped_rust_seed_go_viewers` | an upload-capped Rust seed with three Go viewers |
+//! | `rpc::peer_rpc_both_ways` | peer RPC on the channel pair over TCP and WS: calls both ways, multi-frame payloads, streams, cancels, deadlines, error codes, unknown methods |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
 //! Every test skips when `go` isn't on PATH and is bounded by a timeout;
@@ -38,6 +39,7 @@
 )]
 
 mod harness;
+mod rpc;
 
 use std::collections::BTreeMap;
 use std::future::Future;

@@ -264,6 +264,9 @@ pub struct GoOptions {
     /// Add the WebRTC interface (`NewWebRTCInterface` on a loopback UDP
     /// mux, no ICE servers).
     pub webrtc: bool,
+    /// Run RPC on every peer's channel pair, serving the test Debug
+    /// service (the `rpc-*` verbs call the peer's).
+    pub peer_rpc: bool,
 }
 
 impl GoOptions {
@@ -274,6 +277,7 @@ impl GoOptions {
             rate_limit: None,
             listen: true,
             webrtc: false,
+            peer_rpc: false,
         }
     }
 }
@@ -293,6 +297,7 @@ impl GoNode {
             .arg(format!("-rate-limit={}", o.rate_limit.unwrap_or(0)))
             .arg(format!("-listen={}", o.listen))
             .arg(format!("-webrtc={}", o.webrtc))
+            .arg(format!("-peer-rpc={}", o.peer_rpc))
             .arg("-timeout=15m")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -348,7 +353,10 @@ impl GoNode {
         match f[0] {
             "ok" | "err" => {
                 let id: u64 = f[1].parse().unwrap();
-                let v = f.get(2).copied().unwrap_or("-").to_owned();
+                let v = match f.get(2..) {
+                    Some(v) if !v.is_empty() => v.join(" "),
+                    _ => "-".to_owned(),
+                };
                 let r = if f[0] == "ok" {
                     Ok(v)
                 } else {
