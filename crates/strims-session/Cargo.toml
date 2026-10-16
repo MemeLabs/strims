@@ -1,0 +1,26 @@
+[package]
+name = "strims-session"
+description = "Profile sessions: sign-in, sign-up and the per-profile runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-dao.workspace = true
+strims-kv.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-replication.workspace = true
+strims-rpc.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+futures-core.workspace = true
+futures-sink.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true

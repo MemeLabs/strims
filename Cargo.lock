@@ -2022,6 +2022,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-session"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "strims-base",
+ "strims-dao",
+ "strims-kv",
+ "strims-proto",
+ "strims-replication",
+ "strims-rpc",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strims-sim"
 version = "0.1.0"
 dependencies = [
