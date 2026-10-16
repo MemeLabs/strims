@@ -18,7 +18,7 @@ futures-util = { workspace = true, features = ["alloc"] }
 hex.workspace = true
 proptest.workspace = true
 # tests drive connections on a real executor
-tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync", "test-util"] }
 
 [lints]
 workspace = true
