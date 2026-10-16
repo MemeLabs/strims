@@ -29,6 +29,7 @@ use crate::driver::{Call, Command, Driver};
 use crate::error::{NodeError, ReadError};
 use crate::event::{NodeEvent, NodeMetrics, PeerInfo};
 use crate::net::Net;
+use crate::rpc::PeerRpc;
 use crate::state::{PublisherId, ReadReply, ReaderId, State, WriteOp, WriteReply};
 
 /// Results buffered per hash table get or peer index search.
@@ -200,6 +201,12 @@ impl Node {
     /// Closes the link to `host_id`. Returns whether it was connected.
     pub async fn close_peer(&self, host_id: ID) -> Result<bool, NodeError> {
         self.call(move |s, _| s.close_peer(&host_id)).await
+    }
+
+    /// The peer's RPC channel pair (see [`crate::rpc`]). Each pair is taken
+    /// once; a link that replaces the peer's comes with a new pair.
+    pub async fn take_peer_rpc(&self, host_id: ID) -> Result<PeerRpc, NodeError> {
+        self.call(move |s, _| s.take_peer_rpc(&host_id)).await?
     }
 
     /// Changes the upload cap (see [`NodeConfig::rate_limit`]).

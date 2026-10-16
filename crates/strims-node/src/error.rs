@@ -21,11 +21,19 @@ pub enum NodeError {
     UnknownPeer,
     #[error("unknown swarm")]
     UnknownSwarm,
-    /// The swarm writer or reader was closed (or its swarm removed).
+    /// The swarm writer or reader was closed (or its swarm removed), or the
+    /// peer RPC pair was closed.
     #[error("closed")]
     Closed,
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+    /// The peer's RPC channels were already taken.
+    #[error("peer rpc already taken")]
+    RpcTaken,
+    /// A peer RPC channel received more than its buffer holds, so the pair
+    /// was closed.
+    #[error("peer rpc input overflowed")]
+    RpcOverflow,
     #[error("config: {0}")]
     Config(String),
     #[error("vnic: {0}")]

@@ -77,6 +77,8 @@ pub struct NodeConfig {
     /// the `TCPMuxInit` read on accepted connections.
     pub dial_timeout: Duration,
     pub buffers: BufferConfig,
+    /// The RPC channel pair every peer gets (see [`crate::rpc`]).
+    pub peer_rpc: PeerRpcConfig,
     /// Node events waiting for the app; more are dropped and counted.
     pub event_queue: usize,
     /// Commands waiting for the node task.
@@ -190,6 +192,7 @@ impl NodeConfig {
             vpn: strims_vpn::Config::default(),
             dial_timeout: Duration::from_secs(20),
             buffers: BufferConfig::default(),
+            peer_rpc: PeerRpcConfig::default(),
             event_queue: 1024,
             command_queue: 256,
             input_queue: 256,
@@ -279,6 +282,32 @@ impl WebRtcConfig {
                 ..EndpointConfig::default()
             },
             ..WebRtcConfig::default()
+        }
+    }
+}
+
+/// Peer RPC channels (see [`crate::rpc`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PeerRpcConfig {
+    /// Open an RPC channel pair for every peer. Off, frames on the pair's
+    /// ports are dropped by vnic.
+    pub enabled: bool,
+    /// Received bytes a channel holds that the app hasn't read, including
+    /// before it takes the pair. A frame past this closes the pair. At
+    /// least the largest Call plus a link MTU, so one Call can arrive while
+    /// the app is busy.
+    pub inbound_buffer: usize,
+    /// Bytes a channel's writer may have queued in the node: the writer
+    /// isn't ready while the node holds this much (plus at most one Call).
+    pub outbound_buffer: usize,
+}
+
+impl Default for PeerRpcConfig {
+    fn default() -> PeerRpcConfig {
+        PeerRpcConfig {
+            enabled: true,
+            inbound_buffer: 1024 * 1024,
+            outbound_buffer: 1024 * 1024,
         }
     }
 }

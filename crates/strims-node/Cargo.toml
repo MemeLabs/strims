@@ -37,6 +37,8 @@ turmoil = { workspace = true, optional = true }
 
 [dev-dependencies]
 sha2.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
 # `process` and `rt-multi-thread`: the Go interop tests drive Go helpers as
 # subprocesses and run their Rust nodes on a multi-thread runtime.
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "sync", "test-util", "process"] }

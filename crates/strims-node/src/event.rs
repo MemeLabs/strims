@@ -14,7 +14,8 @@ use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
 /// Notifications from the node task.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NodeEvent {
-    /// A link finished its vnic handshake.
+    /// A link finished its vnic handshake. The peer's RPC channels can be
+    /// taken with `Node::take_peer_rpc`.
     PeerAdded(PeerInfo),
     /// A peer went away (transport closed, replaced or closed locally).
     PeerRemoved { host_id: ID },
@@ -100,6 +101,11 @@ pub struct DriverMetrics {
     /// vpn frames that failed `handle_frame` (malformed, undecryptable...).
     pub vpn_frame_errors: u64,
     pub transfer_errors: u64,
+    /// Bytes of peer RPC frames handed to the app and taken from it.
+    pub rpc_bytes_read: u64,
+    pub rpc_bytes_written: u64,
+    /// Peer RPC pairs closed because a channel's input overflowed.
+    pub rpc_overflows: u64,
     /// API calls that can change the node (everything but queries).
     pub commands: u64,
     /// Read-only API calls (`Node::metrics`, `Node::peers`), answered after

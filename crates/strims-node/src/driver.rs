@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! loop {
-//!     wait (biased): transport input | command | timer at State::poll_timeout
+//!     wait (biased): transport input | command | peer rpc write | timer at State::poll_timeout
 //!     drain a bounded batch of ready inputs and commands
 //!     State::handle_timeouts(now)
 //!     State::pump(now)     // events, vpn.flush, vnic.poll_egress, link writes
@@ -51,6 +51,7 @@ use crate::event::NodeEvent;
 use crate::handle::NodeInfo;
 use crate::link::{self, Input, Transport};
 use crate::net::Net;
+use crate::rpc::RpcFrame;
 use crate::state::{DialId, LinkIo, PublisherId, ReaderId, RtcSetup, State, UdpIo, WriteOp};
 use crate::transport::{self, IoConfig};
 use crate::udp;
@@ -96,6 +97,9 @@ pub(crate) struct Driver<N: Net, C: Clock> {
     input_tx: mpsc::Sender<Input<N>>,
     input_rx: mpsc::Receiver<Input<N>>,
     cmd_rx: mpsc::Receiver<Command>,
+    /// Calls from peer RPC writers. Unbounded, but each writer's credit
+    /// bounds what it has queued (see [`crate::rpc`]).
+    rpc_rx: mpsc::UnboundedReceiver<RpcFrame>,
     /// Read-only calls, answered after passes (see the module docs).
     query_rx: mpsc::Receiver<Call>,
     /// Whether the next pass is due within `query_delay`.
@@ -268,6 +272,7 @@ impl<N: Net, C: Clock> Driver<N, C> {
         });
 
         let (events_tx, events) = mpsc::channel(config.event_queue.max(1));
+        let (rpc_tx, rpc_rx) = mpsc::unbounded_channel();
         let state = State::new(
             &config,
             describe(LinkInterface::Tcp, &tcp_uri),
@@ -275,6 +280,7 @@ impl<N: Net, C: Clock> Driver<N, C> {
             rtc,
             clock.now(),
             events_tx,
+            rpc_tx,
         )?;
         let info = Arc::new(NodeInfo {
             host_id: state.vnic.id(),
@@ -306,6 +312,7 @@ impl<N: Net, C: Clock> Driver<N, C> {
                 input_tx,
                 input_rx,
                 cmd_rx,
+                rpc_rx,
                 query_rx,
                 answers_soon: answers_soon.clone(),
                 query_delay: config.query_delay,
@@ -371,12 +378,19 @@ impl<N: Net, C: Clock> Driver<N, C> {
                         }
                         None => break,
                     },
+                    Some(f) = self.rpc_rx.recv() => self.state.rpc_write(f),
                     () = &mut sleep, if deadline.is_some() => {}
                 }
             }
             for _ in 0..BATCH {
                 match self.input_rx.try_recv() {
                     Ok(input) => self.handle_input(input),
+                    Err(_) => break,
+                }
+            }
+            for _ in 0..BATCH {
+                match self.rpc_rx.try_recv() {
+                    Ok(f) => self.state.rpc_write(f),
                     Err(_) => break,
                 }
             }

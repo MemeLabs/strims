@@ -19,7 +19,7 @@
 //!
 //! | piece | role |
 //! |---|---|
-//! | [`Node`] | the API handle: dials, networks, vpn services, swarms |
+//! | [`Node`] | the API handle: dials, networks, vpn services, swarms, peer RPC |
 //! | `state` | the composition: event routing, egress pipeline, bookkeeping (no I/O) |
 //! | `driver` | the node task's loop around the state |
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
@@ -43,6 +43,12 @@
 //! write buffer, with no per-frame allocation. tungstenite allocates every
 //! WebSocket message, str0m every data-channel message and sent datagram,
 //! and a vpn delivery moves its body into [`NodeEvent::Message`].
+//!
+//! **Peer RPC.** Every peer gets a vnic channel pair for RPC, in a QoS
+//! class of weight 1. The app takes it once ([`Node::take_peer_rpc`]) as
+//! byte streams to run `strims-rpc` over. A channel whose unread input
+//! passes its buffer closes the pair; the peer stays connected, and closing
+//! it is the app's call. See [`rpc`].
 //!
 //! # Bindings
 //!
@@ -130,14 +136,15 @@ mod exchange;
 mod handle;
 mod link;
 pub mod net;
+pub mod rpc;
 mod state;
 mod transport;
 mod udp;
 
 pub use clock::{Clock, SimClock, SystemClock};
 pub use config::{
-    BufferConfig, DEFAULT_NOTSENT_LOWAT, NetworkOptions, NodeConfig, TcpSocketConfig, WebRtcConfig,
-    random_seed,
+    BufferConfig, DEFAULT_NOTSENT_LOWAT, NetworkOptions, NodeConfig, PeerRpcConfig,
+    TcpSocketConfig, WebRtcConfig, random_seed,
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
@@ -150,6 +157,7 @@ pub use handle::{
 #[cfg(feature = "turmoil")]
 pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};
+pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
 
 pub use strims_kademlia::ID as HostId;
 pub use strims_ppspp::{DeliveryMode, SwarmId, SwarmKey, SwarmOptions, WriterOptions};

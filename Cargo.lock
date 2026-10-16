@@ -1854,6 +1854,7 @@ dependencies = [
  "strims-ppspp",
  "strims-proto",
  "strims-qos",
+ "strims-rpc",
  "strims-vnic",
  "strims-vpn",
  "strims-webrtc",

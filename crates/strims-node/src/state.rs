@@ -6,9 +6,11 @@
 //! publishers.
 //!
 //! Every vnic peer gets a runner peer and a writer on
-//! [`ports::TRANSFER_PORT`] in the transfer QoS class, and is bound to
-//! every network with an `auto_bind_port`. vnic frames and send
-//! opportunities reach their owner by [`Tag`].
+//! [`ports::TRANSFER_PORT`] in the transfer QoS class, an RPC channel pair
+//! on [`ports::PEER_RPC_CLIENT_PORT`] and [`ports::PEER_RPC_SERVER_PORT`]
+//! in the peer RPC class (see `rpc`), and is bound to every network with
+//! an `auto_bind_port`. vnic frames and send opportunities reach their
+//! owner by [`Tag`].
 //!
 //! [`State`] owns no sockets and spawns nothing. The driver feeds it link
 //! bytes, commands and the time; it fills the link transmit buffers the
@@ -47,7 +49,7 @@ use strims_vpn::{
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config::{NetworkOptions, NodeConfig};
+use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
@@ -55,8 +57,12 @@ use crate::event::{
 };
 use crate::exchange::{Candidate, CandidateState};
 use crate::link::IdleOk;
+use crate::rpc::RpcFrame;
 
+mod rpc;
 mod rtc;
+
+pub(crate) use rpc::{RpcChannelId, RpcSide};
 
 pub(crate) use rtc::{RtcSetup, UdpIo};
 
@@ -88,6 +94,8 @@ pub(crate) enum Tag {
     Vpn(NetworkId),
     /// ppspp frames on `TRANSFER_PORT`, for the runner's peer.
     Ppspp(PpsppPeer),
+    /// A channel of the peer's RPC pair.
+    Rpc(LinkKey, RpcSide),
 }
 
 /// The driver's half of a link: the channels to its I/O tasks and its
@@ -187,6 +195,9 @@ struct PeerState {
     transfer: Option<WriterId>,
     /// Swarms with a channel to this peer (bound: one per swarm).
     swarms: BTreeMap<SwarmKey, ChannelIds>,
+    /// The RPC channel pair; `None` when peer RPC is off, or once the pair
+    /// has closed.
+    rpc: Option<rpc::PeerRpcState>,
 }
 
 #[derive(Debug)]
@@ -242,6 +253,13 @@ pub(crate) struct State {
     pub(crate) vpn: VpnHost,
     pub(crate) runner: Runner,
     transfer_class: ClassId,
+    rpc_class: ClassId,
+    peer_rpc: PeerRpcConfig,
+    /// Cloned into every RPC writer.
+    rpc_tx: mpsc::UnboundedSender<RpcFrame>,
+    /// RPC pairs to close after vnic's dispatch, and whether they
+    /// overflowed. At most one entry per peer.
+    rpc_closed: Vec<(LinkKey, bool)>,
     /// Listener URIs advertised to peer exchange.
     local_tcp: Option<LinkDescription>,
     local_ws: Option<LinkDescription>,
@@ -290,6 +308,7 @@ impl State {
         webrtc: Option<RtcSetup>,
         now: Time,
         events: mpsc::Sender<NodeEvent>,
+        rpc_tx: mpsc::UnboundedSender<RpcFrame>,
     ) -> Result<State, NodeError> {
         let mut rng = det_rng(config.rng_seed);
         let vnic_rng = fork(&mut rng);
@@ -307,6 +326,7 @@ impl State {
         vnic.set_max_peers(config.max_peers);
         let vpn = VpnHost::new(&mut vnic, config.vpn.clone(), fork(&mut rng))?;
         let transfer_class = vnic.add_qos_class(vnic.qos_root(), TRANSFER_QOS_WEIGHT)?;
+        let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
         let runner = Runner::new(fork(&mut rng));
         let rtc = webrtc.map(|setup| rtc::Rtc::new(setup, now, fork(&mut rng)));
         Ok(State {
@@ -314,6 +334,10 @@ impl State {
             vpn,
             runner,
             transfer_class,
+            rpc_class,
+            peer_rpc: config.peer_rpc,
+            rpc_tx,
+            rpc_closed: Vec::new(),
             local_tcp,
             local_ws,
             allow_insecure_ws: config.allow_insecure_ws,
@@ -419,6 +443,9 @@ impl State {
                 runner,
                 frame_errors,
                 metrics,
+                peers,
+                rpc_closed,
+                peer_rpc,
                 ..
             } = self;
             let res =
@@ -438,6 +465,15 @@ impl State {
                             frame_errors.push((pp, e));
                         }
                     }
+                    Tag::Rpc(peer, side) => rpc::dispatch(
+                        peers,
+                        rpc_closed,
+                        &mut metrics.rpc_bytes_read,
+                        peer_rpc.inbound_buffer,
+                        peer,
+                        side,
+                        f.body,
+                    ),
                 });
             let n = match res {
                 Ok(n) => n,
@@ -448,6 +484,7 @@ impl State {
                 }
             };
             self.handle_frame_errors();
+            self.handle_rpc_closed();
             self.process_events(now);
             if n == 0 {
                 break;
@@ -531,7 +568,12 @@ impl State {
             self.vpn.flush(&mut self.vnic, now);
             self.process_events(now);
             let State {
-                vnic, vpn, runner, ..
+                vnic,
+                vpn,
+                runner,
+                peers,
+                metrics,
+                ..
             } = self;
             vnic.poll_egress(now, &mut |f| match f.tag {
                 Tag::Vpn(net) => vpn.fill_egress(net, f.peer, f.body),
@@ -541,6 +583,9 @@ impl State {
                         len,
                         more: runner.wants_transmit(pp),
                     }
+                }
+                Tag::Rpc(peer, side) => {
+                    rpc::fill(peers, &mut metrics.rpc_bytes_written, peer, side, f.body)
                 }
             });
             let moved = self.drain_transmit();
@@ -660,8 +705,8 @@ impl State {
     }
 
     /// A peer finished its handshake: add it to the runner with a
-    /// transfer writer, bind it to the auto-bound networks, and complete
-    /// its dial.
+    /// transfer writer, open its RPC pair, bind it to the auto-bound
+    /// networks, and complete its dial.
     fn peer_added(&mut self, peer: LinkKey, host_id: ID, now: Time) {
         let pp = self.runner.add_peer(&host_id.to_bytes(), now);
         let transfer = match self.vnic.channel(
@@ -676,6 +721,7 @@ impl State {
                 None
             }
         };
+        let rpc = self.open_peer_rpc(peer, host_id);
         self.ppspp_peers.insert(pp, peer);
         self.peers.insert(
             peer,
@@ -684,6 +730,7 @@ impl State {
                 pp,
                 transfer,
                 swarms: BTreeMap::new(),
+                rpc,
             },
         );
         let State {
