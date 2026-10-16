@@ -7,8 +7,14 @@ rust-version.workspace = true
 license.workspace = true
 build = "build/main.rs"
 
+[features]
+# RPC service interfaces (`service` and the generated per-service items).
+# Off in core crates; the app layer turns it on through `strims-rpc`.
+services = ["dep:futures-core"]
+
 [dependencies]
 prost.workspace = true
+futures-core = { workspace = true, optional = true }
 
 [build-dependencies]
 prost-build.workspace = true
@@ -19,6 +25,10 @@ heck = "0.5"
 
 [dev-dependencies]
 hex.workspace = true
+
+[[test]]
+name = "service"
+required-features = ["services"]
 
 [lints]
 workspace = true

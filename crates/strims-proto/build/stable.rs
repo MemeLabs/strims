@@ -38,11 +38,11 @@ pub fn sanitize_identifier(ident: &str) -> String {
     }
 }
 
-fn to_snake(s: &str) -> String {
+pub fn to_snake(s: &str) -> String {
     sanitize_identifier(&s.to_snake_case())
 }
 
-fn to_upper_camel(s: &str) -> String {
+pub fn to_upper_camel(s: &str) -> String {
     sanitize_identifier(&s.to_upper_camel_case())
 }
 

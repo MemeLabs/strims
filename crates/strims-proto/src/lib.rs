@@ -32,8 +32,11 @@
 //! The stable encoding that signatures cover is in [`stable`].
 //!
 //! [`rpc`] is the RPC envelope: every request, response and cancel is one
-//! [`rpc::Call`] carrying an encoded argument.
+//! [`rpc::Call`] carrying an encoded argument. With the `services` feature,
+//! every package also has interfaces for its RPC services; see `service`.
 
+#[cfg(feature = "services")]
+pub mod service;
 pub mod stable;
 
 include!(concat!(env!("OUT_DIR"), "/tree.rs"));

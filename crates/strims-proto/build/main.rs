@@ -10,11 +10,16 @@
 //!    `src/stable.rs`) from the same descriptors.
 //! 4. Generates the module tree: package `strims.vnic.v1` becomes
 //!    `strims_proto::vnic::v1`.
+//! 5. With the `services` feature, generates RPC service interfaces into
+//!    each package's file (`build/rpc.rs`).
 
+use std::cell::RefCell;
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::{env, fs};
 
+mod rpc;
 mod stable;
 mod tree;
 
@@ -46,7 +51,18 @@ fn main() -> Result<(), BoxError> {
     let mut config = prost_build::Config::new();
     configure(&mut config);
     config.out_dir(&out_dir);
+    let rpc_errors = Rc::new(RefCell::new(Vec::new()));
+    if env::var_os("CARGO_FEATURE_SERVICES").is_some() {
+        config.service_generator(Box::new(rpc::RpcGenerator::new(
+            &fds,
+            Rc::clone(&rpc_errors),
+        )));
+    }
     config.compile_fds(fds.clone())?;
+    let rpc_errors = rpc_errors.take();
+    if !rpc_errors.is_empty() {
+        return Err(rpc_errors.join("\n").into());
+    }
 
     // Our generators cover only the `strims.*` schema; prost maps the
     // imported well-known types to `prost_types` and primitives.
@@ -61,8 +77,6 @@ fn main() -> Result<(), BoxError> {
 
 /// prost-build settings for every generated type.
 fn configure(config: &mut prost_build::Config) {
-    // TODO: RPC service codegen plugs in here with
-    // `config.service_generator(...)`.
     // Deterministic iteration and encoding order; std HashMap is banned in
     // core crates (clippy.toml).
     config.btree_map(["."]);

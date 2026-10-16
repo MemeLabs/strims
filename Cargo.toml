@@ -67,6 +67,11 @@ rand_core = "0.10"
 rand = { version = "0.10", default-features = false, features = ["alloc"] }
 rand_chacha = { version = "0.10", default-features = false }
 
+# async (app layer and drivers; never in core crates)
+futures-core = { version = "0.3", default-features = false }
+futures-sink = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+
 # protobuf
 prost = "0.14"
 prost-types = "0.14"
