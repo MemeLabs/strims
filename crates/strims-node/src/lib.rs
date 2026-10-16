@@ -19,7 +19,7 @@
 //!
 //! | piece | role |
 //! |---|---|
-//! | [`Node`] | the API handle: dials, networks, vpn services, swarms, peer RPC |
+//! | [`Node`] | the API handle: dials, networks, vpn services and ports, swarms, peer RPC |
 //! | `state` | the composition: event routing, egress pipeline, bookkeeping (no I/O) |
 //! | `driver` | the node task's loop around the state |
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
@@ -49,6 +49,11 @@
 //! byte streams to run `strims-rpc` over. A channel whose unread input
 //! passes its buffer closes the pair; the peer stays connected, and closing
 //! it is the app's call. See [`rpc`].
+//!
+//! **vpn RPC.** [`Node::open_vpn_port`] gives the app a port's messages and
+//! sends, for `strims_rpc::vpn`. Services publish their address with
+//! [`Node::publish_vpn_address`], and clients find it with
+//! [`Node::resolve_vpn_address`]. See [`vpn_port`].
 //!
 //! # Bindings
 //!
@@ -140,11 +145,12 @@ pub mod rpc;
 mod state;
 mod transport;
 mod udp;
+pub mod vpn_port;
 
 pub use clock::{Clock, SimClock, SystemClock};
 pub use config::{
     BufferConfig, DEFAULT_NOTSENT_LOWAT, NetworkOptions, NodeConfig, PeerRpcConfig,
-    TcpSocketConfig, WebRtcConfig, random_seed,
+    TcpSocketConfig, VpnPortConfig, WebRtcConfig, random_seed,
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
@@ -158,12 +164,13 @@ pub use handle::{
 pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};
 pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
+pub use vpn_port::{VpnPort, VpnReader, VpnWriter};
 
 pub use strims_kademlia::ID as HostId;
 pub use strims_ppspp::{DeliveryMode, SwarmId, SwarmKey, SwarmOptions, WriterOptions};
 pub use strims_vnic::{LinkKind, TcpOptions};
 pub use strims_vpn::{
-    Delivery, ExchangeOutcome, HashTableGetOptions, HashTablePublisherId, NetworkId, PeerIndexHost,
-    PeerIndexPublisherId,
+    Delivery, ExchangeOutcome, HashTableGetOptions, HashTablePublisherId, HostAddr, NetworkId,
+    PeerIndexHost, PeerIndexPublisherId,
 };
 pub use strims_webrtc::{EndpointConfig as WebRtcEndpointConfig, seed_str0m_thread_rng};

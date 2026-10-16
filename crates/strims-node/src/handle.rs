@@ -18,8 +18,8 @@ use strims_kademlia::ID;
 use strims_ppspp::{SwarmId, SwarmKey, SwarmOptions, WriterOptions};
 use strims_proto::types::{Certificate, Key};
 use strims_vpn::{
-    HashTableGetOptions, HashTablePublisherId, M_BROADCAST, M_STD_FLAGS, NetworkId, PeerIndexHost,
-    PeerIndexPublisherId,
+    HashTableGetOptions, HashTablePublisherId, HostAddr, M_BROADCAST, M_STD_FLAGS, NetworkId,
+    PeerIndexHost, PeerIndexPublisherId,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -31,6 +31,7 @@ use crate::event::{NodeEvent, NodeMetrics, PeerInfo};
 use crate::net::Net;
 use crate::rpc::PeerRpc;
 use crate::state::{PublisherId, ReadReply, ReaderId, State, WriteOp, WriteReply};
+use crate::vpn_port::VpnPort;
 
 /// Results buffered per hash table get or peer index search.
 const RESULT_QUEUE: usize = 16;
@@ -288,9 +289,20 @@ impl Node {
             .await?
     }
 
+    /// Removes a handler set with [`Node::set_vpn_handler`]. Returns
+    /// whether there was one.
     pub async fn remove_vpn_handler(&self, net: NetworkId, port: u16) -> Result<bool, NodeError> {
-        self.call(move |s, _| s.vpn.remove_handler(net, port).is_some())
-            .await
+        self.call(move |s, _| s.remove_vpn_handler(net, port)).await
+    }
+
+    /// Takes `port` on the network, or a free port from 1000 up, and
+    /// returns its messages and sends; see [`crate::vpn_port`].
+    pub async fn open_vpn_port(
+        &self,
+        net: NetworkId,
+        port: Option<u16>,
+    ) -> Result<VpnPort, NodeError> {
+        self.call(move |s, _| s.open_vpn_port(net, port)).await?
     }
 
     /// A free vpn port on the network.
@@ -396,6 +408,38 @@ impl Node {
         self.call(move |s, now| s.hash_table_get(now, net, &key, &salt, options, tx))
             .await??;
         Ok(HashTableGet { rx })
+    }
+
+    /// Publishes this host's `port` as the address of the service under
+    /// (`key.public`, `salt`), until [`Node::hash_table_close`].
+    pub async fn publish_vpn_address(
+        &self,
+        net: NetworkId,
+        key: Key,
+        salt: Vec<u8>,
+        port: u16,
+    ) -> Result<HashTablePublisherId, NodeError> {
+        let value = HostAddr::new(self.host_id(), port).encode();
+        self.hash_table_set(net, key, salt, value).await
+    }
+
+    /// The address of the service under (`key`, `salt`): the first value
+    /// found that is a valid address, or `None` once the get closes
+    /// without one.
+    pub async fn resolve_vpn_address(
+        &self,
+        net: NetworkId,
+        key: Vec<u8>,
+        salt: Vec<u8>,
+        options: HashTableGetOptions,
+    ) -> Result<Option<HostAddr>, NodeError> {
+        let mut get = self.hash_table_get(net, key, salt, options).await?;
+        while let Some(value) = get.next().await {
+            if let Some(addr) = HostAddr::decode(&value) {
+                return Ok(Some(addr));
+            }
+        }
+        Ok(None)
     }
 
     /// Advertises that this host serves (`key`, `salt`) on `port`.

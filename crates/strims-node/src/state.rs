@@ -49,7 +49,7 @@ use strims_vpn::{
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig};
+use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, VpnPortConfig};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
@@ -57,10 +57,12 @@ use crate::event::{
 };
 use crate::exchange::{Candidate, CandidateState};
 use crate::link::IdleOk;
-use crate::rpc::RpcFrame;
+use crate::rpc::Outgoing;
+use crate::vpn_port::VpnFrame;
 
 mod rpc;
 mod rtc;
+mod vpn_port;
 
 pub(crate) use rpc::{RpcChannelId, RpcSide};
 
@@ -255,8 +257,8 @@ pub(crate) struct State {
     transfer_class: ClassId,
     rpc_class: ClassId,
     peer_rpc: PeerRpcConfig,
-    /// Cloned into every RPC writer.
-    rpc_tx: mpsc::UnboundedSender<RpcFrame>,
+    /// Cloned into every RPC writer and vpn port.
+    rpc_tx: mpsc::UnboundedSender<Outgoing>,
     /// RPC pairs to close after vnic's dispatch, and whether they
     /// overflowed. At most one entry per peer.
     rpc_closed: Vec<(LinkKey, bool)>,
@@ -270,6 +272,13 @@ pub(crate) struct State {
     peers: SecondaryMap<LinkKey, PeerState>,
     ppspp_peers: SecondaryMap<PpsppPeer, LinkKey>,
     networks: SecondaryMap<NetworkId, NetworkOptions>,
+    /// Ports opened with `open_vpn_port` (bound: the app's calls).
+    vpn_ports: BTreeMap<(NetworkId, u16), vpn_port::PortState>,
+    vpn_ports_config: VpnPortConfig,
+    next_port_serial: u64,
+    /// Messages from vpn port writers for the next pump. Bounded by the
+    /// writers' credit.
+    vpn_sends: VecDeque<VpnFrame>,
     /// Open hash table gets and peer index searches, by the app's calls.
     gets: BTreeMap<HashTableGetId, mpsc::Sender<Vec<u8>>>,
     searches: BTreeMap<PeerIndexSearchId, mpsc::Sender<PeerIndexHost>>,
@@ -308,7 +317,7 @@ impl State {
         webrtc: Option<RtcSetup>,
         now: Time,
         events: mpsc::Sender<NodeEvent>,
-        rpc_tx: mpsc::UnboundedSender<RpcFrame>,
+        rpc_tx: mpsc::UnboundedSender<Outgoing>,
     ) -> Result<State, NodeError> {
         let mut rng = det_rng(config.rng_seed);
         let vnic_rng = fork(&mut rng);
@@ -345,6 +354,10 @@ impl State {
             peers: SecondaryMap::new(),
             ppspp_peers: SecondaryMap::new(),
             networks: SecondaryMap::new(),
+            vpn_ports: BTreeMap::new(),
+            vpn_ports_config: config.vpn_ports,
+            next_port_serial: 0,
+            vpn_sends: VecDeque::new(),
             gets: BTreeMap::new(),
             searches: BTreeMap::new(),
             exchanges: BTreeMap::new(),
@@ -563,6 +576,7 @@ impl State {
     /// until nothing moves. Returns true if it stopped with work left
     /// (the driver runs it again without waiting).
     pub(crate) fn pump(&mut self, now: Time) -> bool {
+        self.send_vpn_frames(now);
         for _ in 0..PUMP_ROUNDS {
             self.process_events(now);
             self.vpn.flush(&mut self.vnic, now);
@@ -770,7 +784,11 @@ impl State {
 
     fn on_vpn_event(&mut self, e: VpnEvent<u16>, now: Time) {
         match e {
-            VpnEvent::Message(d) => self.emit(NodeEvent::Message(d)),
+            VpnEvent::Message(d) => {
+                if let Some(d) = self.deliver_to_port(d) {
+                    self.emit(NodeEvent::Message(d));
+                }
+            }
             VpnEvent::HashTableValue { get, value, .. } => {
                 let closed = match self.gets.get(&get).map(|tx| tx.try_send(value)) {
                     Some(Err(TrySendError::Full(_))) => {
@@ -1287,6 +1305,7 @@ impl State {
     pub(crate) fn remove_network(&mut self, net: NetworkId) -> Result<(), NodeError> {
         self.vpn.remove_network(&mut self.vnic, net)?;
         self.networks.remove(net);
+        self.close_network_ports(net);
         Ok(())
     }
 

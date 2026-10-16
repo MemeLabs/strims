@@ -51,7 +51,7 @@ use crate::event::NodeEvent;
 use crate::handle::NodeInfo;
 use crate::link::{self, Input, Transport};
 use crate::net::Net;
-use crate::rpc::RpcFrame;
+use crate::rpc::Outgoing;
 use crate::state::{DialId, LinkIo, PublisherId, ReaderId, RtcSetup, State, UdpIo, WriteOp};
 use crate::transport::{self, IoConfig};
 use crate::udp;
@@ -97,9 +97,10 @@ pub(crate) struct Driver<N: Net, C: Clock> {
     input_tx: mpsc::Sender<Input<N>>,
     input_rx: mpsc::Receiver<Input<N>>,
     cmd_rx: mpsc::Receiver<Command>,
-    /// Calls from peer RPC writers. Unbounded, but each writer's credit
-    /// bounds what it has queued (see [`crate::rpc`]).
-    rpc_rx: mpsc::UnboundedReceiver<RpcFrame>,
+    /// Calls from peer RPC writers and messages from vpn port writers.
+    /// Unbounded, but each writer's credit bounds what it has queued (see
+    /// [`crate::rpc`]), and each port closes once.
+    rpc_rx: mpsc::UnboundedReceiver<Outgoing>,
     /// Read-only calls, answered after passes (see the module docs).
     query_rx: mpsc::Receiver<Call>,
     /// Whether the next pass is due within `query_delay`.
@@ -378,7 +379,7 @@ impl<N: Net, C: Clock> Driver<N, C> {
                         }
                         None => break,
                     },
-                    Some(f) = self.rpc_rx.recv() => self.state.rpc_write(f),
+                    Some(o) = self.rpc_rx.recv() => self.state.outgoing(o),
                     () = &mut sleep, if deadline.is_some() => {}
                 }
             }
@@ -390,7 +391,7 @@ impl<N: Net, C: Clock> Driver<N, C> {
             }
             for _ in 0..BATCH {
                 match self.rpc_rx.try_recv() {
-                    Ok(f) => self.state.rpc_write(f),
+                    Ok(o) => self.state.outgoing(o),
                     Err(_) => break,
                 }
             }

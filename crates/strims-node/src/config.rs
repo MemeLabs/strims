@@ -79,6 +79,8 @@ pub struct NodeConfig {
     pub buffers: BufferConfig,
     /// The RPC channel pair every peer gets (see [`crate::rpc`]).
     pub peer_rpc: PeerRpcConfig,
+    /// Ports opened with `Node::open_vpn_port` (see [`crate::vpn_port`]).
+    pub vpn_ports: VpnPortConfig,
     /// Node events waiting for the app; more are dropped and counted.
     pub event_queue: usize,
     /// Commands waiting for the node task.
@@ -193,6 +195,7 @@ impl NodeConfig {
             dial_timeout: Duration::from_secs(20),
             buffers: BufferConfig::default(),
             peer_rpc: PeerRpcConfig::default(),
+            vpn_ports: VpnPortConfig::default(),
             event_queue: 1024,
             command_queue: 256,
             input_queue: 256,
@@ -306,6 +309,27 @@ impl Default for PeerRpcConfig {
     fn default() -> PeerRpcConfig {
         PeerRpcConfig {
             enabled: true,
+            inbound_buffer: 1024 * 1024,
+            outbound_buffer: 1024 * 1024,
+        }
+    }
+}
+
+/// vpn ports for the app's RPC (see [`crate::vpn_port`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VpnPortConfig {
+    /// Received body bytes a port holds that the app hasn't read. Messages
+    /// past this are dropped. At least the largest message, so one can
+    /// arrive while the app is busy.
+    pub inbound_buffer: usize,
+    /// Bytes a port's writer may have queued in the node: the writer isn't
+    /// ready while the node holds this much (plus at most one message).
+    pub outbound_buffer: usize,
+}
+
+impl Default for VpnPortConfig {
+    fn default() -> VpnPortConfig {
+        VpnPortConfig {
             inbound_buffer: 1024 * 1024,
             outbound_buffer: 1024 * 1024,
         }

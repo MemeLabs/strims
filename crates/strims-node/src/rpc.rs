@@ -38,6 +38,7 @@ use tokio::sync::mpsc;
 
 use crate::error::NodeError;
 use crate::state::RpcChannelId;
+use crate::vpn_port::{PortId, VpnFrame};
 
 /// A peer's RPC channel pair; see the [module docs](self).
 #[derive(Debug)]
@@ -107,6 +108,49 @@ impl RpcCredit {
         self.closed.store(true, Ordering::Release);
         self.waker.wake();
     }
+
+    /// Ready while there is credit; [`NodeError::Closed`] once closed.
+    pub(crate) fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<Result<(), NodeError>> {
+        let ready = || {
+            if self.closed.load(Ordering::Acquire) {
+                Some(Err(NodeError::Closed))
+            } else if self.bytes.load(Ordering::Acquire) > 0 {
+                Some(Ok(()))
+            } else {
+                None
+            }
+        };
+        if let Some(r) = ready() {
+            return Poll::Ready(r);
+        }
+        self.waker.register(cx.waker());
+        // credit returned between the check and the registration
+        match ready() {
+            Some(r) => Poll::Ready(r),
+            None => Poll::Pending,
+        }
+    }
+
+    /// Takes `n` bytes of credit for an item being sent.
+    pub(crate) fn take(&self, n: usize) -> Result<(), NodeError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(NodeError::Closed);
+        }
+        self.bytes
+            .fetch_sub(i64::try_from(n).unwrap_or(i64::MAX), Ordering::AcqRel);
+        Ok(())
+    }
+}
+
+/// What app writers hand the node task.
+#[derive(Debug)]
+pub(crate) enum Outgoing {
+    /// A Call for a peer RPC channel.
+    Rpc(RpcFrame),
+    /// A message from a vpn port.
+    Vpn(VpnFrame),
+    /// A vpn port's reader was dropped.
+    ClosePort(PortId),
 }
 
 /// A Call for the node task to send on a channel.
@@ -120,7 +164,7 @@ pub(crate) struct RpcFrame {
 #[derive(Debug)]
 pub struct RpcWriter {
     pub(crate) channel: RpcChannelId,
-    pub(crate) tx: mpsc::UnboundedSender<RpcFrame>,
+    pub(crate) tx: mpsc::UnboundedSender<Outgoing>,
     pub(crate) credit: Arc<RpcCredit>,
 }
 
@@ -128,39 +172,16 @@ impl Sink<Vec<u8>> for RpcWriter {
     type Error = NodeError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), NodeError>> {
-        let ready = |c: &RpcCredit| {
-            if c.closed.load(Ordering::Acquire) {
-                Some(Err(NodeError::Closed))
-            } else if c.bytes.load(Ordering::Acquire) > 0 {
-                Some(Ok(()))
-            } else {
-                None
-            }
-        };
-        if let Some(r) = ready(&self.credit) {
-            return Poll::Ready(r);
-        }
-        self.credit.waker.register(cx.waker());
-        // credit returned between the check and the registration
-        match ready(&self.credit) {
-            Some(r) => Poll::Ready(r),
-            None => Poll::Pending,
-        }
+        self.credit.poll_ready(cx)
     }
 
     fn start_send(self: Pin<&mut Self>, call: Vec<u8>) -> Result<(), NodeError> {
-        if self.credit.closed.load(Ordering::Acquire) {
-            return Err(NodeError::Closed);
-        }
-        self.credit.bytes.fetch_sub(
-            i64::try_from(call.len()).unwrap_or(i64::MAX),
-            Ordering::AcqRel,
-        );
+        self.credit.take(call.len())?;
         self.tx
-            .send(RpcFrame {
+            .send(Outgoing::Rpc(RpcFrame {
                 channel: self.channel,
                 call,
-            })
+            }))
             .map_err(|_| NodeError::Stopped)
     }
 
