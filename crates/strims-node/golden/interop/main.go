@@ -26,6 +26,12 @@
 //     rpc.Client on the first and an rpc.Server on the second, serving the
 //     test Debug service in crates/strims-rpc/golden/debugsvc. The rpc-*
 //     verbs call the peer's.
+//   - with -network-seed, internal/network/dialer's RPC over vpn: a host
+//     certificate chained to the network key's root, as
+//     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
+//     service on a vpn port (a VPNServerDialer, optionally publishing the
+//     address in the hash table), and vpn-rpc and vpn-rpc-dht make an rpc-*
+//     call through a VPNDialer to a fixed or a published address.
 //
 // It is controlled over stdin with one command per line,
 //
@@ -81,7 +87,10 @@ import (
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/crates/strims-rpc/golden/debugsvc"
+	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/network/dialer"
 	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
@@ -200,10 +209,13 @@ type node struct {
 	vpnPort     uint16
 	runner      *ppspp.Runner
 	transferQOS *qos.Class
-	// With -peer-rpc: the RPC channels' QoS class and the served service.
+	// With -peer-rpc: the RPC channels' QoS class. With -peer-rpc or
+	// -network-seed: the served service.
 	rpcQOS *qos.Class
 	debug  *debugsvc.Service
-	logger *zap.Logger
+	// With -network-seed: this host's certificate on the network.
+	vpnCert *certificate.Certificate
+	logger  *zap.Logger
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -699,10 +711,128 @@ func (n *node) command(verb string, args []string) (string, error) {
 		}
 		return rpcCommand(ctx, verb, ps, args[1:])
 
+	case "vpn-serve":
+		// vpn-serve <port> [<key seed> <salt>]: serves the Debug service on
+		// the vpn port, publishing its address under the key and salt
+		if err := need(1); err != nil {
+			return "", err
+		}
+		if n.vpnCert == nil {
+			return "", errors.New("no -network-seed")
+		}
+		port, err := parseUint(args[0], 16)
+		if err != nil {
+			return "", err
+		}
+		d := &dialer.VPNServerDialer{Logger: n.logger, Node: n.vpn, Port: uint16(port), CertFunc: n.certificate}
+		if len(args) >= 3 {
+			seed, err := unhex(args[1])
+			if err != nil || len(seed) != ed25519.SeedSize {
+				return "", errors.New("bad key seed")
+			}
+			salt, err := unhex(args[2])
+			if err != nil {
+				return "", err
+			}
+			d.Publisher = &dialer.DHTHostAddrPublisher{Key: keyFromSeed(seed), Salt: salt}
+		}
+		s := rpc.NewServer(n.logger, d)
+		debugv1.RegisterDebugService(s, n.debug)
+		go func() {
+			if err := s.Listen(context.Background()); err != nil {
+				logf("vpn server: %v", err)
+			}
+		}()
+		for i := 0; network.Handler(uint16(port)) == nil; i++ {
+			if i > 500 {
+				return "", errors.New("vpn server never listened")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return "", nil
+
+	case "vpn-rpc", "vpn-rpc-dht":
+		// vpn-rpc <host> <port> <verb> [<args>],
+		// vpn-rpc-dht <key> <salt> <verb> [<args>]: the rpc-<verb> call
+		// (see rpcCommand) to the Debug service at the address, over vpn
+		if err := need(3); err != nil {
+			return "", err
+		}
+		if n.vpnCert == nil {
+			return "", errors.New("no -network-seed")
+		}
+		var resolver dialer.HostAddrResolver
+		if verb == "vpn-rpc" {
+			id, err := parseID(args[0])
+			if err != nil {
+				return "", err
+			}
+			port, err := parseUint(args[1], 16)
+			if err != nil {
+				return "", err
+			}
+			resolver = &dialer.StaticHostAddrResolver{HostAddr: dialer.HostAddr{HostID: id, Port: uint16(port)}}
+		} else {
+			k, err := unhex(args[0])
+			if err != nil {
+				return "", err
+			}
+			salt, err := unhex(args[1])
+			if err != nil {
+				return "", err
+			}
+			resolver = &dialer.DHTHostAddrResolver{Key: k, Salt: salt}
+		}
+		c, err := rpc.NewClient(n.logger, &dialer.VPNDialer{Logger: n.logger, Node: n.vpn, Resolver: resolver, CertFunc: n.certificate})
+		if err != nil {
+			return "", err
+		}
+		defer c.Close()
+		tctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		ps := &peerState{debug: debugv1.NewDebugClient(c), caller: c}
+		return rpcCommand(tctx, "rpc-"+args[2], ps, args[3:])
+
 	case "exit":
 		os.Exit(0)
 	}
 	return "", fmt.Errorf("unknown command %q", verb)
+}
+
+func (n *node) certificate() *certificate.Certificate {
+	return n.vpnCert
+}
+
+// hostCertificate issues the profile's membership certificate with the
+// network key from networkSeed, under a self-signed root (as
+// dao.NewNetwork does), and the host's certificate under it (as
+// Dialer.ReplaceOrInsertNetwork does).
+func hostCertificate(networkSeed []byte, profileKey, hostKey *key.Key, label string) (*certificate.Certificate, error) {
+	const ttl = 24 * time.Hour
+	networkKey := keyFromSeed(networkSeed)
+	root, err := dao.NewSelfSignedCertificate(networkKey, certificate.KeyUsage_KEY_USAGE_SIGN, ttl, dao.WithSubject("network"))
+	if err != nil {
+		return nil, err
+	}
+	csr, err := dao.NewCertificateRequest(profileKey, certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN, dao.WithSubject(label))
+	if err != nil {
+		return nil, err
+	}
+	member, err := dao.SignCertificateRequest(csr, ttl, networkKey)
+	if err != nil {
+		return nil, err
+	}
+	member.ParentOneof = &certificate.Certificate_Parent{Parent: root}
+	csr, err = dao.NewCertificateRequest(hostKey, certificate.KeyUsage_KEY_USAGE_SIGN)
+	if err != nil {
+		return nil, err
+	}
+	cert, err := dao.SignCertificateRequest(csr, ttl, profileKey)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: member}
+	return cert, nil
 }
 
 // rpcError formats an RPC error as "<code> <message hex>".
@@ -909,6 +1039,7 @@ func main() {
 	listen := flag.Bool("listen", true, "serve the TCP and WebSocket interfaces (false: dial only)")
 	webRTC := flag.Bool("webrtc", false, "add the WebRTC interface on a loopback UDP mux")
 	peerRPC := flag.Bool("peer-rpc", false, "run RPC on every peer's channel pair (ports 4 and 5)")
+	networkSeed := flag.String("network-seed", "", "network key seed (32 bytes hex): issue a host certificate for RPC over vpn")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -921,13 +1052,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC bool) error {
+func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -1022,7 +1153,18 @@ func run(profileSeed, hostSeed, networkKey string, vpnPort uint16, label string,
 	}
 	if peerRPC {
 		n.rpcQOS = h.QOS().AddClass(1)
+	}
+	if peerRPC || networkSeed != "" {
 		n.debug = &debugsvc.Service{}
+	}
+	if networkSeed != "" {
+		ns, err := hex.DecodeString(networkSeed)
+		if err != nil || len(ns) != ed25519.SeedSize {
+			return errors.New("-network-seed: want 32 bytes of hex")
+		}
+		if n.vpnCert, err = hostCertificate(ns, profileKey, h.Key(), label); err != nil {
+			return err
+		}
 	}
 	h.AddPeerHandler(vnic.PeerHandlerFunc(n.handlePeer))
 

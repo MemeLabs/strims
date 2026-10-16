@@ -8,13 +8,6 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- RPC over vpn, for the network services (directory, chat, CA). Send one
-  `strims.rpc.Call` per vpn message on a service port (`Framing::Message`).
-  Carry the caller's certificate in the `certificate` header and verify it
-  before dispatch: its key is the originating host, its root is the
-  network key, and the chain is valid. Hand it to handlers in the call
-  `Context`. Key calls by (host, port, id), with a bound on remotes per
-  port, and publish or resolve server addresses through the hash table.
 - A deadline-and-retry `Caller` for peer and vpn clients. Retries on a
   short per-attempt deadline can repeat a request whose large answer is
   still arriving on a slow link.
@@ -32,7 +25,9 @@ Port the application services that sit on the core crates. The Go versions
   its JS bridge, keeping the TS UI and its RPC. Uses the browser's WebSocket
   and RTCPeerConnection. The frontend's RPC connection sends each framed
   Call as one message and uses `strims_rpc::Config::frontend()`; raise its
-  `max_inbound_calls` if the UI needs more.
+  `max_inbound_calls` if the UI needs more. Like `Node::open_vpn_port`, it
+  gives the services vpn ports for `strims_rpc::vpn`: a stream of
+  deliveries and a sink of addressed messages.
 - `strims-svc`: the headless service.
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 

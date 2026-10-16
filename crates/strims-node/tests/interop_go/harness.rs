@@ -34,8 +34,11 @@ pub const STEP: StdDuration = StdDuration::from_secs(20);
 /// Stream bytes are written in units of one signature (64 chunks of 1 KiB).
 pub const UNIT: usize = 64 * 1024;
 
+/// The seed of the network's key, which issues membership certificates.
+pub const NETWORK_SEED: [u8; 32] = [0xee; 32];
+
 pub fn network_key() -> Vec<u8> {
-    key_from_seed(&[0xee; 32]).public
+    key_from_seed(&NETWORK_SEED).public
 }
 
 /// The stream byte at absolute offset `o` (the Go helper's `streamByte`).
@@ -267,6 +270,9 @@ pub struct GoOptions {
     /// Run RPC on every peer's channel pair, serving the test Debug
     /// service (the `rpc-*` verbs call the peer's).
     pub peer_rpc: bool,
+    /// Issue a host certificate on the network for RPC over vpn (the
+    /// `vpn-*` verbs).
+    pub vpn_rpc: bool,
 }
 
 impl GoOptions {
@@ -278,6 +284,7 @@ impl GoOptions {
             listen: true,
             webrtc: false,
             peer_rpc: false,
+            vpn_rpc: false,
         }
     }
 }
@@ -298,6 +305,14 @@ impl GoNode {
             .arg(format!("-listen={}", o.listen))
             .arg(format!("-webrtc={}", o.webrtc))
             .arg(format!("-peer-rpc={}", o.peer_rpc))
+            .arg(format!(
+                "-network-seed={}",
+                if o.vpn_rpc {
+                    hex::encode(NETWORK_SEED)
+                } else {
+                    String::new()
+                }
+            ))
             .arg("-timeout=15m")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

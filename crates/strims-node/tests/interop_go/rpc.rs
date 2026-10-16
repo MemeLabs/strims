@@ -6,7 +6,7 @@
 //! `strims_rpc::peer_connection` on `Node::take_peer_rpc`. Both serve the
 //! test Debug service of `crates/strims-rpc/golden/debugsvc`.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
@@ -24,10 +24,12 @@ use tokio::task::{LocalSet, spawn_local};
 
 use crate::harness::{GoNode, GoOptions, RustNode, RustOptions, TestNode, Transport, helper};
 
-/// The test service, as `debugsvc` serves it.
+/// The test service, as `debugsvc` serves it. It also records the
+/// profile keys of callers whose certificate the transport verified.
 #[derive(Default)]
-struct TestService {
-    cancelled: Rc<Cell<u64>>,
+pub(crate) struct TestService {
+    pub(crate) cancelled: Rc<Cell<u64>>,
+    pub(crate) callers: Rc<RefCell<Vec<Vec<u8>>>>,
 }
 
 struct CancelGuard(Rc<Cell<u64>>);
@@ -38,12 +40,18 @@ impl Drop for CancelGuard {
     }
 }
 
-fn data(n: usize) -> Vec<u8> {
+pub(crate) fn data(n: usize) -> Vec<u8> {
     (0..n).map(|i| (i * 7) as u8).collect()
 }
 
 impl DebugService for TestService {
-    async fn p_prof(&self, _: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
+    async fn p_prof(&self, ctx: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
+        if let Some(member) = ctx
+            .certificate()
+            .and_then(strims_crypto::certificate_parent)
+        {
+            self.callers.borrow_mut().push(member.key.clone());
+        }
         let name = if req.name.len() > 64 {
             req.name.len().to_string()
         } else {
@@ -108,7 +116,7 @@ impl DebugService for TestService {
 }
 
 /// A method neither service has.
-struct Nope;
+pub(crate) struct Nope;
 
 impl Method for Nope {
     const NAME: &'static str = "strims.debug.v1.Debug.Nope";
@@ -118,14 +126,14 @@ impl Method for Nope {
 
 impl UnaryMethod for Nope {}
 
-fn pprof(name: impl Into<String>) -> PProfRequest {
+pub(crate) fn pprof(name: impl Into<String>) -> PProfRequest {
     PProfRequest {
         name: name.into(),
         ..Default::default()
     }
 }
 
-fn watch(interval_ms: i32) -> WatchMetricsRequest {
+pub(crate) fn watch(interval_ms: i32) -> WatchMetricsRequest {
     WatchMetricsRequest {
         interval_ms,
         ..Default::default()
@@ -133,7 +141,7 @@ fn watch(interval_ms: i32) -> WatchMetricsRequest {
 }
 
 /// Polls `count` until it reaches `n`.
-async fn wait_count(what: &str, n: u64, mut count: impl AsyncFnMut() -> u64) {
+pub(crate) async fn wait_count(what: &str, n: u64, mut count: impl AsyncFnMut() -> u64) {
     for _ in 0..500 {
         if count().await >= n {
             return;
