@@ -1,9 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Generated protobuf types for `schema/**/*.proto`.
+//! Generated protobuf types for `schema/**/*.proto`, plus the `strims.rpc`
+//! envelope ([`rpc`]) from the crate's own `proto/`.
 //!
-//! The build script compiles the schema with protox and prost-build; see
+//! The build script compiles both with protox and prost-build; see
 //! `build/main.rs`.
 //!
 //! Modules mirror the proto packages without the common `strims.` prefix:
@@ -22,14 +23,46 @@
 //! - a oneof is an `Option<message::OneofName>` enum field;
 //! - recursive fields are boxed (`Certificate.parent`);
 //! - type URLs are `type.googleapis.com/<full name>` (`prost::Name`).
+//!   Stored and transmitted `Any` values carry this domain, so it must not
+//!   change.
 //!
 //! Decoding drops unknown fields, so re-encoding a message from a peer with
 //! a newer schema loses the fields this build doesn't know.
 //!
 //! The stable encoding that signatures cover is in [`stable`].
+//!
+//! [`rpc`] is the RPC envelope: every request, response and cancel is one
+//! [`rpc::Call`] carrying an encoded argument.
 
 pub mod stable;
 
 include!(concat!(env!("OUT_DIR"), "/tree.rs"));
 
 pub use r#type as types;
+
+#[cfg(test)]
+mod tests {
+    use prost::Name;
+
+    #[test]
+    fn type_urls_use_the_googleapis_domain() {
+        assert_eq!(
+            crate::rpc::Call::type_url(),
+            "type.googleapis.com/strims.rpc.Call"
+        );
+        assert_eq!(
+            crate::types::Certificate::type_url(),
+            "type.googleapis.com/strims.type.Certificate"
+        );
+    }
+
+    #[test]
+    fn rpc_kinds_keep_their_wire_values() {
+        use crate::rpc::call::Kind;
+        assert_eq!(Kind::CallKindDefault as i32, 0);
+        assert_eq!(Kind::CallKindError as i32, 1);
+        assert_eq!(Kind::CallKindCancel as i32, 2);
+        assert_eq!(Kind::CallKindClose as i32, 3);
+        assert_eq!(Kind::CallKindUndefined as i32, 4);
+    }
+}

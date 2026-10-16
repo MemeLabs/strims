@@ -3,7 +3,8 @@
 
 //! Build script for `strims-proto`.
 //!
-//! 1. Parses `schema/**/*.proto` with protox (pure Rust; no `protoc`).
+//! 1. Parses `schema/**/*.proto` and the crate's own `proto/**/*.proto` (the
+//!    `strims.rpc` envelope) with protox (pure Rust; no `protoc`).
 //! 2. Generates prost message types, one file per proto package.
 //! 3. Generates `StableEncode`/`Signable` impls (the signable encoding, see
 //!    `src/stable.rs`) from the same descriptors.
@@ -24,15 +25,18 @@ fn main() -> Result<(), BoxError> {
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("CARGO_MANIFEST_DIR unset")?);
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("OUT_DIR unset")?);
     let schema = manifest_dir.join("../../schema");
+    let local = manifest_dir.join("proto");
 
     println!("cargo:rerun-if-changed={}", schema.display());
+    println!("cargo:rerun-if-changed={}", local.display());
     println!("cargo:rerun-if-changed=build");
 
     let mut protos = Vec::new();
     collect_protos(&schema, &schema, &mut protos)?;
+    collect_protos(&local, &local, &mut protos)?;
     protos.sort();
 
-    let fds = protox::Compiler::new([&schema])?
+    let fds = protox::Compiler::new([&schema, &local])?
         .include_source_info(true)
         // prost-build's message graph needs the imported well-known types.
         .include_imports(true)
@@ -63,6 +67,8 @@ fn configure(config: &mut prost_build::Config) {
     // core crates (clippy.toml).
     config.btree_map(["."]);
     // `prost::Name` impls (full names and type URLs) for Any and RPC.
+    // Stored and transmitted `Any` values carry this domain, so it must not
+    // change.
     config.enable_type_names();
     config.type_name_domain(["."], "type.googleapis.com");
 }

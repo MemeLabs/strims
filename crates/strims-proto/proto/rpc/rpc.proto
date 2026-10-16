@@ -1,0 +1,36 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+// The RPC envelope. Field numbers, enum values and the package name are the
+// wire format shared with the deployed nodes and the TS client.
+package strims.rpc;
+
+message Call {
+  enum Kind {
+    CALL_KIND_DEFAULT = 0;
+    CALL_KIND_ERROR = 1;
+    CALL_KIND_CANCEL = 2;
+    CALL_KIND_CLOSE = 3;
+    CALL_KIND_UNDEFINED = 4;
+  }
+
+  uint64 id = 1;
+  uint64 parent_id = 2;
+  string method = 3;
+  Kind kind = 4;
+  bytes argument = 5;
+  map<string, bytes> headers = 6;
+}
+
+message Error {
+  string message = 1;
+  int32 code = 2;
+}
+
+message Cancel {}
+
+message Undefined {}
+
+message Close {}

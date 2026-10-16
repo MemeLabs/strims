@@ -10,7 +10,6 @@ Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
 - RPC runtime and service codegen for the `schema/` protos, keeping the TS
   client's wire format. Codegen hooks into `strims-proto`'s `build/main.rs`.
-  Choose the `Any` type-URL domain.
 - Storage (dao, kv, replication) and sessions.
 - Transfer: swarm announce and binding over peer RPC. This replaces the
   driver's explicit `run_swarm` binding.

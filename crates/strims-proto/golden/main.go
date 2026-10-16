@@ -9,10 +9,10 @@
 //
 //	go run -tags golden ./crates/strims-proto/golden
 //
-// Each line of vectors.hex is "<name> <protobuf hex> <stable hex>", where the
-// stable encoding is internal/dao's signableMessageEncoder output ("-" for
-// messages it can't encode). Map fields are avoided: Go's map order isn't
-// canonical.
+// Each line of vectors.hex is "<name> <protobuf hex> <stable hex>" ("=" for
+// empty), where the stable encoding is internal/dao's signableMessageEncoder
+// output ("-" for messages it can't encode, and for protobuf-only vectors).
+// Maps have at most one entry: Go's map order isn't canonical.
 package main
 
 import (
@@ -24,7 +24,9 @@ import (
 	"reflect"
 	"unsafe"
 
+	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
+	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
 	ppsppv1 "github.com/MemeLabs/strims/pkg/apis/devtools/v1/ppspp"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
@@ -148,6 +150,47 @@ type vector struct {
 	msg  proto.Message
 }
 
+func marshal(m proto.Message) []byte {
+	b, err := proto.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// rpcCall builds a Call the way the RPC library's send does: the argument
+// marshaled on its own, and an empty header map.
+func rpcCall(id, parentID uint64, method string, kind rpcapi.Call_Kind, arg proto.Message) *rpcapi.Call {
+	return &rpcapi.Call{
+		Id:       id,
+		ParentId: parentID,
+		Method:   method,
+		Kind:     kind,
+		Argument: marshal(arg),
+		Headers:  map[string][]byte{},
+	}
+}
+
+// rpcVectors are protobuf-only: the envelope has no stable encoding.
+func rpcVectors() []vector {
+	header := rpcCall(9, 0, "strims.debug.v1.Debug.ReadMetrics", rpcapi.Call_CALL_KIND_DEFAULT, &debugv1.ReadMetricsRequest{Format: debugv1.MetricsFormat_METRICS_FORMAT_PROTO_DELIM})
+	header.Headers["certificate"] = marshal(certChain())
+	return []vector{
+		{"rpc_call_request", rpcCall(1, 0, "strims.debug.v1.Debug.PProf", rpcapi.Call_CALL_KIND_DEFAULT, &debugv1.PProfRequest{Name: "heap", Debug: true})},
+		{"rpc_call_callback", rpcCall(2, 1, "CALLBACK", rpcapi.Call_CALL_KIND_DEFAULT, &debugv1.PProfResponse{Name: "heap", Data: seq(0x00, 40)})},
+		{"rpc_call_error", rpcCall(3, 1, "CALLBACK", rpcapi.Call_CALL_KIND_ERROR, &rpcapi.Error{Message: "boom", Code: 5})},
+		{"rpc_call_error_negative_code", rpcCall(4, 1, "CALLBACK", rpcapi.Call_CALL_KIND_ERROR, &rpcapi.Error{Message: "negative", Code: -3})},
+		{"rpc_call_close", rpcCall(5, 1, "CALLBACK", rpcapi.Call_CALL_KIND_CLOSE, &rpcapi.Close{})},
+		{"rpc_call_undefined", rpcCall(6, 1, "CALLBACK", rpcapi.Call_CALL_KIND_UNDEFINED, &rpcapi.Undefined{})},
+		{"rpc_call_cancel", rpcCall(7, 1, "CANCEL", rpcapi.Call_CALL_KIND_CANCEL, &rpcapi.Cancel{})},
+		{"rpc_call_cancel_default_kind", rpcCall(8, 1, "CANCEL", rpcapi.Call_CALL_KIND_DEFAULT, &rpcapi.Cancel{})},
+		{"rpc_call_header", header},
+		{"rpc_call_max_ids", rpcCall(^uint64(0), ^uint64(0)-1, "strims.debug.v1.Debug.WatchMetrics", rpcapi.Call_CALL_KIND_DEFAULT, &debugv1.WatchMetricsRequest{IntervalMs: -1})},
+		{"rpc_call_empty", &rpcapi.Call{}},
+		{"rpc_error", &rpcapi.Error{Message: "method not found: strims.debug.v1.Debug.Nope", Code: 7}},
+	}
+}
+
 func vectors() []vector {
 	return []vector{
 		{"type_certificate_chain", certChain()},
@@ -266,22 +309,22 @@ func vectors() []vector {
 			StyleSheet:     styleSheet(),
 		}},
 		{"directory_listing_snippet", &networkv1directory.ListingSnippet{
-			Title:        "title",
-			Description:  "description",
-			Tags:         []string{"one", "two"},
-			Category:     "category",
-			ChannelName:  "channel",
-			UserCount:    12345,
-			Live:         true,
-			IsMature:     false,
-			Thumbnail:    &networkv1directory.ListingSnippetImage{SourceOneof: &networkv1directory.ListingSnippetImage_Image{Image: &image.Image{Type: image.ImageType_IMAGE_TYPE_JPEG, Height: 720, Width: 1280, Data: seq(0xff, 16)}}},
-			ChannelLogo:  &networkv1directory.ListingSnippetImage{SourceOneof: &networkv1directory.ListingSnippetImage_Url{Url: "https://example.com/logo.png"}},
-			VideoHeight:  720,
-			VideoWidth:   1280,
-			ThemeColor:   0xff00ff00,
-			StartTime:    -1,
-			Key:          seq(0x07, 32),
-			Signature:    seq(0x08, 64),
+			Title:       "title",
+			Description: "description",
+			Tags:        []string{"one", "two"},
+			Category:    "category",
+			ChannelName: "channel",
+			UserCount:   12345,
+			Live:        true,
+			IsMature:    false,
+			Thumbnail:   &networkv1directory.ListingSnippetImage{SourceOneof: &networkv1directory.ListingSnippetImage_Image{Image: &image.Image{Type: image.ImageType_IMAGE_TYPE_JPEG, Height: 720, Width: 1280, Data: seq(0xff, 16)}}},
+			ChannelLogo: &networkv1directory.ListingSnippetImage{SourceOneof: &networkv1directory.ListingSnippetImage_Url{Url: "https://example.com/logo.png"}},
+			VideoHeight: 720,
+			VideoWidth:  1280,
+			ThemeColor:  0xff00ff00,
+			StartTime:   -1,
+			Key:         seq(0x07, 32),
+			Signature:   seq(0x08, 64),
 		}},
 		{"directory_listing_snippet_delta", &networkv1directory.ListingSnippetDelta{
 			Title:       wrapperspb.String(""),
@@ -316,18 +359,28 @@ func main() {
 	w := bufio.NewWriter(f)
 	defer w.Flush()
 
-	for _, v := range vectors() {
+	write := func(v vector, withStable bool) {
 		b, err := proto.MarshalOptions{Deterministic: true}.Marshal(v.msg)
 		if err != nil {
 			panic(err)
 		}
+		p := hex.EncodeToString(b)
+		if p == "" {
+			p = "="
+		}
 		s := "-"
-		if sb, ok := stable(v.msg); ok {
+		if sb, ok := stable(v.msg); withStable && ok {
 			s = hex.EncodeToString(sb)
 			if s == "" {
 				s = "="
 			}
 		}
-		fmt.Fprintf(w, "%s %s %s\n", v.name, hex.EncodeToString(b), s)
+		fmt.Fprintf(w, "%s %s %s\n", v.name, p, s)
+	}
+	for _, v := range vectors() {
+		write(v, true)
+	}
+	for _, v := range rpcVectors() {
+		write(v, false)
 	}
 }

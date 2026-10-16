@@ -5,7 +5,7 @@
 //! (regenerate from the repo root with
 //! `go run -tags golden ./crates/strims-proto/golden`). prost must decode
 //! each vector's protobuf bytes and re-encode them identically, and
-//! `StableEncode` must reproduce the recorded stable encoding.
+//! `StableEncode` must reproduce the recorded stable encoding, if any.
 
 // Tests panic on failure by design.
 #![allow(
@@ -16,15 +16,17 @@
 )]
 
 use prost::Message;
+use strims_proto::rpc::call::Kind;
 use strims_proto::stable::StableEncode;
-use strims_proto::{chat, devtools, network, types, vnic, vpn};
+use strims_proto::{chat, debug, devtools, network, rpc, types, vnic, vpn};
 
 const VECTORS: &str = include_str!("../golden/vectors.hex");
 
 struct Vector {
     name: &'static str,
     proto: Vec<u8>,
-    /// `None` for messages without a stable encoding (they contain maps).
+    /// `None` for messages without a stable encoding (they contain maps)
+    /// and for protobuf-only vectors.
     stable: Option<Vec<u8>>,
 }
 
@@ -56,7 +58,7 @@ fn vectors() -> Vec<Vector> {
         .collect()
 }
 
-fn check<M: Message + Default + StableEncode>(v: &Vector) -> M {
+fn check_proto<M: Message + Default>(v: &Vector) -> M {
     let m = M::decode(v.proto.as_slice()).unwrap_or_else(|e| panic!("{}: decode: {e}", v.name));
     assert_eq!(
         hex::encode(m.encode_to_vec()),
@@ -65,6 +67,11 @@ fn check<M: Message + Default + StableEncode>(v: &Vector) -> M {
         v.name
     );
     assert_eq!(m.encoded_len(), v.proto.len(), "{}: encoded_len", v.name);
+    m
+}
+
+fn check<M: Message + Default + StableEncode>(v: &Vector) -> M {
+    let m = check_proto::<M>(v);
     let stable = v
         .stable
         .as_ref()
@@ -87,7 +94,7 @@ fn check<M: Message + Default + StableEncode>(v: &Vector) -> M {
 #[test]
 fn golden_round_trip() {
     let vectors = vectors();
-    assert!(vectors.len() >= 28, "golden file truncated");
+    assert!(vectors.len() >= 40, "golden file truncated");
     for v in &vectors {
         match v.name {
             "type_certificate_chain" => {
@@ -193,7 +200,91 @@ fn golden_round_trip() {
             "devtools_capconn_event" => {
                 check::<devtools::v1::ppspp::cap_conn_log::peer_log::Event>(v);
             }
+            "rpc_call_request" => {
+                let c = check_rpc_call(
+                    v,
+                    1,
+                    0,
+                    "strims.debug.v1.Debug.PProf",
+                    Kind::CallKindDefault,
+                );
+                let req = debug::v1::PProfRequest::decode(c.argument.as_slice()).unwrap();
+                assert_eq!(req.name, "heap");
+                assert!(req.debug);
+            }
+            "rpc_call_callback" => {
+                let c = check_rpc_call(v, 2, 1, "CALLBACK", Kind::CallKindDefault);
+                let res = debug::v1::PProfResponse::decode(c.argument.as_slice()).unwrap();
+                assert_eq!(res.data.len(), 40);
+            }
+            "rpc_call_error" => {
+                let c = check_rpc_call(v, 3, 1, "CALLBACK", Kind::CallKindError);
+                let e = rpc::Error::decode(c.argument.as_slice()).unwrap();
+                assert_eq!((e.message.as_str(), e.code), ("boom", 5));
+            }
+            "rpc_call_error_negative_code" => {
+                let c = check_rpc_call(v, 4, 1, "CALLBACK", Kind::CallKindError);
+                let e = rpc::Error::decode(c.argument.as_slice()).unwrap();
+                assert_eq!(e.code, -3);
+            }
+            "rpc_call_close" => {
+                let c = check_rpc_call(v, 5, 1, "CALLBACK", Kind::CallKindClose);
+                assert!(c.argument.is_empty());
+            }
+            "rpc_call_undefined" => {
+                check_rpc_call(v, 6, 1, "CALLBACK", Kind::CallKindUndefined);
+            }
+            "rpc_call_cancel" => {
+                check_rpc_call(v, 7, 1, "CANCEL", Kind::CallKindCancel);
+            }
+            "rpc_call_cancel_default_kind" => {
+                check_rpc_call(v, 8, 1, "CANCEL", Kind::CallKindDefault);
+            }
+            "rpc_call_header" => {
+                let c = check_rpc_call(
+                    v,
+                    9,
+                    0,
+                    "strims.debug.v1.Debug.ReadMetrics",
+                    Kind::CallKindDefault,
+                );
+                let cert = c.headers.get("certificate").unwrap();
+                let cert = types::Certificate::decode(cert.as_slice()).unwrap();
+                assert_eq!(cert.subject, "leaf ✓");
+            }
+            "rpc_call_max_ids" => {
+                let c = check_rpc_call(
+                    v,
+                    u64::MAX,
+                    u64::MAX - 1,
+                    "strims.debug.v1.Debug.WatchMetrics",
+                    Kind::CallKindDefault,
+                );
+                let req = debug::v1::WatchMetricsRequest::decode(c.argument.as_slice()).unwrap();
+                assert_eq!(req.interval_ms, -1);
+            }
+            "rpc_call_empty" => {
+                assert_eq!(check_proto::<rpc::Call>(v), rpc::Call::default());
+            }
+            "rpc_error" => {
+                let e: rpc::Error = check_proto(v);
+                assert_eq!(e.code, 7);
+            }
             other => panic!("unhandled vector {other}"),
         }
     }
+}
+
+fn check_rpc_call(v: &Vector, id: u64, parent_id: u64, method: &str, kind: Kind) -> rpc::Call {
+    assert!(
+        v.stable.is_none(),
+        "{}: rpc vectors are protobuf-only",
+        v.name
+    );
+    let c: rpc::Call = check_proto(v);
+    assert_eq!(c.id, id, "{}: id", v.name);
+    assert_eq!(c.parent_id, parent_id, "{}: parent_id", v.name);
+    assert_eq!(c.method, method, "{}: method", v.name);
+    assert_eq!(c.kind, kind as i32, "{}: kind", v.name);
+    c
 }
