@@ -461,19 +461,62 @@ fn poll_transmit_respects_buffer() {
     assert_eq!(s.result(), None);
 }
 
-/// The cuckoo table can't be built for a few percent of small sets: the
-/// receiver aborts, and the sender is left waiting for KKRT input that never
-/// comes. Drivers need a deadline.
+/// The cuckoo table can't be built for a few percent of small sets. The
+/// receiver still completes the run with empty bins: the sender finishes,
+/// nothing is left unsent or unread, and the receiver reports the failure.
 #[test]
-fn receiver_cuckoo_failure_leaves_sender_waiting() {
+fn receiver_cuckoo_failure_completes_the_run() {
     let (aset, bset) = psz_sets(6, 6, 3, 3);
     let mut s = PszSender::new(aset, [1; 16]);
     let mut r = PszReceiver::new(bset, [2; 16]);
     pump(&mut s, &mut r, &mut det_rng(0), 4096);
     assert_eq!(r.result(), Some(Err(&Error::CuckooHashMapFull)));
-    assert!(r.is_done());
-    assert!(!s.is_done());
-    assert_eq!(s.result(), None);
+    assert!(r.is_done() && s.is_done());
+    assert_eq!(s.result(), Some(Ok(())));
+    let mut buf = [0u8; 64];
+    assert_eq!(s.poll_transmit(&mut buf), None);
+    assert_eq!(r.poll_transmit(&mut buf), None);
+}
+
+/// After a cuckoo failure, the same sets succeed with fresh seeds.
+#[test]
+fn a_retry_with_fresh_seeds_succeeds() {
+    let (aset, bset) = psz_sets(6, 6, 3, 3);
+    let want: BTreeSet<_> = {
+        let a: BTreeSet<_> = aset.iter().cloned().collect();
+        bset.iter().filter(|b| a.contains(*b)).cloned().collect()
+    };
+    let mut seeds = det_rng(7);
+    let mut outcomes = Vec::new();
+    while outcomes.len() < 8 {
+        let mut s = PszSender::from_rng(aset.clone(), &mut seeds);
+        let mut r = PszReceiver::from_rng(bset.clone(), &mut seeds);
+        pump(&mut s, &mut r, &mut det_rng(0), 4096);
+        assert_eq!(s.result(), Some(Ok(())));
+        let outcome = r.take_result().unwrap();
+        let done = outcome.is_ok();
+        outcomes.push(outcome.map(|got| got.into_iter().collect::<BTreeSet<_>>()));
+        if done {
+            break;
+        }
+    }
+    let (last, failed) = outcomes.split_last().unwrap();
+    assert_eq!(last, &Ok(want));
+    assert!(failed.iter().all(|o| o == &Err(Error::CuckooHashMapFull)));
+}
+
+/// A peer announcing more elements than the limit is refused before the
+/// run allocates for them.
+#[test]
+fn peer_set_above_the_limit_is_refused() {
+    let (aset, bset) = psz_sets(10, 4, 2, 9);
+    let mut s = PszSender::new(aset, [1; 16]);
+    let mut r = PszReceiver::with_peer_limit(bset, [2; 16], 8);
+    pump(&mut s, &mut r, &mut det_rng(0), 4096);
+    assert_eq!(
+        r.result(),
+        Some(Err(&Error::PeerSetTooLarge { size: 10, max: 8 }))
+    );
 }
 
 /// Drivers can move sessions between threads (e.g. into a spawned task).

@@ -94,14 +94,11 @@ fn shuffle(ns: &mut [usize], rng: &mut AesRng) {
     }
 }
 
-/// Reads the peer's set size, rejecting sizes above [`MAX_PEER_SET_SIZE`].
-async fn read_peer_size(conn: &mut Channel) -> Result<usize, Error> {
+/// Reads the peer's set size, rejecting sizes above `max`.
+async fn read_peer_size(conn: &mut Channel, max: usize) -> Result<usize, Error> {
     let pn = conn.read_int().await? as usize;
-    if pn > MAX_PEER_SET_SIZE {
-        return Err(Error::PeerSetTooLarge {
-            size: pn,
-            max: MAX_PEER_SET_SIZE,
-        });
+    if pn > max {
+        return Err(Error::PeerSetTooLarge { size: pn, max });
     }
     Ok(pn)
 }
@@ -117,11 +114,12 @@ async fn psz_send(
     conn: &mut Channel,
     oprf: &mut KkrtSender,
     inputs: &[Vec<u8>],
+    max_peer_set: usize,
     rng: &mut AesRng,
 ) -> Result<(), Error> {
     conn.write_int(own_size(inputs)?);
     conn.flush();
-    let pn = read_peer_size(conn).await?;
+    let pn = read_peer_size(conn, max_peer_set).await?;
     let n = inputs.len().max(pn);
 
     let keys = cointoss_send(conn, &[rng.block()]).await?;
@@ -152,10 +150,11 @@ async fn psz_receive(
     conn: &mut Channel,
     oprf: &mut KkrtReceiver,
     inputs: &[Vec<u8>],
+    max_peer_set: usize,
     rng: &mut AesRng,
 ) -> Result<Vec<Vec<u8>>, Error> {
     let own = own_size(inputs)?;
-    let pn = read_peer_size(conn).await?;
+    let pn = read_peer_size(conn, max_peer_set).await?;
     conn.write_int(own);
     conn.flush();
     let n = inputs.len().max(pn);
@@ -166,12 +165,22 @@ async fn psz_receive(
 
     let keys = cointoss_receive(conn, &[rng.block()]).await?;
     let digests = compress_and_hash_inputs(inputs, keys.first().unwrap_or(&ZERO_BLOCK));
-    let table = CuckooHashMap::new(&digests, NHASHES)?;
-    let oprf_inputs: Vec<Block> = table
-        .items()
-        .iter()
-        .map(|item| item.map_or(ZERO_BLOCK, |item| item.entry))
-        .collect();
+    // A table that can't be built still runs the rest of the protocol with
+    // every bin empty, so the sender finishes and neither side leaves bytes
+    // unread on the stream.
+    let table = match CuckooHashMap::new(&digests, NHASHES) {
+        Ok(table) => Some(table),
+        Err(Error::CuckooHashMapFull) => None,
+        Err(e) => return Err(e),
+    };
+    let oprf_inputs: Vec<Block> = match &table {
+        Some(table) => table
+            .items()
+            .iter()
+            .map(|item| item.map_or(ZERO_BLOCK, |item| item.entry))
+            .collect(),
+        None => vec![ZERO_BLOCK; compute_nbins(inputs.len(), NHASHES)?],
+    };
     let outputs = oprf.receive(conn, &oprf_inputs, rng).await?;
 
     // One set of the sender's masks per hash function; at most
@@ -186,6 +195,9 @@ async fn psz_receive(
             h.insert(prefix);
         }
     }
+    let Some(table) = table else {
+        return Err(Error::CuckooHashMapFull);
+    };
 
     let mut intersection = Vec::new();
     for (item, output) in table.items().iter().zip(&outputs) {
@@ -223,6 +235,14 @@ impl PszSender {
     /// elements fails with [`Error::InvalidCuckooSetSize`] before anything
     /// is sent.
     pub fn new(inputs: Vec<Vec<u8>>, seed: Block) -> PszSender {
+        PszSender::with_peer_limit(inputs, seed, MAX_PEER_SET_SIZE)
+    }
+
+    /// Like [`PszSender::new`], failing with [`Error::PeerSetTooLarge`] if
+    /// the receiver announces more than `max_peer_set` elements (at most
+    /// [`MAX_PEER_SET_SIZE`]).
+    pub fn with_peer_limit(inputs: Vec<Vec<u8>>, seed: Block, max_peer_set: usize) -> PszSender {
+        let max_peer_set = max_peer_set.min(MAX_PEER_SET_SIZE);
         PszSender(Session::start(move |conn| async move {
             let mut conn = conn;
             let mut rng = AesRng::new(&seed);
@@ -230,7 +250,7 @@ impl PszSender {
                 let mut ot = ChouOrlandiSender::new(&mut conn, &mut rng).await?;
                 let mut ote = KosReceiver::new(&mut conn, &mut ot, &mut rng).await?;
                 let mut oprf = KkrtSender::new(&mut conn, &mut ote, &mut rng).await?;
-                psz_send(&mut conn, &mut oprf, &inputs, &mut rng).await
+                psz_send(&mut conn, &mut oprf, &inputs, max_peer_set, &mut rng).await
             }
             .await;
             finish(&mut conn, result)
@@ -286,7 +306,19 @@ impl PszReceiver {
     /// [`AesRng`], which must be secret and fresh. A set of more than 2^28
     /// elements fails with [`Error::InvalidCuckooSetSize`] before anything
     /// is sent.
+    ///
+    /// If its cuckoo table can't be built, the receiver still completes the
+    /// run, learning nothing, and then fails with
+    /// [`Error::CuckooHashMapFull`]; the sender succeeds.
     pub fn new(inputs: Vec<Vec<u8>>, seed: Block) -> PszReceiver {
+        PszReceiver::with_peer_limit(inputs, seed, MAX_PEER_SET_SIZE)
+    }
+
+    /// Like [`PszReceiver::new`], failing with [`Error::PeerSetTooLarge`]
+    /// if the sender announces more than `max_peer_set` elements (at most
+    /// [`MAX_PEER_SET_SIZE`]).
+    pub fn with_peer_limit(inputs: Vec<Vec<u8>>, seed: Block, max_peer_set: usize) -> PszReceiver {
+        let max_peer_set = max_peer_set.min(MAX_PEER_SET_SIZE);
         PszReceiver(Session::start(move |conn| async move {
             let mut conn = conn;
             let mut rng = AesRng::new(&seed);
@@ -294,7 +326,7 @@ impl PszReceiver {
                 let mut ot = ChouOrlandiReceiver::new(&mut conn, &mut rng).await?;
                 let mut ote = KosSender::new(&mut conn, &mut ot, &mut rng).await?;
                 let mut oprf = KkrtReceiver::new(&mut conn, &mut ote, &mut rng).await?;
-                psz_receive(&mut conn, &mut oprf, &inputs, &mut rng).await
+                psz_receive(&mut conn, &mut oprf, &inputs, max_peer_set, &mut rng).await
             }
             .await;
             finish(&mut conn, result)

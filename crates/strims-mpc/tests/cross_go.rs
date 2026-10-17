@@ -230,3 +230,26 @@ fn mixed_lengths_both_directions() {
     assert!(go.success, "{}", go.stderr);
     assert_eq!(results(&go.stderr), want);
 }
+
+/// A Rust receiver whose cuckoo table fails still completes the run, so
+/// the Go sender finishes. These seeds make the table fail.
+#[test]
+fn go_sender_finishes_when_the_rust_receiver_table_fails() {
+    if !go_available() {
+        return;
+    }
+    let (aset, bset) = key_sets(5, 5, 2, 3);
+    let mut r = PszReceiver::new(bset, [0x21; 16]);
+    let go = run_against_go(
+        "psz-send",
+        "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
+        &aset,
+        &mut r,
+    );
+    assert!(go.success, "go sender failed: {}", go.stderr);
+    assert!(r.is_done());
+    assert_eq!(
+        r.take_result().map(|r| r.map(|_| ())),
+        Some(Err(strims_mpc::Error::CuckooHashMapFull))
+    );
+}

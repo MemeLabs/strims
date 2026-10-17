@@ -31,13 +31,19 @@
 //! - Transport: the stream runs over vnic frames on the network broker
 //!   port. Feed each frame body to `handle_input`, and call `poll_transmit`
 //!   with a buffer of the frame MTU.
-//! - Deadline and retry: for a few percent of small key sets the receiver
-//!   fails with [`Error::CuckooHashMapFull`] (see [`CuckooHashMap::new`]),
-//!   and the sender then waits forever. Impose a deadline and retry with
-//!   fresh seeds; each retry succeeds independently.
+//! - Retry: for a few percent of small key sets the receiver's cuckoo table
+//!   can't be built (see [`CuckooHashMap::new`]). The receiver still
+//!   completes the run with every bin empty, so neither side leaves bytes
+//!   unread, and then fails with [`Error::CuckooHashMapFull`] while the
+//!   sender succeeds. Retry with fresh seeds; each retry succeeds
+//!   independently.
+//! - Deadline: a peer that stops sending leaves the session waiting, so
+//!   impose one.
 //! - Errors: drop the session on any error. The stream can't be
 //!   resynchronised, so bytes left over from a failed run may still arrive
 //!   and fail the next one.
+//! - Limits: `with_peer_limit` bounds the set size a peer may announce,
+//!   which sizes the run's allocations.
 //!
 //! # Async inside
 //!
