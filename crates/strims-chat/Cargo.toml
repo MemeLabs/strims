@@ -8,9 +8,13 @@ license.workspace = true
 
 [dependencies]
 strims-base.workspace = true
+strims-chunkstream.workspace = true
+strims-crypto.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
+prost.workspace = true
 rand_core.workspace = true
 regex-automata.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 hex.workspace = true

@@ -1834,7 +1834,10 @@ dependencies = [
  "regex",
  "regex-automata",
  "strims-base",
+ "strims-chunkstream",
+ "strims-crypto",
  "strims-proto",
+ "thiserror",
 ]
 
 [[package]]
