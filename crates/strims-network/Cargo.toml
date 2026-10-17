@@ -17,6 +17,7 @@ strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true
 strims-vpn.workspace = true
 prost.workspace = true
+data-encoding.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 rand_core.workspace = true

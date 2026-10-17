@@ -1908,6 +1908,7 @@ dependencies = [
 name = "strims-network"
 version = "0.1.0"
 dependencies = [
+ "data-encoding",
  "futures-core",
  "futures-sink",
  "futures-util",

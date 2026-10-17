@@ -56,6 +56,7 @@
 pub mod ca;
 mod control;
 mod events;
+pub mod frontend;
 mod host;
 pub mod membership;
 mod peer;
@@ -69,6 +70,7 @@ use strims_rpc::RetryPolicy;
 
 pub use control::{NetworkControl, NetworkInfo};
 pub use events::NetworkEvent;
+pub use frontend::{NetworkFrontend, bind_frontend};
 pub use host::Host;
 
 /// How network membership runs.
