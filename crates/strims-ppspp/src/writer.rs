@@ -59,13 +59,17 @@ pub struct Writer {
 }
 
 impl Writer {
-    /// Creates the swarm (with the seed scheduling method unless set), sets
-    /// its read offset to 0 and signs the first epoch at `now`.
+    /// Creates the swarm with the seed scheduling method, whatever
+    /// `o.swarm_options` sets, sets its read offset to 0 and signs the first
+    /// epoch at `now`.
     pub fn new(o: WriterOptions, now: Time) -> Result<(Writer, Swarm), SwarmError> {
-        let so = o.swarm_options.assign_defaults(&SwarmOptions {
+        // The node publishes the swarm. The peer scheduler would set the read
+        // offset again when peers first announce chunks, sending the swarm's
+        // local readers back to the window's tail.
+        let so = SwarmOptions {
             scheduling_method: SchedulingMethod::SEED,
-            ..Default::default()
-        });
+            ..o.swarm_options
+        };
         let id = SwarmId::new(&o.key.public);
         let mut swarm = Swarm::new(id.clone(), so)?;
         swarm.set_offset(Bin(0));
