@@ -25,6 +25,8 @@
 //! | `vpn_rpc::vpn_rpc_both_ways` | RPC over vpn with certificates: calls both ways to fixed and hash-table addresses, streams, cancels to the Rust server, deadlines, error codes, unknown methods |
 //! | `network::go_owner_rust_invitee`, `network::rust_owner_go_invitee` | internal/network and `strims_network`: PSI on the broker channel with each side as sender, only the shared network binding, an invitee renewing through the owner's CAPeer, vpn messages both ways, and an alias renewal at the other implementation's CA over vpn |
 //! | `directory::go_owner_rust_member`, `directory::rust_owner_go_member` | internal/directory and `strims_directory`, each serving the other: the member's calls and its view of the server's event and asset swarms from their window tails (listings, user counts, presence), moderation by moderators only, a member's snippet on its snippet port with split deltas and an update, asset swarm rewrites, and alias renewals |
+//! | `chat::go_server_rust_client`, `chat::rust_server_go_client` | internal/chat and `strims_chat`, each serving the other: the chat listing in the other's directory view, a client's unified bundle, deltas, a restarted asset stream and recent events, messages with entities extracted by the server, mutes by the server's moderators only, and the muted user's own mute |
+//! | `chat::whispers_both_ways` | whispers between internal/chat and `strims_chat`, delivered both ways and stored unread; a whisper to a profile that ignores its sender fails on its first refusal |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
 //! Every test skips when `go` isn't on PATH and is bounded by a timeout;
@@ -44,6 +46,7 @@
     clippy::large_enum_variant
 )]
 
+mod chat;
 mod directory;
 mod harness;
 mod network;

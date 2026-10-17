@@ -19,6 +19,7 @@ use strims_node::{
     NodeConfig, NodeEvent, NodeEvents, SwarmId, SwarmKey, SwarmOptions, SwarmWriter, SystemClock,
     TokioNet, WebRtcConfig, WriterOptions,
 };
+use strims_proto::chat::v1 as chat;
 use strims_proto::network::v1::directory::{AssetBundle, EventBroadcast};
 use strims_vpn::{Routing, VerifyMode};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -207,6 +208,17 @@ pub enum GoEvent {
     /// internal/directory read an asset bundle on the network with this
     /// key.
     DirAssets(Vec<u8>, AssetBundle),
+    /// internal/chat read an event of the chat server with this key.
+    ChatEvent(Vec<u8>, chat::ServerEvent),
+    /// internal/chat read an asset bundle of the chat server with this
+    /// key.
+    ChatAssets(Vec<u8>, chat::AssetBundle),
+    /// The read of the chat server with this key ended.
+    ChatReadEnd(Vec<u8>),
+    /// internal/chat wrote a whisper record.
+    WhisperRecord(chat::WhisperRecord),
+    /// internal/chat wrote a whisper thread.
+    WhisperThread(chat::WhisperThread),
     TransferError(HostId, String),
     Written(String),
     ReadDone(String, ReadResult),
@@ -295,6 +307,9 @@ pub struct GoOptions {
     /// Run internal/directory on the networks (the `dir-*` verbs and
     /// events); needs `network_control`.
     pub directory: bool,
+    /// Run internal/chat on the profile (the `chat-*` verbs, the chat and
+    /// whisper events); needs `directory`.
+    pub chat: bool,
 }
 
 impl GoOptions {
@@ -310,6 +325,7 @@ impl GoOptions {
             transfer: false,
             network_control: false,
             directory: false,
+            chat: false,
         }
     }
 }
@@ -333,6 +349,7 @@ impl GoNode {
             .arg(format!("-transfer={}", o.transfer))
             .arg(format!("-network-control={}", o.network_control))
             .arg(format!("-directory={}", o.directory))
+            .arg(format!("-chat={}", o.chat))
             .arg(format!(
                 "-network-seed={}",
                 if o.vpn_rpc {
@@ -435,6 +452,21 @@ impl GoNode {
             "dir-assets" => self.events.push(GoEvent::DirAssets(
                 unhex(f[1]),
                 AssetBundle::decode(unhex(f[2]).as_slice()).expect("go's asset bundle"),
+            )),
+            "chat-event" => self.events.push(GoEvent::ChatEvent(
+                unhex(f[1]),
+                chat::ServerEvent::decode(unhex(f[2]).as_slice()).expect("go's chat event"),
+            )),
+            "chat-assets" => self.events.push(GoEvent::ChatAssets(
+                unhex(f[1]),
+                chat::AssetBundle::decode(unhex(f[2]).as_slice()).expect("go's chat assets"),
+            )),
+            "chat-read-end" => self.events.push(GoEvent::ChatReadEnd(unhex(f[1]))),
+            "whisper-record" => self.events.push(GoEvent::WhisperRecord(
+                chat::WhisperRecord::decode(unhex(f[1]).as_slice()).expect("go's whisper record"),
+            )),
+            "whisper-thread" => self.events.push(GoEvent::WhisperThread(
+                chat::WhisperThread::decode(unhex(f[1]).as_slice()).expect("go's whisper thread"),
             )),
             "transfer-error" => {
                 eprintln!("go {}: {l}", self.name);

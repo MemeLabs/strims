@@ -85,7 +85,7 @@ use tokio::time::Instant;
 
 use crate::harness::{GoEvent, GoNode, GoOptions, helper};
 
-type Timer = NodeTimer<SystemClock>;
+pub(crate) type Timer = NodeTimer<SystemClock>;
 type Control = NetworkControl<MemoryKv, NodeHost, Timer>;
 type Frontend = NetworkFrontend<MemoryKv, NodeHost, Timer>;
 type Transfers = TransferControl<NodeHost, Timer>;
@@ -94,21 +94,23 @@ type Bound = Rc<RefCell<BTreeMap<HostId, bool>>>;
 
 /// How long a directory step may take: a broadcast interval, a swarm
 /// round trip and a call's retries, with room to spare.
-const DIR_STEP: StdDuration = StdDuration::from_secs(60);
+pub(crate) const DIR_STEP: StdDuration = StdDuration::from_secs(60);
 
 /// A Rust node running its profile's networks and their directories.
-struct RustMember {
-    node: Node,
-    profile: Profile,
-    control: Control,
-    frontend: Frontend,
-    transfers: Transfers,
-    directory: Directory,
+pub(crate) struct RustMember {
+    pub(crate) node: Node,
+    pub(crate) host: NodeHost,
+    pub(crate) store: ReplicatedStore<MemoryKv>,
+    pub(crate) profile: Profile,
+    pub(crate) control: Control,
+    pub(crate) frontend: Frontend,
+    pub(crate) transfers: Transfers,
+    pub(crate) directory: Directory,
     /// Peers bound to a network.
     bound: Bound,
 }
 
-async fn rust_member(seed: u8) -> RustMember {
+pub(crate) async fn rust_member(seed: u8) -> RustMember {
     let key = key_from_seed(&[seed; 32]);
     let profile = Profile {
         id: u64::from(seed),
@@ -155,8 +157,8 @@ async fn rust_member(seed: u8) -> RustMember {
         strims_transfer::Config::default(),
     );
     let directory = DirectoryControl::new(
-        host,
-        store,
+        host.clone(),
+        store.clone(),
         control.clone(),
         transfers.clone(),
         NodeTimer(SystemClock),
@@ -198,6 +200,8 @@ async fn rust_member(seed: u8) -> RustMember {
     let frontend = NetworkFrontend::new(control.clone());
     RustMember {
         node,
+        host,
+        store,
         profile,
         control,
         frontend,
@@ -208,7 +212,7 @@ async fn rust_member(seed: u8) -> RustMember {
 }
 
 impl RustMember {
-    fn peer_key(&self) -> Vec<u8> {
+    pub(crate) fn peer_key(&self) -> Vec<u8> {
         self.profile.key.as_ref().unwrap().public.clone()
     }
 
@@ -216,7 +220,7 @@ impl RustMember {
         &self.profile.name
     }
 
-    async fn create(&self, name: &str, icon: Option<Image>) -> Network {
+    pub(crate) async fn create(&self, name: &str, icon: Option<Image>) -> Network {
         self.frontend
             .create_server(
                 &Context::default(),
@@ -232,7 +236,7 @@ impl RustMember {
             .unwrap()
     }
 
-    async fn join(&self, invitation: Vec<u8>) -> Network {
+    pub(crate) async fn join(&self, invitation: Vec<u8>) -> Network {
         self.frontend
             .create_network_from_invitation(
                 &Context::default(),
@@ -247,11 +251,11 @@ impl RustMember {
             .unwrap()
     }
 
-    fn is_bound(&self, peer: HostId) -> bool {
+    pub(crate) fn is_bound(&self, peer: HostId) -> bool {
         self.bound.borrow().get(&peer).copied().unwrap_or(false)
     }
 
-    fn trusted(&self, id: u64) -> bool {
+    pub(crate) fn trusted(&self, id: u64) -> bool {
         let now = SystemClock.now();
         self.control.networks().iter().any(|n| {
             n.network.id == id
@@ -324,7 +328,7 @@ impl RustMember {
 }
 
 /// Polls `f` every 100 ms until it has a value.
-async fn until<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
+pub(crate) async fn until<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
     let deadline = Instant::now() + DIR_STEP;
     loop {
         if let Some(v) = f() {
@@ -335,7 +339,7 @@ async fn until<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
     }
 }
 
-fn go_options(seed: u8) -> GoOptions {
+pub(crate) fn go_options(seed: u8) -> GoOptions {
     let mut o = GoOptions::new(seed);
     o.peer_rpc = true;
     o.network_control = true;
@@ -345,7 +349,7 @@ fn go_options(seed: u8) -> GoOptions {
 }
 
 /// A message as a helper argument.
-fn arg(m: &impl Message) -> String {
+pub(crate) fn arg(m: &impl Message) -> String {
     let b = m.encode_to_vec();
     if b.is_empty() {
         "-".to_owned()
@@ -355,7 +359,7 @@ fn arg(m: &impl Message) -> String {
 }
 
 /// `<id> <key hex>` from a net-create or net-join reply.
-fn id_key(reply: &str) -> (u64, String) {
+pub(crate) fn id_key(reply: &str) -> (u64, String) {
     let mut f = reply.split(' ');
     let id = f.next().unwrap().parse().unwrap();
     (id, f.next().unwrap().to_owned())
@@ -425,7 +429,7 @@ fn moderator() -> Option<UserModeration> {
 }
 
 /// A PNG of `len` bytes of `fill`.
-fn image(len: usize, fill: u8) -> Image {
+pub(crate) fn image(len: usize, fill: u8) -> Image {
     Image {
         r#type: ImageType::Png.into(),
         height: 16,
@@ -453,7 +457,7 @@ fn snippet(title: &str) -> ListingSnippet {
 }
 
 /// The listings of Go's view of network `id`.
-async fn go_listings(go: &mut GoNode, id: u64) -> Vec<NetworkListingsItem> {
+pub(crate) async fn go_listings(go: &mut GoNode, id: u64) -> Vec<NetworkListingsItem> {
     let reply = go.cmd(&format!("dir-listings {id}")).await.unwrap();
     if reply == "-" {
         return Vec::new();
@@ -476,7 +480,7 @@ async fn go_users(go: &mut GoNode, id: u64) -> Vec<Vec<u8>> {
 }
 
 /// Polls Go's view of network `id` every 200 ms until `f` holds.
-async fn go_until(
+pub(crate) async fn go_until(
     go: &mut GoNode,
     id: u64,
     what: &str,
@@ -513,7 +517,7 @@ async fn go_event(go: &mut GoNode, key: &[u8], what: &str, mut f: impl FnMut(&Bo
 
 /// Calls `f` every second until it works, while the member port opens and
 /// the server's address resolves.
-async fn retry<T>(what: &str, mut f: impl AsyncFnMut() -> Result<T, String>) -> T {
+pub(crate) async fn retry<T>(what: &str, mut f: impl AsyncFnMut() -> Result<T, String>) -> T {
     let deadline = Instant::now() + DIR_STEP;
     loop {
         match f().await {
