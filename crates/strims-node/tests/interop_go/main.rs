@@ -23,6 +23,7 @@
 //! | `replication::go_pairs_rust`, `replication::rust_pairs_go_with_a_large_store` | profile replication between a Go and a Rust device: pairing both ways, writes and edits on each, a bootstrap in parts, a device deletion |
 //! | `transfer::go_seed_rust_viewer_bind_by_announce`, `transfer::rust_seed_go_viewer_bind_by_announce` | internal/transfer and `strims_transfer`: a swarm published on both sides binds by announce whichever side publishes second, byte-exact; a removed transfer closes |
 //! | `vpn_rpc::vpn_rpc_both_ways` | RPC over vpn with certificates: calls both ways to fixed and hash-table addresses, streams, cancels to the Rust server, deadlines, error codes, unknown methods |
+//! | `network::go_owner_rust_invitee`, `network::rust_owner_go_invitee` | internal/network and `strims_network`: PSI on the broker channel with each side as sender, only the shared network binding, an invitee renewing through the owner's CAPeer, vpn messages both ways, and an alias renewal at the other implementation's CA over vpn |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
 //! Every test skips when `go` isn't on PATH and is bounded by a timeout;
@@ -43,6 +44,7 @@
 )]
 
 mod harness;
+mod network;
 mod replication;
 mod rpc;
 mod transfer;

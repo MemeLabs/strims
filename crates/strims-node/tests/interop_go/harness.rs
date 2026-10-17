@@ -195,6 +195,10 @@ pub enum GoEvent {
         link: String,
     },
     PeerRemoved(HostId),
+    /// internal/network bound the peer to the network with this key.
+    NetOpen(HostId, Vec<u8>),
+    /// internal/network unbound the peer from the network.
+    NetClose(HostId, Vec<u8>),
     TransferError(HostId, String),
     Written(String),
     ReadDone(String, ReadResult),
@@ -276,6 +280,9 @@ pub struct GoOptions {
     /// Run swarms through internal/transfer (the `transfer-*` verbs);
     /// needs `peer_rpc`.
     pub transfer: bool,
+    /// Bind peers to networks through internal/network (the `net-*`
+    /// verbs) in place of the fixed port pair; needs `peer_rpc`.
+    pub network_control: bool,
 }
 
 impl GoOptions {
@@ -289,6 +296,7 @@ impl GoOptions {
             peer_rpc: false,
             vpn_rpc: false,
             transfer: false,
+            network_control: false,
         }
     }
 }
@@ -310,6 +318,7 @@ impl GoNode {
             .arg(format!("-webrtc={}", o.webrtc))
             .arg(format!("-peer-rpc={}", o.peer_rpc))
             .arg(format!("-transfer={}", o.transfer))
+            .arg(format!("-network-control={}", o.network_control))
             .arg(format!(
                 "-network-seed={}",
                 if o.vpn_rpc {
@@ -399,6 +408,12 @@ impl GoNode {
                 link: f.get(4).copied().unwrap_or_default().to_owned(),
             }),
             "peer-removed" => self.events.push(GoEvent::PeerRemoved(parse_id(f[1]))),
+            "net-open" => self
+                .events
+                .push(GoEvent::NetOpen(parse_id(f[1]), unhex(f[2]))),
+            "net-close" => self
+                .events
+                .push(GoEvent::NetClose(parse_id(f[1]), unhex(f[2]))),
             "transfer-error" => {
                 eprintln!("go {}: {l}", self.name);
                 self.events.push(GoEvent::TransferError(
@@ -503,6 +518,12 @@ impl GoNode {
     pub fn events(&mut self) -> &mut Vec<GoEvent> {
         self.poll();
         &mut self.events
+    }
+
+    /// Messages received so far, drained.
+    pub fn take_msgs(&mut self) -> Vec<Msg> {
+        self.poll();
+        std::mem::take(&mut self.msgs)
     }
 }
 

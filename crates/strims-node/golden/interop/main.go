@@ -31,6 +31,9 @@
 //   - with -transfer and -peer-rpc, internal/transfer in place of the
 //     ppspp wiring above: swarms bind by announce (the transfer-* verbs;
 //     see transfer.go);
+//   - with -network-control and -peer-rpc, internal/network's control in
+//     place of the fixed port pair: peers bind to the networks of a
+//     profile store by negotiation (the net-* verbs; see network.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -232,6 +235,8 @@ type node struct {
 	repl       *replState
 	// With -transfer: internal/transfer runs every peer's swarms.
 	transfer *transferState
+	// With -network-control: internal/network binds peers to networks.
+	network *networkState
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -272,6 +277,9 @@ func (n *node) handlePeer(p *vnic.Peer) {
 			if n.transfer != nil {
 				transferPeer = n.transferAddPeer(p, s, ps.caller)
 			}
+			if n.network != nil {
+				n.networkAddPeer(id, p, s, ps.caller)
+			}
 		}
 		go s.Listen(context.Background())
 	}
@@ -280,8 +288,10 @@ func (n *node) handlePeer(p *vnic.Peer) {
 	n.mu.Unlock()
 
 	// The host may still be bound through a replaced peer's link.
-	n.vpn.Network.RemovePeer(id)
-	n.vpn.Network.AddPeer(p, n.vpnPort, n.vpnPort)
+	if n.network == nil {
+		n.vpn.Network.RemovePeer(id)
+		n.vpn.Network.AddPeer(p, n.vpnPort, n.vpnPort)
+	}
 	if transferPeer != 0 {
 		n.transferNetworkPeerOpen(transferPeer)
 	}
@@ -305,7 +315,7 @@ func (n *node) handlePeer(p *vnic.Peer) {
 			delete(n.peers, id)
 		}
 		n.mu.Unlock()
-		if current {
+		if current && n.network == nil {
 			n.vpn.Network.RemovePeer(id)
 		}
 		emit("peer-removed %s", idHex(id))
@@ -840,6 +850,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	if strings.HasPrefix(verb, "transfer-") {
 		return n.transferCommand(verb, args)
 	}
+	if strings.HasPrefix(verb, "net-") {
+		return n.networkCommand(verb, args)
+	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
 
@@ -1085,6 +1098,7 @@ func main() {
 	peerRPC := flag.Bool("peer-rpc", false, "run RPC on every peer's channel pair (ports 4 and 5)")
 	networkSeed := flag.String("network-seed", "", "network key seed (32 bytes hex): issue a host certificate for RPC over vpn")
 	transfers := flag.Bool("transfer", false, "run swarms through internal/transfer (needs -peer-rpc)")
+	networkControl := flag.Bool("network-control", false, "bind peers to networks through internal/network (needs -peer-rpc)")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -1097,13 +1111,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers, *networkControl); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers bool) error {
+func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers, networkControl bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -1208,6 +1222,14 @@ func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, 
 			return errors.New("-transfer needs -peer-rpc")
 		}
 		if n.transfer, err = newTransferState(logger, v); err != nil {
+			return err
+		}
+	}
+	if networkControl {
+		if !peerRPC || transfers {
+			return errors.New("-network-control needs -peer-rpc, without -transfer")
+		}
+		if n.network, err = newNetworkState(logger, v, profileKey, label); err != nil {
 			return err
 		}
 	}
