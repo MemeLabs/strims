@@ -8,18 +8,14 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Network membership: PSI negotiation via `strims-mpc` (with a deadline, and
-  retry with fresh seeds), certificate exchange, and CA. This replaces the
-  explicit `bind_peer_network`.
-- Directory, chat, notifications.
+- Directory, chat, notifications. Notifications report certificate
+  renewals; the directory makes a new owned network's owner its admin.
 - Video ingress (RTMP), egress, chunkstream, HLS.
-- The other dao record types arrive with their services: certificate logs,
-  network peers, alias reservations, directory records, chat servers,
-  emotes, modifiers, tags and profiles, video channels and configs, vnic,
-  autoseed, debug and bootstrap configs, the network UI config,
-  notifications and swarm caches. With them come many-to-one indexes, the
-  CA records a new owned network creates, and the cascades of a network's
-  deletion; until then, stores from Go keep those records unread.
+- The other dao record types arrive with their services: directory records,
+  chat servers, emotes, modifiers, tags and profiles, video channels and
+  configs, vnic, autoseed, debug and bootstrap configs, notifications and
+  swarm caches, each with its part of a network's deletion; until then,
+  stores from Go keep those records unread.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Targets
@@ -33,8 +29,9 @@ Port the application services that sit on the core crates. The Go versions
   Its `strims_kv::Kv` is IndexedDB: one database per kv table, an object
   store named `data`, string keys and `Uint8Array` values. A task woken by
   an IndexedDB callback has to be polled before the transaction
-  deactivates. Its `SessionFactory` starts a profile's node, replication
-  and peer services (`strims_node::app` is the native equivalent).
+  deactivates. Its `SessionFactory` starts a profile's node, replication,
+  network control and peer services, and binds the network frontend
+  (`strims_node::app` is the native equivalent).
 - `strims-svc`: the headless service. It needs a Postgres `Kv`; profile
   stores shared by several processes (cross-process change events, and a
   lease that spans them); rate limits on SignUp and SignIn, which each
@@ -62,6 +59,12 @@ While profiles have Go and Rust devices:
   reach other devices only with later changes.
 - A device imported by Go records itself under id 0.
 - Stores below version 7 are refused; a Go client upgrades them first.
+
+While networks have Go and Rust nodes:
+- Go negotiates networks with a link one run at a time and without a
+  deadline, so a run that loses the other side (an `Open` that never
+  arrives, a stale key count) stops it negotiating with that link until
+  the link closes.
 
 ## Open questions
 
@@ -158,6 +161,19 @@ While profiles have Go and Rust devices:
     scenario input.
   - Nodes stop reporting a channel's counters once it closes, so run totals
     and the clean-input check are lower bounds.
+- **Network membership.**
+  - A peer that shares no network after a run, or after a `Close`, stays
+    linked; decide whether membership should close it, given replication
+    and transfers.
+  - Renewals sign under a new root the CA doesn't log, so a full-chain
+    `Find` can't rebuild a renewed certificate's chain.
+  - The server config's `root_cert_ttl_secs` and `peer_cert_ttl_secs` are
+    unused; every certificate lasts two years.
+  - A member whose certificate has expired can't renew: the CA verifies it
+    in full. Decide how a lapsed member rejoins.
+  - The CA's records live on the device holding the server config and
+    don't replicate.
+  - The CA event swarm isn't run; it carries nothing yet.
 - **Replication.**
   - A device that never syncs again keeps every log from collection;
     deleting the device frees them. Decide whether logs should expire.
@@ -210,6 +226,13 @@ These are wire changes, held until the version bump.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the
   epoch, so peers don't reset.
 - Bump the protocol version.
+
+### network
+- Give runs an id, and answer `Negotiate` with the key count, so a stale
+  message can't join a later run.
+- Match `Open` bindings by network key, not position.
+- Frame the broker stream per run, so a failed run's bytes can't reach the
+  next.
 
 ### transfer
 - Add the channel to `Close`: a close can't name the announce it undoes,
