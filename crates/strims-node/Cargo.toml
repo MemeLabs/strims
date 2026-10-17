@@ -44,6 +44,7 @@ turmoil = { workspace = true, optional = true }
 [dev-dependencies]
 prost.workspace = true
 sha2.workspace = true
+strims-chat.workspace = true
 strims-dao.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 # `process` and `rt-multi-thread`: the Go interop tests drive Go helpers as

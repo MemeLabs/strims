@@ -2012,6 +2012,7 @@ dependencies = [
  "socket2",
  "strims-base",
  "strims-binmap",
+ "strims-chat",
  "strims-crypto",
  "strims-dao",
  "strims-directory",
