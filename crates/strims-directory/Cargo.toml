@@ -29,7 +29,9 @@ futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
 strims-chunkstream.workspace = true
-futures-sink.workspace = true
+# integration tests only: unit tests build this crate a second time, and the
+# fake world's types come from the first build
+strims-testworld.workspace = true
 # tests drive controls on a real executor with paused time
 tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
 

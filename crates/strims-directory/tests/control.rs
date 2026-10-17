@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Directory controls on fake nodes (see `support`): serving and reading
-//! a network's directory, sessions, server config changes, the lease,
-//! moderation, asset bundles and aliases.
+//! Directory controls on fake nodes (see `strims_testworld`): serving and
+//! reading a network's directory, sessions, server config changes, the
+//! lease, moderation, asset bundles and aliases.
 
 #![allow(
     clippy::unwrap_used,
@@ -11,8 +11,6 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
-
-mod support;
 
 use strims_base::rng::det_rng;
 use strims_dao::Table;
@@ -28,8 +26,8 @@ use strims_proto::network::v1::directory::{
     Listing, ListingModeration, ListingQuery, ListingRecord, UserModeration, UserRecord,
 };
 use strims_proto::types::{Image, ImageType};
+use strims_testworld::*;
 use strims_transfer::TransferId;
-use support::*;
 
 fn chat(n: u8) -> Listing {
     Listing {

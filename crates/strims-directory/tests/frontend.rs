@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The directory frontend on fake nodes (see `support`), mostly through a
-//! UI's RPC connection: calls by network key, reads of the views, and
-//! watches of listings, listing users and asset bundles.
+//! The directory frontend on fake nodes (see `strims_testworld`), mostly
+//! through a UI's RPC connection: calls by network key, reads of the views,
+//! and watches of listings, listing users and asset bundles.
 
 #![allow(
     clippy::unwrap_used,
@@ -11,8 +11,6 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
-
-mod support;
 
 use std::collections::BTreeSet;
 
@@ -39,7 +37,7 @@ use strims_proto::network::v1::directory::{
 };
 use strims_proto::service::{CallError, Context, Error as RpcError};
 use strims_rpc::{Client, Router};
-use support::*;
+use strims_testworld::*;
 
 type Ui = DirectoryFrontendClient<Client>;
 

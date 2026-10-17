@@ -22,6 +22,7 @@ members = [
   "crates/strims-network",
   "crates/strims-directory",
   "crates/strims-session",
+  "crates/strims-testworld",
   "crates/strims-node",
   "crates/strims-sim",
 ]
@@ -70,6 +71,7 @@ strims-transfer = { path = "crates/strims-transfer" }
 strims-network = { path = "crates/strims-network" }
 strims-directory = { path = "crates/strims-directory" }
 strims-session = { path = "crates/strims-session" }
+strims-testworld = { path = "crates/strims-testworld" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 

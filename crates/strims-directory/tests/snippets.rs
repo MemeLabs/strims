@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Media listing snippets on fake nodes (see `support`): publishers serve
-//! them on the snippet port, the server subscribes to them, and views show
-//! those that verify.
+//! Media listing snippets on fake nodes (see `strims_testworld`):
+//! publishers serve them on the snippet port, the server subscribes to
+//! them, and views show those that verify.
 
 #![allow(
     clippy::unwrap_used,
@@ -11,8 +11,6 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
-
-mod support;
 
 use std::rc::Rc;
 
@@ -29,8 +27,8 @@ use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_proto::types::{Image, ImageType};
 use strims_rpc::Router;
 use strims_rpc::vpn::{self, VpnConfig};
+use strims_testworld::*;
 use strims_transfer::{SwarmHost, TransferId};
-use support::*;
 use tokio::task::spawn_local;
 
 fn media(id: &SwarmId) -> Listing {

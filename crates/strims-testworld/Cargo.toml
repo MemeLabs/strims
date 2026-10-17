@@ -1,0 +1,30 @@
+[package]
+name = "strims-testworld"
+description = "A fake world of nodes for app-layer controls' integration tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-dao.workspace = true
+strims-directory.workspace = true
+strims-kademlia.workspace = true
+strims-kv.workspace = true
+strims-network.workspace = true
+strims-ppspp.workspace = true
+strims-proto.workspace = true
+strims-rpc.workspace = true
+strims-transfer.workspace = true
+strims-vpn.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+futures-util.workspace = true
+# the world's clock is tokio's paused clock
+tokio = { workspace = true, features = ["rt", "time", "test-util"] }
+
+[lints]
+workspace = true

@@ -1881,7 +1881,6 @@ name = "strims-directory"
 version = "0.1.0"
 dependencies = [
  "futures-core",
- "futures-sink",
  "futures-util",
  "prost",
  "rand_core 0.10.1",
@@ -1896,6 +1895,7 @@ dependencies = [
  "strims-ppspp",
  "strims-proto",
  "strims-rpc",
+ "strims-testworld",
  "strims-transfer",
  "strims-vnic",
  "strims-vpn",
@@ -2130,6 +2130,28 @@ dependencies = [
  "tokio",
  "tracking-allocator",
  "turmoil",
+]
+
+[[package]]
+name = "strims-testworld"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "strims-base",
+ "strims-crypto",
+ "strims-dao",
+ "strims-directory",
+ "strims-kademlia",
+ "strims-kv",
+ "strims-network",
+ "strims-ppspp",
+ "strims-proto",
+ "strims-rpc",
+ "strims-transfer",
+ "strims-vpn",
+ "tokio",
 ]
 
 [[package]]
