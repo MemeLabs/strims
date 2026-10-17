@@ -1836,6 +1836,8 @@ dependencies = [
  "strims-base",
  "strims-chunkstream",
  "strims-crypto",
+ "strims-directory",
+ "strims-ppspp",
  "strims-proto",
  "thiserror",
 ]

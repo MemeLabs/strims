@@ -18,7 +18,7 @@
 //!   list serves every kind.
 //! - A reader applies a bundle's removals, then its entries, room and icon
 //!   ([`fold`]).
-//! - Records are framed in [`ASSET_FRAME_BYTES`] frames, and the stream
+//! - Records are framed in [`ASSET_FRAME`] frames, and the stream
 //!   holds at most [`ASSET_WINDOW_BYTES`] of them, so a reader that starts
 //!   at the swarm's window tail reads it from its unified bundle on.
 //!   [`AssetPublisher`] starts the stream over with a unified bundle before
@@ -35,18 +35,11 @@ use strims_crypto::crc32_message;
 use strims_proto::chat::v1::{AssetBundle, Emote, Modifier, Server, ServerIcon, Tag};
 
 use crate::reader::RoomLimits;
-
-/// The asset stream's frame size, in bytes.
-pub const ASSET_FRAME_BYTES: usize = 128 * 1024;
-
-/// The framed bytes the asset stream holds at most: the asset swarm's live
-/// window. A record writer for the stream needs a `max_record` of at least
-/// this, since one record may take all of it.
-pub const ASSET_WINDOW_BYTES: usize = 32 * 1024 * 1024;
+use crate::swarms::{ASSET_FRAME, ASSET_WINDOW_BYTES};
 
 const _: () = assert!(
-    ASSET_FRAME_BYTES > strims_chunkstream::HEADER_LEN
-        && ASSET_FRAME_BYTES <= strims_chunkstream::MAX_FRAME_SIZE
+    ASSET_FRAME > strims_chunkstream::HEADER_LEN
+        && ASSET_FRAME <= strims_chunkstream::MAX_FRAME_SIZE
 );
 
 /// The encoding of `is_delta: true`.
@@ -121,7 +114,7 @@ impl AssetPublisher {
         // invariant: the frame size is in range, as the const assertion
         // above checks.
         #[allow(clippy::expect_used)]
-        let encoder = RecordEncoder::new(ASSET_FRAME_BYTES).expect("asset frame size");
+        let encoder = RecordEncoder::new(ASSET_FRAME).expect("asset frame size");
         AssetPublisher {
             encoder,
             checksums: BTreeMap::new(),
@@ -138,7 +131,7 @@ impl AssetPublisher {
     /// and when a delta would take the stream past [`ASSET_WINDOW_BYTES`].
     /// A unified bundle asks for a stream reset when the stream holds
     /// records. The caller writes the returned bundle as one record,
-    /// framed in [`ASSET_FRAME_BYTES`] frames, and calls
+    /// framed in [`ASSET_FRAME`] frames, and calls
     /// [`reset`](Self::reset) when that write fails.
     pub fn sync(
         &mut self,

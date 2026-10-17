@@ -33,7 +33,7 @@ use crate::entities::MAX_ENTITIES;
 pub const MAX_EVENT_RECORD: usize = 64 * 1024;
 
 /// The largest asset record, in bytes: the asset stream's window.
-pub const MAX_ASSET_RECORD: usize = crate::assets::ASSET_WINDOW_BYTES;
+pub const MAX_ASSET_RECORD: usize = crate::swarms::ASSET_WINDOW_BYTES;
 
 /// What a client decodes and holds of one room's streams.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

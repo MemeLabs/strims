@@ -93,7 +93,7 @@ fn delta() -> AssetBundle {
 }
 
 fn framed(b: &AssetBundle) -> usize {
-    RecordEncoder::new(ASSET_FRAME_BYTES)
+    RecordEncoder::new(ASSET_FRAME)
         .unwrap()
         .encoded_len(b.encoded_len())
         .unwrap()
@@ -122,7 +122,7 @@ fn first_sync_is_unified_without_a_reset() {
         }
     );
     assert_eq!(p.stream_bytes(), framed(&w.bundle));
-    assert_eq!(p.stream_bytes(), ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), ASSET_FRAME);
 
     let mut q = AssetPublisher::new();
     let w = q.sync(&a, true).unwrap().unwrap();
@@ -135,7 +135,7 @@ fn unchanged_assets_write_nothing() {
     let mut p = AssetPublisher::new();
     write(&mut p, &a);
     assert_eq!(p.sync(&a, false), Ok(None));
-    assert_eq!(p.stream_bytes(), ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), ASSET_FRAME);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn delta_holds_changed_entries_only() {
             ..delta()
         }
     );
-    assert_eq!(p.stream_bytes(), 2 * ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), 2 * ASSET_FRAME);
 
     a.tags.push(tag(31, "weeb"));
     let w = write(&mut p, &a);
@@ -278,7 +278,7 @@ fn explicit_unified_sync_starts_the_stream_over() {
     let w = p.sync(&a, true).unwrap().unwrap();
     assert!(w.reset);
     assert_eq!(w.bundle, first.bundle);
-    assert_eq!(p.stream_bytes(), ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), ASSET_FRAME);
 }
 
 #[test]
@@ -294,7 +294,7 @@ fn reset_forces_a_unified_bundle() {
     let w = p.sync(&a, false).unwrap().unwrap();
     assert!(w.reset);
     assert_eq!(w.bundle, first.bundle);
-    assert_eq!(p.stream_bytes(), ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), ASSET_FRAME);
     assert_eq!(p.sync(&a, false), Ok(None));
 }
 
@@ -337,7 +337,7 @@ fn oversized_unified_bundle_is_too_large() {
     let err = p.sync(&a, false).unwrap_err();
     let AssetError::TooLarge { framed_len } = err;
     assert!(framed_len > ASSET_WINDOW_BYTES);
-    assert_eq!(p.stream_bytes(), ASSET_FRAME_BYTES);
+    assert_eq!(p.stream_bytes(), ASSET_FRAME);
     assert!(p.sync(&a, false).is_err());
 
     a.emotes[0] = emote(10, "PEPE");

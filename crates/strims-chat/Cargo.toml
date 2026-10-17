@@ -1,6 +1,6 @@
 [package]
 name = "strims-chat"
-description = "Chat servers: message text parsing and entity extraction"
+description = "Chat servers: message parsing and entities, combos, send rates and mutes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,8 @@ license.workspace = true
 strims-base.workspace = true
 strims-chunkstream.workspace = true
 strims-crypto.workspace = true
+strims-directory.workspace = true
+strims-ppspp.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 prost.workspace = true
 rand_core.workspace = true
