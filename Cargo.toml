@@ -18,6 +18,7 @@ members = [
   "crates/strims-dao",
   "crates/strims-replication",
   "crates/strims-transfer",
+  "crates/strims-network",
   "crates/strims-session",
   "crates/strims-node",
   "crates/strims-sim",
@@ -63,6 +64,7 @@ strims-kv-redb = { path = "crates/strims-kv-redb" }
 strims-dao = { path = "crates/strims-dao" }
 strims-replication = { path = "crates/strims-replication" }
 strims-transfer = { path = "crates/strims-transfer" }
+strims-network = { path = "crates/strims-network" }
 strims-session = { path = "crates/strims-session" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }

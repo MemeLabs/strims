@@ -1,0 +1,32 @@
+[package]
+name = "strims-network"
+description = "Network membership: shared networks found by PSI, certificate exchange and the network CA"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-dao.workspace = true
+strims-kademlia.workspace = true
+strims-kv.workspace = true
+strims-mpc.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-vpn.workspace = true
+prost.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rand_core.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+futures-util = { workspace = true, features = ["alloc", "sink"] }
+
+[dev-dependencies]
+# tests drive connections on a real executor with paused time
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true

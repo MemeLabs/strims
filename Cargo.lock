@@ -1905,6 +1905,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-network"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "prost",
+ "rand_core 0.10.1",
+ "strims-base",
+ "strims-crypto",
+ "strims-dao",
+ "strims-kademlia",
+ "strims-kv",
+ "strims-mpc",
+ "strims-proto",
+ "strims-rpc",
+ "strims-vpn",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strims-node"
 version = "0.1.0"
 dependencies = [
