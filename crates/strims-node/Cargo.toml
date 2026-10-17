@@ -26,6 +26,7 @@ strims-kv.workspace = true
 strims-replication.workspace = true
 strims-transfer.workspace = true
 strims-network.workspace = true
+strims-directory.workspace = true
 strims-rpc.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

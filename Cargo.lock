@@ -1986,6 +1986,7 @@ dependencies = [
  "strims-binmap",
  "strims-crypto",
  "strims-dao",
+ "strims-directory",
  "strims-kademlia",
  "strims-kv",
  "strims-network",

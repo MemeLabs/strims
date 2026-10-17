@@ -12,6 +12,12 @@ package main
 // them on the fixed port pair. The networks live in a profile store of
 // their own, written through the dao as internal/frontend writes it.
 //
+// The network control's transfer control gets every peer too, under the
+// same peer id, as internal/peer gives it, so swarms published on the
+// networks bind by announce once their peers bind; the helper's own ppspp
+// wiring is off. With -directory, internal/directory runs beside them
+// (see directory.go).
+//
 // Verbs (byte strings in hex):
 //
 //	net-create <name>                               create a network and run its CA -> <id> <key>
@@ -27,6 +33,8 @@ package main
 //
 //	net-open <host id> <network key>
 //	net-close <host id> <network key>
+//	dir-event <network key> <EventBroadcast>   with -directory
+//	dir-assets <network key> <AssetBundle>     with -directory
 
 import (
 	"bytes"
@@ -40,6 +48,7 @@ import (
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/MemeLabs/strims/internal/dao"
+	"github.com/MemeLabs/strims/internal/directory"
 	"github.com/MemeLabs/strims/internal/event"
 	"github.com/MemeLabs/strims/internal/network"
 	"github.com/MemeLabs/strims/internal/transfer"
@@ -72,17 +81,24 @@ type networkState struct {
 	store     *dao.ReplicatedStore
 	observers *event.Observers
 	control   network.Control
+	transfer  transfer.Control
 	profile   *profilev1.Profile
 	vpnHost   *vpn.Host
+	// With -directory.
+	directory directory.Control
 
 	mu       sync.Mutex
 	nextPeer uint64
 	hosts    map[uint64]kademlia.ID
+	// The keys of the dir-snippet swarms, by swarm id.
+	snippetKeys map[string]*key.Key
 }
 
 // newNetworkState opens a profile store for the profile key, and runs
-// internal/network's control on it.
-func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label string) (*networkState, error) {
+// internal/network's control on it, with its transfer control and, with
+// withDirectory, internal/directory's control, as internal/app builds
+// them.
+func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label string, withDirectory bool) (*networkState, error) {
 	profile, err := dao.NewProfile(label)
 	if err != nil {
 		return nil, err
@@ -139,16 +155,22 @@ func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label
 		store:     rs,
 		observers: obs,
 		control:   control,
+		transfer:  tc,
 		profile:   profile,
 		vpnHost:   v,
 		hosts:     map[uint64]kademlia.ID{},
+	}
+	if withDirectory {
+		s.directory = directory.NewControl(ctx, logger, v, rs, obs, control, tc)
+		go s.directory.Run()
 	}
 	go control.Run()
 	go s.report()
 	return s, nil
 }
 
-// report emits the peers' network bindings.
+// report emits the peers' network bindings, and the event broadcasts and
+// asset bundles the directory reads.
 func (s *networkState) report() {
 	events, done := s.observers.Events()
 	defer done()
@@ -158,6 +180,20 @@ func (s *networkState) report() {
 			emit("net-open %s %s", s.host(e.PeerID), hex.EncodeToString(e.NetworkKey))
 		case event.NetworkPeerClose:
 			emit("net-close %s %s", s.host(e.PeerID), hex.EncodeToString(e.NetworkKey))
+		case event.DirectoryEvent:
+			b, err := proto.Marshal(e.Broadcast)
+			if err != nil {
+				logf("dir-event: %v", err)
+				continue
+			}
+			emit("dir-event %s %s", hex.EncodeToString(e.NetworkKey), hexs(string(b)))
+		case event.DirectoryAssetBundle:
+			b, err := proto.Marshal(e.AssetBundle)
+			if err != nil {
+				logf("dir-assets: %v", err)
+				continue
+			}
+			emit("dir-assets %s %s", hex.EncodeToString(e.NetworkKey), hexs(string(b)))
 		}
 	}
 }
@@ -168,8 +204,9 @@ func (s *networkState) host(pid uint64) string {
 	return idHex(s.hosts[pid])
 }
 
-// networkAddPeer gives a new peer to the control, before its server
-// listens, and reports it with a PeerAdd event, as internal/peer does.
+// networkAddPeer gives a new peer to the control and its transfer
+// control, before its server listens, and reports it with a PeerAdd
+// event, as internal/peer does.
 func (n *node) networkAddPeer(id kademlia.ID, p *vnic.Peer, srv *rpc.Server, c rpc.Caller) {
 	s := n.network
 	s.mu.Lock()
@@ -178,10 +215,12 @@ func (n *node) networkAddPeer(id kademlia.ID, p *vnic.Peer, srv *rpc.Server, c r
 	s.hosts[pid] = id
 	s.mu.Unlock()
 	s.control.AddPeer(pid, p, srv, c)
+	s.transfer.AddPeer(pid, p, srv, c)
 	go func() {
 		s.observers.EmitLocal(event.PeerAdd{ID: pid, HostID: id})
 		<-p.Done()
 		s.control.RemovePeer(pid)
+		s.transfer.RemovePeer(pid)
 		s.observers.EmitLocal(event.PeerRemove{ID: pid, HostID: id})
 	}()
 }

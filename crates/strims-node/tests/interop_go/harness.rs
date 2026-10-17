@@ -11,6 +11,7 @@ use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Duration as StdDuration;
 
+use prost::Message;
 use sha2::{Digest, Sha256};
 use strims_crypto::key_from_seed;
 use strims_node::{
@@ -18,6 +19,7 @@ use strims_node::{
     NodeConfig, NodeEvent, NodeEvents, SwarmId, SwarmKey, SwarmOptions, SwarmWriter, SystemClock,
     TokioNet, WebRtcConfig, WriterOptions,
 };
+use strims_proto::network::v1::directory::{AssetBundle, EventBroadcast};
 use strims_vpn::{Routing, VerifyMode};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
@@ -184,7 +186,7 @@ fn build_helper() -> Option<PathBuf> {
 }
 
 /// What a Go node reported.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GoEvent {
     Peer {
         host_id: HostId,
@@ -199,6 +201,12 @@ pub enum GoEvent {
     NetOpen(HostId, Vec<u8>),
     /// internal/network unbound the peer from the network.
     NetClose(HostId, Vec<u8>),
+    /// internal/directory read an event broadcast on the network with
+    /// this key.
+    DirEvent(Vec<u8>, EventBroadcast),
+    /// internal/directory read an asset bundle on the network with this
+    /// key.
+    DirAssets(Vec<u8>, AssetBundle),
     TransferError(HostId, String),
     Written(String),
     ReadDone(String, ReadResult),
@@ -281,8 +289,12 @@ pub struct GoOptions {
     /// needs `peer_rpc`.
     pub transfer: bool,
     /// Bind peers to networks through internal/network (the `net-*`
-    /// verbs) in place of the fixed port pair; needs `peer_rpc`.
+    /// verbs) in place of the fixed port pair, and run their swarms
+    /// through its internal/transfer; needs `peer_rpc`.
     pub network_control: bool,
+    /// Run internal/directory on the networks (the `dir-*` verbs and
+    /// events); needs `network_control`.
+    pub directory: bool,
 }
 
 impl GoOptions {
@@ -297,6 +309,7 @@ impl GoOptions {
             vpn_rpc: false,
             transfer: false,
             network_control: false,
+            directory: false,
         }
     }
 }
@@ -319,6 +332,7 @@ impl GoNode {
             .arg(format!("-peer-rpc={}", o.peer_rpc))
             .arg(format!("-transfer={}", o.transfer))
             .arg(format!("-network-control={}", o.network_control))
+            .arg(format!("-directory={}", o.directory))
             .arg(format!(
                 "-network-seed={}",
                 if o.vpn_rpc {
@@ -414,6 +428,14 @@ impl GoNode {
             "net-close" => self
                 .events
                 .push(GoEvent::NetClose(parse_id(f[1]), unhex(f[2]))),
+            "dir-event" => self.events.push(GoEvent::DirEvent(
+                unhex(f[1]),
+                EventBroadcast::decode(unhex(f[2]).as_slice()).expect("go's event broadcast"),
+            )),
+            "dir-assets" => self.events.push(GoEvent::DirAssets(
+                unhex(f[1]),
+                AssetBundle::decode(unhex(f[2]).as_slice()).expect("go's asset bundle"),
+            )),
             "transfer-error" => {
                 eprintln!("go {}: {l}", self.name);
                 self.events.push(GoEvent::TransferError(

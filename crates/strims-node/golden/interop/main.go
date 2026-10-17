@@ -33,7 +33,11 @@
 //     see transfer.go);
 //   - with -network-control and -peer-rpc, internal/network's control in
 //     place of the fixed port pair: peers bind to the networks of a
-//     profile store by negotiation (the net-* verbs; see network.go);
+//     profile store by negotiation (the net-* verbs; see network.go), and
+//     the control's internal/transfer runs every peer's swarms in place of
+//     the ppspp wiring above;
+//   - with -directory and -network-control, internal/directory's control
+//     on the same profile store (the dir-* verbs; see directory.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -247,7 +251,7 @@ func (n *node) handlePeer(p *vnic.Peer) {
 	id := p.HostID()
 	ps := &peerState{peer: p}
 	var w *vnic.FrameWriter
-	if n.transfer == nil {
+	if n.transfer == nil && n.network == nil {
 		w = vnic.NewFrameWriter(p.Link, vnic.TransferPort, n.transferQOS)
 		cr, rp := n.runner.RunPeer(id.Bytes(nil), w)
 		p.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
@@ -853,6 +857,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	if strings.HasPrefix(verb, "net-") {
 		return n.networkCommand(verb, args)
 	}
+	if strings.HasPrefix(verb, "dir-") {
+		return n.directoryCommand(verb, args)
+	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
 
@@ -1099,6 +1106,7 @@ func main() {
 	networkSeed := flag.String("network-seed", "", "network key seed (32 bytes hex): issue a host certificate for RPC over vpn")
 	transfers := flag.Bool("transfer", false, "run swarms through internal/transfer (needs -peer-rpc)")
 	networkControl := flag.Bool("network-control", false, "bind peers to networks through internal/network (needs -peer-rpc)")
+	directory := flag.Bool("directory", false, "run internal/directory on the profile store (needs -network-control)")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -1111,13 +1119,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers, *networkControl); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers, *networkControl, *directory); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers, networkControl bool) error {
+func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers, networkControl, directory bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -1225,11 +1233,14 @@ func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, 
 			return err
 		}
 	}
+	if directory && !networkControl {
+		return errors.New("-directory needs -network-control")
+	}
 	if networkControl {
 		if !peerRPC || transfers {
 			return errors.New("-network-control needs -peer-rpc, without -transfer")
 		}
-		if n.network, err = newNetworkState(logger, v, profileKey, label); err != nil {
+		if n.network, err = newNetworkState(logger, v, profileKey, label, directory); err != nil {
 			return err
 		}
 	}

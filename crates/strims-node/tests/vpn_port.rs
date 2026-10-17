@@ -103,3 +103,34 @@ async fn ports_deliver_drop_and_close() {
     assert!(ephemeral.reader.next().await.is_none());
     drop(again);
 }
+
+/// vpn's own services hold their ports, and the directory's snippet port
+/// is free for the app to open by number.
+#[tokio::test]
+async fn service_ports_are_taken_and_the_snippet_port_opens() {
+    let config = NodeConfig::new(key_from_seed(&[2; 32]), 2);
+    let (node, _events) = Node::spawn(config, TokioNet, SystemClock).await.unwrap();
+    let net = node
+        .add_network(
+            &key_from_seed(&[0xee; 32]).public,
+            NetworkOptions::default(),
+        )
+        .await
+        .unwrap();
+    for port in [10, 11, 12] {
+        assert_eq!(
+            node.open_vpn_port(net, Some(port)).await.err(),
+            Some(NodeError::Vpn(strims_vpn::Error::PortInUse(port))),
+            "port {port}"
+        );
+    }
+    let snippets = node
+        .open_vpn_port(net, Some(strims_directory::SNIPPET_PORT))
+        .await
+        .unwrap();
+    assert_eq!(snippets.port, 14);
+    assert_eq!(
+        node.open_vpn_port(net, Some(14)).await.err(),
+        Some(NodeError::Vpn(strims_vpn::Error::PortInUse(14)))
+    );
+}

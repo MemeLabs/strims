@@ -2,9 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The app layer on a node: the node's clock as the app's [`Timer`], the
-//! node as the [`Host`] of replication, of transfers and their record
-//! streams and of network membership, and every peer's RPC link served
-//! with the app's [`PeerHandler`]s.
+//! node as the [`Host`] of the services a profile runs (replication,
+//! transfers and their record streams, network membership and the
+//! directory), and every peer's RPC link served with the app's
+//! [`PeerHandler`]s.
+//!
+//! A profile's services share one [`NodeHost`]. The directory control is
+//! built on the profile's network control and transfer control, and its
+//! swarms move only while the transfer control learns every peer: give
+//! [`PeerServices`] both controls.
 //!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
 //! connections as local tasks, so it runs inside a tokio `LocalSet`.
@@ -55,8 +61,9 @@ const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// A node as replication's [`Host`], on the networks the driver adds, as
 /// the transfers' [`strims_transfer::Host`] and
-/// [`strims_transfer::SwarmHost`], and as network membership's
-/// [`strims_network::Host`], which adds and removes the networks it uses.
+/// [`strims_transfer::SwarmHost`], as network membership's
+/// [`strims_network::Host`], which adds and removes the networks it uses,
+/// and as the directory's [`strims_directory::Host`].
 #[derive(Clone)]
 pub struct NodeHost {
     node: Node,
@@ -343,6 +350,18 @@ impl strims_network::Host for NodeHost {
             timeout: LOOKUP_TIMEOUT,
         };
         self.node.resolve_vpn_address(net, key, salt, options).await
+    }
+}
+
+/// The directory opens its snippet port by number.
+impl strims_directory::Host for NodeHost {
+    async fn open_vpn_port_at(
+        &self,
+        net: NetworkId,
+        port: u16,
+    ) -> Result<(VpnReader, VpnWriter), NodeError> {
+        let p = self.node.open_vpn_port(net, Some(port)).await?;
+        Ok((p.reader, p.writer))
     }
 }
 

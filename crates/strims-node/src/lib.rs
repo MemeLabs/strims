@@ -58,9 +58,10 @@
 //! # App layer
 //!
 //! [`app`] runs the app crates on a node: [`app::NodeTimer`] is the node's
-//! clock as their timer, [`app::NodeHost`] is the node as the host of
-//! replication and of transfers, and [`app::PeerServices`] serves every
-//! peer's RPC link with the app's [`app::PeerHandler`]s.
+//! clock as their timer, [`app::NodeHost`] is the node as the host of the
+//! services a profile runs (replication, transfers, network membership
+//! and the directory), and [`app::PeerServices`] serves every peer's RPC
+//! link with the app's [`app::PeerHandler`]s.
 //!
 //! # Bindings
 //!
