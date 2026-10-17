@@ -2062,6 +2062,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-transfer"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "hex",
+ "sha2 0.11.1",
+ "strims-base",
+ "strims-kademlia",
+ "strims-ppspp",
+ "strims-proto",
+ "strims-rpc",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strims-vnic"
 version = "0.1.0"
 dependencies = [

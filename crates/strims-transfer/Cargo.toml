@@ -1,0 +1,27 @@
+[package]
+name = "strims-transfer"
+description = "Swarm announce, channel binding and peer discovery between nodes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-kademlia.workspace = true
+strims-ppspp.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tracing.workspace = true
+futures-core.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+futures-sink.workspace = true
+# tests drive connections on a real executor with paused time
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true
