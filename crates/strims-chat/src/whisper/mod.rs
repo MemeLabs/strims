@@ -11,11 +11,60 @@
 //!   retries, and says when a record becomes DELIVERED or FAILED.
 //! - **Threads.** [`thread_received`] and [`thread_sent`] update a peer's
 //!   thread for a whisper either way.
+//!
+//! # Running
+//!
+//! [`WhisperControl`] runs whispers for a profile on a node:
+//!
+//! - **Ports.** On each network the node has joined with a trusted
+//!   membership, it opens a whisper port: a vpn port that serves
+//!   `chat.v1.Whisper` and carries the profile's deliveries on that
+//!   network. A port follows the profile's certificate on the network and
+//!   closes when the node leaves it.
+//! - **Lease.** Among the processes sharing the profile's store, the
+//!   holder of the lease [`lease_key`] publishes the address of each of
+//!   its ports under (profile key,
+//!   [`WHISPER_SALT`](crate::WHISPER_SALT)), signed by the profile key,
+//!   and delivers the profile's whispers. The others check again after
+//!   every [`lease::recheck_delay`](strims_dao::lease::recheck_delay).
+//! - **Receiving.** A `SendMessage` comes from the profile of the caller's
+//!   membership certificate, on the network of the certificate's root.
+//!   Calls over one sender's rate ([`WhisperConfig::rate`]) answer
+//!   [`ChatError::TooFast`](crate::ChatError::TooFast). A whisper whose
+//!   (`id`, sender) is stored already succeeds without a write. Otherwise
+//!   [`check_receive`] decides, in the transaction that stores the whisper
+//!   UNREAD and marks the sender's thread unread.
+//! - **Sending.** [`WhisperControl::enqueue`] stores a whisper ENQUEUED and
+//!   updates the recipient's thread. The lease holder queues every
+//!   ENQUEUED record in [`Deliveries`]. An attempt resolves the
+//!   recipient's address on the record's network and calls it with the
+//!   record's id as the whisper's id, within
+//!   [`WhisperConfig::attempt_deadline`]. Success makes the record
+//!   DELIVERED, a [`WHISPER_REFUSED`] answer makes it FAILED, and any
+//!   other failure retries on the [`Deliveries`] schedule. A record's
+//!   attempts count from when the process queued it, and its age from its
+//!   message's server time. A state is written only while the stored
+//!   record is still ENQUEUED.
+//!
+//! A whisper's id is the same on every attempt, and a receiver stores one
+//! whisper per (id, sender), so an attempt that landed but timed out
+//! stores nothing when it is retried.
+
+mod control;
+mod service;
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use strims_base::time::{Duration, Time};
 use strims_proto::chat::v1::{MessageState, UiConfigIgnore, WhisperRecord, WhisperThread};
+
+pub use control::{EnqueueError, WhisperConfig, WhisperControl, WhisperMetrics};
+
+/// The key of the lease whose holder publishes the profile's whisper
+/// addresses and delivers its whispers.
+pub fn lease_key() -> String {
+    strims_dao::lease::key(&["whisper"])
+}
 
 /// The error string a refused whisper answers with.
 pub const WHISPER_REFUSED: &str = "unable to receive whisper";
@@ -316,6 +365,18 @@ impl Deliveries {
         None
     }
 
+    /// Reports that the recipient refused the attempt at record `id`, so
+    /// it isn't retried. Returns FAILED, or `None` when the record was
+    /// cancelled or isn't in flight.
+    pub fn refused(&mut self, id: u64) -> Option<MessageState> {
+        if self.pending.get(&id)?.due.is_some() {
+            return None;
+        }
+        self.in_flight = self.in_flight.saturating_sub(1);
+        let p = self.pending.remove(&id)?;
+        (!p.cancelled).then_some(MessageState::Failed)
+    }
+
     /// Forgets record `id`: it was deleted or is no longer ENQUEUED. An
     /// attempt in flight keeps its slot until it finishes.
     pub fn cancel(&mut self, id: u64) {
@@ -357,5 +418,4 @@ impl Deliveries {
 }
 
 #[cfg(test)]
-#[path = "whisper_test.rs"]
 mod tests;

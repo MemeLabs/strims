@@ -297,3 +297,27 @@ fn cancel_forgets_records() {
     assert_eq!(d.finished(t0(), 99, true), None);
     assert_eq!(d.in_flight(), 0);
 }
+
+#[test]
+fn refused_records_fail_without_a_retry() {
+    let mut d = deliveries();
+    d.enqueue(t0(), &record(1));
+    d.enqueue(t0(), &record(2));
+    assert_eq!(d.refused(1), None, "not in flight");
+    assert_eq!(d.poll_send(t0()).unwrap().id, 1);
+    assert_eq!(d.refused(1), Some(MessageState::Failed));
+    assert_eq!(d.in_flight(), 0);
+    assert_eq!(d.len(), 1);
+    assert_eq!(d.refused(1), None);
+
+    assert_eq!(d.poll_send(t0()).unwrap().id, 2);
+    d.cancel(2);
+    assert_eq!(d.refused(2), None, "cancelled");
+    assert!(d.is_empty());
+    assert_eq!(d.in_flight(), 0);
+}
+
+#[test]
+fn the_lease_key_names_whispers() {
+    assert_eq!(lease_key(), "rt:whisper");
+}

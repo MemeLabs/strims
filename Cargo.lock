@@ -1828,6 +1828,7 @@ dependencies = [
 name = "strims-chat"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "hex",
  "prost",
  "rand_core 0.10.1",
@@ -1836,10 +1837,17 @@ dependencies = [
  "strims-base",
  "strims-chunkstream",
  "strims-crypto",
+ "strims-dao",
  "strims-directory",
+ "strims-kv",
+ "strims-network",
  "strims-ppspp",
  "strims-proto",
+ "strims-rpc",
+ "strims-testworld",
  "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
