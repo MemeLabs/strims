@@ -26,6 +26,8 @@
 //     rpc.Client on the first and an rpc.Server on the second, serving the
 //     test Debug service in crates/strims-rpc/golden/debugsvc. The rpc-*
 //     verbs call the peer's.
+//   - with -peer-rpc, profile replication on demand (the repl-* verbs; see
+//     replication.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -94,6 +96,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/apis/type/key"
 	"github.com/MemeLabs/strims/pkg/httputil"
 	"github.com/MemeLabs/strims/pkg/kademlia"
+	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/MemeLabs/strims/pkg/ppspp"
 	"github.com/MemeLabs/strims/pkg/ppspp/codec"
 	"github.com/MemeLabs/strims/pkg/vnic"
@@ -216,6 +219,14 @@ type node struct {
 	// With -network-seed: this host's certificate on the network.
 	vpnCert *certificate.Certificate
 	logger  *zap.Logger
+	// Profile replication (repl-* verbs): the vpn host it runs on, the
+	// node's profile key and network key, the kv its stores live in, and
+	// the running replication once set up.
+	vpnHost    *vpn.Host
+	profileKey *key.Key
+	networkKey []byte
+	replBlob   *kvtest.Store
+	repl       *replState
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -246,6 +257,9 @@ func (n *node) handlePeer(p *vnic.Peer) {
 		}
 		s := rpc.NewServer(n.logger, &rpc.RWFDialer{Logger: n.logger, ReadWriteFlusher: rw1})
 		debugv1.RegisterDebugService(s, n.debug)
+		if ps.caller != nil {
+			n.replAddPeer(id, p, s, ps.caller)
+		}
 		go s.Listen(context.Background())
 	}
 	n.mu.Lock()
@@ -796,6 +810,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	case "exit":
 		os.Exit(0)
 	}
+	if strings.HasPrefix(verb, "repl-") {
+		return n.replCommand(verb, args)
+	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
 
@@ -1150,6 +1167,10 @@ func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, 
 		peers:       map[kademlia.ID]*peerState{},
 		swarms:      map[string]*swarmState{},
 		logger:      logger,
+		vpnHost:     v,
+		profileKey:  profileKey,
+		networkKey:  nk,
+		replBlob:    newReplBlob(),
 	}
 	if peerRPC {
 		n.rpcQOS = h.QOS().AddClass(1)

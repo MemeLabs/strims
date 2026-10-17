@@ -38,6 +38,7 @@ use futures_util::{StreamExt, stream};
 use sha2::{Digest, Sha256};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
+use strims_node::app::NodeTimer;
 use strims_node::{Clock, HostId, Node, NodeConfig, NodeEvent, NodeEvents, SimClock, TurmoilNet};
 use strims_proto::debug::v1::{
     DebugClient, DebugService, GetConfigRequest, GetConfigResponse, PProfRequest, PProfResponse,
@@ -46,9 +47,8 @@ use strims_proto::debug::v1::{
 };
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_proto::types::Key;
-use strims_rpc::{Client, Config, RetryClient, RetryPolicy, Router, Timer, peer_connection};
+use strims_rpc::{Client, Config, RetryClient, RetryPolicy, Router, peer_connection};
 use tokio::task::spawn_local;
-use tokio::time::Sleep;
 
 const TCP_PORT: u16 = 7000;
 const WS_PORT: u16 = 7001;
@@ -82,22 +82,6 @@ impl World {
             ids: Rc::default(),
             pprofs: Rc::default(),
         }
-    }
-}
-
-/// A node's clock as an RPC client's timer.
-#[derive(Clone)]
-struct SimTimer(SimClock);
-
-impl Timer for SimTimer {
-    type Sleep = Sleep;
-
-    fn now(&self) -> Time {
-        self.0.now()
-    }
-
-    fn sleep_until(&self, deadline: Time) -> Sleep {
-        tokio::time::sleep_until(self.0.deadline(deadline))
     }
 }
 
@@ -489,7 +473,7 @@ async fn retrying_caller(w: World) -> turmoil::Result {
     let policy = RetryPolicy::peer();
     let debug = DebugClient::new(RetryClient::new(
         h.rpc_client(n0).await,
-        SimTimer(h.clock),
+        NodeTimer(h.clock),
         policy,
     ));
     let start = h.clock.now();

@@ -55,6 +55,13 @@
 //! [`Node::publish_vpn_address`], and clients find it with
 //! [`Node::resolve_vpn_address`]. See [`vpn_port`].
 //!
+//! # App layer
+//!
+//! [`app`] runs the app crates on a node: [`app::NodeTimer`] is the node's
+//! clock as their timer, [`app::NodeHost`] is the node as replication's
+//! host, and [`app::PeerServices`] serves every peer's RPC link with the
+//! app's peer services.
+//!
 //! # Bindings
 //!
 //! Peers join networks and swarms through explicit calls on both sides:
@@ -132,6 +139,7 @@
 //! - **Cost.** Debug builds spend most of a run in ed25519, BLAKE2b and
 //!   AES; run large suites with `--release` or `opt-level = 1`.
 
+pub mod app;
 pub mod clock;
 pub mod config;
 mod driver;

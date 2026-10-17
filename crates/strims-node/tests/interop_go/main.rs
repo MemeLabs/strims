@@ -19,6 +19,7 @@
 //! | `ppspp_chain_go_rust_go`, `ppspp_chain_rust_go_rust` | seed in one implementation, relay in the other, byte-exact |
 //! | `ppspp_capped_rust_seed_go_viewers` | an upload-capped Rust seed with three Go viewers |
 //! | `rpc::peer_rpc_both_ways` | peer RPC on the channel pair over TCP and WS: calls both ways, multi-frame payloads, streams, cancels, deadlines, error codes, unknown methods |
+//! | `replication::go_pairs_rust`, `replication::rust_pairs_go_with_a_large_store` | profile replication between a Go and a Rust device: pairing both ways, writes and edits on each, a bootstrap in parts, a device deletion |
 //! | `vpn_rpc::vpn_rpc_both_ways` | RPC over vpn with certificates: calls both ways to fixed and hash-table addresses, streams, cancels to the Rust server, deadlines, error codes, unknown methods |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
@@ -40,6 +41,7 @@
 )]
 
 mod harness;
+mod replication;
 mod rpc;
 mod vpn_rpc;
 
