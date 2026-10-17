@@ -265,6 +265,56 @@ pub fn certificate_network_key(cert: &Certificate) -> &[u8] {
     &certificate_root(cert).key
 }
 
+/// The certificate and its ancestors, from `cert` to the root. A parent
+/// named only by its serial number ends the chain.
+pub fn certificate_chain(cert: &Certificate) -> Vec<&Certificate> {
+    let mut chain = vec![cert];
+    let mut cert = cert;
+    while let Some(parent) = certificate_parent(cert) {
+        chain.push(parent);
+        cert = parent;
+    }
+    chain
+}
+
+/// Whether a membership certificate is trusted at `now`: its network's
+/// root signed it directly and it hasn't expired. A certificate issued
+/// under an invitation, below another member, isn't. Signatures aren't
+/// checked here.
+pub fn membership_trusted(cert: &Certificate, now: Time) -> bool {
+    certificate_parent(cert).is_some_and(|p| p.key == certificate_network_key(cert))
+        && !now.after(from_unix_seconds(cert.not_after))
+}
+
+/// A network's root certificate: self-signed by the network key for
+/// signing, with the network's name as its subject.
+pub fn network_certificate(
+    key: &Key,
+    name: &str,
+    valid_duration: Duration,
+    now: Time,
+    rng: &mut DetRng,
+) -> Result<Certificate, Error> {
+    new_self_signed_certificate(key, KeyUsage::Sign as i32, valid_duration, name, now, rng)
+}
+
+/// Issues a membership certificate for `csr`, signed by the network `key`,
+/// with a new root certificate for the network (see
+/// [`network_certificate`]) as its parent.
+pub fn sign_certificate_request_with_network(
+    csr: &CertificateRequest,
+    key: &Key,
+    name: &str,
+    valid_duration: Duration,
+    now: Time,
+    rng: &mut DetRng,
+) -> Result<Certificate, Error> {
+    let root = network_certificate(key, name, valid_duration, now, rng)?;
+    let mut cert = sign_certificate_request(csr, valid_duration, key, now, rng)?;
+    cert.parent_oneof = Some(ParentOneof::Parent(Box::new(root)));
+    Ok(cert)
+}
+
 /// Whether `now`, in whole seconds, is outside the certificate's validity
 /// period or on either boundary.
 pub fn cert_is_expired(cert: &Certificate, now: Time) -> bool {
@@ -515,6 +565,75 @@ mod tests {
                 .unwrap();
         leaf.parent_oneof = Some(ParentOneof::Parent(Box::new(member)));
         (leaf, network_key, member_key, leaf_key)
+    }
+
+    #[test]
+    fn chains_list_every_certificate_to_the_root() {
+        let (leaf, network_key, member_key, leaf_key) = chain();
+        let keys: Vec<&[u8]> = certificate_chain(&leaf)
+            .iter()
+            .map(|c| c.key.as_slice())
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                leaf_key.public.as_slice(),
+                member_key.public.as_slice(),
+                network_key.public.as_slice()
+            ]
+        );
+        let mut by_serial = leaf.clone();
+        by_serial.parent_oneof = Some(ParentOneof::ParentSerialNumber(vec![1; 16]));
+        assert_eq!(certificate_chain(&by_serial).len(), 1);
+    }
+
+    #[test]
+    fn only_root_signed_unexpired_memberships_are_trusted() {
+        let (leaf, ..) = chain();
+        let member = certificate_parent(&leaf).unwrap();
+        assert!(membership_trusted(member, now()));
+        assert!(!membership_trusted(&leaf, now()));
+        assert!(!membership_trusted(certificate_root(&leaf), now()));
+
+        let not_after = Time::from_unix(i64::try_from(member.not_after).unwrap(), 0);
+        assert!(membership_trusted(member, not_after));
+        assert!(!membership_trusted(member, not_after + Duration::SECOND));
+    }
+
+    #[test]
+    fn network_signed_memberships_carry_a_fresh_root() {
+        let mut rng = det_rng(4);
+        let (network_key, member_key) = (generate_key(&mut rng), generate_key(&mut rng));
+        let csr = new_certificate_request(&member_key, PEER | SIGN, "alias").unwrap();
+        let a = sign_certificate_request_with_network(
+            &csr,
+            &network_key,
+            "net",
+            DEFAULT_CERT_TTL,
+            now(),
+            &mut rng,
+        )
+        .unwrap();
+        let b = sign_certificate_request_with_network(
+            &csr,
+            &network_key,
+            "net",
+            DEFAULT_CERT_TTL,
+            now(),
+            &mut rng,
+        )
+        .unwrap();
+        verify_certificate(&a, now()).unwrap();
+        assert!(membership_trusted(&a, now()));
+        assert_eq!(a.subject, "alias");
+        let (ra, rb) = (
+            certificate_parent(&a).unwrap(),
+            certificate_parent(&b).unwrap(),
+        );
+        assert_eq!(ra.subject, "net");
+        assert_eq!(ra.key_usage, SIGN);
+        assert_eq!(ra.key, rb.key);
+        assert_ne!(ra.serial_number, rb.serial_number);
     }
 
     #[test]

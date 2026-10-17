@@ -23,10 +23,11 @@ pub mod key;
 pub mod signable;
 
 pub use cert::{
-    CERT_PREDATE_DURATION, CertificateErrors, DEFAULT_CERT_TTL, cert_is_expired,
+    CERT_PREDATE_DURATION, CertificateErrors, DEFAULT_CERT_TTL, cert_is_expired, certificate_chain,
     certificate_network_key, certificate_parent, certificate_root, chain_validity,
-    host_certificate, new_certificate_request, new_self_signed_certificate, serialize_certificate,
-    serialize_certificate_request, sign_certificate_request, verify_certificate,
+    host_certificate, membership_trusted, network_certificate, new_certificate_request,
+    new_self_signed_certificate, serialize_certificate, serialize_certificate_request,
+    sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
     verify_certificate_request,
 };
 pub use curve25519::{
