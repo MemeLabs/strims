@@ -1880,6 +1880,9 @@ dependencies = [
 name = "strims-directory"
 version = "0.1.0"
 dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
  "prost",
  "rand_core 0.10.1",
  "slotmap",
@@ -1888,12 +1891,17 @@ dependencies = [
  "strims-crypto",
  "strims-dao",
  "strims-kademlia",
+ "strims-kv",
  "strims-network",
  "strims-ppspp",
  "strims-proto",
  "strims-rpc",
+ "strims-transfer",
+ "strims-vnic",
  "strims-vpn",
  "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

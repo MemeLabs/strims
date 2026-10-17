@@ -69,6 +69,31 @@
 //! Among the processes sharing a store, the holder of the lease
 //! [`lease_key`] serves the network's directory.
 //!
+//! # Running
+//!
+//! [`DirectoryControl`] runs the directory of every network a node has
+//! joined, on the node the driver supplies through [`Host`], beside the
+//! node's [`NetworkControl`](strims_network::NetworkControl) and
+//! [`TransferControl`](strims_transfer::TransferControl). The driver runs
+//! [`DirectoryControl::run`] as a local task. For each joined network:
+//!
+//! - A node holding the network's server config and the lease serves: it
+//!   creates both swarms, publishes their transfers and its address,
+//!   writes the asset bundle and every broadcast, and feeds its own view
+//!   the broadcasts it writes. Any other node reads both swarms into its
+//!   view and asset bundle. A server config gained or lost later switches
+//!   the mode; every switch starts the view over.
+//! - Once the profile's membership is trusted, the node serves snippets
+//!   on [`SNIPPET_PORT`] and calls the server from that port. Its calls to
+//!   a server it runs itself go to that server directly, as its host
+//!   certificate.
+//! - The node pings the server on the schedule the asset bundle's client
+//!   config sets, and right after its certificate changes, which keeps
+//!   its sessions and updates its alias.
+//!
+//! What changes is reported as [`DirectoryEvent`]s; the views and asset
+//! bundles can be read at any time.
+//!
 //! # Bounds
 //!
 //! Callers, publishers and the server may be hostile. Everything a request
@@ -78,9 +103,13 @@
 //! [`DirectoryError::Full`] or [`DirectoryError::TooLarge`], and an event
 //! is dropped and counted in [`ViewMetrics`].
 
+mod control;
+mod events;
+mod host;
 pub mod listing;
 pub mod moderation;
 pub mod server;
+mod services;
 pub mod snippet;
 pub mod swarms;
 pub mod view;
@@ -96,12 +125,19 @@ use strims_dao::key::Part;
 use strims_rpc::RetryPolicy;
 use strims_rpc::vpn::VpnConfig;
 
+pub use control::{CallFailure, DirectoryControl, DirectoryNetwork};
+pub use events::{DirectoryEvent, ListingEvent, UserEventKind};
+pub use host::{Host, Net};
 pub use server::{Caller, Server, ServerAction, ServerMetrics, SubId, Tunables};
 pub use snippet::LocalSnippets;
 pub use swarms::{
     ADDRESS_SALT, ASSET_FRAME, ASSET_SALT, EVENT_FRAME, EVENT_SALT, asset_options, event_options,
 };
 pub use view::{View, ViewEvent, ViewMetrics};
+
+/// The vpn port members serve snippets on and the server subscribes at.
+/// It must stay the vnic snippet port.
+pub const SNIPPET_PORT: u16 = strims_vnic::ports::SNIPPET_PORT;
 
 /// The longest peer key a caller or event may carry.
 pub const MAX_PEER_KEY_BYTES: usize = 64;
@@ -193,6 +229,9 @@ pub struct Config {
     pub call_policy: RetryPolicy,
     /// The server's vpn connection.
     pub server_vpn: VpnConfig,
+    /// The vpn connection on [`SNIPPET_PORT`], which serves snippets and
+    /// calls the server.
+    pub member_vpn: VpnConfig,
     /// The longest event record a reader takes. It holds the largest
     /// broadcast record ([`server::MAX_BROADCAST_RECORD`], or one event
     /// above it) with room to spare.
@@ -209,17 +248,34 @@ impl Default for Config {
             view: ViewLimits::default(),
             call_policy: RetryPolicy::vpn(),
             server_vpn: VpnConfig::default(),
+            member_vpn: VpnConfig::default(),
             max_event_record: 2 * 1024 * 1024,
             max_asset_record: 1024 * 1024,
         }
     }
 }
 
-/// What the directory has done.
+/// What a network's directory has done on this node.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metrics {
-    pub server: ServerMetrics,
+    /// The server's, while this node serves.
+    pub server: Option<ServerMetrics>,
     pub view: ViewMetrics,
+    /// Times this node started serving.
+    pub serves: u64,
+    /// Pings sent, and those that failed.
+    pub pings: u64,
+    pub ping_errors: u64,
+    /// Event stream discontinuities, each of which started the view over.
+    pub discontinuities: u64,
+    /// Asset bundles taken.
+    pub asset_bundles: u64,
+    /// Snippet subscriptions served, and those refused.
+    pub snippets_served: u64,
+    pub snippets_refused: u64,
+    /// Node and store operations that failed.
+    pub host_errors: u64,
+    pub store_errors: u64,
 }
 
 /// Why a directory request failed. Callers receive the message as the RPC
@@ -258,6 +314,34 @@ pub enum DirectoryError {
     /// A field of the request is over its bound.
     #[error("request too large")]
     TooLarge,
+}
+
+impl DirectoryError {
+    /// Every error.
+    const ALL: [DirectoryError; 15] = [
+        DirectoryError::ListingNotFound,
+        DirectoryError::SessionNotFound,
+        DirectoryError::PublishDisabled,
+        DirectoryError::JoinDisabled,
+        DirectoryError::UnsupportedEmbed,
+        DirectoryError::InvalidSwarmUri,
+        DirectoryError::UnsupportedContent,
+        DirectoryError::ListingBanned,
+        DirectoryError::PublishQuota,
+        DirectoryError::ViewQuota,
+        DirectoryError::NotPublishing,
+        DirectoryError::NotViewing,
+        DirectoryError::PermissionDenied,
+        DirectoryError::Full,
+        DirectoryError::TooLarge,
+    ];
+
+    /// The error whose message is `message`.
+    pub fn from_message(message: &str) -> Option<DirectoryError> {
+        DirectoryError::ALL
+            .into_iter()
+            .find(|e| e.to_string() == message)
+    }
 }
 
 /// Why a snippet was refused.
@@ -311,5 +395,37 @@ mod tests {
             "exceeded concurrent publish quota"
         );
         assert_eq!(DirectoryError::Full.to_string(), "directory full");
+    }
+
+    #[test]
+    fn every_error_is_found_by_its_message() {
+        for e in DirectoryError::ALL {
+            assert_eq!(DirectoryError::from_message(&e.to_string()), Some(e));
+        }
+        assert_eq!(DirectoryError::from_message("listing not found!"), None);
+    }
+
+    #[test]
+    fn a_remote_directory_error_is_a_refusal() {
+        use strims_proto::service::{CallError, Error as RpcError};
+        let remote = |m: &str| CallError::Remote(RpcError::new(0, m));
+        assert_eq!(
+            CallFailure::from_call(remote("listing banned")),
+            CallFailure::Refused(DirectoryError::ListingBanned)
+        );
+        let other = RpcError::new(3, "something else");
+        assert_eq!(
+            CallFailure::from_call(CallError::Remote(other.clone())),
+            CallFailure::Remote(other.clone())
+        );
+        assert_eq!(CallFailure::Remote(other.clone()).to_rpc(), other);
+        assert_eq!(
+            CallFailure::Refused(DirectoryError::PermissionDenied).to_rpc(),
+            RpcError::new(0, "permission denied")
+        );
+        assert_eq!(
+            CallFailure::from_call(CallError::Timeout),
+            CallFailure::Call(CallError::Timeout)
+        );
     }
 }
