@@ -66,9 +66,9 @@ pub struct Config {
     pub discovery: bool,
     /// How often each published transfer is searched for on each network.
     pub search_interval: Duration,
-    /// How long a search waits for hosts.
+    /// How long a search takes hosts for.
     pub search_timeout: Duration,
-    /// The most hosts one search returns, and asks the node to link to.
+    /// The most hosts one search takes.
     pub max_search_hosts: usize,
     /// How long to wait before asking the node to link to a host again.
     pub connect_backoff: Duration,
@@ -113,7 +113,7 @@ pub struct Metrics {
     pub closes_received: u64,
     /// Peer index records published.
     pub index_publishes: u64,
-    /// Peer index searches, and those that failed or timed out.
+    /// Peer index searches, and those that failed.
     pub searches: u64,
     pub search_errors: u64,
     /// Requests to the node to link to a found host.

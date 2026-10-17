@@ -81,7 +81,8 @@ pub(crate) enum Action<N, S> {
         link: u64,
         id: TransferId,
     },
-    /// Search the peer index, and report with [`State::search_done`].
+    /// Search the peer index: report what it finds with
+    /// [`State::search_found`], and its end with [`State::search_done`].
     Search {
         id: TransferId,
         net: N,
@@ -149,7 +150,6 @@ pub(crate) struct State<N, S> {
     discovery: bool,
     search_interval: Duration,
     connect_backoff: Duration,
-    max_search_hosts: usize,
     max_contacted: usize,
     /// Bound: the driver's calls.
     transfers: BTreeMap<TransferId, Transfer<N, S>>,
@@ -180,7 +180,6 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
             discovery,
             search_interval,
             connect_backoff,
-            max_search_hosts,
             max_contacted,
             ..
         } = *config;
@@ -189,7 +188,6 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
             discovery,
             search_interval,
             connect_backoff,
-            max_search_hosts,
             max_contacted,
             transfers: BTreeMap::new(),
             networks: BTreeMap::new(),
@@ -654,40 +652,38 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         }
     }
 
-    /// A search ended with these hosts (none if it failed). Asks the node
-    /// to link to those that aren't this host, aren't linked and weren't
-    /// asked about within `connect_backoff`.
-    pub(crate) fn search_done(&mut self, id: TransferId, net: N, hosts: Vec<ID>, now: Time) {
-        if !self.searching.remove(&(id, net)) || !self.is_published(id, net) {
+    /// A search in flight found `host`. Asks the node to link to it
+    /// unless it is this host, is linked, or was asked about within
+    /// `connect_backoff`.
+    pub(crate) fn search_found(&mut self, id: TransferId, net: N, host: ID, now: Time) {
+        if !self.searching.contains(&(id, net)) || !self.is_published(id, net) {
             return;
         }
         self.contacted.retain(|_, until| *until > now);
-        let mut asked = 0;
-        for host in hosts {
-            if asked >= self.max_search_hosts {
-                break;
-            }
-            if host == self.host_id
-                || self.peers.contains_key(&host)
-                || self.contacted.contains_key(&host)
-            {
-                continue;
-            }
-            while self.contacted.len() >= self.max_contacted {
-                let Some(oldest) = self
-                    .contacted
-                    .iter()
-                    .min_by_key(|&(_, until)| *until)
-                    .map(|(&h, _)| h)
-                else {
-                    break;
-                };
-                self.contacted.remove(&oldest);
-            }
-            self.contacted.insert(host, now + self.connect_backoff);
-            self.push_op(Op::Connect { net, host });
-            asked += 1;
+        if host == self.host_id
+            || self.peers.contains_key(&host)
+            || self.contacted.contains_key(&host)
+        {
+            return;
         }
+        while self.contacted.len() >= self.max_contacted {
+            let Some(oldest) = self
+                .contacted
+                .iter()
+                .min_by_key(|&(_, until)| *until)
+                .map(|(&h, _)| h)
+            else {
+                break;
+            };
+            self.contacted.remove(&oldest);
+        }
+        self.contacted.insert(host, now + self.connect_backoff);
+        self.push_op(Op::Connect { net, host });
+    }
+
+    /// A search ended.
+    pub(crate) fn search_done(&mut self, id: TransferId, net: N) {
+        self.searching.remove(&(id, net));
     }
 
     // --- applying ops -------------------------------------------------------

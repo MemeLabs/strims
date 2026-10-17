@@ -58,16 +58,20 @@
 //! # App layer
 //!
 //! [`app`] runs the app crates on a node: [`app::NodeTimer`] is the node's
-//! clock as their timer, [`app::NodeHost`] is the node as replication's
-//! host, and [`app::PeerServices`] serves every peer's RPC link with the
-//! app's peer services.
+//! clock as their timer, [`app::NodeHost`] is the node as the host of
+//! replication and of transfers, and [`app::PeerServices`] serves every
+//! peer's RPC link with the app's [`app::PeerHandler`]s.
 //!
 //! # Bindings
 //!
-//! Peers join networks and swarms through explicit calls on both sides:
-//! [`Node::bind_peer_network`] (or [`NetworkOptions::auto_bind_port`]) and
-//! [`Node::run_swarm`]. These stand in until the app layer negotiates
-//! network membership and swarm channels over peer rpc.
+//! Peers join networks through explicit calls on both sides:
+//! [`Node::bind_peer_network`] (or [`NetworkOptions::auto_bind_port`]),
+//! reported as [`NodeEvent::NetworkPeerAdded`]. They stand in until the app
+//! layer negotiates network membership over peer rpc.
+//!
+//! Swarm channels are negotiated by `strims-transfer` over peer rpc, for
+//! the swarms published on networks the peers share. [`Node::run_swarm`]
+//! is the operation it uses, and binds a channel directly in tests.
 //!
 //! # Determinism
 //!

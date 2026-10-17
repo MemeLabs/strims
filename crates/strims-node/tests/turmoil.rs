@@ -260,6 +260,12 @@ async fn auto(
                 host_id, outcome, ..
             } => format!("exchange {host_id} {outcome:?}"),
             NodeEvent::TransferError { host_id, error } => format!("transfer {host_id} {error}"),
+            NodeEvent::NetworkPeerAdded { network, host_id } => {
+                format!("net+ {network:?} {host_id}")
+            }
+            NodeEvent::NetworkPeerRemoved { network, host_id } => {
+                format!("net- {network:?} {host_id}")
+            }
         };
         trace.borrow_mut().push(format!("{t} {name} {line}"));
         let _ = script.send(e);

@@ -18,7 +18,15 @@ pub enum NodeEvent {
     /// taken with `Node::take_peer_rpc`.
     PeerAdded(PeerInfo),
     /// A peer went away (transport closed, replaced or closed locally).
+    /// It has left every network, with no `NetworkPeerRemoved`.
     PeerRemoved { host_id: ID },
+    /// A connected peer was bound to a network, by
+    /// `Node::bind_peer_network` or `NetworkOptions::auto_bind_port`. It
+    /// follows the peer's `PeerAdded`.
+    NetworkPeerAdded { network: NetworkId, host_id: ID },
+    /// A peer's network binding went, by `Node::unbind_peer_network` or
+    /// `Node::remove_network`.
+    NetworkPeerRemoved { network: NetworkId, host_id: ID },
     /// A vpn message for a port registered with `Node::set_vpn_handler`.
     /// `handler` is the port.
     Message(Delivery<u16>),

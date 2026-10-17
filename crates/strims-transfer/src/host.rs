@@ -6,6 +6,7 @@
 use std::fmt;
 use std::future::Future;
 
+use futures_core::Stream;
 use strims_kademlia::ID;
 
 /// The node operations behind transfers: swarm channels, and the peer
@@ -17,6 +18,9 @@ pub trait Host: 'static {
     type Swarm: Copy + Eq + fmt::Debug + 'static;
     /// A peer index record the node publishes until it is withdrawn.
     type Publication: 'static;
+    /// The hosts a peer index search finds, as they arrive, until it
+    /// ends. Dropping it ends the search.
+    type Search: Stream<Item = ID> + Unpin + 'static;
     /// A failed node call.
     type Error: fmt::Display;
 
@@ -56,15 +60,14 @@ pub trait Host: 'static {
         publication: Self::Publication,
     ) -> impl Future<Output = Result<(), Self::Error>>;
 
-    /// Up to `max` hosts that advertise (`key`, `salt`) in `net`'s peer
-    /// index. The caller drops the future to end the search sooner.
+    /// Searches `net`'s peer index for hosts that advertise (`key`,
+    /// `salt`).
     fn index_search(
         &self,
         net: Self::Network,
         key: Vec<u8>,
         salt: Vec<u8>,
-        max: usize,
-    ) -> impl Future<Output = Result<Vec<ID>, Self::Error>>;
+    ) -> impl Future<Output = Result<Self::Search, Self::Error>>;
 
     /// Asks the node to link to `host` through `net`. Resolves to whether
     /// it started a link.

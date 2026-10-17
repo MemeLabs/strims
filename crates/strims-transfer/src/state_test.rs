@@ -637,7 +637,9 @@ fn searches_repeat_every_interval_and_connect_with_backoff() {
     // a search still in flight isn't started again
     s.handle_timeout(t(30));
     assert!(drain(&mut s).is_empty());
-    s.search_done(id, NET, vec![me, linked, found], t(31));
+    for h in [me, linked, found] {
+        s.search_found(id, NET, h, t(31));
+    }
     assert_eq!(
         ops(&drain(&mut s)),
         vec![Op::Connect {
@@ -645,17 +647,20 @@ fn searches_repeat_every_interval_and_connect_with_backoff() {
             host: found
         }]
     );
+    s.search_done(id, NET);
     // within the backoff the host isn't asked about again
     s.handle_timeout(t(60));
     assert_eq!(drain(&mut s).len(), 1);
-    s.search_done(id, NET, vec![found], t(61));
+    s.search_found(id, NET, found, t(61));
     assert!(drain(&mut s).is_empty());
+    s.search_done(id, NET);
     s.handle_timeout(t(90));
     drain(&mut s);
-    s.search_done(id, NET, vec![found], t(91));
+    s.search_found(id, NET, found, t(91));
     assert_eq!(ops(&drain(&mut s)).len(), 1);
-    // a result for a search nobody started is dropped
-    s.search_done(id, NET, vec![host(4)], t(92));
+    s.search_done(id, NET);
+    // hosts reported for a search that has ended are dropped
+    s.search_found(id, NET, host(4), t(92));
     assert!(drain(&mut s).is_empty());
 }
 
@@ -665,7 +670,6 @@ fn contacted_hosts_are_bounded() {
         host(1),
         &Config {
             max_contacted: 2,
-            max_search_hosts: 3,
             ..config(true)
         },
     );
@@ -673,8 +677,10 @@ fn contacted_hosts_are_bounded() {
     s.publish(id, NET, t(0));
     s.handle_timeout(t(0));
     drain(&mut s);
-    s.search_done(id, NET, (10..20).map(host).collect(), t(1));
-    assert_eq!(ops(&drain(&mut s)).len(), 3);
+    for h in 10..20 {
+        s.search_found(id, NET, host(h), t(1));
+    }
+    assert_eq!(ops(&drain(&mut s)).len(), 10);
     assert_eq!(s.contacted(), 2);
 }
 

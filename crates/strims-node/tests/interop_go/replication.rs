@@ -16,6 +16,7 @@
 //! Go writes before the link: its replication only pushes writes made
 //! after it has opened the peer.
 
+use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
 use prost::Message;
@@ -89,7 +90,7 @@ async fn device(store: ReplicatedStore<MemoryKv>, seed: u8, replication: Config)
         let control = control.clone();
         async move { control.run().await }
     });
-    let services = PeerServices::new(node.clone(), control.clone());
+    let services = PeerServices::new(node.clone()).with(Rc::new(control.clone()));
     spawn_local(async move {
         while let Some(e) = events.recv().await {
             services.handle_event(&e).await;

@@ -197,6 +197,7 @@ async fn event_task(
                     format!("transfer error {}: {error}", w.label(w.ix_of(&host_id))),
                 );
             }
+            NodeEvent::NetworkPeerAdded { .. } | NodeEvent::NetworkPeerRemoved { .. } => {}
         }
     }
 }

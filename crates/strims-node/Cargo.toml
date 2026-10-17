@@ -24,6 +24,7 @@ strims-ppspp.workspace = true
 strims-webrtc.workspace = true
 strims-kv.workspace = true
 strims-replication.workspace = true
+strims-transfer.workspace = true
 strims-rpc.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

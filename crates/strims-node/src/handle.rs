@@ -12,6 +12,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering, fence};
+use std::task::{Context, Poll};
 
 use strims_base::time::Time;
 use strims_kademlia::ID;
@@ -253,8 +254,9 @@ impl Node {
 
     /// Binds a connected peer to a network: frames on `local_port` are the
     /// network's, and it sends to `peer_port`. The peer must bind the
-    /// reverse pair. Explicit until the app layer negotiates bindings (see
-    /// [Bindings](crate#bindings)).
+    /// reverse pair. A new binding is reported as
+    /// [`NodeEvent::NetworkPeerAdded`]. Explicit until the app layer
+    /// negotiates network membership (see [Bindings](crate#bindings)).
     pub async fn bind_peer_network(
         &self,
         host_id: ID,
@@ -266,6 +268,8 @@ impl Node {
             .await?
     }
 
+    /// Unbinds a peer from a network, reported as
+    /// [`NodeEvent::NetworkPeerRemoved`]. Returns whether it was bound.
     pub async fn unbind_peer_network(
         &self,
         host_id: ID,
@@ -534,8 +538,9 @@ impl Node {
 
     /// Runs the swarm with a peer: the peer's frames for it carry
     /// `channel`, ours carry `peer_channel`. Both sides call it with the
-    /// pair reversed. Explicit until the app layer negotiates swarm
-    /// channels (see [Bindings](crate#bindings)).
+    /// pair reversed. `strims-transfer` negotiates the pair for published
+    /// swarms; don't call it for a swarm a transfer runs (see
+    /// [Bindings](crate#bindings)).
     pub async fn run_swarm(
         &self,
         host_id: ID,
@@ -547,6 +552,8 @@ impl Node {
             .await?
     }
 
+    /// Stops the swarm with a peer. Stopping a swarm that isn't running
+    /// is not an error.
     pub async fn stop_swarm(&self, host_id: ID, swarm: SwarmKey) -> Result<(), NodeError> {
         self.call(move |s, _| s.stop_swarm(&host_id, swarm)).await?
     }
@@ -588,6 +595,10 @@ pub struct PeerIndexSearch {
 impl PeerIndexSearch {
     pub async fn next(&mut self) -> Option<PeerIndexHost> {
         self.rx.recv().await
+    }
+
+    pub fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<PeerIndexHost>> {
+        self.rx.poll_recv(cx)
     }
 }
 

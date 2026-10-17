@@ -223,7 +223,7 @@ enum Done<H: Host> {
     Searched {
         id: TransferId,
         net: H::Network,
-        hosts: Option<Vec<ID>>,
+        ok: bool,
     },
 }
 
@@ -530,22 +530,8 @@ impl<H: Host, T: Timer> TransferControl<H, T> {
                 let s = s.clone();
                 Some(
                     async move {
-                        let deadline = s.timer.now() + s.config.search_timeout;
-                        let search =
-                            pin!(
-                                s.host
-                                    .index_search(net, key, salt, s.config.max_search_hosts)
-                            );
-                        let sleep = pin!(s.timer.sleep_until(deadline));
-                        let hosts = match select(search, sleep).await {
-                            Either::Left((Ok(hosts), _)) => Some(hosts),
-                            Either::Left((Err(e), _)) => {
-                                tracing::debug!(error = %e, "peer index search failed");
-                                None
-                            }
-                            Either::Right(_) => None,
-                        };
-                        Done::Searched { id, net, hosts }
+                        let ok = search(&s, id, net, key, salt).await;
+                        Done::Searched { id, net, ok }
                     }
                     .boxed_local(),
                 )
@@ -587,14 +573,50 @@ impl<H: Host, T: Timer> TransferControl<H, T> {
                     tracing::debug!(peer = %host, error = %e, "close failed");
                 }
             }
-            Done::Searched { id, net, hosts } => {
-                if hosts.is_none() {
+            Done::Searched { id, net, ok } => {
+                if !ok {
                     s.metrics_mut().search_errors += 1;
                 }
-                s.update(|st, now| st.search_done(id, net, hosts.unwrap_or_default(), now));
+                s.update(|st, _| st.search_done(id, net));
             }
         }
     }
+}
+
+/// Runs a peer index search for `search_timeout`, reporting at most
+/// `max_search_hosts` hosts as they arrive. Resolves to whether it
+/// started.
+async fn search<H: Host, T: Timer>(
+    s: &Shared<H, T>,
+    id: TransferId,
+    net: H::Network,
+    key: Vec<u8>,
+    salt: Vec<u8>,
+) -> bool {
+    let collect = pin!(async {
+        let mut found = s.host.index_search(net, key, salt).await?;
+        let mut taken = Vec::new();
+        while taken.len() < s.config.max_search_hosts {
+            let Some(host) = found.next().await else {
+                break;
+            };
+            if !taken.contains(&host) {
+                taken.push(host);
+                s.update(|st, now| st.search_found(id, net, host, now));
+            }
+        }
+        Ok(())
+    });
+    let sleep = pin!(s.timer.sleep_until(s.timer.now() + s.config.search_timeout));
+    let started: Result<(), H::Error> = match select(collect, sleep).await {
+        Either::Left((r, _)) => r,
+        Either::Right(_) => Ok(()),
+    };
+    if let Err(e) = started {
+        tracing::debug!(error = %e, "peer index search failed");
+        return false;
+    }
+    true
 }
 
 /// Applies a node operation. Resolves to its id and whether it

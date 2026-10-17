@@ -753,11 +753,13 @@ impl State {
             networks,
             ..
         } = self;
+        let mut bound = Vec::new();
         for (net, o) in networks.iter() {
-            if let Some(port) = o.auto_bind_port
-                && let Err(e) = vpn.add_peer(vnic, net, peer, port, port, Tag::Vpn(net))
-            {
-                tracing::warn!(error = %e, "binding a peer to a network");
+            if let Some(port) = o.auto_bind_port {
+                match vpn.add_peer(vnic, net, peer, port, port, Tag::Vpn(net)) {
+                    Ok(()) => bound.push(net),
+                    Err(e) => tracing::warn!(error = %e, "binding a peer to a network"),
+                }
             }
         }
         // Until the peer sends a keepalive, its idle link may be silent:
@@ -779,6 +781,9 @@ impl State {
         }
         if let Some(info) = self.peer_info(peer) {
             self.emit(NodeEvent::PeerAdded(info));
+        }
+        for network in bound {
+            self.emit(NodeEvent::NetworkPeerAdded { network, host_id });
         }
     }
 
@@ -1290,10 +1295,7 @@ impl State {
         if let Some(port) = options.auto_bind_port {
             let peers: Vec<LinkKey> = self.peers.keys().collect();
             for peer in peers {
-                if let Err(e) =
-                    self.vpn
-                        .add_peer(&mut self.vnic, net, peer, port, port, Tag::Vpn(net))
-                {
+                if let Err(e) = self.bind_network_peer(net, peer, port, port) {
                     tracing::warn!(error = %e, "binding a peer to a network");
                 }
             }
@@ -1303,9 +1305,44 @@ impl State {
     }
 
     pub(crate) fn remove_network(&mut self, net: NetworkId) -> Result<(), NodeError> {
+        let bound: Vec<ID> = self.vpn.links(net).map(|(_, host_id, _)| host_id).collect();
         self.vpn.remove_network(&mut self.vnic, net)?;
         self.networks.remove(net);
         self.close_network_ports(net);
+        for host_id in bound {
+            self.emit(NodeEvent::NetworkPeerRemoved {
+                network: net,
+                host_id,
+            });
+        }
+        Ok(())
+    }
+
+    /// Binds a peer to a network: frames on `local_port` are the
+    /// network's, and it sends to `peer_port`. A new binding is reported
+    /// as `NetworkPeerAdded`.
+    fn bind_network_peer(
+        &mut self,
+        net: NetworkId,
+        peer: LinkKey,
+        local_port: u16,
+        peer_port: u16,
+    ) -> Result<(), strims_vpn::Error> {
+        let bound = self.vpn.links(net).any(|(k, _, _)| k == peer);
+        self.vpn.add_peer(
+            &mut self.vnic,
+            net,
+            peer,
+            local_port,
+            peer_port,
+            Tag::Vpn(net),
+        )?;
+        if !bound && let Some(host_id) = self.peers.get(peer).map(|p| p.host_id) {
+            self.emit(NodeEvent::NetworkPeerAdded {
+                network: net,
+                host_id,
+            });
+        }
         Ok(())
     }
 
@@ -1319,20 +1356,20 @@ impl State {
         peer_port: u16,
     ) -> Result<(), NodeError> {
         let peer = self.peer_key(host_id)?;
-        self.vpn.add_peer(
-            &mut self.vnic,
-            net,
-            peer,
-            local_port,
-            peer_port,
-            Tag::Vpn(net),
-        )?;
+        self.bind_network_peer(net, peer, local_port, peer_port)?;
         Ok(())
     }
 
     /// Unbinds the peer from the network. Returns whether it was bound.
     pub(crate) fn unbind_peer_network(&mut self, host_id: &ID, net: NetworkId) -> bool {
-        self.vpn.remove_peer(&mut self.vnic, net, host_id)
+        let unbound = self.vpn.remove_peer(&mut self.vnic, net, host_id);
+        if unbound {
+            self.emit(NodeEvent::NetworkPeerRemoved {
+                network: net,
+                host_id: *host_id,
+            });
+        }
+        unbound
     }
 
     /// A vnic port on the peer for a network binding.

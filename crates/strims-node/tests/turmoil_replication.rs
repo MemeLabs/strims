@@ -203,7 +203,7 @@ fn replicate(
             w.log(&clock, &name, "replication stopped");
         }
     });
-    let services = PeerServices::new(node.clone(), control.clone());
+    let services = PeerServices::new(node.clone()).with(Rc::new(control.clone()));
     let (w, name) = (w.clone(), name.to_owned());
     spawn_local(async move {
         while let Some(e) = events.recv().await {

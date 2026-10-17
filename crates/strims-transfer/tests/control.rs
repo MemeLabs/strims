@@ -183,6 +183,7 @@ impl Host for FakeHost {
     type Network = u8;
     type Swarm = u32;
     type Publication = IndexKey;
+    type Search = futures_util::stream::Iter<std::vec::IntoIter<ID>>;
     type Error = String;
 
     fn host_id(&self) -> ID {
@@ -247,13 +248,13 @@ impl Host for FakeHost {
         net: u8,
         key: Vec<u8>,
         salt: Vec<u8>,
-        max: usize,
-    ) -> Result<Vec<ID>, String> {
+    ) -> Result<Self::Search, String> {
         let w = self.world.0.borrow();
         let hosts = w.index.get(&(net, key, salt));
-        Ok(hosts
-            .map(|h| h.iter().copied().take(max).collect())
-            .unwrap_or_default())
+        let hosts: Vec<ID> = hosts
+            .map(|h| h.iter().copied().collect())
+            .unwrap_or_default();
+        Ok(futures_util::stream::iter(hosts))
     }
 
     async fn connect_peer(&self, _: u8, host: ID) -> Result<bool, String> {
