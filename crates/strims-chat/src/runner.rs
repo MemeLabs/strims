@@ -68,7 +68,7 @@ use strims_dao::schema::chat::{
 use strims_dao::{ReplicatedStore, Table, ref_key};
 use strims_directory::{Host, Net};
 use strims_kv::Kv;
-use strims_ppspp::{SwarmId, WriterOptions};
+use strims_ppspp::{SchedulingMethod, SwarmId, SwarmOptions, WriterOptions};
 use strims_proto::chat::v1::{Profile, register_chat_service};
 use strims_proto::network::v1::directory::listing::{Chat, Content};
 use strims_proto::network::v1::directory::listing_query::Query;
@@ -440,10 +440,17 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
         .map(|i| i.network.id)
         .ok_or("the network is gone")?;
 
+    // The server's swarms seed: the peer scheduler sets the read offset
+    // when peers first announce chunks, which sends every local reader
+    // back to the window's tail to read it again.
+    let seed = |o: SwarmOptions| SwarmOptions {
+        scheduling_method: SchedulingMethod::SEED,
+        ..o
+    };
     let (event_swarm, event_id, event_writer) = s
         .host
         .create_swarm(WriterOptions {
-            swarm_options: event_options(&key.public),
+            swarm_options: seed(event_options(&key.public)),
             key: key.clone(),
         })
         .await
@@ -452,7 +459,7 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
     let (asset_swarm, asset_id, asset_writer) = s
         .host
         .create_swarm(WriterOptions {
-            swarm_options: asset_options(&key.public),
+            swarm_options: seed(asset_options(&key.public)),
             key: key.clone(),
         })
         .await
