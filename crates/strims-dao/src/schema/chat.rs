@@ -1,13 +1,22 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Chat settings and whispers that follow the profile across devices.
+//! The profile's chat records.
+//!
+//! Chat settings and whispers follow the profile across devices. The chat
+//! servers this device hosts stay on it, with their icons, emotes,
+//! modifiers, tags and user profiles: none of them replicate. Deleting a
+//! server deletes its records, and deleting a network deletes the servers
+//! on it ([`Networks`](super::network::Networks)).
+//!
+//! Index keys are stored, so [`profile_peer_key`] must keep deriving the
+//! same bytes.
 
 use futures_util::future::LocalBoxFuture;
 use strims_kv::Kv;
 use strims_proto::chat::v1::{
-    MessageState, UiConfig, UiConfigHighlight, UiConfigIgnore, UiConfigTag, WhisperRecord,
-    WhisperThread,
+    Emote, MessageState, Modifier, Profile, Server, ServerIcon, Tag, UiConfig, UiConfigHighlight,
+    UiConfigIgnore, UiConfigTag, WhisperRecord, WhisperThread,
 };
 
 use crate::error::Error;
@@ -15,7 +24,8 @@ use crate::events::Record;
 use crate::key::Namespace;
 use crate::store::WriteTx;
 use crate::table::{
-    Index, Replication, Singleton, Table, UniqueConflict, resolve_last_written, upgrade_version,
+    Index, Replication, Singleton, Table, UniqueConflict, ref_key, resolve_last_written,
+    upgrade_version,
 };
 
 /// The chat UI settings. A device's settings replicate only while both
@@ -221,6 +231,152 @@ impl Table for WhisperRecords {
     }
 }
 
+/// The chat servers this device hosts. Deleting a server deletes its
+/// icon, emotes, modifiers, tags and profiles.
+pub struct ChatServers;
+
+impl Table for ChatServers {
+    type Record = Server;
+    const NS: Namespace = Namespace(6001);
+
+    fn id(r: &Server) -> u64 {
+        r.id
+    }
+
+    fn observe(r: &Server) -> Option<Record> {
+        Some(Record::ChatServer(r.clone()))
+    }
+
+    fn on_delete<'a, K: Kv>(
+        tx: &'a mut WriteTx<K>,
+        p: &'a Server,
+    ) -> LocalBoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            ChatServerIcons::delete(tx, p.id).await?;
+            let server = ref_key(p.id);
+            delete_indexed::<ChatEmotes, K>(tx, &ChatEmotes::BY_SERVER, &server).await?;
+            delete_indexed::<ChatModifiers, K>(tx, &ChatModifiers::BY_SERVER, &server).await?;
+            delete_indexed::<ChatTags, K>(tx, &ChatTags::BY_SERVER, &server).await?;
+            delete_indexed::<ChatProfiles, K>(tx, &ChatProfiles::BY_SERVER, &server).await
+        })
+    }
+}
+
+/// Deletes the records `ix` maps `key` to.
+async fn delete_indexed<T: Table, K: Kv>(
+    tx: &mut WriteTx<K>,
+    ix: &Index<T::Record>,
+    key: &[u8],
+) -> Result<(), Error> {
+    for id in T::index_ids(tx, ix, key).await? {
+        T::delete(tx, id).await?;
+    }
+    Ok(())
+}
+
+/// Chat server icons, at most one per server: an icon's id is its
+/// server's id.
+pub struct ChatServerIcons;
+
+impl Table for ChatServerIcons {
+    type Record = ServerIcon;
+    const NS: Namespace = Namespace(6024);
+
+    fn id(r: &ServerIcon) -> u64 {
+        r.id
+    }
+
+    fn observe(r: &ServerIcon) -> Option<Record> {
+        Some(Record::ChatServerIcon(r.clone()))
+    }
+}
+
+macro_rules! server_table {
+    ($(#[$doc:meta])* $name:ident, $record:ty, $variant:ident, $ns:expr, $server_ns:expr) => {
+        $(#[$doc])*
+        pub struct $name;
+
+        impl $name {
+            /// Records by server: the [`ref_key`] of the server's id.
+            pub const BY_SERVER: Index<$record> =
+                Index::new(Namespace($server_ns), |r: &$record| ref_key(r.server_id));
+        }
+
+        impl Table for $name {
+            type Record = $record;
+            const NS: Namespace = Namespace($ns);
+            const INDEXES: &'static [Index<$record>] = &[$name::BY_SERVER];
+
+            fn id(r: &$record) -> u64 {
+                r.id
+            }
+
+            fn observe(r: &$record) -> Option<Record> {
+                Some(Record::$variant(r.clone()))
+            }
+        }
+    };
+}
+
+server_table!(
+    /// Chat server emotes.
+    ChatEmotes,
+    Emote,
+    ChatEmote,
+    6002,
+    6003
+);
+server_table!(
+    /// Chat server modifiers.
+    ChatModifiers,
+    Modifier,
+    ChatModifier,
+    6004,
+    6005
+);
+server_table!(
+    /// Chat server tags.
+    ChatTags,
+    Tag,
+    ChatTag,
+    6006,
+    6007
+);
+
+/// Chat servers' profiles of their users, which hold the users' mutes.
+/// They aren't observable.
+pub struct ChatProfiles;
+
+impl ChatProfiles {
+    /// Profiles by server: the [`ref_key`] of the server's id.
+    pub const BY_SERVER: Index<Profile> = Index::new(Namespace(6010), |r| ref_key(r.server_id));
+    /// Profiles by [`profile_peer_key`]; at most one per user of a
+    /// server.
+    pub const BY_PEER_KEY: Index<Profile> = Index::unique(Namespace(6011), |r| {
+        profile_peer_key(r.server_id, &r.peer_key)
+    });
+}
+
+impl Table for ChatProfiles {
+    type Record = Profile;
+    const NS: Namespace = Namespace(6009);
+    const INDEXES: &'static [Index<Profile>] =
+        &[ChatProfiles::BY_SERVER, ChatProfiles::BY_PEER_KEY];
+
+    fn id(r: &Profile) -> u64 {
+        r.id
+    }
+}
+
+/// The key of the profile of the user with `peer_key` on server
+/// `server_id`: the server id, big-endian, then the peer key.
+pub fn profile_peer_key(server_id: u64, peer_key: &[u8]) -> Vec<u8> {
+    let mut k = Vec::with_capacity(8 + peer_key.len());
+    k.extend_from_slice(&server_id.to_be_bytes());
+    k.extend_from_slice(peer_key);
+    k
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
@@ -276,6 +432,30 @@ mod tests {
             (rep.resolve)(cfg(true, 20), &cfg(true, 5)),
             (rep.resolve)(cfg(true, 5), &cfg(true, 20))
         );
+    }
+
+    #[test]
+    fn chat_server_tables_stay_local_and_profiles_unobserved() {
+        assert!(ChatServers::REPLICATION.is_none());
+        assert!(ChatServerIcons::REPLICATION.is_none());
+        assert!(ChatEmotes::REPLICATION.is_none());
+        assert!(ChatModifiers::REPLICATION.is_none());
+        assert!(ChatTags::REPLICATION.is_none());
+        assert!(ChatProfiles::REPLICATION.is_none());
+        assert!(ChatProfiles::observe(&Profile::default()).is_none());
+    }
+
+    #[test]
+    fn chat_server_index_keys() {
+        assert_eq!(
+            profile_peer_key(0x0102, b"k"),
+            [0, 0, 0, 0, 0, 0, 1, 2, b'k']
+        );
+        let tag = Tag {
+            server_id: 0x0102,
+            ..Default::default()
+        };
+        assert_eq!((ChatTags::BY_SERVER.key)(&tag), [2, 1, 0, 0, 0, 0, 0, 0]);
     }
 
     #[test]

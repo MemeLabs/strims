@@ -9,7 +9,8 @@
 //! replicate. Inserting a network with a server config on this device
 //! creates the CA's records for its owner and makes the owner the admin of
 //! the network's directory ([`super::directory`]). Deleting a network
-//! deletes its CA and directory records.
+//! deletes its CA and directory records and the chat servers on it
+//! ([`super::chat`]).
 
 use futures_util::future::LocalBoxFuture;
 use prost::Message;
@@ -26,6 +27,7 @@ use strims_proto::types::certificate::ParentOneof;
 use crate::error::Error;
 use crate::events::Record;
 use crate::key::Namespace;
+use crate::schema::chat::ChatServers;
 use crate::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, new_user_record};
 use crate::store::WriteTx;
 use crate::table::{
@@ -135,13 +137,23 @@ impl Table for Networks {
         })
     }
 
-    /// Deleting a network deletes its CA's records and its directory
-    /// records.
+    /// Deleting a network deletes its CA's records, its directory records
+    /// and the chat servers on it.
     fn on_delete<'a, K: Kv>(
         tx: &'a mut WriteTx<K>,
         p: &'a Network,
     ) -> LocalBoxFuture<'a, Result<(), Error>> {
         Box::pin(async move {
+            let key = network_key(p);
+            if !key.is_empty() {
+                // Chat servers are local to this device and few, so a scan
+                // finds the network's.
+                for server in ChatServers::get_all(tx).await? {
+                    if server.network_key == key {
+                        ChatServers::delete(tx, server.id).await?;
+                    }
+                }
+            }
             let network = ref_key(p.id);
             for id in CertificateLogs::index_ids(tx, &CertificateLogs::BY_NETWORK, &network).await?
             {

@@ -56,6 +56,16 @@ pub enum Record {
     WhisperThread(chat::WhisperThread),
     /// A whisper message.
     WhisperRecord(chat::WhisperRecord),
+    /// A chat server this device hosts.
+    ChatServer(chat::Server),
+    /// A chat server's icon.
+    ChatServerIcon(chat::ServerIcon),
+    /// A chat server's emote.
+    ChatEmote(chat::Emote),
+    /// A chat server's modifier.
+    ChatModifier(chat::Modifier),
+    /// A chat server's tag.
+    ChatTag(chat::Tag),
 }
 
 /// Something that happened in the store.

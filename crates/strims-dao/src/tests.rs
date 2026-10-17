@@ -22,7 +22,7 @@ use strims_crypto::{
     DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
 };
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
-use strims_proto::chat::v1::UiConfigHighlight;
+use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
 use strims_proto::network::v1::directory::{Listing, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
@@ -33,12 +33,16 @@ use strims_proto::types::{Certificate, KeyUsage};
 
 use crate::events::{Record, Recv, StoreEvent, Subscription};
 use crate::key::{Namespace, profile_table};
+use crate::schema::chat::{
+    ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags,
+    profile_peer_key,
+};
 use crate::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
 };
 use crate::schema::network::{
     AliasReservations, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks, RESERVED_FOREVER,
-    network_scoped_key, new_certificate_log,
+    network_key, network_scoped_key, new_certificate_log,
 };
 use crate::schema::profile::{Devices, Profile, ProfileIds};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
@@ -1172,6 +1176,219 @@ fn directory_records_are_unique_per_listing_and_user() {
             .await
             .unwrap();
     });
+}
+
+/// A chat server and a record of each kind for it.
+struct ChatServerRecords {
+    server: chat::Server,
+    icon: chat::ServerIcon,
+    emote: chat::Emote,
+    modifier: chat::Modifier,
+    tag: chat::Tag,
+    profile: chat::Profile,
+}
+
+/// Chat server `id` on the network with `network_key`, its records
+/// numbered from `id + 1`, and a profile of the user `b"user"`.
+fn chat_server(id: u64, network_key: &[u8]) -> ChatServerRecords {
+    ChatServerRecords {
+        server: chat::Server {
+            id,
+            network_key: network_key.to_vec(),
+            ..Default::default()
+        },
+        icon: chat::ServerIcon { id, image: None },
+        emote: chat::Emote {
+            id: id + 1,
+            server_id: id,
+            name: "emote".into(),
+            ..Default::default()
+        },
+        modifier: chat::Modifier {
+            id: id + 2,
+            server_id: id,
+            name: "modifier".into(),
+            ..Default::default()
+        },
+        tag: chat::Tag {
+            id: id + 3,
+            server_id: id,
+            name: "tag".into(),
+            ..Default::default()
+        },
+        profile: chat::Profile {
+            id: id + 4,
+            server_id: id,
+            peer_key: b"user".to_vec(),
+            alias: "user".into(),
+            ..Default::default()
+        },
+    }
+}
+
+fn insert_chat_server(tx: &mut WriteTx<MemoryKv>, r: &ChatServerRecords) {
+    block(async {
+        ChatServers::insert(tx, r.server.clone()).await.unwrap();
+        ChatServerIcons::insert(tx, r.icon.clone()).await.unwrap();
+        ChatEmotes::insert(tx, r.emote.clone()).await.unwrap();
+        ChatModifiers::insert(tx, r.modifier.clone()).await.unwrap();
+        ChatTags::insert(tx, r.tag.clone()).await.unwrap();
+        ChatProfiles::insert(tx, r.profile.clone()).await.unwrap();
+    });
+}
+
+/// The rows and index entries of chat server `id` and its records.
+fn chat_server_entries(tx: &mut WriteTx<MemoryKv>, id: u64) -> usize {
+    let k = ref_key(id);
+    block(async {
+        let mut n = usize::from(ChatServers::get(tx, id).await.unwrap().is_some());
+        n += usize::from(ChatServerIcons::get(tx, id).await.unwrap().is_some());
+        n += ChatEmotes::index_get_all(tx, &ChatEmotes::BY_SERVER, &k)
+            .await
+            .unwrap()
+            .len();
+        n += ChatModifiers::index_get_all(tx, &ChatModifiers::BY_SERVER, &k)
+            .await
+            .unwrap()
+            .len();
+        n += ChatTags::index_get_all(tx, &ChatTags::BY_SERVER, &k)
+            .await
+            .unwrap()
+            .len();
+        n += ChatProfiles::index_get_all(tx, &ChatProfiles::BY_SERVER, &k)
+            .await
+            .unwrap()
+            .len();
+        n += ChatProfiles::index_ids(
+            tx,
+            &ChatProfiles::BY_PEER_KEY,
+            &profile_peer_key(id, b"user"),
+        )
+        .await
+        .unwrap()
+        .len();
+        n
+    })
+}
+
+/// The ids of the rows left in the chat server tables.
+fn chat_row_ids(tx: &mut WriteTx<MemoryKv>) -> Vec<u64> {
+    block(async {
+        let mut ids: Vec<u64> = ChatServers::get_all(tx)
+            .await
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        ids.extend(
+            ChatServerIcons::get_all(tx)
+                .await
+                .unwrap()
+                .iter()
+                .map(|r| r.id),
+        );
+        ids.extend(ChatEmotes::get_all(tx).await.unwrap().iter().map(|r| r.id));
+        ids.extend(
+            ChatModifiers::get_all(tx)
+                .await
+                .unwrap()
+                .iter()
+                .map(|r| r.id),
+        );
+        ids.extend(ChatTags::get_all(tx).await.unwrap().iter().map(|r| r.id));
+        ids.extend(
+            ChatProfiles::get_all(tx)
+                .await
+                .unwrap()
+                .iter()
+                .map(|r| r.id),
+        );
+        ids.sort();
+        ids
+    })
+}
+
+#[test]
+fn deleting_a_chat_server_deletes_its_records() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let (doomed, kept) = (chat_server(10, b"net"), chat_server(20, b"net"));
+    let mut tx = block(store.write(T0)).unwrap();
+    insert_chat_server(&mut tx, &doomed);
+    insert_chat_server(&mut tx, &kept);
+    assert_eq!(chat_server_entries(&mut tx, 10), 7);
+    block(tx.commit()).unwrap();
+
+    let mut sub = store.events().subscribe();
+    let mut tx = block(store.write(T0)).unwrap();
+    assert!(block(ChatServers::delete(&mut tx, 10)).unwrap());
+    assert_eq!(chat_server_entries(&mut tx, 10), 0);
+    assert_eq!(chat_server_entries(&mut tx, 20), 7);
+    assert_eq!(chat_row_ids(&mut tx), [20, 20, 21, 22, 23, 24]);
+    block(tx.commit()).unwrap();
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Deleted(Record::ChatServerIcon(doomed.icon)),
+            StoreEvent::Deleted(Record::ChatEmote(doomed.emote)),
+            StoreEvent::Deleted(Record::ChatModifier(doomed.modifier)),
+            StoreEvent::Deleted(Record::ChatTag(doomed.tag)),
+            StoreEvent::Deleted(Record::ChatServer(doomed.server)),
+        ]
+    );
+
+    // the user's profile key is taken on the kept server, and free on the
+    // deleted one
+    let mut tx = block(store.write(T0)).unwrap();
+    let profile = chat::Profile {
+        id: 30,
+        ..kept.profile
+    };
+    block(async {
+        assert!(matches!(
+            ChatProfiles::insert(&mut tx, profile.clone()).await,
+            Err(Error::UniqueViolation(Namespace(6011)))
+        ));
+        let moved = chat::Profile {
+            server_id: 10,
+            ..profile
+        };
+        ChatProfiles::insert(&mut tx, moved).await.unwrap();
+    });
+}
+
+#[test]
+fn deleting_a_network_deletes_its_chat_servers() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    let (a, b) = (owned_network(1, 1), owned_network(2, 2));
+    let keyless = Network {
+        id: 3,
+        ..Default::default()
+    };
+    block(async {
+        for n in [&a, &b, &keyless] {
+            Networks::insert(&mut tx, n.clone()).await.unwrap();
+        }
+    });
+    insert_chat_server(&mut tx, &chat_server(10, &network_key(&a)));
+    insert_chat_server(&mut tx, &chat_server(20, &network_key(&b)));
+    let unassigned = chat_server(30, b"").server;
+    block(ChatServers::insert(&mut tx, unassigned)).unwrap();
+
+    block(Networks::delete(&mut tx, 1)).unwrap();
+    assert_eq!(chat_server_entries(&mut tx, 10), 0);
+    assert_eq!(chat_server_entries(&mut tx, 20), 7);
+
+    // a network without a key has no chat servers to delete
+    block(Networks::delete(&mut tx, 3)).unwrap();
+    assert_eq!(chat_row_ids(&mut tx), [20, 20, 21, 22, 23, 24, 30]);
+
+    // a deletion applied from another replica too
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 2)).unwrap();
+    assert_eq!(chat_row_ids(&mut tx), [30]);
 }
 
 #[test]

@@ -16,11 +16,10 @@ Port the application services that sit on the core crates. The Go versions
 - Directory embeds: the server's Twitch, YouTube and AngelThump snippet
   loaders need an HTTP fetch from the driver; until then the server refuses
   embed listings and its client config advertises none.
-- The other dao record types arrive with their services: chat servers,
-  emotes, modifiers, tags and profiles, video channels and configs, vnic,
-  autoseed, debug and bootstrap configs, notifications and swarm caches,
-  each with its part of a network's deletion; until then, stores from Go
-  keep those records unread.
+- The other dao record types arrive with their services: video channels
+  and configs, vnic, autoseed, debug and bootstrap configs, notifications
+  and swarm caches, each with its part of a network's deletion; until then,
+  stores from Go keep those records unread.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Targets

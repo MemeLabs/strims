@@ -30,6 +30,7 @@ import (
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
+	"github.com/MemeLabs/strims/pkg/apis/type/image"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -188,6 +189,42 @@ func storeScenario(w *bufio.Writer) {
 	inviteeUser.Moderation.DisableJoin = wrapperspb.Bool(true)
 	must0(dao.DirectoryUserRecords.Insert(rs, inviteeUser))
 
+	// Chat servers on the owned network, each with an icon, two emotes, a
+	// modifier, a tag, and profiles of the invitee (muted) and the owner.
+	// The second server is deleted, and its icon with it.
+	var servers []*chatv1.Server
+	for _, name := range []string{"kept", "deleted"} {
+		s := must(dao.NewChatServer(rs, dao.CertificateNetworkKey(owned.Certificate), &chatv1.Room{Name: name, Css: "." + name + " {}"}))
+		s.AdminPeerKeys = [][]byte{inviteeKey.Public}
+		must0(dao.ChatServers.Insert(rs, s))
+		servers = append(servers, s)
+		icon := &image.Image{Type: image.ImageType_IMAGE_TYPE_PNG, Height: 1, Width: 1, Data: []byte(name)}
+		must0(dao.ChatServerIcons.Insert(rs, &chatv1.ServerIcon{Id: s.Id, Image: icon}))
+		for _, emote := range []string{"PeepoHappy", "FeelsBadMan"} {
+			images := []*chatv1.EmoteImage{{
+				Data:     []byte(emote),
+				FileType: chatv1.EmoteFileType_FILE_TYPE_PNG,
+				Height:   28,
+				Width:    28,
+				Scale:    chatv1.EmoteScale_EMOTE_SCALE_2X,
+			}}
+			effects := []*chatv1.EmoteEffect{{Effect: &chatv1.EmoteEffect_SpriteAnimation_{
+				SpriteAnimation: &chatv1.EmoteEffect_SpriteAnimation{FrameCount: 4, DurationMs: 400, LoopForever: true},
+			}}}
+			contributor := &chatv1.EmoteContributor{Name: "artist", Link: "https://artist.example"}
+			must0(dao.ChatEmotes.Insert(rs, must(dao.NewChatEmote(rs, s.Id, emote, images, effects, contributor, []string{"pepe"}, true))))
+		}
+		must0(dao.ChatModifiers.Insert(rs, must(dao.NewChatModifier(rs, s.Id, "wide", 1, false, 2, 0.25, &chatv1.StyleSheet{Css: ".wide {}"}))))
+		must0(dao.ChatTags.Insert(rs, must(dao.NewChatTag(rs, s.Id, "nsfw", "#ff0000", true))))
+		muted := must(dao.NewChatProfile(rs, s.Id, inviteeKey.Public, "invitee"))
+		muted.Mutes = []*chatv1.Profile_Mute{{CreatedAt: 100, DurationSecs: 60, Message: "spam", ModeratorPeerKey: profile.Key.Public}}
+		muted.MuteDeadline = 160
+		must0(dao.ChatProfiles.Insert(rs, muted))
+		must0(dao.ChatProfiles.Insert(rs, must(dao.NewChatProfile(rs, s.Id, profile.Key.Public, profile.Name))))
+	}
+	must0(dao.ChatServers.Delete(rs, servers[1].Id))
+	must0(dao.ChatServerIcons.Delete(rs, servers[1].Id))
+
 	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
 	must0(err)
 
@@ -252,6 +289,24 @@ func storeScenario(w *bufio.Writer) {
 	}
 	for _, m := range must(dao.DirectoryUserRecords.GetAll(rs)) {
 		record(9004, m.Id, m)
+	}
+	for _, m := range must(dao.ChatServers.GetAll(rs)) {
+		record(6001, m.Id, m)
+	}
+	for _, m := range must(dao.ChatServerIcons.GetAll(rs)) {
+		record(6024, m.Id, m)
+	}
+	for _, m := range must(dao.ChatEmotes.GetAll(rs)) {
+		record(6002, m.Id, m)
+	}
+	for _, m := range must(dao.ChatModifiers.GetAll(rs)) {
+		record(6004, m.Id, m)
+	}
+	for _, m := range must(dao.ChatTags.GetAll(rs)) {
+		record(6006, m.Id, m)
+	}
+	for _, m := range must(dao.ChatProfiles.GetAll(rs)) {
+		record(6009, m.Id, m)
 	}
 
 	// A peer that has seen the first three of this replica's logs.
@@ -323,6 +378,11 @@ func verify(path string) {
 			must0(proto.Unmarshal(v[2], want))
 			if !proto.Equal(got, want) {
 				fail("record %d/%d: got %v, want %v", ns, id, got, want)
+			}
+		case "absent":
+			ns, id := binary.BigEndian.Uint64(v[0]), binary.BigEndian.Uint64(v[1])
+			if _, err := chatServerRecord(rs, ns, id); !errors.Is(err, kv.ErrRecordNotFound) {
+				fail("record %d/%d: want none, got error %v", ns, id, err)
 			}
 		case "index":
 			ns := binary.BigEndian.Uint64(v[0])
@@ -431,6 +491,25 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 	case 9004:
 		return must(dao.DirectoryUserRecords.Get(s, id))
 	}
+	return must(chatServerRecord(s, ns, id))
+}
+
+// chatServerRecord reads record id of a chat server table.
+func chatServerRecord(s kv.Store, ns, id uint64) (proto.Message, error) {
+	switch ns {
+	case 6001:
+		return dao.ChatServers.Get(s, id)
+	case 6024:
+		return dao.ChatServerIcons.Get(s, id)
+	case 6002:
+		return dao.ChatEmotes.Get(s, id)
+	case 6004:
+		return dao.ChatModifiers.Get(s, id)
+	case 6006:
+		return dao.ChatTags.Get(s, id)
+	case 6009:
+		return dao.ChatProfiles.Get(s, id)
+	}
 	panic(fmt.Sprintf("unknown namespace %d", ns))
 }
 
@@ -498,6 +577,16 @@ func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
 		return one(dao.DirectoryUserRecordsByPeerKey.Get(s, key))
 	case 9006:
 		return ids(dao.DirectoryUserRecordsByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 6003:
+		return ids(dao.ChatEmotesByServer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 6005:
+		return ids(dao.ChatModifiersByServer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 6007:
+		return ids(dao.ChatTagsByServer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 6010:
+		return ids(dao.ChatProfilesByServer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 6011:
+		return one(dao.ChatProfilesByPeerKey.Get(s, key))
 	}
 	panic(fmt.Sprintf("unknown index %d", ns))
 }

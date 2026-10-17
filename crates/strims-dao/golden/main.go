@@ -173,6 +173,22 @@ func directoryListingKeys() {
 	}
 }
 
+// chatProfilePeerKeys writes "chat_profile_peer_key_<i> <server id> <peer
+// key> <key>": the key the chat profile index holds for a server's user.
+func chatProfilePeerKeys() {
+	for i, c := range []struct {
+		server  uint64
+		peerKey []byte
+	}{
+		{0, nil},
+		{1, seq(0, 32)},
+		{0x0102030405060708, []byte("peer")},
+		{^uint64(0), seq(0xf0, 16)},
+	} {
+		put(fmt.Sprintf("chat_profile_peer_key_%d", i), u64(c.server), c.peerKey, dao.FormatChatProfilePeerKey(c.server, c.peerKey))
+	}
+}
+
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "-verify" {
 		verify(os.Args[2])
@@ -189,6 +205,7 @@ func main() {
 	seal()
 	indexHash()
 	directoryListingKeys()
+	chatProfilePeerKeys()
 
 	sf := must(os.Create(filepath.Join("crates", "strims-dao", "golden", "store.hex")))
 	defer sf.Close()

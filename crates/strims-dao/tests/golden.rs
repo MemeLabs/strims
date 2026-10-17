@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 
 use prost::Message;
 use strims_dao::key::index_hash;
+use strims_dao::schema::chat::profile_peer_key;
 use strims_dao::schema::directory::listing_key;
 use strims_dao::seal::StorageKey;
 use strims_proto::network::v1::directory::Listing;
@@ -106,4 +107,16 @@ fn listing_keys_match_go() {
         n += 1;
     }
     assert_eq!(n, 24);
+}
+
+#[test]
+fn chat_profile_peer_keys_match_go() {
+    let v = Vectors::load();
+    let mut n = 0;
+    for (name, f) in v.with_prefix("chat_profile_peer_key_") {
+        let server_id = u64::from_be_bytes(f[0].as_slice().try_into().unwrap());
+        assert_eq!(profile_peer_key(server_id, &f[1]), f[2], "{name}");
+        n += 1;
+    }
+    assert_eq!(n, 4);
 }

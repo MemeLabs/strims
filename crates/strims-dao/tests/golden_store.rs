@@ -25,13 +25,14 @@ use strims_dao::auth::{self, ProfileKey, SessionToken};
 use strims_dao::key::{Namespace, index_entry_key, parse_base36};
 use strims_dao::replication::compressed_delta;
 use strims_dao::schema::chat::{
-    ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
-    WhisperThreads,
+    ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags, ChatUiConfig,
+    ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
+    profile_peer_key,
 };
 use strims_dao::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, listing_key};
 use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
-    RESERVED_FOREVER, network_scoped_key,
+    RESERVED_FOREVER, network_key, network_scoped_key,
 };
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
@@ -166,6 +167,12 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         Checkpoints::NS => re::<<Checkpoints as Table>::Record>(bytes),
         DirectoryListingRecords::NS => re::<<DirectoryListingRecords as Table>::Record>(bytes),
         DirectoryUserRecords::NS => re::<<DirectoryUserRecords as Table>::Record>(bytes),
+        ChatServers::NS => re::<<ChatServers as Table>::Record>(bytes),
+        ChatServerIcons::NS => re::<<ChatServerIcons as Table>::Record>(bytes),
+        ChatEmotes::NS => re::<<ChatEmotes as Table>::Record>(bytes),
+        ChatModifiers::NS => re::<<ChatModifiers as Table>::Record>(bytes),
+        ChatTags::NS => re::<<ChatTags as Table>::Record>(bytes),
+        ChatProfiles::NS => re::<<ChatProfiles as Table>::Record>(bytes),
         other => panic!("no record type for {other}"),
     }
 }
@@ -198,6 +205,12 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         Checkpoints::NS => t::<Checkpoints>(tx, id),
         DirectoryListingRecords::NS => t::<DirectoryListingRecords>(tx, id),
         DirectoryUserRecords::NS => t::<DirectoryUserRecords>(tx, id),
+        ChatServers::NS => t::<ChatServers>(tx, id),
+        ChatServerIcons::NS => t::<ChatServerIcons>(tx, id),
+        ChatEmotes::NS => t::<ChatEmotes>(tx, id),
+        ChatModifiers::NS => t::<ChatModifiers>(tx, id),
+        ChatTags::NS => t::<ChatTags>(tx, id),
+        ChatProfiles::NS => t::<ChatProfiles>(tx, id),
         other => panic!("no record type for {other}"),
     }
 }
@@ -275,6 +288,12 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<Checkpoints>(&mut tx, &salt, &mut derived);
     keys_of::<DirectoryListingRecords>(&mut tx, &salt, &mut derived);
     keys_of::<DirectoryUserRecords>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatServers>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatServerIcons>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatEmotes>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatModifiers>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatTags>(&mut tx, &salt, &mut derived);
+    keys_of::<ChatProfiles>(&mut tx, &salt, &mut derived);
     for ns in [
         StoreVersions::NS,
         Profile::NS,
@@ -289,8 +308,8 @@ fn every_key_is_the_one_this_crate_derives() {
 
     // Every namespace this crate defines, and the lease namespace.
     let mut known: BTreeSet<i64> = [1001, 1002, 1003, 1004, 2001, 2002, 2003].into();
-    known.extend((4001..=4014).chain(4016..=4018).chain([6008]));
-    known.extend((6012..=6023).chain([6025]));
+    known.extend((4001..=4014).chain(4016..=4018));
+    known.extend(6001..=6025);
     known.extend(9001..=9006);
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
@@ -317,6 +336,7 @@ fn every_key_is_the_one_this_crate_derives() {
             4002, 4004, 4005, 4006, 4010, 4011, 4012, 4013, 4014, 4017, 4018,
         ];
         if index_ns.contains(&ns)
+            || [6003, 6005, 6007, 6010, 6011].contains(&ns)
             || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
             || [9002, 9003, 9005, 9006].contains(&ns)
         {
@@ -530,4 +550,85 @@ fn directory_records_read_back_by_index() {
             assert_eq!(found.notes, "checked");
         }
     }
+}
+
+/// The owned network's chat server, with its icon, emotes, modifier, tag
+/// and profiles, each found by index; the deleted server left nothing.
+#[test]
+fn chat_records_read_back_by_index() {
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let owned = block(Networks::get_all(&mut tx))
+        .unwrap()
+        .into_iter()
+        .find(|n| n.server_config.is_some())
+        .unwrap();
+    let owner_key = owned.certificate.clone().unwrap().key;
+
+    let servers = block(ChatServers::get_all(&mut tx)).unwrap();
+    assert_eq!(servers.len(), 1);
+    let server = &servers[0];
+    assert_eq!(server.network_key, network_key(&owned));
+    assert_eq!(server.room.as_ref().unwrap().name, "kept");
+    let icon = block(ChatServerIcons::get(&mut tx, server.id))
+        .unwrap()
+        .unwrap();
+    assert_eq!(icon.image.unwrap().data, b"kept");
+    assert_eq!(block(ChatServerIcons::get_all(&mut tx)).unwrap().len(), 1);
+
+    let k = ref_key(server.id);
+    let emotes = block(ChatEmotes::index_get_all(
+        &mut tx,
+        &ChatEmotes::BY_SERVER,
+        &k,
+    ))
+    .unwrap();
+    let mut names: Vec<_> = emotes.iter().map(|e| e.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["FeelsBadMan", "PeepoHappy"]);
+    assert_eq!(block(ChatEmotes::get_all(&mut tx)).unwrap().len(), 2);
+    let modifiers = block(ChatModifiers::index_get_all(
+        &mut tx,
+        &ChatModifiers::BY_SERVER,
+        &k,
+    ))
+    .unwrap();
+    assert_eq!(modifiers.len(), 1);
+    assert_eq!(modifiers[0].proc_chance, 0.25);
+    assert_eq!(block(ChatModifiers::get_all(&mut tx)).unwrap().len(), 1);
+    let tags = block(ChatTags::index_get_all(&mut tx, &ChatTags::BY_SERVER, &k)).unwrap();
+    assert_eq!(tags.len(), 1);
+    assert!(tags[0].sensitive);
+    assert_eq!(block(ChatTags::get_all(&mut tx)).unwrap().len(), 1);
+
+    let profiles = block(ChatProfiles::index_get_all(
+        &mut tx,
+        &ChatProfiles::BY_SERVER,
+        &k,
+    ))
+    .unwrap();
+    assert_eq!(profiles.len(), 2);
+    assert_eq!(block(ChatProfiles::get_all(&mut tx)).unwrap().len(), 2);
+    for p in &profiles {
+        let found = block(ChatProfiles::index_get(
+            &mut tx,
+            &ChatProfiles::BY_PEER_KEY,
+            &profile_peer_key(server.id, &p.peer_key),
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.id, p.id);
+    }
+    let owner = block(ChatProfiles::index_get(
+        &mut tx,
+        &ChatProfiles::BY_PEER_KEY,
+        &profile_peer_key(server.id, &owner_key),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(owner.alias, g.name);
+    let muted = profiles.iter().find(|p| p.id != owner.id).unwrap();
+    assert_eq!(muted.mute_deadline, 160);
+    assert_eq!(muted.mutes[0].moderator_peer_key, owner_key);
 }

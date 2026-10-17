@@ -3,9 +3,9 @@
 
 //! A store this crate writes, checked by the Go dao (`go run -tags golden
 //! ./crates/strims-dao/golden -verify <file>`): sign-in and session
-//! records, records and index lookups through the Go API, a pairing token
-//! import, and the store's replication logs applied to a Go replica.
-//! Skipped when `go` isn't on PATH.
+//! records, records and index lookups through the Go API, deleted records
+//! absent, a pairing token import, and the store's replication logs
+//! applied to a Go replica. Skipped when `go` isn't on PATH.
 
 #![allow(
     clippy::unwrap_used,
@@ -29,8 +29,9 @@ use strims_base::time::Time;
 use strims_dao::auth::{self, ProfileKey};
 use strims_dao::replication::allocate_ids;
 use strims_dao::schema::chat::{
-    ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
-    WhisperThreads, state_key,
+    ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags, ChatUiConfig,
+    ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
+    profile_peer_key, state_key,
 };
 use strims_dao::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
@@ -42,12 +43,15 @@ use strims_dao::schema::network::{
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs};
 use strims_dao::seal::StorageKey;
-use strims_dao::{ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, lease, ref_key};
+use strims_dao::{
+    ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, WriteTx, lease, ref_key,
+};
 use strims_kv::MemoryKv;
 use strims_proto::auth::v1::PairingToken;
 use strims_proto::chat::v1::{
-    MessageState, UiConfig, UiConfigHighlight, UiConfigIgnore, UiConfigTag, WhisperRecord,
-    WhisperThread,
+    Emote, EmoteFileType, EmoteImage, MessageState, Modifier, Profile as ChatProfile, Room, Server,
+    ServerIcon, Tag, UiConfig, UiConfigHighlight, UiConfigIgnore, UiConfigTag, WhisperRecord,
+    WhisperThread, profile::Mute,
 };
 use strims_proto::network::v1::bootstrap::{
     BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
@@ -58,7 +62,7 @@ use strims_proto::network::v1::directory::{
 use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConfigRecord};
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::EventLog;
-use strims_proto::types::{Key, KeyUsage};
+use strims_proto::types::{Image, ImageType, Key, KeyUsage};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -118,6 +122,146 @@ fn index_line<T: Table>(
     ids.sort();
     let ids: Vec<u8> = ids.iter().flat_map(|id| id.to_be_bytes()).collect();
     out.put("index", &[&(ix.ns.0 as u64).to_be_bytes(), key, &ids]);
+}
+
+/// The ids of a chat server's records. Its icon's id is the server's.
+#[derive(Clone, Copy, Default)]
+struct ChatServerIds {
+    server: u64,
+    emote: u64,
+    modifier: u64,
+    tag: u64,
+    profile: u64,
+}
+
+impl ChatServerIds {
+    /// Each record as (namespace, id).
+    fn records(&self) -> [(i64, u64); 6] {
+        [
+            (ChatServers::NS.0, self.server),
+            (ChatServerIcons::NS.0, self.server),
+            (ChatEmotes::NS.0, self.emote),
+            (ChatModifiers::NS.0, self.modifier),
+            (ChatTags::NS.0, self.tag),
+            (ChatProfiles::NS.0, self.profile),
+        ]
+    }
+}
+
+/// Inserts a chat server named `name` on the network with `network_key`,
+/// with an icon, an emote, a modifier, a tag and a muted profile of
+/// `user`.
+async fn insert_chat_server(
+    tx: &mut WriteTx<MemoryKv>,
+    network_key: &[u8],
+    key: Key,
+    name: &str,
+    user: &[u8],
+) -> ChatServerIds {
+    let server = tx.generate_id().await.unwrap();
+    ChatServers::insert(
+        tx,
+        Server {
+            id: server,
+            network_key: network_key.to_vec(),
+            key: Some(key),
+            room: Some(Room {
+                name: name.into(),
+                css: format!(".{name} {{}}"),
+            }),
+            admin_peer_keys: vec![user.to_vec()],
+        },
+    )
+    .await
+    .unwrap();
+    ChatServerIcons::insert(
+        tx,
+        ServerIcon {
+            id: server,
+            image: Some(Image {
+                r#type: ImageType::Png as i32,
+                height: 1,
+                width: 1,
+                data: name.as_bytes().to_vec(),
+            }),
+        },
+    )
+    .await
+    .unwrap();
+    let emote = tx.generate_id().await.unwrap();
+    ChatEmotes::insert(
+        tx,
+        Emote {
+            id: emote,
+            server_id: server,
+            name: format!("{name}Emote"),
+            images: vec![EmoteImage {
+                data: name.as_bytes().to_vec(),
+                file_type: EmoteFileType::FileTypePng as i32,
+                height: 28,
+                width: 28,
+                ..Default::default()
+            }],
+            labels: vec!["label".into()],
+            enable: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let modifier = tx.generate_id().await.unwrap();
+    ChatModifiers::insert(
+        tx,
+        Modifier {
+            id: modifier,
+            server_id: server,
+            name: "wide".into(),
+            priority: 1,
+            proc_chance: 0.5,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let tag = tx.generate_id().await.unwrap();
+    ChatTags::insert(
+        tx,
+        Tag {
+            id: tag,
+            server_id: server,
+            name: "nsfw".into(),
+            color: "#ff0000".into(),
+            sensitive: true,
+        },
+    )
+    .await
+    .unwrap();
+    let profile = tx.generate_id().await.unwrap();
+    ChatProfiles::insert(
+        tx,
+        ChatProfile {
+            id: profile,
+            server_id: server,
+            peer_key: user.to_vec(),
+            alias: "user".into(),
+            mutes: vec![Mute {
+                created_at: 100,
+                duration_secs: 60,
+                message: "spam".into(),
+                moderator_peer_key: b"moderator".to_vec(),
+            }],
+            mute_deadline: 160,
+        },
+    )
+    .await
+    .unwrap();
+    ChatServerIds {
+        server,
+        emote,
+        modifier,
+        tag,
+        profile,
+    }
 }
 
 #[test]
@@ -193,6 +337,8 @@ fn go_reads_a_store_this_crate_writes() {
         })),
     };
     let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
+    let mut chat_servers = [ChatServerIds::default(); 3];
+    let chat_keys = [(); 3].map(|_| strims_crypto::generate_key(&mut rng));
     block(async {
         let mut tx = rs.write(now).await.unwrap();
         owned_id = tx.generate_id().await.unwrap();
@@ -210,6 +356,14 @@ fn go_reads_a_store_this_crate_writes() {
         )
         .await
         .unwrap();
+        chat_servers[2] = insert_chat_server(
+            &mut tx,
+            &doomed_key.public,
+            chat_keys[2].clone(),
+            "doomed",
+            &invitee.public,
+        )
+        .await;
         Networks::delete(&mut tx, doomed_id).await.unwrap();
         let moderated = ListingModeration {
             is_banned: Some(true),
@@ -390,6 +544,21 @@ fn go_reads_a_store_this_crate_writes() {
         )
         .await
         .unwrap();
+        for (i, name) in ["kept", "deleted"].into_iter().enumerate() {
+            chat_servers[i] = insert_chat_server(
+                &mut tx,
+                &network_key.public,
+                chat_keys[i].clone(),
+                name,
+                &invitee.public,
+            )
+            .await;
+        }
+        assert!(
+            ChatServers::delete(&mut tx, chat_servers[1].server)
+                .await
+                .unwrap()
+        );
         tx.commit().await.unwrap();
     });
     let mut token = [0u8; 16];
@@ -483,6 +652,12 @@ fn go_reads_a_store_this_crate_writes() {
     record_lines::<Checkpoints>(&mut tx, &mut out);
     record_lines::<DirectoryListingRecords>(&mut tx, &mut out);
     record_lines::<DirectoryUserRecords>(&mut tx, &mut out);
+    record_lines::<ChatServers>(&mut tx, &mut out);
+    record_lines::<ChatServerIcons>(&mut tx, &mut out);
+    record_lines::<ChatEmotes>(&mut tx, &mut out);
+    record_lines::<ChatModifiers>(&mut tx, &mut out);
+    record_lines::<ChatTags>(&mut tx, &mut out);
+    record_lines::<ChatProfiles>(&mut tx, &mut out);
 
     index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
     let scoped = |b: &[u8]| network_scoped_key(owned_id, b);
@@ -617,6 +792,35 @@ fn go_reads_a_store_this_crate_writes() {
         &state_key(MessageState::Read as i32),
         &mut out,
     );
+    for ids in &chat_servers {
+        let server = ref_key(ids.server);
+        index_line::<ChatEmotes>(&mut tx, &ChatEmotes::BY_SERVER, &server, &mut out);
+        index_line::<ChatModifiers>(&mut tx, &ChatModifiers::BY_SERVER, &server, &mut out);
+        index_line::<ChatTags>(&mut tx, &ChatTags::BY_SERVER, &server, &mut out);
+        index_line::<ChatProfiles>(&mut tx, &ChatProfiles::BY_SERVER, &server, &mut out);
+        index_line::<ChatProfiles>(
+            &mut tx,
+            &ChatProfiles::BY_PEER_KEY,
+            &profile_peer_key(ids.server, &invitee.public),
+            &mut out,
+        );
+    }
+    // The deleted server and the one on the deleted network left nothing.
+    for (ns, id) in chat_servers[1]
+        .records()
+        .into_iter()
+        .chain(chat_servers[2].records())
+    {
+        out.put("absent", &[&(ns as u64).to_be_bytes(), &id.to_be_bytes()]);
+    }
+    let servers = block(ChatServers::get_all(&mut tx)).unwrap();
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].id, chat_servers[0].server);
+    assert_eq!(block(ChatServerIcons::get_all(&mut tx)).unwrap().len(), 1);
+    let emotes = block(ChatEmotes::get_all(&mut tx)).unwrap();
+    assert!(emotes.len() == 1 && emotes[0].server_id == chat_servers[0].server);
+    let profiles = block(ChatProfiles::get_all(&mut tx)).unwrap();
+    assert!(profiles.len() == 1 && profiles[0].server_id == chat_servers[0].server);
     let networks = block(Networks::get_all(&mut tx)).unwrap();
     let bootstraps = block(BootstrapClients::get_all(&mut tx)).unwrap();
     let devices = block(Devices::get_all(&mut tx)).unwrap();
