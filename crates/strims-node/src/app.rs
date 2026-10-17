@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The app layer on a node: the node's clock as the app's [`Timer`], the
-//! node as the [`Host`] of replication, of transfers and of network
-//! membership, and every peer's RPC link served with the app's
-//! [`PeerHandler`]s.
+//! node as the [`Host`] of replication, of transfers and their record
+//! streams and of network membership, and every peer's RPC link served
+//! with the app's [`PeerHandler`]s.
 //!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
 //! connections as local tasks, so it runs inside a tokio `LocalSet`.
@@ -22,7 +22,7 @@ use strims_network::NetworkControl;
 use strims_proto::types::Key;
 use strims_replication::{Host, ReplicationControl};
 use strims_rpc::{Client, Config, Router, Timer, peer_connection};
-use strims_transfer::TransferControl;
+use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, NetworkId, PeerIndexPublisherId,
 };
@@ -30,7 +30,8 @@ use tokio::time::Sleep;
 
 use crate::{
     Clock, HostId, NetworkOptions, Node, NodeError, NodeEvent, PeerIndexSearch, PeerInfo,
-    RpcReader, RpcWriter, SwarmKey, VpnReader, VpnWriter,
+    ReadError, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions, SwarmReader, SwarmWriter,
+    VpnReader, VpnWriter, WriterOptions,
 };
 
 /// A node's clock as the app layer's [`Timer`].
@@ -53,7 +54,8 @@ impl<C: Clock> Timer for NodeTimer<C> {
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// A node as replication's [`Host`], on the networks the driver adds, as
-/// the transfers' [`strims_transfer::Host`], and as network membership's
+/// the transfers' [`strims_transfer::Host`] and
+/// [`strims_transfer::SwarmHost`], and as network membership's
 /// [`strims_network::Host`], which adds and removes the networks it uses.
 #[derive(Clone)]
 pub struct NodeHost {
@@ -194,6 +196,57 @@ impl strims_transfer::Host for NodeHost {
 
     async fn connect_peer(&self, net: NetworkId, host: HostId) -> Result<bool, NodeError> {
         self.node.connect_peer(net, host).await
+    }
+}
+
+/// The node's swarms, for services' record streams.
+impl strims_transfer::SwarmHost for NodeHost {
+    type Writer = SwarmWriter;
+    type Reader = SwarmReader;
+
+    async fn create_swarm(
+        &self,
+        options: WriterOptions,
+    ) -> Result<(SwarmKey, SwarmId, SwarmWriter), NodeError> {
+        self.node.create_swarm(options).await
+    }
+
+    async fn add_swarm(&self, id: SwarmId, options: SwarmOptions) -> Result<SwarmKey, NodeError> {
+        self.node.add_swarm(id, options).await
+    }
+
+    async fn remove_swarm(&self, swarm: SwarmKey) -> Result<(), NodeError> {
+        self.node.remove_swarm(swarm).await
+    }
+
+    async fn open_reader(&self, swarm: SwarmKey) -> Result<SwarmReader, NodeError> {
+        self.node.open_reader(swarm).await
+    }
+}
+
+/// Underruns and resets are discontinuities; the reader ends when its
+/// swarm or the node does.
+impl SwarmRead for SwarmReader {
+    type Error = ReadError;
+
+    async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<ReadError>> {
+        SwarmReader::read_at(self, out).await.map_err(|e| match e {
+            ReadError::Underrun { .. } | ReadError::Reset => ReadFailure::Discontinuity,
+            ReadError::Closed | ReadError::Stopped => ReadFailure::Closed,
+            e @ ReadError::Store(_) => ReadFailure::Failed(e),
+        })
+    }
+}
+
+impl SwarmWrite for SwarmWriter {
+    type Error = NodeError;
+
+    async fn write(&mut self, data: &[u8]) -> Result<(), NodeError> {
+        SwarmWriter::write(self, data).await
+    }
+
+    async fn reset(&mut self) -> Result<(), NodeError> {
+        SwarmWriter::reset(self).await
     }
 }
 

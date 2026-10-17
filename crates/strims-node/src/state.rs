@@ -214,7 +214,8 @@ struct Exchange {
 #[derive(Debug)]
 pub(crate) struct ReadReply {
     pub(crate) buf: Vec<u8>,
-    pub(crate) result: Result<usize, ReadError>,
+    /// The stream offset of the first byte read, and the bytes read.
+    pub(crate) result: Result<(u64, usize), ReadError>,
 }
 
 #[derive(Debug)]
@@ -1642,14 +1643,16 @@ fn read_swarm(
     buf: &mut [u8],
     max: usize,
     now: Time,
-) -> Option<Result<usize, ReadError>> {
+) -> Option<Result<(u64, usize), ReadError>> {
     let n = max.min(buf.len());
     let res = match runner.swarm(slot.swarm) {
         Some(s) => s.read(&mut slot.reader, buf.get_mut(..n).unwrap_or_default()),
         None => return Some(Err(ReadError::Closed)),
     };
     Some(match res {
-        Ok(n) => Ok(n),
+        // The read may resync the reader first, so its start is known only
+        // after it.
+        Ok(n) => Ok((slot.reader.position().wrapping_sub(n as u64), n)),
         Err(store::Error::WouldBlock) => return None,
         Err(store::Error::BufferUnderrun) => match runner.swarm_mut(slot.swarm, now) {
             Some(mut s) => match s.recover_reader(&mut slot.reader) {

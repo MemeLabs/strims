@@ -10,8 +10,12 @@
 //!   network's peer index and asks its node to link through peer
 //!   exchange.
 //! - Once linked, the two announce the transfer to each other and bind a
-//!   channel; nobody calls `Node::run_swarm`. v reads the whole stream.
-//! - s removes the transfer, and v's channel to s closes.
+//!   channel; nobody calls `Node::run_swarm`. v reads the whole stream, at
+//!   contiguous offsets.
+//! - s also publishes a record swarm whose frames are its integrity units,
+//!   and writes protobuf records into it with a `RecordWriter`. v reads
+//!   them back, whole and in order, with a `RecordReader`.
+//! - s removes the stream's transfer, and v's channel to s for it closes.
 //!
 //! Every host appends what it sees, stamped with simulated time, to one
 //! trace. The same seed must give the same trace, and another seed a
@@ -40,14 +44,21 @@ use strims_node::{
     Clock, DeliveryMode, HostId, NetworkId, NetworkOptions, Node, NodeConfig, NodeEvent, SimClock,
     SwarmId, SwarmKey, SwarmOptions, TurmoilNet, WriterOptions,
 };
+use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
+use strims_proto::transfer::v1::TransferPeerCloseRequest as Record;
 use strims_proto::types::Key;
-use strims_transfer::{Config, TransferControl};
+use strims_transfer::{Config, RecordReader, RecordWriter, TransferControl};
 use tokio::task::spawn_local;
 
 const TCP_PORT: u16 = 7000;
 const VPN_PORT: u16 = 60;
 const STREAM_LEN: usize = 256 * 1024;
 const SALT: &[u8] = b"salt";
+/// The record swarm's chunk, which is its integrity unit, and the records'
+/// frame.
+const RECORD_FRAME: usize = 1024;
+const RECORDS: usize = 64;
+const MAX_RECORD: usize = 4096;
 
 fn epoch() -> Time {
     Time::from_unix_millis(1_700_000_000_000)
@@ -102,6 +113,18 @@ impl World {
         b
     }
 
+    /// Records of 1 to 3000 bytes: one frame or several.
+    fn records(&self) -> Vec<Record> {
+        let mut rng = det_rng(self.seed ^ 0x7ec0);
+        (0..RECORDS)
+            .map(|i| {
+                let mut id = vec![0u8; 1 + (i * 397 + self.seed as usize) % 3000];
+                rand_core::Rng::fill_bytes(&mut rng, &mut id);
+                Record { id }
+            })
+            .collect()
+    }
+
     fn uri(&self, name: &str) -> String {
         let ip = turmoil::lookup(name);
         format!(
@@ -132,6 +155,21 @@ impl World {
 fn swarm_options() -> SwarmOptions {
     SwarmOptions {
         live_window: 1 << 10,
+        delivery_mode: DeliveryMode::MANDATORY,
+        ..Default::default()
+    }
+}
+
+/// Every chunk signed, so the integrity unit is one chunk.
+fn record_options() -> SwarmOptions {
+    SwarmOptions {
+        chunk_size: RECORD_FRAME,
+        chunks_per_signature: 1,
+        live_window: 1 << 10,
+        integrity: VerifierOptions {
+            protection_method: ProtectionMethod::SIGN_ALL,
+            ..Default::default()
+        },
         delivery_mode: DeliveryMode::MANDATORY,
         ..Default::default()
     }
@@ -252,10 +290,21 @@ async fn seed(w: World) -> turmoil::Result {
     let t = h.transfers.add(swarm, &id, SALT.to_vec());
     assert!(h.transfers.publish(t, h.net));
     w.log(&h.clock, "s", format!("published {t}"));
+    let (record_swarm, record_id, record_writer) = h
+        .node
+        .create_swarm(WriterOptions {
+            swarm_options: record_options(),
+            key: w.key("records"),
+        })
+        .await
+        .unwrap();
+    let rt = h.transfers.add(record_swarm, &record_id, SALT.to_vec());
+    assert!(h.transfers.publish(rt, h.net));
+    w.log(&h.clock, "s", format!("published records {rt}"));
 
     let v = w.id("v").await;
     until("v to bind", StdDuration::from_secs(120), async || {
-        h.transfers.channels(v, t).is_some()
+        h.transfers.channels(v, t).is_some() && h.transfers.channels(v, rt).is_some()
     })
     .await;
     let channels = h.transfers.channels(v, t).unwrap();
@@ -266,6 +315,14 @@ async fn seed(w: World) -> turmoil::Result {
     }
     writer.flush().await.unwrap();
     assert_eq!(node_channel(&h.node, v, swarm).await, Some(channels));
+    let mut records = RecordWriter::new(record_writer, RECORD_FRAME, MAX_RECORD).unwrap();
+    for (i, r) in w.records().iter().enumerate() {
+        records.write(r).await.unwrap();
+        if i % 8 == 7 {
+            tokio::time::sleep(StdDuration::from_millis(20)).await;
+        }
+    }
+    w.log(&h.clock, "s", "wrote records");
 
     until(
         "v to read the stream",
@@ -296,7 +353,7 @@ async fn seed(w: World) -> turmoil::Result {
             m.index_publishes
         ),
     );
-    assert_eq!((m.runs, m.stops), (1, 1));
+    assert_eq!((m.runs, m.stops), (2, 1));
     Ok(())
 }
 
@@ -307,21 +364,62 @@ async fn viewer(w: World) -> turmoil::Result {
     let swarm = h.node.add_swarm(id.clone(), swarm_options()).await.unwrap();
     let mut reader = h.node.open_reader(swarm).await.unwrap();
     let t = h.transfers.add(swarm, &id, SALT.to_vec());
+    let record_id = SwarmId::new(&w.key("records").public);
+    let record_swarm = h
+        .node
+        .add_swarm(record_id.clone(), record_options())
+        .await
+        .unwrap();
+    let record_reader = h.node.open_reader(record_swarm).await.unwrap();
+    let mut records = RecordReader::new(record_reader, RECORD_FRAME, MAX_RECORD).unwrap();
+    let rt = h.transfers.add(record_swarm, &record_id, SALT.to_vec());
     // s publishes first, so v's first search can find it
     tokio::time::sleep(StdDuration::from_secs(2)).await;
     assert!(h.transfers.publish(t, h.net));
-    w.log(&h.clock, "v", format!("published {t}"));
+    assert!(h.transfers.publish(rt, h.net));
+    w.log(&h.clock, "v", format!("published {t} and records {rt}"));
 
     let mut out = vec![0u8; STREAM_LEN];
-    tokio::time::timeout(StdDuration::from_secs(180), reader.read_exact(&mut out))
+    let read = async {
+        let mut next = 0;
+        while next < STREAM_LEN {
+            let (off, n) = reader.read_at(&mut out[next..]).await.unwrap();
+            assert_eq!(off, next as u64, "read offsets are contiguous");
+            next += n;
+        }
+    };
+    tokio::time::timeout(StdDuration::from_secs(180), read)
         .await
-        .expect("the stream arrives")
-        .unwrap();
+        .expect("the stream arrives");
     assert!(out == w.stream(), "the stream arrives intact");
     w.log(
         &h.clock,
         "v",
         format!("stream {}", hex::encode(Sha256::digest(&out))),
+    );
+
+    let want = w.records();
+    let read = async {
+        let mut got = Vec::new();
+        while got.len() < want.len() {
+            got.push(records.next_message::<Record>().await.unwrap());
+        }
+        got
+    };
+    let got = tokio::time::timeout(StdDuration::from_secs(180), read)
+        .await
+        .expect("the records arrive");
+    assert!(got == want, "the records arrive whole and in order");
+    let rm = records.metrics();
+    assert_eq!((rm.discontinuities, rm.malformed), (0, 0));
+    let mut digest = Sha256::new();
+    for r in &got {
+        digest.update(&r.id);
+    }
+    w.log(
+        &h.clock,
+        "v",
+        format!("records {} {}", got.len(), hex::encode(digest.finalize())),
     );
     let s = w.id("s").await;
     let peers = h.node.peers().await.unwrap();

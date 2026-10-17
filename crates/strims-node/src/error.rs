@@ -52,7 +52,7 @@ impl From<std::io::Error> for NodeError {
     }
 }
 
-/// Errors from [`crate::SwarmReader::read`]. Only `Closed` and `Stopped`
+/// Errors from [`crate::SwarmReader`] reads. Only `Closed` and `Stopped`
 /// end the reader; after the others the next read continues.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ReadError {

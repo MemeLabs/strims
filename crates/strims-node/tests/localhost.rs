@@ -432,7 +432,9 @@ async fn dial_errors_are_reported() {
 }
 
 /// A reader that falls behind the live window gets `Underrun`, skips to the
-/// tail, and keeps reading; a reset is reported and reading restarts.
+/// tail, and keeps reading; a reset is reported and reading restarts. Read
+/// offsets are contiguous, an underrun moves them on by the bytes skipped,
+/// and a reset restarts them at 0.
 #[tokio::test]
 async fn slow_readers_recover() {
     let t = TestNode::spawn(11, Kind::Tcp).await;
@@ -450,25 +452,37 @@ async fn slow_readers_recover() {
         .unwrap();
     let mut reader = t.node.open_reader(swarm).await.unwrap();
     let data = stream_bytes(512 * 1024);
-    writer.write(&data).await.unwrap();
+    let unit = 64 * 1024;
+    writer.write(&data[..unit]).await.unwrap();
 
     let mut out = vec![0u8; 4096];
-    let skipped = match reader.read(&mut out).await {
+    let mut next = 0;
+    while next < 3000 {
+        let (off, n) = reader.read_at(&mut out[..1000]).await.unwrap();
+        assert_eq!(off, next, "offsets are contiguous");
+        assert_eq!(&out[..n], &data[off as usize..off as usize + n]);
+        next = off + n as u64;
+    }
+
+    writer.write(&data[unit..]).await.unwrap();
+    let skipped = match reader.read_at(&mut out).await {
         Err(strims_node::ReadError::Underrun { skipped }) => skipped,
         r => panic!("expected an underrun, got {r:?}"),
     };
     assert!(skipped > 0);
     // The reader goes on from the window's tail.
-    let off = skipped as usize;
-    let n = reader.read(&mut out).await.unwrap();
+    let (off, n) = reader.read_at(&mut out).await.unwrap();
+    assert_eq!(off, next + skipped, "an underrun skips `skipped` bytes");
     assert!(n > 0);
-    assert_eq!(&out[..n], &data[off..off + n]);
+    assert_eq!(&out[..n], &data[off as usize..off as usize + n]);
+    let (after, _) = reader.read_at(&mut out).await.unwrap();
+    assert_eq!(after, off + n as u64);
 
     writer.reset().await.unwrap();
-    writer.write(&data[..64 * 1024]).await.unwrap();
+    writer.write(&data[..unit]).await.unwrap();
     let mut saw_reset = false;
     for _ in 0..8 {
-        match reader.read(&mut out).await {
+        match reader.read_at(&mut out).await {
             Err(strims_node::ReadError::Reset) => {
                 saw_reset = true;
                 break;
@@ -478,6 +492,9 @@ async fn slow_readers_recover() {
         }
     }
     assert!(saw_reset);
+    let (off, n) = reader.read_at(&mut out).await.unwrap();
+    assert_eq!(off, 0, "the new stream starts at 0");
+    assert_eq!(&out[..n], &data[..n]);
     t.node.remove_swarm(swarm).await.unwrap();
     assert_eq!(
         reader.read(&mut out).await,

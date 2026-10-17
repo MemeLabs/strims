@@ -687,11 +687,16 @@ pub struct SwarmReader {
 
 impl SwarmReader {
     /// Reads at least one byte into `out` (at most 64 KiB), waiting for
-    /// data.
-    pub async fn read(&mut self, out: &mut [u8]) -> Result<usize, ReadError> {
-        if out.is_empty() {
-            return Ok(0);
-        }
+    /// data. Returns the stream offset of `out[0]` and the bytes read.
+    ///
+    /// Each read starts where the last one ended, except across a skip.
+    /// After [`ReadError::Underrun`] the next read starts `skipped` bytes
+    /// on; when another reader of the swarm recovered from the underrun
+    /// first, the skip shows only as a gap between offsets. After
+    /// [`ReadError::Reset`] the reads are of the new stream. An empty `out`
+    /// waits for data the same way and returns its offset without reading
+    /// it.
+    pub async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadError> {
         let buf = self.buf.take().ok_or(ReadError::Closed)?;
         let max = out.len().min(buf.len());
         let cmd = Command::Read {
@@ -704,12 +709,21 @@ impl SwarmReader {
         // The buffer comes back with errors too: underruns and resets don't
         // end the reader.
         let buf = self.buf.insert(r.buf);
-        let n = r.result?;
+        let (offset, n) = r.result?;
         let src = buf.get(..n).unwrap_or_default();
         if let Some(dst) = out.get_mut(..src.len()) {
             dst.copy_from_slice(src);
         }
-        Ok(n)
+        Ok((offset, n))
+    }
+
+    /// Reads at least one byte into `out` (at most 64 KiB), waiting for
+    /// data. An empty `out` reads nothing.
+    pub async fn read(&mut self, out: &mut [u8]) -> Result<usize, ReadError> {
+        if out.is_empty() {
+            return Ok(0);
+        }
+        Ok(self.read_at(out).await?.1)
     }
 
     /// Reads until `out` is full. Underruns and resets are errors.
@@ -718,7 +732,7 @@ impl SwarmReader {
         while let Some(rest) = out.get_mut(off..)
             && !rest.is_empty()
         {
-            off += self.read(rest).await?;
+            off += self.read_at(rest).await?.1;
         }
         Ok(())
     }

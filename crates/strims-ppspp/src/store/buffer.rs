@@ -454,6 +454,13 @@ impl BufferReader {
         self.seen_signal = buf.signal_seq;
     }
 
+    /// The byte offset of the next read as of the last call, without
+    /// syncing with the buffer. A read resyncs before it copies, so a read
+    /// that returned `n` bytes started at `position() - n`.
+    pub fn position(&self) -> u64 {
+        self.off
+    }
+
     /// The byte offset of the next read, or [`Error::WouldBlock`] until the
     /// buffer has a read offset.
     pub fn offset(&mut self, buf: &Buffer) -> Result<u64, Error> {

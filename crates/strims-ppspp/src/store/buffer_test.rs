@@ -314,6 +314,43 @@ fn slow_reader_underruns() {
     );
 }
 
+/// A read of `n` bytes started at `position() - n`: when the read resyncs
+/// the reader to a new read offset, after an underrun (the old position
+/// plus the bytes skipped) and in a new stream after a reset.
+#[test]
+fn a_read_starts_its_length_before_the_position() {
+    let cs = 4;
+    let mut b = Buffer::new(4, cs).unwrap();
+    let mut r = BufferReader::new(&b);
+    b.set_offset(Bin(4));
+    b.consume(Bin(4), &[2; 4]).unwrap();
+    let mut p = [0u8; 2];
+    assert_eq!(r.read(&b, &mut p), Ok(2));
+    assert_eq!(r.position() - 2, 8, "the read resynced to chunk 2");
+    assert_eq!(r.read(&b, &mut p), Ok(2));
+    assert_eq!(r.position() - 2, 10);
+    let before = r.position();
+
+    for o in 3..8u64 {
+        b.consume(Bin::new(0, o), &[o as u8; 4]).unwrap();
+    }
+    assert_eq!(r.read(&b, &mut p), Err(Error::BufferUnderrun));
+    let skipped = r.recover(&mut b).unwrap();
+    assert_eq!(skipped, 4);
+    assert_eq!(r.read(&b, &mut p), Ok(2));
+    assert_eq!(r.position() - 2, before + skipped);
+    assert_eq!(p, [4; 2]);
+
+    b.reset();
+    assert_eq!(r.read(&b, &mut p), Err(Error::StreamReset));
+    let mut r = BufferReader::new(&b);
+    b.set_offset(Bin(0));
+    b.consume(Bin(0), &[9; 4]).unwrap();
+    assert_eq!(r.read(&b, &mut p), Ok(2));
+    assert_eq!(r.position() - 2, 0);
+    assert_eq!(p, [9; 2]);
+}
+
 #[test]
 fn bins_and_bounds() {
     let mut b = Buffer::new(16, 4).unwrap();

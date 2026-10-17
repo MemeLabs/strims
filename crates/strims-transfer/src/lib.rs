@@ -44,12 +44,38 @@
 //! Any peer may be hostile. Its requests only answer or stop peer
 //! transfers this side created by announcing to it, so they can't make
 //! the control hold more state.
+//!
+//! # Streams
+//!
+//! Services that publish a log into a swarm and read it on other nodes
+//! reach the node's swarms through [`SwarmHost`], which creates, adds and
+//! removes them and opens their writers ([`SwarmWrite`]) and readers
+//! ([`SwarmRead`]). A [`RecordWriter`] appends protobuf messages to a
+//! swarm's stream as `strims-chunkstream` records, and a [`RecordReader`]
+//! reassembles them from wherever its reader joins the stream.
+//!
+//! - A writer's frame size is its swarm's integrity unit
+//!   (`chunk_size * chunks_per_signature` for a Merkle tree, `chunk_size`
+//!   otherwise) or a multiple of it. Every record ends on a frame
+//!   boundary, so each record write publishes whole units: nothing waits
+//!   for a flush, and no unit padding lands inside a frame.
+//! - A swarm reader starts at the window tail, which may fall inside a
+//!   frame or a record. The decoder drops the record it joined part-way,
+//!   and may drop the one after it. The tail of an earlier record can pass
+//!   the decoder's length check by chance, so payloads need their own
+//!   validation; [`RecordReader::next_message`] skips those that don't
+//!   decode.
+//! - Each read carries its stream offset. A read that doesn't start where
+//!   the last one ended is a discontinuity whether or not the swarm reader
+//!   reported one: the record reader reports it once and restarts its
+//!   decoder at the new offset.
 
 mod control;
 mod host;
 mod id;
 mod peer;
 mod state;
+mod stream;
 
 use strims_base::time::Duration;
 use strims_rpc::RetryPolicy;
@@ -57,6 +83,10 @@ use strims_rpc::RetryPolicy;
 pub use control::TransferControl;
 pub use host::Host;
 pub use id::TransferId;
+pub use stream::{
+    ReadFailure, ReaderMetrics, RecordReader, RecordWriter, SwarmHost, SwarmRead, SwarmWrite,
+    WriteFailure,
+};
 
 /// How transfers run.
 #[derive(Clone, Copy, Debug)]
