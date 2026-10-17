@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The app layer on a node: the node's clock as the app's [`Timer`], the
-//! node as the [`Host`] of replication and of transfers, and every peer's
-//! RPC link served with the app's [`PeerHandler`]s.
+//! node as the [`Host`] of replication, of transfers and of network
+//! membership, and every peer's RPC link served with the app's
+//! [`PeerHandler`]s.
 //!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
 //! connections as local tasks, so it runs inside a tokio `LocalSet`.
@@ -17,14 +18,20 @@ use std::task::{Context, Poll};
 use futures_util::Stream;
 use strims_base::time::{Duration, Time};
 use strims_kv::Kv;
+use strims_network::NetworkControl;
 use strims_proto::types::Key;
 use strims_replication::{Host, ReplicationControl};
 use strims_rpc::{Client, Config, Router, Timer, peer_connection};
 use strims_transfer::TransferControl;
-use strims_vpn::{HashTableGetOptions, HashTablePublisherId, NetworkId, PeerIndexPublisherId};
+use strims_vpn::{
+    HashTableGetOptions, HashTablePublisherId, HostAddr, NetworkId, PeerIndexPublisherId,
+};
 use tokio::time::Sleep;
 
-use crate::{Clock, HostId, Node, NodeError, NodeEvent, PeerIndexSearch, PeerInfo, SwarmKey};
+use crate::{
+    Clock, HostId, NetworkOptions, Node, NodeError, NodeEvent, PeerIndexSearch, PeerInfo,
+    RpcReader, RpcWriter, SwarmKey, VpnReader, VpnWriter,
+};
 
 /// A node's clock as the app layer's [`Timer`].
 #[derive(Clone)]
@@ -45,8 +52,9 @@ impl<C: Clock> Timer for NodeTimer<C> {
 /// How long a discovery lookup waits for answers.
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// A node as replication's [`Host`], on the networks the driver adds, and
-/// as the transfers' [`strims_transfer::Host`].
+/// A node as replication's [`Host`], on the networks the driver adds, as
+/// the transfers' [`strims_transfer::Host`], and as network membership's
+/// [`strims_network::Host`], which adds and removes the networks it uses.
 #[derive(Clone)]
 pub struct NodeHost {
     node: Node,
@@ -189,6 +197,102 @@ impl strims_transfer::Host for NodeHost {
     }
 }
 
+impl strims_network::Host for NodeHost {
+    type Network = NetworkId;
+    type BrokerReader = RpcReader;
+    type BrokerWriter = RpcWriter;
+    type VpnReader = VpnReader;
+    type VpnWriter = VpnWriter;
+    type Publication = HashTablePublisherId;
+    type Error = NodeError;
+
+    fn host_id(&self) -> HostId {
+        self.node.host_id()
+    }
+
+    async fn add_network(&self, key: &[u8]) -> Result<NetworkId, NodeError> {
+        let net = match self.node.add_network(key, NetworkOptions::default()).await {
+            Err(NodeError::Vpn(strims_vpn::Error::DuplicateNetworkKey)) => self
+                .node
+                .network(key)
+                .await?
+                .ok_or(NodeError::Vpn(strims_vpn::Error::DuplicateNetworkKey))?,
+            r => r?,
+        };
+        self.networks.borrow_mut().insert(net);
+        Ok(net)
+    }
+
+    async fn remove_network(&self, net: NetworkId) -> Result<(), NodeError> {
+        self.networks.borrow_mut().remove(&net);
+        self.node.remove_network(net).await
+    }
+
+    async fn take_broker(&self, host: HostId) -> Result<(RpcReader, RpcWriter), NodeError> {
+        let channel = self.node.take_peer_broker(host).await?;
+        Ok((channel.reader, channel.writer))
+    }
+
+    async fn reserve_peer_port(&self, host: HostId) -> Result<u16, NodeError> {
+        self.node.reserve_peer_port(host).await
+    }
+
+    async fn release_peer_port(&self, host: HostId, port: u16) -> Result<(), NodeError> {
+        self.node.release_peer_port(host, port).await
+    }
+
+    async fn bind_peer(
+        &self,
+        host: HostId,
+        net: NetworkId,
+        local_port: u16,
+        peer_port: u16,
+    ) -> Result<(), NodeError> {
+        self.node
+            .bind_peer_network(host, net, local_port, peer_port)
+            .await
+    }
+
+    async fn unbind_peer(&self, host: HostId, net: NetworkId) -> Result<(), NodeError> {
+        self.node.unbind_peer_network(host, net).await.map(drop)
+    }
+
+    async fn open_vpn_port(
+        &self,
+        net: NetworkId,
+    ) -> Result<(u16, VpnReader, VpnWriter), NodeError> {
+        let p = self.node.open_vpn_port(net, None).await?;
+        Ok((p.port, p.reader, p.writer))
+    }
+
+    async fn publish_address(
+        &self,
+        net: NetworkId,
+        key: Key,
+        salt: Vec<u8>,
+        port: u16,
+    ) -> Result<HashTablePublisherId, NodeError> {
+        self.node.publish_vpn_address(net, key, salt, port).await
+    }
+
+    async fn unpublish_address(&self, publication: HashTablePublisherId) -> Result<(), NodeError> {
+        self.node.hash_table_close(publication).await
+    }
+
+    async fn resolve_address(
+        &self,
+        net: NetworkId,
+        key: Vec<u8>,
+        salt: Vec<u8>,
+    ) -> Result<Option<HostAddr>, NodeError> {
+        let options = HashTableGetOptions {
+            disable_cache: true,
+            timeout: LOOKUP_TIMEOUT,
+        };
+        self.node.resolve_vpn_address(net, key, salt, options).await
+    }
+}
+
 /// The host ids a peer index search finds.
 #[derive(Debug)]
 pub struct IndexHosts(PeerIndexSearch);
@@ -246,6 +350,18 @@ impl<T: Timer> PeerHandler for TransferControl<NodeHost, T> {
             NodeEvent::TransferError { host_id, .. } => self.transfer_failed(host_id),
             _ => {}
         }
+    }
+}
+
+/// Network membership negotiates with every peer over its RPC link and
+/// broker channel.
+impl<K: Kv, T: Timer> PeerHandler for NetworkControl<K, NodeHost, T> {
+    fn add_peer(&self, peer: &PeerInfo, router: &Router, client: Client) {
+        NetworkControl::add_peer(self, peer.host_id, &peer.profile_key, router, client);
+    }
+
+    fn remove_peer(&self, host: HostId) {
+        NetworkControl::remove_peer(self, host);
     }
 }
 

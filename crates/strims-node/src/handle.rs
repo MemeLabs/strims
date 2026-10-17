@@ -254,6 +254,12 @@ impl Node {
             .await
     }
 
+    /// The network whose key is `key`, if the node has joined it.
+    pub async fn network(&self, key: &[u8]) -> Result<Option<NetworkId>, NodeError> {
+        let key = key.to_vec();
+        self.call(move |s, _| s.vpn.network(&key)).await
+    }
+
     pub async fn remove_network(&self, net: NetworkId) -> Result<(), NodeError> {
         self.call(move |s, _| s.remove_network(net)).await?
     }

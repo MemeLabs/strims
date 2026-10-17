@@ -64,10 +64,11 @@
 //!
 //! # Bindings
 //!
-//! Peers join networks through explicit calls on both sides:
-//! [`Node::bind_peer_network`] (or [`NetworkOptions::auto_bind_port`]),
-//! reported as [`NodeEvent::NetworkPeerAdded`]. They stand in until the app
-//! layer negotiates network membership over peer rpc.
+//! Peers join networks through [`Node::bind_peer_network`], reported as
+//! [`NodeEvent::NetworkPeerAdded`]. `strims-network` negotiates the
+//! bindings over peer rpc and each peer's broker channel, and calls it;
+//! [`NetworkOptions::auto_bind_port`] binds every peer on a fixed port
+//! pair for simulations and transport tests, and doesn't mix with it.
 //!
 //! Swarm channels are negotiated by `strims-transfer` over peer rpc, for
 //! the swarms published on networks the peers share. [`Node::run_swarm`]
