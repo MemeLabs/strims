@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base32"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -25,6 +26,7 @@ import (
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
@@ -33,6 +35,7 @@ import (
 	"github.com/MemeLabs/strims/pkg/timeutil"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func u64(v uint64) []byte { return binary.BigEndian.AppendUint64(nil, v) }
@@ -159,6 +162,32 @@ func storeScenario(w *bufio.Writer) {
 	must0(dao.Devices.Insert(rs, old))
 	must0(dao.Devices.Delete(rs, old.Id))
 
+	// The owned network's directory, whose admin is the owner: a listing
+	// of each kind (the media one moderated) and an invitee who may not
+	// join.
+	swarmID := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(must(dao.GenerateKey()).Public)
+	swarmURI := "magnet:?xt=urn:ppspp:" + swarmID + "&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=64&x.sc=1"
+	listings := []*networkv1directory.Listing{
+		{Content: &networkv1directory.Listing_Chat_{Chat: &networkv1directory.Listing_Chat{Key: inviteeKey.Public, Name: "lobby"}}},
+		{Content: &networkv1directory.Listing_Embed_{Embed: &networkv1directory.Listing_Embed{
+			Service: networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+			Id:      "streamer",
+		}}},
+		{Content: &networkv1directory.Listing_Media_{Media: &networkv1directory.Listing_Media{MimeType: "video/mp4", SwarmUri: swarmURI}}},
+		{Content: &networkv1directory.Listing_Service_{Service: &networkv1directory.Listing_Service{Type: "game", SwarmUri: swarmURI}}},
+	}
+	for _, l := range listings {
+		r := must(dao.NewDirectoryListingRecord(rs, owned.Id, l))
+		if l.GetMedia() != nil {
+			r.Moderation = &networkv1directory.ListingModeration{IsMature: wrapperspb.Bool(true), Category: wrapperspb.String("games")}
+			r.Notes = "checked"
+		}
+		must0(dao.DirectoryListingRecords.Insert(rs, r))
+	}
+	inviteeUser := must(dao.NewDirectoryUserRecord(rs, owned.Id, inviteeKey.Public))
+	inviteeUser.Moderation.DisableJoin = wrapperspb.Bool(true)
+	must0(dao.DirectoryUserRecords.Insert(rs, inviteeUser))
+
 	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
 	must0(err)
 
@@ -217,6 +246,12 @@ func storeScenario(w *bufio.Writer) {
 	}
 	for _, m := range must(dao.ReplicationCheckpoints.GetAll(rs)) {
 		record(1004, m.Id, m)
+	}
+	for _, m := range must(dao.DirectoryListingRecords.GetAll(rs)) {
+		record(9001, m.Id, m)
+	}
+	for _, m := range must(dao.DirectoryUserRecords.GetAll(rs)) {
+		record(9004, m.Id, m)
 	}
 
 	// A peer that has seen the first three of this replica's logs.
@@ -391,6 +426,10 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 		return must(dao.ReplicationEventLogs.Get(s, id))
 	case 1004:
 		return must(dao.ReplicationCheckpoints.Get(s, id))
+	case 9001:
+		return must(dao.DirectoryListingRecords.Get(s, id))
+	case 9004:
+		return must(dao.DirectoryUserRecords.Get(s, id))
 	}
 	panic(fmt.Sprintf("unknown namespace %d", ns))
 }
@@ -451,6 +490,14 @@ func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
 		return ids(dao.UnreadChatWhisperRecordsByPeerKey.GetAll(s, key))
 	case 6014:
 		return ids(dao.ChatWhisperRecordsByState.GetAll(s, key))
+	case 9002:
+		return ids(dao.DirectoryListingRecordsByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 9003:
+		return one(dao.DirectoryListingRecordsByListing.Get(s, key))
+	case 9005:
+		return one(dao.DirectoryUserRecordsByPeerKey.Get(s, key))
+	case 9006:
+		return ids(dao.DirectoryUserRecordsByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
 	}
 	panic(fmt.Sprintf("unknown index %d", ns))
 }

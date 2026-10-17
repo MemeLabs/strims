@@ -8,6 +8,7 @@
 //! take multiples of 1000, and their record types count up from there.
 
 pub mod chat;
+pub mod directory;
 pub mod network;
 pub mod profile;
 pub mod system;

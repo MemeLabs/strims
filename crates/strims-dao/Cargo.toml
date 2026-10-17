@@ -10,6 +10,7 @@ license.workspace = true
 strims-base.workspace = true
 strims-crypto.workspace = true
 strims-kv.workspace = true
+strims-ppspp.workspace = true
 strims-proto.workspace = true
 prost.workspace = true
 thiserror.workspace = true

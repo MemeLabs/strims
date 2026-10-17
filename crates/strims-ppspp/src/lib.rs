@@ -94,7 +94,7 @@ pub use epoch::{Epoch, EpochError};
 pub use options::{DeliveryMode, PushMode, SchedulingMethod, SwarmOptions};
 pub use swarm::{Published, Swarm, SwarmError, SwarmEvent, SwarmHandshake};
 pub use swarm_id::{SwarmId, SwarmIdError};
-pub use uri::{Uri, UriError, UriOptions};
+pub use uri::{Uri, UriError, UriOptions, query_value};
 pub use writer::{Writer, WriterOptions};
 
 pub use channel::{ChannelMetrics, HandshakeError};

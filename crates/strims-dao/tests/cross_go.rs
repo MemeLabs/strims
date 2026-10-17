@@ -32,6 +32,9 @@ use strims_dao::schema::chat::{
     ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
     WhisperThreads, state_key,
 };
+use strims_dao::schema::directory::{
+    DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
+};
 use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
     network_scoped_key, new_alias_reservation, new_network_peer,
@@ -48,6 +51,9 @@ use strims_proto::chat::v1::{
 };
 use strims_proto::network::v1::bootstrap::{
     BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
+};
+use strims_proto::network::v1::directory::{
+    Listing, ListingModeration, UserModeration, listing as directory_listing,
 };
 use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConfigRecord};
 use strims_proto::profile::v1::Device;
@@ -167,6 +173,25 @@ fn go_reads_a_store_this_crate_writes() {
         }
     };
     let invitee = strims_crypto::generate_key(&mut rng);
+    let swarm_key = strims_crypto::generate_key(&mut rng);
+    let media = Listing {
+        content: Some(directory_listing::Content::Media(
+            directory_listing::Media {
+                mime_type: "video/mp4".into(),
+                swarm_uri: strims_ppspp::Uri::new(
+                    strims_ppspp::SwarmId::new(&swarm_key.public),
+                    strims_ppspp::UriOptions::default(),
+                )
+                .to_string(),
+            },
+        )),
+    };
+    let chat = Listing {
+        content: Some(directory_listing::Content::Chat(directory_listing::Chat {
+            key: invitee.public.clone(),
+            name: "lobby".into(),
+        })),
+    };
     let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
     block(async {
         let mut tx = rs.write(now).await.unwrap();
@@ -178,7 +203,40 @@ fn go_reads_a_store_this_crate_writes() {
         Networks::insert(&mut tx, owned_network(doomed_id, &doomed_key, &mut rng))
             .await
             .unwrap();
+        let id = tx.generate_id().await.unwrap();
+        DirectoryListingRecords::insert(
+            &mut tx,
+            new_listing_record(id, doomed_id, media.clone(), None),
+        )
+        .await
+        .unwrap();
         Networks::delete(&mut tx, doomed_id).await.unwrap();
+        let moderated = ListingModeration {
+            is_banned: Some(true),
+            category: Some("games".into()),
+            ..Default::default()
+        };
+        for (listing, moderation) in [(media.clone(), Some(moderated)), (chat.clone(), None)] {
+            let id = tx.generate_id().await.unwrap();
+            DirectoryListingRecords::insert(
+                &mut tx,
+                new_listing_record(id, owned_id, listing, moderation),
+            )
+            .await
+            .unwrap();
+        }
+        let id = tx.generate_id().await.unwrap();
+        let moderator = UserModeration {
+            is_moderator: Some(true),
+            disable_publish: Some(true),
+            ..Default::default()
+        };
+        DirectoryUserRecords::insert(
+            &mut tx,
+            new_user_record(id, owned_id, &invitee.public, moderator),
+        )
+        .await
+        .unwrap();
         owner_peer_id = NetworkPeers::index_get(
             &mut tx,
             &NetworkPeers::BY_PUBLIC_KEY,
@@ -423,6 +481,8 @@ fn go_reads_a_store_this_crate_writes() {
     record_lines::<WhisperRecords>(&mut tx, &mut out);
     record_lines::<EventLogs>(&mut tx, &mut out);
     record_lines::<Checkpoints>(&mut tx, &mut out);
+    record_lines::<DirectoryListingRecords>(&mut tx, &mut out);
+    record_lines::<DirectoryUserRecords>(&mut tx, &mut out);
 
     index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
     let scoped = |b: &[u8]| network_scoped_key(owned_id, b);
@@ -462,7 +522,44 @@ fn go_reads_a_store_this_crate_writes() {
             &ref_key(id),
             &mut out,
         );
+        index_line::<DirectoryListingRecords>(
+            &mut tx,
+            &DirectoryListingRecords::BY_NETWORK,
+            &ref_key(id),
+            &mut out,
+        );
+        index_line::<DirectoryUserRecords>(
+            &mut tx,
+            &DirectoryUserRecords::BY_NETWORK,
+            &ref_key(id),
+            &mut out,
+        );
+        for listing in [&media, &chat] {
+            index_line::<DirectoryListingRecords>(
+                &mut tx,
+                &DirectoryListingRecords::BY_LISTING,
+                &listing_key(id, Some(listing)),
+                &mut out,
+            );
+        }
+        for key in [&profile_key.public, &invitee.public] {
+            index_line::<DirectoryUserRecords>(
+                &mut tx,
+                &DirectoryUserRecords::BY_PEER_KEY,
+                &network_scoped_key(id, key),
+                &mut out,
+            );
+        }
     }
+    let users = block(DirectoryUserRecords::get_all(&mut tx)).unwrap();
+    assert_eq!(
+        users.len(),
+        2,
+        "the owned network's admin and moderator; the deleted one's admin went"
+    );
+    let listings = block(DirectoryListingRecords::get_all(&mut tx)).unwrap();
+    assert!(listings.iter().all(|r| r.network_id == owned_id));
+    assert_eq!(listings.len(), 2);
     index_line::<NetworkPeers>(
         &mut tx,
         &NetworkPeers::BY_PUBLIC_KEY,

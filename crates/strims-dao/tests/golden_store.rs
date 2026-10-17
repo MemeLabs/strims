@@ -28,6 +28,7 @@ use strims_dao::schema::chat::{
     ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
     WhisperThreads,
 };
+use strims_dao::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, listing_key};
 use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
     RESERVED_FOREVER, network_scoped_key,
@@ -163,6 +164,8 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         WhisperRecords::NS => re::<<WhisperRecords as Table>::Record>(bytes),
         EventLogs::NS => re::<<EventLogs as Table>::Record>(bytes),
         Checkpoints::NS => re::<<Checkpoints as Table>::Record>(bytes),
+        DirectoryListingRecords::NS => re::<<DirectoryListingRecords as Table>::Record>(bytes),
+        DirectoryUserRecords::NS => re::<<DirectoryUserRecords as Table>::Record>(bytes),
         other => panic!("no record type for {other}"),
     }
 }
@@ -193,6 +196,8 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         WhisperRecords::NS => t::<WhisperRecords>(tx, id),
         EventLogs::NS => t::<EventLogs>(tx, id),
         Checkpoints::NS => t::<Checkpoints>(tx, id),
+        DirectoryListingRecords::NS => t::<DirectoryListingRecords>(tx, id),
+        DirectoryUserRecords::NS => t::<DirectoryUserRecords>(tx, id),
         other => panic!("no record type for {other}"),
     }
 }
@@ -268,6 +273,8 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<WhisperRecords>(&mut tx, &salt, &mut derived);
     keys_of::<EventLogs>(&mut tx, &salt, &mut derived);
     keys_of::<Checkpoints>(&mut tx, &salt, &mut derived);
+    keys_of::<DirectoryListingRecords>(&mut tx, &salt, &mut derived);
+    keys_of::<DirectoryUserRecords>(&mut tx, &salt, &mut derived);
     for ns in [
         StoreVersions::NS,
         Profile::NS,
@@ -284,6 +291,7 @@ fn every_key_is_the_one_this_crate_derives() {
     let mut known: BTreeSet<i64> = [1001, 1002, 1003, 1004, 2001, 2002, 2003].into();
     known.extend((4001..=4014).chain(4016..=4018).chain([6008]));
     known.extend((6012..=6023).chain([6025]));
+    known.extend(9001..=9006);
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
     let stored: BTreeSet<String> = table
@@ -308,7 +316,9 @@ fn every_key_is_the_one_this_crate_derives() {
         let index_ns = [
             4002, 4004, 4005, 4006, 4010, 4011, 4012, 4013, 4014, 4017, 4018,
         ];
-        if index_ns.contains(&ns) || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
+        if index_ns.contains(&ns)
+            || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
+            || [9002, 9003, 9005, 9006].contains(&ns)
         {
             let entry = SecondaryIndexKey::decode(sk.open(v).unwrap().as_slice()).unwrap();
             assert_eq!(
@@ -454,4 +464,70 @@ fn ca_records_read_back_by_index() {
     let ui = block(NetworkUiConfig::get(&mut tx)).unwrap().unwrap();
     assert_eq!(ui.network_display_order.len(), 2);
     assert_eq!(ui.network_display_order[1], owned.id);
+}
+
+/// The owned network's directory: the owner as its admin, an invitee who
+/// may not join, and a listing of each kind, each found by its key.
+#[test]
+fn directory_records_read_back_by_index() {
+    use strims_proto::network::v1::directory::listing::Content;
+
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let owned = block(Networks::get_all(&mut tx))
+        .unwrap()
+        .into_iter()
+        .find(|n| n.server_config.is_some())
+        .unwrap();
+    let owner_key = owned.certificate.clone().unwrap().key;
+
+    let users = block(DirectoryUserRecords::index_get_all(
+        &mut tx,
+        &DirectoryUserRecords::BY_NETWORK,
+        &ref_key(owned.id),
+    ))
+    .unwrap();
+    assert_eq!(users.len(), 2);
+    let owner = block(DirectoryUserRecords::index_get(
+        &mut tx,
+        &DirectoryUserRecords::BY_PEER_KEY,
+        &network_scoped_key(owned.id, &owner_key),
+    ))
+    .unwrap()
+    .unwrap();
+    let m = owner.moderation.unwrap();
+    assert_eq!((m.is_admin, m.is_moderator), (Some(true), Some(true)));
+    assert_eq!((m.disable_join, m.disable_publish), (None, None));
+    let invitee = users.into_iter().find(|u| u.id != owner.id).unwrap();
+    assert_eq!(invitee.moderation.unwrap().disable_join, Some(true));
+
+    let listings = block(DirectoryListingRecords::index_get_all(
+        &mut tx,
+        &DirectoryListingRecords::BY_NETWORK,
+        &ref_key(owned.id),
+    ))
+    .unwrap();
+    assert_eq!(listings.len(), 4);
+    for r in &listings {
+        let key = listing_key(owned.id, r.listing.as_ref());
+        let found = block(DirectoryListingRecords::index_get(
+            &mut tx,
+            &DirectoryListingRecords::BY_LISTING,
+            &key,
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.id, r.id);
+        if let Some(Content::Media(media)) = r.listing.as_ref().and_then(|l| l.content.as_ref()) {
+            let id = strims_ppspp::Uri::parse(&media.swarm_uri).unwrap().id;
+            assert_eq!(key.get(9..).unwrap(), id.as_bytes().get(..30).unwrap());
+            let m = found.moderation.unwrap();
+            assert_eq!(
+                (m.is_mature, m.category.as_deref()),
+                (Some(true), Some("games"))
+            );
+            assert_eq!(found.notes, "checked");
+        }
+    }
 }

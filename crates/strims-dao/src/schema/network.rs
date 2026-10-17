@@ -7,8 +7,9 @@
 //! A network's CA lives on the device that holds its server config, so
 //! its records (certificate logs, network peers, alias reservations) don't
 //! replicate. Inserting a network with a server config on this device
-//! creates the CA's records for its owner, and deleting a network deletes
-//! its CA records.
+//! creates the CA's records for its owner and makes the owner the admin of
+//! the network's directory ([`super::directory`]). Deleting a network
+//! deletes its CA and directory records.
 
 use futures_util::future::LocalBoxFuture;
 use prost::Message;
@@ -17,6 +18,7 @@ use strims_crypto::{certificate_chain, certificate_network_key};
 use strims_kv::Kv;
 use strims_proto::network::v1::bootstrap::{BootstrapClient, bootstrap_client};
 use strims_proto::network::v1::ca::CertificateLog;
+use strims_proto::network::v1::directory::UserModeration;
 use strims_proto::network::v1::{AliasReservation, Network, Peer, UiConfig};
 use strims_proto::types::Certificate;
 use strims_proto::types::certificate::ParentOneof;
@@ -24,6 +26,7 @@ use strims_proto::types::certificate::ParentOneof;
 use crate::error::Error;
 use crate::events::Record;
 use crate::key::Namespace;
+use crate::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, new_user_record};
 use crate::store::WriteTx;
 use crate::table::{
     ApplyConflict, Index, Replication, Singleton, Table, UniqueConflict, ref_key,
@@ -96,7 +99,8 @@ impl Table for Networks {
     /// A network with a server config written here for the first time
     /// gets its CA's records for the owner: a log of each certificate in
     /// the owner's chain, the owner as the network's first peer, and the
-    /// owner's alias.
+    /// owner's alias. The owner becomes its directory's admin and
+    /// moderator.
     fn on_change<'a, K: Kv>(
         tx: &'a mut WriteTx<K>,
         m: &'a mut Network,
@@ -120,11 +124,19 @@ impl Table for Networks {
             let id = tx.generate_id().await?;
             let reservation = new_alias_reservation(id, m.id, &cert.subject, &cert.key);
             AliasReservations::insert(tx, reservation).await?;
+            let id = tx.generate_id().await?;
+            let admin = UserModeration {
+                is_admin: Some(true),
+                is_moderator: Some(true),
+                ..Default::default()
+            };
+            DirectoryUserRecords::insert(tx, new_user_record(id, m.id, &cert.key, admin)).await?;
             Ok(())
         })
     }
 
-    /// Deleting a network deletes its CA's records.
+    /// Deleting a network deletes its CA's records and its directory
+    /// records.
     fn on_delete<'a, K: Kv>(
         tx: &'a mut WriteTx<K>,
         p: &'a Network,
@@ -142,6 +154,21 @@ impl Table for Networks {
                 AliasReservations::index_ids(tx, &AliasReservations::BY_NETWORK, &network).await?
             {
                 AliasReservations::delete(tx, id).await?;
+            }
+            for id in DirectoryListingRecords::index_ids(
+                tx,
+                &DirectoryListingRecords::BY_NETWORK,
+                &network,
+            )
+            .await?
+            {
+                DirectoryListingRecords::delete(tx, id).await?;
+            }
+            for id in
+                DirectoryUserRecords::index_ids(tx, &DirectoryUserRecords::BY_NETWORK, &network)
+                    .await?
+            {
+                DirectoryUserRecords::delete(tx, id).await?;
             }
             Ok(())
         })

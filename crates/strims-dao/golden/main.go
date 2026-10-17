@@ -21,6 +21,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base32"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/MemeLabs/strims/internal/dao"
+	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 
 	_ "unsafe" // go:linkname
@@ -116,6 +118,61 @@ func indexHash() {
 	}
 }
 
+func mediaListing(uri string) *networkv1directory.Listing {
+	return &networkv1directory.Listing{Content: &networkv1directory.Listing_Media_{
+		Media: &networkv1directory.Listing_Media{MimeType: "video/mp4", SwarmUri: uri},
+	}}
+}
+
+// directoryListingKeys writes "dir_listing_key_<i> <network id> <listing>
+// <key>": the key the directory's listing index holds for a listing.
+func directoryListingKeys() {
+	id := seq(0xa0, 32)
+	unpadded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id)
+	padded := base32.StdEncoding.EncodeToString(id)
+	uri := func(xt string) string { return "magnet:?xt=" + xt + "&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=64&x.sc=1" }
+	urn := "urn:ppspp:"
+	listings := []*networkv1directory.Listing{
+		mediaListing(uri(urn + unpadded)),
+		mediaListing(uri(urn + padded)),
+		mediaListing(uri(urn + strings.ToLower(unpadded))),
+		mediaListing(uri(urn + unpadded[:16] + strings.ToLower(unpadded[16:]))),
+		mediaListing(uri(urn + unpadded[:20] + "%0D%0A" + unpadded[20:])),
+		mediaListing(uri(urn + unpadded[:20] + "\r\n" + unpadded[20:])),
+		mediaListing("magnet:?x.im=2&x.cs=1024"),
+		mediaListing(uri(unpadded)),
+		mediaListing(uri(urn+unpadded) + "#%zz"),
+		mediaListing(uri(urn+unpadded) + "\x7f"),
+		mediaListing(":?xt=" + urn + unpadded),
+		mediaListing(""),
+		mediaListing("MAGNET:?xt=urn%3Appspp%3A" + unpadded + "+"),
+		mediaListing("magnet:?xt=a:b:MZXW6YQ%3D&xt=" + urn + unpadded),
+		mediaListing("magnet:?xt;=1&xt=%zz&xt=" + urn + "MZXW6YTBOI======"),
+		mediaListing("magnet:?xt=" + urn + "MY======AB"),
+		mediaListing("magnet:?xt=" + urn + "MZXW6YTBMY======MY======"),
+		mediaListing("magnet:?xt=" + urn + "MZX====="),
+		mediaListing("magnet:?xt=" + urn + "MZXW6YTBMY======%FF"),
+		{Content: &networkv1directory.Listing_Chat_{Chat: &networkv1directory.Listing_Chat{Key: seq(1, 32), Name: "chat"}}},
+		{Content: &networkv1directory.Listing_Embed_{Embed: &networkv1directory.Listing_Embed{
+			Service: networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+			Id:      "streamer",
+		}}},
+		{Content: &networkv1directory.Listing_Embed_{Embed: &networkv1directory.Listing_Embed{
+			Service: networkv1directory.Listing_Embed_Service(-2),
+			Id:      "unknown",
+		}}},
+		{Content: &networkv1directory.Listing_Service_{Service: &networkv1directory.Listing_Service{
+			Type:     "game",
+			SwarmUri: uri(urn + unpadded),
+		}}},
+		{},
+	}
+	for i, l := range listings {
+		networkID := 0x0102030405060708 + uint64(i)<<56
+		put(fmt.Sprintf("dir_listing_key_%d", i), u64(networkID), marshal(l), dao.FormatDirectoryListingRecordListingKey(networkID, l))
+	}
+}
+
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "-verify" {
 		verify(os.Args[2])
@@ -131,6 +188,7 @@ func main() {
 	kdf()
 	seal()
 	indexHash()
+	directoryListingKeys()
 
 	sf := must(os.Create(filepath.Join("crates", "strims-dao", "golden", "store.hex")))
 	defer sf.Close()

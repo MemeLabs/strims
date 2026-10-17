@@ -16,7 +16,9 @@ use std::collections::BTreeMap;
 
 use prost::Message;
 use strims_dao::key::index_hash;
+use strims_dao::schema::directory::listing_key;
 use strims_dao::seal::StorageKey;
+use strims_proto::network::v1::directory::Listing;
 use strims_proto::profile::v1 as profile;
 
 const VECTORS: &str = include_str!("../golden/vectors.hex");
@@ -87,4 +89,21 @@ fn index_hashes_match() {
         let expected = std::str::from_utf8(&f[2]).unwrap();
         assert_eq!(index_hash(&f[0], &f[1]), expected, "{name}");
     }
+}
+
+#[test]
+fn listing_keys_match_go() {
+    let v = Vectors::load();
+    let mut n = 0;
+    for (name, f) in v.with_prefix("dir_listing_key_") {
+        let network_id = u64::from_be_bytes(f[0].as_slice().try_into().unwrap());
+        let listing = Listing::decode(f[1].as_slice()).unwrap();
+        assert_eq!(
+            hex::encode(listing_key(network_id, Some(&listing))),
+            hex::encode(&f[2]),
+            "{name}: {listing:?}"
+        );
+        n += 1;
+    }
+    assert_eq!(n, 24);
 }

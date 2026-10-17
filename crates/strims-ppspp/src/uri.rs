@@ -12,6 +12,9 @@
 //! unescaped with `+` as space, and the first value of a key wins. Control
 //! characters and bad escapes in the fragment are errors. The host and path
 //! are not validated.
+//!
+//! [`query_value`] reads any URL's query by the same rules. Stored keys
+//! derive from its values, so its rules must not change either.
 
 use core::fmt;
 use std::collections::BTreeMap;
@@ -112,14 +115,14 @@ impl Uri {
             return Err(UriError::InvalidUri);
         }
 
-        let xt = query_get(query, "xt").unwrap_or_default();
+        let xt = query_get(query, "xt").map(lossy).unwrap_or_default();
         let id = xt.strip_prefix(URN_PREFIX).ok_or(UriError::InvalidUri)?;
         let id = SwarmId::decode(id).map_err(|_| UriError::InvalidSwarmId)?;
 
         let mut options = UriOptions::default();
         for (t, key) in PROTOCOL_OPTIONS {
             if let Some(v) = query_get(query, key) {
-                options.insert(t, parse_uint31(&v).ok_or(UriError::InvalidOption)?);
+                options.insert(t, parse_uint31(&lossy(v)).ok_or(UriError::InvalidOption)?);
             }
         }
         Ok(Uri { id, options })
@@ -137,6 +140,14 @@ impl fmt::Display for Uri {
         }
         Ok(())
     }
+}
+
+/// The first value of `key` in the query of URL `s`, unescaped, by the
+/// rules in the module docs. An escape may encode any byte, so the value
+/// is bytes. Fails with [`UriError::Malformed`] if `s` isn't a URL.
+pub fn query_value(s: &str, key: &str) -> Result<Option<Vec<u8>>, UriError> {
+    let (_, query) = split_url(s)?;
+    Ok(query_get(query, key))
 }
 
 /// The scheme and raw query of `s`, after the URL checks in the module
@@ -174,7 +185,7 @@ fn split_url(s: &str) -> Result<(&str, &str), UriError> {
 
 /// The first value of `key` in `query`. Pairs containing `;` or a bad
 /// escape are skipped.
-fn query_get(query: &str, key: &str) -> Option<String> {
+fn query_get(query: &str, key: &str) -> Option<Vec<u8>> {
     for pair in query.split('&') {
         if pair.is_empty() || pair.contains(';') {
             continue;
@@ -183,16 +194,21 @@ fn query_get(query: &str, key: &str) -> Option<String> {
         let (Some(k), Some(v)) = (unescape(k, true), unescape(v, true)) else {
             continue;
         };
-        if k == key {
+        if k == key.as_bytes() {
             return Some(v);
         }
     }
     None
 }
 
+/// `b` as a string, with invalid UTF-8 replaced.
+fn lossy(b: Vec<u8>) -> String {
+    String::from_utf8(b).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
 /// Unescapes `%XX` escapes (and `+` as space in a query); `None` for a
-/// malformed escape. Invalid UTF-8 is replaced.
-fn unescape(s: &str, query: bool) -> Option<String> {
+/// malformed escape.
+fn unescape(s: &str, query: bool) -> Option<Vec<u8>> {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -214,7 +230,7 @@ fn unescape(s: &str, query: bool) -> Option<String> {
             }
         }
     }
-    Some(String::from_utf8_lossy(&out).into_owned())
+    Some(out)
 }
 
 /// A decimal below 2^31: ASCII digits only, leading zeros allowed.
@@ -281,6 +297,22 @@ mod tests {
         assert_eq!(parse_uint31("99999999999999999999999"), None);
         for s in ["", "+1", "-1", "1_0", "1 2", "0x10"] {
             assert_eq!(parse_uint31(s), None, "{s}");
+        }
+    }
+
+    #[test]
+    fn query_values_are_the_first_unescaped_bytes_of_their_key() {
+        let value = |s: &str, key: &str| query_value(s, key).unwrap();
+        assert_eq!(
+            value("x:?a=%ff%41+b&a=2", "a"),
+            Some(vec![0xff, b'A', b' ', b'b'])
+        );
+        assert_eq!(value("x:?a;b=1&b=%zz&b=2", "b"), Some(b"2".to_vec()));
+        assert_eq!(value("x:?%61", "a"), Some(vec![]));
+        assert_eq!(value("x:?a=1", "b"), None);
+        assert_eq!(value("no scheme?a=1#frag", "a"), Some(b"1".to_vec()));
+        for s in ["x:?a=1#%zz", "x:?a=1\n", ":?a=1"] {
+            assert_eq!(query_value(s, "a"), Err(UriError::Malformed), "{s:?}");
         }
     }
 }

@@ -24,6 +24,7 @@ use strims_crypto::{
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::chat::v1::UiConfigHighlight;
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
+use strims_proto::network::v1::directory::{Listing, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
@@ -32,6 +33,9 @@ use strims_proto::types::{Certificate, KeyUsage};
 
 use crate::events::{Record, Recv, StoreEvent, Subscription};
 use crate::key::{Namespace, profile_table};
+use crate::schema::directory::{
+    DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
+};
 use crate::schema::network::{
     AliasReservations, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks, RESERVED_FOREVER,
     network_scoped_key, new_certificate_log,
@@ -1002,6 +1006,172 @@ fn deleting_a_network_deletes_its_ca_records() {
     assert_eq!(ca_record_ids(&mut tx, 20), (vec![], vec![], vec![]));
     let left = block(CertificateLogs::get_all(&mut tx)).unwrap();
     assert!(left.is_empty());
+}
+
+fn directory_record_ids(tx: &mut WriteTx<MemoryKv>, network: u64) -> (Vec<u64>, Vec<u64>) {
+    let k = ref_key(network);
+    block(async {
+        (
+            DirectoryListingRecords::index_ids(tx, &DirectoryListingRecords::BY_NETWORK, &k)
+                .await
+                .unwrap(),
+            DirectoryUserRecords::index_ids(tx, &DirectoryUserRecords::BY_NETWORK, &k)
+                .await
+                .unwrap(),
+        )
+    })
+}
+
+fn chat_listing(key: &[u8]) -> Listing {
+    Listing {
+        content: Some(listing::Content::Chat(listing::Chat {
+            key: key.to_vec(),
+            name: "chat".into(),
+        })),
+    }
+}
+
+#[test]
+fn an_owned_network_makes_its_owner_directory_admin() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    let n = block(Networks::insert(&mut tx, owned_network(10, 1))).unwrap();
+    let owner_key = n.certificate.unwrap().key;
+
+    let (listings, users) = directory_record_ids(&mut tx, 10);
+    assert_eq!((listings.len(), users.len()), (0, 1));
+    let admin = block(DirectoryUserRecords::index_get(
+        &mut tx,
+        &DirectoryUserRecords::BY_PEER_KEY,
+        &network_scoped_key(10, &owner_key),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(admin.id, users[0]);
+    assert_eq!(
+        admin.moderation,
+        Some(UserModeration {
+            is_admin: Some(true),
+            is_moderator: Some(true),
+            ..Default::default()
+        })
+    );
+    let ids = ca_record_ids(&mut tx, 10);
+    assert!(
+        ids.0
+            .iter()
+            .chain(&ids.1)
+            .chain(&ids.2)
+            .all(|&id| id < admin.id)
+    );
+
+    // one applied from another replica gets none
+    tx.set_applying(77);
+    block(Networks::insert(&mut tx, owned_network(12, 3))).unwrap();
+    assert_eq!(directory_record_ids(&mut tx, 12), (vec![], vec![]));
+}
+
+#[test]
+fn a_joined_network_has_no_directory_user_record() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    let mut joined = owned_network(11, 2);
+    joined.server_config = None;
+    block(Networks::insert(&mut tx, joined)).unwrap();
+    assert_eq!(directory_record_ids(&mut tx, 11), (vec![], vec![]));
+    assert!(
+        block(DirectoryUserRecords::get_all(&mut tx))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn deleting_a_network_deletes_its_directory_records() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        for (network, seed) in [(10, 1), (20, 2)] {
+            Networks::insert(&mut tx, owned_network(network, seed))
+                .await
+                .unwrap();
+            let id = tx.generate_id().await.unwrap();
+            DirectoryListingRecords::insert(
+                &mut tx,
+                new_listing_record(id, network, chat_listing(b"room"), None),
+            )
+            .await
+            .unwrap();
+            let id = tx.generate_id().await.unwrap();
+            DirectoryUserRecords::insert(
+                &mut tx,
+                new_user_record(id, network, b"user", UserModeration::default()),
+            )
+            .await
+            .unwrap();
+        }
+        Networks::delete(&mut tx, 10).await.unwrap();
+    });
+    assert_eq!(directory_record_ids(&mut tx, 10), (vec![], vec![]));
+    let (listings, users) = directory_record_ids(&mut tx, 20);
+    assert_eq!((listings.len(), users.len()), (1, 2));
+    let by_listing = block(DirectoryListingRecords::index_ids(
+        &mut tx,
+        &DirectoryListingRecords::BY_LISTING,
+        &listing_key(10, Some(&chat_listing(b"room"))),
+    ))
+    .unwrap();
+    assert!(by_listing.is_empty());
+
+    // a deletion applied from another replica too
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 20)).unwrap();
+    assert_eq!(directory_record_ids(&mut tx, 20), (vec![], vec![]));
+    assert!(
+        block(DirectoryListingRecords::get_all(&mut tx))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        block(DirectoryUserRecords::get_all(&mut tx))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn directory_records_are_unique_per_listing_and_user() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        let listing = |id, network| new_listing_record(id, network, chat_listing(b"room"), None);
+        DirectoryListingRecords::insert(&mut tx, listing(1, 7))
+            .await
+            .unwrap();
+        assert!(matches!(
+            DirectoryListingRecords::insert(&mut tx, listing(2, 7)).await,
+            Err(Error::UniqueViolation(Namespace(9003)))
+        ));
+        DirectoryListingRecords::insert(&mut tx, listing(3, 8))
+            .await
+            .unwrap();
+
+        let user = |id, network| new_user_record(id, network, b"user", UserModeration::default());
+        DirectoryUserRecords::insert(&mut tx, user(4, 7))
+            .await
+            .unwrap();
+        assert!(matches!(
+            DirectoryUserRecords::insert(&mut tx, user(5, 7)).await,
+            Err(Error::UniqueViolation(Namespace(9005)))
+        ));
+        DirectoryUserRecords::insert(&mut tx, user(6, 8))
+            .await
+            .unwrap();
+    });
 }
 
 #[test]
