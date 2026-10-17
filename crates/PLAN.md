@@ -8,8 +8,6 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Chat. Its servers publish chat listings to the directory, and its nick
-  list follows the listing's users.
 - Notifications. They report certificate renewals.
 - Video ingress (RTMP), egress and HLS. Ingress publishes media listings and
   pushes its swarms' snippets with `DirectoryControl::push_snippet`.
@@ -19,7 +17,9 @@ Port the application services that sit on the core crates. The Go versions
 - The other dao record types arrive with their services: video channels
   and configs, vnic, autoseed, debug and bootstrap configs, notifications
   and swarm caches, each with its part of a network's deletion; until then,
-  stores from Go keep those records unread.
+  stores from Go keep those records unread. With swarm caches, a chat
+  room's asset swarm can start from its cache under (server key,
+  `chat:assets`); until then a reopened room downloads its bundles again.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Targets
@@ -34,9 +34,9 @@ Port the application services that sit on the core crates. The Go versions
   store named `data`, string keys and `Uint8Array` values. A task woken by
   an IndexedDB callback has to be polled before the transaction
   deactivates. Its `SessionFactory` starts a profile's node, replication,
-  network, transfer and directory controls and peer services, and binds the
-  network and directory frontends (`strims_node::app` is the native
-  equivalent).
+  network, transfer, directory, chat and whisper controls and peer
+  services, and binds the network, directory and chat frontends
+  (`strims_node::app` is the native equivalent).
 - `strims-svc`: the headless service. It needs a Postgres `Kv`; profile
   stores shared by several processes (cross-process change events, and a
   lease that spans them); rate limits on SignUp and SignIn, which each
@@ -47,6 +47,17 @@ Port the application services that sit on the core crates. The Go versions
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until v3 binds the bin.
 - `add_stream_close` is unused.
+
+### strims-chat defects
+- A whisper whose state write fails stays ENQUEUED outside the delivery
+  queue until the queue is reseeded (a lease change or a lagged store
+  subscription).
+- A server left unserved at `Config::max_served` starts only when its
+  record changes or the control restarts.
+- A client stream that moves between a served and a read server reads the
+  event window again, so it can repeat recent messages.
+- `WatchWhispers` doesn't resend the records that changed while it lagged;
+  the UI reads them again with `ListWhispers`.
 
 ### Cutover
 Ship the protocol-v3 changes below behind a version bump, then retire the Go
@@ -76,6 +87,13 @@ While networks have Go and Rust nodes:
   config says, so keep directory session timeouts at 15 minutes or more.
 - A Go directory server sends a new listing without its user count, so
   views show no users until the listing changes or the next refresh.
+- A Go reader of a stream that starts over requests nothing until the new
+  stream is as long as the old one, so it can miss a chat's unified asset
+  bundle (sent after a forced sync, or when deltas would pass the asset
+  window) until later deltas follow.
+- Go chat servers let only `admin_peer_keys` moderate, which no Go client
+  sets; they mute only users who have sent a message there, and answer
+  `GetMute` with no mute.
 
 ## Open questions
 
@@ -164,7 +182,9 @@ While networks have Go and Rust nodes:
 - **NAT traversal.** WebRTC has no ICE-TCP (RFC 4571) and no TURN, which str0m
   doesn't support. Decide what relaying native and browser nodes need.
 - **wasm memory budget.** The default live window is 2^16 × 1 KiB = 64 MiB per
-  swarm. Set per-swarm budgets and a global cap before the wasm target ships.
+  swarm, and a chat's asset swarm grows up to 32 MiB for each room a node
+  reads or serves. Set per-swarm budgets and a global cap before the wasm
+  target ships.
 - **Simulation coverage and fidelity.**
   - Waking an idle node to answer a query is a poll of its task and can shift
     later passes, so a sim's sampling cadence changes its trace. Make query

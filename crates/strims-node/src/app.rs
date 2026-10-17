@@ -3,14 +3,15 @@
 
 //! The app layer on a node: the node's clock as the app's [`Timer`], the
 //! node as the [`Host`] of the services a profile runs (replication,
-//! transfers and their record streams, network membership and the
-//! directory), and every peer's RPC link served with the app's
+//! transfers and their record streams, network membership, the directory,
+//! chat and whispers), and every peer's RPC link served with the app's
 //! [`PeerHandler`]s.
 //!
 //! A profile's services share one [`NodeHost`]. The directory control is
 //! built on the profile's network control and transfer control, and its
 //! swarms move only while the transfer control learns every peer: give
-//! [`PeerServices`] both controls.
+//! [`PeerServices`] both controls. The chat control is built on those and
+//! the directory control, the whisper control on the network control.
 //!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
 //! connections as local tasks, so it runs inside a tokio `LocalSet`.
