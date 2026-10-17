@@ -32,11 +32,14 @@ use strims_dao::schema::chat::{
     ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
     WhisperThreads, state_key,
 };
-use strims_dao::schema::network::{BootstrapClients, Networks};
+use strims_dao::schema::network::{
+    AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
+    network_scoped_key, new_alias_reservation, new_network_peer,
+};
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs};
 use strims_dao::seal::StorageKey;
-use strims_dao::{ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, lease};
+use strims_dao::{ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, lease, ref_key};
 use strims_kv::MemoryKv;
 use strims_proto::auth::v1::PairingToken;
 use strims_proto::chat::v1::{
@@ -46,10 +49,10 @@ use strims_proto::chat::v1::{
 use strims_proto::network::v1::bootstrap::{
     BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
 };
-use strims_proto::network::v1::{Network, ServerConfig};
+use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConfigRecord};
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::EventLog;
-use strims_proto::types::Certificate;
+use strims_proto::types::{Key, KeyUsage};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -134,26 +137,75 @@ fn go_reads_a_store_this_crate_writes() {
     let rs = block(ReplicatedStore::new(store.clone())).unwrap();
     let mut events = rs.events().subscribe();
     let network_key = strims_crypto::generate_key(&mut rng);
+    let doomed_key = strims_crypto::generate_key(&mut rng);
+    let profile_key = block(async {
+        let mut tx = store.read().await.unwrap();
+        Profile::get(&mut tx).await.unwrap().unwrap().key.unwrap()
+    });
+    let owned_network = |id: u64, key: &Key, rng: &mut strims_base::rng::DetRng| {
+        let usage = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
+        let csr = strims_crypto::new_certificate_request(&profile_key, usage, "bob").unwrap();
+        let cert = strims_crypto::sign_certificate_request_with_network(
+            &csr,
+            key,
+            "net",
+            strims_crypto::DEFAULT_CERT_TTL,
+            now,
+            rng,
+        )
+        .unwrap();
+        Network {
+            id,
+            certificate: Some(cert),
+            alias: "owned".into(),
+            server_config: Some(ServerConfig {
+                name: "net".into(),
+                key: Some(key.clone()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    };
+    let invitee = strims_crypto::generate_key(&mut rng);
+    let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
     block(async {
         let mut tx = rs.write(now).await.unwrap();
-        let id = tx.generate_id().await.unwrap();
-        Networks::insert(
+        owned_id = tx.generate_id().await.unwrap();
+        Networks::insert(&mut tx, owned_network(owned_id, &network_key, &mut rng))
+            .await
+            .unwrap();
+        doomed_id = tx.generate_id().await.unwrap();
+        Networks::insert(&mut tx, owned_network(doomed_id, &doomed_key, &mut rng))
+            .await
+            .unwrap();
+        Networks::delete(&mut tx, doomed_id).await.unwrap();
+        owner_peer_id = NetworkPeers::index_get(
             &mut tx,
-            Network {
-                id,
-                certificate: Some(Certificate {
-                    key: network_key.public.clone(),
-                    subject: "net".into(),
-                    not_after: 4_000_000_000,
-                    ..Default::default()
-                }),
-                alias: "owned".into(),
-                server_config: Some(ServerConfig {
-                    name: "net".into(),
-                    key: Some(network_key.clone()),
-                    ..Default::default()
-                }),
-                ..Default::default()
+            &NetworkPeers::BY_PUBLIC_KEY,
+            &network_scoped_key(owned_id, &profile_key.public),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+        let id = tx.generate_id().await.unwrap();
+        NetworkPeers::insert(
+            &mut tx,
+            new_network_peer(id, owned_id, &invitee.public, "invitee", owner_peer_id, now),
+        )
+        .await
+        .unwrap();
+        let id = tx.generate_id().await.unwrap();
+        AliasReservations::insert(
+            &mut tx,
+            new_alias_reservation(id, owned_id, "invitee", &invitee.public),
+        )
+        .await
+        .unwrap();
+        NetworkUiConfig::set(
+            &mut tx,
+            NetworkUiConfigRecord {
+                network_display_order: vec![owned_id],
             },
         )
         .await
@@ -349,6 +401,18 @@ fn go_reads_a_store_this_crate_writes() {
             &ui.encode_to_vec(),
         ],
     );
+    let network_ui = block(NetworkUiConfig::get(&mut tx)).unwrap().unwrap();
+    out.put(
+        "record",
+        &[
+            &4008u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &network_ui.encode_to_vec(),
+        ],
+    );
+    record_lines::<CertificateLogs>(&mut tx, &mut out);
+    record_lines::<NetworkPeers>(&mut tx, &mut out);
+    record_lines::<AliasReservations>(&mut tx, &mut out);
     record_lines::<Devices>(&mut tx, &mut out);
     record_lines::<Networks>(&mut tx, &mut out);
     record_lines::<BootstrapClients>(&mut tx, &mut out);
@@ -361,6 +425,62 @@ fn go_reads_a_store_this_crate_writes() {
     record_lines::<Checkpoints>(&mut tx, &mut out);
 
     index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
+    let scoped = |b: &[u8]| network_scoped_key(owned_id, b);
+    let cert_logs = block(CertificateLogs::get_all(&mut tx)).unwrap();
+    assert_eq!(
+        cert_logs.len(),
+        2,
+        "the owned network's chain; the deleted one's went"
+    );
+    for log in &cert_logs {
+        let c = log.certificate.as_ref().unwrap();
+        index_line::<CertificateLogs>(
+            &mut tx,
+            &CertificateLogs::BY_SERIAL_NUMBER,
+            &scoped(&c.serial_number),
+            &mut out,
+        );
+        index_line::<CertificateLogs>(
+            &mut tx,
+            &CertificateLogs::BY_SUBJECT,
+            &scoped(c.subject.as_bytes()),
+            &mut out,
+        );
+        index_line::<CertificateLogs>(&mut tx, &CertificateLogs::BY_KEY, &scoped(&c.key), &mut out);
+    }
+    for id in [owned_id, doomed_id] {
+        index_line::<CertificateLogs>(
+            &mut tx,
+            &CertificateLogs::BY_NETWORK,
+            &ref_key(id),
+            &mut out,
+        );
+        index_line::<NetworkPeers>(&mut tx, &NetworkPeers::BY_NETWORK, &ref_key(id), &mut out);
+        index_line::<AliasReservations>(
+            &mut tx,
+            &AliasReservations::BY_NETWORK,
+            &ref_key(id),
+            &mut out,
+        );
+    }
+    index_line::<NetworkPeers>(
+        &mut tx,
+        &NetworkPeers::BY_PUBLIC_KEY,
+        &scoped(&invitee.public),
+        &mut out,
+    );
+    index_line::<NetworkPeers>(
+        &mut tx,
+        &NetworkPeers::BY_INVITER,
+        &ref_key(owner_peer_id),
+        &mut out,
+    );
+    index_line::<AliasReservations>(
+        &mut tx,
+        &AliasReservations::BY_ALIAS,
+        &scoped(b"bob"),
+        &mut out,
+    );
     index_line::<BootstrapClients>(
         &mut tx,
         &BootstrapClients::BY_CLIENT_OPTIONS,

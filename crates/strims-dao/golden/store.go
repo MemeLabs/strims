@@ -91,6 +91,25 @@ func storeScenario(w *bufio.Writer) {
 		return nil
 	}))
 
+	// The owned network's CA: an invitee, a renewal of the owner's
+	// certificate that takes over its subject and key, an alias given up,
+	// and the UI's network order.
+	peerSign := certificate.KeyUsage_KEY_USAGE_PEER | certificate.KeyUsage_KEY_USAGE_SIGN
+	ownerPeer := must(dao.NetworkPeersByPublicKey.Get(rs, dao.FormatNetworkPeerPublicKeyKey(owned.Id, owned.Certificate.Key)))
+	inviteeKey := must(dao.GenerateKey())
+	inviteeCSR := must(dao.NewCertificateRequest(inviteeKey, peerSign, dao.WithSubject("invitee")))
+	inviteeCert := must(dao.SignCertificateRequestWithNetwork(inviteeCSR, owned.ServerConfig))
+	must0(dao.CertificateLogs.Insert(rs, must(dao.NewCertificateLog(rs, owned.Id, inviteeCert))))
+	must0(dao.NetworkPeers.Insert(rs, must(dao.NewNetworkPeer(rs, owned.Id, inviteeKey.Public, "invitee", ownerPeer.Id))))
+	must0(dao.NetworkAliasReservations.Insert(rs, must(dao.NewNetworkAliasReservation(rs, owned.Id, "invitee", inviteeKey.Public))))
+	ownerCSR := must(dao.NewCertificateRequest(profile.Key, peerSign, dao.WithSubject(profile.Name)))
+	renewed := must(dao.SignCertificateRequestWithNetwork(ownerCSR, owned.ServerConfig))
+	must0(dao.CertificateLogs.Insert(rs, must(dao.NewCertificateLog(rs, owned.Id, renewed))))
+	spare := must(dao.NewNetworkAliasReservation(rs, owned.Id, "spare", inviteeKey.Public))
+	must0(dao.NetworkAliasReservations.Insert(rs, spare))
+	must0(dao.NetworkAliasReservations.Release(rs, spare.Id, dao.NetworkAliasReservationCooldown))
+	must0(dao.NetworkUIConfig.Set(rs, &networkv1.UIConfig{NetworkDisplayOrder: []uint64{joined.Id, owned.Id}}))
+
 	// Bootstrap clients.
 	b1 := must(dao.NewWebSocketBootstrapClient(rs, "wss://one.example/ws", false))
 	must0(dao.BootstrapClients.Insert(rs, b1))
@@ -167,6 +186,16 @@ func storeScenario(w *bufio.Writer) {
 	}
 	for _, m := range must(dao.BootstrapClients.GetAll(rs)) {
 		record(4007, m.Id, m)
+	}
+	record(4008, 0, must(dao.NetworkUIConfig.Get(rs)))
+	for _, m := range must(dao.CertificateLogs.GetAll(rs)) {
+		record(4003, m.Id, m)
+	}
+	for _, m := range must(dao.NetworkPeers.GetAll(rs)) {
+		record(4009, m.Id, m)
+	}
+	for _, m := range must(dao.NetworkAliasReservations.GetAll(rs)) {
+		record(4016, m.Id, m)
 	}
 	for _, m := range must(dao.ChatUIConfigHighlights.GetAll(rs)) {
 		record(6018, m.Id, m)
@@ -340,6 +369,14 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 		return must(dao.Networks.Get(s, id))
 	case 4007:
 		return must(dao.BootstrapClients.Get(s, id))
+	case 4008:
+		return must(dao.NetworkUIConfig.Get(s))
+	case 4003:
+		return must(dao.CertificateLogs.Get(s, id))
+	case 4009:
+		return must(dao.NetworkPeers.Get(s, id))
+	case 4016:
+		return must(dao.NetworkAliasReservations.Get(s, id))
 	case 6018:
 		return must(dao.ChatUIConfigHighlights.Get(s, id))
 	case 6020:
@@ -382,6 +419,24 @@ func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
 		return one(dao.NetworksByKey.Get(s, key))
 	case 4014:
 		return one(dao.BootstrapClientsByClientOptions.Get(s, key))
+	case 4004:
+		return ids(dao.CertificateLogsByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 4005:
+		return one(dao.CertificateLogsBySerialNumber.Get(s, key))
+	case 4006:
+		return one(dao.CertificateLogsBySubject.Get(s, key))
+	case 4013:
+		return one(dao.CertificateLogsByKey.Get(s, key))
+	case 4010:
+		return ids(dao.NetworkPeersByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 4011:
+		return one(dao.NetworkPeersByPublicKey.Get(s, key))
+	case 4012:
+		return ids(dao.NetworkPeersByInviterPeer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 4017:
+		return ids(dao.NetworkAliasReservationsByNetwork.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
+	case 4018:
+		return one(dao.NetworkAliasReservationsByAlias.Get(s, key))
 	case 6019:
 		return one(dao.ChatUIConfigHighlightsByPeerKey.Get(s, key))
 	case 6021:

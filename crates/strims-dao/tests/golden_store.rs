@@ -28,11 +28,14 @@ use strims_dao::schema::chat::{
     ChatUiConfig, ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords,
     WhisperThreads,
 };
-use strims_dao::schema::network::{BootstrapClients, Networks};
+use strims_dao::schema::network::{
+    AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
+    RESERVED_FOREVER, network_scoped_key,
+};
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use strims_dao::seal::StorageKey;
-use strims_dao::{ProfileStore, ReadTx, Singleton, Table, lease};
+use strims_dao::{ProfileStore, ReadTx, Singleton, Table, lease, ref_key};
 use strims_kv::{Dump, MemoryKv};
 use strims_proto::dao::v1::{Mutex, SecondaryIndexKey, VersionVector};
 use strims_proto::replication::v1::{Event, EventLog};
@@ -149,6 +152,10 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         Devices::NS => re::<<Devices as Table>::Record>(bytes),
         Networks::NS => re::<<Networks as Table>::Record>(bytes),
         BootstrapClients::NS => re::<<BootstrapClients as Table>::Record>(bytes),
+        NetworkUiConfig::NS => re::<<NetworkUiConfig as Singleton>::Record>(bytes),
+        CertificateLogs::NS => re::<<CertificateLogs as Table>::Record>(bytes),
+        NetworkPeers::NS => re::<<NetworkPeers as Table>::Record>(bytes),
+        AliasReservations::NS => re::<<AliasReservations as Table>::Record>(bytes),
         ChatUiConfigHighlights::NS => re::<<ChatUiConfigHighlights as Table>::Record>(bytes),
         ChatUiConfigTags::NS => re::<<ChatUiConfigTags as Table>::Record>(bytes),
         ChatUiConfigIgnores::NS => re::<<ChatUiConfigIgnores as Table>::Record>(bytes),
@@ -175,6 +182,10 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         Devices::NS => t::<Devices>(tx, id),
         Networks::NS => t::<Networks>(tx, id),
         BootstrapClients::NS => t::<BootstrapClients>(tx, id),
+        NetworkUiConfig::NS => s::<NetworkUiConfig>(tx),
+        CertificateLogs::NS => t::<CertificateLogs>(tx, id),
+        NetworkPeers::NS => t::<NetworkPeers>(tx, id),
+        AliasReservations::NS => t::<AliasReservations>(tx, id),
         ChatUiConfigHighlights::NS => t::<ChatUiConfigHighlights>(tx, id),
         ChatUiConfigTags::NS => t::<ChatUiConfigTags>(tx, id),
         ChatUiConfigIgnores::NS => t::<ChatUiConfigIgnores>(tx, id),
@@ -217,14 +228,21 @@ fn records_read_back() {
     assert_ne!(profile.device_id, 0);
 }
 
+/// The keys of `T`'s rows and index entries. A record whose unique key
+/// another record took over has no entry under it, so a unique entry is
+/// expected only for the record the index finds.
 fn keys_of<T: Table>(tx: &mut ReadTx<MemoryKv>, salt: &[u8], out: &mut BTreeSet<String>) {
     for r in block(T::get_all(tx)).unwrap() {
         let id = T::id(&r);
         out.insert(T::NS.record_key(id));
         for ix in T::INDEXES {
-            if (ix.condition)(&r) {
-                out.insert(index_entry_key(ix.ns, salt, &(ix.key)(&r), id));
+            let key = (ix.key)(&r);
+            if !(ix.condition)(&r)
+                || ix.unique && !block(T::index_ids(tx, ix, &key)).unwrap().contains(&id)
+            {
+                continue;
             }
+            out.insert(index_entry_key(ix.ns, salt, &key, id));
         }
     }
 }
@@ -240,6 +258,9 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<Devices>(&mut tx, &salt, &mut derived);
     keys_of::<Networks>(&mut tx, &salt, &mut derived);
     keys_of::<BootstrapClients>(&mut tx, &salt, &mut derived);
+    keys_of::<CertificateLogs>(&mut tx, &salt, &mut derived);
+    keys_of::<NetworkPeers>(&mut tx, &salt, &mut derived);
+    keys_of::<AliasReservations>(&mut tx, &salt, &mut derived);
     keys_of::<ChatUiConfigHighlights>(&mut tx, &salt, &mut derived);
     keys_of::<ChatUiConfigTags>(&mut tx, &salt, &mut derived);
     keys_of::<ChatUiConfigIgnores>(&mut tx, &salt, &mut derived);
@@ -252,6 +273,7 @@ fn every_key_is_the_one_this_crate_derives() {
         Profile::NS,
         ProfileIds::NS,
         ChatUiConfig::NS,
+        NetworkUiConfig::NS,
     ] {
         derived.insert(ns.key());
     }
@@ -260,7 +282,7 @@ fn every_key_is_the_one_this_crate_derives() {
 
     // Every namespace this crate defines, and the lease namespace.
     let mut known: BTreeSet<i64> = [1001, 1002, 1003, 1004, 2001, 2002, 2003].into();
-    known.extend([4001, 4002, 4007, 4014, 6008]);
+    known.extend((4001..=4014).chain(4016..=4018).chain([6008]));
     known.extend((6012..=6023).chain([6025]));
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
@@ -283,7 +305,11 @@ fn every_key_is_the_one_this_crate_derives() {
     let sk = g.profile.storage_key();
     for (k, v) in table {
         let ns = k.split(':').next().and_then(parse_base36).unwrap() as i64;
-        if [4002, 4014, 6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns) {
+        let index_ns = [
+            4002, 4004, 4005, 4006, 4010, 4011, 4012, 4013, 4014, 4017, 4018,
+        ];
+        if index_ns.contains(&ns) || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
+        {
             let entry = SecondaryIndexKey::decode(sk.open(v).unwrap().as_slice()).unwrap();
             assert_eq!(
                 index_entry_key(Namespace(ns), &salt, &entry.key, entry.id),
@@ -340,4 +366,92 @@ fn compressed_delta_matches() {
     let delta = block(compressed_delta(&store, &g.delta_remote)).unwrap();
     assert!(!delta.is_empty());
     assert_eq!(normalize(&delta), normalize(&g.delta));
+}
+
+/// The owned network's CA records: the owner's chain and its renewal, an
+/// invitee under the owner, and an alias given up.
+#[test]
+fn ca_records_read_back_by_index() {
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let owned = block(Networks::get_all(&mut tx))
+        .unwrap()
+        .into_iter()
+        .find(|n| n.server_config.is_some())
+        .unwrap();
+    let owner_cert = owned.certificate.clone().unwrap();
+    let scoped = |b: &[u8]| network_scoped_key(owned.id, b);
+
+    let logs = block(CertificateLogs::index_get_all(
+        &mut tx,
+        &CertificateLogs::BY_NETWORK,
+        &ref_key(owned.id),
+    ))
+    .unwrap();
+    // the owner's member and root certificates, the invitee's, the renewal
+    assert_eq!(logs.len(), 4);
+    let by_subject = |tx: &mut ReadTx<MemoryKv>, subject: &str| {
+        block(CertificateLogs::index_get(
+            tx,
+            &CertificateLogs::BY_SUBJECT,
+            &scoped(subject.as_bytes()),
+        ))
+        .unwrap()
+        .unwrap()
+    };
+    let latest = by_subject(&mut tx, &g.name);
+    assert_ne!(latest.certificate.as_ref().unwrap(), &owner_cert);
+    assert_eq!(latest.certificate.as_ref().unwrap().key, owner_cert.key);
+    assert_eq!(
+        block(CertificateLogs::index_get(
+            &mut tx,
+            &CertificateLogs::BY_KEY,
+            &scoped(&owner_cert.key)
+        ))
+        .unwrap()
+        .unwrap()
+        .id,
+        latest.id
+    );
+    let invitee_log = by_subject(&mut tx, "invitee");
+
+    let owner = block(NetworkPeers::index_get(
+        &mut tx,
+        &NetworkPeers::BY_PUBLIC_KEY,
+        &scoped(&owner_cert.key),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(owner.inviter_peer_id, 0);
+    let invited = block(NetworkPeers::index_get_all(
+        &mut tx,
+        &NetworkPeers::BY_INVITER,
+        &ref_key(owner.id),
+    ))
+    .unwrap();
+    assert_eq!(invited.len(), 1);
+    assert_eq!(invited[0].public_key, invitee_log.certificate.unwrap().key);
+
+    let held = block(AliasReservations::index_get(
+        &mut tx,
+        &AliasReservations::BY_ALIAS,
+        &scoped(b"invitee"),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(held.reserved_until, RESERVED_FOREVER);
+    let spare = block(AliasReservations::index_get(
+        &mut tx,
+        &AliasReservations::BY_ALIAS,
+        &scoped(b"spare"),
+    ))
+    .unwrap()
+    .unwrap();
+    assert!(spare.peer_key.is_empty());
+    assert!(spare.reserved_until > g.now.unix() && spare.reserved_until < RESERVED_FOREVER);
+
+    let ui = block(NetworkUiConfig::get(&mut tx)).unwrap().unwrap();
+    assert_eq!(ui.network_display_order.len(), 2);
+    assert_eq!(ui.network_display_order[1], owned.id);
 }

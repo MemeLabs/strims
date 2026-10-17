@@ -1,17 +1,33 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Networks the profile belongs to, and its bootstrap clients.
+//! Networks the profile belongs to, its bootstrap clients, and the records
+//! of the networks whose CA it runs.
+//!
+//! A network's CA lives on the device that holds its server config, so
+//! its records (certificate logs, network peers, alias reservations) don't
+//! replicate. Inserting a network with a server config on this device
+//! creates the CA's records for its owner, and deleting a network deletes
+//! its CA records.
 
+use futures_util::future::LocalBoxFuture;
 use prost::Message;
-use strims_crypto::certificate_network_key;
-use strims_proto::network::v1::Network;
+use strims_base::time::Time;
+use strims_crypto::{certificate_chain, certificate_network_key};
+use strims_kv::Kv;
 use strims_proto::network::v1::bootstrap::{BootstrapClient, bootstrap_client};
+use strims_proto::network::v1::ca::CertificateLog;
+use strims_proto::network::v1::{AliasReservation, Network, Peer, UiConfig};
+use strims_proto::types::Certificate;
+use strims_proto::types::certificate::ParentOneof;
 
+use crate::error::Error;
 use crate::events::Record;
 use crate::key::Namespace;
+use crate::store::WriteTx;
 use crate::table::{
-    ApplyConflict, Index, Replication, Table, UniqueConflict, resolve_last_written, upgrade_version,
+    ApplyConflict, Index, Replication, Singleton, Table, UniqueConflict, ref_key,
+    resolve_last_written, upgrade_version,
 };
 
 /// The profile's networks. A network's server config (its CA) stays on
@@ -76,6 +92,60 @@ impl Table for Networks {
     /// Server configs don't replicate, so no replica can tell whether
     /// deleting another's record for a network would delete its CA.
     const ON_APPLY_CONFLICT: ApplyConflict = ApplyConflict::KeepLocal;
+
+    /// A network with a server config written here for the first time
+    /// gets its CA's records for the owner: a log of each certificate in
+    /// the owner's chain, the owner as the network's first peer, and the
+    /// owner's alias.
+    fn on_change<'a, K: Kv>(
+        tx: &'a mut WriteTx<K>,
+        m: &'a mut Network,
+        p: Option<&'a Network>,
+    ) -> LocalBoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            if p.is_some() || m.server_config.is_none() || tx.applying() {
+                return Ok(());
+            }
+            let Some(cert) = m.certificate.as_ref() else {
+                return Ok(());
+            };
+            for c in certificate_chain(cert) {
+                let id = tx.generate_id().await?;
+                CertificateLogs::insert(tx, new_certificate_log(id, m.id, c)).await?;
+            }
+            let id = tx.generate_id().await?;
+            let now = tx.now();
+            let peer = new_network_peer(id, m.id, &cert.key, &cert.subject, 0, now);
+            NetworkPeers::insert(tx, peer).await?;
+            let id = tx.generate_id().await?;
+            let reservation = new_alias_reservation(id, m.id, &cert.subject, &cert.key);
+            AliasReservations::insert(tx, reservation).await?;
+            Ok(())
+        })
+    }
+
+    /// Deleting a network deletes its CA's records.
+    fn on_delete<'a, K: Kv>(
+        tx: &'a mut WriteTx<K>,
+        p: &'a Network,
+    ) -> LocalBoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            let network = ref_key(p.id);
+            for id in CertificateLogs::index_ids(tx, &CertificateLogs::BY_NETWORK, &network).await?
+            {
+                CertificateLogs::delete(tx, id).await?;
+            }
+            for id in NetworkPeers::index_ids(tx, &NetworkPeers::BY_NETWORK, &network).await? {
+                NetworkPeers::delete(tx, id).await?;
+            }
+            for id in
+                AliasReservations::index_ids(tx, &AliasReservations::BY_NETWORK, &network).await?
+            {
+                AliasReservations::delete(tx, id).await?;
+            }
+            Ok(())
+        })
+    }
 }
 
 fn updated_at(n: &Network) -> i64 {
@@ -159,6 +229,201 @@ impl Table for BootstrapClients {
         _: &BootstrapClient,
     ) -> UniqueConflict {
         UniqueConflict::Replace
+    }
+}
+
+/// The key of a value within a network: the network id, big-endian,
+/// then the value's bytes.
+pub fn network_scoped_key(network_id: u64, value: &[u8]) -> Vec<u8> {
+    let mut k = Vec::with_capacity(8 + value.len());
+    k.extend_from_slice(&network_id.to_be_bytes());
+    k.extend_from_slice(value);
+    k
+}
+
+/// The certificates a network's CA issued, and the chain of its owner's
+/// first certificate. A log's certificate names its parent by serial
+/// number.
+pub struct CertificateLogs;
+
+impl CertificateLogs {
+    /// Logs by network.
+    pub const BY_NETWORK: Index<CertificateLog> =
+        Index::new(Namespace(4004), |r| ref_key(r.network_id));
+    /// Logs by (network, serial number); serial numbers are unique.
+    pub const BY_SERIAL_NUMBER: Index<CertificateLog> = Index::unique(Namespace(4005), |r| {
+        let serial = log_certificate(r).map_or(&[][..], |c| c.serial_number.as_slice());
+        network_scoped_key(r.network_id, serial)
+    });
+    /// The latest log for each (network, subject).
+    pub const BY_SUBJECT: Index<CertificateLog> = Index::unique(Namespace(4006), |r| {
+        let subject = log_certificate(r).map_or("", |c| c.subject.as_str());
+        network_scoped_key(r.network_id, subject.as_bytes())
+    });
+    /// The latest log for each (network, key).
+    pub const BY_KEY: Index<CertificateLog> = Index::unique(Namespace(4013), |r| {
+        let key = log_certificate(r).map_or(&[][..], |c| c.key.as_slice());
+        network_scoped_key(r.network_id, key)
+    });
+}
+
+fn log_certificate(r: &CertificateLog) -> Option<&Certificate> {
+    r.certificate.as_ref()
+}
+
+impl Table for CertificateLogs {
+    type Record = CertificateLog;
+    const NS: Namespace = Namespace(4003);
+    const INDEXES: &'static [Index<CertificateLog>] = &[
+        CertificateLogs::BY_NETWORK,
+        CertificateLogs::BY_SERIAL_NUMBER,
+        CertificateLogs::BY_SUBJECT,
+        CertificateLogs::BY_KEY,
+    ];
+
+    fn id(r: &CertificateLog) -> u64 {
+        r.id
+    }
+
+    /// A newer log for a subject or key takes it over; serial numbers
+    /// never repeat.
+    fn on_unique_conflict(
+        ix: &Index<CertificateLog>,
+        _: &mut CertificateLog,
+        _: &CertificateLog,
+    ) -> UniqueConflict {
+        if ix.ns == CertificateLogs::BY_SERIAL_NUMBER.ns {
+            UniqueConflict::Reject
+        } else {
+            UniqueConflict::Steal
+        }
+    }
+}
+
+/// A log of `cert`, issued on network `network_id`, naming its parent by
+/// serial number.
+pub fn new_certificate_log(id: u64, network_id: u64, cert: &Certificate) -> CertificateLog {
+    let mut cert = cert.clone();
+    if let Some(ParentOneof::Parent(p)) = &cert.parent_oneof {
+        cert.parent_oneof = Some(ParentOneof::ParentSerialNumber(p.serial_number.clone()));
+    }
+    CertificateLog {
+        id,
+        network_id,
+        certificate: Some(cert),
+    }
+}
+
+/// The members of networks whose CA this device runs.
+pub struct NetworkPeers;
+
+impl NetworkPeers {
+    /// Peers by network.
+    pub const BY_NETWORK: Index<Peer> = Index::new(Namespace(4010), |r| ref_key(r.network_id));
+    /// Peers by (network, public key); at most one per key.
+    pub const BY_PUBLIC_KEY: Index<Peer> = Index::unique(Namespace(4011), |r| {
+        network_scoped_key(r.network_id, &r.public_key)
+    });
+    /// Peers by the peer that invited them; the owner's inviter is 0.
+    pub const BY_INVITER: Index<Peer> = Index::new(Namespace(4012), |r| ref_key(r.inviter_peer_id));
+}
+
+impl Table for NetworkPeers {
+    type Record = Peer;
+    const NS: Namespace = Namespace(4009);
+    const INDEXES: &'static [Index<Peer>] = &[
+        NetworkPeers::BY_NETWORK,
+        NetworkPeers::BY_PUBLIC_KEY,
+        NetworkPeers::BY_INVITER,
+    ];
+
+    fn id(r: &Peer) -> u64 {
+        r.id
+    }
+}
+
+/// Invitations a new network peer may make.
+pub const DEFAULT_INVITE_QUOTA: u32 = 3;
+
+/// A member of network `network_id`, invited by peer `inviter_peer_id` (0
+/// for the owner), joining at `now`.
+pub fn new_network_peer(
+    id: u64,
+    network_id: u64,
+    public_key: &[u8],
+    alias: &str,
+    inviter_peer_id: u64,
+    now: Time,
+) -> Peer {
+    Peer {
+        id,
+        network_id,
+        public_key: public_key.to_vec(),
+        alias: alias.to_owned(),
+        inviter_peer_id,
+        invite_quota: DEFAULT_INVITE_QUOTA,
+        created_at: now.unix(),
+        ..Default::default()
+    }
+}
+
+/// Aliases in networks whose CA this device runs: held by a peer's key,
+/// or free once `reserved_until` (Unix seconds) has passed.
+pub struct AliasReservations;
+
+impl AliasReservations {
+    /// Reservations by network.
+    pub const BY_NETWORK: Index<AliasReservation> =
+        Index::new(Namespace(4017), |r| ref_key(r.network_id));
+    /// Reservations by (network, alias); at most one per alias.
+    pub const BY_ALIAS: Index<AliasReservation> = Index::unique(Namespace(4018), |r| {
+        network_scoped_key(r.network_id, r.alias.as_bytes())
+    });
+}
+
+impl Table for AliasReservations {
+    type Record = AliasReservation;
+    const NS: Namespace = Namespace(4016);
+    const INDEXES: &'static [Index<AliasReservation>] =
+        &[AliasReservations::BY_NETWORK, AliasReservations::BY_ALIAS];
+
+    fn id(r: &AliasReservation) -> u64 {
+        r.id
+    }
+}
+
+/// The `reserved_until` of an alias a peer holds.
+pub const RESERVED_FOREVER: i64 = i64::MAX / 1_000_000_000;
+
+/// `alias` on network `network_id`, held by `peer_key`.
+pub fn new_alias_reservation(
+    id: u64,
+    network_id: u64,
+    alias: &str,
+    peer_key: &[u8],
+) -> AliasReservation {
+    AliasReservation {
+        id,
+        network_id,
+        alias: alias.to_owned(),
+        peer_key: peer_key.to_vec(),
+        reserved_until: RESERVED_FOREVER,
+    }
+}
+
+/// How the UI lists the profile's networks.
+pub struct NetworkUiConfig;
+
+impl Singleton for NetworkUiConfig {
+    type Record = UiConfig;
+    const NS: Namespace = Namespace(4008);
+
+    fn default_value() -> Option<UiConfig> {
+        Some(UiConfig::default())
+    }
+
+    fn observe(r: &UiConfig) -> Option<Record> {
+        Some(Record::NetworkUiConfig(r.clone()))
     }
 }
 

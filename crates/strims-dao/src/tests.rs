@@ -18,19 +18,29 @@ use futures_util::{FutureExt, StreamExt};
 use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
+use strims_crypto::{
+    DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
+};
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::chat::v1::UiConfigHighlight;
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
+use strims_proto::network::v1::{Network, ServerConfig};
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
+use strims_proto::types::certificate::ParentOneof;
+use strims_proto::types::{Certificate, KeyUsage};
 
 use crate::events::{Record, Recv, StoreEvent, Subscription};
 use crate::key::{Namespace, profile_table};
+use crate::schema::network::{
+    AliasReservations, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks, RESERVED_FOREVER,
+    network_scoped_key, new_certificate_log,
+};
 use crate::schema::profile::{Devices, Profile, ProfileIds};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use crate::seal::StorageKey;
 use crate::store::{MAX_LOG_EVENTS, ProfileStore, ReplicatedStore, STORE_VERSION, WriteTx};
-use crate::table::{Index, Replication, Singleton, Table, UniqueConflict};
+use crate::table::{Index, Replication, Singleton, Table, UniqueConflict, ref_key};
 use crate::{Error, lease};
 
 fn block<T>(f: impl Future<Output = T>) -> T {
@@ -850,4 +860,185 @@ fn leases_exclude_other_holders() {
     });
     let mut tx = block(kv.begin_read(&profile_table(1))).unwrap();
     assert!(block(tx.get("rt:replication")).unwrap().is_some());
+}
+
+/// A network as its owner creates it: the owner's membership under the
+/// network's root, and the network's key in its server config.
+fn owned_network(id: u64, seed: u64) -> Network {
+    let mut rng = det_rng(seed);
+    let (network_key, owner) = (generate_key(&mut rng), generate_key(&mut rng));
+    let usage = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
+    let csr = new_certificate_request(&owner, usage, "owner").unwrap();
+    let cert = sign_certificate_request_with_network(
+        &csr,
+        &network_key,
+        "net",
+        DEFAULT_CERT_TTL,
+        T0,
+        &mut rng,
+    )
+    .unwrap();
+    Network {
+        id,
+        certificate: Some(cert),
+        server_config: Some(ServerConfig {
+            name: "net".into(),
+            key: Some(network_key),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+fn ca_record_ids(tx: &mut WriteTx<MemoryKv>, network: u64) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let k = ref_key(network);
+    block(async {
+        (
+            CertificateLogs::index_ids(tx, &CertificateLogs::BY_NETWORK, &k)
+                .await
+                .unwrap(),
+            NetworkPeers::index_ids(tx, &NetworkPeers::BY_NETWORK, &k)
+                .await
+                .unwrap(),
+            AliasReservations::index_ids(tx, &AliasReservations::BY_NETWORK, &k)
+                .await
+                .unwrap(),
+        )
+    })
+}
+
+#[test]
+fn owned_networks_get_their_ca_records() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    let n = block(Networks::insert(&mut tx, owned_network(10, 1))).unwrap();
+    let cert = n.certificate.unwrap();
+    let root = strims_crypto::certificate_parent(&cert).unwrap().clone();
+
+    let (logs, peers, reservations) = ca_record_ids(&mut tx, 10);
+    assert_eq!((logs.len(), peers.len(), reservations.len()), (2, 1, 1));
+    block(async {
+        let member = CertificateLogs::index_get(
+            &mut tx,
+            &CertificateLogs::BY_SUBJECT,
+            &network_scoped_key(10, b"owner"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let logged = member.certificate.unwrap();
+        assert_eq!(logged.key, cert.key);
+        assert_eq!(
+            logged.parent_oneof,
+            Some(ParentOneof::ParentSerialNumber(root.serial_number.clone()))
+        );
+        let root_log = CertificateLogs::index_get(
+            &mut tx,
+            &CertificateLogs::BY_SERIAL_NUMBER,
+            &network_scoped_key(10, &root.serial_number),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(root_log.certificate.unwrap(), root);
+
+        let peer = NetworkPeers::index_get(
+            &mut tx,
+            &NetworkPeers::BY_PUBLIC_KEY,
+            &network_scoped_key(10, &cert.key),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            (peer.alias.as_str(), peer.inviter_peer_id, peer.invite_quota),
+            ("owner", 0, 3)
+        );
+        assert_eq!(peer.created_at, T0.unix());
+        let r = AliasReservations::index_get(
+            &mut tx,
+            &AliasReservations::BY_ALIAS,
+            &network_scoped_key(10, b"owner"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!((r.peer_key, r.reserved_until), (cert.key, RESERVED_FOREVER));
+
+        // a joined network, and one applied from another replica, get none
+        let mut joined = owned_network(11, 2);
+        joined.server_config = None;
+        Networks::insert(&mut tx, joined).await.unwrap();
+        tx.set_applying(77);
+        Networks::insert(&mut tx, owned_network(12, 3))
+            .await
+            .unwrap();
+    });
+    assert_eq!(ca_record_ids(&mut tx, 11), (vec![], vec![], vec![]));
+    assert_eq!(ca_record_ids(&mut tx, 12), (vec![], vec![], vec![]));
+}
+
+#[test]
+fn deleting_a_network_deletes_its_ca_records() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        Networks::insert(&mut tx, owned_network(10, 1))
+            .await
+            .unwrap();
+        Networks::insert(&mut tx, owned_network(20, 2))
+            .await
+            .unwrap();
+        Networks::delete(&mut tx, 10).await.unwrap();
+    });
+    assert_eq!(ca_record_ids(&mut tx, 10), (vec![], vec![], vec![]));
+    assert_eq!(ca_record_ids(&mut tx, 20).0.len(), 2);
+
+    // a deletion applied from another replica too
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 20)).unwrap();
+    assert_eq!(ca_record_ids(&mut tx, 20), (vec![], vec![], vec![]));
+    let left = block(CertificateLogs::get_all(&mut tx)).unwrap();
+    assert!(left.is_empty());
+}
+
+#[test]
+fn newer_certificate_logs_take_over_their_subject_and_key() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let cert = |serial: u8| Certificate {
+        key: b"k".to_vec(),
+        subject: "s".into(),
+        serial_number: vec![serial; 16],
+        ..Default::default()
+    };
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        CertificateLogs::insert(&mut tx, new_certificate_log(1, 7, &cert(1)))
+            .await
+            .unwrap();
+        CertificateLogs::insert(&mut tx, new_certificate_log(2, 7, &cert(2)))
+            .await
+            .unwrap();
+        for (ix, key) in [
+            (&CertificateLogs::BY_SUBJECT, b"s"),
+            (&CertificateLogs::BY_KEY, b"k"),
+        ] {
+            let ids = CertificateLogs::index_ids(&mut tx, ix, &network_scoped_key(7, key))
+                .await
+                .unwrap();
+            assert_eq!(ids, [2]);
+        }
+        assert!(CertificateLogs::get(&mut tx, 1).await.unwrap().is_some());
+        assert!(matches!(
+            CertificateLogs::insert(&mut tx, new_certificate_log(3, 7, &cert(2))).await,
+            Err(Error::UniqueViolation(Namespace(4005)))
+        ));
+        assert_eq!(
+            NetworkUiConfig::get(&mut tx).await.unwrap(),
+            Some(Default::default())
+        );
+    });
 }
