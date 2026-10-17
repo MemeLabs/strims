@@ -1,8 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Each host's software: the node, its event policy, link supervision, and
-//! the swarm writer and readers.
+//! Each host's software: the node, its event policy, link supervision,
+//! the swarm writer and readers, and the transfers that bind the swarms'
+//! channels.
 //!
 //! turmoil re-runs [`host_main`] when a host restarts, so everything here
 //! starts from the spec and the shared registry: a restarted host joins the
@@ -13,10 +14,14 @@
 use std::rc::Rc;
 use std::time::Duration;
 
+use futures_util::stream::{Empty, empty};
+use strims_node::app::{NodeTimer, PeerHandler, PeerServices};
 use strims_node::{
-    NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, ReadError, SimClock, SwarmId, SwarmKey,
-    SwarmWriter, TurmoilNet, WriterOptions,
+    HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents, PeerInfo, ReadError,
+    SimClock, SwarmId, SwarmKey, SwarmWriter, TurmoilNet, WriterOptions,
 };
+use strims_rpc::{Client, Router};
+use strims_transfer::TransferControl;
 use tokio::task::spawn_local;
 
 use crate::APP_PORT;
@@ -55,6 +60,18 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         spawn_local(publish(w.clone(), h, node.clone(), *net));
     }
 
+    let transfers = TransferControl::new(
+        SimTransferHost(node.clone()),
+        NodeTimer(SimClock::turmoil(epoch())),
+        strims_transfer::Config {
+            discovery: false,
+            ..strims_transfer::Config::default()
+        },
+    );
+    spawn_local({
+        let transfers = transfers.clone();
+        async move { transfers.run().await }
+    });
     let mut swarms: Vec<Option<SwarmKey>> = vec![None; w.spec.swarms.len()];
     for (s, spec) in w.spec.swarms.iter().enumerate() {
         let key = w.swarm_keys.get(s).ok_or("swarm key")?;
@@ -78,13 +95,23 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         } else {
             continue;
         };
+        let t = transfers.add(swarm, &SwarmId::new(&key.public), Vec::new());
+        transfers.publish(t, ());
         if let Some(slot) = swarms.get_mut(s) {
             *slot = Some(swarm);
         }
     }
 
-    w.register(h, &node, nets.clone(), swarms.clone());
-    spawn_local(event_task(w.clone(), h, node.clone(), events, nets, swarms));
+    w.register(h, &node, nets.clone(), swarms);
+    let services = PeerServices::new(node.clone()).with(Rc::new(SimTransfers(transfers)));
+    spawn_local(event_task(
+        w.clone(),
+        h,
+        node.clone(),
+        events,
+        nets,
+        services,
+    ));
     if w.spec.faults.iter().any(|f| match f.fault {
         Fault::Uplink(x, _) | Fault::Connect { from: x, .. } => x == h,
         _ => false,
@@ -118,19 +145,96 @@ async fn publish(w: Rc<World>, h: HostIx, node: Node, net: NetworkId) {
     w.log(&me, "published records");
 }
 
-/// The host's event policy: run every shared swarm with a new peer
-/// (channel `swarm index + 1` both ways), bind explicit networks, record
-/// vpn probes and exchanges, and log it all.
+/// The node as the transfers' host. Transfers are published on one
+/// network, `()`: every linked peer, so every peer that adds a swarm runs
+/// it with every other linked peer that has it. Scenario topologies are
+/// fixed, so nothing is discovered.
+struct SimTransferHost(Node);
+
+impl strims_transfer::Host for SimTransferHost {
+    type Network = ();
+    type Swarm = SwarmKey;
+    type Publication = ();
+    type Search = Empty<HostId>;
+    type Error = NodeError;
+
+    fn host_id(&self) -> HostId {
+        self.0.host_id()
+    }
+
+    async fn run_swarm(
+        &self,
+        host: HostId,
+        swarm: SwarmKey,
+        channel: u64,
+        peer_channel: u64,
+    ) -> Result<(), NodeError> {
+        self.0.run_swarm(host, swarm, channel, peer_channel).await
+    }
+
+    async fn stop_swarm(&self, host: HostId, swarm: SwarmKey) -> Result<(), NodeError> {
+        match self.0.stop_swarm(host, swarm).await {
+            Err(NodeError::UnknownPeer) => Ok(()),
+            r => r,
+        }
+    }
+
+    async fn index_publish(&self, _: (), _: Vec<u8>, _: Vec<u8>) -> Result<(), NodeError> {
+        Ok(())
+    }
+
+    async fn index_unpublish(&self, _: ()) -> Result<(), NodeError> {
+        Ok(())
+    }
+
+    async fn index_search(
+        &self,
+        _: (),
+        _: Vec<u8>,
+        _: Vec<u8>,
+    ) -> Result<Empty<HostId>, NodeError> {
+        Ok(empty())
+    }
+
+    async fn connect_peer(&self, _: (), _: HostId) -> Result<bool, NodeError> {
+        Ok(false)
+    }
+}
+
+/// The transfers as a peer handler: every linked peer is on `()`.
+struct SimTransfers(TransferControl<SimTransferHost, NodeTimer<SimClock>>);
+
+impl PeerHandler for SimTransfers {
+    fn add_peer(&self, peer: &PeerInfo, router: &Router, client: Client) {
+        self.0.add_peer(peer.host_id, router, client);
+        self.0.add_network_peer((), peer.host_id);
+    }
+
+    fn remove_peer(&self, host: HostId) {
+        self.0.remove_peer(host);
+    }
+
+    fn handle_event(&self, e: &NodeEvent) {
+        if let NodeEvent::TransferError { host_id, .. } = e {
+            self.0.transfer_failed(*host_id);
+        }
+    }
+}
+
+/// The host's event policy: serve transfers on every peer's RPC link,
+/// bind explicit networks, record vpn probes and exchanges, and log it
+/// all.
 async fn event_task(
     w: Rc<World>,
     h: HostIx,
     node: Node,
     mut events: NodeEvents,
     nets: Vec<Option<NetworkId>>,
-    swarms: Vec<Option<SwarmKey>>,
+    services: PeerServices,
 ) {
     let me = w.name(h).to_owned();
     while let Some(e) = events.recv().await {
+        services.handle_event(&e).await;
         match e {
             NodeEvent::PeerAdded(p) => {
                 let peer = w.ix_of(&p.host_id);
@@ -139,17 +243,6 @@ async fn event_task(
                 let Some(px) = peer else {
                     continue;
                 };
-                for (s, swarm) in swarms.iter().enumerate() {
-                    let (Some(swarm), Some(spec)) = (swarm, w.spec.swarms.get(s)) else {
-                        continue;
-                    };
-                    if spec.member(px) {
-                        let ch = s as u64 + 1;
-                        if let Err(e) = node.run_swarm(p.host_id, *swarm, ch, ch).await {
-                            w.log(&me, format!("run_swarm {} failed: {e}", w.name(px)));
-                        }
-                    }
-                }
                 for (n, net) in nets.iter().enumerate() {
                     let (Some(net), Some(spec)) = (net, w.spec.networks.get(n)) else {
                         continue;

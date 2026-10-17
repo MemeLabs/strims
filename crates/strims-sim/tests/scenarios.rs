@@ -1190,8 +1190,9 @@ fn cross_traffic(
         );
     }
     // No progress invariant: near capacity, pull's lag reaches several
-    // seconds and a viewer can go 5 s without a new frame.
-    s.duration = secs(51);
+    // seconds and a viewer can go 5 s without a new frame. Its tail
+    // reaches 13 s, so the run lasts that long past the last write.
+    s.duration = secs(56);
     s.invariants.max_heap = Some(96 * MIB);
     s
 }

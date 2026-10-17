@@ -13,7 +13,10 @@ strims-crypto.workspace = true
 strims-node = { workspace = true, features = ["turmoil"] }
 strims-ppspp.workspace = true
 strims-proto.workspace = true
+strims-rpc.workspace = true
+strims-transfer.workspace = true
 strims-vpn.workspace = true
+futures-util.workspace = true
 hex.workspace = true
 rand_core.workspace = true
 sha2.workspace = true

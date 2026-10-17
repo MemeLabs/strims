@@ -2048,6 +2048,7 @@ dependencies = [
 name = "strims-sim"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "hex",
  "rand_core 0.10.1",
  "sha2 0.11.1",
@@ -2056,6 +2057,8 @@ dependencies = [
  "strims-node",
  "strims-ppspp",
  "strims-proto",
+ "strims-rpc",
+ "strims-transfer",
  "strims-vpn",
  "tokio",
  "tracking-allocator",
