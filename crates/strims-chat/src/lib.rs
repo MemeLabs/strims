@@ -90,7 +90,8 @@
 //!   port opened once the network is joined and the membership trusted.
 //!
 //! What changes is reported as [`ChatEvent`]s; [`ChatControl::servers`]
-//! reads the state at any time.
+//! reads the state at any time. [`bind_frontend`] serves the UI's chat
+//! calls on the chat and whisper controls ([`frontend`]).
 //!
 //! # Whispers
 //!
@@ -145,6 +146,7 @@ pub mod duration;
 pub mod entities;
 mod error;
 mod events;
+pub mod frontend;
 pub mod rate;
 pub mod reader;
 mod runner;
@@ -159,6 +161,7 @@ pub use config::{Config, MAX_ROOMS, MAX_SERVED, MAX_STREAMS_PER_ROOM, Metrics};
 pub use control::{ChatControl, ChatFailure, ChatServerStatus, ServerMode};
 pub use error::ChatError;
 pub use events::{ChatEvent, ClientEvent};
+pub use frontend::{ChatFrontend, bind_frontend};
 pub use runner::lease_key;
 pub use server::{Server, ServerAction, ServerLimits, ServerMetrics};
 pub use swarms::{

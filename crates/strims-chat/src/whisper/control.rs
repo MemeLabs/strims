@@ -596,7 +596,7 @@ async fn seed<K: Kv, H: Host, T: Timer>(s: Rc<Shared<K, H, T>>, generation: u64)
 ///
 /// Clones share the control.
 pub struct WhisperControl<K: Kv, H: Host, T: Timer> {
-    shared: Rc<Shared<K, H, T>>,
+    pub(crate) shared: Rc<Shared<K, H, T>>,
 }
 
 impl<K: Kv, H: Host, T: Timer> Clone for WhisperControl<K, H, T> {
