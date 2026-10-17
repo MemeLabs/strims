@@ -1828,6 +1828,7 @@ dependencies = [
 name = "strims-chat"
 version = "0.1.0"
 dependencies = [
+ "futures-core",
  "futures-util",
  "hex",
  "prost",
@@ -1845,6 +1846,7 @@ dependencies = [
  "strims-proto",
  "strims-rpc",
  "strims-testworld",
+ "strims-transfer",
  "thiserror",
  "tokio",
  "tracing",

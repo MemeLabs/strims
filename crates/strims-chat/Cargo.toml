@@ -17,11 +17,13 @@ strims-network.workspace = true
 strims-ppspp.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true
+strims-transfer.workspace = true
 prost.workspace = true
 rand_core.workspace = true
 regex-automata.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+futures-core.workspace = true
 futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
