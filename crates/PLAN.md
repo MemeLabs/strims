@@ -8,7 +8,6 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Storage (dao, kv, replication) and sessions.
 - Transfer: swarm announce and binding over peer RPC. This replaces the
   driver's explicit `run_swarm` binding.
 - Network membership: PSI negotiation via `strims-mpc` (with a deadline, and
@@ -16,6 +15,14 @@ Port the application services that sit on the core crates. The Go versions
   explicit `bind_peer_network`.
 - Directory, chat, notifications.
 - Video ingress (RTMP), egress, chunkstream, HLS.
+- The other dao record types arrive with their services: certificate logs,
+  network peers, alias reservations, directory records, chat servers,
+  emotes, modifiers, tags and profiles, video channels and configs, vnic,
+  autoseed, debug and bootstrap configs, the network UI config,
+  notifications and swarm caches. With them come many-to-one indexes, the
+  CA records a new owned network creates, and the cascades of a network's
+  deletion; until then, stores from Go keep those records unread.
+- Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Targets
 - `strims-wasm`: a browser worker driver that replaces the Go wasm build and
@@ -25,7 +32,16 @@ Port the application services that sit on the core crates. The Go versions
   `max_inbound_calls` if the UI needs more. Like `Node::open_vpn_port`, it
   gives the services vpn ports for `strims_rpc::vpn`: a stream of
   deliveries and a sink of addressed messages.
-- `strims-svc`: the headless service.
+  Its `strims_kv::Kv` is IndexedDB: one database per kv table, an object
+  store named `data`, string keys and `Uint8Array` values. A task woken by
+  an IndexedDB callback has to be polled before the transaction
+  deactivates. Its `SessionFactory` starts a profile's node, replication
+  and peer services (`strims_node::app` is the native equivalent).
+- `strims-svc`: the headless service. It needs a Postgres `Kv`; profile
+  stores shared by several processes (cross-process change events, and a
+  lease that spans them); rate limits on SignUp and SignIn, which each
+  cost a 100k-iteration PBKDF2; and redb moved off the executor if its
+  fsyncs show in profiles.
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
@@ -35,6 +51,19 @@ Port the application services that sit on the core crates. The Go versions
 ### Cutover
 Ship the protocol-v3 changes below behind a version bump, then retire the Go
 implementation along with the interop tests that exist only for it.
+
+While profiles have Go and Rust devices:
+- Go sends a bootstrap in one message, capped at 512 KiB on both sides, so
+  a larger Go store can't bootstrap a new device.
+- Go times a write at the wall clock, so after a clock step or within one
+  millisecond, concurrent writes can resolve differently on Go devices.
+- Go stops replicating to a device it deletes before sending the
+  deletion, so the device doesn't learn of it from Go.
+- A Go device sends an empty bootstrap when its store has no chat UI
+  config, and doesn't push writes made before it opens a peer, so those
+  reach other devices only with later changes.
+- A device imported by Go records itself under id 0.
+- Stores below version 7 are refused; a Go client upgrades them first.
 
 ## Open questions
 
@@ -129,6 +158,16 @@ implementation along with the interop tests that exist only for it.
     scenario input.
   - Nodes stop reporting a channel's counters once it closes, so run totals
     and the clean-input check are lower bounds.
+- **Replication.**
+  - A device that never syncs again keeps every log from collection;
+    deleting the device frees them. Decide whether logs should expire.
+  - Tombstones last as long as their logs, so after collection a write
+    from a replica that missed a deletion can bring a record back.
+  - Two devices that each record the same network under different ids
+    keep their own record, since replicas can't see which one holds the
+    CA.
+  - Change events don't cross browser tabs sharing a store, so other tabs'
+    views go stale until they reload.
 - **WebRTC determinism.** DTLS bytes vary between same-seed runs, because
   dimpl's ECDHE and sctp-proto use OS randomness. Byte-level reproducibility
   needs seedable rngs upstream.
