@@ -8,8 +8,6 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Transfer: swarm announce and binding over peer RPC. This replaces the
-  driver's explicit `run_swarm` binding.
 - Network membership: PSI negotiation via `strims-mpc` (with a deadline, and
   retry with fresh seeds), certificate exchange, and CA. This replaces the
   explicit `bind_peer_network`.
@@ -130,12 +128,14 @@ While profiles have Go and Rust devices:
   - peer exchange needs a tie-break (e.g. host id) for simultaneous
     `connect_peer` calls, which can drop the WebRTC link;
   - `connect_peer` policy belongs to the app layer; the node never initiates
-    it;
+    it. Transfer discovery asks to link to every host a search finds (16
+    per search), with no budget across transfers or against `max_peers`;
   - a default upload cap for `strims-svc`;
   - peers that send invalid data or false HAVEs are only backed off; scoring
     or disconnecting them is app policy;
-  - driver policy on a ppspp frame error (drop the peer, or only its swarms),
-    and a minimum link MTU, since chunks that don't fit a frame are dropped.
+  - whether a ppspp frame error should drop the peer rather than close its
+    transfers until it relinks, and a minimum link MTU, since chunks that
+    don't fit a frame are dropped.
 - **ppspp overhead.** `TimeSet` allocates per node (one ring entry per munro
   would do); the data queue's `BTreeMap` index allocates; `channel_stats`
   sizes binmaps from their debug dump. One chunk per request costs about 27 %
@@ -210,6 +210,11 @@ These are wire changes, held until the version bump.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the
   epoch, so peers don't reset.
 - Bump the protocol version.
+
+### transfer
+- Add the channel to `Close`: a close can't name the announce it undoes,
+  so a delayed one stops a later binding, and each side must send one
+  call per (peer, transfer) at a time.
 
 ### Protobuf evolution
 prost drops unknown fields, so re-encoding a newer peer's message loses

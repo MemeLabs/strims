@@ -24,6 +24,9 @@ pub(crate) struct OpId(u64);
 
 /// A node operation. The node must apply them one at a time, in `OpId`
 /// order: the state assumes each one has taken effect before the next.
+/// A `Run` the state no longer wants when its turn comes
+/// ([`State::wants_run`]), and a `Stop` for an earlier link
+/// ([`State::is_current`]), are skipped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Op<N, S> {
     /// Runs the swarm with the peer. A failure is reported with
