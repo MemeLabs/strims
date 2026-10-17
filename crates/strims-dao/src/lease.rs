@@ -52,6 +52,12 @@ pub fn key(parts: &[&str]) -> String {
     NS.format(&parts)
 }
 
+/// The key of the lease named by `parts` of any kind, e.g. a service's
+/// name and the id of the record it serves.
+pub fn key_parts(parts: &[Part<'_>]) -> String {
+    NS.format(parts)
+}
+
 /// The record that takes or refreshes the lease for `token` at `now`,
 /// given the stored record.
 pub fn try_acquire(existing: Option<&Mutex>, token: &Token, now: Time) -> Result<Mutex, Busy> {
@@ -145,6 +151,7 @@ mod tests {
     fn keys_join_their_parts() {
         assert_eq!(key(&["replication"]), "rt:replication");
         assert_eq!(key(&["dao", "upgrade"]), "rt:dao:upgrade");
+        assert_eq!(key_parts(&[Part::Str("ca"), Part::Id(36)]), "rt:ca:10");
     }
 
     #[test]

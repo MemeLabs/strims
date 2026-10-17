@@ -10,6 +10,9 @@
 //! behind loses its queued events and receives [`Recv::Lagged`] once; it
 //! then rereads what it needs from the store. Emitting never blocks and
 //! never waits on a subscriber.
+//!
+//! [`Broadcast`] is the bus itself, for any event type; app services use
+//! it for their own events.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -75,9 +78,9 @@ pub enum StoreEvent {
 
 /// What a [`Subscription`] yields.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Recv {
+pub enum Recv<E = StoreEvent> {
     /// The next event.
-    Event(Rc<StoreEvent>),
+    Event(Rc<E>),
     /// Events were dropped because the subscriber fell behind.
     Lagged,
 }
@@ -86,28 +89,50 @@ new_key_type! {
     struct SubKey;
 }
 
-#[derive(Default)]
-struct Sub {
-    queue: VecDeque<Rc<StoreEvent>>,
+struct Sub<E> {
+    queue: VecDeque<Rc<E>>,
     lagged: bool,
     waker: Option<Waker>,
 }
 
-/// Delivers a store's events to its subscribers. Clones share the
-/// subscriber list.
-#[derive(Clone, Default)]
-pub struct EventBus(Rc<RefCell<SlotMap<SubKey, Sub>>>);
+impl<E> Default for Sub<E> {
+    fn default() -> Self {
+        Sub {
+            queue: VecDeque::new(),
+            lagged: false,
+            waker: None,
+        }
+    }
+}
 
-impl EventBus {
+/// Delivers events to subscribers, each through its own queue of
+/// [`SUBSCRIBER_CAPACITY`] events. Clones share the subscriber list.
+pub struct Broadcast<E>(Rc<RefCell<SlotMap<SubKey, Sub<E>>>>);
+
+impl<E> Clone for Broadcast<E> {
+    fn clone(&self) -> Self {
+        Broadcast(self.0.clone())
+    }
+}
+
+impl<E> Default for Broadcast<E> {
+    fn default() -> Self {
+        Broadcast(Rc::default())
+    }
+}
+
+/// Delivers a store's events to its subscribers.
+pub type EventBus = Broadcast<StoreEvent>;
+
+impl<E> Broadcast<E> {
     /// A bus with no subscribers.
-    pub fn new() -> EventBus {
-        EventBus::default()
+    pub fn new() -> Broadcast<E> {
+        Broadcast::default()
     }
 
     /// Starts receiving the events emitted from now on. The subscribers
-    /// are the store's local services, so their number is the caller's to
-    /// bound.
-    pub fn subscribe(&self) -> Subscription {
+    /// are local services, so their number is the caller's to bound.
+    pub fn subscribe(&self) -> Subscription<E> {
         let key = self.0.borrow_mut().insert(Sub::default());
         Subscription {
             bus: self.clone(),
@@ -115,11 +140,13 @@ impl EventBus {
         }
     }
 
-    pub(crate) fn emit(&self, events: Vec<StoreEvent>) {
+    /// Queues `events` for every subscriber and wakes them. A subscriber
+    /// whose queue is full loses it and lags.
+    pub fn emit(&self, events: Vec<E>) {
         if events.is_empty() {
             return;
         }
-        let events: Vec<Rc<StoreEvent>> = events.into_iter().map(Rc::new).collect();
+        let events: Vec<Rc<E>> = events.into_iter().map(Rc::new).collect();
         let mut wake = Vec::new();
         {
             let mut subs = self.0.borrow_mut();
@@ -143,15 +170,15 @@ impl EventBus {
 }
 
 /// A subscriber's stream of events. Dropping it unsubscribes.
-pub struct Subscription {
-    bus: EventBus,
+pub struct Subscription<E = StoreEvent> {
+    bus: Broadcast<E>,
     key: SubKey,
 }
 
-impl Stream for Subscription {
-    type Item = Recv;
+impl<E> Stream for Subscription<E> {
+    type Item = Recv<E>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Recv>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Recv<E>>> {
         let mut subs = self.bus.0.borrow_mut();
         let Some(sub) = subs.get_mut(self.key) else {
             return Poll::Ready(None);
@@ -170,7 +197,7 @@ impl Stream for Subscription {
     }
 }
 
-impl Drop for Subscription {
+impl<E> Drop for Subscription<E> {
     fn drop(&mut self) {
         let removed = self.bus.0.borrow_mut().remove(self.key);
         drop(removed);

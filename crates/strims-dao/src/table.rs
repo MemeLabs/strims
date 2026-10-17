@@ -219,6 +219,12 @@ impl<R> Index<R> {
     }
 }
 
+/// The index key of a reference to record `id`: indexes under it map
+/// records to the record they belong to.
+pub fn ref_key(id: u64) -> Vec<u8> {
+    id.to_le_bytes().to_vec()
+}
+
 fn always<R>(_: &R) -> bool {
     true
 }
@@ -232,6 +238,9 @@ pub enum UniqueConflict {
     /// The other record is removed without its delete hook: the written
     /// record takes its place.
     Replace,
+    /// The written record takes the key. The other record keeps its row
+    /// and loses only its entry under this key.
+    Steal,
 }
 
 /// What happens when a record applied from another replica takes a
@@ -483,6 +492,7 @@ pub(crate) async fn write_row<T: Table, K: Kv>(
                     let replica = tx.replica_id();
                     remove_row::<T, K>(tx, existing, replica).await?
                 }
+                UniqueConflict::Steal => tx.delete_index(ix.ns, &key, other).await?,
             }
         }
     }

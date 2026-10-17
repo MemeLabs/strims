@@ -143,6 +143,33 @@ impl Table for Replacing {
     }
 }
 
+/// Records whose unique peer key moves to the newest writer, which leaves
+/// the older record unindexed under it.
+struct Stealing;
+
+impl Stealing {
+    const BY_KEY: Index<UiConfigHighlight> =
+        Index::unique(Namespace(90008), |r| r.peer_key.clone());
+}
+
+impl Table for Stealing {
+    type Record = UiConfigHighlight;
+    const NS: Namespace = Namespace(90007);
+    const INDEXES: &'static [Index<UiConfigHighlight>] = &[Stealing::BY_KEY];
+
+    fn id(r: &UiConfigHighlight) -> u64 {
+        r.id
+    }
+
+    fn on_unique_conflict(
+        _: &Index<UiConfigHighlight>,
+        _: &mut UiConfigHighlight,
+        _: &UiConfigHighlight,
+    ) -> UniqueConflict {
+        UniqueConflict::Steal
+    }
+}
+
 /// Where the test tables' delete hooks leave a mark.
 struct Tombstones;
 
@@ -469,6 +496,33 @@ fn unique_conflicts_reject_or_replace() {
             [2]
         );
         assert!(Tombstones::get(&mut tx, 1).await.unwrap().is_none());
+        tx.commit().await.unwrap();
+    });
+}
+
+#[test]
+fn stolen_unique_keys_leave_the_other_record_unindexed() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        Stealing::insert(&mut tx, hl(1, "old", b"k")).await.unwrap();
+        Stealing::insert(&mut tx, hl(2, "new", b"k")).await.unwrap();
+        let ids = |tx: &mut WriteTx<MemoryKv>| {
+            Stealing::index_ids(tx, &Stealing::BY_KEY, b"k")
+                .now_or_never()
+                .unwrap()
+                .unwrap()
+        };
+        assert_eq!(ids(&mut tx), [2]);
+        assert_eq!(
+            Stealing::get(&mut tx, 1).await.unwrap().unwrap().alias,
+            "old"
+        );
+
+        // the older record's later delete leaves the stolen entry alone
+        Stealing::delete(&mut tx, 1).await.unwrap();
+        assert_eq!(ids(&mut tx), [2]);
         tx.commit().await.unwrap();
     });
 }

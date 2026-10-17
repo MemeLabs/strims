@@ -20,9 +20,9 @@ pub mod table;
 pub mod vv;
 
 pub use error::Error;
-pub use events::{EventBus, Recv, StoreEvent, Subscription};
+pub use events::{Broadcast, EventBus, Recv, StoreEvent, Subscription};
 pub use store::{ProfileStore, Read, ReadTx, ReplicatedStore, WriteTx};
-pub use table::{Index, Singleton, Table, UniqueConflict};
+pub use table::{Index, Singleton, Table, UniqueConflict, ref_key};
 
 #[cfg(test)]
 mod tests;
