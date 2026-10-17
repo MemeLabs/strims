@@ -8,14 +8,19 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Directory, chat, notifications. Notifications report certificate
-  renewals; the directory makes a new owned network's owner its admin.
-- Video ingress (RTMP), egress, chunkstream, HLS.
-- The other dao record types arrive with their services: directory records,
-  chat servers, emotes, modifiers, tags and profiles, video channels and
-  configs, vnic, autoseed, debug and bootstrap configs, notifications and
-  swarm caches, each with its part of a network's deletion; until then,
-  stores from Go keep those records unread.
+- Chat. Its servers publish chat listings to the directory, and its nick
+  list follows the listing's users.
+- Notifications. They report certificate renewals.
+- Video ingress (RTMP), egress and HLS. Ingress publishes media listings and
+  pushes its swarms' snippets with `DirectoryControl::push_snippet`.
+- Directory embeds: the server's Twitch, YouTube and AngelThump snippet
+  loaders need an HTTP fetch from the driver; until then the server refuses
+  embed listings and its client config advertises none.
+- The other dao record types arrive with their services: chat servers,
+  emotes, modifiers, tags and profiles, video channels and configs, vnic,
+  autoseed, debug and bootstrap configs, notifications and swarm caches,
+  each with its part of a network's deletion; until then, stores from Go
+  keep those records unread.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Targets
@@ -30,8 +35,9 @@ Port the application services that sit on the core crates. The Go versions
   store named `data`, string keys and `Uint8Array` values. A task woken by
   an IndexedDB callback has to be polled before the transaction
   deactivates. Its `SessionFactory` starts a profile's node, replication,
-  network control and peer services, and binds the network frontend
-  (`strims_node::app` is the native equivalent).
+  network, transfer and directory controls and peer services, and binds the
+  network and directory frontends (`strims_node::app` is the native
+  equivalent).
 - `strims-svc`: the headless service. It needs a Postgres `Kv`; profile
   stores shared by several processes (cross-process change events, and a
   lease that spans them); rate limits on SignUp and SignIn, which each
@@ -59,12 +65,18 @@ While profiles have Go and Rust devices:
   reach other devices only with later changes.
 - A device imported by Go records itself under id 0.
 - Stores below version 7 are refused; a Go client upgrades them first.
+- Media listing records are keyed by the first 30 bytes of their swarm id;
+  rekey them once stores no longer move to Go.
 
 While networks have Go and Rust nodes:
 - Go negotiates networks with a link one run at a time and without a
   deadline, so a run that loses the other side (an `Open` that never
   arrives, a stale key count) stops it negotiating with that link until
   the link closes.
+- Go members ping a directory every 10–14 minutes whatever its client
+  config says, so keep directory session timeouts at 15 minutes or more.
+- A Go directory server sends a new listing without its user count, so
+  views show no users until the listing changes or the next refresh.
 
 ## Open questions
 
@@ -174,6 +186,16 @@ While networks have Go and Rust nodes:
   - The CA's records live on the device holding the server config and
     don't replicate.
   - The CA event swarm isn't run; it carries nothing yet.
+  - A network whose record gains a server config after its first write
+    gets neither the owner's CA records nor its directory admin record.
+- **Directory.**
+  - A refresh rewrites every listing, snippet images included, into an
+    event swarm whose window is 2 MiB. Images may belong in the asset
+    swarm (v3).
+  - Snippet servers answer any member; decide whether only the directory
+    server's host may subscribe.
+  - A member whose event reader falls behind resets its view; only the
+    fake-host tests cover that, not whole nodes.
 - **Replication.**
   - A device that never syncs again keeps every log from collection;
     deleting the device frees them. Decide whether logs should expire.
