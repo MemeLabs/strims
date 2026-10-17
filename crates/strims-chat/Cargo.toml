@@ -1,0 +1,21 @@
+[package]
+name = "strims-chat"
+description = "Chat servers: message text parsing and entity extraction"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+rand_core.workspace = true
+regex-automata.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+prost.workspace = true
+regex.workspace = true
+
+[lints]
+workspace = true

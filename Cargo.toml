@@ -21,6 +21,7 @@ members = [
   "crates/strims-transfer",
   "crates/strims-network",
   "crates/strims-directory",
+  "crates/strims-chat",
   "crates/strims-session",
   "crates/strims-testworld",
   "crates/strims-node",
@@ -70,6 +71,7 @@ strims-replication = { path = "crates/strims-replication" }
 strims-transfer = { path = "crates/strims-transfer" }
 strims-network = { path = "crates/strims-network" }
 strims-directory = { path = "crates/strims-directory" }
+strims-chat = { path = "crates/strims-chat" }
 strims-session = { path = "crates/strims-session" }
 strims-testworld = { path = "crates/strims-testworld" }
 strims-node = { path = "crates/strims-node" }
@@ -84,6 +86,10 @@ slotmap = "1"
 indexmap = "2"
 hex = "0.4"
 data-encoding = "2"
+
+# text matching: explicit caches and capped lazy DFAs, no OS dependencies
+regex = "1.13"
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "perf", "unicode-case", "meta", "nfa-pikevm", "nfa-backtrack", "hybrid"] }
 
 # randomness: never thread_rng / OsRng in core crates (see crates/CONVENTIONS.md)
 rand_core = "0.10"

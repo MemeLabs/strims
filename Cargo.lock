@@ -1825,6 +1825,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-chat"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "prost",
+ "rand_core 0.10.1",
+ "regex",
+ "regex-automata",
+ "strims-base",
+ "strims-proto",
+]
+
+[[package]]
 name = "strims-chunkstream"
 version = "0.1.0"
 dependencies = [
