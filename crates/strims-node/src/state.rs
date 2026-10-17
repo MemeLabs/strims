@@ -256,12 +256,14 @@ pub(crate) struct State {
     pub(crate) runner: Runner,
     transfer_class: ClassId,
     rpc_class: ClassId,
+    /// The QoS class of the peers' broker channels.
+    broker_class: ClassId,
     peer_rpc: PeerRpcConfig,
     /// Cloned into every RPC writer and vpn port.
     rpc_tx: mpsc::UnboundedSender<Outgoing>,
     /// RPC pairs to close after vnic's dispatch, and whether they
     /// overflowed. At most one entry per peer.
-    rpc_closed: Vec<(LinkKey, bool)>,
+    rpc_closed: Vec<(LinkKey, RpcSide, bool)>,
     /// Listener URIs advertised to peer exchange.
     local_tcp: Option<LinkDescription>,
     local_ws: Option<LinkDescription>,
@@ -336,6 +338,7 @@ impl State {
         let vpn = VpnHost::new(&mut vnic, config.vpn.clone(), fork(&mut rng))?;
         let transfer_class = vnic.add_qos_class(vnic.qos_root(), TRANSFER_QOS_WEIGHT)?;
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
+        let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let runner = Runner::new(fork(&mut rng));
         let rtc = webrtc.map(|setup| rtc::Rtc::new(setup, now, fork(&mut rng)));
         Ok(State {
@@ -344,6 +347,7 @@ impl State {
             runner,
             transfer_class,
             rpc_class,
+            broker_class,
             peer_rpc: config.peer_rpc,
             rpc_tx,
             rpc_closed: Vec::new(),
@@ -481,7 +485,11 @@ impl State {
                     Tag::Rpc(peer, side) => rpc::dispatch(
                         peers,
                         rpc_closed,
-                        &mut metrics.rpc_bytes_read,
+                        if side == RpcSide::Broker {
+                            &mut metrics.broker_bytes_read
+                        } else {
+                            &mut metrics.rpc_bytes_read
+                        },
                         peer_rpc.inbound_buffer,
                         peer,
                         side,
@@ -599,7 +607,12 @@ impl State {
                     }
                 }
                 Tag::Rpc(peer, side) => {
-                    rpc::fill(peers, &mut metrics.rpc_bytes_written, peer, side, f.body)
+                    let written = if side == RpcSide::Broker {
+                        &mut metrics.broker_bytes_written
+                    } else {
+                        &mut metrics.rpc_bytes_written
+                    };
+                    rpc::fill(peers, written, peer, side, f.body)
                 }
             });
             let moved = self.drain_transmit();
@@ -1376,6 +1389,13 @@ impl State {
     pub(crate) fn reserve_peer_port(&mut self, host_id: &ID) -> Result<u16, NodeError> {
         let peer = self.peer_key(host_id)?;
         Ok(self.vnic.reserve_port(peer)?)
+    }
+
+    /// Releases a port from [`State::reserve_peer_port`].
+    pub(crate) fn release_peer_port(&mut self, host_id: &ID, port: u16) -> Result<(), NodeError> {
+        let peer = self.peer_key(host_id)?;
+        self.vnic.release_port(peer, port);
+        Ok(())
     }
 
     // --- vpn services -------------------------------------------------------

@@ -114,6 +114,11 @@ pub struct DriverMetrics {
     pub rpc_bytes_written: u64,
     /// Peer RPC pairs closed because a channel's input overflowed.
     pub rpc_overflows: u64,
+    /// Bytes of broker frames handed to the app and taken from it.
+    pub broker_bytes_read: u64,
+    pub broker_bytes_written: u64,
+    /// Broker channels closed because their input overflowed.
+    pub broker_overflows: u64,
     /// Messages for a vpn port dropped because its reader was behind.
     pub vpn_port_drops: u64,
     /// Messages from vpn ports that vpn refused to send (too large, no

@@ -22,6 +22,8 @@
 
 use std::time::Duration as StdDuration;
 
+use futures_util::{SinkExt, StreamExt};
+
 use strims_base::rng::det_rng;
 use strims_crypto::key_from_seed;
 use strims_node::{
@@ -50,6 +52,10 @@ struct TestNode {
 
 impl TestNode {
     async fn spawn(i: u8, kind: Kind) -> TestNode {
+        TestNode::spawn_with(i, kind, |_| {}).await
+    }
+
+    async fn spawn_with(i: u8, kind: Kind, f: impl FnOnce(&mut NodeConfig)) -> TestNode {
         let key = key_from_seed(&[i; 32]);
         let mut config = NodeConfig::new(key.clone(), u64::from(i));
         config.label = format!("node-{i}");
@@ -60,6 +66,7 @@ impl TestNode {
         config.allow_insecure_ws = true;
         config.max_peers = 16;
         config.rate_limit = Some(UPLOAD_CAP);
+        f(&mut config);
         let (node, events) = Node::spawn(config, TokioNet, SystemClock).await.unwrap();
         TestNode {
             node,
@@ -477,4 +484,79 @@ async fn slow_readers_recover() {
         Err(strims_node::ReadError::Closed)
     );
     assert!(writer.write(b"x").await.is_err());
+}
+
+/// Reads `len` bytes from a channel, whatever the frame boundaries.
+async fn read_bytes(reader: &mut strims_node::RpcReader, len: usize) -> Vec<u8> {
+    let mut got = Vec::new();
+    while got.len() < len {
+        let chunk = tokio::time::timeout(STEP, reader.next())
+            .await
+            .expect("bytes in time")
+            .expect("channel open")
+            .unwrap();
+        got.extend(chunk);
+    }
+    got
+}
+
+/// Each side's broker channel carries a byte stream to the other's,
+/// beside the RPC pair.
+#[tokio::test]
+async fn broker_channel_carries_bytes_both_ways() {
+    let a = TestNode::spawn(21, Kind::Tcp).await;
+    let b = TestNode::spawn(22, Kind::Tcp).await;
+    let b_id = a.node.dial(&b.uri(Kind::Tcp)).await.unwrap();
+    let a_id = a.node.host_id();
+    let mut ab = a.node.take_peer_broker(b_id).await.unwrap();
+    let mut ba = b.node.take_peer_broker(a_id).await.unwrap();
+    assert_eq!(
+        a.node.take_peer_broker(b_id).await.unwrap_err(),
+        strims_node::NodeError::RpcTaken
+    );
+
+    let data = stream_bytes(100_000);
+    for chunk in data.chunks(7_000) {
+        ab.writer.send(chunk.to_vec()).await.unwrap();
+    }
+    assert_eq!(read_bytes(&mut ba.reader, data.len()).await, data);
+    ba.writer.send(b"answer".to_vec()).await.unwrap();
+    assert_eq!(read_bytes(&mut ab.reader, 6).await, b"answer");
+
+    let m = b.node.metrics().await.unwrap();
+    assert_eq!(m.driver.broker_bytes_read, data.len() as u64);
+    assert_eq!(m.driver.broker_bytes_written, 6);
+}
+
+/// A broker channel whose reader falls behind closes alone: the RPC pair
+/// keeps working.
+#[tokio::test]
+async fn a_broker_overflow_closes_only_the_broker_channel() {
+    let a = TestNode::spawn(23, Kind::Tcp).await;
+    let b = TestNode::spawn_with(24, Kind::Tcp, |c| c.peer_rpc.inbound_buffer = 16 * 1024).await;
+    let b_id = a.node.dial(&b.uri(Kind::Tcp)).await.unwrap();
+    let a_id = a.node.host_id();
+    let mut ab = a.node.take_peer_broker(b_id).await.unwrap();
+    let mut ba = b.node.take_peer_broker(a_id).await.unwrap();
+
+    ab.writer.send(stream_bytes(64 * 1024)).await.unwrap();
+    let overflowed = tokio::time::timeout(STEP, async {
+        loop {
+            match ba.reader.next().await {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => return Some(e),
+                None => return None,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(overflowed, Some(strims_node::NodeError::RpcOverflow));
+    let m = b.node.metrics().await.unwrap();
+    assert_eq!((m.driver.broker_overflows, m.driver.rpc_overflows), (1, 0));
+
+    let mut a_rpc = a.node.take_peer_rpc(b_id).await.unwrap();
+    let mut b_rpc = b.node.take_peer_rpc(a_id).await.unwrap();
+    a_rpc.client.writer.send(b"call".to_vec()).await.unwrap();
+    assert_eq!(read_bytes(&mut b_rpc.server.reader, 4).await, b"call");
 }

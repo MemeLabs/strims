@@ -1,15 +1,17 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Peer RPC channels inside the node task (see [`crate::rpc`]).
+//! Peer RPC channels and the network broker channel inside the node task
+//! (see [`crate::rpc`]).
 //!
-//! A peer's pair lives in its [`PeerState`]: vnic frames on the pair's
-//! ports reach it by [`Tag::Rpc`], and dropping the peer drops the pair,
-//! ending its readers and closing its writers.
+//! A peer's channels live in its [`PeerState`]: vnic frames on their ports
+//! reach them by [`Tag::Rpc`], and dropping the peer drops them, ending
+//! their readers and closing their writers.
 //!
 //! - **Inbound.** Frame bodies go to the channel's reader over an
 //!   unbounded queue whose bytes are bounded by `inbound_buffer`. A frame
-//!   past the bound, or a dropped reader, closes the pair after vnic's
+//!   past the bound, or a dropped reader, closes the RPC pair (and the
+//!   broker channel with it), or only the broker channel, after vnic's
 //!   dispatch (`rpc_closed`).
 //! - **Outbound.** Calls from writers arrive as [`RpcFrame`]s. Each is
 //!   parked, then fed into the channel's [`FrameWriter`] as room allows and
@@ -29,13 +31,15 @@ use super::{State, Tag};
 use crate::error::NodeError;
 use crate::rpc::{PeerRpc, RpcChannel, RpcCredit, RpcFrame, RpcReader, RpcWriter};
 
-/// Which channel of a peer's pair.
+/// Which of a peer's channels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RpcSide {
     /// This node's calls.
     Client,
     /// The peer's calls.
     Server,
+    /// The network broker's byte stream.
+    Broker,
 }
 
 /// A channel of a peer's RPC pair.
@@ -113,26 +117,35 @@ impl RpcChannelState {
     }
 }
 
-/// A peer's RPC pair.
+/// A peer's RPC pair and broker channel.
 #[derive(Debug)]
 pub(super) struct PeerRpcState {
     client: RpcChannelState,
     server: RpcChannelState,
     /// Held until the app takes them.
     handles: Option<PeerRpc>,
+    /// `None` if it couldn't open, or once it has closed.
+    broker: Option<RpcChannelState>,
+    /// Held until the app takes it.
+    broker_handle: Option<RpcChannel>,
 }
 
 impl PeerRpcState {
-    fn side_mut(&mut self, side: RpcSide) -> &mut RpcChannelState {
+    fn side_mut(&mut self, side: RpcSide) -> Option<&mut RpcChannelState> {
         match side {
-            RpcSide::Client => &mut self.client,
-            RpcSide::Server => &mut self.server,
+            RpcSide::Client => Some(&mut self.client),
+            RpcSide::Server => Some(&mut self.server),
+            RpcSide::Broker => self.broker.as_mut(),
         }
     }
 }
 
+/// The weight of the network broker's QoS class under vnic's root.
+pub(super) const BROKER_QOS_WEIGHT: u64 = 1;
+
 impl State {
-    /// Opens the peer's RPC pair, unless peer RPC is off.
+    /// Opens the peer's RPC pair and broker channel, unless peer RPC is
+    /// off.
     pub(super) fn open_peer_rpc(&mut self, peer: LinkKey, host_id: ID) -> Option<PeerRpcState> {
         if !self.peer_rpc.enabled {
             return None;
@@ -153,6 +166,19 @@ impl State {
         };
         let (client, client_handle) = self.rpc_channel(peer, RpcSide::Client, w0);
         let (server, server_handle) = self.rpc_channel(peer, RpcSide::Server, w1);
+        let broker = match self.vnic.channel(
+            peer,
+            ports::NETWORK_BROKER_PORT,
+            self.broker_class,
+            Tag::Rpc(peer, RpcSide::Broker),
+        ) {
+            Ok(w) => Some(self.rpc_channel(peer, RpcSide::Broker, w)),
+            Err(e) => {
+                tracing::warn!(error = %e, "opening the broker channel");
+                None
+            }
+        };
+        let (broker, broker_handle) = broker.unzip();
         Some(PeerRpcState {
             client,
             server,
@@ -161,6 +187,8 @@ impl State {
                 client: client_handle,
                 server: server_handle,
             }),
+            broker,
+            broker_handle,
         })
     }
 
@@ -211,6 +239,25 @@ impl State {
         rpc.handles.take().ok_or(NodeError::RpcTaken)
     }
 
+    /// The peer's broker channel, once.
+    pub(crate) fn take_peer_broker(&mut self, host_id: &ID) -> Result<RpcChannel, NodeError> {
+        if !self.peer_rpc.enabled {
+            return Err(NodeError::Unsupported("peer rpc is disabled"));
+        }
+        let peer = self.peer_key(host_id)?;
+        let rpc = self
+            .peers
+            .get_mut(peer)
+            .ok_or(NodeError::UnknownPeer)?
+            .rpc
+            .as_mut()
+            .ok_or(NodeError::Closed)?;
+        if rpc.broker.is_none() {
+            return Err(NodeError::Closed);
+        }
+        rpc.broker_handle.take().ok_or(NodeError::RpcTaken)
+    }
+
     /// Queues a Call from a writer.
     pub(crate) fn rpc_write(&mut self, frame: RpcFrame) {
         let RpcChannelId { peer, side } = frame.channel;
@@ -218,9 +265,9 @@ impl State {
             .peers
             .get_mut(peer)
             .and_then(|p| p.rpc.as_mut())
-            .map(|r| r.side_mut(side))
+            .and_then(|r| r.side_mut(side))
         else {
-            // the pair closed; its writer has been told
+            // the channel closed; its writer has been told
             return;
         };
         ch.parked.push_back(frame.call);
@@ -232,27 +279,44 @@ impl State {
         }
     }
 
-    /// Closes the pairs that overflowed or lost their reader during vnic's
-    /// dispatch.
+    /// Closes the channels that overflowed or lost their reader during
+    /// vnic's dispatch: the broker channel alone, or the RPC pair with the
+    /// broker channel.
     pub(super) fn handle_rpc_closed(&mut self) {
-        while let Some((peer, overflow)) = self.rpc_closed.pop() {
-            let Some(rpc) = self.peers.get_mut(peer).and_then(|p| p.rpc.take()) else {
+        while let Some((peer, side, overflow)) = self.rpc_closed.pop() {
+            let Some(rpc) = self.peers.get_mut(peer).and_then(|p| p.rpc.as_mut()) else {
                 continue;
             };
-            if overflow {
-                self.metrics.rpc_overflows += 1;
-            }
-            for w in [rpc.client.writer, rpc.server.writer] {
+            let writers = if side == RpcSide::Broker {
+                let Some(broker) = rpc.broker.take() else {
+                    continue;
+                };
+                if overflow {
+                    self.metrics.broker_overflows += 1;
+                }
+                vec![broker.writer]
+            } else {
+                let Some(rpc) = self.peers.get_mut(peer).and_then(|p| p.rpc.take()) else {
+                    continue;
+                };
+                if overflow {
+                    self.metrics.rpc_overflows += 1;
+                }
+                let mut w = vec![rpc.client.writer, rpc.server.writer];
+                w.extend(rpc.broker.map(|b| b.writer));
+                w
+            };
+            for w in writers {
                 let _ = self.vnic.close_channel(w);
             }
         }
     }
 }
 
-/// vnic's dispatch of a frame body to a peer's RPC channel.
+/// vnic's dispatch of a frame body to one of a peer's channels.
 pub(super) fn dispatch(
     peers: &mut slotmap::SecondaryMap<LinkKey, super::PeerState>,
-    rpc_closed: &mut Vec<(LinkKey, bool)>,
+    rpc_closed: &mut Vec<(LinkKey, RpcSide, bool)>,
     bytes_read: &mut u64,
     limit: usize,
     peer: LinkKey,
@@ -265,21 +329,21 @@ pub(super) fn dispatch(
     let Some(ch) = peers
         .get_mut(peer)
         .and_then(|p| p.rpc.as_mut())
-        .map(|r| r.side_mut(side))
+        .and_then(|r| r.side_mut(side))
     else {
         return;
     };
     match ch.deliver(body, limit) {
         Ok(()) => *bytes_read += body.len() as u64,
         Err(e) => {
-            if !rpc_closed.iter().any(|(p, _)| *p == peer) {
-                rpc_closed.push((peer, e == NodeError::RpcOverflow));
+            if !rpc_closed.iter().any(|(p, s, _)| *p == peer && *s == side) {
+                rpc_closed.push((peer, side, e == NodeError::RpcOverflow));
             }
         }
     }
 }
 
-/// vnic's egress fill for a peer's RPC channel.
+/// vnic's egress fill for one of a peer's channels.
 pub(super) fn fill(
     peers: &mut slotmap::SecondaryMap<LinkKey, super::PeerState>,
     bytes_written: &mut u64,
@@ -290,7 +354,7 @@ pub(super) fn fill(
     match peers
         .get_mut(peer)
         .and_then(|p| p.rpc.as_mut())
-        .map(|r| r.side_mut(side))
+        .and_then(|r| r.side_mut(side))
     {
         Some(ch) => {
             let f = ch.fill(body);

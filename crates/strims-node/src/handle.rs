@@ -30,7 +30,7 @@ use crate::driver::{Call, Command, Driver};
 use crate::error::{NodeError, ReadError};
 use crate::event::{NodeEvent, NodeMetrics, PeerInfo};
 use crate::net::Net;
-use crate::rpc::PeerRpc;
+use crate::rpc::{PeerRpc, RpcChannel};
 use crate::state::{PublisherId, ReadReply, ReaderId, State, WriteOp, WriteReply};
 use crate::vpn_port::VpnPort;
 
@@ -211,6 +211,12 @@ impl Node {
         self.call(move |s, _| s.take_peer_rpc(&host_id)).await?
     }
 
+    /// The peer's network broker channel (see [`crate::rpc`]), taken once
+    /// per link like its RPC pair.
+    pub async fn take_peer_broker(&self, host_id: ID) -> Result<RpcChannel, NodeError> {
+        self.call(move |s, _| s.take_peer_broker(&host_id)).await?
+    }
+
     /// Changes the upload cap (see [`NodeConfig::rate_limit`]).
     pub async fn set_rate_limit(&self, bytes_per_sec: u64) -> Result<(), NodeError> {
         self.call(move |s, _| s.vnic.set_rate_limit(bytes_per_sec))
@@ -282,6 +288,12 @@ impl Node {
     /// A free vnic port on the peer, for a binding.
     pub async fn reserve_peer_port(&self, host_id: ID) -> Result<u16, NodeError> {
         self.call(move |s, _| s.reserve_peer_port(&host_id)).await?
+    }
+
+    /// Releases a port from [`Node::reserve_peer_port`].
+    pub async fn release_peer_port(&self, host_id: ID, port: u16) -> Result<(), NodeError> {
+        self.call(move |s, _| s.release_peer_port(&host_id, port))
+            .await?
     }
 
     // --- vpn messaging ------------------------------------------------------

@@ -25,6 +25,16 @@
 //!   bytes plus one Call: it isn't ready while the node holds that much.
 //!
 //! Dropping a reader closes the pair; the peer stays connected.
+//!
+//! # The network broker channel
+//!
+//! With its pair, every peer gets one channel on
+//! [`NETWORK_BROKER_PORT`](strims_vnic::ports::NETWORK_BROKER_PORT), both
+//! ways, in a QoS class of its own: a byte stream for the network
+//! membership broker. The app takes it once, with
+//! [`crate::Node::take_peer_broker`]. It's an [`RpcChannel`] whose writer
+//! ends a frame after each item. Overflowing it, or dropping its reader,
+//! closes only it; closing the pair closes it too.
 
 use std::pin::Pin;
 use std::sync::Arc;
