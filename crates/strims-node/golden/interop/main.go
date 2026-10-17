@@ -38,6 +38,8 @@
 //     the ppspp wiring above;
 //   - with -directory and -network-control, internal/directory's control
 //     on the same profile store (the dir-* verbs; see directory.go);
+//   - with -chat and -directory, internal/chat's control on the same
+//     profile store (the chat-* verbs; see chat.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -860,6 +862,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	if strings.HasPrefix(verb, "dir-") {
 		return n.directoryCommand(verb, args)
 	}
+	if strings.HasPrefix(verb, "chat-") {
+		return n.chatCommand(verb, args)
+	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
 
@@ -1107,6 +1112,7 @@ func main() {
 	transfers := flag.Bool("transfer", false, "run swarms through internal/transfer (needs -peer-rpc)")
 	networkControl := flag.Bool("network-control", false, "bind peers to networks through internal/network (needs -peer-rpc)")
 	directory := flag.Bool("directory", false, "run internal/directory on the profile store (needs -network-control)")
+	chat := flag.Bool("chat", false, "run internal/chat on the profile store (needs -directory)")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -1119,13 +1125,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers, *networkControl, *directory); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers, *networkControl, *directory, *chat); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers, networkControl, directory bool) error {
+func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers, networkControl, directory, chat bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -1236,11 +1242,14 @@ func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, 
 	if directory && !networkControl {
 		return errors.New("-directory needs -network-control")
 	}
+	if chat && !directory {
+		return errors.New("-chat needs -directory")
+	}
 	if networkControl {
 		if !peerRPC || transfers {
 			return errors.New("-network-control needs -peer-rpc, without -transfer")
 		}
-		if n.network, err = newNetworkState(logger, v, profileKey, label, directory); err != nil {
+		if n.network, err = newNetworkState(logger, v, profileKey, label, directory, chat); err != nil {
 			return err
 		}
 	}

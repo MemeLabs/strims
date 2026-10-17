@@ -16,7 +16,7 @@ package main
 // same peer id, as internal/peer gives it, so swarms published on the
 // networks bind by announce once their peers bind; the helper's own ppspp
 // wiring is off. With -directory, internal/directory runs beside them
-// (see directory.go).
+// (see directory.go), and with -chat, internal/chat (see chat.go).
 //
 // Verbs (byte strings in hex):
 //
@@ -86,6 +86,8 @@ type networkState struct {
 	vpnHost   *vpn.Host
 	// With -directory.
 	directory directory.Control
+	// With -chat.
+	chat *chatState
 
 	mu       sync.Mutex
 	nextPeer uint64
@@ -96,9 +98,9 @@ type networkState struct {
 
 // newNetworkState opens a profile store for the profile key, and runs
 // internal/network's control on it, with its transfer control and, with
-// withDirectory, internal/directory's control, as internal/app builds
-// them.
-func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label string, withDirectory bool) (*networkState, error) {
+// withDirectory, internal/directory's control and, with withChat,
+// internal/chat's, as internal/app builds them.
+func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label string, withDirectory, withChat bool) (*networkState, error) {
 	profile, err := dao.NewProfile(label)
 	if err != nil {
 		return nil, err
@@ -163,6 +165,9 @@ func newNetworkState(logger *zap.Logger, v *vpn.Host, profileKey *key.Key, label
 	if withDirectory {
 		s.directory = directory.NewControl(ctx, logger, v, rs, obs, control, tc)
 		go s.directory.Run()
+	}
+	if withChat {
+		s.chat = newChatState(ctx, logger, s)
 	}
 	go control.Run()
 	go s.report()
