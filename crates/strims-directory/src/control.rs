@@ -691,6 +691,16 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
             .collect()
     }
 
+    /// The id and key of each network whose directory runs, in key order.
+    pub(crate) fn running(&self) -> Vec<(u64, NetKey)> {
+        self.shared
+            .runners
+            .borrow()
+            .values()
+            .map(|r| (r.network_id, r.key.clone()))
+            .collect()
+    }
+
     /// The listings of network `network_id`'s view, in id order.
     pub fn listings(&self, network_id: u64) -> Vec<view::Listing> {
         self.shared

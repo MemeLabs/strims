@@ -56,7 +56,7 @@ use strims_ppspp::{SwarmId, SwarmOptions, WriterOptions};
 use strims_proto::network::v1::Network;
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::{Key, KeyUsage};
-use strims_rpc::{Router, Timer, peer_connection};
+use strims_rpc::{Client, Router, Timer, connect, peer_connection};
 use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
 use strims_vpn::{Delivery, HostAddr, M_ENCRYPT, NetworkId};
 use tokio::task::{JoinHandle, LocalSet, spawn_local};
@@ -906,6 +906,31 @@ fn start_node(world: &World, n: u8, profile: Profile, store: ReplicatedStore<Mem
         timer,
         tasks,
     }
+}
+
+/// A UI's connection to the frontend services on `router`, over in-memory
+/// pipes: the UI's client.
+pub fn frontend_client(router: Router) -> Client {
+    let (up, down) = (Pipe::default(), Pipe::default());
+    let (_, server) = connect(
+        strims_rpc::Config::frontend(),
+        Reader(up.clone()),
+        Writer(down.clone()),
+        Some(router),
+    );
+    let (client, conn) = connect(
+        strims_rpc::Config::frontend(),
+        Reader(down),
+        Writer(up),
+        None,
+    );
+    spawn_local(async move {
+        let _ = server.await;
+    });
+    spawn_local(async move {
+        let _ = conn.await;
+    });
+    client
 }
 
 /// Links `a` and `b` as the node would, for network membership: an RPC

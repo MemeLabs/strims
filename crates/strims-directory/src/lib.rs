@@ -92,7 +92,8 @@
 //!   its sessions and updates its alias.
 //!
 //! What changes is reported as [`DirectoryEvent`]s; the views and asset
-//! bundles can be read at any time.
+//! bundles can be read at any time. [`bind_frontend`] serves them, and the
+//! calls, to the UI.
 //!
 //! # Bounds
 //!
@@ -105,6 +106,7 @@
 
 mod control;
 mod events;
+pub mod frontend;
 mod host;
 pub mod listing;
 pub mod moderation;
@@ -127,6 +129,7 @@ use strims_rpc::vpn::VpnConfig;
 
 pub use control::{CallFailure, DirectoryControl, DirectoryNetwork};
 pub use events::{DirectoryEvent, ListingEvent, UserEventKind};
+pub use frontend::{DirectoryFrontend, bind_frontend};
 pub use host::{Host, Net};
 pub use server::{Caller, Server, ServerAction, ServerMetrics, SubId, Tunables};
 pub use snippet::LocalSnippets;
