@@ -28,6 +28,9 @@
 //     verbs call the peer's.
 //   - with -peer-rpc, profile replication on demand (the repl-* verbs; see
 //     replication.go);
+//   - with -transfer and -peer-rpc, internal/transfer in place of the
+//     ppspp wiring above: swarms bind by announce (the transfer-* verbs;
+//     see transfer.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -227,6 +230,8 @@ type node struct {
 	networkKey []byte
 	replBlob   *kvtest.Store
 	repl       *replState
+	// With -transfer: internal/transfer runs every peer's swarms.
+	transfer *transferState
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -235,17 +240,22 @@ type node struct {
 
 func (n *node) handlePeer(p *vnic.Peer) {
 	id := p.HostID()
-	w := vnic.NewFrameWriter(p.Link, vnic.TransferPort, n.transferQOS)
-	cr, rp := n.runner.RunPeer(id.Bytes(nil), w)
-	p.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
-		err := cr.HandleMessage(f.Body)
-		if err != nil {
-			emit("transfer-error %s %s", idHex(id), hexs(err.Error()))
-		}
-		return err
-	})
+	ps := &peerState{peer: p}
+	var w *vnic.FrameWriter
+	if n.transfer == nil {
+		w = vnic.NewFrameWriter(p.Link, vnic.TransferPort, n.transferQOS)
+		cr, rp := n.runner.RunPeer(id.Bytes(nil), w)
+		p.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
+			err := cr.HandleMessage(f.Body)
+			if err != nil {
+				emit("transfer-error %s %s", idHex(id), hexs(err.Error()))
+			}
+			return err
+		})
+		ps.rp = rp
+	}
 
-	ps := &peerState{peer: p, rp: rp}
+	var transferPeer uint64
 	if n.rpcQOS != nil {
 		rw0, rw1 := p.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort, n.rpcQOS)
 		c, err := rpc.NewClient(n.logger, &rpc.RWFDialer{Logger: n.logger, ReadWriteFlusher: rw0})
@@ -259,6 +269,9 @@ func (n *node) handlePeer(p *vnic.Peer) {
 		debugv1.RegisterDebugService(s, n.debug)
 		if ps.caller != nil {
 			n.replAddPeer(id, p, s, ps.caller)
+			if n.transfer != nil {
+				transferPeer = n.transferAddPeer(p, s, ps.caller)
+			}
 		}
 		go s.Listen(context.Background())
 	}
@@ -269,12 +282,20 @@ func (n *node) handlePeer(p *vnic.Peer) {
 	// The host may still be bound through a replaced peer's link.
 	n.vpn.Network.RemovePeer(id)
 	n.vpn.Network.AddPeer(p, n.vpnPort, n.vpnPort)
+	if transferPeer != 0 {
+		n.transferNetworkPeerOpen(transferPeer)
+	}
 	emit("peer %s %s %s %s", idHex(id), hexs(p.NodePlatform), hexs(p.NodeVersion), linkType(p.Link))
 
 	go func() {
 		<-p.Done()
-		rp.Stop()
-		w.Close()
+		if ps.rp != nil {
+			ps.rp.Stop()
+			w.Close()
+		}
+		if transferPeer != 0 {
+			n.transferRemovePeer(transferPeer)
+		}
 		if ps.caller != nil {
 			ps.caller.Close()
 		}
@@ -652,6 +673,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if ps.rp == nil {
+			return "", errors.New("transfers run the swarms")
+		}
 		if verb == "swarm-stop" {
 			ps.rp.StopSwarm(s.swarm)
 			return "", nil
@@ -812,6 +836,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	}
 	if strings.HasPrefix(verb, "repl-") {
 		return n.replCommand(verb, args)
+	}
+	if strings.HasPrefix(verb, "transfer-") {
+		return n.transferCommand(verb, args)
 	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
@@ -1057,6 +1084,7 @@ func main() {
 	webRTC := flag.Bool("webrtc", false, "add the WebRTC interface on a loopback UDP mux")
 	peerRPC := flag.Bool("peer-rpc", false, "run RPC on every peer's channel pair (ports 4 and 5)")
 	networkSeed := flag.String("network-seed", "", "network key seed (32 bytes hex): issue a host certificate for RPC over vpn")
+	transfers := flag.Bool("transfer", false, "run swarms through internal/transfer (needs -peer-rpc)")
 	flag.Parse()
 
 	// The protocol owns the real stdout.
@@ -1069,13 +1097,13 @@ func main() {
 		os.Exit(3)
 	}()
 
-	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC); err != nil {
+	if err := run(*profileSeed, *hostSeed, *networkKey, *networkSeed, uint16(*vpnPort), *label, *maxPeers, *rateLimit, *verbose, *listen, *webRTC, *peerRPC, *transfers); err != nil {
 		logf("error: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC bool) error {
+func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, label string, maxPeers int, rateLimit uint64, verbose, listen, webRTC, peerRPC, transfers bool) error {
 	logger := zap.NewNop()
 	if verbose {
 		logger, _ = zap.NewDevelopment()
@@ -1174,6 +1202,14 @@ func run(profileSeed, hostSeed, networkKey, networkSeed string, vpnPort uint16, 
 	}
 	if peerRPC {
 		n.rpcQOS = h.QOS().AddClass(1)
+	}
+	if transfers {
+		if !peerRPC {
+			return errors.New("-transfer needs -peer-rpc")
+		}
+		if n.transfer, err = newTransferState(logger, v); err != nil {
+			return err
+		}
 	}
 	if peerRPC || networkSeed != "" {
 		n.debug = &debugsvc.Service{}

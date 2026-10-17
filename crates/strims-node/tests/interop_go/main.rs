@@ -6,7 +6,8 @@
 //! Go nodes are the `golden/interop` helper: the stack cmd/svc's `newVPN`
 //! builds (vnic with a TCP mux and a WebSocket listener, vpn with one
 //! network and fixed port bindings, a ppspp runner with explicit
-//! `RunSwarm`), one subprocess each, driven over stdin/stdout. Rust nodes
+//! `RunSwarm`, or internal/transfer), one subprocess each, driven over
+//! stdin/stdout. Rust nodes
 //! are [`strims_node::Node`]s on `TokioNet`, in `VerifyMode::Audit`.
 //!
 //! | test | covers |
@@ -20,6 +21,7 @@
 //! | `ppspp_capped_rust_seed_go_viewers` | an upload-capped Rust seed with three Go viewers |
 //! | `rpc::peer_rpc_both_ways` | peer RPC on the channel pair over TCP and WS: calls both ways, multi-frame payloads, streams, cancels, deadlines, error codes, unknown methods |
 //! | `replication::go_pairs_rust`, `replication::rust_pairs_go_with_a_large_store` | profile replication between a Go and a Rust device: pairing both ways, writes and edits on each, a bootstrap in parts, a device deletion |
+//! | `transfer::go_seed_rust_viewer_bind_by_announce`, `transfer::rust_seed_go_viewer_bind_by_announce` | internal/transfer and `strims_transfer`: a swarm published on both sides binds by announce whichever side publishes second, byte-exact; a removed transfer closes |
 //! | `vpn_rpc::vpn_rpc_both_ways` | RPC over vpn with certificates: calls both ways to fixed and hash-table addresses, streams, cancels to the Rust server, deadlines, error codes, unknown methods |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
@@ -43,6 +45,7 @@
 mod harness;
 mod replication;
 mod rpc;
+mod transfer;
 mod vpn_rpc;
 
 use std::collections::BTreeMap;

@@ -273,6 +273,9 @@ pub struct GoOptions {
     /// Issue a host certificate on the network for RPC over vpn (the
     /// `vpn-*` verbs).
     pub vpn_rpc: bool,
+    /// Run swarms through internal/transfer (the `transfer-*` verbs);
+    /// needs `peer_rpc`.
+    pub transfer: bool,
 }
 
 impl GoOptions {
@@ -285,6 +288,7 @@ impl GoOptions {
             webrtc: false,
             peer_rpc: false,
             vpn_rpc: false,
+            transfer: false,
         }
     }
 }
@@ -305,6 +309,7 @@ impl GoNode {
             .arg(format!("-listen={}", o.listen))
             .arg(format!("-webrtc={}", o.webrtc))
             .arg(format!("-peer-rpc={}", o.peer_rpc))
+            .arg(format!("-transfer={}", o.transfer))
             .arg(format!(
                 "-network-seed={}",
                 if o.vpn_rpc {
