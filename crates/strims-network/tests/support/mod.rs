@@ -255,6 +255,10 @@ pub struct NodeState {
     pub bound: BTreeMap<(ID, u32), (u16, u16)>,
     /// Each peer's broker channel, until taken.
     pub brokers: BTreeMap<ID, (Reader, Writer)>,
+    /// Joining a network fails.
+    pub refuse_networks: bool,
+    /// How long joining a network takes.
+    pub join_delay: std::time::Duration,
 }
 
 #[derive(Clone)]
@@ -289,7 +293,14 @@ impl Host for FakeHost {
     }
 
     async fn add_network(&self, key: &[u8]) -> Result<u32, Closed> {
+        let delay = self.state.borrow().join_delay;
+        if !delay.is_zero() {
+            tokio::time::sleep(delay).await;
+        }
         let mut s = self.state.borrow_mut();
+        if s.refuse_networks {
+            return Err(Closed);
+        }
         s.next_net += 1;
         let net = s.next_net;
         s.networks.insert(key.to_vec(), net);

@@ -3,8 +3,8 @@
 
 //! The services a network's members reach over vpn RPC: its CA, served by
 //! the device that holds the network's server config, and the client port
-//! this side calls them from. Certificate renewal and the forwarding of
-//! peers' renewals run on them.
+//! this side calls them from. Certificate renewal, certificate searches
+//! and the forwarding of peers' renewals run on them.
 //!
 //! # The CA server
 //!
@@ -49,6 +49,7 @@ use strims_dao::{Table, lease};
 use strims_kademlia::ID;
 use strims_kv::Kv;
 use strims_proto::network::v1::Network;
+use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::ca::{
     CaClient, CaFindRequest, CaFindResponse, CaPeerRenewRequest, CaPeerRenewResponse,
     CaPeerService, CaRenewRequest, CaRenewResponse, CaService, register_ca_service,
@@ -346,6 +347,51 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
         let res = client.renew(&req).await.map_err(remote_error)?;
         res.certificate
             .ok_or((ErrorCode::Unknown, "no certificate".to_owned()))
+    }
+
+    /// Finds the certificate the network's CA issued that matches
+    /// `query`: at this side's CA, or over vpn. See
+    /// [`NetworkControl::find_certificate`](crate::NetworkControl::find_certificate).
+    pub(crate) async fn find_at_ca(
+        self: &Rc<Self>,
+        key: &[u8],
+        query: Query,
+        full_chain: bool,
+    ) -> Result<Certificate, RpcError> {
+        let n = self
+            .records
+            .borrow()
+            .get(key)
+            .cloned()
+            .ok_or_else(|| RpcError::new(ErrorCode::Unknown, "network not found"))?;
+        if n.server_config.is_some() {
+            return ca::find(&self.store, n.id, Some(&query), full_chain)
+                .await
+                .map_err(|e| e.to_rpc());
+        }
+        // vpn RPC admits only host certificates under a trusted membership
+        let trusted = self
+            .state
+            .borrow()
+            .certificate(key)
+            .is_some_and(|c| membership_trusted(c, self.timer.now()));
+        if !trusted {
+            return Err(RpcError::new(
+                ErrorCode::Unknown,
+                "membership not trusted by the network's CA",
+            ));
+        }
+        let client = self.ca_client(key).await.map_err(to_rpc)?;
+        let req = CaFindRequest {
+            query: Some(query),
+            full_chain,
+        };
+        let res = client
+            .find(&req)
+            .await
+            .map_err(|e| to_rpc(remote_error(e)))?;
+        res.certificate
+            .ok_or_else(|| RpcError::new(ErrorCode::Unknown, "no certificate"))
     }
 
     /// Renews at this side's CA, under its rate limit.

@@ -15,7 +15,7 @@ mod support;
 
 use data_encoding::BASE64_NOPAD;
 use futures_util::{FutureExt, StreamExt};
-use strims_network::NetworkFrontend;
+use strims_network::{NetworkEvent, NetworkFrontend};
 use strims_proto::network::v1::WatchNetworksResponse;
 use strims_proto::network::v1::create_network_from_invitation_request::Invitation as InvitationField;
 use strims_proto::network::v1::network_event::Body;
@@ -239,6 +239,41 @@ fn watching_networks() {
             e,
             Body::NetworkStop(s) if s.network_id == created.id
         )));
+    });
+}
+
+/// A watch reports a network once, as it starts: the node joining it
+/// adds nothing.
+#[test]
+fn a_watch_reports_a_network_once_as_it_starts() {
+    run(async {
+        let a = node(5).await;
+        let fa = frontend(&a);
+        let mut w = fa.watch(&ctx(), WatchNetworksRequest {}).await.unwrap();
+        let mut events = a.control.subscribe();
+        let created = fa
+            .create_server(
+                &ctx(),
+                CreateServerRequest {
+                    name: "net".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap()
+            .network
+            .unwrap();
+        settle().await;
+        let mut joined = false;
+        while let Some(Some(strims_dao::Recv::Event(e))) = events.next().now_or_never() {
+            joined |= matches!(&*e, NetworkEvent::Joined { network } if network.id == created.id);
+        }
+        assert!(joined);
+        let got = drain(&mut w);
+        assert!(
+            matches!(&got[..], [Body::NetworkStart(s)] if s.network.as_ref().unwrap().id == created.id),
+            "{got:?}"
+        );
     });
 }
 

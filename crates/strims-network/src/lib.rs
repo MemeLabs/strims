@@ -34,7 +34,10 @@
 //! network it creates, whose CA it runs ([`ca`]), or an invitation from a
 //! member. The control renews its certificates at the network's CA, over
 //! vpn RPC or through a linked peer ([`services`]), and stores them in the
-//! profile's record of the network.
+//! profile's record of the network. Under its membership, the host
+//! presents [`NetworkControl::host_certificate`] to the network's vpn
+//! services, and [`NetworkControl::find_certificate`] looks up the
+//! certificates the CA issued, such as a member's by its alias.
 //!
 //! # Running
 //!
@@ -43,7 +46,10 @@
 //! holds and follows its changes. The driver reports peers as they link
 //! and unlink ([`NetworkControl::add_peer`]), and runs
 //! [`NetworkControl::run`] as a local task. The control reports the
-//! networks it runs and their bound peers as [`NetworkEvent`]s.
+//! networks it runs and their bound peers as [`NetworkEvent`]s: a network
+//! starts when the store holds it, and is joined once the node has joined
+//! it and its services have started. Services built on a network follow
+//! its joins.
 //!
 //! # Peers
 //!

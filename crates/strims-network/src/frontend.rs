@@ -495,12 +495,15 @@ impl<K: Kv, H: Host, T: Timer> Watch<K, H, T> {
         }
     }
 
+    /// Queues the UI's event for `e`, if it has one: the UI's protocol has
+    /// none for `Joined`.
     fn push(&mut self, e: &NetworkEvent) {
         let body = match e {
             NetworkEvent::Started { network } => Body::NetworkStart(NetworkStart {
                 network: Some(network.clone()),
                 peer_count: 0,
             }),
+            NetworkEvent::Joined { .. } => return,
             NetworkEvent::Stopped { network } => Body::NetworkStop(NetworkStop {
                 network_id: network.id,
             }),

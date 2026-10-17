@@ -23,12 +23,15 @@ use strims_dao::schema::network::{Networks, network_key};
 use strims_dao::{Broadcast, Recv, ReplicatedStore, StoreEvent, Subscription, Table};
 use strims_kademlia::ID;
 use strims_kv::Kv;
+use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::ca::{CaPeerClient, register_ca_peer_service};
 use strims_proto::network::v1::{
     Network, NetworkPeerClient, NetworkPeerCloseRequest, NetworkPeerNegotiateRequest,
     NetworkPeerOpenRequest, NetworkPeerUpdateCertificateRequest, register_network_peer_service,
 };
 use strims_proto::profile::v1::Profile;
+use strims_proto::service::Error as RpcError;
+use strims_proto::types::Certificate;
 use strims_rpc::{Client, RetryClient, Router, Timer};
 
 use crate::events::NetworkEvent;
@@ -447,6 +450,45 @@ impl<K: Kv, H: Host, T: Timer> NetworkControl<K, H, T> {
         })
     }
 
+    /// This host's certificate on the network whose key is `key`, under
+    /// the profile's current membership certificate: the one the host's
+    /// vpn connections on the network present. It changes with the
+    /// membership, before the `Updated` event that reports it. `None`
+    /// before the network's `Started`, after its `Stopped`, once the node
+    /// failed to join it, or for a profile without a key.
+    pub fn host_certificate(&self, key: &[u8]) -> Option<Certificate> {
+        self.shared.host_certificate(key)
+    }
+
+    /// The certificate the CA of the network whose key is `key` issued
+    /// that matches `query`: the latest for a subject or a key, or the one
+    /// with a serial number. With `full_chain` its parents are filled in
+    /// from the CA's logs, and a parent missing from them fails the
+    /// search.
+    ///
+    /// This device answers itself when it holds the network's server
+    /// config. Otherwise it calls the CA over vpn, which needs the node to
+    /// have joined the network and the profile's membership to be trusted;
+    /// the call retries under [`RetryPolicy::vpn`](strims_rpc::RetryPolicy::vpn),
+    /// and dropping the future cancels it.
+    ///
+    /// # Errors
+    ///
+    /// An [`RpcError`] whose code is a `strims.network.v1.errors.ErrorCode`.
+    /// The CA's refusals carry its code, and a search that matches nothing
+    /// is `Unknown`, "not found". Everything else is `Unknown` with a
+    /// message saying why: a network the node doesn't run or hasn't
+    /// joined, a membership not trusted yet, a CA that isn't published, or
+    /// a failed call.
+    pub async fn find_certificate(
+        &self,
+        key: &[u8],
+        query: Query,
+        full_chain: bool,
+    ) -> Result<Certificate, RpcError> {
+        self.shared.find_at_ca(key, query, full_chain).await
+    }
+
     /// The control's counters.
     pub fn metrics(&self) -> Metrics {
         self.shared.state.borrow().metrics().clone()
@@ -794,6 +836,11 @@ async fn apply<K: Kv, H: Host, T: Timer>(s: Rc<Shared<K, H, T>>, op: OpOf<H>) {
             };
             s.update(|st, now| st.network_added(&key, net, now));
             s.start_services(&key);
+            let joined = s.state.borrow().network(&key).is_some();
+            let network = s.records.borrow().get(&key).cloned();
+            if let (true, Some(network)) = (joined, network) {
+                s.events.emit(vec![NetworkEvent::Joined { network }]);
+            }
         }
         Op::RemoveNetwork { net } => {
             if let Err(e) = s.host.remove_network(net).await {
