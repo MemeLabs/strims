@@ -1,0 +1,29 @@
+[package]
+name = "strims-directory"
+description = "The network directory: listings, their users and snippets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-dao.workspace = true
+strims-kademlia.workspace = true
+strims-ppspp.workspace = true
+strims-proto.workspace = true
+strims-rpc.workspace = true
+strims-vpn.workspace = true
+prost.workspace = true
+rand_core.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+strims-chunkstream.workspace = true
+# the CA's subject limit bounds aliases (lib.rs test)
+strims-network.workspace = true
+
+[lints]
+workspace = true

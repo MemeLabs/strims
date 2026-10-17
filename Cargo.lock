@@ -1877,6 +1877,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-directory"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "rand_core 0.10.1",
+ "slotmap",
+ "strims-base",
+ "strims-chunkstream",
+ "strims-crypto",
+ "strims-dao",
+ "strims-kademlia",
+ "strims-network",
+ "strims-ppspp",
+ "strims-proto",
+ "strims-rpc",
+ "strims-vpn",
+ "thiserror",
+]
+
+[[package]]
 name = "strims-kademlia"
 version = "0.1.0"
 dependencies = [
