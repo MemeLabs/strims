@@ -23,11 +23,11 @@ enforce the mechanical parts.
 
 ## Architecture: sans-IO core
 
-Core crates (`strims-base`, `-binmap`, `-proto`, `-crypto`, `-qos`,
-`-kademlia`, `-mpc`, `-ppspp`, `-vnic`, `-vpn`, `-webrtc`) are synchronous,
-single-threaded state machines: no async, no tokio, no threads, no locks and
-no I/O. Drivers (`strims-node`, later `strims-wasm`) own sockets, timers and
-tasks.
+Core crates (`strims-base`, `-binmap`, `-chunkstream`, `-proto`, `-crypto`,
+`-qos`, `-kademlia`, `-mpc`, `-ppspp`, `-vnic`, `-vpn`, `-webrtc`) are
+synchronous, single-threaded state machines: no async, no tokio, no threads,
+no locks and no I/O. Drivers (`strims-node`, later `strims-wasm`) own
+sockets, timers and tasks.
 
 Shape:
 

@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "crates/strims-base",
   "crates/strims-binmap",
+  "crates/strims-chunkstream",
   "crates/strims-proto",
   "crates/strims-crypto",
   "crates/strims-qos",
@@ -49,6 +50,7 @@ panic = "warn"
 # internal
 strims-base = { path = "crates/strims-base" }
 strims-binmap = { path = "crates/strims-binmap" }
+strims-chunkstream = { path = "crates/strims-chunkstream" }
 strims-proto = { path = "crates/strims-proto" }
 strims-crypto = { path = "crates/strims-crypto" }
 strims-qos = { path = "crates/strims-qos" }

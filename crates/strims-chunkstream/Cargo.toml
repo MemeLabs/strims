@@ -1,0 +1,20 @@
+[package]
+name = "strims-chunkstream"
+description = "Record framing for byte streams that readers join part-way through"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+proptest.workspace = true
+prost.workspace = true
+sha2.workspace = true
+strims-proto.workspace = true
+
+[lints]
+workspace = true

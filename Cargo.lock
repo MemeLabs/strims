@@ -1825,6 +1825,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-chunkstream"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "proptest",
+ "prost",
+ "sha2 0.11.1",
+ "strims-proto",
+ "thiserror",
+]
+
+[[package]]
 name = "strims-crypto"
 version = "0.1.0"
 dependencies = [
