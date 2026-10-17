@@ -198,16 +198,21 @@ fn apply_singleton<'a, S: Singleton, K: Kv>(
     })
 }
 
+/// Record `r` as an event. A record sent to another replica always
+/// carries a version, if only an empty one, since receivers compare it.
 fn event_of<R: Clone + Message>(
     ns: Namespace,
     id: u64,
-    r: R,
+    mut r: R,
     rep: &crate::table::Replication<R>,
 ) -> Event {
+    let version = (rep.version_mut)(&mut r)
+        .get_or_insert_with(VersionVector::default)
+        .clone();
     Event {
         namespace: ns.0,
         id,
-        version: (rep.version)(&r).cloned(),
+        version: Some(version),
         delete: false,
         record: (rep.extract)(r).encode_to_vec(),
     }
