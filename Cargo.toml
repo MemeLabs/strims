@@ -28,6 +28,7 @@ members = [
   "crates/strims-node",
   "crates/strims-sim",
   "crates/strims-svc",
+  "crates/strims-wasm",
 ]
 
 [workspace.package]
@@ -80,6 +81,7 @@ strims-testworld = { path = "crates/strims-testworld" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
 strims-svc = { path = "crates/strims-svc" }
+strims-wasm = { path = "crates/strims-wasm" }
 
 # general
 thiserror = "2"

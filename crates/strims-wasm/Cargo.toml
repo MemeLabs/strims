@@ -1,0 +1,100 @@
+[package]
+name = "strims-wasm"
+description = "The browser worker driver: a strims node in a dedicated worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# a bare node controlled over the frontend port, for the browser link tests
+e2e = []
+
+# Everything is wasm32-only: native workspace builds see an empty crate.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+strims-base.workspace = true
+strims-dao.workspace = true
+strims-directory.workspace = true
+strims-kv.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-session.workspace = true
+strims-video.workspace = true
+strims-vnic.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+futures-util = { workspace = true, features = ["alloc", "sink", "std"] }
+prost.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The wasm-bindgen family comes from one release, and the `=` pin must match
+# the installed wasm-bindgen-cli, which the web build checks.
+wasm-bindgen = "=0.2.129"
+js-sys = "=0.3.106"
+wasm-bindgen-futures = "=0.4.79"
+web-sys = { version = "=0.3.106", features = [
+  # globals, timers and logging
+  "WorkerGlobalScope",
+  "DedicatedWorkerGlobalScope",
+  "WorkerNavigator",
+  "Performance",
+  "Crypto",
+  "console",
+  # ports and events
+  "MessageChannel",
+  "MessagePort",
+  "MessageEvent",
+  "Event",
+  "EventTarget",
+  "ErrorEvent",
+  "CloseEvent",
+  # WebSocket
+  "WebSocket",
+  "BinaryType",
+  # IndexedDB
+  "IdbFactory",
+  "IdbOpenDbRequest",
+  "IdbRequest",
+  "IdbRequestReadyState",
+  "IdbDatabase",
+  "IdbObjectStore",
+  "IdbTransaction",
+  "IdbTransactionMode",
+  "IdbCursor",
+  "IdbCursorWithValue",
+  "IdbCursorDirection",
+  "IdbKeyRange",
+  "IdbVersionChangeEvent",
+  "DomException",
+  "DomStringList",
+  # WebRTC data channels transferred from the window
+  "RtcDataChannel",
+  "RtcDataChannelState",
+  "RtcDataChannelType",
+  # fetch
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "RequestCredentials",
+  "RequestRedirect",
+  "Headers",
+  "Response",
+  "ReadableStream",
+  "ReadableStreamDefaultReader",
+  "ReadableStreamReadResult",
+  "AbortController",
+  "AbortSignal",
+] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+strims-kv = { workspace = true, features = ["conformance"] }
+wasm-bindgen-test = "=0.3.79"
+
+[lints]
+workspace = true
