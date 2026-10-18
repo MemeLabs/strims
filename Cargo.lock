@@ -2650,6 +2650,7 @@ dependencies = [
  "httparse",
  "js-sys",
  "prost",
+ "rand_core 0.10.1",
  "serde_json",
  "slotmap",
  "strims-base",

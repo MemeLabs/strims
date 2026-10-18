@@ -6,38 +6,81 @@
 //! The worker script runs `await init(); start(options, frontend, signal)`
 //! with the two ports the window transferred to it. Ports buffer their
 //! messages until a handler is attached, so nothing sent before `start` is
-//! lost.
+//! lost. A `start` that throws is reported to the window as `fatal` by the
+//! worker script.
+//!
+//! `start` opens the profiles in IndexedDB ([`IdbKv`], with no table
+//! prefix) through a [`Manager`] on a [`WasmFactory`], and serves the UI's
+//! frontend RPC connection on `frontend` ([`frontend::serve`]). A panic
+//! posts `{type: "fatal", message}` on `signal`.
 
-use std::cell::RefCell;
+use std::rc::Rc;
 
-use js_sys::Reflect;
+use js_sys::{Object, Reflect};
+use rand_core::SeedableRng;
+use strims_base::rng::DetRng;
+use strims_session::Manager;
 use wasm_bindgen::prelude::*;
 use web_sys::MessagePort;
 
-thread_local! {
-    /// The ports `start` was given, held so they stay open.
-    static PORTS: RefCell<Option<(MessagePort, MessagePort)>> = const { RefCell::new(None) };
-}
+use crate::clock::WasmClock;
+use crate::factory::WasmFactory;
+use crate::kv::IdbKv;
+use crate::options::Options;
+use crate::{frontend, runtime};
 
-/// Starts the worker. `options.logLevel` is a zap level (see
-/// [`crate::log::init`]); `frontend` carries the UI's RPC connection and
+/// The operating system a browser's device record reports: the UI's
+/// device list shows it.
+pub const DEVICE_OS: &str = "web";
+
+/// The worker's profiles and their sessions.
+pub type WasmManager = Manager<IdbKv, WasmFactory, WasmClock>;
+
+/// Starts the worker. `options` are the window's (see
+/// [`crate::options`]); `frontend` carries the UI's RPC connection and
 /// `signal` the WebRTC signalling with the window. With the `e2e`
 /// feature, `options.e2e: true` hands both ports to the browser link
-/// tests' bare node (see `crate::e2e`).
+/// tests' bare node instead.
 #[wasm_bindgen]
 pub fn start(options: JsValue, frontend: MessagePort, signal: MessagePort) -> Result<(), JsValue> {
-    let log_level = Reflect::get(&options, &JsValue::from_str("logLevel"))
-        .ok()
-        .and_then(|v| v.as_f64())
-        .map_or(0, |l| l as i32);
-    crate::log::init(log_level);
+    let (parsed, ignored) = Options::parse(&options);
+    crate::log::init(parsed.log_level);
+    // The `e2e` feature's bare node takes both ports here, before anything
+    // opens.
     #[cfg(feature = "e2e")]
     if crate::e2e::requested(&options) {
         crate::e2e::start(frontend, signal);
         return Ok(());
     }
+    for line in &ignored {
+        tracing::warn!("ignoring an option: {line}");
+    }
+    set_fatal_hook(&signal);
+    let seed = crate::entropy::seed()
+        .map_err(|e| js_sys::Error::new(&format!("drawing a seed from entropy: {e}")))?;
+    let manager = Rc::new(WasmManager::new(
+        IdbKv::new(""),
+        WasmFactory::new(&parsed, signal),
+        WasmClock,
+        DEVICE_OS,
+        DetRng::from_seed(seed),
+    ));
+    // Detached: the connection lives as long as the window's port.
+    drop(runtime::spawn(async move {
+        let res = frontend::serve(manager, frontend).await;
+        tracing::info!(?res, "frontend disconnected");
+    }));
     tracing::info!("strims-wasm worker started");
-    let old = PORTS.with(|p| p.replace(Some((frontend, signal))));
-    drop(old);
     Ok(())
+}
+
+/// Makes a panic post `{type: "fatal", message}` on `signal`.
+fn set_fatal_hook(signal: &MessagePort) {
+    let signal = signal.clone();
+    crate::log::set_fatal_hook(move |message| {
+        let msg = Object::new();
+        let _ = Reflect::set(&msg, &"type".into(), &"fatal".into());
+        let _ = Reflect::set(&msg, &"message".into(), &message.into());
+        let _ = signal.post_message(&msg);
+    });
 }

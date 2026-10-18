@@ -41,6 +41,12 @@
 //! - [`rtc`]: the signal port to the window's peer connections, and the
 //!   data channels it hands over.
 //! - `inbox`: a link's read queue, filled by its socket's callbacks.
+//! - [`fetch`]: [`fetch::BrowserFetch`], the directory's HTTPS requests
+//!   with the browser's `fetch`.
+//! - [`factory`]: the app layer on the browser driver: the platform and
+//!   session factory a profile runs on.
+//! - [`frontend`]: the UI's frontend RPC connection over a message port.
+//! - [`options`]: the options the window starts the worker with.
 //! - [`entry`]: `start`, the function the worker script calls.
 //! - `e2e` (feature `e2e`): the bare node the browser link tests drive.
 
@@ -51,6 +57,9 @@ pub mod clock;
 pub mod e2e;
 pub mod entropy;
 pub mod entry;
+pub mod factory;
+pub mod fetch;
+pub mod frontend;
 mod idb;
 mod inbox;
 pub mod io;
@@ -58,6 +67,7 @@ mod js;
 pub mod kv;
 pub mod log;
 pub mod node;
+pub mod options;
 pub mod rtc;
 pub mod runtime;
 pub mod ws;
