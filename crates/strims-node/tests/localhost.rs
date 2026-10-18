@@ -431,6 +431,31 @@ async fn dial_errors_are_reported() {
     );
 }
 
+#[tokio::test]
+async fn dialing_this_node_is_refused() {
+    for (i, kind) in [(11, Kind::Tcp), (12, Kind::Ws)] {
+        let mut t = TestNode::spawn(i, kind).await;
+        let err = t.node.dial(&t.uri(kind)).await.unwrap_err();
+        assert_eq!(err, strims_node::NodeError::OwnHost, "{kind:?}");
+        // Both ends of the loop fail their handshakes without a peer.
+        let settle = tokio::time::timeout(StdDuration::from_millis(300), async {
+            while let Some(e) = t.events.recv().await {
+                t.seen.push(e);
+            }
+        })
+        .await;
+        assert!(settle.is_err(), "node stopped");
+        assert!(
+            !t.seen
+                .iter()
+                .any(|e| matches!(e, NodeEvent::PeerAdded(_) | NodeEvent::PeerRemoved { .. })),
+            "{kind:?}: {:?}",
+            t.seen
+        );
+        assert!(t.node.peers().await.unwrap().is_empty());
+    }
+}
+
 /// A reader that falls behind the live window gets `Underrun`, skips to the
 /// tail, and keeps reading; a reset is reported and reading restarts. Read
 /// offsets are contiguous, an underrun moves them on by the bytes skipped,

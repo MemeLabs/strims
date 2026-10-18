@@ -457,6 +457,7 @@ impl State {
         if let Some((x, i)) = rc.exchange {
             let e = match e {
                 DialError::PeerInit(m) => CandidateError::PeerInit(m),
+                e @ DialError::OwnHost => CandidateError::PeerInit(e.message().to_owned()),
                 DialError::Connect(m) => CandidateError::Failed(m),
             };
             self.fail_candidate(x, i, e, now);

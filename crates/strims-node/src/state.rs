@@ -40,7 +40,7 @@ use strims_proto::types::Key;
 use strims_qos::ClassId;
 use strims_vnic::{
     CandidateError, CloseReason, DialTarget, Fill, HostConfig, InboundFrame, LinkCandidatePool,
-    LinkDescription, LinkInterface, LinkKind, PeerKey as LinkKey, WriterId, ports,
+    LinkDescription, LinkInterface, LinkKind, PeerInitError, PeerKey as LinkKey, WriterId, ports,
 };
 use strims_vpn::{
     Event as VpnEvent, ExchangeId, HashTableGetId, HashTableGetOptions, HashTablePublisherId,
@@ -163,12 +163,22 @@ struct LinkSlot {
 enum DialError {
     Connect(String),
     PeerInit(String),
+    /// The link reached this node.
+    OwnHost,
 }
 
 impl DialError {
     fn message(&self) -> &str {
         match self {
             DialError::Connect(m) | DialError::PeerInit(m) => m,
+            DialError::OwnHost => "the peer is this node",
+        }
+    }
+
+    fn into_node_error(self) -> NodeError {
+        match self {
+            DialError::OwnHost => NodeError::OwnHost,
+            e => NodeError::Dial(e.message().to_owned()),
         }
     }
 }
@@ -567,6 +577,9 @@ impl State {
             return;
         };
         let e = match reason {
+            CloseReason::Failed(strims_vnic::Error::PeerInit(PeerInitError::OwnHost)) => {
+                DialError::OwnHost
+            }
             CloseReason::Failed(e) => DialError::PeerInit(e.to_string()),
             CloseReason::Replaced => DialError::Connect("replaced".to_owned()),
             CloseReason::Closed => DialError::Connect("closed".to_owned()),
@@ -982,11 +995,7 @@ impl State {
             }
         }
         if let Some(w) = dial.waiter {
-            let _ = w.send(
-                result
-                    .clone()
-                    .map_err(|e| NodeError::Dial(e.message().to_owned())),
-            );
+            let _ = w.send(result.clone().map_err(DialError::into_node_error));
         }
         if let Some((x, i)) = dial.exchange {
             if let Some(c) = self
@@ -998,6 +1007,9 @@ impl State {
                     Ok(_) => CandidateState::Linked,
                     Err(DialError::PeerInit(m)) => {
                         CandidateState::Failed(CandidateError::PeerInit(m))
+                    }
+                    Err(e @ DialError::OwnHost) => {
+                        CandidateState::Failed(CandidateError::PeerInit(e.message().to_owned()))
                     }
                     Err(DialError::Connect(m)) => CandidateState::Failed(CandidateError::Failed(m)),
                 };

@@ -14,6 +14,9 @@ pub enum NodeError {
     /// The dial failed before or during the vnic handshake.
     #[error("dial failed: {0}")]
     Dial(String),
+    /// The dialed link reached this node.
+    #[error("dial failed: the peer is this node")]
+    OwnHost,
     #[error("invalid uri: {0}")]
     InvalidUri(String),
     /// No connected peer with this host id.
