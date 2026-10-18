@@ -42,6 +42,7 @@ use strims_proto::video::v1::{
 };
 use strims_rpc::{Client, Router, Timer};
 use strims_testworld::*;
+use strims_video::hls::HlsRoutes;
 use strims_video::host::{NoConnection, NoListener, NoRtmp};
 use strims_video::{
     Config, HlsSettings, MAX_CHANNELS, NoVideoHost, VideoControl, VideoEvent, VideoHost,
@@ -90,6 +91,7 @@ fn start_with<V: VideoHost>(n: &Node, host: V, config: Config) -> Side<V> {
         n.network.clone(),
         n.transfers.clone(),
         n.directory.clone(),
+        HlsRoutes::new(),
         n.timer.clone(),
         n.rng(),
         config,
@@ -475,7 +477,7 @@ fn support_follows_the_host_and_config() {
 
 /// The configs start at their defaults, take what passes their checks and
 /// refuse the rest unchanged. The ingress has no streams yet, and HLS
-/// streams don't open.
+/// streams don't open where the driver doesn't serve HLS.
 #[test]
 fn configs_are_checked_and_round_trip() {
     run(async {
@@ -564,11 +566,11 @@ fn configs_are_checked_and_round_trip() {
             swarm_uri: "magnet:?xt=urn:ppspp:x".into(),
             network_keys: Vec::new(),
         });
-        assert_eq!(refusal(open.await), "not implemented");
+        assert_eq!(refusal(open.await), "HLS egress is not supported");
         let close = s.hls.close_stream(&HlsEgressCloseStreamRequest {
             transfer_id: vec![0; 32],
         });
-        assert_eq!(refusal(close.await), "not implemented");
+        assert_eq!(refusal(close.await), "HLS stream not found");
     });
 }
 

@@ -27,6 +27,7 @@ use strims_proto::video::v1::{EgressClient, EgressOpenStreamRequest, EgressOpenS
 use strims_rpc::{Client, ClientStream, Router};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
+use strims_video::hls::HlsRoutes;
 use strims_video::{
     Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, bind_frontend, capture_options,
 };
@@ -46,6 +47,7 @@ fn start(n: &Node, config: Config) -> Control {
         n.network.clone(),
         n.transfers.clone(),
         n.directory.clone(),
+        HlsRoutes::new(),
         n.timer.clone(),
         n.rng(),
         config,

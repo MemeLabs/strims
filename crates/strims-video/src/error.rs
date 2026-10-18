@@ -7,6 +7,7 @@ use strims_directory::SnippetError;
 use strims_proto::service::Error as RpcError;
 
 use crate::config::ConfigError;
+use crate::hls::RouteError;
 
 /// Why a video control operation failed. A frontend answers with
 /// [`VideoError::to_rpc`]: code 0 and this error's message.
@@ -98,6 +99,27 @@ pub enum VideoError {
     /// Signing a snippet failed.
     #[error("signing failed: {0}")]
     Sign(#[from] strims_crypto::Error),
+    /// The driver doesn't serve HLS
+    /// ([`HlsSettings::serve`](crate::HlsSettings::serve)).
+    #[error("HLS egress is not supported")]
+    HlsNotSupported,
+    /// The profile's HLS streams can't be routed.
+    #[error("HLS egress is unavailable: {0}")]
+    HlsUnavailable(RouteError),
+    /// The device's HLS egress config is disabled.
+    #[error("HLS egress is disabled")]
+    HlsDisabled,
+    /// Neither the HLS config's public server address nor
+    /// [`HlsSettings::base_url`](crate::HlsSettings::base_url) is set.
+    #[error("HLS egress has no server address")]
+    HlsNoServerAddr,
+    /// The node serves [`HlsSettings::max_streams`](crate::HlsSettings::max_streams)
+    /// HLS streams.
+    #[error("too many HLS streams")]
+    TooManyHlsStreams,
+    /// The node has no HLS stream of the transfer.
+    #[error("HLS stream not found")]
+    HlsStreamNotFound,
 }
 
 impl VideoError {

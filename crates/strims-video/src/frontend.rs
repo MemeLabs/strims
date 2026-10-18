@@ -7,9 +7,9 @@
 //! - `strims.video.v1.VideoIngress`: whether the node runs the RTMP
 //!   ingress, the device's ingress config, the streams it takes, and a
 //!   channel's RTMP URL;
-//! - `strims.video.v1.HLSEgress`: whether the driver serves HLS and the
-//!   device's HLS config. `OpenStream` and `CloseStream` answer "not
-//!   implemented".
+//! - `strims.video.v1.HLSEgress`: whether the driver serves HLS, the
+//!   device's HLS config, and the node's HLS streams
+//!   ([`VideoControl::open_hls`], [`VideoControl::close_hls`]);
 //! - `strims.video.v1.Egress`: a stream of a swarm's records
 //!   ([`VideoControl::open_stream`]);
 //! - `strims.video.v1.Capture`: the connection's captures
@@ -39,6 +39,16 @@
 //! fails sends `Error` with the failure's message, and ends. The call's
 //! end, or its connection's, closes the stream.
 //!
+//! # HLS egress
+//!
+//! `OpenStream` answers the playlist URL of the swarm's HLS stream, the
+//! one the node serves or a new one, or an error when it doesn't open.
+//! The stream isn't the connection's: it lasts past the call and the
+//! connection, until `CloseStream` with its transfer id closes it, it
+//! goes idle or HLS is disabled ([`hls_egress`](crate::hls_egress)).
+//! `CloseStream` answers "HLS stream not found" when the node has no HLS
+//! stream of the transfer.
+//!
 //! # Capture
 //!
 //! `Open` opens a capture ([`VideoControl::open_capture`]) that belongs
@@ -61,18 +71,19 @@ use strims_proto::video::v1::{
     CaptureAppendRequest, CaptureAppendResponse, CaptureCloseRequest, CaptureCloseResponse,
     CaptureOpenRequest, CaptureOpenResponse, CaptureService, CaptureUpdateRequest,
     CaptureUpdateResponse, EgressOpenStreamRequest, EgressOpenStreamResponse, EgressService,
-    HlsEgressGetConfigRequest, HlsEgressGetConfigResponse, HlsEgressIsSupportedRequest,
-    HlsEgressIsSupportedResponse, HlsEgressService, HlsEgressSetConfigRequest,
-    HlsEgressSetConfigResponse, VideoChannelCreateRequest, VideoChannelCreateResponse,
-    VideoChannelDeleteRequest, VideoChannelDeleteResponse, VideoChannelFrontendService,
-    VideoChannelGetRequest, VideoChannelGetResponse, VideoChannelListRequest,
-    VideoChannelListResponse, VideoChannelUpdateRequest, VideoChannelUpdateResponse,
-    VideoIngressGetChannelUrlRequest, VideoIngressGetChannelUrlResponse,
-    VideoIngressGetConfigRequest, VideoIngressGetConfigResponse, VideoIngressIsSupportedRequest,
-    VideoIngressIsSupportedResponse, VideoIngressListStreamsRequest,
-    VideoIngressListStreamsResponse, VideoIngressService, VideoIngressSetConfigRequest,
-    VideoIngressSetConfigResponse, register_capture_service, register_egress_service,
-    register_hls_egress_service, register_video_channel_frontend_service,
+    HlsEgressCloseStreamRequest, HlsEgressCloseStreamResponse, HlsEgressGetConfigRequest,
+    HlsEgressGetConfigResponse, HlsEgressIsSupportedRequest, HlsEgressIsSupportedResponse,
+    HlsEgressOpenStreamRequest, HlsEgressOpenStreamResponse, HlsEgressService,
+    HlsEgressSetConfigRequest, HlsEgressSetConfigResponse, VideoChannelCreateRequest,
+    VideoChannelCreateResponse, VideoChannelDeleteRequest, VideoChannelDeleteResponse,
+    VideoChannelFrontendService, VideoChannelGetRequest, VideoChannelGetResponse,
+    VideoChannelListRequest, VideoChannelListResponse, VideoChannelUpdateRequest,
+    VideoChannelUpdateResponse, VideoIngressGetChannelUrlRequest,
+    VideoIngressGetChannelUrlResponse, VideoIngressGetConfigRequest, VideoIngressGetConfigResponse,
+    VideoIngressIsSupportedRequest, VideoIngressIsSupportedResponse,
+    VideoIngressListStreamsRequest, VideoIngressListStreamsResponse, VideoIngressService,
+    VideoIngressSetConfigRequest, VideoIngressSetConfigResponse, register_capture_service,
+    register_egress_service, register_hls_egress_service, register_video_channel_frontend_service,
     register_video_ingress_service,
 };
 use strims_rpc::{Router, Timer};
@@ -281,6 +292,30 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> HlsEgressService for VideoFrontend<
         Ok(HlsEgressSetConfigResponse {
             config: Some(config),
         })
+    }
+
+    async fn open_stream(
+        &self,
+        _: &Context,
+        req: HlsEgressOpenStreamRequest,
+    ) -> Result<HlsEgressOpenStreamResponse, RpcError> {
+        let playlist_url = self
+            .control
+            .open_hls(&req.swarm_uri, &req.network_keys)
+            .await
+            .map_err(rpc)?;
+        Ok(HlsEgressOpenStreamResponse { playlist_url })
+    }
+
+    async fn close_stream(
+        &self,
+        _: &Context,
+        req: HlsEgressCloseStreamRequest,
+    ) -> Result<HlsEgressCloseStreamResponse, RpcError> {
+        let id = TransferId::from_bytes(&req.transfer_id)
+            .ok_or_else(|| VideoError::HlsStreamNotFound.to_rpc())?;
+        self.control.close_hls(&id).map_err(rpc)?;
+        Ok(HlsEgressCloseStreamResponse {})
     }
 }
 

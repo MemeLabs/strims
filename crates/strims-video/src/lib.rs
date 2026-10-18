@@ -40,8 +40,9 @@
 //! [`NoVideoHost`] where there is none), beside the node's
 //! [`NetworkControl`](strims_network::NetworkControl),
 //! [`TransferControl`](strims_transfer::TransferControl) and
-//! [`DirectoryControl`](strims_directory::DirectoryControl). The driver
-//! runs [`VideoControl::run`] as a local task.
+//! [`DirectoryControl`](strims_directory::DirectoryControl), with the
+//! [`hls::HlsRoutes`] the driver's HTTP server answers HLS requests from.
+//! The driver runs [`VideoControl::run`] as a local task.
 //!
 //! - The profile's channels ([`channels`]) are records in its store.
 //!   Each has its own key and token; its stream key is the token signed
@@ -86,6 +87,34 @@
 //!
 //! Each video swarm's transfer is published on its networks the node has
 //! joined, and on the others as it joins them.
+//!
+//! # HLS egress
+//!
+//! Where the driver serves HLS over HTTP ([`HlsSettings::serve`]), the
+//! node serves video swarms to external players as HLS streams
+//! ([`hls_egress`]). [`VideoControl::open_hls`] reads a swarm as a
+//! stream, counted among the [`EgressSettings`] bounds, and answers its
+//! playlist URL.
+//!
+//! - **Contract.** Each whole record of the swarm that is an fMP4 record
+//!   ([`fmp4::split_record`]) is a segment of the playlist, lasting its
+//!   media time ([`fmp4::media_duration`]) and served with its init on the
+//!   driver's [`hls::HlsRoutes`]. Other records, such as a capture's
+//!   WebM, are skipped. A skipped record, or a discontinuity of the
+//!   stream, marks the next segment discontinuous.
+//! - **URL.** The HLS config's public server address, or else the
+//!   driver's [`HlsSettings::base_url`], followed by
+//!   [`hls::playlist_path`] of the profile's key and the swarm's transfer
+//!   id. With neither address, no stream opens.
+//! - **Lifetime.** A stream is the node's, whoever opened it, and a swarm
+//!   has one: opening it again answers the same stream. It lasts until
+//!   [`VideoControl::close_hls`] (the UI's `CloseStream`) closes it, no
+//!   request reaches it for [`HlsSettings::idle_timeout`], the HLS config
+//!   is disabled, or its stream fails. Then its routes answer 404 and its
+//!   swarm is released.
+//! - **Bounds.** [`HlsSettings`]: the streams the node serves, the record
+//!   a stream holds while it arrives, and the segments and bytes each
+//!   playlist keeps.
 
 pub mod aac;
 pub mod amf0;
@@ -102,6 +131,7 @@ pub mod flv;
 pub mod fmp4;
 pub mod frontend;
 pub mod hls;
+pub mod hls_egress;
 pub mod host;
 pub mod media;
 pub mod record;
@@ -126,6 +156,7 @@ pub use egress::{EgressPiece, EgressStream, PackedReader, ReaderMetrics};
 pub use error::VideoError;
 pub use events::VideoEvent;
 pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};
+pub use hls_egress::{HlsCloseReason, HlsStreamInfo};
 pub use host::{Accepted, NoVideoHost, VideoHost};
 pub use registry::{SwarmKind, VideoSwarm};
 

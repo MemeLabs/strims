@@ -32,6 +32,8 @@ use strims_transfer::{TransferControl, TransferId};
 
 use crate::capture::Capture;
 use crate::config::{Config, Metrics, check_hls_config, check_ingress_config};
+use crate::hls::HlsRoutes;
+use crate::hls_egress::{HlsEgress, HlsSweep};
 use crate::registry::{LocalSwarm, Registry, VideoSwarm};
 use crate::{VideoError, VideoEvent, VideoHost};
 
@@ -50,7 +52,7 @@ pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
     pub(crate) rng: RefCell<DetRng>,
     pub(crate) config: Config,
     records: RefCell<Records>,
-    events: Broadcast<VideoEvent>,
+    pub(crate) events: Broadcast<VideoEvent>,
     pub(crate) metrics: RefCell<Metrics>,
     /// The node's video swarms. Reached through
     /// [`with_swarms`](Self::with_swarms), which wakes their waiters.
@@ -58,6 +60,8 @@ pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
     /// The captures, by transfer id. Bound:
     /// [`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures).
     pub(crate) captures: RefCell<BTreeMap<TransferId, Capture<H>>>,
+    /// The HLS streams, and the profile's registration on the HLS routes.
+    pub(crate) hls: RefCell<HlsEgress>,
     /// Tasks for `run` to start. Bound: a reload per lag of the store's
     /// events, each ending after one read of the records; per capture, its
     /// creation, its writer and a listing keeper per network; an add per
@@ -351,6 +355,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 _ => return,
             }
         };
+        if let VideoEvent::HlsConfigChanged(c) = &event {
+            self.hls_config_written(c);
+        }
         self.events.emit(vec![event]);
     }
 
@@ -396,6 +403,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 }
             }
         };
+        for e in &events {
+            if let VideoEvent::HlsConfigChanged(c) = e {
+                self.hls_config_written(c);
+            }
+        }
         if !quiet {
             self.events.emit(events);
         }
@@ -425,14 +437,15 @@ enum Wake {
     Network(Option<Recv<NetworkEvent>>),
     Directory(Option<Recv<DirectoryEvent>>),
     Work,
+    HlsSweep,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// A control for the node behind `host`, with the RTMP listener of
     /// `video`, keeping the video channels of `profile` and the device's
     /// configs in `store`. Streams go on the networks `network` joins, as
-    /// transfers run by `transfers`, listed through `directory`. Timed on
-    /// `timer`.
+    /// transfers run by `transfers`, listed through `directory`, and HLS
+    /// streams served on `hls_routes`. Timed on `timer`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         host: H,
@@ -442,10 +455,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         network: NetworkControl<K, H, T>,
         transfers: TransferControl<H, T>,
         directory: DirectoryControl<K, H, T>,
+        hls_routes: HlsRoutes,
         timer: T,
         rng: DetRng,
         config: Config,
     ) -> Self {
+        let hls = RefCell::new(HlsEgress::new(&hls_routes, &profile));
         VideoControl {
             shared: Rc::new(Shared {
                 host,
@@ -463,6 +478,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 metrics: RefCell::default(),
                 swarms: RefCell::default(),
                 captures: RefCell::default(),
+                hls,
                 spawned: RefCell::new(Vec::new()),
                 waker: RefCell::new(None),
             }),
@@ -520,9 +536,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
 
     // --- HLS ----------------------------------------------------------------
 
-    /// Whether the driver serves HLS ([`HlsSettings::serve`](crate::HlsSettings::serve)).
+    /// Whether the driver serves HLS ([`HlsSettings::serve`](crate::HlsSettings::serve))
+    /// and the profile's streams are routed there; see
+    /// [`hls_egress`](crate::hls_egress).
     pub fn hls_supported(&self) -> bool {
-        self.shared.config.hls.serve
+        self.shared.config.hls.serve && self.shared.hls.borrow().routed()
     }
 
     /// The device's HLS egress config.
@@ -547,8 +565,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// reports their changes, publishes the video swarms on networks as
     /// the node joins them, feeds the listing keepers the directory's
     /// events, and carries the control's tasks: swarm adds and removals,
-    /// capture writers and listing keepers. Never resolves; drop it to
-    /// stop. Run it once per control.
+    /// capture writers, listing keepers and HLS stream readers. Closes
+    /// idle HLS streams. Never resolves; drop it to stop. Run it once per
+    /// control.
     pub async fn run(&self) {
         let s = &self.shared;
         let mut store_events = Some(s.store.events().subscribe());
@@ -557,6 +576,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         s.start_reload(true);
         s.publish_all();
         let mut tasks: FuturesUnordered<LocalBoxFuture<'static, ()>> = FuturesUnordered::new();
+        let mut hls_sweep: HlsSweep<T> = None;
         loop {
             let spawned: Vec<_> = s.spawned.borrow_mut().drain(..).collect();
             tasks.extend(spawned);
@@ -579,6 +599,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     && let Poll::Ready(r) = ev.poll_next_unpin(cx)
                 {
                     return Poll::Ready(Wake::Directory(r));
+                }
+                if s.poll_hls_sweep(&mut hls_sweep, cx).is_ready() {
+                    return Poll::Ready(Wake::HlsSweep);
                 }
                 if !s.spawned.borrow().is_empty() {
                     return Poll::Ready(Wake::Work);
@@ -603,6 +626,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     }
                 }
                 Wake::Directory(None) => directory_events = None,
+                Wake::HlsSweep => s.sweep_hls(),
                 Wake::Task | Wake::Work => {}
             }
         }

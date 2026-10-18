@@ -4,6 +4,9 @@
 //! What the video control reports to the app.
 
 use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
+use strims_transfer::TransferId;
+
+use crate::hls_egress::HlsCloseReason;
 
 /// A change the video control saw. Subscribers get them through
 /// [`VideoControl::subscribe`](crate::VideoControl::subscribe).
@@ -25,4 +28,15 @@ pub enum VideoEvent {
     IngressConfigChanged(VideoIngressConfig),
     /// The device's HLS egress config was written.
     HlsConfigChanged(HlsEgressConfig),
+    /// An HLS stream opened ([`VideoControl::open_hls`](crate::VideoControl::open_hls)).
+    HlsStreamOpened {
+        transfer_id: TransferId,
+        playlist_url: String,
+    },
+    /// An HLS stream reported by [`HlsStreamOpened`](Self::HlsStreamOpened)
+    /// closed.
+    HlsStreamClosed {
+        transfer_id: TransferId,
+        reason: HlsCloseReason,
+    },
 }

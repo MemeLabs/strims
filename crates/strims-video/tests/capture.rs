@@ -34,6 +34,7 @@ use strims_proto::video::v1::{
 use strims_rpc::{Client, ClientStream, Router, Timer, connect};
 use strims_testworld::*;
 use strims_transfer::TransferId;
+use strims_video::hls::HlsRoutes;
 use strims_video::{CaptureSettings, Config, NoVideoHost, SwarmKind, VideoControl, bind_frontend};
 use tokio::task::{JoinHandle, spawn_local};
 
@@ -50,6 +51,7 @@ fn start(n: &Node, config: Config) -> Control {
         n.network.clone(),
         n.transfers.clone(),
         n.directory.clone(),
+        HlsRoutes::new(),
         n.timer.clone(),
         n.rng(),
         config,

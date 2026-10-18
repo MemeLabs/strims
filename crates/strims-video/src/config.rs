@@ -289,6 +289,14 @@ pub struct Metrics {
     pub write_errors: u64,
     /// Stream readers opened again on a swarm that replaced theirs.
     pub reopens: u64,
+    /// HLS streams opened.
+    pub hls_streams: u64,
+    /// Segments HLS streams served.
+    pub hls_segments: u64,
+    /// Records HLS streams skipped: over
+    /// [`HlsSettings::max_record_bytes`], or not fMP4 records with media
+    /// time.
+    pub hls_skipped_records: u64,
 }
 
 /// Why a config was refused.
