@@ -26,6 +26,8 @@ use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
 use strims_proto::network::v1::directory::{Listing, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
+use strims_proto::notification::v1::Notification;
+use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
 use strims_proto::types::certificate::ParentOneof;
@@ -43,6 +45,9 @@ use crate::schema::directory::{
 use crate::schema::network::{
     AliasReservations, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks, RESERVED_FOREVER,
     network_key, network_scoped_key, new_certificate_log,
+};
+use crate::schema::notification::{
+    MAX_NOTIFICATIONS, Notifications, dispatch, network_subject, new_notification,
 };
 use crate::schema::profile::{Devices, Profile, ProfileIds};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
@@ -1428,4 +1433,106 @@ fn newer_certificate_logs_take_over_their_subject_and_key() {
             Some(Default::default())
         );
     });
+}
+
+/// A notification `id` about the network `network`, raised `ms` after T0.
+fn network_notification(id: u64, network: u64, ms: i64) -> Notification {
+    new_notification(
+        id,
+        T0 + Duration::from_millis(ms),
+        Status::Success,
+        "renewed",
+        "",
+        Some(network_subject(network)),
+    )
+}
+
+fn notification_ids(tx: &mut WriteTx<MemoryKv>) -> Vec<u64> {
+    let all = block(Notifications::get_all(tx)).unwrap();
+    all.iter().map(|n| n.id).collect()
+}
+
+#[test]
+fn a_subjects_notification_replaces_its_last() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut sub = store.events().subscribe();
+    let (n1, n2, n3) = (
+        network_notification(1, 10, 0),
+        network_notification(2, 20, 1),
+        network_notification(3, 10, 2),
+    );
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        dispatch(&mut tx, n1.clone()).await.unwrap();
+        dispatch(&mut tx, n2.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+    });
+    drain(&mut sub);
+
+    let mut tx = block(store.write(T0)).unwrap();
+    block(dispatch(&mut tx, n3.clone())).unwrap();
+    assert_eq!(notification_ids(&mut tx), [2, 3]);
+    block(tx.commit()).unwrap();
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Deleted(Record::Notification(n1)),
+            StoreEvent::Changed(Record::Notification(n3)),
+        ]
+    );
+}
+
+#[test]
+fn dispatch_evicts_the_oldest_notifications_past_the_cap() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    let extra = 5;
+    let count = MAX_NOTIFICATIONS + extra;
+    block(async {
+        // newest first, so creation order differs from id order
+        for i in 0..count as u64 {
+            let mut n = network_notification(100 + i, 0, (count as i64) - i as i64);
+            n.subject = None;
+            Notifications::insert(&mut tx, n).await.unwrap();
+        }
+        dispatch(&mut tx, network_notification(1, 10, 1000))
+            .await
+            .unwrap();
+    });
+    let ids = notification_ids(&mut tx);
+    assert_eq!(ids.len(), MAX_NOTIFICATIONS);
+    assert_eq!(ids[0], 1);
+    let oldest = (count - extra - 1) as u64..count as u64;
+    for id in oldest.map(|i| 100 + i) {
+        assert!(!ids.contains(&id), "{id} kept");
+    }
+}
+
+#[test]
+fn deleting_a_network_deletes_its_notifications() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        for (network, seed) in [(10, 1), (20, 2)] {
+            Networks::insert(&mut tx, owned_network(network, seed))
+                .await
+                .unwrap();
+        }
+        dispatch(&mut tx, network_notification(1, 10, 0))
+            .await
+            .unwrap();
+        dispatch(&mut tx, network_notification(2, 20, 1))
+            .await
+            .unwrap();
+        Networks::delete(&mut tx, 10).await.unwrap();
+    });
+    assert_eq!(notification_ids(&mut tx), [2]);
+
+    // a deletion applied from another replica too
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 20)).unwrap();
+    assert!(notification_ids(&mut tx).is_empty());
 }

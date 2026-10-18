@@ -27,6 +27,7 @@ import (
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
+	notificationv1 "github.com/MemeLabs/strims/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
@@ -225,6 +226,16 @@ func storeScenario(w *bufio.Writer) {
 	must0(dao.ChatServers.Delete(rs, servers[1].Id))
 	must0(dao.ChatServerIcons.Delete(rs, servers[1].Id))
 
+	// Notifications: a failed renewal on the owned network, and one
+	// dismissed.
+	failed := must(dao.NewNotification(rs, notificationv1.Notification_STATUS_ERROR, "Certificate renewal failed", dao.WithNotificationMessage("rate limited")))
+	failed.Subject = &notificationv1.Notification_Subject{Model: notificationv1.Notification_Subject_NOTIFICATION_SUBJECT_MODEL_NETWORK, Id: owned.Id}
+	failed.ErrorCode = 2
+	must0(dao.Notifications.Insert(rs, failed))
+	dismissed := must(dao.NewNotification(rs, notificationv1.Notification_STATUS_INFO, "dismissed"))
+	must0(dao.Notifications.Insert(rs, dismissed))
+	must0(dao.Notifications.Delete(rs, dismissed.Id))
+
 	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
 	must0(err)
 
@@ -308,6 +319,9 @@ func storeScenario(w *bufio.Writer) {
 	for _, m := range must(dao.ChatProfiles.GetAll(rs)) {
 		record(6009, m.Id, m)
 	}
+	for _, m := range must(dao.Notifications.GetAll(rs)) {
+		record(5001, m.Id, m)
+	}
 
 	// A peer that has seen the first three of this replica's logs.
 	remote := &daov1.VersionVector{Value: map[uint64]uint64{rs.ReplicaID(): 3}}
@@ -381,7 +395,7 @@ func verify(path string) {
 			}
 		case "absent":
 			ns, id := binary.BigEndian.Uint64(v[0]), binary.BigEndian.Uint64(v[1])
-			if _, err := chatServerRecord(rs, ns, id); !errors.Is(err, kv.ErrRecordNotFound) {
+			if _, err := deletableRecord(rs, ns, id); !errors.Is(err, kv.ErrRecordNotFound) {
 				fail("record %d/%d: want none, got error %v", ns, id, err)
 			}
 		case "index":
@@ -491,12 +505,15 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 	case 9004:
 		return must(dao.DirectoryUserRecords.Get(s, id))
 	}
-	return must(chatServerRecord(s, ns, id))
+	return must(deletableRecord(s, ns, id))
 }
 
-// chatServerRecord reads record id of a chat server table.
-func chatServerRecord(s kv.Store, ns, id uint64) (proto.Message, error) {
+// deletableRecord reads record id of a table whose deletions the checks
+// cover: the chat server tables and notifications.
+func deletableRecord(s kv.Store, ns, id uint64) (proto.Message, error) {
 	switch ns {
+	case 5001:
+		return dao.Notifications.Get(s, id)
 	case 6001:
 		return dao.ChatServers.Get(s, id)
 	case 6024:

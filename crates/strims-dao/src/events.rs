@@ -24,6 +24,7 @@ use futures_core::Stream;
 use slotmap::{SlotMap, new_key_type};
 use strims_proto::chat::v1 as chat;
 use strims_proto::network::v1 as network;
+use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::{Checkpoint, EventLog};
 
@@ -66,6 +67,8 @@ pub enum Record {
     ChatModifier(chat::Modifier),
     /// A chat server's tag.
     ChatTag(chat::Tag),
+    /// A notification for the user.
+    Notification(Notification),
 }
 
 /// Something that happened in the store.

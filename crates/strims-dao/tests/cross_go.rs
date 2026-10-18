@@ -4,7 +4,7 @@
 //! A store this crate writes, checked by the Go dao (`go run -tags golden
 //! ./crates/strims-dao/golden -verify <file>`): sign-in and session
 //! records, records and index lookups through the Go API, deleted records
-//! absent, a pairing token import, and the store's replication logs
+//! (a deleted network's notification among them) absent, a pairing token import, and the store's replication logs
 //! applied to a Go replica. Skipped when `go` isn't on PATH.
 
 #![allow(
@@ -40,6 +40,9 @@ use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
     network_scoped_key, new_alias_reservation, new_network_peer,
 };
+use strims_dao::schema::notification::{
+    Notifications, dispatch, network_subject, new_notification,
+};
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs};
 use strims_dao::seal::StorageKey;
@@ -60,6 +63,7 @@ use strims_proto::network::v1::directory::{
     Listing, ListingModeration, UserModeration, listing as directory_listing,
 };
 use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConfigRecord};
+use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::EventLog;
 use strims_proto::types::{Image, ImageType, Key, KeyUsage};
@@ -337,6 +341,7 @@ fn go_reads_a_store_this_crate_writes() {
         })),
     };
     let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
+    let mut doomed_notification = 0;
     let mut chat_servers = [ChatServerIds::default(); 3];
     let chat_keys = [(); 3].map(|_| strims_crypto::generate_key(&mut rng));
     block(async {
@@ -364,6 +369,16 @@ fn go_reads_a_store_this_crate_writes() {
             &invitee.public,
         )
         .await;
+        doomed_notification = tx.generate_id().await.unwrap();
+        let n = new_notification(
+            doomed_notification,
+            now,
+            Status::Success,
+            "Certificate renewed",
+            "",
+            Some(network_subject(doomed_id)),
+        );
+        dispatch(&mut tx, n).await.unwrap();
         Networks::delete(&mut tx, doomed_id).await.unwrap();
         let moderated = ListingModeration {
             is_banned: Some(true),
@@ -559,6 +574,17 @@ fn go_reads_a_store_this_crate_writes() {
                 .await
                 .unwrap()
         );
+        let id = tx.generate_id().await.unwrap();
+        let mut failed = new_notification(
+            id,
+            now,
+            Status::Error,
+            "Certificate renewal failed",
+            "rate limited",
+            Some(network_subject(owned_id)),
+        );
+        failed.error_code = 2;
+        dispatch(&mut tx, failed).await.unwrap();
         tx.commit().await.unwrap();
     });
     let mut token = [0u8; 16];
@@ -658,6 +684,7 @@ fn go_reads_a_store_this_crate_writes() {
     record_lines::<ChatModifiers>(&mut tx, &mut out);
     record_lines::<ChatTags>(&mut tx, &mut out);
     record_lines::<ChatProfiles>(&mut tx, &mut out);
+    record_lines::<Notifications>(&mut tx, &mut out);
 
     index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
     let scoped = |b: &[u8]| network_scoped_key(owned_id, b);
@@ -813,6 +840,14 @@ fn go_reads_a_store_this_crate_writes() {
     {
         out.put("absent", &[&(ns as u64).to_be_bytes(), &id.to_be_bytes()]);
     }
+    out.put(
+        "absent",
+        &[
+            &(Notifications::NS.0 as u64).to_be_bytes(),
+            &doomed_notification.to_be_bytes(),
+        ],
+    );
+    assert_eq!(block(Notifications::get_all(&mut tx)).unwrap().len(), 1);
     let servers = block(ChatServers::get_all(&mut tx)).unwrap();
     assert_eq!(servers.len(), 1);
     assert_eq!(servers[0].id, chat_servers[0].server);

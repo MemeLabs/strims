@@ -34,6 +34,7 @@ use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
     RESERVED_FOREVER, network_key, network_scoped_key,
 };
+use strims_dao::schema::notification::Notifications;
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use strims_dao::seal::StorageKey;
@@ -173,6 +174,7 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         ChatModifiers::NS => re::<<ChatModifiers as Table>::Record>(bytes),
         ChatTags::NS => re::<<ChatTags as Table>::Record>(bytes),
         ChatProfiles::NS => re::<<ChatProfiles as Table>::Record>(bytes),
+        Notifications::NS => re::<<Notifications as Table>::Record>(bytes),
         other => panic!("no record type for {other}"),
     }
 }
@@ -211,6 +213,7 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         ChatModifiers::NS => t::<ChatModifiers>(tx, id),
         ChatTags::NS => t::<ChatTags>(tx, id),
         ChatProfiles::NS => t::<ChatProfiles>(tx, id),
+        Notifications::NS => t::<Notifications>(tx, id),
         other => panic!("no record type for {other}"),
     }
 }
@@ -244,6 +247,9 @@ fn records_read_back() {
     let profile = block(Profile::get(&mut tx)).unwrap().unwrap();
     assert_eq!(profile.name, g.name);
     assert_ne!(profile.device_id, 0);
+    let notifications = block(Notifications::get_all(&mut tx)).unwrap();
+    assert_eq!(notifications.len(), 1);
+    assert!(notifications[0].subject.is_some());
 }
 
 /// The keys of `T`'s rows and index entries. A record whose unique key
@@ -294,6 +300,7 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<ChatModifiers>(&mut tx, &salt, &mut derived);
     keys_of::<ChatTags>(&mut tx, &salt, &mut derived);
     keys_of::<ChatProfiles>(&mut tx, &salt, &mut derived);
+    keys_of::<Notifications>(&mut tx, &salt, &mut derived);
     for ns in [
         StoreVersions::NS,
         Profile::NS,
@@ -309,6 +316,7 @@ fn every_key_is_the_one_this_crate_derives() {
     // Every namespace this crate defines, and the lease namespace.
     let mut known: BTreeSet<i64> = [1001, 1002, 1003, 1004, 2001, 2002, 2003].into();
     known.extend((4001..=4014).chain(4016..=4018));
+    known.insert(5001);
     known.extend(6001..=6025);
     known.extend(9001..=9006);
 

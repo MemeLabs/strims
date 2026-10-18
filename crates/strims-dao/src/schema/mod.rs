@@ -10,5 +10,6 @@
 pub mod chat;
 pub mod directory;
 pub mod network;
+pub mod notification;
 pub mod profile;
 pub mod system;
