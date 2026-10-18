@@ -30,23 +30,19 @@
 
 mod support;
 
-use std::net::SocketAddr;
 use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
 use strims_base::rng::det_rng;
 use strims_crypto::certificate_network_key;
 use strims_ppspp::{SwarmId, Uri};
-use strims_proto::auth::v1::{AuthFrontendClient, SignUpRequest};
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::network::v1::{CreateServerRequest, NetworkFrontendClient};
 use strims_proto::video::v1::{
-    HlsEgressClient, HlsEgressConfig, HlsEgressIsSupportedRequest, HlsEgressOpenStreamRequest,
-    HlsEgressSetConfigRequest, VideoChannelCreateRequest, VideoChannelFrontendClient,
+    HlsEgressOpenStreamRequest, VideoChannelCreateRequest, VideoChannelFrontendClient,
     VideoChannelGetRequest, VideoChannelListRequest, VideoIngressClient, VideoIngressConfig,
     VideoIngressGetChannelUrlRequest, VideoIngressIsSupportedRequest, VideoIngressSetConfigRequest,
 };
-use strims_rpc::Client;
 use strims_svc::{Config, Svc, SvcError};
 use strims_video::amf0::Value;
 use strims_video::fmp4::{media_duration, parse_init, split_record};
@@ -55,173 +51,15 @@ use strims_video::synth::script::{
     MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records,
 };
 use strims_video::{CutRule, ingress_options};
+use support::video::*;
 use support::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::task::spawn_local;
 use tokio::time::Instant;
 
-const STEP: StdDuration = StdDuration::from_secs(60);
 /// The longest the script runs; the test ends long before.
 const SCRIPT_SECS: u32 = 120;
-
-/// Times the steps of a scenario.
-struct Steps(Instant);
-
-impl Steps {
-    fn done(&mut self, step: &str) {
-        let now = Instant::now();
-        eprintln!("{step}: {:?}", now - self.0);
-        self.0 = now;
-    }
-}
-
-/// A profile signed up on a service: its UI connection and public key.
-struct Profile {
-    svc: Svc,
-    ui: Ui,
-    key: Vec<u8>,
-}
-
-impl Profile {
-    async fn sign_up(config: Config) -> Profile {
-        let svc = Svc::start(config).await.unwrap();
-        let ui = connect_ui(&svc).await;
-        let res = AuthFrontendClient::new(ui.client.clone())
-            .sign_up(&SignUpRequest {
-                name: "alice".into(),
-                password: "pw".into(),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
-        let key = res.profile.unwrap().key.unwrap().public;
-        Profile { svc, ui, key }
-    }
-
-    fn client(&self) -> Client {
-        self.ui.client.clone()
-    }
-
-    fn hls(&self) -> HlsEgressClient<Client> {
-        HlsEgressClient::new(self.client())
-    }
-
-    async fn hls_supported(&self) -> bool {
-        self.hls()
-            .is_supported(&HlsEgressIsSupportedRequest {})
-            .await
-            .unwrap()
-            .supported
-    }
-
-    async fn set_hls(&self, enabled: bool) {
-        self.hls()
-            .set_config(&HlsEgressSetConfigRequest {
-                config: Some(HlsEgressConfig {
-                    enabled,
-                    public_server_addr: String::new(),
-                }),
-            })
-            .await
-            .unwrap();
-    }
-}
-
-/// An HTTP response.
-struct Reply {
-    status: u16,
-    /// Names in lower case.
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
-}
-
-impl Reply {
-    fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, v)| v.as_str())
-    }
-
-    /// Asserts the headers every answer carries, and the content type and
-    /// cache control given.
-    fn check(&self, what: &str, content_type: &str, cache_control: &str) {
-        assert_eq!(self.header("content-type"), Some(content_type), "{what}");
-        assert_eq!(self.header("cache-control"), Some(cache_control), "{what}");
-        assert_eq!(
-            self.header("access-control-allow-origin"),
-            Some("*"),
-            "{what}"
-        );
-        assert_eq!(self.header("connection"), Some("close"), "{what}");
-    }
-
-    fn content_length(&self) -> usize {
-        self.header("content-length").unwrap().parse().unwrap()
-    }
-
-    fn text(&self) -> String {
-        String::from_utf8(self.body.clone()).unwrap()
-    }
-}
-
-/// Sends a request of `path` to `addr` and reads the answer until the
-/// server closes the connection.
-async fn request(addr: SocketAddr, method: &str, path: &str) -> Reply {
-    let mut s = TcpStream::connect(addr).await.unwrap();
-    let req = format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\nAccept: */*\r\n\r\n");
-    s.write_all(req.as_bytes()).await.unwrap();
-    let mut raw = Vec::new();
-    tokio::time::timeout(STEP, s.read_to_end(&mut raw))
-        .await
-        .expect("the server closes the connection")
-        .unwrap();
-    let mut headers = [httparse::EMPTY_HEADER; 32];
-    let mut head = httparse::Response::new(&mut headers);
-    let httparse::Status::Complete(len) = head.parse(&raw).unwrap() else {
-        panic!("a partial response: {}", String::from_utf8_lossy(&raw));
-    };
-    Reply {
-        status: head.code.unwrap(),
-        headers: head
-            .headers
-            .iter()
-            .map(|h| {
-                let value = String::from_utf8(h.value.to_vec()).unwrap();
-                (h.name.to_ascii_lowercase(), value)
-            })
-            .collect(),
-        body: raw[len..].to_vec(),
-    }
-}
-
-/// A listed segment: its init's URI, EXTINF line and URI.
-#[derive(Debug, Clone, PartialEq)]
-struct Listed {
-    init: String,
-    extinf: String,
-    uri: String,
-}
-
-fn listed(playlist: &str) -> Vec<Listed> {
-    let mut out = Vec::new();
-    let (mut init, mut extinf) = (String::new(), None);
-    for line in playlist.lines() {
-        if let Some(uri) = line.strip_prefix("#EXT-X-MAP:URI=") {
-            init = uri.trim_matches('"').to_owned();
-        } else if line.starts_with("#EXTINF:") {
-            extinf = Some(line.to_owned());
-        } else if !line.starts_with('#') {
-            out.push(Listed {
-                init: init.clone(),
-                extinf: extinf.take().unwrap(),
-                uri: line.to_owned(),
-            });
-        }
-    }
-    out
-}
 
 /// The EXTINF line of a segment lasting `media`'s time, in milliseconds
 /// rounded to the nearest.

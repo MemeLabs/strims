@@ -20,6 +20,8 @@ use tokio_tungstenite::tungstenite::http::header::{COOKIE, SET_COOKIE};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 
+pub mod video;
+
 /// The config of a service on localhost: its API, and a node on TCP and
 /// WebSocket listeners, all on ports the OS picks.
 pub fn local_config() -> Config {
