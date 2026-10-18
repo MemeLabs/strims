@@ -39,7 +39,9 @@
 //! when it ends. A closing connection has
 //! [`IngressSettings::close_timeout`](crate::IngressSettings::close_timeout)
 //! to take its last output: the status telling a publisher why the
-//! server ended its stream.
+//! server ended its stream. It then closes its sending side and takes
+//! the publisher's input until the publisher closes too, so the status
+//! isn't lost to a reset.
 //!
 //! # Publishing
 //!
@@ -157,6 +159,8 @@ const BAD_NAME: &str = "NetStream.Publish.BadName";
 const FAILED: &str = "NetStream.Publish.Failed";
 /// The bytes of server output handed to the connection at once.
 const WRITE_CHUNK: usize = 16 * 1024;
+/// The input reads a closing connection takes per poll before it yields.
+const CLOSE_DRAIN_READS: usize = 16;
 
 /// Why the control ends a session or connection.
 const REPLACED: &str = "replaced by a new publish to the channel";
@@ -1477,8 +1481,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
     }
 
     /// Tells the publisher why the connection ends, if it should hear,
-    /// then hands over the last output and closes the connection, within
-    /// the close timeout.
+    /// then hands over the last output, closes the sending side, and takes
+    /// the publisher's input until it closes its side, all within the
+    /// close timeout.
     async fn close(&mut self, end: &End) {
         if end.tells_peer() {
             self.server.refuse(FAILED, &end.to_string());
@@ -1489,16 +1494,34 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
         let s = self.shared.clone();
         let deadline = s.timer.now() + s.config.ingress.close_timeout;
         let mut sleep = pin!(s.timer.sleep_until(deadline));
+        let mut shut = false;
         poll_fn(|cx| {
             if sleep.as_mut().poll(cx).is_ready() {
                 return Poll::Ready(());
             }
-            match self.poll_write(cx) {
-                Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(_)) => return Poll::Ready(()),
-                Poll::Pending => return Poll::Pending,
+            if !shut {
+                match self.poll_write(cx) {
+                    Poll::Ready(Ok(())) => {}
+                    Poll::Ready(Err(_)) => return Poll::Ready(()),
+                    Poll::Pending => return Poll::Pending,
+                }
+                match Pin::new(&mut self.writer).poll_close(cx) {
+                    Poll::Ready(Ok(())) => shut = true,
+                    Poll::Ready(Err(_)) => return Poll::Ready(()),
+                    Poll::Pending => return Poll::Pending,
+                }
             }
-            Pin::new(&mut self.writer).poll_close(cx).map(|_| ())
+            // A connection dropped with input unread is reset, and a reset
+            // can discard the last output before the publisher reads it.
+            for _ in 0..CLOSE_DRAIN_READS {
+                match Pin::new(&mut self.reader).poll_next(cx) {
+                    Poll::Ready(Some(Ok(_))) => {}
+                    Poll::Ready(Some(Err(_)) | None) => return Poll::Ready(()),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+            cx.waker().wake_by_ref();
+            Poll::Pending
         })
         .await;
     }
