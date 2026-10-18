@@ -8,15 +8,14 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Notifications. They report certificate renewals.
 - Video ingress (RTMP), egress and HLS. Ingress publishes media listings and
   pushes its swarms' snippets with `DirectoryControl::push_snippet`.
 - Directory embeds: the server's Twitch, YouTube and AngelThump snippet
   loaders need an HTTP fetch from the driver; until then the server refuses
   embed listings and its client config advertises none.
 - The other dao record types arrive with their services: video channels
-  and configs, vnic, autoseed, debug and bootstrap configs, notifications
-  and swarm caches, each with its part of a network's deletion; until then,
+  and configs, vnic, autoseed, debug and bootstrap configs, and swarm
+  caches, each with its part of a network's deletion; until then,
   stores from Go keep those records unread. With swarm caches, a chat
   room's asset swarm can start from its cache under (server key,
   `chat:assets`); until then a reopened room downloads its bundles again.
