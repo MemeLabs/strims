@@ -1,9 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors that `golden/main.go` records from the Go implementation
-//! (regenerate from the repo root with
-//! `go run -tags golden ./crates/strims-proto/golden`). prost must decode
+//! Recorded golden vectors (`golden/vectors.hex`). prost must decode
 //! each vector's protobuf bytes and re-encode them identically, and
 //! `StableEncode` must reproduce the recorded stable encoding, if any.
 

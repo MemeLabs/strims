@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn labels_take_the_first_eight_characters_of_the_swarm_id() {
-        // Recorded from the Go implementation.
+        // Recorded labels.
         assert_eq!(event_options(&key()).label, "chat_AADQ4FI4_events");
         assert_eq!(asset_options(&key()).label, "chat_AADQ4FI4_assets");
         assert_eq!(event_options(&[0; 32]).label, "chat_AAAAAAAA_events");

@@ -201,7 +201,7 @@ pub enum FrameWriterError {
     #[error("frame writer buffer full")]
     WouldBlock,
     /// The writer was closed.
-    #[error("write on closed frameReadWriter")]
+    #[error("write on closed frame writer")]
     Closed,
 }
 

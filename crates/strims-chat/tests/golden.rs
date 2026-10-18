@@ -1,12 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors that `golden/main.go` records from the Go implementation
-//! (regenerate from the repo root with
-//! `go run -tags golden ./crates/strims-chat/golden`): chat-parser's parse
-//! trees and internal/chat's encoded entities for chat-parser's fuzz corpus,
-//! crafted and generated inputs, under one parser context the file defines,
-//! and the runes each case-folded ASCII letter matches.
+//! Recorded golden vectors (`golden/vectors.hex`): parse trees and encoded
+//! entities for chat-parser's fuzz corpus and for crafted and generated
+//! inputs, under one parser context the file defines, and the runes each
+//! case-folded ASCII letter matches.
 
 // Tests panic on failure by design.
 #![allow(
@@ -113,9 +111,9 @@ fn vectors() -> Vectors {
 }
 
 /// The patterns write case-folded ASCII letters as `(?i:...)`, so `(?i)`
-/// must fold each to the same runes as the Go patterns' case folding.
+/// must fold each to the recorded runes.
 #[test]
-fn case_folded_ascii_letters_match_go() {
+fn case_folded_ascii_letters_match_vectors() {
     let v = vectors();
     assert_eq!(v.folds.len(), 26);
     let mut non_ascii = BTreeSet::new();
@@ -143,7 +141,7 @@ fn case_folded_ascii_letters_match_go() {
 }
 
 #[test]
-fn parse_trees_match_go() {
+fn parse_trees_match_vectors() {
     let v = vectors();
     assert!(v.inputs.len() > 1000, "{} inputs", v.inputs.len());
     for input in &v.inputs {
@@ -168,7 +166,7 @@ fn check_entities(name: &str, body: &str, got: &Entities, want: &[u8]) {
 }
 
 #[test]
-fn entities_match_go() {
+fn entities_match_vectors() {
     let v = vectors();
     let mut patterns = Patterns::new();
     let mut checked = 0;
@@ -184,7 +182,7 @@ fn entities_match_go() {
 }
 
 #[test]
-fn internal_modifiers_match_go() {
+fn internal_modifiers_match_vectors() {
     let v = vectors();
     assert!(!v.internal_modifiers.is_empty());
     let mut patterns = Patterns::new();

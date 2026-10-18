@@ -898,8 +898,7 @@ fn headers_go_on_every_call_and_count_towards_the_send_limit() {
     );
 }
 
-/// The `rpc_*` vectors that `crates/strims-proto/golden` records from the
-/// Go library.
+/// The recorded `rpc_*` vectors in strims-proto's `golden/vectors.hex`.
 fn golden(name: &str) -> Vec<u8> {
     let vectors = include_str!("../../../strims-proto/golden/vectors.hex");
     let line = vectors
@@ -910,7 +909,7 @@ fn golden(name: &str) -> Vec<u8> {
 }
 
 #[test]
-fn go_encoded_calls_are_understood() {
+fn recorded_calls_are_understood() {
     let config = Config {
         framing: Framing::Message,
         ..Config::default()
@@ -953,7 +952,7 @@ fn go_encoded_calls_are_understood() {
         }
     }
 
-    // our request encodes as Go's
+    // our request encodes as recorded
     let mut client = Endpoint::new(config);
     let req = PProfRequest {
         name: "heap".into(),

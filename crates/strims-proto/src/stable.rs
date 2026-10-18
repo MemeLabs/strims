@@ -110,7 +110,7 @@ mod tests {
     fn assert_signable<T: Signable>() {}
 
     #[test]
-    fn go_signable_messages_are_signable() {
+    fn signed_records_are_signable() {
         assert_signable::<hash_table_message::Record>();
         assert_signable::<peer_index_message::Record>();
         assert_signable::<ListingSnippet>();

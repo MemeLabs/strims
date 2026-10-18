@@ -1,11 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Replays the differential trace that `golden/main.go` records from the Go
-//! implementation, and checks every query result, iterator walk and cell
-//! layout (as a hash of the debug dump) against it. Regenerate from the repo
-//! root with
-//! `go run -tags golden ./crates/strims-binmap/golden > crates/strims-binmap/golden/trace.txt`.
+//! Replays the recorded differential trace in `golden/trace.txt`, and checks
+//! every query result, iterator walk and cell layout (as a hash of the debug
+//! dump) against it.
 //!
 //! The trace never sets ALL; the unit tests cover ALL roots. binmap has no
 //! wire format, so the trace pins behaviour, layout and allocation only.

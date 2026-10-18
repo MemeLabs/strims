@@ -1,9 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A profile store the Go dao wrote (`golden/store.hex`, from `go run
-//! -tags golden ./crates/strims-dao/golden`): its sign-in and session
-//! records open, its records read back, every key is the one this crate
+//! A recorded profile store (`golden/store.hex`) that pins the store layout:
+//! its sign-in and session records open, its records read back, every key is the one this crate
 //! derives, the compressed delta matches, its stream keys name their
 //! channels, and its swarm cache reads back by swarm id and salt.
 
@@ -71,9 +70,9 @@ struct Golden {
     records: Vec<(i64, u64, Vec<u8>)>,
     delta_remote: VersionVector,
     delta: Vec<EventLog>,
-    /// Stream keys the Go dao formatted, with the channel each names.
+    /// Recorded stream keys, with the channel each names.
     stream_keys: Vec<(u64, String)>,
-    /// Swarm caches the Go dao stored, as (swarm id, salt, cache).
+    /// Recorded swarm caches, as (swarm id, salt, cache).
     swarm_caches: Vec<(Vec<u8>, Vec<u8>, Cache)>,
 }
 
@@ -702,8 +701,8 @@ fn chat_records_read_back_by_index() {
 }
 
 /// The video channels, one of each owner kind, each found by its owner
-/// key; the deleted one left nothing; both configs; and the stream keys
-/// Go formatted name their channels.
+/// key; the deleted one left nothing; both configs; and the recorded stream
+/// keys name their channels.
 #[test]
 fn video_records_read_back() {
     use strims_proto::video::v1::video_channel::Owner;

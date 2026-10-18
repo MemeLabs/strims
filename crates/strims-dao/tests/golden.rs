@@ -1,8 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors from `golden/main.go` (`go run -tags golden
-//! ./crates/strims-dao/golden`), produced by the real Go functions.
+//! Recorded golden vectors (`golden/vectors.hex`) for the keys and hashes
+//! this crate derives.
 
 // Tests panic on failure by design.
 #![allow(
@@ -94,7 +94,7 @@ fn index_hashes_match() {
 }
 
 #[test]
-fn listing_keys_match_go() {
+fn listing_keys_match_vectors() {
     let v = Vectors::load();
     let mut n = 0;
     for (name, f) in v.with_prefix("dir_listing_key_") {
@@ -111,7 +111,7 @@ fn listing_keys_match_go() {
 }
 
 #[test]
-fn chat_profile_peer_keys_match_go() {
+fn chat_profile_peer_keys_match_vectors() {
     let v = Vectors::load();
     let mut n = 0;
     for (name, f) in v.with_prefix("chat_profile_peer_key_") {
@@ -123,7 +123,7 @@ fn chat_profile_peer_keys_match_go() {
 }
 
 #[test]
-fn stream_keys_match_go() {
+fn stream_keys_match_vectors() {
     let v = Vectors::load();
     let mut n = 0;
     for (name, f) in v.with_prefix("video_stream_key_") {

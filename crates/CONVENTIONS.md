@@ -103,14 +103,14 @@ floods, or well-formed but malicious messages.
 - Decoders return borrowed views into the input. Encoders write into
   caller-supplied buffers.
 
-## Compatibility with the deployed network
+## Formats
 
-Until the protocol version bump planned in `PLAN.md`, wire formats stay
-compatible with the existing (Go) nodes. The golden-vector and live
-cross-implementation tests (`golden/`, `tests/cross_go.rs`,
-`tests/interop_go*`) guard this, and they skip when `go` isn't installed.
-In code, express a compatibility requirement as the local constraint it
-imposes, e.g. "port 20 must stay unhandled by the v2 protocol".
+No deployed network constrains the wire or store formats. Golden vectors
+(`golden/` in a crate, replayed by its `tests/golden*.rs`) pin them, so a
+format can't change by accident. A deliberate change updates the vectors in
+the same commit. In code, express a format requirement as the local
+constraint it imposes, e.g. "port 20 must stay unhandled by the v2
+protocol".
 
 ## Testing
 

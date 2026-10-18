@@ -1,11 +1,11 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors from the Go code (`golden/main.go`):
+//! Recorded golden vectors (`golden/vectors.txt`):
 //!
-//! - messages marshaled by up to five Go hosts in turn: re-encoded hop by
-//!   hop from the same keys and times, byte for byte, signatures included;
-//! - Go's `Message.Verify` on tampered copies;
+//! - messages marshaled by up to five hosts in turn: re-encoded hop by hop
+//!   from the same keys and times, byte for byte, signatures included;
+//! - verification results on tampered copies;
 //! - the AES-GCM message filter with fixed keys and nonces, both ways;
 //! - signed hash table and peer index records and the service messages
 //!   that carry them, and peer exchange messages.
@@ -151,7 +151,7 @@ fn verify_matches_go_on_tampered_messages() {
 }
 
 #[test]
-fn message_cipher_matches_go() {
+fn message_cipher_matches_vectors() {
     let vs = vectors("cipher");
     assert_eq!(vs.len(), 4);
     for v in vs {

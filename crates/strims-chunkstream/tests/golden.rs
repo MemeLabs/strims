@@ -1,12 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors from `golden/main.go` (regenerate from the repo root with
-//! `go run -tags golden ./crates/strims-chunkstream/golden`; the line
-//! formats are documented there). The encoders must reproduce the recorded
-//! frames byte for byte, the packed encoder with the recorded output after
-//! every write and end, and a decoder started at each recorded offset must
-//! yield the recorded records.
+//! Recorded golden vectors (`golden/vectors.hex`). The encoders must
+//! reproduce the recorded frames byte for byte, the packed encoder with the
+//! recorded output after every write and end, and a decoder started at each
+//! recorded offset must yield the recorded records.
 
 // Tests panic on failure by design.
 #![allow(
@@ -104,7 +102,7 @@ fn record_decode(size: usize, offset: u64, input: &[u8], piece: usize) -> Vec<Ve
 }
 
 #[test]
-fn frames_match_go() {
+fn frames_match_vectors() {
     for f in lines("frames") {
         let size: usize = f[0].parse().unwrap();
         let (record, frames) = (bytes(f[1]), bytes(f[2]));
@@ -120,7 +118,7 @@ fn frames_match_go() {
 }
 
 #[test]
-fn large_frames_match_go() {
+fn large_frames_match_vectors() {
     for f in lines("frames_digest") {
         let size: usize = f[0].parse().unwrap();
         let record = pattern(f[1].parse().unwrap());
@@ -141,7 +139,7 @@ fn large_frames_match_go() {
 }
 
 #[test]
-fn event_broadcasts_match_go() {
+fn event_broadcasts_match_vectors() {
     let mut pings = 0;
     for f in lines("records") {
         let (proto, stream) = (bytes(f[0]), bytes(f[1]));
@@ -184,7 +182,7 @@ fn streams() -> BTreeMap<&'static str, Stream> {
 }
 
 #[test]
-fn streams_match_go() {
+fn streams_match_vectors() {
     for (id, s) in streams() {
         assert_eq!(
             hex::encode(record_encode(s.size, &s.payloads)),
@@ -202,7 +200,7 @@ fn streams_match_go() {
 /// A read marked `end` lists every record the decoder must yield. One
 /// marked `err` stopped early, so its records must be a prefix of them.
 #[test]
-fn reads_match_go() {
+fn reads_match_vectors() {
     let streams = streams();
     let (mut ended, mut failed) = (0, 0);
     for f in lines("read") {
@@ -244,7 +242,7 @@ fn reads_match_go() {
 /// A replayed `packed` script.
 struct Script {
     stream: Vec<u8>,
-    /// The records whose end Go accepted.
+    /// The records whose end the recorded writer accepted.
     records: Vec<Vec<u8>>,
     /// The bytes written after the last of them.
     pending: Vec<u8>,
@@ -308,7 +306,7 @@ fn packed_decode(size: usize, offset: u64, input: &[u8], piece: usize) -> (Vec<V
     (records, tail)
 }
 
-/// A stream decoded from offset 0 yields the records Go ended, then the
+/// A stream decoded from offset 0 yields the recorded ended records, then the
 /// output part of the record in progress.
 fn assert_decodes_to_script(size: usize, s: &Script) {
     let (records, tail) = packed_decode(size, 0, &s.stream, s.stream.len().max(1));
@@ -317,7 +315,7 @@ fn assert_decodes_to_script(size: usize, s: &Script) {
 }
 
 #[test]
-fn packed_writes_match_go() {
+fn packed_writes_match_vectors() {
     let mut refused = 0;
     for f in lines("packed") {
         let size: usize = f[1].parse().unwrap();
@@ -330,7 +328,7 @@ fn packed_writes_match_go() {
 }
 
 #[test]
-fn large_packed_writes_match_go() {
+fn large_packed_writes_match_vectors() {
     for f in lines("packed_digest") {
         let size: usize = f[1].parse().unwrap();
         let s = packed_replay(size, f[2]);
@@ -351,7 +349,7 @@ fn large_packed_writes_match_go() {
 }
 
 #[test]
-fn packed_reads_match_go() {
+fn packed_reads_match_vectors() {
     let streams: BTreeMap<&str, (usize, Vec<u8>)> = lines("packed")
         .into_iter()
         .map(|f| (f[0], (f[1].parse().unwrap(), bytes(f[3]))))

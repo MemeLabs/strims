@@ -1,17 +1,17 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors from the Go implementation (`golden/main.go`).
+//! Recorded golden vectors (`golden/vectors.txt`):
 //!
 //! - every codec message, a multi-message payload, channel headers and a
-//!   frame: Rust decodes Go's bytes to the expected messages and encodes
-//!   them back byte for byte;
+//!   frame: the recorded bytes decode to the expected messages and encode
+//!   back byte for byte;
 //! - Merkle digests of every bin for each supported hash function;
-//! - the Go `ppspp.Writer` for Merkle (all hash functions, ed25519 and no
-//!   signatures), sign-all and no integrity: Rust's `Writer`, replaying the
-//!   same writes at the times Go used, must produce identical epochs,
+//! - writer scenarios for Merkle (all hash functions, ed25519 and no
+//!   signatures), sign-all and no integrity: the `Writer`, replaying the
+//!   recorded writes at the recorded times, must produce identical epochs,
 //!   `Data` messages, integrity messages (with several peer have maps) and
-//!   swarm caches; Go's caches must import into Rust and export again
+//!   swarm caches; the recorded caches must import and export again
 //!   unchanged;
 //! - swarm id and URI strings and parsing.
 
@@ -92,7 +92,7 @@ fn lines() -> impl Iterator<Item = Line<'static>> {
         })
 }
 
-/// `dataByte` in `golden/main.go`.
+/// The payload byte at stream offset `off` in the recorded writer scenarios.
 fn data_byte(off: u64, salt: u64) -> u8 {
     ((off.wrapping_add(salt)).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 56) as u8
 }
@@ -279,15 +279,15 @@ fn codec_messages() {
     assert_eq!(msgs.len(), expected.len());
 
     for (name, want) in &expected {
-        let go = &msgs[name];
-        // Rust encodes what Go encoded
-        assert_eq!(&encode(want), go, "encode {name}");
-        // and decodes Go's bytes to the same message
-        let (got, n) = Message::decode(&config(), go).unwrap();
-        assert_eq!(n, go.len(), "decode length {name}");
+        let recorded = &msgs[name];
+        // encodes to the recorded bytes
+        assert_eq!(&encode(want), recorded, "encode {name}");
+        // and decodes them to the same message
+        let (got, n) = Message::decode(&config(), recorded).unwrap();
+        assert_eq!(n, recorded.len(), "decode length {name}");
         assert_eq!(&got, want, "decode {name}");
         // decode then encode is the identity
-        assert_eq!(&encode(&got), go, "re-encode {name}");
+        assert_eq!(&encode(&got), recorded, "re-encode {name}");
     }
 
     // a payload of every message, ended by End
@@ -316,11 +316,11 @@ fn channel_headers_and_frames() {
             channel: l.num("channel"),
             length: l.num("length"),
         };
-        let go = l.hex("hex");
+        let recorded = l.hex("hex");
         let mut b = vec![0u8; h.byte_len()];
-        assert_eq!(h.encode(&mut b), Ok(go.len()));
-        assert_eq!(b, go);
-        assert_eq!(ChannelHeader::decode(&go), Ok((h, go.len())));
+        assert_eq!(h.encode(&mut b), Ok(recorded.len()));
+        assert_eq!(b, recorded);
+        assert_eq!(ChannelHeader::decode(&recorded), Ok((h, recorded.len())));
     }
 
     let frame = lines().find(|l| l.kind == "frame").unwrap().hex("hex");
@@ -410,13 +410,13 @@ impl MessageWriter for Encoded {
     }
 }
 
-/// Compares an error to Go's, whose spaces the generator made underscores
-/// (Go also wraps some errors with a prefix).
-fn assert_go_err(go: &str, rust: &dyn std::fmt::Display, what: &str) {
-    let go = go.replace('_', " ");
+/// Compares an error to the recorded one, whose spaces the vectors write as
+/// underscores and which may carry a prefix.
+fn assert_recorded_err(recorded: &str, rust: &dyn std::fmt::Display, what: &str) {
+    let recorded = recorded.replace('_', " ");
     assert!(
-        go.ends_with(&rust.to_string()),
-        "{what}: go {go:?}, rust {rust}"
+        recorded.ends_with(&rust.to_string()),
+        "{what}: recorded {recorded:?}, rust {rust}"
     );
 }
 
@@ -443,9 +443,9 @@ fn scenarios() -> Vec<Scenario<'static>> {
     out
 }
 
-/// Replays each Go writer scenario through the Rust `Writer`.
+/// Replays each recorded writer scenario through the `Writer`.
 #[test]
-fn writer_matches_go() {
+fn writer_matches_vectors() {
     let scenarios = scenarios();
     assert_eq!(scenarios.len(), 12);
     let mut checked = BTreeMap::<&str, usize>::new();
@@ -508,8 +508,8 @@ fn writer_matches_go() {
                     let mut e = Encoded::default();
                     match (s.write_data(b, ms(1_700_000_000_999), &mut e), l.opt("hex")) {
                         (Ok(_), Some(h)) => assert_eq!(e.0, unhex(h), "{name}: data {b}"),
-                        (Err(err), None) => assert_go_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: data {b}: rust {r:?}, go {:?}", l.kv),
+                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
+                        (r, _) => panic!("{name}: data {b}: rust {r:?}, recorded {:?}", l.kv),
                     }
                     *checked.entry("data").or_default() += 1;
                 }
@@ -531,8 +531,8 @@ fn writer_matches_go() {
                                 l.get("have")
                             )
                         }
-                        (Err(err), None) => assert_go_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: integrity {b}: rust {r:?}, go {:?}", l.kv),
+                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
+                        (r, _) => panic!("{name}: integrity {b}: rust {r:?}, recorded {:?}", l.kv),
                     }
                     *checked.entry("integrity").or_default() += 1;
                 }
@@ -540,10 +540,10 @@ fn writer_matches_go() {
                     match (s.export_cache(), l.opt("hex")) {
                         (Ok(c), Some(h)) => {
                             assert_eq!(hex::encode(c.encode_to_vec()), h, "{name}: cache");
-                            import_go_cache(name, &key, &options, &unhex(h), off, salt);
+                            import_recorded_cache(name, &key, &options, &unhex(h), off, salt);
                         }
-                        (Err(err), None) => assert_go_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: cache: rust {r:?}, go {:?}", l.kv),
+                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
+                        (r, _) => panic!("{name}: cache: rust {r:?}, recorded {:?}", l.kv),
                     }
                     *checked.entry("cache").or_default() += 1;
                 }
@@ -562,22 +562,22 @@ fn writer_matches_go() {
     assert_eq!(checked["cache"], 16);
 }
 
-/// Imports a cache Go exported into a fresh Rust swarm, exports it again
+/// Imports a recorded cache into a fresh swarm, exports it again
 /// and reads the stream back.
-fn import_go_cache(
+fn import_recorded_cache(
     name: &str,
     key: &strims_proto::types::Key,
     options: &SwarmOptions,
-    go: &[u8],
+    recorded: &[u8],
     len: u64,
     salt: u64,
 ) {
-    let c = Cache::decode(go).unwrap();
+    let c = Cache::decode(recorded).unwrap();
     let mut s = Swarm::new(SwarmId::new(&key.public), options.clone()).unwrap();
     s.import_cache(&c)
         .unwrap_or_else(|e| panic!("{name}: import: {e}"));
     let again = s.export_cache().unwrap();
-    assert_eq!(again.encode_to_vec(), go, "{name}: cache re-export");
+    assert_eq!(again.encode_to_vec(), recorded, "{name}: cache re-export");
 
     let mut r = s.reader();
     let mut out = vec![0u8; len as usize + 1];
@@ -617,7 +617,7 @@ fn swarm_ids() {
                 match (SwarmId::decode(&s), l.opt("hex")) {
                     (Ok(id), Some(h)) => assert_eq!(id.as_bytes(), unhex(h), "{s:?}"),
                     (Err(_), None) => {}
-                    (r, _) => panic!("{s:?}: rust {r:?}, go {:?}", l.kv),
+                    (r, _) => panic!("{s:?}: rust {r:?}, recorded {:?}", l.kv),
                 }
                 n += 1;
             }
@@ -666,7 +666,7 @@ fn uris() {
                 assert_eq!(opts, l.get("opts"), "{s:?}");
             }
             (Err(_), None) => {}
-            (r, _) => panic!("{s:?}: rust {r:?}, go {:?}", l.kv),
+            (r, _) => panic!("{s:?}: rust {r:?}, recorded {:?}", l.kv),
         }
         n += 1;
     }

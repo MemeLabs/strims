@@ -101,7 +101,7 @@ pub fn decode_session_description(s: &str) -> Result<SessionDescription, JsonErr
                 match p.peek() {
                     Some(b'"') => sdp = p.string()?,
                     Some(b'n') => p.literal(b"null")?,
-                    _ => return Err(JsonError::Type("non-string into Go struct field sdp")),
+                    _ => return Err(JsonError::Type("non-string sdp")),
                 }
             } else {
                 p.skip_value(0)?;

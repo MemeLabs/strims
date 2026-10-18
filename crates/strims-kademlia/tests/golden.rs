@@ -1,8 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Replays `golden/vectors.txt`, generated from the Go implementation by
-//! `golden/main.go`.
+//! Replays the recorded vectors in `golden/vectors.txt`.
 //!
 //! Every closest lookup must match brute force. The recorded answer is
 //! compared too: equal where the vector marks it exact, different where it

@@ -347,7 +347,7 @@ pub fn generate(fds: &FileDescriptorSet, out_dir: &Path) -> Result<(), BoxError>
     for (name, msg) in &generator.messages {
         if oneof_interleaves(msg.desc) {
             println!(
-                "cargo:warning={name}: oneof tags interleave with other fields; prost field order differs from Go"
+                "cargo:warning={name}: oneof tags interleave with other fields; prost re-encodes them out of field-number order"
             );
         }
     }

@@ -55,12 +55,10 @@ prost.workspace = true
 # a local TLS server for the HTTPS client tests
 rcgen.workspace = true
 sha2.workspace = true
-# `synth`: the turmoil and Go interop tests publish a synthetic RTMP stream.
+# `synth`: the turmoil tests publish a synthetic RTMP stream.
 strims-video = { workspace = true, features = ["test-support"] }
 strims-proto = { workspace = true, features = ["services"] }
-# `process` and `rt-multi-thread`: the Go interop tests drive Go helpers as
-# subprocesses and run their Rust nodes on a multi-thread runtime.
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "sync", "test-util", "process"] }
+tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "test-util"] }
 
 [lints]
 workspace = true

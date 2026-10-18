@@ -1,10 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Replays `golden/vectors.txt`, which `golden/main.go` writes with the Go
-//! implementation: frames, `FrameWriter` batching, `TCPMuxInit`, the AES link
-//! handshake and ciphertext, `PeerInit` from real Go hosts, listener URIs
-//! and the WebRTC session description JSON.
+//! Replays the recorded vectors in `golden/vectors.txt`: frames,
+//! `FrameWriter` batching, `TCPMuxInit`, the AES link handshake and
+//! ciphertext, `PeerInit`, listener URIs and the WebRTC session description
+//! JSON.
 
 #![allow(
     clippy::unwrap_used,
@@ -161,7 +161,7 @@ fn tcp_mux_init() {
     }
 }
 
-/// Go ran `handshakeAESLink` on both ends (A dialing B with B's key) with
+/// The recorded handshake ran on both ends (A dialing B with B's key) with
 /// fixed IVs, then wrote the plaintext chunks each way.
 #[test]
 fn aes_link() {
@@ -215,7 +215,7 @@ fn aes_link() {
     }
 }
 
-/// `PeerInit`s written by real Go hosts.
+/// Recorded `PeerInit`s.
 #[test]
 fn peer_init() {
     for v in vectors("peerinit") {
@@ -323,8 +323,8 @@ fn sdp_json() {
     for v in vectors("sdpdecode") {
         let json = v.text("json");
         let got = SessionDescription::from_json(&json);
-        // Parsing succeeds exactly when the Go decoder accepted the vector
-        // and its type is a known name.
+        // Parsing succeeds exactly when the vector is marked ok and its type
+        // is a known name.
         match SdpType::parse(v.s("type")) {
             Some(t) if v.s("ok") == "true" => {
                 let d = got.unwrap();

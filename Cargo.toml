@@ -156,7 +156,7 @@ proptest = "1"
 
 # Optimize dependencies (not workspace crates) in dev builds. Unoptimized
 # ed25519 costs about 7.5 ms per verified vpn message, which dominates debug
-# interop and simulation runtimes.
+# simulation runtimes.
 [profile.dev.package."*"]
 opt-level = 2
 

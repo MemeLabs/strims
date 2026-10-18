@@ -7,7 +7,7 @@
 //! A TCP connection carries, in order:
 //!
 //! 1. from the dialer, a `TCPMuxInit` (protocol version 1, the listener's
-//!    32-byte ed25519 profile key) in `protoutil` stream framing, which the
+//!    32-byte ed25519 profile key) in [`crate::stream`] framing, which the
 //!    listener's [`TcpMux`] uses to pick the host the connection is for;
 //! 2. the AES link handshake both ways ([`crate::aes_link`]), using the
 //!    hosts' profile keys converted to X25519; the dialer checks that the

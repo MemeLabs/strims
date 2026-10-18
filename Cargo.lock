@@ -2696,7 +2696,6 @@ dependencies = [
  "slotmap",
  "str0m",
  "strims-base",
- "strims-crypto",
  "strims-vnic",
  "thiserror",
 ]
