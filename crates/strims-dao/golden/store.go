@@ -26,6 +26,7 @@ import (
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
+	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	notificationv1 "github.com/MemeLabs/strims/pkg/apis/notification/v1"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
@@ -120,6 +121,7 @@ func storeScenario(w *bufio.Writer) {
 	must0(dao.BootstrapClients.Insert(rs, b1))
 	b2 := must(dao.NewWebSocketBootstrapClient(rs, "wss://two.example/ws", true))
 	must0(dao.BootstrapClients.Insert(rs, b2))
+	must0(dao.BootstrapConfig.Set(rs, &networkv1bootstrap.Config{EnablePublishing: true}))
 
 	// Chat settings.
 	must0(dao.ChatUIConfig.Set(rs, &chatv1.UIConfig{Replicate: true, ShowTime: true, Highlight: true}))
@@ -265,6 +267,7 @@ func storeScenario(w *bufio.Writer) {
 		record(4007, m.Id, m)
 	}
 	record(4008, 0, must(dao.NetworkUIConfig.Get(rs)))
+	record(4015, 0, must(dao.BootstrapConfig.Get(rs)))
 	for _, m := range must(dao.CertificateLogs.GetAll(rs)) {
 		record(4003, m.Id, m)
 	}
@@ -480,6 +483,8 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 		return must(dao.BootstrapClients.Get(s, id))
 	case 4008:
 		return must(dao.NetworkUIConfig.Get(s))
+	case 4015:
+		return must(dao.BootstrapConfig.Get(s))
 	case 4003:
 		return must(dao.CertificateLogs.Get(s, id))
 	case 4009:

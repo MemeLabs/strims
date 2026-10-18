@@ -1,8 +1,11 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Networks the profile belongs to, its bootstrap clients, and the records
-//! of the networks whose CA it runs.
+//! Networks the profile belongs to, its bootstrap clients and bootstrap
+//! config, and the records of the networks whose CA it runs.
+//!
+//! The bootstrap config stays on the device: each device decides whether
+//! peers may publish networks to it.
 //!
 //! A network's CA lives on the device that holds its server config, so
 //! its records (certificate logs, network peers, alias reservations) don't
@@ -18,7 +21,7 @@ use prost::Message;
 use strims_base::time::Time;
 use strims_crypto::{certificate_chain, certificate_network_key};
 use strims_kv::Kv;
-use strims_proto::network::v1::bootstrap::{BootstrapClient, bootstrap_client};
+use strims_proto::network::v1::bootstrap::{self, BootstrapClient, bootstrap_client};
 use strims_proto::network::v1::ca::CertificateLog;
 use strims_proto::network::v1::directory::UserModeration;
 use strims_proto::network::v1::{AliasReservation, Network, Peer, UiConfig};
@@ -465,6 +468,22 @@ impl Singleton for NetworkUiConfig {
 
     fn observe(r: &UiConfig) -> Option<Record> {
         Some(Record::NetworkUiConfig(r.clone()))
+    }
+}
+
+/// Whether this device accepts networks that peers publish to it.
+pub struct BootstrapConfig;
+
+impl Singleton for BootstrapConfig {
+    type Record = bootstrap::Config;
+    const NS: Namespace = Namespace(4015);
+
+    fn default_value() -> Option<bootstrap::Config> {
+        Some(bootstrap::Config::default())
+    }
+
+    fn observe(r: &bootstrap::Config) -> Option<Record> {
+        Some(Record::BootstrapConfig(*r))
     }
 }
 

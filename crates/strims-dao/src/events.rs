@@ -45,6 +45,8 @@ pub enum Record {
     BootstrapClient(network::bootstrap::BootstrapClient),
     /// How the UI lists the profile's networks.
     NetworkUiConfig(network::UiConfig),
+    /// Whether this device accepts published networks.
+    BootstrapConfig(network::bootstrap::Config),
     /// The chat UI settings.
     ChatUiConfig(chat::UiConfig),
     /// A highlighted chat user.

@@ -37,8 +37,8 @@ use strims_dao::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
 };
 use strims_dao::schema::network::{
-    AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
-    network_scoped_key, new_alias_reservation, new_network_peer,
+    AliasReservations, BootstrapClients, BootstrapConfig, CertificateLogs, NetworkPeers,
+    NetworkUiConfig, Networks, network_scoped_key, new_alias_reservation, new_network_peer,
 };
 use strims_dao::schema::notification::{
     Notifications, dispatch, network_subject, new_notification,
@@ -57,7 +57,7 @@ use strims_proto::chat::v1::{
     WhisperThread, profile::Mute,
 };
 use strims_proto::network::v1::bootstrap::{
-    BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
+    self, BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
 };
 use strims_proto::network::v1::directory::{
     Listing, ListingModeration, UserModeration, listing as directory_listing,
@@ -437,6 +437,14 @@ fn go_reads_a_store_this_crate_writes() {
         )
         .await
         .unwrap();
+        BootstrapConfig::set(
+            &mut tx,
+            bootstrap::Config {
+                enable_publishing: true,
+            },
+        )
+        .await
+        .unwrap();
         for url in ["wss://a.example/ws", "wss://b.example/ws"] {
             let id = tx.generate_id().await.unwrap();
             BootstrapClients::insert(
@@ -661,6 +669,15 @@ fn go_reads_a_store_this_crate_writes() {
             &4008u64.to_be_bytes(),
             &0u64.to_be_bytes(),
             &network_ui.encode_to_vec(),
+        ],
+    );
+    let bootstrap_config = block(BootstrapConfig::get(&mut tx)).unwrap().unwrap();
+    out.put(
+        "record",
+        &[
+            &4015u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &bootstrap_config.encode_to_vec(),
         ],
     );
     record_lines::<CertificateLogs>(&mut tx, &mut out);

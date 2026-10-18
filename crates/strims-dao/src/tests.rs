@@ -24,6 +24,7 @@ use strims_crypto::{
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
+use strims_proto::network::v1::bootstrap;
 use strims_proto::network::v1::directory::{Listing, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
 use strims_proto::notification::v1::Notification;
@@ -43,8 +44,8 @@ use crate::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
 };
 use crate::schema::network::{
-    AliasReservations, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks, RESERVED_FOREVER,
-    network_key, network_scoped_key, new_certificate_log,
+    AliasReservations, BootstrapConfig, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
+    RESERVED_FOREVER, network_key, network_scoped_key, new_certificate_log,
 };
 use crate::schema::notification::{
     MAX_NOTIFICATIONS, Notifications, dispatch, network_subject, new_notification,
@@ -1431,6 +1432,36 @@ fn newer_certificate_logs_take_over_their_subject_and_key() {
         assert_eq!(
             NetworkUiConfig::get(&mut tx).await.unwrap(),
             Some(Default::default())
+        );
+    });
+}
+
+#[test]
+fn the_bootstrap_config_is_closed_by_default_and_stays_on_the_device() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    block(async {
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            BootstrapConfig::get(&mut tx).await.unwrap(),
+            Some(bootstrap::Config {
+                enable_publishing: false
+            })
+        );
+        drop(tx);
+        let mut tx = store.write(T0).await.unwrap();
+        let on = bootstrap::Config {
+            enable_publishing: true,
+        };
+        BootstrapConfig::set(&mut tx, on).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(BootstrapConfig::get(&mut tx).await.unwrap(), Some(on));
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+        assert_eq!(
+            drain(&mut sub),
+            [StoreEvent::Changed(Record::BootstrapConfig(on))]
         );
     });
 }

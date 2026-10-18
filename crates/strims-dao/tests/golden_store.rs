@@ -31,8 +31,8 @@ use strims_dao::schema::chat::{
 };
 use strims_dao::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, listing_key};
 use strims_dao::schema::network::{
-    AliasReservations, BootstrapClients, CertificateLogs, NetworkPeers, NetworkUiConfig, Networks,
-    RESERVED_FOREVER, network_key, network_scoped_key,
+    AliasReservations, BootstrapClients, BootstrapConfig, CertificateLogs, NetworkPeers,
+    NetworkUiConfig, Networks, RESERVED_FOREVER, network_key, network_scoped_key,
 };
 use strims_dao::schema::notification::Notifications;
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
@@ -156,6 +156,7 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         Networks::NS => re::<<Networks as Table>::Record>(bytes),
         BootstrapClients::NS => re::<<BootstrapClients as Table>::Record>(bytes),
         NetworkUiConfig::NS => re::<<NetworkUiConfig as Singleton>::Record>(bytes),
+        BootstrapConfig::NS => re::<<BootstrapConfig as Singleton>::Record>(bytes),
         CertificateLogs::NS => re::<<CertificateLogs as Table>::Record>(bytes),
         NetworkPeers::NS => re::<<NetworkPeers as Table>::Record>(bytes),
         AliasReservations::NS => re::<<AliasReservations as Table>::Record>(bytes),
@@ -195,6 +196,7 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         Networks::NS => t::<Networks>(tx, id),
         BootstrapClients::NS => t::<BootstrapClients>(tx, id),
         NetworkUiConfig::NS => s::<NetworkUiConfig>(tx),
+        BootstrapConfig::NS => s::<BootstrapConfig>(tx),
         CertificateLogs::NS => t::<CertificateLogs>(tx, id),
         NetworkPeers::NS => t::<NetworkPeers>(tx, id),
         AliasReservations::NS => t::<AliasReservations>(tx, id),
@@ -307,6 +309,7 @@ fn every_key_is_the_one_this_crate_derives() {
         ProfileIds::NS,
         ChatUiConfig::NS,
         NetworkUiConfig::NS,
+        BootstrapConfig::NS,
     ] {
         derived.insert(ns.key());
     }
@@ -315,7 +318,7 @@ fn every_key_is_the_one_this_crate_derives() {
 
     // Every namespace this crate defines, and the lease namespace.
     let mut known: BTreeSet<i64> = [1001, 1002, 1003, 1004, 2001, 2002, 2003].into();
-    known.extend((4001..=4014).chain(4016..=4018));
+    known.extend(4001..=4018);
     known.insert(5001);
     known.extend(6001..=6025);
     known.extend(9001..=9006);
@@ -492,6 +495,8 @@ fn ca_records_read_back_by_index() {
     let ui = block(NetworkUiConfig::get(&mut tx)).unwrap().unwrap();
     assert_eq!(ui.network_display_order.len(), 2);
     assert_eq!(ui.network_display_order[1], owned.id);
+    let bootstrap = block(BootstrapConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(bootstrap.enable_publishing);
 }
 
 /// The owned network's directory: the owner as its admin, an invitee who
