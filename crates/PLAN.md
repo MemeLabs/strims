@@ -114,26 +114,19 @@ Egress and players:
 - Native HLS egress is a muxer over access units, for external players.
 
 ### Targets
-- `strims-wasm`: a browser worker driver that replaces the Go wasm build and
-  its JS bridge, keeping the TS UI and its RPC. Uses the browser's WebSocket
-  and RTCPeerConnection. The frontend's RPC connection sends each framed
-  Call as one message and uses `strims_rpc::Config::frontend()`; raise its
-  `max_inbound_calls` if the UI needs more. Like `Node::open_vpn_port`, it
-  gives the services vpn ports for `strims_rpc::vpn`: a stream of
-  deliveries and a sink of addressed messages.
-  Its `strims_kv::Kv` is IndexedDB: one database per kv table, an object
-  store named `data`, string keys and `Uint8Array` values. A task woken by
-  an IndexedDB callback has to be polled before the transaction
-  deactivates. Its `SessionFactory` starts a profile's node, replication,
-  network, bootstrap, transfer, directory, chat, whisper and video
-  controls and peer services, runs `strims_session::run_vnic` on its
-  node, and binds the network, bootstrap, directory, chat and video
-  frontends (`strims_node::app::NodeFactory` is the native equivalent).
-  Its video control has no RTMP listener (`NoVideoHost`) and serves no
-  HLS. Its `HttpFetch` for a directory server's embed loads is the
-  browser's `fetch`, which the embed APIs may refuse under CORS; decide
-  whether such a server goes without embed snippets or loads them
-  through a proxy.
+- `strims-wasm` runs a profile's node in a browser worker, and its PSI
+  sessions in a second worker. Remaining:
+  - the browser suites on Safari (iOS 17.1+) and Chromium. Only Firefox
+    has run them, so elsewhere two things are unverified: IndexedDB
+    transactions staying active across the executor's microtask polls,
+    and data channels transferred to a worker;
+  - one compiled module for both workers: the window compiles it once and
+    posts the `WebAssembly.Module` to each, which needs the loader to
+    export the asset URL;
+  - `wasm-opt` in the release build; the shipped module is 5.3 MB, 1.6 MB
+    gzipped;
+  - WebRTC on strims-svc nodes, whose `AppConfig` has no WebRTC settings;
+    until then browsers reach them over WebSocket only.
 - `strims-svc` runs one profile's node per process, on redb, and serves
   the UI's frontend over WebSocket. Remaining:
   - a Postgres `Kv`;

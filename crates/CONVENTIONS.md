@@ -26,8 +26,10 @@ enforce the mechanical parts.
 Core crates (`strims-base`, `-binmap`, `-chunkstream`, `-proto`, `-crypto`,
 `-qos`, `-kademlia`, `-mpc`, `-ppspp`, `-vnic`, `-vpn`, `-webrtc`) are
 synchronous, single-threaded state machines: no async, no tokio, no threads,
-no locks and no I/O. Drivers (`strims-node`, later `strims-wasm`) own
-sockets, timers and tasks.
+no locks and no I/O. Drivers (`strims-node`, `strims-wasm`) own sockets,
+timers and tasks. Both run `strims-node-core`, which composes the core
+crates and the app layer over a driver interface; it uses only tokio's
+`sync` and `macros` features, which build on wasm32.
 
 Shape:
 
@@ -126,6 +128,15 @@ From the repo root:
 - `cargo clippy --workspace --all-targets --features strims-node/turmoil`
 - `cargo test --workspace`
 - `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown`
+- `cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e`
+- `GECKODRIVER=<path to geckodriver> cargo test -p strims-wasm --target wasm32-unknown-unknown`
+  runs strims-wasm's tests in a headless Firefox worker. It needs
+  `wasm-bindgen-cli` at the crate's `wasm-bindgen` pin, whose
+  `wasm-bindgen-test-runner` `.cargo/config.toml` names as the runner.
+
+The browser suites launch headless Firefox against the webpack build and
+are ignored by default; they also need `node_modules`:
+`cargo test -p strims-wasm --test e2e_links --test e2e_app --test ui_smoke -- --ignored`.
 
 Every `.rs` file starts with:
 

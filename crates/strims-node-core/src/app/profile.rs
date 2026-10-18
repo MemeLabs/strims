@@ -68,7 +68,7 @@ impl ProfileSlot {
                 _ => *running = Some((id, None)),
             }
         }
-        // Dropped unstarted, a start gives the listeners back.
+        // Dropped unstarted, a start gives the platform's one node back.
         let mut mark = StartMark {
             running: &self.running,
             started: false,

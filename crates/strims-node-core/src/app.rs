@@ -24,8 +24,9 @@
 //!
 //! - [`ProfileSlot::start`] starts a signed-in profile's node and every
 //!   control on an [`AppPlatform`], and serves every peer through
-//!   [`PeerServices`]. A slot runs one profile at a time, since the node
-//!   listens on the platform's addresses: another profile's start fails
+//!   [`PeerServices`]. A slot runs one profile at a time, since a node
+//!   holds what its platform has one of (the native listeners' addresses,
+//!   a browser worker's signalling port): another profile's start fails
 //!   with [`StartError::ProfileRunning`]. The node starts under the
 //!   profile's vnic config, within [`AppPlatform::ceilings`], and follows
 //!   the config's changes.
