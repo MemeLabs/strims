@@ -9,9 +9,10 @@
 //! offer/answer in [`SessionDescription`] JSON, produced once ICE gathering
 //! completes.
 //!
-//! The crate is native-only. On `wasm32` it compiles to the re-exports from
-//! [`strims_vnic::webrtc`] alone: browsers use `RTCPeerConnection` through
-//! the JS bridge, with the same signalling.
+//! The endpoint is native-only. On `wasm32` the crate compiles to the
+//! re-exports from [`strims_vnic::webrtc`], [`EndpointConfig`] and
+//! [`stun`]: browsers use `RTCPeerConnection`, with the same signalling and
+//! the same configuration.
 //!
 //! # Driver contract
 //!
@@ -132,17 +133,16 @@ pub use strims_vnic::webrtc::{
 mod cert;
 #[cfg(not(target_arch = "wasm32"))]
 mod clock;
+mod config;
 #[cfg(not(target_arch = "wasm32"))]
 mod crypto;
 #[cfg(not(target_arch = "wasm32"))]
 mod endpoint;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod stun;
 
+pub use config::EndpointConfig;
 #[cfg(not(target_arch = "wasm32"))]
-pub use endpoint::{
-    CloseReason, ConnId, ConnectionState, EndpointConfig, Error, Event, Transmit, WebRtcEndpoint,
-};
+pub use endpoint::{CloseReason, ConnId, ConnectionState, Error, Event, Transmit, WebRtcEndpoint};
 
 /// Seeds the thread-local generator str0m draws non-cryptographic values
 /// from (see [Determinism](crate#determinism)). It is process state outside
