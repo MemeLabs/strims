@@ -13,7 +13,6 @@
 //! Index keys are stored, so [`listing_key`] and [`media_listing_id`]
 //! must keep deriving the same bytes.
 
-use strims_ppspp::query_value;
 use strims_proto::network::v1::directory::listing::Content;
 use strims_proto::network::v1::directory::{
     Listing, ListingModeration, ListingRecord, UserModeration, UserRecord,
@@ -115,96 +114,13 @@ pub fn listing_key(network_id: u64, listing: Option<&Listing>) -> Vec<u8> {
     k
 }
 
-/// The bytes a media listing with swarm URI `uri` is keyed by: its `xt`
-/// value after the value's last `:`, without CR and LF, read as padded
-/// base32 up to the first decode error. A quantum that fails to decode
-/// yields nothing, so a swarm URI's unpadded 32-byte id yields its first
-/// 30 bytes. A URI that isn't a URL ([`query_value`]), or has no `xt`,
-/// yields none.
+/// The bytes a media listing with swarm URI `uri` is keyed by: its swarm
+/// id. A URI that doesn't parse ([`strims_ppspp::Uri::parse`]) yields
+/// none.
 pub fn media_listing_id(uri: &str) -> Vec<u8> {
-    let Ok(Some(xt)) = query_value(uri, "xt") else {
-        return Vec::new();
-    };
-    let id = match xt.iter().rposition(|&c| c == b':') {
-        Some(i) => xt.get(i + 1..).unwrap_or_default(),
-        None => &xt,
-    };
-    padded_base32_prefix(id)
-}
-
-const PAD: u8 = b'=';
-
-fn base32_value(c: u8) -> Option<u8> {
-    match c {
-        b'A'..=b'Z' => Some(c - b'A'),
-        b'2'..=b'7' => Some(c - b'2' + 26),
-        _ => None,
-    }
-}
-
-/// `s` without CR and LF, decoded as padded RFC 4648 base32 in quanta of
-/// eight characters, up to the first error: a character outside the
-/// upper-case alphabet, an input ending inside a quantum, or bad padding.
-/// The result holds the quanta before the error.
-///
-/// Padding may start within the last eight characters, after at least
-/// two characters of its quantum, and must fill the quantum, which then
-/// yields its whole bytes (from 2, 4, 5 or 7 characters). Padding ends
-/// the input: what follows the quantum is ignored. Padding anywhere else
-/// is an invalid character.
-fn padded_base32_prefix(s: &[u8]) -> Vec<u8> {
-    let src: Vec<u8> = s
-        .iter()
-        .copied()
-        .filter(|&c| c != b'\r' && c != b'\n')
-        .collect();
-    let mut out = Vec::with_capacity(src.len() / 8 * 5);
-    let mut rest = src.as_slice();
-    while !rest.is_empty() {
-        let mut quantum = [0u8; 8];
-        let mut len = 0;
-        let mut end = false;
-        while len < quantum.len() {
-            let Some((&c, tail)) = rest.split_first() else {
-                return out;
-            };
-            rest = tail;
-            if c == PAD && len >= 2 && rest.len() < 8 {
-                let fill = quantum.len() - 1 - len;
-                if rest.len() < fill || rest.iter().take(fill).any(|&c| c != PAD) {
-                    return out;
-                }
-                if matches!(len, 3 | 6) {
-                    return out;
-                }
-                end = true;
-                break;
-            }
-            let Some(v) = base32_value(c) else {
-                return out;
-            };
-            if let Some(q) = quantum.get_mut(len) {
-                *q = v;
-            }
-            len += 1;
-        }
-        let bits = quantum
-            .iter()
-            .fold(0u64, |acc, &v| (acc << 5) | u64::from(v))
-            .to_be_bytes();
-        let n = match len {
-            8 => 5,
-            7 => 4,
-            5 => 3,
-            4 => 2,
-            _ => 1,
-        };
-        out.extend(bits.iter().skip(3).take(n));
-        if end {
-            break;
-        }
-    }
-    out
+    strims_ppspp::Uri::parse(uri)
+        .map(|u| u.id.as_bytes().to_vec())
+        .unwrap_or_default()
 }
 
 /// A record of `listing` on network `network_id`.
@@ -241,25 +157,6 @@ pub fn new_user_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn padded_base32_keeps_the_quanta_before_an_error() {
-        let decode = |s: &str| padded_base32_prefix(s.as_bytes());
-        assert_eq!(decode("MZXW6YTBOI======"), b"foobar");
-        assert_eq!(decode("MZXW6YTBOI"), b"fooba");
-        assert_eq!(decode("MZXW6YTB\r\nOI======"), b"foobar");
-        assert_eq!(decode("MZXW6YTBoi======"), b"fooba");
-        assert_eq!(decode("MY======"), b"f");
-        assert_eq!(decode("MY======AB"), b"f");
-        assert_eq!(decode("MZXQ===="), b"fo");
-        assert_eq!(decode("MZXW6==="), b"foo");
-        assert_eq!(decode("MZXW6YQ="), b"foob");
-        assert_eq!(decode("MZXW6YTBMY======AB"), b"foobaf");
-        assert_eq!(decode("MZXW6YTBMY======MY======"), b"fooba");
-        for s in ["MY=", "MY=====A", "MZX=====", "M=======", "my======"] {
-            assert_eq!(decode(s), b"", "{s}");
-        }
-    }
 
     #[test]
     fn directory_tables_stay_local_and_unobserved() {

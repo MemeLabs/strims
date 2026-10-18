@@ -608,7 +608,7 @@ fn directory_records_read_back_by_index() {
         assert_eq!(found.id, r.id);
         if let Some(Content::Media(media)) = r.listing.as_ref().and_then(|l| l.content.as_ref()) {
             let id = strims_ppspp::Uri::parse(&media.swarm_uri).unwrap().id;
-            assert_eq!(key.get(9..).unwrap(), id.as_bytes().get(..30).unwrap());
+            assert_eq!(key.get(9..).unwrap(), id.as_bytes());
             let m = found.moderation.unwrap();
             assert_eq!(
                 (m.is_mature, m.category.as_deref()),

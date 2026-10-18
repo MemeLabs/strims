@@ -12,9 +12,6 @@
 //! unescaped with `+` as space, and the first value of a key wins. Control
 //! characters and bad escapes in the fragment are errors. The host and path
 //! are not validated.
-//!
-//! [`query_value`] reads any URL's query by the same rules. Stored keys
-//! derive from its values, so its rules must not change either.
 
 use core::fmt;
 use std::collections::BTreeMap;
@@ -140,14 +137,6 @@ impl fmt::Display for Uri {
         }
         Ok(())
     }
-}
-
-/// The first value of `key` in the query of URL `s`, unescaped, by the
-/// rules in the module docs. An escape may encode any byte, so the value
-/// is bytes. Fails with [`UriError::Malformed`] if `s` isn't a URL.
-pub fn query_value(s: &str, key: &str) -> Result<Option<Vec<u8>>, UriError> {
-    let (_, query) = split_url(s)?;
-    Ok(query_get(query, key))
 }
 
 /// The scheme and raw query of `s`, after the URL checks in the module
@@ -302,6 +291,7 @@ mod tests {
 
     #[test]
     fn query_values_are_the_first_unescaped_bytes_of_their_key() {
+        let query_value = |s: &str, key: &str| split_url(s).map(|(_, q)| query_get(q, key));
         let value = |s: &str, key: &str| query_value(s, key).unwrap();
         assert_eq!(
             value("x:?a=%ff%41+b&a=2", "a"),
