@@ -35,6 +35,12 @@
 //! - [`entropy`]: seeds from `crypto.getRandomValues`.
 //! - [`log`]: `tracing` output on the console, and the panic hook.
 //! - [`kv`]: [`kv::IdbKv`], the `strims_kv::Kv` on IndexedDB.
+//! - [`node`]: starting a core node in the worker.
+//! - [`io`]: [`io::WasmIo`], the node's driver: dials, links and timers.
+//! - [`ws`]: WebSocket links.
+//! - [`rtc`]: the signal port to the window's peer connections, and the
+//!   data channels it hands over.
+//! - `inbox`: a link's read queue, filled by its socket's callbacks.
 //! - [`entry`]: `start`, the function the worker script calls.
 
 #![cfg(target_arch = "wasm32")]
@@ -43,9 +49,17 @@ pub mod clock;
 pub mod entropy;
 pub mod entry;
 mod idb;
+mod inbox;
+pub mod io;
 mod js;
 pub mod kv;
 pub mod log;
+pub mod node;
+pub mod rtc;
 pub mod runtime;
+pub mod ws;
 
 pub use kv::IdbKv;
+
+#[cfg(test)]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_dedicated_worker);

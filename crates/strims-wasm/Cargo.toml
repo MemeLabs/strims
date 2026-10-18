@@ -20,6 +20,7 @@ strims-base.workspace = true
 strims-dao.workspace = true
 strims-directory.workspace = true
 strims-kv.workspace = true
+strims-node-core.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true
 strims-session.workspace = true
@@ -32,6 +33,8 @@ prost.workspace = true
 slotmap.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+# The node's channels and `select!`: `sync` and `macros` need no runtime.
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 # The wasm-bindgen family comes from one release, and the `=` pin must match
 # the installed wasm-bindgen-cli, which the web build checks.
@@ -93,6 +96,7 @@ web-sys = { version = "=0.3.106", features = [
 ] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+strims-crypto.workspace = true
 strims-kv = { workspace = true, features = ["conformance"] }
 wasm-bindgen-test = "=0.3.79"
 
