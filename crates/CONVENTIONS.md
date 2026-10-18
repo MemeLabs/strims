@@ -125,7 +125,7 @@ From the repo root:
 - `cargo fmt --all`
 - `cargo clippy --workspace --all-targets --features strims-node/turmoil`
 - `cargo test --workspace`
-- `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --target wasm32-unknown-unknown`
+- `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown`
 
 Every `.rs` file starts with:
 

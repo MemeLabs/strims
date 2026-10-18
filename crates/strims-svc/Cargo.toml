@@ -1,0 +1,34 @@
+[package]
+name = "strims-svc"
+description = "The headless service: runs a profile's node and serves the UI's frontend RPC over WebSocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-dao.workspace = true
+strims-kv.workspace = true
+strims-kv-redb.workspace = true
+strims-node.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-session.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+data-encoding.workspace = true
+rand_core.workspace = true
+futures-util = { workspace = true, features = ["sink", "std"] }
+# `signal`: the binary stops on ctrl-c.
+tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "signal"] }
+tokio-tungstenite.workspace = true
+getrandom = "0.3"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "env-filter", "ansi"] }
+
+[dev-dependencies]
+strims-crypto.workspace = true
+prost.workspace = true
+
+[lints]
+workspace = true
