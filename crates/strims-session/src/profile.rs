@@ -6,6 +6,7 @@ use std::rc::Rc;
 use strims_dao::schema::profile::{Devices, Profile};
 use strims_dao::{Error, Singleton, Table};
 use strims_kv::Kv;
+use strims_proto::notification::v1::register_notification_frontend_service;
 use strims_proto::profile::v1::{
     DeleteDeviceRequest, DeleteDeviceResponse, GetDeviceRequest, GetDeviceResponse,
     GetProfileRequest, GetProfileResponse, ListDevicesRequest, ListDevicesResponse,
@@ -17,6 +18,7 @@ use strims_replication::ReplicationFrontend;
 use strims_rpc::{Router, Timer};
 
 use crate::manager::Session;
+use crate::notification::NotificationService;
 use crate::rpc_error;
 
 /// Serves `strims.profile.v1.ProfileFrontend` for a session.
@@ -94,8 +96,8 @@ impl<K: Kv, T: Timer> ProfileFrontendService for ProfileService<K, T> {
     }
 }
 
-/// Serves a session's profile and replication frontend services on
-/// `router`.
+/// Serves a session's profile, replication and notification frontend
+/// services on `router`.
 pub fn bind_frontends<K: Kv, T: Timer>(session: &Rc<Session<K>>, timer: &T, router: &Router) {
     let mut router = router.clone();
     register_profile_frontend_service(
@@ -105,6 +107,13 @@ pub fn bind_frontends<K: Kv, T: Timer>(session: &Rc<Session<K>>, timer: &T, rout
     register_replication_frontend_service(
         &mut router,
         Rc::new(ReplicationFrontend::new(
+            session.store.clone(),
+            timer.clone(),
+        )),
+    );
+    register_notification_frontend_service(
+        &mut router,
+        Rc::new(NotificationService::new(
             session.store.clone(),
             timer.clone(),
         )),

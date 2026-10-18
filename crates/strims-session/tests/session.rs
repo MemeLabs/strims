@@ -21,10 +21,12 @@ use std::task::{Context, Poll, Waker};
 
 use futures_core::Stream;
 use futures_sink::Sink;
+use futures_util::StreamExt;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_dao::auth::ProfileKey;
 use strims_dao::schema::network::Networks;
+use strims_dao::schema::notification::{dispatch, network_subject, new_notification};
 use strims_dao::seal::StorageKey;
 use strims_dao::{Error, Table};
 use strims_kv::MemoryKv;
@@ -33,6 +35,9 @@ use strims_proto::auth::v1::{
     register_auth_frontend_service, sign_in_request,
 };
 use strims_proto::network::v1::Network;
+use strims_proto::notification::v1::event::Body;
+use strims_proto::notification::v1::notification::Status;
+use strims_proto::notification::v1::{DismissRequest, NotificationFrontendClient, WatchRequest};
 use strims_proto::profile::v1::{GetProfileRequest, ListDevicesRequest, ProfileFrontendClient};
 use strims_proto::replication::v1::{CreatePairingTokenRequest, ReplicationFrontendClient};
 use strims_proto::service::CallError;
@@ -270,6 +275,53 @@ fn signing_up_binds_the_profiles_services() {
             "alice"
         );
         assert_eq!(m.factory().starts.get(), 1, "one session per profile");
+    });
+}
+
+/// The UI watches a session's notifications, and dismissing one deletes
+/// it.
+#[test]
+fn a_session_serves_its_notifications() {
+    run_local(async {
+        let timer = TokioTimer {
+            base: Instant::now(),
+        };
+        let kv = MemoryKv::new();
+        let m = manager(&kv, &timer, 1);
+        let client = frontend(&m, None);
+        let res = AuthFrontendClient::new(client.clone())
+            .sign_up(&sign_up("alice", true))
+            .await
+            .unwrap();
+        let Some(linked_profile::Credentials::Key(key)) = res.linked_profile.unwrap().credentials
+        else {
+            panic!("a connection without a session key gets the profile key");
+        };
+        let pk = ProfileKey::from_parts(key.profile_id, &key.profile_key).unwrap();
+        let (session, _) = m.get_or_create(&pk).await.unwrap();
+
+        let notifications = NotificationFrontendClient::new(client);
+        let mut events = notifications.watch(&WatchRequest {}).await.unwrap();
+        let n = new_notification(
+            1,
+            T0,
+            Status::Success,
+            "Certificate renewed",
+            "",
+            Some(network_subject(10)),
+        );
+        let mut tx = session.store.write(timer.now()).await.unwrap();
+        dispatch(&mut tx, n.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut next = async || {
+            let r = events.next().await.unwrap().unwrap();
+            r.event.unwrap().body.unwrap()
+        };
+        assert_eq!(next().await, Body::Notification(n));
+
+        let req = DismissRequest { ids: vec![1] };
+        notifications.dismiss(&req).await.unwrap();
+        assert_eq!(next().await, Body::Dismiss(1));
     });
 }
 
