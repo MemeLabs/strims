@@ -99,8 +99,8 @@ impl Pipe {
     }
 }
 
-pub struct Reader(Pipe);
-pub struct Writer(Pipe);
+pub struct Reader(pub Pipe);
+pub struct Writer(pub Pipe);
 
 impl Stream for Reader {
     type Item = Result<Vec<u8>, Closed>;

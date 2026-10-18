@@ -52,6 +52,12 @@
 //! it and its services have started. Services built on a network follow
 //! its joins.
 //!
+//! # Bootstrap
+//!
+//! [`bootstrap`] links the node to the store's bootstrap clients, the
+//! nodes an invitation points its holder to, and hands networks to peers
+//! that accept them.
+//!
 //! # Peers
 //!
 //! Any peer may be hostile. What a peer's requests and broker bytes can
@@ -60,6 +66,7 @@
 //! starts are paced, and PSI sessions run at most
 //! [`Config::max_sessions`] at a time.
 
+pub mod bootstrap;
 pub mod ca;
 mod control;
 mod events;
