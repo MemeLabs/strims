@@ -18,6 +18,7 @@ use prost::Message;
 use strims_dao::key::index_hash;
 use strims_dao::schema::chat::profile_peer_key;
 use strims_dao::schema::directory::listing_key;
+use strims_dao::schema::video::{format_stream_key, parse_stream_key};
 use strims_dao::seal::StorageKey;
 use strims_proto::network::v1::directory::Listing;
 use strims_proto::profile::v1 as profile;
@@ -119,4 +120,57 @@ fn chat_profile_peer_keys_match_go() {
         n += 1;
     }
     assert_eq!(n, 4);
+}
+
+#[test]
+fn stream_keys_match_go() {
+    let v = Vectors::load();
+    let mut n = 0;
+    for (name, f) in v.with_prefix("video_stream_key_") {
+        if name.starts_with("video_stream_key_parse_") {
+            continue;
+        }
+        let key = strims_crypto::key_from_seed(&key32(&f[0]));
+        let id = u64::from_be_bytes(f[1].as_slice().try_into().unwrap());
+        let formatted = std::str::from_utf8(&f[3]).unwrap();
+        assert_eq!(
+            format_stream_key(id, &f[2], &key).unwrap(),
+            formatted,
+            "{name}"
+        );
+        let (parsed, signature) = parse_stream_key(formatted).unwrap();
+        assert_eq!(parsed, id, "{name}");
+        assert!(
+            strims_crypto::verify(&key.public, &f[2], &signature),
+            "{name}"
+        );
+        n += 1;
+    }
+    assert_eq!(n, 6);
+}
+
+/// Each vector's key parses to the id and signature it lists, and the
+/// keys listed without them are rejected.
+#[test]
+fn stream_keys_parse_as_go_parses_them() {
+    let v = Vectors::load();
+    let (mut accepted, mut rejected) = (0, 0);
+    for (name, f) in v.with_prefix("video_stream_key_parse_") {
+        let key = std::str::from_utf8(&f[0]).unwrap();
+        let got = parse_stream_key(key);
+        if f[1].is_empty() {
+            assert!(got.is_err(), "{name}: {key} parsed as {got:?}");
+            rejected += 1;
+        } else {
+            let id = u64::from_be_bytes(f[1].as_slice().try_into().unwrap());
+            let (parsed, signature) = got.unwrap_or_else(|e| panic!("{name}: {key}: {e}"));
+            assert_eq!(
+                (parsed, signature.as_slice()),
+                (id, f[2].as_slice()),
+                "{name}"
+            );
+            accepted += 1;
+        }
+    }
+    assert_eq!((accepted, rejected), (3, 11));
 }

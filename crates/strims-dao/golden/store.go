@@ -33,6 +33,7 @@ import (
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/image"
+	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -238,6 +239,43 @@ func storeScenario(w *bufio.Writer) {
 	must0(dao.Notifications.Insert(rs, dismissed))
 	must0(dao.Notifications.Delete(rs, dismissed.Id))
 
+	// Video channels: the profile's own on the owned network, the
+	// invitee's share of it, a remote share on the joined network, and a
+	// deleted one. Both configs, the ingress one naming both networks.
+	insertChannel := func(c *videov1.VideoChannel, title string) {
+		c.DirectoryListingSnippet = &networkv1directory.ListingSnippet{Title: title, Description: title + " stream", Tags: []string{"video"}, Category: "games", ChannelName: title, IsMature: true}
+		must0(dao.VideoChannels.Insert(rs, c))
+	}
+	ownedKey := dao.CertificateNetworkKey(owned.Certificate)
+	localChannel := must(dao.NewVideoChannel(rs))
+	localChannel.Owner = &videov1.VideoChannel_Local_{Local: &videov1.VideoChannel_Local{AuthKey: profile.Key.Public, NetworkKey: ownedKey}}
+	insertChannel(localChannel, "local")
+	shareChannel := must(dao.NewVideoChannel(rs))
+	shareChannel.Owner = &videov1.VideoChannel_LocalShare_{LocalShare: &videov1.VideoChannel_LocalShare{Certificate: inviteeCert}}
+	insertChannel(shareChannel, "share")
+	remoteChannel := must(dao.NewVideoChannel(rs))
+	remoteChannel.Owner = &videov1.VideoChannel_RemoteShare_{RemoteShare: &videov1.VideoChannel_RemoteShare{
+		Id:          42,
+		NetworkKey:  joinedCert.Key,
+		ServiceKey:  must(dao.GenerateKey()).Public,
+		ServiceSalt: []byte("salt"),
+		ServerAddr:  "rtmp.example:1935",
+	}}
+	insertChannel(remoteChannel, "remote")
+	deletedChannel := must(dao.NewVideoChannel(rs))
+	deletedChannel.Owner = &videov1.VideoChannel_Local_{Local: &videov1.VideoChannel_Local{AuthKey: profile.Key.Public, NetworkKey: ownedKey}}
+	insertChannel(deletedChannel, "deleted")
+	must0(dao.VideoChannels.Delete(rs, deletedChannel.Id))
+	must0(dao.VideoIngressConfig.Set(rs, &videov1.VideoIngressConfig{
+		Enabled:            true,
+		ServerAddr:         "0.0.0.0:1935",
+		PublicServerAddr:   "rtmp.example:1935",
+		ServiceNetworkKeys: [][]byte{ownedKey, joinedCert.Key},
+	}))
+	must0(dao.HLSEgressConfig.Set(rs, &videov1.HLSEgressConfig{Enabled: true, PublicServerAddr: "https://hls.example"}))
+	out("video_stream_key", u64(localChannel.Id), []byte(dao.FormatVideoChannelStreamKey(localChannel.Id, localChannel.Token, profile.Key)))
+	out("video_stream_key", u64(shareChannel.Id), []byte(dao.FormatVideoChannelStreamKey(shareChannel.Id, shareChannel.Token, inviteeKey)))
+
 	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
 	must0(err)
 
@@ -325,6 +363,11 @@ func storeScenario(w *bufio.Writer) {
 	for _, m := range must(dao.Notifications.GetAll(rs)) {
 		record(5001, m.Id, m)
 	}
+	for _, m := range must(dao.VideoChannels.GetAll(rs)) {
+		record(7001, m.Id, m)
+	}
+	record(7003, 0, must(dao.VideoIngressConfig.Get(rs)))
+	record(7004, 0, must(dao.HLSEgressConfig.Get(rs)))
 
 	// A peer that has seen the first three of this replica's logs.
 	remote := &daov1.VersionVector{Value: map[uint64]uint64{rs.ReplicaID(): 3}}
@@ -410,6 +453,17 @@ func verify(path string) {
 			got := indexIDs(rs, ns, v[1])
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				fail("index %d %x: got %v, want %v", ns, v[1], got, want)
+			}
+		case "stream_key":
+			// The channel a stream key names, or none.
+			c, err := dao.GetVideoChannelByStreamKey(rs, string(v[0]))
+			switch {
+			case len(v[1]) == 0 && err == nil:
+				fail("stream key %s: want none, got channel %d", v[0], c.Id)
+			case len(v[1]) != 0 && err != nil:
+				fail("stream key %s: %v", v[0], err)
+			case len(v[1]) != 0 && c.Id != binary.BigEndian.Uint64(v[1]):
+				fail("stream key %s: got channel %d, want %d", v[0], c.Id, binary.BigEndian.Uint64(v[1]))
 			}
 		case "apply":
 			// Logs from the store's replica, applied to a new replica of
@@ -509,16 +563,22 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 		return must(dao.DirectoryListingRecords.Get(s, id))
 	case 9004:
 		return must(dao.DirectoryUserRecords.Get(s, id))
+	case 7003:
+		return must(dao.VideoIngressConfig.Get(s))
+	case 7004:
+		return must(dao.HLSEgressConfig.Get(s))
 	}
 	return must(deletableRecord(s, ns, id))
 }
 
 // deletableRecord reads record id of a table whose deletions the checks
-// cover: the chat server tables and notifications.
+// cover: the chat server tables, notifications and video channels.
 func deletableRecord(s kv.Store, ns, id uint64) (proto.Message, error) {
 	switch ns {
 	case 5001:
 		return dao.Notifications.Get(s, id)
+	case 7001:
+		return dao.VideoChannels.Get(s, id)
 	case 6001:
 		return dao.ChatServers.Get(s, id)
 	case 6024:
@@ -541,6 +601,13 @@ func ids[T interface{ GetId() uint64 }](ms []T, err error) []uint64 {
 	for _, m := range ms {
 		out = append(out, m.GetId())
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func sortedIDs(ids []uint64, err error) []uint64 {
+	must0(err)
+	out := append([]uint64{}, ids...)
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
 }
@@ -609,6 +676,8 @@ func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
 		return ids(dao.ChatProfilesByServer.GetAllByRefID(s, binary.LittleEndian.Uint64(key)))
 	case 6011:
 		return one(dao.ChatProfilesByPeerKey.Get(s, key))
+	case 7002:
+		return sortedIDs(dao.ScanSecondaryIndex(s, 7002, key))
 	}
 	panic(fmt.Sprintf("unknown index %d", ns))
 }

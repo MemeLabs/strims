@@ -12,8 +12,9 @@
 //! replicate. Inserting a network with a server config on this device
 //! creates the CA's records for its owner and makes the owner the admin of
 //! the network's directory ([`super::directory`]). Deleting a network
-//! deletes its CA and directory records, the chat servers on it
-//! ([`super::chat`]) and the notifications about it
+//! deletes its CA and directory records, the chat servers and video
+//! channels on it ([`super::chat`], [`super::video`]), its key in the
+//! video ingress config, and the notifications about it
 //! ([`super::notification`]).
 
 use futures_util::future::LocalBoxFuture;
@@ -34,6 +35,7 @@ use crate::key::Namespace;
 use crate::schema::chat::ChatServers;
 use crate::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, new_user_record};
 use crate::schema::notification::{delete_for_subject, network_subject};
+use crate::schema::video;
 use crate::store::WriteTx;
 use crate::table::{
     ApplyConflict, Index, Replication, Singleton, Table, UniqueConflict, ref_key,
@@ -143,7 +145,8 @@ impl Table for Networks {
     }
 
     /// Deleting a network deletes its CA's records, its directory records,
-    /// the chat servers on it and the notifications about it.
+    /// the chat servers and video channels on it, its key in the video
+    /// ingress config, and the notifications about it.
     fn on_delete<'a, K: Kv>(
         tx: &'a mut WriteTx<K>,
         p: &'a Network,
@@ -158,6 +161,7 @@ impl Table for Networks {
                         ChatServers::delete(tx, server.id).await?;
                     }
                 }
+                video::delete_for_network(tx, &key).await?;
             }
             let network = ref_key(p.id);
             for id in CertificateLogs::index_ids(tx, &CertificateLogs::BY_NETWORK, &network).await?

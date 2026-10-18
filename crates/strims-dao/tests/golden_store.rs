@@ -4,7 +4,8 @@
 //! A profile store the Go dao wrote (`golden/store.hex`, from `go run
 //! -tags golden ./crates/strims-dao/golden`): its sign-in and session
 //! records open, its records read back, every key is the one this crate
-//! derives, and the compressed delta matches.
+//! derives, the compressed delta matches, and its stream keys name their
+//! channels.
 
 // Tests panic on failure by design.
 #![allow(
@@ -37,6 +38,9 @@ use strims_dao::schema::network::{
 use strims_dao::schema::notification::Notifications;
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
+use strims_dao::schema::video::{
+    HlsConfig, IngressConfig, VideoChannels, channel_by_stream_key, channel_network_key, owner_key,
+};
 use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, ReadTx, Singleton, Table, lease, ref_key};
 use strims_kv::{Dump, MemoryKv};
@@ -61,6 +65,8 @@ struct Golden {
     records: Vec<(i64, u64, Vec<u8>)>,
     delta_remote: VersionVector,
     delta: Vec<EventLog>,
+    /// Stream keys the Go dao formatted, with the channel each names.
+    stream_keys: Vec<(u64, String)>,
 }
 
 fn u64_of(b: &[u8]) -> u64 {
@@ -85,6 +91,7 @@ fn load() -> Golden {
         records: vec![],
         delta_remote: VersionVector::default(),
         delta: vec![],
+        stream_keys: vec![],
     };
     for line in STORE.lines().filter(|l| !l.trim().is_empty()) {
         let mut parts = line.split(' ');
@@ -123,6 +130,9 @@ fn load() -> Golden {
                 .push((u64_of(&v[0]) as i64, u64_of(&v[1]), v[2].clone())),
             "delta_remote" => g.delta_remote = VersionVector::decode(v[0].as_slice()).unwrap(),
             "delta" => g.delta.push(EventLog::decode(v[0].as_slice()).unwrap()),
+            "video_stream_key" => g
+                .stream_keys
+                .push((u64_of(&v[0]), String::from_utf8(v[1].clone()).unwrap())),
             other => panic!("unknown line {other}"),
         }
     }
@@ -176,6 +186,9 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         ChatTags::NS => re::<<ChatTags as Table>::Record>(bytes),
         ChatProfiles::NS => re::<<ChatProfiles as Table>::Record>(bytes),
         Notifications::NS => re::<<Notifications as Table>::Record>(bytes),
+        VideoChannels::NS => re::<<VideoChannels as Table>::Record>(bytes),
+        IngressConfig::NS => re::<<IngressConfig as Singleton>::Record>(bytes),
+        HlsConfig::NS => re::<<HlsConfig as Singleton>::Record>(bytes),
         other => panic!("no record type for {other}"),
     }
 }
@@ -216,6 +229,9 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         ChatTags::NS => t::<ChatTags>(tx, id),
         ChatProfiles::NS => t::<ChatProfiles>(tx, id),
         Notifications::NS => t::<Notifications>(tx, id),
+        VideoChannels::NS => t::<VideoChannels>(tx, id),
+        IngressConfig::NS => s::<IngressConfig>(tx),
+        HlsConfig::NS => s::<HlsConfig>(tx),
         other => panic!("no record type for {other}"),
     }
 }
@@ -303,6 +319,7 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<ChatTags>(&mut tx, &salt, &mut derived);
     keys_of::<ChatProfiles>(&mut tx, &salt, &mut derived);
     keys_of::<Notifications>(&mut tx, &salt, &mut derived);
+    keys_of::<VideoChannels>(&mut tx, &salt, &mut derived);
     for ns in [
         StoreVersions::NS,
         Profile::NS,
@@ -310,6 +327,8 @@ fn every_key_is_the_one_this_crate_derives() {
         ChatUiConfig::NS,
         NetworkUiConfig::NS,
         BootstrapConfig::NS,
+        IngressConfig::NS,
+        HlsConfig::NS,
     ] {
         derived.insert(ns.key());
     }
@@ -321,6 +340,7 @@ fn every_key_is_the_one_this_crate_derives() {
     known.extend(4001..=4018);
     known.insert(5001);
     known.extend(6001..=6025);
+    known.extend(7001..=7004);
     known.extend(9001..=9006);
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
@@ -349,7 +369,7 @@ fn every_key_is_the_one_this_crate_derives() {
         if index_ns.contains(&ns)
             || [6003, 6005, 6007, 6010, 6011].contains(&ns)
             || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
-            || [9002, 9003, 9005, 9006].contains(&ns)
+            || [7002, 9002, 9003, 9005, 9006].contains(&ns)
         {
             let entry = SecondaryIndexKey::decode(sk.open(v).unwrap().as_slice()).unwrap();
             assert_eq!(
@@ -644,4 +664,62 @@ fn chat_records_read_back_by_index() {
     let muted = profiles.iter().find(|p| p.id != owner.id).unwrap();
     assert_eq!(muted.mute_deadline, 160);
     assert_eq!(muted.mutes[0].moderator_peer_key, owner_key);
+}
+
+/// The video channels, one of each owner kind, each found by its owner
+/// key; the deleted one left nothing; both configs; and the stream keys
+/// Go formatted name their channels.
+#[test]
+fn video_records_read_back() {
+    use strims_proto::video::v1::video_channel::Owner;
+
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let networks = block(Networks::get_all(&mut tx)).unwrap();
+    let owned = networks.iter().find(|n| n.server_config.is_some()).unwrap();
+    let joined = networks.iter().find(|n| n.server_config.is_none()).unwrap();
+    let (owned_key, joined_key) = (network_key(owned), network_key(joined));
+
+    let channels = block(VideoChannels::get_all(&mut tx)).unwrap();
+    assert_eq!(channels.len(), 3);
+    for c in &channels {
+        let found = block(VideoChannels::index_get(
+            &mut tx,
+            &VideoChannels::BY_OWNER,
+            &owner_key(c),
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.id, c.id);
+        assert_eq!(c.token.len(), 32);
+        assert_eq!(c.key.as_ref().unwrap().public.len(), 32);
+        let title = &c.directory_listing_snippet.as_ref().unwrap().title;
+        let expected = match c.owner.as_ref().unwrap() {
+            Owner::Local(_) => ("local", &owned_key),
+            Owner::LocalShare(_) => ("share", &owned_key),
+            Owner::RemoteShare(r) => {
+                assert_eq!(r.server_addr, "rtmp.example:1935");
+                ("remote", &joined_key)
+            }
+        };
+        assert_eq!(
+            (title.as_str(), channel_network_key(c)),
+            (expected.0, Some(expected.1.as_slice()))
+        );
+    }
+
+    assert_eq!(g.stream_keys.len(), 2);
+    for (id, key) in &g.stream_keys {
+        let found = block(channel_by_stream_key(&mut tx, key)).unwrap().unwrap();
+        assert_eq!(found.id, *id);
+    }
+
+    let ingress = block(IngressConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(ingress.enabled);
+    assert_eq!(ingress.server_addr, "0.0.0.0:1935");
+    assert_eq!(ingress.service_network_keys, [owned_key, joined_key]);
+    let hls = block(HlsConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(hls.enabled);
+    assert_eq!(hls.public_server_addr, "https://hls.example");
 }

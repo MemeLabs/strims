@@ -4,8 +4,10 @@
 //! A store this crate writes, checked by the Go dao (`go run -tags golden
 //! ./crates/strims-dao/golden -verify <file>`): sign-in and session
 //! records, records and index lookups through the Go API, deleted records
-//! (a deleted network's notification among them) absent, a pairing token import, and the store's replication logs
-//! applied to a Go replica. Skipped when `go` isn't on PATH.
+//! (a deleted network's notification and video channels among them)
+//! absent, stream keys this crate formats, a pairing token import, and
+//! the store's replication logs applied to a Go replica. Skipped when `go`
+//! isn't on PATH.
 
 #![allow(
     clippy::unwrap_used,
@@ -45,6 +47,9 @@ use strims_dao::schema::notification::{
 };
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::system::{Checkpoints, EventLogs};
+use strims_dao::schema::video::{
+    HlsConfig, IngressConfig, VideoChannels, format_stream_key, new_channel, owner_key,
+};
 use strims_dao::seal::StorageKey;
 use strims_dao::{
     ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, WriteTx, lease, ref_key,
@@ -60,13 +65,15 @@ use strims_proto::network::v1::bootstrap::{
     self, BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client,
 };
 use strims_proto::network::v1::directory::{
-    Listing, ListingModeration, UserModeration, listing as directory_listing,
+    Listing, ListingModeration, ListingSnippet, UserModeration, listing as directory_listing,
 };
 use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConfigRecord};
 use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::EventLog;
-use strims_proto::types::{Image, ImageType, Key, KeyUsage};
+use strims_proto::types::{Certificate, Image, ImageType, Key, KeyUsage};
+use strims_proto::video::v1::video_channel::{self, Owner};
+use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -268,6 +275,44 @@ async fn insert_chat_server(
     }
 }
 
+/// Video channels on the network with key `network_key`, one of each
+/// owner kind: the profile's own, `share`'s, and a remote share.
+async fn insert_video_channels(
+    tx: &mut WriteTx<MemoryKv>,
+    profile_key: &[u8],
+    network_key: &[u8],
+    share: Certificate,
+) -> [VideoChannel; 3] {
+    let owners = [
+        Owner::Local(video_channel::Local {
+            auth_key: profile_key.to_vec(),
+            network_key: network_key.to_vec(),
+        }),
+        Owner::LocalShare(video_channel::LocalShare {
+            certificate: Some(share),
+        }),
+        Owner::RemoteShare(video_channel::RemoteShare {
+            id: 42,
+            network_key: network_key.to_vec(),
+            service_key: b"service".to_vec(),
+            service_salt: b"salt".to_vec(),
+            server_addr: "rtmp.example:1935".into(),
+        }),
+    ];
+    let mut out = Vec::new();
+    for (owner, title) in owners.into_iter().zip(["local", "share", "remote"]) {
+        let snippet = ListingSnippet {
+            title: title.into(),
+            tags: vec!["video".into()],
+            is_mature: true,
+            ..Default::default()
+        };
+        let c = new_channel(tx, owner, snippet).await.unwrap();
+        out.push(VideoChannels::insert(tx, c).await.unwrap());
+    }
+    out.try_into().unwrap()
+}
+
 #[test]
 fn go_reads_a_store_this_crate_writes() {
     if !go_available() {
@@ -340,6 +385,33 @@ fn go_reads_a_store_this_crate_writes() {
             name: "lobby".into(),
         })),
     };
+    let share_cert = |key: &Key, rng: &mut strims_base::rng::DetRng| {
+        let usage = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
+        let csr = strims_crypto::new_certificate_request(&invitee, usage, "invitee").unwrap();
+        strims_crypto::sign_certificate_request_with_network(
+            &csr,
+            key,
+            "net",
+            strims_crypto::DEFAULT_CERT_TTL,
+            now,
+            rng,
+        )
+        .unwrap()
+    };
+    let kept_share = share_cert(&network_key, &mut rng);
+    let doomed_share = share_cert(&doomed_key, &mut rng);
+    let mut kept_channels: Vec<VideoChannel> = vec![];
+    let mut doomed_channels: Vec<VideoChannel> = vec![];
+    let ingress = VideoIngressConfig {
+        enabled: true,
+        server_addr: "0.0.0.0:1935".into(),
+        public_server_addr: "rtmp.example:1935".into(),
+        service_network_keys: vec![network_key.public.clone(), doomed_key.public.clone()],
+    };
+    let hls = HlsEgressConfig {
+        enabled: true,
+        public_server_addr: "https://hls.example".into(),
+    };
     let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
     let mut doomed_notification = 0;
     let mut chat_servers = [ChatServerIds::default(); 3];
@@ -379,7 +451,25 @@ fn go_reads_a_store_this_crate_writes() {
             Some(network_subject(doomed_id)),
         );
         dispatch(&mut tx, n).await.unwrap();
+        doomed_channels = insert_video_channels(
+            &mut tx,
+            &profile_key.public,
+            &doomed_key.public,
+            doomed_share,
+        )
+        .await
+        .to_vec();
+        IngressConfig::set(&mut tx, ingress.clone()).await.unwrap();
         Networks::delete(&mut tx, doomed_id).await.unwrap();
+        kept_channels = insert_video_channels(
+            &mut tx,
+            &profile_key.public,
+            &network_key.public,
+            kept_share,
+        )
+        .await
+        .to_vec();
+        HlsConfig::set(&mut tx, hls.clone()).await.unwrap();
         let moderated = ListingModeration {
             is_banned: Some(true),
             category: Some("games".into()),
@@ -680,6 +770,30 @@ fn go_reads_a_store_this_crate_writes() {
             &bootstrap_config.encode_to_vec(),
         ],
     );
+    let ingress_config = block(IngressConfig::get(&mut tx)).unwrap().unwrap();
+    assert_eq!(
+        ingress_config.service_network_keys,
+        std::slice::from_ref(&network_key.public),
+        "the deleted network's key went"
+    );
+    out.put(
+        "record",
+        &[
+            &7003u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &ingress_config.encode_to_vec(),
+        ],
+    );
+    let hls_config = block(HlsConfig::get(&mut tx)).unwrap().unwrap();
+    assert_eq!(hls_config, hls);
+    out.put(
+        "record",
+        &[
+            &7004u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &hls_config.encode_to_vec(),
+        ],
+    );
     record_lines::<CertificateLogs>(&mut tx, &mut out);
     record_lines::<NetworkPeers>(&mut tx, &mut out);
     record_lines::<AliasReservations>(&mut tx, &mut out);
@@ -702,6 +816,7 @@ fn go_reads_a_store_this_crate_writes() {
     record_lines::<ChatTags>(&mut tx, &mut out);
     record_lines::<ChatProfiles>(&mut tx, &mut out);
     record_lines::<Notifications>(&mut tx, &mut out);
+    record_lines::<VideoChannels>(&mut tx, &mut out);
 
     index_line::<Networks>(&mut tx, &Networks::BY_KEY, &network_key.public, &mut out);
     let scoped = |b: &[u8]| network_scoped_key(owned_id, b);
@@ -865,6 +980,37 @@ fn go_reads_a_store_this_crate_writes() {
         ],
     );
     assert_eq!(block(Notifications::get_all(&mut tx)).unwrap().len(), 1);
+    let channels = block(VideoChannels::get_all(&mut tx)).unwrap();
+    assert_eq!(channels, kept_channels);
+    for c in kept_channels.iter().chain(&doomed_channels) {
+        index_line::<VideoChannels>(&mut tx, &VideoChannels::BY_OWNER, &owner_key(c), &mut out);
+    }
+    for c in &doomed_channels {
+        out.put(
+            "absent",
+            &[
+                &(VideoChannels::NS.0 as u64).to_be_bytes(),
+                &c.id.to_be_bytes(),
+            ],
+        );
+    }
+    // Stream keys of the kept local and shared channels name them; a
+    // deleted channel's, another signer's and a remote share's don't.
+    let stream_key =
+        |c: &VideoChannel, signer: &Key| format_stream_key(c.id, &c.token, signer).unwrap();
+    let (local, share, remote) = (&kept_channels[0], &kept_channels[1], &kept_channels[2]);
+    for (key, named) in [
+        (stream_key(local, &profile_key), Some(local.id)),
+        (stream_key(share, &invitee), Some(share.id)),
+        (stream_key(&doomed_channels[0], &profile_key), None),
+        (stream_key(local, &invitee), None),
+        (stream_key(remote, remote.key.as_ref().unwrap()), None),
+    ] {
+        let id = named
+            .map(|id| id.to_be_bytes().to_vec())
+            .unwrap_or_default();
+        out.put("stream_key", &[key.as_bytes(), &id]);
+    }
     let servers = block(ChatServers::get_all(&mut tx)).unwrap();
     assert_eq!(servers.len(), 1);
     assert_eq!(servers[0].id, chat_servers[0].server);

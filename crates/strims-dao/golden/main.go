@@ -21,7 +21,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/ed25519"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -31,6 +34,7 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	networkv1directory "github.com/MemeLabs/strims/pkg/apis/network/v1/directory"
 	profilev1 "github.com/MemeLabs/strims/pkg/apis/profile/v1"
+	"github.com/MemeLabs/strims/pkg/apis/type/key"
 
 	_ "unsafe" // go:linkname
 )
@@ -189,6 +193,69 @@ func chatProfilePeerKeys() {
 	}
 }
 
+// videoStreamKeys writes "video_stream_key_<i> <seed> <id> <token>
+// <key>": the stream key of channel id with token, signed with the
+// ed25519 key from seed; and "video_stream_key_parse_<i> <key> <id>
+// <signature>": what the dao parses from key, with both values empty
+// when it fails or panics.
+func videoStreamKeys() {
+	for i, c := range []struct {
+		seed byte
+		id   uint64
+	}{
+		{0, 0},
+		{0x20, 1},
+		{0x40, 127},
+		{0x60, 128},
+		{0x80, 0x0102030405060708},
+		{0xa0, ^uint64(0)},
+	} {
+		private := ed25519.NewKeyFromSeed(seq(c.seed, ed25519.SeedSize))
+		k := &key.Key{Type: key.KeyType_KEY_TYPE_ED25519, Private: private, Public: private.Public().(ed25519.PublicKey)}
+		token := seq(c.seed+1, 32)
+		put(fmt.Sprintf("video_stream_key_%d", i), seq(c.seed, ed25519.SeedSize), u64(c.id), token, []byte(dao.FormatVideoChannelStreamKey(c.id, token, k)))
+	}
+
+	sig := seq(0x40, ed25519.SignatureSize)
+	raw := func(parts ...[]byte) string { return base64.RawURLEncoding.EncodeToString(bytes.Join(parts, nil)) }
+	maxed := bytes.Repeat([]byte{0xff}, 9)
+	for i, k := range []string{
+		raw([]byte{0x05}, sig),
+		raw([]byte{0x85, 0x00}, sig),
+		raw(maxed, []byte{0x01}, sig),
+		raw(maxed, []byte{0x02}, sig),
+		raw(bytes.Repeat([]byte{0x80}, 10), []byte{0x01}, sig),
+		raw(bytes.Repeat([]byte{0x80}, 10), []byte{0x01}, sig[:63]),
+		raw(bytes.Repeat([]byte{0x80}, 5)),
+		raw([]byte{0x05}, sig[:63]),
+		raw([]byte{0x05}, sig, []byte{0x00}),
+		raw([]byte{0x05}, sig) + "=",
+		strings.NewReplacer("-", "+", "_", "/").Replace(raw([]byte{0x05}, bytes.Repeat([]byte{0xff}, 64))),
+		"!!!!",
+		"A",
+		"",
+	} {
+		id, signature, ok := parseStreamKey(k)
+		if !ok {
+			put(fmt.Sprintf("video_stream_key_parse_%d", i), []byte(k), nil, nil)
+			continue
+		}
+		put(fmt.Sprintf("video_stream_key_parse_%d", i), []byte(k), u64(id), signature)
+	}
+}
+
+// parseStreamKey is the dao's parse of stream key k; ok is false when
+// the parse fails or panics.
+func parseStreamKey(k string) (id uint64, signature []byte, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	id, signature, err := dao.ParseVideoChannelStreamKey(k)
+	return id, signature, err == nil
+}
+
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "-verify" {
 		verify(os.Args[2])
@@ -206,6 +273,7 @@ func main() {
 	indexHash()
 	directoryListingKeys()
 	chatProfilePeerKeys()
+	videoStreamKeys()
 
 	sf := must(os.Create(filepath.Join("crates", "strims-dao", "golden", "store.hex")))
 	defer sf.Close()

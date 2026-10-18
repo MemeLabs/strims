@@ -13,3 +13,4 @@ pub mod network;
 pub mod notification;
 pub mod profile;
 pub mod system;
+pub mod video;

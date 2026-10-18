@@ -27,6 +27,7 @@ use strims_proto::network::v1 as network;
 use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::{Checkpoint, EventLog};
+use strims_proto::video::v1 as video;
 
 /// The events a subscriber can hold before it lags.
 pub const SUBSCRIBER_CAPACITY: usize = 256;
@@ -71,6 +72,12 @@ pub enum Record {
     ChatTag(chat::Tag),
     /// A notification for the user.
     Notification(Notification),
+    /// A video channel.
+    VideoChannel(video::VideoChannel),
+    /// This device's video ingress config.
+    VideoIngressConfig(video::VideoIngressConfig),
+    /// This device's HLS egress config.
+    HlsEgressConfig(video::HlsEgressConfig),
 }
 
 /// Something that happened in the store.

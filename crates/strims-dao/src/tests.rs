@@ -13,8 +13,10 @@
 use std::future::Future;
 use std::rc::Rc;
 
+use data_encoding::BASE64URL_NOPAD;
 use futures_util::future::LocalBoxFuture;
 use futures_util::{FutureExt, StreamExt};
+use proptest::prelude::*;
 use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
@@ -25,14 +27,16 @@ use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
 use strims_proto::network::v1::bootstrap;
-use strims_proto::network::v1::directory::{Listing, UserModeration, listing};
+use strims_proto::network::v1::directory::{Listing, ListingSnippet, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
 use strims_proto::notification::v1::Notification;
 use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
 use strims_proto::types::certificate::ParentOneof;
-use strims_proto::types::{Certificate, KeyUsage};
+use strims_proto::types::{Certificate, Key, KeyUsage};
+use strims_proto::video::v1::video_channel::{self, Owner};
+use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
 
 use crate::events::{Record, Recv, StoreEvent, Subscription};
 use crate::key::{Namespace, profile_table};
@@ -52,6 +56,11 @@ use crate::schema::notification::{
 };
 use crate::schema::profile::{Devices, Profile, ProfileIds};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
+use crate::schema::video::{
+    DEFAULT_INGRESS_SERVER_ADDR, HlsConfig, IngressConfig, StreamKeyError, TOKEN_SIZE,
+    VideoChannels, channel_by_stream_key, delete_for_network, format_stream_key, new_channel,
+    owner_key, parse_stream_key,
+};
 use crate::seal::StorageKey;
 use crate::store::{MAX_LOG_EVENTS, ProfileStore, ReplicatedStore, STORE_VERSION, WriteTx};
 use crate::table::{Index, Replication, Singleton, Table, UniqueConflict, ref_key};
@@ -1566,4 +1575,478 @@ fn deleting_a_network_deletes_its_notifications() {
     tx.set_applying(77);
     block(Networks::delete(&mut tx, 20)).unwrap();
     assert!(notification_ids(&mut tx).is_empty());
+}
+
+/// A certificate for `key` issued by the CA of `network`.
+fn member_certificate(network: &Network, key: &Key, seed: u64) -> Certificate {
+    let ca = network
+        .server_config
+        .as_ref()
+        .unwrap()
+        .key
+        .as_ref()
+        .unwrap();
+    let usage = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
+    let csr = new_certificate_request(key, usage, "member").unwrap();
+    sign_certificate_request_with_network(&csr, ca, "net", DEFAULT_CERT_TTL, T0, &mut det_rng(seed))
+        .unwrap()
+}
+
+fn snippet(title: &str) -> ListingSnippet {
+    ListingSnippet {
+        title: title.into(),
+        ..Default::default()
+    }
+}
+
+fn local_owner(auth_key: &[u8], network_key: &[u8]) -> Owner {
+    Owner::Local(video_channel::Local {
+        auth_key: auth_key.to_vec(),
+        network_key: network_key.to_vec(),
+    })
+}
+
+fn share_owner(certificate: Certificate) -> Owner {
+    Owner::LocalShare(video_channel::LocalShare {
+        certificate: Some(certificate),
+    })
+}
+
+fn remote_owner(network_key: &[u8], service_key: &[u8]) -> Owner {
+    Owner::RemoteShare(video_channel::RemoteShare {
+        id: 9,
+        network_key: network_key.to_vec(),
+        service_key: service_key.to_vec(),
+        ..Default::default()
+    })
+}
+
+fn video_channel(id: u64, owner: Owner) -> VideoChannel {
+    VideoChannel {
+        id,
+        owner: Some(owner),
+        ..Default::default()
+    }
+}
+
+fn video_channel_ids(tx: &mut WriteTx<MemoryKv>) -> Vec<u64> {
+    let all = block(VideoChannels::get_all(tx)).unwrap();
+    all.iter().map(|c| c.id).collect()
+}
+
+/// The video channel and config events among `events`.
+fn video_events(events: Vec<StoreEvent>) -> Vec<StoreEvent> {
+    events
+        .into_iter()
+        .filter(|e| {
+            matches!(
+                e,
+                StoreEvent::Changed(
+                    Record::VideoChannel(_)
+                        | Record::VideoIngressConfig(_)
+                        | Record::HlsEgressConfig(_)
+                ) | StoreEvent::Deleted(Record::VideoChannel(_))
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn video_channels_stay_on_the_device_and_are_observable() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let profile_key = generate_key(&mut det_rng(3));
+    let owner = || local_owner(&profile_key.public, b"net");
+    let (c, renamed) = block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let c = new_channel(&mut tx, owner(), snippet("first"))
+            .await
+            .unwrap();
+        let other = new_channel(&mut tx, owner(), snippet("second"))
+            .await
+            .unwrap();
+        assert_eq!(c.token.len(), TOKEN_SIZE);
+        assert_eq!(c.key.as_ref().unwrap().public.len(), 32);
+        assert_ne!(c.id, other.id);
+        assert_ne!(c.token, other.token);
+        assert_ne!(c.key, other.key);
+        assert_eq!(c.owner, Some(owner()));
+        assert_eq!(c.directory_listing_snippet, Some(snippet("first")));
+        VideoChannels::insert(&mut tx, c.clone()).await.unwrap();
+        let renamed = VideoChannel {
+            directory_listing_snippet: Some(snippet("renamed")),
+            ..c.clone()
+        };
+        VideoChannels::update(&mut tx, renamed.clone())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        (c, renamed)
+    });
+
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        assert_eq!(
+            VideoChannels::get(&mut tx, c.id).await.unwrap(),
+            Some(renamed.clone())
+        );
+        let by_owner = VideoChannels::index_get(&mut tx, &VideoChannels::BY_OWNER, &owner_key(&c))
+            .await
+            .unwrap();
+        assert_eq!(by_owner, Some(renamed.clone()));
+        assert!(VideoChannels::delete(&mut tx, c.id).await.unwrap());
+        assert!(
+            VideoChannels::index_ids(&mut tx, &VideoChannels::BY_OWNER, &owner_key(&c))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert!(video_channel_ids(&mut tx).is_empty());
+    block(tx.commit()).unwrap();
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Changed(Record::VideoChannel(c)),
+            StoreEvent::Changed(Record::VideoChannel(renamed.clone())),
+            StoreEvent::Deleted(Record::VideoChannel(renamed)),
+        ]
+    );
+}
+
+#[test]
+fn a_certificate_key_owns_one_shared_channel() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let n = owned_network(1, 1);
+    let (a, b) = (generate_key(&mut det_rng(3)), generate_key(&mut det_rng(4)));
+    let mut tx = block(store.write(T0)).unwrap();
+    block(async {
+        let shared = video_channel(10, share_owner(member_certificate(&n, &a, 5)));
+        VideoChannels::insert(&mut tx, shared.clone())
+            .await
+            .unwrap();
+        VideoChannels::update(
+            &mut tx,
+            VideoChannel {
+                token: b"new token".to_vec(),
+                ..shared
+            },
+        )
+        .await
+        .unwrap();
+        // a renewed certificate for the same key names the same owner
+        let renewed = video_channel(11, share_owner(member_certificate(&n, &a, 6)));
+        assert!(matches!(
+            VideoChannels::insert(&mut tx, renewed).await,
+            Err(Error::UniqueViolation(Namespace(7002)))
+        ));
+        let other = video_channel(12, share_owner(member_certificate(&n, &b, 7)));
+        VideoChannels::insert(&mut tx, other).await.unwrap();
+
+        // local channels are keyed by id, remote shares by network and
+        // service
+        for id in [13, 14] {
+            let local = video_channel(id, local_owner(&a.public, b"net"));
+            VideoChannels::insert(&mut tx, local).await.unwrap();
+        }
+        let remote = video_channel(15, remote_owner(b"net", b"svc"));
+        VideoChannels::insert(&mut tx, remote).await.unwrap();
+        let again = video_channel(16, remote_owner(b"net", b"svc"));
+        assert!(matches!(
+            VideoChannels::insert(&mut tx, again).await,
+            Err(Error::UniqueViolation(Namespace(7002)))
+        ));
+        let elsewhere = video_channel(17, remote_owner(b"net", b"svc2"));
+        VideoChannels::insert(&mut tx, elsewhere).await.unwrap();
+    });
+    assert_eq!(video_channel_ids(&mut tx), [10, 12, 13, 14, 15, 17]);
+}
+
+#[test]
+fn stream_keys_round_trip() {
+    let key = generate_key(&mut det_rng(3));
+    for id in [0, 1, 127, 128, 300, 0x0102_0304_0506_0708, u64::MAX] {
+        let token = [id as u8; TOKEN_SIZE];
+        let s = format_stream_key(id, &token, &key).unwrap();
+        assert!(
+            s.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
+            "{s}"
+        );
+        let (got, signature) = parse_stream_key(&s).unwrap();
+        assert_eq!(got, id);
+        assert!(strims_crypto::verify(&key.public, &token, &signature));
+    }
+    assert!(matches!(
+        format_stream_key(1, b"token", &Key::default()),
+        Err(Error::Invalid(_))
+    ));
+}
+
+#[test]
+fn malformed_stream_keys_are_rejected() {
+    let sig = [7u8; 64];
+    let enc = |parts: &[&[u8]]| BASE64URL_NOPAD.encode(&parts.concat());
+    // an id encoded longer than needed, and the largest id
+    assert_eq!(parse_stream_key(&enc(&[&[0x85, 0x00], &sig])), Ok((5, sig)));
+    assert_eq!(
+        parse_stream_key(&enc(&[&[0xff; 9], &[0x01], &sig])),
+        Ok((u64::MAX, sig))
+    );
+    let cases = [
+        // ids past 64 bits, or truncated
+        (enc(&[&[0xff; 9], &[0x02], &sig]), StreamKeyError::Id),
+        (enc(&[&[0x80; 10], &[0x01], &sig[..63]]), StreamKeyError::Id),
+        (enc(&[&[0x80; 5]]), StreamKeyError::Id),
+        (String::new(), StreamKeyError::Id),
+        // signatures of the wrong length, and overlong keys
+        (enc(&[&[5], &sig[..63]]), StreamKeyError::Length),
+        (enc(&[&[5], &sig, &[0]]), StreamKeyError::Length),
+        (enc(&[&[0x80; 10], &[0x01], &sig]), StreamKeyError::Length),
+        ("A".repeat(1000), StreamKeyError::Length),
+        // not unpadded base64url
+        (format!("{}=", enc(&[&[5], &sig])), StreamKeyError::Encoding),
+        (
+            enc(&[&[5], &[0xff; 64]]).replace('_', "/"),
+            StreamKeyError::Encoding,
+        ),
+        ("!!!!".into(), StreamKeyError::Encoding),
+        ("A".into(), StreamKeyError::Encoding),
+    ];
+    for (key, err) in cases {
+        assert_eq!(parse_stream_key(&key), Err(err), "{key}");
+    }
+}
+
+proptest! {
+    #[test]
+    fn stream_key_parsing_never_panics(s in "\\PC{0,120}") {
+        let _ = parse_stream_key(&s);
+    }
+
+    #[test]
+    fn decoded_stream_keys_are_an_id_then_a_signature(
+        bytes in proptest::collection::vec(any::<u8>(), 0..80)
+    ) {
+        if let Ok((_, signature)) = parse_stream_key(&BASE64URL_NOPAD.encode(&bytes)) {
+            let id_len = bytes.len() - signature.len();
+            prop_assert!((1..=10).contains(&id_len));
+            prop_assert_eq!(&bytes[id_len..], &signature[..]);
+            prop_assert!(bytes[..id_len - 1].iter().all(|&b| b >= 0x80));
+            prop_assert!(bytes[id_len - 1] < 0x80);
+        }
+    }
+}
+
+fn stream_key_channel(tx: &mut WriteTx<MemoryKv>, key: &str) -> Option<u64> {
+    block(channel_by_stream_key(tx, key)).unwrap().map(|c| c.id)
+}
+
+#[test]
+fn a_stream_key_names_its_channel_only_when_the_owner_signed_it() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let n = owned_network(1, 1);
+    let profile_key = generate_key(&mut det_rng(3));
+    let share_key = generate_key(&mut det_rng(4));
+    let cert = member_certificate(&n, &share_key, 5);
+    let (local, share, remote, short) = block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let owner = local_owner(&profile_key.public, &network_key(&n));
+        let local = new_channel(&mut tx, owner, snippet("local")).await.unwrap();
+        let share = new_channel(&mut tx, share_owner(cert), snippet("share"))
+            .await
+            .unwrap();
+        let owner = remote_owner(b"net", b"svc");
+        let remote = new_channel(&mut tx, owner, snippet("remote"))
+            .await
+            .unwrap();
+        let owner = local_owner(b"short", b"other");
+        let short = new_channel(&mut tx, owner, snippet("short")).await.unwrap();
+        for c in [&local, &share, &remote, &short] {
+            VideoChannels::insert(&mut tx, c.clone()).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+        (local, share, remote, short)
+    });
+    let key = |c: &VideoChannel, signer: &Key| format_stream_key(c.id, &c.token, signer).unwrap();
+
+    let mut tx = block(store.write(T0)).unwrap();
+    assert_eq!(
+        stream_key_channel(&mut tx, &key(&local, &profile_key)),
+        Some(local.id)
+    );
+    assert_eq!(
+        stream_key_channel(&mut tx, &key(&share, &share_key)),
+        Some(share.id)
+    );
+    // another signer, another token, an unknown id, a malformed key
+    assert_eq!(stream_key_channel(&mut tx, &key(&local, &share_key)), None);
+    assert_eq!(
+        stream_key_channel(&mut tx, &key(&share, &profile_key)),
+        None
+    );
+    let other_token = format_stream_key(local.id, b"other", &profile_key).unwrap();
+    assert_eq!(stream_key_channel(&mut tx, &other_token), None);
+    let unknown = format_stream_key(999, &local.token, &profile_key).unwrap();
+    assert_eq!(stream_key_channel(&mut tx, &unknown), None);
+    assert_eq!(stream_key_channel(&mut tx, "!!!"), None);
+    // a remote share's key isn't this device's to check
+    let remote_key = key(&remote, remote.key.as_ref().unwrap());
+    assert_eq!(stream_key_channel(&mut tx, &remote_key), None);
+    // an auth key of the wrong length verifies nothing
+    assert_eq!(
+        stream_key_channel(&mut tx, &key(&short, &profile_key)),
+        None
+    );
+
+    // a new token retires the old key
+    let old = key(&local, &profile_key);
+    let retoken = VideoChannel {
+        token: vec![1; TOKEN_SIZE],
+        ..local.clone()
+    };
+    block(VideoChannels::update(&mut tx, retoken.clone())).unwrap();
+    block(tx.commit()).unwrap();
+    let mut read = block(store.read()).unwrap();
+    assert_eq!(block(channel_by_stream_key(&mut read, &old)).unwrap(), None);
+    let new = key(&retoken, &profile_key);
+    let found = block(channel_by_stream_key(&mut read, &new)).unwrap();
+    assert_eq!(found, Some(retoken));
+}
+
+#[test]
+fn deleting_a_network_deletes_its_video_channels() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let (a, b) = (owned_network(1, 1), owned_network(2, 2));
+    let (ka, kb) = (network_key(&a), network_key(&b));
+    let member = generate_key(&mut det_rng(3));
+    let channels = |n: &Network, first: u64| {
+        let k = network_key(n);
+        [
+            video_channel(first, local_owner(&member.public, &k)),
+            video_channel(
+                first + 1,
+                share_owner(member_certificate(n, &member, first)),
+            ),
+            video_channel(first + 2, remote_owner(&k, b"svc")),
+        ]
+    };
+    let (on_a, on_b) = (channels(&a, 10), channels(&b, 20));
+    let unowned = VideoChannel {
+        id: 30,
+        ..Default::default()
+    };
+    let config = VideoIngressConfig {
+        enabled: true,
+        service_network_keys: vec![ka, b"other".to_vec(), kb.clone()],
+        ..IngressConfig::default_value().unwrap()
+    };
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for n in [&a, &b] {
+            Networks::insert(&mut tx, n.clone()).await.unwrap();
+        }
+        for c in on_a.iter().chain(&on_b).chain([&unowned]) {
+            VideoChannels::insert(&mut tx, c.clone()).await.unwrap();
+        }
+        IngressConfig::set(&mut tx, config.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+    });
+
+    let mut sub = store.events().subscribe();
+    let mut tx = block(store.write(T0)).unwrap();
+    block(Networks::delete(&mut tx, 1)).unwrap();
+    assert_eq!(video_channel_ids(&mut tx), [20, 21, 22, 30]);
+    for c in &on_a {
+        let ids = block(VideoChannels::index_ids(
+            &mut tx,
+            &VideoChannels::BY_OWNER,
+            &owner_key(c),
+        ))
+        .unwrap();
+        assert!(ids.is_empty());
+    }
+    let pruned = VideoIngressConfig {
+        service_network_keys: vec![b"other".to_vec(), kb],
+        ..config
+    };
+    assert_eq!(
+        block(IngressConfig::get(&mut tx)).unwrap(),
+        Some(pruned.clone())
+    );
+    block(tx.commit()).unwrap();
+    let mut expected: Vec<StoreEvent> = on_a
+        .iter()
+        .map(|c| StoreEvent::Deleted(Record::VideoChannel(c.clone())))
+        .collect();
+    expected.push(StoreEvent::Changed(Record::VideoIngressConfig(pruned)));
+    assert_eq!(video_events(drain(&mut sub)), expected);
+
+    // a deletion applied from another replica too
+    let mut tx = block(store.write(T0)).unwrap();
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 2)).unwrap();
+    assert_eq!(video_channel_ids(&mut tx), [30]);
+    let keys = block(IngressConfig::get(&mut tx))
+        .unwrap()
+        .unwrap()
+        .service_network_keys;
+    assert_eq!(keys, [b"other".to_vec()]);
+}
+
+#[test]
+fn video_configs_have_defaults_and_stay_on_the_device() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let ingress = VideoIngressConfig {
+        enabled: true,
+        server_addr: "0.0.0.0:1935".into(),
+        public_server_addr: "rtmp.example:1935".into(),
+        service_network_keys: vec![b"net".to_vec()],
+    };
+    let hls = HlsEgressConfig {
+        enabled: true,
+        public_server_addr: "https://hls.example".into(),
+    };
+    block(async {
+        let mut tx = store.read().await.unwrap();
+        let default = IngressConfig::get(&mut tx).await.unwrap().unwrap();
+        assert_eq!(default.server_addr, DEFAULT_INGRESS_SERVER_ADDR);
+        assert_eq!(default.server_addr, "127.0.0.1:1935");
+        assert!(!default.enabled);
+        assert!(default.public_server_addr.is_empty());
+        assert!(default.service_network_keys.is_empty());
+        assert_eq!(
+            HlsConfig::get(&mut tx).await.unwrap(),
+            Some(HlsEgressConfig::default())
+        );
+        drop(tx);
+
+        let mut tx = store.write(T0).await.unwrap();
+        // pruning a key the config doesn't hold writes nothing
+        delete_for_network(&mut tx, b"absent").await.unwrap();
+        IngressConfig::set(&mut tx, ingress.clone()).await.unwrap();
+        HlsConfig::set(&mut tx, hls.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            IngressConfig::get(&mut tx).await.unwrap(),
+            Some(ingress.clone())
+        );
+        assert_eq!(HlsConfig::get(&mut tx).await.unwrap(), Some(hls.clone()));
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Changed(Record::VideoIngressConfig(ingress)),
+            StoreEvent::Changed(Record::HlsEgressConfig(hls)),
+        ]
+    );
 }
