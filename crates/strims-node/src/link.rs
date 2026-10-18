@@ -4,12 +4,13 @@
 //! Link I/O tasks: one reader and one writer per transport connection.
 //!
 //! They own the socket halves and nothing else. Buffers circulate between
-//! them and the node task over bounded channels and are reused for the
-//! link's lifetime:
+//! them and the node task over the link's bounded channels
+//! ([`LinkChannels`](strims_node_core::LinkChannels)) and are reused for
+//! the link's lifetime:
 //!
 //! ```text
-//!   reader task --Read{buf}--> node --read_free_tx--> reader task
-//!   node --write_tx{buf}--> writer task --WriteDone{buf}--> node
+//!   reader task --Read{buf}--> node --read_free--> reader task
+//!   node --writes{buf}--> writer task --WriteDone{buf}--> node
 //! ```
 //!
 //! A link holds at most `read_buffers` read buffers and `write_buffers`
@@ -28,84 +29,36 @@
 //! TCP keepalive finds a dead peer.
 
 use std::future::Future;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration as StdDuration;
 
 use bytes::Bytes;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use strims_base::time::Duration;
-use strims_vnic::{LinkConfig, PeerKey as LinkKey};
+use strims_node_core::IdleOk;
+use strims_vnic::PeerKey as LinkKey;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::net::Net;
-use crate::state::DialId;
 
 /// A connected transport, ready for vnic.
 ///
 /// TCP and WebSocket links are byte streams with their own I/O tasks.
 /// WebRTC links have none: str0m is sans-IO, so its peer connections live
-/// in the node task next to vnic (`state/rtc.rs`), and a data channel
-/// moves vnic link bytes in-process. Datagrams go through one reader and
-/// one writer task per UDP socket (`udp.rs`).
+/// in the node task next to vnic (`rtc.rs`), and a data channel moves vnic
+/// link bytes in-process. Datagrams go through one reader and one writer
+/// task per UDP socket (`udp.rs`).
 pub(crate) enum Transport<N: Net> {
     Tcp(N::TcpStream),
     /// Boxed: tungstenite's state is large and a link is built once.
     Ws(Box<WebSocketStream<N::TcpStream>>),
 }
 
-/// Everything the node task hears from transport tasks.
-pub(crate) enum Input<N: Net> {
-    /// `buf[..len]` was read from the link.
-    Read {
-        link: LinkKey,
-        buf: Vec<u8>,
-        len: usize,
-    },
-    /// The writer task wrote `buf` and returns it.
-    WriteDone {
-        link: LinkKey,
-        buf: Vec<u8>,
-    },
-    /// The transport failed or the peer closed it.
-    LinkDown {
-        link: LinkKey,
-        error: String,
-    },
-    /// A dial or an accepted connection finished its transport handshake
-    /// (TCP mux init, WebSocket upgrade). `leftover` was read past it.
-    Connected {
-        dial: Option<DialId>,
-        transport: Transport<N>,
-        config: LinkConfig,
-        leftover: Vec<u8>,
-        /// The socket's `TCP_NOTSENT_LOWAT`, when set: the link's writes
-        /// are cut to it.
-        notsent_lowat: Option<u32>,
-    },
-    DialFailed {
-        dial: DialId,
-        error: String,
-    },
-    /// An accepted connection was dropped before vnic.
-    AcceptFailed {
-        error: String,
-    },
-    /// `buf[..len]` arrived from `from` on WebRTC UDP socket `socket`.
-    Datagram {
-        socket: usize,
-        buf: Vec<u8>,
-        len: usize,
-        from: SocketAddr,
-    },
-    /// The WebRTC interface's STUN servers, (re)resolved.
-    StunServers(Vec<SocketAddr>),
-}
+/// What the node task hears from the native transport tasks.
+pub(crate) type Input<N> = strims_node_core::Input<Transport<N>>;
 
 /// Runs `f` with a timeout; a non-positive duration means none. `None` on
 /// timeout.
@@ -113,25 +66,6 @@ pub(crate) async fn with_timeout<F: Future>(d: Duration, f: F) -> Option<F::Outp
     match d.to_std() {
         Some(d) if !d.is_zero() => tokio::time::timeout(d, f).await.ok(),
         _ => Some(f.await),
-    }
-}
-
-// TODO: remove once protocol v3 makes keepalives mandatory.
-/// Whether a link may stay silent past its read timeout, shared by the node
-/// task (which sets it) and the link's reader (which reads it when a read
-/// times out). Set for an established peer that hasn't sent a vnic
-/// keepalive yet. A peer that sends keepalives writes at least every
-/// keepalive interval (10 s), so for it the read timeout applies again.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct IdleOk(Arc<AtomicBool>);
-
-impl IdleOk {
-    pub(crate) fn get(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn set(&self, v: bool) {
-        self.0.store(v, Ordering::Relaxed);
     }
 }
 
@@ -307,6 +241,10 @@ pub(crate) const ACCEPT_BACKOFF: StdDuration = StdDuration::from_millis(50);
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::panic)]
+
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
 
     use slotmap::KeyData;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};

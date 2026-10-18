@@ -11,6 +11,8 @@ use strims_vnic::TcpOptions;
 use strims_vnic::ws::WsOptions;
 use strims_webrtc::EndpointConfig;
 
+use crate::error::NodeError;
+
 /// Everything a node needs to start.
 #[derive(Clone, Debug)]
 pub struct NodeConfig {
@@ -20,7 +22,8 @@ pub struct NodeConfig {
     /// it.
     pub profile_key: Key,
     /// Seeds every rng in the node (vnic, vpn, the ppspp runner). Use
-    /// [`random_seed`] in production and the simulation seed in tests.
+    /// OS entropy in production (`strims_node::random_seed`) and the
+    /// simulation seed in tests.
     pub rng_seed: u64,
     /// Seeds vnic's rng, whose first draw is the host key. `None` derives it
     /// from `rng_seed`.
@@ -123,8 +126,8 @@ pub const DEFAULT_NOTSENT_LOWAT: u32 = 16 * 1024;
 /// Data waiting in vnic's QoS is sent freshest first and by class weight;
 /// data in the kernel's send buffer leaves in the order it was written.
 /// These options keep the kernel's share small when a link is slower than
-/// the node's upload. Socket options exist only on real sockets
-/// ([`crate::TokioNet`]); simulated ones ignore them.
+/// the node's upload. Socket options exist only on real sockets; simulated
+/// ones and drivers without TCP ignore them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TcpSocketConfig {
     /// `TCP_NOTSENT_LOWAT`: the most bytes the kernel queues that it hasn't
@@ -204,10 +207,22 @@ impl NodeConfig {
             node_version: "dev".to_owned(),
         }
     }
+
+    /// The profile's ed25519 public key, which TCP listeners route by and
+    /// WebSocket listeners serve at.
+    pub fn profile_public_key(&self) -> Result<[u8; 32], NodeError> {
+        self.profile_key
+            .public
+            .as_slice()
+            .try_into()
+            .map_err(|_| NodeError::Config("the profile key must be ed25519".to_owned()))
+    }
 }
 
-/// The WebRTC interface: data-channel links made by vpn peer exchange
-/// (`strims-webrtc`, str0m), over UDP mux sockets.
+/// The WebRTC interface: data-channel links made by vpn peer exchange.
+/// Natively they run on `strims-webrtc` (str0m) over UDP mux sockets; the
+/// sockets and the STUN refresh (`listen`, `stun_refresh` and the `udp_*`
+/// fields) are that driver's.
 ///
 /// WebRTC links are never dialed: they come up when `Node::connect_peer`
 /// (or a remote offer) trades session descriptions over the network, so a
@@ -215,8 +230,8 @@ impl NodeConfig {
 /// directly to another node it reaches only through the network.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WebRtcConfig {
-    /// Offer a WebRTC candidate in peer exchanges. Off by default; enabling
-    /// it needs at least one `listen` address.
+    /// Offer a WebRTC candidate in peer exchanges. Off by default; the
+    /// native driver needs at least one `listen` address to enable it.
     pub enabled: bool,
     /// One UDP mux socket per address (`ip:port`; port 0 picks one). Every
     /// connection gets a host candidate on each socket. str0m matches a
@@ -344,11 +359,4 @@ pub struct NetworkOptions {
     /// a port join a network without calling `Node::bind_peer_network` per
     /// peer.
     pub auto_bind_port: Option<u16>,
-}
-
-/// A seed from OS entropy, for production nodes.
-pub fn random_seed() -> Result<u64, getrandom::Error> {
-    let mut b = [0u8; 8];
-    getrandom::fill(&mut b)?;
-    Ok(u64::from_le_bytes(b))
 }

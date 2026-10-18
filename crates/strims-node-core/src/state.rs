@@ -19,11 +19,12 @@
 //! The egress pipeline ([`State::pump`]) follows the core crates' driver
 //! contract: drain events, `vpn.flush`, `vnic.poll_egress` with
 //! fill callbacks routed by owner [`Tag`], then move link transmit bytes to
-//! the link tasks' recycled write buffers, or into WebRTC data channels.
+//! the link tasks' recycled write buffers, or into in-process WebRTC data
+//! channels.
 //!
 //! The WebRTC interface (`rtc`, when enabled) is a fourth state machine
-//! here: the str0m endpoint with every peer connection, fed datagrams and
-//! timers by the driver, its transmits handed to the UDP socket tasks and
+//! here: the node's [`RtcEndpoint`](crate::rtc::RtcEndpoint) with every
+//! peer connection, fed driver input and timers, its output flushed and
 //! its events drained with the others.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -50,14 +51,15 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, VpnPortConfig};
+use crate::driver::{IdleOk, Interfaces, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
     RunnerMetrics, RunnerPeerInfo, StoreInfo, SwarmInfo, WriterInfo,
 };
 use crate::exchange::{Candidate, CandidateState};
-use crate::link::IdleOk;
 use crate::rpc::Outgoing;
+use crate::rtc::{RtcConn, RtcFactory};
 use crate::vpn_port::VpnFrame;
 
 mod rpc;
@@ -65,8 +67,6 @@ mod rtc;
 mod vpn_port;
 
 pub(crate) use rpc::{RpcChannelId, RpcSide};
-
-pub(crate) use rtc::{RtcSetup, UdpIo};
 
 type PpsppPeer = strims_ppspp::PeerKey;
 pub(crate) type VnicHost = strims_vnic::Host<Tag>;
@@ -82,7 +82,7 @@ const TRANSFER_QOS_WEIGHT: u64 = 1;
 
 slotmap::new_key_type! {
     /// A dial in progress.
-    pub(crate) struct DialId;
+    pub struct DialId;
     /// A swarm reader handle.
     pub(crate) struct ReaderId;
     /// A swarm publisher (ppspp `Writer`) handle.
@@ -115,26 +115,26 @@ pub(crate) struct LinkIo {
     /// Read buffers back to the reader task.
     pub(crate) read_free_tx: mpsc::Sender<Vec<u8>>,
     /// Aborted when the link goes; the writer ends when `write_tx` drops.
-    pub(crate) reader: Option<tokio::task::AbortHandle>,
-    /// TCP links: lets the reader outwait its read timeout while the peer
-    /// is established and hasn't sent a keepalive (see `link.rs`).
+    pub(crate) reader: TaskGuard,
+    /// Lets the reader outwait its read timeout while the peer is
+    /// established and hasn't sent a keepalive (see [`IdleOk`]).
     pub(crate) idle_ok: Option<IdleOk>,
 }
 
 impl Drop for LinkIo {
+    /// The reader is aborted before the writer's channel closes.
     fn drop(&mut self) {
-        if let Some(r) = &self.reader {
-            r.abort();
-        }
+        self.reader.abort();
     }
 }
 
 /// A link's transport, as the node task sees it.
 #[derive(Debug)]
 enum LinkTransport {
-    /// TCP or WebSocket: I/O tasks and recycled buffers.
+    /// TCP, WebSocket, or a data channel the driver owns: I/O tasks and
+    /// recycled buffers.
     Stream(LinkIo),
-    /// A WebRTC data channel of the endpoint in [`State`].
+    /// An in-process data channel of the endpoint in [`State`].
     DataChannel(rtc::DataChannel),
 }
 
@@ -155,6 +155,8 @@ struct LinkSlot {
     dial: Option<DialId>,
     /// This node made the link: it dialed, or offered the WebRTC session.
     dialed: bool,
+    /// A WebRTC link's connection.
+    rtc: Option<RtcConn>,
 }
 
 /// Why a dial failed. A failed vnic handshake stops a candidate pool
@@ -278,6 +280,8 @@ pub(crate) struct State {
     /// Listener URIs advertised to peer exchange.
     local_tcp: Option<LinkDescription>,
     local_ws: Option<LinkDescription>,
+    /// The link interfaces the driver has.
+    interfaces: Interfaces,
     allow_insecure_ws: bool,
     /// Bounded by the transports the driver attaches.
     links: SecondaryMap<LinkKey, LinkSlot>,
@@ -323,11 +327,13 @@ impl State {
     /// order (vnic, vpn, runner), so a seed fixes every key and nonce.
     /// The WebRTC endpoint's rng is forked last, so enabling WebRTC
     /// changes no other key.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: &NodeConfig,
         local_tcp: Option<LinkDescription>,
         local_ws: Option<LinkDescription>,
-        webrtc: Option<RtcSetup>,
+        interfaces: Interfaces,
+        webrtc: Option<RtcFactory>,
         now: Time,
         events: mpsc::Sender<NodeEvent>,
         rpc_tx: mpsc::UnboundedSender<Outgoing>,
@@ -351,7 +357,12 @@ impl State {
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let runner = Runner::new(fork(&mut rng));
-        let rtc = webrtc.map(|setup| rtc::Rtc::new(setup, now, fork(&mut rng)));
+        let rtc = webrtc.map(|factory| {
+            rtc::Rtc::new(
+                factory(now, fork(&mut rng)),
+                config.webrtc.max_buffered_amount.max(1),
+            )
+        });
         Ok(State {
             vnic,
             vpn,
@@ -364,6 +375,7 @@ impl State {
             rpc_closed: Vec::new(),
             local_tcp,
             local_ws,
+            interfaces,
             allow_insecure_ws: config.allow_insecure_ws,
             links: SecondaryMap::new(),
             peers: SecondaryMap::new(),
@@ -429,24 +441,33 @@ impl State {
 
     // --- links --------------------------------------------------------------
 
-    /// Registers the I/O of a link the driver just added to vnic.
+    /// Registers the I/O of a link the driver just added to vnic: one it
+    /// dialed or accepted, or the data channel of WebRTC connection `rtc`.
     pub(crate) fn insert_link(
         &mut self,
         link: LinkKey,
         kind: LinkKind,
         io: LinkIo,
         dial: Option<DialId>,
+        rtc: Option<RtcConn>,
     ) {
-        if dial.is_none() {
-            self.metrics.accepted += 1;
-        }
+        let dialed = match rtc {
+            Some(conn) => self.rtc_stream_linked(conn, link),
+            None => {
+                if dial.is_none() {
+                    self.metrics.accepted += 1;
+                }
+                dial.is_some()
+            }
+        };
         self.links.insert(
             link,
             LinkSlot {
                 io: LinkTransport::Stream(io),
                 kind,
                 dial,
-                dialed: dial.is_some(),
+                dialed,
+                rtc,
             },
         );
     }
@@ -561,10 +582,12 @@ impl State {
         tracing::debug!(%error, "link down");
         self.metrics.transport_failures += 1;
         self.vnic.remove_link(link);
-        if let Some(slot) = self.links.remove(link)
-            && let Some(d) = slot.dial
-        {
-            self.dial_done(d, Err(DialError::Connect(error)), now);
+        if let Some(slot) = self.links.remove(link) {
+            if let Some(conn) = slot.rtc {
+                self.rtc_link_closed(conn, DialError::Connect(error), now);
+            } else if let Some(d) = slot.dial {
+                self.dial_done(d, Err(DialError::Connect(error)), now);
+            }
         }
         self.process_events(now);
     }
@@ -584,8 +607,8 @@ impl State {
             CloseReason::Replaced => DialError::Connect("replaced".to_owned()),
             CloseReason::Closed => DialError::Connect("closed".to_owned()),
         };
-        if let LinkTransport::DataChannel(dc) = slot.io {
-            self.rtc_link_closed(dc.conn, e, now);
+        if let Some(conn) = slot.rtc {
+            self.rtc_link_closed(conn, e, now);
         } else if let Some(d) = slot.dial {
             self.dial_done(d, Err(e), now);
         }
@@ -643,8 +666,8 @@ impl State {
     /// vnic, whose full send buffer then blocks the link's QoS sessions:
     /// that is the backpressure from a slow socket to the owners.
     ///
-    /// WebRTC links write straight into their data channel until it is
-    /// full; they wait for the endpoint's `Writable` (the same
+    /// In-process WebRTC links write straight into their data channel
+    /// until it is full; they wait for the endpoint's `Writable` (the same
     /// backpressure, from SCTP's send buffer).
     fn drain_transmit(&mut self) -> bool {
         let State {
@@ -665,8 +688,10 @@ impl State {
             let io = match &mut slot.io {
                 LinkTransport::Stream(io) => io,
                 LinkTransport::DataChannel(dc) => {
-                    if let Some(rtc) = rtc {
-                        let n = rtc::write_channel(rtc, dc, vnic, link);
+                    if let Some(rtc) = rtc
+                        && let Some(conn) = slot.rtc
+                    {
+                        let n = rtc::write_channel(rtc, conn, dc, vnic, link);
                         metrics.bytes_written += n as u64;
                         moved |= n > 0;
                     }
@@ -802,8 +827,7 @@ impl State {
         if let Some(d) = self.links.get(peer).and_then(|l| l.dial) {
             self.dial_done(d, Ok(host_id), now);
         }
-        if let Some(LinkTransport::DataChannel(dc)) = self.links.get(peer).map(|l| &l.io) {
-            let conn = dc.conn;
+        if let Some(conn) = self.links.get(peer).and_then(|l| l.rtc) {
             self.rtc_peer_added(conn, now);
         }
         if let Some(info) = self.peer_info(peer) {
@@ -947,7 +971,8 @@ impl State {
     // --- dials --------------------------------------------------------------
 
     /// Queues a dial of a `tcp://` or `ws[s]://` URI. `waiter` gets the
-    /// peer's host id once the vnic handshake completes.
+    /// peer's host id once the vnic handshake completes. A driver without
+    /// TCP refuses `tcp://`.
     pub(crate) fn start_dial(
         &mut self,
         uri: &str,
@@ -955,6 +980,9 @@ impl State {
     ) -> Result<(), NodeError> {
         let target = DialTarget::parse(uri, self.allow_insecure_ws)
             .map_err(|e| NodeError::InvalidUri(e.to_string()))?;
+        if matches!(target, DialTarget::Tcp(_)) && !self.interfaces.tcp {
+            return Err(NodeError::Unsupported("tcp links"));
+        }
         let d = self.dials.insert(Dial {
             target,
             waiter,
@@ -1021,16 +1049,25 @@ impl State {
     // --- peer exchange ------------------------------------------------------
 
     /// The exchange's candidate pool, created on first use: one candidate
-    /// per interface, in the order TCP, WebSocket, WebRTC. The WebRTC
-    /// candidate gets a new peer connection; if the endpoint can't make
-    /// one, the pool goes without it.
+    /// per interface, in the order TCP (when the driver has it), WebSocket,
+    /// WebRTC. The WebRTC candidate gets a new peer connection; if the
+    /// endpoint can't make one, the pool goes without it.
     fn exchange(&mut self, x: ExchangeId, now: Time) -> &mut Exchange {
         let fresh = (!self.exchanges.contains_key(&x)).then(|| {
             let insecure = self.allow_insecure_ws;
-            let mut candidates = vec![
-                Candidate::new(LinkInterface::Tcp, self.local_tcp.clone(), insecure),
-                Candidate::new(LinkInterface::Ws, self.local_ws.clone(), insecure),
-            ];
+            let mut candidates = Vec::with_capacity(3);
+            if self.interfaces.tcp {
+                candidates.push(Candidate::new(
+                    LinkInterface::Tcp,
+                    self.local_tcp.clone(),
+                    insecure,
+                ));
+            }
+            candidates.push(Candidate::new(
+                LinkInterface::Ws,
+                self.local_ws.clone(),
+                insecure,
+            ));
             if let Some(c) = self.rtc_candidate(x, candidates.len(), now) {
                 candidates.push(c);
             }
@@ -1191,7 +1228,10 @@ impl State {
                     LinkTransport::Stream(io) => (io.free_write.is_empty(), 0),
                     LinkTransport::DataChannel(dc) => (
                         dc.blocked(),
-                        rtc.as_mut().map_or(0, |r| r.ep.buffered_amount(dc.conn)),
+                        match (rtc.as_mut(), slot.rtc) {
+                            (Some(r), Some(conn)) => r.ep.buffered_amount(conn),
+                            _ => 0,
+                        },
                     ),
                 };
                 Some(LinkInfo {
@@ -1678,6 +1718,40 @@ impl State {
 
     pub(crate) fn close_publisher(&mut self, id: PublisherId) {
         self.publishers.remove(id);
+    }
+}
+
+/// Peer exchange steps vpn drives, for tests without a network.
+#[cfg(test)]
+impl State {
+    /// Exchange `x`'s pool, created as vpn's first event for it does.
+    pub(crate) fn test_pool(&mut self, x: ExchangeId, now: Time) -> &mut [Candidate] {
+        self.exchange(x, now).pool.candidates_mut()
+    }
+
+    /// Applies `desc` to exchange `x`'s WebRTC candidate, as trying the
+    /// remote descriptions does.
+    pub(crate) fn test_describe(
+        &mut self,
+        x: ExchangeId,
+        desc: strims_vnic::webrtc::SessionDescription,
+        now: Time,
+    ) {
+        let State { exchanges, rtc, .. } = self;
+        let Some(c) = exchanges.get_mut(&x).and_then(|ex| {
+            ex.pool
+                .candidates_mut()
+                .iter_mut()
+                .find(|c| c.conn.is_some())
+        }) else {
+            return;
+        };
+        c.state = CandidateState::Describe(desc);
+        rtc::apply_remote_description(rtc.as_mut(), c, now);
+    }
+
+    pub(crate) fn test_link_count(&self) -> usize {
+        self.links.len()
     }
 }
 

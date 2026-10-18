@@ -1,25 +1,25 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Peer exchange link candidates: the driver's side of vnic's
+//! Peer exchange link candidates: the node's side of vnic's
 //! `LinkCandidatePool`.
 //!
 //! vpn runs the exchange and reports `GatherLocalDescriptions` and
-//! `DialRemoteDescriptions`; the driver keeps one pool per `ExchangeId`
-//! with one candidate per interface, in the order TCP, WebSocket, WebRTC,
-//! which is the order their descriptions are advertised in. The
-//! candidates are plain state: the driver does the work they ask for and
-//! records the outcome, then polls the pool again.
+//! `DialRemoteDescriptions`; the node keeps one pool per `ExchangeId`
+//! with one candidate per interface its driver has, in the order TCP,
+//! WebSocket, WebRTC, which is the order their descriptions are advertised
+//! in. The candidates are plain state: the node does the work they ask for
+//! and records the outcome, then polls the pool again.
 //!
 //! - **TCP and WebSocket** advertise their listener URI and dial the
 //!   remote's. A dial is asynchronous: the candidate reports `Pending`
 //!   until the dialed link completes its vnic handshake (`Linked`) or
 //!   fails.
-//! - **WebRTC** owns one connection of the str0m endpoint. Its local
-//!   description is `Pending` until the driver has polled the endpoint and
+//! - **WebRTC** owns one connection of the node's endpoint. Its local
+//!   description is `Pending` until the node has polled the endpoint and
 //!   ICE gathering finished (an offer, or the answer once the remote offer
 //!   was applied). A remote description is parsed here (`Describe`) and
-//!   applied by the driver, which then knows the role:
+//!   applied by the node, which then knows the role:
 //!   `AwaitInBackground` (we answered) reports `false` at once and the link
 //!   comes up when the channel opens;
 //!   `AwaitLink` (we offered) stays `Pending` until the channel opened and
@@ -29,8 +29,8 @@ use std::task::Poll;
 
 use strims_vnic::webrtc::SessionDescription;
 use strims_vnic::{CandidateError, DialTarget, LinkCandidate, LinkDescription, LinkInterface};
-use strims_webrtc::ConnId;
 
+use crate::rtc::RtcConn;
 use crate::state::DialId;
 
 /// Where a candidate's remote attempt is.
@@ -74,7 +74,7 @@ pub(crate) struct Candidate {
     local: Poll<Result<Option<LinkDescription>, CandidateError>>,
     allow_insecure_ws: bool,
     /// The WebRTC candidate's connection.
-    pub(crate) conn: Option<ConnId>,
+    pub(crate) conn: Option<RtcConn>,
     pub(crate) state: CandidateState,
 }
 
@@ -95,7 +95,7 @@ impl Candidate {
     }
 
     /// A WebRTC candidate on `conn`.
-    pub(crate) fn webrtc(conn: ConnId) -> Candidate {
+    pub(crate) fn webrtc(conn: RtcConn) -> Candidate {
         Candidate {
             iface: LinkInterface::WebRtc,
             local: Poll::Pending,
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn webrtc_candidates_wait_for_the_driver() {
-        let mut c = Candidate::webrtc(ConnId::default());
+        let mut c = Candidate::webrtc(RtcConn(1));
         assert_eq!(c.interface(), "webrtc");
         assert!(c.local_pending());
         assert_eq!(c.poll_local_description(), Poll::Pending);

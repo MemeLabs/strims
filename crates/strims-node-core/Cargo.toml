@@ -1,0 +1,32 @@
+[package]
+name = "strims-node-core"
+description = "The runtime-neutral node: vnic, vpn and ppspp composed, its API handle and the loop its drivers run"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-binmap.workspace = true
+strims-proto.workspace = true
+strims-crypto.workspace = true
+strims-kademlia.workspace = true
+strims-qos.workspace = true
+strims-vnic.workspace = true
+strims-vpn.workspace = true
+strims-ppspp.workspace = true
+strims-webrtc.workspace = true
+# `SwarmRead` and `SwarmWrite` for the swarm handles.
+strims-transfer.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+slotmap.workspace = true
+rand_core.workspace = true
+# Channels and `select!` only: `sync` needs no runtime and compiles for
+# wasm32, where the workspace entry's `net` doesn't.
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc", "sink", "std"] }
+
+[lints]
+workspace = true

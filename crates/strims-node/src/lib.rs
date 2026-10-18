@@ -1,59 +1,33 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Tokio driver composing vnic, vpn and ppspp over TCP, WebSocket and
-//! WebRTC, natively or under turmoil.
+//! The Tokio driver of the node: [`strims_node_core`] over TCP, WebSocket
+//! and WebRTC, natively or under turmoil.
 //!
 //! A driver crate: OS access (sockets, the wall clock, OS entropy) happens
-//! here, and only behind [`Net`], [`Clock`] and [`random_seed`].
+//! here, and only behind [`Net`], [`Clock`] and [`random_seed`]. The node
+//! itself (its state machines, its API handle [`Node`] and its loop) is
+//! `strims_node_core`, re-exported here; this crate implements the core's
+//! `NodeIo` on tokio (`native`) and spawns the node task with
+//! [`Node::spawn`].
 //!
 //! # Architecture
 //!
-//! One node task owns the sans-IO state machines: `strims_vnic::Host`,
-//! `strims_vpn::Host`, `strims_ppspp::Runner`, and
-//! `strims_webrtc::WebRtcEndpoint` when WebRTC is enabled. Nothing else
-//! touches them. [`Node`] sends closures that run on the state and reply
-//! over a oneshot. Per-link reader and writer tasks, and per-UDP-socket
-//! tasks, own the sockets and trade recycled buffers with the node task
-//! over bounded channels.
-//!
 //! | piece | role |
 //! |---|---|
-//! | [`Node`] | the API handle: dials, networks, vpn services and ports, swarms, peer RPC |
-//! | `state` | the composition: event routing, egress pipeline, bookkeeping (no I/O) |
-//! | `driver` | the node task's loop around the state |
+//! | `native` | the core's `NodeIo`: spawning, the clock, the timer; [`Node::spawn`] on a [`Net`] with a [`SystemClock`] or [`SimClock`] |
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
-//! | `udp` | WebRTC UDP socket tasks and the STUN resolver |
+//! | `rtc`, `udp` | the WebRTC endpoint (str0m) in the node task; its UDP socket tasks and the STUN resolver |
 //! | [`Net`], [`Clock`] | sockets and time: tokio or turmoil, wall clock or simulated |
+//! | [`app`] | the app layer on a node |
 //!
-//! Each pass of the node task handles inputs and commands, runs the due
-//! timers, then pumps egress: drain events, flush vpn, poll vnic's egress
-//! (which has vpn or the runner fill frames, by owner tag), and copy link
-//! bytes into the link's free write buffers or its data channel.
+//! str0m is sans-IO, so the WebRTC endpoint runs inside the node task as
+//! the core's `RtcEndpoint`, and its data channels move link bytes
+//! in-process. Datagrams go through one reader and one writer task per UDP
+//! socket.
 //!
-//! **Backpressure.** A link whose write buffers are all with its writer
-//! task (or whose data channel is full) leaves its bytes in vnic. vnic's
-//! full link buffer blocks the link's QoS sessions, so owners stop being
-//! asked to fill frames until a buffer comes back. The node task never
-//! waits on a socket, and every queue between tasks is bounded
-//! ([`NodeConfig`], [`BufferConfig`], [`WebRtcConfig`]).
-//!
-//! **Allocation.** Stream link bytes go socket → read buffer → vnic
-//! (decrypted in place) → owner, and back through vnic's link buffer and a
-//! write buffer, with no per-frame allocation. tungstenite allocates every
-//! WebSocket message, str0m every data-channel message and sent datagram,
-//! and a vpn delivery moves its body into [`NodeEvent::Message`].
-//!
-//! **Peer RPC.** Every peer gets a vnic channel pair for RPC, in a QoS
-//! class of weight 1. The app takes it once ([`Node::take_peer_rpc`]) as
-//! byte streams to run `strims-rpc` over. A channel whose unread input
-//! passes its buffer closes the pair; the peer stays connected, and closing
-//! it is the app's call. See [`rpc`].
-//!
-//! **vpn RPC.** [`Node::open_vpn_port`] gives the app a port's messages and
-//! sends, for `strims_rpc::vpn`. Services publish their address with
-//! [`Node::publish_vpn_address`], and clients find it with
-//! [`Node::resolve_vpn_address`]. See [`vpn_port`].
+//! **Allocation.** tungstenite allocates every WebSocket message, str0m
+//! every data-channel message and sent datagram.
 //!
 //! # App layer
 //!
@@ -66,39 +40,15 @@
 //! listeners on the node's [`Net`], and [`fetch::NetFetch`] the
 //! directory its HTTPS requests.
 //!
-//! # Bindings
-//!
-//! Peers join networks through [`Node::bind_peer_network`], reported as
-//! [`NodeEvent::NetworkPeerAdded`]. `strims-network` negotiates the
-//! bindings over peer rpc and each peer's broker channel, and calls it;
-//! [`NetworkOptions::auto_bind_port`] binds every peer on a fixed port
-//! pair for simulations and transport tests, and doesn't mix with it.
-//!
-//! Swarm channels are negotiated by `strims-transfer` over peer rpc, for
-//! the swarms published on networks the peers share. [`Node::run_swarm`]
-//! is the operation it uses, and binds a channel directly in tests.
-//!
 //! # Determinism
 //!
-//! Under turmoil the same seed replays the same run. That holds while:
-//!
-//! - the runtime is current-thread (turmoil hosts are; so is
-//!   `#[tokio::test]` by default). Multi-thread runtimes work, as
-//!   everything is `Send`, but aren't deterministic;
-//! - every `tokio::select!` is `biased`, and tasks spawn in loop order:
-//!   accept loops and UDP tasks at start, a link's reader then its writer
-//!   when the link is attached, dials after each pass;
-//! - no hash map is iterated;
-//! - every rng forks from [`NodeConfig::rng_seed`]: vnic, vpn and the
-//!   runner in that order, then the WebRTC endpoint, so enabling WebRTC
-//!   changes no other key ([`NodeConfig::host_key_seed`] overrides vnic's);
-//! - time comes from the [`Clock`].
-//!
-//! Read-only queries ([`Node::metrics`], [`Node::peers`]) are answered after
-//! passes the node makes anyway, and an idle node answers without running
-//! timers or egress (see [`NodeConfig::query_delay`]). Waking an idle node
-//! is still a poll of its task, which can shift the order of later passes,
-//! so a simulation's sampling cadence is one of its inputs.
+//! Under turmoil the same seed replays the same run, on the core's terms
+//! ([Determinism](strims_node_core#determinism)): the runtime is
+//! current-thread (turmoil hosts are; so is `#[tokio::test]` by default),
+//! and time comes from the [`Clock`]. Tasks spawn in the loop's order:
+//! accept loops, then each UDP socket's reader and writer, then the STUN
+//! resolver at start; a link's reader then its writer when the link is
+//! attached; dials after each pass.
 //!
 //! Randomness the seed doesn't reach changes bytes, never the schedule:
 //!
@@ -150,21 +100,29 @@
 
 pub mod app;
 pub mod clock;
-pub mod config;
-mod driver;
-pub mod error;
-pub mod event;
-mod exchange;
 pub mod fetch;
-mod handle;
 mod link;
+mod native;
 pub mod net;
-pub mod rpc;
-mod state;
+mod rtc;
 mod transport;
 mod udp;
 pub mod video_host;
-pub mod vpn_port;
+
+pub use strims_node_core::{error, event, rpc, vpn_port};
+
+/// Node configuration (`strims_node_core::config`), and OS entropy for its
+/// seed.
+pub mod config {
+    pub use strims_node_core::config::*;
+
+    /// A seed from OS entropy, for production nodes.
+    pub fn random_seed() -> Result<u64, getrandom::Error> {
+        let mut b = [0u8; 8];
+        getrandom::fill(&mut b)?;
+        Ok(u64::from_le_bytes(b))
+    }
+}
 
 pub use clock::{Clock, SimClock, SystemClock};
 pub use config::{
@@ -176,13 +134,13 @@ pub use event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
     RunnerMetrics, RunnerPeerInfo, StoreInfo, SwarmInfo, WriterInfo,
 };
-pub use handle::{
-    HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SwarmReader, SwarmWriter,
-};
 #[cfg(feature = "turmoil")]
 pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};
 pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
+pub use strims_node_core::{
+    HashTableGet, Interfaces, Node, NodeEvents, NodeInfo, PeerIndexSearch, SwarmReader, SwarmWriter,
+};
 pub use vpn_port::{VpnPort, VpnReader, VpnWriter};
 
 pub use strims_kademlia::ID as HostId;

@@ -52,7 +52,7 @@ use strims_rpc::{Client, Config, Router, Timer, peer_connection};
 use strims_session::{
     Session, SessionFactory, VnicCeilings, VnicHost, VnicLimits, read_vnic_limits, run_vnic,
 };
-use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
+use strims_transfer::TransferControl;
 use strims_video::VideoControl;
 use strims_video::hls::HlsRoutes;
 use strims_vpn::{
@@ -65,8 +65,8 @@ use crate::fetch::{NetFetch, tls_client_config};
 use crate::video_host::NetVideoHost;
 use crate::{
     Clock, HostId, Net, NetworkOptions, Node, NodeConfig, NodeError, NodeEvent, NodeInfo,
-    PeerIndexSearch, PeerInfo, ReadError, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions,
-    SwarmReader, SwarmWriter, VpnReader, VpnWriter, WriterOptions,
+    PeerIndexSearch, PeerInfo, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions, SwarmReader,
+    SwarmWriter, VpnReader, VpnWriter, WriterOptions,
 };
 
 /// A node's clock as the app layer's [`Timer`].
@@ -271,32 +271,6 @@ impl strims_transfer::SwarmHost for NodeHost {
 
     async fn open_reader(&self, swarm: SwarmKey) -> Result<SwarmReader, NodeError> {
         self.node.open_reader(swarm).await
-    }
-}
-
-/// Underruns and resets are discontinuities; the reader ends when its
-/// swarm or the node does.
-impl SwarmRead for SwarmReader {
-    type Error = ReadError;
-
-    async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<ReadError>> {
-        SwarmReader::read_at(self, out).await.map_err(|e| match e {
-            ReadError::Underrun { .. } | ReadError::Reset => ReadFailure::Discontinuity,
-            ReadError::Closed | ReadError::Stopped => ReadFailure::Closed,
-            e @ ReadError::Store(_) => ReadFailure::Failed(e),
-        })
-    }
-}
-
-impl SwarmWrite for SwarmWriter {
-    type Error = NodeError;
-
-    async fn write(&mut self, data: &[u8]) -> Result<(), NodeError> {
-        SwarmWriter::write(self, data).await
-    }
-
-    async fn reset(&mut self) -> Result<(), NodeError> {
-        SwarmWriter::reset(self).await
     }
 }
 
@@ -570,11 +544,12 @@ impl PeerServices {
 // --- bootstrap ----------------------------------------------------------------
 
 /// A node as bootstrap's [`strims_network::bootstrap::Host`]: it dials
-/// `tcp://` and `ws://` link URIs. A URI the node can't dial, or one that
+/// `tcp://` and `ws://` link URIs, and `wss://` where its driver has it
+/// ([`crate::Interfaces::wss`]). A URI the node can't dial, or one that
 /// reaches it, fails permanently.
 impl strims_network::bootstrap::Host for NodeHost {
     async fn dial(&self, uri: &str) -> Result<HostId, Failure> {
-        if uri.starts_with("wss://") {
+        if uri.starts_with("wss://") && !self.node.interfaces().wss {
             return Err(Failure::Permanent("wss:// isn't supported".to_owned()));
         }
         match self.node.dial(uri).await {
@@ -766,7 +741,8 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
         let (rate_limit, max_peers) = node_limits(limits);
         config.rate_limit = Some(rate_limit);
         config.max_peers = max_peers;
-        let (node, mut events) = Node::spawn(config, self.net.clone(), self.clock.clone()).await?;
+        let (node, mut events) =
+            crate::native::spawn(config, self.net.clone(), self.clock.clone()).await?;
 
         let c = &self.config;
         let timer = NodeTimer(self.clock.clone());

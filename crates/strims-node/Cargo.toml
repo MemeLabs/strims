@@ -1,6 +1,6 @@
 [package]
 name = "strims-node"
-description = "Tokio driver composing vnic, vpn and ppspp over TCP, WebSocket and WebRTC, natively or under turmoil"
+description = "The Tokio driver of strims-node-core: the node over TCP, WebSocket and WebRTC, natively or under turmoil"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,7 @@ turmoil = ["dep:turmoil"]
 
 [dependencies]
 strims-base.workspace = true
+strims-node-core.workspace = true
 strims-binmap.workspace = true
 strims-proto.workspace = true
 strims-crypto.workspace = true

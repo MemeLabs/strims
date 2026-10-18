@@ -9,6 +9,7 @@
 //! reply channel and buffer, so reading and publishing don't allocate per
 //! call.
 
+use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering, fence};
@@ -18,18 +19,17 @@ use strims_base::time::Time;
 use strims_kademlia::ID;
 use strims_ppspp::{SwarmId, SwarmKey, SwarmOptions, WriterOptions};
 use strims_proto::types::{Cache, Certificate, Key};
+use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite};
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, M_BROADCAST, M_STD_FLAGS, NetworkId,
     PeerIndexHost, PeerIndexPublisherId,
 };
 use tokio::sync::{mpsc, oneshot};
 
-use crate::clock::Clock;
 use crate::config::{NetworkOptions, NodeConfig};
-use crate::driver::{Call, Command, Driver};
+use crate::driver::{Call, Command, Interfaces};
 use crate::error::{NodeError, ReadError};
 use crate::event::{NodeEvent, NodeMetrics, PeerInfo};
-use crate::net::Net;
 use crate::rpc::{PeerRpc, RpcChannel};
 use crate::state::{PublisherId, ReadReply, ReaderId, State, WriteOp, WriteReply};
 use crate::vpn_port::VpnPort;
@@ -69,6 +69,22 @@ pub struct Node {
     /// `NodeConfig::query_delay`.
     answers_soon: Arc<AtomicBool>,
     info: Arc<NodeInfo>,
+    interfaces: Interfaces,
+}
+
+/// Spawns a node on a driver's executor: what [`Node::spawn`] calls.
+///
+/// A driver crate implements it for its clocks, over any of its socket
+/// providers `N`: the clock is the side a driver defines whichever
+/// sockets the caller brings.
+pub trait SpawnNode<N> {
+    /// Builds the node on this clock and `net`'s sockets, and spawns its
+    /// task.
+    fn spawn_node(
+        self,
+        config: NodeConfig,
+        net: N,
+    ) -> impl Future<Output = Result<(Node, NodeEvents), NodeError>> + Send;
 }
 
 /// The node's event stream.
@@ -78,6 +94,10 @@ pub struct NodeEvents {
 }
 
 impl NodeEvents {
+    pub(crate) fn new(rx: mpsc::Receiver<NodeEvent>) -> NodeEvents {
+        NodeEvents { rx }
+    }
+
     /// The next event; `None` once the node has stopped.
     pub async fn recv(&mut self) -> Option<NodeEvent> {
         self.rx.recv().await
@@ -88,36 +108,40 @@ impl NodeEvents {
     }
 }
 
-impl std::fmt::Debug for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Command")
-    }
-}
-
 impl Node {
-    /// Builds the node, binds its listeners and spawns the node task on the
-    /// current runtime (a current-thread runtime for determinism; turmoil
-    /// hosts are one).
-    pub async fn spawn<N: Net, C: Clock>(
+    pub(crate) fn new(
+        tx: mpsc::Sender<Command>,
+        queries: mpsc::Sender<Call>,
+        answers_soon: Arc<AtomicBool>,
+        info: Arc<NodeInfo>,
+        interfaces: Interfaces,
+    ) -> Node {
+        Node {
+            tx,
+            queries,
+            answers_soon,
+            info,
+            interfaces,
+        }
+    }
+
+    /// Builds the node on `net`'s sockets, binds its listeners and spawns
+    /// the node task (see [`SpawnNode`]).
+    pub fn spawn<N, C: SpawnNode<N>>(
         config: NodeConfig,
         net: N,
         clock: C,
-    ) -> Result<(Node, NodeEvents), NodeError> {
-        let started = Driver::start(config, net, clock).await?;
-        tokio::spawn(started.driver.run());
-        Ok((
-            Node {
-                tx: started.commands,
-                queries: started.queries,
-                answers_soon: started.answers_soon,
-                info: started.info,
-            },
-            NodeEvents { rx: started.events },
-        ))
+    ) -> impl Future<Output = Result<(Node, NodeEvents), NodeError>> + Send {
+        clock.spawn_node(config, net)
     }
 
     pub fn info(&self) -> &NodeInfo {
         &self.info
+    }
+
+    /// The link interfaces the node's driver has.
+    pub fn interfaces(&self) -> Interfaces {
+        self.interfaces
     }
 
     pub fn host_id(&self) -> ID {
@@ -778,5 +802,31 @@ impl SwarmReader {
 impl Drop for SwarmReader {
     fn drop(&mut self) {
         let _ = self.tx.try_send(Command::CloseReader(self.reader));
+    }
+}
+
+/// Underruns and resets are discontinuities; the reader ends when its
+/// swarm or the node does.
+impl SwarmRead for SwarmReader {
+    type Error = ReadError;
+
+    async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<ReadError>> {
+        SwarmReader::read_at(self, out).await.map_err(|e| match e {
+            ReadError::Underrun { .. } | ReadError::Reset => ReadFailure::Discontinuity,
+            ReadError::Closed | ReadError::Stopped => ReadFailure::Closed,
+            e @ ReadError::Store(_) => ReadFailure::Failed(e),
+        })
+    }
+}
+
+impl SwarmWrite for SwarmWriter {
+    type Error = NodeError;
+
+    async fn write(&mut self, data: &[u8]) -> Result<(), NodeError> {
+        SwarmWriter::write(self, data).await
+    }
+
+    async fn reset(&mut self) -> Result<(), NodeError> {
+        SwarmWriter::reset(self).await
     }
 }

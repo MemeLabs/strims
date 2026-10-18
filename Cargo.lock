@@ -2322,6 +2322,7 @@ dependencies = [
  "strims-kademlia",
  "strims-kv",
  "strims-network",
+ "strims-node-core",
  "strims-ppspp",
  "strims-proto",
  "strims-qos",
@@ -2340,6 +2341,29 @@ dependencies = [
  "tracing",
  "turmoil",
  "webpki-roots",
+]
+
+[[package]]
+name = "strims-node-core"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "rand_core 0.10.1",
+ "slotmap",
+ "strims-base",
+ "strims-binmap",
+ "strims-crypto",
+ "strims-kademlia",
+ "strims-ppspp",
+ "strims-proto",
+ "strims-qos",
+ "strims-transfer",
+ "strims-vnic",
+ "strims-vpn",
+ "strims-webrtc",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

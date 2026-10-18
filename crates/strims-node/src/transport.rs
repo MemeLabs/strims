@@ -22,6 +22,7 @@
 
 use std::net::SocketAddr;
 
+use strims_node_core::DialId;
 use strims_vnic::ws::ws_path;
 use strims_vnic::{DialTarget, LinkConfig, TcpMux, TcpMuxAcceptor, TcpOptions};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -29,10 +30,9 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::{StatusCode, Uri};
 
-use crate::config::{BufferConfig, TcpSocketConfig};
+use crate::config::TcpSocketConfig;
 use crate::link::{ACCEPT_BACKOFF, Input, Transport, with_timeout, ws_config};
 use crate::net::Net;
-use crate::state::DialId;
 
 /// What the transport tasks need from the config.
 #[derive(Clone, Debug)]
@@ -40,7 +40,6 @@ pub(crate) struct IoConfig {
     pub(crate) tcp: TcpOptions,
     pub(crate) tcp_socket: TcpSocketConfig,
     pub(crate) ws: strims_vnic::ws::WsOptions,
-    pub(crate) buffers: BufferConfig,
     pub(crate) dial_timeout: strims_base::time::Duration,
     /// This node's profile public key: the TCP mux route and WS path.
     pub(crate) profile_key: [u8; 32],
@@ -64,6 +63,7 @@ pub(crate) async fn dial<N: Net>(
             config,
             leftover: Vec::new(),
             notsent_lowat,
+            rtc: None,
         },
         Err(error) => Input::DialFailed { dial, error },
     };
@@ -187,6 +187,7 @@ async fn tcp_accept<N: Net>(
             config: LinkConfig::tcp_accept(),
             leftover,
             notsent_lowat,
+            rtc: None,
         },
         Err(error) => Input::AcceptFailed { error },
     };
@@ -272,6 +273,7 @@ async fn ws_accept<N: Net>(
             config: LinkConfig::ws(),
             leftover: Vec::new(),
             notsent_lowat,
+            rtc: None,
         },
         Some(Err(e)) => Input::AcceptFailed {
             error: e.to_string(),
@@ -308,7 +310,6 @@ mod tests {
             tcp: TcpOptions::default(),
             tcp_socket: TcpSocketConfig::default(),
             ws: strims_vnic::ws::WsOptions::default(),
-            buffers: BufferConfig::default(),
             dial_timeout: strims_base::time::Duration::from_secs(5),
             profile_key: key,
         };
@@ -367,7 +368,6 @@ mod tests {
                     congestion: Some(congestion.to_owned()),
                 },
                 ws: strims_vnic::ws::WsOptions::default(),
-                buffers: BufferConfig::default(),
                 dial_timeout: strims_base::time::Duration::from_secs(5),
                 profile_key: key,
             };
