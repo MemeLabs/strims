@@ -168,3 +168,6 @@ panic = "abort"
 [profile.release-wasm]
 inherits = "release"
 opt-level = "z"
+# The name section is over half the module; without it, wasm frames in
+# stack traces show as function indices.
+strip = true
