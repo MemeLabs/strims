@@ -24,6 +24,7 @@ use strims_crypto::{
     DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
 };
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
+use strims_proto::autoseed::v1::{Config as AutoseedConfigRecord, Rule};
 use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
 use strims_proto::network::v1::bootstrap;
@@ -34,12 +35,14 @@ use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
 use strims_proto::types::certificate::ParentOneof;
-use strims_proto::types::{Certificate, Key, KeyUsage};
+use strims_proto::types::{Cache, CacheMeta, Certificate, Key, KeyUsage, cache};
 use strims_proto::video::v1::video_channel::{self, Owner};
 use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
+use strims_proto::vnic::v1::Config as VnicConfigRecord;
 
 use crate::events::{Record, Recv, StoreEvent, Subscription};
 use crate::key::{Namespace, profile_table};
+use crate::schema::autoseed::{AutoseedConfig, AutoseedRules, new_rule};
 use crate::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags,
     profile_peer_key,
@@ -55,12 +58,17 @@ use crate::schema::notification::{
     MAX_NOTIFICATIONS, Notifications, dispatch, network_subject, new_notification,
 };
 use crate::schema::profile::{Devices, Profile, ProfileIds};
+use crate::schema::swarm::{
+    MAX_SWARM_CACHES, SwarmCacheMetas, SwarmCaches, cache_checksum, delete_cache, get_cache,
+    set_cache,
+};
 use crate::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use crate::schema::video::{
     DEFAULT_INGRESS_SERVER_ADDR, HlsConfig, IngressConfig, StreamKeyError, TOKEN_SIZE,
     VideoChannels, channel_by_stream_key, delete_for_network, format_stream_key, new_channel,
     owner_key, parse_stream_key,
 };
+use crate::schema::vnic::VnicConfig;
 use crate::seal::StorageKey;
 use crate::store::{MAX_LOG_EVENTS, ProfileStore, ReplicatedStore, STORE_VERSION, WriteTx};
 use crate::table::{Index, Replication, Singleton, Table, UniqueConflict, ref_key};
@@ -2049,4 +2057,422 @@ fn video_configs_have_defaults_and_stay_on_the_device() {
             StoreEvent::Changed(Record::HlsEgressConfig(hls)),
         ]
     );
+}
+
+#[test]
+fn vnic_and_autoseed_configs_have_defaults_and_stay_on_the_device() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let vnic = VnicConfigRecord {
+        max_upload_bytes_per_second: 1 << 20,
+        max_peers: 8,
+    };
+    let autoseed = AutoseedConfigRecord { enable: true };
+    block(async {
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            VnicConfig::get(&mut tx).await.unwrap(),
+            Some(VnicConfigRecord {
+                max_upload_bytes_per_second: 1 << 40,
+                max_peers: 25,
+            })
+        );
+        assert_eq!(
+            AutoseedConfig::get(&mut tx).await.unwrap(),
+            Some(AutoseedConfigRecord { enable: false })
+        );
+        drop(tx);
+
+        let mut tx = store.write(T0).await.unwrap();
+        VnicConfig::set(&mut tx, vnic).await.unwrap();
+        AutoseedConfig::set(&mut tx, autoseed).await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(VnicConfig::get(&mut tx).await.unwrap(), Some(vnic));
+        assert_eq!(AutoseedConfig::get(&mut tx).await.unwrap(), Some(autoseed));
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert!(VnicConfig::REPLICATION.is_none());
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Changed(Record::VnicConfig(vnic)),
+            StoreEvent::Changed(Record::AutoseedConfig(autoseed)),
+        ]
+    );
+}
+
+/// A rule `id` naming a swarm on the network with key `network_key`.
+fn autoseed_rule(id: u64, network_key: &[u8], label: &str) -> Rule {
+    Rule {
+        id,
+        network_key: network_key.to_vec(),
+        swarm_id: b"swarm".to_vec(),
+        salt: b"salt".to_vec(),
+        label: label.into(),
+    }
+}
+
+fn autoseed_rule_ids(tx: &mut WriteTx<MemoryKv>) -> Vec<u64> {
+    let mut ids: Vec<u64> = block(AutoseedRules::get_all(tx))
+        .unwrap()
+        .iter()
+        .map(|r| r.id)
+        .collect();
+    ids.sort_unstable();
+    ids
+}
+
+#[test]
+fn autoseed_rules_get_new_ids_stay_on_the_device_and_are_observable() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let (a, b) = block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let a = new_rule(&mut tx, autoseed_rule(999, b"net", "a"))
+            .await
+            .unwrap();
+        let b = new_rule(&mut tx, autoseed_rule(999, b"net", "b"))
+            .await
+            .unwrap();
+        // a new rule isn't stored
+        assert!(AutoseedRules::get_all(&mut tx).await.unwrap().is_empty());
+        AutoseedRules::insert(&mut tx, a.clone()).await.unwrap();
+        AutoseedRules::insert(&mut tx, b.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+        (a, b)
+    });
+    assert!(a.id != 999 && b.id != 999 && a.id != b.id);
+    assert_eq!(a, autoseed_rule(a.id, b"net", "a"));
+
+    let renamed = Rule {
+        label: "renamed".into(),
+        ..a.clone()
+    };
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        AutoseedRules::update(&mut tx, renamed.clone())
+            .await
+            .unwrap();
+        assert!(AutoseedRules::delete(&mut tx, b.id).await.unwrap());
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            AutoseedRules::get_all(&mut tx).await.unwrap(),
+            std::slice::from_ref(&renamed)
+        );
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert_eq!(
+        drain(&mut sub),
+        [
+            StoreEvent::Changed(Record::AutoseedRule(a)),
+            StoreEvent::Changed(Record::AutoseedRule(b.clone())),
+            StoreEvent::Changed(Record::AutoseedRule(renamed)),
+            StoreEvent::Deleted(Record::AutoseedRule(b)),
+        ]
+    );
+}
+
+#[test]
+fn deleting_a_network_deletes_its_autoseed_rules() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let (a, b) = (owned_network(1, 1), owned_network(2, 2));
+    let (ka, kb) = (network_key(&a), network_key(&b));
+    let keyless = Network {
+        id: 3,
+        ..Default::default()
+    };
+    let rules = [
+        autoseed_rule(10, &ka, "a1"),
+        autoseed_rule(11, &ka, "a2"),
+        autoseed_rule(20, &kb, "b"),
+        autoseed_rule(30, b"", "keyless"),
+        autoseed_rule(31, b"other", "other"),
+    ];
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for n in [&a, &b, &keyless] {
+            Networks::insert(&mut tx, n.clone()).await.unwrap();
+        }
+        for r in &rules {
+            AutoseedRules::insert(&mut tx, r.clone()).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+    });
+
+    let mut sub = store.events().subscribe();
+    let mut tx = block(store.write(T0)).unwrap();
+    block(Networks::delete(&mut tx, 1)).unwrap();
+    assert_eq!(autoseed_rule_ids(&mut tx), [20, 30, 31]);
+    // a network without a key has no rules to delete
+    block(Networks::delete(&mut tx, 3)).unwrap();
+    assert_eq!(autoseed_rule_ids(&mut tx), [20, 30, 31]);
+    block(tx.commit()).unwrap();
+    let deleted: Vec<StoreEvent> = drain(&mut sub)
+        .into_iter()
+        .filter(|e| matches!(e, StoreEvent::Deleted(Record::AutoseedRule(_))))
+        .collect();
+    assert_eq!(
+        deleted,
+        [
+            StoreEvent::Deleted(Record::AutoseedRule(rules[0].clone())),
+            StoreEvent::Deleted(Record::AutoseedRule(rules[1].clone())),
+        ]
+    );
+
+    // a deletion applied from another replica too
+    let mut tx = block(store.write(T0)).unwrap();
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 2)).unwrap();
+    assert_eq!(autoseed_rule_ids(&mut tx), [30, 31]);
+}
+
+/// A cache of a swarm holding `data`.
+fn swarm_cache(data: &[u8]) -> Cache {
+    Cache {
+        uri: "magnet:?xt=urn:ppspp:swarm".into(),
+        epoch: Some(cache::Epoch {
+            timestamp: 5,
+            signature: vec![1; 64],
+        }),
+        integrity: Some(cache::Integrity {
+            merkle_integrity: Some(cache::MerkleIntegrity {
+                timestamps: vec![5],
+                signatures: vec![vec![2; 64]],
+            }),
+            ..Default::default()
+        }),
+        data: data.to_vec(),
+        ..Default::default()
+    }
+}
+
+/// The stored rows of the cache tables: metas, index entries and caches.
+fn cache_rows(kv: &MemoryKv) -> [usize; 3] {
+    [
+        SwarmCacheMetas::NS,
+        SwarmCacheMetas::BY_KEY.ns,
+        SwarmCaches::NS,
+    ]
+    .map(|ns| raw_keys(kv, &ns.prefix()).len())
+}
+
+#[test]
+fn a_swarm_cache_round_trips_and_stays_on_the_device() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let c = swarm_cache(b"data");
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        assert!(
+            set_cache(&mut tx, b"swarm", b"salt", c.clone())
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+
+        let mut tx = store.read().await.unwrap();
+        let got = get_cache(&mut tx, b"swarm", b"salt")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(got.id, 0);
+        assert_eq!(
+            got,
+            Cache {
+                id: got.id,
+                ..c.clone()
+            }
+        );
+        assert_eq!(
+            SwarmCacheMetas::get(&mut tx, got.id).await.unwrap(),
+            Some(CacheMeta {
+                id: got.id,
+                swarm_id: b"swarm".to_vec(),
+                swarm_salt: b"salt".to_vec(),
+                checksum: cache_checksum(&c),
+            })
+        );
+        let ids = SwarmCacheMetas::index_ids(&mut tx, &SwarmCacheMetas::BY_KEY, b"swarmsalt")
+            .await
+            .unwrap();
+        assert_eq!(ids, [got.id]);
+        assert_eq!(get_cache(&mut tx, b"swarm", b"").await.unwrap(), None);
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert!(drain(&mut sub).is_empty());
+    assert_eq!(cache_rows(&kv), [1, 1, 1]);
+}
+
+#[test]
+fn pairs_with_the_same_cache_key_replace_each_other() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let c = swarm_cache(b"ab|c");
+        assert!(set_cache(&mut tx, b"ab", b"c", c.clone()).await.unwrap());
+        assert_eq!(get_cache(&mut tx, b"a", b"bc").await.unwrap(), None);
+        assert!(!delete_cache(&mut tx, b"a", b"bc").await.unwrap());
+        // the same cache under the other pair is a write
+        assert!(set_cache(&mut tx, b"a", b"bc", c).await.unwrap());
+        assert_eq!(get_cache(&mut tx, b"ab", b"c").await.unwrap(), None);
+        let got = get_cache(&mut tx, b"a", b"bc").await.unwrap().unwrap();
+        assert_eq!(got.data, b"ab|c");
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(cache_rows(&kv), [1, 1, 1]);
+}
+
+#[test]
+fn an_unchanged_cache_checksum_skips_the_write() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let c = swarm_cache(b"data");
+    let first = block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        assert!(
+            set_cache(&mut tx, b"swarm", b"salt", c.clone())
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        get_cache(&mut tx, b"swarm", b"salt")
+            .await
+            .unwrap()
+            .unwrap()
+    });
+    let before = kv.dump();
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        assert!(
+            !set_cache(&mut tx, b"swarm", b"salt", c.clone())
+                .await
+                .unwrap()
+        );
+        // the stored cache carries its id, which the checksum ignores
+        assert!(
+            !set_cache(&mut tx, b"swarm", b"salt", first.clone())
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(kv.dump(), before);
+
+    // a changed cache moves to a new id
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let changed = swarm_cache(b"more data");
+        assert!(
+            set_cache(&mut tx, b"swarm", b"salt", changed)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        let got = get_cache(&mut tx, b"swarm", b"salt")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(got.data, b"more data");
+        assert!(got.id > first.id);
+        assert_eq!(SwarmCacheMetas::get(&mut tx, first.id).await.unwrap(), None);
+        assert_eq!(SwarmCaches::get(&mut tx, first.id).await.unwrap(), None);
+    });
+    assert_eq!(cache_rows(&kv), [1, 1, 1]);
+}
+
+#[test]
+fn deleting_a_swarm_cache_deletes_its_data() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for swarm in [&b"a"[..], b"b"] {
+            set_cache(&mut tx, swarm, b"", swarm_cache(swarm))
+                .await
+                .unwrap();
+        }
+        assert!(delete_cache(&mut tx, b"a", b"").await.unwrap());
+        assert!(!delete_cache(&mut tx, b"a", b"").await.unwrap());
+        assert_eq!(get_cache(&mut tx, b"a", b"").await.unwrap(), None);
+        assert!(get_cache(&mut tx, b"b", b"").await.unwrap().is_some());
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(cache_rows(&kv), [1, 1, 1]);
+
+    // deleting a meta deletes its cache
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        let id = get_cache(&mut tx, b"b", b"").await.unwrap().unwrap().id;
+        assert!(SwarmCacheMetas::delete(&mut tx, id).await.unwrap());
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(cache_rows(&kv), [0, 0, 0]);
+}
+
+#[test]
+fn the_cache_cap_evicts_the_least_recently_written_cache() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let swarm = |i: usize| format!("swarm-{i}").into_bytes();
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for i in 0..MAX_SWARM_CACHES {
+            set_cache(&mut tx, &swarm(i), b"", swarm_cache(&[i as u8]))
+                .await
+                .unwrap();
+        }
+        // rewriting the first cache leaves the second the least recent
+        set_cache(&mut tx, &swarm(0), b"", swarm_cache(b"rewritten"))
+            .await
+            .unwrap();
+        set_cache(&mut tx, &swarm(MAX_SWARM_CACHES), b"", swarm_cache(b"new"))
+            .await
+            .unwrap();
+        assert_eq!(get_cache(&mut tx, &swarm(1), b"").await.unwrap(), None);
+        for i in (0..=MAX_SWARM_CACHES).filter(|&i| i != 1) {
+            assert!(get_cache(&mut tx, &swarm(i), b"").await.unwrap().is_some());
+        }
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(cache_rows(&kv), [MAX_SWARM_CACHES; 3]);
+
+    // a store holding more than the cap sheds the excess on its next cache
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for i in 0..MAX_SWARM_CACHES + 2 {
+            let id = i as u64 + 1;
+            let meta = CacheMeta {
+                id,
+                swarm_id: swarm(i),
+                swarm_salt: vec![],
+                checksum: 0,
+            };
+            SwarmCacheMetas::insert(&mut tx, meta).await.unwrap();
+            let c = Cache {
+                id,
+                ..swarm_cache(&[i as u8])
+            };
+            SwarmCaches::insert(&mut tx, c).await.unwrap();
+        }
+        set_cache(&mut tx, b"newest", b"", swarm_cache(b"new"))
+            .await
+            .unwrap();
+        for i in 0..3 {
+            assert_eq!(get_cache(&mut tx, &swarm(i), b"").await.unwrap(), None);
+        }
+        assert!(get_cache(&mut tx, &swarm(3), b"").await.unwrap().is_some());
+        tx.commit().await.unwrap();
+    });
+    assert_eq!(cache_rows(&kv), [MAX_SWARM_CACHES; 3]);
 }

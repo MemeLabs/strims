@@ -22,12 +22,14 @@ use std::task::{Context, Poll, Waker};
 
 use futures_core::Stream;
 use slotmap::{SlotMap, new_key_type};
+use strims_proto::autoseed::v1 as autoseed;
 use strims_proto::chat::v1 as chat;
 use strims_proto::network::v1 as network;
 use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::{Checkpoint, EventLog};
 use strims_proto::video::v1 as video;
+use strims_proto::vnic::v1 as vnic;
 
 /// The events a subscriber can hold before it lags.
 pub const SUBSCRIBER_CAPACITY: usize = 256;
@@ -78,6 +80,12 @@ pub enum Record {
     VideoIngressConfig(video::VideoIngressConfig),
     /// This device's HLS egress config.
     HlsEgressConfig(video::HlsEgressConfig),
+    /// This device's upload cap and peer budget.
+    VnicConfig(vnic::Config),
+    /// Whether this device seeds the swarms its autoseed rules name.
+    AutoseedConfig(autoseed::Config),
+    /// An autoseed rule.
+    AutoseedRule(autoseed::Rule),
 }
 
 /// Something that happened in the store.

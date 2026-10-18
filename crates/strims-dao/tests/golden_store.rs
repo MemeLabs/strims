@@ -4,8 +4,8 @@
 //! A profile store the Go dao wrote (`golden/store.hex`, from `go run
 //! -tags golden ./crates/strims-dao/golden`): its sign-in and session
 //! records open, its records read back, every key is the one this crate
-//! derives, the compressed delta matches, and its stream keys name their
-//! channels.
+//! derives, the compressed delta matches, its stream keys name their
+//! channels, and its swarm cache reads back by swarm id and salt.
 
 // Tests panic on failure by design.
 #![allow(
@@ -25,6 +25,7 @@ use strims_base::time::Time;
 use strims_dao::auth::{self, ProfileKey, SessionToken};
 use strims_dao::key::{Namespace, index_entry_key, parse_base36};
 use strims_dao::replication::compressed_delta;
+use strims_dao::schema::autoseed::{AutoseedConfig, AutoseedRules};
 use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags, ChatUiConfig,
     ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
@@ -37,15 +38,20 @@ use strims_dao::schema::network::{
 };
 use strims_dao::schema::notification::Notifications;
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
+use strims_dao::schema::swarm::{
+    SwarmCacheMetas, SwarmCaches, cache_checksum, cache_key, get_cache, set_cache,
+};
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use strims_dao::schema::video::{
     HlsConfig, IngressConfig, VideoChannels, channel_by_stream_key, channel_network_key, owner_key,
 };
+use strims_dao::schema::vnic::VnicConfig;
 use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, ReadTx, Singleton, Table, lease, ref_key};
 use strims_kv::{Dump, MemoryKv};
 use strims_proto::dao::v1::{Mutex, SecondaryIndexKey, VersionVector};
 use strims_proto::replication::v1::{Event, EventLog};
+use strims_proto::types::Cache;
 
 const STORE: &str = include_str!("../golden/store.hex");
 
@@ -67,6 +73,8 @@ struct Golden {
     delta: Vec<EventLog>,
     /// Stream keys the Go dao formatted, with the channel each names.
     stream_keys: Vec<(u64, String)>,
+    /// Swarm caches the Go dao stored, as (swarm id, salt, cache).
+    swarm_caches: Vec<(Vec<u8>, Vec<u8>, Cache)>,
 }
 
 fn u64_of(b: &[u8]) -> u64 {
@@ -92,6 +100,7 @@ fn load() -> Golden {
         delta_remote: VersionVector::default(),
         delta: vec![],
         stream_keys: vec![],
+        swarm_caches: vec![],
     };
     for line in STORE.lines().filter(|l| !l.trim().is_empty()) {
         let mut parts = line.split(' ');
@@ -133,6 +142,11 @@ fn load() -> Golden {
             "video_stream_key" => g
                 .stream_keys
                 .push((u64_of(&v[0]), String::from_utf8(v[1].clone()).unwrap())),
+            "swarm_cache" => g.swarm_caches.push((
+                v[0].clone(),
+                v[1].clone(),
+                Cache::decode(v[2].as_slice()).unwrap(),
+            )),
             other => panic!("unknown line {other}"),
         }
     }
@@ -189,6 +203,11 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         VideoChannels::NS => re::<<VideoChannels as Table>::Record>(bytes),
         IngressConfig::NS => re::<<IngressConfig as Singleton>::Record>(bytes),
         HlsConfig::NS => re::<<HlsConfig as Singleton>::Record>(bytes),
+        VnicConfig::NS => re::<<VnicConfig as Singleton>::Record>(bytes),
+        AutoseedConfig::NS => re::<<AutoseedConfig as Singleton>::Record>(bytes),
+        AutoseedRules::NS => re::<<AutoseedRules as Table>::Record>(bytes),
+        SwarmCacheMetas::NS => re::<<SwarmCacheMetas as Table>::Record>(bytes),
+        SwarmCaches::NS => re::<<SwarmCaches as Table>::Record>(bytes),
         other => panic!("no record type for {other}"),
     }
 }
@@ -232,6 +251,11 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         VideoChannels::NS => t::<VideoChannels>(tx, id),
         IngressConfig::NS => s::<IngressConfig>(tx),
         HlsConfig::NS => s::<HlsConfig>(tx),
+        VnicConfig::NS => s::<VnicConfig>(tx),
+        AutoseedConfig::NS => s::<AutoseedConfig>(tx),
+        AutoseedRules::NS => t::<AutoseedRules>(tx, id),
+        SwarmCacheMetas::NS => t::<SwarmCacheMetas>(tx, id),
+        SwarmCaches::NS => t::<SwarmCaches>(tx, id),
         other => panic!("no record type for {other}"),
     }
 }
@@ -320,6 +344,12 @@ fn every_key_is_the_one_this_crate_derives() {
     keys_of::<ChatProfiles>(&mut tx, &salt, &mut derived);
     keys_of::<Notifications>(&mut tx, &salt, &mut derived);
     keys_of::<VideoChannels>(&mut tx, &salt, &mut derived);
+    keys_of::<AutoseedRules>(&mut tx, &salt, &mut derived);
+    keys_of::<SwarmCacheMetas>(&mut tx, &salt, &mut derived);
+    // A cache row is under its meta's id.
+    for m in block(SwarmCacheMetas::get_all(&mut tx)).unwrap() {
+        derived.insert(SwarmCaches::NS.record_key(m.id));
+    }
     for ns in [
         StoreVersions::NS,
         Profile::NS,
@@ -329,6 +359,8 @@ fn every_key_is_the_one_this_crate_derives() {
         BootstrapConfig::NS,
         IngressConfig::NS,
         HlsConfig::NS,
+        VnicConfig::NS,
+        AutoseedConfig::NS,
     ] {
         derived.insert(ns.key());
     }
@@ -341,7 +373,10 @@ fn every_key_is_the_one_this_crate_derives() {
     known.insert(5001);
     known.extend(6001..=6025);
     known.extend(7001..=7004);
+    known.insert(8001);
     known.extend(9001..=9006);
+    known.extend(10001..=10002);
+    known.extend(11001..=11003);
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
     let stored: BTreeSet<String> = table
@@ -369,7 +404,7 @@ fn every_key_is_the_one_this_crate_derives() {
         if index_ns.contains(&ns)
             || [6003, 6005, 6007, 6010, 6011].contains(&ns)
             || [6013, 6014, 6016, 6017, 6019, 6021, 6023, 6025].contains(&ns)
-            || [7002, 9002, 9003, 9005, 9006].contains(&ns)
+            || [7002, 9002, 9003, 9005, 9006, 11002].contains(&ns)
         {
             let entry = SecondaryIndexKey::decode(sk.open(v).unwrap().as_slice()).unwrap();
             assert_eq!(
@@ -722,4 +757,61 @@ fn video_records_read_back() {
     let hls = block(HlsConfig::get(&mut tx)).unwrap().unwrap();
     assert!(hls.enabled);
     assert_eq!(hls.public_server_addr, "https://hls.example");
+}
+
+/// The vnic config, the enabled autoseed config with a rule on each
+/// network, and a swarm cache found by its swarm id and salt, whose
+/// checksum is the one this crate derives.
+#[test]
+fn vnic_autoseed_and_swarm_cache_records_read_back() {
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let vnic = block(VnicConfig::get(&mut tx)).unwrap().unwrap();
+    assert_eq!(
+        (vnic.max_upload_bytes_per_second, vnic.max_peers),
+        (1 << 20, 12)
+    );
+    assert!(block(AutoseedConfig::get(&mut tx)).unwrap().unwrap().enable);
+    let networks = block(Networks::get_all(&mut tx)).unwrap();
+    let owned = networks.iter().find(|n| n.server_config.is_some()).unwrap();
+    let joined = networks.iter().find(|n| n.server_config.is_none()).unwrap();
+    let mut rules = block(AutoseedRules::get_all(&mut tx)).unwrap();
+    rules.sort_by(|a, b| a.label.cmp(&b.label));
+    assert_eq!(rules.len(), 2);
+    for (r, (label, network)) in rules.iter().zip([("rule 0", owned), ("rule 1", joined)]) {
+        assert_eq!(r.label, label);
+        assert_eq!(r.salt, label.as_bytes());
+        assert_eq!(r.network_key, network_key(network));
+        assert_eq!(r.swarm_id.len(), 32);
+    }
+
+    assert_eq!(g.swarm_caches.len(), 1);
+    let (swarm_id, salt, cache) = &g.swarm_caches[0];
+    assert_eq!(salt, b"chat:assets");
+    let got = block(get_cache(&mut tx, swarm_id, salt)).unwrap().unwrap();
+    assert_eq!(
+        got,
+        Cache {
+            id: got.id,
+            ..cache.clone()
+        }
+    );
+    let meta = block(SwarmCacheMetas::index_get(
+        &mut tx,
+        &SwarmCacheMetas::BY_KEY,
+        &cache_key(swarm_id, salt),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(meta.id, got.id);
+    assert_eq!(meta.checksum, cache_checksum(cache));
+    drop(tx);
+
+    let mut tx = block(store.write(g.now)).unwrap();
+    assert!(!block(set_cache(&mut tx, swarm_id, salt, cache.clone())).unwrap());
+    // deleting a network deletes its rule
+    block(Networks::delete(&mut tx, owned.id)).unwrap();
+    let left = block(AutoseedRules::get_all(&mut tx)).unwrap();
+    assert_eq!(left, [rules[1].clone()]);
 }

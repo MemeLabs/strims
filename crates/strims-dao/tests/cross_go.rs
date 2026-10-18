@@ -4,10 +4,11 @@
 //! A store this crate writes, checked by the Go dao (`go run -tags golden
 //! ./crates/strims-dao/golden -verify <file>`): sign-in and session
 //! records, records and index lookups through the Go API, deleted records
-//! (a deleted network's notification and video channels among them)
-//! absent, stream keys this crate formats, a pairing token import, and
-//! the store's replication logs applied to a Go replica. Skipped when `go`
-//! isn't on PATH.
+//! (a deleted network's notification, video channels and autoseed rule
+//! among them) absent, swarm caches by swarm id and salt (one rewritten
+//! under a new id), stream keys this crate formats, a pairing token
+//! import, and the store's replication logs applied to a Go replica.
+//! Skipped when `go` isn't on PATH.
 
 #![allow(
     clippy::unwrap_used,
@@ -30,6 +31,7 @@ use strims_base::rng::det_rng;
 use strims_base::time::Time;
 use strims_dao::auth::{self, ProfileKey};
 use strims_dao::replication::allocate_ids;
+use strims_dao::schema::autoseed::{AutoseedConfig, AutoseedRules, new_rule};
 use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags, ChatUiConfig,
     ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
@@ -46,16 +48,19 @@ use strims_dao::schema::notification::{
     Notifications, dispatch, network_subject, new_notification,
 };
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
+use strims_dao::schema::swarm::{SwarmCacheMetas, SwarmCaches, cache_key, get_cache, set_cache};
 use strims_dao::schema::system::{Checkpoints, EventLogs};
 use strims_dao::schema::video::{
     HlsConfig, IngressConfig, VideoChannels, format_stream_key, new_channel, owner_key,
 };
+use strims_dao::schema::vnic::VnicConfig;
 use strims_dao::seal::StorageKey;
 use strims_dao::{
     ReadTx, Recv, ReplicatedStore, Singleton, StoreEvent, Table, WriteTx, lease, ref_key,
 };
 use strims_kv::MemoryKv;
 use strims_proto::auth::v1::PairingToken;
+use strims_proto::autoseed::v1::{Config as AutoseedConfigRecord, Rule};
 use strims_proto::chat::v1::{
     Emote, EmoteFileType, EmoteImage, MessageState, Modifier, Profile as ChatProfile, Room, Server,
     ServerIcon, Tag, UiConfig, UiConfigHighlight, UiConfigIgnore, UiConfigTag, WhisperRecord,
@@ -71,9 +76,10 @@ use strims_proto::network::v1::{Network, ServerConfig, UiConfig as NetworkUiConf
 use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::EventLog;
-use strims_proto::types::{Certificate, Image, ImageType, Key, KeyUsage};
+use strims_proto::types::{Cache, Certificate, Image, ImageType, Key, KeyUsage, cache};
 use strims_proto::video::v1::video_channel::{self, Owner};
 use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
+use strims_proto::vnic::v1::Config as VnicConfigRecord;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -313,6 +319,39 @@ async fn insert_video_channels(
     out.try_into().unwrap()
 }
 
+/// Stores a rule naming a swarm on the network with key `network_key`.
+async fn insert_rule(tx: &mut WriteTx<MemoryKv>, network_key: &[u8], label: &str) -> Rule {
+    let rule = Rule {
+        network_key: network_key.to_vec(),
+        swarm_id: label.as_bytes().to_vec(),
+        salt: b"salt".to_vec(),
+        label: label.into(),
+        ..Default::default()
+    };
+    let rule = new_rule(tx, rule).await.unwrap();
+    AutoseedRules::insert(tx, rule).await.unwrap()
+}
+
+/// A cache of the swarm `uri` holding `data`.
+fn swarm_cache(uri: &str, data: &[u8]) -> Cache {
+    Cache {
+        uri: uri.into(),
+        epoch: Some(cache::Epoch {
+            timestamp: 1_700_000_000_000_000_000,
+            signature: vec![3; 64],
+        }),
+        integrity: Some(cache::Integrity {
+            sign_all_integrity: Some(cache::SignAllIntegrity {
+                timestamps: vec![1, 2, 3],
+                signatures: vec![4; 192],
+            }),
+            ..Default::default()
+        }),
+        data: data.to_vec(),
+        ..Default::default()
+    }
+}
+
 #[test]
 fn go_reads_a_store_this_crate_writes() {
     if !go_available() {
@@ -413,6 +452,17 @@ fn go_reads_a_store_this_crate_writes() {
         public_server_addr: "https://hls.example".into(),
     };
     let (mut owned_id, mut doomed_id, mut owner_peer_id) = (0, 0, 0);
+    let vnic = VnicConfigRecord {
+        max_upload_bytes_per_second: 1 << 22,
+        max_peers: 9,
+    };
+    let mut kept_rules: Vec<Rule> = vec![];
+    let mut doomed_rule = Rule::default();
+    // Caches of two swarms; the first is rewritten, which moves it to a
+    // new id.
+    let swarms = [(); 2].map(|_| strims_crypto::generate_key(&mut rng).public);
+    let swarm_salts: [&[u8]; 2] = [b"chat:assets", b""];
+    let mut first_cache_id = 0;
     let mut doomed_notification = 0;
     let mut chat_servers = [ChatServerIds::default(); 3];
     let chat_keys = [(); 3].map(|_| strims_crypto::generate_key(&mut rng));
@@ -460,7 +510,14 @@ fn go_reads_a_store_this_crate_writes() {
         .await
         .to_vec();
         IngressConfig::set(&mut tx, ingress.clone()).await.unwrap();
+        doomed_rule = insert_rule(&mut tx, &doomed_key.public, "doomed").await;
+        kept_rules.push(insert_rule(&mut tx, &network_key.public, "kept").await);
         Networks::delete(&mut tx, doomed_id).await.unwrap();
+        kept_rules.push(insert_rule(&mut tx, b"elsewhere", "elsewhere").await);
+        VnicConfig::set(&mut tx, vnic).await.unwrap();
+        AutoseedConfig::set(&mut tx, AutoseedConfigRecord { enable: true })
+            .await
+            .unwrap();
         kept_channels = insert_video_channels(
             &mut tx,
             &profile_key.public,
@@ -672,6 +729,36 @@ fn go_reads_a_store_this_crate_writes() {
                 .await
                 .unwrap()
         );
+        let uri = |id: &[u8]| {
+            strims_ppspp::Uri::new(
+                strims_ppspp::SwarmId::new(id),
+                strims_ppspp::UriOptions::default(),
+            )
+            .to_string()
+        };
+        let first = swarm_cache(&uri(&swarms[0]), b"first");
+        assert!(
+            set_cache(&mut tx, &swarms[0], swarm_salts[0], first)
+                .await
+                .unwrap()
+        );
+        first_cache_id = get_cache(&mut tx, &swarms[0], swarm_salts[0])
+            .await
+            .unwrap()
+            .unwrap()
+            .id;
+        let rewritten = swarm_cache(&uri(&swarms[0]), b"rewritten");
+        assert!(
+            set_cache(&mut tx, &swarms[0], swarm_salts[0], rewritten)
+                .await
+                .unwrap()
+        );
+        let other = swarm_cache(&uri(&swarms[1]), b"other");
+        assert!(
+            set_cache(&mut tx, &swarms[1], swarm_salts[1], other)
+                .await
+                .unwrap()
+        );
         let id = tx.generate_id().await.unwrap();
         let mut failed = new_notification(
             id,
@@ -794,6 +881,70 @@ fn go_reads_a_store_this_crate_writes() {
             &hls_config.encode_to_vec(),
         ],
     );
+    let vnic_config = block(VnicConfig::get(&mut tx)).unwrap().unwrap();
+    assert_eq!(vnic_config, vnic);
+    out.put(
+        "record",
+        &[
+            &8001u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &vnic_config.encode_to_vec(),
+        ],
+    );
+    let autoseed_config = block(AutoseedConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(autoseed_config.enable);
+    out.put(
+        "record",
+        &[
+            &10001u64.to_be_bytes(),
+            &0u64.to_be_bytes(),
+            &autoseed_config.encode_to_vec(),
+        ],
+    );
+    let mut rules = block(AutoseedRules::get_all(&mut tx)).unwrap();
+    rules.sort_by_key(|r| r.id);
+    assert_eq!(rules, kept_rules, "the deleted network's rule went");
+    out.put(
+        "absent",
+        &[
+            &(AutoseedRules::NS.0 as u64).to_be_bytes(),
+            &doomed_rule.id.to_be_bytes(),
+        ],
+    );
+    record_lines::<AutoseedRules>(&mut tx, &mut out);
+    record_lines::<SwarmCacheMetas>(&mut tx, &mut out);
+    for m in block(SwarmCacheMetas::get_all(&mut tx)).unwrap() {
+        let c = block(SwarmCaches::get(&mut tx, m.id)).unwrap().unwrap();
+        out.put(
+            "record",
+            &[
+                &(SwarmCaches::NS.0 as u64).to_be_bytes(),
+                &m.id.to_be_bytes(),
+                &c.encode_to_vec(),
+            ],
+        );
+    }
+    for (swarm, salt) in swarms.iter().zip(swarm_salts) {
+        let c = block(get_cache(&mut tx, swarm, salt)).unwrap().unwrap();
+        out.put("swarm_cache", &[swarm, salt, &c.encode_to_vec()]);
+        index_line::<SwarmCacheMetas>(
+            &mut tx,
+            &SwarmCacheMetas::BY_KEY,
+            &cache_key(swarm, salt),
+            &mut out,
+        );
+    }
+    let rewritten = block(get_cache(&mut tx, &swarms[0], swarm_salts[0]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(rewritten.data, b"rewritten");
+    assert!(rewritten.id > first_cache_id);
+    for ns in [SwarmCacheMetas::NS, SwarmCaches::NS] {
+        out.put(
+            "absent",
+            &[&(ns.0 as u64).to_be_bytes(), &first_cache_id.to_be_bytes()],
+        );
+    }
     record_lines::<CertificateLogs>(&mut tx, &mut out);
     record_lines::<NetworkPeers>(&mut tx, &mut out);
     record_lines::<AliasReservations>(&mut tx, &mut out);

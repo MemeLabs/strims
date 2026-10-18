@@ -23,6 +23,7 @@ import (
 	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/internal/dao/versionvector"
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
+	autoseedv1 "github.com/MemeLabs/strims/pkg/apis/autoseed/v1"
 	chatv1 "github.com/MemeLabs/strims/pkg/apis/chat/v1"
 	daov1 "github.com/MemeLabs/strims/pkg/apis/dao/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
@@ -33,7 +34,9 @@ import (
 	replicationv1 "github.com/MemeLabs/strims/pkg/apis/replication/v1"
 	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	"github.com/MemeLabs/strims/pkg/apis/type/image"
+	"github.com/MemeLabs/strims/pkg/apis/type/swarm"
 	videov1 "github.com/MemeLabs/strims/pkg/apis/video/v1"
+	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/kv"
 	"github.com/MemeLabs/strims/pkg/kv/kvtest"
 	"github.com/MemeLabs/strims/pkg/timeutil"
@@ -276,6 +279,28 @@ func storeScenario(w *bufio.Writer) {
 	out("video_stream_key", u64(localChannel.Id), []byte(dao.FormatVideoChannelStreamKey(localChannel.Id, localChannel.Token, profile.Key)))
 	out("video_stream_key", u64(shareChannel.Id), []byte(dao.FormatVideoChannelStreamKey(shareChannel.Id, shareChannel.Token, inviteeKey)))
 
+	// The vnic config, an enabled autoseed config with a rule on each
+	// network, and a cache of a swarm under a salt.
+	must0(dao.VNICConfig.Set(rs, &vnicv1.Config{MaxUploadBytesPerSecond: 1 << 20, MaxPeers: 12}))
+	must0(dao.AutoseedConfig.Set(rs, &autoseedv1.Config{Enable: true}))
+	for i, k := range [][]byte{ownedKey, joinedCert.Key} {
+		label := fmt.Sprintf("rule %d", i)
+		must0(dao.AutoseedRules.Insert(rs, must(dao.NewAutoseedRule(rs, label, k, must(dao.GenerateKey()).Public, []byte(label)))))
+	}
+	cacheSwarmID := must(dao.GenerateKey()).Public
+	cacheSalt := []byte("chat:assets")
+	cache := &swarm.Cache{
+		Uri:   "magnet:?xt=urn:ppspp:" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(cacheSwarmID) + "&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=64&x.sc=1",
+		Epoch: &swarm.Cache_Epoch{Timestamp: 1_700_000_000_000_000_000, Signature: seq(1, 64)},
+		Integrity: &swarm.Cache_Integrity{MerkleIntegrity: &swarm.Cache_MerkleIntegrity{
+			Timestamps: []int64{1, 2},
+			Signatures: [][]byte{seq(64, 64), seq(128, 64)},
+		}},
+		Data: seq(7, 100),
+	}
+	must0(dao.SetSwarmCache(rs, cacheSwarmID, cacheSalt, cache))
+	out("swarm_cache", cacheSwarmID, cacheSalt, marshal(cache))
+
 	_, err = dao.NewMutex(zap.NewNop(), rs, "replication").TryLock(context.Background())
 	must0(err)
 
@@ -368,6 +393,17 @@ func storeScenario(w *bufio.Writer) {
 	}
 	record(7003, 0, must(dao.VideoIngressConfig.Get(rs)))
 	record(7004, 0, must(dao.HLSEgressConfig.Get(rs)))
+	record(8001, 0, must(dao.VNICConfig.Get(rs)))
+	record(10001, 0, must(dao.AutoseedConfig.Get(rs)))
+	for _, m := range must(dao.AutoseedRules.GetAll(rs)) {
+		record(10002, m.Id, m)
+	}
+	for _, m := range rawRecords[swarm.CacheMeta](rs, 11001) {
+		record(11001, m.Id, m)
+	}
+	for _, m := range rawRecords[swarm.Cache](rs, 11003) {
+		record(11003, m.Id, m)
+	}
 
 	// A peer that has seen the first three of this replica's logs.
 	remote := &daov1.VersionVector{Value: map[uint64]uint64{rs.ReplicaID(): 3}}
@@ -464,6 +500,28 @@ func verify(path string) {
 				fail("stream key %s: %v", v[0], err)
 			case len(v[1]) != 0 && c.Id != binary.BigEndian.Uint64(v[1]):
 				fail("stream key %s: got channel %d, want %d", v[0], c.Id, binary.BigEndian.Uint64(v[1]))
+			}
+		case "swarm_cache":
+			// The cache of a swarm under a salt, found through the meta
+			// index, and its meta's checksum as the dao derives it.
+			want := &swarm.Cache{}
+			must0(proto.Unmarshal(v[2], want))
+			got, err := dao.GetSwarmCache(rs, v[0], v[1])
+			if err != nil {
+				fail("swarm cache %x/%x: %v", v[0], v[1], err)
+			}
+			if !proto.Equal(got, want) {
+				fail("swarm cache %x/%x: got %v, want %v", v[0], v[1], got, want)
+			}
+			metas := must(dao.ScanSecondaryIndex(rs, 11002, dao.FormatSwarmCacheMetaKey(v[0], v[1])))
+			if len(metas) != 1 || metas[0] != got.Id {
+				fail("swarm cache %x/%x: metas %v, want %d", v[0], v[1], metas, got.Id)
+			}
+			meta := must(rawRecord[swarm.CacheMeta](rs, 11001, got.Id))
+			unstored := proto.Clone(want).(*swarm.Cache)
+			unstored.Id = 0
+			if meta.Checksum != dao.CRC32Message(unstored) {
+				fail("swarm cache %x/%x: checksum %x, want %x", v[0], v[1], meta.Checksum, dao.CRC32Message(unstored))
 			}
 		case "apply":
 			// Logs from the store's replica, applied to a new replica of
@@ -567,14 +625,47 @@ func getRecord(s kv.Store, ns, id uint64) proto.Message {
 		return must(dao.VideoIngressConfig.Get(s))
 	case 7004:
 		return must(dao.HLSEgressConfig.Get(s))
+	case 8001:
+		return must(dao.VNICConfig.Get(s))
+	case 10001:
+		return must(dao.AutoseedConfig.Get(s))
 	}
 	return must(deletableRecord(s, ns, id))
 }
 
+// rawRecords reads the rows of table ns, which the dao doesn't export.
+func rawRecords[T any, P interface {
+	*T
+	proto.Message
+}](s kv.Store, ns uint64) []P {
+	var ms []P
+	must0(s.View(func(tx kv.Tx) error { return tx.ScanPrefix(strconv.FormatUint(ns, 36)+":", &ms) }))
+	return ms
+}
+
+// rawRecord reads row id of table ns, which the dao doesn't export.
+func rawRecord[T any, P interface {
+	*T
+	proto.Message
+}](s kv.Store, ns, id uint64) (P, error) {
+	m := P(new(T))
+	err := s.View(func(tx kv.Tx) error {
+		return tx.Get(strconv.FormatUint(ns, 36)+":"+strconv.FormatUint(id, 36), m)
+	})
+	return m, err
+}
+
 // deletableRecord reads record id of a table whose deletions the checks
-// cover: the chat server tables, notifications and video channels.
+// cover: the chat server tables, notifications, video channels, autoseed
+// rules and swarm caches.
 func deletableRecord(s kv.Store, ns, id uint64) (proto.Message, error) {
 	switch ns {
+	case 10002:
+		return dao.AutoseedRules.Get(s, id)
+	case 11001:
+		return rawRecord[swarm.CacheMeta](s, ns, id)
+	case 11003:
+		return rawRecord[swarm.Cache](s, ns, id)
 	case 5001:
 		return dao.Notifications.Get(s, id)
 	case 7001:
@@ -678,6 +769,8 @@ func indexIDs(s kv.Store, ns uint64, key []byte) []uint64 {
 		return one(dao.ChatProfilesByPeerKey.Get(s, key))
 	case 7002:
 		return sortedIDs(dao.ScanSecondaryIndex(s, 7002, key))
+	case 11002:
+		return sortedIDs(dao.ScanSecondaryIndex(s, 11002, key))
 	}
 	panic(fmt.Sprintf("unknown index %d", ns))
 }
