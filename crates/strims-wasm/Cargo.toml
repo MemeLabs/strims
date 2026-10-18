@@ -20,6 +20,7 @@ strims-base.workspace = true
 strims-dao.workspace = true
 strims-directory.workspace = true
 strims-kv.workspace = true
+strims-network.workspace = true
 strims-node-core.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true

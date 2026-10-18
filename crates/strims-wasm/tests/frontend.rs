@@ -120,7 +120,7 @@ fn manager(prefix: &str) -> Rc<WasmManager> {
     let signal = MessageChannel::new().unwrap().port1();
     Rc::new(WasmManager::new(
         IdbKv::new(prefix),
-        WasmFactory::new(&options, signal),
+        WasmFactory::new(&options, signal, None),
         WasmClock,
         DEVICE_OS,
         DetRng::from_seed(entropy::seed().unwrap()),

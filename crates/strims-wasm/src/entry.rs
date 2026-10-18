@@ -3,8 +3,8 @@
 
 //! The worker's entry point.
 //!
-//! The worker script runs `await init(); start(options, frontend, signal)`
-//! with the two ports the window transferred to it. Ports buffer their
+//! The worker script runs `await init(); start(options, frontend, signal,
+//! psi)` with the ports the window transferred to it. Ports buffer their
 //! messages until a handler is attached, so nothing sent before `start` is
 //! lost. A `start` that throws is reported to the window as `fatal` by the
 //! worker script.
@@ -13,6 +13,9 @@
 //! prefix) through a [`Manager`] on a [`WasmFactory`], and serves the UI's
 //! frontend RPC connection on `frontend` ([`frontend::serve`]). A panic
 //! posts `{type: "fatal", message}` on `signal`.
+//!
+//! The PSI worker's script runs `await init(); start_psi(options, port)`
+//! instead ([`crate::psi::start_psi`]).
 
 use std::rc::Rc;
 
@@ -38,11 +41,18 @@ pub type WasmManager = Manager<IdbKv, WasmFactory, WasmClock>;
 
 /// Starts the worker. `options` are the window's (see
 /// [`crate::options`]); `frontend` carries the UI's RPC connection and
-/// `signal` the WebRTC signalling with the window. With the `e2e`
-/// feature, `options.e2e: true` hands both ports to the browser link
-/// tests' bare node instead.
+/// `signal` the WebRTC signalling with the window. `psi` is the port to
+/// the PSI worker, where the profiles' PSI sessions compute
+/// ([`crate::psi`]); without one (`undefined` or `null`) they compute in
+/// this worker. With the `e2e` feature, `options.e2e: true` hands
+/// `frontend` and `signal` to the browser link tests' bare node instead.
 #[wasm_bindgen]
-pub fn start(options: JsValue, frontend: MessagePort, signal: MessagePort) -> Result<(), JsValue> {
+pub fn start(
+    options: JsValue,
+    frontend: MessagePort,
+    signal: MessagePort,
+    psi: Option<MessagePort>,
+) -> Result<(), JsValue> {
     let (parsed, ignored) = Options::parse(&options);
     crate::log::init(parsed.log_level);
     // The `e2e` feature's bare node takes both ports here, before anything
@@ -60,7 +70,7 @@ pub fn start(options: JsValue, frontend: MessagePort, signal: MessagePort) -> Re
         .map_err(|e| js_sys::Error::new(&format!("drawing a seed from entropy: {e}")))?;
     let manager = Rc::new(WasmManager::new(
         IdbKv::new(""),
-        WasmFactory::new(&parsed, signal),
+        WasmFactory::new(&parsed, signal, psi),
         WasmClock,
         DEVICE_OS,
         DetRng::from_seed(seed),

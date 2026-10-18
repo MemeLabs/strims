@@ -4,7 +4,8 @@
 // The window's side of a strims-wasm node. The node runs in a dedicated
 // worker; the window hands it a port for the frontend RPC connection and a
 // port for signalling, hosts its RTCPeerConnections and forwards visibility
-// changes.
+// changes. The node's PSI sessions compute in a second worker, over a port
+// between the two.
 
 import { EventEmitter } from "events";
 
@@ -21,13 +22,28 @@ export interface WasmNodeOptions {
   e2e?: boolean;
 }
 
-/** The one message the window sends the worker. Both ports are transferred. */
-export interface InitMessage {
-  type: "init";
-  options: WasmNodeOptions;
-  frontend: MessagePort;
-  signal: MessagePort;
-}
+/** The PSI worker's options. */
+export type PsiWorkerOptions = Pick<WasmNodeOptions, "logLevel">;
+
+/**
+ * The one message the window sends each worker, with its ports transferred.
+ * The node's worker gets `psi` when a PSI worker serves the other end. That
+ * port carries the PSI sessions' keys and seeds, so it connects this page's
+ * two workers and nothing else.
+ */
+export type InitMessage =
+  | {
+      type: "init";
+      role: "node";
+      options: WasmNodeOptions;
+      frontend: MessagePort;
+      signal: MessagePort;
+      psi?: MessagePort;
+    }
+  | { type: "init"; role: "psi"; options: PsiWorkerOptions; port: MessagePort };
+
+/** What the PSI worker posts the window when it can't start. */
+export type PsiWorkerMessage = { type: "fatal"; message: string };
 
 /** Messages the worker sends on the signal port. Conn ids are JS-safe integers. */
 export type WorkerSignal =
@@ -235,16 +251,45 @@ class PeerHost {
 
 export interface WasmNode {
   bus: PortBus;
-  /** Terminates the worker and closes the node's peer connections. */
+  /** Terminates the workers and closes the node's peer connections. */
   close(): void;
 }
 
-// Starts a strims-wasm node in a new dedicated worker.
-export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
-  const worker = new Worker(new URL("./svc.worker.ts", import.meta.url), {
+// Both workers run svc.worker.ts. It is constructed in one place, so webpack
+// bundles it once.
+const spawnWorker = (name: "svc" | "psi") =>
+  new Worker(/* webpackChunkName: "svc" */ new URL("./svc.worker.ts", import.meta.url), {
     type: "module",
-    name: "svc",
+    name,
   });
+
+// Starts the worker that computes a node's PSI sessions, serving `port`.
+// Without it the node's PSI sessions stall and its network control gives up
+// on them, so a PSI worker that dies is logged and the node runs on.
+const startPsiWorker = (logLevel: number, port: MessagePort): Worker => {
+  const worker = spawnWorker("psi");
+  const died = (message: string) => {
+    // eslint-disable-next-line no-console
+    console.error("strims-wasm psi worker:", message);
+    worker.terminate();
+  };
+  worker.onerror = (e: ErrorEvent) => died(e.message || "failed to load");
+  worker.onmessage = ({ data }: MessageEvent<PsiWorkerMessage>) => {
+    if (data.type === "fatal") died(data.message);
+  };
+  worker.postMessage(
+    { type: "init", role: "psi", options: { logLevel }, port } satisfies InitMessage,
+    [port]
+  );
+  return worker;
+};
+
+// Starts a strims-wasm node in a new dedicated worker, and its PSI worker.
+// The browser link tests' bare node runs no PSI, and gets no PSI worker.
+export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
+  const worker = spawnWorker("svc");
+  const psi = options.e2e ? undefined : new MessageChannel();
+  const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
   const frontend = new MessageChannel();
   const signal = new MessageChannel();
   const bus = new PortBus(frontend.port1);
@@ -266,6 +311,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
     signal.port1.onmessage = null;
     signal.port1.close();
     worker.terminate();
+    psiWorker?.terminate();
     peers.closeAll();
     bus.shut();
   };
@@ -288,14 +334,18 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
     close();
   };
 
+  const ports = [frontend.port2, signal.port2];
+  if (psi) ports.push(psi.port1);
   worker.postMessage(
     {
       type: "init",
+      role: "node",
       options,
       frontend: frontend.port2,
       signal: signal.port2,
+      psi: psi?.port1,
     } satisfies InitMessage,
-    [frontend.port2, signal.port2]
+    ports
   );
 
   return { bus, close };

@@ -9,8 +9,17 @@ declare module "*/strims-wasm/Cargo.toml" {
   export default function init(): Promise<unknown>;
 
   /**
-   * Starts the node with the window's options and the two ports it
-   * transferred. Throws when the options are invalid.
+   * Starts the node with the window's options and the ports it transferred.
+   * Without `psi`, the port to the PSI worker, the node computes PSI itself.
+   * Throws when it can't draw a seed.
    */
-  export function start(options: unknown, frontend: MessagePort, signal: MessagePort): void;
+  export function start(
+    options: unknown,
+    frontend: MessagePort,
+    signal: MessagePort,
+    psi?: MessagePort
+  ): void;
+
+  /** Starts the PSI worker, serving the node's engine on `port`. */
+  export function start_psi(options: unknown, port: MessagePort): void;
 }

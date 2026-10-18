@@ -8,6 +8,8 @@
 //!   ([`crate::node::browser_config`]) with the window's options, its
 //!   WebRTC signalled over the window's signal port, seeded from
 //!   `crypto.getRandomValues`, timed by [`WasmClock`].
+//! - Its PSI sessions compute in the PSI worker ([`WorkerPsi`]) when the
+//!   window started one, and inline otherwise.
 //! - The node hosts no RTMP ingress ([`NoVideoHost`]), and its HLS routes
 //!   aren't served. The directory makes its HTTPS requests with the
 //!   browser's `fetch` ([`BrowserFetch`]). The vnic config takes no
@@ -23,6 +25,7 @@ use std::rc::Rc;
 use futures_util::future::LocalBoxFuture;
 use strims_directory::Fetch;
 use strims_kv::Kv;
+use strims_network::psi::{InlinePsi, PsiEngine};
 use strims_node_core::app::{
     AppPlatform, ProfileRuntime, ProfileSlot, ServicesConfig, Spawn, StartError, TaskHandle,
     bind_profile,
@@ -38,6 +41,7 @@ use web_sys::MessagePort;
 use crate::clock::WasmClock;
 use crate::fetch::BrowserFetch;
 use crate::options::Options;
+use crate::psi::WorkerPsi;
 use crate::runtime;
 
 /// A running profile on a [`WasmPlatform`]: its node and the controls its
@@ -70,17 +74,22 @@ pub struct WasmPlatform {
     /// The window's signal port, which every node of the platform takes.
     signal: MessagePort,
     hls: HlsRoutes,
+    /// The engine on the port to the PSI worker, if the window started
+    /// one. Every profile's sessions share it.
+    psi: Option<WorkerPsi>,
 }
 
 impl WasmPlatform {
     /// A platform of nodes configured by `options`, signalling WebRTC
-    /// with the window over `signal`.
-    pub fn new(options: &Options, signal: MessagePort) -> WasmPlatform {
+    /// with the window over `signal`, and computing PSI in the PSI worker
+    /// at the other end of `psi`, if there is one.
+    pub fn new(options: &Options, signal: MessagePort, psi: Option<MessagePort>) -> WasmPlatform {
         WasmPlatform {
             allow_insecure_ws: options.allow_insecure_ws,
             ice_servers: options.ice_servers.clone(),
             signal,
             hls: HlsRoutes::new(),
+            psi: psi.map(WorkerPsi::new),
         }
     }
 }
@@ -140,6 +149,15 @@ impl AppPlatform for WasmPlatform {
     fn spawner(&self) -> WasmSpawn {
         WasmSpawn
     }
+
+    /// The PSI worker's [`WorkerPsi`] when the window started one, else
+    /// [`InlinePsi`].
+    fn psi(&self) -> Rc<dyn PsiEngine> {
+        match &self.psi {
+            Some(engine) => Rc::new(engine.clone()),
+            None => Rc::new(InlinePsi),
+        }
+    }
 }
 
 /// The [`SessionFactory`] that runs a signed-in profile's node and
@@ -154,10 +172,11 @@ pub struct WasmFactory {
 
 impl WasmFactory {
     /// A factory of nodes configured by `options`, signalling WebRTC with
-    /// the window over `signal`.
-    pub fn new(options: &Options, signal: MessagePort) -> WasmFactory {
+    /// the window over `signal`, and computing PSI in the PSI worker at
+    /// the other end of `psi`, if there is one ([`WasmPlatform::new`]).
+    pub fn new(options: &Options, signal: MessagePort, psi: Option<MessagePort>) -> WasmFactory {
         WasmFactory {
-            platform: WasmPlatform::new(options, signal),
+            platform: WasmPlatform::new(options, signal, psi),
             slot: ProfileSlot::new(),
         }
     }
