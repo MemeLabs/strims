@@ -29,6 +29,7 @@ use strims_crypto::{
     DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
 };
 use strims_dao::schema::network::Networks;
+use strims_dao::schema::notification::Notifications;
 use strims_dao::schema::profile::Profile as ProfileRecord;
 use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, ReplicatedStore, Singleton, Table};
@@ -36,6 +37,7 @@ use strims_kademlia::ID;
 use strims_kv::MemoryKv;
 use strims_network::{Config, Host, NetworkControl};
 use strims_proto::network::v1::Network;
+use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 use strims_rpc::{Router, Timer, peer_connection};
@@ -572,4 +574,9 @@ pub fn run(f: impl std::future::Future<Output = ()> + 'static) {
 pub async fn read_network(node: &Node, id: u64) -> Network {
     let mut tx = node.store.read().await.unwrap();
     Networks::get(&mut tx, id).await.unwrap().unwrap()
+}
+
+pub async fn read_notifications(node: &Node) -> Vec<Notification> {
+    let mut tx = node.store.read().await.unwrap();
+    Notifications::get_all(&mut tx).await.unwrap()
 }

@@ -33,11 +33,12 @@
 //! A profile's membership of a network starts from [`membership`]: a
 //! network it creates, whose CA it runs ([`ca`]), or an invitation from a
 //! member. The control renews its certificates at the network's CA, over
-//! vpn RPC or through a linked peer ([`services`]), and stores them in the
-//! profile's record of the network. Under its membership, the host
-//! presents [`NetworkControl::host_certificate`] to the network's vpn
-//! services, and [`NetworkControl::find_certificate`] looks up the
-//! certificates the CA issued, such as a member's by its alias.
+//! vpn RPC or through a linked peer ([`services`]), stores them in the
+//! profile's record of the network, and reports the outcomes as the
+//! user's notifications. Under its membership, the host presents
+//! [`NetworkControl::host_certificate`] to the network's vpn services, and
+//! [`NetworkControl::find_certificate`] looks up the certificates the CA
+//! issued, such as a member's by its alias.
 //!
 //! # Running
 //!

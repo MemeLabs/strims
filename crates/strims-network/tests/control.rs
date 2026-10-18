@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Network controls on fake nodes (see `support`): binding, following the
-//! store, joining, relinking, certificate renewal and certificate
-//! lookups.
+//! store, joining, relinking, certificate renewal and its notifications,
+//! and certificate lookups.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,12 +19,17 @@ use std::collections::BTreeMap;
 use futures_util::{FutureExt, StreamExt};
 use strims_base::rng::det_rng;
 use strims_crypto::{certificate_parent, generate_key};
+use strims_dao::events::Record;
 use strims_dao::schema::network::{NetworkPeers, network_scoped_key};
-use strims_dao::{Recv, Subscription, Table};
+use strims_dao::schema::notification::network_subject;
+use strims_dao::{Recv, StoreEvent, Subscription, Table};
 use strims_network::NetworkEvent;
 use strims_network::membership::{network_from_invitation_v0, new_invitation_v0, new_network};
+use strims_network::services::RENEW_RETRY;
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::ca::ca_find_request::Query;
+use strims_proto::network::v1::errors::ErrorCode;
+use strims_proto::notification::v1::notification::Status;
 use strims_proto::types::Key;
 use support::*;
 
@@ -169,8 +174,8 @@ fn a_relinked_peer_binds_again() {
 }
 
 /// A profile invited to its network renews its provisional certificate
-/// through the owner, whose CA signs it: then both bind, and the CA
-/// records the new peer under its inviter.
+/// through the owner, whose CA signs it: then both bind, the CA records
+/// the new peer under its inviter, and the invitee is notified.
 #[test]
 fn an_invitee_renews_through_its_inviter_and_binds() {
     run(async {
@@ -195,6 +200,11 @@ fn an_invitee_renews_through_its_inviter_and_binds() {
         let cert = renewed.certificate.unwrap();
         assert!(strims_crypto::membership_trusted(&cert, T0));
         assert_eq!(renewed.certificate_renewal_error, 0);
+        let notes = read_notifications(&invitee).await;
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_eq!(notes[0].status, Status::Success as i32);
+        assert_eq!(notes[0].subject, Some(network_subject(80)));
+        assert!(read_notifications(&owner).await.is_empty());
 
         let mut tx = owner.store.read().await.unwrap();
         let scoped = |k: &[u8]| network_scoped_key(70, k);
@@ -371,6 +381,64 @@ fn a_network_deleted_while_joining_is_joined_only_if_held_again() {
         assert_eq!(net, host.networks.get(&kept.public).copied());
         assert!(a.control.network(&gone.public).is_none());
         assert!(!host.networks.contains_key(&gone.public));
+    });
+}
+
+/// A renewal that keeps failing the same way notifies once, and the
+/// renewal that then succeeds replaces that notification.
+#[test]
+fn repeated_renewal_failures_notify_once() {
+    run(async {
+        let world = World::default();
+        let owner = node_in(&world, 11).await;
+        let member = node_in(&world, 12).await;
+        let (_, _pipes) = owned_network(&owner, &[&member], 110).await;
+        let renewed = read_notifications(&member).await;
+        assert_eq!(renewed.len(), 1, "{renewed:?}");
+
+        // the CA's address goes, so renewals over vpn can't reach it
+        let addresses = std::mem::take(&mut world.0.borrow_mut().addresses);
+        let mut events = member.store.events().subscribe();
+        let n = read_network(&member, 110).await;
+        member
+            .write_network(Network {
+                alias: "bob".into(),
+                ..n
+            })
+            .await;
+        settle().await;
+        tokio::time::sleep((RENEW_RETRY * 3).to_std().unwrap()).await;
+        let n = read_network(&member, 110).await;
+        assert_eq!(n.certificate_renewal_error, ErrorCode::Unknown as i32);
+        let failed = read_notifications(&member).await;
+        assert_eq!(failed.len(), 1, "{failed:?}");
+        assert_eq!(failed[0].status, Status::Error as i32);
+        assert_eq!(failed[0].error_code, ErrorCode::Unknown as i32);
+        assert_eq!(failed[0].subject, Some(network_subject(110)));
+        assert!(!failed[0].message.is_empty());
+        let mut raised = Vec::new();
+        while let Some(Some(e)) = events.next().now_or_never() {
+            match e {
+                Recv::Event(e) => {
+                    if let StoreEvent::Changed(Record::Notification(n)) = &*e {
+                        raised.push(n.id);
+                    }
+                }
+                Recv::Lagged => panic!("lagged"),
+            }
+        }
+        assert_eq!(raised, [failed[0].id]);
+
+        world.0.borrow_mut().addresses = addresses;
+        tokio::time::sleep(RENEW_RETRY.to_std().unwrap()).await;
+        settle().await;
+        let n = read_network(&member, 110).await;
+        assert_eq!(n.certificate.unwrap().subject, "bob");
+        assert_eq!(n.certificate_renewal_error, 0);
+        let notes = read_notifications(&member).await;
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_eq!(notes[0].status, Status::Success as i32);
+        assert_ne!(notes[0].id, failed[0].id);
     });
 }
 

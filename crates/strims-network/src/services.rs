@@ -22,7 +22,9 @@
 //! CA over vpn when its certificate is trusted, and otherwise asks a peer
 //! whose certificate is: that peer's `CAPeer.Renew` forwards the request.
 //! The outcome, and its error code, go into the profile's record of the
-//! network.
+//! network. A notification reports every renewal, and every failure whose
+//! error code differs from the last outcome's
+//! ([`strims_dao::schema::notification`]).
 //!
 //! A peer may forward only for its own certificate on a network the last
 //! run found shared, one at a time, at most one per
@@ -45,6 +47,7 @@ use strims_crypto::{
 };
 use strims_dao::key::Part;
 use strims_dao::schema::network::Networks;
+use strims_dao::schema::notification::{self, network_subject, new_notification};
 use strims_dao::{Table, lease};
 use strims_kademlia::ID;
 use strims_kv::Kv;
@@ -55,6 +58,7 @@ use strims_proto::network::v1::ca::{
     CaPeerService, CaRenewRequest, CaRenewResponse, CaService, register_ca_service,
 };
 use strims_proto::network::v1::errors::ErrorCode;
+use strims_proto::notification::v1::notification::Status;
 use strims_proto::service::{CallError, Context, Error as RpcError};
 use strims_proto::types::{Certificate, CertificateRequest};
 use strims_rpc::vpn::{self, VpnClient, VpnConfig};
@@ -471,24 +475,36 @@ pub(crate) async fn renew<K: Kv, H: Host, T: Timer>(
         return Done::Service;
     };
     let now = s.timer.now();
-    let (certificate, code) = match outcome {
-        Ok(c) => (Some(c), ErrorCode::Undefined),
+    let (certificate, code, message) = match outcome {
+        Ok(c) => (Some(c), ErrorCode::Undefined, String::new()),
         Err((code, message)) => {
             tracing::info!(network = id, error = %message, "certificate renewal failed");
             s.update(|st, now| st.schedule_renewal(&key, Some(now + RENEW_RETRY)));
-            (None, code)
+            (None, code, message)
         }
+    };
+    let (status, title) = match certificate {
+        Some(_) => (Status::Success, "Certificate renewed"),
+        None => (Status::Error, "Certificate renewal failed"),
     };
     let written = async {
         let mut tx = s.store.write(now).await?;
         let Some(mut n) = Networks::get(&mut tx, id).await? else {
             return Ok(());
         };
+        let notify = certificate.is_some() || n.certificate_renewal_error != i32::from(code);
         n.certificate_renewal_error = code.into();
         if let Some(c) = certificate {
             n.certificate = Some(c);
         }
         Networks::update(&mut tx, n).await?;
+        if notify {
+            let nid = tx.generate_id().await?;
+            let subject = Some(network_subject(id));
+            let mut note = new_notification(nid, now, status, title, &message, subject);
+            note.error_code = code.into();
+            notification::dispatch(&mut tx, note).await?;
+        }
         tx.commit().await
     }
     .await;
