@@ -10,7 +10,14 @@
 //! write into caller buffers, and decoders take input in pieces of any
 //! size.
 //!
-//! The layout is a wire format and must stay byte-exact.
+//! Two layouts share one frame format:
+//!
+//! - zero-padded frames, at the crate root: every record starts on a new
+//!   frame, and a length prefix lets the reader check it;
+//! - packed frames, in [`packed`]: records back to back, at most one
+//!   record end per frame. Video swarms use them.
+//!
+//! Both layouts are wire formats and must stay byte-exact.
 //!
 //! # Frames
 //!
@@ -18,24 +25,26 @@
 //! `HEADER_LEN + 1` to [`MAX_FRAME_SIZE`] bytes. Each frame starts with a
 //! [`HEADER_LEN`] byte big-endian header:
 //!
-//! - on a record's last frame, `0x8000_0000 | end`: the top bit is the
-//!   end-of-record flag ([`EOR_FLAG`] in the first byte), and `end` is the
-//!   offset within the frame just past the record's last byte, header
-//!   included;
+//! - on a frame that holds a record end, `0x8000_0000 | end`: the top bit
+//!   is the end-of-record flag ([`EOR_FLAG`] in the first byte), and `end`
+//!   is the offset within the frame just past the record's last byte,
+//!   header included;
 //! - on every other frame, `0`.
 //!
-//! Every record starts on a new frame, right after the header. Its bytes
-//! fill frames in order, and the rest of its last frame is zero. A record
-//! of `n` bytes takes `n / (size - 4) + 1` frames ([`FrameEncoder`]), so a
-//! record that exactly fills its frames is followed by a frame holding only
-//! the header `0x8000_0004`.
+//! # Zero-padded frames
 //!
-//! # Records
+//! Every record starts on a new frame, right after the header. Its bytes
+//! fill frames in order, and the rest of its last frame, the one holding
+//! its end, is zero. A record of `n` bytes takes `n / (size - 4) + 1`
+//! frames ([`FrameEncoder`]), so a record that exactly fills its frames is
+//! followed by a frame holding only the header `0x8000_0004`.
+//!
+//! ## Records
 //!
 //! A record is the payload's length as an unsigned LEB128 varint
 //! ([`get_uvarint`]), then the payload ([`RecordEncoder`]).
 //!
-//! # Reader contract
+//! ## Reader contract
 //!
 //! [`RecordDecoder`] reads from the stream offset given to
 //! [`RecordDecoder::reset`] (0 when new):
@@ -69,8 +78,16 @@
 //! - A payload longer than `max_record` is dropped at its end, and the
 //!   decoder buffers at most `max_record + MAX_UVARINT_LEN` bytes.
 //! - No input panics, and the work per call is linear in its input.
+//!
+//! # Packed frames
+//!
+//! The frames' data is the records back to back, so a record starts where
+//! the one before it ends, in the same frame, and a frame holds at most one
+//! record end. The [`packed`] module docs give the layout and its reader
+//! contract.
 
 mod frame;
+pub mod packed;
 mod record;
 mod uvarint;
 

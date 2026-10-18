@@ -27,6 +27,21 @@
 //	    them. "end": the reader ran out of input; "err": Read failed first.
 //	    Offsets inside a frame header (1 to 3 past a frame start) are left
 //	    out: the reader takes the 4 bytes there for a header.
+//	packed <id> <size> <op>,<op>,... <stream>
+//	    a script through one chunkstream.Writer of that size. An op is
+//	    "w<n>:<out>" (Write the script's next n bytes), "e:<out>" (Flush) or
+//	    "E:<out>" (a Flush that failed with ErrHeaderWritten), where out is
+//	    the stream length the Writer has written after the op. The
+//	    script's bytes are pattern(total bytes written).
+//	packed_digest <id> <size> <op>,<op>,... <stream sha256> <headers>
+//	    the same for large frames: headers concatenates each frame's first
+//	    4 bytes
+//	packed_read <id> <offset> <len>,<len>,...|- <tail> <digest>
+//	    what chunkstream.Reader returns when its input starts at byte offset
+//	    of packed stream id: the length of each record it ends with io.EOF,
+//	    the bytes it returns after the last of them before the input runs
+//	    out, and the first 8 bytes of the sha256 of all the bytes it
+//	    returns. Offsets inside a frame header are left out, as for read.
 //
 // pattern(n) is byte i = (i*131 + 7) mod 256 for i < n.
 package main
@@ -322,6 +337,140 @@ func reads(w io.Writer) {
 	}
 }
 
+// flush is a script op that ends the record.
+const flush = -1
+
+// packedScripts are the scripts written with frames of size bytes: write
+// lengths, and flush.
+func packedScripts(size int) [][]int {
+	d := size - 4
+	return [][]int{
+		// An empty record, then ends refused after an end in the frame.
+		{flush, 1, flush, d - 1, flush, 2, flush},
+		// Records that fill their frames, so their ends land at offset 4.
+		{d, flush, d, flush, 3, flush, d - 3, flush, 2*d + 7},
+		// Records sharing frames, some written in several pieces.
+		{3, flush, 4, flush, d, flush, 1, 0, 2, flush, d - 1, 5, flush, 2},
+		// Records over many frames.
+		{3*d + 5, flush, 2 * d, flush, 1, flush, d, flush},
+		randomScript(size, 40),
+	}
+}
+
+// randomScript is a seeded mix of flushes, writes that fill the frame and
+// writes of up to two frames.
+func randomScript(size, ops int) (script []int) {
+	d := size - 4
+	state := uint64(size)
+	next := func(n int) int {
+		state = state*6364136223846793005 + 1442695040888963407
+		return int(state>>33) % n
+	}
+	written := 0
+	for i := 0; i < ops; i++ {
+		n := flush
+		switch next(6) {
+		case 0, 1:
+		case 2:
+			n = d - written%d
+		case 3:
+			n = next(5)
+		default:
+			n = next(2 * size)
+		}
+		if n >= 0 {
+			written += n
+		}
+		script = append(script, n)
+	}
+	return script
+}
+
+// runScript writes script through a chunkstream.Writer and returns the
+// stream and each op with the stream length after it.
+func runScript(size int, script []int) (stream []byte, ops []string) {
+	var b bytes.Buffer
+	w, err := chunkstream.NewWriterSize(&b, size)
+	check(err)
+	written := 0
+	for _, n := range script {
+		switch {
+		case n == flush:
+			err := w.Flush()
+			switch {
+			case err == nil:
+				ops = append(ops, fmt.Sprintf("e:%d", b.Len()))
+			case errors.Is(err, chunkstream.ErrHeaderWritten):
+				ops = append(ops, fmt.Sprintf("E:%d", b.Len()))
+			default:
+				panic(err)
+			}
+		default:
+			_, err := w.Write(pattern(written + n)[written:])
+			check(err)
+			written += n
+			ops = append(ops, fmt.Sprintf("w%d:%d", n, b.Len()))
+		}
+	}
+	return b.Bytes(), ops
+}
+
+func packedRead(stream []byte, size, offset int) (records []string, tail int, digest []byte) {
+	r, err := chunkstream.NewReaderSize(&input{b: stream[offset:], offset: uint64(offset)}, int64(offset), size)
+	check(err)
+	sum := sha256.New()
+	p := make([]byte, 64)
+	for {
+		n, err := r.Read(p)
+		if errors.Is(err, errEnd) {
+			return records, tail, sum.Sum(nil)[:8]
+		}
+		sum.Write(p[:n])
+		tail += n
+		switch {
+		case err == io.EOF:
+			records = append(records, strconv.Itoa(tail))
+			tail = 0
+		case err != nil:
+			panic(err)
+		}
+	}
+}
+
+func packed(w io.Writer) {
+	id := 0
+	for _, size := range []int{16, 32, 1024} {
+		offsets := everyOffset(size)
+		if size == 1024 {
+			offsets = someOffsets(size)
+		}
+		for _, script := range packedScripts(size) {
+			b, ops := runScript(size, script)
+			fmt.Fprintf(w, "packed %d %d %s %s\n", id, size, strings.Join(ops, ","), h(b))
+			for _, offset := range offsets(len(b)) {
+				records, tail, digest := packedRead(b, size, offset)
+				list := strings.Join(records, ",")
+				if list == "" {
+					list = "-"
+				}
+				fmt.Fprintf(w, "packed_read %d %d %s %d %s\n", id, offset, list, tail, h(digest))
+			}
+			id++
+		}
+	}
+	size := chunkstream.DefaultSize
+	for _, script := range packedScripts(size) {
+		b, ops := runScript(size, script)
+		var headers []byte
+		for i := 0; i < len(b); i += size {
+			headers = append(headers, b[i:i+4]...)
+		}
+		sum := sha256.Sum256(b)
+		fmt.Fprintf(w, "packed_digest %d %d %s %s %s\n", id, size, strings.Join(ops, ","), h(sum[:]), h(headers))
+		id++
+	}
+}
+
 func main() {
 	f, err := os.Create(filepath.Join("crates", "strims-chunkstream", "golden", "vectors.hex"))
 	check(err)
@@ -332,4 +481,5 @@ func main() {
 	frames(w)
 	records(w)
 	reads(w)
+	packed(w)
 }

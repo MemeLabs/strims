@@ -15,7 +15,7 @@ pub const EOR_FLAG: u8 = 0x80;
 pub const MAX_FRAME_SIZE: usize = (u32::MAX >> 1) as usize - HEADER_LEN;
 
 /// [`EOR_FLAG`] as a bit of the big-endian header.
-const EOR_BIT: u32 = (EOR_FLAG as u32) << 24;
+pub(crate) const EOR_BIT: u32 = (EOR_FLAG as u32) << 24;
 
 /// A frame size outside `HEADER_LEN + 1 ..= MAX_FRAME_SIZE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -27,7 +27,7 @@ pub struct SizeError(pub usize);
 #[error("output buffer is too small for the encoded frames")]
 pub struct BufferTooSmall;
 
-fn check_size(size: usize) -> Result<usize, SizeError> {
+pub(crate) fn check_size(size: usize) -> Result<usize, SizeError> {
     if (HEADER_LEN + 1..=MAX_FRAME_SIZE).contains(&size) {
         Ok(size)
     } else {
@@ -145,7 +145,8 @@ pub enum Start {
     Data,
 }
 
-/// A piece of the frame stream, from [`FrameDecoder::decode`].
+/// A piece of the frame stream, from [`FrameDecoder::decode`] or
+/// [`PackedDecoder::decode`](crate::packed::PackedDecoder::decode).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Frag<'a> {
     /// Bytes of the current record.
@@ -155,6 +156,15 @@ pub enum Frag<'a> {
     /// The frame's header flags an end outside `4..=size`: the current
     /// record is lost, and the rest of the frame is skipped.
     Corrupt,
+}
+
+/// What follows a record end in its frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AfterEnd {
+    /// Padding: the next record starts on the next frame.
+    Padding,
+    /// The next record's bytes.
+    Record,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,16 +186,22 @@ pub struct FrameDecoder {
     pos: usize,
     state: State,
     header: [u8; HEADER_LEN],
+    after_end: AfterEnd,
 }
 
 impl FrameDecoder {
     /// A decoder for frames of `size` bytes, starting at stream offset 0.
     pub fn new(size: usize) -> Result<Self, SizeError> {
+        Self::with_after_end(size, AfterEnd::Padding)
+    }
+
+    pub(crate) fn with_after_end(size: usize, after_end: AfterEnd) -> Result<Self, SizeError> {
         Ok(Self {
             size: check_size(size)?,
             pos: 0,
             state: State::Header,
             header: [0; HEADER_LEN],
+            after_end,
         })
     }
 
@@ -255,7 +271,13 @@ impl FrameDecoder {
                 State::Data { end, eor } => {
                     if self.pos >= end {
                         if eor {
-                            self.state = State::Skip;
+                            self.state = match self.after_end {
+                                AfterEnd::Padding => State::Skip,
+                                AfterEnd::Record => State::Data {
+                                    end: self.size,
+                                    eor: false,
+                                },
+                            };
                             return (used, Some(Frag::End));
                         }
                         self.next_frame();

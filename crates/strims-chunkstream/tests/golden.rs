@@ -4,7 +4,8 @@
 //! Golden vectors from `golden/main.go` (regenerate from the repo root with
 //! `go run -tags golden ./crates/strims-chunkstream/golden`; the line
 //! formats are documented there). The encoders must reproduce the recorded
-//! frames byte for byte, and a decoder started at each recorded offset must
+//! frames byte for byte, the packed encoder with the recorded output after
+//! every write and end, and a decoder started at each recorded offset must
 //! yield the recorded records.
 
 // Tests panic on failure by design.
@@ -19,6 +20,7 @@ use std::collections::BTreeMap;
 
 use prost::Message;
 use sha2::{Digest, Sha256};
+use strims_chunkstream::packed::{FrameHasEnd, PackedDecoder, PackedEncoder};
 use strims_chunkstream::{
     Frag, FrameDecoder, FrameEncoder, HEADER_LEN, RecordDecoder, RecordEncoder,
 };
@@ -237,4 +239,146 @@ fn reads_match_go() {
         }
     }
     assert!(ended > 700 && failed > 0, "{ended} ended, {failed} failed");
+}
+
+/// A replayed `packed` script.
+struct Script {
+    stream: Vec<u8>,
+    /// The records whose end Go accepted.
+    records: Vec<Vec<u8>>,
+    /// The bytes written after the last of them.
+    pending: Vec<u8>,
+}
+
+/// Replays a `packed` script through a [`PackedEncoder`], checking each
+/// end's outcome and the output length after every op.
+fn packed_replay(size: usize, ops: &str) -> Script {
+    let mut e = PackedEncoder::new(size).unwrap();
+    let mut s = Script {
+        stream: Vec::new(),
+        records: Vec::new(),
+        pending: Vec::new(),
+    };
+    let mut written = 0;
+    for op in ops.split(',') {
+        let (op, out) = op.split_once(':').unwrap();
+        match op {
+            "e" => {
+                assert_eq!(e.end_record(&mut s.stream), Ok(()), "size {size}");
+                s.records.push(std::mem::take(&mut s.pending));
+            }
+            "E" => assert_eq!(e.end_record(&mut s.stream), Err(FrameHasEnd), "size {size}"),
+            w => {
+                let n: usize = w.strip_prefix('w').unwrap().parse().unwrap();
+                let data: Vec<u8> = (written..written + n)
+                    .map(|i| ((i * 131 + 7) % 256) as u8)
+                    .collect();
+                e.write(&data, &mut s.stream);
+                s.pending.extend_from_slice(&data);
+                written += n;
+            }
+        }
+        assert_eq!(
+            s.stream.len(),
+            out.parse::<usize>().unwrap(),
+            "size {size}, after {op} in {ops}"
+        );
+    }
+    s
+}
+
+/// The records a packed decoder started at `offset` ends in `input`, fed
+/// in `piece` byte pieces, and the bytes it yields after the last.
+fn packed_decode(size: usize, offset: u64, input: &[u8], piece: usize) -> (Vec<Vec<u8>>, Vec<u8>) {
+    let mut d = PackedDecoder::new(size).unwrap();
+    d.reset(offset);
+    let (mut records, mut tail) = (Vec::new(), Vec::new());
+    for mut chunk in input.chunks(piece) {
+        loop {
+            let (n, frag) = d.decode(chunk);
+            chunk = &chunk[n..];
+            match frag {
+                Some(Frag::Data(b)) => tail.extend_from_slice(b),
+                Some(Frag::End) => records.push(std::mem::take(&mut tail)),
+                Some(Frag::Corrupt) => panic!("corrupt frame from offset {offset}"),
+                None => break,
+            }
+        }
+    }
+    (records, tail)
+}
+
+/// A stream decoded from offset 0 yields the records Go ended, then the
+/// output part of the record in progress.
+fn assert_decodes_to_script(size: usize, s: &Script) {
+    let (records, tail) = packed_decode(size, 0, &s.stream, s.stream.len().max(1));
+    assert_eq!(records, s.records, "size {size}");
+    assert!(s.pending.starts_with(&tail), "size {size}");
+}
+
+#[test]
+fn packed_writes_match_go() {
+    let mut refused = 0;
+    for f in lines("packed") {
+        let size: usize = f[1].parse().unwrap();
+        let s = packed_replay(size, f[2]);
+        assert_eq!(hex::encode(&s.stream), f[3], "stream {}", f[0]);
+        assert_decodes_to_script(size, &s);
+        refused += f[2].matches('E').count();
+    }
+    assert!(refused > 10, "{refused} refused ends");
+}
+
+#[test]
+fn large_packed_writes_match_go() {
+    for f in lines("packed_digest") {
+        let size: usize = f[1].parse().unwrap();
+        let s = packed_replay(size, f[2]);
+        let headers: Vec<u8> = s
+            .stream
+            .chunks(size)
+            .flat_map(|c| c[..HEADER_LEN].to_vec())
+            .collect();
+        assert_eq!(hex::encode(headers), f[4], "stream {}", f[0]);
+        assert_eq!(
+            hex::encode(Sha256::digest(&s.stream)),
+            f[3],
+            "stream {}",
+            f[0]
+        );
+        assert_decodes_to_script(size, &s);
+    }
+}
+
+#[test]
+fn packed_reads_match_go() {
+    let streams: BTreeMap<&str, (usize, Vec<u8>)> = lines("packed")
+        .into_iter()
+        .map(|f| (f[0], (f[1].parse().unwrap(), bytes(f[3]))))
+        .collect();
+    let reads = lines("packed_read");
+    assert!(reads.len() > 1000, "{} reads", reads.len());
+    for f in reads {
+        let (size, stream) = &streams[f[0]];
+        let offset: usize = f[1].parse().unwrap();
+        let input = &stream[offset..];
+        for piece in [input.len().max(1), 7, 1] {
+            let (records, tail) = packed_decode(*size, offset as u64, input, piece);
+            let lens: Vec<String> = records.iter().map(|r| r.len().to_string()).collect();
+            let lens = if lens.is_empty() {
+                "-".to_owned()
+            } else {
+                lens.join(",")
+            };
+            let mut sum = Sha256::new();
+            for r in &records {
+                sum.update(r);
+            }
+            sum.update(&tail);
+            let at = format!("stream {} offset {offset} piece {piece}", f[0]);
+            assert_eq!(lens, f[2], "{at}");
+            assert_eq!(tail.len().to_string(), f[3], "{at}");
+            assert_eq!(hex::encode(&sum.finalize()[..8]), f[4], "{at}");
+        }
+    }
 }
