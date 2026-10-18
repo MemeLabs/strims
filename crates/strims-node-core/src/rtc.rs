@@ -41,6 +41,10 @@ use strims_vnic::webrtc::{RemoteDescriptionAction, SessionDescription};
 
 use crate::event::DriverMetrics;
 
+pub mod proxy;
+
+pub use proxy::{ProxyRtc, RtcCommand};
+
 /// A peer connection of the node's [`RtcEndpoint`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RtcConn(pub u64);

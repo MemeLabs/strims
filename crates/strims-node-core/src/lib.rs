@@ -26,7 +26,7 @@
 //! | [`Node`] | the API handle: dials, networks, vpn services and ports, swarms, peer RPC |
 //! | `state` | the composition: event routing, egress pipeline, bookkeeping (no I/O) |
 //! | [`driver`] | the node task's loop around the state, and [`NodeIo`] |
-//! | [`rtc`] | the WebRTC interface: [`RtcEndpoint`] |
+//! | [`rtc`] | the WebRTC interface: [`RtcEndpoint`], and [`ProxyRtc`] for connections outside the node task |
 //!
 //! Each pass of the node task handles inputs and commands, runs the due
 //! timers, then pumps egress: drain events, flush vpn, poll vnic's egress
@@ -126,7 +126,10 @@ pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,
 };
 pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
-pub use rtc::{RtcCloseReason, RtcConn, RtcEndpoint, RtcEvent, RtcFactory, RtcInput, RtcSignal};
+pub use rtc::{
+    ProxyRtc, RtcCloseReason, RtcCommand, RtcConn, RtcEndpoint, RtcEvent, RtcFactory, RtcInput,
+    RtcSignal,
+};
 pub use state::DialId;
 pub use vpn_port::{VpnPort, VpnReader, VpnWriter};
 
