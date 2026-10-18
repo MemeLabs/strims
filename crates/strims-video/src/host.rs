@@ -15,6 +15,26 @@ use futures_sink::Sink;
 /// The node operations behind the video ingress. Only futures traits
 /// cross this boundary, so the browser and native drivers both supply
 /// one.
+///
+/// What the [ingress](crate::ingress) relies on:
+///
+/// - [`listen`](VideoHost::listen) binds `addr` and returns its listener,
+///   or fails; the control binds again after
+///   [`IngressSettings::bind_retry`](crate::IngressSettings::bind_retry).
+/// - The listener yields each connection it accepts. An error, or its
+///   end, ends it: the control drops it and binds again after the bind
+///   retry. Dropping it stops listening and leaves the connections it
+///   took open.
+/// - A connection's reader yields its bytes in the pieces they arrive in;
+///   its end is the peer's end of the stream, and an error ends the
+///   connection.
+/// - Its writer takes a piece once [`Sink::poll_ready`] is ready, which
+///   waits while the pieces before are being sent: what the control
+///   queues for a peer that doesn't read stays within its bound.
+///   [`Sink::poll_flush`] resolves once they are sent, and
+///   [`Sink::poll_close`] shuts the sending side down.
+/// - Dropping the reader and the writer closes the connection; that is
+///   how a connection over a cap closes.
 pub trait VideoHost: Clone + 'static {
     type Error: fmt::Display;
     /// The bytes a connection receives, in the pieces they arrive in.
@@ -38,7 +58,8 @@ pub trait VideoHost: Clone + 'static {
 pub struct Accepted<R, W> {
     pub reader: R,
     pub writer: W,
-    /// The remote address, as the host names it.
+    /// The remote address: `host:port`, an IPv6 host in brackets. The
+    /// per-address cap counts the host.
     pub peer: String,
 }
 

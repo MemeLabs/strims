@@ -8,6 +8,8 @@ use strims_base::time::Duration;
 use strims_directory::KeeperConfig;
 use strims_proto::video::v1::{HlsEgressConfig, VideoIngressConfig};
 
+use crate::ingress::IngressMetrics;
+
 /// The longest ingress listen address, ingress public address or HLS
 /// public address, in bytes.
 pub const MAX_ADDR_BYTES: usize = 256;
@@ -55,6 +57,9 @@ pub struct IngressSettings {
     /// record.
     pub max_record_bytes: usize,
     pub rtmp: RtmpSettings,
+    /// How long a closing connection has to take its last output, such as
+    /// the status that tells a publisher why.
+    pub close_timeout: Duration,
 }
 
 impl Default for IngressSettings {
@@ -70,6 +75,7 @@ impl Default for IngressSettings {
             min_segment_media_bytes: 32 * 1024,
             max_record_bytes: 8 * 1024 * 1024,
             rtmp: RtmpSettings::default(),
+            close_timeout: Duration::from_secs(5),
         }
     }
 }
@@ -297,6 +303,8 @@ pub struct Metrics {
     /// [`HlsSettings::max_record_bytes`], or not fMP4 records with media
     /// time.
     pub hls_skipped_records: u64,
+    /// The RTMP ingress's counters.
+    pub ingress: IngressMetrics,
 }
 
 /// Why a config was refused.

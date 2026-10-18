@@ -52,7 +52,16 @@
 //!   checked before they are stored ([`check_ingress_config`],
 //!   [`check_hls_config`]). Ingress is supported where the [`VideoHost`]
 //!   listens, HLS where the driver serves it ([`HlsSettings::serve`]).
-//! - What changes is reported as [`VideoEvent`]s.
+//! - The RTMP ingress ([`ingress`]) listens on the ingress config's
+//!   address while it is enabled, binding again when the address changes
+//!   and after a failed bind. A publish to `live/<stream key>` of a
+//!   channel whose network the node has joined starts the channel's
+//!   session, and a second publish to the channel replaces it. Its
+//!   connections, deadlines and sessions are bounded by
+//!   [`IngressSettings`]; [`VideoControl::ingress_streams`] lists the
+//!   live sessions.
+//! - What changes is reported as [`VideoEvent`]s, with the ingress's
+//!   sessions and listener failures.
 //!
 //! [`bind_frontend`] serves the UI's video calls on the control
 //! ([`frontend`]). [`Config`] holds every bound the control and its
@@ -60,14 +69,29 @@
 //!
 //! # Video swarms
 //!
-//! Every video swarm on the node is the control's: a capture creates one
-//! to write, and a stream adds one to read. Each is the transfer of its
-//! swarm id under the empty salt, so a transfer id names one video swarm,
-//! and a stream of a swarm the node already runs reads it where it is.
+//! Every video swarm on the node is the control's: an ingest session or a
+//! capture creates one to write, and a stream adds one to read. Each is
+//! the transfer of its swarm id under the empty salt, so a transfer id
+//! names one video swarm, and a stream of a swarm the node already runs
+//! reads it where it is.
 //! A video swarm carries opaque records in the packed chunkstream layout
 //! ([`strims_chunkstream::packed`]), with at most one record end per
 //! frame.
 //!
+//! - **Ingest** ([`ingress`]): a broadcaster's RTMP stream to a channel.
+//!   Its session's swarm is under the channel key, with
+//!   [`ingress_options`], so the swarm id is the channel's public key.
+//!   Its records are fMP4 segments, each starting at a keyframe and cut
+//!   by a [`Segmenter`] into a [`PackedSink`]; a record over its bound,
+//!   or a codec the [`FlvSource`] refuses, ends the session with the
+//!   reason. The session serves the channel's snippet, live from the
+//!   publish's start time and signed with the channel key, and keeps a
+//!   listing of the records' MIME type and swarm URI on the channel's
+//!   network from its first record. A changed channel serves the snippet
+//!   again; a deleted or moved one ends the session. Its end writes the
+//!   record in progress, then takes the listing, snippet, transfer, slot
+//!   and swarm down; a session that replaces it keeps the slot, so the
+//!   node's streams of the channel go on after a discontinuity.
 //! - **Captures** ([`capture`]): the UI's recording. A capture has a
 //!   fresh key, a swarm of [`capture_options`], its snippet signed with
 //!   its key, and a listing of its MIME type and swarm URI on each of its
@@ -81,9 +105,9 @@
 //!   before the next whole record once the stream skipped. A swarm added
 //!   for streams gets a live window of
 //!   [`EgressSettings::window_bytes`], and goes with the last of them; a
-//!   capture's stays with the capture. A stream whose swarm closes reads
-//!   the swarm that replaced it under its transfer id, if any. Bounds:
-//!   [`EgressSettings`].
+//!   capture's or an ingest session's stays with it. A stream whose swarm
+//!   closes reads the swarm that replaced it under its transfer id, if
+//!   any. Bounds: [`EgressSettings`].
 //!
 //! Each video swarm's transfer is published on its networks the node has
 //! joined, and on the others as it joins them.
@@ -133,6 +157,7 @@ pub mod frontend;
 pub mod hls;
 pub mod hls_egress;
 pub mod host;
+pub mod ingress;
 pub mod media;
 pub mod record;
 mod registry;
@@ -158,6 +183,7 @@ pub use events::VideoEvent;
 pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};
 pub use hls_egress::{HlsCloseReason, HlsStreamInfo};
 pub use host::{Accepted, NoVideoHost, VideoHost};
+pub use ingress::{IngressMetrics, ingress_options};
 pub use registry::{SwarmKind, VideoSwarm};
 
 pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};

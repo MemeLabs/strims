@@ -4,17 +4,19 @@
 //! The video swarms on this node, by transfer id.
 //!
 //! The video control makes every video swarm the node runs: a capture
-//! creates and writes one, and egress adds one to read. Each is the
-//! transfer of its swarm id under the empty salt, so a transfer id names
-//! at most one of them, and a stream of a swarm the node already runs
-//! reads that swarm.
+//! or an ingest session creates and writes one, and egress adds one to
+//! read. Each is the transfer of its swarm id under the empty salt, so a
+//! transfer id names at most one of them, and a stream of a swarm the
+//! node already runs reads that swarm.
 //!
 //! An entry is a slot: it lasts from its insert to its removal. A capture
-//! removes its slot when it closes, whatever streams read it; an egress
-//! slot goes with its last stream. A slot's swarm can change while the
-//! slot lasts (`swarm` is `None` while one is being added), and each swarm
-//! it holds has its own generation. Slots and generations take their ids
-//! from one counter, starting at 1, so they never repeat.
+//! or an ingest session removes its slot when it ends, whatever streams
+//! read it; an egress slot goes with its last stream. A slot's swarm can
+//! change while the slot lasts (`swarm` is `None` while one is being
+//! added): an ingest session that takes over a slot replaces its swarm
+//! ([`Registry::replace`]), and the slot keeps its streams. Each swarm a
+//! slot holds has its own generation. Slots and generations take their
+//! ids from one counter, starting at 1, so they never repeat.
 //!
 //! A stream holds a [`Claim`]: its slot, and the generation of the swarm
 //! it reads. When that swarm closes, the stream reads the slot's newer
@@ -36,6 +38,9 @@ pub enum SwarmKind {
     Capture,
     /// Streams: added to read, and removed with the last of them.
     Egress,
+    /// An RTMP ingest session: it writes the swarm of its channel's key,
+    /// and removes it when it ends.
+    Ingest,
 }
 
 /// A video swarm on this node, as
@@ -76,8 +81,8 @@ pub(crate) struct LocalSwarm<S> {
     /// Streams holding the slot.
     pub(crate) refs: usize,
     /// The keys of the networks the transfer is published on, each once
-    /// the node joins it. Bound: a capture's network keys; for an egress
-    /// slot, the networks the node runs.
+    /// the node joins it. Bound: a capture's network keys; an ingest
+    /// session's one; for an egress slot, the networks the node runs.
     pub(crate) networks: BTreeSet<Vec<u8>>,
     pub(crate) slot: u64,
     pub(crate) generation: u64,
@@ -107,9 +112,11 @@ pub(crate) enum Added {
 /// The node's video swarms; see the [module docs](self).
 pub(crate) struct Registry<S> {
     /// Bound: the egress slots
-    /// ([`EgressSettings::max_swarms`](crate::EgressSettings::max_swarms))
-    /// and the captures
-    /// ([`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures)).
+    /// ([`EgressSettings::max_swarms`](crate::EgressSettings::max_swarms)),
+    /// the captures
+    /// ([`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures))
+    /// and the ingest sessions
+    /// ([`IngressSettings::max_sessions`](crate::IngressSettings::max_sessions)).
     swarms: BTreeMap<TransferId, LocalSwarm<S>>,
     /// Streams open, of any swarm.
     pub(crate) streams: usize,
@@ -263,6 +270,32 @@ impl<S: Copy> Registry<S> {
         self.remove(t)
     }
 
+    /// Takes the swarm out of the slot of `t` for a swarm of `kind` to
+    /// come: the slot keeps its streams, takes `id`, `options` and
+    /// `networks`, and gets a new generation without a swarm until
+    /// [`set_swarm`](Self::set_swarm). Its streams read the next swarm
+    /// once theirs closes. Returns the slot and the swarm taken out, for
+    /// the caller to remove with its transfer; `None` without a slot.
+    pub(crate) fn replace(
+        &mut self,
+        t: &TransferId,
+        id: SwarmId,
+        options: SwarmOptions,
+        kind: SwarmKind,
+        networks: BTreeSet<Vec<u8>>,
+    ) -> Option<(u64, Option<S>)> {
+        let generation = self.next_id();
+        let e = self.swarms.get_mut(t)?;
+        let old = e.swarm.take();
+        e.id = id;
+        e.options = options;
+        e.kind = kind;
+        e.networks = networks;
+        e.generation = generation;
+        Self::wake(&mut self.woken, e);
+        Some((e.slot, old))
+    }
+
     /// Sets the swarm of slot `slot` of `t`, which has none, as a new
     /// generation; an egress slot no stream holds goes instead.
     pub(crate) fn set_swarm(&mut self, t: &TransferId, slot: u64, swarm: S) -> Added {
@@ -408,6 +441,39 @@ mod tests {
         assert_eq!(r.get(&tid(1)).unwrap().refs, 2);
         assert!(r.release(&tid(1), c).is_none());
         assert_eq!(r.get(&tid(1)).unwrap().refs, 1);
+    }
+
+    #[test]
+    fn a_replaced_swarm_keeps_its_slot_and_streams_for_the_next() {
+        let mut r = Registry::default();
+        let mut c = insert(&mut r, 1, Some(7), SwarmKind::Egress);
+        assert_eq!(poll(&mut r, 1, &mut c), Poll::Ready(Some(7)));
+        let (slot, old) = r
+            .replace(
+                &tid(1),
+                SwarmId::new(&[1; 32]),
+                SwarmOptions::default(),
+                SwarmKind::Ingest,
+                BTreeSet::new(),
+            )
+            .unwrap();
+        assert_eq!((slot, old), (c.slot, Some(7)));
+        assert_eq!(poll(&mut r, 1, &mut c), Poll::Pending);
+        assert_eq!(r.set_swarm(&tid(1), slot, 8), Added::Kept);
+        assert_eq!(poll(&mut r, 1, &mut c), Poll::Ready(Some(8)));
+        // The last stream leaves an ingest slot in place.
+        assert!(r.release(&tid(1), c).is_none());
+        assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Ingest);
+        assert!(
+            r.replace(
+                &tid(2),
+                SwarmId::new(&[2; 32]),
+                SwarmOptions::default(),
+                SwarmKind::Ingest,
+                BTreeSet::new()
+            )
+            .is_none()
+        );
     }
 
     #[test]

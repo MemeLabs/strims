@@ -34,6 +34,7 @@ use crate::capture::Capture;
 use crate::config::{Config, Metrics, check_hls_config, check_ingress_config};
 use crate::hls::HlsRoutes;
 use crate::hls_egress::{HlsEgress, HlsSweep};
+use crate::ingress::Ingress;
 use crate::registry::{LocalSwarm, Registry, VideoSwarm};
 use crate::{VideoError, VideoEvent, VideoHost};
 
@@ -62,10 +63,14 @@ pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
     pub(crate) captures: RefCell<BTreeMap<TransferId, Capture<H>>>,
     /// The HLS streams, and the profile's registration on the HLS routes.
     pub(crate) hls: RefCell<HlsEgress>,
+    /// The RTMP ingress: its config, connections and sessions.
+    pub(crate) ingress: RefCell<Ingress>,
     /// Tasks for `run` to start. Bound: a reload per lag of the store's
     /// events, each ending after one read of the records; per capture, its
     /// creation, its writer and a listing keeper per network; an add per
-    /// egress slot; a removal per removed swarm, each one node call.
+    /// egress slot; a removal per removed swarm, each one node call; the
+    /// RTMP listener, a task per RTMP connection and a listing keeper per
+    /// ingest session.
     spawned: RefCell<Vec<LocalBoxFuture<'static, ()>>>,
     /// Wakes `run`.
     waker: RefCell<Option<Waker>>,
@@ -307,13 +312,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// The listing keepers of the captures.
+    /// The listing keepers of the captures and ingest sessions.
     fn keepers(&self) -> Vec<ListingKeeper> {
-        self.captures
+        let mut keepers: Vec<ListingKeeper> = self
+            .captures
             .borrow()
             .values()
             .flat_map(|c| c.keepers().cloned())
-            .collect()
+            .collect();
+        keepers.extend(self.ingest_keepers());
+        keepers
     }
 
     fn handle_directory_event(&self, e: &DirectoryEvent) {
@@ -358,6 +366,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         if let VideoEvent::HlsConfigChanged(c) = &event {
             self.hls_config_written(c);
         }
+        self.ingress_records_changed(std::slice::from_ref(&event));
         self.events.emit(vec![event]);
     }
 
@@ -408,6 +417,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 self.hls_config_written(c);
             }
         }
+        self.ingress_records_changed(&events);
         if !quiet {
             self.events.emit(events);
         }
@@ -479,6 +489,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 swarms: RefCell::default(),
                 captures: RefCell::default(),
                 hls,
+                ingress: RefCell::default(),
                 spawned: RefCell::new(Vec::new()),
                 waker: RefCell::new(None),
             }),
@@ -529,9 +540,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         Ok(c)
     }
 
-    /// The streams the ingress is taking now, by channel.
+    /// The streams the ingress is taking now, by channel; see the
+    /// [ingress docs](crate::ingress).
     pub fn ingress_streams(&self) -> Vec<VideoIngressStream> {
-        Vec::new()
+        self.shared.ingress_streams()
     }
 
     // --- HLS ----------------------------------------------------------------
@@ -564,9 +576,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// Runs the video: follows the store's channels and configs and
     /// reports their changes, publishes the video swarms on networks as
     /// the node joins them, feeds the listing keepers the directory's
-    /// events, and carries the control's tasks: swarm adds and removals,
-    /// capture writers, listing keepers and HLS stream readers. Closes
-    /// idle HLS streams. Never resolves; drop it to stop. Run it once per
+    /// events, runs the RTMP ingress, and carries the control's tasks:
+    /// swarm adds and removals, capture writers, RTMP connections,
+    /// listing keepers and HLS stream readers. Closes idle HLS streams.
+    /// Never resolves; drop it to stop. Run it once per
     /// control.
     pub async fn run(&self) {
         let s = &self.shared;
@@ -575,6 +588,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         let mut directory_events = Some(s.directory.subscribe());
         s.start_reload(true);
         s.publish_all();
+        s.start_ingress();
         let mut tasks: FuturesUnordered<LocalBoxFuture<'static, ()>> = FuturesUnordered::new();
         let mut hls_sweep: HlsSweep<T> = None;
         loop {

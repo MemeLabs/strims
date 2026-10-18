@@ -39,4 +39,13 @@ pub enum VideoEvent {
         transfer_id: TransferId,
         reason: HlsCloseReason,
     },
+    /// The RTMP listener couldn't bind `addr`, or failed while bound. It
+    /// binds again after
+    /// [`IngressSettings::bind_retry`](crate::IngressSettings::bind_retry).
+    IngressListenFailed { addr: String, error: String },
+    /// A publish to channel `channel_id` was accepted: its stream is live.
+    IngressStarted { channel_id: u64 },
+    /// The live stream of channel `channel_id` ended, for `reason`; see
+    /// the [ingress docs](crate::ingress#teardown).
+    IngressEnded { channel_id: u64, reason: String },
 }
