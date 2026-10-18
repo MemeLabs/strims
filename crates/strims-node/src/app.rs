@@ -46,9 +46,12 @@ use strims_kv::Kv;
 use strims_network::NetworkControl;
 use strims_network::bootstrap::{BootstrapControl, Failure};
 use strims_proto::types::Key;
+use strims_qos::DEFAULT_RATE_LIMIT;
 use strims_replication::{Host, ReplicationControl};
 use strims_rpc::{Client, Config, Router, Timer, peer_connection};
-use strims_session::{Session, SessionFactory};
+use strims_session::{
+    Session, SessionFactory, VnicCeilings, VnicHost, VnicLimits, read_vnic_limits, run_vnic,
+};
 use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
 use strims_video::VideoControl;
 use strims_video::hls::HlsRoutes;
@@ -587,10 +590,33 @@ impl<K: Kv, T: Timer> PeerHandler for BootstrapControl<K, NodeHost, T> {
     }
 }
 
+// --- vnic ---------------------------------------------------------------------
+
+/// The node's upload cap and peer budget, from the profile's vnic config.
+impl VnicHost for NodeHost {
+    type Error = NodeError;
+
+    async fn set_vnic_limits(&self, limits: VnicLimits) -> Result<(), NodeError> {
+        let (rate_limit, max_peers) = node_limits(limits);
+        self.node.set_rate_limit(rate_limit).await?;
+        self.node.set_max_peers(max_peers).await
+    }
+}
+
+/// `limits` as [`NodeConfig::rate_limit`] and [`NodeConfig::max_peers`].
+/// QoS's [`DEFAULT_RATE_LIMIT`] is both the unlimited upload cap and the
+/// largest, and a peer budget of 0 is unlimited.
+fn node_limits(limits: VnicLimits) -> (u64, u32) {
+    let upload = limits
+        .upload
+        .map_or(DEFAULT_RATE_LIMIT, |u| u.min(DEFAULT_RATE_LIMIT));
+    (upload, limits.max_peers.unwrap_or(0))
+}
+
 // --- sessions -----------------------------------------------------------------
 
 /// How a profile's node and services run.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AppConfig {
     /// `host:port` the node accepts TCP links on; port 0 picks one.
     pub tcp_listen: Option<String>,
@@ -606,8 +632,12 @@ pub struct AppConfig {
     pub ws_public_port: u16,
     /// Whether the node dials `ws://` links, which aren't encrypted by TLS.
     pub allow_insecure_ws: bool,
-    /// vnic's peer budget, which gates peer exchange.
-    pub max_peers: u32,
+    /// The largest peer budget the node takes from the profile's vnic
+    /// config; `None` takes it as stored.
+    pub max_peers: Option<u32>,
+    /// The largest upload cap, in bytes per second, the node takes from the
+    /// profile's vnic config; `None` takes it as stored.
+    pub max_upload: Option<u64>,
     /// The host certificate's subject.
     pub label: String,
     pub network: strims_network::Config,
@@ -618,29 +648,6 @@ pub struct AppConfig {
     pub chat: strims_chat::Config,
     pub whispers: WhisperConfig,
     pub video: strims_video::Config,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        AppConfig {
-            tcp_listen: None,
-            ws_listen: None,
-            public_ip: None,
-            ws_public_hostname: String::new(),
-            ws_public_port: 0,
-            allow_insecure_ws: false,
-            max_peers: 16,
-            label: String::new(),
-            network: strims_network::Config::default(),
-            bootstrap: strims_network::bootstrap::Config::default(),
-            transfer: strims_transfer::Config::default(),
-            replication: strims_replication::Config::default(),
-            directory: strims_directory::Config::default(),
-            chat: strims_chat::Config::default(),
-            whispers: WhisperConfig::default(),
-            video: strims_video::Config::default(),
-        }
-    }
 }
 
 /// Why a profile's node didn't start.
@@ -666,7 +673,9 @@ pub enum StartError {
 ///
 /// A session's node runs replication, transfers, network membership,
 /// bootstrap, the directory, chat, whispers and video, each control as a
-/// local task, and serves every peer through [`PeerServices`]. The video
+/// local task, and serves every peer through [`PeerServices`]. It starts
+/// under the profile's vnic config, within [`AppConfig::max_upload`] and
+/// [`AppConfig::max_peers`], and follows the config's changes. The video
 /// control's RTMP ingress listens on the factory's [`Net`], and the
 /// directory's servers make their HTTPS requests over it ([`NetFetch`]).
 pub struct NodeFactory<N: Net, C: Clock> {
@@ -716,7 +725,6 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
         config.ws_public_hostname.clone_from(&c.ws_public_hostname);
         config.ws_public_port = c.ws_public_port;
         config.allow_insecure_ws = c.allow_insecure_ws;
-        config.max_peers = c.max_peers;
         config.node_platform = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
         config.node_version = env!("CARGO_PKG_VERSION").to_owned();
         config
@@ -735,7 +743,15 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
         getrandom::fill(&mut seed).map_err(StartError::Entropy)?;
         let mut rng = DetRng::from_seed(seed);
         let node_seed = rand_core::Rng::next_u64(&mut rng);
-        let config = self.node_config(key, node_seed);
+        let mut config = self.node_config(key, node_seed);
+        let ceilings = VnicCeilings {
+            max_upload_bytes_per_second: self.config.max_upload,
+            max_peers: self.config.max_peers,
+        };
+        let limits = read_vnic_limits(&session.store, &ceilings).await?;
+        let (rate_limit, max_peers) = node_limits(limits);
+        config.rate_limit = Some(rate_limit);
+        config.max_peers = max_peers;
         let (node, mut events) = Node::spawn(config, self.net.clone(), self.clock.clone()).await?;
 
         let c = &self.config;
@@ -801,7 +817,7 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             c.whispers.clone(),
         );
         let video = VideoControl::new(
-            host,
+            host.clone(),
             NetVideoHost(self.net.clone()),
             store.clone(),
             profile.clone(),
@@ -850,6 +866,7 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             let video = video.clone();
             Box::pin(async move { video.run().await })
         });
+        spawn(Box::pin(run_vnic(store.clone(), host, ceilings)));
         let services = PeerServices::new(node.clone())
             .with(Rc::new(network.clone()))
             .with(Rc::new(transfers))

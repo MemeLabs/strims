@@ -26,7 +26,10 @@ options:
   --public-hostname <host>  the host WebSocket link URIs advertise
   --ws-public-port <port>   the port WebSocket link URIs advertise
   --allow-insecure-ws       dial ws:// links, which TLS doesn't protect
-  --max-peers <n>           the node's peer budget (default 16)
+  --max-peers <n>           the most peers the node takes, whatever the
+                            profile's vnic settings allow
+  --max-upload <bytes/s>    the most bytes per second the node uploads,
+                            whatever the profile's vnic settings allow
   --label <name>            the node's host certificate subject
   --max-connections <n>     UI connections served at once (default 64)
   --hls-listen <host:port>  where players fetch HLS over HTTP; without it,
@@ -81,7 +84,8 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             "--public-hostname" => app.ws_public_hostname = value()?,
             "--ws-public-port" => app.ws_public_port = number(&flag, &value()?)?,
             "--allow-insecure-ws" => app.allow_insecure_ws = true,
-            "--max-peers" => app.max_peers = number(&flag, &value()?)?,
+            "--max-peers" => app.max_peers = Some(positive(&flag, &value()?)?),
+            "--max-upload" => app.max_upload = Some(positive(&flag, &value()?)?),
             "--label" => app.label = value()?,
             "--max-connections" => config.max_connections = number(&flag, &value()?)?,
             "--hls-listen" => config.hls_listen = Some(value()?),
@@ -106,6 +110,15 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
 
 fn number<T: std::str::FromStr>(flag: &str, v: &str) -> Result<T, String> {
     v.parse().map_err(|_| format!("{flag}: invalid value {v}"))
+}
+
+/// `v` as a number other than 0, since a vnic limit of 0 is unlimited.
+fn positive<T: std::str::FromStr + Default + PartialEq>(flag: &str, v: &str) -> Result<T, String> {
+    let n = number(flag, v)?;
+    if n == T::default() {
+        return Err(format!("{flag} must be at least 1"));
+    }
+    Ok(n)
 }
 
 /// Whether `url` is `http://` or `https://`, in any case, and more.
@@ -148,6 +161,8 @@ mod tests {
             "443",
             "--allow-insecure-ws",
             "--max-peers=4",
+            "--max-upload",
+            "1000000",
             "--label",
             "a",
             "--max-connections",
@@ -166,7 +181,8 @@ mod tests {
         assert_eq!(c.app.ws_public_hostname, "node.example");
         assert_eq!(c.app.ws_public_port, 443);
         assert!(c.app.allow_insecure_ws);
-        assert_eq!(c.app.max_peers, 4);
+        assert_eq!(c.app.max_peers, Some(4));
+        assert_eq!(c.app.max_upload, Some(1_000_000));
         assert_eq!(c.app.label, "a");
         assert_eq!(c.max_connections, 8);
         assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
@@ -181,7 +197,8 @@ mod tests {
         assert_eq!(c.api_path, "/api");
         assert_eq!(c.app.tcp_listen, None);
         assert!(!c.app.allow_insecure_ws);
-        assert_eq!(c.app.max_peers, 16);
+        assert_eq!(c.app.max_peers, None);
+        assert_eq!(c.app.max_upload, None);
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
     }
@@ -190,6 +207,11 @@ mod tests {
     fn bad_command_lines_are_refused() {
         assert!(run(&[]).err().unwrap().contains("--db"));
         assert!(run(&["--db-memory", "--max-peers", "x"]).is_err());
+        assert!(run(&["--db-memory", "--max-upload=-1"]).is_err());
+        for flag in ["--max-peers", "--max-upload"] {
+            let zero = run(&["--db-memory", flag, "0"]);
+            assert!(zero.err().unwrap().contains("at least 1"), "{flag}");
+        }
         assert!(run(&["--db-memory", "--public-ip", "nope"]).is_err());
         assert!(run(&["--db-memory", "--api-path", "api"]).is_err());
         assert!(run(&["--db-memory", "--tcp-listen"]).is_err());

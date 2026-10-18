@@ -223,6 +223,20 @@ impl Node {
             .await
     }
 
+    /// Changes vnic's peer budget (see [`NodeConfig::max_peers`]). Peers
+    /// past a lowered budget stay connected.
+    pub async fn set_max_peers(&self, n: u32) -> Result<(), NodeError> {
+        self.call(move |s, _| s.vnic.set_max_peers(n)).await
+    }
+
+    /// The upload cap in bytes per second and the peer budget in effect,
+    /// where an unlimited budget is `i32::MAX`. A query (see
+    /// [`NodeConfig::query_delay`]).
+    pub async fn vnic_limits(&self) -> Result<(u64, usize), NodeError> {
+        self.query(|s, _| (s.vnic.qos().rate_limit(), s.vnic.max_peers()))
+            .await
+    }
+
     /// Every counter in the node: vnic, vpn, the driver, links, the ppspp
     /// runner (swarms, peers, channels) and vpn networks. Cheap enough to
     /// poll every second. A query: sampling doesn't change what the node

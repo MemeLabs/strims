@@ -14,12 +14,14 @@ use strims_proto::profile::v1::{
 };
 use strims_proto::replication::v1::register_replication_frontend_service;
 use strims_proto::service::{Context, Error as RpcError};
+use strims_proto::vnic::v1::register_vnic_frontend_service;
 use strims_replication::ReplicationFrontend;
 use strims_rpc::{Router, Timer};
 
 use crate::manager::Session;
 use crate::notification::NotificationService;
 use crate::rpc_error;
+use crate::vnic::VnicFrontend;
 
 /// Serves `strims.profile.v1.ProfileFrontend` for a session.
 pub struct ProfileService<K: Kv, T: Timer> {
@@ -96,8 +98,8 @@ impl<K: Kv, T: Timer> ProfileFrontendService for ProfileService<K, T> {
     }
 }
 
-/// Serves a session's profile, replication and notification frontend
-/// services on `router`.
+/// Serves a session's profile, replication, notification and vnic
+/// frontend services on `router`.
 pub fn bind_frontends<K: Kv, T: Timer>(session: &Rc<Session<K>>, timer: &T, router: &Router) {
     let mut router = router.clone();
     register_profile_frontend_service(
@@ -117,5 +119,9 @@ pub fn bind_frontends<K: Kv, T: Timer>(session: &Rc<Session<K>>, timer: &T, rout
             session.store.clone(),
             timer.clone(),
         )),
+    );
+    register_vnic_frontend_service(
+        &mut router,
+        Rc::new(VnicFrontend::new(session.store.clone(), timer.clone())),
     );
 }

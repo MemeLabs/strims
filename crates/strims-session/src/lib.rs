@@ -13,12 +13,17 @@
 //! in or up starts or joins the profile's session and binds the session's
 //! frontend services on the same connection. [`bind_frontends`] binds
 //! those that need only the session's store: its profile and devices,
-//! replication, and the user's notifications ([`NotificationService`]).
+//! replication, the user's notifications ([`NotificationService`]) and
+//! this device's vnic config ([`VnicFrontend`]).
+//!
+//! The driver runs its node under the vnic config with [`run_vnic`],
+//! through a [`VnicHost`].
 
 mod auth;
 mod manager;
 mod notification;
 mod profile;
+mod vnic;
 
 use std::fmt::Display;
 
@@ -28,6 +33,9 @@ pub use auth::AuthService;
 pub use manager::{Manager, Session, SessionFactory};
 pub use notification::NotificationService;
 pub use profile::{ProfileService, bind_frontends};
+pub use vnic::{
+    VnicCeilings, VnicFrontend, VnicHost, VnicLimits, read_vnic_limits, run_vnic, vnic_limits,
+};
 
 /// The RPC error a store or session start error answers with.
 pub(crate) fn rpc_error(e: impl Display) -> RpcError {

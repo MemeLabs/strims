@@ -53,8 +53,8 @@ pub struct NodeConfig {
     /// effectively uncapped and unweighted). Change it at runtime with
     /// `Node::set_rate_limit`.
     pub rate_limit: Option<u64>,
-    /// vnic's peer budget, which gates peer exchange. 0 refuses every
-    /// offer.
+    /// vnic's peer budget, which gates peer exchange. 0 is unlimited.
+    /// Change it at runtime with `Node::set_max_peers`.
     pub max_peers: u32,
     /// Deadlines for TCP links, and keepalive and buffer sizes for the
     /// sockets under TCP and WebSocket links. The read timeout (25 s) must

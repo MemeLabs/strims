@@ -12,9 +12,6 @@ Port the application services that sit on the core crates. The Go versions
 - The other dao record types arrive with their services, and those that
   name a network with their part of its deletion. Until then, stores from
   Go keep these records unread:
-  - the vnic config (8001): the node's upload cap and peer budget, and
-    the UI's VNIC frontend. Until then the node takes its peer budget
-    from `AppConfig` and has no upload cap;
   - the autoseed config and rules (10001, 10002): seeding the swarms of
     directory listings that a rule names by network, swarm id and salt,
     and the UI's autoseed frontend. Deleting a network deletes its rules;
@@ -135,13 +132,14 @@ Egress and players:
   an IndexedDB callback has to be polled before the transaction
   deactivates. Its `SessionFactory` starts a profile's node, replication,
   network, bootstrap, transfer, directory, chat, whisper and video
-  controls and peer services, and binds the network, bootstrap,
-  directory, chat and video frontends (`strims_node::app::NodeFactory` is
-  the native equivalent). Its video control has no RTMP listener
-  (`NoVideoHost`) and serves no HLS. Its `HttpFetch` for a directory
-  server's embed loads is the browser's `fetch`, which the embed APIs may
-  refuse under CORS; decide whether such a server goes without embed
-  snippets or loads them through a proxy.
+  controls and peer services, runs `strims_session::run_vnic` on its
+  node, and binds the network, bootstrap, directory, chat and video
+  frontends (`strims_node::app::NodeFactory` is the native equivalent).
+  Its video control has no RTMP listener (`NoVideoHost`) and serves no
+  HLS. Its `HttpFetch` for a directory server's embed loads is the
+  browser's `fetch`, which the embed APIs may refuse under CORS; decide
+  whether such a server goes without embed snippets or loads them
+  through a proxy.
 - `strims-svc` runs one profile's node per process, on redb, and serves
   the UI's frontend over WebSocket. Remaining:
   - a Postgres `Kv`;
@@ -282,9 +280,8 @@ While networks have Go and Rust nodes:
   - an idle timeout for established peers that send keepalives;
   - cache host certificates until near expiry;
   - QoS: a per-link gate if per-session blocking shows up in profiles;
-    per-link and per-class rate limits; whether a rate limit of 0 means
-    unlimited; MTU vs exact backlog hints; a neutral starting weight for
-    new non-ppspp writers;
+    per-link and per-class rate limits; MTU vs exact backlog hints; a
+    neutral starting weight for new non-ppspp writers;
   - vpn rejects messages larger than one frame (MTU − 4) at send time;
   - make vpn `VerifyMode::Enforce` the default once mixed networks have run
     clean under `Audit`;
@@ -297,7 +294,8 @@ While networks have Go and Rust nodes:
   - `connect_peer` policy belongs to the app layer; the node never initiates
     it. Transfer discovery asks to link to every host a search finds (16
     per search), with no budget across transfers or against `max_peers`;
-  - a default upload cap for `strims-svc`;
+  - lowering the peer budget keeps the peers already connected; decide
+    whether it should close the excess, and which peers go;
   - peers that send invalid data or false HAVEs are only backed off; scoring
     or disconnecting them is app policy;
   - whether a ppspp frame error should drop the peer rather than close its
