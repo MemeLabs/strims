@@ -165,8 +165,6 @@ Egress and players:
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until v3 binds the bin.
 - `add_stream_close` is unused.
-- A Merkle cache import takes the data past its signed munros without
-  verifying it, so a cache with no timestamps imports all of its data.
 
 ### strims-chat defects
 - A whisper whose state write fails stays ENQUEUED outside the delivery

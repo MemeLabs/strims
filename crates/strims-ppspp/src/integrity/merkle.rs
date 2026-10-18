@@ -268,8 +268,9 @@ impl MerkleSwarmVerifier {
     }
 
     /// Loads and verifies a cache. The data must start at chunk 0 and the
-    /// cache may hold at most a live window of munros.
-    pub fn import_cache(&mut self, c: &Cache) -> Result<(), Error> {
+    /// cache may hold at most a live window of munros. Returns how many
+    /// bytes of the data the imported signatures cover.
+    pub fn import_cache(&mut self, c: &Cache) -> Result<usize, Error> {
         let ic = c
             .integrity
             .as_ref()
@@ -278,7 +279,7 @@ impl MerkleSwarmVerifier {
 
         let n = ic.timestamps.len();
         if n == 0 {
-            return Ok(());
+            return Ok(0);
         }
         if n as u64 > self.ring.size {
             return Err(Error::CacheTooLarge);
@@ -315,7 +316,7 @@ impl MerkleSwarmVerifier {
             let sig = Signature::from_slice(sig).ok_or(Error::InvalidSignature)?;
             self.ring.store(ts, &mut self.spare, sig);
         }
-        Ok(())
+        Ok(n * munro_bytes)
     }
 
     /// The timestamps and signatures of the munros from slot 0 up to the

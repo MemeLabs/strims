@@ -438,10 +438,12 @@ impl SwarmVerifier {
         }
     }
 
-    /// Loads and checks signatures from a cache.
-    pub fn import_cache(&mut self, c: &Cache) -> Result<(), Error> {
+    /// Loads and checks signatures from a cache. Returns how many bytes of
+    /// the cache's data they cover: all of it when the swarm has no
+    /// integrity protection.
+    pub fn import_cache(&mut self, c: &Cache) -> Result<usize, Error> {
         match self {
-            SwarmVerifier::None => Ok(()),
+            SwarmVerifier::None => Ok(c.data.len()),
             SwarmVerifier::Merkle(v) => v.import_cache(c),
             SwarmVerifier::SignAll(v) => v.import_cache(c),
         }

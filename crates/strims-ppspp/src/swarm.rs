@@ -285,13 +285,15 @@ impl Swarm {
 
     /// Loads a cache, whose URI must match this swarm's and whose epoch the
     /// swarm key signed. A refused URI or epoch leaves the swarm unchanged.
+    /// The store takes only the data the cache's signatures cover.
     pub fn import_cache(&mut self, c: &Cache) -> Result<(), SwarmError> {
         if c.uri != self.uri().to_string() {
             return Err(SwarmError::IncompatibleCache);
         }
         self.epoch.import_cache(c.epoch.as_ref())?;
-        self.verifier.import_cache(c)?;
-        self.store.import_cache(&c.data)?;
+        let verified = self.verifier.import_cache(c)?;
+        let data = c.data.get(..verified).unwrap_or(&c.data);
+        self.store.import_cache(data)?;
         Ok(())
     }
 
@@ -492,6 +494,47 @@ mod tests {
         )
         .unwrap();
         assert_eq!(other.import_cache(&c), Err(SwarmError::IncompatibleCache));
+    }
+
+    /// A cache's data past its signed munros, or a cache with no
+    /// signatures at all, leaves nothing unverified in the store.
+    #[test]
+    fn cache_imports_only_signed_data() {
+        let key = strims_crypto::key_from_seed(&[12; 32]);
+        let opt = SwarmOptions::default_options();
+        let (mut w, mut ws) = Writer::new(
+            WriterOptions {
+                swarm_options: opt.clone(),
+                key: key.clone(),
+            },
+            now(),
+        )
+        .unwrap();
+        let munro = opt.chunk_size * opt.chunks_per_signature;
+        let mut b = vec![0u8; munro * 2];
+        det_rng(2).fill_bytes(&mut b);
+        assert_eq!(w.write(&mut ws, now(), &b), Ok(b.len()));
+        let c = ws.export_cache().unwrap();
+
+        let mut padded = c.clone();
+        padded.data.extend(std::iter::repeat_n(0xa5, munro));
+        let mut s = Swarm::new_default(SwarmId::new(&key.public)).unwrap();
+        s.import_cache(&padded).unwrap();
+        let mut r = s.reader();
+        assert_eq!(read_all(&s, &mut r, b.len() + munro), b);
+
+        let mut unsigned = c.clone();
+        if let Some(m) = unsigned
+            .integrity
+            .as_mut()
+            .and_then(|i| i.merkle_integrity.as_mut())
+        {
+            m.timestamps.clear();
+            m.signatures.clear();
+        }
+        let mut s = Swarm::new_default(SwarmId::new(&key.public)).unwrap();
+        s.import_cache(&unsigned).unwrap();
+        assert!(s.store().is_empty());
     }
 
     /// Published chunks reach the store and the scheduler queue, and resets

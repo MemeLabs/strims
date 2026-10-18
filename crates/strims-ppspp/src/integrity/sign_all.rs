@@ -145,8 +145,9 @@ impl SignAllSwarmVerifier {
     }
 
     /// Loads and verifies a cache. The head moves past the imported chunks,
-    /// so their signatures can be sent.
-    pub fn import_cache(&mut self, c: &Cache) -> Result<(), Error> {
+    /// so their signatures can be sent. Returns how many bytes of the data
+    /// the imported signatures cover.
+    pub fn import_cache(&mut self, c: &Cache) -> Result<usize, Error> {
         let ic = c
             .integrity
             .as_ref()
@@ -192,7 +193,7 @@ impl SignAllSwarmVerifier {
         }
         self.head = Bin(2 * n as u64);
         self.tail = Bin(0);
-        Ok(())
+        Ok(n * cs)
     }
 
     /// The timestamps and signatures from slot 0 up to the first zero
