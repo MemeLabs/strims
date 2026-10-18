@@ -38,7 +38,12 @@
 //! [`AppConfig::ws_public_hostname`], else none, and the HLS config must
 //! name the address. Without the listener, HLS egress is unsupported.
 //!
-//! Everything runs on one thread: [`Svc`] runs inside a tokio `LocalSet`.
+//! # Threads
+//!
+//! [`Svc`] runs inside a tokio `LocalSet`, on one thread. The running
+//! profile's PSI sessions compute on a thread of their own by default
+//! ([`PsiMode::Thread`] in [`Config::app`]), so the node's I/O goes on
+//! while a session computes.
 
 mod api;
 mod http;
@@ -50,7 +55,7 @@ use std::rc::Rc;
 use rand_core::SeedableRng;
 use strims_base::rng::DetRng;
 use strims_kv_redb::RedbKv;
-use strims_node::app::{AppConfig, NodeFactory, NodeTimer};
+use strims_node::app::{AppConfig, NodeFactory, NodeTimer, PsiMode};
 use strims_node::{NodeInfo, SystemClock, TokioNet};
 use strims_session::Manager;
 use tokio::net::TcpListener;
@@ -78,7 +83,8 @@ pub struct Config {
     /// The path the API upgrades WebSocket connections at.
     pub api_path: String,
     pub db: Db,
-    /// How a signed-in profile's node runs. The service sets
+    /// How a signed-in profile's node runs; by default its PSI sessions
+    /// compute on their own thread ([`PsiMode::Thread`]). The service sets
     /// [`HlsSettings::serve`](strims_video::HlsSettings::serve) in its
     /// video config, and fills an empty
     /// [`HlsSettings::base_url`](strims_video::HlsSettings::base_url).
@@ -96,7 +102,10 @@ impl Default for Config {
             api_listen: "127.0.0.1:8083".to_owned(),
             api_path: "/api".to_owned(),
             db: Db::Memory,
-            app: AppConfig::default(),
+            app: AppConfig {
+                psi: PsiMode::Thread,
+                ..AppConfig::default()
+            },
             max_connections: 64,
             hls_listen: None,
         }

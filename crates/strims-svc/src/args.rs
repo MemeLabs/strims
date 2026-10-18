@@ -6,6 +6,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
+use strims_node::app::PsiMode;
 use strims_svc::{Config, Db};
 
 pub(crate) const USAGE: &str = "\
@@ -31,6 +32,8 @@ options:
   --max-upload <bytes/s>    the most bytes per second the node uploads,
                             whatever the profile's vnic settings allow
   --label <name>            the node's host certificate subject
+  --psi <inline|thread>     where PSI sessions compute: on the node's
+                            thread, or on their own (default thread)
   --max-connections <n>     UI connections served at once (default 64)
   --hls-listen <host:port>  where players fetch HLS over HTTP; without it,
                             HLS egress is unsupported
@@ -87,6 +90,13 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             "--max-peers" => app.max_peers = Some(positive(&flag, &value()?)?),
             "--max-upload" => app.max_upload = Some(positive(&flag, &value()?)?),
             "--label" => app.label = value()?,
+            "--psi" => {
+                app.psi = match value()?.as_str() {
+                    "inline" => PsiMode::Inline,
+                    "thread" => PsiMode::Thread,
+                    v => return Err(format!("--psi must be inline or thread: {v}")),
+                }
+            }
             "--max-connections" => config.max_connections = number(&flag, &value()?)?,
             "--hls-listen" => config.hls_listen = Some(value()?),
             "--hls-public-url" => {
@@ -165,6 +175,7 @@ mod tests {
             "1000000",
             "--label",
             "a",
+            "--psi=inline",
             "--max-connections",
             "8",
             "--hls-listen",
@@ -184,6 +195,7 @@ mod tests {
         assert_eq!(c.app.max_peers, Some(4));
         assert_eq!(c.app.max_upload, Some(1_000_000));
         assert_eq!(c.app.label, "a");
+        assert_eq!(c.app.psi, PsiMode::Inline);
         assert_eq!(c.max_connections, 8);
         assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
         assert_eq!(c.app.video.hls.base_url, "https://media.example");
@@ -199,6 +211,7 @@ mod tests {
         assert!(!c.app.allow_insecure_ws);
         assert_eq!(c.app.max_peers, None);
         assert_eq!(c.app.max_upload, None);
+        assert_eq!(c.app.psi, PsiMode::Thread);
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
     }
@@ -215,6 +228,7 @@ mod tests {
         assert!(run(&["--db-memory", "--public-ip", "nope"]).is_err());
         assert!(run(&["--db-memory", "--api-path", "api"]).is_err());
         assert!(run(&["--db-memory", "--tcp-listen"]).is_err());
+        assert!(run(&["--db-memory", "--psi", "worker"]).is_err());
         assert!(run(&["--db-memory", "--bogus"]).is_err());
         for url in ["media.example", "ftp://media.example", "http://"] {
             let args = ["--db-memory", "--hls-listen=:0", "--hls-public-url", url];

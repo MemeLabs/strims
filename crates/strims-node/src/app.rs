@@ -10,7 +10,9 @@
 //!   with the config's listeners and advertised addresses, and its seed
 //!   comes from OS entropy. The directory's servers make their HTTPS
 //!   requests over the `Net` ([`NetFetch`]), and the video control's RTMP
-//!   ingress listens on it ([`NetVideoHost`]).
+//!   ingress listens on it ([`NetVideoHost`]). The network control's PSI
+//!   sessions compute where [`AppConfig::psi`] says: inline, or on the
+//!   platform's [`ThreadPsi`].
 //! - [`TokioSpawn`] runs the app's tasks with `tokio::task::spawn_local`,
 //!   so they run inside a tokio `LocalSet`.
 //! - [`NodeFactory`] is the [`SessionFactory`] that runs a signed-in
@@ -22,6 +24,7 @@
 //! simulations that compose services themselves: [`NodeHost`],
 //! [`PeerHandler`], and [`PeerServices`] on `TokioSpawn`.
 
+use std::cell::RefCell;
 use std::future::Future;
 use std::net::IpAddr;
 use std::rc::Rc;
@@ -32,6 +35,7 @@ use strims_base::time::Time;
 use strims_chat::WhisperConfig;
 use strims_directory::Fetch;
 use strims_kv::Kv;
+use strims_network::psi::{InlinePsi, PsiEngine};
 use strims_proto::types::Key;
 use strims_rpc::{Router, Timer};
 use strims_session::{Session, SessionFactory, VnicCeilings};
@@ -44,6 +48,7 @@ pub use strims_node_core::app::{
 };
 
 use crate::fetch::{NetFetch, tls_client_config};
+use crate::psi::ThreadPsi;
 use crate::video_host::NetVideoHost;
 use crate::{Clock, Net, Node, NodeConfig, NodeError, NodeEvents, NodeInfo};
 
@@ -95,6 +100,21 @@ impl Spawn for TokioSpawn {
 
 // --- sessions -----------------------------------------------------------------
 
+/// Where a profile's PSI sessions compute.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PsiMode {
+    /// On the node's thread, inside the network control's calls
+    /// ([`InlinePsi`]). Runs replay from their seeds, so simulations and
+    /// tests use this.
+    #[default]
+    Inline,
+    /// On the platform's [`ThreadPsi`], started with the first profile
+    /// and shared by every profile after it, so the node's thread does
+    /// I/O while a session computes. Its answers come in wall time, so a
+    /// run doesn't replay: never use it under turmoil.
+    Thread,
+}
+
 /// How a profile's node and services run.
 #[derive(Clone, Default)]
 pub struct AppConfig {
@@ -120,6 +140,8 @@ pub struct AppConfig {
     pub max_upload: Option<u64>,
     /// The host certificate's subject.
     pub label: String,
+    /// Where the network control's PSI sessions compute.
+    pub psi: PsiMode,
     pub network: strims_network::Config,
     pub bootstrap: strims_network::bootstrap::Config,
     pub transfer: strims_transfer::Config,
@@ -150,6 +172,11 @@ impl AppConfig {
 /// by `C` and configured by an [`AppConfig`], under the profile's vnic
 /// config within [`AppConfig::max_upload`] and [`AppConfig::max_peers`].
 /// See the [module docs](self).
+///
+/// With [`PsiMode::Thread`], the platform starts one [`ThreadPsi`] at the
+/// first profile start, and its reply task on the profile's executor; the
+/// profiles it starts after share them. The thread runs while the
+/// platform or a profile's network control holds the engine.
 pub struct NativePlatform<N: Net, C: Clock> {
     net: N,
     clock: C,
@@ -157,6 +184,8 @@ pub struct NativePlatform<N: Net, C: Clock> {
     /// The TLS client config of every node's HTTPS requests.
     tls: Arc<rustls::ClientConfig>,
     hls: HlsRoutes,
+    /// The PSI thread, once a start under [`PsiMode::Thread`] started it.
+    psi_thread: RefCell<Option<ThreadPsi>>,
 }
 
 impl<N: Net, C: Clock> NativePlatform<N, C> {
@@ -168,6 +197,27 @@ impl<N: Net, C: Clock> NativePlatform<N, C> {
             config,
             tls: tls_client_config(),
             hls: HlsRoutes::new(),
+            psi_thread: RefCell::new(None),
+        }
+    }
+
+    /// The platform's PSI thread, started on first use. A failed start
+    /// leaves `None`, and the next call tries again.
+    fn psi_thread(&self) -> Option<ThreadPsi> {
+        if let Some(engine) = &*self.psi_thread.borrow() {
+            return Some(engine.clone());
+        }
+        match ThreadPsi::spawn() {
+            Ok((engine, task)) => {
+                // The task ends with the thread.
+                let _detached = self.spawner().spawn_local(Box::pin(task.run()));
+                *self.psi_thread.borrow_mut() = Some(engine.clone());
+                Some(engine)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "can't start the psi thread; computing psi inline");
+                None
+            }
         }
     }
 }
@@ -235,13 +285,26 @@ impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
     fn spawner(&self) -> TokioSpawn {
         TokioSpawn
     }
+
+    /// [`InlinePsi`] under [`PsiMode::Inline`], else the platform's
+    /// [`ThreadPsi`]; inline while its thread can't start.
+    fn psi(&self) -> Rc<dyn PsiEngine> {
+        match self.config.psi {
+            PsiMode::Inline => Rc::new(InlinePsi),
+            PsiMode::Thread => match self.psi_thread() {
+                Some(engine) => Rc::new(engine),
+                None => Rc::new(InlinePsi),
+            },
+        }
+    }
 }
 
 /// The [`SessionFactory`] that runs a signed-in profile's node and
 /// services on a [`NativePlatform`] ([`ProfileSlot::start`]). A process
 /// runs one profile's node at a time, since the node listens on the
 /// configured addresses: starting another profile's session fails with
-/// [`StartError::ProfileRunning`].
+/// [`StartError::ProfileRunning`]. Under [`PsiMode::Thread`] its profiles
+/// share one PSI thread.
 pub struct NodeFactory<N: Net, C: Clock> {
     platform: NativePlatform<N, C>,
     slot: ProfileSlot,

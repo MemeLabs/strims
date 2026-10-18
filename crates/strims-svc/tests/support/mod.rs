@@ -23,8 +23,10 @@ use tokio_tungstenite::tungstenite::{self, Message};
 pub mod video;
 
 /// The config of a service on localhost: its API, and a node on TCP and
-/// WebSocket listeners, all on ports the OS picks.
+/// WebSocket listeners, all on ports the OS picks, under the service's
+/// defaults otherwise.
 pub fn local_config() -> Config {
+    let defaults = Config::default();
     Config {
         api_listen: "127.0.0.1:0".into(),
         db: Db::Memory,
@@ -32,9 +34,9 @@ pub fn local_config() -> Config {
             tcp_listen: Some("127.0.0.1:0".into()),
             ws_listen: Some("127.0.0.1:0".into()),
             allow_insecure_ws: true,
-            ..AppConfig::default()
+            ..defaults.app.clone()
         },
-        ..Config::default()
+        ..defaults
     }
 }
 

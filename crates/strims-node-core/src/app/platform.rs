@@ -5,10 +5,12 @@
 
 use std::fmt;
 use std::future::Future;
+use std::rc::Rc;
 
 use futures_util::future::LocalBoxFuture;
 use strims_chat::WhisperConfig;
 use strims_directory::Fetch;
+use strims_network::psi::{InlinePsi, PsiEngine};
 use strims_proto::types::Key;
 use strims_rpc::Timer;
 use strims_session::VnicCeilings;
@@ -117,6 +119,19 @@ pub trait AppPlatform: 'static {
 
     /// The executor of the profile's tasks.
     fn spawner(&self) -> Self::Spawn;
+
+    /// The engine the profile's network control runs its PSI sessions on,
+    /// taken once per start as the control is built.
+    ///
+    /// The default, [`InlinePsi`], computes each session inside the
+    /// control's calls, on the thread that runs the node, and replays
+    /// exactly from the run's seed. A driver whose node thread can't spare
+    /// a session's tens of milliseconds of CPU runs them elsewhere, on a
+    /// [`RemotePsi`](strims_network::psi::RemotePsi) whose server lives
+    /// on another thread or worker.
+    fn psi(&self) -> Rc<dyn PsiEngine> {
+        Rc::new(InlinePsi)
+    }
 }
 
 /// Why a profile's node didn't start.

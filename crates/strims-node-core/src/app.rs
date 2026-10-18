@@ -35,7 +35,8 @@
 //! The platform supplies what differs between drivers: entropy, the node's
 //! config and its spawn, the vnic ceilings, the services' configs, the
 //! timer, the directory's HTTP fetcher, the video control's RTMP host, the
-//! HLS routes and the task spawner.
+//! HLS routes, the task spawner, and the engine the network control runs
+//! its PSI sessions on.
 //!
 //! # Tasks
 //!
@@ -53,7 +54,9 @@
 //! whispers, video (transfers draw none). Tasks spawn in this order: the
 //! controls' `run`s (replication, network, bootstrap, transfers,
 //! directory, chat, whispers, video), the vnic config's follower, then the
-//! event loop. Both orders are part of the run.
+//! event loop. Both orders are part of the run. So is the PSI engine: the
+//! default [`AppPlatform::psi`] computes inline and replays, and an engine
+//! whose sessions answer from another thread doesn't.
 
 mod host;
 mod peers;

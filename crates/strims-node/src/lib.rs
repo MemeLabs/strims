@@ -4,8 +4,9 @@
 //! The Tokio driver of the node: [`strims_node_core`] over TCP, WebSocket
 //! and WebRTC, natively or under turmoil.
 //!
-//! A driver crate: OS access (sockets, the wall clock, OS entropy) happens
-//! here, and only behind [`Net`], [`Clock`] and [`random_seed`]. The node
+//! A driver crate: OS access (sockets, the wall clock, OS entropy,
+//! threads) happens here, and only behind [`Net`], [`Clock`],
+//! [`random_seed`] and [`psi::ThreadPsi`]. The node
 //! itself (its state machines, its API handle [`Node`] and its loop) is
 //! `strims_node_core`, re-exported here; this crate implements the core's
 //! `NodeIo` on tokio (`native`) and spawns the node task with
@@ -20,6 +21,7 @@
 //! | `rtc`, `udp` | the WebRTC endpoint (str0m) in the node task; its UDP socket tasks and the STUN resolver |
 //! | [`Net`], [`Clock`] | sockets and time: tokio or turmoil, wall clock or simulated |
 //! | [`app`] | the native platform of the core's app layer |
+//! | [`psi`] | PSI sessions on a thread of their own, off the node's |
 //!
 //! str0m is sans-IO, so the WebRTC endpoint runs inside the node task as
 //! the core's `RtcEndpoint`, and its data channels move link bytes
@@ -38,7 +40,9 @@
 //! [`app::NodeFactory`] the session factory that runs a signed-in profile
 //! on it. [`video_host::NetVideoHost`] gives the video control its RTMP
 //! listeners on the node's [`Net`], and [`fetch::NetFetch`] the
-//! directory its HTTPS requests.
+//! directory its HTTPS requests. [`app::AppConfig::psi`] picks where the
+//! network control's PSI sessions compute: inline, the default, or on a
+//! [`psi::ThreadPsi`].
 //!
 //! # Determinism
 //!
@@ -95,6 +99,10 @@
 //!   time consistent, and the node gets new links. turmoil has no TCP
 //!   keepalive, so a crashed host's links close when the peer's next write
 //!   fails, or at the read timeout once the peer has sent a keepalive.
+//! - **PSI.** A profile's PSI sessions compute inline under
+//!   [`app::AppConfig`]'s default [`app::PsiMode::Inline`]. A
+//!   [`psi::ThreadPsi`] answers in wall time, so a simulation never uses
+//!   [`app::PsiMode::Thread`].
 //! - **Cost.** Debug builds spend most of a run in ed25519, BLAKE2b and
 //!   AES; run large suites with `--release` or `opt-level = 1`.
 
@@ -104,6 +112,7 @@ pub mod fetch;
 mod link;
 mod native;
 pub mod net;
+pub mod psi;
 mod rtc;
 mod transport;
 mod udp;

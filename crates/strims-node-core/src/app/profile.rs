@@ -134,7 +134,8 @@ async fn start_profile<K: Kv, P: AppPlatform>(
         timer.clone(),
         fork(&mut rng),
         c.network,
-    );
+    )
+    .with_psi(platform.psi());
     let bootstrap = BootstrapControl::new(
         host.clone(),
         store.clone(),
