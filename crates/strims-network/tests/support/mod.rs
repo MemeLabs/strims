@@ -6,6 +6,7 @@
 //! carries messages between ports and holds service addresses. Each fake
 //! node keeps the networks it joined and the peers it bound to them. The
 //! networks come from real profile stores. Time is tokio's paused clock.
+//! A node's PSI may run on a remote engine whose server is a local task.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,7 +16,7 @@
     dead_code
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::pin::Pin;
 use std::rc::Rc;
@@ -23,6 +24,7 @@ use std::task::{Context, Poll, Waker};
 
 use futures_core::Stream;
 use futures_sink::Sink;
+use futures_util::StreamExt;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
@@ -35,6 +37,7 @@ use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, ReplicatedStore, Singleton, Table};
 use strims_kademlia::ID;
 use strims_kv::MemoryKv;
+use strims_network::psi::{PsiEngine, PsiServer, PsiTransport, RemotePsi};
 use strims_network::{Config, Host, NetworkControl};
 use strims_proto::network::v1::Network;
 use strims_proto::notification::v1::Notification;
@@ -87,6 +90,18 @@ pub struct PipeState {
 pub struct Pipe(pub Rc<RefCell<PipeState>>);
 
 impl Pipe {
+    /// Queues a message for the reader.
+    pub fn push(&self, msg: Vec<u8>) {
+        let w = {
+            let mut s = self.0.borrow_mut();
+            s.queue.push_back(msg);
+            s.reader.take()
+        };
+        if let Some(w) = w {
+            w.wake();
+        }
+    }
+
     pub fn close(&self) {
         let w = {
             let mut s = self.0.borrow_mut();
@@ -129,14 +144,7 @@ impl Sink<Vec<u8>> for Writer {
     }
 
     fn start_send(self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Closed> {
-        let w = {
-            let mut s = self.0.0.borrow_mut();
-            s.queue.push_back(item);
-            s.reader.take()
-        };
-        if let Some(w) = w {
-            w.wake();
-        }
+        self.0.push(item);
         Ok(())
     }
 
@@ -148,6 +156,35 @@ impl Sink<Vec<u8>> for Writer {
         self.0.close();
         Poll::Ready(Ok(()))
     }
+}
+
+impl PsiTransport for Pipe {
+    fn send(&self, msg: Vec<u8>) {
+        self.push(msg);
+    }
+}
+
+/// A remote PSI engine whose server, a local task, answers each message
+/// after `delay`, its replies in separate turns. Returns the engine and
+/// the count of messages the server took.
+pub fn remote_psi(delay: std::time::Duration) -> (Rc<dyn PsiEngine>, Rc<Cell<usize>>) {
+    let pipe = Pipe::default();
+    let engine = RemotePsi::new(pipe.clone());
+    let handled = Rc::new(Cell::new(0));
+    let (e, h) = (engine.clone(), handled.clone());
+    spawn_local(async move {
+        let mut server = PsiServer::new();
+        let mut reader = Reader(pipe);
+        while let Some(Ok(msg)) = reader.next().await {
+            tokio::time::sleep(delay).await;
+            h.set(h.get() + 1);
+            for reply in server.handle(&msg) {
+                e.receive(&reply);
+                tokio::task::yield_now().await;
+            }
+        }
+    });
+    (Rc::new(engine), handled)
 }
 
 // --- a fake vpn -------------------------------------------------------------
@@ -436,6 +473,11 @@ pub async fn node(n: u8) -> Node {
 }
 
 pub async fn node_in(world: &World, n: u8) -> Node {
+    node_with(world, n, None).await
+}
+
+/// A node whose PSI runs on `psi`, or inline.
+pub async fn node_with(world: &World, n: u8, psi: Option<Rc<dyn PsiEngine>>) -> Node {
     let id = ID::from_bytes(&[n; 32]);
     let mut rng = det_rng(u64::from(n));
     let key = generate_key(&mut rng);
@@ -469,7 +511,7 @@ pub async fn node_in(world: &World, n: u8) -> Node {
         world: world.clone(),
         timer: timer.clone(),
     };
-    let control = NetworkControl::new(
+    let mut control = NetworkControl::new(
         host.clone(),
         store.clone(),
         profile.clone(),
@@ -477,6 +519,9 @@ pub async fn node_in(world: &World, n: u8) -> Node {
         det_rng(u64::from(n) + 2),
         Config::default(),
     );
+    if let Some(psi) = psi {
+        control = control.with_psi(psi);
+    }
     let c = control.clone();
     spawn_local(async move { c.run().await });
     Node {

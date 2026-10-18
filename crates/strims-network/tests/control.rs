@@ -118,6 +118,38 @@ fn nodes_bind_the_networks_their_profiles_share() {
     });
 }
 
+/// Nodes whose PSI runs on remote engines that answer late bind the
+/// networks their profiles share, as inline PSI does.
+#[test]
+fn nodes_bind_through_late_remote_psi_engines() {
+    run(async {
+        let delay = std::time::Duration::from_millis(300);
+        let (psi_a, handled_a) = remote_psi(delay);
+        let (psi_b, handled_b) = remote_psi(delay);
+        let a = node_with(&World::default(), 1, Some(psi_a)).await;
+        let b = node_with(&World::default(), 2, Some(psi_b)).await;
+        let mut rng = det_rng(10);
+        let nets: Vec<Key> = (0..4).map(|_| generate_key(&mut rng)).collect();
+        for (i, net) in nets[..3].iter().enumerate() {
+            a.write_network(joined(10 + i as u64, net, &a)).await;
+        }
+        for (i, net) in nets[1..].iter().enumerate() {
+            b.write_network(joined(20 + i as u64, net, &b)).await;
+        }
+        let _pipes = link(&a, &b);
+        settle().await;
+        assert_bound(&a, &b, &nets[1]);
+        assert_bound(&a, &b, &nets[2]);
+        assert_eq!(a.bound(&b, &nets[0]), None);
+        assert_eq!(b.bound(&a, &nets[3]), None);
+        for n in [&a, &b] {
+            let m = n.control.metrics();
+            assert_eq!((m.runs_completed, m.runs_failed), (1, 0), "{m:?}");
+        }
+        assert!(handled_a.get() > 0 && handled_b.get() > 0);
+    });
+}
+
 /// A network joined after the peers linked binds too; one deleted from
 /// the store is closed and unbound on both sides.
 #[test]

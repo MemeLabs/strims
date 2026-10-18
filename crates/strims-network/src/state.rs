@@ -22,6 +22,10 @@
 //!   and the peer's count is known, and only then may broker bytes go
 //!   out: the peer's run then exists to read every byte. Bytes that arrive
 //!   earlier wait for the session, up to [`Config::max_broker_buffer`].
+//!   The session runs on the state's [`PsiEngine`]. An inline one has its
+//!   outcome as the peer's bytes arrive; a remote one has its bytes and
+//!   outcome later, and the driver passes them on with
+//!   [`State::psi_ready`].
 //! - **Open.** The receiver reserves a port for each shared key it has no
 //!   link for and calls `Open` with them, in the order the PSI returned
 //!   them. The sender answers with one binding per received binding, in
@@ -45,6 +49,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
+use std::rc::Rc;
 
 use rand_core::Rng;
 use strims_base::rng::DetRng;
@@ -54,10 +59,11 @@ use strims_crypto::{
     verify_certificate,
 };
 use strims_kademlia::ID;
-use strims_mpc::{Block, Error as MpcError, PszReceiver, PszSender};
+use strims_mpc::Block;
 use strims_proto::network::v1::NetworkPeerBinding;
 use strims_proto::types::Certificate;
 
+use crate::psi::{InlinePsi, PsiEngine, PsiOutcome, PsiReady, PsiRole, PsiSession};
 use crate::{Config, Metrics};
 
 /// A network's key: its root certificate's key.
@@ -179,65 +185,26 @@ pub(crate) enum Refusal {
     BindingNotFound,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Role {
-    Sender,
-    Receiver,
-}
-
 /// A run's PSI session.
-enum Psi {
-    Sender(PszSender),
-    Receiver(PszReceiver),
-}
+struct Psi(Box<dyn PsiSession>);
 
 impl fmt::Debug for Psi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Psi::Sender(_) => f.write_str("Psi::Sender"),
-            Psi::Receiver(_) => f.write_str("Psi::Receiver"),
-        }
+        f.write_str("Psi")
     }
 }
 
-/// How a session ended.
-enum PsiOutcome {
-    /// The sender finished.
-    Sent,
-    /// The receiver finished with the shared keys.
-    Shared(Vec<NetKey>),
-    /// The receiver's cuckoo table failed; nothing is left unread.
-    CuckooFailed,
-    Failed(MpcError),
+/// Where sessions run, and what their [`PsiReady`] does.
+struct Engine {
+    engine: Rc<dyn PsiEngine>,
+    /// Called with the peer when its session has new bytes or its
+    /// outcome.
+    wake: Option<Rc<dyn Fn(ID)>>,
 }
 
-impl Psi {
-    fn handle_input(&mut self, data: &[u8]) -> Result<(), MpcError> {
-        match self {
-            Psi::Sender(s) => s.handle_input(data),
-            Psi::Receiver(r) => r.handle_input(data),
-        }
-    }
-
-    fn poll_transmit(&mut self, buf: &mut [u8]) -> Option<usize> {
-        match self {
-            Psi::Sender(s) => s.poll_transmit(buf),
-            Psi::Receiver(r) => r.poll_transmit(buf),
-        }
-    }
-
-    fn outcome(&mut self) -> Option<PsiOutcome> {
-        match self {
-            Psi::Sender(s) => match s.result()? {
-                Ok(()) => Some(PsiOutcome::Sent),
-                Err(e) => Some(PsiOutcome::Failed(e)),
-            },
-            Psi::Receiver(r) => match r.take_result()? {
-                Ok(keys) => Some(PsiOutcome::Shared(keys)),
-                Err(MpcError::CuckooHashMapFull) => Some(PsiOutcome::CuckooFailed),
-                Err(e) => Some(PsiOutcome::Failed(e)),
-            },
-        }
+impl fmt::Debug for Engine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Engine")
     }
 }
 
@@ -286,7 +253,7 @@ enum Run {
     },
     Running {
         run: u64,
-        role: Role,
+        role: PsiRole,
         psi: Psi,
         stall: Time,
         cap: Time,
@@ -431,6 +398,7 @@ pub(crate) struct State<N> {
     host_id: ID,
     config: Config,
     rng: DetRng,
+    psi: Engine,
     /// Bound: the networks the driver reports.
     networks: BTreeMap<NetKey, LocalNetwork<N>>,
     /// Linked peers. Bound: the node's peers.
@@ -452,6 +420,10 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
             host_id,
             config: *config,
             rng,
+            psi: Engine {
+                engine: Rc::new(InlinePsi),
+                wake: None,
+            },
             networks: BTreeMap::new(),
             peers: BTreeMap::new(),
             queue: VecDeque::new(),
@@ -466,6 +438,19 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
 
     pub(crate) fn metrics(&self) -> &Metrics {
         &self.metrics
+    }
+
+    /// Starts later sessions on `engine`, and returns the engine it
+    /// replaces.
+    pub(crate) fn set_psi(&mut self, engine: Rc<dyn PsiEngine>) -> Rc<dyn PsiEngine> {
+        std::mem::replace(&mut self.psi.engine, engine)
+    }
+
+    /// Has later sessions call `wake` with their peer when they have new
+    /// bytes or their outcome, from outside a call into them. It must only
+    /// schedule [`State::psi_ready`].
+    pub(crate) fn set_psi_wake(&mut self, wake: Rc<dyn Fn(ID)>) {
+        self.psi.wake = Some(wake);
     }
 
     pub(crate) fn metrics_mut(&mut self) -> &mut Metrics {
@@ -948,16 +933,21 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
         let count = keys.len();
         let peer_count = peer_count as usize;
         let role = if count > peer_count || (count == peer_count && host < host_id) {
-            Role::Sender
+            PsiRole::Sender
         } else {
-            Role::Receiver
+            PsiRole::Receiver
         };
-        let psi = match role {
-            Role::Sender => Psi::Sender(PszSender::with_peer_limit(keys, seed, max_peer_keys)),
-            Role::Receiver => {
-                Psi::Receiver(PszReceiver::with_peer_limit(keys, seed, max_peer_keys))
+        let ready = match &self.psi.wake {
+            Some(wake) => {
+                let wake = wake.clone();
+                PsiReady::new(move || wake(host))
             }
+            None => PsiReady::new(|| {}),
         };
+        let psi = Psi(self
+            .psi
+            .engine
+            .start(role, keys, seed, max_peer_keys, ready));
         p.run = Run::Running {
             run,
             role,
@@ -1007,8 +997,7 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
             return;
         };
         *stall = now + stall_timeout;
-        // an error is also the session's outcome
-        let _ = psi.handle_input(data);
+        psi.0.handle_input(data);
         self.check_session(host, now);
     }
 
@@ -1031,7 +1020,7 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
             else {
                 return None;
             };
-            let n = psi.poll_transmit(buf)?;
+            let n = psi.0.poll_transmit(buf)?;
             *stall = now + stall_timeout;
             n
         } else {
@@ -1046,6 +1035,14 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
         }
         self.metrics.broker_bytes_written += n as u64;
         Some(n)
+    }
+
+    /// The peer's session has new bytes or its outcome, from outside a
+    /// call into it: moves its run on, as when the peer's bytes arrive.
+    pub(crate) fn psi_ready(&mut self, host: ID, link: u64, now: Time) {
+        if self.is_current(host, link) {
+            self.check_session(host, now);
+        }
     }
 
     /// Moves a finished session's run on.
@@ -1063,12 +1060,12 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
         else {
             return;
         };
-        let Some(outcome) = psi.outcome() else {
+        let Some(outcome) = psi.0.poll_outcome() else {
             return;
         };
         // the session's last message still has to go out
         let mut buf = [0u8; 4096];
-        while let Some(n) = psi.poll_transmit(&mut buf) {
+        while let Some(n) = psi.0.poll_transmit(&mut buf) {
             p.broker_out
                 .extend_from_slice(buf.get(..n).unwrap_or_default());
         }
@@ -1076,10 +1073,10 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
         p.run = Run::Idle;
         let deadline = now + exchange_timeout;
         match (role, outcome) {
-            (Role::Sender, PsiOutcome::Sent) => {
+            (PsiRole::Sender, PsiOutcome::Sent) => {
                 p.run = Run::AwaitOpen { run, deadline };
             }
-            (Role::Receiver, PsiOutcome::Shared(keys)) => {
+            (PsiRole::Receiver, PsiOutcome::Shared(keys)) => {
                 p.shared = keys.iter().cloned().collect();
                 let offer: Vec<NetKey> = keys
                     .into_iter()
@@ -1087,7 +1084,7 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
                     .collect();
                 self.offer(host, run, offer, false, now);
             }
-            (Role::Receiver, PsiOutcome::CuckooFailed) => {
+            (PsiRole::Receiver, PsiOutcome::CuckooFailed) => {
                 self.offer(host, run, Vec::new(), true, now);
             }
             (_, outcome) => {

@@ -5,6 +5,10 @@
 //! profile's networks as the store has them, carries out the state's node
 //! operations in order, one at a time, its calls in order, one at a time
 //! per peer, and every peer's broker channel.
+//!
+//! A PSI session's [`PsiReady`](crate::psi::PsiReady) marks its peer in
+//! `psi_ready` and wakes the peer's broker task, which passes the session
+//! on to [`State::psi_ready`] before it sends the session's bytes.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -37,6 +41,7 @@ use strims_rpc::{Client, RetryClient, Router, Timer};
 use crate::events::NetworkEvent;
 use crate::host::Host;
 use crate::peer::PeerService;
+use crate::psi::PsiEngine;
 use crate::services::{self, Forwards, Services, renew_time};
 use crate::state::{Action, NetKey, Op, OpId, State};
 use crate::{Config, Metrics};
@@ -91,6 +96,9 @@ pub(crate) struct Shared<K: Kv, H: Host, T: Timer> {
     /// Broker tasks waiting for the state to change, and those it woke.
     broker_wakers: RefCell<BTreeMap<ID, Waker>>,
     broker_woken: RefCell<BTreeSet<ID>>,
+    /// Peers whose PSI session has new bytes or its outcome, for their
+    /// broker tasks. Bound: the peers.
+    psi_ready: RefCell<BTreeSet<ID>>,
     events: Broadcast<NetworkEvent>,
     /// Wakes `run`.
     waker: RefCell<Option<Waker>>,
@@ -135,6 +143,18 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             w.wake();
         }
         r
+    }
+
+    /// The peer's PSI session has new bytes or its outcome: wakes its
+    /// broker task. It may run inside a state call, so it touches only the
+    /// broker tasks' sets.
+    fn notify_psi(&self, host: ID) {
+        self.psi_ready.borrow_mut().insert(host);
+        let waker = self.broker_wakers.borrow_mut().remove(&host);
+        if let Some(w) = waker {
+            self.broker_woken.borrow_mut().insert(host);
+            w.wake();
+        }
     }
 
     pub(crate) fn metrics_mut(&self) -> std::cell::RefMut<'_, Metrics> {
@@ -355,8 +375,15 @@ impl<K: Kv, H: Host, T: Timer> NetworkControl<K, H, T> {
     ) -> Self {
         let mut rng = rng;
         let state = State::new(host.host_id(), &config, fork(&mut rng));
-        NetworkControl {
-            shared: Rc::new(Shared {
+        let shared = Rc::new_cyclic(|weak: &std::rc::Weak<Shared<K, H, T>>| {
+            let weak = weak.clone();
+            let mut state = state;
+            state.set_psi_wake(Rc::new(move |host| {
+                if let Some(s) = weak.upgrade() {
+                    s.notify_psi(host);
+                }
+            }));
+            Shared {
                 host,
                 timer,
                 config,
@@ -376,10 +403,21 @@ impl<K: Kv, H: Host, T: Timer> NetworkControl<K, H, T> {
                 brokers: RefCell::new(VecDeque::new()),
                 broker_wakers: RefCell::new(BTreeMap::new()),
                 broker_woken: RefCell::new(BTreeSet::new()),
+                psi_ready: RefCell::new(BTreeSet::new()),
                 events: Broadcast::new(),
                 waker: RefCell::new(None),
-            }),
-        }
+            }
+        });
+        NetworkControl { shared }
+    }
+
+    /// Runs PSI sessions on `engine`, from the next session on. The
+    /// default is [`InlinePsi`](crate::psi::InlinePsi); see the [crate
+    /// docs](crate#psi).
+    pub fn with_psi(self, engine: Rc<dyn PsiEngine>) -> Self {
+        let prev = self.shared.state.borrow_mut().set_psi(engine);
+        drop(prev);
+        self
     }
 
     // --- peers --------------------------------------------------------------
@@ -413,6 +451,7 @@ impl<K: Kv, H: Host, T: Timer> NetworkControl<K, H, T> {
     pub fn remove_peer(&self, host: ID) {
         self.shared.update(|st, now| st.remove_peer(host, now));
         self.shared.links.borrow_mut().remove(&host);
+        self.shared.psi_ready.borrow_mut().remove(&host);
         self.shared.forwards.borrow_mut().forget(host);
     }
 
@@ -776,6 +815,9 @@ async fn broker<K: Kv, H: Host, T: Timer>(s: Rc<Shared<K, H, T>>, host: ID, link
     };
     let mut buf = vec![0u8; BROKER_CHUNK];
     loop {
+        if s.psi_ready.borrow_mut().remove(&host) {
+            s.update(|st, now| st.psi_ready(host, link, now));
+        }
         loop {
             let now = s.timer.now();
             let n = s
@@ -795,7 +837,7 @@ async fn broker<K: Kv, H: Host, T: Timer>(s: Rc<Shared<K, H, T>>, host: ID, link
             if let Poll::Ready(r) = reader.poll_next_unpin(cx) {
                 return Poll::Ready(Some(r));
             }
-            if s.broker_woken.borrow_mut().remove(&host) {
+            if s.broker_woken.borrow_mut().remove(&host) || s.psi_ready.borrow().contains(&host) {
                 return Poll::Ready(None);
             }
             s.broker_wakers

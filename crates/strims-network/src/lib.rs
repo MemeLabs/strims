@@ -28,6 +28,21 @@
 //! Runs start when a peer links and when the node joins a network. A run
 //! that stalls or fails backs off and runs again with fresh PSI seeds.
 //!
+//! # PSI
+//!
+//! A PSI session takes tens of milliseconds of CPU, and the control's
+//! thread also does the node's latency-sensitive I/O. The sessions run on
+//! a [`psi::PsiEngine`]:
+//!
+//! - [`psi::InlinePsi`], the default, computes on the control's thread,
+//!   inside the broker bytes' calls. It is deterministic, so a node's
+//!   runs replay exactly from its seeds.
+//! - [`psi::RemotePsi`], set with [`NetworkControl::with_psi`], runs them
+//!   on a [`psi::PsiServer`] the driver hosts on another thread or worker.
+//!   Its sessions complete asynchronously: each reply wakes the control,
+//!   which sends the session's bytes and takes its outcome as it does an
+//!   inline one.
+//!
 //! # Certificates
 //!
 //! A profile's membership of a network starts from [`membership`]: a
@@ -64,7 +79,8 @@
 //! make the control hold is bounded by [`Config`]: its key count, its
 //! broker bytes, its bindings and their certificate chains. Runs a peer
 //! starts are paced, and PSI sessions run at most
-//! [`Config::max_sessions`] at a time.
+//! [`Config::max_sessions`] at a time. A PSI engine's messages are bounded
+//! as the [`psi`] module describes.
 
 pub mod bootstrap;
 pub mod ca;
@@ -74,6 +90,7 @@ pub mod frontend;
 mod host;
 pub mod membership;
 mod peer;
+pub mod psi;
 pub mod services;
 mod state;
 #[cfg(test)]
@@ -97,7 +114,10 @@ pub struct Config {
     /// peer's.
     pub negotiate_timeout: Duration,
     /// How long a PSI session waits without broker bytes in either
-    /// direction.
+    /// direction. Between the peer's bytes and the session's answer, both
+    /// sides' engines compute: tens of milliseconds a message, whether
+    /// inline or remote, far below this. An engine that stops answering
+    /// stalls the run as a silent peer does.
     pub stall_timeout: Duration,
     /// The longest a run's PSI takes, from its start.
     pub run_timeout: Duration,

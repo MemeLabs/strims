@@ -3,8 +3,9 @@
 
 //! Runs between states in an event-queue simulation: real PSZ sessions,
 //! real certificates, a fake node, and seeded latency on every channel.
-//! Each channel (a peer's calls, its answers, its broker bytes) delivers
-//! in order, and channels race each other.
+//! Each channel (a peer's calls, its answers, its broker bytes, a side's
+//! PSI engine messages each way) delivers in order, and channels race
+//! each other.
 
 #![allow(
     clippy::unwrap_used,
@@ -13,7 +14,9 @@
     clippy::indexing_slicing
 )]
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::rc::Rc;
 
 use rand_core::Rng;
 use strims_base::rng::{DetRng, det_rng, fork};
@@ -28,6 +31,7 @@ use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 
 use crate::Config;
+use crate::psi::{PsiServer, PsiTransport, RemotePsi};
 use crate::state::{Action, NetKey, Op, State};
 
 const T0: Time = Time::from_unix_millis(1_700_000_000_000);
@@ -79,6 +83,9 @@ enum Msg {
         ok: bool,
     },
     Broker(Vec<u8>),
+    /// A message to the side's PSI server, and one back.
+    ToEngine(Vec<u8>),
+    FromEngine(Vec<u8>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -86,6 +93,31 @@ enum Chan {
     Call,
     Answer,
     Broker,
+    ToEngine,
+    FromEngine,
+}
+
+/// Messages for a side's PSI server.
+#[derive(Clone, Default)]
+struct Outbox(Rc<RefCell<VecDeque<Vec<u8>>>>);
+
+impl PsiTransport for Outbox {
+    fn send(&self, msg: Vec<u8>) {
+        self.0.borrow_mut().push_back(msg);
+    }
+}
+
+/// A side's remote PSI engine and its server.
+struct Engine {
+    remote: RemotePsi,
+    server: PsiServer,
+    outbox: Outbox,
+    /// The peers whose sessions notified.
+    ready: Rc<RefCell<Vec<ID>>>,
+    /// How long the server takes to answer each message, or `None` if it
+    /// never does.
+    delay: Option<Duration>,
+    handled: usize,
 }
 
 struct Node {
@@ -107,6 +139,8 @@ struct Side {
     renew_via: Vec<(usize, NetKey)>,
     /// Peers (by index) this side is linked to, and their link ids here.
     links: BTreeMap<usize, u64>,
+    /// The side's PSI engine, if remote.
+    engine: Option<Engine>,
 }
 
 struct Sim {
@@ -144,6 +178,7 @@ impl Sim {
                     counts: BTreeMap::new(),
                     renew_via: Vec::new(),
                     links: BTreeMap::new(),
+                    engine: None,
                 }
             })
             .collect();
@@ -156,6 +191,27 @@ impl Sim {
             last: BTreeMap::new(),
             trace: Vec::new(),
         }
+    }
+
+    /// Runs side `i`'s sessions on a remote engine whose server answers
+    /// each message after `delay` and a jitter up to as long again, or
+    /// never.
+    fn remote_psi(&mut self, i: usize, delay: Option<Duration>) {
+        let outbox = Outbox::default();
+        let remote = RemotePsi::new(outbox.clone());
+        let ready: Rc<RefCell<Vec<ID>>> = Rc::default();
+        let notified = ready.clone();
+        let st = &mut self.sides[i].st;
+        st.set_psi(Rc::new(remote.clone()));
+        st.set_psi_wake(Rc::new(move |host| notified.borrow_mut().push(host)));
+        self.sides[i].engine = Some(Engine {
+            remote,
+            server: PsiServer::new(),
+            outbox,
+            ready,
+            delay,
+            handled: 0,
+        });
     }
 
     fn index_of(&self, host: ID) -> usize {
@@ -193,6 +249,10 @@ impl Sim {
 
     fn send(&mut self, from: usize, to: usize, chan: Chan, msg: Msg) {
         let latency = Duration::from_millis(2 + (self.rng.next_u64() % 30) as i64);
+        self.send_after(from, to, chan, msg, latency);
+    }
+
+    fn send_after(&mut self, from: usize, to: usize, chan: Chan, msg: Msg, latency: Duration) {
         let at = (self.now + latency).max(
             self.last
                 .get(&(from, to, chan))
@@ -204,10 +264,31 @@ impl Sim {
         self.queue.insert((at, self.seq), (from, to, chan, msg));
     }
 
-    /// Carries out side `i`'s actions and sends its broker bytes.
+    /// Carries out side `i`'s actions and sends its broker bytes. A remote
+    /// engine's messages go to its server, and the sessions that notified
+    /// move on.
     fn pump(&mut self, i: usize) {
         loop {
             let mut progressed = false;
+            let (msgs, ready) = match &self.sides[i].engine {
+                Some(e) => (
+                    e.outbox.0.borrow_mut().drain(..).collect(),
+                    e.ready.borrow_mut().drain(..).collect(),
+                ),
+                None => (Vec::new(), Vec::new()),
+            };
+            for m in msgs {
+                progressed = true;
+                self.send_after(i, i, Chan::ToEngine, Msg::ToEngine(m), Duration::ZERO);
+            }
+            for host in ready {
+                progressed = true;
+                let j = self.index_of(host);
+                if let Some(&link) = self.sides[i].links.get(&j) {
+                    let now = self.now;
+                    self.sides[i].st.psi_ready(host, link, now);
+                }
+            }
             while let Some(a) = self.sides[i].st.poll_action() {
                 progressed = true;
                 self.act(i, a);
@@ -319,6 +400,29 @@ impl Sim {
     }
 
     fn deliver(&mut self, from: usize, to: usize, msg: Msg) {
+        let msg = match msg {
+            Msg::ToEngine(m) => {
+                let e = self.sides[to].engine.as_mut().unwrap();
+                let Some(delay) = e.delay else {
+                    return;
+                };
+                e.handled += 1;
+                let replies = e.server.handle(&m);
+                for r in replies {
+                    let jitter = Duration::from_nanos(
+                        (self.rng.next_u64() % delay.as_nanos().max(1) as u64) as i64,
+                    );
+                    self.send_after(to, to, Chan::FromEngine, Msg::FromEngine(r), delay + jitter);
+                }
+                return;
+            }
+            Msg::FromEngine(m) => {
+                self.sides[to].engine.as_ref().unwrap().remote.receive(&m);
+                self.pump(to);
+                return;
+            }
+            msg => msg,
+        };
         let now = self.now;
         let host = self.sides[from].host;
         let Some(&link) = self.sides[to].links.get(&from) else {
@@ -446,6 +550,8 @@ fn describe(m: &Msg) -> String {
         Msg::Update { .. } => "update".into(),
         Msg::Answer { call, ok } => format!("answer {} {ok}", describe(call)),
         Msg::Broker(b) => format!("broker {}", b.len()),
+        Msg::ToEngine(m) => format!("to engine {}", m.len()),
+        Msg::FromEngine(m) => format!("from engine {}", m.len()),
     }
 }
 
@@ -734,4 +840,66 @@ fn a_binding_for_someone_else_is_refused() {
     let refused =
         sim.sides[0].st.metrics().bindings_refused + sim.sides[1].st.metrics().bindings_refused;
     assert!(refused > 0);
+}
+
+/// Sessions on remote engines whose answers come back late, behind the
+/// peer's bytes and calls, still find and bind the shared networks: each
+/// answer moves the run on through `psi_ready`. One side or both may be
+/// remote.
+#[test]
+fn late_remote_psi_answers_still_bind_the_shared_networks() {
+    for seed in 0..4 {
+        let mut sim = Sim::new(300 + seed, 2, Config::default());
+        let late = Some(Duration::from_millis(400));
+        sim.remote_psi(0, late);
+        if seed % 2 == 0 {
+            sim.remote_psi(1, late);
+        }
+        let mut rng = det_rng(400 + seed);
+        let nets = networks(&mut rng, 5);
+        for k in [0, 1, 2, 4] {
+            let c = membership(&nets[k], &sim.sides[0].profile.clone(), &mut rng);
+            sim.join(0, &nets[k], c);
+        }
+        for k in [1, 2, 3] {
+            let c = membership(&nets[k], &sim.sides[1].profile.clone(), &mut rng);
+            sim.join(1, &nets[k], c);
+        }
+        sim.connect(0, 1);
+        sim.settle(Duration::from_secs(120));
+        sim.assert_idle();
+        for k in [1, 2] {
+            sim.assert_linked(0, 1, &nets[k].public);
+        }
+        for k in [0, 3, 4] {
+            sim.assert_unlinked(0, 1, &nets[k].public);
+        }
+        for side in &sim.sides {
+            assert_eq!(side.st.metrics().runs_failed, 0, "seed {seed}");
+        }
+        assert!(sim.sides[0].engine.as_ref().unwrap().handled > 0);
+    }
+}
+
+/// A remote engine that never answers stalls its runs like a silent peer:
+/// each fails at the stall timeout, and the peer gives up after
+/// `max_attempts`.
+#[test]
+fn a_silent_psi_engine_stalls_runs_until_they_give_up() {
+    let config = Config::default();
+    let mut sim = Sim::new(17, 2, config);
+    sim.remote_psi(0, None);
+    let mut rng = det_rng(170);
+    let net = generate_key(&mut rng);
+    for i in 0..2 {
+        let c = membership(&net, &sim.sides[i].profile.clone(), &mut rng);
+        sim.join(i, &net, c);
+    }
+    sim.connect(0, 1);
+    sim.settle(Duration::from_secs(600));
+    assert!(sim.sides[0].st.is_idle(sim.sides[1].host));
+    let m = sim.sides[0].st.metrics();
+    assert_eq!(m.runs_failed, u64::from(config.max_attempts), "{m:?}");
+    assert_eq!(m.runs_completed, 0);
+    sim.assert_unlinked(0, 1, &net.public);
 }
