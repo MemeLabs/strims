@@ -102,8 +102,14 @@ pub async fn connect_ui(svc: &Svc) -> Ui {
 }
 
 /// Runs `f` on a current-thread runtime inside a `LocalSet`, on the real
-/// clock.
+/// clock. Logs as `RUST_LOG` says, if it's set.
 pub fn run<F: Future<Output = ()>>(f: F) {
+    if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_test_writer()
+            .try_init();
+    }
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
