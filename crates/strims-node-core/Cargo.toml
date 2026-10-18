@@ -1,6 +1,6 @@
 [package]
 name = "strims-node-core"
-description = "The runtime-neutral node: vnic, vpn and ppspp composed, its API handle and the loop its drivers run"
+description = "The runtime-neutral node: vnic, vpn and ppspp composed, its API handle, the loop its drivers run, and the app layer on it"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,8 +17,18 @@ strims-vnic.workspace = true
 strims-vpn.workspace = true
 strims-ppspp.workspace = true
 strims-webrtc.workspace = true
-# `SwarmRead` and `SwarmWrite` for the swarm handles.
+# `SwarmRead` and `SwarmWrite` for the swarm handles, and the app layer.
 strims-transfer.workspace = true
+# The app layer (`app`).
+strims-kv.workspace = true
+strims-dao.workspace = true
+strims-rpc.workspace = true
+strims-replication.workspace = true
+strims-network.workspace = true
+strims-directory.workspace = true
+strims-chat.workspace = true
+strims-video.workspace = true
+strims-session.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 slotmap.workspace = true

@@ -19,7 +19,7 @@
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
 //! | `rtc`, `udp` | the WebRTC endpoint (str0m) in the node task; its UDP socket tasks and the STUN resolver |
 //! | [`Net`], [`Clock`] | sockets and time: tokio or turmoil, wall clock or simulated |
-//! | [`app`] | the app layer on a node |
+//! | [`app`] | the native platform of the core's app layer |
 //!
 //! str0m is sans-IO, so the WebRTC endpoint runs inside the node task as
 //! the core's `RtcEndpoint`, and its data channels move link bytes
@@ -31,12 +31,12 @@
 //!
 //! # App layer
 //!
-//! [`app`] runs the app crates on a node: [`app::NodeTimer`] is the node's
-//! clock as their timer, [`app::NodeHost`] is the node as the host of the
-//! services a profile runs (replication, transfers, network membership
-//! and the directory), and [`app::PeerServices`] serves every peer's RPC
-//! link with the app's [`app::PeerHandler`]s.
-//! [`video_host::NetVideoHost`] gives the video control its RTMP
+//! The core composes the app crates on a node (`strims_node_core::app`),
+//! and [`app`] gives it the native platform: [`app::NodeTimer`] is the
+//! node's clock as their timer, [`app::NativePlatform`] the core's
+//! [`app::AppPlatform`] on a [`Net`] and a [`Clock`], and
+//! [`app::NodeFactory`] the session factory that runs a signed-in profile
+//! on it. [`video_host::NetVideoHost`] gives the video control its RTMP
 //! listeners on the node's [`Net`], and [`fetch::NetFetch`] the
 //! directory its HTTPS requests.
 //!

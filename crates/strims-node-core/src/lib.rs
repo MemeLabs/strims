@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The node every driver runs: vnic, vpn and ppspp composed into one task,
-//! its API handle, and the loop around them.
+//! its API handle, the loop around them, and the app layer on the node.
 //!
 //! The crate is runtime-neutral. It uses tokio's channels and `select!`
 //! only (the `sync` and `macros` features, which need no runtime), owns no
-//! sockets, reads no clock and spawns nothing. A driver
+//! sockets, reads no clock and spawns only through its driver. A driver
 //! (`strims-node` natively and under turmoil, `strims-wasm` in a browser
 //! worker) implements [`NodeIo`], builds a node with [`start`] and runs the
-//! returned [`NodeTask`] on its executor.
+//! returned [`NodeTask`] on its executor. For a signed-in profile it
+//! implements [`app::AppPlatform`], and [`app`] composes the profile's
+//! node and services on it.
 //!
 //! # Architecture
 //!
@@ -27,6 +29,7 @@
 //! | `state` | the composition: event routing, egress pipeline, bookkeeping (no I/O) |
 //! | [`driver`] | the node task's loop around the state, and [`NodeIo`] |
 //! | [`rtc`] | the WebRTC interface: [`RtcEndpoint`], and [`ProxyRtc`] for connections outside the node task |
+//! | [`app`] | the app layer: the node as its services' host, peer RPC services, a profile's composition |
 //!
 //! Each pass of the node task handles inputs and commands, runs the due
 //! timers, then pumps egress: drain events, flush vpn, poll vnic's egress
@@ -98,6 +101,7 @@
 //! is still a poll of its task, which can shift the order of later passes,
 //! so a simulation's sampling cadence is one of its inputs.
 
+pub mod app;
 pub mod config;
 pub mod driver;
 pub mod error;
