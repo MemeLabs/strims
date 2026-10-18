@@ -20,6 +20,8 @@ mod manager;
 mod notification;
 mod profile;
 
+use std::fmt::Display;
+
 use strims_proto::service::Error as RpcError;
 
 pub use auth::AuthService;
@@ -27,7 +29,7 @@ pub use manager::{Manager, Session, SessionFactory};
 pub use notification::NotificationService;
 pub use profile::{ProfileService, bind_frontends};
 
-/// The RPC error a store error answers with.
-pub(crate) fn rpc_error(e: strims_dao::Error) -> RpcError {
+/// The RPC error a store or session start error answers with.
+pub(crate) fn rpc_error(e: impl Display) -> RpcError {
     RpcError::new(0, e.to_string())
 }

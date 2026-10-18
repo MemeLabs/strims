@@ -75,6 +75,7 @@ struct TestFactory {
 
 impl SessionFactory<MemoryKv> for TestFactory {
     type Runtime = u32;
+    type Error = Error;
 
     async fn start(&self, _: &Rc<Session<MemoryKv>>) -> Result<u32, Error> {
         while self.hold.get() {

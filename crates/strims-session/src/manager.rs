@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::future::{Future, poll_fn};
 use std::rc::Rc;
 use std::task::{Poll, Waker};
@@ -31,9 +32,14 @@ pub trait SessionFactory<K: Kv>: 'static {
     /// services.
     type Runtime: 'static;
 
+    /// Why a session didn't start: a store error, or the driver's own.
+    type Error: From<Error> + Display + 'static;
+
     /// Starts a session's runtime.
-    fn start(&self, session: &Rc<Session<K>>)
-    -> impl Future<Output = Result<Self::Runtime, Error>>;
+    fn start(
+        &self,
+        session: &Rc<Session<K>>,
+    ) -> impl Future<Output = Result<Self::Runtime, Self::Error>>;
 
     /// Serves a session's frontend services on a frontend connection's
     /// router.
@@ -128,7 +134,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> Manager<K, F, T> {
     pub async fn get_or_create(
         &self,
         pk: &ProfileKey,
-    ) -> Result<(Rc<Session<K>>, Rc<F::Runtime>), Error> {
+    ) -> Result<(Rc<Session<K>>, Rc<F::Runtime>), F::Error> {
         // A waiter woken by a failed start finds the slot empty and starts
         // the session itself.
         let running = poll_fn(|cx| {
@@ -148,7 +154,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> Manager<K, F, T> {
         .await;
         if let Some((session, runtime)) = running {
             if session.key != *pk {
-                return Err(Error::Credentials);
+                return Err(Error::Credentials.into());
             }
             return Ok((session, runtime));
         }
@@ -165,7 +171,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> Manager<K, F, T> {
         result
     }
 
-    async fn start(&self, pk: &ProfileKey) -> Result<(Rc<Session<K>>, Rc<F::Runtime>), Error> {
+    async fn start(&self, pk: &ProfileKey) -> Result<(Rc<Session<K>>, Rc<F::Runtime>), F::Error> {
         let rng = self.fork_rng();
         let store = ProfileStore::open(self.kv.clone(), pk.id, pk.storage_key(), rng).await?;
         let store = ReplicatedStore::new(store).await?;
@@ -180,7 +186,9 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> Manager<K, F, T> {
             Ok(())
         })
         .await?;
-        let profile = Profile::get(&mut tx).await?.ok_or(Error::NotFound)?;
+        let profile = Profile::get(&mut tx)
+            .await?
+            .ok_or(F::Error::from(Error::NotFound))?;
         tx.commit().await?;
 
         let session = Rc::new(Session {
