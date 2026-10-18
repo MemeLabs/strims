@@ -13,32 +13,48 @@
 //! [`PeerServices`] both controls. The chat control is built on those and
 //! the directory control, the whisper control on the network control.
 //!
+//! The node is bootstrap's [`strims_network::bootstrap::Host`] too: it
+//! dials the profile's bootstrap clients.
+//!
+//! [`NodeFactory`] is the [`SessionFactory`] that composes all of this for
+//! a signed-in profile: it starts the profile's node and every control,
+//! and serves the session's frontends on the UI's connection.
+//!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
-//! connections as local tasks, so it runs inside a tokio `LocalSet`.
+//! connections as local tasks, and [`NodeFactory`] its controls, so they
+//! run inside a tokio `LocalSet`.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use futures_util::Stream;
+use rand_core::SeedableRng;
+use strims_base::rng::{DetRng, fork};
 use strims_base::time::{Duration, Time};
+use strims_chat::{ChatControl, WhisperConfig, WhisperControl};
+use strims_directory::DirectoryControl;
 use strims_kv::Kv;
 use strims_network::NetworkControl;
+use strims_network::bootstrap::{BootstrapControl, Failure};
 use strims_proto::types::Key;
 use strims_replication::{Host, ReplicationControl};
 use strims_rpc::{Client, Config, Router, Timer, peer_connection};
+use strims_session::{Session, SessionFactory};
 use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, NetworkId, PeerIndexPublisherId,
 };
+use tokio::task::AbortHandle;
 use tokio::time::Sleep;
 
 use crate::{
-    Clock, HostId, NetworkOptions, Node, NodeError, NodeEvent, PeerIndexSearch, PeerInfo,
-    ReadError, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions, SwarmReader, SwarmWriter,
-    VpnReader, VpnWriter, WriterOptions,
+    Clock, HostId, Net, NetworkOptions, Node, NodeConfig, NodeError, NodeEvent, NodeInfo,
+    PeerIndexSearch, PeerInfo, ReadError, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions,
+    SwarmReader, SwarmWriter, VpnReader, VpnWriter, WriterOptions,
 };
 
 /// A node's clock as the app layer's [`Timer`].
@@ -522,5 +538,378 @@ impl PeerServices {
                 }
             }
         });
+    }
+}
+
+// --- bootstrap ----------------------------------------------------------------
+
+/// A node as bootstrap's [`strims_network::bootstrap::Host`]: it dials
+/// `tcp://` and `ws://` link URIs. A URI the node can't dial, or one that
+/// reaches it, fails permanently.
+impl strims_network::bootstrap::Host for NodeHost {
+    async fn dial(&self, uri: &str) -> Result<HostId, Failure> {
+        if uri.starts_with("wss://") {
+            return Err(Failure::Permanent("wss:// isn't supported".to_owned()));
+        }
+        match self.node.dial(uri).await {
+            Ok(host) => Ok(host),
+            Err(
+                e @ (NodeError::InvalidUri(_) | NodeError::OwnHost | NodeError::Unsupported(_)),
+            ) => Err(Failure::Permanent(e.to_string())),
+            Err(e) => Err(Failure::Retry(e.to_string())),
+        }
+    }
+
+    fn own_uris(&self) -> Vec<String> {
+        let info = self.node.info();
+        info.tcp_uri.iter().chain(&info.ws_uri).cloned().collect()
+    }
+}
+
+/// Bootstrap serves every peer its peer service and asks whether it
+/// accepts published networks.
+impl<K: Kv, T: Timer> PeerHandler for BootstrapControl<K, NodeHost, T> {
+    fn add_peer(&self, peer: &PeerInfo, router: &Router, client: Client) {
+        BootstrapControl::add_peer(self, peer.host_id, &peer.profile_key, router, client);
+    }
+
+    fn remove_peer(&self, host: HostId) {
+        BootstrapControl::remove_peer(self, host);
+    }
+}
+
+// --- sessions -----------------------------------------------------------------
+
+/// How a profile's node and services run.
+#[derive(Clone)]
+pub struct AppConfig {
+    /// `host:port` the node accepts TCP links on; port 0 picks one.
+    pub tcp_listen: Option<String>,
+    /// `host:port` the node accepts WebSocket links on, at
+    /// `/<hex profile key>`.
+    pub ws_listen: Option<String>,
+    /// The address link URIs advertise for a listener on an unspecified
+    /// address.
+    pub public_ip: Option<IpAddr>,
+    /// The host WebSocket link URIs advertise; empty for `public_ip`.
+    pub ws_public_hostname: String,
+    /// The port WebSocket link URIs advertise; 0 for the listener's.
+    pub ws_public_port: u16,
+    /// Whether the node dials `ws://` links, which aren't encrypted by TLS.
+    pub allow_insecure_ws: bool,
+    /// vnic's peer budget, which gates peer exchange.
+    pub max_peers: u32,
+    /// The host certificate's subject.
+    pub label: String,
+    pub network: strims_network::Config,
+    pub bootstrap: strims_network::bootstrap::Config,
+    pub transfer: strims_transfer::Config,
+    pub replication: strims_replication::Config,
+    pub directory: strims_directory::Config,
+    pub chat: strims_chat::Config,
+    pub whispers: WhisperConfig,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        AppConfig {
+            tcp_listen: None,
+            ws_listen: None,
+            public_ip: None,
+            ws_public_hostname: String::new(),
+            ws_public_port: 0,
+            allow_insecure_ws: false,
+            max_peers: 16,
+            label: String::new(),
+            network: strims_network::Config::default(),
+            bootstrap: strims_network::bootstrap::Config::default(),
+            transfer: strims_transfer::Config::default(),
+            replication: strims_replication::Config::default(),
+            directory: strims_directory::Config::default(),
+            chat: strims_chat::Config::default(),
+            whispers: WhisperConfig::default(),
+        }
+    }
+}
+
+/// Why a profile's node didn't start.
+#[derive(Debug, thiserror::Error)]
+pub enum StartError {
+    #[error(transparent)]
+    Store(#[from] strims_dao::Error),
+    #[error("starting the node: {0}")]
+    Node(#[from] NodeError),
+    #[error("drawing a seed from OS entropy: {0}")]
+    Entropy(getrandom::Error),
+    #[error("profile has no key")]
+    NoProfileKey,
+    /// The listeners belong to another profile's node.
+    #[error("this process runs another profile's node, and it runs one at a time")]
+    ProfileRunning,
+}
+
+/// The [`SessionFactory`] that runs a signed-in profile's node and
+/// services. A process runs one profile's node at a time, since the node
+/// listens on the configured addresses: starting another profile's
+/// session fails with [`StartError::ProfileRunning`].
+///
+/// A session's node runs replication, transfers, network membership,
+/// bootstrap, the directory, chat and whispers, each control as a local
+/// task, and serves every peer through [`PeerServices`].
+pub struct NodeFactory<N: Net, C: Clock> {
+    net: N,
+    clock: C,
+    config: AppConfig,
+    /// The profile whose node runs or starts, and the node once it runs.
+    running: RefCell<Option<(u64, Option<NodeInfo>)>>,
+}
+
+impl<N: Net, C: Clock> NodeFactory<N, C> {
+    /// A factory of nodes on `net`, timed by `clock`.
+    pub fn new(net: N, clock: C, config: AppConfig) -> Self {
+        NodeFactory {
+            net,
+            clock,
+            config,
+            running: RefCell::new(None),
+        }
+    }
+
+    /// The running node, if a session started one.
+    pub fn running(&self) -> Option<NodeInfo> {
+        self.running.borrow().as_ref().and_then(|(_, n)| n.clone())
+    }
+
+    fn node_config(&self, key: Key, seed: u64) -> NodeConfig {
+        let c = &self.config;
+        let mut config = NodeConfig::new(key, seed);
+        config.label.clone_from(&c.label);
+        config.tcp_listen.clone_from(&c.tcp_listen);
+        config.ws_listen.clone_from(&c.ws_listen);
+        config.public_ip = c.public_ip;
+        config.ws_public_hostname.clone_from(&c.ws_public_hostname);
+        config.ws_public_port = c.ws_public_port;
+        config.allow_insecure_ws = c.allow_insecure_ws;
+        config.max_peers = c.max_peers;
+        config.node_platform = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
+        config.node_version = env!("CARGO_PKG_VERSION").to_owned();
+        config
+    }
+
+    async fn start_node<K: Kv>(
+        &self,
+        session: &Rc<Session<K>>,
+    ) -> Result<AppRuntime<K, C>, StartError> {
+        let key = session
+            .profile
+            .key
+            .clone()
+            .ok_or(StartError::NoProfileKey)?;
+        let mut seed = [0u8; 32];
+        getrandom::fill(&mut seed).map_err(StartError::Entropy)?;
+        let mut rng = DetRng::from_seed(seed);
+        let node_seed = rand_core::Rng::next_u64(&mut rng);
+        let config = self.node_config(key, node_seed);
+        let (node, mut events) = Node::spawn(config, self.net.clone(), self.clock.clone()).await?;
+
+        let c = &self.config;
+        let timer = NodeTimer(self.clock.clone());
+        let (store, profile) = (&session.store, &session.profile);
+        let host = NodeHost::new(node.clone());
+        let replication = ReplicationControl::new(
+            store.clone(),
+            profile.clone(),
+            host.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.replication.clone(),
+        );
+        let network = NetworkControl::new(
+            host.clone(),
+            store.clone(),
+            profile.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.network,
+        );
+        let bootstrap = BootstrapControl::new(
+            host.clone(),
+            store.clone(),
+            profile.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.bootstrap,
+        );
+        let transfers = TransferControl::new(host.clone(), timer.clone(), c.transfer);
+        let directory = DirectoryControl::new(
+            host.clone(),
+            store.clone(),
+            network.clone(),
+            transfers.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.directory.clone(),
+        );
+        let chat = ChatControl::new(
+            host.clone(),
+            store.clone(),
+            profile.clone(),
+            network.clone(),
+            transfers.clone(),
+            directory.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.chat.clone(),
+        );
+        let whispers = WhisperControl::new(
+            host,
+            store.clone(),
+            profile.clone(),
+            network.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.whispers.clone(),
+        );
+
+        let mut tasks = Vec::new();
+        let mut spawn = |f: futures_util::future::LocalBoxFuture<'static, ()>| {
+            tasks.push(tokio::task::spawn_local(f).abort_handle());
+        };
+        spawn({
+            let replication = replication.clone();
+            Box::pin(async move { replication.run().await })
+        });
+        spawn({
+            let network = network.clone();
+            Box::pin(async move { network.run().await })
+        });
+        spawn({
+            let bootstrap = bootstrap.clone();
+            Box::pin(async move { bootstrap.run().await })
+        });
+        spawn({
+            let transfers = transfers.clone();
+            Box::pin(async move { transfers.run().await })
+        });
+        spawn({
+            let directory = directory.clone();
+            Box::pin(async move { directory.run().await })
+        });
+        spawn({
+            let chat = chat.clone();
+            Box::pin(async move { chat.run().await })
+        });
+        spawn({
+            let whispers = whispers.clone();
+            Box::pin(async move { whispers.run().await })
+        });
+        let services = PeerServices::new(node.clone())
+            .with(Rc::new(network.clone()))
+            .with(Rc::new(transfers))
+            .with(Rc::new(replication))
+            .with(Rc::new(bootstrap.clone()));
+        spawn(Box::pin(async move {
+            while let Some(e) = events.recv().await {
+                services.handle_event(&e).await;
+            }
+        }));
+
+        tracing::info!(
+            profile = %session.profile.name,
+            ws_uri = node.ws_uri().unwrap_or_default(),
+            tcp_uri = node.tcp_uri().unwrap_or_default(),
+            "node started",
+        );
+        Ok(AppRuntime {
+            node,
+            timer,
+            network,
+            bootstrap,
+            directory,
+            chat,
+            whispers,
+            tasks,
+        })
+    }
+}
+
+impl<K: Kv, N: Net, C: Clock> SessionFactory<K> for NodeFactory<N, C> {
+    type Runtime = AppRuntime<K, C>;
+    type Error = StartError;
+
+    async fn start(&self, session: &Rc<Session<K>>) -> Result<AppRuntime<K, C>, StartError> {
+        let id = session.profile.id;
+        {
+            let mut running = self.running.borrow_mut();
+            match &*running {
+                Some((other, _)) if *other != id => return Err(StartError::ProfileRunning),
+                _ => *running = Some((id, None)),
+            }
+        }
+        // Dropped unstarted, a start gives the listeners back.
+        let mut mark = StartMark {
+            running: &self.running,
+            started: false,
+        };
+        let runtime = self.start_node(session).await?;
+        *self.running.borrow_mut() = Some((id, Some(runtime.node.info().clone())));
+        mark.started = true;
+        Ok(runtime)
+    }
+
+    fn bind(&self, runtime: &AppRuntime<K, C>, session: &Rc<Session<K>>, router: &Router) {
+        strims_session::bind_frontends(session, &runtime.timer, router);
+        strims_network::bind_frontend(router, &runtime.network);
+        strims_network::bootstrap::bind_frontend(router, &runtime.bootstrap);
+        strims_directory::bind_frontend(router, &runtime.directory);
+        strims_chat::bind_frontend(router, &runtime.chat, &runtime.whispers);
+    }
+}
+
+/// Clears the factory's running profile unless its start finished.
+struct StartMark<'a> {
+    running: &'a RefCell<Option<(u64, Option<NodeInfo>)>>,
+    started: bool,
+}
+
+impl Drop for StartMark<'_> {
+    fn drop(&mut self) {
+        if !self.started {
+            *self.running.borrow_mut() = None;
+        }
+    }
+}
+
+/// A running profile's node and the controls its frontends serve. Dropping
+/// it stops the controls' tasks and the node.
+pub struct AppRuntime<K: Kv, C: Clock> {
+    node: Node,
+    timer: NodeTimer<C>,
+    network: NetworkControl<K, NodeHost, NodeTimer<C>>,
+    bootstrap: BootstrapControl<K, NodeHost, NodeTimer<C>>,
+    directory: DirectoryControl<K, NodeHost, NodeTimer<C>>,
+    chat: ChatControl<K, NodeHost, NodeTimer<C>>,
+    whispers: WhisperControl<K, NodeHost, NodeTimer<C>>,
+    tasks: Vec<AbortHandle>,
+}
+
+impl<K: Kv, C: Clock> AppRuntime<K, C> {
+    /// The profile's node.
+    pub fn node(&self) -> &Node {
+        &self.node
+    }
+}
+
+impl<K: Kv, C: Clock> Drop for AppRuntime<K, C> {
+    fn drop(&mut self) {
+        for t in &self.tasks {
+            t.abort();
+        }
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let node = self.node.clone();
+            tokio::spawn(async move {
+                let _ = node.shutdown().await;
+            });
+        }
     }
 }

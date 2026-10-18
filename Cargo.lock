@@ -2024,6 +2024,7 @@ dependencies = [
  "strims-qos",
  "strims-replication",
  "strims-rpc",
+ "strims-session",
  "strims-transfer",
  "strims-vnic",
  "strims-vpn",
