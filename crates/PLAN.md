@@ -8,18 +8,114 @@ on it is in `CONVENTIONS.md`.
 ### App layer
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
-- Video ingress (RTMP), egress and HLS. Ingress publishes media listings and
-  pushes its swarms' snippets with `DirectoryControl::push_snippet`.
+- Video; see Video below.
 - Directory embeds: the server's Twitch, YouTube and AngelThump snippet
   loaders need an HTTP fetch from the driver; until then the server refuses
   embed listings and its client config advertises none.
-- The other dao record types arrive with their services: video channels
-  and configs, vnic, autoseed and debug configs, and swarm caches, each
-  with its part of a network's deletion; until then,
-  stores from Go keep those records unread. With swarm caches, a chat
-  room's asset swarm can start from its cache under (server key,
-  `chat:assets`); until then a reopened room downloads its bundles again.
+- The other dao record types arrive with their services: vnic, autoseed
+  and debug configs, and swarm caches, each with its part of a network's
+  deletion; until then, stores from Go keep those records unread. With
+  swarm caches, a chat room's asset swarm can start from its cache under
+  (server key, `chat:assets`); until then a reopened room downloads its
+  bundles again.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
+
+### Video
+Gaps in the current services:
+- Snippets go live without a thumbnail. Making one needs a decoder stage
+  in the driver (ffmpeg or a library) over a segment's keyframe.
+- The VideoIngressShare service isn't served. The ingress config's
+  `service_network_keys` are stored, and pruned when a network is
+  deleted, but nothing reads them.
+- One ingest per channel holds within a process. Stores shared by several
+  processes need the lease that spans them (see `strims-svc` below).
+- A writer never publishes its last partial integrity unit, so viewers
+  miss the end of a stream's last segment.
+- A stream without audio may not play in the current UI, whose
+  MediaSource codec string names both tracks.
+- No edit list offsets the B-frame composition delay.
+- A large backward jump in FLV tag times holds both tracks' timestamps
+  until the tag times catch up, which stalls an encoder that restarts its
+  clock mid-stream.
+- RTMP: a connection publishes once; AMF3 commands and shared objects are
+  ignored; the server never sends StreamBegin. A peer that stops reading
+  is cut off only once its queued output passes the bound, and the
+  server's replies are small. `NetVideoHost` sets no TCP options on RTMP
+  connections.
+- Egress publishes a swarm it adds only on the networks the node runs
+  when the stream opens. A stream of a swarm the node already runs
+  doesn't compare its URI's options. A cancelled `open_reader` can hold a
+  reader slot until its swarm goes. Each Data message allocates.
+- An HLS stream ends at its stream's first error, with no recovery. HLS
+  has no LL-HLS parts or `EXT-X-INDEPENDENT-SEGMENTS`, and its target
+  duration can grow during a stream.
+- The UI can't open an HLS stream: nothing calls HLSEgress.OpenStream, so
+  a playlist URL comes only through the RPC.
+
+The target shape follows. Nothing in the current services needs rework to
+reach it.
+
+Pipeline:
+- Ingest sources produce access units, and muxers consume them. An access
+  unit is a track, decode and presentation timestamps, a keyframe flag and
+  a payload. Each track has a decoder config: an RFC 6381 codec string
+  plus avcC, hvcC or av1C, or AudioSpecificConfig or OpusHead. Sources are
+  RTMP, browser capture and transcoder output. Muxers are the fMP4
+  segmenter, HLS egress and the frame format.
+- Transcoded renditions come from a codec stage (ffmpeg or a library) that
+  takes and returns access units. Segmenting and muxing stay in Rust.
+- Ingest writes each access unit to the swarm as it arrives. In the fMP4
+  format that means a moof/mdat pair per access unit, or per small group,
+  within a segment's record. Check that the current player and Go egress
+  accept that before relying on it.
+- Each access unit keeps its publish time next to its media timestamps.
+  The deadline-aware request scheduler and the players' playout clocks
+  both need it.
+
+Wire formats:
+- The listing's MIME type names the format, and readers dispatch on it. A
+  new format gets a new MIME type.
+- While Go nodes share networks, the fMP4 format stays playable by the
+  current UI and by Go egress. That format is one chunkstream record per
+  segment, `[u16 init length][init segment][media segment]`, starting at a
+  keyframe, in 1 KiB chunks with BLAKE2b-256 Merkle trees and Ed25519 live
+  signatures. The rule for cutting segments is a parameter. The codecs in
+  the MIME type come from the decoder configs.
+- The frame format is one chunkstream record per access unit, with the
+  decoder configs repeated ahead of each keyframe. Readers join and
+  recover at a keyframe, so a lost chunk costs the frames up to the next
+  keyframe.
+
+RTMP and codecs:
+- H.264 with AAC is the rendition every viewer can play. A streamer's HEVC
+  or AV1 passes through unchanged as another rendition. Each viewer picks
+  one with `VideoDecoder.isConfigSupported` or `MediaSource.isTypeSupported`.
+  VP9 isn't a target: OBS can't send it over RTMP, and it compresses no
+  better than HEVC.
+- Listing several renditions needs a listing schema change (protocol v3).
+
+Egress and players:
+- The UI egress stays format-agnostic: payload bytes, record ends and
+  discontinuities. Parsing the format is the player's job. In
+  `strims-wasm`, egress runs in the swarm's worker, so a player in that
+  worker can read records without the frontend RPC.
+- The browser floor is the current generation: WebCodecs, plus
+  ManagedMediaSource on iOS 17.1+. With that floor, the service-worker HLS
+  relay and the MPEG-TS decoder go. ManagedMediaSource needs
+  `disableRemotePlayback`.
+- The baseline player muxes the frame format into fMP4 for MediaSource or
+  ManagedMediaSource.
+- The low-latency player decodes with WebCodecs in the worker. It renders
+  to an OffscreenCanvas that the UI transfers in and plays audio through an
+  AudioWorklet. It owns its jitter buffer, a playout clock driven by audio,
+  A/V sync and keyframe recovery. VideoTrackGenerator (Safari) and
+  MediaStreamTrackGenerator (Chromium) give it a native `<video>` where
+  they exist; Firefox has neither.
+- Browser capture encodes with WebCodecs into the frame format, through the
+  same writer as RTMP. Input frames come from MediaStreamTrackProcessor
+  where it exists and from a canvas elsewhere. Audio is Opus, since Firefox
+  has no AAC encoder.
+- Native HLS egress is a muxer over access units, for external players.
 
 ### Targets
 - `strims-wasm`: a browser worker driver that replaces the Go wasm build and
@@ -33,9 +129,11 @@ Port the application services that sit on the core crates. The Go versions
   store named `data`, string keys and `Uint8Array` values. A task woken by
   an IndexedDB callback has to be polled before the transaction
   deactivates. Its `SessionFactory` starts a profile's node, replication,
-  network, bootstrap, transfer, directory, chat and whisper controls and
-  peer services, and binds the network, bootstrap, directory and chat
-  frontends (`strims_node::app::NodeFactory` is the native equivalent).
+  network, bootstrap, transfer, directory, chat, whisper and video
+  controls and peer services, and binds the network, bootstrap,
+  directory, chat and video frontends (`strims_node::app::NodeFactory` is
+  the native equivalent). Its video control has no RTMP listener
+  (`NoVideoHost`) and serves no HLS.
 - `strims-svc` runs one profile's node per process, on redb, and serves
   the UI's frontend over WebSocket. Remaining:
   - a Postgres `Kv`;
@@ -48,13 +146,17 @@ Port the application services that sit on the core crates. The Go versions
   - rate limits on SignUp and SignIn, which each cost a 100k-iteration
     PBKDF2;
   - redb moved off the executor if its fsyncs show in profiles;
-  - TLS for the API (see `wss://` on native nodes below); until then the
-    dev page reaches it through the webpack dev server's proxy;
+  - TLS for the API and the HLS listener (see `wss://` on native nodes
+    below); until then the dev page reaches the API through the webpack
+    dev server's proxy;
   - Origin checks on the API's upgrade, which accepts any origin;
   - WebSocket pings on API connections, so a UI that goes without
     closing its connection releases it;
   - headless sessions started at boot, for bootstrap nodes;
-  - an HTTP health check.
+  - an HTTP health check;
+  - on the HLS listener: keep-alive, Range requests, CORS preflight, and
+    a cap per address. One client's slow connections can hold every slot
+    for up to 10 s on the request head or 60 s on the response.
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
@@ -195,9 +297,9 @@ While networks have Go and Rust nodes:
 - **NAT traversal.** WebRTC has no ICE-TCP (RFC 4571) and no TURN, which str0m
   doesn't support. Decide what relaying native and browser nodes need.
 - **wasm memory budget.** The default live window is 2^16 × 1 KiB = 64 MiB per
-  swarm, and a chat's asset swarm grows up to 32 MiB for each room a node
-  reads or serves. Set per-swarm budgets and a global cap before the wasm
-  target ships.
+  swarm, a chat's asset swarm grows up to 32 MiB for each room a node
+  reads or serves, and a viewed video swarm or a capture holds 32 MiB. Set
+  per-swarm budgets and a global cap before the wasm target ships.
 - **Simulation coverage and fidelity.**
   - Waking an idle node to answer a query is a poll of its task and can shift
     later passes, so a sim's sampling cadence changes its trace. Make query
@@ -237,6 +339,8 @@ While networks have Go and Rust nodes:
     server's host may subscribe.
   - A member whose event reader falls behind resets its view; only the
     fake-host tests cover that, not whole nodes.
+  - A listing keeper stopped while its publish is in flight can leave the
+    listing on the server until the publisher's session expires.
 - **Replication.**
   - A device that never syncs again keeps every log from collection;
     deleting the device frees them. Decide whether logs should expire.
