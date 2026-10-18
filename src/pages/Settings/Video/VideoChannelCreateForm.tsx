@@ -9,6 +9,7 @@ import { useTitle } from "react-use";
 
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { toImageType } from "../../../lib/image";
 import VideoChannelForm, { VideoChannelFormData } from "./VideoChannelForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
@@ -24,6 +25,17 @@ const ChatModifierCreateFormPage: React.FC = () => {
   const onSubmit = React.useCallback(async (data: VideoChannelFormData) => {
     await createChannel({
       directoryListingSnippet: {
+        channelName: data.channelName,
+        channelLogo: {
+          sourceOneof: {
+            image: {
+              data: Base64.toUint8Array(data.channelLogo.data),
+              type: toImageType(data.channelLogo.type),
+              height: data.channelLogo.height,
+              width: data.channelLogo.width,
+            },
+          },
+        },
         title: data.title,
         description: data.description,
         tags: data.tags.map(({ value }) => value),

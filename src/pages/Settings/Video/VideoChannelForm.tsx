@@ -98,7 +98,8 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({
         <ImageInput
           control={control}
           name="channelLogo"
-          maxSize={49152}
+          // A snippet image encodes to at most 32 KiB, its fields included.
+          maxSize={32 * 1024 - 64}
           rules={{
             required: {
               value: true,
