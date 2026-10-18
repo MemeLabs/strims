@@ -4,32 +4,39 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    paths:
-      - "pkg/**"
-      - "internal/**"
-      - "infra/**"
-      - "integration/**"
-      - "hack/**"
-      - "cmd/**"
 
 jobs:
-  build:
-    name: Test
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
     - name: Install ffmpeg
       run: |
-        sudo apt update
-        sudo apt install ffmpeg
-    - name: Set up Go 1.x
-      uses: actions/setup-go@v2
-      with:
-        go-version: 1.19
-        stable: false
-      id: go
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
-    - name: Get dependencies
-      run: go get -v -t -d ./...
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    # rust-toolchain.toml names the channel, components and wasm target.
+    - name: Install toolchain
+      run: rustup toolchain install
+    - uses: Swatinem/rust-cache@v2
+    - name: Format
+      run: cargo fmt --all --check
+    - name: Clippy
+      run: cargo clippy --workspace --all-targets --features strims-node/turmoil -- -D warnings
     - name: Test
-      run: go test `go list ./... | grep -vE 'integration|internal/models'` -mod=readonly
+      run: cargo test --workspace
+    - name: Check wasm
+      run: cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown
+    - name: Clippy wasm
+      run: cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e -- -D warnings
+
+  go:
+    name: Go (infra)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - name: Test
+      run: go test `go list ./... | grep -v internal/models`

@@ -1,4 +1,3 @@
 *
-
 !.gitignore
-!config.sample.yaml
+!multi-stream.py

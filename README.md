@@ -7,50 +7,47 @@
 </div>
 <br />
 
+[setup](#setup)
+
+[web ui](#web-ui)
+
 [headless service](#headless-service)
 
 [streaming](#streaming)
 
 [connecting remote peers](#connecting-remote-peers)
 
-## headless service
+[checks](#checks)
+
+The node is written in Rust (`crates/`). It runs natively as `strims-svc` and
+in the browser as `strims-wasm`. `crates/PLAN.md` lists the remaining work and
+`crates/CONVENTIONS.md` the rules for working on it. `infra/` holds the
+deployment tooling, which is written in Go.
+
+## setup
+
+1. Install rustup. `rust-toolchain.toml` picks the toolchain, its components
+   and the `wasm32-unknown-unknown` target.
+
+1. Install `wasm-bindgen-cli` at strims-wasm's `wasm-bindgen` pin:
+
+   ```sh
+   $ cargo install wasm-bindgen-cli --version 0.2.129 --locked
+   ```
+
+1. Install node.js and the ui's dependencies:
+
+   ```sh
+   $ npm ci
+   ```
 
 1. Generate a self signed root certificate using the instructions in
    [/hack/tls](/hack/tls)
 
-1. Copy `hack/svc/config.sample.yaml` to `hack/svc/config.yaml`
+## web ui
 
-1. Create a user profile
-
-   ```sh
-   $ cd /workspaces/strims
-   $ go run ./cmd/svc add-profile -config ./hack/svc/config.yaml -username dev -password secret
-   2022/06/01 13:48:18 74880235203461122
-   2022/06/01 13:48:18 DnLta2pK2GlRLHTobM2jKecX/XNqD4OGDjwWSOs0o7s=
-   ```
-
-1. Copy the id and auth key into `config.yaml` in `session/headless` like so:
-
-   ```yaml
-   headless:
-      - id: 74880235203461122
-        key: DnLta2pK2GlRLHTobM2jKecX/XNqD4OGDjwWSOs0o7s=
-   ```
-
-1. Run `svc` with live reloading using npm
-
-   ```sh
-   $ npm run dev:svc
-   ```
-
-   _Take note of the path from the line `ws vnic listener starting` - you'll need it
-   to connect to the headless service from the ui._
-
-   ```
-   2022-06-01T13:54:33.545Z        DEBUG   vnic/ws_native.go:43    ws vnic listener starting       {"path": "/0408549bb2971e6051c11c1caafbbd2b0f88b6937d0bf608f6d1a2d4c237a0f8"}
-   ```
-
-1. Run the webpack dev server
+1. Run the webpack dev server. Its strims-wasm loader builds the browser node
+   with cargo and wasm-bindgen.
 
    ```sh
    $ npm run dev:web
@@ -67,13 +64,26 @@
    $ git config --global --add safe.directory /workspaces/strims
    ```
 
-1. In the web ui at `https://0.0.0.0:8080` click `new login` and enter the
-   username and password you used in the `add-profile` command.
+1. In the web ui at `https://<dev machine IP>:8080` click `new login` and sign
+   up. The profile's node runs in a worker in the page.
 
-1. Toggle the advanced `advanced` options and enter `wss://0.0.0.0:8083/api` or
-   the IP of your dev machine or localhost.
+## headless service
 
-   > _on Windows, this address might have to be set as be `wss://localhost:8083/api`._
+1. Run `strims-svc`. It keeps its profiles in one redb file and runs one
+   profile's node at a time. `--help` lists its options.
+
+   ```sh
+   $ cargo run --release -p strims-svc -- --db ./strims.redb \
+       --api-path /manage --ws-listen 127.0.0.1:8082 --allow-insecure-ws
+   ```
+
+   The webpack dev server proxies `wss://<dev machine IP>:8080/manage` to the
+   service's API on port 8083, and `wss://<dev machine IP>:8080/<hex key>` to
+   its node's WebSocket listener on port 8082.
+
+1. In the web ui click `new login`, toggle the `advanced` options, enter
+   `wss://<dev machine IP>:8080/manage` and sign up. The profile's node runs in
+   the service.
 
 ## streaming
 
@@ -110,8 +120,8 @@ to connect a remote peer and watch the stream via p2p.
 
 ## connecting remote peers
 
-1. In the web ui while logged into your headless server open the networks list
-   in settings.
+1. In the web ui while logged into your headless service open the networks
+   list in settings.
 
 1. In the networks table click the menu icon to the right of the certificate
    expiry and choose `create invite`.
@@ -123,8 +133,14 @@ to connect a remote peer and watch the stream via p2p.
 1. From the `add network` menu in the networks list in settings choose `add
    invite code`, paste the invite code, and click `join network`
 
-1. In bootstrap settings create a bootstrap client using the path from the
-   headless service log earlier eg
-   `wss://0.0.0.0:8083/0408549bb2971e6051c11c1caafbbd2b0f88b6937d0bf608f6d1a2d4c237a0f8`
+1. In bootstrap settings create a bootstrap client for the headless service's
+   node, `wss://<dev machine IP>:8080/<hex key>`, where `<hex key>` is the
+   headless profile's public key in hex
 
 1. Find the stream thumbnail in the network directory
+
+## checks
+
+`crates/CONVENTIONS.md` lists the checks to run from the repo root before
+committing: formatting, clippy, the workspace's tests, the wasm build, and
+strims-wasm's browser suites.

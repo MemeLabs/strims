@@ -16,6 +16,7 @@
 		"esbenp.prettier-vscode",
 		"gencer.html-slim-scss-css-class-completion",
 		"golang.go",
+		"rust-lang.rust-analyzer",
 		"ms-azuretools.vscode-docker",
 		"redhat.vscode-yaml",
 		"zxh404.vscode-proto3",

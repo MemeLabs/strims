@@ -83,5 +83,20 @@ ENV GOPATH="/${USERNAME}/go"
 ENV GO111MODULE=auto
 ENV PATH="${GOPATH}/bin:${GOROOT}/bin:${PATH}"
 
+# rust-toolchain.toml picks the toolchain, its components and the wasm target.
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+# must match strims-wasm's wasm-bindgen pin
+ARG WASM_BINDGEN_VERSION=0.2.129
+
+RUN \
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable \
+      --component clippy,rustfmt --target wasm32-unknown-unknown \
+  && cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_VERSION}" --locked \
+  && chmod -R a+w "${RUSTUP_HOME}" "${CARGO_HOME}"
+
 # switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog

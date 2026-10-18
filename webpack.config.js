@@ -150,11 +150,6 @@ module.exports = (env, argv) => {
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
       ...htmlWebpackPluginOptions,
     }),
-    // new HtmlWebpackPlugin({
-    //   filename: "funding.html",
-    //   chunks: ["funding"],
-    //   title: "funding",
-    // }),
     new WebpackPwaManifest({
       name: "Strims",
       short_name: "Strims",
@@ -351,7 +346,6 @@ module.exports = (env, argv) => {
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
             sw: path.join(__dirname, "src", "web", "sw.ts"),
-            // funding: path.join(__dirname, "src", "funding", "index.tsx"),
             ...entries,
           },
           devtool,
@@ -376,11 +370,6 @@ module.exports = (env, argv) => {
               {
                 context: "/manage",
                 target: "ws://localhost:8083",
-                ws: true,
-              },
-              {
-                context: "/api/funding",
-                target: "ws://localhost:8084",
                 ws: true,
               },
               {

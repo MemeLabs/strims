@@ -11,7 +11,6 @@ import { ChatFrontendClient, ChatServerFrontendClient } from "./strims/chat/v1/c
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
 import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc";
 import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
-import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";
 import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
 import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
 import { InviteLinkClient } from "./strims/network/v1/invite/invite_rpc";
@@ -67,15 +66,6 @@ export class FrontendClient {
   }
 }
 
-export class FundingClient {
-  public funding: FundingServiceClient;
-
-  constructor(w: Writable, r: Readable) {
-    const host = new Host(w, r);
-    this.funding = new FundingServiceClient(host);
-  }
-}
-
 export class DevToolsClient {
   public devTools: DevToolsServiceClient;
   public ppsppCapConn: CapConnClient;
@@ -96,4 +86,4 @@ export class InviteClient {
   }
 }
 
-export type Client = FrontendClient | FundingClient | DevToolsClient | InviteClient;
+export type Client = FrontendClient | DevToolsClient | InviteClient;

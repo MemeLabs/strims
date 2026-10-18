@@ -3,6 +3,7 @@
     "typescriptteam.native-preview",
     "oxc.oxc-vscode",
     "esbenp.prettier-vscode",
-    "golang.go"
+    "golang.go",
+    "rust-lang.rust-analyzer"
   ]
 }
