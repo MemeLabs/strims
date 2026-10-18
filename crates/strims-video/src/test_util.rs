@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Builders of synthetic codec configs for the unit tests.
+//! Builders of synthetic codec configs for the unit tests and `synth`.
 
-// Test code: a panic is a test failure.
+// Test support: a panic is a test failure.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 /// Writes bits most significant first.

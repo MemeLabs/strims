@@ -11,6 +11,7 @@ test-support = []
 
 [dependencies]
 strims-base.workspace = true
+strims-chunkstream.workspace = true
 strims-dao.workspace = true
 strims-directory.workspace = true
 strims-kv.workspace = true
@@ -25,6 +26,7 @@ futures-sink.workspace = true
 futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
+hex.workspace = true
 proptest.workspace = true
 strims-crypto.workspace = true
 # integration tests only: unit tests build this crate a second time, and the
@@ -32,6 +34,8 @@ strims-crypto.workspace = true
 strims-testworld.workspace = true
 # tests drive controls on a real executor with paused time
 tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+# unit and integration tests see `synth`
+strims-video = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

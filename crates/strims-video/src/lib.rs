@@ -17,6 +17,14 @@
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
 //!   H.264 with AAC and refuses other codecs.
+//! - [`fmp4`]: fragmented MP4 init segments and fragments, and the reading
+//!   of records.
+//! - [`segment`]: the muxer cutting access units into fMP4 segments, one
+//!   record each, under a [`CutRule`].
+//! - [`record`]: where records go: packed into a video swarm's frames
+//!   ([`PackedSink`]) or collected whole ([`VecSink`]).
+//! - `synth` (feature `test-support`): deterministic FLV tag scripts and
+//!   the records they produce.
 //! - [`hls`]: HLS playlists of fMP4 segments, and the routes a driver
 //!   serves them on.
 //!
@@ -56,11 +64,17 @@ mod control;
 mod error;
 mod events;
 pub mod flv;
+pub mod fmp4;
 pub mod frontend;
 pub mod hls;
 pub mod host;
 pub mod media;
-#[cfg(test)]
+pub mod record;
+pub mod segment;
+#[cfg(feature = "test-support")]
+pub mod synth;
+#[cfg(any(test, feature = "test-support"))]
+#[cfg_attr(not(test), allow(dead_code))]
 mod test_util;
 
 pub use channels::{ChannelUrl, MAX_CHANNELS};
@@ -79,3 +93,5 @@ pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};
 pub use media::{
     AccessUnit, CodecParams, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind, fmp4_mime,
 };
+pub use record::{PackedSink, RecordSink, VecSink};
+pub use segment::{CutRule, SegmentError, SegmentInfo, Segmenter, SegmenterMetrics};
