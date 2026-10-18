@@ -25,9 +25,7 @@ Port the application services that sit on the core crates. The Go versions
     (swarm id, salt), so a reopened swarm starts from them. A chat room's
     asset swarm can start from its cache under (server key,
     `chat:assets`); until then a reopened room downloads its bundles
-    again;
-  - the debug config (12001): mock streams published on a network for
-    testing. Deleting that network clears the config's network key.
+    again.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Video
@@ -187,6 +185,14 @@ Egress and players:
 ### Cutover
 Ship the protocol-v3 changes below behind a version bump, then retire the Go
 implementation along with the interop tests that exist only for it.
+
+Once Rust is the default implementation and the Go compatibility checks
+have served their purpose, serve the UI's Debug service: metrics
+(`ReadMetrics`, `WatchMetrics`) from the controls' metrics structs, a
+profiling endpoint to answer `PProf`, and the debug config (12001) with
+its mock streams published on a network for testing. Deleting that
+network clears the config's network key. Until then the UI's debugger
+and debug settings get no answers.
 
 While profiles have Go and Rust devices:
 - Go sends a bootstrap in one message, capped at 512 KiB on both sides, so
