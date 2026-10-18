@@ -42,10 +42,13 @@
 //!   data channels it hands over.
 //! - `inbox`: a link's read queue, filled by its socket's callbacks.
 //! - [`entry`]: `start`, the function the worker script calls.
+//! - `e2e` (feature `e2e`): the bare node the browser link tests drive.
 
 #![cfg(target_arch = "wasm32")]
 
 pub mod clock;
+#[cfg(feature = "e2e")]
+pub mod e2e;
 pub mod entropy;
 pub mod entry;
 mod idb;

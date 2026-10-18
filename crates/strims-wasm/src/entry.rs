@@ -21,7 +21,9 @@ thread_local! {
 
 /// Starts the worker. `options.logLevel` is a zap level (see
 /// [`crate::log::init`]); `frontend` carries the UI's RPC connection and
-/// `signal` the WebRTC signalling with the window.
+/// `signal` the WebRTC signalling with the window. With the `e2e`
+/// feature, `options.e2e: true` hands both ports to the browser link
+/// tests' bare node (see `crate::e2e`).
 #[wasm_bindgen]
 pub fn start(options: JsValue, frontend: MessagePort, signal: MessagePort) -> Result<(), JsValue> {
     let log_level = Reflect::get(&options, &JsValue::from_str("logLevel"))
@@ -29,6 +31,11 @@ pub fn start(options: JsValue, frontend: MessagePort, signal: MessagePort) -> Re
         .and_then(|v| v.as_f64())
         .map_or(0, |l| l as i32);
     crate::log::init(log_level);
+    #[cfg(feature = "e2e")]
+    if crate::e2e::requested(&options) {
+        crate::e2e::start(frontend, signal);
+        return Ok(());
+    }
     tracing::info!("strims-wasm worker started");
     let old = PORTS.with(|p| p.replace(Some((frontend, signal))));
     drop(old);

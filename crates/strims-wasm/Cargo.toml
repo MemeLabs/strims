@@ -100,5 +100,17 @@ strims-crypto.workspace = true
 strims-kv = { workspace = true, features = ["conformance"] }
 wasm-bindgen-test = "=0.3.79"
 
+# The browser harness (`tests/support`) and the `--ignored` browser tests,
+# which run natively and drive headless Firefox.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+strims-crypto.workspace = true
+strims-node.workspace = true
+futures-util = { workspace = true, features = ["sink", "std"] }
+hex.workspace = true
+httparse.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync"] }
+tokio-tungstenite.workspace = true
+
 [lints]
 workspace = true
