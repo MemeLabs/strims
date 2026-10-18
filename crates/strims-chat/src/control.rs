@@ -172,6 +172,9 @@ pub(crate) struct Runner<H: Host> {
     /// When the next asset sync is due, and whether it must be unified.
     pub(crate) assets_due: Cell<Option<Time>>,
     pub(crate) unified_due: Cell<bool>,
+    /// When the read asset swarm is next stored as the room's cache, while
+    /// a stream has decoded a bundle since it was last stored.
+    pub(crate) cache_at: Cell<Option<Time>>,
     /// The runner stopped; its mode task winds down.
     pub(crate) stopped: Cell<bool>,
     /// Something the mode task looks at changed since it last looked.
@@ -207,6 +210,7 @@ impl<H: Host> Runner<H> {
             keeper: RefCell::new(None),
             assets_due: Cell::new(None),
             unified_due: Cell::new(false),
+            cache_at: Cell::new(None),
             stopped: Cell::new(false),
             changed: Cell::new(false),
             waker: RefCell::new(None),
@@ -231,6 +235,16 @@ impl<H: Host> Runner<H> {
 
     pub(crate) fn serving(&self) -> bool {
         self.server.borrow().is_some()
+    }
+
+    /// Has the mode task store the read asset swarm as the room's cache
+    /// within [`runner::CACHE_DELAY`] of `now`, when a stream decoded a
+    /// bundle while the runner reads.
+    pub(crate) fn bundle_decoded(&self, now: Time) {
+        if self.mode.get() == ServerMode::Reading && self.cache_at.get().is_none() {
+            self.cache_at.set(Some(now + runner::CACHE_DELAY));
+            self.poke();
+        }
     }
 
     pub(crate) fn server_id(&self) -> Option<u64> {

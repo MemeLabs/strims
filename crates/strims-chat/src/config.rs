@@ -112,6 +112,11 @@ pub struct Metrics {
     /// Client streams refused for [`Config::max_rooms`] or
     /// [`Config::max_streams_per_room`].
     pub streams_refused: u64,
+    /// Asset caches a read room's swarm started from, those the node
+    /// refused (and the control deleted), and those the control stored.
+    pub cache_loads: u64,
+    pub cache_refusals: u64,
+    pub cache_writes: u64,
     /// Swarm writes, node operations and store operations that failed.
     pub write_errors: u64,
     pub host_errors: u64,

@@ -17,7 +17,7 @@ use std::task::{Context, Poll};
 use strims_base::time::Time;
 use strims_kademlia::ID;
 use strims_ppspp::{SwarmId, SwarmKey, SwarmOptions, WriterOptions};
-use strims_proto::types::{Certificate, Key};
+use strims_proto::types::{Cache, Certificate, Key};
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, M_BROADCAST, M_STD_FLAGS, NetworkId,
     PeerIndexHost, PeerIndexPublisherId,
@@ -561,6 +561,29 @@ impl Node {
         options: SwarmOptions,
     ) -> Result<SwarmKey, NodeError> {
         self.call(move |s, _| s.add_swarm(id, options)).await?
+    }
+
+    /// Adds a swarm to download and relay, as [`Node::add_swarm`] does,
+    /// starting from `cache`, which [`Node::export_cache`] gave. Returns
+    /// whether the swarm took the cache; one that refused it starts empty.
+    /// The swarm takes a cache of its own id and options whose epoch,
+    /// signatures and data verify under its key. The node task hashes all
+    /// of the cache's data to check it.
+    pub async fn add_cached_swarm(
+        &self,
+        id: SwarmId,
+        options: SwarmOptions,
+        cache: Cache,
+    ) -> Result<(SwarmKey, bool), NodeError> {
+        self.call(move |s, _| s.add_cached_swarm(id, options, &cache))
+            .await?
+    }
+
+    /// The swarm's stream as a cache: its data from offset 0, signatures
+    /// and epoch. `None` for an unknown swarm, one that holds nothing, or
+    /// one whose window has moved past offset 0.
+    pub async fn export_cache(&self, swarm: SwarmKey) -> Result<Option<Cache>, NodeError> {
+        self.call(move |s, _| s.export_cache(swarm)).await
     }
 
     /// Stops the swarm's channels; its readers and writers close.

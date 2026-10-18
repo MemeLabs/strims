@@ -251,6 +251,20 @@ impl strims_transfer::SwarmHost for NodeHost {
         self.node.add_swarm(id, options).await
     }
 
+    async fn add_cached_swarm(
+        &self,
+        id: SwarmId,
+        options: SwarmOptions,
+        cache: strims_proto::types::Cache,
+    ) -> Result<(SwarmKey, bool), NodeError> {
+        self.node.add_cached_swarm(id, options, cache).await
+    }
+
+    /// `None` once the node has stopped.
+    async fn export_cache(&self, swarm: SwarmKey) -> Option<strims_proto::types::Cache> {
+        self.node.export_cache(swarm).await.ok().flatten()
+    }
+
     async fn remove_swarm(&self, swarm: SwarmKey) -> Result<(), NodeError> {
         self.node.remove_swarm(swarm).await
     }

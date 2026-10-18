@@ -3,8 +3,8 @@
 
 //! Chat controls on fake nodes (see `strims_testworld`): serving a chat
 //! server and the conditions it waits for, the lease, network moves, the
-//! listing and its nicks, calls, asset bundles, client streams and a
-//! hostile server.
+//! listing and its nicks, calls, asset bundles, client streams, room
+//! caches and a hostile server.
 
 #![allow(
     clippy::unwrap_used,
@@ -25,6 +25,7 @@ use strims_chat::{
 };
 use strims_crypto::membership_trusted;
 use strims_dao::schema::chat::{ChatEmotes, ChatProfiles, ChatServers, profile_peer_key};
+use strims_dao::schema::swarm::{get_cache, set_cache};
 use strims_dao::{Recv, Subscription, Table};
 use strims_kv::MemoryKv;
 use strims_network::membership::{network_from_invitation_v0, new_invitation_v0};
@@ -37,6 +38,7 @@ use strims_proto::chat::v1::{
 use strims_proto::network::v1::directory::ListingQuery;
 use strims_proto::network::v1::directory::listing::{Chat, Content};
 use strims_proto::network::v1::directory::listing_query::Query;
+use strims_proto::types::Cache;
 use strims_rpc::Timer;
 use strims_testworld::*;
 use strims_transfer::{RecordWriter, SwarmHost, TransferId};
@@ -816,6 +818,33 @@ fn a_late_stream_gets_the_unified_bundle_then_deltas_and_recent_events() {
             .await
             .unwrap();
         assert_eq!(reader.message(5).await.body, "three");
+    });
+}
+
+/// A read room's stored asset cache that the node refuses is deleted, and
+/// the room's bundles come from its server.
+#[test]
+fn a_refused_room_cache_is_deleted() {
+    run(async {
+        let r = room3(Config::default()).await;
+        let skey = server_key(&r.server);
+        let cache = Cache {
+            uri: "magnet:?xt=urn:ppspp:other".into(),
+            data: vec![7; 1024],
+            ..Default::default()
+        };
+        let mut tx = r.bob.store.store().write(r.bob.timer.now()).await.unwrap();
+        assert!(set_cache(&mut tx, &skey, ASSET_SALT, cache).await.unwrap());
+        tx.commit().await.unwrap();
+
+        let mut reader = Reader::new(r.bob_chat.open_client(&r.key, &skey).unwrap());
+        let b = reader.bundle(5).await;
+        assert!(!b.is_delta);
+        assert_eq!(b.room.unwrap().name, "room");
+        let m = r.bob_chat.metrics();
+        assert_eq!((m.cache_loads, m.cache_refusals), (0, 1), "{m:?}");
+        let mut tx = r.bob.store.read().await.unwrap();
+        assert_eq!(get_cache(&mut tx, &skey, ASSET_SALT).await.unwrap(), None);
     });
 }
 

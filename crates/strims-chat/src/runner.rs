@@ -28,6 +28,14 @@
 //!   doesn't serve: it adds both swarms by the server key and publishes
 //!   their transfers on the network. It tries the lease after every
 //!   [`lease::recheck_delay`] while serving is otherwise possible.
+//!
+//!   The asset swarm starts from the room's cache, stored on this device
+//!   under (server key, [`ASSET_SALT`]); a cache the node refuses is
+//!   deleted. The runner stores the swarm as the cache again
+//!   [`CACHE_DELAY`] after the first bundle a stream decodes since the
+//!   last store, and when it stops reading with a store still due. A
+//!   served room's swarms are never cached: the writer's stream starts
+//!   over from the store's assets.
 //! - **Idle** otherwise, trying the lease on the same schedule.
 //!
 //! Client streams read whichever swarms the mode holds, and reopen their
@@ -57,6 +65,7 @@ use strims_dao::lease::{self, Token};
 use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags,
 };
+use strims_dao::schema::swarm::{delete_cache, get_cache, set_cache};
 use strims_dao::{ReplicatedStore, Table, ref_key};
 use strims_directory::{Host, ListingKeeper, Net};
 use strims_kv::Kv;
@@ -64,6 +73,7 @@ use strims_ppspp::{SwarmId, WriterOptions};
 use strims_proto::chat::v1::{Profile, register_chat_service};
 use strims_proto::network::v1::directory::Listing;
 use strims_proto::network::v1::directory::listing::{Chat, Content};
+use strims_proto::types::Cache;
 use strims_rpc::vpn;
 use strims_rpc::{Router, Timer};
 use strims_transfer::{RecordWriter, SwarmHost, TransferId};
@@ -84,6 +94,10 @@ const READ_RETRY: Duration = Duration::from_secs(10);
 /// The wait after a failed asset write before the assets are synced
 /// again, unified.
 const ASSET_RETRY: Duration = Duration::from_secs(5);
+/// The wait after a read room's stream decodes an asset bundle before the
+/// asset swarm is stored as the room's cache, so that a burst of bundles
+/// makes one write.
+pub(crate) const CACHE_DELAY: Duration = Duration::from_secs(10);
 
 type Publication<H> = <H as strims_network::Host>::Publication;
 type Writer<H> = <H as SwarmHost>::Writer;
@@ -328,6 +342,7 @@ async fn read<K: Kv, H: Host, T: Timer>(
             return None;
         }
     };
+    r.cache_at.set(None);
     r.set_swarms(Some(swarms));
     r.mode.set(ServerMode::Reading);
     s.metrics.borrow_mut().reads += 1;
@@ -350,10 +365,20 @@ async fn read<K: Kv, H: Host, T: Timer>(
             }
             *lease_at = Some(recheck(s));
         }
-        wait(&s.timer, r, w.serve.and(*lease_at)).await;
+        if r.cache_at.get().is_some_and(|t| t <= s.timer.now()) {
+            store_cache(s, r, swarms.1).await;
+        }
+        let at = match (w.serve.and(*lease_at), r.cache_at.get()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        wait(&s.timer, r, at).await;
     }
     r.set_swarms(None);
     r.mode.set(ServerMode::Idle);
+    if r.cache_at.get().is_some() {
+        store_cache(s, r, swarms.1).await;
+    }
     held.remove_swarms(s).await;
     s.emit(ChatEvent::ReadStopped {
         server_key: r.key.clone(),
@@ -362,7 +387,9 @@ async fn read<K: Kv, H: Host, T: Timer>(
     leased
 }
 
-/// Adds both swarms by the server key and publishes their transfers.
+/// Adds both swarms by the server key and publishes their transfers. The
+/// asset swarm starts from the room's cache, which is deleted if the node
+/// refuses it.
 async fn add_swarms<K: Kv, H: Host, T: Timer>(
     s: &Shared<K, H, T>,
     r: &Runner<H>,
@@ -376,15 +403,93 @@ async fn add_swarms<K: Kv, H: Host, T: Timer>(
         .await
         .map_err(err)?;
     held.swarms.push(events);
-    let assets = s
-        .host
-        .add_swarm(id.clone(), asset_options(&r.key))
-        .await
-        .map_err(err)?;
+    let assets = match load_cache(s, &r.key).await {
+        Some(cache) => {
+            let (assets, imported) = s
+                .host
+                .add_cached_swarm(id.clone(), asset_options(&r.key), cache)
+                .await
+                .map_err(err)?;
+            if imported {
+                s.metrics.borrow_mut().cache_loads += 1;
+            } else {
+                s.metrics.borrow_mut().cache_refusals += 1;
+                drop_cache(s, &r.key).await;
+            }
+            assets
+        }
+        None => s
+            .host
+            .add_swarm(id.clone(), asset_options(&r.key))
+            .await
+            .map_err(err)?,
+    };
     held.swarms.push(assets);
     held.publish(s, events, &id, EVENT_SALT, net);
     held.publish(s, assets, &id, ASSET_SALT, net);
     Ok((events, assets))
+}
+
+/// The room's asset cache, stored under (`server_key`, [`ASSET_SALT`]).
+async fn load_cache<K: Kv, H: Host, T: Timer>(
+    s: &Shared<K, H, T>,
+    server_key: &[u8],
+) -> Option<Cache> {
+    let res = async {
+        let mut tx = s.store.read().await?;
+        get_cache(&mut tx, server_key, ASSET_SALT).await
+    }
+    .await;
+    res.unwrap_or_else(|e| {
+        s.metrics.borrow_mut().store_errors += 1;
+        tracing::warn!(error = %e, "reading a chat asset cache failed");
+        None
+    })
+}
+
+/// Deletes the room's asset cache.
+async fn drop_cache<K: Kv, H: Host, T: Timer>(s: &Shared<K, H, T>, server_key: &[u8]) {
+    let res = async {
+        let mut tx = s.store.store().write(s.timer.now()).await?;
+        delete_cache(&mut tx, server_key, ASSET_SALT).await?;
+        tx.commit().await
+    }
+    .await;
+    if let Err(e) = res {
+        s.metrics.borrow_mut().store_errors += 1;
+        tracing::warn!(error = %e, "deleting a chat asset cache failed");
+    }
+}
+
+/// Stores the read asset swarm `assets` as the room's cache. A swarm with
+/// no cache to give (empty, or its window past offset 0) leaves the stored
+/// one in place.
+async fn store_cache<K: Kv, H: Host, T: Timer>(
+    s: &Shared<K, H, T>,
+    r: &Runner<H>,
+    assets: Swarm<H>,
+) {
+    r.cache_at.set(None);
+    let Some(cache) = s.host.export_cache(assets).await else {
+        return;
+    };
+    let res = async {
+        let mut tx = s.store.store().write(s.timer.now()).await?;
+        let stored = set_cache(&mut tx, &r.key, ASSET_SALT, cache).await?;
+        if stored {
+            tx.commit().await?;
+        }
+        Ok::<_, strims_dao::Error>(stored)
+    }
+    .await;
+    match res {
+        Ok(true) => s.metrics.borrow_mut().cache_writes += 1,
+        Ok(false) => {}
+        Err(e) => {
+            s.metrics.borrow_mut().store_errors += 1;
+            tracing::warn!(error = %e, "storing a chat asset cache failed");
+        }
+    }
 }
 
 // --- serving ----------------------------------------------------------------

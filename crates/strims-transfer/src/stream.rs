@@ -10,6 +10,7 @@ use std::future::Future;
 use prost::Message;
 use strims_chunkstream::{DecoderMetrics, RecordDecoder, RecordEncoder, SizeError};
 use strims_ppspp::{SwarmId, SwarmOptions, WriterOptions};
+use strims_proto::types::Cache;
 
 use crate::host::Host;
 
@@ -99,6 +100,31 @@ pub trait SwarmHost: Host {
         id: SwarmId,
         options: SwarmOptions,
     ) -> impl Future<Output = Result<Self::Swarm, Self::Error>>;
+
+    /// Adds the swarm `id` as [`add_swarm`](SwarmHost::add_swarm) does,
+    /// starting from `cache`, a cache of its stream from
+    /// [`export_cache`](SwarmHost::export_cache). Resolves to the swarm and
+    /// whether it took the cache. A swarm that refused the cache starts
+    /// empty, as an added one does; so does every swarm of a host that
+    /// keeps no caches, which is the default.
+    fn add_cached_swarm(
+        &self,
+        id: SwarmId,
+        options: SwarmOptions,
+        cache: Cache,
+    ) -> impl Future<Output = Result<(Self::Swarm, bool), Self::Error>> {
+        drop(cache);
+        async move { Ok((self.add_swarm(id, options).await?, false)) }
+    }
+
+    /// The swarm's stream as a cache: its data from offset 0, its
+    /// signatures and its epoch. `None` once the window has moved past
+    /// offset 0, while the swarm holds nothing, when the swarm is gone, and
+    /// on a host that keeps no caches, which is the default.
+    fn export_cache(&self, swarm: Self::Swarm) -> impl Future<Output = Option<Cache>> {
+        let _ = swarm;
+        std::future::ready(None)
+    }
 
     /// Removes a swarm; its writer and readers close. Remove its transfer
     /// first.

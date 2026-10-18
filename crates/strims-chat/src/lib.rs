@@ -83,7 +83,9 @@
 //! - [`ChatControl::open_client`] opens a client stream of any server
 //!   ([`ClientStream`]). A server this process doesn't serve is read
 //!   through its swarms, added on the network while streams are open and
-//!   for [`Config::linger`] after the last.
+//!   for [`Config::linger`] after the last. The asset swarm of a read
+//!   server starts from the cache this device last stored of it, so a
+//!   reopened room has its bundles with no server or peers to serve them.
 //! - Calls ([`ChatControl::send_message`], [`ChatControl::mute`] and the
 //!   rest) go to a server this process serves directly, as its host
 //!   certificate, and to any other from the network's member port, a vpn

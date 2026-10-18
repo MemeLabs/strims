@@ -15,11 +15,6 @@ Port the application services that sit on the core crates. The Go versions
   - the autoseed config and rules (10001, 10002): seeding the swarms of
     directory listings that a rule names by network, swarm id and salt,
     and the UI's autoseed frontend. Deleting a network deletes its rules;
-  - swarm caches (11001–11003): a swarm's data and signatures under
-    (swarm id, salt), so a reopened swarm starts from them. A chat room's
-    asset swarm can start from its cache under (server key,
-    `chat:assets`); until then a reopened room downloads its bundles
-    again.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Video
@@ -170,6 +165,8 @@ Egress and players:
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until v3 binds the bin.
 - `add_stream_close` is unused.
+- A Merkle cache import takes the data past its signed munros without
+  verifying it, so a cache with no timestamps imports all of its data.
 
 ### strims-chat defects
 - A whisper whose state write fails stays ENQUEUED outside the delivery
@@ -318,6 +315,9 @@ While networks have Go and Rust nodes:
   swarm, a chat's asset swarm grows up to 32 MiB for each room a node
   reads or serves, and a viewed video swarm or a capture holds 32 MiB. Set
   per-swarm budgets and a global cap before the wasm target ships.
+- **Swarm cache cost.** Importing a chat room's asset cache verifies up
+  to 32 MiB on the node task, and storing one seals up to 32 MiB on the
+  executor. Measure both on wasm.
 - **Simulation coverage and fidelity.**
   - Waking an idle node to answer a query is a poll of its task and can shift
     later passes, so a sim's sampling cadence changes its trace. Make query

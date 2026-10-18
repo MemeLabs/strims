@@ -36,7 +36,7 @@ use strims_base::time::Time;
 use strims_kademlia::ID;
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{Runner, RunnerError, SwarmId, SwarmKey, SwarmOptions, WriterOptions};
-use strims_proto::types::Key;
+use strims_proto::types::{Cache, Key};
 use strims_qos::ClassId;
 use strims_vnic::{
     CandidateError, CloseReason, DialTarget, Fill, HostConfig, InboundFrame, LinkCandidatePool,
@@ -1505,6 +1505,39 @@ impl State {
         let key = self.runner.add_swarm(swarm);
         self.swarms.insert(key);
         Ok(key)
+    }
+
+    /// A swarm this node downloads (and relays), starting from `cache`, and
+    /// whether it took the cache. A refused cache leaves the swarm empty.
+    ///
+    /// The cache goes in before the runner takes the swarm, since the
+    /// runner's scheduler starts from the store's chunks. A failed import
+    /// can leave part of the cache behind (the epoch, some signatures), so
+    /// the swarm it failed on is dropped.
+    pub(crate) fn add_cached_swarm(
+        &mut self,
+        id: SwarmId,
+        options: SwarmOptions,
+        cache: &Cache,
+    ) -> Result<(SwarmKey, bool), NodeError> {
+        let mut swarm = strims_ppspp::Swarm::new(id.clone(), options.clone())?;
+        let imported = match swarm.import_cache(cache) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::debug!(swarm = %id, error = %e, "refused a swarm cache");
+                swarm = strims_ppspp::Swarm::new(id, options)?;
+                false
+            }
+        };
+        let key = self.runner.add_swarm(swarm);
+        self.swarms.insert(key);
+        Ok((key, imported))
+    }
+
+    /// The swarm's stream as a cache; `None` for an unknown swarm, one
+    /// that holds nothing, or one whose window moved past offset 0.
+    pub(crate) fn export_cache(&self, swarm: SwarmKey) -> Option<Cache> {
+        self.runner.swarm(swarm)?.export_cache().ok()
     }
 
     /// Stops the swarm's channels, closes its publishers and readers.

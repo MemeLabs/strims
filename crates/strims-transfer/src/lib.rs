@@ -52,7 +52,10 @@
 //! removes them and opens their writers ([`SwarmWrite`]) and readers
 //! ([`SwarmRead`]). A [`RecordWriter`] appends protobuf messages to a
 //! swarm's stream as `strims-chunkstream` records, and a [`RecordReader`]
-//! reassembles them from wherever its reader joins the stream.
+//! reassembles them from wherever its reader joins the stream. A swarm's
+//! stream exports as a cache ([`SwarmHost::export_cache`]) for the app to
+//! store, and the swarm added again starts from it
+//! ([`SwarmHost::add_cached_swarm`]).
 //!
 //! - A writer's frame size is its swarm's integrity unit
 //!   (`chunk_size * chunks_per_signature` for a Merkle tree, `chunk_size`

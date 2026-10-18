@@ -290,6 +290,7 @@ impl<K: Kv, H: Host, T: Timer> Stream for ClientStream<K, H, T> {
                     if batch.is_empty() {
                         match assets.poll_next_unpin(cx) {
                             Poll::Ready(Some(Read::Item(b))) => {
+                                this.runner.bundle_decoded(this.shared.timer.now());
                                 return Poll::Ready(Some(ClientEvent::Assets(b)));
                             }
                             Poll::Ready(Some(Read::Skipped)) => continue,

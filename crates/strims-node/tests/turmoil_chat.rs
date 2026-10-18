@@ -26,7 +26,11 @@
 //!   certificate by alias at the CA: the sender's whisper is DELIVERED,
 //!   and the receiver's UNREAD in a thread with unread whispers.
 //! - m parts the listing and closes its stream, and m's room swarms go
-//!   after the linger. o mentions m again, and the message has no nick.
+//!   after the linger, leaving m's cache of the asset swarm. o mentions m
+//!   again, and the message has no nick.
+//! - o deletes the chat server, which stops when its stream's linger
+//!   ends. m opens the room again: with no server, its stream has the
+//!   unified bundle from m's cache. o, which only served, cached nothing.
 //!
 //! Every host appends what it sees, stamped with simulated time, to one
 //! trace. The same seed must give the same trace, and another seed a
@@ -955,6 +959,22 @@ async fn owner(w: World) -> turmoil::Result {
         (6, 1, 1),
         "{s:?}"
     );
+    let cache_writes = h.chat.metrics().cache_writes;
+    assert_eq!(cache_writes, 0, "a served room is cached");
+
+    // the server goes
+    w.step("m stopped reading", 120).await;
+    stream.close();
+    let mut tx = h.store.write(h.clock.now()).await.unwrap();
+    assert!(ChatServers::delete(&mut tx, server.id).await.unwrap());
+    tx.commit().await.unwrap();
+    h.log("deleted the chat server");
+    w.wait("o to stop running the chat", 120, || {
+        h.chat.servers().is_empty().then_some(())
+    })
+    .await;
+    h.log("stopped running the chat");
+    w.set("server gone");
     w.step("m done", 120).await;
     w.set("o done");
     Ok(())
@@ -1103,6 +1123,27 @@ async fn member(w: World) -> turmoil::Result {
     })
     .await;
     assert!(h.chat.servers().is_empty());
+    let metrics = h.chat.metrics();
+    h.log(format!("cache writes={}", metrics.cache_writes));
+    assert!(metrics.cache_writes > 0, "{metrics:?}");
+    w.set("m stopped reading");
+
+    // with the server gone, the room's bundle comes from m's cache
+    w.step("server gone", 180).await;
+    let stream = Reader::new(&h, h.chat.open_client(&net, &skey).unwrap());
+    let b = stream.bundle(&w, 0).await;
+    assert!(!b.is_delta, "{b:?}");
+    assert_eq!(
+        (emote_names(&b), modifier_names(&b)),
+        (vec!["PEPE"], vec!["rain"])
+    );
+    let metrics = h.chat.metrics();
+    assert_eq!(
+        (metrics.cache_loads, metrics.cache_refusals),
+        (1, 0),
+        "{metrics:?}"
+    );
+    stream.close();
     w.set("m done");
     w.step("o done", 120).await;
     Ok(())

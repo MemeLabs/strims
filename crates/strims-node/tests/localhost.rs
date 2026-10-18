@@ -12,6 +12,9 @@
 //!   triangle, byte-exact from offset 0;
 //! - every node runs under an upload cap, so QoS (not the socket) is the
 //!   bottleneck, and the seed's upload stays within it.
+//!
+//! Smaller tests cover slow readers, the broker channel, and swarms that
+//! start from a cache of another node's stream.
 
 #![allow(
     clippy::unwrap_used,
@@ -28,7 +31,8 @@ use strims_base::rng::det_rng;
 use strims_crypto::key_from_seed;
 use strims_node::{
     DeliveryMode, ExchangeOutcome, HashTableGetOptions, HostId, NetworkOptions, Node, NodeConfig,
-    NodeEvent, NodeEvents, SwarmId, SwarmOptions, SystemClock, TokioNet, WriterOptions,
+    NodeEvent, NodeEvents, StoreInfo, SwarmId, SwarmKey, SwarmOptions, SystemClock, TokioNet,
+    WriterOptions,
 };
 
 const VPN_PORT: u16 = 10_000;
@@ -601,4 +605,113 @@ async fn a_broker_overflow_closes_only_the_broker_channel() {
     let mut b_rpc = b.node.take_peer_rpc(a_id).await.unwrap();
     a_rpc.client.writer.send(b"call".to_vec()).await.unwrap();
     assert_eq!(read_bytes(&mut b_rpc.server.reader, 4).await, b"call");
+}
+
+/// The stream a cache test's writer publishes: four whole integrity units
+/// under the default Merkle tree of 64 one KiB chunks.
+const CACHED_LEN: usize = 4 * 64 * 1024;
+
+/// Writes [`CACHED_LEN`] bytes into a new swarm on `t`, and returns the
+/// swarm, its id and the bytes.
+async fn cached_stream(t: &TestNode, key_seed: u8) -> (SwarmKey, SwarmId, Vec<u8>) {
+    let (swarm, id, mut writer) = t
+        .node
+        .create_swarm(WriterOptions {
+            swarm_options: swarm_options(),
+            key: key_from_seed(&[key_seed; 32]),
+        })
+        .await
+        .unwrap();
+    let data = stream_bytes(CACHED_LEN);
+    writer.write(&data).await.unwrap();
+    (swarm, id, data)
+}
+
+/// The store of `swarm` on `t`.
+async fn store_info(t: &TestNode, swarm: SwarmKey) -> StoreInfo {
+    let m = t.node.metrics().await.unwrap();
+    m.runner
+        .swarms
+        .iter()
+        .find(|s| s.swarm == swarm)
+        .expect("the swarm")
+        .store
+}
+
+/// A cache exported from a writer's swarm starts a swarm on another node,
+/// which reads the stream from offset 0 with no peers.
+#[tokio::test]
+async fn a_cached_swarm_is_readable_with_no_peers() {
+    let a = TestNode::spawn(25, Kind::Tcp).await;
+    let b = TestNode::spawn(26, Kind::Tcp).await;
+    let (sa, id, data) = cached_stream(&a, 0x71).await;
+    let cache = a
+        .node
+        .export_cache(sa)
+        .await
+        .unwrap()
+        .expect("a cache of the writer's stream");
+    assert!(
+        cache.data == data,
+        "the cache holds the stream from offset 0"
+    );
+
+    let (sb, imported) = b
+        .node
+        .add_cached_swarm(id, swarm_options(), cache.clone())
+        .await
+        .unwrap();
+    assert!(imported);
+    assert!(b.node.peers().await.unwrap().is_empty());
+    assert!(store_info(&b, sb).await.ready);
+    let mut reader = b.node.open_reader(sb).await.unwrap();
+    let mut out = vec![0u8; CACHED_LEN];
+    tokio::time::timeout(STEP, reader.read_exact(&mut out))
+        .await
+        .expect("the cached stream in time")
+        .unwrap();
+    assert!(out == data, "stream bytes differ");
+    // The swarm gives the same cache back.
+    assert_eq!(b.node.export_cache(sb).await.unwrap(), Some(cache));
+}
+
+/// A cache whose data doesn't verify is refused after its epoch and first
+/// unit went in, and the swarm it was given to starts empty: it has
+/// nothing to read or export, and downloads a peer's stream from offset 0.
+/// The cache comes from a later stream of the same key than the peer's, so
+/// a swarm that kept its epoch would refuse the peer's as out of date.
+#[tokio::test]
+async fn a_corrupt_cache_is_refused_and_leaves_a_clean_swarm() {
+    let mut a = TestNode::spawn(27, Kind::Tcp).await;
+    let mut b = TestNode::spawn(28, Kind::Tcp).await;
+    let (sa, id, data) = cached_stream(&a, 0x72).await;
+    tokio::time::sleep(StdDuration::from_millis(5)).await;
+    let (later, _, _) = cached_stream(&a, 0x72).await;
+    let mut cache = a.node.export_cache(later).await.unwrap().unwrap();
+    a.node.remove_swarm(later).await.unwrap();
+    cache.data[64 * 1024 + 7] ^= 1;
+
+    let (sb, imported) = b
+        .node
+        .add_cached_swarm(id, swarm_options(), cache)
+        .await
+        .unwrap();
+    assert!(!imported);
+    assert!(!store_info(&b, sb).await.ready);
+    assert_eq!(b.node.export_cache(sb).await.unwrap(), None);
+
+    let (a_id, b_id) = (a.node.host_id(), b.node.host_id());
+    assert_eq!(b.node.dial(&a.uri(Kind::Tcp)).await.unwrap(), a_id);
+    let added = |peer: HostId| move |e: &NodeEvent| matches!(e, NodeEvent::PeerAdded(p) if p.host_id == peer);
+    a.wait("a: peer b", added(b_id)).await;
+    b.wait("b: peer a", added(a_id)).await;
+    a.node.run_swarm(b_id, sa, 1, 1).await.unwrap();
+    b.node.run_swarm(a_id, sb, 1, 1).await.unwrap();
+    let mut reader = b.node.open_reader(sb).await.unwrap();
+    let mut out = vec![0u8; CACHED_LEN];
+    tokio::time::timeout(STEP, reader.read_exact(&mut out))
+        .await
+        .expect("the stream from a in time")
+        .unwrap();
+    assert!(out == data, "stream bytes differ");
 }
