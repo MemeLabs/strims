@@ -2282,6 +2282,7 @@ dependencies = [
  "strims-directory",
  "strims-kv",
  "strims-network",
+ "strims-ppspp",
  "strims-proto",
  "strims-rpc",
  "strims-testworld",

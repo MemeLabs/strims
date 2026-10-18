@@ -10,17 +10,57 @@
 //! - `strims.video.v1.HLSEgress`: whether the driver serves HLS and the
 //!   device's HLS config. `OpenStream` and `CloseStream` answer "not
 //!   implemented".
+//! - `strims.video.v1.Egress`: a stream of a swarm's records
+//!   ([`VideoControl::open_stream`]);
+//! - `strims.video.v1.Capture`: the connection's captures
+//!   ([`CaptureFrontend`]).
 //!
 //! A refused call answers with its [`VideoError`]'s message
 //! ([`VideoError::to_rpc`]). A `SetConfig` without a config stores the
 //! default one, which it checks like any other.
+//!
+//! # Egress
+//!
+//! `OpenStream` answers an error when the stream doesn't open: its URI
+//! or network keys are refused, the node has its most swarms or streams,
+//! or the swarm can't be added. An open stream answers `Open` with its
+//! transfer id, then `Data` messages of at most
+//! [`EgressSettings::max_data_bytes`](crate::EgressSettings::max_data_bytes)
+//! bytes of the records:
+//!
+//! - the message that completes a record has `segment_end`, and its
+//!   record's bytes are those of the messages since the last one with
+//!   `segment_end`, or with `discontinuity`;
+//! - after a discontinuity, the first message has `discontinuity`, and its
+//!   bytes begin the next whole record: the bytes of the record in
+//!   progress were dropped.
+//!
+//! A message waits until it is full or completes a record. A stream that
+//! fails sends `Error` with the failure's message, and ends. The call's
+//! end, or its connection's, closes the stream.
+//!
+//! # Capture
+//!
+//! `Open` opens a capture ([`VideoControl::open_capture`]) that belongs
+//! to the connection: `Update`, `Append` and `Close` take only the
+//! connection's own captures, answering "capture not found" for any other
+//! id, and the connection's end closes them. `Append` answers once its
+//! bytes are written.
 
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use futures_util::StreamExt;
+use futures_util::stream::unfold;
 use strims_directory::Host;
 use strims_kv::Kv;
-use strims_proto::service::{Context, Error as RpcError};
+use strims_proto::service::{Context, Error as RpcError, ServerStream};
+use strims_proto::video::v1::egress_open_stream_response::{self, Body};
 use strims_proto::video::v1::{
+    CaptureAppendRequest, CaptureAppendResponse, CaptureCloseRequest, CaptureCloseResponse,
+    CaptureOpenRequest, CaptureOpenResponse, CaptureService, CaptureUpdateRequest,
+    CaptureUpdateResponse, EgressOpenStreamRequest, EgressOpenStreamResponse, EgressService,
     HlsEgressGetConfigRequest, HlsEgressGetConfigResponse, HlsEgressIsSupportedRequest,
     HlsEgressIsSupportedResponse, HlsEgressService, HlsEgressSetConfigRequest,
     HlsEgressSetConfigResponse, VideoChannelCreateRequest, VideoChannelCreateResponse,
@@ -31,11 +71,14 @@ use strims_proto::video::v1::{
     VideoIngressGetConfigRequest, VideoIngressGetConfigResponse, VideoIngressIsSupportedRequest,
     VideoIngressIsSupportedResponse, VideoIngressListStreamsRequest,
     VideoIngressListStreamsResponse, VideoIngressService, VideoIngressSetConfigRequest,
-    VideoIngressSetConfigResponse, register_hls_egress_service,
-    register_video_channel_frontend_service, register_video_ingress_service,
+    VideoIngressSetConfigResponse, register_capture_service, register_egress_service,
+    register_hls_egress_service, register_video_channel_frontend_service,
+    register_video_ingress_service,
 };
 use strims_rpc::{Router, Timer};
+use strims_transfer::TransferId;
 
+use crate::egress::{EgressPiece, EgressStream};
 use crate::{VideoControl, VideoError, VideoHost};
 
 fn rpc(e: VideoError) -> RpcError {
@@ -54,18 +97,22 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoFrontend<K, H, V, T> {
         VideoFrontend { control }
     }
 
-    /// Serves its services on `router`.
+    /// Serves its services on `router`, a connection's: the captures
+    /// opened through it close with it.
     pub fn bind(self, router: &Router) {
         let mut router = router.clone();
+        let captures = Rc::new(CaptureFrontend::new(self.control.clone()));
         let frontend = Rc::new(self);
         register_video_channel_frontend_service(&mut router, frontend.clone());
         register_video_ingress_service(&mut router, frontend.clone());
-        register_hls_egress_service(&mut router, frontend);
+        register_hls_egress_service(&mut router, frontend.clone());
+        register_egress_service(&mut router, frontend);
+        register_capture_service(&mut router, captures);
     }
 }
 
-/// Serves the video frontend of `control` on `router`; see
-/// [`VideoFrontend`].
+/// Serves the video frontend of `control` on `router`, a connection's;
+/// see [`VideoFrontend`].
 pub fn bind_frontend<K: Kv, H: Host, V: VideoHost, T: Timer>(
     router: &Router,
     control: &VideoControl<K, H, V, T>,
@@ -234,5 +281,190 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> HlsEgressService for VideoFrontend<
         Ok(HlsEgressSetConfigResponse {
             config: Some(config),
         })
+    }
+}
+
+// --- egress -------------------------------------------------------------------
+
+/// An `OpenStream` call's stream, and the message it fills.
+struct Feed<K: Kv, H: Host, V: VideoHost, T: Timer> {
+    stream: EgressStream<K, H, V, T>,
+    /// The next `Data` message's bytes. Bound: `max`.
+    data: Vec<u8>,
+    max: usize,
+    /// The next `Data` message has `discontinuity`.
+    discontinuity: bool,
+    opened: bool,
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> Feed<K, H, V, T> {
+    /// The next message, and whether the stream goes on.
+    async fn next(&mut self) -> (EgressOpenStreamResponse, bool) {
+        if !self.opened {
+            self.opened = true;
+            let open = egress_open_stream_response::Open {
+                transfer_id: self.stream.transfer_id().as_bytes().to_vec(),
+            };
+            return (response(Body::Open(open)), true);
+        }
+        loop {
+            let room = self.max.saturating_sub(self.data.len());
+            match self.stream.next(room).await {
+                Ok(EgressPiece::Data(d)) => {
+                    self.data.extend_from_slice(d);
+                    if self.data.len() >= self.max {
+                        return (self.data_message(false), true);
+                    }
+                }
+                Ok(EgressPiece::RecordEnd) => return (self.data_message(true), true),
+                Ok(EgressPiece::Discontinuity) => {
+                    self.data.clear();
+                    self.discontinuity = true;
+                }
+                Err(e) => {
+                    let error = egress_open_stream_response::Error {
+                        message: e.to_string(),
+                    };
+                    return (response(Body::Error(error)), false);
+                }
+            }
+        }
+    }
+
+    fn data_message(&mut self, segment_end: bool) -> EgressOpenStreamResponse {
+        let data = std::mem::replace(&mut self.data, Vec::with_capacity(self.max));
+        response(Body::Data(egress_open_stream_response::Data {
+            data,
+            segment_end,
+            discontinuity: std::mem::take(&mut self.discontinuity),
+        }))
+    }
+}
+
+fn response(body: Body) -> EgressOpenStreamResponse {
+    EgressOpenStreamResponse { body: Some(body) }
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressService for VideoFrontend<K, H, V, T> {
+    async fn open_stream(
+        &self,
+        _: &Context,
+        req: EgressOpenStreamRequest,
+    ) -> Result<ServerStream<EgressOpenStreamResponse>, RpcError> {
+        let stream = self
+            .control
+            .open_stream(&req.swarm_uri, &req.network_keys)
+            .await
+            .map_err(rpc)?;
+        let max = self.control.shared.config.egress.max_data_bytes.max(1);
+        let feed = Feed {
+            stream,
+            data: Vec::with_capacity(max),
+            max,
+            discontinuity: false,
+            opened: false,
+        };
+        Ok(unfold(Some(feed), |feed| async move {
+            let mut feed = feed?;
+            let (message, more) = feed.next().await;
+            Some((Ok(message), more.then_some(feed)))
+        })
+        .boxed_local())
+    }
+}
+
+// --- capture ------------------------------------------------------------------
+
+/// Serves `strims.video.v1.Capture` for one frontend connection: its
+/// `Update`, `Append` and `Close` take only the captures its `Open`
+/// opened, and dropping it, as its connection closes, closes them.
+pub struct CaptureFrontend<K: Kv, H: Host, V: VideoHost, T: Timer> {
+    control: VideoControl<K, H, V, T>,
+    /// Bound: the node's captures
+    /// ([`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures)).
+    owned: RefCell<BTreeSet<TransferId>>,
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> CaptureFrontend<K, H, V, T> {
+    pub fn new(control: VideoControl<K, H, V, T>) -> Self {
+        CaptureFrontend {
+            control,
+            owned: RefCell::new(BTreeSet::new()),
+        }
+    }
+
+    /// Capture `id` if this connection opened it.
+    fn owned(&self, id: &[u8]) -> Result<TransferId, RpcError> {
+        TransferId::from_bytes(id)
+            .filter(|id| self.owned.borrow().contains(id))
+            .ok_or_else(|| VideoError::CaptureNotFound.to_rpc())
+    }
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for CaptureFrontend<K, H, V, T> {
+    fn drop(&mut self) {
+        for id in std::mem::take(self.owned.get_mut()) {
+            self.control.shared.queue_close_capture(&id);
+        }
+    }
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> CaptureService for CaptureFrontend<K, H, V, T> {
+    async fn open(
+        &self,
+        _: &Context,
+        req: CaptureOpenRequest,
+    ) -> Result<CaptureOpenResponse, RpcError> {
+        let id = self
+            .control
+            .open_capture(
+                &req.mime_type,
+                req.network_keys,
+                req.directory_snippet.unwrap_or_default(),
+            )
+            .await
+            .map_err(rpc)?;
+        let open = self.control.shared.captures.borrow();
+        let mut owned = self.owned.borrow_mut();
+        owned.retain(|id| open.contains_key(id));
+        owned.insert(id);
+        Ok(CaptureOpenResponse {
+            id: id.as_bytes().to_vec(),
+        })
+    }
+
+    async fn update(
+        &self,
+        _: &Context,
+        req: CaptureUpdateRequest,
+    ) -> Result<CaptureUpdateResponse, RpcError> {
+        let id = self.owned(&req.id)?;
+        let snippet = req.directory_snippet.unwrap_or_default();
+        self.control.update_capture(&id, snippet).map_err(rpc)?;
+        Ok(CaptureUpdateResponse {})
+    }
+
+    async fn append(
+        &self,
+        _: &Context,
+        req: CaptureAppendRequest,
+    ) -> Result<CaptureAppendResponse, RpcError> {
+        let id = self.owned(&req.id)?;
+        self.control
+            .append_capture(&id, req.data, req.segment_end)
+            .await
+            .map_err(rpc)?;
+        Ok(CaptureAppendResponse {})
+    }
+
+    async fn close(
+        &self,
+        _: &Context,
+        req: CaptureCloseRequest,
+    ) -> Result<CaptureCloseResponse, RpcError> {
+        let id = self.owned(&req.id)?;
+        self.owned.borrow_mut().remove(&id);
+        self.control.close_capture(&id).await.map_err(rpc)?;
+        Ok(CaptureCloseResponse {})
     }
 }

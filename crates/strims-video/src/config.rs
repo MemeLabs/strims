@@ -5,6 +5,7 @@
 //! checks on the device's stored ingress and HLS configs.
 
 use strims_base::time::Duration;
+use strims_directory::KeeperConfig;
 use strims_proto::video::v1::{HlsEgressConfig, VideoIngressConfig};
 
 /// The longest ingress listen address, ingress public address or HLS
@@ -143,11 +144,13 @@ impl Default for CaptureSettings {
 /// The swarms viewers read, for the UI's streams and HLS together.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EgressSettings {
-    /// Swarms read at once.
+    /// Swarms added for streams at once. A stream of a swarm the node
+    /// already runs adds none.
     pub max_swarms: usize,
-    /// Each swarm's live window, in bytes.
+    /// Each added swarm's live window, in bytes: the largest power of two
+    /// of chunks that fits.
     pub window_bytes: usize,
-    /// Streams open at once.
+    /// Streams open at once, of any swarm.
     pub max_streams: usize,
     /// The most bytes one Data message carries.
     pub max_data_bytes: usize,
@@ -244,6 +247,8 @@ pub struct ListingSettings {
     pub min_republish: Duration,
     /// How often a listing is checked to be in its directory.
     pub listing_check: Duration,
+    /// The longest a stream's end waits for its listing's unpublish.
+    pub unpublish_timeout: Duration,
 }
 
 impl Default for ListingSettings {
@@ -251,6 +256,18 @@ impl Default for ListingSettings {
         ListingSettings {
             min_republish: Duration::from_secs(5),
             listing_check: Duration::from_secs(60),
+            unpublish_timeout: Duration::from_secs(5),
+        }
+    }
+}
+
+impl ListingSettings {
+    /// The listing keepers' config.
+    pub fn keeper_config(&self) -> KeeperConfig {
+        KeeperConfig {
+            min_republish: self.min_republish,
+            listing_check: self.listing_check,
+            unpublish_timeout: self.unpublish_timeout,
         }
     }
 }
@@ -262,6 +279,16 @@ pub struct Metrics {
     pub store_lags: u64,
     /// Store reads that failed while following the records.
     pub store_errors: u64,
+    /// Node calls that failed: creating, adding or removing a swarm, or
+    /// opening its reader.
+    pub host_errors: u64,
+    /// Capture records dropped because they ended in a frame that held
+    /// the end of the record before them.
+    pub dropped_records: u64,
+    /// Capture writes into a swarm that failed.
+    pub write_errors: u64,
+    /// Stream readers opened again on a swarm that replaced theirs.
+    pub reopens: u64,
 }
 
 /// Why a config was refused.

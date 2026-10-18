@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The video control: the profile's channels, the device's ingress and
-//! HLS configs, and the records' events.
+//! HLS configs, the records' events, and the node's video swarms.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::future::poll_fn;
 use std::rc::Rc;
 use std::task::{Poll, Waker};
@@ -15,49 +16,98 @@ use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, StreamExt};
 use strims_base::rng::DetRng;
 use strims_dao::events::Record;
+use strims_dao::schema::network::network_key;
 use strims_dao::schema::video::{HlsConfig, IngressConfig, VideoChannels};
 use strims_dao::{Broadcast, Recv, ReplicatedStore, Singleton, StoreEvent, Subscription, Table};
-use strims_directory::{DirectoryControl, Host};
+use strims_directory::{DirectoryControl, DirectoryEvent, Host, ListingKeeper};
 use strims_kv::Kv;
-use strims_network::NetworkControl;
+use strims_network::{NetworkControl, NetworkEvent};
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::Key;
 use strims_proto::video::v1::{
     HlsEgressConfig, VideoChannel, VideoIngressConfig, VideoIngressStream,
 };
 use strims_rpc::Timer;
-use strims_transfer::TransferControl;
+use strims_transfer::{TransferControl, TransferId};
 
+use crate::capture::Capture;
 use crate::config::{Config, Metrics, check_hls_config, check_ingress_config};
+use crate::registry::{LocalSwarm, Registry, VideoSwarm};
 use crate::{VideoError, VideoEvent, VideoHost};
 
+/// A swarm of the node.
+pub(crate) type Swarm<H> = <H as strims_transfer::Host>::Swarm;
+
 pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
-    #[expect(dead_code, reason = "the ingress and egress run on the node")]
     pub(crate) host: H,
     pub(crate) video: V,
     pub(crate) store: ReplicatedStore<K>,
     pub(crate) profile: Profile,
-    #[expect(dead_code, reason = "streams are published on joined networks")]
     pub(crate) network: NetworkControl<K, H, T>,
-    #[expect(dead_code, reason = "streams are transfers of their swarms")]
     pub(crate) transfers: TransferControl<H, T>,
-    #[expect(
-        dead_code,
-        reason = "streams are listed in their networks' directories"
-    )]
     pub(crate) directory: DirectoryControl<K, H, T>,
     pub(crate) timer: T,
-    #[expect(dead_code, reason = "streams draw their keys from it")]
     pub(crate) rng: RefCell<DetRng>,
     pub(crate) config: Config,
     records: RefCell<Records>,
     events: Broadcast<VideoEvent>,
-    metrics: RefCell<Metrics>,
+    pub(crate) metrics: RefCell<Metrics>,
+    /// The node's video swarms. Reached through
+    /// [`with_swarms`](Self::with_swarms), which wakes their waiters.
+    swarms: RefCell<Registry<Swarm<H>>>,
+    /// The captures, by transfer id. Bound:
+    /// [`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures).
+    pub(crate) captures: RefCell<BTreeMap<TransferId, Capture<H>>>,
     /// Tasks for `run` to start. Bound: a reload per lag of the store's
-    /// events, each ending after one read of the records.
+    /// events, each ending after one read of the records; per capture, its
+    /// creation, its writer and a listing keeper per network; an add per
+    /// egress slot; a removal per removed swarm, each one node call.
     spawned: RefCell<Vec<LocalBoxFuture<'static, ()>>>,
     /// Wakes `run`.
     waker: RefCell<Option<Waker>>,
+}
+
+/// A value one task sets and another takes.
+pub(crate) struct Slot<T> {
+    value: RefCell<Option<T>>,
+    waker: RefCell<Option<Waker>>,
+}
+
+impl<T> Slot<T> {
+    pub(crate) fn new() -> Rc<Slot<T>> {
+        Rc::new(Slot {
+            value: RefCell::new(None),
+            waker: RefCell::new(None),
+        })
+    }
+
+    /// Sets the value and wakes the taker.
+    pub(crate) fn set(&self, v: T) {
+        let prev = self.value.replace(Some(v));
+        drop(prev);
+        let w = self.waker.take();
+        if let Some(w) = w {
+            w.wake();
+        }
+    }
+
+    /// The value, once set.
+    pub(crate) async fn take(&self) -> T {
+        poll_fn(|cx| {
+            if let Some(v) = self.value.take() {
+                return Poll::Ready(v);
+            }
+            let prev = self.waker.replace(Some(cx.waker().clone()));
+            drop(prev);
+            Poll::Pending
+        })
+        .await
+    }
+
+    /// The value, if set and not taken.
+    pub(crate) fn take_now(&self) -> Option<T> {
+        self.value.take()
+    }
 }
 
 /// The channels and configs as the control last took them, from the
@@ -158,7 +208,7 @@ impl Records {
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     /// Has `run` start a task.
-    fn spawn(&self, task: LocalBoxFuture<'static, ()>) {
+    pub(crate) fn spawn(&self, task: LocalBoxFuture<'static, ()>) {
         self.spawned.borrow_mut().push(task);
         let w = self.waker.borrow_mut().take();
         if let Some(w) = w {
@@ -169,6 +219,103 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     /// The profile's key, which signs its channels' stream keys.
     pub(crate) fn profile_key(&self) -> Result<&Key, VideoError> {
         self.profile.key.as_ref().ok_or(VideoError::NoProfileKey)
+    }
+
+    // --- swarms ---------------------------------------------------------------
+
+    /// Runs `f` on the swarm registry, then wakes the tasks it woke.
+    pub(crate) fn with_swarms<R>(&self, f: impl FnOnce(&mut Registry<Swarm<H>>) -> R) -> R {
+        let (out, woken) = {
+            let mut r = self.swarms.borrow_mut();
+            let out = f(&mut r);
+            (out, r.take_woken())
+        };
+        for w in woken {
+            w.wake();
+        }
+        out
+    }
+
+    /// Counts a failed node call, and the error it answers with.
+    pub(crate) fn host_failed(&self, what: &str, e: &impl fmt::Display) -> VideoError {
+        self.metrics.borrow_mut().host_errors += 1;
+        tracing::warn!(error = %e, "{what} failed");
+        VideoError::Host(e.to_string())
+    }
+
+    /// Removes `swarm` from the node. Remove its transfer first.
+    pub(crate) async fn remove_host_swarm(&self, swarm: Swarm<H>) {
+        if let Err(e) = self.host.remove_swarm(swarm).await {
+            self.host_failed("removing a video swarm", &e);
+        }
+    }
+
+    /// Takes down a slot gone from the registry: its transfer now, and
+    /// its swarm in a task.
+    pub(crate) fn drop_swarm(self: &Rc<Self>, t: TransferId, e: LocalSwarm<Swarm<H>>) {
+        if let Some(swarm) = e.swarm {
+            self.transfers.remove(t);
+            let s = self.clone();
+            self.spawn(async move { s.remove_host_swarm(swarm).await }.boxed_local());
+        }
+    }
+
+    /// Publishes the transfer of `t` on each of its networks the node has
+    /// joined and it isn't published on.
+    pub(crate) fn publish_joined(&self, t: &TransferId) {
+        let networks: Vec<Vec<u8>> = self.with_swarms(|r| {
+            r.get(t)
+                .filter(|e| e.swarm.is_some())
+                .map(|e| e.networks.iter().cloned().collect())
+                .unwrap_or_default()
+        });
+        for key in networks {
+            if let Some(net) = self.network.network(&key).and_then(|i| i.net)
+                && !self.transfers.is_published(*t, net)
+            {
+                self.transfers.publish(*t, net);
+            }
+        }
+    }
+
+    /// [`publish_joined`](Self::publish_joined) for every video swarm.
+    fn publish_all(&self) {
+        for t in self.with_swarms(|r| r.ids()) {
+            self.publish_joined(&t);
+        }
+    }
+
+    fn handle_network_event(&self, e: &NetworkEvent) {
+        match e {
+            NetworkEvent::Joined { network } | NetworkEvent::Updated { network } => {
+                let key = network_key(network);
+                let ids: Vec<TransferId> = self.with_swarms(|r| {
+                    r.ids()
+                        .into_iter()
+                        .filter(|t| r.get(t).is_some_and(|e| e.networks.contains(&key)))
+                        .collect()
+                });
+                for t in ids {
+                    self.publish_joined(&t);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The listing keepers of the captures.
+    fn keepers(&self) -> Vec<ListingKeeper> {
+        self.captures
+            .borrow()
+            .values()
+            .flat_map(|c| c.keepers().cloned())
+            .collect()
+    }
+
+    fn handle_directory_event(&self, e: &DirectoryEvent) {
+        for k in self.keepers() {
+            k.handle_event(e);
+        }
     }
 
     fn handle_store_event(&self, e: &StoreEvent) {
@@ -255,8 +402,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     }
 }
 
-/// Runs the profile's video: its channels and the device's ingress and
-/// HLS configs; see the [crate docs](crate).
+/// Runs the profile's video: its channels, the device's ingress and HLS
+/// configs, its captures and streams; see the [crate docs](crate).
 ///
 /// Clones share the control.
 pub struct VideoControl<K: Kv, H: Host, V: VideoHost, T: Timer> {
@@ -275,6 +422,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Clone for VideoControl<K, H, V, T> 
 enum Wake {
     Task,
     Store(Option<Recv<StoreEvent>>),
+    Network(Option<Recv<NetworkEvent>>),
+    Directory(Option<Recv<DirectoryEvent>>),
     Work,
 }
 
@@ -312,6 +461,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 records: RefCell::default(),
                 events: Broadcast::new(),
                 metrics: RefCell::default(),
+                swarms: RefCell::default(),
+                captures: RefCell::default(),
                 spawned: RefCell::new(Vec::new()),
                 waker: RefCell::new(None),
             }),
@@ -326,6 +477,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// The control's counters.
     pub fn metrics(&self) -> Metrics {
         self.shared.metrics.borrow().clone()
+    }
+
+    /// The node's video swarms, in transfer id order; see the
+    /// [crate docs](crate#video-swarms).
+    pub fn video_swarms(&self) -> Vec<VideoSwarm> {
+        self.shared.with_swarms(|r| r.list())
     }
 
     // --- ingress ------------------------------------------------------------
@@ -387,12 +544,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     // --- running ------------------------------------------------------------
 
     /// Runs the video: follows the store's channels and configs and
-    /// reports their changes, and carries the control's tasks. Never
-    /// resolves; drop it to stop. Run it once per control.
+    /// reports their changes, publishes the video swarms on networks as
+    /// the node joins them, feeds the listing keepers the directory's
+    /// events, and carries the control's tasks: swarm adds and removals,
+    /// capture writers and listing keepers. Never resolves; drop it to
+    /// stop. Run it once per control.
     pub async fn run(&self) {
         let s = &self.shared;
         let mut store_events = Some(s.store.events().subscribe());
+        let mut network_events = Some(s.network.subscribe());
+        let mut directory_events = Some(s.directory.subscribe());
         s.start_reload(true);
+        s.publish_all();
         let mut tasks: FuturesUnordered<LocalBoxFuture<'static, ()>> = FuturesUnordered::new();
         loop {
             let spawned: Vec<_> = s.spawned.borrow_mut().drain(..).collect();
@@ -407,6 +570,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 {
                     return Poll::Ready(Wake::Store(r));
                 }
+                if let Some(ev) = &mut network_events
+                    && let Poll::Ready(r) = ev.poll_next_unpin(cx)
+                {
+                    return Poll::Ready(Wake::Network(r));
+                }
+                if let Some(ev) = &mut directory_events
+                    && let Poll::Ready(r) = ev.poll_next_unpin(cx)
+                {
+                    return Poll::Ready(Wake::Directory(r));
+                }
                 if !s.spawned.borrow().is_empty() {
                     return Poll::Ready(Wake::Work);
                 }
@@ -420,6 +593,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     s.start_reload(false);
                 }
                 Wake::Store(None) => store_events = None,
+                Wake::Network(Some(Recv::Event(e))) => s.handle_network_event(&e),
+                Wake::Network(Some(Recv::Lagged)) => s.publish_all(),
+                Wake::Network(None) => network_events = None,
+                Wake::Directory(Some(Recv::Event(e))) => s.handle_directory_event(&e),
+                Wake::Directory(Some(Recv::Lagged)) => {
+                    for k in s.keepers() {
+                        k.check();
+                    }
+                }
+                Wake::Directory(None) => directory_events = None,
                 Wake::Task | Wake::Work => {}
             }
         }

@@ -36,7 +36,7 @@ pub struct ChannelUrl {
 }
 
 /// Checks, in `tx`, that `key` names one of the profile's networks.
-async fn check_network<R: Read>(tx: &mut R, key: &[u8]) -> Result<(), VideoError> {
+pub(crate) async fn check_network<R: Read>(tx: &mut R, key: &[u8]) -> Result<(), VideoError> {
     if key.is_empty() || key.len() > MAX_NETWORK_KEY_BYTES {
         return Err(VideoError::NetworkNotFound);
     }

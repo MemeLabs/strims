@@ -39,6 +39,65 @@ pub enum VideoError {
     /// The store failed.
     #[error(transparent)]
     Store(#[from] strims_dao::Error),
+    /// A capture's MIME type is empty, over
+    /// [`CaptureSettings::max_mime_bytes`](crate::CaptureSettings::max_mime_bytes),
+    /// or not printable ASCII.
+    #[error("invalid mime type")]
+    MimeType,
+    /// A capture names no networks, or a capture or stream more than its
+    /// bound.
+    #[error("wrong number of network keys")]
+    NetworkKeyCount,
+    /// A stream's network key is over
+    /// [`EgressSettings::max_network_key_bytes`](crate::EgressSettings::max_network_key_bytes).
+    #[error("network key too long")]
+    NetworkKeyTooLong,
+    /// The node runs [`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures)
+    /// captures.
+    #[error("too many captures")]
+    TooManyCaptures,
+    /// No capture of this node, or of this frontend connection, has the
+    /// id.
+    #[error("capture not found")]
+    CaptureNotFound,
+    /// A capture record ended in a frame that holds the end of the record
+    /// before it, so it was dropped. The capture goes on.
+    #[error("record dropped: it ended too soon after the one before it")]
+    RecordDropped,
+    /// The swarm URI is over
+    /// [`EgressSettings::max_uri_bytes`](crate::EgressSettings::max_uri_bytes).
+    #[error("swarm uri too long")]
+    UriTooLong,
+    /// The swarm URI doesn't parse.
+    #[error("invalid swarm uri: {0}")]
+    Uri(#[from] strims_ppspp::UriError),
+    /// A swarm option of the URI is outside the egress bounds
+    /// ([`EgressSettings`](crate::EgressSettings)) or unsupported.
+    #[error("unsupported swarm option: {0}")]
+    SwarmOption(&'static str),
+    /// The node reads [`EgressSettings::max_swarms`](crate::EgressSettings::max_swarms)
+    /// swarms for streams.
+    #[error("too many swarms")]
+    TooManySwarms,
+    /// The node has [`EgressSettings::max_streams`](crate::EgressSettings::max_streams)
+    /// streams open.
+    #[error("too many streams")]
+    TooManyStreams,
+    /// The stream's swarm was removed, or couldn't be added.
+    #[error("stream closed")]
+    StreamClosed,
+    /// A swarm read failed.
+    #[error("reading the stream failed: {0}")]
+    StreamRead(String),
+    /// A swarm write failed; the capture writes no more.
+    #[error("writing the stream failed: {0}")]
+    StreamWrite(String),
+    /// A node call failed.
+    #[error("node error: {0}")]
+    Host(String),
+    /// Signing a snippet failed.
+    #[error("signing failed: {0}")]
+    Sign(#[from] strims_crypto::Error),
 }
 
 impl VideoError {

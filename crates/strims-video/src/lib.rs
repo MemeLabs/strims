@@ -56,14 +56,46 @@
 //! [`bind_frontend`] serves the UI's video calls on the control
 //! ([`frontend`]). [`Config`] holds every bound the control and its
 //! driver apply, each documented where it is declared.
+//!
+//! # Video swarms
+//!
+//! Every video swarm on the node is the control's: a capture creates one
+//! to write, and a stream adds one to read. Each is the transfer of its
+//! swarm id under the empty salt, so a transfer id names one video swarm,
+//! and a stream of a swarm the node already runs reads it where it is.
+//! A video swarm carries opaque records in the packed chunkstream layout
+//! ([`strims_chunkstream::packed`]), with at most one record end per
+//! frame.
+//!
+//! - **Captures** ([`capture`]): the UI's recording. A capture has a
+//!   fresh key, a swarm of [`capture_options`], its snippet signed with
+//!   its key, and a listing of its MIME type and swarm URI on each of its
+//!   networks. Its records are appended in order; one that would end in
+//!   the frame of the record before it is dropped, and the capture goes
+//!   on. A capture closes when asked or with the frontend connection that
+//!   opened it, taking its listings, snippet, transfer and swarm with it.
+//!   Bounds: [`CaptureSettings`].
+//! - **Streams** ([`egress`]): a viewer's read of the swarm a magnet URI
+//!   names, as [`EgressPiece`]s: data, record ends, and a discontinuity
+//!   before the next whole record once the stream skipped. A swarm added
+//!   for streams gets a live window of
+//!   [`EgressSettings::window_bytes`], and goes with the last of them; a
+//!   capture's stays with the capture. A stream whose swarm closes reads
+//!   the swarm that replaced it under its transfer id, if any. Bounds:
+//!   [`EgressSettings`].
+//!
+//! Each video swarm's transfer is published on its networks the node has
+//! joined, and on the others as it joins them.
 
 pub mod aac;
 pub mod amf0;
 pub mod avc;
 mod bits;
+pub mod capture;
 pub mod channels;
 mod config;
 mod control;
+pub mod egress;
 mod error;
 mod events;
 pub mod flv;
@@ -73,6 +105,7 @@ pub mod hls;
 pub mod host;
 pub mod media;
 pub mod record;
+mod registry;
 pub mod rtmp;
 pub mod segment;
 #[cfg(any(test, feature = "test-support"))]
@@ -81,6 +114,7 @@ pub mod synth;
 #[cfg_attr(not(test), allow(dead_code))]
 mod test_util;
 
+pub use capture::{CaptureInfo, capture_options};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
     CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings, IngressSettings,
@@ -88,10 +122,12 @@ pub use config::{
     RtmpSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
+pub use egress::{EgressPiece, EgressStream, PackedReader, ReaderMetrics};
 pub use error::VideoError;
 pub use events::VideoEvent;
-pub use frontend::{VideoFrontend, bind_frontend};
+pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};
 pub use host::{Accepted, NoVideoHost, VideoHost};
+pub use registry::{SwarmKind, VideoSwarm};
 
 pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};
 pub use media::{

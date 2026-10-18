@@ -12,10 +12,12 @@ test-support = []
 [dependencies]
 strims-base.workspace = true
 strims-chunkstream.workspace = true
+strims-crypto.workspace = true
 strims-dao.workspace = true
 strims-directory.workspace = true
 strims-kv.workspace = true
 strims-network.workspace = true
+strims-ppspp.workspace = true
 strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true
 strims-transfer.workspace = true
@@ -31,7 +33,6 @@ rand_core.workspace = true
 [dev-dependencies]
 hex.workspace = true
 proptest.workspace = true
-strims-crypto.workspace = true
 # integration tests only: unit tests build this crate a second time, and the
 # fake world's types come from the first build
 strims-testworld.workspace = true
