@@ -35,20 +35,12 @@
 //!
 //! # Listing keeper
 //!
-//! While the server is served, the keeper publishes its listing
-//! `Chat{key, name: room name}`, at most once per
-//! [`Config::min_republish`](crate::Config::min_republish): at the start,
-//! when the control asks (the directory restarted, unpublished the
-//! listing, or lagged without it), after a failed publish, and when a
-//! check every [`Config::listing_check`](crate::Config::listing_check)
-//! finds the view without it. Publishing is idempotent and answers the
-//! listing's id; a new id replaces the server's nicks with the listing's
-//! users.
-//!
-//! The directory names a chat listing by its key alone and keeps its
-//! content while it lists it, so when the room's name changes the keeper
-//! unpublishes the listing, waits until the view drops it (or a check
-//! interval passes), and publishes the renamed one.
+//! While the server is served, a [`ListingKeeper`] keeps its listing
+//! `Chat{key, name: room name}` published on the record's network, paced
+//! by [`Config::listing`](crate::Config::listing). The control hands it
+//! the directory's events, and a changed record hands it the listing with
+//! the room's new name. Each new listing id replaces the server's nicks
+//! with the listing's users.
 
 use std::future::{Future, poll_fn};
 use std::pin::pin;
@@ -66,13 +58,12 @@ use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags,
 };
 use strims_dao::{ReplicatedStore, Table, ref_key};
-use strims_directory::{Host, Net};
+use strims_directory::{Host, ListingKeeper, Net};
 use strims_kv::Kv;
 use strims_ppspp::{SwarmId, WriterOptions};
 use strims_proto::chat::v1::{Profile, register_chat_service};
+use strims_proto::network::v1::directory::Listing;
 use strims_proto::network::v1::directory::listing::{Chat, Content};
-use strims_proto::network::v1::directory::listing_query::Query;
-use strims_proto::network::v1::directory::{Listing, ListingQuery};
 use strims_rpc::vpn;
 use strims_rpc::{Router, Timer};
 use strims_transfer::{RecordWriter, SwarmHost, TransferId};
@@ -270,7 +261,6 @@ struct Held<H: Host> {
     transfers: Vec<TransferId>,
     conn: Option<AbortHandle>,
     publication: Option<Publication<H>>,
-    keeper: Option<AbortHandle>,
     /// The server id, once serving was reported.
     serving: Option<u64>,
 }
@@ -282,7 +272,6 @@ impl<H: Host> Default for Held<H> {
             transfers: Vec::new(),
             conn: None,
             publication: None,
-            keeper: None,
             serving: None,
         }
     }
@@ -540,70 +529,87 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
         server_key: r.key.clone(),
         network_key: r.network_key.clone(),
     });
-    r.republish.set(true);
-    let (keeper, abort) = abortable(keep_listing(s.clone(), r.clone(), server_id, network_id));
-    held.keeper = Some(abort);
-    s.spawn(keeper.map(|_| ()).boxed_local());
+    let listing = chat_listing(&r.key, r.record.borrow().as_ref().unwrap_or(&record));
+    let keeper = ListingKeeper::new(r.network_key.clone(), listing);
+    let prev = r.keeper.replace(Some(keeper.clone()));
+    drop(prev);
+    let keep = pin!(keeper.run(&s.directory, s.config.listing, |id| {
+        listed(s, r, server_id, network_id, id);
+    }));
 
-    let mut refresh_at = s.timer.now() + lease::REFRESH;
-    loop {
+    let serve = pin!(async {
+        let mut refresh_at = s.timer.now() + lease::REFRESH;
         loop {
-            let e = r
-                .server
-                .borrow_mut()
-                .as_mut()
-                .and_then(|st| st.events.pop_front());
-            let Some(e) = e else {
-                break;
-            };
-            match events.write(&e).await {
-                Ok(()) => s.metrics.borrow_mut().events_written += 1,
-                Err(e) => {
-                    s.metrics.borrow_mut().write_errors += 1;
-                    tracing::warn!(error = %e, "writing a chat event failed");
-                }
-            }
-        }
-
-        let now = s.timer.now();
-        if r.assets_due.get().is_some_and(|t| t <= now) {
-            r.assets_due.set(None);
-            let unified = r.unified_due.replace(false);
-            if let Err(e) = sync_assets(s, r, server_id, &mut publisher, &mut assets, unified).await
-            {
-                tracing::warn!(server = server_id, error = %e, "syncing chat assets failed");
-            }
-            continue;
-        }
-
-        let at = r.assets_due.get().map_or(refresh_at, |t| t.min(refresh_at));
-        match wait(&s.timer, r, Some(at)).await {
-            Woke::Stop => return Ok(()),
-            Woke::Closed => return Err("the server's connection ended".into()),
-            Woke::Changed => {
-                let w = want(s, r);
-                if w.net != Some(net) || w.serve != Some(server_id) {
-                    return Ok(());
-                }
-                let record = r.record.borrow().clone();
-                if let Some(record) = record {
-                    s.with_server(r, |srv, _| srv.set_record(&record));
-                }
-                r.poke_keeper();
-            }
-            Woke::Work => {}
-            Woke::Timer => {
-                let now = s.timer.now();
-                if now >= refresh_at {
-                    let key = lease_key(server_id);
-                    if let Err(e) = lease::try_lock(s.store.store(), &key, token, now).await {
-                        return Err(format!("the chat server lease was lost: {e}"));
+            loop {
+                let e = r
+                    .server
+                    .borrow_mut()
+                    .as_mut()
+                    .and_then(|st| st.events.pop_front());
+                let Some(e) = e else {
+                    break;
+                };
+                match events.write(&e).await {
+                    Ok(()) => s.metrics.borrow_mut().events_written += 1,
+                    Err(e) => {
+                        s.metrics.borrow_mut().write_errors += 1;
+                        tracing::warn!(error = %e, "writing a chat event failed");
                     }
-                    refresh_at = now + lease::REFRESH;
+                }
+            }
+
+            let now = s.timer.now();
+            if r.assets_due.get().is_some_and(|t| t <= now) {
+                r.assets_due.set(None);
+                let unified = r.unified_due.replace(false);
+                if let Err(e) =
+                    sync_assets(s, r, server_id, &mut publisher, &mut assets, unified).await
+                {
+                    tracing::warn!(server = server_id, error = %e, "syncing chat assets failed");
+                }
+                continue;
+            }
+
+            let at = r.assets_due.get().map_or(refresh_at, |t| t.min(refresh_at));
+            match wait(&s.timer, r, Some(at)).await {
+                Woke::Stop => return Ok(()),
+                Woke::Closed => return Err("the server's connection ended".to_owned()),
+                Woke::Changed => {
+                    let w = want(s, r);
+                    if w.net != Some(net) || w.serve != Some(server_id) {
+                        return Ok(());
+                    }
+                    let record = r.record.borrow().clone();
+                    if let Some(record) = record {
+                        s.with_server(r, |srv, _| srv.set_record(&record));
+                        keeper.set_listing(chat_listing(&r.key, &record));
+                    }
+                }
+                Woke::Work => {}
+                Woke::Timer => {
+                    let now = s.timer.now();
+                    if now >= refresh_at {
+                        let key = lease_key(server_id);
+                        if let Err(e) = lease::try_lock(s.store.store(), &key, token, now).await {
+                            return Err(format!("the chat server lease was lost: {e}"));
+                        }
+                        refresh_at = now + lease::REFRESH;
+                    }
                 }
             }
         }
+    });
+
+    let (res, kept) = match select(keep, serve).await {
+        Either::Left(((), serve)) => (serve.await, None),
+        Either::Right((res, keep)) => (res, Some(keep)),
+    };
+    keeper.stop();
+    if let Some(keep) = kept {
+        keep.await;
     }
+    s.retire_keeper(r);
+    res
 }
 
 /// Takes down what serving added, in reverse; see the [module docs](self).
@@ -612,21 +618,6 @@ async fn teardown<K: Kv, H: Host, T: Timer>(
     r: &Rc<Runner<H>>,
     mut held: Held<H>,
 ) {
-    if let Some(a) = held.keeper.take() {
-        a.abort();
-    }
-    if let Some(id) = r.listing_id.take() {
-        let deadline = s.timer.now() + s.config.unpublish_timeout;
-        let unpublish = pin!(s.directory.unpublish(&r.network_key, id));
-        let timeout = pin!(s.timer.sleep_until(deadline));
-        match select(unpublish, timeout).await {
-            Either::Left((Err(e), _)) => {
-                tracing::debug!(error = %e, "unpublishing a chat listing failed");
-            }
-            Either::Right(_) => tracing::debug!("unpublishing a chat listing timed out"),
-            Either::Left((Ok(()), _)) => {}
-        }
-    }
     if let Some(p) = held.publication.take()
         && let Err(e) = s.host.unpublish_address(p).await
     {
@@ -738,171 +729,31 @@ async fn sync_assets<K: Kv, H: Host, T: Timer>(
     Ok(())
 }
 
-// --- the listing keeper -----------------------------------------------------
+// --- the listing ------------------------------------------------------------
 
-/// The listing of `r`'s server, while the profile owns it.
-fn chat_listing<H: Host>(r: &Runner<H>) -> Option<Listing> {
-    let record = r.record.borrow();
-    let record = record.as_ref()?;
-    Some(Listing {
+/// The listing of the server with key `key` and record `record`.
+fn chat_listing(key: &[u8], record: &strims_proto::chat::v1::Server) -> Listing {
+    Listing {
         content: Some(Content::Chat(Chat {
-            key: r.key.clone(),
+            key: key.to_vec(),
             name: record
                 .room
                 .as_ref()
                 .map(|room| room.name.clone())
                 .unwrap_or_default(),
         })),
-    })
-}
-
-/// Whether network `network_id`'s view holds listing `id` as `r`'s
-/// server's listing.
-pub(crate) fn listed<K: Kv, H: Host, T: Timer>(
-    s: &Shared<K, H, T>,
-    r: &Runner<H>,
-    network_id: u64,
-    id: u64,
-) -> bool {
-    let Some(l) = s.directory.listing(network_id, &by_id(id)) else {
-        return false;
-    };
-    chat_listing(r).is_some_and(|want| l.listing == want)
-}
-
-/// Waits for the keeper's next poke, or until `at`.
-async fn wait_keeper<H: Host, T: Timer>(timer: &T, r: &Runner<H>, at: Time) {
-    let mut sleep = Box::pin(timer.sleep_until(at));
-    poll_fn(|cx| {
-        if r.keeper_poked.replace(false) || r.stopped.get() {
-            return Poll::Ready(());
-        }
-        let prev = r.keeper_waker.replace(Some(cx.waker().clone()));
-        drop(prev);
-        if sleep.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(());
-        }
-        Poll::Pending
-    })
-    .await;
-}
-
-/// What the directory holds of the server's listing, as the keeper last
-/// saw it.
-enum ListingState {
-    /// Nothing, or nothing known.
-    Unlisted,
-    /// Listing `id`, as `listing`.
-    Listed { id: u64, listing: Listing },
-    /// Listing `id`, unpublished at `since` for a rename, until the view
-    /// drops it.
-    Retiring { id: u64, since: Time },
-}
-
-/// Keeps the served server's listing published; see the
-/// [module docs](self).
-async fn keep_listing<K: Kv, H: Host, T: Timer>(
-    s: Rc<Shared<K, H, T>>,
-    r: Rc<Runner<H>>,
-    server_id: u64,
-    network_id: u64,
-) {
-    let mut state = ListingState::Unlisted;
-    let mut last: Option<Time> = None;
-    let mut check_at = s.timer.now() + s.config.listing_check;
-    while !r.stopped.get() {
-        let Some(listing) = chat_listing(&r) else {
-            return;
-        };
-        let now = s.timer.now();
-        let publish_at = last.map_or(now, |t| t + s.config.min_republish);
-        match &state {
-            // The directory keeps a listing's content while it lists it,
-            // so a renamed listing is published again once the view no
-            // longer holds the old one.
-            ListingState::Retiring { id, since } => {
-                let gone = s.directory.listing(network_id, &by_id(*id)).is_none();
-                let give_up = *since + s.config.listing_check;
-                if gone || now >= give_up {
-                    state = ListingState::Unlisted;
-                    r.republish.set(true);
-                } else {
-                    wait_keeper(&s.timer, &r, give_up).await;
-                }
-                continue;
-            }
-            ListingState::Listed { id, listing: l } if *l != listing => {
-                if publish_at > now {
-                    wait_keeper(&s.timer, &r, publish_at).await;
-                    continue;
-                }
-                let id = *id;
-                last = Some(now);
-                match s.directory.unpublish(&r.network_key, id).await {
-                    Ok(()) => state = ListingState::Retiring { id, since: now },
-                    Err(e) => {
-                        s.metrics.borrow_mut().listing_errors += 1;
-                        tracing::debug!(server = server_id, error = %e, "unpublishing a chat listing failed");
-                    }
-                }
-                continue;
-            }
-            _ => {}
-        }
-        let due = r.republish.get() || matches!(state, ListingState::Unlisted);
-        if due && publish_at <= now {
-            r.republish.set(false);
-            last = Some(now);
-            match s.directory.publish(&r.network_key, listing.clone()).await {
-                Ok(id) => {
-                    s.metrics.borrow_mut().listing_publishes += 1;
-                    if r.listing_id.get() != Some(id) {
-                        set_listing(&s, &r, server_id, network_id, id);
-                    }
-                    state = ListingState::Listed { id, listing };
-                }
-                Err(e) => {
-                    s.metrics.borrow_mut().listing_errors += 1;
-                    tracing::debug!(server = server_id, error = %e, "publishing a chat listing failed");
-                    r.republish.set(true);
-                }
-            }
-            continue;
-        }
-        if now >= check_at {
-            check_at = now + s.config.listing_check;
-            if let ListingState::Listed { id, .. } = &state
-                && !listed(&s, &r, network_id, *id)
-            {
-                r.republish.set(true);
-            }
-            continue;
-        }
-        let at = if due {
-            publish_at.min(check_at)
-        } else {
-            check_at
-        };
-        wait_keeper(&s.timer, &r, at).await;
-    }
-}
-
-fn by_id(id: u64) -> ListingQuery {
-    ListingQuery {
-        query: Some(Query::Id(id)),
     }
 }
 
 /// The server's listing has id `id` now: its nicks are the listing's
 /// users.
-fn set_listing<K: Kv, H: Host, T: Timer>(
+fn listed<K: Kv, H: Host, T: Timer>(
     s: &Shared<K, H, T>,
     r: &Runner<H>,
     server_id: u64,
     network_id: u64,
     id: u64,
 ) {
-    r.listing_id.set(Some(id));
     let users = s.directory.listing_users(network_id, id);
     s.with_server(r, |srv, _| srv.reset_nicks(&users));
     s.emit(ChatEvent::ListingChanged {

@@ -93,7 +93,8 @@
 //!
 //! What changes is reported as [`DirectoryEvent`]s; the views and asset
 //! bundles can be read at any time. [`bind_frontend`] serves them, and the
-//! calls, to the UI.
+//! calls, to the UI. A [`ListingKeeper`] keeps one listing of this host's
+//! published for as long as its owner runs it ([`keeper`]).
 //!
 //! # Bounds
 //!
@@ -108,6 +109,7 @@ mod control;
 mod events;
 pub mod frontend;
 mod host;
+pub mod keeper;
 pub mod listing;
 pub mod moderation;
 pub mod server;
@@ -131,6 +133,7 @@ pub use control::{CallFailure, DirectoryControl, DirectoryNetwork};
 pub use events::{DirectoryEvent, ListingEvent, UserEventKind};
 pub use frontend::{DirectoryFrontend, bind_frontend};
 pub use host::{Host, Net};
+pub use keeper::{KeeperConfig, KeeperMetrics, ListingKeeper};
 pub use server::{Caller, Server, ServerAction, ServerMetrics, SubId, Tunables};
 pub use snippet::LocalSnippets;
 pub use swarms::{

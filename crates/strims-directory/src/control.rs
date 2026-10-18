@@ -691,6 +691,12 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
             .collect()
     }
 
+    /// The id of the network whose key is `network_key`, while its
+    /// directory runs.
+    pub(crate) fn network_id(&self, network_key: &[u8]) -> Option<u64> {
+        self.shared.runner(network_key).map(|r| r.network_id)
+    }
+
     /// The id and key of each network whose directory runs, in key order.
     pub(crate) fn running(&self) -> Vec<(u64, NetKey)> {
         self.shared
@@ -715,6 +721,17 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
         let r = self.shared.runner_by_id(network_id)?;
         let view = r.view.borrow();
         view.listing_by_query(query).cloned()
+    }
+
+    /// Whether network `network_id`'s view holds listing `id`, as
+    /// `listing` when one is given.
+    pub(crate) fn view_holds(&self, network_id: u64, id: u64, listing: Option<&Listing>) -> bool {
+        self.shared.runner_by_id(network_id).is_some_and(|r| {
+            r.view
+                .borrow()
+                .listing(id)
+                .is_some_and(|l| listing.is_none_or(|want| l.listing == *want))
+        })
     }
 
     /// The users of network `network_id`'s view, in id order.

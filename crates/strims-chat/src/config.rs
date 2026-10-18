@@ -4,6 +4,7 @@
 //! How the chat control runs, and what it counts.
 
 use strims_base::time::Duration;
+use strims_directory::KeeperConfig;
 use strims_rpc::RetryPolicy;
 use strims_rpc::vpn::VpnConfig;
 
@@ -38,13 +39,10 @@ pub struct Config {
     /// The wait after a change to a server's assets in the store before
     /// they are published, so that a burst of changes makes one bundle.
     pub asset_debounce: Duration,
-    /// The shortest wait between two publishes of a server's listing.
-    pub min_republish: Duration,
-    /// How often a server checks that the directory still holds its
-    /// listing.
-    pub listing_check: Duration,
-    /// How long a server that stops waits for its listing's unpublish.
-    pub unpublish_timeout: Duration,
+    /// How a served server's directory listing is kept published: the
+    /// pace of its publishes, its checks, and the wait for its unpublish
+    /// when the server stops.
+    pub listing: KeeperConfig,
     /// Retries for `SendMessage` calls to a remote server. An attempt may
     /// reach the server whatever its outcome here, so the policy must not
     /// retry.
@@ -73,9 +71,7 @@ impl Default for Config {
             max_streams_per_room: MAX_STREAMS_PER_ROOM,
             linger: Duration::from_secs(30),
             asset_debounce: Duration::from_millis(250),
-            min_republish: Duration::from_secs(5),
-            listing_check: Duration::from_secs(60),
-            unpublish_timeout: Duration::from_secs(5),
+            listing: KeeperConfig::default(),
             send_policy: RetryPolicy {
                 attempt_timeout: Duration::from_secs(30),
                 retries: 0,

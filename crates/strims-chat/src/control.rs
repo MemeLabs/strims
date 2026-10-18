@@ -22,7 +22,7 @@ use strims_dao::events::Record;
 use strims_dao::schema::chat::ChatServers;
 use strims_dao::schema::network::network_key;
 use strims_dao::{Broadcast, Recv, ReplicatedStore, StoreEvent, Subscription, Table};
-use strims_directory::{Caller, DirectoryControl, DirectoryEvent, Host, ListingEvent, Net};
+use strims_directory::{Caller, DirectoryControl, DirectoryEvent, Host, ListingKeeper, Net};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
 use strims_proto::chat::v1::{ChatClient, GetMuteResponse, MuteRequest, UnmuteRequest};
@@ -167,15 +167,11 @@ pub(crate) struct Runner<H: Host> {
     /// The server, while this process serves it.
     pub(crate) server: RefCell<Option<ServerState>>,
     pub(crate) mode: Cell<ServerMode>,
-    /// The id of the server's listing, while it serves.
-    pub(crate) listing_id: Cell<Option<u64>>,
+    /// The keeper of the server's listing, while it serves.
+    pub(crate) keeper: RefCell<Option<ListingKeeper>>,
     /// When the next asset sync is due, and whether it must be unified.
     pub(crate) assets_due: Cell<Option<Time>>,
     pub(crate) unified_due: Cell<bool>,
-    /// The listing keeper must publish, and its wake.
-    pub(crate) republish: Cell<bool>,
-    pub(crate) keeper_poked: Cell<bool>,
-    pub(crate) keeper_waker: RefCell<Option<Waker>>,
     /// The runner stopped; its mode task winds down.
     pub(crate) stopped: Cell<bool>,
     /// Something the mode task looks at changed since it last looked.
@@ -208,12 +204,9 @@ impl<H: Host> Runner<H> {
             linger_until: Cell::new(None),
             server: RefCell::new(None),
             mode: Cell::new(ServerMode::Idle),
-            listing_id: Cell::new(None),
+            keeper: RefCell::new(None),
             assets_due: Cell::new(None),
             unified_due: Cell::new(false),
-            republish: Cell::new(true),
-            keeper_poked: Cell::new(false),
-            keeper_waker: RefCell::new(None),
             stopped: Cell::new(false),
             changed: Cell::new(false),
             waker: RefCell::new(None),
@@ -270,19 +263,16 @@ impl<H: Host> Runner<H> {
         }
     }
 
-    /// Has the listing keeper look at the runner's state again.
-    pub(crate) fn poke_keeper(&self) {
-        self.keeper_poked.set(true);
-        let w = self.keeper_waker.borrow_mut().take();
-        if let Some(w) = w {
-            w.wake();
-        }
+    pub(crate) fn keeper(&self) -> Option<ListingKeeper> {
+        self.keeper.borrow().clone()
     }
 
-    /// Has the listing keeper publish the listing again.
-    pub(crate) fn request_republish(&self) {
-        self.republish.set(true);
-        self.poke_keeper();
+    /// The id of the server's listing, while it serves.
+    pub(crate) fn listing_id(&self) -> Option<u64> {
+        self.keeper
+            .borrow()
+            .as_ref()
+            .and_then(ListingKeeper::listing_id)
     }
 
     /// The network id of the server this process serves.
@@ -474,7 +464,6 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
         }
         r.wake();
         r.wake_streams();
-        r.poke_keeper();
     }
 
     /// Runners with a record.
@@ -518,7 +507,6 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
                 if changed {
                     self.schedule_assets(&r, false);
                     r.poke();
-                    r.poke_keeper();
                 }
             }
             Some(_) => {
@@ -776,23 +764,19 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .collect()
     }
 
+    /// The keepers of the served servers' listings.
+    fn keepers(&self) -> Vec<ListingKeeper> {
+        self.runners
+            .borrow()
+            .values()
+            .filter_map(|r| r.keeper())
+            .collect()
+    }
+
+    /// Hands `e` to the listing keepers, and the listings' user changes to
+    /// their servers' nicks.
     fn handle_directory_event(&self, e: &DirectoryEvent) {
         match e {
-            DirectoryEvent::Started { network_id, .. } => {
-                for r in self.served_on(*network_id) {
-                    r.request_republish();
-                }
-            }
-            DirectoryEvent::Listing {
-                network_id,
-                event: ListingEvent::Unpublished(l),
-            } => {
-                for r in self.served_on(*network_id) {
-                    if r.listing_id.get() == Some(l.id) {
-                        r.request_republish();
-                    }
-                }
-            }
             DirectoryEvent::User {
                 network_id,
                 listing_id,
@@ -800,7 +784,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
                 user,
             } => {
                 for r in self.served_on(*network_id) {
-                    if r.listing_id.get() == Some(*listing_id) {
+                    if r.listing_id() == Some(*listing_id) {
                         self.with_server(&r, |srv, _| srv.nick_changed(*kind, user));
                     }
                 }
@@ -808,11 +792,13 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             DirectoryEvent::Lagged { network_id } => self.directory_lagged(Some(*network_id)),
             _ => {}
         }
+        for k in self.keepers() {
+            k.handle_event(e);
+        }
     }
 
     /// Reseeds the nicks of the servers on network `network_id`, or on
-    /// every network, from the directory's views, and republishes the
-    /// listings the views lack.
+    /// every network, from the directory's views.
     fn directory_lagged(&self, network_id: Option<u64>) {
         for r in self.all_runners() {
             let Some(net) = r.served_network() else {
@@ -821,15 +807,25 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             if network_id.is_some_and(|id| id != net) {
                 continue;
             }
-            let Some(id) = r.listing_id.get() else {
+            let Some(id) = r.listing_id() else {
                 continue;
             };
             let users = self.directory.listing_users(net, id);
             self.with_server(&r, |srv, _| srv.reset_nicks(&users));
-            if !runner::listed(self, &r, net, id) {
-                r.request_republish();
-            }
         }
+    }
+
+    /// Folds the counters of `r`'s listing keeper into the control's, and
+    /// drops the keeper.
+    pub(crate) fn retire_keeper(&self, r: &Runner<H>) {
+        let keeper = r.keeper.borrow_mut().take();
+        if let Some(k) = &keeper {
+            let km = k.metrics();
+            let mut m = self.metrics.borrow_mut();
+            m.listing_publishes += km.publishes;
+            m.listing_errors += km.errors;
+        }
+        drop(keeper);
     }
 
     // --- timers -------------------------------------------------------------
@@ -1069,7 +1065,7 @@ impl<K: Kv, H: Host, T: Timer> ChatControl<K, H, T> {
                 server_id: r.server_id(),
                 mode: r.mode.get(),
                 streams: r.streams.borrow().len(),
-                listing_id: r.listing_id.get(),
+                listing_id: r.listing_id(),
                 server: r
                     .server
                     .borrow()
@@ -1081,7 +1077,18 @@ impl<K: Kv, H: Host, T: Timer> ChatControl<K, H, T> {
 
     /// The control's counters.
     pub fn metrics(&self) -> Metrics {
-        self.shared.metrics.borrow().clone()
+        let s = &self.shared;
+        let mut m = s.metrics.borrow().clone();
+        let runners = s.runners.borrow();
+        let stopping = s.stopping.borrow();
+        for r in runners.values().chain(stopping.values()) {
+            if let Some(k) = &*r.keeper.borrow() {
+                let km = k.metrics();
+                m.listing_publishes += km.publishes;
+                m.listing_errors += km.errors;
+            }
+        }
+        m
     }
 
     /// Opens a client stream of the server with `server_key` on the
@@ -1274,7 +1281,12 @@ impl<K: Kv, H: Host, T: Timer> ChatControl<K, H, T> {
                 Wake::Network(Some(Recv::Lagged)) => s.sync_networks(),
                 Wake::Network(None) => network_events = None,
                 Wake::Directory(Some(Recv::Event(e))) => s.handle_directory_event(&e),
-                Wake::Directory(Some(Recv::Lagged)) => s.directory_lagged(None),
+                Wake::Directory(Some(Recv::Lagged)) => {
+                    s.directory_lagged(None);
+                    for k in s.keepers() {
+                        k.check();
+                    }
+                }
                 Wake::Directory(None) => directory_events = None,
                 Wake::Timer => s.tick(),
                 Wake::Task | Wake::Work => {}
