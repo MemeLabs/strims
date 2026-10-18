@@ -14,8 +14,8 @@ Port the application services that sit on the core crates. The Go versions
   loaders need an HTTP fetch from the driver; until then the server refuses
   embed listings and its client config advertises none.
 - The other dao record types arrive with their services: video channels
-  and configs, vnic, autoseed, debug and bootstrap configs, and swarm
-  caches, each with its part of a network's deletion; until then,
+  and configs, vnic, autoseed and debug configs, and swarm caches, each
+  with its part of a network's deletion; until then,
   stores from Go keep those records unread. With swarm caches, a chat
   room's asset swarm can start from its cache under (server key,
   `chat:assets`); until then a reopened room downloads its bundles again.
@@ -33,14 +33,28 @@ Port the application services that sit on the core crates. The Go versions
   store named `data`, string keys and `Uint8Array` values. A task woken by
   an IndexedDB callback has to be polled before the transaction
   deactivates. Its `SessionFactory` starts a profile's node, replication,
-  network, transfer, directory, chat and whisper controls and peer
-  services, and binds the network, directory and chat frontends
-  (`strims_node::app` is the native equivalent).
-- `strims-svc`: the headless service. It needs a Postgres `Kv`; profile
-  stores shared by several processes (cross-process change events, and a
-  lease that spans them); rate limits on SignUp and SignIn, which each
-  cost a 100k-iteration PBKDF2; and redb moved off the executor if its
-  fsyncs show in profiles.
+  network, bootstrap, transfer, directory, chat and whisper controls and
+  peer services, and binds the network, bootstrap, directory and chat
+  frontends (`strims_node::app::NodeFactory` is the native equivalent).
+- `strims-svc` runs one profile's node per process, on redb, and serves
+  the UI's frontend over WebSocket. Remaining:
+  - a Postgres `Kv`;
+  - profile stores shared by several processes (cross-process change
+    events, and a lease that spans them);
+  - several profiles per process, on TCP and WebSocket listeners their
+    nodes share, routed by profile key. Until then, a sign-up on a
+    process that runs another profile creates the profile, which can't
+    start until the process restarts;
+  - rate limits on SignUp and SignIn, which each cost a 100k-iteration
+    PBKDF2;
+  - redb moved off the executor if its fsyncs show in profiles;
+  - TLS for the API (see `wss://` on native nodes below); until then the
+    dev page reaches it through the webpack dev server's proxy;
+  - Origin checks on the API's upgrade, which accepts any origin;
+  - WebSocket pings on API connections, so a UI that goes without
+    closing its connection releases it;
+  - headless sessions started at boot, for bootstrap nodes;
+  - an HTTP health check.
 - Desktop (Electron sidecar or Tauri) and mobile (uniffi).
 
 ### strims-ppspp defects
@@ -150,14 +164,14 @@ While networks have Go and Rust nodes:
     unlimited; MTU vs exact backlog hints; a neutral starting weight for
     new non-ppspp writers;
   - vpn rejects messages larger than one frame (MTU − 4) at send time;
-  - pick an app default for `max_peers`; at 0, peer exchange accepts nobody;
   - make vpn `VerifyMode::Enforce` the default once mixed networks have run
     clean under `Audit`;
   - lossy transports report loss, so direct vpn links can get a backup copy;
   - peer-exchange topology hints that suggest links to shorten long paths;
   - decide whether any app needs to stop a broadcast from being relayed;
   - peer exchange needs a tie-break (e.g. host id) for simultaneous
-    `connect_peer` calls, which can drop the WebRTC link;
+    `connect_peer` calls, which can drop the WebRTC link, and so do two
+    nodes whose bootstrap clients dial each other at once;
   - `connect_peer` policy belongs to the app layer; the node never initiates
     it. Transfer discovery asks to link to every host a search finds (16
     per search), with no budget across transfers or against `max_peers`;
@@ -206,6 +220,15 @@ While networks have Go and Rust nodes:
   - The CA event swarm isn't run; it carries nothing yet.
   - A network whose record gains a server config after its first write
     gets neither the owner's CA records nor its directory admin record.
+- **Bootstrap.**
+  - A published membership has no alias, and the CA keeps no record of
+    it (no `NetworkPeers` entry), so its holder can't renew at the CA.
+    The publisher could record it.
+  - A peer is asked `GetPublishEnabled` once per link, so a change to
+    its bootstrap config reaches linked peers when they relink.
+  - Native nodes dial bootstrap clients over `ws://` only, with
+    `allow_insecure_ws`.
+  - `PeerService.ListNetworks` is unimplemented.
 - **Directory.**
   - A refresh rewrites every listing, snippet images included, into an
     event swarm whose window is 2 MiB. Images may belong in the asset
