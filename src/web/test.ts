@@ -1,24 +1,30 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Bus, WindowBridge } from "../lib/bridge";
+// Relays one node's frontend connection to the WebSocket named by
+// ?manage=, which defaults to wss://<host>/manage. ?allowInsecureWs=true
+// lets the node dial ws:// URIs.
+
 import { WSReadWriter } from "../lib/ws";
-import Worker from "./svc.worker";
+import { startWasmNode } from "./wasm";
 
 class Success {}
 
-void (async () => {
-  const bridge = new WindowBridge(Worker);
-  const bus = await new Promise<Bus>((resolve) => {
-    bridge.once("busopen:default", (b: any) => resolve(b));
-  });
+const params = new URLSearchParams(location.search);
 
-  const ws = new WSReadWriter(`wss://${location.host}/manage`);
+const node = startWasmNode({
+  logLevel: parseInt(params.get("logLevel") ?? window.localStorage.getItem("log_level")) >> 0,
+  allowInsecureWs: params.get("allowInsecureWs") === "true",
+  iceServers: [],
+});
 
-  bus.on("data", (d: Uint8Array) => ws.write(d));
-  ws.on("data", (d: Uint8Array) => bus.write(d));
+const ws = new WSReadWriter(params.get("manage") ?? `wss://${location.host}/manage`);
 
-  ws.on("close", () => {
-    throw new Success();
-  });
-})();
+node.bus.on("data", (d: Uint8Array) => ws.write(d));
+node.bus.on("close", () => ws.close());
+ws.on("data", (d: Uint8Array) => node.bus.write(d));
+
+ws.on("close", () => {
+  node.close();
+  throw new Success();
+});

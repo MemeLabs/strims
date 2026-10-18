@@ -11,11 +11,10 @@ import { Root, createRoot } from "react-dom/client";
 import registerServiceWorker from "service-worker-loader!./sw";
 
 import { APIDialer, ClientConstructor } from "../contexts/Session";
-import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "./App";
 import manifest from "./manifest";
-import Worker from "./svc.worker";
+import { WasmNode, startWasmNode } from "./wasm";
 
 void (async () => {
   if (IS_PRODUCTION && !(await caches.has(`${GIT_HASH}_static`))) {
@@ -27,26 +26,23 @@ void (async () => {
 void registerServiceWorker({ scope: "/" });
 
 class WorkerConn {
-  bridge: WindowBridge;
-  bus: Promise<Duplex>;
+  node: WasmNode;
 
   constructor() {
-    this.bridge = new WindowBridge(Worker);
-    this.bus = new Promise<Duplex>((resolve) => {
-      this.bridge.once("busopen:default", (b: Duplex) => resolve(b));
-    });
-    this.bridge.createWorker("default", {
+    this.node = startWasmNode({
       logLevel: parseInt(window.localStorage.getItem("log_level")) >> 0,
+      allowInsecureWs: false,
+      iceServers: ["stun:stun.l.google.com:19302"],
     });
   }
 
-  async client<T>(C: ClientConstructor<T>): Promise<T> {
-    const b = await this.bus;
-    return new C(b, b);
+  client<T>(C: ClientConstructor<T>): Promise<T> {
+    const bus = this.node.bus as unknown as Duplex;
+    return Promise.resolve(new C(bus, bus));
   }
 
   close() {
-    this.bridge.close();
+    this.node.close();
   }
 }
 
@@ -92,8 +88,5 @@ const runner = new Runner();
 runner.start();
 
 if (import.meta.webpackHot) {
-  import.meta.webpackHot.accept(
-    ["../apis/client", "../lib/bridge", "../lib/ws", "./svc.worker"],
-    () => runner.restart()
-  );
+  import.meta.webpackHot.accept(["../apis/client", "../lib/ws", "./wasm"], () => runner.restart());
 }

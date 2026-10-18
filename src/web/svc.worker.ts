@@ -1,20 +1,15 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { WorkerBridge, WorkerOptions } from "../lib/bridge";
-import svc from "./svc.go";
+import init, { start } from "../../crates/strims-wasm/Cargo.toml";
+import type { InitMessage, WorkerSignal } from "./wasm";
 
-interface Message {
-  service: "default" | "broker";
-  baseURI: string;
-  options: WorkerOptions;
-}
+declare let self: DedicatedWorkerGlobalScope;
 
-onmessage = async ({ data: { service, baseURI, options } }: MessageEvent<Message>) => {
-  const bridge = new WorkerBridge();
-  const proxy = await svc(baseURI, bridge.wasmio());
-  void proxy.init(service, bridge, options);
+// The ports buffer their messages until the node attaches its handlers.
+self.onmessage = ({ data: { options, frontend, signal } }: MessageEvent<InitMessage>) => {
+  self.onmessage = null;
+  init()
+    .then(() => start(options, frontend, signal))
+    .catch((e) => signal.postMessage({ type: "fatal", message: String(e) } satisfies WorkerSignal));
 };
-
-// let ts know what to expect from worker-loader.
-export default null as new () => Worker;

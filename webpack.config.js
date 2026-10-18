@@ -15,7 +15,7 @@ module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
 
   // swc only strips types; type checking is done separately by tsc
-  const swcLoader = (tsx) => ({
+  const swcLoader = (tsx, refresh) => ({
     loader: "swc-loader",
     options: {
       jsc: {
@@ -26,17 +26,42 @@ module.exports = (env, argv) => {
           react: {
             runtime: "classic",
             development: !isProduction,
-            refresh: !isProduction,
+            refresh,
           },
         },
       },
     },
   });
 
-  const scriptModuleRule = {
+  // refresh: whether ReactRefreshWebpackPlugin runs, which defines the hooks
+  // swc's refresh transform calls
+  const scriptRule = (refresh) => ({
     test: /\.tsx?$/,
     exclude: /node_modules/,
-    oneOf: [{ test: /\.tsx$/, use: swcLoader(true) }, { use: swcLoader(false) }],
+    oneOf: [{ test: /\.tsx$/, use: swcLoader(true, refresh) }, { use: swcLoader(false, refresh) }],
+  });
+
+  const scriptModuleRule = scriptRule(!isProduction);
+
+  // The worker imports crates/strims-wasm/Cargo.toml, which the loader turns
+  // into the crate's wasm-bindgen glue.
+  const strimsWasmRule = (features) => ({
+    test: /crates\/strims-wasm\/Cargo\.toml$/,
+    type: "javascript/auto",
+    loader: path.resolve(__dirname, "vendor_modules", "strims-wasm-loader", "index.js"),
+    options: {
+      profile: isProduction ? "release-wasm" : "dev",
+      features,
+    },
+  });
+
+  // The glue fetches its module from new URL("strims_wasm_bg.wasm", import.meta.url).
+  const wasmAssetRule = {
+    test: /\.wasm$/,
+    type: "asset/resource",
+    generator: {
+      filename: "[name].[contenthash][ext]",
+    },
   };
 
   const styleModuleRule = {
@@ -96,6 +121,28 @@ module.exports = (env, argv) => {
     },
   };
 
+  const providePlugin = () =>
+    new webpack.ProvidePlugin({
+      process: "process/browser",
+      Buffer: ["buffer", "Buffer"],
+    });
+
+  const definePlugin = () =>
+    new webpack.DefinePlugin({
+      IS_PRODUCTION: isProduction,
+      BUILD_TIME: Date.now(),
+      GIT_HASH: JSON.stringify(
+        require("child_process").execSync("git rev-parse HEAD").toString().trim()
+      ),
+      VERSION: JSON.stringify(require(path.resolve(__dirname, "package.json")).version),
+      I18N_LANG: JSON.stringify(fs.readdirSync(path.resolve(__dirname, "assets", "locales"))),
+      EMOJI_LANG: JSON.stringify(
+        fs
+          .readdirSync(path.resolve(__dirname, "node_modules", "emojibase-data"))
+          .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
+      ),
+    });
+
   const plugins = [
     new HtmlWebpackPlugin({
       chunks: ["index"],
@@ -140,24 +187,8 @@ module.exports = (env, argv) => {
         },
       ],
     }),
-    new webpack.ProvidePlugin({
-      process: "process/browser",
-      Buffer: ["buffer", "Buffer"],
-    }),
-    new webpack.DefinePlugin({
-      IS_PRODUCTION: isProduction,
-      BUILD_TIME: Date.now(),
-      GIT_HASH: JSON.stringify(
-        require("child_process").execSync("git rev-parse HEAD").toString().trim()
-      ),
-      VERSION: JSON.stringify(require(path.resolve(__dirname, "package.json")).version),
-      I18N_LANG: JSON.stringify(fs.readdirSync(path.resolve(__dirname, "assets", "locales"))),
-      EMOJI_LANG: JSON.stringify(
-        fs
-          .readdirSync(path.resolve(__dirname, "node_modules", "emojibase-data"))
-          .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
-      ),
-    }),
+    providePlugin(),
+    definePlugin(),
   ];
 
   let devtool, optimization, entries;
@@ -191,7 +222,8 @@ module.exports = (env, argv) => {
   } else {
     plugins.unshift(
       new ReactRefreshWebpackPlugin({
-        exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx|src\/lib\/i18n\.ts$/,
+        exclude:
+          /node_modules|\/target\/|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx|src\/lib\/i18n\.ts$/,
         overlay: false,
       }),
       new HtmlWebpackPlugin({
@@ -253,6 +285,16 @@ module.exports = (env, argv) => {
       }
     : {};
 
+  const resolve = {
+    extensions: [".tsx", ".ts", ".js"],
+    fallback: {
+      "fs": false,
+      "stream": require.resolve("stream-browserify"),
+      "buffer": require.resolve("buffer"),
+      "process": require.resolve("process"),
+    },
+  };
+
   switch (env.TARGET) {
     case "app":
       return [
@@ -265,6 +307,37 @@ module.exports = (env, argv) => {
         }),
         createElectronBuild("main"),
         createElectronBuild("preload"),
+      ];
+    // The pages the strims-wasm browser tests load: test.html and e2e.html.
+    // A static server serves dist/wasm-e2e at its root; asset URLs start at /.
+    case "wasm-e2e":
+      return [
+        {
+          target: "web",
+          entry: {
+            test: path.join(__dirname, "src", "web", "test.ts"),
+            e2e: path.join(__dirname, "src", "web", "e2e.ts"),
+          },
+          devtool,
+          output: {
+            filename: "[name].[contenthash].js",
+            chunkFilename: "[id].[chunkhash].js",
+            path: path.resolve(__dirname, "dist", "wasm-e2e"),
+            publicPath: "/",
+            clean: true,
+          },
+          module: {
+            rules: [strimsWasmRule(["e2e"]), wasmAssetRule, scriptRule(false)],
+          },
+          resolve,
+          optimization,
+          plugins: [
+            new HtmlWebpackPlugin({ filename: "test.html", chunks: ["test"], title: "test" }),
+            new HtmlWebpackPlugin({ filename: "e2e.html", chunks: ["e2e"], title: "e2e" }),
+            providePlugin(),
+            definePlugin(),
+          ],
+        },
       ];
     case "web":
     default:
@@ -299,59 +372,34 @@ module.exports = (env, argv) => {
               index: "/",
             },
             host: "0.0.0.0",
-            proxy: {
-              "/manage": {
+            proxy: [
+              {
+                context: "/manage",
                 target: "ws://localhost:8083",
                 ws: true,
               },
-              "/api/funding": {
+              {
+                context: "/api/funding",
                 target: "ws://localhost:8084",
                 ws: true,
               },
-              "/api/invite": {
+              {
+                context: "/api/invite",
                 target: "http://localhost:8084",
               },
-            },
-          },
-          module: {
-            rules: [
               {
-                test: /\.worker\.ts$/,
-                loader: "worker-loader",
-                options: {
-                  inline: "fallback",
-                  chunkFilename: "[id].[contenthash].worker.js",
-                },
+                // A local native node's WS listener, which a node in the page
+                // dials as wss://<LAN IP>:8080/<hex key>.
+                context: (pathname) => /^\/[0-9a-f]{64}$/.test(pathname),
+                target: "ws://localhost:8082",
+                ws: true,
               },
-              {
-                test: /\.shared-worker\.ts$/,
-                loader: "worker-loader",
-                options: {
-                  inline: "fallback",
-                  worker: "SharedWorker",
-                  chunkFilename: "[id].[contenthash].shared-worker.js",
-                },
-              },
-              {
-                test: /\.go/,
-                use: ["golang-wasm-async-loader"],
-              },
-              {
-                test: /\.wasm$/,
-                loader: "file-loader",
-              },
-              ...sharedRules,
             ],
           },
-          resolve: {
-            extensions: [".go", ".tsx", ".ts", ".js"],
-            fallback: {
-              "fs": false,
-              "stream": require.resolve("stream-browserify"),
-              "buffer": require.resolve("buffer"),
-              "process": require.resolve("process"),
-            },
+          module: {
+            rules: [strimsWasmRule([]), wasmAssetRule, ...sharedRules],
           },
+          resolve,
           optimization,
           plugins,
         },
