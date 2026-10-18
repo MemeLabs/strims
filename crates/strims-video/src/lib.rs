@@ -25,6 +25,7 @@ pub mod aac;
 pub mod avc;
 mod bits;
 pub mod flv;
+pub mod hls;
 pub mod media;
 #[cfg(test)]
 mod test_util;
