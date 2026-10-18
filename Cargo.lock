@@ -2663,6 +2663,7 @@ dependencies = [
  "strims-proto",
  "strims-rpc",
  "strims-session",
+ "strims-svc",
  "strims-video",
  "strims-vnic",
  "thiserror",

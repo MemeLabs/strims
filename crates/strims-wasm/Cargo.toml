@@ -109,9 +109,14 @@ wasm-bindgen-test = "=0.3.79"
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 strims-crypto.workspace = true
 strims-node.workspace = true
+# the app test's native profile, and the UI's side of both profiles' APIs
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-svc.workspace = true
 futures-util = { workspace = true, features = ["sink", "std"] }
 hex.workspace = true
 httparse.workspace = true
+prost.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync"] }
 tokio-tungstenite.workspace = true

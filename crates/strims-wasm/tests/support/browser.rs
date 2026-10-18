@@ -7,21 +7,22 @@
 //! - **Bundle.** `npx webpack --mode development --env TARGET=wasm-e2e`,
 //!   run from the repo root, builds `dist/wasm-e2e`, with strims-wasm
 //!   built for wasm32 with the `e2e` feature in the shared target dir. It
-//!   runs once per test binary, under a lock file in the target dir so two
-//!   test binaries don't build at once. The files are then read into
-//!   memory, so another binary's build can't change what a running test
-//!   serves.
-//! - **Server.** One listener on 127.0.0.1 serves the bundle at its root.
-//!   Every WebSocket upgrade goes to the test, by its path and query:
-//!   e2e.html's `/control?i=<n>`, or whatever a page was told to connect
-//!   to, such as test.html's `?manage=`.
+//!   runs once per test binary. Every webpack build ([`build`]) runs under
+//!   one lock file in the target dir, so two test binaries don't build at
+//!   once, and its files are then read into memory, so another binary's
+//!   build can't change what a running test serves.
+//! - **Server** ([`Site`]). One listener on 127.0.0.1 serves the bundle
+//!   at its root. Every WebSocket upgrade goes to the test, by its path
+//!   and query: e2e.html's `/control?i=<n>`, or whatever a page was told
+//!   to connect to, such as test.html's `?manage=`.
 //! - **Firefox.** `firefox --headless --no-remote` on a new profile under
 //!   `~/snap/firefox/common`, since a snap Firefox can't see `/tmp`. Its
 //!   prefs leave ICE host candidates as addresses, so two pages in one
 //!   browser link without mDNS, and put the pages' console on stdout. The
 //!   output is captured and printed when the test fails. A test binary
 //!   runs one [`Browser`] at a time; its Firefox can be closed and opened
-//!   again on the same profile, and is killed when it drops.
+//!   again on the same profile, which keeps its storage and loads only
+//!   the page opened, and is killed when it drops.
 //! - **Skips.** Without node and npx, node_modules, firefox, or a
 //!   wasm-bindgen CLI of strims-wasm's pinned version, [`Browser::serve`]
 //!   prints why and returns `None`.
@@ -121,19 +122,23 @@ fn missing_tool() -> Option<String> {
     }
 }
 
-/// The built pages, by path below the server's root.
-struct Bundle(BTreeMap<String, Vec<u8>>);
+/// Built pages, by path below the server's root.
+pub struct Bundle(BTreeMap<String, Vec<u8>>);
 
-enum Unavailable {
+pub enum Unavailable {
     Skip(String),
     Failed(String),
 }
 
-/// The bundle, built on the first call. `None` after printing why it
-/// can't be built here; a failed build fails the test.
+/// The wasm-e2e bundle, built on the first call. `None` after printing
+/// why it can't be built here; a failed build fails the test.
 fn bundle() -> Option<Arc<Bundle>> {
     static BUNDLE: OnceLock<Result<Arc<Bundle>, Unavailable>> = OnceLock::new();
-    match BUNDLE.get_or_init(build) {
+    let built = BUNDLE.get_or_init(|| {
+        let args = ["--mode", "development", "--env", "TARGET=wasm-e2e"];
+        build("wasm-e2e", &args, "dist/wasm-e2e").map(Arc::new)
+    });
+    match built {
         Ok(b) => Some(b.clone()),
         Err(Unavailable::Skip(why)) => {
             eprintln!("skipping: {why}");
@@ -143,52 +148,46 @@ fn bundle() -> Option<Arc<Bundle>> {
     }
 }
 
-fn build() -> Result<Arc<Bundle>, Unavailable> {
+/// Runs `npx webpack <args>` at the repo root under the target dir's lock
+/// file, then reads `out`, a directory below the repo root, into memory.
+pub fn build(name: &str, args: &[&str], out: &str) -> Result<Bundle, Unavailable> {
     if let Some(why) = missing_tool() {
         return Err(Unavailable::Skip(why));
     }
     let failed = |what: &str, e: std::io::Error| Unavailable::Failed(format!("{what}: {e}"));
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
     std::fs::create_dir_all(tmp).map_err(|e| failed("the target tmp dir", e))?;
-    let lock = File::create(tmp.join("wasm-e2e.lock")).map_err(|e| failed("the lock file", e))?;
+    let lock = File::create(tmp.join("webpack.lock")).map_err(|e| failed("the lock file", e))?;
     lock.lock().map_err(|e| failed("the lock file", e))?;
 
     let started = Instant::now();
     let root = repo_root();
-    let out = Command::new("npx")
-        .args([
-            // Never install: webpack comes from node_modules.
-            "--no",
-            "--",
-            "webpack",
-            "--mode",
-            "development",
-            "--env",
-            "TARGET=wasm-e2e",
-        ])
+    let res = Command::new("npx")
+        // Never install: webpack comes from node_modules.
+        .args(["--no", "--", "webpack"])
+        .args(args)
         .current_dir(&root)
         .stdin(Stdio::null())
         .output()
         .map_err(|e| failed("npx", e))?;
-    if !out.status.success() {
+    if !res.status.success() {
         return Err(Unavailable::Failed(format!(
-            "the wasm-e2e build failed ({}):\n{}\n{}",
-            out.status,
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
+            "the {name} build failed ({}):\n{}\n{}",
+            res.status,
+            String::from_utf8_lossy(&res.stdout),
+            String::from_utf8_lossy(&res.stderr)
         )));
     }
     let mut files = BTreeMap::new();
-    read_tree(&root.join("dist/wasm-e2e"), "", &mut files)
-        .map_err(|e| failed("dist/wasm-e2e", e))?;
+    read_tree(&root.join(out), "", &mut files).map_err(|e| failed(out, e))?;
     drop(lock);
     eprintln!(
-        "built the wasm-e2e bundle in {:.1?}: {} files, {} bytes",
+        "built the {name} bundle in {:.1?}: {} files, {} bytes",
         started.elapsed(),
         files.len(),
         files.values().map(Vec::len).sum::<usize>()
     );
-    Ok(Arc::new(Bundle(files)))
+    Ok(Bundle(files))
 }
 
 fn read_tree(
@@ -259,11 +258,16 @@ async fn serve(
         let _ = sockets.send((target, ws));
         return Ok(());
     }
-    let path = target
+    let mut path = target
         .split('?')
         .next()
         .unwrap_or("")
         .trim_start_matches('/');
+    // A route of a single-page app, whose router reads the path.
+    let is_route = !path.rsplit('/').next().unwrap_or("").contains('.');
+    if !bundle.0.contains_key(path) && is_route && bundle.0.contains_key("index.html") {
+        path = "index.html";
+    }
     match bundle.0.get(path) {
         Some(body) if method == "GET" => respond(conn, "200 OK", content_type(path), body).await,
         _ => respond(conn, "404 Not Found", "text/plain", b"").await,
@@ -290,8 +294,14 @@ fn content_type(path: &str) -> &'static str {
     match path.rsplit('.').next() {
         Some("html") => "text/html; charset=utf-8",
         Some("js") => "text/javascript",
+        Some("css") => "text/css",
         Some("wasm") => "application/wasm",
         Some("json" | "map") => "application/json",
+        Some("webmanifest") => "application/manifest+json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
         _ => "application/octet-stream",
     }
 }
@@ -304,6 +314,12 @@ const FIREFOX_PREFS: &str = concat!(
     "user_pref(\"media.peerconnection.ice.obfuscate_host_addresses\", false);\n",
     // The pages' and workers' console, on stdout.
     "user_pref(\"devtools.console.stdout.content\", true);\n",
+    // An `open` after a `close` on the same profile loads only the page it
+    // names. `close` kills Firefox, so its session isn't restored; and
+    // thumbnail capture would load the profile's top sites, the pages
+    // opened before, in a hidden browser.
+    "user_pref(\"browser.sessionstore.resume_from_crash\", false);\n",
+    "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
 );
 
 /// A new Firefox profile with the harness's prefs. A snap Firefox has a
@@ -371,14 +387,49 @@ pub fn outbound_ip() -> Option<IpAddr> {
     (!ip.is_unspecified() && !ip.is_loopback()).then_some(ip)
 }
 
+/// A server of a bundle on 127.0.0.1, until it drops. A route of the
+/// bundle's single-page app, a path whose last segment has no `.`, gets
+/// its `index.html`.
+pub struct Site {
+    pub addr: SocketAddr,
+    /// The WebSockets pages opened, with their paths and queries.
+    pub sockets: mpsc::UnboundedReceiver<(String, Socket)>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for Site {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+impl Site {
+    pub async fn serve(bundle: Arc<Bundle>) -> Site {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, sockets) = mpsc::unbounded_channel();
+        let task = tokio::spawn(async move {
+            while let Ok((conn, _)) = listener.accept().await {
+                let (bundle, tx) = (bundle.clone(), tx.clone());
+                tokio::spawn(async move {
+                    let _ = serve(conn, &bundle, &tx).await;
+                });
+            }
+        });
+        Site {
+            addr,
+            sockets,
+            task,
+        }
+    }
+}
+
 /// The server, a Firefox profile, and the Firefox on it while a page is
 /// open ([`Browser::open`]).
 pub struct Browser {
-    addr: SocketAddr,
-    sockets: mpsc::UnboundedReceiver<(String, Socket)>,
+    site: Site,
     /// Sockets that arrived while a test waited for another.
     pending: Vec<(String, Socket)>,
-    server: tokio::task::JoinHandle<()>,
     profile: PathBuf,
     firefox: Option<Firefox>,
     /// The output of every Firefox on this profile, in order.
@@ -390,7 +441,6 @@ pub struct Browser {
 
 impl Drop for Browser {
     fn drop(&mut self) {
-        self.server.abort();
         self.close();
         if std::thread::panicking() {
             eprintln!(
@@ -410,22 +460,9 @@ impl Browser {
         static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
         let bundle = bundle()?;
         let turn = TURN.lock().await;
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let (tx, sockets) = mpsc::unbounded_channel();
-        let server = tokio::spawn(async move {
-            while let Ok((conn, _)) = listener.accept().await {
-                let (bundle, tx) = (bundle.clone(), tx.clone());
-                tokio::spawn(async move {
-                    let _ = serve(conn, &bundle, &tx).await;
-                });
-            }
-        });
         Some(Browser {
-            addr,
-            sockets,
+            site: Site::serve(bundle).await,
             pending: Vec::new(),
-            server,
             profile: new_profile(),
             firefox: None,
             output: Arc::default(),
@@ -454,12 +491,12 @@ impl Browser {
 
     /// `http://127.0.0.1:<port>`.
     pub fn origin(&self) -> String {
-        format!("http://{}", self.addr)
+        format!("http://{}", self.site.addr)
     }
 
     /// `ws://127.0.0.1:<port>`, for pages told where to connect.
     pub fn ws_origin(&self) -> String {
-        format!("ws://{}", self.addr)
+        format!("ws://{}", self.site.addr)
     }
 
     /// Opens `page`, a path and query on the server such as
@@ -484,7 +521,7 @@ impl Browser {
         }
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
-            match tokio::time::timeout_at(deadline, self.sockets.recv()).await {
+            match tokio::time::timeout_at(deadline, self.site.sockets.recv()).await {
                 Ok(Some((p, ws))) if p == path => return ws,
                 Ok(Some(other)) => self.pending.push(other),
                 Ok(None) => unreachable!("the server runs while the browser does"),
@@ -494,6 +531,15 @@ impl Browser {
                 }
             }
         }
+    }
+
+    /// The paths of the sockets pages opened that no [`Browser::socket`]
+    /// call took.
+    pub fn unclaimed(&mut self) -> Vec<String> {
+        while let Ok(s) = self.site.sockets.try_recv() {
+            self.pending.push(s);
+        }
+        self.pending.iter().map(|(p, _)| p.clone()).collect()
     }
 
     /// What Firefox printed so far, the pages' console included.
