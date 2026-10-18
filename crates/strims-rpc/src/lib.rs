@@ -68,5 +68,5 @@ pub use endpoint::{
 pub use frame::{FrameDecoder, FrameError};
 pub use peer::{PeerConnection, peer_connection};
 pub use retry::{RetryClient, RetryPolicy, Timer};
-pub use router::Router;
+pub use router::{Router, WeakRouter};
 pub use wire::Framing;

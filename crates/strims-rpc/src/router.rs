@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use futures_util::StreamExt;
 use futures_util::future::LocalBoxFuture;
@@ -56,12 +56,40 @@ impl Router {
         self.methods.borrow_mut().remove(method);
     }
 
+    /// A handle that doesn't keep the handlers alive. A service that holds
+    /// the router it is registered on holds it this way, or the two keep
+    /// each other alive.
+    pub fn downgrade(&self) -> WeakRouter {
+        WeakRouter {
+            methods: Rc::downgrade(&self.methods),
+        }
+    }
+
     pub(crate) fn get(&self, method: &str) -> Option<Rc<Handler>> {
         self.methods.borrow().get(method).cloned()
     }
 
     fn insert(&self, method: &'static str, handler: Rc<Handler>) {
         self.methods.borrow_mut().insert(method, handler);
+    }
+}
+
+/// A [`Router`] handle from [`Router::downgrade`].
+#[derive(Clone, Default)]
+pub struct WeakRouter {
+    methods: Weak<RefCell<BTreeMap<&'static str, Rc<Handler>>>>,
+}
+
+impl fmt::Debug for WeakRouter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("WeakRouter")
+    }
+}
+
+impl WeakRouter {
+    /// The router, unless every [`Router`] sharing its handlers is gone.
+    pub fn upgrade(&self) -> Option<Router> {
+        self.methods.upgrade().map(|methods| Router { methods })
     }
 }
 
@@ -137,5 +165,22 @@ impl Registry for Router {
                 })
             }),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_weak_router_lives_only_as_long_as_its_router() {
+        let router = Router::new();
+        let weak = router.downgrade();
+        let again = weak.upgrade();
+        assert!(again.is_some());
+        drop(again);
+        drop(router);
+        assert!(weak.upgrade().is_none());
+        assert!(WeakRouter::default().upgrade().is_none());
     }
 }

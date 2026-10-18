@@ -42,9 +42,9 @@ use strims_proto::profile::v1::{GetProfileRequest, ListDevicesRequest, ProfileFr
 use strims_proto::replication::v1::{CreatePairingTokenRequest, ReplicationFrontendClient};
 use strims_proto::service::CallError;
 use strims_proto::types::Certificate;
-use strims_rpc::{Client, Config, Router, Timer, connect};
+use strims_rpc::{Client, Config, Router, Timer, WeakRouter, connect};
 use strims_session::{AuthService, Manager, Session, SessionFactory, bind_frontends};
-use tokio::task::{LocalSet, spawn_local};
+use tokio::task::{JoinHandle, LocalSet, spawn_local};
 use tokio::time::{Instant, Sleep};
 
 const T0: Time = Time::from_unix_millis(1_700_000_000_000);
@@ -169,10 +169,24 @@ impl Sink<Vec<u8>> for Writer {
 /// A frontend connection to `manager`, with only the auth service bound
 /// until a sign-in. Returns the UI's client.
 fn frontend(manager: &Rc<TestManager>, session_key: Option<StorageKey>) -> Client {
+    frontend_connection(manager, session_key).client
+}
+
+struct FrontendConnection {
+    client: Client,
+    router: WeakRouter,
+    server: JoinHandle<()>,
+}
+
+fn frontend_connection(
+    manager: &Rc<TestManager>,
+    session_key: Option<StorageKey>,
+) -> FrontendConnection {
     let (up, down) = (Pipe::default(), Pipe::default());
     let mut router = Router::new();
     let auth = AuthService::new(manager.clone(), session_key, router.clone());
     register_auth_frontend_service(&mut router, Rc::new(auth));
+    let weak = router.downgrade();
     let (_, server) = connect(
         Config::frontend(),
         Reader(up.clone()),
@@ -180,13 +194,17 @@ fn frontend(manager: &Rc<TestManager>, session_key: Option<StorageKey>) -> Clien
         Some(router),
     );
     let (client, conn) = connect(Config::frontend(), Reader(down), Writer(up), None);
-    spawn_local(async move {
+    let server = spawn_local(async move {
         let _ = server.await;
     });
     spawn_local(async move {
         let _ = conn.await;
     });
-    client
+    FrontendConnection {
+        client,
+        router: weak,
+        server,
+    }
 }
 
 fn run_local<F: Future>(f: F) -> F::Output {
@@ -218,6 +236,27 @@ fn password(name: &str, pw: &str, persist_login: bool) -> SignInRequest {
             },
         )),
     }
+}
+
+#[test]
+fn a_closed_connection_frees_its_services() {
+    run_local(async {
+        let timer = TokioTimer {
+            base: Instant::now(),
+        };
+        let kv = MemoryKv::new();
+        let m = manager(&kv, &timer, 1);
+        let c = frontend_connection(&m, None);
+        let auth = AuthFrontendClient::new(c.client.clone());
+        auth.sign_up(&sign_up("alice", false)).await.unwrap();
+        let profile = ProfileFrontendClient::new(c.client.clone());
+        profile.get(&GetProfileRequest {}).await.unwrap();
+        assert!(c.router.upgrade().is_some());
+
+        c.server.abort();
+        let _ = c.server.await;
+        assert!(c.router.upgrade().is_none());
+    });
 }
 
 #[test]

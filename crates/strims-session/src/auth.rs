@@ -11,7 +11,7 @@ use strims_proto::auth::v1::{
     SignUpResponse, linked_profile, sign_in_request,
 };
 use strims_proto::service::{Context, Error as RpcError};
-use strims_rpc::{Router, Timer};
+use strims_rpc::{Router, Timer, WeakRouter};
 
 use crate::manager::{Manager, SessionFactory};
 use crate::rpc_error;
@@ -21,7 +21,8 @@ use crate::rpc_error;
 pub struct AuthService<K: Kv + Clone, F: SessionFactory<K>, T: Timer> {
     manager: Rc<Manager<K, F, T>>,
     session_key: Option<StorageKey>,
-    router: Router,
+    /// Weak: the router holds this service.
+    router: WeakRouter,
 }
 
 impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthService<K, F, T> {
@@ -36,7 +37,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthService<K, F, T> {
         AuthService {
             manager,
             session_key,
-            router,
+            router: router.downgrade(),
         }
     }
 
@@ -74,9 +75,11 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthService<K, F, T> {
         credentials: Option<linked_profile::Credentials>,
     ) -> Result<(LinkedProfile, strims_proto::profile::v1::Profile), RpcError> {
         let (session, runtime) = self.manager.get_or_create(pk).await.map_err(rpc_error)?;
-        self.manager
-            .factory()
-            .bind(&runtime, &session, &self.router);
+        let router = self
+            .router
+            .upgrade()
+            .ok_or_else(|| RpcError::new(0, "connection closed".to_owned()))?;
+        self.manager.factory().bind(&runtime, &session, &router);
         let linked = LinkedProfile {
             name: session.profile.name.clone(),
             credentials,
