@@ -84,6 +84,7 @@ fn one_profile_runs_per_process_with_every_frontend_bound() {
             "strims.video.v1.HLSEgress.OpenStream",
             "strims.video.v1.Egress.OpenStream",
             "strims.video.v1.Capture.Open",
+            "strims.autoseed.v1.AutoseedFrontend.CreateRule",
         ] {
             assert!(router.contains(method), "{method} isn't bound");
         }

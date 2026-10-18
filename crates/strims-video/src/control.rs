@@ -1,8 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The video control: the profile's channels, the device's ingress and
-//! HLS configs, the records' events, and the node's video swarms.
+//! The video control: the profile's channels, the device's ingress, HLS
+//! and autoseed records, the records' events, and the node's video
+//! swarms.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,12 +17,14 @@ use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, StreamExt};
 use strims_base::rng::DetRng;
 use strims_dao::events::Record;
+use strims_dao::schema::autoseed::{AutoseedConfig, AutoseedRules};
 use strims_dao::schema::network::network_key;
 use strims_dao::schema::video::{HlsConfig, IngressConfig, VideoChannels};
 use strims_dao::{Broadcast, Recv, ReplicatedStore, Singleton, StoreEvent, Subscription, Table};
 use strims_directory::{DirectoryControl, DirectoryEvent, Host, ListingKeeper};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
+use strims_proto::autoseed::v1::{Config as SeedConfig, Rule};
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::Key;
 use strims_proto::video::v1::{
@@ -30,6 +33,7 @@ use strims_proto::video::v1::{
 use strims_rpc::Timer;
 use strims_transfer::{TransferControl, TransferId};
 
+use crate::autoseed::Autoseed;
 use crate::capture::Capture;
 use crate::config::{Config, Metrics, check_hls_config, check_ingress_config};
 use crate::hls::HlsRoutes;
@@ -65,12 +69,14 @@ pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
     pub(crate) hls: RefCell<HlsEgress>,
     /// The RTMP ingress: its config, connections and sessions.
     pub(crate) ingress: RefCell<Ingress>,
+    /// Autoseed's index of listings and its seeds.
+    pub(crate) autoseed: RefCell<Autoseed<Swarm<H>>>,
     /// Tasks for `run` to start. Bound: a reload per lag of the store's
     /// events, each ending after one read of the records; per capture, its
     /// creation, its writer and a listing keeper per network; an add per
-    /// egress slot; a removal per removed swarm, each one node call; the
-    /// RTMP listener, a task per RTMP connection and a listing keeper per
-    /// ingest session.
+    /// egress or seed slot, and per salted transfer autoseed adds; a
+    /// removal per removed swarm, each one node call; the RTMP listener, a
+    /// task per RTMP connection and a listing keeper per ingest session.
     spawned: RefCell<Vec<LocalBoxFuture<'static, ()>>>,
     /// Wakes `run`.
     waker: RefCell<Option<Waker>>,
@@ -127,6 +133,9 @@ struct Records {
     channels: BTreeMap<u64, VideoChannel>,
     ingress: Option<VideoIngressConfig>,
     hls: Option<HlsEgressConfig>,
+    autoseed: Option<SeedConfig>,
+    /// Bound: the device's autoseed rules in the store.
+    rules: BTreeMap<u64, Rule>,
     /// The current read of every record, while one runs.
     reload: Option<Reload>,
     next_reload: u64,
@@ -142,6 +151,10 @@ struct Reload {
     channels: BTreeSet<u64>,
     ingress: bool,
     hls: bool,
+    autoseed: bool,
+    /// Bound: the device's autoseed rules in the store, and those deleted
+    /// during the read.
+    rules: BTreeSet<u64>,
 }
 
 /// Every record, as one read found them.
@@ -149,6 +162,8 @@ struct Snapshot {
     channels: Vec<VideoChannel>,
     ingress: VideoIngressConfig,
     hls: HlsEgressConfig,
+    autoseed: SeedConfig,
+    rules: Vec<Rule>,
 }
 
 impl Records {
@@ -180,9 +195,50 @@ impl Records {
         self.hls = Some(c.clone());
     }
 
+    fn autoseed_written(&mut self, c: SeedConfig) {
+        if let Some(r) = &mut self.reload {
+            r.autoseed = true;
+        }
+        self.autoseed = Some(c);
+    }
+
+    fn rule_written(&mut self, rule: &Rule) {
+        if let Some(r) = &mut self.reload {
+            r.rules.insert(rule.id);
+        }
+        self.rules.insert(rule.id, rule.clone());
+    }
+
+    fn rule_deleted(&mut self, rule: &Rule) {
+        if let Some(r) = &mut self.reload {
+            r.rules.insert(rule.id);
+        }
+        self.rules.remove(&rule.id);
+    }
+
+    /// Takes the autoseed records of `s`, read by `reload`, except those
+    /// events wrote since it began.
+    fn apply_autoseed(&mut self, reload: &Reload, s: &mut Snapshot) {
+        let read: BTreeMap<u64, Rule> = std::mem::take(&mut s.rules)
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
+        self.rules
+            .retain(|id, _| read.contains_key(id) || reload.rules.contains(id));
+        for (id, r) in read {
+            if !reload.rules.contains(&id) {
+                self.rules.insert(id, r);
+            }
+        }
+        if !reload.autoseed {
+            self.autoseed = Some(s.autoseed);
+        }
+    }
+
     /// Takes the records of `s`, read by `reload`, except those events
     /// wrote since it began: the events that report the difference.
-    fn apply(&mut self, reload: Reload, s: Snapshot) -> Vec<VideoEvent> {
+    fn apply(&mut self, reload: Reload, mut s: Snapshot) -> Vec<VideoEvent> {
+        self.apply_autoseed(&reload, &mut s);
         let mut events = Vec::new();
         let read: BTreeMap<u64, VideoChannel> = s.channels.into_iter().map(|c| (c.id, c)).collect();
         let gone: Vec<u64> = self
@@ -219,10 +275,25 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     /// Has `run` start a task.
     pub(crate) fn spawn(&self, task: LocalBoxFuture<'static, ()>) {
         self.spawned.borrow_mut().push(task);
+        self.wake_run();
+    }
+
+    /// Wakes `run` to look for work.
+    pub(crate) fn wake_run(&self) {
         let w = self.waker.borrow_mut().take();
         if let Some(w) = w {
             w.wake();
         }
+    }
+
+    /// Runs `f` on whether the device's autoseed config is enabled, and
+    /// its rules by id, as the control last took them.
+    pub(crate) fn with_autoseed_records<R>(
+        &self,
+        f: impl FnOnce(bool, &BTreeMap<u64, Rule>) -> R,
+    ) -> R {
+        let r = self.records.borrow();
+        f(r.autoseed.is_some_and(|c| c.enable), &r.rules)
     }
 
     /// The profile's key, which signs its channels' stream keys.
@@ -278,7 +349,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 .map(|e| e.networks.iter().cloned().collect())
                 .unwrap_or_default()
         });
-        for key in networks {
+        self.publish_on_joined(t, networks);
+    }
+
+    /// Publishes transfer `t` on each of the networks `keys` names that
+    /// the node has joined and it isn't published on.
+    pub(crate) fn publish_on_joined(&self, t: &TransferId, keys: Vec<Vec<u8>>) {
+        for key in keys {
             if let Some(net) = self.network.network(&key).and_then(|i| i.net)
                 && !self.transfers.is_published(*t, net)
             {
@@ -287,11 +364,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// [`publish_joined`](Self::publish_joined) for every video swarm.
+    /// [`publish_joined`](Self::publish_joined) for every video swarm,
+    /// and the salted transfers autoseed added.
     fn publish_all(&self) {
         for t in self.with_swarms(|r| r.ids()) {
             self.publish_joined(&t);
         }
+        self.publish_salted_on(None);
     }
 
     fn handle_network_event(&self, e: &NetworkEvent) {
@@ -307,6 +386,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 for t in ids {
                     self.publish_joined(&t);
                 }
+                self.publish_salted_on(Some(&key));
             }
             _ => {}
         }
@@ -324,13 +404,35 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         keepers
     }
 
-    fn handle_directory_event(&self, e: &DirectoryEvent) {
+    fn handle_directory_event(self: &Rc<Self>, e: &DirectoryEvent) {
         for k in self.keepers() {
             k.handle_event(e);
         }
+        self.autoseed_directory_event(e);
+    }
+
+    /// Takes an autoseed record of `e`; returns whether `e` was one.
+    fn handle_autoseed_record(&self, e: &StoreEvent) -> bool {
+        {
+            let mut r = self.records.borrow_mut();
+            match e {
+                StoreEvent::Changed(Record::AutoseedConfig(c)) => r.autoseed_written(*c),
+                StoreEvent::Deleted(Record::AutoseedConfig(_)) => {
+                    r.autoseed_written(AutoseedConfig::default_value().unwrap_or_default());
+                }
+                StoreEvent::Changed(Record::AutoseedRule(rule)) => r.rule_written(rule),
+                StoreEvent::Deleted(Record::AutoseedRule(rule)) => r.rule_deleted(rule),
+                _ => return false,
+            }
+        }
+        self.schedule_autoseed();
+        true
     }
 
     fn handle_store_event(&self, e: &StoreEvent) {
+        if self.handle_autoseed_record(e) {
+            return;
+        }
         let event = {
             let mut r = self.records.borrow_mut();
             match e {
@@ -382,6 +484,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 channels: BTreeSet::new(),
                 ingress: false,
                 hls: false,
+                autoseed: false,
+                rules: BTreeSet::new(),
             });
             id
         };
@@ -395,6 +499,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 channels: VideoChannels::get_all(&mut tx).await?,
                 ingress: IngressConfig::get(&mut tx).await?.unwrap_or_default(),
                 hls: HlsConfig::get(&mut tx).await?.unwrap_or_default(),
+                autoseed: AutoseedConfig::get(&mut tx).await?.unwrap_or_default(),
+                rules: AutoseedRules::get_all(&mut tx).await?,
             })
         }
         .await;
@@ -418,14 +524,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             }
         }
         self.ingress_records_changed(&events);
+        self.schedule_autoseed();
         if !quiet {
             self.events.emit(events);
         }
     }
 }
 
-/// Runs the profile's video: its channels, the device's ingress and HLS
-/// configs, its captures and streams; see the [crate docs](crate).
+/// Runs the profile's video: its channels, the device's ingress, HLS and
+/// autoseed records, its captures, streams and seeds; see the
+/// [crate docs](crate).
 ///
 /// Clones share the control.
 pub struct VideoControl<K: Kv, H: Host, V: VideoHost, T: Timer> {
@@ -448,6 +556,7 @@ enum Wake {
     Directory(Option<Recv<DirectoryEvent>>),
     Work,
     HlsSweep,
+    Autoseed,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
@@ -490,6 +599,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 captures: RefCell::default(),
                 hls,
                 ingress: RefCell::default(),
+                autoseed: RefCell::default(),
                 spawned: RefCell::new(Vec::new()),
                 waker: RefCell::new(None),
             }),
@@ -576,17 +686,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// Runs the video: follows the store's channels and configs and
     /// reports their changes, publishes the video swarms on networks as
     /// the node joins them, feeds the listing keepers the directory's
-    /// events, runs the RTMP ingress, and carries the control's tasks:
-    /// swarm adds and removals, capture writers, RTMP connections,
-    /// listing keepers and HLS stream readers. Closes idle HLS streams.
-    /// Never resolves; drop it to stop. Run it once per
-    /// control.
+    /// events, seeds the listings the autoseed rules name, runs the RTMP
+    /// ingress, and carries the control's tasks: swarm adds and removals,
+    /// capture writers, RTMP connections, listing keepers and HLS stream
+    /// readers. Closes idle HLS streams. Never resolves; drop it to stop.
+    /// Run it once per control.
     pub async fn run(&self) {
         let s = &self.shared;
         let mut store_events = Some(s.store.events().subscribe());
         let mut network_events = Some(s.network.subscribe());
         let mut directory_events = Some(s.directory.subscribe());
         s.start_reload(true);
+        s.read_autoseed_networks();
         s.publish_all();
         s.start_ingress();
         let mut tasks: FuturesUnordered<LocalBoxFuture<'static, ()>> = FuturesUnordered::new();
@@ -603,6 +714,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     && let Poll::Ready(r) = ev.poll_next_unpin(cx)
                 {
                     return Poll::Ready(Wake::Store(r));
+                }
+                // After the store's events at hand, so that a burst of
+                // rule writes is reconciled once.
+                if s.autoseed_due() {
+                    return Poll::Ready(Wake::Autoseed);
                 }
                 if let Some(ev) = &mut network_events
                     && let Poll::Ready(r) = ev.poll_next_unpin(cx)
@@ -638,9 +754,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     for k in s.keepers() {
                         k.check();
                     }
+                    s.read_autoseed_networks();
+                    s.schedule_autoseed();
                 }
                 Wake::Directory(None) => directory_events = None,
                 Wake::HlsSweep => s.sweep_hls(),
+                Wake::Autoseed => s.reconcile_autoseed(),
                 Wake::Task | Wake::Work => {}
             }
         }
@@ -670,6 +789,8 @@ mod tests {
             channels: BTreeSet::new(),
             ingress: false,
             hls: false,
+            autoseed: false,
+            rules: BTreeSet::new(),
         }
     }
 
@@ -681,7 +802,43 @@ mod tests {
                 ..Default::default()
             },
             hls: HlsEgressConfig::default(),
+            autoseed: SeedConfig::default(),
+            rules: Vec::new(),
         }
+    }
+
+    fn rule(id: u64, label: &str) -> Rule {
+        Rule {
+            id,
+            label: label.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_reload_keeps_the_autoseed_records_events_wrote_during_its_read() {
+        let mut r = Records::default();
+        r.rule_written(&rule(1, "a"));
+        r.rule_written(&rule(2, "b"));
+        r.reload = Some(reload(0));
+        r.rule_written(&rule(3, "new"));
+        r.rule_deleted(&rule(2, "b"));
+        r.autoseed_written(SeedConfig { enable: true });
+        let touched = r.reload.take().unwrap_or_else(|| reload(0));
+        let s = Snapshot {
+            rules: vec![rule(2, "b"), rule(3, "old"), rule(4, "d")],
+            ..snapshot(Vec::new(), false)
+        };
+        r.apply(touched, s);
+        assert_eq!(r.rules.keys().copied().collect::<Vec<_>>(), [3, 4]);
+        assert_eq!(r.rules[&3], rule(3, "new"));
+        assert_eq!(r.autoseed, Some(SeedConfig { enable: true }));
+
+        r.reload = Some(reload(1));
+        let touched = r.reload.take().unwrap_or_else(|| reload(1));
+        r.apply(touched, snapshot(Vec::new(), false));
+        assert!(r.rules.is_empty());
+        assert_eq!(r.autoseed, Some(SeedConfig::default()));
     }
 
     #[test]

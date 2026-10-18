@@ -9,12 +9,6 @@ on it is in `CONVENTIONS.md`.
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
 - Video; see Video below.
-- The other dao record types arrive with their services, and those that
-  name a network with their part of its deletion. Until then, stores from
-  Go keep these records unread:
-  - the autoseed config and rules (10001, 10002): seeding the swarms of
-    directory listings that a rule names by network, swarm id and salt,
-    and the UI's autoseed frontend. Deleting a network deletes its rules;
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Video
@@ -48,6 +42,11 @@ Gaps in the current services:
   duration can grow during a stream.
 - The UI can't open an HLS stream: nothing calls HLSEgress.OpenStream, so
   a playlist URL comes only through the RPC.
+- Autoseed: a seed that ends while streams or other seeds hold its swarm
+  leaves the transfer published on the rule's network until they end. A
+  rule that names a capture's or an ingest session's swarm seeds nothing.
+  An ingest session that takes over a seeded swarm ends its seeds until
+  the listings that match their rules next change.
 
 The target shape follows. Nothing in the current services needs rework to
 reach it.

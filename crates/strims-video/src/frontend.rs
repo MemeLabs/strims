@@ -13,11 +13,22 @@
 //! - `strims.video.v1.Egress`: a stream of a swarm's records
 //!   ([`VideoControl::open_stream`]);
 //! - `strims.video.v1.Capture`: the connection's captures
-//!   ([`CaptureFrontend`]).
+//!   ([`CaptureFrontend`]);
+//! - `strims.autoseed.v1.AutoseedFrontend`: the device's autoseed config
+//!   and rules ([`autoseed`](crate::autoseed)).
 //!
 //! A refused call answers with its [`VideoError`]'s message
 //! ([`VideoError::to_rpc`]). A `SetConfig` without a config stores the
 //! default one, which it checks like any other.
+//!
+//! # Autoseed
+//!
+//! `CreateRule` stores a rule under a new id, whatever id the request's
+//! rule carries, and `UpdateRule` replaces the network key, swarm id,
+//! salt and label of rule `id`; a request without a rule carries an empty
+//! one, which the bounds refuse. `GetRule` and `UpdateRule` answer
+//! "autoseed rule not found" for an id the device has no rule of;
+//! `DeleteRule` of such an id succeeds.
 //!
 //! # Egress
 //!
@@ -65,6 +76,12 @@ use futures_util::StreamExt;
 use futures_util::stream::unfold;
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_proto::autoseed::v1::{
+    AutoseedFrontendService, CreateRuleRequest, CreateRuleResponse, DeleteRuleRequest,
+    DeleteRuleResponse, GetConfigRequest, GetConfigResponse, GetRuleRequest, GetRuleResponse,
+    ListRulesRequest, ListRulesResponse, SetConfigRequest, SetConfigResponse, UpdateRuleRequest,
+    UpdateRuleResponse, register_autoseed_frontend_service,
+};
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_proto::video::v1::egress_open_stream_response::{self, Body};
 use strims_proto::video::v1::{
@@ -117,6 +134,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoFrontend<K, H, V, T> {
         register_video_channel_frontend_service(&mut router, frontend.clone());
         register_video_ingress_service(&mut router, frontend.clone());
         register_hls_egress_service(&mut router, frontend.clone());
+        register_autoseed_frontend_service(&mut router, frontend.clone());
         register_egress_service(&mut router, frontend);
         register_capture_service(&mut router, captures);
     }
@@ -316,6 +334,90 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> HlsEgressService for VideoFrontend<
             .ok_or_else(|| VideoError::HlsStreamNotFound.to_rpc())?;
         self.control.close_hls(&id).map_err(rpc)?;
         Ok(HlsEgressCloseStreamResponse {})
+    }
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> AutoseedFrontendService for VideoFrontend<K, H, V, T> {
+    async fn get_config(
+        &self,
+        _: &Context,
+        _: GetConfigRequest,
+    ) -> Result<GetConfigResponse, RpcError> {
+        let config = self.control.autoseed_config().await.map_err(rpc)?;
+        Ok(GetConfigResponse {
+            config: Some(config),
+        })
+    }
+
+    async fn set_config(
+        &self,
+        _: &Context,
+        req: SetConfigRequest,
+    ) -> Result<SetConfigResponse, RpcError> {
+        let config = self
+            .control
+            .set_autoseed_config(req.config.unwrap_or_default())
+            .await
+            .map_err(rpc)?;
+        Ok(SetConfigResponse {
+            config: Some(config),
+        })
+    }
+
+    async fn list_rules(
+        &self,
+        _: &Context,
+        _: ListRulesRequest,
+    ) -> Result<ListRulesResponse, RpcError> {
+        let rules = self.control.list_autoseed_rules().await.map_err(rpc)?;
+        Ok(ListRulesResponse { rules })
+    }
+
+    async fn get_rule(
+        &self,
+        _: &Context,
+        req: GetRuleRequest,
+    ) -> Result<GetRuleResponse, RpcError> {
+        let rule = self.control.get_autoseed_rule(req.id).await.map_err(rpc)?;
+        Ok(GetRuleResponse { rule: Some(rule) })
+    }
+
+    async fn create_rule(
+        &self,
+        _: &Context,
+        req: CreateRuleRequest,
+    ) -> Result<CreateRuleResponse, RpcError> {
+        let rule = self
+            .control
+            .create_autoseed_rule(req.rule.unwrap_or_default())
+            .await
+            .map_err(rpc)?;
+        Ok(CreateRuleResponse { rule: Some(rule) })
+    }
+
+    async fn update_rule(
+        &self,
+        _: &Context,
+        req: UpdateRuleRequest,
+    ) -> Result<UpdateRuleResponse, RpcError> {
+        let rule = self
+            .control
+            .update_autoseed_rule(req.id, req.rule.unwrap_or_default())
+            .await
+            .map_err(rpc)?;
+        Ok(UpdateRuleResponse { rule: Some(rule) })
+    }
+
+    async fn delete_rule(
+        &self,
+        _: &Context,
+        req: DeleteRuleRequest,
+    ) -> Result<DeleteRuleResponse, RpcError> {
+        self.control
+            .delete_autoseed_rule(req.id)
+            .await
+            .map_err(rpc)?;
+        Ok(DeleteRuleResponse {})
     }
 }
 

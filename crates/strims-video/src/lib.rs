@@ -60,20 +60,24 @@
 //!   connections, deadlines and sessions are bounded by
 //!   [`IngressSettings`]; [`VideoControl::ingress_streams`] lists the
 //!   live sessions.
+//! - The device's autoseed config and rules ([`autoseed`]) are records in
+//!   the store. While the config is enabled, the node seeds the swarms of
+//!   the directory listings the rules name. Deleting a network deletes
+//!   the rules on it.
 //! - What changes is reported as [`VideoEvent`]s, with the ingress's
 //!   sessions and listener failures.
 //!
-//! [`bind_frontend`] serves the UI's video calls on the control
-//! ([`frontend`]). [`Config`] holds every bound the control and its
+//! [`bind_frontend`] serves the UI's video and autoseed calls on the
+//! control ([`frontend`]). [`Config`] holds every bound the control and its
 //! driver apply, each documented where it is declared.
 //!
 //! # Video swarms
 //!
 //! Every video swarm on the node is the control's: an ingest session or a
-//! capture creates one to write, and a stream adds one to read. Each is
-//! the transfer of its swarm id under the empty salt, so a transfer id
-//! names one video swarm, and a stream of a swarm the node already runs
-//! reads it where it is.
+//! capture creates one to write, a stream adds one to read, and a seed
+//! one to seed. Each is the transfer of its swarm id under the empty
+//! salt, so a transfer id names one video swarm, and a stream or a seed
+//! of a swarm the node already runs takes it where it is.
 //! A video swarm carries opaque records in the packed chunkstream layout
 //! ([`strims_chunkstream::packed`]), with at most one record end per
 //! frame.
@@ -108,6 +112,12 @@
 //!   capture's or an ingest session's stays with it. A stream whose swarm
 //!   closes reads the swarm that replaced it under its transfer id, if
 //!   any. Bounds: [`EgressSettings`].
+//! - **Seeds** ([`autoseed`]): an autoseed rule's hold on the swarm of a
+//!   listing it names: a swarm streams read, or one added as a stream's
+//!   is. The swarm goes with the last of its seeds and streams; a
+//!   capture's or an ingest session's takes no seed. A rule under a
+//!   non-empty salt seeds a transfer of that salt outside the video
+//!   swarms. Bounds: [`AutoseedSettings`].
 //!
 //! Each video swarm's transfer is published on its networks the node has
 //! joined, and on the others as it joins them.
@@ -142,6 +152,7 @@
 
 pub mod aac;
 pub mod amf0;
+pub mod autoseed;
 pub mod avc;
 mod bits;
 pub mod capture;
@@ -172,9 +183,9 @@ mod test_util;
 pub use capture::{CaptureInfo, capture_options};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
-    CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings, IngressSettings,
-    ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES, MAX_SERVICE_NETWORKS, Metrics,
-    RtmpSettings, check_hls_config, check_ingress_config,
+    AutoseedSettings, CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings,
+    IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES, MAX_SERVICE_NETWORKS,
+    Metrics, RtmpSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
 pub use egress::{EgressPiece, EgressStream, PackedReader, ReaderMetrics};

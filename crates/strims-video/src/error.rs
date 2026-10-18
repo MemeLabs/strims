@@ -120,6 +120,18 @@ pub enum VideoError {
     /// The node has no HLS stream of the transfer.
     #[error("HLS stream not found")]
     HlsStreamNotFound,
+    /// The device has no autoseed rule with the id.
+    #[error("autoseed rule not found")]
+    AutoseedRuleNotFound,
+    /// The device has
+    /// [`AutoseedSettings::max_rules`](crate::AutoseedSettings::max_rules)
+    /// autoseed rules.
+    #[error("too many autoseed rules")]
+    TooManyAutoseedRules,
+    /// A field of an autoseed rule is empty or over its bound; see
+    /// [`autoseed`](crate::autoseed#rules).
+    #[error("invalid autoseed rule: {0}")]
+    AutoseedRule(&'static str),
 }
 
 impl VideoError {

@@ -28,6 +28,7 @@ pub struct Config {
     pub egress: EgressSettings,
     pub hls: HlsSettings,
     pub listing: ListingSettings,
+    pub autoseed: AutoseedSettings,
 }
 
 /// The RTMP ingress: its connections, the sessions publishing on them,
@@ -272,6 +273,30 @@ impl ListingSettings {
     }
 }
 
+/// The device's autoseed rules, and the seeds they start; see
+/// [`autoseed`](crate::autoseed).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AutoseedSettings {
+    /// Rules the frontend creates. Each names one swarm.
+    pub max_rules: usize,
+    /// Rules seeding at once, from the lowest rule id up.
+    pub max_seeds: usize,
+    /// The longest rule label and salt, in bytes.
+    pub max_label_bytes: usize,
+    pub max_salt_bytes: usize,
+}
+
+impl Default for AutoseedSettings {
+    fn default() -> AutoseedSettings {
+        AutoseedSettings {
+            max_rules: 64,
+            max_seeds: 8,
+            max_label_bytes: 256,
+            max_salt_bytes: 64,
+        }
+    }
+}
+
 /// What the video control has done.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metrics {
@@ -297,6 +322,10 @@ pub struct Metrics {
     /// [`HlsSettings::max_record_bytes`], or not fMP4 records with media
     /// time.
     pub hls_skipped_records: u64,
+    /// Times an autoseed rule found its swarm held by another: a
+    /// capture's or an ingest session's, or another component's transfer
+    /// under the rule's salt. The rule seeds nothing while it is so.
+    pub autoseed_skipped: u64,
     /// The RTMP ingress's counters.
     pub ingress: IngressMetrics,
 }

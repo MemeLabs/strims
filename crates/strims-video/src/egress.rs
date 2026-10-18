@@ -6,13 +6,15 @@
 //! [`VideoControl::open_stream`] reads the swarm a magnet URI names, as the
 //! transfer of its id under the empty salt:
 //!
-//! - A swarm the node already runs, a capture's or another stream's, is
-//!   read where it is: the stream holds its slot in the control's swarm
-//!   registry. Streams of a swarm the node adds also publish its transfer
-//!   on their networks the node runs, each once joined.
+//! - A swarm the node already runs, a capture's, a seed's or another
+//!   stream's, is read where it is: the stream holds its slot in the
+//!   control's swarm registry. Streams of a swarm the node adds also
+//!   publish its transfer on their networks the node runs, each once
+//!   joined.
 //! - Any other swarm is added with the URI's options and a live window of
 //!   [`EgressSettings::window_bytes`], its transfer added and published.
-//!   The last stream of it to close removes the transfer, then the swarm.
+//!   The last stream of it to close removes the transfer, then the swarm,
+//!   unless autoseed seeds it ([`autoseed`](crate::autoseed)).
 //!
 //! Its URI is at most [`EgressSettings::max_uri_bytes`] and its options
 //! within the settings' bounds: the chunk size, chunks per signature (a
@@ -519,7 +521,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let max = self.config.egress.max_swarms;
         let (claim, added) = self.with_swarms(|r| {
             if let Some(e) = r.get_mut(&t) {
-                if e.kind == SwarmKind::Egress {
+                if matches!(e.kind, SwarmKind::Egress | SwarmKind::Seed) {
                     e.networks.extend(networks);
                 }
                 return r
@@ -553,8 +555,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         Ok(claim)
     }
 
-    /// Adds the swarm of egress slot `slot` of `t`, and its transfer.
-    async fn add_stream_swarm(
+    /// Adds the swarm of egress or seed slot `slot` of `t`, and its
+    /// transfer.
+    pub(crate) async fn add_stream_swarm(
         self: Rc<Self>,
         t: TransferId,
         slot: u64,
