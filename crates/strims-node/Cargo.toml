@@ -48,7 +48,7 @@ turmoil = { workspace = true, optional = true }
 [dev-dependencies]
 prost.workspace = true
 sha2.workspace = true
-# `synth`: the turmoil test publishes a synthetic RTMP stream.
+# `synth`: the turmoil and Go interop tests publish a synthetic RTMP stream.
 strims-video = { workspace = true, features = ["test-support"] }
 strims-proto = { workspace = true, features = ["services"] }
 # `process` and `rt-multi-thread`: the Go interop tests drive Go helpers as

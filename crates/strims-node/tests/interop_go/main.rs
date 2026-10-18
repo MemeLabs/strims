@@ -27,6 +27,7 @@
 //! | `directory::go_owner_rust_member`, `directory::rust_owner_go_member` | internal/directory and `strims_directory`, each serving the other: the member's calls and its view of the server's event and asset swarms from their window tails (listings, user counts, presence), moderation by moderators only, a member's snippet on its snippet port with split deltas and an update, asset swarm rewrites, and alias renewals |
 //! | `chat::go_server_rust_client`, `chat::rust_server_go_client` | internal/chat and `strims_chat`, each serving the other: the chat listing in the other's directory view, a client's unified bundle, deltas, a restarted asset stream and recent events, messages with entities extracted by the server, mutes by the server's moderators only, and the muted user's own mute |
 //! | `chat::whispers_both_ways` | whispers between internal/chat and `strims_chat`, delivered both ways and stored unread; a whisper to a profile that ignores its sender fails on its first refusal |
+//! | `video::rust_ingest_go_egress`, `video::go_writer_rust_egress` | live video swarms both ways: an RTMP stream into Rust's ingress read by internal/videoegress, with the channel's listing and live snippet in Go's directory view, and records written as internal/videoingress writes them read by Rust's egress, record for record |
 //! | `soak_mixed_streaming` (ignored) | 3 minutes: 6 mixed nodes, two streams, vpn traffic |
 //!
 //! Every test skips when `go` isn't on PATH and is bounded by a timeout;
@@ -53,6 +54,7 @@ mod network;
 mod replication;
 mod rpc;
 mod transfer;
+mod video;
 mod vpn_rpc;
 
 use std::collections::BTreeMap;

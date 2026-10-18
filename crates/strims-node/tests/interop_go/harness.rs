@@ -222,6 +222,9 @@ pub enum GoEvent {
     TransferError(HostId, String),
     Written(String),
     ReadDone(String, ReadResult),
+    /// A `video-read` into the file ended: it wrote its records after
+    /// dropping this many at discontinuities, or it failed.
+    VideoRead(String, Result<u64, String>),
     Other(String),
 }
 
@@ -302,7 +305,8 @@ pub struct GoOptions {
     pub transfer: bool,
     /// Bind peers to networks through internal/network (the `net-*`
     /// verbs) in place of the fixed port pair, and run their swarms
-    /// through its internal/transfer; needs `peer_rpc`.
+    /// through its internal/transfer, as the `video-*` verbs' swarms do;
+    /// needs `peer_rpc`.
     pub network_control: bool,
     /// Run internal/directory on the networks (the `dir-*` verbs and
     /// events); needs `network_control`.
@@ -495,6 +499,14 @@ impl GoNode {
                     mismatches: 0,
                     error: Some(String::from_utf8_lossy(&unhex(f[3])).into_owned()),
                 },
+            )),
+            "video-read-done" => self.events.push(GoEvent::VideoRead(
+                f[1].to_owned(),
+                Ok(f[2].parse().unwrap()),
+            )),
+            "video-read-error" => self.events.push(GoEvent::VideoRead(
+                f[1].to_owned(),
+                Err(String::from_utf8_lossy(&unhex(f[2])).into_owned()),
             )),
             _ => self.events.push(GoEvent::Other(l)),
         }

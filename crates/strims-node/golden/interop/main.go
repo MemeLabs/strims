@@ -40,6 +40,9 @@
 //     on the same profile store (the dir-* verbs; see directory.go);
 //   - with -chat and -directory, internal/chat's control on the same
 //     profile store (the chat-* verbs; see chat.go);
+//   - with -network-control, a video swarm written as internal/videoingress
+//     writes a channel's, and streams read through internal/videoegress's
+//     control (the video-* verbs; see video.go);
 //   - with -network-seed, internal/network/dialer's RPC over vpn: a host
 //     certificate chained to the network key's root, as
 //     Dialer.ReplaceOrInsertNetwork issues it. vpn-serve serves the Debug
@@ -243,6 +246,8 @@ type node struct {
 	transfer *transferState
 	// With -network-control: internal/network binds peers to networks.
 	network *networkState
+	// The video-* verbs' writer and egress control.
+	video videoState
 
 	mu     sync.Mutex
 	peers  map[kademlia.ID]*peerState
@@ -864,6 +869,9 @@ func (n *node) command(verb string, args []string) (string, error) {
 	}
 	if strings.HasPrefix(verb, "chat-") {
 		return n.chatCommand(verb, args)
+	}
+	if strings.HasPrefix(verb, "video-") {
+		return n.videoCommand(verb, args)
 	}
 	return "", fmt.Errorf("unknown command %q", verb)
 }
