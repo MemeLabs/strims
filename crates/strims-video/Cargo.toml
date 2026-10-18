@@ -11,10 +11,27 @@ test-support = []
 
 [dependencies]
 strims-base.workspace = true
+strims-dao.workspace = true
+strims-directory.workspace = true
+strims-kv.workspace = true
+strims-network.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-transfer.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
 proptest.workspace = true
+strims-crypto.workspace = true
+# integration tests only: unit tests build this crate a second time, and the
+# fake world's types come from the first build
+strims-testworld.workspace = true
+# tests drive controls on a real executor with paused time
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
 
 [lints]
 workspace = true

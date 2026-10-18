@@ -2267,9 +2267,23 @@ dependencies = [
 name = "strims-video"
 version = "0.1.0"
 dependencies = [
+ "futures-core",
+ "futures-sink",
+ "futures-util",
  "proptest",
  "strims-base",
+ "strims-crypto",
+ "strims-dao",
+ "strims-directory",
+ "strims-kv",
+ "strims-network",
+ "strims-proto",
+ "strims-rpc",
+ "strims-testworld",
+ "strims-transfer",
  "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
