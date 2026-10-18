@@ -37,7 +37,7 @@
 //! # Data channels
 //!
 //! A transferred channel gets `binaryType = "arraybuffer"`, listeners that
-//! fill its [`Inbox`], and a `bufferedAmountLowThreshold` of half
+//! fill its `Inbox`, and a `bufferedAmountLowThreshold` of half
 //! `WebRtcConfig::max_buffered_amount`, all in the callback that received
 //! it, before any of its events can be dispatched. As a link it has the
 //! shared reader ([`crate::io`]) with no read timeout: ICE and the

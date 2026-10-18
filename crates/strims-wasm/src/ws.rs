@@ -7,7 +7,7 @@
 //! - **Dial.** `new WebSocket(url)` with `binaryType = "arraybuffer"`,
 //!   then the first of open, error or close. The caller bounds it with the
 //!   dial timeout. Messages that arrive before the link's reader starts
-//!   wait in the socket's [`Inbox`].
+//!   wait in the socket's `Inbox`.
 //! - **Reads.** Every binary message goes to the inbox; a text message
 //!   fails the link. The reader is the shared one in [`crate::io`]. A
 //!   browser can't send pings and doesn't surface the peer's, so a silent
@@ -19,7 +19,7 @@
 //!   the writer closes the socket with code 1000.
 //! - **Hang-ups.** Locking the screen or backgrounding a page on iOS kills
 //!   its sockets without reliably firing their events or updating
-//!   `readyState`. When the page is visible again ([`hang_up`]), sockets
+//!   `readyState`. When the page is visible again (`hang_up`), sockets
 //!   past `OPEN` are closed and their links failed, or every socket when
 //!   the window says the platform needs it.
 

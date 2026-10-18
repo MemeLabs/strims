@@ -15,7 +15,7 @@
 //!   [`SignalPort`] task, which talks to the window and attaches each
 //!   open data channel as a [`WasmTransport::Channel`].
 //! - **Links.** Each link has a reader task and a writer task. The reader
-//!   copies its socket's [`Inbox`] into the node's recycled read buffers;
+//!   copies its socket's `Inbox` into the node's recycled read buffers;
 //!   the writer sends the node's write buffers and returns them, and
 //!   closes the socket when the node drops the link.
 //!
