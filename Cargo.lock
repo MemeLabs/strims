@@ -2264,6 +2264,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-video"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "strims-base",
+ "thiserror",
+]
+
+[[package]]
 name = "strims-vnic"
 version = "0.1.0"
 dependencies = [
