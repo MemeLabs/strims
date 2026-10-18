@@ -81,7 +81,8 @@ impl Default for IngressSettings {
 }
 
 /// What one RTMP connection takes and holds. Decoder configs (avcC,
-/// AudioSpecificConfig) are bounded by [`MAX_CONFIG_LEN`](crate::MAX_CONFIG_LEN).
+/// AudioSpecificConfig) are bounded by [`MAX_CONFIG_LEN`](crate::MAX_CONFIG_LEN),
+/// and AMF0 values by the [`amf0`](crate::amf0) decoder's limits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RtmpSettings {
     /// The chunk size the server sends with.
@@ -101,10 +102,6 @@ pub struct RtmpSettings {
     /// sets.
     pub window_ack_size: u32,
     pub peer_bandwidth: u32,
-    /// AMF0 nesting depth, items per message, and long string bytes.
-    pub amf_max_depth: usize,
-    pub amf_max_items: usize,
-    pub amf_max_string_bytes: usize,
 }
 
 impl Default for RtmpSettings {
@@ -118,9 +115,6 @@ impl Default for RtmpSettings {
             max_queued_output: 64 * 1024,
             window_ack_size: 2_500_000,
             peer_bandwidth: 2_500_000,
-            amf_max_depth: 8,
-            amf_max_items: 512,
-            amf_max_string_bytes: 64 * 1024,
         }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "strims-video"
-description = "Live video: access units, decoder configs and the FLV demuxer"
+description = "Live video: video channels, RTMP ingress to fMP4 swarms, browser capture, egress streams and HLS"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
