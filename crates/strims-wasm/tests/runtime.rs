@@ -97,6 +97,21 @@ async fn now_is_wall_time() {
 }
 
 #[wasm_bindgen_test]
+async fn now_holds_within_a_turn_and_moves_between_turns() {
+    clock::yield_now().await;
+    let first = clock::now();
+    let start = js_sys::Date::now();
+    while js_sys::Date::now() < start + 5.0 {}
+    assert_eq!(clock::now(), first, "the clock moved within a turn");
+    clock::yield_now().await;
+    let next = clock::now();
+    assert!(
+        next >= first + Duration::from_millis(5),
+        "{next:?} is not 5 ms past {first:?}"
+    );
+}
+
+#[wasm_bindgen_test]
 async fn yield_lets_macrotasks_run() {
     // A message posted on another channel before the yield is delivered
     // before the yield's own message.

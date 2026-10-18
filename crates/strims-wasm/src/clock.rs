@@ -8,6 +8,14 @@
 //!   clock can stop while the machine sleeps, so the node would fall
 //!   behind wall time for the rest of its life. Like any wall clock, it
 //!   can step backwards.
+//! - Reading the clock costs microseconds in some browsers, and the node
+//!   reads it for every input, so [`now`] reads it once per turn of the
+//!   event loop. The first read of a turn queues a microtask that forgets
+//!   the value; every read before it runs returns the same time. That
+//!   covers the rest of the turn's callback and the tasks the executor
+//!   polls in the microtask it was already running, so time moves on
+//!   between turns and never within one, and a long turn ends with the
+//!   time it started at.
 //! - A [`Sleep`] waits on `setTimeout`. A timer can fire before [`now`]
 //!   reaches its deadline: delays are clamped to 2^31−1 ms, and browsers
 //!   round timers and the clock differently. A sleep woken early arms a
@@ -38,13 +46,40 @@ const MAX_TIMEOUT_MS: i64 = i32::MAX as i64;
 
 thread_local! {
     static YIELDER: Option<Yielder> = Yielder::new();
+
+    static TURN: Turn = Turn::new();
 }
 
-/// The current wall time, at [`Time::PRECISION`].
+/// The time read in this turn of the event loop, until the microtask that
+/// forgets it runs.
+struct Turn {
+    now: Cell<Option<Time>>,
+    forget: Closure<dyn FnMut()>,
+}
+
+impl Turn {
+    fn new() -> Turn {
+        Turn {
+            now: Cell::new(None),
+            forget: Closure::new(|| TURN.with(|t| t.now.set(None))),
+        }
+    }
+}
+
+/// The current wall time, at [`Time::PRECISION`], as of the first read in
+/// this turn of the event loop.
 pub fn now() -> Time {
-    // The worker's clock, and the one place the crate reads the time.
-    // `as` saturates, and NaN is 0.
-    Time::from_unix_millis(js_sys::Date::now() as i64)
+    TURN.with(|t| {
+        if let Some(now) = t.now.get() {
+            return now;
+        }
+        // The worker's clock, and the one place the crate reads the time.
+        // `as` saturates, and NaN is 0.
+        let now = Time::from_unix_millis(js_sys::Date::now() as i64);
+        t.now.set(Some(now));
+        js::queue_microtask(t.forget.as_ref().unchecked_ref());
+        now
+    })
 }
 
 /// A sleep that is already due: the driver loop's timer before its first

@@ -27,6 +27,9 @@ extern "C" {
 
     #[wasm_bindgen(js_name = clearTimeout)]
     pub(crate) fn clear_timeout(id: &JsValue);
+
+    #[wasm_bindgen(js_name = queueMicrotask)]
+    pub(crate) fn queue_microtask(callback: &js_sys::Function);
 }
 
 /// The global object.
