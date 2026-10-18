@@ -63,7 +63,8 @@
 //! and the directory), and [`app::PeerServices`] serves every peer's RPC
 //! link with the app's [`app::PeerHandler`]s.
 //! [`video_host::NetVideoHost`] gives the video control its RTMP
-//! listeners on the node's [`Net`].
+//! listeners on the node's [`Net`], and [`fetch::NetFetch`] the
+//! directory its HTTPS requests.
 //!
 //! # Bindings
 //!
@@ -154,6 +155,7 @@ mod driver;
 pub mod error;
 pub mod event;
 mod exchange;
+pub mod fetch;
 mod handle;
 mod link;
 pub mod net;

@@ -33,6 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures_util::Stream;
@@ -40,7 +41,7 @@ use rand_core::SeedableRng;
 use strims_base::rng::{DetRng, fork};
 use strims_base::time::{Duration, Time};
 use strims_chat::{ChatControl, WhisperConfig, WhisperControl};
-use strims_directory::DirectoryControl;
+use strims_directory::{DirectoryControl, Fetch};
 use strims_kv::Kv;
 use strims_network::NetworkControl;
 use strims_network::bootstrap::{BootstrapControl, Failure};
@@ -57,6 +58,7 @@ use strims_vpn::{
 use tokio::task::AbortHandle;
 use tokio::time::Sleep;
 
+use crate::fetch::{NetFetch, tls_client_config};
 use crate::video_host::NetVideoHost;
 use crate::{
     Clock, HostId, Net, NetworkOptions, Node, NodeConfig, NodeError, NodeEvent, NodeInfo,
@@ -665,11 +667,14 @@ pub enum StartError {
 /// A session's node runs replication, transfers, network membership,
 /// bootstrap, the directory, chat, whispers and video, each control as a
 /// local task, and serves every peer through [`PeerServices`]. The video
-/// control's RTMP ingress listens on the factory's [`Net`].
+/// control's RTMP ingress listens on the factory's [`Net`], and the
+/// directory's servers make their HTTPS requests over it ([`NetFetch`]).
 pub struct NodeFactory<N: Net, C: Clock> {
     net: N,
     clock: C,
     config: AppConfig,
+    /// The TLS client config of every node's HTTPS requests.
+    tls: Arc<rustls::ClientConfig>,
     /// The profile whose node runs or starts, and the node once it runs.
     running: RefCell<Option<(u64, Option<NodeInfo>)>>,
     hls: HlsRoutes,
@@ -682,6 +687,7 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             net,
             clock,
             config,
+            tls: tls_client_config(),
             running: RefCell::new(None),
             hls: HlsRoutes::new(),
         }
@@ -769,7 +775,11 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             timer.clone(),
             fork(&mut rng),
             c.directory.clone(),
-        );
+        )
+        .with_fetch(Fetch::new(NetFetch::new(
+            self.net.clone(),
+            self.tls.clone(),
+        )));
         let chat = ChatControl::new(
             host.clone(),
             store.clone(),

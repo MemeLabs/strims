@@ -40,6 +40,10 @@ hex.workspace = true
 rand_core.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+httparse.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 socket2 = { version = "0.6", features = ["all"] }
 getrandom = "0.3"
@@ -47,6 +51,8 @@ turmoil = { workspace = true, optional = true }
 
 [dev-dependencies]
 prost.workspace = true
+# a local TLS server for the HTTPS client tests
+rcgen.workspace = true
 sha2.workspace = true
 # `synth`: the turmoil and Go interop tests publish a synthetic RTMP stream.
 strims-video = { workspace = true, features = ["test-support"] }

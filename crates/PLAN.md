@@ -9,9 +9,6 @@ on it is in `CONVENTIONS.md`.
 Port the application services that sit on the core crates. The Go versions
 (`internal/*`) are the behavioural reference.
 - Video; see Video below.
-- Directory embeds: the server's Twitch, YouTube and AngelThump snippet
-  loaders need an HTTP fetch from the driver; until then the server refuses
-  embed listings and its client config advertises none.
 - The other dao record types arrive with their services, and those that
   name a network with their part of its deletion. Until then, stores from
   Go keep these records unread:
@@ -141,7 +138,10 @@ Egress and players:
   controls and peer services, and binds the network, bootstrap,
   directory, chat and video frontends (`strims_node::app::NodeFactory` is
   the native equivalent). Its video control has no RTMP listener
-  (`NoVideoHost`) and serves no HLS.
+  (`NoVideoHost`) and serves no HLS. Its `HttpFetch` for a directory
+  server's embed loads is the browser's `fetch`, which the embed APIs may
+  refuse under CORS; decide whether such a server goes without embed
+  snippets or loads them through a proxy.
 - `strims-svc` runs one profile's node per process, on redb, and serves
   the UI's frontend over WebSocket. Remaining:
   - a Postgres `Kv`;
@@ -165,7 +165,9 @@ Egress and players:
   - on the HLS listener: keep-alive, Range requests, CORS preflight, and
     a cap per address. One client's slow connections can hold every slot
     for up to 10 s on the request head or 60 s on the response.
-- Desktop (Electron sidecar or Tauri) and mobile (uniffi).
+- Desktop (Electron sidecar or Tauri) and mobile (uniffi). strims-node's
+  TLS runs on ring, which compiles C, so each cross build needs a C
+  toolchain for its target.
 
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until v3 binds the bin.
@@ -272,8 +274,10 @@ While networks have Go and Rust nodes:
 - **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
   test-only hook in `strims-node`. Automated attempts to build it were stopped
   by a safety check. Waiting on the user.
-- **TLS for `wss://` on native nodes.** rustls needs a crypto provider:
-  aws-lc-rs and ring compile C, and the rustcrypto provider is experimental.
+- **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
+  yet. tokio-tungstenite can take the rustls `ClientConfig` that
+  `NodeFactory` builds once for the node's HTTPS
+  (`strims_node::fetch::tls_client_config`).
 - **Link and peer housekeeping:**
   - an idle timeout for established peers that send keepalives;
   - cache host certificates until near expiry;
@@ -357,6 +361,12 @@ While networks have Go and Rust nodes:
     fake-host tests cover that, not whole nodes.
   - A listing keeper stopped while its publish is in flight can leave the
     listing on the server until the publisher's session expires.
+  - AngelThump's API takes one username per request, so every embed load
+    costs a request per AngelThump listing, up to `Limits::max_listings`.
+  - Embed loads don't track the APIs' quotas (YouTube's daily units,
+    Twitch's rate limit): a load runs every `embed_load_interval` however
+    many listings there are, and a refused batch is retried only at the
+    next load.
 - **Replication.**
   - A device that never syncs again keeps every log from collection;
     deleting the device frees them. Decide whether logs should expire.
