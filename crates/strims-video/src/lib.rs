@@ -17,14 +17,16 @@
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
 //!   H.264 with AAC and refuses other codecs.
+//! - [`amf0`]: the AMF0 values RTMP commands and metadata carry.
+//! - [`rtmp`]: the RTMP server a publisher streams FLV tags to.
 //! - [`fmp4`]: fragmented MP4 init segments and fragments, and the reading
 //!   of records.
 //! - [`segment`]: the muxer cutting access units into fMP4 segments, one
 //!   record each, under a [`CutRule`].
 //! - [`record`]: where records go: packed into a video swarm's frames
 //!   ([`PackedSink`]) or collected whole ([`VecSink`]).
-//! - `synth` (feature `test-support`): deterministic FLV tag scripts and
-//!   the records they produce.
+//! - `synth` (feature `test-support`): deterministic FLV tag scripts, the
+//!   records they produce, and an RTMP publisher client.
 //! - [`hls`]: HLS playlists of fMP4 segments, and the routes a driver
 //!   serves them on.
 //!
@@ -56,6 +58,7 @@
 //! driver apply, each documented where it is declared.
 
 pub mod aac;
+pub mod amf0;
 pub mod avc;
 mod bits;
 pub mod channels;
@@ -70,8 +73,9 @@ pub mod hls;
 pub mod host;
 pub mod media;
 pub mod record;
+pub mod rtmp;
 pub mod segment;
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod synth;
 #[cfg(any(test, feature = "test-support"))]
 #[cfg_attr(not(test), allow(dead_code))]

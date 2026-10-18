@@ -34,19 +34,7 @@ use strims_video::{
     TrackKind, VecSink,
 };
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn go_available() -> bool {
-    match Command::new("go").arg("version").output() {
-        Ok(o) if o.status.success() => true,
-        _ => {
-            eprintln!("skipping: `go` is not on PATH");
-            false
-        }
-    }
-}
+use crate::{go_available, repo_root};
 
 fn go(args: &[&str], files: &[&Path]) -> String {
     let run = Command::new("go")
