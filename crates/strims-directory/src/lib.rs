@@ -90,6 +90,10 @@
 //! - The node pings the server on the schedule the asset bundle's client
 //!   config sets, and right after its certificate changes, which keeps
 //!   its sessions and updates its alias.
+//! - A server loads the snippets of its embed listings from their
+//!   services' APIs ([`embed`]) through the [`Fetch`] the driver gives the
+//!   control ([`DirectoryControl::with_fetch`]). With none, embed
+//!   listings go without snippets.
 //!
 //! What changes is reported as [`DirectoryEvent`]s; the views and asset
 //! bundles can be read at any time. [`bind_frontend`] serves them, and the
@@ -106,7 +110,9 @@
 //! is dropped and counted in [`ViewMetrics`].
 
 mod control;
+pub mod embed;
 mod events;
+pub mod fetch;
 pub mod frontend;
 mod host;
 pub mod keeper;
@@ -130,11 +136,13 @@ use strims_rpc::RetryPolicy;
 use strims_rpc::vpn::VpnConfig;
 
 pub use control::{CallFailure, DirectoryControl, DirectoryNetwork};
+pub use embed::{EmbedService, EmbedServices};
 pub use events::{DirectoryEvent, ListingEvent, UserEventKind};
+pub use fetch::{Fetch, FetchError, HttpFetch, HttpRequest, HttpResponse, Method, NoFetch};
 pub use frontend::{DirectoryFrontend, bind_frontend};
 pub use host::{Host, Net};
 pub use keeper::{KeeperConfig, KeeperMetrics, ListingKeeper};
-pub use server::{Caller, Server, ServerAction, ServerMetrics, SubId, Tunables};
+pub use server::{Caller, LoadId, Server, ServerAction, ServerMetrics, SubId, Tunables};
 pub use snippet::LocalSnippets;
 pub use swarms::{
     ADDRESS_SALT, ASSET_FRAME, ASSET_SALT, EVENT_FRAME, EVENT_SALT, asset_options, event_options,
@@ -279,6 +287,9 @@ pub struct Metrics {
     /// Snippet subscriptions served, and those refused.
     pub snippets_served: u64,
     pub snippets_refused: u64,
+    /// Embed snippet batches the server loaded, and those that failed.
+    pub embed_batches: u64,
+    pub embed_batch_errors: u64,
     /// Node and store operations that failed.
     pub host_errors: u64,
     pub store_errors: u64,
@@ -298,6 +309,9 @@ pub enum DirectoryError {
     JoinDisabled,
     #[error("unsupported embed service")]
     UnsupportedEmbed,
+    /// An embed's id isn't of its service's form.
+    #[error("invalid embed id")]
+    InvalidEmbedId,
     #[error("invalid swarm uri")]
     InvalidSwarmUri,
     #[error("unsupported content type")]
@@ -324,12 +338,13 @@ pub enum DirectoryError {
 
 impl DirectoryError {
     /// Every error.
-    const ALL: [DirectoryError; 15] = [
+    const ALL: [DirectoryError; 16] = [
         DirectoryError::ListingNotFound,
         DirectoryError::SessionNotFound,
         DirectoryError::PublishDisabled,
         DirectoryError::JoinDisabled,
         DirectoryError::UnsupportedEmbed,
+        DirectoryError::InvalidEmbedId,
         DirectoryError::InvalidSwarmUri,
         DirectoryError::UnsupportedContent,
         DirectoryError::ListingBanned,

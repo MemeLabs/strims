@@ -26,6 +26,8 @@ thiserror.workspace = true
 tracing.workspace = true
 futures-core.workspace = true
 futures-util = { workspace = true, features = ["alloc"] }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 strims-chunkstream.workspace = true

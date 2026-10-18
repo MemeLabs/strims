@@ -26,6 +26,13 @@
 //! Every mode switch, and every discontinuity of the event stream, starts
 //! the view over.
 //!
+//! # Embed loads
+//!
+//! The server mode carries out each [`ServerAction::LoadEmbeds`] as a task
+//! of its own, with the control's [`Fetch`](crate::Fetch) at the time and
+//! the [`Loader`] of the server config's credentials. A change to those
+//! credentials makes a new loader and ends the load in flight.
+//!
 //! # Snippets
 //!
 //! The member port serves the snippets [`SnippetHub`] holds. A
@@ -71,9 +78,10 @@ use strims_transfer::{ReadFailure, RecordReader, RecordWriter, TransferId};
 use strims_vpn::HostAddr;
 
 use crate::control::{CallFailure, MEMBER_RETRY, Runner, Shared};
+use crate::embed::{EmbedService, Loader, LoaderConfig};
 use crate::host::Host;
 use crate::moderation::{is_admin, is_moderator, merge_listing, merge_user};
-use crate::server::{Caller, Server, ServerAction, SubId};
+use crate::server::{Caller, LoadId, Server, ServerAction, SubId};
 use crate::snippet::{
     LocalSnippets, MAX_SNIPPET_SUBSCRIBERS, MAX_SUBSCRIBERS_PER_SWARM, diff, is_empty, split,
 };
@@ -435,6 +443,8 @@ pub(crate) struct ServerState {
     /// The snippet subscriptions in flight. Bound: the server's, at most
     /// one per listing.
     pub(crate) subs: BTreeMap<SubId, AbortHandle>,
+    /// The embed load in flight.
+    pub(crate) load: Option<(LoadId, AbortHandle)>,
     /// The connection ended.
     pub(crate) closed: bool,
 }
@@ -526,6 +536,12 @@ async fn wait<H: Host, T: Timer>(timer: &T, r: &Runner<H>, at: Option<Time>) -> 
                 return Poll::Ready(Woke::Closed);
             }
             if !st.actions.is_empty() {
+                return Poll::Ready(Woke::Work);
+            }
+            // a call or a load's end moved the server's timeout earlier
+            if let (Some(at), Some(t)) = (at, st.server.poll_timeout())
+                && t < at
+            {
                 return Poll::Ready(Woke::Work);
             }
         }
@@ -782,6 +798,9 @@ async fn serve_directory<K: Kv, H: Host, T: Timer>(
         for a in st.subs.values() {
             a.abort();
         }
+        if let Some((_, a)) = &st.load {
+            a.abort();
+        }
     }
     drop(state);
     if let Some(a) = held.conn.take() {
@@ -874,11 +893,15 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
         fork(&mut s.rng.borrow_mut()),
         s.timer.now(),
     );
+    let mut loader = Rc::new(Loader::new(LoaderConfig::from_config(
+        config.directory.as_ref(),
+    )));
     let prev = r.server.replace(Some(ServerState {
         server,
         client,
         actions: VecDeque::new(),
         subs: BTreeMap::new(),
+        load: None,
         closed: false,
     }));
     drop(prev);
@@ -963,6 +986,9 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
                         a.abort();
                     }
                 }
+                ServerAction::LoadEmbeds { load, ids } => {
+                    start_load(s, r, &loader, load, ids);
+                }
             }
         }
 
@@ -981,6 +1007,11 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
                     return Ok(());
                 };
                 s.with_server(r, |srv, _| srv.set_config(config.directory.as_ref()));
+                let credentials = LoaderConfig::from_config(config.directory.as_ref());
+                if *loader.config() != credentials {
+                    loader = Rc::new(Loader::new(credentials));
+                    end_load(s, r);
+                }
                 assets_due = true;
             }
             Woke::Work => {}
@@ -998,6 +1029,79 @@ async fn run_server<K: Kv, H: Host, T: Timer>(
                 }
             }
         }
+    }
+}
+
+/// Starts embed load `load` of `ids` with `loader`, feeding its batches
+/// and its end to the server.
+fn start_load<K: Kv, H: Host, T: Timer>(
+    s: &Rc<Shared<K, H, T>>,
+    r: &Rc<Runner<H>>,
+    loader: &Rc<Loader>,
+    load: LoadId,
+    ids: BTreeMap<EmbedService, Vec<String>>,
+) {
+    let fetch = s.fetch.borrow().clone();
+    let timer = s.timer.clone();
+    let loader = loader.clone();
+    let shared = Rc::downgrade(s);
+    let runner = Rc::downgrade(r);
+    let task = async move {
+        loader
+            .load(&fetch, &timer, ids, |service, res| {
+                let (Some(s), Some(r)) = (shared.upgrade(), runner.upgrade()) else {
+                    return;
+                };
+                {
+                    let mut m = r.metrics.borrow_mut();
+                    m.embed_batches += 1;
+                    m.embed_batch_errors += u64::from(res.is_err());
+                }
+                match res {
+                    Ok(snippets) => {
+                        s.with_server(&r, |srv, now| {
+                            srv.embeds_loaded(now, load, service, snippets);
+                        });
+                    }
+                    Err(e) => tracing::debug!(
+                        network = r.network_id,
+                        ?service,
+                        error = %e,
+                        "loading embed snippets failed"
+                    ),
+                }
+            })
+            .await;
+        if let (Some(s), Some(r)) = (shared.upgrade(), runner.upgrade()) {
+            let ours = r.server.borrow_mut().as_mut().and_then(|st| {
+                if st.load.as_ref().is_some_and(|(l, _)| *l == load) {
+                    st.load.take()
+                } else {
+                    None
+                }
+            });
+            drop(ours);
+            s.with_server(&r, |srv, now| srv.embeds_load_ended(now, load));
+        }
+    };
+    let (task, abort) = abortable(task);
+    let prev = r
+        .server
+        .borrow_mut()
+        .as_mut()
+        .and_then(|st| st.load.replace((load, abort)));
+    if let Some((_, a)) = prev {
+        a.abort();
+    }
+    s.spawn(task.map(|_| ()).boxed_local());
+}
+
+/// Ends the embed load in flight, if any, and tells the server.
+fn end_load<K: Kv, H: Host, T: Timer>(s: &Shared<K, H, T>, r: &Runner<H>) {
+    let load = r.server.borrow_mut().as_mut().and_then(|st| st.load.take());
+    if let Some((load, a)) = load {
+        a.abort();
+        s.with_server(r, |srv, now| srv.embeds_load_ended(now, load));
     }
 }
 

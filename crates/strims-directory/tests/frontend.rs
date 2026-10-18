@@ -19,13 +19,15 @@ use strims_base::rng::det_rng;
 use strims_dao::schema::directory::DirectoryUserRecords;
 use strims_dao::schema::network::{Networks, network_scoped_key};
 use strims_dao::{Recv, Table};
-use strims_directory::{DirectoryFrontend, bind_frontend};
+use strims_directory::{DirectoryFrontend, EmbedService, bind_frontend, embed};
 use strims_network::membership::{network_from_invitation_v0, new_invitation_v0, new_network};
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::directory::frontend_watch_listing_users_response::UserEventType;
 use strims_proto::network::v1::directory::frontend_watch_listings_response::event::Event as Body;
 use strims_proto::network::v1::directory::listing::{Chat, Content, Embed, Service};
 use strims_proto::network::v1::directory::listing_query::Query;
+use strims_proto::network::v1::directory::server_config::Integrations;
+use strims_proto::network::v1::directory::server_config::integrations::{AngelThump, YouTube};
 use strims_proto::network::v1::directory::{
     DirectoryFrontendClient, DirectoryFrontendService, FrontendGetListingRequest,
     FrontendGetListingsRequest, FrontendGetUsersRequest, FrontendJoinRequest,
@@ -35,7 +37,7 @@ use strims_proto::network::v1::directory::{
     FrontendWatchListingUsersResponse, FrontendWatchListingsRequest, FrontendWatchListingsResponse,
     Listing, ListingContentType, ListingModeration, ListingQuery, UserModeration,
 };
-use strims_proto::service::{CallError, Context, Error as RpcError};
+use strims_proto::service::{CallError, Context};
 use strims_rpc::{Client, Router};
 use strims_testworld::*;
 
@@ -816,17 +818,71 @@ fn lagging_watches_get_the_views_again() {
     });
 }
 
-/// `Test` has no implementation.
+/// `Test` publishes embeds of the services the network enables, each
+/// service in turn, up to the publish quota; a network that enables none
+/// refuses it.
 #[test]
-fn test_is_unimplemented() {
+fn test_publishes_the_enabled_services_embeds_up_to_the_quota() {
     run(async {
         let world = World::default();
+        let owner = node_in(&world, 1).await;
         let alice = node_in(&world, 2).await;
-        let got = ui(&alice)
+        let bob = node_in(&world, 3).await;
+        let carol = node_in(&world, 4).await;
+        let (key, _pipes) = owned_network_with(&owner, &[&alice], 10, |n: &mut Network| {
+            let d = n
+                .server_config
+                .as_mut()
+                .unwrap()
+                .directory
+                .get_or_insert_default();
+            d.publish_quota = 3;
+            d.integrations = Some(Integrations {
+                angelthump: Some(AngelThump { enable: true }),
+                youtube: Some(YouTube {
+                    enable: true,
+                    public_api_key: "key".into(),
+                }),
+                ..Default::default()
+            });
+        })
+        .await;
+        let key = key.public;
+        let ua = ui(&alice);
+        let test = FrontendTestRequest {
+            network_key: key.clone(),
+        };
+        ua.test(&test).await.unwrap();
+        sleep_secs(3).await;
+        let embeds = |n: &Node| -> Vec<(EmbedService, String)> {
+            n.directory
+                .listings(10)
+                .iter()
+                .filter_map(|l| embed::of(&l.listing).map(|(s, id)| (s, id.to_owned())))
+                .collect()
+        };
+        let want = [
+            (EmbedService::YouTube, "DDTGlyJVNVI".to_owned()),
+            (EmbedService::AngelThump, "psrngafk".to_owned()),
+            (EmbedService::YouTube, "SocSlBubzwA".to_owned()),
+        ];
+        assert_eq!(embeds(&alice), want);
+        ua.test(&test).await.unwrap();
+        sleep_secs(3).await;
+        assert_eq!(embeds(&alice), want);
+
+        let (plain, _pipes) = owned_network(&bob, &[&carol], 11).await;
+        let refused = ui(&carol)
             .test(&FrontendTestRequest {
-                network_key: vec![1; 32],
+                network_key: plain.public,
             })
             .await;
-        assert_eq!(got, Err(CallError::Remote(RpcError::unimplemented())));
+        assert_eq!(refusal(refused), "unsupported embed service");
+        let unknown = ua
+            .test(&FrontendTestRequest {
+                network_key: vec![9; 32],
+            })
+            .await;
+        assert_eq!(refusal(unknown), "network not found");
     });
 }

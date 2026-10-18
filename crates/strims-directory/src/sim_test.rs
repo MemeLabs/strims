@@ -879,6 +879,7 @@ impl Sim {
                         .push(format!("{} unsubscribe {}", self.stamp(), sub.0));
                     self.streams.remove(&sub);
                 }
+                ServerAction::LoadEmbeds { .. } => {}
             }
         }
     }

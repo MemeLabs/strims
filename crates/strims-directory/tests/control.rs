@@ -12,16 +12,25 @@
     clippy::indexing_slicing
 )]
 
+use std::cell::Cell;
+use std::rc::Rc;
+
+use futures_util::future::LocalBoxFuture;
 use strims_base::rng::det_rng;
 use strims_dao::Table;
 use strims_dao::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, listing_key};
 use strims_dao::schema::network::network_scoped_key;
-use strims_directory::{CallFailure, DirectoryError, DirectoryEvent, ListingEvent, UserEventKind};
+use strims_directory::{
+    CallFailure, DirectoryError, DirectoryEvent, EmbedService, Fetch, FetchError, HttpFetch,
+    HttpRequest, HttpResponse, ListingEvent, UserEventKind, embed,
+};
 use strims_network::membership::new_network;
 use strims_ppspp::SwarmId;
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::directory::listing::{Chat, Content};
 use strims_proto::network::v1::directory::listing_query::Query;
+use strims_proto::network::v1::directory::server_config::Integrations;
+use strims_proto::network::v1::directory::server_config::integrations::AngelThump;
 use strims_proto::network::v1::directory::{
     Listing, ListingModeration, ListingQuery, ListingRecord, UserModeration, UserRecord,
 };
@@ -595,5 +604,98 @@ fn a_renewed_alias_reaches_presence() {
                     if *listing_id == id && user.alias == "alicia")),
             "{got:?}"
         );
+    });
+}
+
+/// Answers AngelThump's stream API with a live stream of any username,
+/// counting the requests.
+struct FakeAngelThump {
+    requests: Rc<Cell<u32>>,
+}
+
+impl HttpFetch for FakeAngelThump {
+    fn fetch(&self, req: HttpRequest) -> LocalBoxFuture<'static, Result<HttpResponse, FetchError>> {
+        self.requests.set(self.requests.get() + 1);
+        let prefix = "https://api.angelthump.com/v3/streams/?username=";
+        let user = req.url.strip_prefix(prefix).unwrap_or_default().to_owned();
+        let body = format!(
+            r#"[{{"type":"live","thumbnail_url":"https://thumb/{user}.jpeg","viewer_count":12,
+               "createdAt":"2023-11-14T22:13:20Z","user":{{"display_name":"{user}",
+               "title":"live now","username":"{user}","profile_logo_url":"https://logo/{user}.png"}}}}]"#
+        );
+        Box::pin(async move {
+            Ok(HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: body.into_bytes(),
+            })
+        })
+    }
+}
+
+fn angelthump(n: &mut Network) {
+    let d = n
+        .server_config
+        .as_mut()
+        .unwrap()
+        .directory
+        .get_or_insert_default();
+    d.integrations = Some(Integrations {
+        angelthump: Some(AngelThump { enable: true }),
+        ..Default::default()
+    });
+}
+
+/// A member's embed listing of a service the network enables shows the
+/// snippet the server loads through its fetcher, again every load
+/// interval; a service the network doesn't enable is refused.
+#[test]
+fn a_members_embed_shows_the_snippet_the_server_loads() {
+    run(async {
+        let world = World::default();
+        let owner = node_in(&world, 1).await;
+        let alice = node_in(&world, 2).await;
+        let requests = Rc::new(Cell::new(0));
+        owner.directory.set_fetch(Fetch::new(FakeAngelThump {
+            requests: requests.clone(),
+        }));
+        let (key, _pipes) = owned_network_with(&owner, &[&alice], 12, angelthump).await;
+        let key = key.public;
+        let client = alice.directory.client_config(&key).unwrap();
+        let i = client.integrations.unwrap();
+        assert!(i.angelthump && !i.twitch && !i.youtube);
+
+        let twitch = embed::listing(EmbedService::TwitchStream, "destiny");
+        assert_eq!(
+            alice.directory.publish(&key, twitch).await,
+            Err(CallFailure::Refused(DirectoryError::UnsupportedEmbed))
+        );
+        let listing = embed::listing(EmbedService::AngelThump, "psrngafk");
+        let id = alice.directory.publish(&key, listing).await.unwrap();
+        let snippet = |n: &Node| {
+            n.directory
+                .listings(12)
+                .into_iter()
+                .find(|l| l.id == id)
+                .and_then(|l| l.snippet)
+        };
+        wait_for(10, "the loaded snippet", || {
+            snippet(&alice).is_some_and(|s| s.title == "live now")
+        })
+        .await;
+        let s = snippet(&alice).unwrap();
+        assert!(s.live);
+        assert_eq!((s.user_count, s.channel_name.as_str()), (12, "psrngafk"));
+        assert_eq!(s.start_time, 1_700_000_000);
+        assert_eq!(requests.get(), 1);
+
+        // the next load's live thumbnail is fetched again
+        sleep_secs(62).await;
+        assert_eq!(requests.get(), 2);
+        let m = owner.directory.metrics(&key).unwrap();
+        assert_eq!((m.embed_batches, m.embed_batch_errors), (2, 0));
+        let later = snippet(&alice).unwrap();
+        assert_eq!(later.title, s.title);
+        assert_ne!(later.thumbnail, s.thumbnail);
     });
 }

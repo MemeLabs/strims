@@ -8,6 +8,8 @@
     clippy::panic
 )]
 
+use std::collections::BTreeMap;
+
 use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
@@ -22,18 +24,21 @@ use strims_proto::network::v1::directory::listing::{Chat, Content, Embed, Media}
 use strims_proto::network::v1::directory::listing_query::Query;
 use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
 use strims_proto::network::v1::directory::server_config::Integrations;
-use strims_proto::network::v1::directory::server_config::integrations::Swarm;
+use strims_proto::network::v1::directory::server_config::integrations::{
+    AngelThump, Swarm, Twitch, YouTube,
+};
 use strims_proto::network::v1::directory::{
     Event, EventBroadcast, Listing, ListingModeration, ListingQuery, ListingSnippet,
     ListingSnippetDelta, ListingSnippetImage, ServerConfig, UserModeration,
 };
 use strims_proto::types::{Image, KeyUsage};
 
+use crate::embed::EmbedService;
 use crate::server::{
-    MAX_BROADCAST_RECORD, MAX_DELTAS_PER_MINUTE, MAX_UNVERIFIED, MIN_SNIPPET_BACKOFF,
-    REFRESH_BYTES_PER_TICK,
+    LoadId, MAX_BROADCAST_RECORD, MAX_DELTAS_PER_MINUTE, MAX_UNVERIFIED, MIN_EMBED_LOAD_SPACING,
+    MIN_SNIPPET_BACKOFF, REFRESH_BYTES_PER_TICK,
 };
-use crate::snippet::{diff, split};
+use crate::snippet::{MAX_TEXT_BYTES, diff, split};
 use crate::{Caller, DirectoryError, Limits, Server, ServerAction, SubId, Tunables};
 
 const T0: Time = Time::from_unix_millis(1_700_000_000_000);
@@ -941,6 +946,8 @@ fn tunables_take_defaults_and_stay_in_range() {
     assert_eq!(d.snippet_timeout, Duration::from_secs(30));
     assert_eq!((d.publish_quota, d.join_quota), (10, 10));
     assert!(!d.swarm);
+    assert!(!d.embeds.any());
+    assert_eq!(d.embed_load_interval, Duration::MINUTE);
 
     let huge = Tunables::from_config(Some(&config(|c| {
         c.broadcast_interval = u32::MAX;
@@ -949,9 +956,11 @@ fn tunables_take_defaults_and_stay_in_range() {
         c.min_ping_interval = u32::MAX;
         c.max_ping_interval = 1;
         c.load_media_embed_timeout = u32::MAX;
+        c.embed_load_interval = u32::MAX;
         c.publish_quota = 1000;
         c.join_quota = 1;
     })));
+    assert_eq!(huge.embed_load_interval, Duration::HOUR);
     assert_eq!(huge.broadcast_interval, Duration::MINUTE);
     assert_eq!(huge.refresh_interval, Duration::HOUR);
     assert_eq!(huge.session_timeout, Duration::HOUR * 24);
@@ -969,8 +978,10 @@ fn tunables_take_defaults_and_stay_in_range() {
         c.session_timeout = 1;
         c.min_ping_interval = 1;
         c.max_ping_interval = 1;
+        c.embed_load_interval = 1;
     })));
     assert_eq!(small.refresh_interval, Duration::from_secs(30));
+    assert_eq!(small.embed_load_interval, Duration::from_secs(30));
     assert_eq!(small.session_timeout, Duration::MINUTE * 2);
     assert_eq!(small.min_ping_interval, Duration::MINUTE);
     assert_eq!(small.max_ping_interval, Duration::MINUTE);
@@ -981,7 +992,7 @@ fn tunables_take_defaults_and_stay_in_range() {
 }
 
 #[test]
-fn the_client_config_advertises_no_embeds() {
+fn the_client_config_advertises_the_swarm_integration_and_quotas() {
     let c = config(|c| {
         c.integrations = Some(Integrations {
             swarm: Some(Swarm { enable: true }),
@@ -1007,6 +1018,28 @@ fn the_client_config_advertises_no_embeds() {
     f.s.set_config(None);
     assert!(!f.s.client_config().integrations.unwrap().swarm);
     assert_eq!(f.s.client_config().max_ping_interval, 840);
+}
+
+#[test]
+fn the_client_config_advertises_the_embed_services_with_credentials() {
+    let c = embeds_config(|i| {
+        i.angelthump = Some(AngelThump { enable: true });
+        i.twitch = Some(Twitch {
+            enable: true,
+            client_id: "id".into(),
+            client_secret: "secret".into(),
+        });
+        i.youtube = Some(YouTube {
+            enable: true,
+            public_api_key: String::new(),
+        });
+    });
+    let mut f = Fixture::with(Limits::default(), Some(&c));
+    let i = f.s.client_config().integrations.unwrap();
+    assert!(i.angelthump && i.twitch && !i.youtube && !i.swarm);
+    f.s.set_config(Some(&angelthump_and_youtube()));
+    let i = f.s.client_config().integrations.unwrap();
+    assert!(i.angelthump && !i.twitch && i.youtube);
 }
 
 #[test]
@@ -1378,4 +1411,273 @@ fn an_unpublished_media_listing_stops_its_snippet_source_at_once() {
     f.unpublish(&a, 1).unwrap();
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
     assert_eq!(f.tick(), s(&["unpublish 1", "online 1 user1 []"]));
+}
+
+// --- embeds -----------------------------------------------------------------
+
+fn embed(service: EmbedService, id: &str) -> Listing {
+    crate::embed::listing(service, id)
+}
+
+fn embeds_config(f: impl FnOnce(&mut Integrations)) -> ServerConfig {
+    config(|c| {
+        let mut i = Integrations::default();
+        f(&mut i);
+        c.integrations = Some(i);
+    })
+}
+
+fn angelthump_and_youtube() -> ServerConfig {
+    embeds_config(|i| {
+        i.angelthump = Some(AngelThump { enable: true });
+        i.youtube = Some(YouTube {
+            enable: true,
+            public_api_key: "key".into(),
+        });
+    })
+}
+
+fn embed_fixture() -> Fixture {
+    Fixture::with(Limits::default(), Some(&angelthump_and_youtube()))
+}
+
+type Ids = BTreeMap<EmbedService, Vec<String>>;
+
+/// The LoadEmbeds actions so far.
+fn loads(f: &mut Fixture) -> Vec<(LoadId, Ids)> {
+    f.take_actions()
+        .into_iter()
+        .filter_map(|a| match a {
+            ServerAction::LoadEmbeds { load, ids } => Some((load, ids)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn ids(v: &[(EmbedService, &[&str])]) -> Ids {
+    v.iter()
+        .map(|(s, ids)| (*s, ids.iter().map(|i| (*i).to_owned()).collect()))
+        .collect()
+}
+
+/// Runs the server to now, and returns the load that starts.
+fn started(f: &mut Fixture) -> LoadId {
+    f.advance(0);
+    let l = loads(f);
+    assert_eq!(l.len(), 1, "{l:?}");
+    l[0].0
+}
+
+fn loaded(title: &str) -> ListingSnippet {
+    ListingSnippet {
+        title: title.into(),
+        live: true,
+        channel_logo: Some(ListingSnippetImage {
+            source_oneof: Some(SourceOneof::Url("https://x/logo.png".into())),
+        }),
+        ..Default::default()
+    }
+}
+
+fn load_batch(f: &mut Fixture, load: LoadId, service: EmbedService, v: &[(&str, ListingSnippet)]) {
+    let snippets = v
+        .iter()
+        .map(|(id, s)| ((*id).to_owned(), s.clone()))
+        .collect();
+    f.s.embeds_loaded(f.now, load, service, snippets);
+    f.check();
+}
+
+fn end_load(f: &mut Fixture, load: LoadId) {
+    f.s.embeds_load_ended(f.now, load);
+    f.check();
+}
+
+#[test]
+fn embed_listings_are_taken_only_of_enabled_services_with_credentials() {
+    use EmbedService::*;
+    let mut f = embed_fixture();
+    let a = caller(1, 1);
+    assert_eq!(f.publish(&a, embed(AngelThump, "psrngafk")), Ok(1));
+    assert_eq!(f.publish(&a, embed(YouTube, "DDTGlyJVNVI")), Ok(2));
+    for refused in [embed(TwitchStream, "destiny"), embed(TwitchVod, "1")] {
+        assert_eq!(
+            f.publish(&a, refused),
+            Err(DirectoryError::UnsupportedEmbed)
+        );
+    }
+    assert_eq!(
+        f.publish(&a, embed(YouTube, "short")),
+        Err(DirectoryError::InvalidEmbedId)
+    );
+
+    let no_secret = embeds_config(|i| {
+        i.twitch = Some(Twitch {
+            enable: true,
+            client_id: "id".into(),
+            client_secret: String::new(),
+        });
+    });
+    let mut f = Fixture::with(Limits::default(), Some(&no_secret));
+    assert_eq!(
+        f.publish(&a, embed(TwitchStream, "destiny")),
+        Err(DirectoryError::UnsupportedEmbed)
+    );
+    assert_eq!(f.s.metrics().users_created, 0);
+}
+
+#[test]
+fn embed_loads_run_one_at_a_time_at_their_interval() {
+    use EmbedService::*;
+    let mut f = embed_fixture();
+    let a = caller(1, 1);
+    f.publish(&a, chat(1)).unwrap();
+    f.advance(30);
+    assert!(loads(&mut f).is_empty());
+
+    // a new embed listing starts a load at once
+    f.publish(&a, embed(AngelThump, "a")).unwrap();
+    assert_eq!(f.s.poll_timeout(), Some(f.now));
+    f.advance(0);
+    let l = loads(&mut f);
+    assert_eq!(l.len(), 1);
+    let (first, first_ids) = &l[0];
+    assert_eq!(*first_ids, ids(&[(AngelThump, &["a"])]));
+    let first_at = f.now;
+
+    // another waits for the load in flight, and for the spacing
+    f.publish(&a, embed(YouTube, "DDTGlyJVNVI")).unwrap();
+    f.advance(5);
+    assert!(loads(&mut f).is_empty());
+    end_load(&mut f, *first);
+    f.advance(4);
+    assert!(loads(&mut f).is_empty());
+    f.advance(1);
+    assert_eq!(f.now, first_at + MIN_EMBED_LOAD_SPACING);
+    let l = loads(&mut f);
+    assert_eq!(l.len(), 1);
+    let (second, second_ids) = &l[0];
+    assert_eq!(
+        *second_ids,
+        ids(&[(AngelThump, &["a"]), (YouTube, &["DDTGlyJVNVI"])])
+    );
+    assert_eq!(f.s.embed_load(), Some(*second));
+    end_load(&mut f, *second);
+
+    // then one every interval
+    f.advance(59);
+    assert!(loads(&mut f).is_empty());
+    f.advance(1);
+    let third = loads(&mut f);
+    assert_eq!(third.len(), 1);
+    end_load(&mut f, third[0].0);
+
+    // without embed listings, loads stop
+    f.unpublish(&a, 2).unwrap();
+    f.unpublish(&a, 3).unwrap();
+    f.advance(120);
+    assert!(loads(&mut f).is_empty());
+    assert!(f.s.poll_timeout().unwrap() <= f.now + Duration::SECOND);
+    assert_eq!(f.s.metrics().embed_loads, 3);
+}
+
+#[test]
+fn a_loaded_snippet_is_applied_only_when_it_changes() {
+    use EmbedService::*;
+    let mut f = embed_fixture();
+    let a = caller(1, 1);
+    let id = f.publish(&a, embed(AngelThump, "a")).unwrap();
+    let load = started(&mut f);
+    assert_eq!(
+        f.tick(),
+        s(&["change 1", "count 1 1/1", "online 1 user1 [1]"])
+    );
+
+    load_batch(
+        &mut f,
+        load,
+        AngelThump,
+        &[("a", loaded("t")), ("other", loaded("x"))],
+    );
+    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
+    assert_eq!(f.tick(), s(&["change 1", "count 1 1/1"]));
+    load_batch(&mut f, load, AngelThump, &[("a", loaded("t"))]);
+    assert_eq!(f.tick(), Vec::<String>::new());
+    assert_eq!(f.s.metrics().embed_snippets_shown, 1);
+
+    let oversized = loaded(&"x".repeat(MAX_TEXT_BYTES + 1));
+    load_batch(&mut f, load, AngelThump, &[("a", oversized)]);
+    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
+    assert_eq!(f.s.metrics().embed_snippets_rejected, 1);
+
+    // batches of another service, or of a load that ended, change nothing
+    load_batch(&mut f, load, YouTube, &[("a", loaded("y"))]);
+    load_batch(&mut f, load, TwitchStream, &[("a", loaded("y"))]);
+    end_load(&mut f, load);
+    load_batch(&mut f, load, AngelThump, &[("a", loaded("late"))]);
+    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
+    assert_eq!(f.s.metrics().stale_embed_batches, 2);
+    assert_eq!(f.tick(), Vec::<String>::new());
+}
+
+#[test]
+fn a_failed_batch_keeps_the_snippet() {
+    use EmbedService::*;
+    let mut f = embed_fixture();
+    let a = caller(1, 1);
+    let at = f.publish(&a, embed(AngelThump, "a")).unwrap();
+    let yt = f.publish(&a, embed(YouTube, "DDTGlyJVNVI")).unwrap();
+    let load = started(&mut f);
+    load_batch(&mut f, load, AngelThump, &[("a", loaded("a1"))]);
+    load_batch(&mut f, load, YouTube, &[("DDTGlyJVNVI", loaded("y1"))]);
+    end_load(&mut f, load);
+    f.tick();
+
+    // the next load's AngelThump batch fails, and its YouTube batch
+    // answers nothing for the video
+    f.advance(59);
+    let load = started(&mut f);
+    load_batch(&mut f, load, YouTube, &[]);
+    end_load(&mut f, load);
+    assert_eq!(f.s.snippet(at), Some(&loaded("a1")));
+    assert_eq!(f.s.snippet(yt), Some(&loaded("y1")));
+    assert_eq!(f.tick(), Vec::<String>::new());
+}
+
+#[test]
+fn disabling_an_embed_service_removes_its_listings() {
+    use EmbedService::{AngelThump as At, YouTube as Yt};
+    let mut f = embed_fixture();
+    let a = caller(1, 1);
+    let at = f.publish(&a, embed(At, "a")).unwrap();
+    let yt = f.publish(&a, embed(Yt, "DDTGlyJVNVI")).unwrap();
+    let c = f.publish(&a, chat(1)).unwrap();
+    let load = started(&mut f);
+    f.tick();
+
+    let youtube_only = embeds_config(|i| {
+        i.youtube = Some(YouTube {
+            enable: true,
+            public_api_key: "key".into(),
+        });
+    });
+    f.s.set_config(Some(&youtube_only));
+    f.check();
+    assert_eq!(
+        f.tick(),
+        s(&[
+            &format!("unpublish {at}"),
+            &format!("online 1 user1 [{yt}, {c}]")
+        ])
+    );
+    assert_eq!(f.s.listing_ids(), [yt, c]);
+    assert_eq!(
+        f.publish(&a, embed(At, "a")),
+        Err(DirectoryError::UnsupportedEmbed)
+    );
+    load_batch(&mut f, load, At, &[("a", loaded("a1"))]);
+    assert_eq!(f.s.metrics().stale_embed_batches, 1);
+    end_load(&mut f, load);
+    f.advance(60);
+    assert_eq!(loads(&mut f)[0].1, ids(&[(Yt, &["DDTGlyJVNVI"])]));
 }

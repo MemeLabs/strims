@@ -26,8 +26,8 @@ use strims_network::{NetworkControl, NetworkEvent};
 use strims_ppspp::SwarmId;
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::directory::{
-    AssetBundle, DirectoryClient, Listing, ListingModeration, ListingQuery, ListingSnippet,
-    UserModeration,
+    AssetBundle, ClientConfig, DirectoryClient, Listing, ListingModeration, ListingQuery,
+    ListingSnippet, UserModeration,
 };
 use strims_proto::service::{CallError, Error as RpcError};
 use strims_rpc::vpn::VpnClient;
@@ -35,6 +35,7 @@ use strims_rpc::{RetryClient, Timer};
 use strims_transfer::TransferControl;
 
 use crate::events::{DirectoryEvent, ListingEvent, UserEventKind};
+use crate::fetch::Fetch;
 use crate::host::{Host, Net};
 use crate::server::{Caller, Server};
 use crate::services::{self, MemberPort, Reply, Request, ServerState, SnippetHub};
@@ -184,6 +185,8 @@ pub(crate) struct Shared<K: Kv, H: Host, T: Timer> {
     pub(crate) transfers: TransferControl<H, T>,
     pub(crate) timer: T,
     pub(crate) config: Config,
+    /// The fetcher of the servers' embed loads.
+    pub(crate) fetch: RefCell<Fetch>,
     /// Draws lease tokens, the servers' rngs and ping intervals.
     pub(crate) rng: RefCell<DetRng>,
     /// Bound: the profile's networks.
@@ -653,6 +656,7 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
                 transfers,
                 timer,
                 config,
+                fetch: RefCell::new(Fetch::default()),
                 rng: RefCell::new(rng),
                 runners: RefCell::new(BTreeMap::new()),
                 stopping: RefCell::new(BTreeMap::new()),
@@ -662,6 +666,20 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
                 waker: RefCell::new(None),
             }),
         }
+    }
+
+    /// The control, with `fetch` as its fetcher ([`Self::set_fetch`]).
+    pub fn with_fetch(self, fetch: Fetch) -> Self {
+        self.set_fetch(fetch);
+        self
+    }
+
+    /// Makes the servers' embed loads through `fetch`, from their next
+    /// load on. Until a fetcher is set, every load fails, and embed
+    /// listings go without snippets.
+    pub fn set_fetch(&self, fetch: Fetch) {
+        let prev = self.shared.fetch.replace(fetch);
+        drop(prev);
     }
 
     /// The network control whose networks this control follows.
@@ -762,6 +780,14 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
                 (!listings.is_empty()).then(|| (r.key.clone(), listings))
             })
             .collect()
+    }
+
+    /// The client config of the latest asset bundle of the network whose
+    /// key is `network_key`.
+    pub fn client_config(&self, network_key: &[u8]) -> Option<ClientConfig> {
+        let r = self.shared.runner(network_key)?;
+        let b = r.bundle.borrow();
+        b.as_ref()?.directory
     }
 
     /// The latest asset bundle of each network that has one: its id, its

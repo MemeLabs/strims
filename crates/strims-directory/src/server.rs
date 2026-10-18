@@ -69,6 +69,22 @@
 //! [`MIN_SNIPPET_BACKOFF`], doubling up to [`MAX_SNIPPET_BACKOFF`], plus up
 //! to a quarter of jitter; by then a source that stopped publishing has
 //! moved to the newest publisher. A verified delta resets the backoff.
+//!
+//! # Embeds
+//!
+//! The server takes embed listings of the services its config enables
+//! ([`Tunables::embeds`]) and loads their snippets through the control:
+//! [`ServerAction::LoadEmbeds`] names the ids of every embed listing by
+//! service, and the control answers each batch it loads with
+//! [`Server::embeds_loaded`] and the load's end with
+//! [`Server::embeds_load_ended`]. One load runs at a time. While there
+//! are embed listings, a load starts every
+//! [`Tunables::embed_load_interval`]; a new embed listing brings the next
+//! one forward, to no sooner than [`MIN_EMBED_LOAD_SPACING`] after the
+//! last one started. A loaded snippet replaces the listing's when it
+//! differs and passes [`snippet::check`], and the listing is modified; a
+//! listing a load doesn't answer keeps its snippet. Once the config stops
+//! enabling a service, the next broadcast removes its listings.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -90,6 +106,7 @@ use strims_proto::network::v1::directory::{
 };
 use strims_proto::types::{Certificate, Image};
 
+use crate::embed::{self, EmbedService, EmbedServices, LoaderConfig};
 use crate::{DirectoryError, Limits, MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, listing, snippet};
 
 /// How long a user counts towards a listing's recent users.
@@ -115,6 +132,8 @@ pub const MAX_SNIPPET_BACKOFF: Duration = Duration::from_secs(10 * 60);
 /// The longest encoded asset bundle; a bundle with a larger icon goes
 /// without it.
 pub const MAX_ASSET_BUNDLE: usize = 1024 * 1024;
+/// The shortest wait between the starts of two embed loads.
+pub const MIN_EMBED_LOAD_SPACING: Duration = Duration::from_secs(10);
 
 const RATE_WINDOW: Duration = Duration::MINUTE;
 
@@ -127,6 +146,10 @@ new_key_type! {
 /// A snippet subscription's id, unique for the server's life.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubId(pub u64);
+
+/// An embed load's id, unique for the server's life.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LoadId(pub u64);
 
 /// The host behind a call, from its vpn certificate.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -191,6 +214,11 @@ pub struct Tunables {
     pub join_quota: u32,
     /// Whether the swarm integration is enabled, for clients.
     pub swarm: bool,
+    /// The embed services enabled with their credentials
+    /// ([`LoaderConfig`]).
+    pub embeds: EmbedServices,
+    /// Default 1 min; 30 s to 1 h.
+    pub embed_load_interval: Duration,
 }
 
 impl Tunables {
@@ -217,6 +245,8 @@ impl Tunables {
             .and_then(|c| c.integrations.as_ref())
             .and_then(|i| i.swarm.as_ref())
             .is_some_and(|s| s.enable);
+        let embed_load_interval =
+            secs(field(|c| c.embed_load_interval), 60).clamp(Duration::SECOND * 30, Duration::HOUR);
         Tunables {
             broadcast_interval,
             refresh_interval,
@@ -227,6 +257,8 @@ impl Tunables {
             publish_quota: quota(field(|c| c.publish_quota)),
             join_quota: quota(field(|c| c.join_quota)),
             swarm,
+            embeds: LoaderConfig::from_config(c).services(),
+            embed_load_interval,
         }
     }
 }
@@ -253,6 +285,13 @@ pub enum ServerAction {
     },
     /// End subscription `sub`, without reporting it.
     Unsubscribe { sub: SubId },
+    /// Load the snippets of the embed listings `ids` names, and report
+    /// each batch to [`Server::embeds_loaded`] and the end to
+    /// [`Server::embeds_load_ended`].
+    LoadEmbeds {
+        load: LoadId,
+        ids: BTreeMap<EmbedService, Vec<String>>,
+    },
 }
 
 /// What a [`Server`] has done.
@@ -292,6 +331,14 @@ pub struct ServerMetrics {
     pub snippets_rejected: u64,
     pub snippet_floods: u64,
     pub snippets_oversized: u64,
+    /// Embed loads started.
+    pub embed_loads: u64,
+    /// Loaded embed snippets that changed a listing's snippet, and those
+    /// over a bound.
+    pub embed_snippets_shown: u64,
+    pub embed_snippets_rejected: u64,
+    /// Batches of loads that had ended, or of services no longer enabled.
+    pub stale_embed_batches: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -497,6 +544,14 @@ pub struct Server {
     refresh: VecDeque<RefreshItem>,
     last_refresh: Time,
     next_broadcast: Time,
+    /// The embed load in flight.
+    load: Option<LoadId>,
+    /// When the next embed load starts; none while there were no embed
+    /// listings at the last start.
+    load_due: Option<Time>,
+    /// When the last embed load started.
+    last_load: Option<Time>,
+    next_load: u64,
     stamp: u64,
     mark: u64,
     next_listing_id: u64,
@@ -531,6 +586,10 @@ impl Server {
             refresh: VecDeque::new(),
             last_refresh: now,
             next_broadcast: now + tunables.broadcast_interval,
+            load: None,
+            load_due: None,
+            last_load: None,
+            next_load: 1,
             stamp: 0,
             mark: 0,
             next_listing_id: 1,
@@ -542,9 +601,19 @@ impl Server {
     }
 
     /// Takes the settings of a changed `ServerConfig`. Memberships beyond
-    /// lowered quotas stay.
+    /// lowered quotas stay; the listings of embed services it no longer
+    /// enables go at the next broadcast.
     pub fn set_config(&mut self, config: Option<&ServerConfig>) {
         self.tunables = Tunables::from_config(config);
+        let disabled: Vec<ListingKey> = self
+            .listings
+            .iter()
+            .filter(|(_, l)| !embed_enabled(self.tunables.embeds, &l.listing))
+            .map(|(lk, _)| lk)
+            .collect();
+        for lk in disabled {
+            self.touch_listing(lk);
+        }
     }
 
     pub fn tunables(&self) -> &Tunables {
@@ -552,15 +621,16 @@ impl Server {
     }
 
     /// The client config of the asset bundle: the effective quotas and
-    /// ping intervals, the swarm integration, and no embed integrations.
+    /// ping intervals, the swarm integration and the enabled embed
+    /// services.
     pub fn client_config(&self) -> ClientConfig {
         let t = &self.tunables;
         let secs = |d: Duration| u32::try_from(d.as_secs()).unwrap_or(u32::MAX);
         ClientConfig {
             integrations: Some(client_config::Integrations {
-                angelthump: false,
-                twitch: false,
-                youtube: false,
+                angelthump: t.embeds.angelthump,
+                twitch: t.embeds.twitch,
+                youtube: t.embeds.youtube,
                 swarm: t.swarm,
             }),
             publish_quota: t.publish_quota,
@@ -785,6 +855,48 @@ impl Server {
         }
     }
 
+    /// A batch of embed load `load`: `service`'s ids with their snippets.
+    /// Each snippet that passes [`snippet::check`] and differs from its
+    /// listing's replaces it. A batch of a load that ended, or of a
+    /// service the config no longer enables, changes nothing.
+    pub fn embeds_loaded(
+        &mut self,
+        _now: Time,
+        load: LoadId,
+        service: EmbedService,
+        snippets: Vec<(String, ListingSnippet)>,
+    ) {
+        if self.load != Some(load) || !self.tunables.embeds.supports(service) {
+            self.metrics.stale_embed_batches += 1;
+            return;
+        }
+        for (id, s) in snippets {
+            let key = listing::key(&embed::listing(service, &id));
+            let Some(&lk) = self.listing_keys.get(&key) else {
+                continue;
+            };
+            if snippet::check(&s).is_err() {
+                self.metrics.embed_snippets_rejected += 1;
+                continue;
+            }
+            let Some(l) = self.listings.get_mut(lk) else {
+                continue;
+            };
+            if l.snippet != s {
+                l.snippet = s;
+                self.metrics.embed_snippets_shown += 1;
+                self.modify_listing(lk);
+            }
+        }
+    }
+
+    /// Embed load `load` ended; the next may start.
+    pub fn embeds_load_ended(&mut self, _now: Time, load: LoadId) {
+        if self.load == Some(load) {
+            self.load = None;
+        }
+    }
+
     /// Snippet subscription `sub` ended at the publisher.
     pub fn snippet_ended(&mut self, now: Time, sub: SubId) {
         let Some(&lk) = self.subs.get(&sub) else {
@@ -797,11 +909,13 @@ impl Server {
     /// When [`Server::handle_timeout`] is next due.
     pub fn poll_timeout(&self) -> Option<Time> {
         let timer = self.source_timers.first().map(|(t, _)| *t);
-        Some(timer.map_or(self.next_broadcast, |t| t.min(self.next_broadcast)))
+        let load = self.load_due.filter(|_| self.load.is_none());
+        let due = [timer, load].into_iter().flatten().min();
+        Some(due.map_or(self.next_broadcast, |t| t.min(self.next_broadcast)))
     }
 
-    /// Runs the snippet retries and timeouts due at `now`, and the
-    /// broadcast if it's due.
+    /// Runs the snippet retries and timeouts due at `now`, and the embed
+    /// load and the broadcast if they're due.
     pub fn handle_timeout(&mut self, now: Time) {
         while let Some(&(t, lk)) = self.source_timers.first() {
             if t > now {
@@ -809,6 +923,9 @@ impl Server {
             }
             self.source_timers.pop_first();
             self.source_timer(now, lk);
+        }
+        if self.load.is_none() && self.load_due.is_some_and(|t| t <= now) {
+            self.start_load(now);
         }
         if now >= self.next_broadcast {
             self.broadcast(now);
@@ -842,6 +959,9 @@ impl Server {
             return Err(DirectoryError::PublishDisabled);
         }
         let v = listing::validate(&l)?;
+        if v.embed.is_some_and(|s| !self.tunables.embeds.supports(s)) {
+            return Err(DirectoryError::UnsupportedEmbed);
+        }
         if record.and_then(|m| m.is_banned) == Some(true) {
             return Err(DirectoryError::ListingBanned);
         }
@@ -871,7 +991,12 @@ impl Server {
         let sk = self.admit(now, c, session);
         let lk = match existing {
             Some(lk) => lk,
-            None => self.insert_listing(l, v, record.cloned()),
+            None => {
+                if v.embed.is_some() {
+                    self.bring_load_forward(now);
+                }
+                self.insert_listing(l, v, record.cloned())
+            }
         };
         self.remove_viewer(lk, sk);
         self.add_publisher(now, lk, sk);
@@ -1487,6 +1612,47 @@ impl Server {
         }
     }
 
+    // --- embed loads ----------------------------------------------------
+
+    /// Has the next embed load start as soon as the spacing allows.
+    fn bring_load_forward(&mut self, now: Time) {
+        let earliest = self
+            .last_load
+            .map_or(now, |t| (t + MIN_EMBED_LOAD_SPACING).max(now));
+        self.load_due = Some(self.load_due.map_or(earliest, |t| t.min(earliest)));
+    }
+
+    /// Starts a load of every embed listing's snippet, unless there are
+    /// none.
+    fn start_load(&mut self, now: Time) {
+        let mut ids: BTreeMap<EmbedService, Vec<String>> = BTreeMap::new();
+        for lk in self.listing_ids.values() {
+            let Some(l) = self.listings.get(*lk) else {
+                continue;
+            };
+            if l.publishers.is_empty() || l.evicted {
+                continue;
+            }
+            if let Some((service, id)) = embed::of(&l.listing)
+                && self.tunables.embeds.supports(service)
+            {
+                ids.entry(service).or_default().push(id.to_owned());
+            }
+        }
+        if ids.is_empty() {
+            self.load_due = None;
+            return;
+        }
+        let load = LoadId(self.next_load);
+        self.next_load += 1;
+        self.load = Some(load);
+        self.last_load = Some(now);
+        self.load_due = Some(now + self.tunables.embed_load_interval);
+        self.metrics.embed_loads += 1;
+        self.actions
+            .push_back(ServerAction::LoadEmbeds { load, ids });
+    }
+
     // --- broadcasts -----------------------------------------------------
 
     fn broadcast(&mut self, now: Time) {
@@ -1510,7 +1676,12 @@ impl Server {
                 RefreshItem::Listing(lk) => self
                     .listings
                     .get(lk)
-                    .filter(|l| l.modified <= self.mark && !l.publishers.is_empty() && !l.evicted)
+                    .filter(|l| {
+                        l.modified <= self.mark
+                            && !l.publishers.is_empty()
+                            && !l.evicted
+                            && embed_enabled(self.tunables.embeds, &l.listing)
+                    })
                     .map(ListingEntry::change_len),
                 RefreshItem::User(uk) => self
                     .users
@@ -1547,7 +1718,10 @@ impl Server {
             let Some(l) = self.listings.get_mut(lk) else {
                 continue;
             };
-            if l.publishers.is_empty() || l.evicted {
+            if l.publishers.is_empty()
+                || l.evicted
+                || !embed_enabled(self.tunables.embeds, &l.listing)
+            {
                 if let Some(id) = self.remove_listing(lk) {
                     events.push(Event {
                         body: Some(Body::Unpublish(Unpublish { id })),
@@ -1626,6 +1800,11 @@ impl Server {
     }
 }
 
+/// Whether `l` isn't an embed, or is one of a service in `embeds`.
+fn embed_enabled(embeds: EmbedServices, l: &Listing) -> bool {
+    embed::of(l).is_none_or(|(s, _)| embeds.supports(s))
+}
+
 /// `m` without a category over [`listing::MAX_CATEGORY_BYTES`].
 fn bounded(m: Option<ListingModeration>) -> Option<ListingModeration> {
     m.map(|mut m| {
@@ -1691,6 +1870,11 @@ impl Server {
             }
         }
         p
+    }
+
+    /// The embed load in flight.
+    pub(crate) fn embed_load(&self) -> Option<LoadId> {
+        self.load
     }
 
     /// Whether every listing and user change has been broadcast.
@@ -1868,6 +2052,12 @@ impl Server {
         }
         if self.refresh.len() > lim.max_listings + lim.max_users {
             return Err("refresh queue".into());
+        }
+        if self.load.is_some_and(|l| l.0 >= self.next_load) {
+            return Err("embed load id".into());
+        }
+        if self.load.is_some() && (self.load_due.is_none() || self.last_load.is_none()) {
+            return Err("embed load schedule".into());
         }
         Ok(())
     }

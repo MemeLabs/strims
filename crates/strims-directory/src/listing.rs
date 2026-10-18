@@ -5,8 +5,8 @@
 //!
 //! A listing is named by its key ([`key`]): two publishes of listings with
 //! the same key publish the same listing. The server accepts chat,
-//! service and media listings; embeds need snippet loaders this node
-//! doesn't run, so they're refused.
+//! service, media and embed listings; an embed's service must also be one
+//! the server enables, which the server checks.
 
 use prost::Message;
 use strims_dao::schema::directory::listing_key;
@@ -15,6 +15,7 @@ use strims_proto::network::v1::directory::listing::Content;
 use strims_proto::network::v1::directory::{Listing, ListingContentType, ListingModeration};
 
 use crate::DirectoryError;
+use crate::embed::{self, EmbedService};
 
 /// The longest encoded listing.
 pub const MAX_LISTING_BYTES: usize = 4 * 1024;
@@ -31,35 +32,44 @@ pub struct Validated {
     pub content_type: ListingContentType,
     /// A media listing's swarm.
     pub swarm_id: Option<SwarmId>,
+    /// An embed listing's service.
+    pub embed: Option<EmbedService>,
 }
 
 /// Checks that the server accepts `l`:
 /// - it encodes to at most [`MAX_LISTING_BYTES`] ([`DirectoryError::TooLarge`]);
-/// - it has content ([`DirectoryError::UnsupportedContent`]) that isn't an
-///   embed ([`DirectoryError::UnsupportedEmbed`]);
+/// - it has content ([`DirectoryError::UnsupportedContent`]);
 /// - a media listing's swarm URI parses, with a swarm id of 1 to
-///   [`MAX_SWARM_ID_BYTES`] bytes ([`DirectoryError::InvalidSwarmUri`]).
+///   [`MAX_SWARM_ID_BYTES`] bytes ([`DirectoryError::InvalidSwarmUri`]);
+/// - an embed names a known service ([`DirectoryError::UnsupportedEmbed`])
+///   and an id of its form ([`embed::validate_id`]).
 pub fn validate(l: &Listing) -> Result<Validated, DirectoryError> {
     if l.encoded_len() > MAX_LISTING_BYTES {
         return Err(DirectoryError::TooLarge);
     }
-    let swarm_id = match &l.content {
+    let (swarm_id, embed_service) = match &l.content {
         None => return Err(DirectoryError::UnsupportedContent),
-        Some(Content::Embed(_)) => return Err(DirectoryError::UnsupportedEmbed),
+        Some(Content::Embed(e)) => {
+            let service =
+                EmbedService::from_proto(e.service).ok_or(DirectoryError::UnsupportedEmbed)?;
+            embed::validate_id(service, &e.id)?;
+            (None, Some(service))
+        }
         Some(Content::Media(m)) => {
             let uri = Uri::parse(&m.swarm_uri).map_err(|_| DirectoryError::InvalidSwarmUri)?;
             let n = uri.id.as_bytes().len();
             if n == 0 || n > MAX_SWARM_ID_BYTES {
                 return Err(DirectoryError::InvalidSwarmUri);
             }
-            Some(uri.id)
+            (Some(uri.id), None)
         }
-        Some(Content::Chat(_) | Content::Service(_)) => None,
+        Some(Content::Chat(_) | Content::Service(_)) => (None, None),
     };
     Ok(Validated {
         key: key(l),
         content_type: content_type(l),
         swarm_id,
+        embed: embed_service,
     })
 }
 
@@ -131,16 +141,39 @@ mod tests {
         );
     }
 
-    #[test]
-    fn embeds_and_empty_listings_are_refused() {
-        let embed = Listing {
+    fn embed(service: i32, id: &str) -> Listing {
+        Listing {
             content: Some(Content::Embed(Embed {
-                service: 2,
-                id: "x".into(),
+                service,
+                id: id.into(),
                 ..Default::default()
             })),
-        };
-        assert_eq!(validate(&embed), Err(DirectoryError::UnsupportedEmbed));
+        }
+    }
+
+    #[test]
+    fn embeds_need_a_known_service_and_an_id_of_its_form() {
+        let v = validate(&embed(2, "destiny")).unwrap();
+        assert_eq!(v.content_type, ListingContentType::Embed);
+        assert_eq!(v.embed, Some(EmbedService::TwitchStream));
+        assert_eq!(v.swarm_id, None);
+        assert_eq!(
+            validate(&embed(4, "DDTGlyJVNVI")).unwrap().embed,
+            Some(EmbedService::YouTube)
+        );
+        for service in [0, 5, -1] {
+            assert_eq!(
+                validate(&embed(service, "x")),
+                Err(DirectoryError::UnsupportedEmbed)
+            );
+        }
+        for (service, id) in [(2, "a&b"), (3, "x"), (4, "short"), (1, "")] {
+            assert_eq!(
+                validate(&embed(service, id)),
+                Err(DirectoryError::InvalidEmbedId),
+                "{service} {id}"
+            );
+        }
         assert_eq!(
             validate(&Listing::default()),
             Err(DirectoryError::UnsupportedContent)
@@ -160,7 +193,8 @@ mod tests {
             Validated {
                 key: listing_key(0, Some(&chat)),
                 content_type: ListingContentType::Chat,
-                swarm_id: None
+                swarm_id: None,
+                embed: None,
             }
         );
         let service = Listing {

@@ -58,17 +58,18 @@ use strims_proto::network::v1::directory::{
     FrontendUnpublishRequest, FrontendUnpublishResponse, FrontendWatchAssetBundlesRequest,
     FrontendWatchAssetBundlesResponse, FrontendWatchListingUsersRequest,
     FrontendWatchListingUsersResponse, FrontendWatchListingsRequest, FrontendWatchListingsResponse,
-    ListingContentType, ListingQuery, Network, NetworkListings, NetworkListingsItem,
+    Listing, ListingContentType, ListingQuery, Network, NetworkListings, NetworkListingsItem,
     register_directory_frontend_service,
 };
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::{Router, Timer};
 
 use crate::control::{CallFailure, DirectoryControl};
+use crate::embed::{self, EmbedService, EmbedServices};
 use crate::events::{DirectoryEvent, ListingEvent, UserEventKind};
 use crate::host::Host;
 use crate::listing::content_type;
-use crate::view;
+use crate::{DirectoryError, view};
 
 /// The most events, or users, one response of a watch carries.
 pub const MAX_RESPONSE_ITEMS: usize = 256;
@@ -80,6 +81,83 @@ pub const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// What an item costs in a response beyond its encoding: its tag and
 /// length prefix, rounded up.
 const ITEM_OVERHEAD: usize = 16;
+
+/// The embeds `Test` publishes, by service.
+const TEST_EMBEDS: [(EmbedService, &[&str]); 4] = [
+    (
+        EmbedService::YouTube,
+        &[
+            "DDTGlyJVNVI",
+            "SocSlBubzwA",
+            "-IO6fpjDJY8",
+            "nKrznsPB5t8",
+            "PMesD2l6viA",
+            "GTYJd2qfx5g",
+            "i6zaVYWLTkU",
+            "9VE7afYWzYo",
+            "JQ4Jx8XfP_w",
+            "oEgZeTr3Vs4",
+            "pRpeEdMmmQ0",
+        ],
+    ),
+    (
+        EmbedService::AngelThump,
+        &[
+            "psrngafk",
+            "bliutwo",
+            "t4tv",
+            "somuchforsubtlety",
+            "erik",
+            "windowsmoviehouse",
+            "keyno",
+            "eastmancolor",
+            "feenamabob",
+            "harkdan",
+        ],
+    ),
+    (
+        EmbedService::TwitchStream,
+        &[
+            "namemannen",
+            "not0like0this",
+            "buddha",
+            "shroud",
+            "purgegamers",
+            "sweetdreams",
+            "destiny",
+            "hannapig_",
+            "ibabyrainbow",
+            "tastelesstv",
+        ],
+    ),
+    (EmbedService::TwitchVod, &["1157956746", "1160400711"]),
+];
+
+/// The embeds of [`TEST_EMBEDS`] whose services `services` has, taking
+/// each service's next in turn, so that a small quota still shows every
+/// service.
+fn test_embeds(services: EmbedServices) -> Vec<Listing> {
+    let sets: Vec<&[&str]> = TEST_EMBEDS
+        .iter()
+        .filter(|(s, _)| services.supports(*s))
+        .map(|(_, ids)| *ids)
+        .collect();
+    let services: Vec<EmbedService> = TEST_EMBEDS
+        .iter()
+        .map(|(s, _)| *s)
+        .filter(|s| services.supports(*s))
+        .collect();
+    let longest = sets.iter().map(|ids| ids.len()).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for i in 0..longest {
+        for (s, ids) in services.iter().zip(&sets) {
+            if let Some(id) = ids.get(i) {
+                out.push(embed::listing(*s, id));
+            }
+        }
+    }
+    out
+}
 
 fn not_found(what: &str) -> RpcError {
     RpcError::new(0, format!("{what} not found"))
@@ -268,14 +346,37 @@ impl<K: Kv, H: Host, T: Timer> DirectoryFrontendService for DirectoryFrontend<K,
         Ok(FrontendPartResponse {})
     }
 
-    /// Unimplemented: the method publishes embed listings, which
-    /// directories refuse.
+    /// Publishes a fixed set of embed listings from this host, of the
+    /// services the network's client config enables, until the publish
+    /// quota refuses one. With no service enabled, it's refused with
+    /// "unsupported embed service".
     async fn test(
         &self,
         _: &Context,
-        _: FrontendTestRequest,
+        req: FrontendTestRequest,
     ) -> Result<FrontendTestResponse, RpcError> {
-        Err(RpcError::unimplemented())
+        self.network(&req.network_key)?;
+        let enabled = self
+            .control
+            .client_config(&req.network_key)
+            .and_then(|c| c.integrations)
+            .unwrap_or_default();
+        let listings = test_embeds(EmbedServices {
+            angelthump: enabled.angelthump,
+            twitch: enabled.twitch,
+            youtube: enabled.youtube,
+        });
+        if listings.is_empty() {
+            return Err(CallFailure::Refused(DirectoryError::UnsupportedEmbed).to_rpc());
+        }
+        for l in listings {
+            match self.control.publish(&req.network_key, l).await {
+                Ok(_) => {}
+                Err(CallFailure::Refused(DirectoryError::PublishQuota)) => break,
+                Err(e) => return Err(call_error(e)),
+            }
+        }
+        Ok(FrontendTestResponse {})
     }
 
     async fn moderate_listing(
@@ -988,5 +1089,54 @@ impl<K: Kv, H: Host, T: Timer> Feed for BundlesFeed<K, H, T> {
 
     fn response(&mut self) -> FrontendWatchAssetBundlesResponse {
         self.pending.pop_first().map(|(_, r)| r).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+
+    use super::*;
+
+    #[test]
+    fn test_embeds_take_each_enabled_service_in_turn() {
+        let ids = |services| -> Vec<(EmbedService, String)> {
+            test_embeds(services)
+                .iter()
+                .filter_map(|l| embed::of(l).map(|(s, id)| (s, id.to_owned())))
+                .collect()
+        };
+        let both = ids(EmbedServices {
+            angelthump: true,
+            youtube: true,
+            twitch: false,
+        });
+        assert_eq!(both.len(), 21);
+        assert_eq!(
+            both[..3],
+            [
+                (EmbedService::YouTube, "DDTGlyJVNVI".to_owned()),
+                (EmbedService::AngelThump, "psrngafk".to_owned()),
+                (EmbedService::YouTube, "SocSlBubzwA".to_owned()),
+            ]
+        );
+        assert_eq!(both[20], (EmbedService::YouTube, "pRpeEdMmmQ0".to_owned()));
+        let twitch = ids(EmbedServices {
+            twitch: true,
+            ..Default::default()
+        });
+        assert_eq!(twitch.len(), 12);
+        assert_eq!(
+            twitch[1],
+            (EmbedService::TwitchVod, "1157956746".to_owned())
+        );
+        assert!(ids(EmbedServices::default()).is_empty());
+        for l in test_embeds(EmbedServices {
+            angelthump: true,
+            twitch: true,
+            youtube: true,
+        }) {
+            assert!(crate::listing::validate(&l).is_ok(), "{l:?}");
+        }
     }
 }
