@@ -12,12 +12,22 @@ Port the application services that sit on the core crates. The Go versions
 - Directory embeds: the server's Twitch, YouTube and AngelThump snippet
   loaders need an HTTP fetch from the driver; until then the server refuses
   embed listings and its client config advertises none.
-- The other dao record types arrive with their services: vnic, autoseed
-  and debug configs, and swarm caches, each with its part of a network's
-  deletion; until then, stores from Go keep those records unread. With
-  swarm caches, a chat room's asset swarm can start from its cache under
-  (server key, `chat:assets`); until then a reopened room downloads its
-  bundles again.
+- The other dao record types arrive with their services, and those that
+  name a network with their part of its deletion. Until then, stores from
+  Go keep these records unread:
+  - the vnic config (8001): the node's upload cap and peer budget, and
+    the UI's VNIC frontend. Until then the node takes its peer budget
+    from `AppConfig` and has no upload cap;
+  - the autoseed config and rules (10001, 10002): seeding the swarms of
+    directory listings that a rule names by network, swarm id and salt,
+    and the UI's autoseed frontend. Deleting a network deletes its rules;
+  - swarm caches (11001–11003): a swarm's data and signatures under
+    (swarm id, salt), so a reopened swarm starts from them. A chat room's
+    asset swarm can start from its cache under (server key,
+    `chat:assets`); until then a reopened room downloads its bundles
+    again;
+  - the debug config (12001): mock streams published on a network for
+    testing. Deleting that network clears the config's network key.
 - Import of Go bbolt stores into `strims-kv-redb` for native users.
 
 ### Video
