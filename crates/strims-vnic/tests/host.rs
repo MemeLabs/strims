@@ -306,6 +306,39 @@ fn failed_peer_init_is_reported() {
 }
 
 #[test]
+fn a_link_to_this_host_is_refused() {
+    let mut a = Node::new(1, "a");
+    let l1 = a.host.add_link(now(), plain(500)).unwrap();
+    let l2 = a.host.add_link(now(), plain(500)).unwrap();
+    let mut init1 = a.take_transmit(l1);
+    let mut init2 = a.take_transmit(l2);
+    let own = Error::PeerInit(PeerInitError::OwnHost);
+    assert_eq!(
+        a.input(l2, now(), &mut init1, &mut no_handlers),
+        Err(own.clone())
+    );
+    assert_eq!(
+        a.input(l1, now(), &mut init2, &mut no_handlers),
+        Err(own.clone())
+    );
+    assert!(added(&a.events).is_empty());
+    assert_eq!(
+        a.events,
+        vec![
+            Event::LinkClosed {
+                link: l2,
+                reason: CloseReason::Failed(own.clone())
+            },
+            Event::LinkClosed {
+                link: l1,
+                reason: CloseReason::Failed(own)
+            },
+        ]
+    );
+    assert!(!a.host.has_link(l1) && !a.host.has_link(l2));
+}
+
+#[test]
 fn expired_certificates_are_rejected() {
     let mut a = Node::new(1, "a");
     let mut b = Node::new(2, "b");

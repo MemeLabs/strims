@@ -310,6 +310,9 @@ pub enum PeerInitError {
     InvalidPeerCertificate,
     #[error("peer host id malformed")]
     MalformedHostId,
+    /// The peer's host id is this host's: the link loops back to it.
+    #[error("the peer is this host")]
+    OwnHost,
 }
 
 /// A frame delivered by [`Host::handle_link_input`].
@@ -837,6 +840,9 @@ impl<T: Copy> Host<T> {
             .cloned()
             .ok_or(PeerInitError::InvalidPeerCertificate)?;
         let (host_id, _) = ID::unmarshal(&cert.key).map_err(|_| PeerInitError::MalformedHostId)?;
+        if host_id == self.id {
+            return Err(PeerInitError::OwnHost.into());
+        }
 
         let link = self.links.get_mut(key).ok_or(Error::UnknownLink)?;
         link.stage = Stage::Established(Box::new(Peer {
