@@ -7,15 +7,12 @@
 use js_sys::Reflect;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{Crypto, IdbFactory, Performance};
+use web_sys::{Crypto, IdbFactory};
 
 #[wasm_bindgen]
 extern "C" {
     /// The global object: a `WorkerGlobalScope` or a `Window`.
     pub(crate) type Scope;
-
-    #[wasm_bindgen(method, getter, structural)]
-    pub(crate) fn performance(this: &Scope) -> Option<Performance>;
 
     #[wasm_bindgen(method, getter, structural)]
     pub(crate) fn crypto(this: &Scope) -> Option<Crypto>;

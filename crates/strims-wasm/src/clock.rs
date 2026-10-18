@@ -3,9 +3,11 @@
 
 //! Time in the worker: the clock, sleeps and the macrotask yield.
 //!
-//! - [`now`] is `performance.timeOrigin + performance.now()`, read in
-//!   microseconds and truncated to [`Time::PRECISION`]. It never goes
-//!   backwards for the life of the worker.
+//! - [`now`] is the wall clock, `Date.now()`, at [`Time::PRECISION`].
+//!   Certificates and record timestamps are wall time, and a monotonic
+//!   clock can stop while the machine sleeps, so the node would fall
+//!   behind wall time for the rest of its life. Like any wall clock, it
+//!   can step backwards.
 //! - A [`Sleep`] waits on `setTimeout`. A timer can fire before [`now`]
 //!   reaches its deadline: delays are clamped to 2^31−1 ms, and browsers
 //!   round timers and the clock differently. A sleep woken early arms a
@@ -27,7 +29,7 @@ use strims_base::time::{Duration, Time};
 use strims_rpc::Timer;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageChannel, MessagePort, Performance};
+use web_sys::{MessageChannel, MessagePort};
 
 use crate::js;
 
@@ -35,33 +37,14 @@ use crate::js;
 const MAX_TIMEOUT_MS: i64 = i32::MAX as i64;
 
 thread_local! {
-    /// The global's `performance`, and its time origin in microseconds,
-    /// which is fixed for the life of the global.
-    static PERFORMANCE: Option<(Performance, i64)> = js::scope()
-        .performance()
-        .map(|p| {
-            let origin = micros(p.time_origin());
-            (p, origin)
-        });
-
     static YIELDER: Option<Yielder> = Yielder::new();
 }
 
-/// Milliseconds as whole microseconds. `as` saturates, and NaN is 0.
-fn micros(ms: f64) -> i64 {
-    (ms * 1_000.0) as i64
-}
-
-/// The current time, at [`Time::PRECISION`].
+/// The current wall time, at [`Time::PRECISION`].
 pub fn now() -> Time {
     // The worker's clock, and the one place the crate reads the time.
-    // Every worker and window has `performance`; `Date.now()` stands in
-    // where a global lacks it.
-    let micros = PERFORMANCE.with(|p| match p {
-        Some((performance, origin)) => origin.saturating_add(micros(performance.now())),
-        None => micros(js_sys::Date::now()),
-    });
-    Time::from_unix_nanos(micros.saturating_mul(1_000)).truncate(Time::PRECISION)
+    // `as` saturates, and NaN is 0.
+    Time::from_unix_millis(js_sys::Date::now() as i64)
 }
 
 /// A sleep that is already due: the driver loop's timer before its first

@@ -83,24 +83,15 @@ async fn a_new_sleep_is_due() {
 }
 
 #[wasm_bindgen_test]
-async fn now_is_monotonic() {
-    let mut last = clock::now();
-    for i in 0..2_000 {
-        if i % 100 == 0 {
-            clock::yield_now().await;
-        }
-        let now = clock::now();
-        assert!(now >= last, "{now:?} after {last:?}");
-        last = now;
-    }
-
+async fn now_is_wall_time() {
     // The clock reads wall time at millisecond precision.
+    clock::yield_now().await;
     let now = clock::now();
     assert_eq!(now, now.truncate(Time::PRECISION));
     let wall = Time::from_unix_millis(js_sys::Date::now() as i64);
     let skew = (wall - now).abs();
     assert!(
-        skew < Duration::from_secs(60),
+        skew < Duration::from_secs(1),
         "{now:?} is {skew} from {wall:?}"
     );
 }
