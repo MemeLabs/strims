@@ -131,6 +131,8 @@ pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "sync"] }
 turmoil = "0.7"
 tokio-tungstenite = "0.30"
+# HTTP/1 request heads, for strims-svc's HLS server
+httparse = "1.10"
 str0m = "0.24"
 
 # storage (native drivers only)

@@ -11,7 +11,8 @@ use strims_svc::{Config, Db};
 pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
 
-Runs a profile's node and serves the UI's frontend RPC over WebSocket.
+Runs a profile's node, serves the UI's frontend RPC over WebSocket, and
+serves the node's HLS streams to players over plain HTTP.
 
 options:
   --db <path>               the redb file holding the profiles' stores
@@ -28,6 +29,12 @@ options:
   --max-peers <n>           the node's peer budget (default 16)
   --label <name>            the node's host certificate subject
   --max-connections <n>     UI connections served at once (default 64)
+  --hls-listen <host:port>  where players fetch HLS over HTTP; without it,
+                            HLS egress is unsupported
+  --hls-public-url <url>    the http(s):// URL playlist URLs start with when
+                            the HLS config sets no public address (default
+                            http:// and the HLS address; for an unspecified
+                            address, the public IP or hostname at its port)
   --help                    print this
 
 The log level comes from RUST_LOG (default info).";
@@ -77,15 +84,38 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             "--max-peers" => app.max_peers = number(&flag, &value()?)?,
             "--label" => app.label = value()?,
             "--max-connections" => config.max_connections = number(&flag, &value()?)?,
+            "--hls-listen" => config.hls_listen = Some(value()?),
+            "--hls-public-url" => {
+                let url = value()?;
+                if !is_http_url(&url) {
+                    return Err(format!(
+                        "--hls-public-url must start with http(s)://: {url}"
+                    ));
+                }
+                app.video.hls.base_url = url;
+            }
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
     config.db = db.ok_or("pass --db <path> or --db-memory")?;
+    if config.hls_listen.is_none() && !config.app.video.hls.base_url.is_empty() {
+        return Err("--hls-public-url needs --hls-listen".to_owned());
+    }
     Ok(Command::Run(Box::new(config)))
 }
 
 fn number<T: std::str::FromStr>(flag: &str, v: &str) -> Result<T, String> {
     v.parse().map_err(|_| format!("{flag}: invalid value {v}"))
+}
+
+/// Whether `url` is `http://` or `https://`, in any case, and more.
+fn is_http_url(url: &str) -> bool {
+    ["http://", "https://"].iter().any(|scheme| {
+        url.len() > scheme.len()
+            && url
+                .get(..scheme.len())
+                .is_some_and(|p| p.eq_ignore_ascii_case(scheme))
+    })
 }
 
 #[cfg(test)]
@@ -122,6 +152,9 @@ mod tests {
             "a",
             "--max-connections",
             "8",
+            "--hls-listen",
+            "0.0.0.0:8082",
+            "--hls-public-url=https://media.example",
         ])
         .unwrap();
         assert!(matches!(&c.db, Db::File(p) if p.to_str() == Some("/tmp/a.redb")));
@@ -136,6 +169,8 @@ mod tests {
         assert_eq!(c.app.max_peers, 4);
         assert_eq!(c.app.label, "a");
         assert_eq!(c.max_connections, 8);
+        assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
+        assert_eq!(c.app.video.hls.base_url, "https://media.example");
     }
 
     #[test]
@@ -147,6 +182,8 @@ mod tests {
         assert_eq!(c.app.tcp_listen, None);
         assert!(!c.app.allow_insecure_ws);
         assert_eq!(c.app.max_peers, 16);
+        assert_eq!(c.hls_listen, None);
+        assert_eq!(c.app.video.hls.base_url, "");
     }
 
     #[test]
@@ -157,6 +194,12 @@ mod tests {
         assert!(run(&["--db-memory", "--api-path", "api"]).is_err());
         assert!(run(&["--db-memory", "--tcp-listen"]).is_err());
         assert!(run(&["--db-memory", "--bogus"]).is_err());
+        for url in ["media.example", "ftp://media.example", "http://"] {
+            let args = ["--db-memory", "--hls-listen=:0", "--hls-public-url", url];
+            assert!(run(&args).err().unwrap().contains("http(s)://"), "{url}");
+        }
+        let lone = run(&["--db-memory", "--hls-public-url", "HTTP://a"]);
+        assert!(lone.err().unwrap().contains("--hls-listen"));
         assert!(matches!(
             parse(["--help".to_owned()]).unwrap(),
             Command::Help

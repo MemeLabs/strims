@@ -20,10 +20,10 @@ use tokio_tungstenite::tungstenite::http::header::{COOKIE, SET_COOKIE};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 
-/// A service on localhost: its API, and a node on TCP and WebSocket
-/// listeners, all on ports the OS picks.
-pub async fn service() -> Svc {
-    Svc::start(Config {
+/// The config of a service on localhost: its API, and a node on TCP and
+/// WebSocket listeners, all on ports the OS picks.
+pub fn local_config() -> Config {
+    Config {
         api_listen: "127.0.0.1:0".into(),
         db: Db::Memory,
         app: AppConfig {
@@ -33,9 +33,12 @@ pub async fn service() -> Svc {
             ..AppConfig::default()
         },
         ..Config::default()
-    })
-    .await
-    .unwrap()
+    }
+}
+
+/// A service of [`local_config`].
+pub async fn service() -> Svc {
+    Svc::start(local_config()).await.unwrap()
 }
 
 /// The UI's connection to a service.

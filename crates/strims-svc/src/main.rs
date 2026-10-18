@@ -1,8 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! `strims-svc`: runs a profile's node and serves the UI's frontend RPC
-//! over WebSocket until interrupted. See [`args::USAGE`].
+//! `strims-svc`: runs a profile's node, serves the UI's frontend RPC over
+//! WebSocket and, if asked, HLS over HTTP until interrupted. See
+//! [`args::USAGE`].
 
 mod args;
 
@@ -49,6 +50,15 @@ fn main() -> ExitCode {
             }
         };
         tracing::info!(address = %svc.api_addr(), %path, "serving the UI");
+        if let Some(address) = svc.hls_addr() {
+            match svc.hls_base_url() {
+                "" => tracing::warn!(
+                    %address,
+                    "serving HLS; playlist URLs need the HLS config's public address"
+                ),
+                base_url => tracing::info!(%address, base_url, "serving HLS"),
+            }
+        }
         if let Err(e) = tokio::signal::ctrl_c().await {
             tracing::warn!(error = %e, "can't wait for ctrl-c; running until killed");
             std::future::pending::<()>().await;
