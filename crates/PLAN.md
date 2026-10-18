@@ -6,10 +6,16 @@ on it is in `CONVENTIONS.md`.
 ## Remaining work
 
 ### App layer
-Port the application services that sit on the core crates. The Go versions
-(`internal/*`) are the behavioural reference.
 - Video; see Video below.
-- Import of Go bbolt stores into `strims-kv-redb` for native users.
+- The UI's Debug service: metrics (`ReadMetrics`, `WatchMetrics`) from the
+  controls' metrics structs, a profiling endpoint to answer `PProf`, and
+  the debug config (12001) with its mock streams published on a network
+  for testing. Deleting that network clears the config's network key.
+  Until then the UI's debugger and debug settings get no answers.
+- The invite link service (`InviteLinkService` over HTTP), which the UI's
+  invite page reads invitations from at `/api/invite`.
+- A server for the devtools UI (`src/devtools`): `DevToolsService`, and
+  `CapConnService`, which lists, watches and loads ppspp capture logs.
 
 ### Video
 Gaps in the current services:
@@ -62,8 +68,8 @@ Pipeline:
   takes and returns access units. Segmenting and muxing stay in Rust.
 - Ingest writes each access unit to the swarm as it arrives. In the fMP4
   format that means a moof/mdat pair per access unit, or per small group,
-  within a segment's record. Check that the current player and Go egress
-  accept that before relying on it.
+  within a segment's record. Check that the current player accepts that
+  before relying on it.
 - Each access unit keeps its publish time next to its media timestamps.
   The deadline-aware request scheduler and the players' playout clocks
   both need it.
@@ -71,9 +77,9 @@ Pipeline:
 Wire formats:
 - The listing's MIME type names the format, and readers dispatch on it. A
   new format gets a new MIME type.
-- While Go nodes share networks, the fMP4 format stays playable by the
-  current UI and by Go egress. That format is one chunkstream record per
-  segment, `[u16 init length][init segment][media segment]`, starting at a
+- The fMP4 format stays playable by the current UI. That format is one
+  chunkstream record per segment,
+  `[u16 init length][init segment][media segment]`, starting at a
   keyframe, in 1 KiB chunks with BLAKE2b-256 Merkle trees and Ed25519 live
   signatures. The rule for cutting segments is a parameter. The codecs in
   the MIME type come from the decoder configs.
@@ -88,7 +94,7 @@ RTMP and codecs:
   one with `VideoDecoder.isConfigSupported` or `MediaSource.isTypeSupported`.
   VP9 isn't a target: OBS can't send it over RTMP, and it compresses no
   better than HEVC.
-- Listing several renditions needs a listing schema change (protocol v3).
+- Listing several renditions needs a listing schema change.
 
 Egress and players:
 - The UI egress stays format-agnostic: payload bytes, record ends and
@@ -150,12 +156,21 @@ Egress and players:
   - on the HLS listener: keep-alive, Range requests, CORS preflight, and
     a cap per address. One client's slow connections can hold every slot
     for up to 10 s on the request head or 60 s on the response.
-- Desktop (Electron sidecar or Tauri) and mobile (uniffi). strims-node's
-  TLS runs on ring, which compiles C, so each cross build needs a C
-  toolchain for its target.
+  - profile commands: list, add, remove, import and export profiles
+    from the command line;
+  - a container image. infra's leader, seeder and invites deployments
+    still name the retired Go svc image.
+- Desktop: the Electron app (`src/desktop`) spawns its node from
+  `dist/desktop/svc`, which nothing builds; run strims-svc as that
+  sidecar, or move to Tauri.
+- Mobile: the `android/` and `ios/` apps have no node bridge; bind
+  strims-node-core with uniffi.
+- strims-node's TLS runs on ring, which compiles C, so each desktop and
+  mobile cross build needs a C toolchain for its target.
 
 ### strims-ppspp defects
-- Require monotonic sign-all timestamps until v3 binds the bin.
+- Require monotonic sign-all timestamps until live signatures bind the
+  bin (see Wire changes).
 - `add_stream_close` is unused.
 
 ### strims-chat defects
@@ -168,50 +183,6 @@ Egress and players:
   event window again, so it can repeat recent messages.
 - `WatchWhispers` doesn't resend the records that changed while it lagged;
   the UI reads them again with `ListWhispers`.
-
-### Cutover
-Ship the protocol-v3 changes below behind a version bump, then retire the Go
-implementation along with the interop tests that exist only for it.
-
-Once Rust is the default implementation and the Go compatibility checks
-have served their purpose, serve the UI's Debug service: metrics
-(`ReadMetrics`, `WatchMetrics`) from the controls' metrics structs, a
-profiling endpoint to answer `PProf`, and the debug config (12001) with
-its mock streams published on a network for testing. Deleting that
-network clears the config's network key. Until then the UI's debugger
-and debug settings get no answers.
-
-While profiles have Go and Rust devices:
-- Go sends a bootstrap in one message, capped at 512 KiB on both sides, so
-  a larger Go store can't bootstrap a new device.
-- Go times a write at the wall clock, so after a clock step or within one
-  millisecond, concurrent writes can resolve differently on Go devices.
-- Go stops replicating to a device it deletes before sending the
-  deletion, so the device doesn't learn of it from Go.
-- A Go device sends an empty bootstrap when its store has no chat UI
-  config, and doesn't push writes made before it opens a peer, so those
-  reach other devices only with later changes.
-- A device imported by Go records itself under id 0.
-- Stores below version 7 are refused; a Go client upgrades them first.
-- Media listing records are keyed by the first 30 bytes of their swarm id;
-  rekey them once stores no longer move to Go.
-
-While networks have Go and Rust nodes:
-- Go negotiates networks with a link one run at a time and without a
-  deadline, so a run that loses the other side (an `Open` that never
-  arrives, a stale key count) stops it negotiating with that link until
-  the link closes.
-- Go members ping a directory every 10–14 minutes whatever its client
-  config says, so keep directory session timeouts at 15 minutes or more.
-- A Go directory server sends a new listing without its user count, so
-  views show no users until the listing changes or the next refresh.
-- A Go reader of a stream that starts over requests nothing until the new
-  stream is as long as the old one, so it can miss a chat's unified asset
-  bundle (sent after a forced sync, or when deltas would pass the asset
-  window) until later deltas follow.
-- Go chat servers let only `admin_peer_keys` moderate, which no Go client
-  sets; they mute only users who have sent a message there, and answer
-  `GetMute` with no mute.
 
 ## Open questions
 
@@ -227,8 +198,7 @@ While networks have Go and Rust nodes:
     both controllers.
   - Its p99 is about 9 % worse on sparse lossy meshes.
   - On a shared parent it yields to LEDBAT, so a network should run one
-    controller. Peers on the v2 protocol all run LEDBAT, which ties a default
-    switch to the protocol-v3 cutover.
+    controller.
   - Next: a deadline-aware request scheduler. Each chunk's deadline is its
     publish time plus the target lag. A peer's expected arrival time is its
     backlog ÷ rate + min RTT. Assign each chunk to the earliest peer that meets
@@ -242,7 +212,6 @@ While networks have Go and Rust nodes:
   - push bypassing congestion control;
   - cycles longer than two;
   - the default stream count;
-  - validation in mixed Go/Rust swarms;
   - the upload meter assumes the driver drains at link speed, so it reads low
     under vnic QoS, and swarms share one meter but admit independently.
     strims-node could report link capacity;
@@ -270,8 +239,7 @@ While networks have Go and Rust nodes:
     per-link and per-class rate limits; MTU vs exact backlog hints; a
     neutral starting weight for new non-ppspp writers;
   - vpn rejects messages larger than one frame (MTU − 4) at send time;
-  - make vpn `VerifyMode::Enforce` the default once mixed networks have run
-    clean under `Audit`;
+  - make vpn `VerifyMode::Enforce` the default; it is `Off`;
   - lossy transports report loss, so direct vpn links can get a backup copy;
   - peer-exchange topology hints that suggest links to shorten long paths;
   - decide whether any app needs to stop a broadcast from being relayed;
@@ -342,7 +310,7 @@ While networks have Go and Rust nodes:
 - **Directory.**
   - A refresh rewrites every listing, snippet images included, into an
     event swarm whose window is 2 MiB. Images may belong in the asset
-    swarm (v3).
+    swarm, which is a wire change.
   - Snippet servers answer any member; decide whether only the directory
     server's host may subscribe.
   - A member whose event reader falls behind resets its view; only the
@@ -369,15 +337,17 @@ While networks have Go and Rust nodes:
   dimpl's ECDHE and sctp-proto use OS randomness. Byte-level reproducibility
   needs seedable rngs upstream.
 
-## Protocol v3 backlog
+## Wire changes
 
-These are wire changes, held until the version bump.
+No deployed peers constrain these, so each lands directly, without a dual
+stack or a version gate.
 
 ### vnic
 - Replace AES-CFB without a MAC with AEAD or Noise.
 - Add proof of possession of the host key in the handshake.
-- Make keepalives mandatory: every node sends them and announces support in
-  `PeerInit`. Port 65535 stays reserved.
+- Make keepalives mandatory. Every node sends them already, so the
+  tolerance for peers that never do (`IdleOk` and the drivers' readers
+  that honour it) can go. Port 65535 stays reserved.
 
 ### vpn
 - Make message IDs unique across networks, replacing the 16-bit seq that
