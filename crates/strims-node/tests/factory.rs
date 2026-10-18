@@ -72,6 +72,11 @@ fn one_profile_runs_per_process_with_every_frontend_bound() {
             "strims.network.v1.directory.DirectoryFrontend.WatchListings",
             "strims.chat.v1.ChatFrontend.OpenClient",
             "strims.chat.v1.ChatServerFrontend.CreateServer",
+            "strims.video.v1.VideoChannelFrontend.Create",
+            "strims.video.v1.VideoIngress.GetChannelURL",
+            "strims.video.v1.HLSEgress.OpenStream",
+            "strims.video.v1.Egress.OpenStream",
+            "strims.video.v1.Capture.Open",
         ] {
             assert!(router.contains(method), "{method} isn't bound");
         }

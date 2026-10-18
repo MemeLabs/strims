@@ -62,6 +62,8 @@
 //! services a profile runs (replication, transfers, network membership
 //! and the directory), and [`app::PeerServices`] serves every peer's RPC
 //! link with the app's [`app::PeerHandler`]s.
+//! [`video_host::NetVideoHost`] gives the video control its RTMP
+//! listeners on the node's [`Net`].
 //!
 //! # Bindings
 //!
@@ -159,6 +161,7 @@ pub mod rpc;
 mod state;
 mod transport;
 mod udp;
+pub mod video_host;
 pub mod vpn_port;
 
 pub use clock::{Clock, SimClock, SystemClock};

@@ -4,21 +4,25 @@
 //! The app layer on a node: the node's clock as the app's [`Timer`], the
 //! node as the [`Host`] of the services a profile runs (replication,
 //! transfers and their record streams, network membership, the directory,
-//! chat and whispers), and every peer's RPC link served with the app's
-//! [`PeerHandler`]s.
+//! chat, whispers and video), and every peer's RPC link served with the
+//! app's [`PeerHandler`]s.
 //!
 //! A profile's services share one [`NodeHost`]. The directory control is
 //! built on the profile's network control and transfer control, and its
 //! swarms move only while the transfer control learns every peer: give
-//! [`PeerServices`] both controls. The chat control is built on those and
-//! the directory control, the whisper control on the network control.
+//! [`PeerServices`] both controls. The chat and video controls are built
+//! on those and the directory control, the whisper control on the network
+//! control. The video control's RTMP ingress listens through a
+//! [`NetVideoHost`] on the node's [`Net`].
 //!
 //! The node is bootstrap's [`strims_network::bootstrap::Host`] too: it
 //! dials the profile's bootstrap clients.
 //!
 //! [`NodeFactory`] is the [`SessionFactory`] that composes all of this for
 //! a signed-in profile: it starts the profile's node and every control,
-//! and serves the session's frontends on the UI's connection.
+//! and serves the session's frontends on the UI's connection. It holds
+//! the [`HlsRoutes`] the running profile's HLS streams are served on, for
+//! the driver's HTTP server.
 //!
 //! App-layer futures aren't `Send`: [`PeerServices`] spawns its
 //! connections as local tasks, and [`NodeFactory`] its controls, so they
@@ -45,12 +49,15 @@ use strims_replication::{Host, ReplicationControl};
 use strims_rpc::{Client, Config, Router, Timer, peer_connection};
 use strims_session::{Session, SessionFactory};
 use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite, TransferControl};
+use strims_video::VideoControl;
+use strims_video::hls::HlsRoutes;
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, NetworkId, PeerIndexPublisherId,
 };
 use tokio::task::AbortHandle;
 use tokio::time::Sleep;
 
+use crate::video_host::NetVideoHost;
 use crate::{
     Clock, HostId, Net, NetworkOptions, Node, NodeConfig, NodeError, NodeEvent, NodeInfo,
     PeerIndexSearch, PeerInfo, ReadError, RpcReader, RpcWriter, SwarmId, SwarmKey, SwarmOptions,
@@ -608,6 +615,7 @@ pub struct AppConfig {
     pub directory: strims_directory::Config,
     pub chat: strims_chat::Config,
     pub whispers: WhisperConfig,
+    pub video: strims_video::Config,
 }
 
 impl Default for AppConfig {
@@ -628,6 +636,7 @@ impl Default for AppConfig {
             directory: strims_directory::Config::default(),
             chat: strims_chat::Config::default(),
             whispers: WhisperConfig::default(),
+            video: strims_video::Config::default(),
         }
     }
 }
@@ -654,14 +663,16 @@ pub enum StartError {
 /// session fails with [`StartError::ProfileRunning`].
 ///
 /// A session's node runs replication, transfers, network membership,
-/// bootstrap, the directory, chat and whispers, each control as a local
-/// task, and serves every peer through [`PeerServices`].
+/// bootstrap, the directory, chat, whispers and video, each control as a
+/// local task, and serves every peer through [`PeerServices`]. The video
+/// control's RTMP ingress listens on the factory's [`Net`].
 pub struct NodeFactory<N: Net, C: Clock> {
     net: N,
     clock: C,
     config: AppConfig,
     /// The profile whose node runs or starts, and the node once it runs.
     running: RefCell<Option<(u64, Option<NodeInfo>)>>,
+    hls: HlsRoutes,
 }
 
 impl<N: Net, C: Clock> NodeFactory<N, C> {
@@ -672,12 +683,21 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             clock,
             config,
             running: RefCell::new(None),
+            hls: HlsRoutes::new(),
         }
     }
 
     /// The running node, if a session started one.
     pub fn running(&self) -> Option<NodeInfo> {
         self.running.borrow().as_ref().and_then(|(_, n)| n.clone())
+    }
+
+    /// The routes of the running profile's HLS streams, for the driver's
+    /// HTTP server to answer requests from. The video control serves its
+    /// streams there only where [`strims_video::HlsSettings::serve`] is
+    /// set in [`AppConfig::video`].
+    pub fn hls_routes(&self) -> &HlsRoutes {
+        &self.hls
     }
 
     fn node_config(&self, key: Key, seed: u64) -> NodeConfig {
@@ -699,7 +719,7 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
     async fn start_node<K: Kv>(
         &self,
         session: &Rc<Session<K>>,
-    ) -> Result<AppRuntime<K, C>, StartError> {
+    ) -> Result<AppRuntime<K, N, C>, StartError> {
         let key = session
             .profile
             .key
@@ -762,13 +782,26 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             c.chat.clone(),
         );
         let whispers = WhisperControl::new(
-            host,
+            host.clone(),
             store.clone(),
             profile.clone(),
             network.clone(),
             timer.clone(),
             fork(&mut rng),
             c.whispers.clone(),
+        );
+        let video = VideoControl::new(
+            host,
+            NetVideoHost(self.net.clone()),
+            store.clone(),
+            profile.clone(),
+            network.clone(),
+            transfers.clone(),
+            directory.clone(),
+            self.hls.clone(),
+            timer.clone(),
+            fork(&mut rng),
+            c.video.clone(),
         );
 
         let mut tasks = Vec::new();
@@ -803,6 +836,10 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             let whispers = whispers.clone();
             Box::pin(async move { whispers.run().await })
         });
+        spawn({
+            let video = video.clone();
+            Box::pin(async move { video.run().await })
+        });
         let services = PeerServices::new(node.clone())
             .with(Rc::new(network.clone()))
             .with(Rc::new(transfers))
@@ -828,16 +865,17 @@ impl<N: Net, C: Clock> NodeFactory<N, C> {
             directory,
             chat,
             whispers,
+            video,
             tasks,
         })
     }
 }
 
 impl<K: Kv, N: Net, C: Clock> SessionFactory<K> for NodeFactory<N, C> {
-    type Runtime = AppRuntime<K, C>;
+    type Runtime = AppRuntime<K, N, C>;
     type Error = StartError;
 
-    async fn start(&self, session: &Rc<Session<K>>) -> Result<AppRuntime<K, C>, StartError> {
+    async fn start(&self, session: &Rc<Session<K>>) -> Result<AppRuntime<K, N, C>, StartError> {
         let id = session.profile.id;
         {
             let mut running = self.running.borrow_mut();
@@ -857,12 +895,13 @@ impl<K: Kv, N: Net, C: Clock> SessionFactory<K> for NodeFactory<N, C> {
         Ok(runtime)
     }
 
-    fn bind(&self, runtime: &AppRuntime<K, C>, session: &Rc<Session<K>>, router: &Router) {
+    fn bind(&self, runtime: &AppRuntime<K, N, C>, session: &Rc<Session<K>>, router: &Router) {
         strims_session::bind_frontends(session, &runtime.timer, router);
         strims_network::bind_frontend(router, &runtime.network);
         strims_network::bootstrap::bind_frontend(router, &runtime.bootstrap);
         strims_directory::bind_frontend(router, &runtime.directory);
         strims_chat::bind_frontend(router, &runtime.chat, &runtime.whispers);
+        strims_video::bind_frontend(router, &runtime.video);
     }
 }
 
@@ -882,7 +921,7 @@ impl Drop for StartMark<'_> {
 
 /// A running profile's node and the controls its frontends serve. Dropping
 /// it stops the controls' tasks and the node.
-pub struct AppRuntime<K: Kv, C: Clock> {
+pub struct AppRuntime<K: Kv, N: Net, C: Clock> {
     node: Node,
     timer: NodeTimer<C>,
     network: NetworkControl<K, NodeHost, NodeTimer<C>>,
@@ -890,17 +929,18 @@ pub struct AppRuntime<K: Kv, C: Clock> {
     directory: DirectoryControl<K, NodeHost, NodeTimer<C>>,
     chat: ChatControl<K, NodeHost, NodeTimer<C>>,
     whispers: WhisperControl<K, NodeHost, NodeTimer<C>>,
+    video: VideoControl<K, NodeHost, NetVideoHost<N>, NodeTimer<C>>,
     tasks: Vec<AbortHandle>,
 }
 
-impl<K: Kv, C: Clock> AppRuntime<K, C> {
+impl<K: Kv, N: Net, C: Clock> AppRuntime<K, N, C> {
     /// The profile's node.
     pub fn node(&self) -> &Node {
         &self.node
     }
 }
 
-impl<K: Kv, C: Clock> Drop for AppRuntime<K, C> {
+impl<K: Kv, N: Net, C: Clock> Drop for AppRuntime<K, N, C> {
     fn drop(&mut self) {
         for t in &self.tasks {
             t.abort();
