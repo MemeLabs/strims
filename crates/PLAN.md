@@ -12,8 +12,6 @@ on it is in `CONVENTIONS.md`.
   the debug config (12001) with its mock streams published on a network
   for testing. Deleting that network clears the config's network key.
   Until then the UI's debugger and debug settings get no answers.
-- The invite link service (`InviteLinkService` over HTTP), which the UI's
-  invite page reads invitations from at `/api/invite`.
 - A server for the devtools UI (`src/devtools`): `DevToolsService`, and
   `CapConnService`, which lists, watches and loads ppspp capture logs.
 
@@ -156,6 +154,12 @@ Egress and players:
   - on the HLS listener: keep-alive, Range requests, CORS preflight, and
     a cap per address. One client's slow connections can hold every slot
     for up to 10 s on the request head or 60 s on the response.
+  - invite shortlinks, for sign-up with little friction:
+    `InviteLink.GetInvitation` over HTTP at `/api/invite` maps a short
+    code to a stored invitation, and the UI's `/invite/<code>` page signs
+    a newcomer up and into that network in one step. The retired Go
+    service only read codes and nothing minted them, so this needs a way
+    to create one too;
   - profile commands: list, add, remove, import and export profiles
     from the command line;
   - a container image. infra's leader, seeder and invites deployments
