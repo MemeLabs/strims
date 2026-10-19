@@ -1,0 +1,34 @@
+[package]
+name = "strims-debug"
+description = "Debugging a node: mock streams on a network's directory, and the UI's debug service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+strims-base.workspace = true
+strims-crypto.workspace = true
+strims-dao.workspace = true
+strims-directory.workspace = true
+strims-kv.workspace = true
+strims-network.workspace = true
+strims-ppspp.workspace = true
+strims-proto = { workspace = true, features = ["services"] }
+strims-rpc.workspace = true
+strims-transfer.workspace = true
+futures-util = { workspace = true, features = ["alloc"] }
+prost.workspace = true
+rand_core.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# integration tests only: unit tests build this crate a second time, and the
+# fake world's types come from the first build
+strims-testworld.workspace = true
+# tests drive controls on a real executor with paused time
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true

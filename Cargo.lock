@@ -2206,6 +2206,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-debug"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "prost",
+ "rand_core 0.10.1",
+ "strims-base",
+ "strims-crypto",
+ "strims-dao",
+ "strims-directory",
+ "strims-kv",
+ "strims-network",
+ "strims-ppspp",
+ "strims-proto",
+ "strims-rpc",
+ "strims-testworld",
+ "strims-transfer",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strims-directory"
 version = "0.1.0"
 dependencies = [
