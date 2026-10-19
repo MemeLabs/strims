@@ -9,39 +9,21 @@ option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1;debugv1";
 option java_package = "gg.strims.debug.v1";
 option swift_prefix = "SDG";
 
-message PProfRequest {
-  string name = 1;
-  bool debug = 2;
-  bool gc = 3;
-}
-message PProfResponse {
-  string name = 1;
-  bytes data = 2;
-}
+import "debug/v1/metrics.proto";
 
-message ReadMetricsRequest {
-  MetricsFormat format = 1;
-}
+message ReadMetricsRequest {}
 
 message ReadMetricsResponse {
-  bytes data = 1;
+  Metrics metrics = 1;
 }
 
 message WatchMetricsRequest {
-  MetricsFormat format = 1;
-  int32 interval_ms = 2;
+  // 0 or less means 1 s. The service clamps it to its bounds.
+  int32 interval_ms = 1;
 }
 
 message WatchMetricsResponse {
-  bytes data = 1;
-}
-
-enum MetricsFormat {
-  METRICS_FORMAT_TEXT = 0;
-  METRICS_FORMAT_PROTO_DELIM = 1;
-  METRICS_FORMAT_PROTO_TEXT = 2;
-  METRICS_FORMAT_PROTO_COMPACT = 3;
-  METRICS_FORMAT_OPEN_METRICS = 4;
+  Metrics metrics = 1;
 }
 
 message GetConfigRequest {}
@@ -61,15 +43,21 @@ message Config {
   bytes mock_stream_network_key = 2;
 }
 
+// One record of a mock stream's swarm.
 message MockStreamSegment {
+  // The mock stream's id.
   uint64 id = 1;
+  // When it was written, in Unix microseconds.
   int64 timestamp = 2;
+  // Zeros that bring the stream to its bitrate.
   bytes padding = 3;
 }
 
 message StartMockStreamRequest {
   uint32 bitrate_kbps = 1;
+  // 0 means 1 s.
   uint32 segment_interval_ms = 2;
+  // 0 runs the stream until it's stopped.
   uint32 timeout_ms = 3;
   bytes network_key = 4;
 }
@@ -78,19 +66,26 @@ message StartMockStreamResponse {
   uint64 id = 1;
 }
 
+// Stopping an id no mock stream has does nothing.
 message StopMockStreamRequest {
   uint64 id = 1;
 }
 
 message StopMockStreamResponse {}
 
+message ListMockStreamsRequest {}
+
+message ListMockStreamsResponse {
+  // In id order.
+  repeated MockStream mock_streams = 1;
+}
 
 service Debug {
-  rpc PProf(PProfRequest) returns (PProfResponse);
   rpc ReadMetrics(ReadMetricsRequest) returns (ReadMetricsResponse);
   rpc WatchMetrics(WatchMetricsRequest) returns (stream WatchMetricsResponse);
   rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
   rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
   rpc StartMockStream(StartMockStreamRequest) returns (StartMockStreamResponse);
   rpc StopMockStream(StopMockStreamRequest) returns (StopMockStreamResponse);
+  rpc ListMockStreams(ListMockStreamsRequest) returns (ListMockStreamsResponse);
 }

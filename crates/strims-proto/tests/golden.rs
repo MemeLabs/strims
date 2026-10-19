@@ -24,6 +24,7 @@ use strims_proto::chat::v1::{
     Emote, EmoteContributor, EmoteEffect, EmoteFileType, EmoteImage, EmoteScale, Modifier,
     StyleSheet, emote_effect, style_sheet,
 };
+use strims_proto::debug::v1::MockStreamSegment;
 use strims_proto::devtools::v1::ppspp::cap_conn_log::peer_log::{Event, event};
 use strims_proto::network::v1::directory::{
     ListingSnippet, ListingSnippetBody, ListingSnippetImage, SignedListingSnippet,
@@ -580,6 +581,17 @@ fn directory_snippets(v: &mut Vectors) {
     );
 }
 
+fn debug_messages(v: &mut Vectors) {
+    v.pin(
+        "debug_mock_stream_segment",
+        &MockStreamSegment {
+            id: u64::MAX - 1,
+            timestamp: 1_700_000_000_000_000,
+            padding: vec![0; 5],
+        },
+    );
+}
+
 fn devtools_events(v: &mut Vectors) {
     v.pin(
         "devtools_capconn_event",
@@ -716,6 +728,7 @@ fn messages_keep_their_encodings() {
     swarm_caches(&mut v);
     chat_messages(&mut v);
     directory_snippets(&mut v);
+    debug_messages(&mut v);
     devtools_events(&mut v);
     rpc_messages(&mut v);
     v.finish();

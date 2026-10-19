@@ -3,85 +3,77 @@
 
 import "./Debugger.scss";
 
-import PBReader from "@memelabs/protobuf/lib/pb/reader";
+import clsx from "clsx";
 import React, { useState } from "react";
-import { FiDownload } from "react-icons/fi";
 
-import { MetricFamily } from "../../apis/io/prometheus/client/metrics";
-import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
-import { useClient, useLazyCall } from "../../contexts/FrontendApi";
-import { ActivityChart, RTCChart, SwarmChart } from "./ActivityChart";
+import { ActivityChart, MockStreamChart, RTCChart, SwarmChart } from "./ActivityChart";
 import Portlet, { PortletProps } from "./Portlet";
+import { latest } from "./series";
+import Snapshot from "./Snapshot";
+import useMetricsHistory from "./useMetricsHistory";
 
-type Tab = "activity" | "swarms" | "rtc";
+type Tab = "activity" | "swarms" | "mock streams" | "rtc" | "snapshot";
 
-type DebuggerProps = Omit<PortletProps, "children">;
+const TABS: Tab[] = ["activity", "swarms", "mock streams", "rtc", "snapshot"];
 
-const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
-  const client = useClient();
-  const [selectedTab, setSelectedTab] = useState<Tab>();
+interface DebuggerContentProps {
+  selectedTab: Tab;
+  onSelectTab: (tab: Tab) => void;
+}
 
-  const [, pprof] = useLazyCall("debug", "pProf", {
-    onComplete: ({ data, name }) => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(
-        new Blob([data as Uint8Array<ArrayBuffer>], { type: "application/binary" })
-      );
-      a.download = `${name}-${new Date().toISOString()}.profile`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    },
-  });
-
-  const handleReadMetricsClick = async () => {
-    const { data } = await client.debug.readMetrics({
-      format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
-    });
-
-    const metricFamilies: MetricFamily[] = [];
-    for (const r = new PBReader(data); r.pos < r.len; ) {
-      metricFamilies.push(MetricFamily.decode(r, r.uint32()));
-    }
-    console.log(metricFamilies);
-  };
+// The portlet mounts its children only while it's open, so the metrics are
+// watched only then.
+const DebuggerContent: React.FC<DebuggerContentProps> = ({ selectedTab, onSelectTab }) => {
+  const { snapshots, error } = useMetricsHistory();
 
   const content = (() => {
+    if (selectedTab === "rtc") {
+      return <RTCChart />;
+    }
+    if (snapshots.length === 0) {
+      return <div className="debugger__status">{error ?? "waiting for metrics"}</div>;
+    }
     switch (selectedTab) {
       case "activity":
-        return <ActivityChart />;
+        return <ActivityChart history={snapshots} />;
       case "swarms":
-        return <SwarmChart />;
-      case "rtc":
-        return <RTCChart />;
+        return <SwarmChart history={snapshots} />;
+      case "mock streams":
+        return <MockStreamChart history={snapshots} />;
+      case "snapshot":
+        return <Snapshot snapshot={latest(snapshots)} />;
     }
   })();
 
   return (
-    <Portlet onClose={onClose} isOpen={isOpen}>
+    <>
       <div className="debugger__tabs">
-        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("activity")}>
-          activity
-        </button>
-        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("swarms")}>
-          swarms
-        </button>
-        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("rtc")}>
-          rtc
-        </button>
-        <button className="debugger__tabs__tab" onClick={() => pprof({ name: "allocs" })}>
-          allocs <FiDownload />
-        </button>
-        <button className="debugger__tabs__tab" onClick={() => pprof({ name: "goroutine" })}>
-          goroutine <FiDownload />
-        </button>
-        <button className="debugger__tabs__tab" onClick={() => pprof({ name: "heap" })}>
-          heap <FiDownload />
-        </button>
-        <button className="debugger__tabs__tab" onClick={handleReadMetricsClick}>
-          read metrics
-        </button>
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            className={clsx("debugger__tabs__tab", {
+              "debugger__tabs__tab--selected": tab === selectedTab,
+            })}
+            onClick={() => onSelectTab(tab)}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
+      {error && snapshots.length > 0 && <div className="debugger__status">{error}</div>}
       <div>{content}</div>
+    </>
+  );
+};
+
+type DebuggerProps = Omit<PortletProps, "children">;
+
+const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
+  const [selectedTab, setSelectedTab] = useState<Tab>("activity");
+
+  return (
+    <Portlet onClose={onClose} isOpen={isOpen}>
+      <DebuggerContent selectedTab={selectedTab} onSelectTab={setSelectedTab} />
     </Portlet>
   );
 };

@@ -1,14 +1,11 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import PBReader from "@memelabs/protobuf/lib/pb/reader";
+import clsx from "clsx";
 import { format } from "d3-format";
-import React, { ReactElement, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   AreaSeries,
-  AreaSeriesPoint,
-  HeatmapSeries,
-  HeatmapSeriesPoint,
   HorizontalGridLines,
   LineSeries,
   LineSeriesPoint,
@@ -16,11 +13,22 @@ import {
   YAxis,
 } from "react-vis";
 
-import { Timestamp } from "../../apis/google/protobuf/timestamp";
-import { Counter, LabelPair, Metric, MetricFamily } from "../../apis/io/prometheus/client/metrics";
-import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
-import { useClient } from "../../contexts/FrontendApi";
+import { Metrics } from "../../apis/strims/debug/v1/metrics";
 import { usePortletSize } from "./Portlet";
+import {
+  Point,
+  Series,
+  SwarmSeries,
+  gauge,
+  hex,
+  latest,
+  linkRates,
+  rate,
+  readerLatencies,
+  swarmRates,
+  timeDomain,
+} from "./series";
+import { HISTORY_SECONDS } from "./useMetricsHistory";
 
 const PLOT_MARGIN_LARGE = {
   top: 5,
@@ -31,123 +39,26 @@ const PLOT_MARGIN_LARGE = {
 
 const PLOT_MARGIN_SMALL = { ...PLOT_MARGIN_LARGE, left: 5 };
 
-interface MetricSeries {
-  name: string;
-  metrics: Metric[][];
-}
+// Line colors in a fixed order; past the last they repeat, and the legend
+// tells the lines apart.
+const COLORS = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#6250d6",
+  "#e34948",
+];
 
-type PrometheusMetrics = {
-  [key: string]: MetricSeries;
-};
+const lineColor = (i: number) => COLORS[i % COLORS.length];
 
-const metricsReducer = (prev: PrometheusMetrics, families: MetricFamily[]) => {
-  const next = { ...prev };
-  families.forEach(({ name, metric }) => {
-    const metrics = prev[name]?.metrics;
-    const prune = metrics?.length == 241;
+const formatValue = format(".3~s");
 
-    next[name] = {
-      name,
-      metrics: [...(metrics?.slice(prune ? 1 : 0, 241) || []), metric],
-    };
-  });
-  return next;
-};
-
-const formatKey = (l: LabelPair[]) => {
-  const parts: string[] = [];
-  l.forEach((p) => {
-    parts.push(p.name);
-    parts.push(p.value);
-  });
-  return parts.join("_");
-};
-
-const counterGraphValues = (series: MetricSeries) => {
-  const values: {
-    [key: string]: {
-      prev: number;
-      series: LineSeriesPoint[];
-    };
-  } = {};
-
-  series.metrics.forEach((ms, i) => {
-    ms.forEach((m) => {
-      const key = formatKey(m.label);
-      if (!(key in values)) {
-        values[key] = {
-          prev: m.counter.value,
-          series: [],
-        };
-      } else {
-        const v = values[key];
-        v.series.push({
-          x: i,
-          y: m.counter.value - v.prev,
-        });
-        v.prev = m.counter.value;
-      }
-    });
-  });
-
-  return Object.values(values).map(({ series: values }) => values);
-};
-
-const gaugeGraphValues = (series: MetricSeries) => {
-  const values: { [key: string]: LineSeriesPoint[] } = {};
-
-  series.metrics.forEach((ms, i) => {
-    ms.forEach((m) => {
-      const key = formatKey(m.label);
-      if (!(key in values)) {
-        values[key] = [];
-      } else {
-        values[key].push({
-          x: i,
-          y: m.gauge.value,
-        });
-      }
-    });
-  });
-
-  return Object.values(values);
-};
-
-interface SummarySeries {
-  range: AreaSeriesPoint[];
-  iqr: AreaSeriesPoint[];
-  median: LineSeriesPoint[];
-}
-
-const summaryGraphValues = (series: MetricSeries): SummarySeries => ({
-  range: series.metrics.slice(1).map((m, i) => ({
-    x: i,
-    y: m[0].summary.quantile[0].value,
-    y0: m[0].summary.quantile[4].value,
-  })),
-  iqr: series.metrics.slice(1).map((m, i) => ({
-    x: i,
-    y: m[0].summary.quantile[1].value,
-    y0: m[0].summary.quantile[3].value,
-  })),
-  median: series.metrics.slice(1).map((m, i) => ({
-    x: i,
-    y: m[0].summary.quantile[2].value,
-  })),
-});
-
-const histogramGraphValues = (series: MetricSeries) => {
-  const values: HeatmapSeriesPoint[] = [];
-  series.metrics.slice(1).forEach((m, i) => {
-    m[0].histogram.bucket.forEach((b) => {
-      values.push({
-        x: i,
-        y: b.upperBound,
-        color: Number(b.cumulativeCount),
-      });
-    });
-  });
-  return values;
+const lastValue = (points: { y: number }[]) => {
+  const last = points[points.length - 1];
+  return last === undefined ? "-" : formatValue(last.y);
 };
 
 const seriesDomain = (v: { x: number }[], d: number = 240): [number, number] => {
@@ -164,11 +75,30 @@ interface AbstractGraphProps {
 
 interface LineGraphProps extends AbstractGraphProps {
   values: LineSeriesPoint[][];
+  // Names the lines in a legend with their latest values.
+  labels?: string[];
+  // The x range; by default each line's last 240 s.
+  domain?: [number, number];
+  className?: string;
 }
 
-const LineGraph: React.FC<LineGraphProps> = ({ label, values, height, width, showAxes }) => (
-  <div className="debugger_graph">
-    <div className="debugger_graph__label">{label}</div>
+const LineGraph: React.FC<LineGraphProps> = ({
+  label,
+  values,
+  labels,
+  domain,
+  className,
+  height,
+  width,
+  showAxes,
+}) => (
+  <div className={clsx("debugger_graph", className)}>
+    <div className="debugger_graph__label">
+      {label}
+      {!labels && values.length === 1 && (
+        <span className="debugger_graph__value">{lastValue(values[0])}</span>
+      )}
+    </div>
     <XYPlot
       className="debugger_graph__plot"
       width={width - 10}
@@ -178,241 +108,125 @@ const LineGraph: React.FC<LineGraphProps> = ({ label, values, height, width, sho
       {showAxes && <HorizontalGridLines />}
       {showAxes && <YAxis tickFormat={format("~s")} />}
       {values.map((data, i) => (
-        <LineSeries key={i} data={data} xDomain={seriesDomain(data)} style={{ fill: "none" }} />
+        <LineSeries
+          key={i}
+          data={data}
+          xDomain={domain ?? seriesDomain(data)}
+          color={lineColor(i)}
+          style={{ fill: "none" }}
+        />
       ))}
     </XYPlot>
+    {labels && (
+      <div className="debugger_graph__legend">
+        {labels.map((label, i) => (
+          <span key={i} className="debugger_graph__legend__item">
+            <i style={{ background: lineColor(i) }} />
+            {label} <span className="debugger_graph__value">{lastValue(values[i] ?? [])}</span>
+          </span>
+        ))}
+      </div>
+    )}
   </div>
 );
 
-interface SummaryGraphProps extends AbstractGraphProps {
-  values: SummarySeries;
+interface SeriesGraphProps extends AbstractGraphProps {
+  series: Series[];
+  domain: [number, number];
+  className?: string;
 }
 
-const SummaryGraph: React.FC<SummaryGraphProps> = ({ label, values, height, width, showAxes }) => (
-  <div className="debugger_graph">
-    <div className="debugger_graph__label">{label}</div>
-    <XYPlot
-      className="debugger_graph__plot"
-      width={width - 10}
-      height={height}
-      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
-    >
-      {showAxes && <HorizontalGridLines />}
-      {showAxes && <YAxis tickFormat={format("~s")} />}
-      <AreaSeries data={values.range} xDomain={seriesDomain(values.range)} />
-      <AreaSeries data={values.iqr} xDomain={seriesDomain(values.iqr)} />
-      <LineSeries
-        data={values.median}
-        xDomain={seriesDomain(values.median)}
-        style={{ fill: "none" }}
-      />
-    </XYPlot>
-  </div>
+// A line per series, with a legend.
+const SeriesGraph: React.FC<SeriesGraphProps> = ({ series, ...props }) => (
+  <LineGraph
+    {...props}
+    values={series.map(({ points }) => points)}
+    labels={series.map(({ label }) => label)}
+  />
 );
 
-interface HeatmapGraphProps extends AbstractGraphProps {
-  values: HeatmapSeriesPoint[];
+interface ChartProps {
+  history: Metrics[];
 }
 
-const HeatmapGraph: React.FC<HeatmapGraphProps> = ({ label, values, height, width, showAxes }) => (
-  <div className="debugger_graph">
-    <div className="debugger_graph__label">{label}</div>
-    <XYPlot
-      className="debugger_graph__plot"
-      width={width - 10}
-      height={height}
-      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
-    >
-      {showAxes && <HorizontalGridLines />}
-      {showAxes && <YAxis tickFormat={format("~s")} />}
-      <HeatmapSeries data={values} xDomain={seriesDomain(values)} />
-    </XYPlot>
-  </div>
-);
-
-interface GraphProps extends AbstractGraphProps {
-  series?: MetricSeries;
-}
-
-const Graph: React.FC<GraphProps> = ({ series, ...props }) => {
-  if (!series) {
-    return null;
-  }
-
-  let graph: ReactElement;
-  if (series.metrics[0][0].counter) {
-    graph = <LineGraph {...props} values={counterGraphValues(series)} />;
-  } else if (series.metrics[0][0].gauge) {
-    graph = <LineGraph {...props} values={gaugeGraphValues(series)} />;
-  } else if (series.metrics[0][0].summary) {
-    graph = <SummaryGraph {...props} values={summaryGraphValues(series)} />;
-  } else if (series.metrics[0][0].histogram) {
-    graph = <HeatmapGraph {...props} values={histogramGraphValues(series)} />;
-  }
-
-  return <div>{graph}</div>;
-};
-
-const useMetrics = (dispatch: (families: MetricFamily[]) => void) => {
-  const client = useClient();
-
-  useEffect(() => {
-    const events = client.debug.watchMetrics({
-      format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
-      intervalMs: 500,
-    });
-
-    events.on("data", ({ data }) => {
-      const families: MetricFamily[] = [];
-      for (const r = new PBReader(data); r.pos < r.len; ) {
-        families.push(MetricFamily.decode(r, r.uint32()));
-      }
-      dispatch(families);
-    });
-
-    return () => events.destroy();
-  }, []);
-};
-
-export const ActivityChart: React.FC = () => {
-  const [metrics, dispatch] = React.useReducer(metricsReducer, {});
-  useMetrics(dispatch);
-
+const useGraphSize = (largeHeight: number) => {
   const { width, height } = usePortletSize();
   const large = height > 600;
-  const graphHeight = large ? 60 : 20;
+  return { width, height: large ? largeHeight : 20, showAxes: large };
+};
+
+export const ActivityChart: React.FC<ChartProps> = ({ history }) => {
+  const size = useGraphSize(60);
+  const domain = timeDomain(history, HISTORY_SECONDS);
+
+  const live = gauge(history, (m) => m.memory?.liveBytes);
+  const peak = gauge(history, (m) => m.memory?.peakBytes);
+  const linear = gauge(history, (m) => m.memory?.linearMemoryBytes);
+  const heap: Series[] = [
+    { key: "live", label: "live", points: live },
+    { key: "peak", label: "peak", points: peak },
+  ];
+  if (linear.some(({ y }) => y > 0)) {
+    heap.push({ key: "linear", label: "linear memory", points: linear });
+  }
+
+  const graphs: [string, Point[]][] = [
+    ["allocations/s", rate(history, (m) => m.memory?.allocations)],
+    ["allocated B/s", rate(history, (m) => m.memory?.allocatedBytes)],
+    ["loop iterations/s", rate(history, (m) => m.node?.driver?.loopIterations)],
+    ["queries/s", rate(history, (m) => m.node?.driver?.queries)],
+    ["query wakes/s", rate(history, (m) => m.node?.driver?.queryWakes)],
+  ];
 
   return (
-    <div style={{ height: "40px" }}>
-      <Graph
-        label="go_gc_duration_seconds"
-        series={metrics["go_gc_duration_seconds"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
+    <div>
+      <SeriesGraph
+        label={latest(history)?.memory ? "heap bytes" : "heap bytes (not counted)"}
+        className="debugger_graph--memory"
+        series={heap}
+        domain={domain}
+        {...size}
       />
-      <Graph
-        label="go_goroutines"
-        series={metrics["go_goroutines"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
+      {graphs.map(([label, points]) => (
+        <LineGraph key={label} label={label} values={[points]} domain={domain} {...size} />
+      ))}
+      <SeriesGraph
+        label="link read B/s"
+        series={linkRates(history, "read")}
+        domain={domain}
+        {...size}
       />
-      <Graph
-        label="go_memstats_heap_objects"
-        series={metrics["go_memstats_heap_objects"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
-      />
-      <Graph
-        label="go_memstats_alloc_bytes"
-        series={metrics["go_memstats_alloc_bytes"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
-      />
-      <Graph
-        label="go_memstats_alloc_bytes_total"
-        series={metrics["go_memstats_alloc_bytes_total"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
-      />
-      <Graph
-        label="go_memstats_mallocs_total"
-        series={metrics["go_memstats_mallocs_total"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
-      />
-      <Graph
-        label="strims_vnic_link_read_bytes"
-        series={metrics["strims_vnic_link_read_bytes"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
-      />
-      <Graph
-        label="strims_vnic_link_write_bytes"
-        series={metrics["strims_vnic_link_write_bytes"]}
-        height={graphHeight}
-        width={width}
-        showAxes={large}
+      <SeriesGraph
+        label="link write B/s"
+        series={linkRates(history, "write")}
+        domain={domain}
+        {...size}
       />
     </div>
   );
 };
 
-type PrometheusSarmMetrics = {
-  tick: number;
-  swarm: {
-    // label
-    [key: string]: {
-      // metric name
-      [key: string]: {
-        // direction
-        [key: string]: {
-          name: string;
-          metrics: Counter[];
-          tick: number;
-        };
-      };
-    };
-  };
-  peer: {
-    // label
-    [key: string]: {
-      // peerId
-      [key: string]: {
-        // metric name
-        [key: string]: {
-          // direction
-          [key: string]: {
-            name: string;
-            metrics: Counter[];
-          };
-        };
-      };
-    };
-  };
-};
-
-type SwarmMetricSeries = {
-  [key: string]: {
-    name: string;
-    metrics: Counter[];
-  };
-};
-
-const swarmGraphValues = (series: SwarmMetricSeries) => {
-  const toSeries = (series: Counter[], d: number) => {
-    let prev = series[0].value;
-    return series.map(({ value }, x) => {
-      const y = (value - prev) * d;
-      prev = value;
-      return { x, y };
-    });
-  };
-
-  return {
-    in: toSeries(series.in.metrics, 1),
-    out: toSeries(series.out.metrics, -1),
-  };
-};
-
-type SwarmSeries = {
-  in: LineSeriesPoint[];
-  out: LineSeriesPoint[];
-};
-
 interface SwarmGraphProps extends AbstractGraphProps {
   values: SwarmSeries;
+  domain: [number, number];
 }
 
-const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width, showAxes }) => (
+// Data in above the axis and out below it.
+const SwarmGraph: React.FC<SwarmGraphProps> = ({
+  label,
+  values,
+  domain,
+  height,
+  width,
+  showAxes,
+}) => (
   <div className="debugger_graph">
-    <div className="debugger_graph__label">{label}</div>
+    <div className="debugger_graph__label">
+      {label}
+      <span className="debugger_graph__value">
+        in {lastValue(values.in)}B/s out {lastValue(values.out)}B/s
+      </span>
+    </div>
     <XYPlot
       className="debugger_graph__plot"
       width={width - 10}
@@ -421,8 +235,8 @@ const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width, s
     >
       {showAxes && <HorizontalGridLines />}
       {showAxes && <YAxis tickFormat={format("~s")} />}
-      <AreaSeries data={values.in} xDomain={seriesDomain(values.in)} />
-      <AreaSeries data={values.out} xDomain={seriesDomain(values.out)} />
+      <AreaSeries data={values.in} xDomain={domain} />
+      <AreaSeries data={values.out.map(({ x, y }) => ({ x, y: -y }))} xDomain={domain} />
       <LineSeries
         data={[
           { x: 0, y: 0 },
@@ -435,90 +249,88 @@ const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width, s
   </div>
 );
 
-type M<T> = { [key: string]: T };
-
-const unpack = <T extends M<any>>(next: M<T>, prev: M<T>, k: string): T => {
-  if (next[k] === undefined) {
-    return (next[k] = {} as T);
-  }
-  if (next[k] !== prev?.[k]) {
-    return next[k];
-  }
-  return (next[k] = { ...next[k] });
-};
-
-const swarmsReducer = (prev: PrometheusSarmMetrics, families: MetricFamily[]) => {
-  const next = {
-    tick: prev.tick + 1,
-    swarm: { ...prev.swarm },
-    peer: { ...prev.peer },
-  };
-
-  const family = families.find(({ name }) => name === "strims_ppspp_channel");
-  if (family) {
-    family.metric.forEach(({ label, counter }) => {
-      const [
-        { value: direction },
-        { value: swarmLabel },
-        { value: peerId },
-        { value: swarmId },
-        { value: name },
-      ] = label;
-      const key = swarmLabel || swarmId.substring(0, 8);
-
-      const p0 = unpack(next.peer, prev.peer, key);
-      const p1 = unpack(p0, prev.peer[key], peerId);
-      const p2 = unpack(p1, prev.peer[key]?.[peerId], name);
-      const p3 = unpack(p2, prev.peer[key]?.[peerId]?.[name], direction);
-
-      p3.name = name;
-      const prune = p3.metrics?.length == 241;
-      p3.metrics = [...(p3.metrics?.slice(prune ? 1 : 0, 241) || []), counter];
-
-      const s0 = unpack(next.swarm, prev.swarm, key);
-      const s1 = unpack(s0, prev.swarm[key], name);
-      const s2 = unpack(s1, prev.swarm[key]?.[name], direction);
-
-      s2.name = name;
-      if (s2.tick === next.tick) {
-        s2.metrics[s2.metrics.length - 1].value += counter.value;
-      } else {
-        const prune = s2.metrics?.length == 241;
-        s2.metrics = [...(s2.metrics?.slice(prune ? 1 : 0, 241) || []), counter];
-      }
-      s2.tick = next.tick;
-    });
-  }
-
-  return next;
-};
-
-const initialSwarmMetrics = {
-  tick: 0,
-  swarm: {},
-  peer: {},
-};
-
-export const SwarmChart: React.FC = () => {
-  const [metrics, dispatch] = React.useReducer(swarmsReducer, initialSwarmMetrics);
-  useMetrics(dispatch);
-
-  const { width, height } = usePortletSize();
-  const large = height > 600;
-  const graphHeight = large ? 80 : 20;
+export const SwarmChart: React.FC<ChartProps> = ({ history }) => {
+  const size = useGraphSize(80);
+  const domain = timeDomain(history, HISTORY_SECONDS);
 
   return (
-    <div style={{ height: "40px" }}>
-      {Object.entries(metrics.swarm).map(([label, metrics]) => (
+    <div>
+      {swarmRates(history).map((values) => (
         <SwarmGraph
-          key={label}
-          label={`data_bytes ${label}`}
-          values={swarmGraphValues(metrics["data_bytes"])}
-          height={graphHeight}
-          width={width}
-          showAxes={large}
+          key={values.key}
+          label={`data ${values.label}`}
+          values={values}
+          domain={domain}
+          {...size}
         />
       ))}
+    </div>
+  );
+};
+
+const formatMs = (ns?: bigint) => (ns === undefined ? "-" : `${(Number(ns) / 1e6).toFixed(0)} ms`);
+
+export const MockStreamChart: React.FC<ChartProps> = ({ history }) => {
+  const size = useGraphSize(80);
+  const domain = timeDomain(history, HISTORY_SECONDS);
+  const debug = latest(history)?.debug;
+
+  return (
+    <div>
+      <SeriesGraph
+        label="reader latency ms"
+        series={readerLatencies(history)}
+        domain={domain}
+        {...size}
+      />
+      <table className="debugger_table">
+        <caption>producers</caption>
+        <thead>
+          <tr>
+            <th>id</th>
+            <th>bitrate</th>
+            <th>interval</th>
+            <th>segments</th>
+            <th>bytes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {debug?.mockStreams.map((s) => (
+            <tr key={s.id.toString()}>
+              <td>{s.id.toString()}</td>
+              <td>{s.bitrateKbps} kbps</td>
+              <td>{s.segmentIntervalMs} ms</td>
+              <td>{s.segments.toString()}</td>
+              <td>{formatValue(Number(s.bytesWritten))}B</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <table className="debugger_table">
+        <caption>readers</caption>
+        <thead>
+          <tr>
+            <th>listing</th>
+            <th>stream</th>
+            <th>segments</th>
+            <th>malformed</th>
+            <th>discontinuities</th>
+            <th>latency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {debug?.readers.map((r) => (
+            <tr key={`${hex(r.networkKey)}/${r.listingId.toString()}`}>
+              <td>{r.listingId.toString()}</td>
+              <td>{r.id?.value.toString() ?? "-"}</td>
+              <td>{r.segments.toString()}</td>
+              <td>{r.malformed.toString()}</td>
+              <td>{r.discontinuities.toString()}</td>
+              <td>{formatMs(r.latency?.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

@@ -8,21 +8,17 @@ import (
 
 // RegisterDebugService ...
 func RegisterDebugService(host rpc.ServiceRegistry, service DebugService) {
-	host.RegisterMethod("strims.debug.v1.Debug.PProf", service.PProf)
 	host.RegisterMethod("strims.debug.v1.Debug.ReadMetrics", service.ReadMetrics)
 	host.RegisterMethod("strims.debug.v1.Debug.WatchMetrics", service.WatchMetrics)
 	host.RegisterMethod("strims.debug.v1.Debug.GetConfig", service.GetConfig)
 	host.RegisterMethod("strims.debug.v1.Debug.SetConfig", service.SetConfig)
 	host.RegisterMethod("strims.debug.v1.Debug.StartMockStream", service.StartMockStream)
 	host.RegisterMethod("strims.debug.v1.Debug.StopMockStream", service.StopMockStream)
+	host.RegisterMethod("strims.debug.v1.Debug.ListMockStreams", service.ListMockStreams)
 }
 
 // DebugService ...
 type DebugService interface {
-	PProf(
-		ctx context.Context,
-		req *PProfRequest,
-	) (*PProfResponse, error)
 	ReadMetrics(
 		ctx context.Context,
 		req *ReadMetricsRequest,
@@ -47,17 +43,14 @@ type DebugService interface {
 		ctx context.Context,
 		req *StopMockStreamRequest,
 	) (*StopMockStreamResponse, error)
+	ListMockStreams(
+		ctx context.Context,
+		req *ListMockStreamsRequest,
+	) (*ListMockStreamsResponse, error)
 }
 
 // DebugService ...
 type UnimplementedDebugService struct{}
-
-func (s *UnimplementedDebugService) PProf(
-	ctx context.Context,
-	req *PProfRequest,
-) (*PProfResponse, error) {
-	return nil, rpc.ErrNotImplemented
-}
 
 func (s *UnimplementedDebugService) ReadMetrics(
 	ctx context.Context,
@@ -101,6 +94,13 @@ func (s *UnimplementedDebugService) StopMockStream(
 	return nil, rpc.ErrNotImplemented
 }
 
+func (s *UnimplementedDebugService) ListMockStreams(
+	ctx context.Context,
+	req *ListMockStreamsRequest,
+) (*ListMockStreamsResponse, error) {
+	return nil, rpc.ErrNotImplemented
+}
+
 var _ DebugService = (*UnimplementedDebugService)(nil)
 
 // DebugClient ...
@@ -111,15 +111,6 @@ type DebugClient struct {
 // NewDebugClient ...
 func NewDebugClient(client rpc.Caller) *DebugClient {
 	return &DebugClient{client}
-}
-
-// PProf ...
-func (c *DebugClient) PProf(
-	ctx context.Context,
-	req *PProfRequest,
-	res *PProfResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.PProf", req, res)
 }
 
 // ReadMetrics ...
@@ -174,4 +165,13 @@ func (c *DebugClient) StopMockStream(
 	res *StopMockStreamResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.StopMockStream", req, res)
+}
+
+// ListMockStreams ...
+func (c *DebugClient) ListMockStreams(
+	ctx context.Context,
+	req *ListMockStreamsRequest,
+	res *ListMockStreamsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.ListMockStreams", req, res)
 }

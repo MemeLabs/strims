@@ -4,9 +4,6 @@ import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/
 import { Readable as GenericReadable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import {
-  strims_debug_v1_IPProfRequest,
-  strims_debug_v1_PProfRequest,
-  strims_debug_v1_PProfResponse,
   strims_debug_v1_IReadMetricsRequest,
   strims_debug_v1_ReadMetricsRequest,
   strims_debug_v1_ReadMetricsResponse,
@@ -25,44 +22,43 @@ import {
   strims_debug_v1_IStopMockStreamRequest,
   strims_debug_v1_StopMockStreamRequest,
   strims_debug_v1_StopMockStreamResponse,
+  strims_debug_v1_IListMockStreamsRequest,
+  strims_debug_v1_ListMockStreamsRequest,
+  strims_debug_v1_ListMockStreamsResponse,
 } from "./debug";
 
 export interface DebugService {
-  pProf(req: strims_debug_v1_PProfRequest, call: strims_rpc_Call): Promise<strims_debug_v1_PProfResponse> | strims_debug_v1_PProfResponse;
   readMetrics(req: strims_debug_v1_ReadMetricsRequest, call: strims_rpc_Call): Promise<strims_debug_v1_ReadMetricsResponse> | strims_debug_v1_ReadMetricsResponse;
   watchMetrics(req: strims_debug_v1_WatchMetricsRequest, call: strims_rpc_Call): GenericReadable<strims_debug_v1_WatchMetricsResponse>;
   getConfig(req: strims_debug_v1_GetConfigRequest, call: strims_rpc_Call): Promise<strims_debug_v1_GetConfigResponse> | strims_debug_v1_GetConfigResponse;
   setConfig(req: strims_debug_v1_SetConfigRequest, call: strims_rpc_Call): Promise<strims_debug_v1_SetConfigResponse> | strims_debug_v1_SetConfigResponse;
   startMockStream(req: strims_debug_v1_StartMockStreamRequest, call: strims_rpc_Call): Promise<strims_debug_v1_StartMockStreamResponse> | strims_debug_v1_StartMockStreamResponse;
   stopMockStream(req: strims_debug_v1_StopMockStreamRequest, call: strims_rpc_Call): Promise<strims_debug_v1_StopMockStreamResponse> | strims_debug_v1_StopMockStreamResponse;
+  listMockStreams(req: strims_debug_v1_ListMockStreamsRequest, call: strims_rpc_Call): Promise<strims_debug_v1_ListMockStreamsResponse> | strims_debug_v1_ListMockStreamsResponse;
 }
 
 export class UnimplementedDebugService implements DebugService {
-  pProf(req: strims_debug_v1_PProfRequest, call: strims_rpc_Call): Promise<strims_debug_v1_PProfResponse> | strims_debug_v1_PProfResponse { throw new Error("not implemented"); }
   readMetrics(req: strims_debug_v1_ReadMetricsRequest, call: strims_rpc_Call): Promise<strims_debug_v1_ReadMetricsResponse> | strims_debug_v1_ReadMetricsResponse { throw new Error("not implemented"); }
   watchMetrics(req: strims_debug_v1_WatchMetricsRequest, call: strims_rpc_Call): GenericReadable<strims_debug_v1_WatchMetricsResponse> { throw new Error("not implemented"); }
   getConfig(req: strims_debug_v1_GetConfigRequest, call: strims_rpc_Call): Promise<strims_debug_v1_GetConfigResponse> | strims_debug_v1_GetConfigResponse { throw new Error("not implemented"); }
   setConfig(req: strims_debug_v1_SetConfigRequest, call: strims_rpc_Call): Promise<strims_debug_v1_SetConfigResponse> | strims_debug_v1_SetConfigResponse { throw new Error("not implemented"); }
   startMockStream(req: strims_debug_v1_StartMockStreamRequest, call: strims_rpc_Call): Promise<strims_debug_v1_StartMockStreamResponse> | strims_debug_v1_StartMockStreamResponse { throw new Error("not implemented"); }
   stopMockStream(req: strims_debug_v1_StopMockStreamRequest, call: strims_rpc_Call): Promise<strims_debug_v1_StopMockStreamResponse> | strims_debug_v1_StopMockStreamResponse { throw new Error("not implemented"); }
+  listMockStreams(req: strims_debug_v1_ListMockStreamsRequest, call: strims_rpc_Call): Promise<strims_debug_v1_ListMockStreamsResponse> | strims_debug_v1_ListMockStreamsResponse { throw new Error("not implemented"); }
 }
 
 export const registerDebugService = (host: strims_rpc_Service, service: DebugService): void => {
-  host.registerMethod<strims_debug_v1_PProfRequest, strims_debug_v1_PProfResponse>("strims.debug.v1.Debug.PProf", service.pProf.bind(service), strims_debug_v1_PProfRequest);
   host.registerMethod<strims_debug_v1_ReadMetricsRequest, strims_debug_v1_ReadMetricsResponse>("strims.debug.v1.Debug.ReadMetrics", service.readMetrics.bind(service), strims_debug_v1_ReadMetricsRequest);
   host.registerMethod<strims_debug_v1_WatchMetricsRequest, strims_debug_v1_WatchMetricsResponse>("strims.debug.v1.Debug.WatchMetrics", service.watchMetrics.bind(service), strims_debug_v1_WatchMetricsRequest);
   host.registerMethod<strims_debug_v1_GetConfigRequest, strims_debug_v1_GetConfigResponse>("strims.debug.v1.Debug.GetConfig", service.getConfig.bind(service), strims_debug_v1_GetConfigRequest);
   host.registerMethod<strims_debug_v1_SetConfigRequest, strims_debug_v1_SetConfigResponse>("strims.debug.v1.Debug.SetConfig", service.setConfig.bind(service), strims_debug_v1_SetConfigRequest);
   host.registerMethod<strims_debug_v1_StartMockStreamRequest, strims_debug_v1_StartMockStreamResponse>("strims.debug.v1.Debug.StartMockStream", service.startMockStream.bind(service), strims_debug_v1_StartMockStreamRequest);
   host.registerMethod<strims_debug_v1_StopMockStreamRequest, strims_debug_v1_StopMockStreamResponse>("strims.debug.v1.Debug.StopMockStream", service.stopMockStream.bind(service), strims_debug_v1_StopMockStreamRequest);
+  host.registerMethod<strims_debug_v1_ListMockStreamsRequest, strims_debug_v1_ListMockStreamsResponse>("strims.debug.v1.Debug.ListMockStreams", service.listMockStreams.bind(service), strims_debug_v1_ListMockStreamsRequest);
 }
 
 export class DebugClient {
   constructor(private readonly host: strims_rpc_Host) {}
-
-  public pProf(req?: strims_debug_v1_IPProfRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_debug_v1_PProfResponse> {
-    return this.host.expectOne(this.host.call("strims.debug.v1.Debug.PProf", new strims_debug_v1_PProfRequest(req)), strims_debug_v1_PProfResponse, opts);
-  }
 
   public readMetrics(req?: strims_debug_v1_IReadMetricsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_debug_v1_ReadMetricsResponse> {
     return this.host.expectOne(this.host.call("strims.debug.v1.Debug.ReadMetrics", new strims_debug_v1_ReadMetricsRequest(req)), strims_debug_v1_ReadMetricsResponse, opts);
@@ -86,6 +82,10 @@ export class DebugClient {
 
   public stopMockStream(req?: strims_debug_v1_IStopMockStreamRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_debug_v1_StopMockStreamResponse> {
     return this.host.expectOne(this.host.call("strims.debug.v1.Debug.StopMockStream", new strims_debug_v1_StopMockStreamRequest(req)), strims_debug_v1_StopMockStreamResponse, opts);
+  }
+
+  public listMockStreams(req?: strims_debug_v1_IListMockStreamsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_debug_v1_ListMockStreamsResponse> {
+    return this.host.expectOne(this.host.call("strims.debug.v1.Debug.ListMockStreams", new strims_debug_v1_ListMockStreamsRequest(req)), strims_debug_v1_ListMockStreamsResponse, opts);
   }
 }
 

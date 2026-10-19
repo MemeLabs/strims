@@ -1,150 +1,46 @@
 import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
+import {
+  strims_debug_v1_Metrics,
+  strims_debug_v1_IMetrics,
+  strims_debug_v1_MockStream,
+  strims_debug_v1_IMockStream,
+} from "./metrics";
 
-export type IPProfRequest = {
-  name?: string;
-  debug?: boolean;
-  gc?: boolean;
-}
-
-export class PProfRequest {
-  name: string;
-  debug: boolean;
-  gc: boolean;
-
-  constructor(v?: IPProfRequest) {
-    this.name = v?.name || "";
-    this.debug = v?.debug || false;
-    this.gc = v?.gc || false;
-  }
-
-  static encode(m: PProfRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.name.length) w.uint32(10).string(m.name);
-    if (m.debug) w.uint32(16).bool(m.debug);
-    if (m.gc) w.uint32(24).bool(m.gc);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): PProfRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new PProfRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.name = r.string();
-        break;
-        case 2:
-        m.debug = r.bool();
-        break;
-        case 3:
-        m.gc = r.bool();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IPProfResponse = {
-  name?: string;
-  data?: Uint8Array;
-}
-
-export class PProfResponse {
-  name: string;
-  data: Uint8Array;
-
-  constructor(v?: IPProfResponse) {
-    this.name = v?.name || "";
-    this.data = v?.data || new Uint8Array();
-  }
-
-  static encode(m: PProfResponse, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.name.length) w.uint32(10).string(m.name);
-    if (m.data.length) w.uint32(18).bytes(m.data);
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): PProfResponse {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new PProfResponse();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.name = r.string();
-        break;
-        case 2:
-        m.data = r.bytes();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IReadMetricsRequest = {
-  format?: strims_debug_v1_MetricsFormat;
-}
+export type IReadMetricsRequest = Record<string, any>;
 
 export class ReadMetricsRequest {
-  format: strims_debug_v1_MetricsFormat;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IReadMetricsRequest) {
-    this.format = v?.format || 0;
   }
 
   static encode(m: ReadMetricsRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.format) w.uint32(8).uint32(m.format);
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): ReadMetricsRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new ReadMetricsRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.format = r.uint32();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
+    if (r instanceof Reader && length) r.skip(length);
+    return new ReadMetricsRequest();
   }
 }
 
 export type IReadMetricsResponse = {
-  data?: Uint8Array;
+  metrics?: strims_debug_v1_IMetrics;
 }
 
 export class ReadMetricsResponse {
-  data: Uint8Array;
+  metrics: strims_debug_v1_Metrics | undefined;
 
   constructor(v?: IReadMetricsResponse) {
-    this.data = v?.data || new Uint8Array();
+    this.metrics = v?.metrics && new strims_debug_v1_Metrics(v.metrics);
   }
 
   static encode(m: ReadMetricsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data.length) w.uint32(10).bytes(m.data);
+    if (m.metrics) strims_debug_v1_Metrics.encode(m.metrics, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -156,7 +52,7 @@ export class ReadMetricsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.data = r.bytes();
+        m.metrics = strims_debug_v1_Metrics.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -168,23 +64,19 @@ export class ReadMetricsResponse {
 }
 
 export type IWatchMetricsRequest = {
-  format?: strims_debug_v1_MetricsFormat;
   intervalMs?: number;
 }
 
 export class WatchMetricsRequest {
-  format: strims_debug_v1_MetricsFormat;
   intervalMs: number;
 
   constructor(v?: IWatchMetricsRequest) {
-    this.format = v?.format || 0;
     this.intervalMs = v?.intervalMs || 0;
   }
 
   static encode(m: WatchMetricsRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.format) w.uint32(8).uint32(m.format);
-    if (m.intervalMs) w.uint32(16).int32(m.intervalMs);
+    if (m.intervalMs) w.uint32(8).int32(m.intervalMs);
     return w;
   }
 
@@ -196,9 +88,6 @@ export class WatchMetricsRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.format = r.uint32();
-        break;
-        case 2:
         m.intervalMs = r.int32();
         break;
         default:
@@ -211,19 +100,19 @@ export class WatchMetricsRequest {
 }
 
 export type IWatchMetricsResponse = {
-  data?: Uint8Array;
+  metrics?: strims_debug_v1_IMetrics;
 }
 
 export class WatchMetricsResponse {
-  data: Uint8Array;
+  metrics: strims_debug_v1_Metrics | undefined;
 
   constructor(v?: IWatchMetricsResponse) {
-    this.data = v?.data || new Uint8Array();
+    this.metrics = v?.metrics && new strims_debug_v1_Metrics(v.metrics);
   }
 
   static encode(m: WatchMetricsResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.data.length) w.uint32(10).bytes(m.data);
+    if (m.metrics) strims_debug_v1_Metrics.encode(m.metrics, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -235,7 +124,7 @@ export class WatchMetricsResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.data = r.bytes();
+        m.metrics = strims_debug_v1_Metrics.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -614,25 +503,61 @@ export class StopMockStreamResponse {
   }
 }
 
-export enum MetricsFormat {
-  METRICS_FORMAT_TEXT = 0,
-  METRICS_FORMAT_PROTO_DELIM = 1,
-  METRICS_FORMAT_PROTO_TEXT = 2,
-  METRICS_FORMAT_PROTO_COMPACT = 3,
-  METRICS_FORMAT_OPEN_METRICS = 4,
+export type IListMockStreamsRequest = Record<string, any>;
+
+export class ListMockStreamsRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IListMockStreamsRequest) {
+  }
+
+  static encode(m: ListMockStreamsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListMockStreamsRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ListMockStreamsRequest();
+  }
 }
-/* @internal */
-export const strims_debug_v1_PProfRequest = PProfRequest;
-/* @internal */
-export type strims_debug_v1_PProfRequest = PProfRequest;
-/* @internal */
-export type strims_debug_v1_IPProfRequest = IPProfRequest;
-/* @internal */
-export const strims_debug_v1_PProfResponse = PProfResponse;
-/* @internal */
-export type strims_debug_v1_PProfResponse = PProfResponse;
-/* @internal */
-export type strims_debug_v1_IPProfResponse = IPProfResponse;
+
+export type IListMockStreamsResponse = {
+  mockStreams?: strims_debug_v1_IMockStream[];
+}
+
+export class ListMockStreamsResponse {
+  mockStreams: strims_debug_v1_MockStream[];
+
+  constructor(v?: IListMockStreamsResponse) {
+    this.mockStreams = v?.mockStreams ? v.mockStreams.map(v => new strims_debug_v1_MockStream(v)) : [];
+  }
+
+  static encode(m: ListMockStreamsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.mockStreams) strims_debug_v1_MockStream.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListMockStreamsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListMockStreamsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.mockStreams.push(strims_debug_v1_MockStream.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 /* @internal */
 export const strims_debug_v1_ReadMetricsRequest = ReadMetricsRequest;
 /* @internal */
@@ -718,6 +643,14 @@ export type strims_debug_v1_StopMockStreamResponse = StopMockStreamResponse;
 /* @internal */
 export type strims_debug_v1_IStopMockStreamResponse = IStopMockStreamResponse;
 /* @internal */
-export const strims_debug_v1_MetricsFormat = MetricsFormat;
+export const strims_debug_v1_ListMockStreamsRequest = ListMockStreamsRequest;
 /* @internal */
-export type strims_debug_v1_MetricsFormat = MetricsFormat;
+export type strims_debug_v1_ListMockStreamsRequest = ListMockStreamsRequest;
+/* @internal */
+export type strims_debug_v1_IListMockStreamsRequest = IListMockStreamsRequest;
+/* @internal */
+export const strims_debug_v1_ListMockStreamsResponse = ListMockStreamsResponse;
+/* @internal */
+export type strims_debug_v1_ListMockStreamsResponse = ListMockStreamsResponse;
+/* @internal */
+export type strims_debug_v1_IListMockStreamsResponse = IListMockStreamsResponse;

@@ -12,9 +12,7 @@ import { Link, Routes, useNavigate, useResolvedPath } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "use-portal";
 
-import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
-import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import Layout from "../../pages/Settings/Layout";
 import { createSettingsRoutes } from "../../root/MainRouter";
@@ -29,19 +27,11 @@ const defaultSearch = <DirectorySearch maxResults={10} />;
 
 const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
   const { t } = useTranslation();
-  const client = useClient();
   const layout = useLayout();
 
   const [debuggerIsOpen, setDebuggerIsOpen] = useState(false);
   const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
   const handleDebuggerOpen = () => setDebuggerIsOpen(true);
-
-  const handleAlertsClick = async () => {
-    const { data } = await client.debug.readMetrics({
-      format: MetricsFormat.METRICS_FORMAT_TEXT,
-    });
-    console.log(new TextDecoder().decode(data));
-  };
 
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     clsx({
@@ -87,9 +77,6 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         </button>
         {/* <button className="layout_header__user_nav__link">
           <FiCloud />
-        </button>
-        <button onClick={handleAlertsClick} className="layout_header__user_nav__link">
-          <FiBell />
         </button> */}
         <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
         {showSettings && <SettingsModal onClose={handleSettingsClose} />}

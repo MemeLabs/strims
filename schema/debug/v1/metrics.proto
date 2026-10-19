@@ -1,0 +1,598 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.debug.v1;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1;debugv1";
+option java_package = "gg.strims.debug.v1";
+option swift_prefix = "SDG";
+
+import "google/protobuf/wrappers.proto";
+
+// A snapshot of a running profile's counters. Each message mirrors the
+// node's struct of the same name, field for field. Durations are
+// nanoseconds, times Unix nanoseconds, and bins uint64 (2^64 - 1 for none).
+// Swarm, peer and network keys are the node's local keys: they join the
+// parts of one snapshot and mean nothing elsewhere.
+message Metrics {
+  int64 time = 1;
+  // Unset where the driver counts nothing.
+  MemoryMetrics memory = 2;
+  NodeMetrics node = 3;
+  NetworkMetrics network = 4;
+  TransferMetrics transfer = 5;
+  ReplicationMetrics replication = 6;
+  // One per network the directory runs on, in network key order.
+  repeated DirectoryNetworkMetrics directory = 7;
+  ChatMetrics chat = 8;
+  WhisperMetrics whispers = 9;
+  VideoMetrics video = 10;
+  DebugMetrics debug = 11;
+}
+
+// The process's heap, counted from its start.
+message MemoryMetrics {
+  uint64 live_bytes = 1;
+  uint64 peak_bytes = 2;
+  uint64 allocated_bytes = 3;
+  uint64 allocations = 4;
+  uint64 deallocations = 5;
+  uint64 reallocations = 6;
+  // The wasm module's linear memory; 0 elsewhere.
+  uint64 linear_memory_bytes = 7;
+}
+
+message NodeMetrics {
+  HostMetrics host = 1;
+  VpnMetrics vpn = 2;
+  DriverMetrics driver = 3;
+  repeated LinkInfo links = 4;
+  RunnerMetrics runner = 5;
+  repeated NetworkInfo networks = 6;
+}
+
+message HostMetrics {
+  uint64 links_active = 1;
+  uint64 frame_read_count = 2;
+  uint64 frame_read_bytes = 3;
+  uint64 frame_handler_not_found_count = 4;
+  uint64 frame_write_count = 5;
+  uint64 frame_write_bytes = 6;
+  uint64 keepalive_write_count = 7;
+  uint64 keepalive_read_count = 8;
+  uint64 handshake_timeout_count = 9;
+  uint64 handshake_evict_count = 10;
+}
+
+message VpnMetrics {
+  uint64 messages_sent = 1;
+  uint64 messages_relayed = 2;
+  uint64 frames_received = 3;
+  uint64 frames_queued = 4;
+  uint64 frames_sent = 5;
+  uint64 messages_delivered = 6;
+  uint64 duplicates = 7;
+  uint64 malformed = 8;
+  uint64 trailer_mismatch = 9;
+  uint64 compressed_dropped = 10;
+  uint64 verify_failures = 11;
+  uint64 unverified_dropped = 12;
+  uint64 hop_limit = 13;
+  uint64 link_queue_full = 14;
+  uint64 too_large = 15;
+  uint64 no_handler = 16;
+  uint64 decrypt_failures = 17;
+  uint64 handler_errors = 18;
+  uint64 deliveries_dropped = 19;
+  uint64 dedup_evictions = 20;
+  uint64 shorter_relays = 21;
+  uint64 learned_routes = 22;
+  uint64 fallback_routes = 23;
+  uint64 link_announcements_sent = 24;
+  uint64 link_announcements_received = 25;
+  uint64 records_pushed = 26;
+}
+
+message DriverMetrics {
+  uint64 tcp_dials = 1;
+  uint64 tcp_dial_errors = 2;
+  uint64 ws_dials = 3;
+  uint64 ws_dial_errors = 4;
+  uint64 accepted = 5;
+  uint64 accept_errors = 6;
+  uint64 transport_failures = 7;
+  uint64 links_closed = 8;
+  uint64 bytes_read = 9;
+  uint64 bytes_written = 10;
+  uint64 events_dropped = 11;
+  uint64 results_dropped = 12;
+  uint64 vpn_frame_errors = 13;
+  uint64 transfer_errors = 14;
+  uint64 rpc_bytes_read = 15;
+  uint64 rpc_bytes_written = 16;
+  uint64 rpc_overflows = 17;
+  uint64 broker_bytes_read = 18;
+  uint64 broker_bytes_written = 19;
+  uint64 broker_overflows = 20;
+  uint64 vpn_port_drops = 21;
+  uint64 vpn_send_errors = 22;
+  uint64 commands = 23;
+  uint64 queries = 24;
+  uint64 query_wakes = 25;
+  uint64 loop_iterations = 26;
+  uint64 webrtc_connections = 27;
+  uint64 webrtc_opened = 28;
+  uint64 webrtc_closed = 29;
+  uint64 udp_datagrams_read = 30;
+  uint64 udp_bytes_read = 31;
+  uint64 udp_datagrams_written = 32;
+  uint64 udp_bytes_written = 33;
+  uint64 udp_send_dropped = 34;
+  uint64 udp_unrouted = 35;
+}
+
+enum LinkKind {
+  LINK_KIND_OTHER = 0;
+  LINK_KIND_TCP = 1;
+  LINK_KIND_WS = 2;
+  LINK_KIND_WEBRTC = 3;
+}
+
+message LinkMetrics {
+  uint64 read_bytes = 1;
+  uint64 read_count = 2;
+  uint64 write_bytes = 3;
+  uint64 write_count = 4;
+}
+
+message LinkInfo {
+  // Empty until the handshake completes.
+  bytes host_id = 1;
+  LinkKind kind = 2;
+  LinkMetrics metrics = 3;
+  bool dialed = 4;
+  uint64 mtu = 5;
+  uint64 transmit_pending = 6;
+  uint64 input_buffered = 7;
+  bool write_blocked = 8;
+  uint64 buffered_amount = 9;
+}
+
+message RunnerMetrics {
+  repeated SwarmInfo swarms = 1;
+  repeated RunnerPeerInfo peers = 2;
+}
+
+message SwarmInfo {
+  uint64 swarm = 1;
+  bytes id = 2;
+  string label = 3;
+  uint64 channels = 4;
+  StoreInfo store = 5;
+  // Unset while the swarm has no channel.
+  SwarmSchedulerStats scheduler = 6;
+  PushStats push = 7;
+  uint64 readers = 8;
+  uint64 readers_waiting = 9;
+  uint64 publishers = 10;
+}
+
+message StoreInfo {
+  bool ready = 1;
+  uint64 tail = 2;
+  uint64 next = 3;
+  uint64 window = 4;
+  uint64 readable_seq = 5;
+}
+
+message SwarmSchedulerStats {
+  bool first_chunk_set = 1;
+  uint64 have_bin_max = 2;
+  uint64 peer_max_have_bin = 3;
+  uint64 wasted_chunks = 4;
+  uint64 bin_time_nodes = 5;
+  uint64 have_map_size = 6;
+  uint64 request_map_size = 7;
+  uint64 stream_sources = 8;
+  uint64 subscribers = 9;
+}
+
+enum PushMode {
+  PUSH_MODE_OFF = 0;
+  PUSH_MODE_EAGER_HAVE = 1;
+  PUSH_MODE_HYBRID = 2;
+}
+
+// A stream's open push parent, with its mean push delay and the deadline
+// it gets.
+message PushParent {
+  google.protobuf.UInt64Value peer = 1;
+  google.protobuf.Int64Value lag = 2;
+  google.protobuf.Int64Value deadline = 3;
+}
+
+message PushStats {
+  PushMode mode = 1;
+  // One per stream.
+  repeated PushParent parents = 2;
+  uint64 upload_rate = 3;
+  uint32 upload_busy_permille = 4;
+  google.protobuf.UInt32Value interior = 5;
+  uint64 children = 6;
+  uint64 expected = 7;
+  uint64 hits = 8;
+  uint64 misses = 9;
+  uint64 late = 10;
+  uint64 unsolicited = 11;
+  uint64 requests_sent = 12;
+  uint64 opens = 13;
+  uint64 declined = 14;
+  uint64 open_timeouts = 15;
+  uint64 shed = 16;
+  uint64 pruned = 17;
+  uint64 switched = 18;
+  uint64 accepted = 19;
+  uint64 rejected = 20;
+  uint64 sheds_sent = 21;
+  uint64 stale_drops = 22;
+  uint64 suppressed = 23;
+}
+
+message RunnerPeerInfo {
+  bytes host_id = 1;
+  google.protobuf.UInt64Value qos_weight = 2;
+  PeerStats queues = 3;
+  MetricsSnapshot metrics = 4;
+  WriterInfo writer = 5;
+  repeated ChannelInfo channels = 6;
+}
+
+message PeerStats {
+  bool wants_transmit = 1;
+  bool queued_channels = 2;
+  // Pushes, then requests.
+  repeated uint64 queued_data = 3;
+  repeated uint64 queue_ring = 4;
+  uint64 dropped = 5;
+}
+
+// Data bytes in total, and bytes per second over the last minute.
+message TransferMetricsSnapshot {
+  uint64 count = 1;
+  uint64 rate = 2;
+}
+
+message MetricsSnapshot {
+  TransferMetricsSnapshot read = 1;
+  TransferMetricsSnapshot write = 2;
+}
+
+message WriterInfo {
+  uint64 weight = 1;
+  bool backlogged = 2;
+  bool blocked = 3;
+}
+
+message ChannelInfo {
+  uint64 swarm = 1;
+  uint64 channel = 2;
+  uint64 peer_channel = 3;
+  MetricsSnapshot metrics = 4;
+  ChannelStats stats = 5;
+}
+
+message ChannelStats {
+  ChannelSchedulerStats scheduler = 1;
+  ChannelMetrics inbound = 2;
+  ChannelMetrics outbound = 3;
+}
+
+enum RequestControllerKind {
+  REQUEST_CONTROLLER_KIND_DEFAULT = 0;
+  REQUEST_CONTROLLER_KIND_LEDBAT = 1;
+  REQUEST_CONTROLLER_KIND_BBR_LIKE = 2;
+}
+
+message ChannelSchedulerStats {
+  bool handshake_received = 1;
+  bool choked = 2;
+  RequestControllerKind controller = 3;
+  int64 cwnd = 4;
+  int64 flight_size = 5;
+  int64 cto = 6;
+  int64 rtt_mean = 7;
+  int64 min_rtt = 8;
+  uint64 delivery_rate = 9;
+  uint64 pending_requests = 10;
+  uint64 request_time_nodes = 11;
+  uint64 extra_messages = 12;
+  uint64 peer_max_have_bin = 13;
+  uint64 peer_have_map_size = 14;
+  uint64 have_map_size = 15;
+  uint64 cancel_map_size = 16;
+}
+
+message ChannelMetrics {
+  uint64 handshake = 1;
+  uint64 restart = 2;
+  uint64 data = 3;
+  uint64 chunk = 4;
+  uint64 integrity = 5;
+  uint64 signed_integrity = 6;
+  uint64 ack = 7;
+  uint64 have = 8;
+  uint64 request = 9;
+  uint64 cancel = 10;
+  uint64 choke = 11;
+  uint64 unchoke = 12;
+  uint64 ping = 13;
+  uint64 pong = 14;
+  uint64 stream_request = 15;
+  uint64 stream_cancel = 16;
+  uint64 stream_open = 17;
+  uint64 stream_close = 18;
+  uint64 data_bytes = 19;
+  uint64 overhead_bytes = 20;
+  uint64 invalid_data = 21;
+  uint64 invalid_chunk = 22;
+  uint64 invalid_bytes = 23;
+  uint64 rejected = 24;
+  uint64 stale_stream_open = 25;
+  uint64 stale_data = 26;
+}
+
+message NetworkInfo {
+  uint64 network = 1;
+  uint64 links = 2;
+  uint64 routed_links = 3;
+  uint64 queued = 4;
+  uint64 topology = 5;
+}
+
+message NetworkMetrics {
+  uint64 runs = 1;
+  uint64 runs_completed = 2;
+  uint64 runs_failed = 3;
+  uint64 cuckoo_retries = 4;
+  uint64 runs_paced = 5;
+  uint64 links_paired = 6;
+  uint64 links_opened = 7;
+  uint64 bindings_refused = 8;
+  uint64 broker_bytes_read = 9;
+  uint64 broker_bytes_written = 10;
+  uint64 call_errors = 11;
+  uint64 host_errors = 12;
+}
+
+message TransferMetrics {
+  uint64 announces_sent = 1;
+  uint64 announces_accepted = 2;
+  uint64 announces_received = 3;
+  uint64 announces_answered = 4;
+  uint64 call_errors = 5;
+  uint64 runs = 6;
+  uint64 stops = 7;
+  uint64 run_errors = 8;
+  uint64 closes_sent = 9;
+  uint64 closes_received = 10;
+  uint64 index_publishes = 11;
+  uint64 searches = 12;
+  uint64 search_errors = 13;
+  uint64 connects = 14;
+  uint64 host_errors = 15;
+}
+
+message ReplicationMetrics {
+  uint64 leases = 1;
+  uint64 opens = 2;
+  uint64 bootstraps_sent = 3;
+  uint64 bootstraps_received = 4;
+  uint64 events_sent = 5;
+  uint64 events_received = 6;
+  uint64 syncs_sent = 7;
+  uint64 syncs_received = 8;
+  uint64 logs_sent = 9;
+  uint64 logs_received = 10;
+  uint64 refused = 11;
+  uint64 peer_errors = 12;
+  uint64 store_errors = 13;
+  uint64 gc_runs = 14;
+  uint64 logs_collected = 15;
+  uint64 publishes = 16;
+  uint64 lookups = 17;
+  uint64 connects = 18;
+}
+
+message DirectoryNetworkMetrics {
+  bytes network_key = 1;
+  DirectoryMetrics metrics = 2;
+}
+
+message DirectoryMetrics {
+  // Unset where the node doesn't serve the network's directory.
+  DirectoryServerMetrics server = 1;
+  DirectoryViewMetrics view = 2;
+  uint64 serves = 3;
+  uint64 pings = 4;
+  uint64 ping_errors = 5;
+  uint64 discontinuities = 6;
+  uint64 asset_bundles = 7;
+  uint64 snippets_served = 8;
+  uint64 snippets_refused = 9;
+  uint64 embed_batches = 10;
+  uint64 embed_batch_errors = 11;
+  uint64 host_errors = 12;
+  uint64 store_errors = 13;
+}
+
+message DirectoryServerMetrics {
+  uint64 broadcasts = 1;
+  uint64 records = 2;
+  uint64 events = 3;
+  uint64 refreshes = 4;
+  uint64 refreshed = 5;
+  uint64 listings_created = 6;
+  uint64 listings_removed = 7;
+  uint64 users_created = 8;
+  uint64 users_removed = 9;
+  uint64 sessions_created = 10;
+  uint64 sessions_expired = 11;
+  uint64 sessions_evicted = 12;
+  uint64 sessions_displaced = 13;
+  uint64 refused = 14;
+  uint64 subscriptions = 15;
+  uint64 snippet_responses = 16;
+  uint64 stale_responses = 17;
+  uint64 snippets_shown = 18;
+  uint64 snippets_unverified = 19;
+  uint64 snippets_stale = 20;
+  uint64 snippets_ended = 21;
+  uint64 snippet_timeouts = 22;
+  uint64 snippets_rejected = 23;
+  uint64 snippet_floods = 24;
+  uint64 snippets_oversized = 25;
+  uint64 embed_loads = 26;
+  uint64 embed_snippets_shown = 27;
+  uint64 embed_snippets_rejected = 28;
+  uint64 stale_embed_batches = 29;
+}
+
+message DirectoryViewMetrics {
+  uint64 records = 1;
+  uint64 events = 2;
+  uint64 resets = 3;
+  uint64 malformed_records = 4;
+  uint64 malformed_events = 5;
+  uint64 unknown_listings = 6;
+  uint64 listings_dropped = 7;
+  uint64 users_dropped = 8;
+  uint64 ids_dropped = 9;
+  uint64 malformed_snippets = 10;
+  uint64 images_dropped = 11;
+  uint64 snippets_dropped = 12;
+  uint64 oversized_listings = 13;
+  uint64 events_dropped = 14;
+}
+
+message ChatMetrics {
+  uint64 serves = 1;
+  uint64 reads = 2;
+  uint64 events_written = 3;
+  uint64 asset_bundles = 4;
+  uint64 asset_resets = 5;
+  uint64 assets_too_large = 6;
+  uint64 listing_publishes = 7;
+  uint64 listing_errors = 8;
+  uint64 local_calls = 9;
+  uint64 remote_calls = 10;
+  uint64 servers_dropped = 11;
+  uint64 streams_refused = 12;
+  uint64 cache_loads = 13;
+  uint64 cache_refusals = 14;
+  uint64 cache_writes = 15;
+  uint64 write_errors = 16;
+  uint64 host_errors = 17;
+  uint64 store_errors = 18;
+}
+
+message WhisperMetrics {
+  uint64 received = 1;
+  uint64 duplicates = 2;
+  uint64 refused = 3;
+  uint64 rate_limited = 4;
+  uint64 enqueued = 5;
+  uint64 attempts = 6;
+  uint64 delivered = 7;
+  uint64 failed = 8;
+  uint64 leases = 9;
+  uint64 ports_opened = 10;
+  uint64 pending = 11;
+  uint64 in_flight = 12;
+  uint64 host_errors = 13;
+  uint64 store_errors = 14;
+}
+
+message VideoMetrics {
+  uint64 store_lags = 1;
+  uint64 store_errors = 2;
+  uint64 host_errors = 3;
+  uint64 dropped_records = 4;
+  uint64 write_errors = 5;
+  uint64 reopens = 6;
+  uint64 hls_streams = 7;
+  uint64 hls_segments = 8;
+  uint64 hls_skipped_records = 9;
+  uint64 autoseed_skipped = 10;
+  IngressMetrics ingress = 11;
+}
+
+message IngressMetrics {
+  uint64 listens = 1;
+  uint64 listen_errors = 2;
+  uint64 connections = 3;
+  uint64 rejected_connections = 4;
+  uint64 refused = 5;
+  uint64 sessions = 6;
+  uint64 replaced = 7;
+  uint64 segments = 8;
+  uint64 bytes = 9;
+  uint64 dropped_units = 10;
+  uint64 metadata = 11;
+  uint64 deadlines = 12;
+  uint64 media_errors = 13;
+  uint64 write_errors = 14;
+}
+
+// The debug control's counters and its mock streams.
+message DebugMetrics {
+  uint64 mock_streams_started = 1;
+  uint64 mock_streams_ended = 2;
+  uint64 segments_written = 3;
+  uint64 write_errors = 4;
+  uint64 readers_started = 5;
+  uint64 readers_ended = 6;
+  uint64 segments_read = 7;
+  uint64 read_errors = 8;
+  uint64 host_errors = 9;
+  uint64 store_errors = 10;
+  uint64 store_lags = 11;
+  // In id order.
+  repeated MockStream mock_streams = 12;
+  // In network key, then listing id order.
+  repeated MockStreamReader readers = 13;
+}
+
+// A mock stream this node writes.
+message MockStream {
+  uint64 id = 1;
+  bytes network_key = 2;
+  string swarm_uri = 3;
+  uint32 bitrate_kbps = 4;
+  uint32 segment_interval_ms = 5;
+  // 0 runs the stream until it's stopped.
+  uint32 timeout_ms = 6;
+  int64 started_at = 7;
+  uint64 segments = 8;
+  uint64 bytes_written = 9;
+  // Unset until the stream's listing is published.
+  google.protobuf.UInt64Value listing_id = 10;
+}
+
+// A mock stream this node reads.
+message MockStreamReader {
+  bytes network_key = 1;
+  uint64 listing_id = 2;
+  bytes swarm_id = 3;
+  // The stream's id, from its last segment.
+  google.protobuf.UInt64Value id = 4;
+  uint64 segments = 5;
+  uint64 malformed = 6;
+  uint64 discontinuities = 7;
+  // The last segment's age when it was read: the reader's clock less the
+  // writer's. Clock skew can make it negative.
+  google.protobuf.Int64Value latency = 8;
+  google.protobuf.Int64Value last_segment_at = 9;
+  int64 started_at = 10;
+}
