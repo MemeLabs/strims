@@ -5,8 +5,8 @@
 //! that publish and view them, the snippet subscriptions of media
 //! listings, and what each broadcast sends. Sans-IO: the control feeds it
 //! the Directory service's calls with the moderation records it read, the
-//! deltas of its snippet subscriptions and the time, and carries out its
-//! [`ServerAction`]s, draining them after every call.
+//! responses of its snippet subscriptions and the time, and carries out
+//! its [`ServerAction`]s, draining them after every call.
 //!
 //! # Model
 //!
@@ -58,17 +58,28 @@
 //! A media listing has at most one snippet source: the session that first
 //! published it, then, when the source stops publishing, the newest
 //! publisher. The server subscribes to the source's host
-//! ([`ServerAction::Subscribe`]) and merges each delta into the
-//! subscription's next snippet, which starts empty. When the next snippet
-//! passes [`snippet::check`] and verifies, the listing shows it and is
-//! modified. A subscription ends when the publisher ends it, when no delta
+//! ([`ServerAction::Subscribe`]) and takes each response of the stream
+//! ([`snippet`](crate::snippet#streams)). A response's image waits in the
+//! subscription, which keeps the latest [`MAX_PENDING_IMAGES`]. A signed
+//! snippet applies once it verifies: the listing's swarm key signed it,
+//! the images it names are the listing's or waiting, and it passes
+//! [`snippet::check`]. It then replaces the listing's snippet and images,
+//! keeping the envelope and image bytes as they arrived for broadcasts,
+//! and the listing is modified if the snippet changed. A snippet signed
+//! before the listing's is dropped.
+//!
+//! A subscription ends when the publisher ends it, when no snippet
 //! verifies within the snippet timeout of subscribing or of a failed
 //! verification, after [`MAX_UNVERIFIED`] failed verifications in a row,
-//! after more than [`MAX_DELTAS_PER_MINUTE`] deltas in a minute, or when
-//! the next snippet is over a bound. It's retried after
+//! after more than [`MAX_RESPONSES_PER_MINUTE`] responses in a minute, or
+//! when a snippet or image is over a bound. It's retried after
 //! [`MIN_SNIPPET_BACKOFF`], doubling up to [`MAX_SNIPPET_BACKOFF`], plus up
 //! to a quarter of jitter; by then a source that stopped publishing has
-//! moved to the newest publisher. A verified delta resets the backoff.
+//! moved to the newest publisher. A verified snippet resets the backoff.
+//!
+//! The server makes the snippets of embed listings itself (see below), and
+//! broadcasts them unsigned, as it does the empty snippet of a listing
+//! without one.
 //!
 //! # Embeds
 //!
@@ -93,7 +104,7 @@ use rand_core::Rng;
 use slotmap::{SlotMap, new_key_type};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::{SignableMessage, certificate_body, certificate_parent};
+use strims_crypto::{certificate_body, certificate_parent};
 use strims_kademlia::ID;
 use strims_ppspp::SwarmId;
 use strims_proto::network::v1::directory::event::{
@@ -102,12 +113,16 @@ use strims_proto::network::v1::directory::event::{
 use strims_proto::network::v1::directory::listing_query::Query;
 use strims_proto::network::v1::directory::{
     AssetBundle, ClientConfig, Event, EventBroadcast, Listing, ListingModeration, ListingQuery,
-    ListingSnippet, ListingSnippetDelta, ServerConfig, UserModeration, client_config,
+    ListingSnippet, ListingSnippetBody, ServerConfig, SignedListingSnippet,
+    SnippetSubscribeResponse, UserModeration, client_config,
 };
 use strims_proto::types::{Certificate, Image};
 
 use crate::embed::{self, EmbedService, EmbedServices, LoaderConfig};
-use crate::{DirectoryError, Limits, MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, listing, snippet};
+use crate::snippet::{EncodedImage, SignedSnippet, image_in};
+use crate::{
+    DirectoryError, Limits, MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, SnippetError, listing, snippet,
+};
 
 /// How long a user counts towards a listing's recent users.
 pub const RECENT_USER_TTL: Duration = Duration::from_secs(30 * 60);
@@ -116,13 +131,17 @@ pub const MAX_QUOTA: u32 = 64;
 /// The most bytes of events a broadcast record packs together.
 pub const MAX_BROADCAST_RECORD: usize = 64 * 1024;
 /// The longest encoded event: a `ListingChange` of the largest listing,
-/// snippet and moderation, with its framing.
-pub const MAX_EVENT_BYTES: usize = listing::MAX_LISTING_BYTES + snippet::MAX_SNIPPET_BYTES + 1024;
+/// signed snippet, two images and moderation, with its framing.
+pub const MAX_EVENT_BYTES: usize =
+    listing::MAX_LISTING_BYTES + snippet::MAX_SIGNED_BYTES + 2 * snippet::MAX_IMAGE_BYTES + 1024;
 /// The most refresh bytes one broadcast sends, unless a single item is
 /// larger.
 pub const REFRESH_BYTES_PER_TICK: usize = 256 * 1024;
-/// The most deltas a snippet subscription may send in a minute.
-pub const MAX_DELTAS_PER_MINUTE: u32 = 120;
+/// The most responses a snippet subscription may send in a minute.
+pub const MAX_RESPONSES_PER_MINUTE: u32 = 120;
+/// The most images a snippet subscription keeps that no snippet it
+/// applied names: the most a stream sends before a snippet.
+pub const MAX_PENDING_IMAGES: usize = 2;
 /// Failed verifications in a row that end a snippet subscription.
 pub const MAX_UNVERIFIED: u32 = 3;
 /// The first wait before a failed snippet subscription is retried.
@@ -206,7 +225,7 @@ pub struct Tunables {
     /// maximum at least the minimum.
     pub min_ping_interval: Duration,
     pub max_ping_interval: Duration,
-    /// How long a snippet subscription may go without a verified delta
+    /// How long a snippet subscription may go without a verified snippet
     /// after subscribing or a failed verification. Default 30 s; 1 s to
     /// 10 min.
     pub snippet_timeout: Duration,
@@ -276,7 +295,7 @@ pub enum ServerAction {
     /// Write each record to the event swarm, in order.
     Broadcast(Vec<EventBroadcast>),
     /// Subscribe to `host`'s snippet of `swarm_id` on the snippet port, and
-    /// feed its deltas to [`Server::snippet_delta`] and its end to
+    /// feed its responses to [`Server::snippet_response`] and its end to
     /// [`Server::snippet_ended`].
     Subscribe {
         sub: SubId,
@@ -318,15 +337,18 @@ pub struct ServerMetrics {
     /// Calls that failed.
     pub refused: u64,
     pub subscriptions: u64,
-    pub snippet_deltas: u64,
-    /// Deltas for subscriptions that had ended.
-    pub stale_deltas: u64,
+    pub snippet_responses: u64,
+    /// Responses for subscriptions that had ended.
+    pub stale_responses: u64,
     /// Verified snippets that changed a listing's snippet.
     pub snippets_shown: u64,
-    /// Deltas after which the next snippet didn't verify.
+    /// Snippets that didn't verify, or named an image the subscription
+    /// lacked.
     pub snippets_unverified: u64,
+    /// Verified snippets signed before the listing's.
+    pub snippets_stale: u64,
     /// Subscriptions ended by the publisher, by timeout, by failed
-    /// verifications, by their delta rate and by size.
+    /// verifications, by their response rate and by size.
     pub snippets_ended: u64,
     pub snippet_timeouts: u64,
     pub snippets_rejected: u64,
@@ -390,10 +412,64 @@ impl Recent {
 #[derive(Debug)]
 struct Subscription {
     sub: SubId,
-    next: ListingSnippet,
+    /// Images received that no snippet the subscription applied names,
+    /// oldest first. Bound: [`MAX_PENDING_IMAGES`].
+    pending: VecDeque<EncodedImage>,
     unverified: u32,
     window: Time,
-    deltas: u32,
+    responses: u32,
+}
+
+/// A listing's snippet as the server holds and broadcasts it.
+#[derive(Debug)]
+struct HeldSnippet {
+    /// As its publisher signed it, or unsigned for one the server made.
+    envelope: SignedListingSnippet,
+    /// When it was signed or loaded, in unix nanoseconds.
+    timestamp: i64,
+    /// The encodings of the images its body names, by digest: at most
+    /// two, each at most [`snippet::MAX_IMAGE_BYTES`].
+    images: Vec<EncodedImage>,
+}
+
+impl HeldSnippet {
+    fn signed(s: SignedSnippet) -> HeldSnippet {
+        let timestamp = s.timestamp();
+        let (envelope, images) = s.into_parts();
+        HeldSnippet {
+            envelope,
+            timestamp,
+            images,
+        }
+    }
+
+    /// An unsigned snippet of `s`, loaded at `now`.
+    fn loaded(s: &ListingSnippet, now: Time) -> HeldSnippet {
+        let (body, images) = snippet::seal(s, now.unix_nanos());
+        HeldSnippet {
+            envelope: SignedListingSnippet {
+                body: body.encode_to_vec(),
+                signature: Vec::new(),
+            },
+            timestamp: body.timestamp,
+            images,
+        }
+    }
+
+    /// The body, which decoded when the snippet was verified or made.
+    fn body(&self) -> ListingSnippetBody {
+        ListingSnippetBody::decode(self.envelope.body.as_slice()).unwrap_or_default()
+    }
+
+    /// The snippet, with its images inline.
+    #[cfg(test)]
+    fn snippet(&self) -> ListingSnippet {
+        snippet::resolve(&self.body(), |d| image_in(&self.images, d)).unwrap_or_default()
+    }
+
+    fn encoded_len(&self) -> usize {
+        self.envelope.encoded_len() + self.images.iter().map(|(_, b)| b.len() + 8).sum::<usize>()
+    }
 }
 
 #[derive(Debug)]
@@ -419,7 +495,9 @@ struct ListingEntry {
     key: Vec<u8>,
     listing: Listing,
     moderation: Option<ListingModeration>,
-    snippet: ListingSnippet,
+    /// None while the listing has no snippet; its events then carry the
+    /// empty one.
+    snippet: Option<HeldSnippet>,
     swarm_id: Option<SwarmId>,
     evicted: bool,
     touched: u64,
@@ -449,19 +527,27 @@ impl ListingEntry {
     }
 
     fn change_event(&self) -> Event {
+        let (snippet, snippet_images) = match &self.snippet {
+            Some(h) => (
+                h.envelope.clone(),
+                h.images.iter().map(|(_, b)| b.clone()).collect(),
+            ),
+            None => (SignedListingSnippet::default(), Vec::new()),
+        };
         Event {
             body: Some(Body::ListingChange(ListingChange {
                 id: self.id,
                 listing: Some(self.listing.clone()),
-                snippet: Some(self.snippet.clone()),
+                snippet: Some(snippet),
                 moderation: self.moderation.clone(),
+                snippet_images,
             })),
         }
     }
 
     fn change_len(&self) -> usize {
         self.listing.encoded_len()
-            + self.snippet.encoded_len()
+            + self.snippet.as_ref().map_or(0, HeldSnippet::encoded_len)
             + self.moderation.as_ref().map_or(0, Message::encoded_len)
             + 64
     }
@@ -504,9 +590,13 @@ enum RefreshItem {
     User(UserKey),
 }
 
-/// What a delta did to a subscription.
-enum DeltaOutcome {
+/// What a response did to a subscription.
+enum ResponseOutcome {
+    /// A snippet applied; whether it changed the listing's.
     Shown(bool),
+    /// An image alone.
+    Image,
+    Stale,
     Unverified,
     Fail(Failure),
 }
@@ -779,11 +869,11 @@ impl Server {
         }
     }
 
-    /// A delta of snippet subscription `sub`.
-    pub fn snippet_delta(&mut self, now: Time, sub: SubId, d: &ListingSnippetDelta) {
-        self.metrics.snippet_deltas += 1;
+    /// A response of snippet subscription `sub`.
+    pub fn snippet_response(&mut self, now: Time, sub: SubId, res: SnippetSubscribeResponse) {
+        self.metrics.snippet_responses += 1;
         let Some(&lk) = self.subs.get(&sub) else {
-            self.metrics.stale_deltas += 1;
+            self.metrics.stale_responses += 1;
             return;
         };
         let Some(l) = self.listings.get_mut(lk) else {
@@ -796,53 +886,53 @@ impl Server {
             return;
         };
         if s.sub != sub {
-            self.metrics.stale_deltas += 1;
+            self.metrics.stale_responses += 1;
             return;
         }
         if now >= s.window + RATE_WINDOW {
             s.window = now;
-            s.deltas = 0;
+            s.responses = 0;
         }
-        s.deltas = s.deltas.saturating_add(1);
-        let outcome = if s.deltas > MAX_DELTAS_PER_MINUTE {
-            DeltaOutcome::Fail(Failure::Flood)
+        s.responses = s.responses.saturating_add(1);
+        let outcome = if s.responses > MAX_RESPONSES_PER_MINUTE {
+            ResponseOutcome::Fail(Failure::Flood)
         } else {
-            snippet::merge(&mut s.next, d);
-            if snippet::check(&s.next).is_err() {
-                DeltaOutcome::Fail(Failure::Oversized)
-            } else if s.next.verify_message().is_ok() {
+            take_response(&mut l.snippet, s, &src.swarm_id, res)
+        };
+        let outcome = match outcome {
+            ResponseOutcome::Shown(changed) => {
                 s.unverified = 0;
                 src.backoff = MIN_SNIPPET_BACKOFF;
-                let changed = l.snippet != s.next;
-                if changed {
-                    l.snippet.clone_from(&s.next);
-                }
-                DeltaOutcome::Shown(changed)
-            } else {
+                ResponseOutcome::Shown(changed)
+            }
+            ResponseOutcome::Unverified => {
                 s.unverified = s.unverified.saturating_add(1);
                 if s.unverified >= MAX_UNVERIFIED {
-                    DeltaOutcome::Fail(Failure::Rejected)
+                    ResponseOutcome::Fail(Failure::Rejected)
                 } else {
-                    DeltaOutcome::Unverified
+                    ResponseOutcome::Unverified
                 }
             }
+            o => o,
         };
         let timer = src.timer;
         match outcome {
-            DeltaOutcome::Shown(changed) => {
+            ResponseOutcome::Shown(changed) => {
                 self.set_source_timer(lk, None);
                 if changed {
                     self.metrics.snippets_shown += 1;
                     self.modify_listing(lk);
                 }
             }
-            DeltaOutcome::Unverified => {
+            ResponseOutcome::Image => {}
+            ResponseOutcome::Stale => self.metrics.snippets_stale += 1,
+            ResponseOutcome::Unverified => {
                 self.metrics.snippets_unverified += 1;
                 if timer.is_none() {
                     self.set_source_timer(lk, Some(now + self.tunables.snippet_timeout));
                 }
             }
-            DeltaOutcome::Fail(f) => {
+            ResponseOutcome::Fail(f) => {
                 match f {
                     Failure::Flood => self.metrics.snippet_floods += 1,
                     Failure::Oversized => self.metrics.snippets_oversized += 1,
@@ -862,7 +952,7 @@ impl Server {
     /// service the config no longer enables, changes nothing.
     pub fn embeds_loaded(
         &mut self,
-        _now: Time,
+        now: Time,
         load: LoadId,
         service: EmbedService,
         snippets: Vec<(String, ListingSnippet)>,
@@ -883,8 +973,13 @@ impl Server {
             let Some(l) = self.listings.get_mut(lk) else {
                 continue;
             };
-            if l.snippet != s {
-                l.snippet = s;
+            let loaded = HeldSnippet::loaded(&s, now);
+            let unchanged = l
+                .snippet
+                .as_ref()
+                .is_some_and(|h| snippet::same_content(&h.body(), &loaded.body()));
+            if !unchanged {
+                l.snippet = Some(loaded);
                 self.metrics.embed_snippets_shown += 1;
                 self.modify_listing(lk);
             }
@@ -1279,7 +1374,7 @@ impl Server {
             listing: l,
             evicted: false,
             moderation: bounded(moderation),
-            snippet: ListingSnippet::default(),
+            snippet: None,
             swarm_id: v.swarm_id,
             touched: 0,
             modified: 0,
@@ -1512,10 +1607,10 @@ impl Server {
         self.next_sub += 1;
         src.state = SourceState::Subscribed(Box::new(Subscription {
             sub,
-            next: ListingSnippet::default(),
+            pending: VecDeque::new(),
             unverified: 0,
             window: now,
-            deltas: 0,
+            responses: 0,
         }));
         let action = ServerAction::Subscribe {
             sub,
@@ -1816,6 +1911,51 @@ fn bounded(m: Option<ListingModeration>) -> Option<ListingModeration> {
     })
 }
 
+/// Takes response `res` of subscription `s` to the listing of swarm
+/// `swarm_id` that holds `held`; see the module docs.
+fn take_response(
+    held: &mut Option<HeldSnippet>,
+    s: &mut Subscription,
+    swarm_id: &SwarmId,
+    res: SnippetSubscribeResponse,
+) -> ResponseOutcome {
+    if !res.image.is_empty() {
+        if res.image.len() > snippet::MAX_IMAGE_BYTES {
+            return ResponseOutcome::Fail(Failure::Oversized);
+        }
+        let d = snippet::digest(&res.image);
+        if image_in(s.pending.make_contiguous(), &d).is_none() {
+            if s.pending.len() >= MAX_PENDING_IMAGES {
+                s.pending.pop_front();
+            }
+            s.pending.push_back((d, res.image));
+        }
+    }
+    let Some(envelope) = res.snippet else {
+        return ResponseOutcome::Image;
+    };
+    let pending: &[EncodedImage] = s.pending.make_contiguous();
+    let verified = SignedSnippet::verify(envelope, swarm_id.as_bytes(), |d| {
+        held.as_ref()
+            .and_then(|h| image_in(&h.images, d))
+            .or_else(|| image_in(pending, d))
+    });
+    let v = match verified {
+        Ok(v) => v,
+        Err(SnippetError::TooLarge) => return ResponseOutcome::Fail(Failure::Oversized),
+        Err(_) => return ResponseOutcome::Unverified,
+    };
+    if held.as_ref().is_some_and(|h| v.timestamp() < h.timestamp) {
+        return ResponseOutcome::Stale;
+    }
+    s.pending.retain(|(d, _)| image_in(v.images(), d).is_none());
+    let changed = held.as_ref().is_none_or(|h| h.envelope != *v.envelope());
+    if changed {
+        *held = Some(HeldSnippet::signed(v));
+    }
+    ResponseOutcome::Shown(changed)
+}
+
 /// `events` in order, in records of at most [`MAX_BROADCAST_RECORD`]
 /// bytes, or of one larger event.
 fn pack(events: Vec<Event>) -> Vec<EventBroadcast> {
@@ -1848,7 +1988,12 @@ impl Server {
                 l.id,
                 ProjectedListing {
                     listing: l.listing.clone(),
-                    snippet: Some(l.snippet.clone()),
+                    snippet: Some(
+                        l.snippet
+                            .as_ref()
+                            .map(HeldSnippet::snippet)
+                            .unwrap_or_default(),
+                    ),
                     moderation: l.moderation.clone(),
                     user_count: u32::try_from(l.members.len()).unwrap_or(u32::MAX),
                     recent_user_count: l.broadcast_recent,
@@ -1926,12 +2071,32 @@ impl Server {
         Some((src.host, sub))
     }
 
-    pub(crate) fn snippet(&self, id: u64) -> Option<&ListingSnippet> {
+    /// Listing `id`'s snippet, with its images inline: the empty snippet
+    /// until it has one.
+    pub(crate) fn snippet(&self, id: u64) -> Option<ListingSnippet> {
         let l = self
             .listing_ids
             .get(&id)
             .and_then(|k| self.listings.get(*k))?;
-        Some(&l.snippet)
+        Some(
+            l.snippet
+                .as_ref()
+                .map(HeldSnippet::snippet)
+                .unwrap_or_default(),
+        )
+    }
+
+    /// The signed snippet listing `id` broadcasts, with its images.
+    pub(crate) fn signed_snippet(&self, id: u64) -> Option<(&SignedListingSnippet, Vec<&[u8]>)> {
+        let l = self
+            .listing_ids
+            .get(&id)
+            .and_then(|k| self.listings.get(*k))?;
+        let h = l.snippet.as_ref()?;
+        Some((
+            &h.envelope,
+            h.images.iter().map(|(_, b)| b.as_slice()).collect(),
+        ))
     }
 
     /// Checks the internal invariants.
@@ -1991,13 +2156,16 @@ impl Server {
             {
                 return Err(format!("listing {} recent users", l.id));
             }
+            if l.snippet.as_ref().is_some_and(|h| h.images.len() > 2) {
+                return Err(format!("listing {} snippet images", l.id));
+            }
             if let Some(src) = &l.source {
                 if l.swarm_id.is_none() || !l.publishers.contains_key(&src.session) {
                     return Err(format!("listing {} source", l.id));
                 }
                 if let SourceState::Subscribed(s) = &src.state {
                     subs += 1;
-                    if self.subs.get(&s.sub) != Some(&lk) {
+                    if self.subs.get(&s.sub) != Some(&lk) || s.pending.len() > MAX_PENDING_IMAGES {
                         return Err(format!("listing {} subscription", l.id));
                     }
                 }

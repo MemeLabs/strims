@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 
-import { Event } from "../../../apis/strims/network/v1/directory/directory";
+import { INetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
 import img00 from "./images/00.jpg";
 import img01 from "./images/01.png";
 import img02 from "./images/02.jpg";
@@ -88,8 +88,6 @@ export default [
       "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -112,8 +110,6 @@ export default [
       "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -148,8 +144,6 @@ export default [
           "url": img01,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -184,8 +178,6 @@ export default [
           "url": img03,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -208,8 +200,6 @@ export default [
       "userCount": BigInt("0"),
       "live": false,
       "isMature": false,
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -244,8 +234,6 @@ export default [
           "url": img05,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -280,8 +268,6 @@ export default [
           "url": img07,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -316,8 +302,6 @@ export default [
           "url": img09,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -352,8 +336,6 @@ export default [
           "url": img10,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -388,8 +370,6 @@ export default [
           "url": img12,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -424,8 +404,6 @@ export default [
           "url": img13,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -460,8 +438,6 @@ export default [
           "url": img15,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -496,8 +472,6 @@ export default [
           "url": img17,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -532,8 +506,6 @@ export default [
           "url": img18,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -568,8 +540,6 @@ export default [
           "url": img20,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -604,8 +574,6 @@ export default [
           "url": img22,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -640,8 +608,6 @@ export default [
           "url": img23,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -676,8 +642,6 @@ export default [
           "url": img25,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -712,8 +676,6 @@ export default [
           "url": img27,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -748,8 +710,6 @@ export default [
           "url": img29,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -784,8 +744,6 @@ export default [
           "url": img31,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -820,8 +778,6 @@ export default [
           "url": img33,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -856,8 +812,6 @@ export default [
           "url": img35,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -892,8 +846,6 @@ export default [
           "url": img37,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -928,8 +880,6 @@ export default [
           "url": img39,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -964,8 +914,6 @@ export default [
           "url": img41,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1000,8 +948,6 @@ export default [
           "url": img43,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1037,8 +983,6 @@ export default [
           "url": img45,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1073,8 +1017,6 @@ export default [
           "url": img47,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1109,8 +1051,6 @@ export default [
           "url": img49,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1145,8 +1085,6 @@ export default [
           "url": img51,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1181,8 +1119,6 @@ export default [
           "url": img53,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1217,8 +1153,6 @@ export default [
           "url": img55,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1253,8 +1187,6 @@ export default [
           "url": img57,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1289,8 +1221,6 @@ export default [
           "url": img59,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
   {
@@ -1325,8 +1255,6 @@ export default [
           "url": img61,
         },
       },
-      "key": new Uint8Array(),
-      "signature": new Uint8Array(),
     },
   },
-] as Event.IListingChange[];
+] as INetworkListingsItem[];

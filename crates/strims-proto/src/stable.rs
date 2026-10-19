@@ -1,25 +1,24 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The stable "signable" encoding: a simple binary format for protobuf
-//! messages with ordered fields.
+//! The stable encoding: a simple binary format for protobuf messages with
+//! ordered fields.
 //!
-//! Message signatures and CRC32 checksums are computed over this encoding,
-//! so its byte layout is part of the protocol. Each message writes its
-//! fields in `.proto` declaration order, which can differ from field-number
-//! order; a oneof sits where its first member is declared.
+//! CRC32 checksums are computed over this encoding, so its byte layout is
+//! part of the protocol. Each message writes its fields in `.proto`
+//! declaration order, which can differ from field-number order; a oneof
+//! sits where its first member is declared.
 //!
 //! - bool: one byte; 32/64-bit ints, enums and floats: big-endian bits;
 //! - string and bytes: the raw bytes, with no length prefix;
 //! - repeated: the elements back to back;
 //! - message, wrapper or oneof: the contents when set, nothing when unset.
 //!
-//! Nothing marks field boundaries, so a signature doesn't bind them: bytes
-//! can move between adjacent string fields without invalidating it.
+//! Nothing marks field boundaries: bytes can move between adjacent string
+//! fields without changing the encoding.
 //!
 //! The build script generates the impls from the schema descriptors
-//! (`build/stable.rs`). The signing and checksum functions live in
-//! `strims-crypto`.
+//! (`build/stable.rs`). The checksum function lives in `strims-crypto`.
 
 /// Receives the encoded bytes. Implemented for `Vec<u8>` and
 /// [`LenCounter`]; a hasher can implement it to checksum without buffering.
@@ -43,7 +42,7 @@ impl StableSink for LenCounter {
     }
 }
 
-/// The stable signable encoding. Implemented for every generated message
+/// The stable encoding. Implemented for every generated message
 /// except those that contain a map field, directly or through a nested
 /// message: maps have no defined order, so they have no stable encoding.
 /// The build lists the skipped messages in `$OUT_DIR/stable_skipped.txt`.
@@ -73,56 +72,10 @@ impl<T: StableEncode + ?Sized> StableEncode for Box<T> {
     }
 }
 
-/// Accessors for signing a message over its stable encoding.
-///
-/// Generated for every message with plain `bytes key` and `bytes signature`
-/// fields; `network.v1.directory.ListingSnippet` is the one signed this way.
-pub trait Signable: StableEncode {
-    fn key(&self) -> &[u8];
-    fn set_key(&mut self, key: &[u8]);
-    fn signature(&self) -> &[u8];
-    fn set_signature(&mut self, signature: Vec<u8>);
-
-    /// The encoding with the signature field treated as empty, which is what
-    /// signatures cover.
-    fn stable_encode_unsigned_into<S: StableSink + ?Sized>(&self, s: &mut S);
-
-    fn stable_encode_unsigned_to_vec(&self) -> Vec<u8> {
-        let mut n = LenCounter::default();
-        self.stable_encode_unsigned_into(&mut n);
-        let mut b = Vec::with_capacity(n.0);
-        self.stable_encode_unsigned_into(&mut b);
-        b
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::v1::directory::ListingSnippet;
     use crate::vpn::v1::hash_table_message;
-
-    fn assert_signable<T: Signable>() {}
-
-    #[test]
-    fn signed_records_are_signable() {
-        assert_signable::<ListingSnippet>();
-    }
-
-    #[test]
-    fn unsigned_encoding_skips_only_the_signature() {
-        let mut s = ListingSnippet {
-            title: "t".into(),
-            key: vec![1, 2],
-            signature: vec![3; 4],
-            ..Default::default()
-        };
-        let signed = s.stable_encode_to_vec();
-        let unsigned = s.stable_encode_unsigned_to_vec();
-        s.signature.clear();
-        assert_eq!(unsigned, s.stable_encode_to_vec());
-        assert_eq!(signed.len(), unsigned.len() + 4);
-    }
 
     #[test]
     fn nested_messages_encode_only_when_set() {

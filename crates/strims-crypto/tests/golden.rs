@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Golden vectors (`golden/vectors.hex`): signatures, certificate chains
-//! and requests, signable messages, message checksums, curve25519
-//! conversions and key agreement. `STRIMS_GOLDEN=update` rewrites them from
+//! and requests, message checksums, curve25519 conversions and key
+//! agreement. `STRIMS_GOLDEN=update` rewrites them from
 //! the code (see `strims-golden`).
 
 // Tests panic on failure by design.
@@ -18,15 +18,15 @@ use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, Domain, Error, Issuer, SignableMessage, Signer, aes_link_key, crc32_message,
-    key_from_seed, key_to_curve25519, message_cipher_key, new_certificate_request,
-    new_self_signed_certificate, public_key_to_curve25519, sign, sign_certificate_request,
-    verify_certificate, verify_certificate_request, x25519,
+    DEFAULT_CERT_TTL, Domain, Error, Issuer, Signer, aes_link_key, crc32_message, key_from_seed,
+    key_to_curve25519, message_cipher_key, new_certificate_request, new_self_signed_certificate,
+    public_key_to_curve25519, sign, sign_certificate_request, verify_certificate,
+    verify_certificate_request, x25519,
 };
 use strims_golden::Golden;
-use strims_proto::stable::{Signable, StableEncode};
+use strims_proto::stable::StableEncode;
 use strims_proto::types::{Key, KeyUsage};
-use strims_proto::{chat, network, types};
+use strims_proto::{chat, types};
 
 fn open() -> Golden {
     Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.hex"))
@@ -190,26 +190,6 @@ fn certificate_requests_match_vectors() {
         g.check_hex(e, 0, env.encode_to_vec());
         g.check_hex(e, 1, &env.body);
     }
-}
-
-/// Signs the vector's message, with its key and signature cleared, by `key`.
-fn check_signable<M: Message + Default + Signable + Clone>(g: &mut Golden, name: &str, key: &Key) {
-    let e = g.entry(&format!("signable_{name}"));
-    let mut m = M::decode(g.bytes(e, 0).as_slice()).unwrap();
-    m.set_key(&[]);
-    m.set_signature(Vec::new());
-    m.sign_message(key).unwrap();
-    m.verify_message().unwrap();
-    assert_eq!(m.key(), key.public.as_slice());
-    g.check_hex(e, 0, m.encode_to_vec());
-    g.check_hex(e, 1, m.stable_encode_unsigned_to_vec());
-}
-
-#[test]
-fn signable_messages_match_vectors() {
-    let mut g = open();
-    let k2 = key(&g, 2);
-    check_signable::<network::v1::directory::ListingSnippet>(&mut g, "listing_snippet", &k2);
 }
 
 /// Checksums the vector's message.

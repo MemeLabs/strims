@@ -20,7 +20,7 @@ use strims_proto::network::v1::directory::listing_query::Query;
 use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
 use strims_proto::network::v1::directory::{
     Event, EventBroadcast, Listing as ProtoListing, ListingModeration, ListingQuery,
-    ListingSnippet, ListingSnippetImage,
+    ListingSnippet, ListingSnippetImage, SignedListingSnippet,
 };
 use strims_proto::types::Image;
 
@@ -41,10 +41,22 @@ fn change(id: u64, n: u8) -> Event {
         body: Some(Body::ListingChange(ListingChange {
             id,
             listing: Some(chat(n)),
-            snippet: Some(ListingSnippet::default()),
+            snippet: Some(SignedListingSnippet::default()),
             moderation: None,
+            snippet_images: Vec::new(),
         })),
     }
+}
+
+/// `s` as an event carries a snippet the server made: unsigned, with its
+/// images apart.
+fn unsigned(s: &ListingSnippet) -> (SignedListingSnippet, Vec<Vec<u8>>) {
+    let (body, images) = crate::snippet::seal(s, 0);
+    let envelope = SignedListingSnippet {
+        body: body.encode_to_vec(),
+        signature: Vec::new(),
+    };
+    (envelope, images.into_iter().map(|(_, b)| b).collect())
 }
 
 fn count(id: u64, users: u32, recent: u32) -> Event {
@@ -150,6 +162,7 @@ fn a_listing_change_adds_or_replaces_a_listing_keeping_its_counts() {
             listing: Some(chat(2)),
             snippet: None,
             moderation: Some(moderation.clone()),
+            snippet_images: Vec::new(),
         })),
     };
     let e = apply(&mut v, vec![replaced]);
@@ -384,22 +397,26 @@ fn an_oversized_listing_drops_its_images_then_its_snippet() {
         ..ViewLimits::default()
     };
     let mut v = View::new(limits);
-    let with = |id: u64, title: usize, img: usize, name: usize| Event {
-        body: Some(Body::ListingChange(ListingChange {
-            id,
-            listing: Some(ProtoListing {
-                content: Some(Content::Chat(Chat {
-                    key: vec![1; 32],
-                    name: "n".repeat(name),
-                })),
-            }),
-            snippet: Some(ListingSnippet {
-                title: "t".repeat(title),
-                thumbnail: Some(image(img)),
-                ..Default::default()
-            }),
-            moderation: None,
-        })),
+    let with = |id: u64, title: usize, img: usize, name: usize| {
+        let (snippet, snippet_images) = unsigned(&ListingSnippet {
+            title: "t".repeat(title),
+            thumbnail: Some(image(img)),
+            ..Default::default()
+        });
+        Event {
+            body: Some(Body::ListingChange(ListingChange {
+                id,
+                listing: Some(ProtoListing {
+                    content: Some(Content::Chat(Chat {
+                        key: vec![1; 32],
+                        name: "n".repeat(name),
+                    })),
+                }),
+                snippet: Some(snippet),
+                moderation: None,
+                snippet_images,
+            })),
+        }
     };
     apply(
         &mut v,
@@ -421,6 +438,36 @@ fn an_oversized_listing_drops_its_images_then_its_snippet() {
         (m.images_dropped, m.snippets_dropped, m.oversized_listings),
         (3, 2, 1)
     );
+}
+
+#[test]
+fn a_snippet_takes_its_images_by_digest() {
+    let mut v = View::new(ViewLimits::default());
+    let content = ListingSnippet {
+        title: "t".into(),
+        thumbnail: Some(image(10)),
+        channel_logo: Some(image(20)),
+        ..Default::default()
+    };
+    let (snippet, mut images) = unsigned(&content);
+    images.reverse();
+    images.insert(1, image(30).encode_to_vec());
+    let event = |images: Vec<Vec<u8>>| Event {
+        body: Some(Body::ListingChange(ListingChange {
+            id: 1,
+            listing: Some(chat(1)),
+            snippet: Some(snippet.clone()),
+            moderation: None,
+            snippet_images: images,
+        })),
+    };
+    apply(&mut v, vec![event(images.clone())]);
+    assert_eq!(v.listing(1).unwrap().snippet, Some(content));
+    // without an image it names, the listing goes without its snippet
+    images.remove(0);
+    apply(&mut v, vec![event(images)]);
+    assert_eq!(v.listing(1).unwrap().snippet, None);
+    assert_eq!(v.metrics().malformed_snippets, 1);
 }
 
 #[test]

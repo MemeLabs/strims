@@ -398,10 +398,6 @@ stack or a version gate.
 prost drops unknown fields, so re-encoding a newer peer's message loses
 them. Decide how forward compatibility works before changing any schema.
 
-### Certificates and signed messages
-Length-prefix or domain-separate the signed encodings; today fields can
-shift across boundaries.
-
 ### Key derivation
 Run the X25519 shared secrets that key vnic links and vpn messages through a
 KDF before using them as AES keys, or use per-message keys.

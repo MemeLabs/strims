@@ -4,7 +4,7 @@
 //! The directory in an event-queue simulation with a virtual clock: one
 //! [`Server`] fed by users with one to three hosts each, whose calls cross
 //! a lossy channel with seeded latency and are retried; snippet publishers
-//! that stream signed deltas with loss; and [`View`]s that read the
+//! that stream signed snippets and their images with loss; and [`View`]s that read the
 //! broadcasts through chunkstream framing in a windowed log, each from a
 //! random frame-aligned start, with injected underruns that reset them.
 //!
@@ -34,7 +34,7 @@ use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_chunkstream::{RecordDecoder, RecordEncoder};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, SignableMessage, generate_key, host_certificate, new_certificate_request,
+    DEFAULT_CERT_TTL, Signer, generate_key, host_certificate, new_certificate_request,
     sign_certificate_request_with_network,
 };
 use strims_dao::schema::directory::{listing_key, new_user_record};
@@ -43,13 +43,13 @@ use strims_proto::network::v1::directory::listing::{Chat, Content, Embed, Media,
 use strims_proto::network::v1::directory::listing_query::Query;
 use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
 use strims_proto::network::v1::directory::{
-    Listing, ListingModeration, ListingQuery, ListingRecord, ListingSnippet, ListingSnippetDelta,
-    ListingSnippetImage, ServerConfig, UserModeration, UserRecord,
+    Listing, ListingModeration, ListingQuery, ListingRecord, ListingSnippet, ListingSnippetImage,
+    ServerConfig, SnippetSubscribeResponse, UserModeration, UserRecord,
 };
 use strims_proto::types::{Certificate, Image, Key, KeyUsage};
 
 use crate::moderation::{is_admin, is_moderator, merge_listing, merge_user};
-use crate::snippet::{diff, is_empty, split};
+use crate::snippet::{Feed, SignedSnippet};
 use crate::view::Projection;
 use crate::{
     Caller, DirectoryError, EVENT_FRAME, Limits, LocalSnippets, Server, ServerAction, SubId, View,
@@ -145,9 +145,9 @@ enum Ev {
         call: u64,
         attempt: u32,
     },
-    Delta {
+    Response {
         sub: SubId,
-        delta: Box<ListingSnippetDelta>,
+        response: Box<SnippetSubscribeResponse>,
     },
     Ended {
         sub: SubId,
@@ -195,7 +195,7 @@ struct SwarmSim {
 struct Stream {
     host: usize,
     swarm: usize,
-    sent: ListingSnippet,
+    feed: Feed,
     last: Time,
 }
 
@@ -278,8 +278,8 @@ impl Trace {
 struct Stats {
     calls: u64,
     refused: BTreeMap<String, u64>,
-    deltas_sent: u64,
-    deltas_lost: u64,
+    responses_sent: u64,
+    responses_lost: u64,
     records: u64,
     underruns: u64,
     restarts: u64,
@@ -481,7 +481,7 @@ impl Sim {
         self.queue.insert((t, self.seq), ev);
     }
 
-    fn make_snippet(&mut self, s: usize) -> ListingSnippet {
+    fn make_snippet(&mut self, s: usize) -> SignedSnippet {
         self.swarms[s].version += 1;
         let v = self.swarms[s].version;
         let image = |rng: &mut DetRng, max: u64| {
@@ -509,7 +509,7 @@ impl Sim {
             }),
             _ => Some(image(&mut self.rng, 1500)),
         };
-        let mut snippet = ListingSnippet {
+        let snippet = ListingSnippet {
             title: format!("swarm {s} v{v}"),
             live: self.rng.next_u64().is_multiple_of(2),
             user_count: self.rng.next_u64() % 100,
@@ -518,8 +518,8 @@ impl Sim {
             channel_logo,
             ..Default::default()
         };
-        snippet.sign_message(&self.swarms[s].key).unwrap();
-        snippet
+        let signer = Signer::new(&self.swarms[s].key).unwrap();
+        SignedSnippet::sign(&signer, &snippet, self.now)
     }
 
     fn media(&self, s: usize) -> Listing {
@@ -675,11 +675,11 @@ impl Sim {
                     },
                 );
             }
-            Ev::Delta { sub, delta } => {
+            Ev::Response { sub, response } => {
                 if self.phase == Phase::Frozen || !self.streams.contains_key(&sub) {
                     return;
                 }
-                self.server.snippet_delta(self.now, sub, &delta);
+                self.server.snippet_response(self.now, sub, *response);
                 self.drain();
             }
             Ev::Ended { sub } => {
@@ -905,38 +905,37 @@ impl Sim {
             Stream {
                 host: h,
                 swarm,
-                sent: ListingSnippet::default(),
+                feed: Feed::default(),
                 last: self.now,
             },
         );
-        self.stream_to(sub, snippet);
+        self.stream_to(sub, &snippet);
     }
 
-    /// Sends stream `sub` the deltas to `snippet`.
-    fn stream_to(&mut self, sub: SubId, snippet: ListingSnippet) {
-        let Some(st) = self.streams.get(&sub) else {
+    /// Sends stream `sub` the responses that bring the server to `snippet`.
+    fn stream_to(&mut self, sub: SubId, snippet: &SignedSnippet) {
+        let Some(st) = self.streams.get_mut(&sub) else {
             return;
         };
-        let deltas = split(diff(&st.sent, &snippet));
+        let responses = st.feed.responses(snippet);
         let mut last = st.last;
-        for delta in deltas.into_iter().filter(|d| !is_empty(d)) {
-            self.stats.deltas_sent += 1;
+        for response in responses {
+            self.stats.responses_sent += 1;
             if self.lost() {
-                self.stats.deltas_lost += 1;
+                self.stats.responses_lost += 1;
                 continue;
             }
             let t = (self.now + self.latency()).max(last + Duration::MILLISECOND);
             last = t;
             self.at(
                 t,
-                Ev::Delta {
+                Ev::Response {
                     sub,
-                    delta: Box::new(delta),
+                    response: Box::new(response),
                 },
             );
         }
         if let Some(st) = self.streams.get_mut(&sub) {
-            st.sent = snippet;
             st.last = last;
         }
     }
@@ -1117,7 +1116,7 @@ impl Sim {
             self.swarms[s].version
         ));
         for sub in subs {
-            self.stream_to(sub, snippet.clone());
+            self.stream_to(sub, &snippet);
         }
     }
 
@@ -1238,7 +1237,7 @@ impl Sim {
         let summary = format!(
             "{} listings ({shown} with snippets), {} users; {} calls, refused {:?}; \
              server: {} broadcasts, {} records, {} refreshes, {} sessions expired, {} evicted, \
-             {} subscriptions, {} deltas ({} lost), {} snippets shown, {} unverified, \
+             {} subscriptions, {} responses ({} lost), {} snippets shown, {} unverified, \
              {} timeouts, {} ended, {} sessions displaced; views: {} underruns; {} restarts, \
              {} renames, {} moves; {} log bytes",
             expected.listings.len(),
@@ -1251,8 +1250,8 @@ impl Sim {
             m.sessions_expired,
             m.sessions_evicted,
             m.subscriptions,
-            self.stats.deltas_sent,
-            self.stats.deltas_lost,
+            self.stats.responses_sent,
+            self.stats.responses_lost,
             m.snippets_shown,
             m.snippets_unverified,
             m.snippet_timeouts,

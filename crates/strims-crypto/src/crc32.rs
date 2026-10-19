@@ -1,10 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! CRC-32 (IEEE) as a [`StableSink`], so [`crate::crc32_message`] needn't
-//! buffer the encoding.
+//! CRC-32 (IEEE) of a message's stable encoding, computed as a
+//! [`StableSink`] so that the encoding isn't buffered.
 
-use strims_proto::stable::StableSink;
+use strims_proto::stable::{StableEncode, StableSink};
 
 const POLY: u32 = 0xedb8_8320;
 
@@ -49,6 +49,13 @@ impl StableSink for Crc32 {
     }
 }
 
+/// CRC-32 (IEEE) of the stable encoding.
+pub fn crc32_message<M: StableEncode + ?Sized>(m: &M) -> u32 {
+    let mut c = Crc32::new();
+    m.stable_encode_into(&mut c);
+    c.sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +67,15 @@ mod tests {
         c.put(b"56789");
         assert_eq!(c.sum(), 0xcbf4_3926);
         assert_eq!(Crc32::new().sum(), 0);
+    }
+
+    #[test]
+    fn crc32_of_empty_message() {
+        let mut c = Crc32::new();
+        c.put(&[0u8; 8]);
+        assert_eq!(
+            crc32_message(&strims_proto::types::Cache::default()),
+            c.sum()
+        );
     }
 }

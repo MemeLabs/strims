@@ -8,16 +8,8 @@ import {
 import {
   google_protobuf_BoolValue,
   google_protobuf_IBoolValue,
-  google_protobuf_BytesValue,
-  google_protobuf_IBytesValue,
-  google_protobuf_Int64Value,
-  google_protobuf_IInt64Value,
   google_protobuf_StringValue,
   google_protobuf_IStringValue,
-  google_protobuf_UInt32Value,
-  google_protobuf_IUInt32Value,
-  google_protobuf_UInt64Value,
-  google_protobuf_IUInt64Value,
 } from "../../../../google/protobuf/wrappers";
 
 export type IServerConfig = {
@@ -1000,8 +992,6 @@ export type IListingSnippet = {
   videoWidth?: number;
   themeColor?: number;
   startTime?: bigint;
-  key?: Uint8Array;
-  signature?: Uint8Array;
 }
 
 export class ListingSnippet {
@@ -1019,8 +1009,6 @@ export class ListingSnippet {
   videoWidth: number;
   themeColor: number;
   startTime: bigint;
-  key: Uint8Array;
-  signature: Uint8Array;
 
   constructor(v?: IListingSnippet) {
     this.title = v?.title || "";
@@ -1037,8 +1025,6 @@ export class ListingSnippet {
     this.videoWidth = v?.videoWidth || 0;
     this.themeColor = v?.themeColor || 0;
     this.startTime = v?.startTime || BigInt(0);
-    this.key = v?.key || new Uint8Array();
-    this.signature = v?.signature || new Uint8Array();
   }
 
   static encode(m: ListingSnippet, w?: Writer): Writer {
@@ -1057,8 +1043,6 @@ export class ListingSnippet {
     if (m.videoWidth) w.uint32(96).uint32(m.videoWidth);
     if (m.themeColor) w.uint32(109).fixed32(m.themeColor);
     if (m.startTime) w.uint32(112).int64(m.startTime);
-    if (m.key.length) w.uint32(80010).bytes(m.key);
-    if (m.signature.length) w.uint32(80018).bytes(m.signature);
     return w;
   }
 
@@ -1111,10 +1095,104 @@ export class ListingSnippet {
         case 14:
         m.startTime = r.int64();
         break;
-        case 10001:
-        m.key = r.bytes();
+        default:
+        r.skipType(tag & 7);
         break;
-        case 10002:
+      }
+    }
+    return m;
+  }
+}
+
+export type IListingSnippetBody = {
+  snippet?: strims_network_v1_directory_IListingSnippet;
+  thumbnailDigest?: Uint8Array;
+  channelLogoDigest?: Uint8Array;
+  timestamp?: bigint;
+}
+
+export class ListingSnippetBody {
+  snippet: strims_network_v1_directory_ListingSnippet | undefined;
+  thumbnailDigest: Uint8Array;
+  channelLogoDigest: Uint8Array;
+  timestamp: bigint;
+
+  constructor(v?: IListingSnippetBody) {
+    this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
+    this.thumbnailDigest = v?.thumbnailDigest || new Uint8Array();
+    this.channelLogoDigest = v?.channelLogoDigest || new Uint8Array();
+    this.timestamp = v?.timestamp || BigInt(0);
+  }
+
+  static encode(m: ListingSnippetBody, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(10).fork()).ldelim();
+    if (m.thumbnailDigest.length) w.uint32(18).bytes(m.thumbnailDigest);
+    if (m.channelLogoDigest.length) w.uint32(26).bytes(m.channelLogoDigest);
+    if (m.timestamp) w.uint32(32).int64(m.timestamp);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingSnippetBody {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingSnippetBody();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.snippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
+        break;
+        case 2:
+        m.thumbnailDigest = r.bytes();
+        break;
+        case 3:
+        m.channelLogoDigest = r.bytes();
+        break;
+        case 4:
+        m.timestamp = r.int64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISignedListingSnippet = {
+  body?: Uint8Array;
+  signature?: Uint8Array;
+}
+
+export class SignedListingSnippet {
+  body: Uint8Array;
+  signature: Uint8Array;
+
+  constructor(v?: ISignedListingSnippet) {
+    this.body = v?.body || new Uint8Array();
+    this.signature = v?.signature || new Uint8Array();
+  }
+
+  static encode(m: SignedListingSnippet, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.body.length) w.uint32(10).bytes(m.body);
+    if (m.signature.length) w.uint32(18).bytes(m.signature);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SignedListingSnippet {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SignedListingSnippet();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.body = r.bytes();
+        break;
+        case 2:
         m.signature = r.bytes();
         break;
         default:
@@ -1124,303 +1202,6 @@ export class ListingSnippet {
     }
     return m;
   }
-}
-
-export type IListingSnippetDelta = {
-  title?: google_protobuf_IStringValue;
-  description?: google_protobuf_IStringValue;
-  category?: google_protobuf_IStringValue;
-  channelName?: google_protobuf_IStringValue;
-  userCount?: google_protobuf_IUInt64Value;
-  live?: google_protobuf_IBoolValue;
-  isMature?: google_protobuf_IBoolValue;
-  key?: google_protobuf_IBytesValue;
-  signature?: google_protobuf_IBytesValue;
-  videoHeight?: google_protobuf_IUInt32Value;
-  videoWidth?: google_protobuf_IUInt32Value;
-  themeColor?: google_protobuf_IUInt32Value;
-  startTime?: google_protobuf_IInt64Value;
-  tagsOneof?: ListingSnippetDelta.ITagsOneof
-  thumbnailOneof?: ListingSnippetDelta.IThumbnailOneof
-  channelLogoOneof?: ListingSnippetDelta.IChannelLogoOneof
-}
-
-export class ListingSnippetDelta {
-  title: google_protobuf_StringValue | undefined;
-  description: google_protobuf_StringValue | undefined;
-  category: google_protobuf_StringValue | undefined;
-  channelName: google_protobuf_StringValue | undefined;
-  userCount: google_protobuf_UInt64Value | undefined;
-  live: google_protobuf_BoolValue | undefined;
-  isMature: google_protobuf_BoolValue | undefined;
-  key: google_protobuf_BytesValue | undefined;
-  signature: google_protobuf_BytesValue | undefined;
-  videoHeight: google_protobuf_UInt32Value | undefined;
-  videoWidth: google_protobuf_UInt32Value | undefined;
-  themeColor: google_protobuf_UInt32Value | undefined;
-  startTime: google_protobuf_Int64Value | undefined;
-  tagsOneof: ListingSnippetDelta.TTagsOneof;
-  thumbnailOneof: ListingSnippetDelta.TThumbnailOneof;
-  channelLogoOneof: ListingSnippetDelta.TChannelLogoOneof;
-
-  constructor(v?: IListingSnippetDelta) {
-    this.title = v?.title && new google_protobuf_StringValue(v.title);
-    this.description = v?.description && new google_protobuf_StringValue(v.description);
-    this.category = v?.category && new google_protobuf_StringValue(v.category);
-    this.channelName = v?.channelName && new google_protobuf_StringValue(v.channelName);
-    this.userCount = v?.userCount && new google_protobuf_UInt64Value(v.userCount);
-    this.live = v?.live && new google_protobuf_BoolValue(v.live);
-    this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
-    this.key = v?.key && new google_protobuf_BytesValue(v.key);
-    this.signature = v?.signature && new google_protobuf_BytesValue(v.signature);
-    this.videoHeight = v?.videoHeight && new google_protobuf_UInt32Value(v.videoHeight);
-    this.videoWidth = v?.videoWidth && new google_protobuf_UInt32Value(v.videoWidth);
-    this.themeColor = v?.themeColor && new google_protobuf_UInt32Value(v.themeColor);
-    this.startTime = v?.startTime && new google_protobuf_Int64Value(v.startTime);
-    this.tagsOneof = new ListingSnippetDelta.TagsOneof(v?.tagsOneof);
-    this.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof(v?.thumbnailOneof);
-    this.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof(v?.channelLogoOneof);
-  }
-
-  static encode(m: ListingSnippetDelta, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.title) google_protobuf_StringValue.encode(m.title, w.uint32(10).fork()).ldelim();
-    if (m.description) google_protobuf_StringValue.encode(m.description, w.uint32(18).fork()).ldelim();
-    if (m.category) google_protobuf_StringValue.encode(m.category, w.uint32(26).fork()).ldelim();
-    if (m.channelName) google_protobuf_StringValue.encode(m.channelName, w.uint32(34).fork()).ldelim();
-    if (m.userCount) google_protobuf_UInt64Value.encode(m.userCount, w.uint32(42).fork()).ldelim();
-    if (m.live) google_protobuf_BoolValue.encode(m.live, w.uint32(50).fork()).ldelim();
-    if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(58).fork()).ldelim();
-    if (m.key) google_protobuf_BytesValue.encode(m.key, w.uint32(66).fork()).ldelim();
-    if (m.signature) google_protobuf_BytesValue.encode(m.signature, w.uint32(74).fork()).ldelim();
-    if (m.videoHeight) google_protobuf_UInt32Value.encode(m.videoHeight, w.uint32(82).fork()).ldelim();
-    if (m.videoWidth) google_protobuf_UInt32Value.encode(m.videoWidth, w.uint32(90).fork()).ldelim();
-    if (m.themeColor) google_protobuf_UInt32Value.encode(m.themeColor, w.uint32(98).fork()).ldelim();
-    if (m.startTime) google_protobuf_Int64Value.encode(m.startTime, w.uint32(106).fork()).ldelim();
-    switch (m.tagsOneof.case) {
-      case ListingSnippetDelta.TagsOneofCase.TAGS:
-      strims_network_v1_directory_ListingSnippetDelta_Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
-      break;
-    }
-    switch (m.thumbnailOneof.case) {
-      case ListingSnippetDelta.ThumbnailOneofCase.THUMBNAIL:
-      strims_network_v1_directory_ListingSnippetImage.encode(m.thumbnailOneof.thumbnail, w.uint32(16010).fork()).ldelim();
-      break;
-    }
-    switch (m.channelLogoOneof.case) {
-      case ListingSnippetDelta.ChannelLogoOneofCase.CHANNEL_LOGO:
-      strims_network_v1_directory_ListingSnippetImage.encode(m.channelLogoOneof.channelLogo, w.uint32(24010).fork()).ldelim();
-      break;
-    }
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): ListingSnippetDelta {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new ListingSnippetDelta();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.title = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 2:
-        m.description = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 3:
-        m.category = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 4:
-        m.channelName = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 5:
-        m.userCount = google_protobuf_UInt64Value.decode(r, r.uint32());
-        break;
-        case 6:
-        m.live = google_protobuf_BoolValue.decode(r, r.uint32());
-        break;
-        case 7:
-        m.isMature = google_protobuf_BoolValue.decode(r, r.uint32());
-        break;
-        case 8:
-        m.key = google_protobuf_BytesValue.decode(r, r.uint32());
-        break;
-        case 9:
-        m.signature = google_protobuf_BytesValue.decode(r, r.uint32());
-        break;
-        case 10:
-        m.videoHeight = google_protobuf_UInt32Value.decode(r, r.uint32());
-        break;
-        case 11:
-        m.videoWidth = google_protobuf_UInt32Value.decode(r, r.uint32());
-        break;
-        case 12:
-        m.themeColor = google_protobuf_UInt32Value.decode(r, r.uint32());
-        break;
-        case 13:
-        m.startTime = google_protobuf_Int64Value.decode(r, r.uint32());
-        break;
-        case 1001:
-        m.tagsOneof = new ListingSnippetDelta.TagsOneof({ tags: strims_network_v1_directory_ListingSnippetDelta_Tags.decode(r, r.uint32()) });
-        break;
-        case 2001:
-        m.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof({ thumbnail: strims_network_v1_directory_ListingSnippetImage.decode(r, r.uint32()) });
-        break;
-        case 3001:
-        m.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof({ channelLogo: strims_network_v1_directory_ListingSnippetImage.decode(r, r.uint32()) });
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export namespace ListingSnippetDelta {
-  export enum TagsOneofCase {
-    NOT_SET = 0,
-    TAGS = 1001,
-  }
-
-  export type ITagsOneof =
-  { case?: TagsOneofCase.NOT_SET }
-  |{ case?: TagsOneofCase.TAGS, tags: strims_network_v1_directory_ListingSnippetDelta_ITags }
-  ;
-
-  export type TTagsOneof = Readonly<
-  { case: TagsOneofCase.NOT_SET }
-  |{ case: TagsOneofCase.TAGS, tags: strims_network_v1_directory_ListingSnippetDelta_Tags }
-  >;
-
-  class TagsOneofImpl {
-    tags: strims_network_v1_directory_ListingSnippetDelta_Tags;
-    case: TagsOneofCase = TagsOneofCase.NOT_SET;
-
-    constructor(v?: ITagsOneof) {
-      if (v && "tags" in v) {
-        this.case = TagsOneofCase.TAGS;
-        this.tags = new strims_network_v1_directory_ListingSnippetDelta_Tags(v.tags);
-      }
-    }
-  }
-
-  export const TagsOneof = TagsOneofImpl as {
-    new (): Readonly<{ case: TagsOneofCase.NOT_SET }>;
-    new <T extends ITagsOneof>(v: T): Readonly<
-    T extends { tags: strims_network_v1_directory_ListingSnippetDelta_ITags } ? { case: TagsOneofCase.TAGS, tags: strims_network_v1_directory_ListingSnippetDelta_Tags } :
-    never
-    >;
-  };
-
-  export enum ThumbnailOneofCase {
-    NOT_SET = 0,
-    THUMBNAIL = 2001,
-  }
-
-  export type IThumbnailOneof =
-  { case?: ThumbnailOneofCase.NOT_SET }
-  |{ case?: ThumbnailOneofCase.THUMBNAIL, thumbnail: strims_network_v1_directory_IListingSnippetImage }
-  ;
-
-  export type TThumbnailOneof = Readonly<
-  { case: ThumbnailOneofCase.NOT_SET }
-  |{ case: ThumbnailOneofCase.THUMBNAIL, thumbnail: strims_network_v1_directory_ListingSnippetImage }
-  >;
-
-  class ThumbnailOneofImpl {
-    thumbnail: strims_network_v1_directory_ListingSnippetImage;
-    case: ThumbnailOneofCase = ThumbnailOneofCase.NOT_SET;
-
-    constructor(v?: IThumbnailOneof) {
-      if (v && "thumbnail" in v) {
-        this.case = ThumbnailOneofCase.THUMBNAIL;
-        this.thumbnail = new strims_network_v1_directory_ListingSnippetImage(v.thumbnail);
-      }
-    }
-  }
-
-  export const ThumbnailOneof = ThumbnailOneofImpl as {
-    new (): Readonly<{ case: ThumbnailOneofCase.NOT_SET }>;
-    new <T extends IThumbnailOneof>(v: T): Readonly<
-    T extends { thumbnail: strims_network_v1_directory_IListingSnippetImage } ? { case: ThumbnailOneofCase.THUMBNAIL, thumbnail: strims_network_v1_directory_ListingSnippetImage } :
-    never
-    >;
-  };
-
-  export enum ChannelLogoOneofCase {
-    NOT_SET = 0,
-    CHANNEL_LOGO = 3001,
-  }
-
-  export type IChannelLogoOneof =
-  { case?: ChannelLogoOneofCase.NOT_SET }
-  |{ case?: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: strims_network_v1_directory_IListingSnippetImage }
-  ;
-
-  export type TChannelLogoOneof = Readonly<
-  { case: ChannelLogoOneofCase.NOT_SET }
-  |{ case: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: strims_network_v1_directory_ListingSnippetImage }
-  >;
-
-  class ChannelLogoOneofImpl {
-    channelLogo: strims_network_v1_directory_ListingSnippetImage;
-    case: ChannelLogoOneofCase = ChannelLogoOneofCase.NOT_SET;
-
-    constructor(v?: IChannelLogoOneof) {
-      if (v && "channelLogo" in v) {
-        this.case = ChannelLogoOneofCase.CHANNEL_LOGO;
-        this.channelLogo = new strims_network_v1_directory_ListingSnippetImage(v.channelLogo);
-      }
-    }
-  }
-
-  export const ChannelLogoOneof = ChannelLogoOneofImpl as {
-    new (): Readonly<{ case: ChannelLogoOneofCase.NOT_SET }>;
-    new <T extends IChannelLogoOneof>(v: T): Readonly<
-    T extends { channelLogo: strims_network_v1_directory_IListingSnippetImage } ? { case: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: strims_network_v1_directory_ListingSnippetImage } :
-    never
-    >;
-  };
-
-  export type ITags = {
-    tags?: string[];
-  }
-
-  export class Tags {
-    tags: string[];
-
-    constructor(v?: ITags) {
-      this.tags = v?.tags ? v.tags : [];
-    }
-
-    static encode(m: Tags, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      for (const v of m.tags) w.uint32(8010).string(v);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Tags {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Tags();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1001:
-          m.tags.push(r.string())
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
 }
 
 export type IEvent = {
@@ -1562,29 +1343,33 @@ export namespace Event {
   export type IListingChange = {
     id?: bigint;
     listing?: strims_network_v1_directory_IListing;
-    snippet?: strims_network_v1_directory_IListingSnippet;
+    snippet?: strims_network_v1_directory_ISignedListingSnippet;
     moderation?: strims_network_v1_directory_IListingModeration;
+    snippetImages?: Uint8Array[];
   }
 
   export class ListingChange {
     id: bigint;
     listing: strims_network_v1_directory_Listing | undefined;
-    snippet: strims_network_v1_directory_ListingSnippet | undefined;
+    snippet: strims_network_v1_directory_SignedListingSnippet | undefined;
     moderation: strims_network_v1_directory_ListingModeration | undefined;
+    snippetImages: Uint8Array[];
 
     constructor(v?: IListingChange) {
       this.id = v?.id || BigInt(0);
       this.listing = v?.listing && new strims_network_v1_directory_Listing(v.listing);
-      this.snippet = v?.snippet && new strims_network_v1_directory_ListingSnippet(v.snippet);
+      this.snippet = v?.snippet && new strims_network_v1_directory_SignedListingSnippet(v.snippet);
       this.moderation = v?.moderation && new strims_network_v1_directory_ListingModeration(v.moderation);
+      this.snippetImages = v?.snippetImages ? v.snippetImages : [];
     }
 
     static encode(m: ListingChange, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.id) w.uint32(8).uint64(m.id);
       if (m.listing) strims_network_v1_directory_Listing.encode(m.listing, w.uint32(18).fork()).ldelim();
-      if (m.snippet) strims_network_v1_directory_ListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
+      if (m.snippet) strims_network_v1_directory_SignedListingSnippet.encode(m.snippet, w.uint32(26).fork()).ldelim();
       if (m.moderation) strims_network_v1_directory_ListingModeration.encode(m.moderation, w.uint32(34).fork()).ldelim();
+      for (const v of m.snippetImages) w.uint32(42).bytes(v);
       return w;
     }
 
@@ -1602,10 +1387,13 @@ export namespace Event {
           m.listing = strims_network_v1_directory_Listing.decode(r, r.uint32());
           break;
           case 3:
-          m.snippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
+          m.snippet = strims_network_v1_directory_SignedListingSnippet.decode(r, r.uint32());
           break;
           case 4:
           m.moderation = strims_network_v1_directory_ListingModeration.decode(r, r.uint32());
+          break;
+          case 5:
+          m.snippetImages.push(r.bytes())
           break;
           default:
           r.skipType(tag & 7);
@@ -4204,19 +3992,23 @@ export class SnippetSubscribeRequest {
 }
 
 export type ISnippetSubscribeResponse = {
-  snippetDelta?: strims_network_v1_directory_IListingSnippetDelta;
+  snippet?: strims_network_v1_directory_ISignedListingSnippet;
+  image?: Uint8Array;
 }
 
 export class SnippetSubscribeResponse {
-  snippetDelta: strims_network_v1_directory_ListingSnippetDelta | undefined;
+  snippet: strims_network_v1_directory_SignedListingSnippet | undefined;
+  image: Uint8Array;
 
   constructor(v?: ISnippetSubscribeResponse) {
-    this.snippetDelta = v?.snippetDelta && new strims_network_v1_directory_ListingSnippetDelta(v.snippetDelta);
+    this.snippet = v?.snippet && new strims_network_v1_directory_SignedListingSnippet(v.snippet);
+    this.image = v?.image || new Uint8Array();
   }
 
   static encode(m: SnippetSubscribeResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.snippetDelta) strims_network_v1_directory_ListingSnippetDelta.encode(m.snippetDelta, w.uint32(10).fork()).ldelim();
+    if (m.snippet) strims_network_v1_directory_SignedListingSnippet.encode(m.snippet, w.uint32(10).fork()).ldelim();
+    if (m.image.length) w.uint32(18).bytes(m.image);
     return w;
   }
 
@@ -4228,7 +4020,10 @@ export class SnippetSubscribeResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.snippetDelta = strims_network_v1_directory_ListingSnippetDelta.decode(r, r.uint32());
+        m.snippet = strims_network_v1_directory_SignedListingSnippet.decode(r, r.uint32());
+        break;
+        case 2:
+        m.image = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -4295,11 +4090,17 @@ export type strims_network_v1_directory_ListingSnippet = ListingSnippet;
 /* @internal */
 export type strims_network_v1_directory_IListingSnippet = IListingSnippet;
 /* @internal */
-export const strims_network_v1_directory_ListingSnippetDelta = ListingSnippetDelta;
+export const strims_network_v1_directory_ListingSnippetBody = ListingSnippetBody;
 /* @internal */
-export type strims_network_v1_directory_ListingSnippetDelta = ListingSnippetDelta;
+export type strims_network_v1_directory_ListingSnippetBody = ListingSnippetBody;
 /* @internal */
-export type strims_network_v1_directory_IListingSnippetDelta = IListingSnippetDelta;
+export type strims_network_v1_directory_IListingSnippetBody = IListingSnippetBody;
+/* @internal */
+export const strims_network_v1_directory_SignedListingSnippet = SignedListingSnippet;
+/* @internal */
+export type strims_network_v1_directory_SignedListingSnippet = SignedListingSnippet;
+/* @internal */
+export type strims_network_v1_directory_ISignedListingSnippet = ISignedListingSnippet;
 /* @internal */
 export const strims_network_v1_directory_Event = Event;
 /* @internal */
@@ -4678,12 +4479,6 @@ export const strims_network_v1_directory_Listing_Chat = Listing.Chat;
 export type strims_network_v1_directory_Listing_Chat = Listing.Chat;
 /* @internal */
 export type strims_network_v1_directory_Listing_IChat = Listing.IChat;
-/* @internal */
-export const strims_network_v1_directory_ListingSnippetDelta_Tags = ListingSnippetDelta.Tags;
-/* @internal */
-export type strims_network_v1_directory_ListingSnippetDelta_Tags = ListingSnippetDelta.Tags;
-/* @internal */
-export type strims_network_v1_directory_ListingSnippetDelta_ITags = ListingSnippetDelta.ITags;
 /* @internal */
 export const strims_network_v1_directory_Event_ListingChange = Event.ListingChange;
 /* @internal */

@@ -39,6 +39,8 @@ pub enum Domain {
     Certificate,
     /// A certificate request: its encoded `CertificateRequestBody`.
     CertificateRequest,
+    /// A directory listing snippet: its encoded `ListingSnippetBody`.
+    DirectoryListingSnippet,
     /// A ppspp Merkle munro's root, live: `timestamp (u64 BE ns) ‖ root`.
     PpsppMunroRoot,
     /// A ppspp chunk, live: `timestamp (u64 BE ns) ‖ chunk`.
@@ -58,9 +60,10 @@ pub enum Domain {
 
 impl Domain {
     /// Every domain, in declaration order.
-    pub const ALL: [Domain; 9] = [
+    pub const ALL: [Domain; 10] = [
         Domain::Certificate,
         Domain::CertificateRequest,
+        Domain::DirectoryListingSnippet,
         Domain::PpsppMunroRoot,
         Domain::PpsppChunk,
         Domain::PpsppEpoch,
@@ -76,6 +79,7 @@ impl Domain {
         match self {
             Domain::Certificate => "certificate",
             Domain::CertificateRequest => "certificate-request",
+            Domain::DirectoryListingSnippet => "directory-listing-snippet",
             Domain::PpsppMunroRoot => "ppspp-munro-root",
             Domain::PpsppChunk => "ppspp-chunk",
             Domain::PpsppEpoch => "ppspp-epoch",

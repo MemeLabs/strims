@@ -17,6 +17,7 @@
 use core::ops::Deref;
 
 use prost::Message;
+use strims_proto::network::v1::directory::{ListingSnippetBody, SignedListingSnippet};
 use strims_proto::types::{
     Certificate, CertificateBody, CertificateRequest, CertificateRequestBody,
 };
@@ -130,6 +131,7 @@ macro_rules! envelope {
 }
 
 envelope!(CertificateRequest);
+envelope!(SignedListingSnippet);
 envelope!(hash_table_message::Record);
 envelope!(peer_index_message::Record);
 
@@ -168,6 +170,13 @@ impl SelfKeyed for CertificateRequestBody {
     fn signer_key(&self) -> &[u8] {
         &self.key
     }
+}
+
+/// A directory listing snippet, signed by its listing's media swarm key: the
+/// key whose public half is the swarm id.
+impl SignedBody for ListingSnippetBody {
+    const DOMAIN: Domain = Domain::DirectoryListingSnippet;
+    type Envelope = SignedListingSnippet;
 }
 
 /// A vpn hash table record, signed by the key it is published under.

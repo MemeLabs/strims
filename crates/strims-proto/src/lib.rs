@@ -29,7 +29,7 @@
 //! Decoding drops unknown fields, so re-encoding a message from a peer with
 //! a newer schema loses the fields this build doesn't know.
 //!
-//! The stable encoding that signatures cover is in [`stable`].
+//! The stable encoding that checksums cover is in [`stable`].
 //!
 //! [`rpc`] is the RPC envelope: every request, response and cancel is one
 //! [`rpc::Call`] carrying an encoded argument. With the `services` feature,

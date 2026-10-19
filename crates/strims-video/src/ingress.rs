@@ -126,9 +126,9 @@ use futures_sink::Sink;
 use futures_util::future::select;
 use futures_util::{FutureExt, StreamExt};
 use strims_base::time::{Duration, Time};
-use strims_crypto::SignableMessage;
+use strims_crypto::Signer;
 use strims_dao::schema::video::{channel_by_stream_key, channel_network_key, parse_stream_key};
-use strims_directory::{Host, ListingKeeper};
+use strims_directory::{Host, ListingKeeper, SignedSnippet};
 use strims_kv::Kv;
 use strims_ppspp::integrity::{
     LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod, VerifierOptions,
@@ -556,7 +556,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         match update {
             Err(stop) => stop.stop(CHANNEL_MOVED),
             Ok(Some((snippet, key, swarm_id))) => {
-                if let Err(e) = self.push_live_snippet(&swarm_id, snippet, &key) {
+                if let Err(e) = self.push_live_snippet(&swarm_id, &snippet, &key) {
                     tracing::warn!(error = %e, channel = c.id, "serving a changed live snippet failed");
                 }
             }
@@ -576,15 +576,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// Signs `snippet` with `key` and serves it for `swarm_id`.
+    /// Signs `snippet` now with `key`, the key of swarm `swarm_id`, and
+    /// serves it for the swarm.
     fn push_live_snippet(
         &self,
         swarm_id: &SwarmId,
-        mut snippet: ListingSnippet,
+        snippet: &ListingSnippet,
         key: &Key,
     ) -> Result<(), VideoError> {
-        snippet.sign_message(key)?;
-        self.directory.push_snippet(swarm_id, snippet)?;
+        let signed = SignedSnippet::sign(&Signer::new(key)?, snippet, self.timer.now());
+        self.directory.push_snippet(swarm_id, signed)?;
         Ok(())
     }
 
@@ -825,7 +826,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let Some((snippet, key)) = pushed else {
             return Err(failed(REPLACED));
         };
-        if let Err(e) = self.push_live_snippet(&publication.swarm_id, snippet, &key) {
+        if let Err(e) = self.push_live_snippet(&publication.swarm_id, &snippet, &key) {
             tracing::warn!(error = %e, channel = channel.id, "serving a live snippet failed");
             return Err(failed("the stream's snippet couldn't be served"));
         }

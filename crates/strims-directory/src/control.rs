@@ -27,7 +27,7 @@ use strims_ppspp::SwarmId;
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::directory::{
     AssetBundle, ClientConfig, DirectoryClient, Listing, ListingModeration, ListingQuery,
-    ListingSnippet, UserModeration,
+    UserModeration,
 };
 use strims_proto::service::{CallError, Error as RpcError};
 use strims_rpc::vpn::VpnClient;
@@ -39,6 +39,7 @@ use crate::fetch::Fetch;
 use crate::host::{Host, Net};
 use crate::server::{Caller, Server};
 use crate::services::{self, MemberPort, Reply, Request, ServerState, SnippetHub};
+use crate::snippet::SignedSnippet;
 use crate::view::{self, View, ViewEvent};
 use crate::{ADDRESS_SALT, Config, DirectoryError, Metrics, SnippetError};
 
@@ -826,13 +827,13 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
     ///
     /// # Errors
     ///
-    /// The snippet fails [`snippet::check`](crate::snippet::check) or
-    /// doesn't verify, or this node serves
+    /// The snippet doesn't verify against the swarm's key, or fails
+    /// [`snippet::check`](crate::snippet::check), or this node serves
     /// [`MAX_LOCAL_SNIPPETS`](crate::snippet::MAX_LOCAL_SNIPPETS) others.
     pub fn push_snippet(
         &self,
         swarm_id: &SwarmId,
-        snippet: ListingSnippet,
+        snippet: SignedSnippet,
     ) -> Result<(), SnippetError> {
         self.shared.snippets.push(swarm_id, snippet)
     }

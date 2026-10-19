@@ -46,16 +46,6 @@ pub(crate) fn signing_key_from_private(private: &[u8]) -> Result<SigningKey, Err
     SigningKey::from_keypair_bytes(bytes).map_err(|_| Error::KeyPairMismatch)
 }
 
-/// The signing key of an ed25519 [`Key`]. The type must be
-/// `KEY_TYPE_ED25519` ([`Error::UnsupportedKeyType`]) and the private key 64
-/// bytes ([`Error::InvalidKeyLength`]).
-pub(crate) fn signing_key(key: &Key) -> Result<SigningKey, Error> {
-    if key.r#type != KeyType::Ed25519 as i32 {
-        return Err(Error::UnsupportedKeyType);
-    }
-    signing_key_from_private(&key.private)
-}
-
 /// Signs `message` with a 64-byte expanded private key.
 ///
 /// Derives the signing key on every call (two base-point multiplications).
@@ -116,11 +106,5 @@ mod tests {
         let mut mismatched = k.private.clone();
         mismatched[40] ^= 1;
         assert_eq!(sign(&mismatched, b"msg"), Err(Error::KeyPairMismatch));
-
-        let x = Key {
-            r#type: KeyType::X25519 as i32,
-            ..k
-        };
-        assert_eq!(signing_key(&x).err(), Some(Error::UnsupportedKeyType));
     }
 }

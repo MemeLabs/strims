@@ -19,7 +19,6 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use strims_base::time::Time;
-use strims_crypto::SignableMessage;
 use strims_dao::schema::video::{VideoChannels, format_stream_key, new_channel};
 use strims_dao::{Recv, Subscription, Table};
 use strims_kv::MemoryKv;
@@ -343,8 +342,15 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
         assert_eq!(m.mime_type, fmp4_mime(&script_configs(&script)));
         assert_eq!(m.mime_type, "video/mp4;codecs=\"avc1.64001f,mp4a.40.2\"");
         let shown = shown.unwrap();
-        shown.verify_message().unwrap();
-        assert_eq!(shown.key, channel_key(&s.channel).public);
+        // the server shows only snippets the swarm's key, the channel's,
+        // signed
+        let server =
+            s.a.directory
+                .metrics(&s.net.public)
+                .unwrap()
+                .server
+                .unwrap();
+        assert_eq!(server.snippets_unverified, 0, "{server:?}");
         assert_eq!(
             (
                 shown.title.as_str(),
@@ -613,9 +619,18 @@ fn channel_changes_reach_the_session() {
         })
         .await;
         let second = shown_snippet(b).unwrap();
-        second.verify_message().unwrap();
         assert_eq!((second.start_time, second.live), (first.start_time, true));
-        assert_eq!(second.key, first.key);
+        let server =
+            s.a.directory
+                .metrics(&s.net.public)
+                .unwrap()
+                .server
+                .unwrap();
+        assert_eq!(
+            (server.snippets_shown, server.snippets_unverified),
+            (2, 0),
+            "{server:?}"
+        );
         assert_eq!(s.va.ingress_streams().len(), 1);
 
         p.send_tags(&script.tags[script.tags.len() / 3..], &script)

@@ -30,8 +30,8 @@ use strims_proto::debug::v1::{
 };
 use strims_proto::devtools::v1::ppspp::cap_conn_log::peer_log::{Event, event};
 use strims_proto::network::v1::directory::{
-    ListingSnippet, ListingSnippetDelta, ListingSnippetImage, listing_snippet_delta,
-    listing_snippet_image,
+    ListingSnippet, ListingSnippetBody, ListingSnippetImage, SignedListingSnippet,
+    SnippetSubscribeResponse, listing_snippet_image,
 };
 use strims_proto::rpc;
 use strims_proto::rpc::call::Kind;
@@ -529,15 +529,9 @@ fn chat_messages(v: &mut Vectors) {
     );
 }
 
-fn directory_snippets(v: &mut Vectors) {
-    use listing_snippet_image::SourceOneof;
-
-    let image = |source| ListingSnippetImage {
-        source_oneof: Some(source),
-    };
-    v.pin(
-        "directory_listing_snippet",
-        &ListingSnippet {
+fn listing_snippet_body() -> ListingSnippetBody {
+    ListingSnippetBody {
+        snippet: Some(ListingSnippet {
             title: "title".to_owned(),
             description: "description".to_owned(),
             tags: strings(&["one", "two"]),
@@ -546,45 +540,68 @@ fn directory_snippets(v: &mut Vectors) {
             user_count: 12345,
             live: true,
             is_mature: false,
-            thumbnail: Some(image(SourceOneof::Image(Image {
-                r#type: ImageType::Jpeg as i32,
-                height: 720,
-                width: 1280,
-                data: seq(0xff, 16),
-            }))),
-            channel_logo: Some(image(SourceOneof::Url(
-                "https://example.com/logo.png".to_owned(),
-            ))),
+            thumbnail: None,
+            channel_logo: None,
             video_height: 720,
             video_width: 1280,
             theme_color: 0xff00_ff00,
             start_time: -1,
-            key: seq(0x07, 32),
-            signature: seq(0x08, 64),
+        }),
+        thumbnail_digest: seq(0x07, 32),
+        channel_logo_digest: seq(0x27, 32),
+        timestamp: 1_700_000_000_123_456_789,
+    }
+}
+
+fn signed_listing_snippet() -> SignedListingSnippet {
+    SignedListingSnippet {
+        body: listing_snippet_body().encode_to_vec(),
+        signature: seq(0x08, 64),
+    }
+}
+
+fn directory_snippets(v: &mut Vectors) {
+    use listing_snippet_image::SourceOneof;
+
+    let image = |source| ListingSnippetImage {
+        source_oneof: Some(source),
+    };
+    let thumbnail = image(SourceOneof::Image(Image {
+        r#type: ImageType::Jpeg as i32,
+        height: 720,
+        width: 1280,
+        data: seq(0xff, 16),
+    }));
+    let logo = image(SourceOneof::Url("https://example.com/logo.png".to_owned()));
+    v.pin("directory_listing_snippet_body", &listing_snippet_body());
+    // A body without images names no digests.
+    v.pin(
+        "directory_listing_snippet_body_without_images",
+        &ListingSnippetBody {
+            snippet: Some(ListingSnippet {
+                title: "title".to_owned(),
+                ..ListingSnippet::default()
+            }),
+            timestamp: -1,
+            ..ListingSnippetBody::default()
         },
     );
-    // Wrappers set to their defaults (`title`, `user_count`, `live`) encode
-    // as set, distinct from the unset ones.
     v.pin(
-        "directory_listing_snippet_delta",
-        &ListingSnippetDelta {
-            title: Some(String::new()),
-            description: Some("new description".to_owned()),
-            user_count: Some(0),
-            live: Some(false),
-            is_mature: Some(true),
-            key: Some(seq(0x01, 32)),
-            theme_color: Some(7),
-            start_time: Some(-100),
-            tags_oneof: Some(listing_snippet_delta::TagsOneof::Tags(
-                listing_snippet_delta::Tags {
-                    tags: strings(&["x"]),
-                },
-            )),
-            thumbnail_oneof: Some(listing_snippet_delta::ThumbnailOneof::Thumbnail(
-                ListingSnippetImage::default(),
-            )),
-            ..ListingSnippetDelta::default()
+        "directory_signed_listing_snippet",
+        &signed_listing_snippet(),
+    );
+    v.pin(
+        "directory_snippet_subscribe_response",
+        &SnippetSubscribeResponse {
+            snippet: Some(signed_listing_snippet()),
+            image: logo.encode_to_vec(),
+        },
+    );
+    v.pin(
+        "directory_snippet_subscribe_response_image",
+        &SnippetSubscribeResponse {
+            snippet: None,
+            image: thumbnail.encode_to_vec(),
         },
     );
 }

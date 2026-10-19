@@ -53,13 +53,13 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::{SignableMessage, key_from_seed, membership_trusted};
+use strims_crypto::{Signer, key_from_seed, membership_trusted};
 use strims_dao::schema::network::Networks;
 use strims_dao::schema::profile::Profile as ProfileRecord;
 use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, Recv, ReplicatedStore, Singleton, Table};
 use strims_directory::{
-    CallFailure, DirectoryControl, DirectoryError, DirectoryEvent, ListingEvent,
+    CallFailure, DirectoryControl, DirectoryError, DirectoryEvent, ListingEvent, SignedSnippet,
 };
 use strims_kv::MemoryKv;
 use strims_network::{NetworkControl, NetworkFrontend};
@@ -207,15 +207,13 @@ fn publish_quota(h: &Started) -> Option<u32> {
 }
 
 /// The snippet m pushes for its media swarm.
-fn snippet(w: &World) -> ListingSnippet {
-    let mut s = ListingSnippet {
+fn snippet() -> ListingSnippet {
+    ListingSnippet {
         title: "live now".into(),
         live: true,
         channel_name: "m's channel".into(),
         ..Default::default()
-    };
-    s.sign_message(&w.key("snippet")).unwrap();
-    s
+    }
 }
 
 fn chat(w: &World) -> Listing {
@@ -540,7 +538,7 @@ async fn owner(w: World) -> turmoil::Result {
     let media_id = w
         .wait("m's media listing", 120, || w.listing("media"))
         .await;
-    let s = snippet(&w);
+    let s = snippet();
     w.wait("o's view of the snippet", 60, || {
         h.shows(media_id, &s).then_some(())
     })
@@ -715,8 +713,10 @@ async fn member(w: World) -> turmoil::Result {
         .unwrap();
     let t = h.transfers.add(swarm, &swarm_id, Vec::new());
     assert!(h.transfers.publish(t, net));
-    let s = snippet(&w);
-    h.directory.push_snippet(&swarm_id, s.clone()).unwrap();
+    let s = snippet();
+    let signer = Signer::new(&w.key("media")).unwrap();
+    let signed = SignedSnippet::sign(&signer, &s, h.clock.now());
+    h.directory.push_snippet(&swarm_id, signed).unwrap();
     let media = Listing {
         content: Some(Content::Media(Media {
             mime_type: "video/mp4".into(),

@@ -17,7 +17,6 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use strims_crypto::SignableMessage;
 use strims_dao::Table;
 use strims_dao::schema::network::Networks;
 use strims_kv::MemoryKv;
@@ -383,16 +382,22 @@ fn the_snippet_is_signed_with_the_capture_key() {
             }
         };
         wait_for(10, "the snippet", shown("first")).await;
-        let s = media(&b, 10).remove(0).2.unwrap();
-        assert_eq!(s.key, swarm.as_bytes());
-        s.verify_message().unwrap();
+        let (_, m, s) = media(&b, 10).remove(0);
+        assert_eq!(Uri::parse(&m.swarm_uri).unwrap().id, swarm);
+        let s = s.unwrap();
         assert_eq!((s.description.as_str(), s.live), ("desc", true));
+        // the server shows only snippets the swarm's key signed
+        let server = || a.directory.metrics(&net.public).unwrap().server.unwrap();
+        assert_eq!(server().snippets_unverified, 0, "{:?}", server());
 
         ua.update(&id, "second").await.unwrap();
         wait_for(10, "the update", shown("second")).await;
-        let s = media(&b, 10).remove(0).2.unwrap();
-        s.verify_message().unwrap();
-        assert_eq!(s.key, swarm.as_bytes());
+        assert_eq!(
+            (server().snippets_shown, server().snippets_unverified),
+            (2, 0),
+            "{:?}",
+            server()
+        );
 
         let long = "x".repeat(9 * 1024);
         assert_eq!(refusal(ua.update(&id, &long).await), "snippet too large");

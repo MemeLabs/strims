@@ -14,8 +14,8 @@ use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, Domain, Error as CryptoError, SignableMessage, Signer, certificate_body,
-    generate_key, host_certificate, key_from_seed, new_certificate_request,
+    DEFAULT_CERT_TTL, Domain, Error as CryptoError, Signer, certificate_body, generate_key,
+    host_certificate, key_from_seed, new_certificate_request,
     sign_certificate_request_with_network, verify_certificate,
 };
 use strims_kademlia::ID;
@@ -30,17 +30,20 @@ use strims_proto::network::v1::directory::server_config::integrations::{
 };
 use strims_proto::network::v1::directory::{
     Event, EventBroadcast, Listing, ListingModeration, ListingQuery, ListingSnippet,
-    ListingSnippetDelta, ListingSnippetImage, ServerConfig, UserModeration,
+    ListingSnippetImage, ServerConfig, SignedListingSnippet, SnippetSubscribeResponse,
+    UserModeration,
 };
 use strims_proto::types::{Image, KeyUsage};
 
 use crate::embed::EmbedService;
 use crate::server::{
-    LoadId, MAX_BROADCAST_RECORD, MAX_DELTAS_PER_MINUTE, MAX_UNVERIFIED, MIN_EMBED_LOAD_SPACING,
+    LoadId, MAX_BROADCAST_RECORD, MAX_RESPONSES_PER_MINUTE, MAX_UNVERIFIED, MIN_EMBED_LOAD_SPACING,
     MIN_SNIPPET_BACKOFF, REFRESH_BYTES_PER_TICK,
 };
-use crate::snippet::{MAX_TEXT_BYTES, diff, split};
-use crate::{Caller, DirectoryError, Limits, Server, ServerAction, SubId, Tunables};
+use crate::snippet::{Feed, MAX_IMAGE_BYTES, MAX_TEXT_BYTES, SignedSnippet};
+use crate::{
+    Caller, DirectoryError, Limits, Server, ServerAction, SubId, Tunables, View, ViewLimits,
+};
 
 const T0: Time = Time::from_unix_millis(1_700_000_000_000);
 
@@ -66,8 +69,13 @@ fn chat(n: u8) -> Listing {
     }
 }
 
+/// The key of swarm `n`.
+fn swarm_key(n: u8) -> Signer {
+    Signer::new(&key_from_seed(&[n; 32])).unwrap()
+}
+
 fn swarm(n: u8) -> SwarmId {
-    SwarmId::new(&[n; 32])
+    SwarmId::new(&swarm_key(n).public())
 }
 
 fn media(n: u8) -> Listing {
@@ -477,7 +485,9 @@ fn a_moderation_change_is_broadcast_as_a_listing_change() {
         panic!()
     };
     assert_eq!(c.moderation, Some(m));
-    assert_eq!(c.snippet, Some(ListingSnippet::default()));
+    // a listing without a snippet has the empty one, unsigned
+    assert_eq!(c.snippet, Some(SignedListingSnippet::default()));
+    assert!(c.snippet_images.is_empty());
 }
 
 #[test]
@@ -833,19 +843,18 @@ fn records_pack_events_up_to_the_record_bound() {
     f.publish(&caller(1, 1), chat(1)).unwrap();
     f.publish(&caller(2, 2), media(2)).unwrap();
     let sub = subscribed(&mut f)[0].0;
-    let key = key_from_seed(&[1; 32]);
-    let snippet = signed(
-        ListingSnippet {
+    let snippet = SignedSnippet::sign(
+        &swarm_key(2),
+        &ListingSnippet {
             title: "t".repeat(4000),
             thumbnail: Some(image(30 * 1024)),
-            channel_logo: Some(image(30 * 1024)),
+            channel_logo: Some(image(30 * 1024 - 1)),
             ..Default::default()
         },
-        &key,
+        f.now,
     );
-    for d in split(diff(&ListingSnippet::default(), &snippet)) {
-        f.s.snippet_delta(f.now, sub, &d);
-    }
+    send(&mut f, sub, &mut Feed::default(), &snippet);
+    assert_eq!(f.s.metrics().snippets_shown, 1);
     let records = f.run_until(f.now + Duration::SECOND);
     assert!(
         records
@@ -1082,23 +1091,29 @@ fn image(n: usize) -> ListingSnippetImage {
     }
 }
 
-fn signed(mut s: ListingSnippet, key: &strims_proto::types::Key) -> ListingSnippet {
-    s.sign_message(key).unwrap();
-    s
+/// A snippet with a logo.
+fn snippet(title: &str) -> ListingSnippet {
+    ListingSnippet {
+        title: title.into(),
+        live: true,
+        channel_logo: Some(ListingSnippetImage {
+            source_oneof: Some(SourceOneof::Url("https://x/logo.png".into())),
+        }),
+        ..Default::default()
+    }
 }
 
-fn snippet(title: &str) -> ListingSnippet {
-    signed(
-        ListingSnippet {
-            title: title.into(),
-            live: true,
-            channel_logo: Some(ListingSnippetImage {
-                source_oneof: Some(SourceOneof::Url("https://x/logo.png".into())),
-            }),
-            ..Default::default()
-        },
-        &key_from_seed(&[1; 32]),
-    )
+/// `s` signed at `at` by the key of swarm 5, which `media(5)` lists.
+fn signed(s: &ListingSnippet, at: Time) -> SignedSnippet {
+    SignedSnippet::sign(&swarm_key(5), s, at)
+}
+
+/// A response with an image alone.
+fn image_response(i: &ListingSnippetImage) -> SnippetSubscribeResponse {
+    SnippetSubscribeResponse {
+        snippet: None,
+        image: i.encode_to_vec(),
+    }
 }
 
 /// The Subscribe actions so far: (sub, listing, host, swarm).
@@ -1127,9 +1142,10 @@ fn unsubscribed(actions: &[ServerAction]) -> Vec<SubId> {
         .collect()
 }
 
-fn send(f: &mut Fixture, sub: SubId, from: &ListingSnippet, to: &ListingSnippet) {
-    for d in split(diff(from, to)) {
-        f.s.snippet_delta(f.now, sub, &d);
+/// Sends `s` on subscription `sub` as a stream that sent `feed` does.
+fn send(f: &mut Fixture, sub: SubId, feed: &mut Feed, s: &SignedSnippet) {
+    for r in feed.responses(s) {
+        f.s.snippet_response(f.now, sub, r);
         f.check();
     }
 }
@@ -1153,102 +1169,250 @@ fn a_verified_snippet_is_shown_and_broadcast() {
     f.publish(&caller(1, 1), media(5)).unwrap();
     f.tick();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let a = snippet("a");
-    send(&mut f, sub, &ListingSnippet::default(), &a);
-    assert_eq!(f.s.snippet(1), Some(&a));
+    let mut feed = Feed::default();
+    let a = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut feed, &a);
+    assert_eq!(f.s.snippet(1), Some(snippet("a")));
     let records = f.run_until(f.now + Duration::SECOND);
     assert_eq!(describe(&records), s(&["change 1", "count 1 1/1"]));
     let Some(Body::ListingChange(c)) = &records[0].events[0].body else {
         panic!()
     };
-    assert_eq!(c.snippet.as_ref(), Some(&a));
-    // updates are diffs from what was sent
-    let b = snippet("b");
-    send(&mut f, sub, &a, &b);
-    assert_eq!(f.s.snippet(1), Some(&b));
+    // the event carries the signed snippet as received, with its image
+    assert_eq!(c.snippet.as_ref(), Some(a.envelope()));
+    assert_eq!(c.snippet_images, [a.images()[0].1.clone()]);
+    // a later snippet replaces it
+    let b = signed(&snippet("b"), f.now);
+    send(&mut f, sub, &mut feed, &b);
+    assert_eq!(f.s.snippet(1), Some(snippet("b")));
     assert_eq!(f.s.metrics().snippets_shown, 2);
-    // a delta that changes nothing shows nothing new
-    send(&mut f, sub, &b, &b);
+    // the same snippet again shows nothing new
+    send(&mut f, sub, &mut feed, &b);
     assert_eq!(f.tick(), s(&["change 1", "count 1 1/1"]));
     assert_eq!(f.tick(), Vec::<String>::new());
+    assert_eq!(f.s.metrics().snippets_unverified, 0);
 }
 
 #[test]
-fn a_both_images_snippet_shows_once_its_second_delta_arrives() {
+fn snippet_images_resolve_by_digest() {
+    let mut f = Fixture::new();
+    f.publish(&caller(1, 1), media(5)).unwrap();
+    let (sub, ..) = subscribed(&mut f)[0].clone();
+    let content = ListingSnippet {
+        title: "a".into(),
+        thumbnail: Some(image(100)),
+        channel_logo: Some(image(50)),
+        ..Default::default()
+    };
+    let a = signed(&content, f.now);
+    let r = Feed::default().responses(&a);
+    assert_eq!(r.len(), 2);
+    f.s.snippet_response(f.now, sub, r[0].clone());
+    assert_eq!(f.s.snippet(1), Some(ListingSnippet::default()));
+    f.s.snippet_response(f.now, sub, r[1].clone());
+    assert_eq!(f.s.snippet(1), Some(content));
+    let (_, images) = f.s.signed_snippet(1).unwrap();
+    assert_eq!(images.len(), 2);
+    assert_eq!(f.s.metrics().snippets_unverified, 0);
+
+    // a snippet naming an image the listing holds needs only its body
+    let mut b = a.snippet();
+    b.title = "b".into();
+    b.channel_logo = None;
+    let b = signed(&b, f.now);
+    let body = SnippetSubscribeResponse {
+        snippet: Some(b.envelope().clone()),
+        image: Vec::new(),
+    };
+    f.s.snippet_response(f.now, sub, body);
+    assert_eq!(f.s.snippet(1), Some(b.snippet()));
+    // the image no longer named is dropped
+    let (_, images) = f.s.signed_snippet(1).unwrap();
+    assert_eq!(images, [b.images()[0].1.as_slice()]);
+}
+
+#[test]
+fn a_snippet_naming_an_image_the_server_never_received_is_not_applied() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
     let a = signed(
-        ListingSnippet {
+        &ListingSnippet {
             title: "a".into(),
             thumbnail: Some(image(100)),
             channel_logo: Some(image(50)),
             ..Default::default()
         },
-        &key_from_seed(&[2; 32]),
+        f.now,
     );
-    let parts = split(diff(&ListingSnippet::default(), &a));
-    assert_eq!(parts.len(), 2);
-    f.s.snippet_delta(f.now, sub, &parts[0]);
-    assert_eq!(f.s.snippet(1), Some(&ListingSnippet::default()));
-    f.s.snippet_delta(f.now, sub, &parts[1]);
-    assert_eq!(f.s.snippet(1), Some(&a));
+    let r = Feed::default().responses(&a);
+    f.s.snippet_response(f.now, sub, r[1].clone());
+    f.check();
+    assert_eq!(f.s.snippet(1), Some(ListingSnippet::default()));
     assert_eq!(f.s.metrics().snippets_unverified, 1);
+    assert_eq!(
+        f.tick(),
+        s(&["change 1", "count 1 1/1", "online 1 user1 [1]"])
+    );
+    assert_eq!(f.tick(), Vec::<String>::new());
 }
 
 #[test]
-fn a_snippet_that_fails_verification_is_not_shown() {
+fn at_most_two_pending_images_are_kept() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let mut forged = snippet("a");
-    forged.title = "forged".into();
-    let d = diff(&ListingSnippet::default(), &forged);
+    let images = [image(10), image(11), image(12)];
+    let with = |t: &ListingSnippetImage, l: &ListingSnippetImage| ListingSnippet {
+        thumbnail: Some(t.clone()),
+        channel_logo: Some(l.clone()),
+        ..Default::default()
+    };
+    for i in &images {
+        f.s.snippet_response(f.now, sub, image_response(i));
+    }
+    // the oldest image is gone
+    let first = signed(&with(&images[0], &images[1]), f.now);
+    let body = |s: &SignedSnippet| SnippetSubscribeResponse {
+        snippet: Some(s.envelope().clone()),
+        image: Vec::new(),
+    };
+    f.s.snippet_response(f.now, sub, body(&first));
+    f.check();
+    assert_eq!(f.s.snippet(1), Some(ListingSnippet::default()));
+    assert_eq!(f.s.metrics().snippets_unverified, 1);
+    // the latest two remain
+    let latest = signed(&with(&images[1], &images[2]), f.now);
+    f.s.snippet_response(f.now, sub, body(&latest));
+    f.check();
+    assert_eq!(f.s.snippet(1), Some(with(&images[1], &images[2])));
+    // and moved to the listing: an image sent again waits alone
+    f.s.snippet_response(f.now, sub, image_response(&images[0]));
+    let back = signed(&with(&images[0], &images[2]), f.now);
+    f.s.snippet_response(f.now, sub, body(&back));
+    assert_eq!(f.s.snippet(1), Some(with(&images[0], &images[2])));
+    assert_eq!(f.s.metrics().snippets_shown, 2);
+}
+
+#[test]
+fn a_snippet_signed_by_another_key_is_not_shown() {
+    let mut f = Fixture::new();
+    f.publish(&caller(1, 1), media(5)).unwrap();
+    let (sub, ..) = subscribed(&mut f)[0].clone();
+    let forged = SignedSnippet::sign(&swarm_key(6), &snippet("a"), f.now);
+    let r = Feed::default().responses(&forged);
+    assert_eq!(r.len(), 1);
     for _ in 0..MAX_UNVERIFIED {
-        f.s.snippet_delta(f.now, sub, &d);
+        f.s.snippet_response(f.now, sub, r[0].clone());
         f.check();
     }
-    assert_eq!(f.s.snippet(1), Some(&ListingSnippet::default()));
+    assert_eq!(f.s.snippet(1), Some(ListingSnippet::default()));
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
     assert_eq!(f.s.metrics().snippets_rejected, 1);
-    // deltas of the ended subscription are ignored
-    send(&mut f, sub, &ListingSnippet::default(), &snippet("a"));
-    assert_eq!(f.s.snippet(1), Some(&ListingSnippet::default()));
-    assert_eq!(f.s.metrics().stale_deltas, 1);
-    // the retry starts from an empty next snippet
+    // responses of the ended subscription are ignored
+    let genuine = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut Feed::default(), &genuine);
+    assert_eq!(f.s.snippet(1), Some(ListingSnippet::default()));
+    assert_eq!(f.s.metrics().stale_responses, 1);
+    // the retry starts afresh
     f.advance(MIN_SNIPPET_BACKOFF.as_secs() * 5 / 4 + 1);
     let (retry, ..) = subscribed(&mut f)[0].clone();
     assert_ne!(retry, sub);
-    send(&mut f, retry, &ListingSnippet::default(), &snippet("a"));
-    assert_eq!(f.s.snippet(1), Some(&snippet("a")));
+    let genuine = signed(&snippet("a"), f.now);
+    send(&mut f, retry, &mut Feed::default(), &genuine);
+    assert_eq!(f.s.snippet(1), Some(snippet("a")));
 }
 
 #[test]
-fn a_lost_delta_is_recovered_by_subscribing_again() {
+fn a_stale_snippet_is_ignored() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let a = snippet("a");
-    let b = snippet("b");
-    let mut c = b.clone();
-    c.description = "c".into();
-    let c = signed(c, &key_from_seed(&[1; 32]));
-    send(&mut f, sub, &ListingSnippet::default(), &a);
-    // a→b is lost; b→c doesn't verify against a
-    send(&mut f, sub, &b, &c);
-    assert_eq!(f.s.snippet(1), Some(&a));
-    // no verified delta within the snippet timeout ends the subscription
+    let mut feed = Feed::default();
+    let older = signed(&snippet("older"), f.now);
+    let newer = signed(&snippet("newer"), f.now + Duration::SECOND);
+    send(&mut f, sub, &mut feed, &newer);
+    f.tick();
+    send(&mut f, sub, &mut feed, &older);
+    assert_eq!(f.s.snippet(1), Some(snippet("newer")));
+    assert_eq!(f.s.metrics().snippets_stale, 1);
+    assert_eq!(f.s.metrics().snippets_unverified, 0);
+    assert_eq!(f.tick(), Vec::<String>::new());
+    // one signed at the same time applies
+    let same = signed(&snippet("same"), Time::from_unix_nanos(newer.timestamp()));
+    send(&mut f, sub, &mut feed, &same);
+    assert_eq!(f.s.snippet(1), Some(snippet("same")));
+}
+
+#[test]
+fn a_viewer_gets_snippet_fields_the_server_does_not_know() {
+    let mut f = Fixture::new();
+    f.publish(&caller(1, 1), media(5)).unwrap();
+    let (sub, ..) = subscribed(&mut f)[0].clone();
+    let a = signed(&snippet("a"), f.now);
+    // field 15, bytes "future": a field this node doesn't know
+    let mut body = a.envelope().body.clone();
+    body.extend_from_slice(&[0x7a, 6]);
+    body.extend_from_slice(b"future");
+    let envelope = SignedListingSnippet {
+        signature: swarm_key(5)
+            .sign(Domain::DirectoryListingSnippet, &[&body])
+            .to_vec(),
+        body,
+    };
+    f.s.snippet_response(
+        f.now,
+        sub,
+        SnippetSubscribeResponse {
+            snippet: Some(envelope.clone()),
+            image: a.images()[0].1.clone(),
+        },
+    );
+    assert_eq!(f.s.snippet(1), Some(snippet("a")));
+    let records = f.run_until(f.now + Duration::SECOND);
+    // the record as the event swarm carries it
+    let record = EventBroadcast::decode(records[0].encode_to_vec().as_slice()).unwrap();
+    let Some(Body::ListingChange(c)) = &record.events[0].body else {
+        panic!()
+    };
+    assert_eq!(c.snippet.as_ref(), Some(&envelope));
+    assert!(c.snippet.as_ref().unwrap().body.ends_with(b"future"));
+    let mut v = View::new(ViewLimits::default());
+    v.handle_broadcast(&record);
+    assert_eq!(v.listing(1).unwrap().snippet, Some(snippet("a")));
+}
+
+#[test]
+fn a_lost_image_is_recovered_by_subscribing_again() {
+    let mut f = Fixture::new();
+    f.publish(&caller(1, 1), media(5)).unwrap();
+    let (sub, ..) = subscribed(&mut f)[0].clone();
+    let mut feed = Feed::default();
+    let a = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut feed, &a);
+    let with_thumbnail = |title| ListingSnippet {
+        thumbnail: Some(image(10)),
+        ..snippet(title)
+    };
+    // b's response, with its thumbnail, is lost; c names the thumbnail
+    let b = signed(&with_thumbnail("b"), f.now);
+    let _lost = feed.responses(&b);
+    let c = signed(&with_thumbnail("c"), f.now);
+    send(&mut f, sub, &mut feed, &c);
+    assert_eq!(f.s.snippet(1), Some(snippet("a")));
+    assert_eq!(f.s.metrics().snippets_unverified, 1);
+    // no verified snippet within the snippet timeout ends the subscription
     f.advance(31);
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
     assert_eq!(f.s.metrics().snippet_timeouts, 1);
     f.advance(40);
     let (retry, ..) = subscribed(&mut f)[0].clone();
-    send(&mut f, retry, &ListingSnippet::default(), &c);
-    assert_eq!(f.s.snippet(1), Some(&c));
+    send(&mut f, retry, &mut Feed::default(), &c);
+    assert_eq!(f.s.snippet(1), Some(with_thumbnail("c")));
 }
 
 #[test]
-fn a_subscription_without_a_verified_delta_times_out_and_backs_off() {
+fn a_subscription_without_a_verified_snippet_times_out_and_backs_off() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let mut subs = vec![subscribed(&mut f)[0].0];
@@ -1299,36 +1463,40 @@ fn an_ended_subscription_is_retried_while_the_host_publishes() {
 }
 
 #[test]
-fn a_delta_flood_ends_the_subscription() {
+fn a_response_flood_ends_the_subscription() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let a = snippet("a");
-    send(&mut f, sub, &ListingSnippet::default(), &a);
-    for _ in 1..MAX_DELTAS_PER_MINUTE {
-        f.s.snippet_delta(f.now, sub, &diff(&a, &a));
+    let mut feed = Feed::default();
+    let a = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut feed, &a);
+    let again = feed.responses(&a).remove(0);
+    for _ in 1..MAX_RESPONSES_PER_MINUTE {
+        f.s.snippet_response(f.now, sub, again.clone());
     }
     f.check();
     assert!(unsubscribed(&f.take_actions()).is_empty());
-    f.s.snippet_delta(f.now, sub, &diff(&a, &a));
+    f.s.snippet_response(f.now, sub, again);
     f.check();
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
     assert_eq!(f.s.metrics().snippet_floods, 1);
     // the shown snippet stays
-    assert_eq!(f.s.snippet(1), Some(&a));
+    assert_eq!(f.s.snippet(1), Some(snippet("a")));
 }
 
 #[test]
-fn deltas_spread_over_minutes_are_not_a_flood() {
+fn responses_spread_over_minutes_are_not_a_flood() {
     let mut f = Fixture::new();
     let c = caller(1, 1);
     f.publish(&c, media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let a = snippet("a");
-    send(&mut f, sub, &ListingSnippet::default(), &a);
+    let mut feed = Feed::default();
+    let a = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut feed, &a);
+    let again = feed.responses(&a).remove(0);
     for _ in 0..5 {
-        for _ in 0..MAX_DELTAS_PER_MINUTE - 1 {
-            f.s.snippet_delta(f.now, sub, &diff(&a, &a));
+        for _ in 0..MAX_RESPONSES_PER_MINUTE - 1 {
+            f.s.snippet_response(f.now, sub, again.clone());
         }
         f.advance(61);
         f.ping(&c).unwrap();
@@ -1337,18 +1505,32 @@ fn deltas_spread_over_minutes_are_not_a_flood() {
 }
 
 #[test]
-fn an_oversized_snippet_ends_the_subscription() {
+fn an_oversized_snippet_or_image_ends_the_subscription() {
     let mut f = Fixture::new();
     f.publish(&caller(1, 1), media(5)).unwrap();
     let (sub, ..) = subscribed(&mut f)[0].clone();
-    let d = ListingSnippetDelta {
-        description: Some("d".repeat(crate::snippet::MAX_TEXT_BYTES + 1)),
+    let big = ListingSnippet {
+        description: "d".repeat(MAX_TEXT_BYTES + 1),
         ..Default::default()
     };
-    f.s.snippet_delta(f.now, sub, &d);
-    f.check();
+    let big = signed(&big, f.now);
+    send(&mut f, sub, &mut Feed::default(), &big);
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
     assert_eq!(f.s.metrics().snippets_oversized, 1);
+
+    f.advance(MIN_SNIPPET_BACKOFF.as_secs() * 5 / 4 + 1);
+    let (retry, ..) = subscribed(&mut f)[0].clone();
+    f.s.snippet_response(
+        f.now,
+        retry,
+        SnippetSubscribeResponse {
+            snippet: None,
+            image: vec![0; MAX_IMAGE_BYTES + 1],
+        },
+    );
+    f.check();
+    assert_eq!(unsubscribed(&f.take_actions()), vec![retry]);
+    assert_eq!(f.s.metrics().snippets_oversized, 2);
 }
 
 #[test]
@@ -1361,7 +1543,8 @@ fn a_source_that_stops_publishing_moves_to_the_newest_publisher() {
     f.publish(&c, media(5)).unwrap();
     let (first, ..) = subscribed(&mut f)[0].clone();
     let shown = snippet("a");
-    send(&mut f, first, &ListingSnippet::default(), &shown);
+    let a_signed = signed(&shown, f.now);
+    send(&mut f, first, &mut Feed::default(), &a_signed);
     f.unpublish(&a, 1).unwrap();
     let actions = f.take_actions();
     assert_eq!(unsubscribed(&actions), vec![first]);
@@ -1370,7 +1553,7 @@ fn a_source_that_stops_publishing_moves_to_the_newest_publisher() {
     assert_eq!(moved.len(), 1);
     assert_eq!(moved[0].2, c.host);
     // the shown snippet stays until the new source verifies
-    assert_eq!(f.s.snippet(1), Some(&shown));
+    assert_eq!(f.s.snippet(1), Some(shown));
     // a source that expires moves too
     f.unpublish(&c, 1).unwrap();
     assert_eq!(subscribed(&mut f)[0].2, b.host);
@@ -1409,9 +1592,9 @@ fn removing_a_listing_ends_its_subscription() {
     );
     f.tick();
     assert_eq!(unsubscribed(&f.take_actions()), vec![sub]);
-    f.s.snippet_delta(f.now, sub, &diff(&ListingSnippet::default(), &snippet("a")));
-    f.check();
-    assert_eq!(f.s.metrics().stale_deltas, 1);
+    let a = signed(&snippet("a"), f.now);
+    send(&mut f, sub, &mut Feed::default(), &a);
+    assert_eq!(f.s.metrics().stale_responses, 1);
 }
 
 #[test]
@@ -1611,15 +1794,27 @@ fn a_loaded_snippet_is_applied_only_when_it_changes() {
         AngelThump,
         &[("a", loaded("t")), ("other", loaded("x"))],
     );
-    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
-    assert_eq!(f.tick(), s(&["change 1", "count 1 1/1"]));
+    assert_eq!(f.s.snippet(id), Some(loaded("t")));
+    let next = f.s.poll_timeout().unwrap().max(f.now);
+    let records = f.run_until(next);
+    assert_eq!(describe(&records), s(&["change 1", "count 1 1/1"]));
+    // the server's own snippets go unsigned
+    let Some(Body::ListingChange(c)) = &records[0].events[0].body else {
+        panic!()
+    };
+    let unsigned = c.snippet.as_ref().unwrap();
+    assert!(unsigned.signature.is_empty());
+    assert_eq!(
+        crate::snippet::decode(unsigned, &c.snippet_images),
+        Ok(loaded("t"))
+    );
     load_batch(&mut f, load, AngelThump, &[("a", loaded("t"))]);
     assert_eq!(f.tick(), Vec::<String>::new());
     assert_eq!(f.s.metrics().embed_snippets_shown, 1);
 
     let oversized = loaded(&"x".repeat(MAX_TEXT_BYTES + 1));
     load_batch(&mut f, load, AngelThump, &[("a", oversized)]);
-    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
+    assert_eq!(f.s.snippet(id), Some(loaded("t")));
     assert_eq!(f.s.metrics().embed_snippets_rejected, 1);
 
     // batches of another service, or of a load that ended, change nothing
@@ -1627,7 +1822,7 @@ fn a_loaded_snippet_is_applied_only_when_it_changes() {
     load_batch(&mut f, load, TwitchStream, &[("a", loaded("y"))]);
     end_load(&mut f, load);
     load_batch(&mut f, load, AngelThump, &[("a", loaded("late"))]);
-    assert_eq!(f.s.snippet(id), Some(&loaded("t")));
+    assert_eq!(f.s.snippet(id), Some(loaded("t")));
     assert_eq!(f.s.metrics().stale_embed_batches, 2);
     assert_eq!(f.tick(), Vec::<String>::new());
 }
@@ -1651,8 +1846,8 @@ fn a_failed_batch_keeps_the_snippet() {
     let load = started(&mut f);
     load_batch(&mut f, load, YouTube, &[]);
     end_load(&mut f, load);
-    assert_eq!(f.s.snippet(at), Some(&loaded("a1")));
-    assert_eq!(f.s.snippet(yt), Some(&loaded("y1")));
+    assert_eq!(f.s.snippet(at), Some(loaded("a1")));
+    assert_eq!(f.s.snippet(yt), Some(loaded("y1")));
     assert_eq!(f.tick(), Vec::<String>::new());
 }
 

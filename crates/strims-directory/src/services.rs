@@ -40,8 +40,8 @@
 //! salt is published on the network, the hub holds its snippet, and the
 //! subscribers number fewer than [`MAX_SNIPPET_SUBSCRIBERS`] in all and
 //! [`MAX_SUBSCRIBERS_PER_SWARM`] for the swarm. Its stream sends the
-//! snippet's deltas from the last snippet it sent, starting from the empty
-//! snippet, and ends when the snippet is deleted.
+//! signed snippet whenever it changes, after the images the last one it
+//! sent didn't name ([`Feed`]), and ends when the snippet is deleted.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
@@ -65,11 +65,11 @@ use strims_ppspp::{SwarmId, WriterOptions};
 use strims_proto::network::v1::directory::{
     AssetBundle, DirectoryClient, DirectoryService, DirectorySnippetClient,
     DirectorySnippetService, JoinRequest, JoinResponse, Listing, ListingModeration, ListingQuery,
-    ListingRecord, ListingSnippet, ListingSnippetDelta, ModerateListingRequest,
-    ModerateListingResponse, ModerateUserRequest, ModerateUserResponse, PartRequest, PartResponse,
-    PingRequest, PingResponse, PublishRequest, PublishResponse, SnippetSubscribeRequest,
-    SnippetSubscribeResponse, UnpublishRequest, UnpublishResponse, UserModeration, UserRecord,
-    register_directory_service, register_directory_snippet_service,
+    ListingRecord, ModerateListingRequest, ModerateListingResponse, ModerateUserRequest,
+    ModerateUserResponse, PartRequest, PartResponse, PingRequest, PingResponse, PublishRequest,
+    PublishResponse, SnippetSubscribeRequest, SnippetSubscribeResponse, UnpublishRequest,
+    UnpublishResponse, UserModeration, UserRecord, register_directory_service,
+    register_directory_snippet_service,
 };
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::vpn::{self, VpnClient, VpnConnection};
@@ -83,7 +83,7 @@ use crate::host::Host;
 use crate::moderation::{is_admin, is_moderator, merge_listing, merge_user};
 use crate::server::{Caller, LoadId, Server, ServerAction, SubId};
 use crate::snippet::{
-    LocalSnippets, MAX_SNIPPET_SUBSCRIBERS, MAX_SUBSCRIBERS_PER_SWARM, diff, is_empty, split,
+    Feed, LocalSnippets, MAX_SNIPPET_SUBSCRIBERS, MAX_SUBSCRIBERS_PER_SWARM, SignedSnippet,
 };
 use crate::{
     ADDRESS_SALT, ASSET_FRAME, ASSET_SALT, DirectoryError, EVENT_FRAME, EVENT_SALT,
@@ -1106,7 +1106,7 @@ fn end_load<K: Kv, H: Host, T: Timer>(s: &Shared<K, H, T>, r: &Runner<H>) {
 }
 
 /// Starts the server's snippet subscription `sub` to `host`'s snippet of
-/// `swarm_id`, feeding its deltas and its end to the server.
+/// `swarm_id`, feeding its responses and its end to the server.
 fn subscribe<K: Kv, H: Host, T: Timer>(
     s: &Rc<Shared<K, H, T>>,
     r: &Rc<Runner<H>>,
@@ -1130,9 +1130,7 @@ fn subscribe<K: Kv, H: Host, T: Timer>(
                 let (Some(s), Some(r)) = (shared.upgrade(), runner.upgrade()) else {
                     return;
                 };
-                if let Some(d) = res.snippet_delta {
-                    s.with_server(&r, |srv, now| srv.snippet_delta(now, sub, &d));
-                }
+                s.with_server(&r, |srv, now| srv.snippet_response(now, sub, res));
             }
         }
         if let (Some(s), Some(r)) = (shared.upgrade(), runner.upgrade()) {
@@ -1227,7 +1225,7 @@ pub(crate) struct SnippetHub {
 }
 
 impl SnippetHub {
-    pub(crate) fn push(&self, id: &SwarmId, snippet: ListingSnippet) -> Result<(), SnippetError> {
+    pub(crate) fn push(&self, id: &SwarmId, snippet: SignedSnippet) -> Result<(), SnippetError> {
         let res = self.snippets.borrow_mut().push(id.clone(), snippet);
         res?;
         self.wake(id);
@@ -1274,7 +1272,7 @@ impl SnippetHub {
             hub: self.clone(),
             slot,
             id,
-            sent: ListingSnippet::default(),
+            feed: Feed::default(),
             version: 0,
             pending: VecDeque::new(),
         })
@@ -1285,16 +1283,16 @@ fn snippet_not_found() -> RpcError {
     RpcError::new(0, "snippet not found")
 }
 
-/// A subscriber's deltas of one snippet; see the [module docs](self).
+/// A subscriber's stream of one snippet; see the [module docs](self).
 struct SnippetStream {
     hub: Rc<SnippetHub>,
     slot: u64,
     id: SwarmId,
-    /// The snippet the subscriber has, and the version it is of.
-    sent: ListingSnippet,
+    /// What the subscriber was sent, and the version it is of.
+    feed: Feed,
     version: u64,
-    /// Deltas to send. Bound: one split delta.
-    pending: VecDeque<ListingSnippetDelta>,
+    /// Responses to send. Bound: one snippet's, at most two.
+    pending: VecDeque<SnippetSubscribeResponse>,
 }
 
 impl Stream for SnippetStream {
@@ -1303,27 +1301,17 @@ impl Stream for SnippetStream {
     fn poll_next(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         loop {
-            if let Some(d) = this.pending.pop_front() {
-                return Poll::Ready(Some(Ok(SnippetSubscribeResponse {
-                    snippet_delta: Some(d),
-                })));
+            if let Some(r) = this.pending.pop_front() {
+                return Poll::Ready(Some(Ok(r)));
             }
-            let next = {
-                let snippets = this.hub.snippets.borrow();
-                match snippets.get(&this.id) {
-                    None => return Poll::Ready(None),
-                    Some((s, v)) if v != this.version => Some((s.clone(), v)),
-                    Some(_) => None,
+            let snippets = this.hub.snippets.borrow();
+            match snippets.get(&this.id) {
+                None => return Poll::Ready(None),
+                Some((s, v)) if v != this.version => {
+                    this.pending.extend(this.feed.responses(s));
+                    this.version = v;
                 }
-            };
-            let Some((current, version)) = next else {
-                break;
-            };
-            let d = diff(&this.sent, &current);
-            this.sent = current;
-            this.version = version;
-            if !is_empty(&d) {
-                this.pending.extend(split(d));
+                Some(_) => break,
             }
         }
         let prev = this

@@ -8,7 +8,7 @@
 //! - [`signed`]: signed objects that travel as an encoded body and its
 //!   signature.
 //! - [`cert`]: certificate requests, issuing and chain verification.
-//! - [`signable`]: signatures and checksums over a message's stable encoding.
+//! - [`crc32_message`]: checksums over a message's stable encoding.
 //! - [`curve25519`]: ed25519 to X25519 conversion and the X25519 key
 //!   agreements of vnic links and vpn message ciphers.
 //!
@@ -24,7 +24,6 @@ pub mod curve25519;
 mod field;
 pub mod key;
 pub mod sign;
-pub mod signable;
 pub mod signed;
 
 pub use cert::{
@@ -34,6 +33,7 @@ pub use cert::{
     sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
     verify_certificate_request,
 };
+pub use crc32::crc32_message;
 pub use curve25519::{
     X25519_SIZE, aes_link_key, key_to_curve25519, message_cipher_key, private_key_to_curve25519,
     public_key_to_curve25519, x25519,
@@ -43,7 +43,6 @@ pub use key::{
     generate_key, key_from_seed, sign, verify,
 };
 pub use sign::{Domain, Signer, Verifier};
-pub use signable::{SignableMessage, crc32_message};
 pub use signed::{Envelope, SelfKeyed, SignedBody, Verified};
 
 /// Errors from key, certificate and message operations.
@@ -81,7 +80,7 @@ pub enum Error {
     /// `now` is after a certificate's validity period.
     #[error("not after limit exceeded")]
     NotAfterRange,
-    /// A signed message's signature doesn't verify against its key field.
+    /// A signed object's signature doesn't verify against its signer's key.
     #[error("invalid signature")]
     InvalidMessageSignature,
     /// A signed object's body doesn't decode.

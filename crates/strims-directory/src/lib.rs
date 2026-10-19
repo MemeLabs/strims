@@ -34,10 +34,12 @@
 //!   14 (the vnic snippet port, outside the hash table). A subscription to
 //!   a swarm is admitted while the swarm's transfer under the empty salt is
 //!   published on that network and the member holds a snippet for it. The
-//!   stream sends the whole snippet as deltas from the empty snippet, then
-//!   a delta per change, each split by [`snippet::split`]. The server
-//!   subscribes to one publisher of each media listing and shows the
-//!   snippet once its signature verifies.
+//!   stream sends the snippet signed by the swarm's key, and again on each
+//!   change, each time after the images the last one sent didn't name
+//!   ([`snippet`]). The server subscribes to one publisher of each media
+//!   listing and shows the snippet once it verifies against the swarm id.
+//!   Events carry the signed snippet as the server received it, with its
+//!   images.
 //! - **Events.** The event swarm carries `EventBroadcast` records, the
 //!   asset swarm one `AssetBundle` record, rewritten from the swarm's start
 //!   whenever it changes. Records are chunkstream records (a uvarint
@@ -143,7 +145,7 @@ pub use frontend::{DirectoryFrontend, bind_frontend};
 pub use host::{Host, Net};
 pub use keeper::{KeeperConfig, KeeperMetrics, ListingKeeper};
 pub use server::{Caller, LoadId, Server, ServerAction, ServerMetrics, SubId, Tunables};
-pub use snippet::LocalSnippets;
+pub use snippet::{LocalSnippets, SignedSnippet};
 pub use swarms::{
     ADDRESS_SALT, ASSET_FRAME, ASSET_SALT, EVENT_FRAME, EVENT_SALT, asset_options, event_options,
 };
@@ -371,12 +373,19 @@ pub enum SnippetError {
     /// The publisher holds [`snippet::MAX_LOCAL_SNIPPETS`] snippets.
     #[error("too many snippets")]
     Full,
-    /// An image, the text or the whole snippet is over its bound.
+    /// An image, the text, the body or the whole snippet is over its bound.
     #[error("snippet too large")]
     TooLarge,
-    /// The signature doesn't verify against the snippet's key.
+    /// The signature doesn't verify against the swarm's key.
     #[error("invalid snippet signature")]
     InvalidSignature,
+    /// The body or a named image doesn't decode, the body's content holds
+    /// an image, or a digest isn't 32 bytes.
+    #[error("malformed snippet")]
+    Malformed,
+    /// The body names an image that isn't on hand.
+    #[error("snippet image missing")]
+    MissingImage,
 }
 
 #[cfg(test)]

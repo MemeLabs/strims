@@ -143,49 +143,40 @@ message ListingSnippet {
   uint32 video_width = 12;
   fixed32 theme_color = 13;
   int64 start_time = 14;
-
-  bytes key = 10001;
-  bytes signature = 10002;
 }
 
-message ListingSnippetDelta {
-  message Tags {
-    repeated string tags = 1001;
-  }
+// What a listing snippet states: its content without images, which travel
+// apart, named by digest. An empty digest names no image.
+message ListingSnippetBody {
+  // The content, with both images unset.
+  ListingSnippet snippet = 1;
+  // The SHA-256 of the image's encoded ListingSnippetImage.
+  bytes thumbnail_digest = 2;
+  bytes channel_logo_digest = 3;
+  // Unix nanoseconds when the publisher signed it.
+  int64 timestamp = 4;
+}
 
-  google.protobuf.StringValue title = 1;
-  google.protobuf.StringValue description = 2;
-  google.protobuf.StringValue category = 3;
-  google.protobuf.StringValue channel_name = 4;
-  google.protobuf.UInt64Value user_count = 5;
-  google.protobuf.BoolValue live = 6;
-  google.protobuf.BoolValue is_mature = 7;
-  google.protobuf.BytesValue key = 8;
-  google.protobuf.BytesValue signature = 9;
-  google.protobuf.UInt32Value video_height = 10;
-  google.protobuf.UInt32Value video_width = 11;
-  google.protobuf.UInt32Value theme_color = 12;
-  google.protobuf.Int64Value start_time = 13;
-
-  oneof tags_oneof {
-    Tags tags = 1001;
-  }
-
-  oneof thumbnail_oneof {
-    ListingSnippetImage thumbnail = 2001;
-  }
-
-  oneof channel_logo_oneof {
-    ListingSnippetImage  channel_logo = 3001;
-  }
+// A ListingSnippetBody's encoding, signed in the directory-listing-snippet
+// domain by the listing's media swarm key: the key whose public half is
+// the swarm id.
+message SignedListingSnippet {
+  bytes body = 1;
+  bytes signature = 2;
 }
 
 message Event {
   message ListingChange {
     uint64 id = 1;
     Listing listing = 2;
-    ListingSnippet snippet = 3;
+    // A media listing's snippet, as its publisher signed it. The snippets
+    // the server makes itself, an embed's or the empty one of a listing
+    // that has none, carry no signature.
+    SignedListingSnippet snippet = 3;
     ListingModeration moderation = 4;
+    // The encoded ListingSnippetImages the snippet's digests name, in any
+    // order.
+    repeated bytes snippet_images = 5;
   }
 
   message Unpublish {
@@ -520,8 +511,13 @@ message SnippetSubscribeRequest {
   bytes swarm_id = 1;
 }
 
+// A snippet stream's response: a signed snippet, an image, or both. Each
+// image a snippet names that the subscriber lacks comes before the
+// snippet, the last one in the snippet's response.
 message SnippetSubscribeResponse {
-  ListingSnippetDelta snippet_delta = 1;
+  SignedListingSnippet snippet = 1;
+  // An encoded ListingSnippetImage.
+  bytes image = 2;
 }
 
 service DirectorySnippet {

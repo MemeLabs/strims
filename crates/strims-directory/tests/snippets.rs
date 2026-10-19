@@ -3,7 +3,7 @@
 
 //! Media listing snippets on fake nodes (see `strims_testworld`):
 //! publishers serve them on the snippet port, the server subscribes to
-//! them, and views show those that verify.
+//! them, and views show those that verify against their swarm.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,17 +15,20 @@
 use std::rc::Rc;
 
 use futures_util::StreamExt;
-use strims_crypto::{SignableMessage, key_from_seed};
+use strims_base::time::Time;
+use strims_crypto::{Signer, key_from_seed};
+use strims_directory::SignedSnippet;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, UriOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
 use strims_proto::network::v1::directory::{
-    DirectorySnippetService, Listing, ListingSnippet, ListingSnippetDelta, ListingSnippetImage,
-    SnippetSubscribeRequest, SnippetSubscribeResponse, register_directory_snippet_service,
+    DirectorySnippetService, Listing, ListingSnippet, ListingSnippetImage, SnippetSubscribeRequest,
+    SnippetSubscribeResponse, register_directory_snippet_service,
 };
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_proto::types::{Image, ImageType};
 use strims_rpc::Router;
+use strims_rpc::Timer;
 use strims_rpc::vpn::{self, VpnConfig};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, TransferId};
@@ -52,7 +55,7 @@ fn image(n: u8) -> ListingSnippetImage {
 }
 
 fn snippet(title: &str) -> ListingSnippet {
-    let mut s = ListingSnippet {
+    ListingSnippet {
         title: title.into(),
         live: true,
         channel_name: "chan".into(),
@@ -60,15 +63,23 @@ fn snippet(title: &str) -> ListingSnippet {
             source_oneof: Some(SourceOneof::Url("https://x/logo.png".into())),
         }),
         ..Default::default()
-    };
-    s.sign_message(&key_from_seed(&[9; 32])).unwrap();
-    s
+    }
+}
+
+/// The key of swarm `n`.
+fn swarm_key(n: u8) -> Signer {
+    Signer::new(&key_from_seed(&[n; 32])).unwrap()
+}
+
+/// `s` signed now on `node` by the key of swarm `n`.
+fn signed(node: &Node, n: u8, s: &ListingSnippet) -> SignedSnippet {
+    SignedSnippet::sign(&swarm_key(n), s, node.timer.now())
 }
 
 /// A swarm `n` on `node`, with its transfer under the empty salt,
 /// published on the network `key` when `publish` is set.
 async fn media_swarm(node: &Node, key: &[u8], n: u8, publish: bool) -> (SwarmId, TransferId) {
-    let id = SwarmId::new(&[n; 32]);
+    let id = SwarmId::new(&swarm_key(n).public());
     let swarm = node
         .host
         .add_swarm(id.clone(), SwarmOptions::default_options())
@@ -110,7 +121,10 @@ fn a_published_media_listing_takes_its_publishers_snippet() {
         let key = key.public;
         let (swarm, _) = media_swarm(&alice, &key, 7, true).await;
         let s = snippet("live now");
-        alice.directory.push_snippet(&swarm, s.clone()).unwrap();
+        alice
+            .directory
+            .push_snippet(&swarm, signed(&alice, 7, &s))
+            .unwrap();
         let id = alice.directory.publish(&key, media(&swarm)).await.unwrap();
 
         let nodes = [&owner, &alice, &bob];
@@ -123,7 +137,10 @@ fn a_published_media_listing_takes_its_publishers_snippet() {
 
         let (own, _) = media_swarm(&owner, &key, 8, true).await;
         let o = snippet("the owner's");
-        owner.directory.push_snippet(&own, o.clone()).unwrap();
+        owner
+            .directory
+            .push_snippet(&own, signed(&owner, 8, &o))
+            .unwrap();
         let own_id = owner.directory.publish(&key, media(&own)).await.unwrap();
         wait_for(10, "the owner's snippet", || {
             shown(&nodes, 30, own_id)
@@ -136,7 +153,7 @@ fn a_published_media_listing_takes_its_publishers_snippet() {
     });
 }
 
-/// A publisher's later snippets reach the views as deltas over the same
+/// A publisher's later snippets reach the views over the same
 /// subscription, both images included.
 #[test]
 fn snippet_updates_reach_views() {
@@ -150,7 +167,7 @@ fn snippet_updates_reach_views() {
         let (swarm, _) = media_swarm(&alice, &key, 7, true).await;
         alice
             .directory
-            .push_snippet(&swarm, snippet("first"))
+            .push_snippet(&swarm, signed(&alice, 7, &snippet("first")))
             .unwrap();
         let id = alice.directory.publish(&key, media(&swarm)).await.unwrap();
         let nodes = [&owner, &bob];
@@ -161,15 +178,17 @@ fn snippet_updates_reach_views() {
         })
         .await;
 
-        let mut next = ListingSnippet {
+        let next = ListingSnippet {
             title: "second".into(),
             thumbnail: Some(image(1)),
             channel_logo: Some(image(2)),
             user_count: 5,
             ..Default::default()
         };
-        next.sign_message(&key_from_seed(&[9; 32])).unwrap();
-        alice.directory.push_snippet(&swarm, next.clone()).unwrap();
+        alice
+            .directory
+            .push_snippet(&swarm, signed(&alice, 7, &next))
+            .unwrap();
         wait_for(10, "the second snippet", || {
             shown(&nodes, 31, id)
                 .iter()
@@ -196,7 +215,10 @@ fn an_unpublished_transfer_serves_no_snippet() {
         let key = key.public;
         let (swarm, transfer) = media_swarm(&alice, &key, 7, false).await;
         let s = snippet("hidden");
-        alice.directory.push_snippet(&swarm, s.clone()).unwrap();
+        alice
+            .directory
+            .push_snippet(&swarm, signed(&alice, 7, &s))
+            .unwrap();
         let id = alice.directory.publish(&key, media(&swarm)).await.unwrap();
         sleep_secs(5).await;
         assert_eq!(shown(&[&owner, &alice], 32, id), [None, None]);
@@ -213,7 +235,7 @@ fn an_unpublished_transfer_serves_no_snippet() {
     });
 }
 
-/// Serves deltas whose snippets don't verify.
+/// Serves snippets signed by a key other than the swarm's.
 struct Forged;
 
 impl DirectorySnippetService for Forged {
@@ -222,24 +244,26 @@ impl DirectorySnippetService for Forged {
         _: &Context,
         _: SnippetSubscribeRequest,
     ) -> Result<ServerStream<SnippetSubscribeResponse>, RpcError> {
-        let signed = snippet("genuine");
-        let deltas = ["forged", "forged again", "forged once more"].map(|title| {
+        let forger = swarm_key(9);
+        let responses = ["forged", "forged again", "forged once more"].map(|title| {
+            let forged = SignedSnippet::sign(&forger, &snippet(title), Time::from_unix_millis(1));
+            let (envelope, images) = forged.into_parts();
             Ok(SnippetSubscribeResponse {
-                snippet_delta: Some(ListingSnippetDelta {
-                    title: Some(title.into()),
-                    key: Some(signed.key.clone()),
-                    signature: Some(signed.signature.clone()),
-                    ..Default::default()
-                }),
+                snippet: Some(envelope),
+                image: images
+                    .into_iter()
+                    .next()
+                    .map(|(_, b)| b)
+                    .unwrap_or_default(),
             })
         });
-        let stream = futures_util::stream::iter(deltas).chain(futures_util::stream::pending());
+        let stream = futures_util::stream::iter(responses).chain(futures_util::stream::pending());
         Ok(Box::pin(stream))
     }
 }
 
 /// The server shows no snippet whose signature fails, and gives up on a
-/// publisher whose deltas keep failing.
+/// publisher whose snippets keep failing.
 #[test]
 fn a_snippet_that_fails_verification_is_not_shown() {
     run(async {

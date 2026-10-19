@@ -49,8 +49,8 @@ use std::task::{Poll, Waker};
 
 use futures_util::FutureExt;
 use strims_chunkstream::packed::{DEFAULT_SIZE, PackedEncoder};
-use strims_crypto::{SignableMessage, generate_key};
-use strims_directory::{Host, ListingKeeper, snippet};
+use strims_crypto::{Signer, generate_key};
+use strims_directory::{Host, ListingKeeper, SignedSnippet, snippet};
 use strims_kv::Kv;
 use strims_ppspp::integrity::{
     LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod, VerifierOptions,
@@ -308,7 +308,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         key: Key,
         mime_type: String,
         network_keys: Vec<Vec<u8>>,
-        mut snippet: ListingSnippet,
+        snippet: ListingSnippet,
     ) -> Result<TransferId, VideoError> {
         let options = capture_options();
         let (swarm, swarm_id, writer) = self
@@ -342,11 +342,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
         self.transfers.add(swarm, &swarm_id, Vec::new());
         self.publish_joined(&t);
-        let pushed = match snippet.sign_message(&key) {
-            Ok(()) => self
-                .directory
-                .push_snippet(&swarm_id, snippet)
-                .map_err(VideoError::from),
+        let pushed = match Signer::new(&key) {
+            Ok(signer) => {
+                let signed = SignedSnippet::sign(&signer, &snippet, self.timer.now());
+                self.directory
+                    .push_snippet(&swarm_id, signed)
+                    .map_err(VideoError::from)
+            }
             Err(e) => Err(e.into()),
         };
         if let Err(e) = pushed {
@@ -540,7 +542,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         reply.reply.take().await
     }
 
-    /// Re-signs `snippet` with capture `id`'s key and serves it.
+    /// Signs `snippet` with capture `id`'s key and serves it.
     ///
     /// # Errors
     ///
@@ -548,7 +550,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     pub fn update_capture(
         &self,
         id: &TransferId,
-        mut snippet: ListingSnippet,
+        snippet: ListingSnippet,
     ) -> Result<(), VideoError> {
         snippet::check(&snippet)?;
         let s = &self.shared;
@@ -558,8 +560,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
             .get(id)
             .map(|c| (c.key.clone(), c.swarm_id.clone()))
             .ok_or(VideoError::CaptureNotFound)?;
-        snippet.sign_message(&key)?;
-        s.directory.push_snippet(&swarm_id, snippet)?;
+        let signed = SignedSnippet::sign(&Signer::new(&key)?, &snippet, s.timer.now());
+        s.directory.push_snippet(&swarm_id, signed)?;
         Ok(())
     }
 

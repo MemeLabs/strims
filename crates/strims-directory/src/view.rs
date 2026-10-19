@@ -10,9 +10,13 @@
 //! # Semantics
 //!
 //! - `ListingChange` adds a listing or replaces its listing, snippet and
-//!   moderation, keeping its user counts. `UserCountChange` sets the
-//!   counts. `Unpublish` removes the listing; its users' memberships end
-//!   with it, without part events.
+//!   moderation, keeping its user counts. The snippet's body is read
+//!   without verifying its signature: the server verified it, and the
+//!   network's root key signs the event swarm. Its images come from the
+//!   event's images by digest; a snippet that doesn't decode or names an
+//!   image the event lacks is dropped and counted. `UserCountChange` sets
+//!   the counts. `Unpublish` removes the listing; its users' memberships
+//!   end with it, without part events.
 //! - An online `UserPresenceChange` adds a user or sets its alias and
 //!   listings. A user is in the listings its latest presence names that the
 //!   view holds; it joins a listing named earlier once a `ListingChange`
@@ -36,7 +40,7 @@ use strims_proto::network::v1::directory::{
     EventBroadcast, ListingModeration, ListingQuery, ListingSnippet,
 };
 
-use crate::{MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, ViewLimits, listing};
+use crate::{MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, ViewLimits, listing, snippet};
 
 /// A listing as a view holds it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -101,6 +105,8 @@ pub struct ViewMetrics {
     pub listings_dropped: u64,
     pub users_dropped: u64,
     pub ids_dropped: u64,
+    /// Snippets that didn't decode or named an image their event lacked.
+    pub malformed_snippets: u64,
     /// Listings stored without their snippet's images, without their
     /// snippet, or not at all, for their size.
     pub images_dropped: u64,
@@ -290,7 +296,16 @@ impl View {
             return;
         };
         let max = self.limits.max_listing_bytes;
-        let mut snippet = c.snippet.clone();
+        let mut snippet = match &c.snippet {
+            Some(s) => match snippet::decode(s, &c.snippet_images) {
+                Ok(s) => Some(s),
+                Err(_) => {
+                    self.metrics.malformed_snippets += 1;
+                    None
+                }
+            },
+            None => None,
+        };
         let moderation = c.moderation.clone();
         let size = |s: &Option<ListingSnippet>| {
             l.encoded_len()

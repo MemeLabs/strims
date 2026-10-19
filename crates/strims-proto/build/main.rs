@@ -6,7 +6,7 @@
 //! 1. Parses `schema/**/*.proto` and the crate's own `proto/**/*.proto` (the
 //!    `strims.rpc` envelope) with protox (pure Rust; no `protoc`).
 //! 2. Generates prost message types, one file per proto package.
-//! 3. Generates `StableEncode`/`Signable` impls (the signable encoding, see
+//! 3. Generates `StableEncode` impls (the stable encoding, see
 //!    `src/stable.rs`) from the same descriptors.
 //! 4. Generates the module tree: package `strims.vnic.v1` becomes
 //!    `strims_proto::vnic::v1`.

@@ -47,7 +47,7 @@ use prost::Message as _;
 use sha2::{Digest, Sha256};
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::{SignableMessage, key_from_seed, membership_trusted};
+use strims_crypto::{key_from_seed, membership_trusted};
 use strims_dao::schema::profile::Profile as ProfileRecord;
 use strims_dao::seal::StorageKey;
 use strims_dao::{ProfileStore, Recv, ReplicatedStore, Singleton};
@@ -723,6 +723,8 @@ async fn member(w: World) -> turmoil::Result {
         })
         .await;
     h.log(format!("found the channel as {listing_id}"));
+    // the server shows only snippets the listing's swarm key signed: the
+    // channel's
     assert_eq!(media.swarm_uri, channel.uri());
     assert_eq!(media.mime_type, fmp4_mime(&script_configs(&w.script)));
     assert_eq!(
@@ -730,8 +732,6 @@ async fn member(w: World) -> turmoil::Result {
         "video/mp4;codecs=\"avc1.64001f,mp4a.40.2\""
     );
     let shown = shown.unwrap();
-    shown.verify_message().unwrap();
-    assert_eq!(shown.key, channel.key);
     assert_eq!(
         (
             shown.title.as_str(),
