@@ -110,7 +110,8 @@ No deployed network constrains the wire or store formats. Golden vectors
 `strims-golden`) pin them, so a format can't change by accident. A
 deliberate change updates the vectors in the same commit:
 `STRIMS_GOLDEN=update cargo test -p <crate> --test <test>` rewrites them
-from the code, and a plain run must pass afterwards. In code, express a
+from the code (under `cargo test`, so the tests of a file update it in one
+process), and a plain run must pass afterwards. In code, express a
 format requirement as the local constraint it imposes, e.g. "port 20 must
 stay unhandled by the v2 protocol".
 
@@ -156,7 +157,10 @@ From the repo root:
 
 - `cargo fmt --all`
 - `cargo clippy --workspace --all-targets --features strims-node/turmoil`
-- `cargo test --workspace`
+- `cargo nextest run --workspace` and `cargo test --workspace --doc`:
+  [cargo-nextest](https://nexte.st) runs every test in a process of its
+  own, as many at once as there are cores, and skips doctests.
+  `.config/nextest.toml` sets each heavy test's share of the cores.
 - `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown`
 - `cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e`
 - `GECKODRIVER=<path to geckodriver> cargo test -p strims-wasm --target wasm32-unknown-unknown`
@@ -167,6 +171,11 @@ From the repo root:
 The browser suites launch headless Firefox against the webpack build and
 are ignored by default; they also need `node_modules`:
 `cargo test -p strims-wasm --test e2e_links --test e2e_app --test ui_smoke -- --ignored`.
+They stay on `cargo test`, which builds a binary's bundle once for all of
+its tests.
+
+The release simulations, the ignored ones included:
+`cargo nextest run --release -p strims-sim -p strims-ppspp --run-ignored all`.
 
 Every `.rs` file starts with:
 

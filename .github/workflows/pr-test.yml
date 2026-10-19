@@ -23,8 +23,13 @@ jobs:
       run: cargo fmt --all --check
     - name: Clippy
       run: cargo clippy --workspace --all-targets --features strims-node/turmoil -- -D warnings
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-nextest
     - name: Test
-      run: cargo test --workspace
+      run: cargo nextest run --workspace
+    - name: Doctests
+      run: cargo test --workspace --doc
     - name: Check wasm
       run: cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown
     - name: Clippy wasm

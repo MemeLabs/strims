@@ -1,0 +1,53 @@
+# cargo-nextest runs every test in a process of its own, as many at once as
+# there are cores (crates/CONVENTIONS.md, "Checks").
+
+# Test priorities.
+nextest-version = "0.9.91"
+
+[profile.default]
+# Long simulations are reported as slow, never killed.
+slow-timeout = { period = "60s" }
+
+[test-groups]
+# Instances of a snap Firefox must not start concurrently.
+firefox = { max-threads = 1 }
+
+# threads-required is the share of the run's test threads a test takes, and
+# tests of a higher priority start first, so the longest tests don't start
+# last. The first override that sets a field wins.
+
+# 9 runs of 10 simulated minutes each.
+[[profile.default.overrides]]
+filter = 'package(strims-sim) & test(=long_run)'
+threads-required = 9
+priority = 100
+
+# These spread their simulations over every core.
+[[profile.default.overrides]]
+filter = 'test(=controller_ab) | (package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep)))'
+threads-required = "num-test-threads"
+priority = 90
+
+# The longest single-threaded simulations: the release tables, and the
+# longest test of a debug run.
+[[profile.default.overrides]]
+filter = 'package(strims-ppspp) & (test(=node_sim_sweep) | test(=push_pull_matrix) | test(=sim_adversaries_dont_stall_honest_peers))'
+priority = 80
+
+# A sweep runs each seed and the replay of the first on a thread of its
+# own: 3 threads in a debug build. A release build's 9 overcommit its share,
+# which keeps the cores busy.
+[[profile.default.overrides]]
+filter = 'package(strims-sim) & binary(scenarios)'
+threads-required = 3
+priority = 50
+
+[[profile.default.overrides]]
+filter = '(package(strims-ppspp) | package(strims-vpn)) & binary(sim)'
+priority = 50
+
+# The browser tests (ignored; they run under cargo test, which builds
+# their bundle once per binary).
+[[profile.default.overrides]]
+filter = '(package(strims-wasm) & (binary(e2e_links) | binary(e2e_app) | binary(ui_smoke))) | (package(strims-webrtc) & binary(browser))'
+test-group = "firefox"

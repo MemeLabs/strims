@@ -25,6 +25,9 @@
 //! [`Golden::remove`] drops entries. Tests in one binary that update the
 //! same file take turns: [`Golden::open`] holds a process-wide lock in
 //! update mode and reads the file under it, so each sees the others' writes.
+//! The lock spans one process only, so an update runs under `cargo test`,
+//! which runs a binary's tests in one process (cargo-nextest gives every
+//! test a process of its own).
 //!
 //! [`check_file`] pins a whole file that a recorder writes from scratch.
 

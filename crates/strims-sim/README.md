@@ -7,9 +7,9 @@ derives from one `u64` seed.
 ## Running
 
 ```sh
-cargo test -p strims-sim --release -- --nocapture          # every scenario, 8 seeds
-cargo test -p strims-sim                                    # debug: 2 seeds
-cargo test -p strims-sim --release --test scenarios -- --ignored --nocapture
+cargo nextest run -p strims-sim --release                   # every scenario, 8 seeds
+cargo nextest run -p strims-sim                             # debug: 2 seeds
+cargo nextest run -p strims-sim --release --run-ignored only
 ```
 
 | variable | effect |
@@ -19,7 +19,8 @@ cargo test -p strims-sim --release --test scenarios -- --ignored --nocapture
 | `STRIMS_SIM_TRACE=1` | print each run's trace |
 
 A sweep runs its seeds at once, each on a thread of its own. With
-`--nocapture`, each run prints a summary.
+`--success-output immediate` (or `cargo test` with `--nocapture`), each
+run prints a summary.
 
 ## Replaying a failure
 
