@@ -18,10 +18,11 @@
 //! # Signatures
 //!
 //! A live signature covers the big-endian `u64` timestamp in nanoseconds
-//! followed by the payload: a munro's root digest (Merkle), a chunk's data
-//! (sign-all), or nothing (an epoch). This layout is part of the v2 wire
-//! format. Neither payload covers the bin, so a valid munro or chunk can be
-//! replayed at another position.
+//! followed by the payload, in the payload's domain: a munro's root digest
+//! ([`Domain::PpsppMunroRoot`], Merkle), a chunk's data
+//! ([`Domain::PpsppChunk`], sign-all), or nothing ([`Domain::PpsppEpoch`]).
+//! Neither payload covers the bin, so a valid munro or chunk can be replayed
+//! at another position.
 //!
 //! # Peer input
 //!
@@ -43,6 +44,7 @@ mod sign_all_test;
 
 use strims_base::time::Time;
 use strims_binmap::{Bin, Map};
+use strims_crypto::Domain;
 use strims_proto::types::{Cache, cache};
 
 use crate::codec::{self, MessageWriter};
@@ -286,28 +288,6 @@ impl core::fmt::Debug for Signature {
     }
 }
 
-/// The signed message: the big-endian timestamp in nanoseconds followed by
-/// `p` (see the module docs). Short payloads (Merkle roots, epochs) use
-/// `stack`; chunk payloads use `scratch`, which the caller keeps so nothing
-/// allocates per chunk.
-fn signed_message<'s>(
-    t: Time,
-    p: &[u8],
-    stack: &'s mut [u8; 8 + MAX_SIGNATURE_SIZE],
-    scratch: &'s mut Vec<u8>,
-) -> &'s [u8] {
-    let ts = (t.unix_nanos() as u64).to_be_bytes();
-    if let Some(dst) = stack.get_mut(8..8 + p.len()) {
-        dst.copy_from_slice(p);
-        stack[..8].copy_from_slice(&ts);
-        return stack.get(..8 + p.len()).unwrap_or_default();
-    }
-    scratch.clear();
-    scratch.extend_from_slice(&ts);
-    scratch.extend_from_slice(p);
-    scratch
-}
-
 /// Signs live data.
 // One per writer; boxing the key would only add an indirection.
 #[allow(clippy::large_enum_variant)]
@@ -318,11 +298,11 @@ pub enum SignatureSigner {
 }
 
 impl SignatureSigner {
-    /// Signs `t ‖ p`. `scratch` is used for payloads longer than 64 bytes.
-    pub fn sign(&self, t: Time, p: &[u8], scratch: &mut Vec<u8>) -> Signature {
+    /// Signs `t ‖ p` in `domain`.
+    pub fn sign(&self, domain: Domain, t: Time, p: &[u8]) -> Signature {
         match self {
             SignatureSigner::None => Signature::EMPTY,
-            SignatureSigner::Ed25519(s) => s.sign(t, p, scratch),
+            SignatureSigner::Ed25519(s) => s.sign(domain, t, p),
         }
     }
 
@@ -345,12 +325,11 @@ pub enum SignatureVerifier {
 }
 
 impl SignatureVerifier {
-    /// Checks `sig` over `t ‖ p`. `scratch` is used for payloads longer
-    /// than 64 bytes.
-    pub fn verify(&self, t: Time, p: &[u8], sig: &[u8], scratch: &mut Vec<u8>) -> bool {
+    /// Checks `sig` over `t ‖ p` in `domain`.
+    pub fn verify(&self, domain: Domain, t: Time, p: &[u8], sig: &[u8]) -> bool {
         match self {
             SignatureVerifier::None => true,
-            SignatureVerifier::Ed25519(v) => v.verify(t, p, sig, scratch),
+            SignatureVerifier::Ed25519(v) => v.verify(domain, t, p, sig),
         }
     }
 

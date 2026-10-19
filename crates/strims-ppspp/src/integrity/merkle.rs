@@ -21,6 +21,7 @@ use core::mem;
 
 use strims_base::time::Time;
 use strims_binmap::{Bin, Map};
+use strims_crypto::Domain;
 use strims_proto::types::{Cache, cache};
 
 use super::{
@@ -143,7 +144,6 @@ pub struct MerkleSwarmVerifier {
     /// The tree the writer and cache import fill before storing it.
     spare: Tree,
     signature_verifier: SignatureVerifier,
-    scratch: Vec<u8>,
     live_window: u64,
 }
 
@@ -183,7 +183,6 @@ impl MerkleSwarmVerifier {
             hasher,
             spare: Tree::new(Bin::new(tree_height - 1, 0), o.chunk_size, hash_size),
             signature_verifier: o.verifier.clone(),
-            scratch: Vec::new(),
             live_window: window,
         })
     }
@@ -246,7 +245,6 @@ impl MerkleSwarmVerifier {
             timestamp: Time::EPOCH,
             signature: Some(Signature::EMPTY),
             chunk_size: self.ring.chunk_size,
-            scratch: Vec::new(),
         }
     }
 
@@ -262,7 +260,7 @@ impl MerkleSwarmVerifier {
         let b = Bin::new(self.munro_layer(), index);
         self.spare.reset(b)?;
         self.spare.fill(&mut self.hasher, b, data)?;
-        let sig = signer.sign(ts, self.spare.root_digest(), &mut self.scratch);
+        let sig = signer.sign(Domain::PpsppMunroRoot, ts, self.spare.root_digest());
         self.ring.store(ts, &mut self.spare, sig);
         Ok(())
     }
@@ -305,10 +303,10 @@ impl MerkleSwarmVerifier {
 
             if sig.len() != sig_size
                 || !self.signature_verifier.verify(
+                    Domain::PpsppMunroRoot,
                     ts,
                     self.spare.root_digest(),
                     sig,
-                    &mut self.scratch,
                 )
             {
                 return Err(Error::InvalidSignature);
@@ -374,7 +372,6 @@ pub struct MerkleChannelVerifier {
     /// `None` if the peer's signature was longer than any we support.
     signature: Option<Signature>,
     chunk_size: usize,
-    scratch: Vec<u8>,
 }
 
 impl MerkleChannelVerifier {
@@ -450,10 +447,10 @@ impl MerkleChannelVerifier {
             .filter(|s| s.as_slice().len() == sv.signature_verifier.size())
             .ok_or(Error::SignatureTooShort)?;
         if !sv.signature_verifier.verify(
+            Domain::PpsppMunroRoot,
             self.timestamp,
             self.tree.root_digest(),
             sig.as_slice(),
-            &mut self.scratch,
         ) {
             return Err(Error::InvalidSignature);
         }

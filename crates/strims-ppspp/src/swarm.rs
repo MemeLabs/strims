@@ -706,7 +706,7 @@ mod tests {
         let sig = LiveSignatureAlgorithm::ED25519
             .signer(&key.private)
             .unwrap()
-            .sign(now(), &[], &mut Vec::new());
+            .sign(strims_crypto::Domain::PpsppEpoch, now(), &[]);
         assert_eq!(s.sync_epoch(now(), sig.as_slice()), Ok(true));
         let h = s.handshake_options();
         let o = h.handshake().options.summary();

@@ -118,7 +118,12 @@ fn stream_keys_match_vectors() {
         let (parsed, signature) = parse_stream_key(&formatted).unwrap();
         assert_eq!(parsed, id, "{name}");
         assert!(
-            strims_crypto::verify(&key.public, &token, &signature),
+            strims_crypto::sign::verify(
+                strims_crypto::Domain::VideoStreamKey,
+                &key.public,
+                &[&token],
+                &signature
+            ),
             "{name}"
         );
         g.check_hex(e, 3, formatted);

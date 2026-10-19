@@ -517,7 +517,7 @@ impl<T: Copy> Host<T> {
     /// Creates a host with a fresh host key drawn from `rng`. Fails unless
     /// `profile_key` is an ed25519 signing key.
     pub fn new(profile_key: Key, config: HostConfig, mut rng: DetRng) -> Result<Host<T>, Error> {
-        strims_crypto::signing_key(&profile_key)?;
+        strims_crypto::Signer::new(&profile_key)?;
         let profile_x25519 = key_to_curve25519(&profile_key)?;
         let key = strims_crypto::generate_key(&mut rng);
         let (id, _) =

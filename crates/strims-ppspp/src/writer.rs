@@ -19,6 +19,7 @@ use core::mem;
 
 use strims_base::time::Time;
 use strims_binmap::Bin;
+use strims_crypto::Domain;
 use strims_proto::types::Key;
 
 use crate::integrity::{self, ProtectionMethod, SignatureSigner, SwarmVerifier};
@@ -55,7 +56,6 @@ pub struct Writer {
     staging: Vec<u8>,
     staged: usize,
     chunks: store::Writer,
-    scratch: Vec<u8>,
 }
 
 impl Writer {
@@ -95,7 +95,6 @@ impl Writer {
             staging: vec![0; unit_len],
             staged: 0,
             chunks: store::Writer::new(),
-            scratch: Vec::with_capacity(8 + so.chunk_size),
         };
         w.init_epoch(&mut swarm, now)?;
         Ok((w, swarm))
@@ -111,7 +110,7 @@ impl Writer {
     /// [`EpochError::OutOfDate`](crate::EpochError::OutOfDate).
     fn init_epoch(&mut self, swarm: &mut Swarm, now: Time) -> Result<(), SwarmError> {
         let e = now.truncate(Time::PRECISION);
-        let sig = self.signer.sign(e, &[], &mut self.scratch);
+        let sig = self.signer.sign(Domain::PpsppEpoch, e, &[]);
         swarm.sync_epoch(e, sig.as_slice())?;
         Ok(())
     }

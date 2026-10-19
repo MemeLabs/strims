@@ -369,9 +369,10 @@ fn channel_urls_by_owner() {
         assert_eq!(by_stream_key(&n, &u.stream_key).await, Some(local.clone()));
         let (id, signature) = parse_stream_key(&u.stream_key).unwrap();
         assert_eq!(id, local.id);
-        assert!(strims_crypto::verify(
+        assert!(strims_crypto::sign::verify(
+            strims_crypto::Domain::VideoStreamKey,
             &profile_key,
-            &local.token,
+            &[&local.token],
             &signature
         ));
 
@@ -408,9 +409,10 @@ fn channel_urls_by_owner() {
         );
         let (id, signature) = parse_stream_key(&r.stream_key).unwrap();
         assert_eq!(id, 4242);
-        assert!(strims_crypto::verify(
+        assert!(strims_crypto::sign::verify(
+            strims_crypto::Domain::VideoStreamKey,
             &profile_key,
-            &remote.token,
+            &[&remote.token],
             &signature
         ));
         assert_eq!(by_stream_key(&n, &r.stream_key).await, None);

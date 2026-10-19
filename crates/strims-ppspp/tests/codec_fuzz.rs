@@ -353,7 +353,11 @@ fn forged_epoch_is_rejected() {
     let sig = LiveSignatureAlgorithm::ED25519
         .signer(&strims_crypto::key_from_seed(&[1; 32]).private)
         .unwrap()
-        .sign(Time::from_unix_millis(5), &[], &mut Vec::new());
+        .sign(
+            strims_crypto::Domain::PpsppEpoch,
+            Time::from_unix_millis(5),
+            &[],
+        );
     assert!(
         s.sync_epoch(Time::from_unix_millis(5), sig.as_slice())
             .is_err()

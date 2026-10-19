@@ -6,6 +6,7 @@
 //! epoch resets its copy of the swarm.
 
 use strims_base::time::Time;
+use strims_crypto::Domain;
 use strims_proto::types::cache;
 
 use crate::integrity::SignatureVerifier;
@@ -51,7 +52,8 @@ impl Epoch {
             return Ok(());
         }
         let sig = c.map_or(&[][..], |c| &c.signature);
-        if sig.len() != self.verifier.size() || !self.verifier.verify(t, &[], sig, &mut Vec::new())
+        if sig.len() != self.verifier.size()
+            || !self.verifier.verify(Domain::PpsppEpoch, t, &[], sig)
         {
             return Err(EpochError::InvalidSignature);
         }
@@ -82,7 +84,7 @@ impl Epoch {
         if t < self.timestamp {
             return Err(EpochError::OutOfDate);
         }
-        if !self.verifier.verify(t, &[], sig, &mut Vec::new()) {
+        if !self.verifier.verify(Domain::PpsppEpoch, t, &[], sig) {
             return Err(EpochError::InvalidSignature);
         }
         self.timestamp = t;
@@ -108,7 +110,7 @@ mod tests {
         assert_eq!(e.value().1, [0; 64]);
 
         let t1 = Time::from_unix_millis(1000);
-        let s1 = signer.sign(t1, &[], &mut Vec::new());
+        let s1 = signer.sign(Domain::PpsppEpoch, t1, &[]);
         assert_eq!(e.sync(t1, s1.as_slice()), Ok(true));
         assert_eq!(e.sync(t1, &[]), Ok(false));
         let t0 = Time::from_unix_millis(999);
@@ -125,7 +127,7 @@ mod tests {
         let signer = alg.signer(&key.private).unwrap();
         let mut e = Epoch::new(alg.verifier(&key.public).unwrap());
         let t1 = Time::from_unix_millis(1000);
-        let s1 = signer.sign(t1, &[], &mut Vec::new());
+        let s1 = signer.sign(Domain::PpsppEpoch, t1, &[]);
         assert_eq!(e.sync(t1, s1.as_slice()), Ok(true));
         let good = e.export_cache();
 

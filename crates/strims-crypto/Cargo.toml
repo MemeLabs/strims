@@ -12,6 +12,7 @@ strims-proto.workspace = true
 thiserror.workspace = true
 rand_core.workspace = true
 ed25519-dalek.workspace = true
+curve25519-dalek.workspace = true
 x25519-dalek.workspace = true
 sha2.workspace = true
 

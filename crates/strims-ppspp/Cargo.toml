@@ -12,7 +12,6 @@ strims-binmap.workspace = true
 strims-proto.workspace = true
 strims-crypto.workspace = true
 thiserror.workspace = true
-ed25519-dalek.workspace = true
 blake2.workspace = true
 blake3.workspace = true
 sha1.workspace = true

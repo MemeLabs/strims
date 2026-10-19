@@ -19,10 +19,10 @@ use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::cert::{certificate_parent, verify_certificate};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, Error, SignableMessage, aes_link_key, certificate_network_key, crc32_message,
-    key_from_seed, key_to_curve25519, message_cipher_key, new_certificate_request,
-    new_self_signed_certificate, public_key_to_curve25519, serialize_certificate,
-    serialize_certificate_request, sign, sign_certificate_request, verify,
+    DEFAULT_CERT_TTL, Domain, Error, SignableMessage, Signer, aes_link_key,
+    certificate_network_key, crc32_message, key_from_seed, key_to_curve25519, message_cipher_key,
+    new_certificate_request, new_self_signed_certificate, public_key_to_curve25519,
+    serialize_certificate, serialize_certificate_request, sign, sign_certificate_request,
     verify_certificate_request, x25519,
 };
 use strims_golden::Golden;
@@ -74,18 +74,33 @@ fn keys_keep_their_storage_format() {
     }
 }
 
-#[test]
-fn signatures_match_vectors() {
-    let mut g = open();
-    let entries = g.prefixed("sign_");
-    for &e in &entries {
-        let i = ids(g.name(e), "sign_")[0];
-        let (k, msg) = (key(&g, i), g.bytes(e, 0));
-        let sig = sign(&k.private, &msg).unwrap();
-        assert!(verify(&k.public, &msg, &sig), "{}", g.name(e));
-        g.check_hex(e, 1, sig);
+/// The message each domain's vectors sign, by the index of the signing key.
+fn signed_message(i: usize) -> Vec<u8> {
+    match i {
+        0 => b"hello".to_vec(),
+        _ => (0..1000).map(|n| (n % 251) as u8).collect(),
     }
-    assert_eq!(entries.len(), 8);
+}
+
+#[test]
+fn signatures_name_their_domain() {
+    let mut g = open();
+    for d in Domain::ALL {
+        for i in 0..2 {
+            let e = g.entry(&format!("sign_{}_{i}", d.context().replace('-', "_")));
+            let (k, msg) = (key(&g, i), signed_message(i));
+            let sig = Signer::new(&k).unwrap().sign(d, &[&msg]);
+            assert!(strims_crypto::sign::verify(d, &k.public, &[&msg], &sig));
+            // the signed bytes are the tag, the context's length and the
+            // context, then the payload
+            let context = d.context().as_bytes();
+            let framed = [b"strims\0", &[context.len() as u8][..], context, &msg].concat();
+            assert_eq!(sign(&k.private, &framed).unwrap(), sig);
+            g.check_hex(e, 0, &msg);
+            g.check_hex(e, 1, sig);
+        }
+    }
+    assert_eq!(g.prefixed("sign_").len(), 2 * Domain::ALL.len());
 }
 
 #[test]

@@ -1786,7 +1786,12 @@ fn stream_keys_round_trip() {
         );
         let (got, signature) = parse_stream_key(&s).unwrap();
         assert_eq!(got, id);
-        assert!(strims_crypto::verify(&key.public, &token, &signature));
+        assert!(strims_crypto::sign::verify(
+            strims_crypto::Domain::VideoStreamKey,
+            &key.public,
+            &[&token],
+            &signature
+        ));
     }
     assert!(matches!(
         format_stream_key(1, b"token", &Key::default()),

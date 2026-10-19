@@ -2166,6 +2166,7 @@ dependencies = [
 name = "strims-crypto"
 version = "0.1.0"
 dependencies = [
+ "curve25519-dalek 5.0.0",
  "ed25519-dalek",
  "hex",
  "prost",
@@ -2390,7 +2391,6 @@ version = "0.1.0"
 dependencies = [
  "blake2",
  "blake3",
- "ed25519-dalek",
  "hex",
  "indexmap",
  "proptest",

@@ -16,6 +16,7 @@
 
 use strims_base::time::Time;
 use strims_binmap::Bin;
+use strims_crypto::Domain;
 use strims_proto::types::{Cache, cache};
 
 use super::{Error, SignatureSigner, SignatureVerifier, ring_size};
@@ -44,7 +45,6 @@ pub struct SignAllSwarmVerifier {
     sig_size: usize,
     chunk_size: usize,
     signature_verifier: SignatureVerifier,
-    scratch: Vec<u8>,
 }
 
 impl SignAllSwarmVerifier {
@@ -65,7 +65,6 @@ impl SignAllSwarmVerifier {
             sig_size,
             chunk_size: o.chunk_size,
             signature_verifier: o.verifier.clone(),
-            scratch: Vec::with_capacity(8 + o.chunk_size),
         })
     }
 
@@ -127,7 +126,7 @@ impl SignAllSwarmVerifier {
     /// Signs and stores the chunk at `b` from local data. Publishing the
     /// chunk is the caller's job.
     pub(crate) fn write_chunk(&mut self, signer: &SignatureSigner, ts: Time, b: Bin, chunk: &[u8]) {
-        let sig = signer.sign(ts, chunk, &mut self.scratch);
+        let sig = signer.sign(Domain::PpsppChunk, ts, chunk);
         self.store_signature(b, ts, sig.as_slice());
     }
 
@@ -140,7 +139,6 @@ impl SignAllSwarmVerifier {
             max_pending: self.timestamps.len(),
             sig_size: self.sig_size,
             chunk_size: self.chunk_size,
-            scratch: Vec::with_capacity(8 + self.chunk_size),
         }
     }
 
@@ -173,10 +171,10 @@ impl SignAllSwarmVerifier {
                 .get(i * ss..(i + 1) * ss)
                 .ok_or(Error::IntegrityCacheIncomplete)?;
             if !self.signature_verifier.verify(
+                Domain::PpsppChunk,
                 Time::from_unix_nanos(t),
                 chunk,
                 sig,
-                &mut self.scratch,
             ) {
                 return Err(Error::InvalidChunkSignature);
             }
@@ -236,7 +234,6 @@ pub struct SignAllChannelVerifier {
     max_pending: usize,
     sig_size: usize,
     chunk_size: usize,
-    scratch: Vec<u8>,
 }
 
 impl SignAllChannelVerifier {
@@ -311,7 +308,7 @@ impl SignAllChannelVerifier {
                 .unwrap_or_default();
             if !sv
                 .signature_verifier
-                .verify(ts, chunk, sig, &mut self.scratch)
+                .verify(Domain::PpsppChunk, ts, chunk, sig)
             {
                 return Err(Error::InvalidChunkSignature);
             }

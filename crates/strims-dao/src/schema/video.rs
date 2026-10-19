@@ -27,7 +27,10 @@
 
 use data_encoding::BASE64URL_NOPAD;
 use rand_core::Rng;
-use strims_crypto::{ED25519_SIGNATURE_SIZE, certificate_network_key, generate_key};
+use strims_crypto::sign::verify;
+use strims_crypto::{
+    Domain, ED25519_SIGNATURE_SIZE, Signer, certificate_network_key, generate_key,
+};
 use strims_kv::Kv;
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::types::Key;
@@ -187,11 +190,12 @@ fn get_uvarint(b: &[u8]) -> Option<(u64, usize)> {
 }
 
 /// The stream key of channel `id`, whose token is `token`, signed with
-/// its owner's `key`. Fails with [`Error::Invalid`] if `key` holds no
-/// ed25519 private key.
+/// its owner's `key` in [`Domain::VideoStreamKey`]. Fails with
+/// [`Error::Invalid`] if `key` holds no ed25519 private key.
 pub fn format_stream_key(id: u64, token: &[u8], key: &Key) -> Result<String, Error> {
-    let signature = strims_crypto::sign(&key.private, token)
-        .map_err(|_| Error::Invalid("stream key signing key"))?;
+    let signature = Signer::from_private(&key.private)
+        .map_err(|_| Error::Invalid("stream key signing key"))?
+        .sign(Domain::VideoStreamKey, &[token]);
     let mut b = Vec::with_capacity(MAX_STREAM_KEY_BYTES);
     put_uvarint(&mut b, id);
     b.extend_from_slice(&signature);
@@ -250,7 +254,7 @@ pub async fn channel_by_stream_key<R: Read>(
         Some(Owner::LocalShare(s)) => s.certificate.as_ref().map_or(&[], |cert| &cert.key),
         Some(Owner::RemoteShare(_)) | None => return Ok(None),
     };
-    if !strims_crypto::verify(owner_key, &c.token, &signature) {
+    if !verify(Domain::VideoStreamKey, owner_key, &[&c.token], &signature) {
         return Ok(None);
     }
     Ok(Some(c))

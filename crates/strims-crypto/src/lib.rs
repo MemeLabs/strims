@@ -3,7 +3,8 @@
 
 //! Keys, certificates, signed messages and key agreement.
 //!
-//! - [`key`]: ed25519 keys, signing and verification.
+//! - [`key`]: ed25519 keys.
+//! - [`sign`]: domain-separated ed25519 signatures.
 //! - [`cert`]: certificate requests, issuing and chain verification.
 //! - [`signable`]: signatures and checksums over a message's stable encoding.
 //! - [`curve25519`]: ed25519 to X25519 conversion and the X25519 key
@@ -20,6 +21,7 @@ mod crc32;
 pub mod curve25519;
 mod field;
 pub mod key;
+pub mod sign;
 pub mod signable;
 
 pub use cert::{
@@ -38,6 +40,7 @@ pub use key::{
     ED25519_PRIVATE_KEY_SIZE, ED25519_PUBLIC_KEY_SIZE, ED25519_SEED_SIZE, ED25519_SIGNATURE_SIZE,
     generate_key, key_from_seed, sign, signing_key, signing_key_from_private, verify,
 };
+pub use sign::{Domain, Signer, Verifier};
 pub use signable::{SignableMessage, crc32_message};
 
 /// Re-exported so callers can cache a [`ed25519_dalek::SigningKey`] from

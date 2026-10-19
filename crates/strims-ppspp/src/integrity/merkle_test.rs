@@ -490,5 +490,5 @@ fn unsupported_options() {
     let bad = LiveSignatureAlgorithm::ED25519
         .verifier(&[0xff; 32])
         .unwrap();
-    assert!(!bad.verify(Time::EPOCH, b"x", &[0; 64], &mut Vec::new()));
+    assert!(!bad.verify(Domain::PpsppMunroRoot, Time::EPOCH, b"x", &[0; 64]));
 }
