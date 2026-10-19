@@ -59,7 +59,7 @@ use strims_chat::{
     ChatControl, ChatError, ChatEvent, ChatFailure, ClientEvent, ClientStream, ServerMode,
     WhisperConfig, WhisperControl,
 };
-use strims_crypto::{key_from_seed, membership_trusted};
+use strims_crypto::{certificate_body, key_from_seed, membership_trusted};
 use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServers, WhisperRecords, WhisperThreads,
     profile_peer_key,
@@ -737,6 +737,7 @@ impl Started {
             .find_certificate(net, CertQuery::Subject(alias.into()), false)
             .await
             .unwrap();
+        let cert = certificate_body(&cert).unwrap();
         let r = self
             .whispers
             .enqueue(net, server_key, &cert.key, &cert.subject, body)

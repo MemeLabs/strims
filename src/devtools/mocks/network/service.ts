@@ -12,36 +12,43 @@ import {
   NetworkFrontendService,
   UnimplementedNetworkFrontendService,
 } from "../../../apis/strims/network/v1/network_rpc";
-import { KeyUsage } from "../../../apis/strims/type/certificate";
+import { CertificateBody, KeyUsage } from "../../../apis/strims/type/certificate";
 import images from "../images";
+
+const body = (b: ConstructorParameters<typeof CertificateBody>[0]) =>
+  CertificateBody.encode(new CertificateBody(b)).finish();
+
+const rootSerialNumber = Base64.toUint8Array("L1mJl1pJAhGhbeWNZuTKxw==");
 
 const network = new Network({
   "id": BigInt("3501"),
   "certificate": {
-    "key": Base64.toUint8Array("1cFuxhf5HI5d6XQgypXXfqI8LducWmeJtHpUIADR1aU="),
-    "keyType": 1,
-    "keyUsage": KeyUsage.KEY_USAGE_PEER | KeyUsage.KEY_USAGE_SIGN,
-    "subject": "alias",
-    "notBefore": BigInt("1633572461"),
-    "notAfter": BigInt("1696648061"),
-    "serialNumber": Base64.toUint8Array("qBdmT/tj/b5x5m9ENRPLUQ=="),
+    "body": body({
+      "key": Base64.toUint8Array("1cFuxhf5HI5d6XQgypXXfqI8LducWmeJtHpUIADR1aU="),
+      "keyType": 1,
+      "keyUsage": KeyUsage.KEY_USAGE_PEER | KeyUsage.KEY_USAGE_SIGN,
+      "subject": "alias",
+      "notBefore": BigInt("1633572461"),
+      "notAfter": BigInt("1696648061"),
+      "serialNumber": Base64.toUint8Array("qBdmT/tj/b5x5m9ENRPLUQ=="),
+      "issuerSerialNumber": rootSerialNumber,
+    }),
     "signature": Base64.toUint8Array(
       "ND2uEYXMTVy6820/ql4bJ2qdexlRVK+qKB+NKyAO5k3ngyr8k6rVl+ez7OxUiupcm+z42N2ln43rhPpnECMWDw=="
     ),
-    "parentOneof": {
-      "case": 9,
-      "parent": {
+    "parent": {
+      "body": body({
         "key": Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
         "keyType": 1,
         "keyUsage": 4,
         "subject": "Test Network",
         "notBefore": BigInt("1633572461"),
         "notAfter": BigInt("1696648061"),
-        "serialNumber": Base64.toUint8Array("L1mJl1pJAhGhbeWNZuTKxw=="),
-        "signature": Base64.toUint8Array(
-          "tjOLhRDUr+JOgi1nz4jmwjghS8ccAL63SItgm0hvS64ptKZmx0FD5e4UXaOILJfs1yx496eewoyZBNAIqDiPAA=="
-        ),
-      },
+        "serialNumber": rootSerialNumber,
+      }),
+      "signature": Base64.toUint8Array(
+        "tjOLhRDUr+JOgi1nz4jmwjghS8ccAL63SItgm0hvS64ptKZmx0FD5e4UXaOILJfs1yx496eewoyZBNAIqDiPAA=="
+      ),
     },
   },
 });

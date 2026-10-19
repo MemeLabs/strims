@@ -36,10 +36,9 @@ use strims_proto::network::v1::directory::{
 use strims_proto::rpc;
 use strims_proto::rpc::call::Kind;
 use strims_proto::stable::StableEncode;
-use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{
-    Cache, CacheMeta, Certificate, CertificateRequest, Image, ImageType, Key, KeyType, KeyUsage,
-    cache,
+    Cache, CacheMeta, Certificate, CertificateBody, CertificateRequest, CertificateRequestBody,
+    Image, ImageType, Key, KeyType, KeyUsage, cache,
 };
 use strims_proto::vnic::v1::{AesLinkInit, LinkDescription, PeerInit};
 use strims_proto::vpn::v1::{
@@ -127,8 +126,22 @@ fn strings(s: &[&str]) -> Vec<String> {
     s.iter().map(|&s| s.to_owned()).collect()
 }
 
-fn root_cert() -> Certificate {
+/// `body` encoded into a certificate with `signature`, under `parent`.
+fn certificate(
+    body: &CertificateBody,
+    signature: Vec<u8>,
+    parent: Option<Certificate>,
+) -> Certificate {
     Certificate {
+        body: body.encode_to_vec(),
+        signature,
+        parent: parent.map(Box::new),
+    }
+}
+
+/// A self-signed root: its body names no issuer.
+fn root_body() -> CertificateBody {
+    CertificateBody {
         key: seq(0x10, 32),
         key_type: ED25519,
         key_usage: SIGN,
@@ -136,14 +149,12 @@ fn root_cert() -> Certificate {
         not_before: 1_600_000_000,
         not_after: 1_900_000_000,
         serial_number: seq(0x30, 16),
-        signature: seq(0x40, 64),
-        parent_oneof: None,
+        issuer_serial_number: Vec::new(),
     }
 }
 
-/// leaf -> intermediate -> root.
-fn cert_chain() -> Certificate {
-    let intermediate = Certificate {
+fn intermediate_body() -> CertificateBody {
+    CertificateBody {
         key: seq(0x50, 32),
         key_type: ED25519,
         key_usage: SIGN | PEER,
@@ -151,10 +162,12 @@ fn cert_chain() -> Certificate {
         not_before: 1_600_000_100,
         not_after: 1_800_000_000,
         serial_number: seq(0x70, 16),
-        signature: seq(0x80, 64),
-        parent_oneof: Some(ParentOneof::Parent(Box::new(root_cert()))),
-    };
-    Certificate {
+        issuer_serial_number: root_body().serial_number,
+    }
+}
+
+fn leaf_body() -> CertificateBody {
+    CertificateBody {
         key: seq(0xa0, 32),
         key_type: ED25519,
         key_usage: PEER | BOOTSTRAP,
@@ -162,34 +175,53 @@ fn cert_chain() -> Certificate {
         not_before: 1_700_000_000,
         not_after: 1_700_086_400,
         serial_number: seq(0xc0, 16),
-        signature: seq(0x01, 64),
-        parent_oneof: Some(ParentOneof::Parent(Box::new(intermediate))),
+        issuer_serial_number: intermediate_body().serial_number,
+    }
+}
+
+/// leaf -> intermediate -> root, each body naming its parent's serial number.
+fn cert_chain() -> Certificate {
+    let root = certificate(&root_body(), seq(0x40, 64), None);
+    let intermediate = certificate(&intermediate_body(), seq(0x80, 64), Some(root));
+    certificate(&leaf_body(), seq(0x01, 64), Some(intermediate))
+}
+
+fn certificate_request_body() -> CertificateRequestBody {
+    CertificateRequestBody {
+        key: seq(0x10, 32),
+        key_type: ED25519,
+        key_usage: PEER | ENCIPHERMENT,
+        subject: "csr".to_owned(),
     }
 }
 
 fn certificates(v: &mut Vectors) {
+    v.pin("type_certificate_body", &leaf_body());
     v.pin("type_certificate_chain", &cert_chain());
+    // Stored apart from its chain: the body names the issuer, and no parent
+    // travels with it.
     v.pin(
-        "type_certificate_parent_serial",
-        &Certificate {
-            key: seq(0x01, 32),
-            key_type: ED25519,
-            key_usage: PEER,
-            subject: String::new(),
-            not_before: 1,
-            not_after: u64::MAX,
-            serial_number: seq(0x02, 16),
-            signature: seq(0x03, 64),
-            parent_oneof: Some(ParentOneof::ParentSerialNumber(seq(0x30, 16))),
-        },
+        "type_certificate_issuer_serial",
+        &certificate(
+            &CertificateBody {
+                key: seq(0x01, 32),
+                key_type: ED25519,
+                key_usage: PEER,
+                subject: String::new(),
+                not_before: 1,
+                not_after: u64::MAX,
+                serial_number: seq(0x02, 16),
+                issuer_serial_number: seq(0x30, 16),
+            },
+            seq(0x03, 64),
+            None,
+        ),
     );
+    v.pin("type_certificate_request_body", &certificate_request_body());
     v.pin(
         "type_certificate_request",
         &CertificateRequest {
-            key: seq(0x10, 32),
-            key_type: ED25519,
-            key_usage: PEER | ENCIPHERMENT,
-            subject: "csr".to_owned(),
+            body: certificate_request_body().encode_to_vec(),
             signature: seq(0x20, 64),
         },
     );

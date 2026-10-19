@@ -17,7 +17,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
-import { certificateRoot } from "../../../lib/certificate";
+import { certificateBody, certificateRoot } from "../../../lib/certificate";
 import PublishNetworkModal from "./PublishNetworkModal";
 
 interface NetworkTableProps {
@@ -52,7 +52,7 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
           </Link>
         </TableCell>
         <TableCell>
-          {new Date(Number(network.certificate.notAfter) * 1000).toLocaleString()}
+          {new Date(Number(certificateBody(network.certificate).notAfter) * 1000).toLocaleString()}
         </TableCell>
         <MenuCell>
           <MenuItem label="Delete" onClick={handleDelete} />

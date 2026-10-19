@@ -11,15 +11,25 @@ option swift_prefix = "STP";
 
 import "type/key.proto";
 
-message CertificateRequest {
+// What a certificate request asks for.
+message CertificateRequestBody {
   bytes key = 1;
   strims.type.KeyType key_type = 2;
   KeyUsage key_usage = 3;
-  string subject = 5;
-  bytes signature = 4;
+  string subject = 4;
 }
 
-message Certificate {
+// A CertificateRequestBody's encoding, signed by its key in the
+// certificate-request domain.
+message CertificateRequest {
+  bytes body = 1;
+  bytes signature = 2;
+}
+
+// What a certificate states. The issuer serial number names the
+// certificate whose key signs this one; it is empty for a self-signed
+// certificate.
+message CertificateBody {
   bytes key = 1;
   strims.type.KeyType key_type = 2;
   KeyUsage key_usage = 3;
@@ -27,11 +37,16 @@ message Certificate {
   uint64 not_before = 5;
   uint64 not_after = 6;
   bytes serial_number = 7;
-  bytes signature = 8;
-  oneof parent_oneof {
-    Certificate parent = 9;
-    bytes parent_serial_number = 10;
-  }
+  bytes issuer_serial_number = 8;
+}
+
+// A CertificateBody's encoding, signed in the certificate domain by its
+// issuer's key, with the issuer's certificate as its parent. A certificate
+// stored apart from its chain has no parent.
+message Certificate {
+  bytes body = 1;
+  bytes signature = 2;
+  Certificate parent = 3;
 }
 
 enum KeyUsage {

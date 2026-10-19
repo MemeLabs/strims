@@ -78,12 +78,12 @@ use slotmap::SlotMap;
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    CertificateErrors, certificate_parent, key_to_curve25519, new_certificate_request,
+    CertificateChain, CertificateErrors, Issuer, key_to_curve25519, new_certificate_request,
     new_self_signed_certificate, public_key_to_curve25519, sign_certificate_request,
     verify_certificate,
 };
 use strims_kademlia::ID;
-use strims_proto::types::{Certificate, Key, KeyUsage, certificate::ParentOneof};
+use strims_proto::types::{Certificate, Key, KeyUsage};
 use strims_proto::vnic::v1::{PeerInit, TcpMuxInit};
 use strims_qos::{ClassId, Control, SessionId};
 
@@ -372,7 +372,7 @@ impl Fill {
 pub struct Peer<T> {
     host_id: ID,
     /// The peer's profile certificate (the parent of its host certificate).
-    certificate: Certificate,
+    certificate: CertificateChain,
     protocol_version: u32,
     node_platform: String,
     node_version: String,
@@ -391,7 +391,7 @@ impl<T: Copy> Peer<T> {
     }
 
     /// The peer's profile certificate.
-    pub fn certificate(&self) -> &Certificate {
+    pub fn certificate(&self) -> &CertificateChain {
         &self.certificate
     }
 
@@ -569,8 +569,8 @@ impl<T: Copy> Host<T> {
     }
 
     /// A host certificate for `PeerInit`: the host key, signed by the
-    /// profile key, whose self-signed certificate is the parent. Both are
-    /// valid for an hour.
+    /// profile key under its self-signed certificate. Both are valid for an
+    /// hour.
     pub fn cert(&mut self, now: Time) -> Result<Certificate, Error> {
         let usage = KeyUsage::Sign as i32;
         let profile_cert = new_self_signed_certificate(
@@ -584,15 +584,17 @@ impl<T: Copy> Host<T> {
         .map_err(PeerInitError::Cert)?;
         let csr =
             new_certificate_request(&self.key, usage, &self.label).map_err(PeerInitError::Cert)?;
-        let mut cert = sign_certificate_request(
+        let cert = sign_certificate_request(
             &csr,
             HOST_CERT_VALID_DURATION,
-            &self.profile_key,
+            Issuer::Certificate {
+                key: &self.profile_key,
+                certificate: &profile_cert,
+            },
             now,
             &mut self.rng,
         )
         .map_err(PeerInitError::Cert)?;
-        cert.parent_oneof = Some(ParentOneof::Parent(Box::new(profile_cert)));
         Ok(cert)
     }
 
@@ -835,10 +837,8 @@ impl<T: Copy> Host<T> {
         let cert = init
             .certificate
             .ok_or(PeerInitError::InvalidPeerCertificate)?;
-        verify_certificate(&cert, now).map_err(PeerInitError::Certificate)?;
-        let peer_cert = certificate_parent(&cert)
-            .cloned()
-            .ok_or(PeerInitError::InvalidPeerCertificate)?;
+        let cert = verify_certificate(&cert, now).map_err(PeerInitError::Certificate)?;
+        let peer_cert = cert.parent().ok_or(PeerInitError::InvalidPeerCertificate)?;
         let (host_id, _) = ID::unmarshal(&cert.key).map_err(|_| PeerInitError::MalformedHostId)?;
         if host_id == self.id {
             return Err(PeerInitError::OwnHost.into());

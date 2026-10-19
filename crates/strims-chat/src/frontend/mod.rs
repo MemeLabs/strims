@@ -69,6 +69,7 @@ mod watch;
 use std::rc::Rc;
 
 use strims_base::time::Time;
+use strims_crypto::certificate_body;
 use strims_dao::{Index, ReplicatedStore, Table, WriteTx};
 use strims_directory::{Host, MAX_ALIAS_BYTES};
 use strims_kv::Kv;
@@ -77,7 +78,7 @@ use strims_proto::chat::v1::{
 };
 use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::service::Error as RpcError;
-use strims_proto::types::Certificate;
+use strims_proto::types::CertificateBody;
 use strims_rpc::{Router, Timer};
 
 use crate::{ChatControl, WhisperControl};
@@ -162,23 +163,25 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontend<K, H, T> {
         self.store().write(self.now()).await.map_err(rpc_error)
     }
 
-    /// The latest certificate the CA of the network with `network_key`
-    /// issued for `query`.
+    /// The body of the latest certificate the CA of the network with
+    /// `network_key` issued for `query`.
     async fn peer_certificate(
         &self,
         network_key: &[u8],
         query: Query,
-    ) -> Result<Certificate, RpcError> {
+    ) -> Result<CertificateBody, RpcError> {
         if let Query::Subject(alias) = &query
             && alias.len() > MAX_ALIAS_BYTES
         {
             return Err(rpc_error("alias too long"));
         }
-        self.chat
+        let cert = self
+            .chat
             .network()
             .find_certificate(network_key, query, false)
             .await
-            .map_err(|e| RpcError::new(e.code, format!("finding peer cert failed: {e}")))
+            .map_err(|e| RpcError::new(e.code, format!("finding peer cert failed: {e}")))?;
+        certificate_body(&cert).map_err(rpc_error)
     }
 
     /// `peer_key`, or when it's empty the key of the holder of `alias` on

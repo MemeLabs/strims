@@ -172,7 +172,8 @@ fn key(n: &Node) -> Vec<u8> {
 
 /// `n`'s alias on network `id`.
 async fn alias(n: &Node, id: u64) -> String {
-    n.read_network(id).await.certificate.unwrap().subject
+    let cert = n.read_network(id).await.certificate.unwrap();
+    strims_crypto::certificate_body(&cert).unwrap().subject
 }
 
 fn room(name: &str) -> Option<Room> {

@@ -43,6 +43,9 @@ pub enum NodeError {
     Vnic(#[from] strims_vnic::Error),
     #[error("vpn: {0}")]
     Vpn(#[from] strims_vpn::Error),
+    /// A certificate the call was given doesn't decode.
+    #[error("certificate: {0}")]
+    Certificate(#[from] strims_crypto::Error),
     #[error("ppspp: {0}")]
     Runner(#[from] strims_ppspp::RunnerError),
     #[error("swarm: {0}")]

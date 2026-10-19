@@ -19,6 +19,7 @@ futures-util = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
 futures-core.workspace = true
+prost.workspace = true
 futures-sink.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
 

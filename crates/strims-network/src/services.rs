@@ -39,10 +39,11 @@ use std::task::{Poll, Waker};
 
 use futures_util::FutureExt;
 use futures_util::future::{AbortHandle, abortable};
+use prost::Message;
 use strims_base::rng::fork;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    certificate_network_key, host_certificate, membership_trusted, new_certificate_request,
+    CertificateChain, host_certificate, membership_trusted, new_certificate_request,
     verify_certificate,
 };
 use strims_dao::key::Part;
@@ -60,7 +61,7 @@ use strims_proto::network::v1::ca::{
 use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::notification::v1::notification::Status;
 use strims_proto::service::{CallError, Context, Error as RpcError};
-use strims_proto::types::{Certificate, CertificateRequest};
+use strims_proto::types::{Certificate, CertificateRequest, CertificateRequestBody};
 use strims_rpc::vpn::{self, VpnClient, VpnConfig};
 use strims_rpc::{RetryClient, RetryPolicy, Router, Timer};
 
@@ -163,8 +164,8 @@ impl<K: Kv, H: Host, T: Timer> Drop for ForwardSlot<K, H, T> {
 /// When this side renews its certificate on `n`: `None` while it can only
 /// renew through a peer.
 pub(crate) fn renew_time(n: &Network, now: Time) -> Option<Time> {
-    let cert = n.certificate.as_ref()?;
-    if n.server_config.is_none() && !membership_trusted(cert, now) {
+    let cert = CertificateChain::decode(n.certificate.as_ref()?).ok()?;
+    if n.server_config.is_none() && !cert.membership_trusted(now) {
         return None;
     }
     if !n.alias.is_empty() && n.alias != cert.subject {
@@ -407,7 +408,10 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
     ) -> Result<Certificate, (ErrorCode, String)> {
         let err = |e: CaError| (e.code(), e.to_string());
         let now = self.timer.now();
-        self.ca_rate_limit(&csr.key, now).map_err(err)?;
+        let csr_key = CertificateRequestBody::decode(csr.body.as_slice())
+            .map(|b| b.key)
+            .unwrap_or_default();
+        self.ca_rate_limit(&csr_key, now).map_err(err)?;
         let mut rng = fork(&mut self.rng.borrow_mut());
         ca::renew(&self.store, n, cert, csr, now, &mut rng)
             .await
@@ -529,7 +533,9 @@ async fn renew_once<K: Kv, H: Host, T: Timer>(
     } else {
         &n.alias
     };
-    let csr = new_certificate_request(profile_key, MEMBER_USAGE, subject).ok()?;
+    let csr = new_certificate_request(profile_key, MEMBER_USAGE, subject)
+        .ok()?
+        .into_envelope();
     let now = s.timer.now();
     let trusted = membership_trusted(&cert, now);
     let via = via.or_else(|| {
@@ -554,9 +560,8 @@ async fn renew_once<K: Kv, H: Host, T: Timer>(
         return None;
     };
     let res = res.and_then(|c| {
-        let ok = verify_certificate(&c, s.timer.now()).is_ok()
-            && c.key == profile_key.public
-            && certificate_network_key(&c) == key;
+        let ok = verify_certificate(&c, s.timer.now())
+            .is_ok_and(|chain| chain.key == profile_key.public && chain.network_key() == key);
         if ok {
             Ok(c)
         } else {
@@ -748,10 +753,12 @@ impl<K: Kv, H: Host, T: Timer> CaPeerService for PeerService<K, H, T> {
         let csr = req
             .certificate_request
             .ok_or_else(|| CaError::Invalid("certificate request missing").to_rpc())?;
-        let key = certificate_network_key(&cert).to_vec();
+        let chain = CertificateChain::decode(&cert)
+            .map_err(|_| CaError::Invalid("invalid certificate").to_rpc())?;
+        let key = chain.network_key().to_vec();
         let allowed = {
             let st = s.state.borrow();
-            st.shares(host, link, &key) && st.profile_key(host, link) == Some(cert.key.as_slice())
+            st.shares(host, link, &key) && st.profile_key(host, link) == Some(chain.key.as_slice())
         };
         if !allowed {
             return Err(CaError::Invalid("not a member of a shared network").to_rpc());

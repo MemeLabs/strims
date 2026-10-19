@@ -21,7 +21,8 @@ use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
+    DEFAULT_CERT_TTL, certificate_body, certificate_parent, generate_key, new_certificate_request,
+    sign_certificate_request_with_network,
 };
 use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::autoseed::v1::{Config as AutoseedConfigRecord, Rule};
@@ -34,8 +35,7 @@ use strims_proto::notification::v1::Notification;
 use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1 as profile;
 use strims_proto::replication::v1::Checkpoint;
-use strims_proto::types::certificate::ParentOneof;
-use strims_proto::types::{Cache, CacheMeta, Certificate, Key, KeyUsage, cache};
+use strims_proto::types::{Cache, CacheMeta, Certificate, CertificateBody, Key, KeyUsage, cache};
 use strims_proto::video::v1::video_channel::{self, Owner};
 use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
 use strims_proto::vnic::v1::Config as VnicConfigRecord;
@@ -278,16 +278,16 @@ fn stores_open_only_at_the_current_version() {
 
     block(async {
         let mut tx = store.write(T0).await.unwrap();
-        StoreVersions::set(&mut tx, StoreVersion { version: 6 })
+        StoreVersions::set(&mut tx, StoreVersion { version: 7 })
             .await
             .unwrap();
         tx.commit().await.unwrap();
     });
     assert!(matches!(
         block(ProfileStore::open(kv.clone(), 1, key(), det_rng(1))),
-        Err(Error::UnsupportedStoreVersion { have: 6 })
+        Err(Error::UnsupportedStoreVersion { have: 7 })
     ));
-    assert_eq!(STORE_VERSION, 7);
+    assert_eq!(STORE_VERSION, 8);
 }
 
 #[test]
@@ -945,7 +945,11 @@ fn owned_networks_get_their_ca_records() {
     let mut tx = block(store.write(T0)).unwrap();
     let n = block(Networks::insert(&mut tx, owned_network(10, 1))).unwrap();
     let cert = n.certificate.unwrap();
-    let root = strims_crypto::certificate_parent(&cert).unwrap().clone();
+    let root = certificate_parent(&cert).unwrap().clone();
+    let (owner, root_body) = (
+        certificate_body(&cert).unwrap(),
+        certificate_body(&root).unwrap(),
+    );
 
     let (logs, peers, reservations) = ca_record_ids(&mut tx, 10);
     assert_eq!((logs.len(), peers.len(), reservations.len()), (2, 1, 1));
@@ -959,15 +963,14 @@ fn owned_networks_get_their_ca_records() {
         .unwrap()
         .unwrap();
         let logged = member.certificate.unwrap();
-        assert_eq!(logged.key, cert.key);
-        assert_eq!(
-            logged.parent_oneof,
-            Some(ParentOneof::ParentSerialNumber(root.serial_number.clone()))
-        );
+        assert!(logged.parent.is_none());
+        let logged = certificate_body(&logged).unwrap();
+        assert_eq!(logged.key, owner.key);
+        assert_eq!(logged.issuer_serial_number, root_body.serial_number);
         let root_log = CertificateLogs::index_get(
             &mut tx,
             &CertificateLogs::BY_SERIAL_NUMBER,
-            &network_scoped_key(10, &root.serial_number),
+            &network_scoped_key(10, &root_body.serial_number),
         )
         .await
         .unwrap()
@@ -977,7 +980,7 @@ fn owned_networks_get_their_ca_records() {
         let peer = NetworkPeers::index_get(
             &mut tx,
             &NetworkPeers::BY_PUBLIC_KEY,
-            &network_scoped_key(10, &cert.key),
+            &network_scoped_key(10, &owner.key),
         )
         .await
         .unwrap()
@@ -995,7 +998,10 @@ fn owned_networks_get_their_ca_records() {
         .await
         .unwrap()
         .unwrap();
-        assert_eq!((r.peer_key, r.reserved_until), (cert.key, RESERVED_FOREVER));
+        assert_eq!(
+            (r.peer_key, r.reserved_until),
+            (owner.key, RESERVED_FOREVER)
+        );
 
         // a joined network, and one applied from another replica, get none
         let mut joined = owned_network(11, 2);
@@ -1064,7 +1070,7 @@ fn an_owned_network_makes_its_owner_directory_admin() {
     let store = new_store(&kv);
     let mut tx = block(store.write(T0)).unwrap();
     let n = block(Networks::insert(&mut tx, owned_network(10, 1))).unwrap();
-    let owner_key = n.certificate.unwrap().key;
+    let owner_key = certificate_body(&n.certificate.unwrap()).unwrap().key;
 
     let (listings, users) = directory_record_ids(&mut tx, 10);
     assert_eq!((listings.len(), users.len()), (0, 1));
@@ -1419,9 +1425,13 @@ fn newer_certificate_logs_take_over_their_subject_and_key() {
     let kv = MemoryKv::new();
     let store = new_store(&kv);
     let cert = |serial: u8| Certificate {
-        key: b"k".to_vec(),
-        subject: "s".into(),
-        serial_number: vec![serial; 16],
+        body: CertificateBody {
+            key: b"k".to_vec(),
+            subject: "s".into(),
+            serial_number: vec![serial; 16],
+            ..Default::default()
+        }
+        .encode_to_vec(),
         ..Default::default()
     };
     block(async {

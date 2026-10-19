@@ -35,6 +35,10 @@ use crate::{ED25519_PRIVATE_KEY_SIZE, ED25519_PUBLIC_KEY_SIZE, ED25519_SIGNATURE
 /// variant; a new kind of signed object adds a domain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Domain {
+    /// A certificate: its encoded `CertificateBody`.
+    Certificate,
+    /// A certificate request: its encoded `CertificateRequestBody`.
+    CertificateRequest,
     /// A ppspp Merkle munro's root, live: `timestamp (u64 BE ns) ‖ root`.
     PpsppMunroRoot,
     /// A ppspp chunk, live: `timestamp (u64 BE ns) ‖ chunk`.
@@ -54,7 +58,9 @@ pub enum Domain {
 
 impl Domain {
     /// Every domain, in declaration order.
-    pub const ALL: [Domain; 7] = [
+    pub const ALL: [Domain; 9] = [
+        Domain::Certificate,
+        Domain::CertificateRequest,
         Domain::PpsppMunroRoot,
         Domain::PpsppChunk,
         Domain::PpsppEpoch,
@@ -68,6 +74,8 @@ impl Domain {
     /// shorter than 256 bytes.
     pub const fn context(self) -> &'static str {
         match self {
+            Domain::Certificate => "certificate",
+            Domain::CertificateRequest => "certificate-request",
             Domain::PpsppMunroRoot => "ppspp-munro-root",
             Domain::PpsppChunk => "ppspp-chunk",
             Domain::PpsppEpoch => "ppspp-epoch",

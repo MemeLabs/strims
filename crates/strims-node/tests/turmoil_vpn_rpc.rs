@@ -33,8 +33,8 @@ use sha2::{Digest, Sha256};
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, certificate_parent, host_certificate, key_from_seed, new_certificate_request,
-    new_self_signed_certificate, sign_certificate_request,
+    CertificateChain, DEFAULT_CERT_TTL, Issuer, host_certificate, key_from_seed,
+    new_certificate_request, new_self_signed_certificate, sign_certificate_request,
 };
 use strims_node::{
     Clock, HashTableGetOptions, HostAddr, HostId, NetworkId, NetworkOptions, Node, NodeConfig,
@@ -45,7 +45,6 @@ use strims_proto::debug::v1::{
     StartMockStreamResponse, WatchMetricsRequest, WatchMetricsResponse, register_debug_service,
 };
 use strims_proto::service::{Context as CallContext, Error, ServerStream};
-use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 use strims_rpc::vpn::{self, VpnConfig};
 use strims_rpc::{Client, Router};
@@ -106,10 +105,11 @@ impl World {
         .unwrap();
         let usage = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
         let csr = new_certificate_request(&self.profile_key(i), usage, &format!("n{i}")).unwrap();
-        let mut member =
-            sign_certificate_request(&csr, DEFAULT_CERT_TTL, &network, epoch(), rng).unwrap();
-        member.parent_oneof = Some(ParentOneof::Parent(Box::new(root)));
-        member
+        let issuer = Issuer::Certificate {
+            key: &network,
+            certificate: &root,
+        };
+        sign_certificate_request(&csr, DEFAULT_CERT_TTL, issuer, epoch(), rng).unwrap()
     }
 }
 
@@ -133,7 +133,8 @@ impl Drop for CancelGuard {
 impl DebugService for TestService {
     async fn p_prof(&self, ctx: &CallContext, _: PProfRequest) -> Result<PProfResponse, Error> {
         let cert = ctx.certificate().ok_or(Error::new(1, "no certificate"))?;
-        let profile = certificate_parent(cert).ok_or(Error::new(2, "no membership"))?;
+        let cert = CertificateChain::decode(cert).map_err(|_| Error::new(3, "malformed"))?;
+        let profile = cert.parent().ok_or(Error::new(2, "no membership"))?;
         Ok(PProfResponse {
             name: hex::encode(&cert.key),
             data: profile.key.clone(),

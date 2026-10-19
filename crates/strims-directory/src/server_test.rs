@@ -14,8 +14,9 @@ use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, SignableMessage, generate_key, host_certificate, key_from_seed,
-    new_certificate_request, sign_certificate_request_with_network,
+    DEFAULT_CERT_TTL, Domain, Error as CryptoError, SignableMessage, Signer, certificate_body,
+    generate_key, host_certificate, key_from_seed, new_certificate_request,
+    sign_certificate_request_with_network, verify_certificate,
 };
 use strims_kademlia::ID;
 use strims_ppspp::{SwarmId, Uri, UriOptions};
@@ -926,11 +927,22 @@ fn the_caller_is_the_host_certificate_and_its_membership() {
     assert_eq!(c.host, ID::try_from(host.public.as_slice()).unwrap());
     assert_eq!(c.peer_key, profile.public);
     assert_eq!(c.alias, "alice");
+    // a host certificate without the membership its body names
     let mut orphan = cert.clone();
-    orphan.parent_oneof = None;
+    orphan.parent = None;
+    let errs = verify_certificate(&orphan, T0).unwrap_err();
+    assert!(errs.includes(CryptoError::MissingIssuer));
     assert_eq!(Caller::from_certificate(&orphan), None);
+    // a validly signed host certificate whose key isn't a host id
+    let mut body = certificate_body(&cert).unwrap();
+    body.key.pop();
     let mut short = cert;
-    short.key.pop();
+    short.body = body.encode_to_vec();
+    short.signature = Signer::new(&profile)
+        .unwrap()
+        .sign(Domain::Certificate, &[&short.body])
+        .to_vec();
+    verify_certificate(&short, T0).unwrap();
     assert_eq!(Caller::from_certificate(&short), None);
 }
 

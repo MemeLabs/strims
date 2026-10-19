@@ -17,8 +17,7 @@
 use strims_base::rng::det_rng;
 use strims_base::time::Time;
 use strims_crypto::{
-    certificate_parent, key_from_seed, key_to_curve25519, public_key_to_curve25519,
-    verify_certificate,
+    key_from_seed, key_to_curve25519, public_key_to_curve25519, verify_certificate,
 };
 use strims_golden::Golden;
 use strims_proto::vnic::v1::PeerInit;
@@ -225,12 +224,11 @@ fn peer_init() {
         assert_eq!(init.protocol_version, 1);
         assert_eq!(init.node_platform, "");
         assert_eq!(init.node_version, "dev");
-        let cert = init.certificate.as_ref().unwrap();
-        verify_certificate(cert, now).unwrap();
+        let cert = verify_certificate(init.certificate.as_ref().unwrap(), now).unwrap();
         assert_eq!(cert.key, a.key().public);
         assert_eq!(cert.subject, label);
         assert_eq!(cert.not_after - cert.not_before, 2 * 3600);
-        let parent = certificate_parent(cert).unwrap();
+        let parent = cert.parent().unwrap();
         assert_eq!(parent.key, a.profile_key().public);
         assert_eq!(parent.subject, "");
 

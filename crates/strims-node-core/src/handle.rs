@@ -288,8 +288,8 @@ impl Node {
         cert: &Certificate,
         options: NetworkOptions,
     ) -> Result<NetworkId, NodeError> {
-        self.add_network(strims_crypto::certificate_network_key(cert), options)
-            .await
+        let chain = strims_crypto::CertificateChain::decode(cert)?;
+        self.add_network(chain.network_key(), options).await
     }
 
     /// The network whose key is `key`, if the node has joined it.

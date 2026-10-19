@@ -590,8 +590,9 @@ fn a_renewed_alias_reaches_presence() {
             .change_network(20, |n| n.alias = "alicia".into())
             .await;
         settle().await;
+        let cert = alice.read_network(20).await.certificate.unwrap();
         assert_eq!(
-            alice.read_network(20).await.certificate.unwrap().subject,
+            strims_crypto::certificate_body(&cert).unwrap().subject,
             "alicia"
         );
         for n in [&owner, &bob] {

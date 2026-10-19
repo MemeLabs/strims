@@ -5,9 +5,7 @@
 
 use std::rc::{Rc, Weak};
 
-use strims_crypto::{
-    certificate_chain, certificate_network_key, membership_trusted, verify_certificate,
-};
+use strims_crypto::{CertificateChain, verify_certificate};
 use strims_dao::Table;
 use strims_dao::schema::network::Networks;
 use strims_kv::Kv;
@@ -79,19 +77,21 @@ async fn accept_published<K: Kv, H: Host, T: Timer>(
         return Err(rpc_error("not supported"));
     }
     let cert = certificate.ok_or_else(|| rpc_error("certificate required"))?;
-    if certificate_chain(&cert).len() > s.config.max_chain_depth {
+    let chain = CertificateChain::decode(&cert)
+        .map_err(|e| rpc_error(format!("invalid certificate: {e}")))?;
+    if chain.bodies().len() > s.config.max_chain_depth {
         return Err(rpc_error("certificate chain too long"));
     }
     let now = s.timer.now();
     verify_certificate(&cert, now).map_err(|e| rpc_error(format!("invalid certificate: {e}")))?;
     let profile_key = s.profile.key.as_ref().map(|k| k.public.as_slice());
-    if profile_key != Some(cert.key.as_slice()) {
+    if profile_key != Some(chain.key.as_slice()) {
         return Err(rpc_error("certificate isn't for this profile"));
     }
-    if !membership_trusted(&cert, now) {
+    if !chain.membership_trusted(now) {
         return Err(rpc_error("certificate isn't signed by its network"));
     }
-    let network_key = certificate_network_key(&cert).to_vec();
+    let network_key = chain.network_key().to_vec();
     let mut tx = s.store.write(now).await.map_err(rpc_error)?;
     if Networks::index_get(&mut tx, &Networks::BY_KEY, &network_key)
         .await

@@ -23,6 +23,7 @@ use std::task::{Context, Poll, Waker};
 
 use futures_core::Stream;
 use futures_sink::Sink;
+use prost::Message as _;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_dao::auth::{self, ProfileKey};
@@ -36,7 +37,7 @@ use strims_kv::MemoryKv;
 use strims_proto::chat::v1::{UiConfigHighlight, WhisperRecord};
 use strims_proto::network::v1::Network;
 use strims_proto::replication::v1::Event;
-use strims_proto::types::{Certificate, Key};
+use strims_proto::types::{Certificate, CertificateBody, Key};
 use strims_replication::{Config, Host, ReplicationControl, ReplicationFrontend};
 use strims_rpc::{Router, Timer, peer_connection};
 use tokio::task::{LocalSet, spawn_local};
@@ -258,8 +259,12 @@ async fn first_device(world: &World, timer: &TokioTimer, seed: u64) -> (Device, 
         Network {
             id,
             certificate: Some(Certificate {
-                key: vec![9; 32],
-                not_after: u64::MAX,
+                body: CertificateBody {
+                    key: vec![9; 32],
+                    not_after: u64::MAX,
+                    ..Default::default()
+                }
+                .encode_to_vec(),
                 ..Default::default()
             }),
             alias: "net".into(),

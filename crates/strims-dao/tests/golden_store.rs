@@ -3,9 +3,9 @@
 
 //! A recorded profile store (`golden/store.hex`) that pins the store layout:
 //! its sign-in and session records open, its records read back, every key
-//! is the one this crate derives, the compressed delta matches, its stream
-//! keys name their channels, and its swarm cache reads back by swarm id and
-//! salt.
+//! is the one this crate derives, the compressed delta matches, its
+//! certificates verify at the recording time, its stream keys name their
+//! channels, and its swarm cache reads back by swarm id and salt.
 //!
 //! [`record`] writes the store through this crate's API, from seeded rngs
 //! at a fixed time, and renders it as the file's lines: `now`, `auth`,
@@ -34,8 +34,9 @@ use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, certificate_network_key, generate_key, new_certificate_request,
-    new_self_signed_certificate, sign_certificate_request_with_network,
+    CertificateChain, DEFAULT_CERT_TTL, Issuer, certificate_body, certificate_parent, generate_key,
+    network_certificate, new_certificate_request, new_self_signed_certificate,
+    sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
 };
 use strims_dao::auth::{self, ProfileKey, SessionToken};
 use strims_dao::key::{Namespace, index_entry_key, parse_base36};
@@ -76,6 +77,7 @@ use strims_proto::dao::v1::{Mutex, SecondaryIndexKey, VersionVector};
 use strims_proto::network::v1::bootstrap::{
     self, BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client::ClientOptions,
 };
+use strims_proto::network::v1::ca::CertificateLog;
 use strims_proto::network::v1::directory::listing::{self, Content};
 use strims_proto::network::v1::directory::server_config::Integrations;
 use strims_proto::network::v1::directory::server_config::integrations::Swarm;
@@ -87,7 +89,7 @@ use strims_proto::notification::v1::notification::Status;
 use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::{Event, EventLog};
 use strims_proto::types::cache::{Epoch, Integrity, MerkleIntegrity};
-use strims_proto::types::{Cache, Certificate, Image, ImageType, KeyUsage};
+use strims_proto::types::{Cache, Certificate, CertificateBody, Image, ImageType, KeyUsage};
 use strims_proto::video::v1::video_channel::{Local, LocalShare, Owner, RemoteShare};
 use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
 use strims_proto::vnic::v1 as vnic;
@@ -178,17 +180,17 @@ async fn insert<T: Table>(
     .await
 }
 
-/// A whisper in the conversation with `peer_key`, from the holder of
-/// `cert`, on the network with key `network_key`.
+/// A whisper in the conversation with `peer_key`, from the holder of the
+/// certificate `from`, on the network with key `network_key`.
 fn whisper(
     id: u64,
     network_key: &[u8],
     peer_key: &[u8],
-    cert: &Certificate,
+    from: &CertificateBody,
     body: &str,
     peer_message_id: u64,
 ) -> chat::WhisperRecord {
-    let state = if peer_key == cert.key {
+    let state = if peer_key == from.key {
         chat::MessageState::Unread
     } else {
         chat::MessageState::Enqueued
@@ -200,8 +202,8 @@ fn whisper(
         state: state as i32,
         message: Some(chat::Message {
             server_time: NOW.unix_millis(),
-            peer_key: cert.key.clone(),
-            nick: cert.subject.clone(),
+            peer_key: from.key.clone(),
+            nick: from.subject.clone(),
             body: body.to_owned(),
             ..Default::default()
         }),
@@ -233,7 +235,8 @@ async fn insert_channel(rs: &ReplicatedStore<MemoryKv>, owner: Owner, title: &st
 ///
 /// The profile `alice` has a persisted session; a network it runs, whose
 /// CA has an invitee, a renewal of the owner's certificate and a released
-/// alias; a network it joined and renamed; bootstrap clients and config;
+/// alias; a network it joined, with a membership its root signed, and
+/// renamed; bootstrap clients and config;
 /// chat settings, with a highlight renamed and one deleted; a whisper
 /// thread absorbed by a second one, and whispers in it; a device added and
 /// one deleted; the owned network's directory; two chat servers on it, one
@@ -302,22 +305,28 @@ async fn record_store() -> String {
         ..Default::default()
     })
     .await;
-    let owner_cert = owned.certificate.clone().unwrap();
-    let owned_key = certificate_network_key(&owner_cert).to_vec();
+    let owner_cert = CertificateChain::decode(owned.certificate.as_ref().unwrap()).unwrap();
+    let owned_key = owner_cert.network_key().to_vec();
 
     let joined_key = generate_key(&mut rng);
-    let joined_cert = new_self_signed_certificate(
-        &joined_key,
-        PEER_SIGN,
+    let joined_root =
+        network_certificate(&joined_key, "joined", DEFAULT_CERT_TTL, NOW, &mut rng).unwrap();
+    let joined_csr = new_certificate_request(&profile_key, PEER_SIGN, &profile.name).unwrap();
+    let joined_cert = sign_certificate_request(
+        &joined_csr,
         Duration::HOUR,
-        "joined",
+        Issuer::Certificate {
+            key: &joined_key,
+            certificate: &joined_root,
+        },
         NOW,
         &mut rng,
     )
     .unwrap();
+    let joined_network_key = joined_key.public.clone();
     let joined = insert::<Networks>(&rs, |id| Network {
         id,
-        certificate: Some(joined_cert.clone()),
+        certificate: Some(joined_cert),
         alias: "joined".to_owned(),
         ..Default::default()
     })
@@ -496,6 +505,7 @@ async fn record_store() -> String {
         &mut rng,
     )
     .unwrap();
+    let peer_cert = certificate_body(&peer_cert).unwrap();
     let thread = |id| chat::WhisperThread {
         id,
         peer_key: peer_cert.key.clone(),
@@ -509,12 +519,12 @@ async fn record_store() -> String {
     })
     .await;
     insert::<WhisperThreads>(&rs, thread).await;
-    let own_cert = Certificate {
+    let own_cert = CertificateBody {
         key: profile_key.public.clone(),
         subject: profile.name.clone(),
         ..Default::default()
     };
-    let (network, peer) = (&joined_cert.key, &peer_cert.key);
+    let (network, peer) = (&joined_network_key, &peer_cert.key);
     insert::<WhisperRecords>(&rs, |id| whisper(id, network, peer, &peer_cert, "hi", 5)).await;
     insert::<WhisperRecords>(&rs, |id| whisper(id, network, peer, &own_cert, "hello", 0)).await;
     let again =
@@ -738,7 +748,7 @@ async fn record_store() -> String {
     let share = insert_channel(&rs, share_owner, "share").await;
     let remote_owner = Owner::RemoteShare(RemoteShare {
         id: 42,
-        network_key: joined_cert.key.clone(),
+        network_key: joined_network_key.clone(),
         service_key: generate_key(&mut rng).public,
         service_salt: b"salt".to_vec(),
         server_addr: "rtmp.example:1935".to_owned(),
@@ -751,7 +761,7 @@ async fn record_store() -> String {
             enabled: true,
             server_addr: "0.0.0.0:1935".to_owned(),
             public_server_addr: "rtmp.example:1935".to_owned(),
-            service_network_keys: vec![owned_key.clone(), joined_cert.key.clone()],
+            service_network_keys: vec![owned_key.clone(), joined_network_key.clone()],
         };
         IngressConfig::set(tx, config).await
     })
@@ -786,7 +796,7 @@ async fn record_store() -> String {
         AutoseedConfig::set(tx, autoseed::Config { enable: true }).await
     })
     .await;
-    for (i, network_key) in [&owned_key, &joined_cert.key].into_iter().enumerate() {
+    for (i, network_key) in [&owned_key, &joined_network_key].into_iter().enumerate() {
         let label = format!("rule {i}");
         let rule = autoseed::Rule {
             network_key: network_key.clone(),
@@ -1335,7 +1345,9 @@ fn ca_records_read_back_by_index() {
         .find(|n| n.server_config.is_some())
         .unwrap();
     let owner_cert = owned.certificate.clone().unwrap();
+    let owner_body = certificate_body(&owner_cert).unwrap();
     let scoped = |b: &[u8]| network_scoped_key(owned.id, b);
+    let log_body = |l: &CertificateLog| certificate_body(l.certificate.as_ref().unwrap()).unwrap();
 
     let logs = block(CertificateLogs::index_get_all(
         &mut tx,
@@ -1354,26 +1366,59 @@ fn ca_records_read_back_by_index() {
         .unwrap()
         .unwrap()
     };
-    let latest = by_subject(&mut tx, &g.name);
-    assert_ne!(latest.certificate.as_ref().unwrap(), &owner_cert);
-    assert_eq!(latest.certificate.as_ref().unwrap().key, owner_cert.key);
-    assert_eq!(
+    let latest = log_body(&by_subject(&mut tx, &g.name));
+    assert_ne!(latest.serial_number, owner_body.serial_number);
+    assert_eq!(latest.key, owner_body.key);
+    let by_key = block(CertificateLogs::index_get(
+        &mut tx,
+        &CertificateLogs::BY_KEY,
+        &scoped(&owner_body.key),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(log_body(&by_key).serial_number, latest.serial_number);
+    let invitee_log = by_subject(&mut tx, "invitee");
+
+    // Logs hold no parents: each names its issuer by serial number, and
+    // only the root is self-signed. The owner's first certificate finds
+    // its root's log by the serial number it names.
+    assert!(
+        logs.iter()
+            .all(|l| l.certificate.as_ref().unwrap().parent.is_none())
+    );
+    let self_signed: Vec<_> = logs
+        .iter()
+        .map(log_body)
+        .filter(|b| b.issuer_serial_number.is_empty())
+        .collect();
+    assert_eq!(self_signed.len(), 1);
+    assert_eq!(self_signed[0].key, network_key(&owned));
+    let by_serial = |tx: &mut ReadTx<MemoryKv>, serial: &[u8]| {
         block(CertificateLogs::index_get(
-            &mut tx,
-            &CertificateLogs::BY_KEY,
-            &scoped(&owner_cert.key)
+            tx,
+            &CertificateLogs::BY_SERIAL_NUMBER,
+            &scoped(serial),
         ))
         .unwrap()
         .unwrap()
-        .id,
-        latest.id
+        .certificate
+        .unwrap()
+    };
+    let member = by_serial(&mut tx, &owner_body.serial_number);
+    assert_eq!(
+        member,
+        Certificate {
+            parent: None,
+            ..owner_cert.clone()
+        }
     );
-    let invitee_log = by_subject(&mut tx, "invitee");
+    let root = by_serial(&mut tx, &owner_body.issuer_serial_number);
+    assert_eq!(Some(&root), certificate_parent(&owner_cert));
 
     let owner = block(NetworkPeers::index_get(
         &mut tx,
         &NetworkPeers::BY_PUBLIC_KEY,
-        &scoped(&owner_cert.key),
+        &scoped(&owner_body.key),
     ))
     .unwrap()
     .unwrap();
@@ -1385,7 +1430,7 @@ fn ca_records_read_back_by_index() {
     ))
     .unwrap();
     assert_eq!(invited.len(), 1);
-    assert_eq!(invited[0].public_key, invitee_log.certificate.unwrap().key);
+    assert_eq!(invited[0].public_key, log_body(&invitee_log).key);
 
     let held = block(AliasReservations::index_get(
         &mut tx,
@@ -1412,6 +1457,34 @@ fn ca_records_read_back_by_index() {
     assert!(bootstrap.enable_publishing);
 }
 
+/// Both networks hold the profile's membership, signed by the network's
+/// root and trusted at the recording time; the owned network's root is its
+/// server config's key.
+#[test]
+fn network_certificates_verify_at_the_recording_time() {
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.read()).unwrap();
+    let profile_key = block(Profile::get(&mut tx)).unwrap().unwrap().key.unwrap();
+    let networks = block(Networks::get_all(&mut tx)).unwrap();
+    assert_eq!(networks.len(), 2);
+    for n in &networks {
+        let chain = verify_certificate(n.certificate.as_ref().unwrap(), g.now).unwrap();
+        assert_eq!(chain.key, profile_key.public);
+        assert_eq!(chain.subject, g.name);
+        assert_eq!(chain.bodies().len(), 2);
+        assert!(chain.membership_trusted(g.now));
+        assert_eq!(chain.network_key(), network_key(n));
+        match &n.server_config {
+            Some(config) => {
+                assert_eq!(chain.root().subject, config.name);
+                assert_eq!(chain.network_key(), config.key.as_ref().unwrap().public);
+            }
+            None => assert_eq!(chain.root().subject, "joined"),
+        }
+    }
+}
+
 /// The owned network's directory: the owner as its admin, an invitee who
 /// may not join, and a listing of each kind, each found by its key.
 #[test]
@@ -1426,7 +1499,9 @@ fn directory_records_read_back_by_index() {
         .into_iter()
         .find(|n| n.server_config.is_some())
         .unwrap();
-    let owner_key = owned.certificate.clone().unwrap().key;
+    let owner_key = certificate_body(owned.certificate.as_ref().unwrap())
+        .unwrap()
+        .key;
 
     let users = block(DirectoryUserRecords::index_get_all(
         &mut tx,
@@ -1490,7 +1565,9 @@ fn chat_records_read_back_by_index() {
         .into_iter()
         .find(|n| n.server_config.is_some())
         .unwrap();
-    let owner_key = owned.certificate.clone().unwrap().key;
+    let owner_key = certificate_body(owned.certificate.as_ref().unwrap())
+        .unwrap()
+        .key;
 
     let servers = block(ChatServers::get_all(&mut tx)).unwrap();
     assert_eq!(servers.len(), 1);
@@ -1590,7 +1667,12 @@ fn video_records_read_back() {
         let title = &c.directory_listing_snippet.as_ref().unwrap().title;
         let expected = match c.owner.as_ref().unwrap() {
             Owner::Local(_) => ("local", &owned_key),
-            Owner::LocalShare(_) => ("share", &owned_key),
+            Owner::LocalShare(s) => {
+                // the invitee's membership, as the CA issued it
+                let chain = verify_certificate(s.certificate.as_ref().unwrap(), g.now).unwrap();
+                assert!(chain.membership_trusted(g.now));
+                ("share", &owned_key)
+            }
             Owner::RemoteShare(r) => {
                 assert_eq!(r.server_addr, "rtmp.example:1935");
                 ("remote", &joined_key)
@@ -1598,7 +1680,7 @@ fn video_records_read_back() {
         };
         assert_eq!(
             (title.as_str(), channel_network_key(c)),
-            (expected.0, Some(expected.1.as_slice()))
+            (expected.0, Some(expected.1.clone()))
         );
     }
 

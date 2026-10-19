@@ -33,7 +33,7 @@ use std::task::{Context as TaskContext, Poll};
 
 use futures_core::Stream;
 use prost::Message;
-use strims_crypto::certificate_root;
+use strims_crypto::{certificate_body, certificate_root};
 use strims_dao::schema::network::network_key;
 use strims_dao::{Recv, Subscription};
 use strims_kv::Kv;
@@ -174,7 +174,8 @@ fn describe(n: &NetworkRecord) -> Network {
         name: n
             .certificate
             .as_ref()
-            .map(|c| certificate_root(c).subject.clone())
+            .and_then(|c| certificate_body(certificate_root(c)).ok())
+            .map(|b| b.subject)
             .unwrap_or_default(),
         key: network_key(n),
     }
@@ -403,8 +404,11 @@ impl<K: Kv, H: Host, T: Timer> DirectoryFrontendService for DirectoryFrontend<K,
             .network()
             .find_certificate(&req.network_key, Query::Subject(req.alias), false)
             .await?;
+        let peer_key = certificate_body(&cert)
+            .map_err(|e| RpcError::new(0, e.to_string()))?
+            .key;
         self.control
-            .moderate_user(&req.network_key, &cert.key, req.moderation)
+            .moderate_user(&req.network_key, &peer_key, req.moderation)
             .await
             .map_err(call_error)?;
         Ok(FrontendModerateUserResponse {})

@@ -28,7 +28,7 @@ use strims_proto::debug::v1::{
 use strims_proto::service::{
     CallError, Caller, Context, Error, Registry, ServerStream, StreamingMethod, UnaryMethod,
 };
-use strims_proto::types::Certificate;
+use strims_proto::types::{Certificate, CertificateBody};
 
 /// Polls `f` once; every future in these tests is ready immediately.
 fn ready<F: Future>(f: F) -> F::Output {
@@ -201,7 +201,11 @@ fn handlers_reach_the_service_with_their_context() {
     let ctx = Context::new(7, BTreeMap::from([("x".to_owned(), vec![1, 2])]));
     assert_eq!(ctx.certificate(), None);
     let cert = Certificate {
-        key: vec![9; 32],
+        body: CertificateBody {
+            key: vec![9; 32],
+            ..Default::default()
+        }
+        .encode_to_vec(),
         ..Default::default()
     };
     let ctx = ctx.with_certificate(Some(Rc::new(cert.clone())));

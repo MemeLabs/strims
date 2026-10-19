@@ -47,7 +47,7 @@ use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use prost::Message as _;
-use strims_crypto::{certificate_network_key, membership_trusted};
+use strims_crypto::{CertificateChain, certificate_body, membership_trusted};
 use strims_node::app::AppConfig;
 use strims_node::{Clock, SystemClock};
 use strims_proto::auth::v1::{
@@ -363,7 +363,8 @@ impl Profile {
         all.into_iter().find(|n| {
             n.certificate
                 .as_ref()
-                .is_some_and(|c| certificate_network_key(c) == key)
+                .and_then(|c| CertificateChain::decode(c).ok())
+                .is_some_and(|c| c.network_key() == key)
         })
     }
 
@@ -611,7 +612,10 @@ async fn scenario(browser: &mut Browser) {
     let (network, key, joined) = steps
         .run("bob joins alice's network and renews at her CA", async {
             let network = alice.create_network("lobby-net").await;
-            let key = certificate_network_key(network.certificate.as_ref().unwrap()).to_vec();
+            let key = CertificateChain::decode(network.certificate.as_ref().unwrap())
+                .unwrap()
+                .network_key()
+                .to_vec();
             let joined = bob.join(alice.invite(network.id).await).await;
             assert!(!membership_trusted(
                 joined.certificate.as_ref().unwrap(),
@@ -619,7 +623,8 @@ async fn scenario(browser: &mut Browser) {
             ));
             let renewed = bob.wait_trusted(&key).await;
             assert_eq!(renewed.id, joined.id);
-            assert_eq!(renewed.certificate.unwrap().subject, "bob");
+            let membership = certificate_body(renewed.certificate.as_ref().unwrap()).unwrap();
+            assert_eq!(membership.subject, "bob");
             alice.wait_ca_peer(network.id, &bob).await;
             (network, key, joined)
         })

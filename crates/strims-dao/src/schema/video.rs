@@ -29,7 +29,7 @@ use data_encoding::BASE64URL_NOPAD;
 use rand_core::Rng;
 use strims_crypto::sign::verify;
 use strims_crypto::{
-    Domain, ED25519_SIGNATURE_SIZE, Signer, certificate_network_key, generate_key,
+    CertificateChain, Domain, ED25519_SIGNATURE_SIZE, Signer, certificate_body, generate_key,
 };
 use strims_kv::Kv;
 use strims_proto::network::v1::directory::ListingSnippet;
@@ -85,9 +85,13 @@ pub fn owner_key(c: &VideoChannel) -> Vec<u8> {
         }
         Some(Owner::LocalShare(s)) => {
             k.push(LOCAL_SHARE);
-            if let Some(cert) = &s.certificate {
-                k.extend_from_slice(certificate_network_key(cert));
-                k.extend_from_slice(&cert.key);
+            if let Some(c) = s
+                .certificate
+                .as_ref()
+                .and_then(|c| CertificateChain::decode(c).ok())
+            {
+                k.extend_from_slice(c.network_key());
+                k.extend_from_slice(&c.key);
             }
         }
         Some(Owner::RemoteShare(r)) => {
@@ -104,11 +108,14 @@ pub fn owner_key(c: &VideoChannel) -> Vec<u8> {
 /// `RemoteShare` owner's network key, or a `LocalShare` certificate's
 /// root key. None without an owner, or for a `LocalShare` without a
 /// certificate.
-pub fn channel_network_key(c: &VideoChannel) -> Option<&[u8]> {
+pub fn channel_network_key(c: &VideoChannel) -> Option<Vec<u8>> {
     match c.owner.as_ref()? {
-        Owner::Local(l) => Some(&l.network_key),
-        Owner::LocalShare(s) => s.certificate.as_ref().map(certificate_network_key),
-        Owner::RemoteShare(r) => Some(&r.network_key),
+        Owner::Local(l) => Some(l.network_key.clone()),
+        Owner::LocalShare(s) => {
+            let c = CertificateChain::decode(s.certificate.as_ref()?).ok()?;
+            Some(c.network_key().to_vec())
+        }
+        Owner::RemoteShare(r) => Some(r.network_key.clone()),
     }
 }
 
@@ -145,7 +152,7 @@ pub async fn delete_for_network<K: Kv>(
     // Channels are local to this device and few, so a scan finds the
     // network's.
     for c in VideoChannels::get_all(tx).await? {
-        if channel_network_key(&c) == Some(network_key) {
+        if channel_network_key(&c).as_deref() == Some(network_key) {
             VideoChannels::delete(tx, c.id).await?;
         }
     }
@@ -249,12 +256,17 @@ pub async fn channel_by_stream_key<R: Read>(
     let Some(c) = VideoChannels::get(tx, id).await? else {
         return Ok(None);
     };
-    let owner_key: &[u8] = match &c.owner {
-        Some(Owner::Local(l)) => &l.auth_key,
-        Some(Owner::LocalShare(s)) => s.certificate.as_ref().map_or(&[], |cert| &cert.key),
+    let owner_key = match &c.owner {
+        Some(Owner::Local(l)) => l.auth_key.clone(),
+        Some(Owner::LocalShare(s)) => s
+            .certificate
+            .as_ref()
+            .and_then(|cert| certificate_body(cert).ok())
+            .map(|b| b.key)
+            .unwrap_or_default(),
         Some(Owner::RemoteShare(_)) | None => return Ok(None),
     };
-    if !verify(Domain::VideoStreamKey, owner_key, &[&c.token], &signature) {
+    if !verify(Domain::VideoStreamKey, &owner_key, &[&c.token], &signature) {
         return Ok(None);
     }
     Ok(Some(c))
@@ -303,8 +315,8 @@ impl Singleton for HlsConfig {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use strims_proto::types::Certificate;
-    use strims_proto::types::certificate::ParentOneof;
+    use prost::Message;
+    use strims_proto::types::{Certificate, CertificateBody};
     use strims_proto::video::v1::video_channel::{Local, LocalShare, RemoteShare};
 
     use super::*;
@@ -321,23 +333,37 @@ mod tests {
     fn owner_keys_by_kind() {
         let local = channel(300, Owner::Local(Local::default()));
         assert_eq!(owner_key(&local), [1, 0xac, 0x02]);
+        // Unsigned: neither function checks signatures.
         let root = Certificate {
-            key: b"root".to_vec(),
+            body: CertificateBody {
+                key: b"root".to_vec(),
+                serial_number: b"r".to_vec(),
+                ..Default::default()
+            }
+            .encode_to_vec(),
             ..Default::default()
         };
-        let cert = Certificate {
-            key: b"leaf".to_vec(),
-            parent_oneof: Some(ParentOneof::Parent(Box::new(root))),
+        let leaf = |issuer_serial_number: &[u8]| Certificate {
+            body: CertificateBody {
+                key: b"leaf".to_vec(),
+                issuer_serial_number: issuer_serial_number.to_vec(),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            parent: Some(Box::new(root.clone())),
             ..Default::default()
         };
-        let share = channel(
-            1,
-            Owner::LocalShare(LocalShare {
-                certificate: Some(cert),
-            }),
-        );
+        let share_of = |cert| {
+            channel(
+                1,
+                Owner::LocalShare(LocalShare {
+                    certificate: Some(cert),
+                }),
+            )
+        };
+        let share = share_of(leaf(b"r"));
         assert_eq!(owner_key(&share), b"\x02rootleaf");
-        assert_eq!(channel_network_key(&share), Some(&b"root"[..]));
+        assert_eq!(channel_network_key(&share).as_deref(), Some(&b"root"[..]));
         let remote = channel(
             1,
             Owner::RemoteShare(RemoteShare {
@@ -347,13 +373,17 @@ mod tests {
             }),
         );
         assert_eq!(owner_key(&remote), b"\x03netsvc");
-        assert_eq!(channel_network_key(&remote), Some(&b"net"[..]));
+        assert_eq!(channel_network_key(&remote).as_deref(), Some(&b"net"[..]));
         let unowned = VideoChannel::default();
         assert!(owner_key(&unowned).is_empty());
         assert_eq!(channel_network_key(&unowned), None);
         let bare_share = channel(1, Owner::LocalShare(LocalShare::default()));
         assert_eq!(owner_key(&bare_share), [2]);
         assert_eq!(channel_network_key(&bare_share), None);
+        // a chain whose parent isn't the issuer its leaf names
+        let broken_share = share_of(leaf(b"other"));
+        assert_eq!(owner_key(&broken_share), [2]);
+        assert_eq!(channel_network_key(&broken_share), None);
     }
 
     #[test]

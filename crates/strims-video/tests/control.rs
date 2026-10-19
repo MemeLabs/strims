@@ -17,6 +17,11 @@ use std::fmt::Debug;
 use std::future::Future;
 
 use futures_util::StreamExt;
+use strims_base::rng::det_rng;
+use strims_crypto::{
+    DEFAULT_CERT_TTL, Issuer, generate_key, network_certificate, new_certificate_request,
+    sign_certificate_request,
+};
 use strims_dao::schema::chat::ChatServers;
 use strims_dao::schema::network::Networks;
 use strims_dao::schema::video::{
@@ -28,8 +33,7 @@ use strims_kv::MemoryKv;
 use strims_proto::chat::v1::Server;
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::service::CallError;
-use strims_proto::types::Certificate;
-use strims_proto::types::certificate::ParentOneof;
+use strims_proto::types::KeyUsage;
 use strims_proto::video::v1::video_channel::{Local, LocalShare, Owner, RemoteShare};
 use strims_proto::video::v1::{
     HlsEgressClient, HlsEgressCloseStreamRequest, HlsEgressConfig, HlsEgressGetConfigRequest,
@@ -354,8 +358,8 @@ fn channel_urls_by_owner() {
     run(async {
         let world = World::default();
         let n = node_in(&world, 1).await;
-        let (net, _) = owned_network(&n, &[], 10).await;
-        let net = net.public;
+        let (net_key, _) = owned_network(&n, &[], 10).await;
+        let net = net_key.public.clone();
         let s = start(&n);
         let profile_key = n.profile_key().public.clone();
 
@@ -417,18 +421,20 @@ fn channel_urls_by_owner() {
         ));
         assert_eq!(by_stream_key(&n, &r.stream_key).await, None);
 
-        let root = Certificate {
-            key: net.clone(),
-            ..Default::default()
+        let rng = &mut det_rng(9);
+        let root = network_certificate(&net_key, "net", DEFAULT_CERT_TTL, T0, rng).unwrap();
+        let sharer = generate_key(rng);
+        let csr = new_certificate_request(&sharer, KeyUsage::Peer as i32, "").unwrap();
+        let issuer = Issuer::Certificate {
+            key: &net_key,
+            certificate: &root,
         };
+        let certificate =
+            sign_certificate_request(&csr, DEFAULT_CERT_TTL, issuer, T0, rng).unwrap();
         let share = seed_channel(
             &n,
             Owner::LocalShare(LocalShare {
-                certificate: Some(Certificate {
-                    key: vec![9; 32],
-                    parent_oneof: Some(ParentOneof::Parent(Box::new(root))),
-                    ..Default::default()
-                }),
+                certificate: Some(certificate),
             }),
         )
         .await;

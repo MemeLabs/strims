@@ -23,8 +23,8 @@ use std::time::Duration as StdDuration;
 use data_encoding::HEXLOWER;
 use strims_base::rng::det_rng;
 use strims_crypto::{
-    DEFAULT_CERT_TTL, certificate_network_key, generate_key, membership_trusted,
-    new_certificate_request, sign_certificate_request_with_network,
+    CertificateChain, DEFAULT_CERT_TTL, generate_key, membership_trusted, new_certificate_request,
+    sign_certificate_request_with_network,
 };
 use strims_dao::Table;
 use strims_dao::schema::network::Networks;
@@ -420,13 +420,12 @@ fn a_published_network_joins_the_receivers_store() {
         drop(tx);
         assert_eq!(networks.len(), 1);
         let cert = networks[0].certificate.as_ref().unwrap();
-        assert_eq!(cert.key, b.node.profile_key().public);
+        let chain = CertificateChain::decode(cert).unwrap();
+        assert_eq!(chain.key, b.node.profile_key().public);
+        let published = CertificateChain::decode(network.certificate.as_ref().unwrap()).unwrap();
+        assert_eq!(chain.network_key(), published.network_key());
         assert_eq!(
-            certificate_network_key(cert),
-            certificate_network_key(network.certificate.as_ref().unwrap())
-        );
-        assert_eq!(
-            cert.key_usage,
+            chain.key_usage,
             KeyUsage::Broker as i32 | KeyUsage::Sign as i32
         );
         assert!(membership_trusted(cert, T0));

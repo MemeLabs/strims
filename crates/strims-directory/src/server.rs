@@ -93,7 +93,7 @@ use rand_core::Rng;
 use slotmap::{SlotMap, new_key_type};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::{SignableMessage, certificate_parent};
+use strims_crypto::{SignableMessage, certificate_body, certificate_parent};
 use strims_kademlia::ID;
 use strims_ppspp::SwarmId;
 use strims_proto::network::v1::directory::event::{
@@ -169,13 +169,14 @@ impl Caller {
     /// under a membership certificate. The vpn connection verified the
     /// chain.
     pub fn from_certificate(c: &Certificate) -> Option<Caller> {
-        let parent = certificate_parent(c)?;
-        let host = ID::try_from(c.key.as_slice()).ok()?;
+        let parent = certificate_body(certificate_parent(c)?).ok()?;
+        let leaf = certificate_body(c).ok()?;
+        let host = ID::try_from(leaf.key.as_slice()).ok()?;
         Some(Caller {
-            host_key: c.key.clone(),
+            host_key: leaf.key,
             host,
-            peer_key: parent.key.clone(),
-            alias: parent.subject.clone(),
+            peer_key: parent.key,
+            alias: parent.subject,
         })
     }
 

@@ -15,7 +15,7 @@ import { InviteClient } from "../apis/client";
 import { BootstrapClient } from "../apis/strims/network/v1/bootstrap/bootstrap";
 import { Invitation, InvitationV0 } from "../apis/strims/network/v1/network";
 import { Profile } from "../apis/strims/profile/v1/profile";
-import { Certificate } from "../apis/strims/type/certificate";
+import { CertificateBody } from "../apis/strims/type/certificate";
 import { useCall, useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";
 import { suppressClickAway } from "../hooks/useClickAway";
@@ -98,8 +98,8 @@ interface InviteAuthFormValues {
 
 interface InviteAuthFormProps {
   invitation: InvitationV0;
-  networkCert: Certificate;
-  peerCert: Certificate;
+  networkCert: CertificateBody;
+  peerCert: CertificateBody;
   profile: Profile;
 }
 

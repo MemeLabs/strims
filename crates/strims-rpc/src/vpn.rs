@@ -64,7 +64,7 @@ use futures_core::Stream;
 use futures_sink::Sink;
 use prost::Message;
 use strims_base::time::Time;
-use strims_crypto::{certificate_parent, chain_validity, verify_certificate};
+use strims_crypto::{certificate_body, certificate_parent, verify_certificate};
 use strims_kademlia::ID;
 use strims_proto::rpc::Call;
 use strims_proto::types::Certificate;
@@ -162,11 +162,14 @@ pub enum VpnError {
     NetworkMismatch,
 }
 
-/// The root of a host certificate: the certificate's grandparent, which
-/// has no parent of its own.
-fn host_certificate_root(cert: &Certificate) -> Option<&Certificate> {
+/// The network key of a host certificate: the key of the certificate's
+/// grandparent, which has no parent of its own.
+fn host_certificate_network_key(cert: &Certificate) -> Option<Vec<u8>> {
     let root = certificate_parent(certificate_parent(cert)?)?;
-    root.parent_oneof.is_none().then_some(root)
+    if root.parent.is_some() {
+        return None;
+    }
+    certificate_body(root).ok().map(|b| b.key)
 }
 
 fn certificate_headers(cert: &Certificate) -> BTreeMap<String, Vec<u8>> {
@@ -190,7 +193,7 @@ impl Remote {
 struct CachedCertificate {
     bytes: Vec<u8>,
     certificate: Rc<Certificate>,
-    /// [`chain_validity`] of the certificate.
+    /// The certificate chain's validity ([`strims_crypto::CertificateChain::validity`]).
     valid: (Time, Time),
     /// Insertion order, for eviction.
     stamp: u64,
@@ -279,17 +282,17 @@ impl Port {
             self.metrics.rejected_certificate += 1;
             return None;
         };
-        let on_network =
-            host_certificate_root(&cert).is_some_and(|root| root.key == self.network_key);
-        if cert.key != src.to_bytes() || !on_network {
+        let on_network = host_certificate_network_key(&cert).is_some_and(|k| k == self.network_key);
+        let for_src = certificate_body(&cert).is_ok_and(|b| b.key == src.to_bytes());
+        if !for_src || !on_network {
             self.metrics.rejected_certificate += 1;
             return None;
         }
         // the structure check bounds this to three signatures
-        if verify_certificate(&cert, at).is_err() {
+        let Ok(chain) = verify_certificate(&cert, at) else {
             self.metrics.invalid_certificate += 1;
             return None;
-        }
+        };
         let certificate = Rc::new(cert);
         if !self.certificates.contains_key(&src)
             && self.certificates.len() >= self.config.max_certificates
@@ -307,7 +310,7 @@ impl Port {
             src,
             CachedCertificate {
                 bytes: bytes.clone(),
-                valid: chain_validity(&certificate),
+                valid: chain.validity(),
                 certificate: certificate.clone(),
                 stamp: self.next_stamp,
             },
@@ -412,10 +415,8 @@ where
     R: Stream<Item = Result<Delivery<H>, E>> + Unpin,
     W: Sink<(HostAddr, Vec<u8>), Error = E> + Unpin,
 {
-    let network_key = host_certificate_root(certificate)
-        .ok_or(VpnError::NotHostCertificate)?
-        .key
-        .clone();
+    let network_key =
+        host_certificate_network_key(certificate).ok_or(VpnError::NotHostCertificate)?;
     let mut rpc = config.rpc.clone();
     rpc.serve &= router.is_some();
     let mut endpoint = Endpoint::new(rpc);
@@ -468,10 +469,11 @@ impl VpnClient {
     /// Replaces this host's certificate, e.g. when its membership is
     /// renewed. Calls sent from now on carry the new one.
     pub fn set_certificate(&self, certificate: &Certificate) -> Result<(), VpnError> {
-        let root = host_certificate_root(certificate).ok_or(VpnError::NotHostCertificate)?;
+        let network_key =
+            host_certificate_network_key(certificate).ok_or(VpnError::NotHostCertificate)?;
         let mut s = self.shared.borrow_mut();
         let s = &mut *s;
-        if s.vpn.as_ref().is_some_and(|p| p.network_key != root.key) {
+        if s.vpn.as_ref().is_some_and(|p| p.network_key != network_key) {
             return Err(VpnError::NetworkMismatch);
         }
         s.endpoint.set_headers(&certificate_headers(certificate));

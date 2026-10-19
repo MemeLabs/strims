@@ -287,7 +287,8 @@ fn moderating_users_by_alias_and_listings() {
         let (key, _pipes) = owned_network(&owner, &[&alice, &bob], 11).await;
         let key = key.public;
         let (uo, ua, ub) = (ui(&owner), ui(&alice), ui(&bob));
-        let alias = alice.read_network(11).await.certificate.unwrap().subject;
+        let cert = alice.read_network(11).await.certificate.unwrap();
+        let alias = strims_crypto::certificate_body(&cert).unwrap().subject;
         assert_eq!(alias, "node-2");
 
         uo.moderate_user(&FrontendModerateUserRequest {

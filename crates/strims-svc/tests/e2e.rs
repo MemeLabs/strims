@@ -22,7 +22,7 @@ use std::time::Duration as StdDuration;
 
 use futures_util::StreamExt;
 use prost::Message as _;
-use strims_crypto::{certificate_network_key, membership_trusted};
+use strims_crypto::{CertificateChain, certificate_body, membership_trusted};
 use strims_node::{Clock, SystemClock};
 use strims_proto::auth::v1::{AuthFrontendClient, SignUpRequest};
 use strims_proto::chat::v1::open_client_response::Body as OpenBody;
@@ -173,7 +173,8 @@ impl Profile {
         all.into_iter().find(|n| {
             n.certificate
                 .as_ref()
-                .is_some_and(|c| certificate_network_key(c) == key)
+                .and_then(|c| CertificateChain::decode(c).ok())
+                .is_some_and(|c| c.network_key() == key)
         })
     }
 
@@ -321,7 +322,7 @@ fn three_profiles_chat_across_local_nodes() {
             // Alice's invitation links bob to her node, and her own client
             // for it isn't dialed.
             let network = alice.create_network("lobby-net").await;
-            let key = certificate_network_key(network.certificate.as_ref().unwrap()).to_vec();
+            let key = network_key(network.certificate.as_ref().unwrap());
             let invitation = alice.invite(network.id).await;
             let joined = bob.join(invitation).await;
             assert!(!membership_trusted(
@@ -329,7 +330,8 @@ fn three_profiles_chat_across_local_nodes() {
                 SystemClock.now()
             ));
             let renewed = bob.wait_trusted(&key, STEP).await;
-            assert_eq!(renewed.certificate.unwrap().subject, "bob");
+            let membership = certificate_body(renewed.certificate.as_ref().unwrap()).unwrap();
+            assert_eq!(membership.subject, "bob");
             steps.done("bob joins from alice's invitation and renews");
 
             let room = ChatServerFrontendClient::new(alice.client())
@@ -402,7 +404,7 @@ fn publishing_a_network_to_a_bootstrap_peer() {
                 .unwrap();
             receiver.add_bootstrap_client(&publisher.ws_uri()).await;
             let network = publisher.create_network("published").await;
-            let key = certificate_network_key(network.certificate.as_ref().unwrap()).to_vec();
+            let key = network_key(network.certificate.as_ref().unwrap());
 
             let label = data_encoding::HEXLOWER.encode(&receiver.key);
             let peer = eventually("the receiver as a bootstrap peer", STEP, || async {
@@ -432,7 +434,7 @@ fn publishing_a_network_to_a_bootstrap_peer() {
                 .unwrap();
             let published = receiver.network(&key).await.unwrap();
             let cert = published.certificate.as_ref().unwrap();
-            assert_eq!(cert.key, receiver.key);
+            assert_eq!(certificate_body(cert).unwrap().key, receiver.key);
             assert!(membership_trusted(cert, SystemClock.now()));
             assert!(published.server_config.is_none());
             steps.done("the publisher publishes the network");

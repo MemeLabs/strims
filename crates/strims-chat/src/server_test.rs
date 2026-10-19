@@ -9,11 +9,11 @@
     clippy::indexing_slicing
 )]
 
+use prost::Message as _;
 use strims_base::rng::det_rng;
 use strims_proto::chat::v1::message::Entities;
 use strims_proto::chat::v1::message::entities::{Bounds, Nick};
-use strims_proto::types::Certificate;
-use strims_proto::types::certificate::ParentOneof;
+use strims_proto::types::{Certificate, CertificateBody};
 
 use super::*;
 
@@ -31,13 +31,21 @@ fn record() -> strims_proto::chat::v1::Server {
 }
 
 fn caller(peer_key: &[u8], alias: &str) -> Caller {
-    Caller::from_certificate(&Certificate {
+    let membership = CertificateBody {
+        key: peer_key.to_vec(),
+        subject: alias.into(),
+        ..CertificateBody::default()
+    };
+    let host = CertificateBody {
         key: vec![peer_key.first().copied().unwrap_or(0); 32],
-        parent_oneof: Some(ParentOneof::Parent(Box::new(Certificate {
-            key: peer_key.to_vec(),
-            subject: alias.into(),
+        ..CertificateBody::default()
+    };
+    Caller::from_certificate(&Certificate {
+        body: host.encode_to_vec(),
+        parent: Some(Box::new(Certificate {
+            body: membership.encode_to_vec(),
             ..Certificate::default()
-        }))),
+        })),
         ..Certificate::default()
     })
     .expect("a host certificate under a membership")

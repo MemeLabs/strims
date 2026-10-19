@@ -17,6 +17,9 @@
 use core::ops::Deref;
 
 use prost::Message;
+use strims_proto::types::{
+    Certificate, CertificateBody, CertificateRequest, CertificateRequestBody,
+};
 use strims_proto::vpn::v1::{hash_table_message, peer_index_message};
 
 use crate::Error;
@@ -126,8 +129,46 @@ macro_rules! envelope {
     };
 }
 
+envelope!(CertificateRequest);
 envelope!(hash_table_message::Record);
 envelope!(peer_index_message::Record);
+
+impl Envelope for Certificate {
+    /// A certificate without a parent.
+    fn new(body: Vec<u8>, signature: Vec<u8>) -> Self {
+        Certificate {
+            body,
+            signature,
+            parent: None,
+        }
+    }
+
+    fn body(&self) -> &[u8] {
+        &self.body
+    }
+
+    fn signature(&self) -> &[u8] {
+        &self.signature
+    }
+}
+
+/// A certificate, signed by its issuer (see [`crate::cert`]).
+impl SignedBody for CertificateBody {
+    const DOMAIN: Domain = Domain::Certificate;
+    type Envelope = Certificate;
+}
+
+/// A certificate request, signed by the key it asks a certificate for.
+impl SignedBody for CertificateRequestBody {
+    const DOMAIN: Domain = Domain::CertificateRequest;
+    type Envelope = CertificateRequest;
+}
+
+impl SelfKeyed for CertificateRequestBody {
+    fn signer_key(&self) -> &[u8] {
+        &self.key
+    }
+}
 
 /// A vpn hash table record, signed by the key it is published under.
 impl SignedBody for hash_table_message::RecordBody {

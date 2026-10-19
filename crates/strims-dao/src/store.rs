@@ -36,7 +36,7 @@ use crate::seal::StorageKey;
 use crate::table::{Singleton, Table};
 
 /// The store format this build reads and writes.
-pub const STORE_VERSION: u32 = 7;
+pub const STORE_VERSION: u32 = 8;
 
 /// Ids a store reserves from its ranges at a time.
 const ID_RESERVATION: u64 = 100;

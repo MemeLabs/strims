@@ -20,14 +20,13 @@
 use futures_util::future::LocalBoxFuture;
 use prost::Message;
 use strims_base::time::Time;
-use strims_crypto::{certificate_chain, certificate_network_key};
+use strims_crypto::{CertificateChain, certificate_body, certificate_parent};
 use strims_kv::Kv;
 use strims_proto::network::v1::bootstrap::{self, BootstrapClient, bootstrap_client};
 use strims_proto::network::v1::ca::CertificateLog;
 use strims_proto::network::v1::directory::UserModeration;
 use strims_proto::network::v1::{AliasReservation, Network, Peer, UiConfig};
-use strims_proto::types::Certificate;
-use strims_proto::types::certificate::ParentOneof;
+use strims_proto::types::{Certificate, CertificateBody};
 
 use crate::error::Error;
 use crate::events::Record;
@@ -56,7 +55,8 @@ impl Networks {
 pub fn network_key(n: &Network) -> Vec<u8> {
     n.certificate
         .as_ref()
-        .map(|c| certificate_network_key(c).to_vec())
+        .and_then(|c| CertificateChain::decode(c).ok())
+        .map(|c| c.network_key().to_vec())
         .unwrap_or_default()
 }
 
@@ -122,16 +122,20 @@ impl Table for Networks {
             let Some(cert) = m.certificate.as_ref() else {
                 return Ok(());
             };
-            for c in certificate_chain(cert) {
+            let owner =
+                certificate_body(cert).map_err(|_| Error::Invalid("network certificate"))?;
+            let mut level = Some(cert);
+            while let Some(c) = level {
                 let id = tx.generate_id().await?;
                 CertificateLogs::insert(tx, new_certificate_log(id, m.id, c)).await?;
+                level = certificate_parent(c);
             }
             let id = tx.generate_id().await?;
             let now = tx.now();
-            let peer = new_network_peer(id, m.id, &cert.key, &cert.subject, 0, now);
+            let peer = new_network_peer(id, m.id, &owner.key, &owner.subject, 0, now);
             NetworkPeers::insert(tx, peer).await?;
             let id = tx.generate_id().await?;
-            let reservation = new_alias_reservation(id, m.id, &cert.subject, &cert.key);
+            let reservation = new_alias_reservation(id, m.id, &owner.subject, &owner.key);
             AliasReservations::insert(tx, reservation).await?;
             let id = tx.generate_id().await?;
             let admin = UserModeration {
@@ -139,7 +143,7 @@ impl Table for Networks {
                 is_moderator: Some(true),
                 ..Default::default()
             };
-            DirectoryUserRecords::insert(tx, new_user_record(id, m.id, &cert.key, admin)).await?;
+            DirectoryUserRecords::insert(tx, new_user_record(id, m.id, &owner.key, admin)).await?;
             Ok(())
         })
     }
@@ -202,7 +206,10 @@ fn updated_at(n: &Network) -> i64 {
 }
 
 fn not_after(n: &Network) -> u64 {
-    n.certificate.as_ref().map_or(0, |c| c.not_after)
+    n.certificate
+        .as_ref()
+        .and_then(|c| certificate_body(c).ok())
+        .map_or(0, |b| b.not_after)
 }
 
 /// Folds `p` into `m`: the alias and renewal error written last, the
@@ -291,8 +298,8 @@ pub fn network_scoped_key(network_id: u64, value: &[u8]) -> Vec<u8> {
 }
 
 /// The certificates a network's CA issued, and the chain of its owner's
-/// first certificate. A log's certificate names its parent by serial
-/// number.
+/// first certificate. A log's certificate has no parent; its body names
+/// its issuer by serial number.
 pub struct CertificateLogs;
 
 impl CertificateLogs {
@@ -301,23 +308,25 @@ impl CertificateLogs {
         Index::new(Namespace(4004), |r| ref_key(r.network_id));
     /// Logs by (network, serial number); serial numbers are unique.
     pub const BY_SERIAL_NUMBER: Index<CertificateLog> = Index::unique(Namespace(4005), |r| {
-        let serial = log_certificate(r).map_or(&[][..], |c| c.serial_number.as_slice());
-        network_scoped_key(r.network_id, serial)
+        network_scoped_key(r.network_id, &log_body(r).serial_number)
     });
     /// The latest log for each (network, subject).
     pub const BY_SUBJECT: Index<CertificateLog> = Index::unique(Namespace(4006), |r| {
-        let subject = log_certificate(r).map_or("", |c| c.subject.as_str());
-        network_scoped_key(r.network_id, subject.as_bytes())
+        network_scoped_key(r.network_id, log_body(r).subject.as_bytes())
     });
     /// The latest log for each (network, key).
     pub const BY_KEY: Index<CertificateLog> = Index::unique(Namespace(4013), |r| {
-        let key = log_certificate(r).map_or(&[][..], |c| c.key.as_slice());
-        network_scoped_key(r.network_id, key)
+        network_scoped_key(r.network_id, &log_body(r).key)
     });
 }
 
-fn log_certificate(r: &CertificateLog) -> Option<&Certificate> {
-    r.certificate.as_ref()
+/// The body of a log's certificate; empty if it has none or it doesn't
+/// decode.
+fn log_body(r: &CertificateLog) -> CertificateBody {
+    r.certificate
+        .as_ref()
+        .and_then(|c| certificate_body(c).ok())
+        .unwrap_or_default()
 }
 
 impl Table for CertificateLogs {
@@ -349,13 +358,12 @@ impl Table for CertificateLogs {
     }
 }
 
-/// A log of `cert`, issued on network `network_id`, naming its parent by
-/// serial number.
+/// A log of `cert`, issued on network `network_id`, without its parent.
 pub fn new_certificate_log(id: u64, network_id: u64, cert: &Certificate) -> CertificateLog {
-    let mut cert = cert.clone();
-    if let Some(ParentOneof::Parent(p)) = &cert.parent_oneof {
-        cert.parent_oneof = Some(ParentOneof::ParentSerialNumber(p.serial_number.clone()));
-    }
+    let cert = Certificate {
+        parent: None,
+        ..cert.clone()
+    };
     CertificateLog {
         id,
         network_id,
@@ -498,7 +506,6 @@ mod tests {
 
     use strims_proto::dao::v1::VersionVector;
     use strims_proto::network::v1::ServerConfig;
-    use strims_proto::types::Certificate;
 
     use super::*;
 
@@ -510,8 +517,12 @@ mod tests {
                 updated_at: at,
             }),
             certificate: Some(Certificate {
-                key: b"root".to_vec(),
-                not_after,
+                body: CertificateBody {
+                    key: b"root".to_vec(),
+                    not_after,
+                    ..Default::default()
+                }
+                .encode_to_vec(),
                 ..Default::default()
             }),
             alias: alias.into(),
@@ -527,7 +538,7 @@ mod tests {
         let at_a = resolve_network(b.clone(), &a);
         let at_b = resolve_network(a.clone(), &b);
         assert_eq!(at_a.alias, "b");
-        assert_eq!(at_a.certificate.as_ref().unwrap().not_after, 100);
+        assert_eq!(not_after(&at_a), 100);
         assert!(at_a.server_config.is_some());
         assert!(at_b.server_config.is_none());
         let strip = |mut n: Network| {
@@ -562,6 +573,6 @@ mod tests {
             UniqueConflict::Replace
         );
         assert_eq!(m.alias, "p");
-        assert_eq!(m.certificate.unwrap().not_after, 5);
+        assert_eq!(not_after(&m), 5);
     }
 }

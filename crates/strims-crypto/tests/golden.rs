@@ -17,17 +17,15 @@
 use prost::Message;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::cert::{certificate_parent, verify_certificate};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, Domain, Error, SignableMessage, Signer, aes_link_key,
-    certificate_network_key, crc32_message, key_from_seed, key_to_curve25519, message_cipher_key,
-    new_certificate_request, new_self_signed_certificate, public_key_to_curve25519,
-    serialize_certificate, serialize_certificate_request, sign, sign_certificate_request,
-    verify_certificate_request, x25519,
+    DEFAULT_CERT_TTL, Domain, Error, Issuer, SignableMessage, Signer, aes_link_key, crc32_message,
+    key_from_seed, key_to_curve25519, message_cipher_key, new_certificate_request,
+    new_self_signed_certificate, public_key_to_curve25519, sign, sign_certificate_request,
+    verify_certificate, verify_certificate_request, x25519,
 };
 use strims_golden::Golden;
 use strims_proto::stable::{Signable, StableEncode};
-use strims_proto::types::{Key, KeyUsage, certificate::ParentOneof};
+use strims_proto::types::{Key, KeyUsage};
 use strims_proto::{chat, network, types};
 
 fn open() -> Golden {
@@ -120,45 +118,51 @@ fn certificate_chain_matches_vectors() {
     )
     .unwrap();
     let member_csr = new_certificate_request(&member_key, PEER | SIGN, "alias").unwrap();
-    let mut member =
-        sign_certificate_request(&member_csr, DEFAULT_CERT_TTL, &network_key, now, &mut rng)
-            .unwrap();
-    member.parent_oneof = Some(ParentOneof::Parent(Box::new(root)));
+    let member = sign_certificate_request(
+        &member_csr,
+        DEFAULT_CERT_TTL,
+        Issuer::Certificate {
+            key: &network_key,
+            certificate: &root,
+        },
+        now,
+        &mut rng,
+    )
+    .unwrap();
     let leaf_csr = new_certificate_request(&leaf_key, PEER | BOOTSTRAP, "").unwrap();
-    let mut leaf =
-        sign_certificate_request(&leaf_csr, Duration::HOUR * 24, &member_key, now, &mut rng)
-            .unwrap();
-    leaf.parent_oneof = Some(ParentOneof::Parent(Box::new(member)));
-    verify_certificate(&leaf, now).unwrap();
+    let leaf = sign_certificate_request(
+        &leaf_csr,
+        Duration::HOUR * 24,
+        Issuer::Certificate {
+            key: &member_key,
+            certificate: &member,
+        },
+        now,
+        &mut rng,
+    )
+    .unwrap();
+    let chain = verify_certificate(&leaf, now).unwrap();
 
     let e = g.entry("cert_chain");
     g.check_hex(e, 0, leaf.encode_to_vec());
 
-    let member = certificate_parent(&leaf).unwrap();
-    let root = certificate_parent(member).unwrap();
-    assert!(certificate_parent(root).is_none());
     for (name, cert, signer) in [
-        ("root", root, &network_key),
-        ("member", member, &network_key),
+        ("root", &root, &network_key),
+        ("member", &member, &network_key),
         ("leaf", &leaf, &member_key),
     ] {
-        let serialized = serialize_certificate(cert);
-        let e = g.entry(&format!("cert_serialized_{name}"));
-        g.check_hex(e, 0, &serialized);
-        // ed25519 is deterministic: identical bytes, identical signature
-        assert_eq!(
-            sign(&signer.private, &serialized).unwrap().as_slice(),
-            cert.signature.as_slice(),
-            "{name}"
-        );
+        let e = g.entry(&format!("cert_body_{name}"));
+        g.check_hex(e, 0, &cert.body);
+        // the signature is the issuer's over the body, in its domain
+        let sig = Signer::new(signer)
+            .unwrap()
+            .sign(Domain::Certificate, &[&cert.body]);
+        assert_eq!(sig.as_slice(), cert.signature.as_slice(), "{name}");
     }
-    assert_eq!(leaf.key, leaf_key.public);
-    assert_eq!(
-        certificate_network_key(&leaf),
-        network_key.public.as_slice()
-    );
+    assert_eq!(chain.key, leaf_key.public);
+    assert_eq!(chain.network_key(), network_key.public.as_slice());
     let e = g.entry("cert_network_key");
-    g.check_hex(e, 0, certificate_network_key(&leaf));
+    g.check_hex(e, 0, chain.network_key());
 
     // the leaf is valid for a day, predated by an hour
     let errs = verify_certificate(&leaf, now + Duration::HOUR * 25).unwrap_err();
@@ -175,15 +179,16 @@ fn certificate_requests_match_vectors() {
         ("csr_leaf", 2, PEER | BOOTSTRAP, ""),
     ] {
         let csr = new_certificate_request(&key(&g, i), usage, subject).unwrap();
-        verify_certificate_request(&csr, usage).unwrap();
+        let env = csr.envelope();
+        assert_eq!(verify_certificate_request(env, usage).unwrap(), csr);
         assert_eq!(
-            verify_certificate_request(&csr, PEER),
-            Err(Error::UnsupportedKeyUsage),
+            verify_certificate_request(env, PEER).err(),
+            Some(Error::UnsupportedKeyUsage),
             "{name}: usage outside the allowed set"
         );
         let e = g.entry(name);
-        g.check_hex(e, 0, csr.encode_to_vec());
-        g.check_hex(e, 1, serialize_certificate_request(&csr));
+        g.check_hex(e, 0, env.encode_to_vec());
+        g.check_hex(e, 1, &env.body);
     }
 }
 

@@ -16,7 +16,7 @@ use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, StreamExt};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::membership_trusted;
+use strims_crypto::{certificate_body, membership_trusted};
 use strims_dao::events::Record;
 use strims_dao::lease;
 use strims_dao::schema::chat::{WhisperRecords, WhisperThreads, state_key};
@@ -716,6 +716,7 @@ impl<K: Kv, H: Host, T: Timer> WhisperControl<K, H, T> {
             .network
             .network(network_key)
             .and_then(|i| i.network.certificate)
+            .and_then(|c| certificate_body(&c).ok())
             .ok_or(EnqueueError::NoNetwork)?;
         if own.key == peer_key {
             return Err(EnqueueError::ToSelf);

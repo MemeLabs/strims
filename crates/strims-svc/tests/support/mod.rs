@@ -10,7 +10,9 @@ use std::future::{Future, ready};
 use std::time::Duration as StdDuration;
 
 use futures_util::{SinkExt, StreamExt};
+use strims_crypto::CertificateChain;
 use strims_node::app::AppConfig;
+use strims_proto::types::Certificate;
 use strims_rpc::{Client, Config as RpcConfig, connect};
 use strims_svc::{Config, Db, Svc};
 use tokio::task::{LocalSet, spawn_local};
@@ -106,6 +108,14 @@ pub async fn connect_at(
 /// Connects to `svc`'s API.
 pub async fn connect_ui(svc: &Svc) -> Ui {
     connect_at(svc, "/api", None).await.unwrap()
+}
+
+/// The key of the network whose root `cert` chains to.
+pub fn network_key(cert: &Certificate) -> Vec<u8> {
+    CertificateChain::decode(cert)
+        .unwrap()
+        .network_key()
+        .to_vec()
 }
 
 /// Runs `f` on a current-thread runtime inside a `LocalSet`, on the real

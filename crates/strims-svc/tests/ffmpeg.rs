@@ -29,7 +29,6 @@ mod support;
 use std::process::Stdio;
 use std::time::Duration as StdDuration;
 
-use strims_crypto::certificate_network_key;
 use strims_ppspp::{SwarmId, Uri};
 use strims_proto::network::v1::directory::{
     DirectoryFrontendClient, FrontendGetListingsRequest, ListingSnippet, listing,
@@ -92,7 +91,7 @@ impl Channel {
             .unwrap()
             .network
             .unwrap();
-        let network_key = certificate_network_key(network.certificate.as_ref().unwrap()).to_vec();
+        let network_key = network_key(network.certificate.as_ref().unwrap());
         let channel = VideoChannelFrontendClient::new(alice.client())
             .create(&VideoChannelCreateRequest {
                 directory_listing_snippet: Some(ListingSnippet {

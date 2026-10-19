@@ -22,6 +22,7 @@ import (
 	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
 	networkv1 "github.com/MemeLabs/strims/pkg/apis/network/v1"
 	networkv1bootstrap "github.com/MemeLabs/strims/pkg/apis/network/v1/bootstrap"
+	"github.com/MemeLabs/strims/pkg/apis/type/certificate"
 	vnicv1 "github.com/MemeLabs/strims/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/strims/pkg/errutil"
 	"github.com/MemeLabs/strims/pkg/httputil"
@@ -362,13 +363,18 @@ func run() error {
 	return nil
 }
 
-// networkKey returns the key of the root of the network's certificate chain.
+// networkKey returns the key of the root of the network's certificate chain,
+// read from the root's signed body.
 func networkKey(network *networkv1.Network) []byte {
 	cert := network.GetCertificate()
 	for cert.GetParent() != nil {
 		cert = cert.GetParent()
 	}
-	return cert.GetKey()
+	var body certificate.CertificateBody
+	if err := proto.Unmarshal(cert.GetBody(), &body); err != nil {
+		return nil
+	}
+	return body.GetKey()
 }
 
 func newClient(logger *zap.Logger, hostIP string, wsPort int) (*apis.FrontendClient, error) {

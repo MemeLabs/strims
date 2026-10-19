@@ -32,6 +32,7 @@ use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
 use futures_util::FutureExt;
+use prost::Message;
 use sha2::{Digest, Sha256};
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
@@ -51,7 +52,7 @@ use strims_proto::auth::v1::PairingToken;
 use strims_proto::chat::v1::UiConfigHighlight;
 use strims_proto::network::v1::Network;
 use strims_proto::replication::v1::Event;
-use strims_proto::types::{Certificate, Key};
+use strims_proto::types::{Certificate, CertificateBody, Key};
 use strims_replication::{Config, ReplicationControl, ReplicationFrontend};
 use tokio::task::spawn_local;
 
@@ -285,8 +286,12 @@ async fn first_device(w: World) -> turmoil::Result {
         Network {
             id,
             certificate: Some(Certificate {
-                key: network_key().public,
-                not_after: u64::MAX,
+                body: CertificateBody {
+                    key: network_key().public,
+                    not_after: u64::MAX,
+                    ..Default::default()
+                }
+                .encode_to_vec(),
                 ..Default::default()
             }),
             alias: "net".into(),

@@ -27,8 +27,8 @@ use prost::Message;
 use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, generate_key, host_certificate, new_certificate_request,
-    new_self_signed_certificate, sign_certificate_request,
+    DEFAULT_CERT_TTL, Issuer, certificate_body, generate_key, host_certificate,
+    new_certificate_request, new_self_signed_certificate, sign_certificate_request,
 };
 use strims_kademlia::ID;
 use strims_proto::debug::v1::{
@@ -38,8 +38,7 @@ use strims_proto::debug::v1::{
 use strims_proto::rpc::Call;
 use strims_proto::rpc::call::Kind;
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
-use strims_proto::types::certificate::ParentOneof;
-use strims_proto::types::{Certificate, Key, KeyUsage};
+use strims_proto::types::{Certificate, CertificateBody, Key, KeyUsage};
 use strims_rpc::vpn::{self, CERTIFICATE_HEADER, VpnClient, VpnConfig, VpnError};
 use strims_rpc::wire::CALLBACK;
 use strims_rpc::{Client, RetryClient, RetryPolicy, Router};
@@ -77,9 +76,21 @@ impl Network {
     /// A profile's membership certificate, valid for `ttl`.
     fn member(&self, profile: &Key, ttl: Duration, rng: &mut DetRng) -> Certificate {
         let csr = new_certificate_request(profile, PEER | SIGN, "member").unwrap();
-        let mut cert = sign_certificate_request(&csr, ttl, &self.key, epoch(), rng).unwrap();
-        cert.parent_oneof = Some(ParentOneof::Parent(Box::new(self.root.clone())));
-        cert
+        let issuer = Issuer::Certificate {
+            key: &self.key,
+            certificate: &self.root,
+        };
+        sign_certificate_request(&csr, ttl, issuer, epoch(), rng).unwrap()
+    }
+}
+
+/// `cert` with its body changed by `f` and its signature left as it was.
+fn with_body(cert: &Certificate, f: impl FnOnce(&mut CertificateBody)) -> Certificate {
+    let mut body = certificate_body(cert).unwrap();
+    f(&mut body);
+    Certificate {
+        body: body.encode_to_vec(),
+        ..cert.clone()
     }
 }
 
@@ -283,7 +294,8 @@ impl DebugService for TestService {
         let profile = ctx
             .certificate()
             .and_then(strims_crypto::certificate_parent)
-            .map(|c| c.key.clone())
+            .and_then(|c| certificate_body(c).ok())
+            .map(|b| b.key)
             .unwrap_or_default();
         Ok(PProfResponse {
             name: req.name,
@@ -578,8 +590,7 @@ async fn calls_failing_a_check_are_dropped_and_others_still_served() {
         net.inject(net.delivery(from, to, padded.encode_to_vec()));
         net.inject(net.delivery(from, to, vec![0xff, 0xff]));
         net.inject(net.delivery(from, to, raw_request(1, None).encode_to_vec()));
-        let mut big = mallory.cert.clone();
-        big.subject = "x".repeat(1024);
+        let big = with_body(&mallory.cert, |b| b.subject = "x".repeat(1024));
         net.inject(net.delivery(from, to, req(&big)));
 
         // someone else's certificate
@@ -590,8 +601,7 @@ async fn calls_failing_a_check_are_dropped_and_others_still_served() {
         let shallow = host_certificate(&mallory.key.public, &network.key, &network.root).unwrap();
         net.inject(net.delivery(from, to, req(&shallow)));
         // a tampered certificate
-        let mut forged = mallory.cert.clone();
-        forged.not_after += 1;
+        let forged = with_body(&mallory.cert, |b| b.not_after += 1);
         net.inject(net.delivery(from, to, req(&forged)));
         // an expired one, at the time it arrives
         net.set_now(epoch() + Duration::HOUR * 2);

@@ -30,7 +30,7 @@ use strims_proto::network::v1::bootstrap::{
 };
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::Error as RpcError;
-use strims_proto::types::{CertificateRequest, KeyType, KeyUsage};
+use strims_proto::types::{CertificateRequestBody, KeyType, KeyUsage};
 use strims_rpc::{Client, RetryClient, Router, Timer};
 
 use super::schedule::{Dial, Schedule};
@@ -279,12 +279,11 @@ impl<K: Kv, H: Host, T: Timer> BootstrapControl<K, H, T> {
             .key
             .as_ref()
             .ok_or_else(|| rpc_error("network has no key"))?;
-        let csr = CertificateRequest {
+        let csr = CertificateRequestBody {
             key: profile_key,
             key_type: KeyType::Ed25519 as i32,
             key_usage: KeyUsage::Broker as i32 | KeyUsage::Sign as i32,
             subject: String::new(),
-            signature: Vec::new(),
         };
         let mut rng = fork(&mut s.rng.borrow_mut());
         let certificate = sign_certificate_request_with_network(

@@ -22,6 +22,7 @@ use std::task::{Context, Poll, Waker};
 use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::StreamExt;
+use prost::Message as _;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_dao::auth::ProfileKey;
@@ -41,7 +42,7 @@ use strims_proto::notification::v1::{DismissRequest, NotificationFrontendClient,
 use strims_proto::profile::v1::{GetProfileRequest, ListDevicesRequest, ProfileFrontendClient};
 use strims_proto::replication::v1::{CreatePairingTokenRequest, ReplicationFrontendClient};
 use strims_proto::service::CallError;
-use strims_proto::types::Certificate;
+use strims_proto::types::{Certificate, CertificateBody};
 use strims_rpc::{Client, Config, Router, Timer, WeakRouter, connect};
 use strims_session::{AuthService, Manager, Session, SessionFactory, bind_frontends};
 use tokio::task::{JoinHandle, LocalSet, spawn_local};
@@ -459,7 +460,11 @@ fn a_pairing_token_makes_a_new_device() {
             Network {
                 id,
                 certificate: Some(Certificate {
-                    key: vec![1; 32],
+                    body: CertificateBody {
+                        key: vec![1; 32],
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
                     ..Default::default()
                 }),
                 ..Default::default()

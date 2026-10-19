@@ -5,43 +5,39 @@ import {
   strims_type_KeyType,
 } from "./key";
 
-export type ICertificateRequest = {
+export type ICertificateRequestBody = {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
   keyUsage?: strims_type_KeyUsage;
   subject?: string;
-  signature?: Uint8Array;
 }
 
-export class CertificateRequest {
+export class CertificateRequestBody {
   key: Uint8Array;
   keyType: strims_type_KeyType;
   keyUsage: strims_type_KeyUsage;
   subject: string;
-  signature: Uint8Array;
 
-  constructor(v?: ICertificateRequest) {
+  constructor(v?: ICertificateRequestBody) {
     this.key = v?.key || new Uint8Array();
     this.keyType = v?.keyType || 0;
     this.keyUsage = v?.keyUsage || 0;
     this.subject = v?.subject || "";
-    this.signature = v?.signature || new Uint8Array();
   }
 
-  static encode(m: CertificateRequest, w?: Writer): Writer {
+  static encode(m: CertificateRequestBody, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.key.length) w.uint32(10).bytes(m.key);
     if (m.keyType) w.uint32(16).uint32(m.keyType);
     if (m.keyUsage) w.uint32(24).uint32(m.keyUsage);
-    if (m.subject.length) w.uint32(42).string(m.subject);
-    if (m.signature.length) w.uint32(34).bytes(m.signature);
+    if (m.subject.length) w.uint32(34).string(m.subject);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CertificateRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CertificateRequestBody {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CertificateRequest();
+    const m = new CertificateRequestBody();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -54,10 +50,50 @@ export class CertificateRequest {
         case 3:
         m.keyUsage = r.uint32();
         break;
-        case 5:
+        case 4:
         m.subject = r.string();
         break;
-        case 4:
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ICertificateRequest = {
+  body?: Uint8Array;
+  signature?: Uint8Array;
+}
+
+export class CertificateRequest {
+  body: Uint8Array;
+  signature: Uint8Array;
+
+  constructor(v?: ICertificateRequest) {
+    this.body = v?.body || new Uint8Array();
+    this.signature = v?.signature || new Uint8Array();
+  }
+
+  static encode(m: CertificateRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.body.length) w.uint32(10).bytes(m.body);
+    if (m.signature.length) w.uint32(18).bytes(m.signature);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CertificateRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CertificateRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.body = r.bytes();
+        break;
+        case 2:
         m.signature = r.bytes();
         break;
         default:
@@ -69,7 +105,7 @@ export class CertificateRequest {
   }
 }
 
-export type ICertificate = {
+export type ICertificateBody = {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
   keyUsage?: strims_type_KeyUsage;
@@ -77,11 +113,10 @@ export type ICertificate = {
   notBefore?: bigint;
   notAfter?: bigint;
   serialNumber?: Uint8Array;
-  signature?: Uint8Array;
-  parentOneof?: Certificate.IParentOneof
+  issuerSerialNumber?: Uint8Array;
 }
 
-export class Certificate {
+export class CertificateBody {
   key: Uint8Array;
   keyType: strims_type_KeyType;
   keyUsage: strims_type_KeyUsage;
@@ -89,10 +124,9 @@ export class Certificate {
   notBefore: bigint;
   notAfter: bigint;
   serialNumber: Uint8Array;
-  signature: Uint8Array;
-  parentOneof: Certificate.TParentOneof;
+  issuerSerialNumber: Uint8Array;
 
-  constructor(v?: ICertificate) {
+  constructor(v?: ICertificateBody) {
     this.key = v?.key || new Uint8Array();
     this.keyType = v?.keyType || 0;
     this.keyUsage = v?.keyUsage || 0;
@@ -100,11 +134,10 @@ export class Certificate {
     this.notBefore = v?.notBefore || BigInt(0);
     this.notAfter = v?.notAfter || BigInt(0);
     this.serialNumber = v?.serialNumber || new Uint8Array();
-    this.signature = v?.signature || new Uint8Array();
-    this.parentOneof = new Certificate.ParentOneof(v?.parentOneof);
+    this.issuerSerialNumber = v?.issuerSerialNumber || new Uint8Array();
   }
 
-  static encode(m: Certificate, w?: Writer): Writer {
+  static encode(m: CertificateBody, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.key.length) w.uint32(10).bytes(m.key);
     if (m.keyType) w.uint32(16).uint32(m.keyType);
@@ -113,22 +146,14 @@ export class Certificate {
     if (m.notBefore) w.uint32(40).uint64(m.notBefore);
     if (m.notAfter) w.uint32(48).uint64(m.notAfter);
     if (m.serialNumber.length) w.uint32(58).bytes(m.serialNumber);
-    if (m.signature.length) w.uint32(66).bytes(m.signature);
-    switch (m.parentOneof.case) {
-      case Certificate.ParentOneofCase.PARENT:
-      strims_type_Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();
-      break;
-      case Certificate.ParentOneofCase.PARENT_SERIAL_NUMBER:
-      w.uint32(82).bytes(m.parentOneof.parentSerialNumber);
-      break;
-    }
+    if (m.issuerSerialNumber.length) w.uint32(66).bytes(m.issuerSerialNumber);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): Certificate {
+  static decode(r: Reader | Uint8Array, length?: number): CertificateBody {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new Certificate();
+    const m = new CertificateBody();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -154,13 +179,7 @@ export class Certificate {
         m.serialNumber = r.bytes();
         break;
         case 8:
-        m.signature = r.bytes();
-        break;
-        case 9:
-        m.parentOneof = new Certificate.ParentOneof({ parent: strims_type_Certificate.decode(r, r.uint32()) });
-        break;
-        case 10:
-        m.parentOneof = new Certificate.ParentOneof({ parentSerialNumber: r.bytes() });
+        m.issuerSerialNumber = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -171,51 +190,54 @@ export class Certificate {
   }
 }
 
-export namespace Certificate {
-  export enum ParentOneofCase {
-    NOT_SET = 0,
-    PARENT = 9,
-    PARENT_SERIAL_NUMBER = 10,
+export type ICertificate = {
+  body?: Uint8Array;
+  signature?: Uint8Array;
+  parent?: strims_type_ICertificate;
+}
+
+export class Certificate {
+  body: Uint8Array;
+  signature: Uint8Array;
+  parent: strims_type_Certificate | undefined;
+
+  constructor(v?: ICertificate) {
+    this.body = v?.body || new Uint8Array();
+    this.signature = v?.signature || new Uint8Array();
+    this.parent = v?.parent && new strims_type_Certificate(v.parent);
   }
 
-  export type IParentOneof =
-  { case?: ParentOneofCase.NOT_SET }
-  |{ case?: ParentOneofCase.PARENT, parent: strims_type_ICertificate }
-  |{ case?: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
-  ;
+  static encode(m: Certificate, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.body.length) w.uint32(10).bytes(m.body);
+    if (m.signature.length) w.uint32(18).bytes(m.signature);
+    if (m.parent) strims_type_Certificate.encode(m.parent, w.uint32(26).fork()).ldelim();
+    return w;
+  }
 
-  export type TParentOneof = Readonly<
-  { case: ParentOneofCase.NOT_SET }
-  |{ case: ParentOneofCase.PARENT, parent: strims_type_Certificate }
-  |{ case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
-  >;
-
-  class ParentOneofImpl {
-    parent: strims_type_Certificate;
-    parentSerialNumber: Uint8Array;
-    case: ParentOneofCase = ParentOneofCase.NOT_SET;
-
-    constructor(v?: IParentOneof) {
-      if (v && "parent" in v) {
-        this.case = ParentOneofCase.PARENT;
-        this.parent = new strims_type_Certificate(v.parent);
-      } else
-      if (v && "parentSerialNumber" in v) {
-        this.case = ParentOneofCase.PARENT_SERIAL_NUMBER;
-        this.parentSerialNumber = v.parentSerialNumber;
+  static decode(r: Reader | Uint8Array, length?: number): Certificate {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Certificate();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.body = r.bytes();
+        break;
+        case 2:
+        m.signature = r.bytes();
+        break;
+        case 3:
+        m.parent = strims_type_Certificate.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
       }
     }
+    return m;
   }
-
-  export const ParentOneof = ParentOneofImpl as {
-    new (): Readonly<{ case: ParentOneofCase.NOT_SET }>;
-    new <T extends IParentOneof>(v: T): Readonly<
-    T extends { parent: strims_type_ICertificate } ? { case: ParentOneofCase.PARENT, parent: strims_type_Certificate } :
-    T extends { parentSerialNumber: Uint8Array } ? { case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array } :
-    never
-    >;
-  };
-
 }
 
 export enum KeyUsage {
@@ -227,11 +249,23 @@ export enum KeyUsage {
   KEY_USAGE_ENCIPHERMENT = 16,
 }
 /* @internal */
+export const strims_type_CertificateRequestBody = CertificateRequestBody;
+/* @internal */
+export type strims_type_CertificateRequestBody = CertificateRequestBody;
+/* @internal */
+export type strims_type_ICertificateRequestBody = ICertificateRequestBody;
+/* @internal */
 export const strims_type_CertificateRequest = CertificateRequest;
 /* @internal */
 export type strims_type_CertificateRequest = CertificateRequest;
 /* @internal */
 export type strims_type_ICertificateRequest = ICertificateRequest;
+/* @internal */
+export const strims_type_CertificateBody = CertificateBody;
+/* @internal */
+export type strims_type_CertificateBody = CertificateBody;
+/* @internal */
+export type strims_type_ICertificateBody = ICertificateBody;
 /* @internal */
 export const strims_type_Certificate = Certificate;
 /* @internal */

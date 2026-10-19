@@ -28,10 +28,9 @@ pub mod signable;
 pub mod signed;
 
 pub use cert::{
-    CERT_PREDATE_DURATION, CertificateErrors, DEFAULT_CERT_TTL, cert_is_expired, certificate_chain,
-    certificate_network_key, certificate_parent, certificate_root, chain_validity,
-    host_certificate, membership_trusted, network_certificate, new_certificate_request,
-    new_self_signed_certificate, serialize_certificate, serialize_certificate_request,
+    CERT_PREDATE_DURATION, CertificateChain, CertificateErrors, DEFAULT_CERT_TTL, Issuer,
+    certificate_body, certificate_parent, certificate_root, host_certificate, membership_trusted,
+    network_certificate, new_certificate_request, new_self_signed_certificate,
     sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
     verify_certificate_request,
 };
@@ -63,9 +62,16 @@ pub enum Error {
     /// A certificate request isn't signed by its own key.
     #[error("invalid certificate request signature")]
     InvalidCertificateRequestSignature,
-    /// A certificate's issuer isn't the signing key.
+    /// A certificate's issuer isn't the signing key, or a parent isn't the
+    /// certificate its child's body names as issuer.
     #[error("certificate issuer mismatch")]
     IssuerMismatch,
+    /// A certificate names an issuer its chain doesn't carry.
+    #[error("certificate issuer missing")]
+    MissingIssuer,
+    /// A certificate chain longer than [`cert::MAX_CHAIN_LENGTH`].
+    #[error("certificate chain too long")]
+    ChainTooLong,
     /// A certificate isn't signed by its parent, or by itself if it has none.
     #[error("invalid certificate signature")]
     InvalidSignature,

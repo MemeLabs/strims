@@ -2480,6 +2480,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
+ "prost",
  "strims-base",
  "strims-dao",
  "strims-kv",

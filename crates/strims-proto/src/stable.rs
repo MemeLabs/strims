@@ -7,8 +7,7 @@
 //! Message signatures and CRC32 checksums are computed over this encoding,
 //! so its byte layout is part of the protocol. Each message writes its
 //! fields in `.proto` declaration order, which can differ from field-number
-//! order (`CertificateRequest` declares `subject = 5` before
-//! `signature = 4`); a oneof sits where its first member is declared.
+//! order; a oneof sits where its first member is declared.
 //!
 //! - bool: one byte; 32/64-bit ints, enums and floats: big-endian bits;
 //! - string and bytes: the raw bytes, with no length prefix;
@@ -77,10 +76,7 @@ impl<T: StableEncode + ?Sized> StableEncode for Box<T> {
 /// Accessors for signing a message over its stable encoding.
 ///
 /// Generated for every message with plain `bytes key` and `bytes signature`
-/// fields. The messages signed this way are `vpn.v1.HashTableMessage.Record`,
-/// `vpn.v1.PeerIndexMessage.Record` and `network.v1.directory.ListingSnippet`.
-/// `type.Certificate` and `type.CertificateRequest` qualify too, but are
-/// signed over their own serialization.
+/// fields; `network.v1.directory.ListingSnippet` is the one signed this way.
 pub trait Signable: StableEncode {
     fn key(&self) -> &[u8];
     fn set_key(&mut self, key: &[u8]);
@@ -104,7 +100,6 @@ pub trait Signable: StableEncode {
 mod tests {
     use super::*;
     use crate::network::v1::directory::ListingSnippet;
-    use crate::types::{Certificate, CertificateRequest, KeyType, certificate::ParentOneof};
     use crate::vpn::v1::hash_table_message;
 
     fn assert_signable<T: Signable>() {}
@@ -112,38 +107,20 @@ mod tests {
     #[test]
     fn signed_records_are_signable() {
         assert_signable::<ListingSnippet>();
-        assert_signable::<Certificate>();
-    }
-
-    #[test]
-    fn declaration_order_not_field_number_order() {
-        // CertificateRequest declares subject (5) before signature (4).
-        let csr = CertificateRequest {
-            key: vec![1],
-            key_type: KeyType::Ed25519 as i32,
-            key_usage: 2,
-            subject: "s".into(),
-            signature: vec![9],
-        };
-        assert_eq!(
-            csr.stable_encode_to_vec(),
-            [1, 0, 0, 0, 1, 0, 0, 0, 2, b's', 9]
-        );
-        assert_eq!(csr.stable_encoded_len(), 11);
     }
 
     #[test]
     fn unsigned_encoding_skips_only_the_signature() {
-        let mut c = Certificate {
+        let mut s = ListingSnippet {
+            title: "t".into(),
             key: vec![1, 2],
             signature: vec![3; 4],
-            parent_oneof: Some(ParentOneof::ParentSerialNumber(vec![5])),
             ..Default::default()
         };
-        let signed = c.stable_encode_to_vec();
-        let unsigned = c.stable_encode_unsigned_to_vec();
-        c.signature.clear();
-        assert_eq!(unsigned, c.stable_encode_to_vec());
+        let signed = s.stable_encode_to_vec();
+        let unsigned = s.stable_encode_unsigned_to_vec();
+        s.signature.clear();
+        assert_eq!(unsigned, s.stable_encode_to_vec());
         assert_eq!(signed.len(), unsigned.len() + 4);
     }
 

@@ -34,7 +34,6 @@ use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
 use strims_base::rng::det_rng;
-use strims_crypto::certificate_network_key;
 use strims_ppspp::{SwarmId, Uri};
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::network::v1::{CreateServerRequest, NetworkFrontendClient};
@@ -195,7 +194,7 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 .unwrap()
                 .network
                 .unwrap();
-            let net = certificate_network_key(network.certificate.as_ref().unwrap()).to_vec();
+            let net = network_key(network.certificate.as_ref().unwrap());
             let channels = VideoChannelFrontendClient::new(alice.client());
             let created = channels
                 .create(&VideoChannelCreateRequest {

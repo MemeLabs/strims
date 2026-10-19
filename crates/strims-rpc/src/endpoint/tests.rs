@@ -753,7 +753,7 @@ const B: RemoteId = RemoteId(2);
 fn requests_are_keyed_by_remote_and_caller_id() {
     let mut server = Endpoint::new(message_config());
     let cert = Rc::new(Certificate {
-        key: vec![1; 32],
+        body: vec![1; 32],
         ..Default::default()
     });
     server.handle_call(A, request_call(7, PPROF, &pprof("a")), Some(cert.clone()));

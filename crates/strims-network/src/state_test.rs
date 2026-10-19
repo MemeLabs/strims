@@ -22,12 +22,11 @@ use rand_core::Rng;
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request,
+    DEFAULT_CERT_TTL, Issuer, generate_key, new_certificate_request, sign_certificate_request,
     sign_certificate_request_with_network,
 };
 use strims_kademlia::ID;
 use strims_proto::network::v1::NetworkPeerBinding;
-use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 
 use crate::Config;
@@ -54,12 +53,17 @@ fn invited(
 ) -> Certificate {
     let invite_key = generate_key(rng);
     let csr = new_certificate_request(&invite_key, KeyUsage::Sign as i32, "").unwrap();
-    let mut invite = sign_certificate_request(&csr, Duration::HOUR * 24, inviter, T0, rng).unwrap();
-    invite.parent_oneof = Some(ParentOneof::Parent(Box::new(inviter_cert.clone())));
+    let issuer = Issuer::Certificate {
+        key: inviter,
+        certificate: inviter_cert,
+    };
+    let invite = sign_certificate_request(&csr, Duration::HOUR * 24, issuer, T0, rng).unwrap();
     let csr = new_certificate_request(invitee, KeyUsage::Peer as i32, "invitee").unwrap();
-    let mut cert = sign_certificate_request(&csr, DEFAULT_CERT_TTL, &invite_key, T0, rng).unwrap();
-    cert.parent_oneof = Some(ParentOneof::Parent(Box::new(invite)));
-    cert
+    let issuer = Issuer::Certificate {
+        key: &invite_key,
+        certificate: &invite,
+    };
+    sign_certificate_request(&csr, DEFAULT_CERT_TTL, issuer, T0, rng).unwrap()
 }
 
 #[derive(Clone, Debug)]

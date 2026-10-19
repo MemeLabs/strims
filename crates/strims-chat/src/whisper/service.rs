@@ -12,7 +12,7 @@ use std::task::{Poll, Waker};
 
 use futures_util::FutureExt;
 use futures_util::future::{AbortHandle, Aborted, Either, abortable, select};
-use strims_crypto::certificate_network_key;
+use strims_crypto::CertificateChain;
 use strims_dao::Table;
 use strims_dao::schema::chat::{
     ChatUiConfigIgnores, WhisperRecords, WhisperThreads, peer_message_id_key,
@@ -290,6 +290,10 @@ async fn receive<K: Kv, H: Host, T: Timer>(
 ) -> Result<Received, Refusal> {
     let cert = cert.ok_or(Refusal::Caller)?;
     let caller = Caller::from_certificate(cert).ok_or(Refusal::Caller)?;
+    let network_key = CertificateChain::decode(cert)
+        .map_err(|_| Refusal::Caller)?
+        .network_key()
+        .to_vec();
     if caller.peer_key.is_empty()
         || caller.peer_key.len() > MAX_PEER_KEY_BYTES
         || caller.alias.len() > MAX_ALIAS_BYTES
@@ -350,7 +354,7 @@ async fn receive<K: Kv, H: Host, T: Timer>(
     let id = tx.generate_id().await?;
     let record = WhisperRecord {
         id,
-        network_key: certificate_network_key(cert).to_vec(),
+        network_key,
         server_key: req.server_key,
         peer_key: peer_key.clone(),
         state: MessageState::Unread as i32,

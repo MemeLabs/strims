@@ -45,7 +45,7 @@
 //! `Open`s to it, until a `Close` either way or the peer relinks: once a
 //! binding is offered or answered, or a pairing fails partway. A link
 //! opens, and the node binds the peer to the network, once both
-//! certificates are trusted ([`membership_trusted`]).
+//! certificates are trusted ([`CertificateChain::membership_trusted`]).
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -55,8 +55,7 @@ use rand_core::Rng;
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    Error as CryptoError, certificate_chain, certificate_network_key, membership_trusted,
-    verify_certificate,
+    CertificateChain, Error as CryptoError, membership_trusted, verify_certificate,
 };
 use strims_kademlia::ID;
 use strims_mpc::Block;
@@ -1299,12 +1298,11 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
         now: Time,
     ) -> Option<PeerBinding> {
         let certificate = b.certificate.as_ref()?;
-        if certificate_chain(certificate).len() > self.config.max_chain_depth
-            || certificate.key != profile_key
-        {
+        let chain = CertificateChain::decode(certificate).ok()?;
+        if chain.bodies().len() > self.config.max_chain_depth || chain.key != profile_key {
             return None;
         }
-        let key = certificate_network_key(certificate).to_vec();
+        let key = chain.network_key().to_vec();
         if !keys.contains(&key) {
             return None;
         }
@@ -1660,18 +1658,18 @@ impl<N: Copy + Ord + fmt::Debug> State<N> {
             .get_mut(&host)
             .filter(|p| p.link == link)
             .ok_or(Refusal::NotLinked)?;
-        if certificate_chain(&certificate).len() > depth
-            || verify_certificate(&certificate, now).is_err()
-        {
+        let chain =
+            CertificateChain::decode(&certificate).map_err(|_| Refusal::InvalidCertificate)?;
+        if chain.bodies().len() > depth || verify_certificate(&certificate, now).is_err() {
             return Err(Refusal::InvalidCertificate);
         }
-        if certificate.key != p.profile_key {
+        if chain.key != p.profile_key {
             return Err(Refusal::OwnerMismatch);
         }
-        if !membership_trusted(&certificate, now) {
+        if !chain.membership_trusted(now) {
             return Err(Refusal::Provisional);
         }
-        let key = certificate_network_key(&certificate).to_vec();
+        let key = chain.network_key().to_vec();
         let net = self.networks.get(&key).and_then(|n| n.net);
         let Some(Link::Paired {
             local_port,

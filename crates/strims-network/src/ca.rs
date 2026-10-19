@@ -29,8 +29,8 @@
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, certificate_chain, certificate_network_key,
-    sign_certificate_request_with_network, verify_certificate, verify_certificate_request,
+    CertificateChain, DEFAULT_CERT_TTL, certificate_body, sign_certificate_request_with_network,
+    verify_certificate, verify_certificate_request,
 };
 use strims_dao::schema::network::{
     AliasReservations, CertificateLogs, NetworkPeers, RESERVED_FOREVER, network_key,
@@ -42,8 +42,7 @@ use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::network::v1::{Network, Peer};
 use strims_proto::service::Error as RpcError;
-use strims_proto::types::certificate::ParentOneof;
-use strims_proto::types::{Certificate, CertificateRequest, KeyUsage};
+use strims_proto::types::{Certificate, CertificateBody, CertificateRequest, KeyUsage};
 
 /// The salt the CA's address is published under, with the network's key.
 pub const CA_SALT: &[u8] = b"ca";
@@ -116,44 +115,46 @@ pub(crate) async fn renew<K: Kv>(
 ) -> Result<Certificate, CaError> {
     let config = network.server_config.as_ref().ok_or(CaError::NotCa)?;
     let key = config.key.as_ref().ok_or(CaError::NotCa)?;
-    let chain = certificate_chain(cert);
-    if chain.len() > MAX_CHAIN_DEPTH {
+    let chain =
+        CertificateChain::decode(cert).map_err(|_| CaError::Invalid("invalid certificate"))?;
+    if chain.bodies().len() > MAX_CHAIN_DEPTH {
         return Err(CaError::Invalid("certificate chain too long"));
     }
     verify_certificate(cert, now).map_err(|_| CaError::Invalid("invalid certificate"))?;
-    if certificate_network_key(cert) != network_key(network) {
+    if chain.network_key() != network_key(network) {
         return Err(CaError::Invalid("certificate for another network"));
     }
-    if cert.key != csr.key {
+    let csr = verify_certificate_request(csr, MEMBER_USAGE)
+        .map_err(|_| CaError::Invalid("invalid certificate request"))?;
+    if chain.key != csr.key {
         return Err(CaError::Invalid(
             "certificate key does not match the request key",
         ));
     }
-    verify_certificate_request(csr, MEMBER_USAGE)
-        .map_err(|_| CaError::Invalid("invalid certificate request"))?;
     if csr.subject.len() > MAX_SUBJECT_LEN {
         return Err(CaError::Invalid("subject too long"));
     }
-    let inviter_key = chain.get(2).map(|c| c.key.clone());
+    let inviter_key = chain.bodies().get(2).map(|c| c.key.clone());
     let issued =
-        sign_certificate_request_with_network(csr, key, &config.name, DEFAULT_CERT_TTL, now, rng)
+        sign_certificate_request_with_network(&csr, key, &config.name, DEFAULT_CERT_TTL, now, rng)
             .map_err(|_| CaError::Invalid("signing failed"))?;
+    let body = certificate_body(&issued).map_err(|_| CaError::Invalid("signing failed"))?;
 
     let mut tx = store.write(now).await?;
     let id = network.id;
     let existing = NetworkPeers::index_get(
         &mut tx,
         &NetworkPeers::BY_PUBLIC_KEY,
-        &network_scoped_key(id, &issued.key),
+        &network_scoped_key(id, &body.key),
     )
     .await?;
     match existing {
-        Some(peer) => update_peer(&mut tx, peer, &issued, now).await?,
+        Some(peer) => update_peer(&mut tx, peer, &body, now).await?,
         None => {
             let inviter_key = inviter_key
-                .filter(|_| chain.len() == 4)
+                .filter(|_| chain.bodies().len() == 4)
                 .ok_or(CaError::Invalid("malformed invite certificate chain"))?;
-            insert_peer(&mut tx, id, &issued, &inviter_key, now).await?;
+            insert_peer(&mut tx, id, &body, &inviter_key, now).await?;
         }
     }
     let log_id = tx.generate_id().await?;
@@ -165,7 +166,7 @@ pub(crate) async fn renew<K: Kv>(
 async fn update_peer<K: Kv>(
     tx: &mut WriteTx<K>,
     mut peer: Peer,
-    cert: &Certificate,
+    cert: &CertificateBody,
     now: Time,
 ) -> Result<(), CaError> {
     if peer.is_banned {
@@ -189,7 +190,7 @@ async fn update_peer<K: Kv>(
 async fn insert_peer<K: Kv>(
     tx: &mut WriteTx<K>,
     network_id: u64,
-    cert: &Certificate,
+    cert: &CertificateBody,
     inviter_key: &[u8],
     now: Time,
 ) -> Result<(), CaError> {
@@ -295,18 +296,24 @@ pub(crate) async fn find<K: Kv>(
         return Ok(cert);
     }
     let mut chain = vec![cert];
-    while let Some(Certificate {
-        parent_oneof: Some(ParentOneof::ParentSerialNumber(serial)),
-        ..
-    }) = chain.last()
-    {
+    loop {
+        let issuer = chain
+            .last()
+            .map(certificate_body)
+            .transpose()
+            .map_err(|_| CaError::Invalid("malformed certificate log"))?
+            .map(|b| b.issuer_serial_number)
+            .unwrap_or_default();
+        if issuer.is_empty() {
+            break;
+        }
         if chain.len() >= MAX_CHAIN_DEPTH {
             return Err(CaError::Invalid("certificate chain too long"));
         }
         let parent = CertificateLogs::index_get(
             &mut tx,
             &CertificateLogs::BY_SERIAL_NUMBER,
-            &scoped(serial),
+            &scoped(&issuer),
         )
         .await?
         .and_then(|l| l.certificate)
@@ -315,7 +322,7 @@ pub(crate) async fn find<K: Kv>(
     }
     let mut cert = chain.pop().ok_or(CaError::NotFound)?;
     while let Some(mut child) = chain.pop() {
-        child.parent_oneof = Some(ParentOneof::Parent(Box::new(cert)));
+        child.parent = Some(Box::new(cert));
         cert = child;
     }
     Ok(cert)
@@ -323,20 +330,29 @@ pub(crate) async fn find<K: Kv>(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing
+    )]
 
     use std::future::Future;
 
     use futures_util::FutureExt;
+    use prost::Message;
     use strims_base::rng::det_rng;
-    use strims_crypto::{generate_key, new_certificate_request};
+    use strims_crypto::{
+        Issuer, certificate_parent, generate_key, new_certificate_request,
+        new_self_signed_certificate, sign_certificate_request,
+    };
     use strims_dao::schema::network::Networks;
     use strims_dao::schema::profile::Profile as ProfileRecord;
     use strims_dao::seal::StorageKey;
     use strims_dao::{ProfileStore, Singleton};
     use strims_kv::MemoryKv;
     use strims_proto::profile::v1::Profile;
-    use strims_proto::types::Key;
+    use strims_proto::types::{CertificateRequestBody, Key};
 
     use super::*;
     use crate::membership::{network_from_invitation_v0, new_invitation_v0, new_network};
@@ -422,14 +438,40 @@ mod tests {
             at: Time,
         ) -> Result<Certificate, CaError> {
             let csr = new_certificate_request(key, MEMBER_USAGE, subject).unwrap();
+            self.renew_with(cert, csr.envelope(), at)
+        }
+
+        fn renew_with(
+            &mut self,
+            cert: &Certificate,
+            csr: &CertificateRequest,
+            at: Time,
+        ) -> Result<Certificate, CaError> {
             block(renew(
                 &self.store,
                 &self.network,
                 cert,
-                &csr,
+                csr,
                 at,
                 &mut self.rng,
             ))
+        }
+
+        fn find(&self, query: Query, full_chain: bool) -> Result<Certificate, CaError> {
+            block(find(&self.store, 10, Some(&query), full_chain))
+        }
+
+        fn log(&self, certs: &[Certificate]) {
+            block(async {
+                let mut tx = self.store.write(T0).await.unwrap();
+                for c in certs {
+                    let id = tx.generate_id().await.unwrap();
+                    CertificateLogs::insert(&mut tx, new_certificate_log(id, 10, c))
+                        .await
+                        .unwrap();
+                }
+                tx.commit().await.unwrap();
+            });
         }
 
         fn peer(&self, key: &[u8]) -> Peer {
@@ -466,47 +508,88 @@ mod tests {
         let provisional = ca.invited(&owner, &ca.owner_cert(), &alice);
         let issued = ca.renew(&provisional, key_of(&alice), "alice", T0).unwrap();
         assert!(strims_crypto::membership_trusted(&issued, T0));
-        assert_eq!(issued.subject, "alice");
+        let body = certificate_body(&issued).unwrap();
+        assert_eq!(body.subject, "alice");
         let peer = ca.peer(&key_of(&alice).public);
         let inviter = ca.peer(&key_of(&owner).public);
         assert_eq!(peer.inviter_peer_id, inviter.id);
         assert_eq!((peer.alias.as_str(), inviter.invite_quota), ("alice", 2));
 
-        let found = block(find(
-            &ca.store,
-            10,
-            Some(&Query::Subject("alice".into())),
-            false,
-        ))
-        .unwrap();
-        assert_eq!(found.serial_number, issued.serial_number);
-        let by_key = block(find(
-            &ca.store,
-            10,
-            Some(&Query::Key(issued.key.clone())),
-            false,
-        ))
-        .unwrap();
-        assert_eq!(by_key.serial_number, issued.serial_number);
+        // the log holds the certificate without its parent
+        let logged = Certificate {
+            parent: None,
+            ..issued.clone()
+        };
+        let found = ca.find(Query::Subject("alice".into()), false).unwrap();
+        assert_eq!(found, logged);
+        let by_key = ca.find(Query::Key(body.key.clone()), false).unwrap();
+        assert_eq!(by_key, logged);
+        let by_serial = ca.find(Query::SerialNumber(body.serial_number), false);
+        assert_eq!(by_serial.unwrap(), logged);
+    }
+
+    #[test]
+    fn full_chain_finds_follow_issuer_serial_numbers_through_the_logs() {
+        let mut ca = Ca::new();
+        // the owner's chain is logged whole when the network is created
+        let owner_cert = ca.owner_cert();
+        let owner = certificate_body(&owner_cert).unwrap();
+        let root = certificate_parent(&owner_cert).unwrap();
+        for q in [
+            Query::Subject("p1".into()),
+            Query::Key(owner.key.clone()),
+            Query::SerialNumber(owner.serial_number.clone()),
+        ] {
+            let chain = ca.find(q, true).unwrap();
+            assert_eq!(chain, owner_cert);
+            verify_certificate(&chain, T0).unwrap();
+        }
+        let root_serial = certificate_body(root).unwrap().serial_number;
+        assert_eq!(
+            ca.find(Query::SerialNumber(root_serial), true).unwrap(),
+            *root
+        );
+
         // a renewal's root is new and unlogged, so its chain can't be
-        // rebuilt; the owner's first chain is logged whole
+        // rebuilt
+        let alice = profile(2);
+        let provisional = ca.invited(&ca.owner.clone(), &owner_cert, &alice);
+        ca.renew(&provisional, key_of(&alice), "alice", T0).unwrap();
+        assert!(ca.find(Query::Subject("alice".into()), false).is_ok());
         assert!(matches!(
-            block(find(
-                &ca.store,
-                10,
-                Some(&Query::Subject("alice".into())),
-                true
-            )),
+            ca.find(Query::Subject("alice".into()), true),
             Err(CaError::NotFound)
         ));
-        let owner_chain = block(find(
-            &ca.store,
-            10,
-            Some(&Query::Subject("p1".into())),
-            true,
-        ))
-        .unwrap();
-        assert_eq!(owner_chain, ca.owner_cert());
+    }
+
+    #[test]
+    fn full_chain_finds_stop_at_the_depth_limit() {
+        let ca = Ca::new();
+        let mut rng = det_rng(3);
+        let k = generate_key(&mut rng);
+        let sign = KeyUsage::Sign as i32;
+        let root = new_self_signed_certificate(&k, sign, DEFAULT_CERT_TTL, "", T0, &mut rng);
+        // chain[i] has i parents
+        let mut chain = vec![root.unwrap()];
+        for _ in 0..MAX_CHAIN_DEPTH {
+            let csr = new_certificate_request(&k, sign, "").unwrap();
+            let issuer = Issuer::Certificate {
+                key: &k,
+                certificate: chain.last().unwrap(),
+            };
+            let c = sign_certificate_request(&csr, DEFAULT_CERT_TTL, issuer, T0, &mut rng);
+            chain.push(c.unwrap());
+        }
+        ca.log(&chain);
+        let serial =
+            |c: &Certificate| Query::SerialNumber(certificate_body(c).unwrap().serial_number);
+
+        let deepest = &chain[MAX_CHAIN_DEPTH - 1];
+        assert_eq!(ca.find(serial(deepest), true).unwrap(), *deepest);
+        assert!(matches!(
+            ca.find(serial(&chain[MAX_CHAIN_DEPTH]), true),
+            Err(CaError::Invalid(_))
+        ));
     }
 
     #[test]
@@ -585,5 +668,33 @@ mod tests {
             ca.renew(other.certificate.as_ref().unwrap(), key_of(&a), "a", T0),
             Err(CaError::Invalid(_))
         ));
+    }
+
+    #[test]
+    fn requests_must_verify_and_ask_only_for_member_usage() {
+        let mut ca = Ca::new();
+        let owner = ca.owner.clone();
+        let a = profile(2);
+        let pa = ca.invited(&owner, &ca.owner_cert(), &a);
+        let a_cert = ca.renew(&pa, key_of(&a), "a", T0).unwrap();
+
+        // a body changed after signing
+        let csr = new_certificate_request(key_of(&a), MEMBER_USAGE, "a").unwrap();
+        let mut forged = csr.into_envelope();
+        let mut body = CertificateRequestBody::decode(forged.body.as_slice()).unwrap();
+        body.subject = "b".into();
+        forged.body = body.encode_to_vec();
+        assert!(matches!(
+            ca.renew_with(&a_cert, &forged, T0),
+            Err(CaError::Invalid(_))
+        ));
+        // a signed request for more than peer and sign usage
+        let usage = MEMBER_USAGE | KeyUsage::Bootstrap as i32;
+        let greedy = new_certificate_request(key_of(&a), usage, "a").unwrap();
+        assert!(matches!(
+            ca.renew_with(&a_cert, greedy.envelope(), T0),
+            Err(CaError::Invalid(_))
+        ));
+        ca.renew(&a_cert, key_of(&a), "a", T0).unwrap();
     }
 }

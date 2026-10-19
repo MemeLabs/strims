@@ -28,7 +28,8 @@ use futures_util::StreamExt;
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, generate_key, new_certificate_request, sign_certificate_request_with_network,
+    DEFAULT_CERT_TTL, certificate_body, generate_key, new_certificate_request,
+    sign_certificate_request_with_network,
 };
 use strims_dao::schema::network::Networks;
 use strims_dao::schema::notification::Notifications;
@@ -42,7 +43,7 @@ use strims_network::{Config, Host, NetworkControl};
 use strims_proto::network::v1::Network;
 use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Profile;
-use strims_proto::types::{Certificate, Key, KeyUsage};
+use strims_proto::types::{Certificate, CertificateBody, Key, KeyUsage};
 use strims_rpc::{Router, Timer, peer_connection};
 use strims_vpn::{Delivery, HostAddr, M_ENCRYPT, NetworkId};
 use tokio::task::{LocalSet, spawn_local};
@@ -466,6 +467,11 @@ impl Node {
         Networks::delete(&mut tx, id).await.unwrap();
         tx.commit().await.unwrap();
     }
+}
+
+/// The body of `cert`, decoded.
+pub fn body(cert: &Certificate) -> CertificateBody {
+    certificate_body(cert).unwrap()
 }
 
 pub async fn node(n: u8) -> Node {

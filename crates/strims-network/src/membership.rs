@@ -8,7 +8,7 @@
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
-    DEFAULT_CERT_TTL, Error as CryptoError, generate_key, new_certificate_request,
+    DEFAULT_CERT_TTL, Error as CryptoError, Issuer, generate_key, new_certificate_request,
     sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
 };
 use strims_proto::network::v1::directory::ServerConfig as DirectoryConfig;
@@ -16,7 +16,6 @@ use strims_proto::network::v1::directory::server_config::Integrations;
 use strims_proto::network::v1::directory::server_config::integrations::Swarm;
 use strims_proto::network::v1::{InvitationV0, Network, ServerConfig};
 use strims_proto::profile::v1::Profile;
-use strims_proto::types::certificate::ParentOneof;
 use strims_proto::types::{Certificate, Image, KeyUsage};
 
 use crate::ca::MEMBER_USAGE;
@@ -62,10 +61,10 @@ pub fn new_network(
     let csr = new_certificate_request(profile_key, MEMBER_USAGE, subject(profile, alias))?;
     let certificate =
         sign_certificate_request_with_network(&csr, &key, name, DEFAULT_CERT_TTL, now, rng)?;
-    let alias = if certificate.subject == profile.name {
+    let alias = if csr.subject == profile.name {
         String::new()
     } else {
-        certificate.subject.clone()
+        csr.subject.clone()
     };
     Ok(Network {
         id,
@@ -100,8 +99,11 @@ pub fn new_invitation_v0(
     let profile_key = profile.key.as_ref().ok_or(MembershipError::NoProfileKey)?;
     let key = generate_key(rng);
     let csr = new_certificate_request(&key, KeyUsage::Sign as i32, "")?;
-    let mut certificate = sign_certificate_request(&csr, INVITATION_TTL, profile_key, now, rng)?;
-    certificate.parent_oneof = Some(ParentOneof::Parent(Box::new(membership.clone())));
+    let issuer = Issuer::Certificate {
+        key: profile_key,
+        certificate: membership,
+    };
+    let certificate = sign_certificate_request(&csr, INVITATION_TTL, issuer, now, rng)?;
     Ok(InvitationV0 {
         key: Some(key),
         certificate: Some(certificate),
@@ -126,8 +128,11 @@ pub fn network_from_invitation_v0(
     };
     verify_certificate(invite, now).map_err(|e| MembershipError::Certificate(e.to_string()))?;
     let csr = new_certificate_request(profile_key, KeyUsage::Peer as i32, subject(profile, alias))?;
-    let mut certificate = sign_certificate_request(&csr, DEFAULT_CERT_TTL, key, now, rng)?;
-    certificate.parent_oneof = Some(ParentOneof::Parent(Box::new(invite.clone())));
+    let issuer = Issuer::Certificate {
+        key,
+        certificate: invite,
+    };
+    let certificate = sign_certificate_request(&csr, DEFAULT_CERT_TTL, issuer, now, rng)?;
     Ok(Network {
         id,
         certificate: Some(certificate),

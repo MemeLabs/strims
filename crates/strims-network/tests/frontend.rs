@@ -72,7 +72,7 @@ fn a_network_created_and_joined_through_the_frontend_binds() {
             .network
             .unwrap();
         assert_eq!(created.alias, "boss");
-        assert_eq!(created.certificate.as_ref().unwrap().subject, "boss");
+        assert_eq!(body(created.certificate.as_ref().unwrap()).subject, "boss");
         let key = created.server_config.as_ref().unwrap().key.clone().unwrap();
 
         let invitation = fo
@@ -216,7 +216,7 @@ fn watching_networks() {
         )));
         assert!(events.iter().any(|e| matches!(
             e,
-            Body::NetworkUpdate(n) if n.certificate.as_ref().unwrap().subject == "renamed"
+            Body::NetworkUpdate(n) if body(n.certificate.as_ref().unwrap()).subject == "renamed"
         )));
         assert!(events.iter().any(|e| matches!(
             e,

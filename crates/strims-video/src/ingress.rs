@@ -537,7 +537,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             let Some(s) = ing.sessions.get_mut(&c.id) else {
                 return;
             };
-            let moved = channel_network_key(c) != Some(s.network_key.as_slice())
+            let moved = channel_network_key(c).as_deref() != Some(s.network_key.as_slice())
                 || c.key.as_ref() != Some(&s.key);
             if moved {
                 Err(s.stop.clone())
@@ -789,9 +789,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             .clone()
             .filter(|k| !k.public.is_empty())
             .ok_or_else(|| failed("the channel has no key"))?;
-        let network_key = channel_network_key(&channel)
-            .map(<[u8]>::to_vec)
-            .ok_or_else(|| failed("the channel has no network"))?;
+        let network_key =
+            channel_network_key(&channel).ok_or_else(|| failed("the channel has no network"))?;
         if self
             .network
             .network(&network_key)

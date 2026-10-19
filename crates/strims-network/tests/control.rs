@@ -30,7 +30,7 @@ use strims_proto::network::v1::Network;
 use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::notification::v1::notification::Status;
-use strims_proto::types::Key;
+use strims_proto::types::{Certificate, Key};
 use support::*;
 
 /// The next event that starts, joins or stops a network.
@@ -294,7 +294,7 @@ fn a_member_renews_at_the_ca_over_vpn() {
             .await;
         settle().await;
         let n = read_network(&member, 100).await;
-        assert_eq!(n.certificate.unwrap().subject, "bob");
+        assert_eq!(body(&n.certificate.unwrap()).subject, "bob");
         assert_eq!(n.certificate_renewal_error, 0);
         let m = member.control.metrics();
         assert_eq!(m.runs_failed, 0, "{m:?}");
@@ -465,7 +465,7 @@ fn repeated_renewal_failures_notify_once() {
         tokio::time::sleep(RENEW_RETRY.to_std().unwrap()).await;
         settle().await;
         let n = read_network(&member, 110).await;
-        assert_eq!(n.certificate.unwrap().subject, "bob");
+        assert_eq!(body(&n.certificate.unwrap()).subject, "bob");
         assert_eq!(n.certificate_renewal_error, 0);
         let notes = read_notifications(&member).await;
         assert_eq!(notes.len(), 1, "{notes:?}");
@@ -512,7 +512,7 @@ fn find_certificate_answers_locally_and_over_vpn() {
         let owner_cert = read_network(&owner, 130).await.certificate.unwrap();
         let bob_cert = read_network(&bob, 130).await.certificate.unwrap();
         let by_subject = |n: &Node| Query::Subject(n.profile.name.clone());
-        let owner_subject = Query::Subject(owner_cert.subject.clone());
+        let owner_subject = Query::Subject(body(&owner_cert).subject);
 
         // over vpn: by subject and by key, and the owner's full chain
         let c = alice
@@ -520,20 +520,32 @@ fn find_certificate_answers_locally_and_over_vpn() {
             .find_certificate(&key, owner_subject.clone(), false)
             .await
             .unwrap();
-        assert_eq!(c.key, owner.profile_key().public);
+        assert_eq!(body(&c).key, owner.profile_key().public);
         let c = alice
             .control
             .find_certificate(&key, by_subject(&bob), false)
             .await
             .unwrap();
-        assert_eq!(c.key, bob.profile_key().public);
-        assert_eq!(c.serial_number, bob_cert.serial_number);
+        // logs hold certificates without their parents
+        let bob_logged = Certificate {
+            parent: None,
+            ..bob_cert.clone()
+        };
+        assert_eq!(c, bob_logged);
+        assert_eq!(body(&c).key, bob.profile_key().public);
         let c = alice
             .control
             .find_certificate(&key, Query::Key(bob.profile_key().public.clone()), false)
             .await
             .unwrap();
-        assert_eq!(c.subject, bob.profile.name);
+        assert_eq!(c, bob_logged);
+        let serial = Query::SerialNumber(body(&bob_cert).serial_number);
+        let c = alice
+            .control
+            .find_certificate(&key, serial, false)
+            .await
+            .unwrap();
+        assert_eq!(c, bob_logged);
         let chain = alice
             .control
             .find_certificate(&key, owner_subject.clone(), true)
@@ -555,7 +567,7 @@ fn find_certificate_answers_locally_and_over_vpn() {
             .find_certificate(&key, by_subject(&alice), false)
             .await
             .unwrap();
-        assert_eq!(c.key, alice.profile_key().public);
+        assert_eq!(body(&c).key, alice.profile_key().public);
         let c = owner
             .control
             .find_certificate(&key, owner_subject, true)
@@ -598,14 +610,14 @@ fn a_host_certificate_is_under_the_current_membership() {
         let n = read_network(&member, 160).await;
         let membership = n.certificate.clone().unwrap();
         let host = member.control.host_certificate(&key).unwrap();
-        assert_eq!(host.key, member.id.to_bytes());
+        assert_eq!(body(&host).key, member.id.to_bytes());
         assert_eq!(certificate_parent(&host), Some(&membership));
         let found = owner
             .control
             .find_certificate(&key, Query::Key(member.profile_key().public.clone()), false)
             .await
             .unwrap();
-        assert_eq!(found.serial_number, membership.serial_number);
+        assert_eq!(body(&found).serial_number, body(&membership).serial_number);
 
         member
             .write_network(Network {
@@ -615,7 +627,7 @@ fn a_host_certificate_is_under_the_current_membership() {
             .await;
         settle().await;
         let renewed = read_network(&member, 160).await.certificate.unwrap();
-        assert_eq!(renewed.subject, "carol");
+        assert_eq!(body(&renewed).subject, "carol");
         let host = member.control.host_certificate(&key).unwrap();
         assert_eq!(certificate_parent(&host), Some(&renewed));
         assert_eq!(member.control.host_certificate(b"no such network"), None);
