@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/MemeLabs/protobuf/pkg/rpc"
-	"github.com/MemeLabs/strims/internal/dao"
 	"github.com/MemeLabs/strims/pkg/apis"
 	authv1 "github.com/MemeLabs/strims/pkg/apis/auth/v1"
 	debugv1 "github.com/MemeLabs/strims/pkg/apis/debug/v1"
@@ -222,7 +221,7 @@ func run() error {
 			debugConfigReq := &debugv1.SetConfigRequest{
 				Config: &debugv1.Config{
 					EnableMockStreams:    true,
-					MockStreamNetworkKey: dao.NetworkKey(createServerResponse.Network),
+					MockStreamNetworkKey: networkKey(createServerResponse.Network),
 				},
 			}
 			if err = client.Debug.SetConfig(ctx, debugConfigReq, &debugv1.SetConfigResponse{}); err != nil {
@@ -242,7 +241,7 @@ func run() error {
 		BitrateKbps:       6000,
 		SegmentIntervalMs: 1000,
 		TimeoutMs:         5 * 60 * 1000,
-		NetworkKey:        dao.NetworkKey(createServerResponse.Network),
+		NetworkKey:        networkKey(createServerResponse.Network),
 	}
 	startMockStreamRes := &debugv1.StartMockStreamResponse{}
 	if err = clients[0].Debug.StartMockStream(ctx, startMockStreamReq, startMockStreamRes); err != nil {
@@ -361,6 +360,15 @@ func run() error {
 	*/
 
 	return nil
+}
+
+// networkKey returns the key of the root of the network's certificate chain.
+func networkKey(network *networkv1.Network) []byte {
+	cert := network.GetCertificate()
+	for cert.GetParent() != nil {
+		cert = cert.GetParent()
+	}
+	return cert.GetKey()
 }
 
 func newClient(logger *zap.Logger, hostIP string, wsPort int) (*apis.FrontendClient, error) {
