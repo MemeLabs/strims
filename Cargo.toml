@@ -27,6 +27,7 @@ members = [
   "crates/strims-session",
   "crates/strims-testworld",
   "crates/strims-golden",
+  "crates/strims-wan",
   "crates/strims-node-core",
   "crates/strims-node",
   "crates/strims-sim",
@@ -83,6 +84,7 @@ strims-debug = { path = "crates/strims-debug" }
 strims-session = { path = "crates/strims-session" }
 strims-testworld = { path = "crates/strims-testworld" }
 strims-golden = { path = "crates/strims-golden" }
+strims-wan = { path = "crates/strims-wan" }
 strims-node-core = { path = "crates/strims-node-core" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }

@@ -2694,6 +2694,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-wan"
+version = "0.1.0"
+dependencies = [
+ "rand_core 0.10.1",
+ "strims-base",
+]
+
+[[package]]
 name = "strims-wasm"
 version = "0.1.0"
 dependencies = [

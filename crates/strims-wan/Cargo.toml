@@ -1,0 +1,15 @@
+[package]
+name = "strims-wan"
+description = "Real-world wide-area paths for the simulations: city-pair latency, access links, jitter, loss and bandwidth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+strims-base.workspace = true
+rand_core.workspace = true
+
+[lints]
+workspace = true
