@@ -106,11 +106,41 @@ floods, or well-formed but malicious messages.
 ## Formats
 
 No deployed network constrains the wire or store formats. Golden vectors
-(`golden/` in a crate, replayed by its `tests/golden*.rs`) pin them, so a
-format can't change by accident. A deliberate change updates the vectors in
-the same commit. In code, express a format requirement as the local
-constraint it imposes, e.g. "port 20 must stay unhandled by the v2
-protocol".
+(`golden/` in a crate, replayed by its `tests/golden*.rs` through
+`strims-golden`) pin them, so a format can't change by accident. A
+deliberate change updates the vectors in the same commit:
+`STRIMS_GOLDEN=update cargo test -p <crate> --test <test>` rewrites them
+from the code, and a plain run must pass afterwards. In code, express a
+format requirement as the local constraint it imposes, e.g. "port 20 must
+stay unhandled by the v2 protocol".
+
+Messages between peers evolve add-only:
+
+- A change adds fields, oneof members and enum values under new tags. A
+  removed field's tag and name are `reserved`, and no tag is reused.
+- Receivers ignore fields they don't know. A oneof member they don't know
+  reads as unset, and an enum value they don't know keeps its number; to
+  the receiver both are input it can't use.
+- A field whose meaning a receiver can't safely ignore needs a version or
+  capability both sides agreed on first.
+
+A signed object travels as an envelope (`strims_crypto::signed`): an
+encoded body in `bytes body` and its signature in `bytes signature`. The
+signature covers those bytes, and whoever stores or forwards the object
+keeps them, so a body's unknown fields survive any relay. Nothing
+re-encodes a body it verified or forwards; what must survive a relay
+belongs in the body. Every ed25519 signature goes through
+`strims_crypto::sign` with the `Domain` of what it signs, and a new kind of
+signed object adds a domain. Only `strims-crypto` depends on
+`ed25519-dalek`.
+
+Stored records (`strims-dao`) and the UI's frontend API are same-version
+and keep no unknown fields. A store opens only at its `STORE_VERSION`, and
+replication refuses a peer at another, so a change to a stored record's
+encoding or meaning bumps it. The UI is built with its node.
+
+A change under `schema/` regenerates the UI's `src/apis` and infra's
+`pkg/apis` with `hack/protogen.sh` in the same commit.
 
 ## Testing
 

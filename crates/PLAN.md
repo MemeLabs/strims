@@ -147,6 +147,9 @@ Egress and players:
     below); until then the dev page reaches the API through the webpack
     dev server's proxy;
   - Origin checks on the API's upgrade, which accepts any origin;
+  - the UI and its node must come from one build, since the frontend
+    API keeps no unknown fields: the UI could send its build id when it
+    connects, and the API refuse another;
   - WebSocket pings on API connections, so a UI that goes without
     closing its connection releases it;
   - headless sessions started at boot, for bootstrap nodes;
@@ -314,7 +317,7 @@ Egress and players:
 - **Directory.**
   - A refresh rewrites every listing, snippet images included, into an
     event swarm whose window is 2 MiB. Images may belong in the asset
-    swarm, which is a wire change.
+    swarm, named by the digests a snippet's signed body carries.
   - Snippet servers answer any member; decide whether only the directory
     server's host may subscribe.
   - A member whose event reader falls behind resets its view; only the
@@ -337,6 +340,9 @@ Egress and players:
     CA.
   - Change events don't cross browser tabs sharing a store, so other tabs'
     views go stale until they reload.
+- **Store upgrades.** A node opens only a store at its `STORE_VERSION`,
+  and nothing migrates one. Before a first release, decide between
+  migrations and export and import.
 - **WebRTC determinism.** DTLS bytes vary between same-seed runs, because
   dimpl's ECDHE and sctp-proto use OS randomness. Byte-level reproducibility
   needs seedable rngs upstream.
@@ -362,7 +368,6 @@ stack or a version gate.
 - Bound trailer length and add a hop-limit field. 8 hops reach the far pairs
   that 5 can't.
 - Authenticate unencrypted senders, which prevents reflection.
-- Bind the peer-index record's host fields.
 - Don't trust the publisher's clock in hash-table conflicts.
 - Add a signed link-state message with a capability bit, and cheap per-hop
   authentication.
@@ -393,10 +398,6 @@ stack or a version gate.
 - Add the channel to `Close`: a close can't name the announce it undoes,
   so a delayed one stops a later binding, and each side must send one
   call per (peer, transfer) at a time.
-
-### Protobuf evolution
-prost drops unknown fields, so re-encoding a newer peer's message loses
-them. Decide how forward compatibility works before changing any schema.
 
 ### Key derivation
 Run the X25519 shared secrets that key vnic links and vpn messages through a
