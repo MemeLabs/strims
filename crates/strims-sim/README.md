@@ -33,6 +33,14 @@ replay: STRIMS_SIM_SEED=1 cargo test -p strims-sim --release --test scenarios sl
 
 Debug and release builds produce the same trace for a seed.
 
+## WAN scenarios
+
+`Scenario::host_at` places a host at a `strims_wan::Site` (a city and an
+access link) and turns on WAN mode: messages between hosts then take
+real-world paths, with city-pair latency, jitter, loss and the access
+links' rates (see the crate docs). The `wan_*` scenarios stream at about
+2 Mbit/s, so they are slower than the others.
+
 ## Adding a scenario
 
 Scenarios live in `tests/scenarios.rs`:

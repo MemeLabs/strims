@@ -19,9 +19,12 @@ use strims_base::rng::det_rng;
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, Fault, HostIx, NetworkSpec, Report, Scenario, SwarmSpec, Transport, VpnProbes, sweep,
+    Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SwarmSpec, Transport,
+    VpnProbes, sweep,
 };
 use strims_vpn::Routing;
+use strims_wan::sample::pick;
+use strims_wan::{Access, City, GLOBAL_AUDIENCE, RESIDENTIAL, Region, Site};
 
 #[global_allocator]
 static ALLOC: strims_sim::memory::Allocator<std::alloc::System> =
@@ -1315,6 +1318,328 @@ fn long_run() {
     sweep("long_run", long_run_scenario, check_long_run);
 }
 
+// --- 10. WAN paths ------------------------------------------------------------
+
+/// The stream rate of the WAN scenarios: about 2 Mbit/s.
+const WAN_RATE: u64 = 256 * KIB;
+/// Their live window: 16 s of stream.
+const WAN_WINDOW: usize = 4096;
+/// Salt of the rng that draws viewer sites.
+const SITES: u64 = 0x5349_5445;
+
+/// A seed at `seed_site` and a viewer at each of `sites`, in a seeded
+/// random mesh (each host dials up to 3 earlier ones, 40 % over
+/// WebSocket), streaming `WAN_RATE` from `start` to `stop`.
+fn wan(
+    name: &str,
+    seed: u64,
+    seed_site: Site,
+    sites: &[Site],
+    push: PushMode,
+    (start, stop): (u64, u64),
+) -> Streaming {
+    let mut s = Scenario::new(name);
+    let mut rng = det_rng(seed);
+    let seed_host = s.host_at("seed", seed_site);
+    let vs = s.hosts_at("v", sites);
+    let all: Vec<HostIx> = std::iter::once(seed_host)
+        .chain(vs.iter().copied())
+        .collect();
+    random_mesh(&mut s, &mut rng, &all, 3, 0.4);
+    s.swarm(
+        SwarmSpec::live(seed_host, vs.clone(), WAN_RATE, secs(start), secs(stop))
+            .with_push_mode(push)
+            .with_live_window(WAN_WINDOW),
+    );
+    s.invariants = Invariants {
+        max_heap: Some(256 * MIB),
+        ..Invariants::for_window(WAN_WINDOW)
+    };
+    s.duration = secs(stop + 10);
+    Streaming {
+        s,
+        seed: seed_host,
+        viewers: vs,
+    }
+}
+
+/// `n` viewer sites drawn by weight from `cities` and `access`.
+fn viewer_sites(
+    seed: u64,
+    n: usize,
+    cities: &[(City, u32)],
+    access: &[(Access, u32)],
+) -> Vec<Site> {
+    let mut rng = det_rng(seed ^ SITES);
+    (0..n)
+        .map(|_| {
+            let city = pick(&mut rng, cities).unwrap();
+            Site::new(city, pick(&mut rng, access).unwrap())
+        })
+        .collect()
+}
+
+/// `GLOBAL_AUDIENCE`'s cities in North America and Europe.
+fn atlantic() -> Vec<(City, u32)> {
+    GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
+        .collect()
+}
+
+/// The viewers of swarm 0 whose site is in `region`.
+fn in_region(r: &Report, region: Region) -> Vec<HostIx> {
+    all_viewers(r)
+        .into_iter()
+        .filter(|&h| {
+            r.scenario.hosts[h]
+                .site
+                .is_some_and(|s| s.city.region() == region)
+        })
+        .collect()
+}
+
+/// No access link queued a message for longer than `max`.
+fn queues_within(r: &Report, max: Duration) -> Result<(), String> {
+    let wan = r.wan.as_ref().ok_or("not a WAN run")?;
+    let ((up, up_host), (down, down_host)) = wan.queue_peaks();
+    let max = ms(max);
+    if u64::from(up) > max || u64::from(down) > max {
+        return Err(format!(
+            "access queues reached {up} ms up ({up_host}) and {down} ms down ({down_host}), over {max} ms"
+        ));
+    }
+    Ok(())
+}
+
+/// The p99 lag of swarm 0 is at most `max` ms.
+fn p99_within(r: &Report, max: u32) -> Result<(), String> {
+    let lag = r.lag(0);
+    if lag.p99 > max {
+        return Err(format!("lag {lag}, p99 over {max} ms"));
+    }
+    Ok(())
+}
+
+// 10a. Two continents: a London seed, three viewers in Europe and three
+// in North America.
+
+fn wan_two_continents_scenario(seed: u64) -> Scenario {
+    let sites = [
+        Site::new(City::Amsterdam, Access::Cable),
+        Site::new(City::Frankfurt, Access::Fiber),
+        Site::new(City::Warsaw, Access::Dsl),
+        Site::new(City::NewYork, Access::Cable),
+        Site::new(City::Chicago, Access::Fiber),
+        Site::new(City::Toronto, Access::Lte),
+    ];
+    let seed_site = Site::new(City::London, Access::Fiber);
+    let mut m = wan(
+        "wan_two_continents",
+        seed,
+        seed_site,
+        &sites,
+        PushMode::Off,
+        (5, 30),
+    );
+    m.s.invariants.max_heap = Some(96 * MIB);
+    m.s
+}
+
+/// The stream reaches everyone from 8 s on, North America reads it later
+/// than Europe, and no access link queues for a second.
+fn check_wan_two_continents(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(r, &all_viewers(r), secs(8), spec.stop)?;
+    queues_within(r, secs(1))?;
+    let eu = r.lag_of(0, &in_region(r, Region::Europe));
+    let na = r.lag_of(0, &in_region(r, Region::NorthAmerica));
+    if na.p50 <= eu.p50 {
+        return Err(format!("north america lag {na}, europe {eu}"));
+    }
+    let sites = r.trace.iter().filter(|l| l.starts_with("0 wan ")).count();
+    if sites != r.scenario.hosts.len() {
+        return Err(format!("{sites} site lines in the trace"));
+    }
+    Ok(())
+}
+
+#[test]
+fn wan_two_continents() {
+    sweep(
+        "wan_two_continents",
+        wan_two_continents_scenario,
+        check_wan_two_continents,
+    );
+}
+
+// 10b. A worldwide audience of a datacenter seed.
+
+fn wan_global_audience(seed: u64, push: PushMode) -> Scenario {
+    let sites = viewer_sites(seed, 16, GLOBAL_AUDIENCE, RESIDENTIAL);
+    wan(
+        &format!("wan_global_audience {push:?}"),
+        seed,
+        Site::new(City::Frankfurt, Access::Datacenter),
+        &sites,
+        push,
+        (5, 65),
+    )
+    .s
+}
+
+/// Everyone gets the stream from 10 s on, within 3.5 s at p99, through
+/// access queues under 2 s.
+fn check_wan_global_audience(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(r, &all_viewers(r), secs(10), spec.stop)?;
+    p99_within(r, 3500)?;
+    queues_within(r, secs(2))
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_global_audience_pull() {
+    sweep(
+        "wan_global_audience_pull",
+        |s| wan_global_audience(s, PushMode::Off),
+        check_wan_global_audience,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_global_audience_hybrid() {
+    sweep(
+        "wan_global_audience_hybrid",
+        |s| wan_global_audience(s, PushMode::Hybrid),
+        check_wan_global_audience,
+    );
+}
+
+// 10c. A seed on a cable uplink that can serve a few viewers, and 16
+// viewers around the Atlantic: the viewers relay.
+
+fn wan_residential_seed(seed: u64, push: PushMode) -> Scenario {
+    let sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
+    wan(
+        &format!("wan_residential_seed {push:?}"),
+        seed,
+        Site::new(City::Chicago, Access::Cable),
+        &sites,
+        push,
+        (5, 65),
+    )
+    .s
+}
+
+/// Everyone gets the stream from 10 s on while the seed sends at most 60 %
+/// of the data and at least 2 viewers relay.
+fn check_wan_residential_seed(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(r, &all_viewers(r), secs(10), spec.stop)?;
+    let share = r.data_share(0);
+    let relays = r.data_uploaders(0, 4 * MIB.unsigned_abs());
+    if share > 0.6 || relays < 2 {
+        return Err(format!(
+            "seed data share {:.0}%, {relays} viewers relayed 4 MiB",
+            share * 100.0
+        ));
+    }
+    queues_within(r, secs(2))
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_pull() {
+    sweep(
+        "wan_residential_seed_pull",
+        |s| wan_residential_seed(s, PushMode::Off),
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_hybrid() {
+    sweep(
+        "wan_residential_seed_hybrid",
+        |s| wan_residential_seed(s, PushMode::Hybrid),
+        check_wan_residential_seed,
+    );
+}
+
+// 10d. Mobile viewers: six on LTE and six on cable in North America.
+
+fn wan_mobile_viewers(seed: u64, push: PushMode) -> Scenario {
+    let na: Vec<(City, u32)> = GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|(c, _)| c.region() == Region::NorthAmerica)
+        .collect();
+    let mut sites = viewer_sites(seed, 6, &na, &[(Access::Lte, 1)]);
+    sites.extend(viewer_sites(seed + 1, 6, &na, &[(Access::Cable, 1)]));
+    let mut m = wan(
+        &format!("wan_mobile_viewers {push:?}"),
+        seed,
+        Site::new(City::NewYork, Access::Datacenter),
+        &sites,
+        push,
+        (5, 65),
+    );
+    m.s.invariants.max_heap = Some(192 * MIB);
+    m.s
+}
+
+/// Everyone gets the stream from 10 s on, LTE viewers within 3.5 s at p99,
+/// and packets were lost on the way.
+fn check_wan_mobile_viewers(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(r, &all_viewers(r), secs(10), spec.stop)?;
+    let lte: Vec<HostIx> = all_viewers(r)
+        .into_iter()
+        .filter(|&h| {
+            r.scenario.hosts[h]
+                .site
+                .is_some_and(|s| s.access == Access::Lte)
+        })
+        .collect();
+    let lag = r.lag_of(0, &lte);
+    if lag.p99 > 3500 {
+        return Err(format!("LTE viewers' lag {lag}"));
+    }
+    let (retransmits, _) = r.wan.as_ref().map_or((0, 0), |w| w.losses());
+    if retransmits == 0 {
+        return Err("no stream message lost a packet".to_owned());
+    }
+    queues_within(r, secs(2))
+}
+
+#[test]
+#[ignore = "WAN, 13 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_mobile_viewers_pull() {
+    sweep(
+        "wan_mobile_viewers_pull",
+        |s| wan_mobile_viewers(s, PushMode::Off),
+        check_wan_mobile_viewers,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 13 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_mobile_viewers_hybrid() {
+    sweep(
+        "wan_mobile_viewers_hybrid",
+        |s| wan_mobile_viewers(s, PushMode::Hybrid),
+        check_wan_mobile_viewers,
+    );
+}
+
 // --- sampling -----------------------------------------------------------------
 
 /// A seed and 3 viewers in a chain, Hybrid, uplinks well above the stream.
@@ -1375,6 +1700,9 @@ struct AbRun {
     seed_share: f64,
     settle: Duration,
     swarms: usize,
+    /// The highest p99 lag of a region's viewers, and the region (WAN
+    /// runs).
+    worst_region: Option<(u32, Region)>,
 }
 
 fn ab_measure(r: &Report, check: Check, step: bool) -> AbRun {
@@ -1393,6 +1721,12 @@ fn ab_measure(r: &Report, check: Check, step: bool) -> AbRun {
             Duration::ZERO
         },
         swarms,
+        worst_region: r.wan.as_ref().and_then(|_| {
+            r.lag_by_region(0)
+                .into_iter()
+                .map(|(g, p)| (p.p99, g))
+                .max()
+        }),
     };
     for sw in 0..swarms {
         let lag = r.lag(sw);
@@ -1432,6 +1766,13 @@ fn ab_row(name: &str, runs: &[AbRun]) -> String {
         median_of(settle.clone()),
         settle.iter().max().unwrap_or(&0),
     );
+    let worst: Vec<(u32, Region)> = runs.iter().filter_map(|r| r.worst_region).collect();
+    if let Some(&(max, region)) = worst.iter().max() {
+        row += &format!(
+            " worst region p99 {} ({max} {region}) |",
+            median_of(worst.iter().map(|w| w.0).collect())
+        );
+    }
     if runs.iter().any(|r| r.swarms > 1) {
         // Jain's index over the two swarms' delivery, and over their
         // inverse p99 lag: 1 when equal, 0.5 when one swarm gets it all.
@@ -1469,8 +1810,9 @@ type Check = fn(&Report) -> Result<(), String>;
 /// traces, in pull and Hybrid. Prints one row per scenario, mode and
 /// controller: delivery mean (min), lag p50 (median) and p99 (median,
 /// max), duplicates, the seed's data share, the latency step's settling
-/// time (median, max), the seeds that failed the scenario's check, and for
-/// cross traffic the second swarm and the fairness between the two.
+/// time (median, max), the seeds that failed the scenario's check, for
+/// cross traffic the second swarm and the fairness between the two, and
+/// for WAN runs the p99 lag of the worst region (median, max).
 #[test]
 #[ignore = "the request controller comparison; run in release with --ignored --nocapture"]
 fn controller_ab() {
@@ -1605,6 +1947,66 @@ fn controller_ab() {
             "cross_traffic hybrid ledbat/bbr",
             |s| cross_traffic(s, PushMode::Hybrid, LEDBAT, BBR),
             check_cross_traffic,
+            false,
+        ),
+        (
+            "wan_global_audience pull ledbat",
+            |s| with_controller(wan_global_audience(s, PushMode::Off), LEDBAT),
+            check_wan_global_audience,
+            false,
+        ),
+        (
+            "wan_global_audience pull bbr",
+            |s| with_controller(wan_global_audience(s, PushMode::Off), BBR),
+            check_wan_global_audience,
+            false,
+        ),
+        (
+            "wan_global_audience hybrid ledbat",
+            |s| with_controller(wan_global_audience(s, PushMode::Hybrid), LEDBAT),
+            check_wan_global_audience,
+            false,
+        ),
+        (
+            "wan_global_audience hybrid bbr",
+            |s| with_controller(wan_global_audience(s, PushMode::Hybrid), BBR),
+            check_wan_global_audience,
+            false,
+        ),
+        (
+            "wan_residential_seed pull ledbat",
+            |s| with_controller(wan_residential_seed(s, PushMode::Off), LEDBAT),
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed pull bbr",
+            |s| with_controller(wan_residential_seed(s, PushMode::Off), BBR),
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed hybrid ledbat",
+            |s| with_controller(wan_residential_seed(s, PushMode::Hybrid), LEDBAT),
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed hybrid bbr",
+            |s| with_controller(wan_residential_seed(s, PushMode::Hybrid), BBR),
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_mobile_viewers pull ledbat",
+            |s| with_controller(wan_mobile_viewers(s, PushMode::Off), LEDBAT),
+            check_wan_mobile_viewers,
+            false,
+        ),
+        (
+            "wan_mobile_viewers pull bbr",
+            |s| with_controller(wan_mobile_viewers(s, PushMode::Off), BBR),
+            check_wan_mobile_viewers,
             false,
         ),
     ];

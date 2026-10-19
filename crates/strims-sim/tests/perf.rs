@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Where idle simulation time goes: turmoil's per-host ticks, node loops
-//! woken by the ppspp runner's 100 ms tick, and swarm channels with no
-//! data. Prints wall time per simulated second and node wakeups; asserts
-//! only determinism.
+//! woken by the ppspp runner's 100 ms tick, swarm channels with no data,
+//! and WAN mode's link scheduler. Prints wall time per simulated second and
+//! node wakeups; asserts only determinism.
 
 #![allow(
     clippy::unwrap_used,
@@ -18,6 +18,7 @@ use std::time::Duration;
 use strims_base::rng::det_rng;
 use strims_sim::topology::random_mesh;
 use strims_sim::{Scenario, SwarmSpec, run};
+use strims_wan::{Access, City, Site};
 
 #[derive(Clone, Copy, Debug)]
 enum Idle {
@@ -27,15 +28,27 @@ enum Idle {
     Linked,
     /// 13 nodes in a mesh running a swarm nobody writes to.
     Swarm,
+    /// The same at sites around the world, in WAN mode.
+    WanSwarm,
 }
 
 fn idle(kind: Idle, tick_ms: u64) -> Scenario {
     let mut s = Scenario::new(&format!("idle {kind:?} tick {tick_ms} ms"));
-    let hosts = s.hosts("n", 13, Some(1 << 20));
+    let hosts = if matches!(kind, Idle::WanSwarm) {
+        let sites: Vec<Site> = City::ALL
+            .iter()
+            .zip(Access::ALL.iter().cycle())
+            .take(13)
+            .map(|(&c, &a)| Site::new(c, a))
+            .collect();
+        s.hosts_at("n", &sites)
+    } else {
+        s.hosts("n", 13, Some(1 << 20))
+    };
     if !matches!(kind, Idle::Alone) {
         random_mesh(&mut s, &mut det_rng(1), &hosts, 3, 0.4);
     }
-    if matches!(kind, Idle::Swarm) {
+    if matches!(kind, Idle::Swarm | Idle::WanSwarm) {
         let far = Duration::from_secs(3600);
         s.swarm(SwarmSpec::live(
             hosts[0],
@@ -57,6 +70,7 @@ fn idle_cost() {
         (Idle::Alone, 10),
         (Idle::Linked, 1),
         (Idle::Swarm, 1),
+        (Idle::WanSwarm, 1),
     ] {
         let a = run(idle(kind, tick), 1).unwrap();
         let wakeups: u64 = a.hosts.iter().map(|h| h.loop_iterations).sum();

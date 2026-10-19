@@ -34,6 +34,13 @@ priority = 90
 filter = 'package(strims-ppspp) & (test(=node_sim_sweep) | test(=push_pull_matrix) | test(=sim_adversaries_dont_stall_honest_peers))'
 priority = 80
 
+# The WAN sweeps stream at 2 Mbit/s to up to 16 viewers, several times the
+# work of the other sweeps per thread.
+[[profile.default.overrides]]
+filter = 'package(strims-sim) & test(/^wan_/)'
+threads-required = 6
+priority = 85
+
 # A sweep runs each seed and the replay of the first on a thread of its
 # own: 3 threads in a debug build. A release build's 9 overcommit its share,
 # which keeps the cores busy.
