@@ -27,7 +27,7 @@ use std::str::FromStr;
 
 use prost::Message as _;
 use strims_base::time::Time;
-use strims_crypto::{SignableMessage, key_from_seed, signing_key};
+use strims_crypto::{Signer, Verified, key_from_seed};
 use strims_golden::Golden;
 use strims_kademlia::ID;
 use strims_proto::types::Key;
@@ -100,7 +100,7 @@ impl MessageCase {
     fn wires(&self) -> Vec<Vec<u8>> {
         let mut wires: Vec<Vec<u8>> = Vec::new();
         for (k, &time) in self.hosts.iter().zip(&self.times) {
-            let sk = signing_key(k).unwrap();
+            let sk = Signer::new(k).unwrap();
             let mut wire = Vec::new();
             match wires.last() {
                 None => encode_message(&mut wire, &self.header, &self.body, time, &id_of(k), &sk)
@@ -214,18 +214,27 @@ fn hash_table_records_and_messages() {
     assert_eq!(entries.len(), 3);
     for e in entries {
         let k = key(&g.bytes(e, "seed"));
-        let mut r = ht::Record {
+        let signer = Signer::new(&k).unwrap();
+        let body = ht::RecordBody {
+            key: k.public.clone(),
             salt: g.bytes(e, "salt"),
             value: g.bytes(e, "value"),
             timestamp: num(&g, e, "timestamp"),
-            ..Default::default()
+            unpublish: false,
         };
-        r.sign_message(&k).unwrap();
-        let hash = hash_table_record_hash(&k.public, &r.salt);
+        let r = Verified::sign(&signer, body.clone()).into_envelope();
+        let gone = Verified::sign(
+            &signer,
+            ht::RecordBody {
+                unpublish: true,
+                ..body.clone()
+            },
+        )
+        .into_envelope();
+        let hash = hash_table_record_hash(&k.public, &body.salt);
         let record = r.encode_to_vec();
         let decoded = ht::Record::decode(&record[..]).unwrap();
-        decoded.verify_message().unwrap();
-        assert_eq!(decoded, r);
+        assert_eq!(*Verified::<ht::RecordBody>::open(decoded).unwrap(), body);
         g.check_hex(e, "hash", hash);
         g.check_hex(e, "record", &record);
 
@@ -233,13 +242,11 @@ fn hash_table_records_and_messages() {
         let publish = msg(ht::Body::Publish(ht::Publish {
             record: Some(r.clone()),
         }));
-        let unpublish = msg(ht::Body::Unpublish(ht::Unpublish {
-            record: Some(r.clone()),
-        }));
+        let unpublish = msg(ht::Body::Unpublish(ht::Unpublish { record: Some(gone) }));
         let get = msg(ht::Body::GetRequest(ht::GetRequest {
             request_id: 0x0123_4567_89ab_cdef,
             hash: hash.to_vec(),
-            if_modified_since: r.timestamp - 1,
+            if_modified_since: body.timestamp - 1,
         }));
         let res = msg(ht::Body::GetResponse(ht::GetResponse {
             request_id: 0xfedc_ba98_7654_3210,
@@ -266,28 +273,34 @@ fn peer_index_records_and_messages() {
     let mut records = Vec::new();
     for e in entries {
         let host = key(&g.bytes(e, "seed"));
+        let signer = Signer::new(&host).unwrap();
         let hash = peer_index_record_hash(&g.bytes(e, "key"), &g.bytes(e, "salt"));
-        let mut r = pi::Record {
+        let body = pi::RecordBody {
             hash: hash.to_vec(),
             host_id: host.public.clone(),
             port: num(&g, e, "port"),
             timestamp: num(&g, e, "timestamp"),
-            ..Default::default()
+            unpublish: false,
         };
-        r.sign_message(&host).unwrap();
+        let r = Verified::sign(&signer, body.clone()).into_envelope();
+        let gone = Verified::sign(
+            &signer,
+            pi::RecordBody {
+                unpublish: true,
+                ..body.clone()
+            },
+        )
+        .into_envelope();
         let record = r.encode_to_vec();
         let decoded = pi::Record::decode(&record[..]).unwrap();
-        decoded.verify_message().unwrap();
-        assert_eq!(decoded, r);
+        assert_eq!(*Verified::<pi::RecordBody>::open(decoded).unwrap(), body);
         g.check_hex(e, "record", &record);
 
         let msg = |body| PeerIndexMessage { body: Some(body) }.encode_to_vec();
         let publish = msg(pi::Body::Publish(pi::Publish {
             record: Some(r.clone()),
         }));
-        let unpublish = msg(pi::Body::Unpublish(pi::Unpublish {
-            record: Some(r.clone()),
-        }));
+        let unpublish = msg(pi::Body::Unpublish(pi::Unpublish { record: Some(gone) }));
         let search = msg(pi::Body::SearchRequest(pi::SearchRequest {
             request_id: 99,
             hash: hash.to_vec(),

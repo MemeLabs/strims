@@ -240,23 +240,36 @@ fn vnic_messages(v: &mut Vectors) {
     );
 }
 
-fn hash_table_record() -> hash_table_message::Record {
-    hash_table_message::Record {
+fn hash_table_record_body() -> hash_table_message::RecordBody {
+    hash_table_message::RecordBody {
         key: seq(0x11, 32),
         salt: b"salt".to_vec(),
         value: seq(0x00, 200),
         timestamp: 1_700_000_000_123,
+        unpublish: false,
+    }
+}
+
+fn hash_table_record() -> hash_table_message::Record {
+    hash_table_message::Record {
+        body: hash_table_record_body().encode_to_vec(),
         signature: seq(0x22, 64),
+    }
+}
+
+fn peer_index_record_body(i: u8) -> peer_index_message::RecordBody {
+    peer_index_message::RecordBody {
+        hash: seq(i, 32),
+        host_id: seq(i + 1, 32),
+        port: 1000 + u32::from(i),
+        timestamp: -i64::from(i) * 1000,
+        unpublish: i.is_multiple_of(2),
     }
 }
 
 fn peer_index_record(i: u8) -> peer_index_message::Record {
     peer_index_message::Record {
-        hash: seq(i, 32),
-        host_id: seq(i + 1, 32),
-        port: 1000 + u32::from(i),
-        timestamp: -i64::from(i) * 1000,
-        key: seq(i + 2, 32),
+        body: peer_index_record_body(i).encode_to_vec(),
         signature: seq(i + 3, 64),
     }
 }
@@ -267,6 +280,7 @@ fn vpn_messages(v: &mut Vectors) {
     use peer_index_message as pi;
 
     let hash_table = |body| HashTableMessage { body: Some(body) };
+    v.pin("vpn_hash_table_record_body", &hash_table_record_body());
     v.pin("vpn_hash_table_record", &hash_table_record());
     v.pin(
         "vpn_hash_table_publish",
@@ -303,6 +317,7 @@ fn vpn_messages(v: &mut Vectors) {
     );
 
     let peer_index = |body| PeerIndexMessage { body: Some(body) };
+    v.pin("vpn_peer_index_record_body", &peer_index_record_body(4));
     v.pin("vpn_peer_index_record", &peer_index_record(5));
     v.pin(
         "vpn_peer_index_publish",

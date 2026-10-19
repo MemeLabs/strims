@@ -123,43 +123,43 @@ export namespace HashTableMessage {
     >;
   };
 
-  export type IRecord = {
+  export type IRecordBody = {
     key?: Uint8Array;
     salt?: Uint8Array;
     value?: Uint8Array;
     timestamp?: bigint;
-    signature?: Uint8Array;
+    unpublish?: boolean;
   }
 
-  export class Record {
+  export class RecordBody {
     key: Uint8Array;
     salt: Uint8Array;
     value: Uint8Array;
     timestamp: bigint;
-    signature: Uint8Array;
+    unpublish: boolean;
 
-    constructor(v?: IRecord) {
+    constructor(v?: IRecordBody) {
       this.key = v?.key || new Uint8Array();
       this.salt = v?.salt || new Uint8Array();
       this.value = v?.value || new Uint8Array();
       this.timestamp = v?.timestamp || BigInt(0);
-      this.signature = v?.signature || new Uint8Array();
+      this.unpublish = v?.unpublish || false;
     }
 
-    static encode(m: Record, w?: Writer): Writer {
+    static encode(m: RecordBody, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.key.length) w.uint32(10).bytes(m.key);
       if (m.salt.length) w.uint32(18).bytes(m.salt);
       if (m.value.length) w.uint32(26).bytes(m.value);
       if (m.timestamp) w.uint32(32).int64(m.timestamp);
-      if (m.signature.length) w.uint32(42).bytes(m.signature);
+      if (m.unpublish) w.uint32(40).bool(m.unpublish);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Record {
+    static decode(r: Reader | Uint8Array, length?: number): RecordBody {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Record();
+      const m = new RecordBody();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -176,6 +176,49 @@ export namespace HashTableMessage {
           m.timestamp = r.int64();
           break;
           case 5:
+          m.unpublish = r.bool();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IRecord = {
+    body?: Uint8Array;
+    signature?: Uint8Array;
+  }
+
+  export class Record {
+    body: Uint8Array;
+    signature: Uint8Array;
+
+    constructor(v?: IRecord) {
+      this.body = v?.body || new Uint8Array();
+      this.signature = v?.signature || new Uint8Array();
+    }
+
+    static encode(m: Record, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.body.length) w.uint32(10).bytes(m.body);
+      if (m.signature.length) w.uint32(18).bytes(m.signature);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Record {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Record();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.body = r.bytes();
+          break;
+          case 2:
           m.signature = r.bytes();
           break;
           default:
@@ -360,6 +403,12 @@ export const strims_vpn_v1_HashTableMessage = HashTableMessage;
 export type strims_vpn_v1_HashTableMessage = HashTableMessage;
 /* @internal */
 export type strims_vpn_v1_IHashTableMessage = IHashTableMessage;
+/* @internal */
+export const strims_vpn_v1_HashTableMessage_RecordBody = HashTableMessage.RecordBody;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_RecordBody = HashTableMessage.RecordBody;
+/* @internal */
+export type strims_vpn_v1_HashTableMessage_IRecordBody = HashTableMessage.IRecordBody;
 /* @internal */
 export const strims_vpn_v1_HashTableMessage_Record = HashTableMessage.Record;
 /* @internal */

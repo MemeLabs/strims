@@ -3,10 +3,11 @@
 
 //! Who holds what, on port 11.
 //!
-//! - **Publish** ([`Host::peer_index_publish`]): a record `{hash, host_id,
-//!   port, timestamp}` signed by the host key is broadcast one hop
-//!   ([`M_NORELAY`]) every 10 minutes, and pushed to links that come up in
-//!   between. Neighbours store it.
+//! - **Publish** ([`Host::peer_index_publish`]): a record, a `RecordBody
+//!   {hash, host_id, port, timestamp}` signed by the host key, is broadcast
+//!   one hop ([`M_NORELAY`]) every 10 minutes, and pushed to links that
+//!   come up in between. Neighbours store it, as the envelope it arrived
+//!   in. An unpublish is a record whose body is marked `unpublish`.
 //! - **Search** ([`Host::peer_index_search`]): a search request is broadcast
 //!   towards the hash; every host it reaches answers the requester with up
 //!   to five stored records for the hash whose holders are its own routed
@@ -22,16 +23,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 use slotmap::SlotMap;
 use strims_base::time::{Duration, Time};
-use strims_crypto::SignableMessage;
+use strims_crypto::Verified;
 use strims_kademlia::{Filter, ID, Interface};
 use strims_proto::vpn::v1::PeerIndexMessage;
 use strims_proto::vpn::v1::peer_index_message::{
-    Body, Publish, Record, SearchRequest, SearchResponse, Unpublish,
+    Body, Publish, Record, RecordBody, SearchRequest, SearchResponse, Unpublish,
 };
 use strims_vnic::PeerKey;
 use strims_vnic::ports::PEER_INDEX_PORT;
 
-use crate::host::{Event, Host, Inbound, random_u64, sign_record};
+use crate::host::{Event, Host, Inbound, random_u64};
 use crate::message::{M_NORELAY, M_STD_FLAGS};
 use crate::{Error, NetworkId, PeerIndexPublisherId, PeerIndexSearchId};
 
@@ -72,7 +73,7 @@ type ItemKey = ([u8; 32], [u8; 32]);
 
 #[derive(Debug)]
 struct Item {
-    record: Record,
+    record: Verified<RecordBody>,
     host_id: ID,
     /// When the record was last received.
     time: Time,
@@ -90,27 +91,26 @@ pub(crate) struct PeerIndexStore {
     last_gc: Time,
 }
 
-/// Records must carry a 32-byte hash and host id and be signed by that
-/// host's own key, so that no key can advertise another host.
-fn validate(r: &Record) -> Result<ItemKey, Error> {
-    r.verify_message()
+/// Opens a record that `unpublish` says whether it must withdraw. Records
+/// must carry a 32-byte hash and host id and be signed by that host's own
+/// key, so that no key can advertise another host.
+fn validate(r: Record, unpublish: bool) -> Result<(ItemKey, Verified<RecordBody>), Error> {
+    let r = Verified::<RecordBody>::open(r)
         .map_err(|_| Error::InvalidRecord("peer index record signature"))?;
+    if r.unpublish != unpublish {
+        return Err(Error::InvalidRecord("peer index record kind"));
+    }
     let hash = <[u8; 32]>::try_from(r.hash.as_slice())
         .map_err(|_| Error::InvalidRecord("peer index hash length"))?;
     let host = <[u8; 32]>::try_from(r.host_id.as_slice())
         .map_err(|_| Error::InvalidRecord("peer index host id length"))?;
-    if r.key != r.host_id {
-        return Err(Error::InvalidRecord(
-            "peer index record not signed by its host",
-        ));
-    }
-    Ok((hash, host))
+    Ok(((hash, host), r))
 }
 
 /// A record's holder, for nearest-first ordering.
 struct Holder<'a> {
     id: ID,
-    record: &'a Record,
+    record: &'a Verified<RecordBody>,
 }
 
 impl Interface for Holder<'_> {
@@ -131,7 +131,7 @@ impl PeerIndexStore {
 
     /// Stores a record and refreshes its time. A record at least as new as
     /// the stored one replaces it.
-    fn upsert(&mut self, key: ItemKey, r: Record, host_id: ID, now: Time) {
+    fn upsert(&mut self, key: ItemKey, r: Verified<RecordBody>, host_id: ID, now: Time) {
         if let Some(item) = self.items.get_mut(&key) {
             self.by_time.remove(&(item.time, key));
             item.time = now;
@@ -159,7 +159,7 @@ impl PeerIndexStore {
 
     /// Removes the record. An unpublish older than the stored record (a
     /// replay) is ignored.
-    fn remove(&mut self, key: ItemKey, r: &Record) {
+    fn remove(&mut self, key: ItemKey, r: &RecordBody) {
         if let Some(item) = self.items.get(&key)
             && r.timestamp >= item.record.timestamp
         {
@@ -181,7 +181,7 @@ impl PeerIndexStore {
         f.iter()
             .filter(|h| h.id != *requester && has_peer(&h.id))
             .take(PEER_INDEX_SEARCH_RESPONSE_SIZE)
-            .map(|h| h.record.clone())
+            .map(|h| h.record.envelope().clone())
             .collect()
     }
 
@@ -219,7 +219,10 @@ impl PeerIndexStore {
 #[derive(Debug)]
 pub(crate) struct Publisher {
     network: NetworkId,
-    record: Record,
+    /// Signed again, with the time, at every publish.
+    body: RecordBody,
+    /// The last record published, which new links are sent.
+    published: Option<Record>,
     next: Time,
 }
 
@@ -266,12 +269,13 @@ impl<H: Copy> Host<H> {
         }
         let p = self.peer_index.publishers.insert(Publisher {
             network: net,
-            record: Record {
+            body: RecordBody {
                 hash: peer_index_record_hash(key, salt).to_vec(),
                 host_id: self.id.to_bytes().to_vec(),
                 port: u32::from(port),
                 ..Default::default()
             },
+            published: None,
             next: now,
         });
         if let Err(e) = self.peer_index_send(now, p, false) {
@@ -305,15 +309,17 @@ impl<H: Copy> Host<H> {
             .publishers
             .get_mut(id)
             .ok_or(Error::UnknownRequest)?;
-        p.record.timestamp = now.unix();
-        sign_record(&mut p.record, &self.signer);
+        p.body.timestamp = now.unix();
+        p.body.unpublish = unpublish;
+        let record = Verified::sign(&self.signer, p.body.clone()).into_envelope();
         p.next = now + PEER_INDEX_PUBLISH_INTERVAL;
-        let (net, record) = (p.network, p.record.clone());
+        let net = p.network;
         let body = if unpublish {
             Body::Unpublish(Unpublish {
                 record: Some(record),
             })
         } else {
+            p.published = Some(record.clone());
             Body::Publish(Publish {
                 record: Some(record),
             })
@@ -332,8 +338,8 @@ impl<H: Copy> Host<H> {
             .peer_index
             .publishers
             .values()
-            .filter(|p| p.network == net && !p.record.signature.is_empty())
-            .map(|p| p.record.clone())
+            .filter(|p| p.network == net)
+            .filter_map(|p| p.published.clone())
             .collect();
         for record in records {
             let msg = PeerIndexMessage {
@@ -426,7 +432,7 @@ impl<H: Copy> Host<H> {
         match m.body {
             Some(Body::Publish(p)) => {
                 let r = p.record.ok_or(Error::InvalidRecord("missing record"))?;
-                let key = validate(&r)?;
+                let (key, r) = validate(r, false)?;
                 if r.host_id != src_bytes {
                     return Err(Error::HostIdMismatch);
                 }
@@ -436,7 +442,7 @@ impl<H: Copy> Host<H> {
             }
             Some(Body::Unpublish(p)) => {
                 let r = p.record.ok_or(Error::InvalidRecord("missing record"))?;
-                let key = validate(&r)?;
+                let (key, r) = validate(r, true)?;
                 if r.host_id != src_bytes {
                     return Err(Error::HostIdMismatch);
                 }
@@ -477,7 +483,7 @@ impl<H: Copy> Host<H> {
                 let mut hinted = Vec::new();
                 if let Some(s) = self.peer_index.searches.get_mut(search) {
                     for rec in r.records {
-                        let Ok((hash, host)) = validate(&rec) else {
+                        let Ok(((hash, host), rec)) = validate(rec, false) else {
                             continue;
                         };
                         if hash != s.hash {
@@ -592,21 +598,29 @@ mod tests {
         Time::from_unix(1_700_000_000, 0)
     }
 
+    fn signed(seed: u8, body: RecordBody) -> Record {
+        let signer = strims_crypto::Signer::new(&key_from_seed(&[seed; 32])).unwrap();
+        Verified::sign(&signer, body).into_envelope()
+    }
+
     fn record(seed: u8, hash: &[u8; 32], port: u32, ts: i64) -> (Record, ID) {
         let k = key_from_seed(&[seed; 32]);
-        let mut r = Record {
+        let body = RecordBody {
             hash: hash.to_vec(),
             host_id: k.public.clone(),
             port,
             timestamp: ts,
             ..Default::default()
         };
-        r.sign_message(&k).unwrap();
-        (r, ID::unmarshal(&k.public).unwrap().0)
+        (signed(seed, body), ID::unmarshal(&k.public).unwrap().0)
+    }
+
+    fn body(r: &Record) -> RecordBody {
+        prost::Message::decode(r.body.as_slice()).unwrap()
     }
 
     fn upsert(s: &mut PeerIndexStore, r: Record, id: ID, t: Time) {
-        let key = validate(&r).unwrap();
+        let (key, r) = validate(r, false).unwrap();
         s.upsert(key, r, id, t);
     }
 
@@ -633,13 +647,14 @@ mod tests {
         want.sort_by_key(|id| *id ^ requester);
         let got_ids: Vec<ID> = got
             .iter()
-            .map(|r| ID::unmarshal(&r.host_id).unwrap().0)
+            .map(|r| ID::unmarshal(&body(r).host_id).unwrap().0)
             .collect();
         assert_eq!(got_ids, want[..5]);
         // The requester itself and non-peers are skipped.
         let got = s.get(&hash, &ids[0], |id| *id != ids[1]);
         assert!(
             got.iter()
+                .map(body)
                 .all(|r| r.host_id != ids[0].to_bytes() && r.host_id != ids[1].to_bytes())
         );
         assert_eq!(got.len(), 5);
@@ -655,17 +670,17 @@ mod tests {
         upsert(&mut s, r, id, now() + Duration::from_secs(600));
         let got = s.get(&hash, &ID::MIN, |_| true);
         assert_eq!(got.len(), 1);
-        assert_eq!(got[0].port, 2000);
+        assert_eq!(body(&got[0]).port, 2000);
         // An older record refreshes the time but not the record.
         let (r, id) = record(1, &hash, 3000, now().unix());
         upsert(&mut s, r.clone(), id, now() + Duration::from_secs(700));
-        assert_eq!(s.get(&hash, &ID::MIN, |_| true)[0].port, 2000);
+        assert_eq!(body(&s.get(&hash, &ID::MIN, |_| true)[0]).port, 2000);
         // A replayed old unpublish doesn't remove it; a newer one does.
-        let key = validate(&r).unwrap();
+        let (key, r) = validate(r, false).unwrap();
         s.remove(key, &r);
         assert_eq!(s.len(), 1);
         let (r, _) = record(1, &hash, 0, now().unix() + 900);
-        s.remove(key, &r);
+        s.remove(key, &body(&r));
         assert_eq!(s.len(), 0);
     }
 
@@ -704,15 +719,24 @@ mod tests {
     #[test]
     fn records_must_be_signed_by_their_host() {
         let hash = [3u8; 32];
-        let (mut r, _) = record(1, &hash, 0, 1);
-        assert!(validate(&r).is_ok());
+        let (r, _) = record(1, &hash, 0, 1);
+        assert!(validate(r.clone(), false).is_ok());
         // Signed by key 2, claiming host 1.
-        r.host_id = key_from_seed(&[1; 32]).public;
-        r.sign_message(&key_from_seed(&[2; 32])).unwrap();
-        assert!(validate(&r).is_err());
-        let (mut r, _) = record(1, &hash, 0, 1);
-        r.hash = vec![1; 31];
-        r.sign_message(&key_from_seed(&[1; 32])).unwrap();
-        assert!(validate(&r).is_err());
+        assert!(validate(signed(2, body(&r)), false).is_err());
+        let mut short = body(&r);
+        short.hash = vec![1; 31];
+        assert!(validate(signed(1, short), false).is_err());
+    }
+
+    /// A publish can't be replayed as an unpublish, nor the reverse.
+    #[test]
+    fn records_state_whether_they_withdraw() {
+        let (r, _) = record(1, &[3; 32], 0, 1);
+        assert!(validate(r.clone(), true).is_err());
+        let mut gone = body(&r);
+        gone.unpublish = true;
+        let gone = signed(1, gone);
+        assert!(validate(gone.clone(), true).is_ok());
+        assert!(validate(gone, false).is_err());
     }
 }

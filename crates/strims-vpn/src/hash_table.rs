@@ -3,11 +3,13 @@
 
 //! The DHT on port 10.
 //!
-//! - **Publish** ([`Host::hash_table_set`]): a record
-//!   `{key, salt, value, timestamp}` signed by an app key is broadcast
-//!   towards `sha256(key || salt)` every 10 minutes and stored by every
-//!   host it reaches. [`Host::hash_table_update`] takes effect at the next
-//!   publish. Closing the publisher broadcasts an unpublish.
+//! - **Publish** ([`Host::hash_table_set`]): a record, a
+//!   `RecordBody {key, salt, value, timestamp}` signed by an app key, is
+//!   broadcast towards `sha256(key || salt)` every 10 minutes and stored
+//!   by every host it reaches. [`Host::hash_table_update`] takes effect at
+//!   the next publish. Closing the publisher broadcasts an unpublish, a
+//!   record whose body is marked `unpublish`, so a publish can't stand in
+//!   for one.
 //! - **Get** ([`Host::hash_table_get`]): the local copy, if any, comes
 //!   first. If it is fresh (younger than the publish interval) the get
 //!   closes at once; otherwise a get request is broadcast towards the hash
@@ -17,24 +19,24 @@
 //! - **Store** (`HashTableStore`): host-wide, keyed by
 //!   `(host id XOR hash) || network`, so that when it is full the record
 //!   farthest from this host goes first. Records expire 30 minutes after
-//!   their timestamp.
+//!   their timestamp. A stored record keeps the envelope it arrived in,
+//!   which get responses send on unchanged.
 
 use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 use slotmap::SlotMap;
 use strims_base::time::{Duration, Time};
-use strims_crypto::SignableMessage;
-use strims_crypto::ed25519_dalek::SigningKey;
+use strims_crypto::{Signer, Verified};
 use strims_kademlia::{ID, ID_LENGTH};
 use strims_proto::types::Key;
 use strims_proto::vpn::v1::HashTableMessage;
 use strims_proto::vpn::v1::hash_table_message::{
-    Body, GetRequest, GetResponse, Publish, Record, Unpublish,
+    Body, GetRequest, GetResponse, Publish, Record, RecordBody, Unpublish,
 };
 use strims_vnic::ports::HASH_TABLE_PORT;
 
-use crate::host::{Event, Host, Inbound, random_u64, sign_record};
+use crate::host::{Event, Host, Inbound, random_u64};
 use crate::message::M_BROADCAST;
 use crate::timeout_queue::TimeoutQueue;
 use crate::{Error, HashTableGetId, HashTablePublisherId, NetworkId};
@@ -93,13 +95,14 @@ fn item_key(store_id: u32, hash: &[u8; 32], local: &ID) -> ItemKey {
     k
 }
 
-fn record_size(r: &Record) -> usize {
-    r.key.len() + r.salt.len() + r.value.len() + r.signature.len() + RECORD_OVERHEAD
+fn record_size(r: &Verified<RecordBody>) -> usize {
+    let e = r.envelope();
+    e.body.len() + e.signature.len() + RECORD_OVERHEAD
 }
 
 #[derive(Debug)]
 struct Stored {
-    record: Record,
+    record: Verified<RecordBody>,
     deadline: Time,
     size: usize,
 }
@@ -137,13 +140,13 @@ impl HashTableStore {
     /// Records expire `HASH_TABLE_MAX_RECORD_AGE` after their timestamp.
     /// A timestamp in the future counts as now, so no record outlives the
     /// age limit.
-    fn deadline(r: &Record, now: Time) -> Time {
+    fn deadline(r: &RecordBody, now: Time) -> Time {
         Time::from_unix(r.timestamp.min(now.unix()), 0) + HASH_TABLE_MAX_RECORD_AGE
     }
 
     /// Stores a verified record. Returns whether it is new or its value
     /// changed.
-    pub(crate) fn upsert(&mut self, store_id: u32, r: Record, now: Time) -> bool {
+    pub(crate) fn upsert(&mut self, store_id: u32, r: Verified<RecordBody>, now: Time) -> bool {
         let hash = hash_table_record_hash(&r.key, &r.salt);
         let k = item_key(store_id, &hash, &self.host_id);
         let deadline = Self::deadline(&r, now);
@@ -188,7 +191,7 @@ impl HashTableStore {
     }
 
     /// Removes the record if `r` is newer.
-    pub(crate) fn remove(&mut self, store_id: u32, r: &Record) {
+    pub(crate) fn remove(&mut self, store_id: u32, r: &RecordBody) {
         let hash = hash_table_record_hash(&r.key, &r.salt);
         let k = item_key(store_id, &hash, &self.host_id);
         if self
@@ -203,7 +206,7 @@ impl HashTableStore {
     }
 
     /// The record stored under `hash`.
-    pub(crate) fn get(&self, store_id: u32, hash: &[u8; 32]) -> Option<&Record> {
+    pub(crate) fn get(&self, store_id: u32, hash: &[u8; 32]) -> Option<&Verified<RecordBody>> {
         self.records
             .get(&item_key(store_id, hash, &self.host_id))
             .map(|s| &s.record)
@@ -256,8 +259,9 @@ impl HashTableStore {
 #[derive(Debug)]
 pub(crate) struct Publisher {
     network: NetworkId,
-    signer: SigningKey,
-    record: Record,
+    signer: Signer,
+    /// Signed again, with the time, at every publish.
+    body: RecordBody,
     target: ID,
     next: Time,
     /// The last publish reached no link: publish again when links come
@@ -304,11 +308,16 @@ impl HashTableService {
     }
 }
 
-// TODO: cache verifying keys for hash table and peer index records, as the
+// TODO: cache verifiers for hash table and peer index records, as the
 // trailer path does, if profiles show the cost.
-fn validate(r: &Record) -> Result<(), Error> {
-    r.verify_message()
-        .map_err(|_| Error::InvalidRecord("hash table record signature"))
+/// Opens a record that `unpublish` says whether it must withdraw.
+fn validate(r: Record, unpublish: bool) -> Result<Verified<RecordBody>, Error> {
+    let r = Verified::<RecordBody>::open(r)
+        .map_err(|_| Error::InvalidRecord("hash table record signature"))?;
+    if r.unpublish != unpublish {
+        return Err(Error::InvalidRecord("hash table record kind"));
+    }
+    Ok(r)
 }
 
 impl<H: Copy> Host<H> {
@@ -325,12 +334,12 @@ impl<H: Copy> Host<H> {
         if !self.networks.contains_key(net) {
             return Err(Error::NetworkNotFound);
         }
-        let signer = strims_crypto::signing_key(key)?;
+        let signer = Signer::new(key)?;
         let target = ID::from_bytes(&hash_table_record_hash(&key.public, salt));
         let p = self.hash_table.publishers.insert(Publisher {
             network: net,
             signer,
-            record: Record {
+            body: RecordBody {
                 key: key.public.clone(),
                 salt: salt.to_vec(),
                 value: value.to_vec(),
@@ -358,7 +367,7 @@ impl<H: Copy> Host<H> {
             .publishers
             .get_mut(publisher)
             .ok_or(Error::UnknownRequest)?;
-        p.record.value = value.to_vec();
+        p.body.value = value.to_vec();
         Ok(())
     }
 
@@ -385,22 +394,22 @@ impl<H: Copy> Host<H> {
             .publishers
             .get_mut(id)
             .ok_or(Error::UnknownRequest)?;
-        p.record.timestamp = now.unix();
-        sign_record(&mut p.record, &p.signer);
+        p.body.timestamp = now.unix();
+        p.body.unpublish = unpublish;
+        let record = Verified::sign(&p.signer, p.body.clone());
         p.next = now + HASH_TABLE_SET_INTERVAL;
-        let (net, target, record) = (p.network, p.target, p.record.clone());
+        let (net, target) = (p.network, p.target);
+        let envelope = record.envelope().clone();
         let body = if unpublish {
             Body::Unpublish(Unpublish {
-                record: Some(record),
+                record: Some(envelope),
             })
         } else {
             if let Some(n) = self.networks.get(net) {
-                self.hash_table
-                    .store
-                    .upsert(n.store_id, record.clone(), now);
+                self.hash_table.store.upsert(n.store_id, record, now);
             }
             Body::Publish(Publish {
-                record: Some(record),
+                record: Some(envelope),
             })
         };
         let msg = HashTableMessage { body: Some(body) };
@@ -543,13 +552,13 @@ impl<H: Copy> Host<H> {
         match m.body {
             Some(Body::Publish(p)) => {
                 let r = p.record.ok_or(Error::InvalidRecord("missing record"))?;
-                validate(&r)?;
+                let r = validate(r, false)?;
                 self.hash_table.store.upsert(store_id, r, now);
                 Ok(())
             }
             Some(Body::Unpublish(p)) => {
                 let r = p.record.ok_or(Error::InvalidRecord("missing record"))?;
-                validate(&r)?;
+                let r = validate(r, true)?;
                 self.hash_table.store.remove(store_id, &r);
                 Ok(())
             }
@@ -566,7 +575,7 @@ impl<H: Copy> Host<H> {
                 let res = HashTableMessage {
                     body: Some(Body::GetResponse(GetResponse {
                         request_id: r.request_id,
-                        record: Some(record.clone()),
+                        record: Some(record.envelope().clone()),
                     })),
                 };
                 self.send_proto_with_flags(
@@ -580,13 +589,12 @@ impl<H: Copy> Host<H> {
                 )
             }
             Some(Body::GetResponse(r)) => {
-                let Some(record) = r.record else {
+                let Some(Ok(record)) = r.record.map(|r| validate(r, false)) else {
                     return Ok(());
                 };
-                if validate(&record).is_err() {
-                    return Ok(());
-                }
-                let modified = self.hash_table.store.upsert(store_id, record.clone(), now);
+                let hash = hash_table_record_hash(&record.key, &record.salt);
+                let value = record.value.clone();
+                let modified = self.hash_table.store.upsert(store_id, record, now);
                 if msg.header.dst_id != self.id {
                     return Ok(());
                 }
@@ -597,7 +605,7 @@ impl<H: Copy> Host<H> {
                     return Ok(());
                 };
                 // A record for another key isn't an answer.
-                if hash_table_record_hash(&record.key, &record.salt) != g.hash {
+                if hash != g.hash {
                     return Ok(());
                 }
                 if !modified && g.delivered {
@@ -607,7 +615,7 @@ impl<H: Copy> Host<H> {
                 self.push_event(Event::HashTableValue {
                     network: net,
                     get,
-                    value: record.value,
+                    value,
                 });
                 Ok(())
             }
@@ -678,15 +686,16 @@ mod tests {
     use super::*;
     use strims_crypto::key_from_seed;
 
-    fn record(seed: u8, salt: &[u8], value: &[u8], ts: i64) -> Record {
-        let mut r = Record {
+    fn record(seed: u8, salt: &[u8], value: &[u8], ts: i64) -> Verified<RecordBody> {
+        let k = key_from_seed(&[seed; 32]);
+        let body = RecordBody {
+            key: k.public.clone(),
             salt: salt.to_vec(),
             value: value.to_vec(),
             timestamp: ts,
             ..Default::default()
         };
-        r.sign_message(&key_from_seed(&[seed; 32])).unwrap();
-        r
+        Verified::sign(&Signer::new(&k).unwrap(), body)
     }
 
     fn now() -> Time {
@@ -710,7 +719,11 @@ mod tests {
         (vnic, host, net)
     }
 
-    fn respond(host: &mut Host<u16>, net: NetworkId, rid: u64, r: &Record) {
+    fn respond(host: &mut Host<u16>, net: NetworkId, rid: u64, r: &Verified<RecordBody>) {
+        respond_with(host, net, rid, r.envelope());
+    }
+
+    fn respond_with(host: &mut Host<u16>, net: NetworkId, rid: u64, r: &Record) {
         let body = prost::Message::encode_to_vec(&HashTableMessage {
             body: Some(Body::GetResponse(GetResponse {
                 request_id: rid,
@@ -776,9 +789,17 @@ mod tests {
         respond(&mut host, net, rid, &record(9, b"s", b"w", t + 1));
         assert_eq!(values(&mut host), vec![b"w".to_vec()]);
         // A forged signature is ignored.
-        let mut bad = record(9, b"s", b"z", t + 2);
-        bad.value = b"zz".to_vec();
-        respond(&mut host, net, rid, &bad);
+        let signed = record(9, b"s", b"z", t + 2);
+        let mut forged = signed.body().clone();
+        forged.value = b"zz".to_vec();
+        let mut bad = signed.into_envelope();
+        bad.body = prost::Message::encode_to_vec(&forged);
+        respond_with(&mut host, net, rid, &bad);
+        // So is an unpublish.
+        let mut gone = record(9, b"s", b"u", t + 3).body().clone();
+        gone.unpublish = true;
+        let gone = Verified::sign(&Signer::new(&k).unwrap(), gone);
+        respond(&mut host, net, rid, &gone);
         assert!(values(&mut host).is_empty());
     }
 
@@ -872,7 +893,8 @@ mod tests {
         }
         assert!(s.get(1, &sorted[3]).is_none());
         // A byte budget also bounds it.
-        let mut s = HashTableStore::new(local, 100, 2 * (RECORD_OVERHEAD + 32 + 64 + 1000));
+        let size = record_size(&record(1, b"", &[0; 1000], t.unix()));
+        let mut s = HashTableStore::new(local, 100, 2 * size);
         for seed in 1..=4u8 {
             s.upsert(1, record(seed, b"", &[0; 1000], t.unix()), t);
         }

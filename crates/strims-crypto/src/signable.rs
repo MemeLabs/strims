@@ -8,8 +8,6 @@
 //! cleared, in its `signature` field. [`SignableMessage`] covers every
 //! message for which `strims-proto` generates [`Signable`]: those with plain
 //! `bytes key` and `bytes signature` fields, such as
-//! `vpn::v1::hash_table_message::Record`,
-//! `vpn::v1::peer_index_message::Record` and
 //! `network::v1::directory::ListingSnippet`.
 //!
 //! The stable encoding has no length prefixes, so a signature doesn't bind
@@ -73,16 +71,14 @@ mod tests {
     use super::*;
     use crate::key_from_seed;
     use strims_proto::network::v1::directory::ListingSnippet;
-    use strims_proto::vpn::v1::{hash_table_message, peer_index_message};
 
     #[test]
     fn sign_verify_round_trip() {
         let k = key_from_seed(&[5; 32]);
-        let mut r = peer_index_message::Record {
-            hash: vec![1; 32],
-            host_id: vec![2; 32],
-            port: 7,
-            timestamp: 1234,
+        let mut r = ListingSnippet {
+            title: "t".into(),
+            user_count: 7,
+            start_time: 1234,
             ..Default::default()
         };
         r.sign_message(&k).unwrap();
@@ -95,7 +91,7 @@ mod tests {
         r.sign_message(&k).unwrap();
         assert_eq!(r.signature, sig);
 
-        r.port = 8;
+        r.user_count = 8;
         assert_eq!(r.verify_message(), Err(Error::InvalidMessageSignature));
         r.key.pop();
         assert_eq!(r.verify_message(), Err(Error::InvalidKeyLength));
@@ -104,7 +100,7 @@ mod tests {
     #[test]
     fn sign_rejects_bad_keys() {
         let k = key_from_seed(&[5; 32]);
-        let mut r = hash_table_message::Record::default();
+        let mut r = ListingSnippet::default();
         let short = Key {
             private: k.private[..60].to_vec(),
             ..k.clone()

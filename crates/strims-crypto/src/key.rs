@@ -40,7 +40,7 @@ pub fn key_from_seed(seed: &[u8; ED25519_SEED_SIZE]) -> Key {
 
 /// Parses a 64-byte expanded private key. A public half that doesn't match
 /// the seed is [`Error::KeyPairMismatch`].
-pub fn signing_key_from_private(private: &[u8]) -> Result<SigningKey, Error> {
+pub(crate) fn signing_key_from_private(private: &[u8]) -> Result<SigningKey, Error> {
     let bytes: &[u8; ED25519_PRIVATE_KEY_SIZE] =
         private.try_into().map_err(|_| Error::InvalidKeyLength)?;
     SigningKey::from_keypair_bytes(bytes).map_err(|_| Error::KeyPairMismatch)
@@ -49,7 +49,7 @@ pub fn signing_key_from_private(private: &[u8]) -> Result<SigningKey, Error> {
 /// The signing key of an ed25519 [`Key`]. The type must be
 /// `KEY_TYPE_ED25519` ([`Error::UnsupportedKeyType`]) and the private key 64
 /// bytes ([`Error::InvalidKeyLength`]).
-pub fn signing_key(key: &Key) -> Result<SigningKey, Error> {
+pub(crate) fn signing_key(key: &Key) -> Result<SigningKey, Error> {
     if key.r#type != KeyType::Ed25519 as i32 {
         return Err(Error::UnsupportedKeyType);
     }
@@ -59,8 +59,6 @@ pub fn signing_key(key: &Key) -> Result<SigningKey, Error> {
 /// Signs `message` with a 64-byte expanded private key.
 ///
 /// Derives the signing key on every call (two base-point multiplications).
-/// Hot paths should cache [`signing_key`] and sign with
-/// [`ed25519_dalek::Signer`].
 pub fn sign(private: &[u8], message: &[u8]) -> Result<[u8; ED25519_SIGNATURE_SIZE], Error> {
     Ok(signing_key_from_private(private)?.sign(message).to_bytes())
 }
@@ -74,8 +72,7 @@ pub fn sign(private: &[u8], message: &[u8]) -> Result<[u8; ED25519_SIGNATURE_SIZ
 /// for byte. These are ed25519-dalek's `verify` rules; `verify_strict`
 /// rejects some signatures they accept.
 ///
-/// Decompresses the public key on every call. Hot paths should cache an
-/// [`ed25519_dalek::VerifyingKey`].
+/// Decompresses the public key on every call.
 pub fn verify(public: &[u8], message: &[u8], signature: &[u8]) -> bool {
     let Ok(public) = <&[u8; ED25519_PUBLIC_KEY_SIZE]>::try_from(public) else {
         return false;

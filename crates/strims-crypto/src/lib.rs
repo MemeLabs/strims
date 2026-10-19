@@ -5,6 +5,8 @@
 //!
 //! - [`key`]: ed25519 keys.
 //! - [`sign`]: domain-separated ed25519 signatures.
+//! - [`signed`]: signed objects that travel as an encoded body and its
+//!   signature.
 //! - [`cert`]: certificate requests, issuing and chain verification.
 //! - [`signable`]: signatures and checksums over a message's stable encoding.
 //! - [`curve25519`]: ed25519 to X25519 conversion and the X25519 key
@@ -23,6 +25,7 @@ mod field;
 pub mod key;
 pub mod sign;
 pub mod signable;
+pub mod signed;
 
 pub use cert::{
     CERT_PREDATE_DURATION, CertificateErrors, DEFAULT_CERT_TTL, cert_is_expired, certificate_chain,
@@ -38,14 +41,11 @@ pub use curve25519::{
 };
 pub use key::{
     ED25519_PRIVATE_KEY_SIZE, ED25519_PUBLIC_KEY_SIZE, ED25519_SEED_SIZE, ED25519_SIGNATURE_SIZE,
-    generate_key, key_from_seed, sign, signing_key, signing_key_from_private, verify,
+    generate_key, key_from_seed, sign, verify,
 };
 pub use sign::{Domain, Signer, Verifier};
 pub use signable::{SignableMessage, crc32_message};
-
-/// Re-exported so callers can cache a [`ed25519_dalek::SigningKey`] from
-/// [`signing_key`] without depending on a matching version.
-pub use ed25519_dalek;
+pub use signed::{Envelope, SelfKeyed, SignedBody, Verified};
 
 /// Errors from key, certificate and message operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -78,6 +78,9 @@ pub enum Error {
     /// A signed message's signature doesn't verify against its key field.
     #[error("invalid signature")]
     InvalidMessageSignature,
+    /// A signed object's body doesn't decode.
+    #[error("malformed signed body")]
+    MalformedBody,
     /// A 64-byte private key whose public half doesn't match its seed.
     #[error("private key does not match its public key")]
     KeyPairMismatch,

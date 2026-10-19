@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 strims-base.workspace = true
 strims-proto.workspace = true
+prost.workspace = true
 thiserror.workspace = true
 rand_core.workspace = true
 ed25519-dalek.workspace = true

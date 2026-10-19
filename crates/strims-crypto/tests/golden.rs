@@ -28,7 +28,7 @@ use strims_crypto::{
 use strims_golden::Golden;
 use strims_proto::stable::{Signable, StableEncode};
 use strims_proto::types::{Key, KeyUsage, certificate::ParentOneof};
-use strims_proto::{chat, network, types, vpn};
+use strims_proto::{chat, network, types};
 
 fn open() -> Golden {
     Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.hex"))
@@ -203,9 +203,7 @@ fn check_signable<M: Message + Default + Signable + Clone>(g: &mut Golden, name:
 #[test]
 fn signable_messages_match_vectors() {
     let mut g = open();
-    let (k1, k2, k3) = (key(&g, 1), key(&g, 2), key(&g, 3));
-    check_signable::<vpn::v1::hash_table_message::Record>(&mut g, "hash_table_record", &k3);
-    check_signable::<vpn::v1::peer_index_message::Record>(&mut g, "peer_index_record", &k1);
+    let k2 = key(&g, 2);
     check_signable::<network::v1::directory::ListingSnippet>(&mut g, "listing_snippet", &k2);
 }
 

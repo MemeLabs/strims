@@ -105,15 +105,14 @@ mod tests {
     use super::*;
     use crate::network::v1::directory::ListingSnippet;
     use crate::types::{Certificate, CertificateRequest, KeyType, certificate::ParentOneof};
-    use crate::vpn::v1::{hash_table_message, peer_index_message};
+    use crate::vpn::v1::hash_table_message;
 
     fn assert_signable<T: Signable>() {}
 
     #[test]
     fn signed_records_are_signable() {
-        assert_signable::<hash_table_message::Record>();
-        assert_signable::<peer_index_message::Record>();
         assert_signable::<ListingSnippet>();
+        assert_signable::<Certificate>();
     }
 
     #[test]
@@ -150,10 +149,12 @@ mod tests {
 
     #[test]
     fn nested_messages_encode_only_when_set() {
-        let mut r = hash_table_message::Publish::default();
+        let mut r = crate::vpn::v1::HashTableMessage::default();
         assert!(r.stable_encode_to_vec().is_empty());
-        r.record = Some(hash_table_message::Record::default());
-        // an empty record still has its 8-byte timestamp
+        r.body = Some(hash_table_message::Body::GetResponse(
+            hash_table_message::GetResponse::default(),
+        ));
+        // an empty response still has its 8-byte request id
         assert_eq!(r.stable_encode_to_vec(), [0u8; 8]);
     }
 

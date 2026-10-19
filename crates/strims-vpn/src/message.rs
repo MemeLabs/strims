@@ -14,9 +14,9 @@
 //! ```
 //!
 //! Each entry's signature covers every byte before it, including its own
-//! time and host id, so it is computed when the hop appends it. ed25519 is
-//! deterministic: the same keys and times give the same bytes, which the
-//! golden vectors check.
+//! time and host id, in [`Domain::VpnMessage`], so it is computed when the
+//! hop appends it. ed25519 is deterministic: the same keys and times give
+//! the same bytes, which the golden vectors check.
 //!
 //! Decoding borrows from the input ([`MessageView`]); encoding appends to a
 //! caller-owned `Vec` ([`encode_message`], [`append_trailer_entry`]).
@@ -24,7 +24,7 @@
 use core::fmt;
 
 use strims_base::time::Time;
-use strims_crypto::ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use strims_crypto::{Domain, Signer, Verifier};
 use strims_kademlia::{ID, ID_LENGTH};
 
 /// Header bytes.
@@ -281,39 +281,38 @@ impl<'a> MessageView<'a> {
     /// Checks the signature of trailer entry `hop`. A message with no
     /// trailer (a local loopback) verifies.
     pub fn verify(&self, hop: usize) -> bool {
-        self.verify_with(hop, |id| VerifyingKey::from_bytes(&id.to_bytes()).ok())
+        self.verify_with(hop, |id| Verifier::new(&id.to_bytes()).ok())
     }
 
     /// [`MessageView::verify`] with the verifying key supplied by `key`, so
     /// callers can cache decompressed keys.
-    pub fn verify_with(&self, hop: usize, key: impl FnOnce(&ID) -> Option<VerifyingKey>) -> bool {
+    pub fn verify_with(&self, hop: usize, key: impl FnOnce(&ID) -> Option<Verifier>) -> bool {
         if self.hops() == 0 {
             return true;
         }
         let (Some(entry), Some(msg)) = (self.entry(hop), self.signed_bytes(hop)) else {
             return false;
         };
-        let Some(vk) = key(&entry.host_id) else {
+        let Some(v) = key(&entry.host_id) else {
             return false;
         };
-        vk.verify(msg, &Signature::from_bytes(entry.signature))
-            .is_ok()
+        v.verify(Domain::VpnMessage, &[msg], entry.signature)
     }
 }
 
 /// Appends this hop's trailer entry to the message in `buf` (which holds
 /// only that message): `now`, the host id and the signature of everything
 /// before the signature.
-pub fn append_trailer_entry(buf: &mut Vec<u8>, now: Time, host_id: &ID, signer: &SigningKey) {
+pub fn append_trailer_entry(buf: &mut Vec<u8>, now: Time, host_id: &ID, signer: &Signer) {
     append_entry_at(buf, 0, now, host_id, signer);
 }
 
 /// Appends a trailer entry for the message starting at `buf[start]`.
-fn append_entry_at(buf: &mut Vec<u8>, start: usize, now: Time, host_id: &ID, signer: &SigningKey) {
+fn append_entry_at(buf: &mut Vec<u8>, start: usize, now: Time, host_id: &ID, signer: &Signer) {
     buf.extend_from_slice(&now.unix_nanos().to_be_bytes());
     buf.extend_from_slice(&host_id.to_bytes());
-    let sig = signer.sign(buf.get(start..).unwrap_or_default());
-    buf.extend_from_slice(&sig.to_bytes());
+    let sig = signer.sign(Domain::VpnMessage, &[buf.get(start..).unwrap_or_default()]);
+    buf.extend_from_slice(&sig);
 }
 
 /// Appends a new message from this host: the header (with `length` set to
@@ -324,7 +323,7 @@ pub fn encode_message(
     body: &[u8],
     now: Time,
     host_id: &ID,
-    signer: &SigningKey,
+    signer: &Signer,
 ) -> Result<(), MessageError> {
     let length = u16::try_from(body.len()).map_err(|_| MessageError::BodyTooLong(body.len()))?;
     let start = buf.len();
@@ -341,7 +340,7 @@ pub fn encode_relay(
     msg: &MessageView<'_>,
     now: Time,
     host_id: &ID,
-    signer: &SigningKey,
+    signer: &Signer,
 ) {
     let start = buf.len();
     buf.reserve(msg.raw().len() + TRAILER_ENTRY_LEN);
@@ -354,12 +353,12 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
-    use strims_crypto::{key_from_seed, signing_key};
+    use strims_crypto::key_from_seed;
 
-    fn host(seed: u8) -> (ID, SigningKey) {
+    fn host(seed: u8) -> (ID, Signer) {
         let k = key_from_seed(&[seed; 32]);
         let (id, _) = ID::unmarshal(&k.public).unwrap();
-        (id, signing_key(&k).unwrap())
+        (id, Signer::new(&k).unwrap())
     }
 
     fn header() -> MessageHeader {

@@ -10,12 +10,21 @@ option java_package = "gg.strims.vpn.v1";
 option swift_prefix = "SVN";
 
 message HashTableMessage {
-  message Record {
+  // What a record states. Unpublish marks a record that withdraws the
+  // value published under (key, salt).
+  message RecordBody {
     bytes key = 1;
     bytes salt = 2;
     bytes value = 3;
     int64 timestamp = 4;
-    bytes signature = 5;
+    bool unpublish = 5;
+  }
+
+  // A RecordBody's encoding, signed by its key in the
+  // vpn-hash-table-record domain.
+  message Record {
+    bytes body = 1;
+    bytes signature = 2;
   }
 
   message Publish {

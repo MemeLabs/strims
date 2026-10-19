@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, VecDeque};
 use slotmap::SlotMap;
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
-use strims_crypto::ed25519_dalek::{SigningKey, VerifyingKey};
+use strims_crypto::{Signer, Verifier};
 use strims_kademlia::ID;
 use strims_proto::types::Key;
 use strims_vnic::{Fill, PeerKey, ports};
@@ -353,7 +353,7 @@ pub struct Host<H: Copy = ()> {
     /// The vnic host key: signs trailers and peer index records, and keys
     /// message ciphers.
     pub(crate) key: Key,
-    pub(crate) signer: SigningKey,
+    pub(crate) signer: Signer,
     pub(crate) config: Config,
     pub(crate) rng: DetRng,
     qos_class: strims_qos::ClassId,
@@ -368,7 +368,7 @@ pub struct Host<H: Copy = ()> {
     bufs: BufArena,
     pub(crate) pool: BufPool,
     ciphers: BoundedMap<ID, MessageCipher>,
-    verifiers: BoundedMap<ID, Option<VerifyingKey>>,
+    verifiers: BoundedMap<ID, Option<Verifier>>,
     /// Deliveries are bounded by `max_queued_deliveries`; the rest by local
     /// requests and exchanges.
     events: VecDeque<Event<H>>,
@@ -387,7 +387,7 @@ impl<H: Copy> Host<H> {
         rng: DetRng,
     ) -> Result<Host<H>, Error> {
         let key = vnic.key().clone();
-        let signer = strims_crypto::signing_key(&key)?;
+        let signer = Signer::new(&key)?;
         let qos_class = vnic.add_qos_class(vnic.qos_root(), QOS_CLASS_WEIGHT)?;
         let id = vnic.id();
         Ok(Host {
@@ -1203,9 +1203,7 @@ impl<H: Copy> Host<H> {
         (0..hops).all(|hop| {
             msg.verify_with(hop, |id| {
                 verifiers
-                    .get_or_try_insert::<()>(*id, || {
-                        Ok(VerifyingKey::from_bytes(&id.to_bytes()).ok())
-                    })
+                    .get_or_try_insert::<()>(*id, || Ok(Verifier::new(&id.to_bytes()).ok()))
                     .ok()
                     .copied()
                     .flatten()
@@ -1625,15 +1623,6 @@ fn random_below(rng: &mut DetRng, n: u32) -> u32 {
             return (v % n) as u32;
         }
     }
-}
-
-/// Signs a record with this host's key: sets `key`, then signs the
-/// record's stable encoding.
-pub(crate) fn sign_record<T: strims_proto::stable::Signable>(r: &mut T, signer: &SigningKey) {
-    use strims_crypto::ed25519_dalek::Signer;
-    r.set_key(&signer.verifying_key().to_bytes());
-    let b = r.stable_encode_unsigned_to_vec();
-    r.set_signature(signer.sign(&b).to_bytes().to_vec());
 }
 
 /// A random u64 (request and exchange ids).

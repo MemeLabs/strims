@@ -43,15 +43,25 @@ pub enum Domain {
     PpsppEpoch,
     /// A video channel's stream key token: the 32-byte token.
     VideoStreamKey,
+    /// A vpn message's trailer entry: header ‖ body ‖ earlier entries ‖
+    /// time (i64 BE ns) ‖ host id, all of fixed or header-given length.
+    VpnMessage,
+    /// A vpn hash table record: its encoded body.
+    VpnHashTableRecord,
+    /// A vpn peer index record: its encoded body.
+    VpnPeerIndexRecord,
 }
 
 impl Domain {
     /// Every domain, in declaration order.
-    pub const ALL: [Domain; 4] = [
+    pub const ALL: [Domain; 7] = [
         Domain::PpsppMunroRoot,
         Domain::PpsppChunk,
         Domain::PpsppEpoch,
         Domain::VideoStreamKey,
+        Domain::VpnMessage,
+        Domain::VpnHashTableRecord,
+        Domain::VpnPeerIndexRecord,
     ];
 
     /// The domain's name in signed bytes. Contexts are lowercase ASCII and
@@ -62,6 +72,9 @@ impl Domain {
             Domain::PpsppChunk => "ppspp-chunk",
             Domain::PpsppEpoch => "ppspp-epoch",
             Domain::VideoStreamKey => "video-stream-key",
+            Domain::VpnMessage => "vpn-message",
+            Domain::VpnHashTableRecord => "vpn-hash-table-record",
+            Domain::VpnPeerIndexRecord => "vpn-peer-index-record",
         }
     }
 }

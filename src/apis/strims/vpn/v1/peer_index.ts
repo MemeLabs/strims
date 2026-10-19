@@ -123,47 +123,43 @@ export namespace PeerIndexMessage {
     >;
   };
 
-  export type IRecord = {
+  export type IRecordBody = {
     hash?: Uint8Array;
     hostId?: Uint8Array;
     port?: number;
     timestamp?: bigint;
-    key?: Uint8Array;
-    signature?: Uint8Array;
+    unpublish?: boolean;
   }
 
-  export class Record {
+  export class RecordBody {
     hash: Uint8Array;
     hostId: Uint8Array;
     port: number;
     timestamp: bigint;
-    key: Uint8Array;
-    signature: Uint8Array;
+    unpublish: boolean;
 
-    constructor(v?: IRecord) {
+    constructor(v?: IRecordBody) {
       this.hash = v?.hash || new Uint8Array();
       this.hostId = v?.hostId || new Uint8Array();
       this.port = v?.port || 0;
       this.timestamp = v?.timestamp || BigInt(0);
-      this.key = v?.key || new Uint8Array();
-      this.signature = v?.signature || new Uint8Array();
+      this.unpublish = v?.unpublish || false;
     }
 
-    static encode(m: Record, w?: Writer): Writer {
+    static encode(m: RecordBody, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.hash.length) w.uint32(10).bytes(m.hash);
       if (m.hostId.length) w.uint32(18).bytes(m.hostId);
       if (m.port) w.uint32(24).uint32(m.port);
       if (m.timestamp) w.uint32(32).int64(m.timestamp);
-      if (m.key.length) w.uint32(80010).bytes(m.key);
-      if (m.signature.length) w.uint32(80018).bytes(m.signature);
+      if (m.unpublish) w.uint32(40).bool(m.unpublish);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Record {
+    static decode(r: Reader | Uint8Array, length?: number): RecordBody {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Record();
+      const m = new RecordBody();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
@@ -179,10 +175,50 @@ export namespace PeerIndexMessage {
           case 4:
           m.timestamp = r.int64();
           break;
-          case 10001:
-          m.key = r.bytes();
+          case 5:
+          m.unpublish = r.bool();
           break;
-          case 10002:
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IRecord = {
+    body?: Uint8Array;
+    signature?: Uint8Array;
+  }
+
+  export class Record {
+    body: Uint8Array;
+    signature: Uint8Array;
+
+    constructor(v?: IRecord) {
+      this.body = v?.body || new Uint8Array();
+      this.signature = v?.signature || new Uint8Array();
+    }
+
+    static encode(m: Record, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.body.length) w.uint32(10).bytes(m.body);
+      if (m.signature.length) w.uint32(18).bytes(m.signature);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): Record {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new Record();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.body = r.bytes();
+          break;
+          case 2:
           m.signature = r.bytes();
           break;
           default:
@@ -360,6 +396,12 @@ export const strims_vpn_v1_PeerIndexMessage = PeerIndexMessage;
 export type strims_vpn_v1_PeerIndexMessage = PeerIndexMessage;
 /* @internal */
 export type strims_vpn_v1_IPeerIndexMessage = IPeerIndexMessage;
+/* @internal */
+export const strims_vpn_v1_PeerIndexMessage_RecordBody = PeerIndexMessage.RecordBody;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_RecordBody = PeerIndexMessage.RecordBody;
+/* @internal */
+export type strims_vpn_v1_PeerIndexMessage_IRecordBody = PeerIndexMessage.IRecordBody;
 /* @internal */
 export const strims_vpn_v1_PeerIndexMessage_Record = PeerIndexMessage.Record;
 /* @internal */

@@ -10,14 +10,21 @@ option java_package = "gg.strims.vpn.v1";
 option swift_prefix = "SVN";
 
 message PeerIndexMessage {
-  message Record {
+  // What a record states. Unpublish marks a record that withdraws the
+  // host's earlier ones for the hash.
+  message RecordBody {
     bytes hash = 1;
     bytes host_id = 2;
     uint32 port = 3;
     int64 timestamp = 4;
+    bool unpublish = 5;
+  }
 
-    bytes key = 10001;
-    bytes signature = 10002;
+  // A RecordBody's encoding, signed by its host in the
+  // vpn-peer-index-record domain.
+  message Record {
+    bytes body = 1;
+    bytes signature = 2;
   }
 
   message Publish {

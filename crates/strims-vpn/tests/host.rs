@@ -15,7 +15,7 @@ mod common;
 
 use common::{APP_PORT, AppTag, World, messages};
 use strims_base::time::{Duration, Time};
-use strims_crypto::{key_from_seed, signing_key};
+use strims_crypto::{Signer, key_from_seed};
 use strims_kademlia::ID;
 use strims_proto::vpn::v1::PeerExchangeMessage;
 use strims_proto::vpn::v1::peer_exchange_message::{Body as PxBody, LinkAnswer};
@@ -225,7 +225,7 @@ fn dedup_is_per_network() {
 /// Builds a frame as `from` would send it to its neighbour.
 fn frame_from(w: &World, from: usize, header: MessageHeader, body: &[u8]) -> Vec<u8> {
     let key = w.nodes[from].vnic.key();
-    let sk = signing_key(key).unwrap();
+    let sk = Signer::new(key).unwrap();
     let mut b = Vec::new();
     encode_message(&mut b, &header, body, w.now, &w.id(from), &sk).unwrap();
     b
@@ -348,7 +348,7 @@ fn verification_modes() {
 
         // A relayed message whose first hop claims node 2 but node 0 signed.
         let forged = {
-            let sk0 = signing_key(w.nodes[0].vnic.key()).unwrap();
+            let sk0 = Signer::new(w.nodes[0].vnic.key()).unwrap();
             let mut inner = Vec::new();
             let h = MessageHeader {
                 dst_id: w.id(1),
