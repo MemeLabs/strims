@@ -43,8 +43,8 @@ use strims_video::hls::HlsRoutes;
 use tokio::time::Sleep;
 
 pub use strims_node_core::app::{
-    AppPlatform, IndexHosts, NodeHost, PeerHandler, ProfileRuntime, ProfileSlot, ServicesConfig,
-    Spawn, StartError, TaskHandle, bind_profile,
+    AppPlatform, IndexHosts, MemoryMetrics, NodeHost, PeerHandler, ProfileRuntime, ProfileSlot,
+    ServicesConfig, Spawn, StartError, TaskHandle, bind_profile,
 };
 
 use crate::fetch::{NetFetch, tls_client_config};
@@ -142,6 +142,10 @@ pub struct AppConfig {
     pub label: String,
     /// Where the network control's PSI sessions compute.
     pub psi: PsiMode,
+    /// Reads the process's heap counters, which the binary's allocator
+    /// keeps ([`AppPlatform::memory`]); `None` leaves the heap out of the
+    /// Debug service's snapshots.
+    pub memory: Option<fn() -> MemoryMetrics>,
     pub network: strims_network::Config,
     pub bootstrap: strims_network::bootstrap::Config,
     pub transfer: strims_transfer::Config,
@@ -150,6 +154,7 @@ pub struct AppConfig {
     pub chat: strims_chat::Config,
     pub whispers: WhisperConfig,
     pub video: strims_video::Config,
+    pub debug: strims_debug::Config,
 }
 
 impl AppConfig {
@@ -164,6 +169,7 @@ impl AppConfig {
             chat: self.chat.clone(),
             whispers: self.whispers.clone(),
             video: self.video.clone(),
+            debug: self.debug.clone(),
         }
     }
 }
@@ -296,6 +302,11 @@ impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
                 None => Rc::new(InlinePsi),
             },
         }
+    }
+
+    /// [`AppConfig::memory`].
+    fn memory(&self) -> Option<fn() -> MemoryMetrics> {
+        self.config.memory
     }
 }
 

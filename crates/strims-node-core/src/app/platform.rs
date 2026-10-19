@@ -72,6 +72,23 @@ pub struct ServicesConfig {
     pub chat: strims_chat::Config,
     pub whispers: WhisperConfig,
     pub video: strims_video::Config,
+    pub debug: strims_debug::Config,
+}
+
+/// The process's heap, as a driver's allocator counts it from the process's
+/// start ([`AppPlatform::memory`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryMetrics {
+    /// Bytes allocated and not yet freed, and their most at any time.
+    pub live_bytes: u64,
+    pub peak_bytes: u64,
+    /// Bytes ever allocated.
+    pub allocated_bytes: u64,
+    pub allocations: u64,
+    pub deallocations: u64,
+    pub reallocations: u64,
+    /// The wasm module's linear memory, which only grows; 0 elsewhere.
+    pub linear_memory_bytes: u64,
 }
 
 /// What a driver supplies to run a profile's node and services
@@ -131,6 +148,13 @@ pub trait AppPlatform: 'static {
     /// on another thread or worker.
     fn psi(&self) -> Rc<dyn PsiEngine> {
         Rc::new(InlinePsi)
+    }
+
+    /// Reads the process's heap counters, taken once per start for the
+    /// Debug service's snapshots. The default counts nothing, and the
+    /// snapshots leave the heap out.
+    fn memory(&self) -> Option<fn() -> MemoryMetrics> {
+        None
     }
 }
 

@@ -5,7 +5,8 @@
 //! WebSockets, as the UI drives them: profiles sign up, create and join a
 //! network through invitations whose bootstrap clients link the nodes,
 //! renew their certificates, find a chat room in the directory and chat;
-//! and a network's CA publishes it to a peer that accepts it.
+//! a network's CA publishes it to a peer that accepts it; and a member
+//! reads another's mock stream.
 //!
 //! Each step prints how long it took.
 
@@ -31,6 +32,7 @@ use strims_proto::chat::v1::{
     CreateServerRequest as CreateChatServerRequest, Message, OpenClientRequest, OpenClientResponse,
     Room, server_event,
 };
+use strims_proto::debug::v1 as debug;
 use strims_proto::network::v1::bootstrap::{
     BootstrapClientWebSocketOptions, BootstrapFrontendClient, Config as BootstrapConfig,
     CreateBootstrapClientRequest, ListBootstrapPeersRequest, PublishNetworkToBootstrapPeerRequest,
@@ -89,6 +91,19 @@ impl Profile {
 
     fn bootstrap(&self) -> BootstrapFrontendClient<Client> {
         BootstrapFrontendClient::new(self.client())
+    }
+
+    fn debug(&self) -> debug::DebugClient<Client> {
+        debug::DebugClient::new(self.client())
+    }
+
+    async fn debug_metrics(&self) -> Option<debug::DebugMetrics> {
+        let res = self
+            .debug()
+            .read_metrics(&debug::ReadMetricsRequest {})
+            .await
+            .ok()?;
+        res.metrics?.debug
     }
 
     /// The URI other nodes link to this profile's node at.
@@ -460,5 +475,85 @@ fn publishing_a_network_to_a_bootstrap_peer() {
         })
         .await
         .expect("the scenario took over 120 s");
+    });
+}
+
+#[test]
+fn a_mock_stream_crosses_local_services() {
+    run(async {
+        tokio::time::timeout(StdDuration::from_secs(180), async {
+            let mut steps = Steps(tokio::time::Instant::now());
+            let alice = Profile::sign_up("alice").await;
+            let bob = Profile::sign_up("bob").await;
+            let network = alice.create_network("mock-net").await;
+            let key = network_key(network.certificate.as_ref().unwrap());
+            let invitation = alice.invite(network.id).await;
+            bob.join(invitation).await;
+            bob.wait_trusted(&key, STEP).await;
+            steps.done("bob joins alice's network");
+
+            bob.debug()
+                .set_config(&debug::SetConfigRequest {
+                    config: Some(debug::Config {
+                        enable_mock_streams: true,
+                        mock_stream_network_key: key.clone(),
+                    }),
+                })
+                .await
+                .unwrap();
+            let id = alice
+                .debug()
+                .start_mock_stream(&debug::StartMockStreamRequest {
+                    bitrate_kbps: 1000,
+                    segment_interval_ms: 500,
+                    timeout_ms: 0,
+                    network_key: key.clone(),
+                })
+                .await
+                .unwrap()
+                .id;
+            let listed = eventually("alice's mock stream listed", STEP, || async {
+                let streams = alice
+                    .debug()
+                    .list_mock_streams(&debug::ListMockStreamsRequest {})
+                    .await
+                    .ok()?
+                    .mock_streams;
+                streams
+                    .into_iter()
+                    .find(|s| s.id == id && s.listing_id.is_some())
+            })
+            .await;
+            assert_eq!(listed.network_key, key);
+            steps.done("alice lists a mock stream");
+
+            let reader = eventually("bob reading alice's mock stream", STEP, || async {
+                let readers = bob.debug_metrics().await?.readers;
+                readers
+                    .into_iter()
+                    .find(|r| r.id == Some(id) && r.segments >= 3 && r.latency.is_some())
+            })
+            .await;
+            assert_eq!(reader.network_key, key);
+            assert_eq!(reader.malformed, 0);
+            steps.done("bob reads it with its latency");
+
+            alice
+                .debug()
+                .stop_mock_stream(&debug::StopMockStreamRequest { id })
+                .await
+                .unwrap();
+            eventually("bob's reader to end", STEP, || async {
+                bob.debug_metrics().await?.readers.is_empty().then_some(())
+            })
+            .await;
+            assert!(alice.debug_metrics().await.unwrap().mock_streams.is_empty());
+            steps.done("alice stops it and bob's reader ends");
+
+            alice.svc.stop().await;
+            bob.svc.stop().await;
+        })
+        .await
+        .expect("the scenario took over 180 s");
     });
 }

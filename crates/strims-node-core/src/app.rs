@@ -14,9 +14,9 @@
 //! clients), the directory, and the profile's vnic limits. The directory
 //! control is built on the profile's network control and transfer control,
 //! and its swarms move only while the transfer control learns every peer:
-//! give [`PeerServices`] both controls. The chat and video controls are
-//! built on those and the directory control, the whisper control on the
-//! network control.
+//! give [`PeerServices`] both controls. The chat, video and debug
+//! controls are built on those and the directory control, the whisper
+//! control on the network control.
 //!
 //! # Composition
 //!
@@ -31,13 +31,14 @@
 //!   profile's vnic config, within [`AppPlatform::ceilings`], and follows
 //!   the config's changes.
 //! - [`bind_profile`] serves the session's frontends on a frontend
-//!   connection's router.
+//!   connection's router. The Debug service's snapshots report the node's
+//!   metrics, the controls' counters and the platform's heap counters.
 //!
 //! The platform supplies what differs between drivers: entropy, the node's
 //! config and its spawn, the vnic ceilings, the services' configs, the
 //! timer, the directory's HTTP fetcher, the video control's RTMP host, the
-//! HLS routes, the task spawner, and the engine the network control runs
-//! its PSI sessions on.
+//! HLS routes, the task spawner, the engine the network control runs its
+//! PSI sessions on, and the heap counters ([`AppPlatform::memory`]).
 //!
 //! # Tasks
 //!
@@ -52,19 +53,21 @@
 //! same profile run. The seed builds one `DetRng`, whose first `u64` seeds
 //! the node ([`crate::NodeConfig::rng_seed`]) and from which the controls
 //! fork in the order replication, network, bootstrap, directory, chat,
-//! whispers, video (transfers draw none). Tasks spawn in this order: the
-//! controls' `run`s (replication, network, bootstrap, transfers,
-//! directory, chat, whispers, video), the vnic config's follower, then the
-//! event loop. Both orders are part of the run. So is the PSI engine: the
+//! whispers, video, debug (transfers draw none). Tasks spawn in this
+//! order: the controls' `run`s (replication, network, bootstrap,
+//! transfers, directory, chat, whispers, video), the vnic config's
+//! follower, the event loop, then the debug control's `run`. Both orders
+//! are part of the run. So is the PSI engine: the
 //! default [`AppPlatform::psi`] computes inline and replays, and an engine
 //! whose sessions answer from another thread doesn't.
 
 mod host;
+mod metrics;
 mod peers;
 mod platform;
 mod profile;
 
 pub use host::{IndexHosts, NodeHost};
 pub use peers::{PeerHandler, PeerServices};
-pub use platform::{AppPlatform, ServicesConfig, Spawn, StartError, TaskHandle};
+pub use platform::{AppPlatform, MemoryMetrics, ServicesConfig, Spawn, StartError, TaskHandle};
 pub use profile::{ProfileRuntime, ProfileSlot, bind_profile};

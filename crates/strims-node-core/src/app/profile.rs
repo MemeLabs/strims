@@ -10,6 +10,7 @@ use futures_util::future::LocalBoxFuture;
 use rand_core::SeedableRng;
 use strims_base::rng::{DetRng, fork};
 use strims_chat::{ChatControl, WhisperControl};
+use strims_debug::DebugControl;
 use strims_directory::DirectoryControl;
 use strims_kv::Kv;
 use strims_network::NetworkControl;
@@ -21,7 +22,8 @@ use strims_transfer::TransferControl;
 use strims_video::{VideoControl, VideoHost};
 
 use super::host::node_limits;
-use super::{AppPlatform, NodeHost, PeerServices, Spawn, StartError, TaskHandle};
+use super::metrics::ProfileMetrics;
+use super::{AppPlatform, MemoryMetrics, NodeHost, PeerServices, Spawn, StartError, TaskHandle};
 use crate::{Node, NodeInfo};
 
 /// The profile whose node runs on a platform. A platform runs one
@@ -48,7 +50,7 @@ impl ProfileSlot {
     /// Starts `session`'s node on `platform`, under the profile's vnic
     /// config within [`AppPlatform::ceilings`], and runs replication,
     /// transfers, network membership, bootstrap, the directory, chat,
-    /// whispers and video, each control as a local task, serving every
+    /// whispers, video and debug, each control as a local task, serving every
     /// peer through [`PeerServices`]. The node follows the vnic config's
     /// changes.
     ///
@@ -188,6 +190,16 @@ async fn start_profile<K: Kv, P: AppPlatform>(
         fork(&mut rng),
         c.video,
     );
+    let debug = DebugControl::new(
+        host.clone(),
+        store.clone(),
+        network.clone(),
+        transfers.clone(),
+        directory.clone(),
+        timer.clone(),
+        fork(&mut rng),
+        c.debug,
+    );
 
     let spawner = platform.spawner();
     let mut tasks = Vec::new();
@@ -229,14 +241,18 @@ async fn start_profile<K: Kv, P: AppPlatform>(
     spawn(Box::pin(run_vnic(store.clone(), host, ceilings)));
     let services = PeerServices::with_spawner(node.clone(), spawner.clone())
         .with(Rc::new(network.clone()))
-        .with(Rc::new(transfers))
-        .with(Rc::new(replication))
+        .with(Rc::new(transfers.clone()))
+        .with(Rc::new(replication.clone()))
         .with(Rc::new(bootstrap.clone()));
     spawn(Box::pin(async move {
         while let Some(e) = events.recv().await {
             services.handle_event(&e).await;
         }
     }));
+    spawn({
+        let debug = debug.clone();
+        Box::pin(async move { debug.run().await })
+    });
 
     tracing::info!(
         profile = %session.profile.name,
@@ -249,10 +265,14 @@ async fn start_profile<K: Kv, P: AppPlatform>(
         timer,
         network,
         bootstrap,
+        transfers,
+        replication,
         directory,
         chat,
         whispers,
         video,
+        debug,
+        memory: platform.memory(),
         tasks,
         spawn: spawner,
     })
@@ -271,6 +291,21 @@ pub fn bind_profile<K: Kv, T: Timer, V: VideoHost, S: Spawn>(
     strims_directory::bind_frontend(router, &runtime.directory);
     strims_chat::bind_frontend(router, &runtime.chat, &runtime.whispers);
     strims_video::bind_frontend(router, &runtime.video);
+    strims_debug::bind_frontend(
+        router,
+        &runtime.debug,
+        ProfileMetrics {
+            node: runtime.node.clone(),
+            network: runtime.network.clone(),
+            transfers: runtime.transfers.clone(),
+            replication: runtime.replication.clone(),
+            directory: runtime.directory.clone(),
+            chat: runtime.chat.clone(),
+            whispers: runtime.whispers.clone(),
+            video: runtime.video.clone(),
+            memory: runtime.memory,
+        },
+    );
 }
 
 /// A running profile's node and the controls its frontends serve
@@ -281,10 +316,15 @@ pub struct ProfileRuntime<K: Kv, T: Timer, V: VideoHost, S: Spawn> {
     timer: T,
     network: NetworkControl<K, NodeHost, T>,
     bootstrap: BootstrapControl<K, NodeHost, T>,
+    transfers: TransferControl<NodeHost, T>,
+    replication: ReplicationControl<K, NodeHost, T>,
     directory: DirectoryControl<K, NodeHost, T>,
     chat: ChatControl<K, NodeHost, T>,
     whispers: WhisperControl<K, NodeHost, T>,
     video: VideoControl<K, NodeHost, V, T>,
+    debug: DebugControl<K, NodeHost, T>,
+    /// The platform's heap counters ([`AppPlatform::memory`]).
+    memory: Option<fn() -> MemoryMetrics>,
     tasks: Vec<TaskHandle>,
     spawn: S,
 }

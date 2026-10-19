@@ -171,6 +171,18 @@ impl<H: Host> Runner<H> {
         self.server.borrow().is_some()
     }
 
+    /// The runner's counters with its view's and its server's.
+    fn current_metrics(&self) -> Metrics {
+        let mut m = self.metrics.borrow().clone();
+        m.view = self.view.borrow().metrics().clone();
+        m.server = self
+            .server
+            .borrow()
+            .as_ref()
+            .map(|s| s.server.metrics().clone());
+        m
+    }
+
     fn member_client(&self) -> Option<VpnClient> {
         match &*self.member.borrow() {
             MemberPort::Open { client, .. } => Some(client.clone()),
@@ -808,15 +820,18 @@ impl<K: Kv, H: Host, T: Timer> DirectoryControl<K, H, T> {
     /// What the directory of the network whose key is `network_key` has
     /// done on this node, while it runs.
     pub fn metrics(&self, network_key: &[u8]) -> Option<Metrics> {
-        let r = self.shared.runner(network_key)?;
-        let mut m = r.metrics.borrow().clone();
-        m.view = r.view.borrow().metrics().clone();
-        m.server = r
-            .server
+        Some(self.shared.runner(network_key)?.current_metrics())
+    }
+
+    /// What the directory of each network it runs on has done on this
+    /// node, in network key order.
+    pub fn network_metrics(&self) -> Vec<(Vec<u8>, Metrics)> {
+        self.shared
+            .runners
             .borrow()
-            .as_ref()
-            .map(|s| s.server.metrics().clone());
-        Some(m)
+            .values()
+            .map(|r| (r.key.clone(), r.current_metrics()))
+            .collect()
     }
 
     // --- snippets -----------------------------------------------------------
