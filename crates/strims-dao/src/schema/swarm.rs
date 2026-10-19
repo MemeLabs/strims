@@ -23,7 +23,8 @@
 //! bytes.
 
 use futures_util::future::LocalBoxFuture;
-use strims_crypto::crc32_message;
+use prost::Message;
+use strims_crypto::Crc32;
 use strims_kv::Kv;
 use strims_proto::types::{Cache, CacheMeta};
 
@@ -89,14 +90,21 @@ pub fn cache_key(swarm_id: &[u8], salt: &[u8]) -> Vec<u8> {
 }
 
 /// The checksum a meta holds of its cache: the CRC-32 of the cache's
-/// stable encoding with id 0, so it doesn't depend on where the cache is
-/// stored. A cache with a non-zero id is copied.
+/// encoding without its id or data, then of its data. Leaving the id out
+/// keeps it independent of where the cache is stored, and checksumming the
+/// data apart avoids copying it.
 pub fn cache_checksum(c: &Cache) -> u32 {
-    if c.id == 0 {
-        crc32_message(c)
-    } else {
-        crc32_message(&Cache { id: 0, ..c.clone() })
-    }
+    let head = Cache {
+        id: 0,
+        uri: c.uri.clone(),
+        integrity: c.integrity.clone(),
+        data: Vec::new(),
+        epoch: c.epoch.clone(),
+    };
+    let mut crc = Crc32::new();
+    crc.update(&head.encode_to_vec());
+    crc.update(&c.data);
+    crc.sum()
 }
 
 /// The meta under the key of (`swarm_id`, `salt`), which may belong to
@@ -145,7 +153,7 @@ pub async fn set_cache<K: Kv>(
     mut cache: Cache,
 ) -> Result<bool, Error> {
     cache.id = 0;
-    let checksum = crc32_message(&cache);
+    let checksum = cache_checksum(&cache);
     if let Some(m) = keyed_meta(tx, swarm_id, salt).await? {
         if m.swarm_id == swarm_id && m.swarm_salt == salt && m.checksum == checksum {
             return Ok(false);
@@ -207,7 +215,11 @@ mod tests {
         };
         let stored = Cache { id: 7, ..c.clone() };
         assert_eq!(cache_checksum(&stored), cache_checksum(&c));
-        assert_eq!(cache_checksum(&c), crc32_message(&c));
+        let other = Cache {
+            data: vec![1, 2, 4],
+            ..c.clone()
+        };
+        assert_ne!(cache_checksum(&other), cache_checksum(&c));
     }
 
     #[test]

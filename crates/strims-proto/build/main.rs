@@ -6,11 +6,9 @@
 //! 1. Parses `schema/**/*.proto` and the crate's own `proto/**/*.proto` (the
 //!    `strims.rpc` envelope) with protox (pure Rust; no `protoc`).
 //! 2. Generates prost message types, one file per proto package.
-//! 3. Generates `StableEncode` impls (the stable encoding, see
-//!    `src/stable.rs`) from the same descriptors.
-//! 4. Generates the module tree: package `strims.vnic.v1` becomes
+//! 3. Generates the module tree: package `strims.vnic.v1` becomes
 //!    `strims_proto::vnic::v1`.
-//! 5. With the `services` feature, generates RPC service interfaces into
+//! 4. With the `services` feature, generates RPC service interfaces into
 //!    each package's file (`build/rpc.rs`).
 
 use std::cell::RefCell;
@@ -19,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::{env, fs};
 
+mod ident;
 mod rpc;
-mod stable;
 mod tree;
 
 type BoxError = Box<dyn Error>;
@@ -64,13 +62,12 @@ fn main() -> Result<(), BoxError> {
         return Err(rpc_errors.join("\n").into());
     }
 
-    // Our generators cover only the `strims.*` schema; prost maps the
+    // The module tree covers only the `strims.*` schema; prost maps the
     // imported well-known types to `prost_types` and primitives.
     let mut schema_fds = fds;
     schema_fds
         .file
         .retain(|f| f.package().starts_with("strims."));
-    stable::generate(&schema_fds, &out_dir)?;
     tree::generate(&schema_fds, &out_dir)?;
     Ok(())
 }

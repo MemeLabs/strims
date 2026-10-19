@@ -17,7 +17,7 @@ use std::path::Path;
 use prost_types::FileDescriptorSet;
 
 use crate::BoxError;
-use crate::stable::sanitize_identifier;
+use crate::ident::sanitize_identifier;
 
 const ROOT_PACKAGE: &str = "strims";
 
@@ -86,10 +86,6 @@ fn write_node(
         writeln!(
             out,
             "{indent}    include!(concat!(env!(\"OUT_DIR\"), \"/{file}\"));"
-        )?;
-        writeln!(
-            out,
-            "{indent}    include!(concat!(env!(\"OUT_DIR\"), \"/{package}.stable.rs\"));"
         )?;
     }
     for (child_name, child) in &node.children {

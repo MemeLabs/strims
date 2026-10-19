@@ -20,11 +20,10 @@ use strims_base::time::{Duration, Time};
 use strims_crypto::{
     DEFAULT_CERT_TTL, Domain, Error, Issuer, Signer, aes_link_key, crc32_message, key_from_seed,
     key_to_curve25519, message_cipher_key, new_certificate_request, new_self_signed_certificate,
-    public_key_to_curve25519, sign, sign_certificate_request, verify_certificate,
+    public_key_to_curve25519, sign_certificate_request, verify_certificate,
     verify_certificate_request, x25519,
 };
 use strims_golden::Golden;
-use strims_proto::stable::StableEncode;
 use strims_proto::types::{Key, KeyUsage};
 use strims_proto::{chat, types};
 
@@ -93,7 +92,11 @@ fn signatures_name_their_domain() {
             // context, then the payload
             let context = d.context().as_bytes();
             let framed = [b"strims\0", &[context.len() as u8][..], context, &msg].concat();
-            assert_eq!(sign(&k.private, &framed).unwrap(), sig);
+            let raw = ed25519_dalek::SigningKey::from_keypair_bytes(
+                &k.private.as_slice().try_into().unwrap(),
+            )
+            .unwrap();
+            assert_eq!(ed25519_dalek::Signer::sign(&raw, &framed).to_bytes(), sig);
             g.check_hex(e, 0, &msg);
             g.check_hex(e, 1, sig);
         }
@@ -193,7 +196,7 @@ fn certificate_requests_match_vectors() {
 }
 
 /// Checksums the vector's message.
-fn check_crc<M: Message + Default + StableEncode>(g: &mut Golden, name: &str) {
+fn check_crc<M: Message + Default>(g: &mut Golden, name: &str) {
     let e = g.entry(&format!("crc32_{name}"));
     let m = M::decode(g.bytes(e, 0).as_slice()).unwrap();
     g.check_hex(e, 1, crc32_message(&m).to_be_bytes());

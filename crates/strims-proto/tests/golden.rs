@@ -1,10 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors (`golden/vectors.hex`): the protobuf and stable encodings
-//! of messages built here. Each line is `<name> <protobuf hex> <stable
-//! hex>`, with `=` for an empty encoding and `-` for a message without a
-//! stable encoding. prost must decode each encoding back to the message
+//! Golden vectors (`golden/vectors.hex`): the protobuf encodings of
+//! messages built here. Each line is `<name> <protobuf hex>`, with `=` for
+//! an empty encoding. prost must decode each encoding back to the message
 //! and re-encode it identically. `STRIMS_GOLDEN=update` rewrites the
 //! vectors from the code (see `strims-golden`).
 
@@ -35,7 +34,6 @@ use strims_proto::network::v1::directory::{
 };
 use strims_proto::rpc;
 use strims_proto::rpc::call::Kind;
-use strims_proto::stable::StableEncode;
 use strims_proto::types::{
     Cache, CacheMeta, Certificate, CertificateBody, CertificateRequest, CertificateRequestBody,
     Image, ImageType, Key, KeyType, KeyUsage, cache,
@@ -66,29 +64,8 @@ impl Vectors {
         }
     }
 
-    /// Pins `m`'s protobuf and stable encodings under `name`.
-    fn pin<M: Message + Default + PartialEq + Debug + StableEncode>(&mut self, name: &str, m: &M) {
-        let stable = m.stable_encode_to_vec();
-        assert_eq!(
-            m.stable_encoded_len(),
-            stable.len(),
-            "{name}: stable_encoded_len"
-        );
-        self.pin_with(name, m, hex::encode(stable));
-    }
-
-    /// Pins the protobuf encoding of `m`, a message without a stable
-    /// encoding (it contains a map).
-    fn pin_proto<M: Message + Default + PartialEq + Debug>(&mut self, name: &str, m: &M) {
-        self.pin_with(name, m, "-".to_owned());
-    }
-
-    fn pin_with<M: Message + Default + PartialEq + Debug>(
-        &mut self,
-        name: &str,
-        m: &M,
-        stable: String,
-    ) {
+    /// Pins `m`'s protobuf encoding under `name`.
+    fn pin<M: Message + Default + PartialEq + Debug>(&mut self, name: &str, m: &M) {
         assert!(self.pinned.insert(name.to_owned()), "{name} pinned twice");
         let proto = m.encode_to_vec();
         assert_eq!(m.encoded_len(), proto.len(), "{name}: encoded_len");
@@ -97,7 +74,6 @@ impl Vectors {
         assert_eq!(back.encode_to_vec(), proto, "{name}: re-encode");
         let e = self.g.entry(name);
         self.g.check_hex(e, 0, proto);
-        self.g.check(e, 1, stable);
     }
 
     /// Fails on entries nothing pinned; update mode removes them.
@@ -639,7 +615,7 @@ fn rpc_messages(v: &mut Vectors) {
         message: message.to_owned(),
         code,
     };
-    v.pin_proto(
+    v.pin(
         "rpc_call_request",
         &rpc_call(
             1,
@@ -653,7 +629,7 @@ fn rpc_messages(v: &mut Vectors) {
             },
         ),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_callback",
         &rpc_call(
             2,
@@ -666,11 +642,11 @@ fn rpc_messages(v: &mut Vectors) {
             },
         ),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_error",
         &rpc_call(3, 1, "CALLBACK", Kind::CallKindError, &error("boom", 5)),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_error_negative_code",
         &rpc_call(
             4,
@@ -680,11 +656,11 @@ fn rpc_messages(v: &mut Vectors) {
             &error("negative", -3),
         ),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_close",
         &rpc_call(5, 1, "CALLBACK", Kind::CallKindClose, &rpc::Close {}),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_undefined",
         &rpc_call(
             6,
@@ -694,11 +670,11 @@ fn rpc_messages(v: &mut Vectors) {
             &rpc::Undefined {},
         ),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_cancel",
         &rpc_call(7, 1, "CANCEL", Kind::CallKindCancel, &rpc::Cancel {}),
     );
-    v.pin_proto(
+    v.pin(
         "rpc_call_cancel_default_kind",
         &rpc_call(8, 1, "CANCEL", Kind::CallKindDefault, &rpc::Cancel {}),
     );
@@ -714,8 +690,8 @@ fn rpc_messages(v: &mut Vectors) {
     header
         .headers
         .insert("certificate".to_owned(), cert_chain().encode_to_vec());
-    v.pin_proto("rpc_call_header", &header);
-    v.pin_proto(
+    v.pin("rpc_call_header", &header);
+    v.pin(
         "rpc_call_max_ids",
         &rpc_call(
             u64::MAX,
@@ -728,8 +704,8 @@ fn rpc_messages(v: &mut Vectors) {
             },
         ),
     );
-    v.pin_proto("rpc_call_empty", &rpc::Call::default());
-    v.pin_proto(
+    v.pin("rpc_call_empty", &rpc::Call::default());
+    v.pin(
         "rpc_error",
         &error("method not found: strims.debug.v1.Debug.Nope", 7),
     );

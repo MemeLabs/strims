@@ -8,7 +8,7 @@
 //! - [`signed`]: signed objects that travel as an encoded body and its
 //!   signature.
 //! - [`cert`]: certificate requests, issuing and chain verification.
-//! - [`crc32_message`]: checksums over a message's stable encoding.
+//! - [`crc32_message`]: checksums over a message's encoding.
 //! - [`curve25519`]: ed25519 to X25519 conversion and the X25519 key
 //!   agreements of vnic links and vpn message ciphers.
 //!
@@ -33,14 +33,14 @@ pub use cert::{
     sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
     verify_certificate_request,
 };
-pub use crc32::crc32_message;
+pub use crc32::{Crc32, crc32_message};
 pub use curve25519::{
     X25519_SIZE, aes_link_key, key_to_curve25519, message_cipher_key, private_key_to_curve25519,
     public_key_to_curve25519, x25519,
 };
 pub use key::{
     ED25519_PRIVATE_KEY_SIZE, ED25519_PUBLIC_KEY_SIZE, ED25519_SEED_SIZE, ED25519_SIGNATURE_SIZE,
-    generate_key, key_from_seed, sign, verify,
+    generate_key, key_from_seed,
 };
 pub use sign::{Domain, Signer, Verifier};
 pub use signed::{Envelope, SelfKeyed, SignedBody, Verified};

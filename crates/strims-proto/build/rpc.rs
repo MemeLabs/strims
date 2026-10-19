@@ -19,7 +19,7 @@ use heck::ToSnakeCase;
 use prost_build::{Comments, Service, ServiceGenerator};
 use prost_types::FileDescriptorSet;
 
-use crate::stable::{sanitize_identifier, to_snake, to_upper_camel};
+use crate::ident::{sanitize_identifier, to_snake, to_upper_camel};
 
 /// Generic parameter names of the generated items, which must not shadow a
 /// package type.
