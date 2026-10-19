@@ -31,12 +31,12 @@ use strims_crypto::{
     new_certificate_request, new_self_signed_certificate, sign_certificate_request,
 };
 use strims_kademlia::ID;
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, PProfRequest, PProfResponse, WatchMetricsRequest,
-    WatchMetricsResponse, register_debug_service,
-};
 use strims_proto::rpc::Call;
 use strims_proto::rpc::call::Kind;
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, WatchRequest, WatchResponse,
+    register_fixture_service,
+};
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_proto::types::{Certificate, CertificateBody, Key, KeyUsage};
 use strims_rpc::vpn::{self, CERTIFICATE_HEADER, VpnClient, VpnConfig, VpnError};
@@ -286,10 +286,10 @@ struct TestService {
     calls: Cell<usize>,
 }
 
-impl DebugService for TestService {
+impl FixtureService for TestService {
     /// Answers with the caller's profile key, from its membership
     /// certificate.
-    async fn p_prof(&self, ctx: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
+    async fn echo(&self, ctx: &CallContext, req: EchoRequest) -> Result<EchoResponse, Error> {
         self.calls.set(self.calls.get() + 1);
         let profile = ctx
             .certificate()
@@ -297,24 +297,24 @@ impl DebugService for TestService {
             .and_then(|c| certificate_body(c).ok())
             .map(|b| b.key)
             .unwrap_or_default();
-        Ok(PProfResponse {
+        Ok(EchoResponse {
             name: req.name,
             data: profile,
         })
     }
 
     /// Streams `interval_ms` items, or never ends if it's negative.
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _ctx: &CallContext,
-        req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
+        req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
         self.calls.set(self.calls.get() + 1);
         if req.interval_ms < 0 {
             return Ok(Box::pin(futures_util::stream::pending()));
         }
         let items = (0..req.interval_ms).map(|i| {
-            Ok(WatchMetricsResponse {
+            Ok(WatchResponse {
                 data: vec![u8::try_from(i).unwrap()],
             })
         });
@@ -349,7 +349,7 @@ fn start(
     let (reader, writer) = net.port(host.addr(port));
     let router = service.map(|s| {
         let mut r = Router::new();
-        register_debug_service(&mut r, s);
+        register_fixture_service(&mut r, s);
         r
     });
     let (client, conn) = vpn::connect(config, &host.cert, reader, writer, router).unwrap();
@@ -376,15 +376,15 @@ fn start(
     (client, metrics)
 }
 
-fn pprof(name: &str) -> PProfRequest {
-    PProfRequest {
+fn echo(name: &str) -> EchoRequest {
+    EchoRequest {
         name: name.into(),
         ..Default::default()
     }
 }
 
-async fn call(client: &Client, name: &str) -> Result<PProfResponse, CallError> {
-    DebugClient::new(client.clone()).p_prof(&pprof(name)).await
+async fn call(client: &Client, name: &str) -> Result<EchoResponse, CallError> {
+    FixtureClient::new(client.clone()).echo(&echo(name)).await
 }
 
 // --- tests ----------------------------------------------------------------------
@@ -411,8 +411,8 @@ async fn calls_reach_servers_and_handlers_see_the_caller() {
         assert_eq!(res.name, "a");
         assert_eq!(res.data, client.profile.public);
 
-        let mut stream = DebugClient::new(to_server.clone())
-            .watch_metrics(&WatchMetricsRequest {
+        let mut stream = FixtureClient::new(to_server.clone())
+            .watch(&WatchRequest {
                 interval_ms: 3,
                 ..Default::default()
             })
@@ -458,7 +458,7 @@ async fn a_lost_request_is_sent_again() {
 
         net.lose(1);
         let begin = Instant::now();
-        let res = DebugClient::new(to_server).p_prof(&pprof("a")).await;
+        let res = FixtureClient::new(to_server).echo(&echo("a")).await;
         assert_eq!(res.unwrap().name, "a");
         // a 10 s attempt, then a 1 s delay
         assert_eq!(begin.elapsed(), StdDuration::from_secs(11));
@@ -468,13 +468,13 @@ async fn a_lost_request_is_sent_again() {
             .into_iter()
             .map(|(from, _, call)| (from, call.method))
             .collect();
-        let pprof = "strims.debug.v1.Debug.PProf".to_owned();
+        let method = "strims.rpc.fixture.Fixture.Echo".to_owned();
         assert_eq!(
             sent,
             [
-                (client.addr(200), pprof.clone()),
+                (client.addr(200), method.clone()),
                 (client.addr(200), "CANCEL".to_owned()),
-                (client.addr(200), pprof),
+                (client.addr(200), method),
                 (server.addr(100), CALLBACK.to_owned()),
             ]
         );
@@ -500,8 +500,8 @@ async fn every_call_carries_the_senders_certificate() {
         let to_server = vpn_client.to(server.addr(100));
 
         call(&to_server, "a").await.unwrap();
-        let stream = DebugClient::new(to_server)
-            .watch_metrics(&WatchMetricsRequest {
+        let stream = FixtureClient::new(to_server)
+            .watch(&WatchRequest {
                 interval_ms: -1,
                 ..Default::default()
             })
@@ -516,9 +516,9 @@ async fn every_call_carries_the_senders_certificate() {
         assert_eq!(
             methods,
             [
-                "strims.debug.v1.Debug.PProf",
+                "strims.rpc.fixture.Fixture.Echo",
                 CALLBACK,
-                "strims.debug.v1.Debug.WatchMetrics",
+                "strims.rpc.fixture.Fixture.Watch",
                 "CANCEL"
             ]
         );
@@ -541,8 +541,8 @@ async fn every_call_carries_the_senders_certificate() {
 fn raw_request(id: u64, cert: Option<&Certificate>) -> Call {
     Call {
         id,
-        method: "strims.debug.v1.Debug.PProf".into(),
-        argument: pprof("raw").encode_to_vec(),
+        method: "strims.rpc.fixture.Fixture.Echo".into(),
+        argument: echo("raw").encode_to_vec(),
         headers: cert
             .map(|c| BTreeMap::from([(CERTIFICATE_HEADER.to_owned(), c.encode_to_vec())]))
             .unwrap_or_default(),
@@ -686,7 +686,7 @@ async fn answers_count_only_from_the_called_address() {
             parent_id: request.id,
             method: CALLBACK.into(),
             kind: Kind::CallKindDefault as i32,
-            argument: PProfResponse {
+            argument: EchoResponse {
                 name: "forged".into(),
                 data: Vec::new(),
             }
@@ -731,8 +731,8 @@ async fn remote_addresses_are_bounded_per_port_and_per_host() {
         let to = server.addr(100);
         let hang = |h: &Host| Call {
             id: 1,
-            method: "strims.debug.v1.Debug.WatchMetrics".into(),
-            argument: WatchMetricsRequest {
+            method: "strims.rpc.fixture.Fixture.Watch".into(),
+            argument: WatchRequest {
                 interval_ms: -1,
                 ..Default::default()
             }

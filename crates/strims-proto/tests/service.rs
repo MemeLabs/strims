@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The generated RPC interfaces of `strims.debug.v1.Debug`, driven by a
+//! The generated RPC interfaces of `strims.rpc.fixture.Fixture`, driven by a
 //! registry that records handlers and a caller that records calls.
 
 // Tests panic on failure by design.
@@ -21,9 +21,9 @@ use std::task::{self, Poll, Waker};
 
 use futures_core::Stream;
 use prost::Message;
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, GetConfigRequest, PProfRequest, PProfResponse, ReadMetricsRequest,
-    WatchMetricsRequest, WatchMetricsResponse, debug_methods, register_debug_service,
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, ReadRequest,
+    WatchRequest, WatchResponse, fixture_methods, register_fixture_service,
 };
 use strims_proto::service::{
     CallError, Caller, Context, Error, Registry, ServerStream, StreamingMethod, UnaryMethod,
@@ -110,25 +110,25 @@ impl Registry for Recorder {
 /// Implements two methods and leaves the rest to the defaults.
 struct Partial;
 
-impl DebugService for Partial {
-    async fn p_prof(&self, ctx: &Context, req: PProfRequest) -> Result<PProfResponse, Error> {
-        Ok(PProfResponse {
+impl FixtureService for Partial {
+    async fn echo(&self, ctx: &Context, req: EchoRequest) -> Result<EchoResponse, Error> {
+        Ok(EchoResponse {
             name: format!("{}#{}", req.name, ctx.id()),
             data: ctx.header("x").unwrap_or_default().to_vec(),
         })
     }
 
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _ctx: &Context,
-        req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
+        req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
         if req.interval_ms < 0 {
             return Err(Error::new(3, "negative interval"));
         }
         let mut items: VecDeque<_> = (0..req.interval_ms)
             .map(|i| {
-                Ok(WatchMetricsResponse {
+                Ok(WatchResponse {
                     data: vec![u8::try_from(i).unwrap()],
                 })
             })
@@ -160,44 +160,43 @@ fn markers_name_their_methods() {
         M::NAME
     }
     assert_eq!(
-        unary::<debug_methods::PProf>(),
-        "strims.debug.v1.Debug.PProf"
+        unary::<fixture_methods::Echo>(),
+        "strims.rpc.fixture.Fixture.Echo"
     );
     assert_eq!(
-        unary::<debug_methods::StopMockStream>(),
-        "strims.debug.v1.Debug.StopMockStream"
+        unary::<fixture_methods::Start>(),
+        "strims.rpc.fixture.Fixture.Start"
     );
     assert_eq!(
-        streaming::<debug_methods::WatchMetrics>(),
-        "strims.debug.v1.Debug.WatchMetrics"
+        streaming::<fixture_methods::Watch>(),
+        "strims.rpc.fixture.Fixture.Watch"
     );
 }
 
 #[test]
 fn register_adds_every_method_by_kind() {
     let mut r = Recorder::default();
-    register_debug_service(&mut r, Rc::new(Partial));
+    register_fixture_service(&mut r, Rc::new(Partial));
     assert_eq!(
         r.unary.keys().copied().collect::<Vec<_>>(),
         [
-            "strims.debug.v1.Debug.GetConfig",
-            "strims.debug.v1.Debug.PProf",
-            "strims.debug.v1.Debug.ReadMetrics",
-            "strims.debug.v1.Debug.SetConfig",
-            "strims.debug.v1.Debug.StartMockStream",
-            "strims.debug.v1.Debug.StopMockStream",
+            "strims.rpc.fixture.Fixture.Echo",
+            "strims.rpc.fixture.Fixture.Get",
+            "strims.rpc.fixture.Fixture.Read",
+            "strims.rpc.fixture.Fixture.Set",
+            "strims.rpc.fixture.Fixture.Start",
         ]
     );
     assert_eq!(
         r.streaming.keys().copied().collect::<Vec<_>>(),
-        ["strims.debug.v1.Debug.WatchMetrics"]
+        ["strims.rpc.fixture.Fixture.Watch"]
     );
 }
 
 #[test]
 fn handlers_reach_the_service_with_their_context() {
     let mut r = Recorder::default();
-    register_debug_service(&mut r, Rc::new(Partial));
+    register_fixture_service(&mut r, Rc::new(Partial));
     let ctx = Context::new(7, BTreeMap::from([("x".to_owned(), vec![1, 2])]));
     assert_eq!(ctx.certificate(), None);
     let cert = Certificate {
@@ -210,16 +209,16 @@ fn handlers_reach_the_service_with_their_context() {
     };
     let ctx = ctx.with_certificate(Some(Rc::new(cert.clone())));
     assert_eq!(ctx.certificate(), Some(&cert));
-    let req = PProfRequest {
+    let req = EchoRequest {
         name: "heap".into(),
         ..Default::default()
     };
-    let res = ready(r.unary["strims.debug.v1.Debug.PProf"](
+    let res = ready(r.unary["strims.rpc.fixture.Fixture.Echo"](
         ctx,
         req.encode_to_vec(),
     ))
     .unwrap();
-    let res = PProfResponse::decode(res.as_slice()).unwrap();
+    let res = EchoResponse::decode(res.as_slice()).unwrap();
     assert_eq!(res.name, "heap#7");
     assert_eq!(res.data, [1, 2]);
 }
@@ -227,10 +226,10 @@ fn handlers_reach_the_service_with_their_context() {
 #[test]
 fn unimplemented_methods_answer_not_implemented() {
     let mut r = Recorder::default();
-    register_debug_service(&mut r, Rc::new(Partial));
-    let err = ready(r.unary["strims.debug.v1.Debug.GetConfig"](
+    register_fixture_service(&mut r, Rc::new(Partial));
+    let err = ready(r.unary["strims.rpc.fixture.Fixture.Get"](
         Context::default(),
-        GetConfigRequest::default().encode_to_vec(),
+        GetRequest::default().encode_to_vec(),
     ))
     .unwrap_err();
     assert_eq!(err, Error::unimplemented());
@@ -240,10 +239,10 @@ fn unimplemented_methods_answer_not_implemented() {
 #[test]
 fn streaming_handlers_yield_items_then_errors() {
     let mut r = Recorder::default();
-    register_debug_service(&mut r, Rc::new(Partial));
-    let watch = &r.streaming["strims.debug.v1.Debug.WatchMetrics"];
+    register_fixture_service(&mut r, Rc::new(Partial));
+    let watch = &r.streaming["strims.rpc.fixture.Fixture.Watch"];
 
-    let req = WatchMetricsRequest {
+    let req = WatchRequest {
         interval_ms: 2,
         ..Default::default()
     };
@@ -251,7 +250,7 @@ fn streaming_handlers_yield_items_then_errors() {
     // the stream's error item surfaces after its two items
     assert_eq!(err, Error::new(9, "done"));
 
-    let req = WatchMetricsRequest {
+    let req = WatchRequest {
         interval_ms: -1,
         ..Default::default()
     };
@@ -261,11 +260,11 @@ fn streaming_handlers_yield_items_then_errors() {
 
 /// Records each call and answers with defaults.
 #[derive(Clone, Default)]
-struct Echo {
+struct DefaultCaller {
     calls: Rc<RefCell<Vec<&'static str>>>,
 }
 
-impl Caller for Echo {
+impl Caller for DefaultCaller {
     type Stream<T: Message + Default + 'static> = Items<Result<T, CallError>>;
 
     fn call_unary<M: UnaryMethod>(
@@ -288,24 +287,21 @@ impl Caller for Echo {
 
 #[test]
 fn clients_call_through_the_method_markers() {
-    let echo = Echo::default();
-    let client = DebugClient::new(echo.clone());
-    ready(client.p_prof(&PProfRequest::default())).unwrap();
-    ready(client.read_metrics(&ReadMetricsRequest::default())).unwrap();
-    let stream = ready(client.watch_metrics(&WatchMetricsRequest::default())).unwrap();
+    let caller = DefaultCaller::default();
+    let client = FixtureClient::new(caller.clone());
+    ready(client.echo(&EchoRequest::default())).unwrap();
+    ready(client.read(&ReadRequest::default())).unwrap();
+    let stream = ready(client.watch(&WatchRequest::default())).unwrap();
     assert_eq!(
         collect(stream),
-        [
-            Ok(WatchMetricsResponse::default()),
-            Err(CallError::Disconnected)
-        ]
+        [Ok(WatchResponse::default()), Err(CallError::Disconnected)]
     );
     assert_eq!(
-        *echo.calls.borrow(),
+        *caller.calls.borrow(),
         [
-            "strims.debug.v1.Debug.PProf",
-            "strims.debug.v1.Debug.ReadMetrics",
-            "strims.debug.v1.Debug.WatchMetrics",
+            "strims.rpc.fixture.Fixture.Echo",
+            "strims.rpc.fixture.Fixture.Read",
+            "strims.rpc.fixture.Fixture.Watch",
         ]
     );
 }
@@ -324,12 +320,12 @@ fn errors_display_their_message() {
 
 #[test]
 fn client_calls_outlive_their_requests() {
-    let client = DebugClient::new(Echo::default());
-    let call = client.p_prof(&PProfRequest {
+    let client = FixtureClient::new(DefaultCaller::default());
+    let call = client.echo(&EchoRequest {
         name: "temporary".into(),
         ..Default::default()
     });
-    let stream = client.watch_metrics(&WatchMetricsRequest::default());
+    let stream = client.watch(&WatchRequest::default());
     drop(client);
     ready(call).unwrap();
     ready(stream).unwrap();

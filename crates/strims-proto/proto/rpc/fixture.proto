@@ -1,0 +1,60 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+// The service the RPC tests serve, so they depend on no API's schema.
+// strims-proto's golden vectors pin calls that carry these messages: field
+// numbers and types must not change.
+package strims.rpc.fixture;
+
+message EchoRequest {
+  string name = 1;
+  bool flag = 2;
+  bool other_flag = 3;
+}
+
+message EchoResponse {
+  string name = 1;
+  bytes data = 2;
+}
+
+message ReadRequest {
+  int32 kind = 1;
+}
+
+message ReadResponse {
+  bytes data = 1;
+}
+
+message WatchRequest {
+  int32 kind = 1;
+  int32 interval_ms = 2;
+}
+
+message WatchResponse {
+  bytes data = 1;
+}
+
+message GetRequest {}
+
+message GetResponse {}
+
+message SetRequest {}
+
+message SetResponse {}
+
+message StartRequest {}
+
+message StartResponse {
+  uint64 id = 1;
+}
+
+service Fixture {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc Read(ReadRequest) returns (ReadResponse);
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Set(SetRequest) returns (SetResponse);
+  rpc Start(StartRequest) returns (StartResponse);
+}

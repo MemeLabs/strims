@@ -23,10 +23,9 @@ use std::time::Duration;
 use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::StreamExt;
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, GetConfigRequest, GetConfigResponse, PProfRequest, PProfResponse,
-    ReadMetricsRequest, ReadMetricsResponse, WatchMetricsRequest, WatchMetricsResponse,
-    register_debug_service,
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, GetResponse, ReadRequest,
+    ReadResponse, WatchRequest, WatchResponse, register_fixture_service,
 };
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_rpc::{Client, Config, Router, connect, peer_connection};
@@ -189,7 +188,7 @@ struct TestService {
     pulled: Rc<Cell<usize>>,
     /// Set when the last stream is dropped.
     stream_dropped: Rc<Cell<bool>>,
-    /// A client this service calls while handling `read_metrics`.
+    /// A client this service calls while handling `read`.
     nested: RefCell<Option<Client>>,
 }
 
@@ -201,7 +200,7 @@ struct Counted {
 }
 
 impl Stream for Counted {
-    type Item = Result<WatchMetricsResponse, Error>;
+    type Item = Result<WatchResponse, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(r) = &mut self.remaining {
@@ -212,7 +211,7 @@ impl Stream for Counted {
         }
         let n = self.pulled.get();
         self.pulled.set(n + 1);
-        Poll::Ready(Some(Ok(WatchMetricsResponse {
+        Poll::Ready(Some(Ok(WatchResponse {
             data: (n as u32).to_be_bytes().to_vec(),
         })))
     }
@@ -224,37 +223,33 @@ impl Drop for Counted {
     }
 }
 
-impl DebugService for TestService {
-    async fn p_prof(&self, ctx: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
-        Ok(PProfResponse {
+impl FixtureService for TestService {
+    async fn echo(&self, ctx: &CallContext, req: EchoRequest) -> Result<EchoResponse, Error> {
+        Ok(EchoResponse {
             name: format!("{}@{}", req.name, ctx.id()),
-            data: vec![7; usize::from(req.debug) * 1000],
+            data: vec![7; usize::from(req.flag) * 1000],
         })
     }
 
-    async fn read_metrics(
-        &self,
-        _ctx: &CallContext,
-        _req: ReadMetricsRequest,
-    ) -> Result<ReadMetricsResponse, Error> {
+    async fn read(&self, _ctx: &CallContext, _req: ReadRequest) -> Result<ReadResponse, Error> {
         let client = self.nested.borrow().clone();
         if let Some(client) = client {
             // start a call on another connection and drop it unfinished
-            let debug = DebugClient::new(client);
-            let stream = debug
-                .watch_metrics(&WatchMetricsRequest::default())
+            let fixture = FixtureClient::new(client);
+            let stream = fixture
+                .watch(&WatchRequest::default())
                 .await
                 .map_err(|e| Error::new(1, e.to_string()))?;
             drop(stream);
         }
-        Ok(ReadMetricsResponse { data: vec![1] })
+        Ok(ReadResponse { data: vec![1] })
     }
 
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _ctx: &CallContext,
-        req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
+        req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
         if req.interval_ms < 0 {
             return Err(Error::new(3, "negative interval"));
         }
@@ -267,18 +262,14 @@ impl DebugService for TestService {
         }))
     }
 
-    async fn get_config(
-        &self,
-        _ctx: &CallContext,
-        _req: GetConfigRequest,
-    ) -> Result<GetConfigResponse, Error> {
+    async fn get(&self, _ctx: &CallContext, _req: GetRequest) -> Result<GetResponse, Error> {
         Err(Error::new(7, "no config"))
     }
 }
 
 fn router_for(service: Rc<TestService>) -> Router {
     let mut router = Router::new();
-    register_debug_service(&mut router, service);
+    register_fixture_service(&mut router, service);
     router
 }
 
@@ -288,13 +279,13 @@ fn router_for(service: Rc<TestService>) -> Router {
 async fn unary_calls_and_errors_reach_the_caller() {
     local(async {
         let (client, ..) = serve(router_for(Rc::default()), Config::default());
-        let debug = DebugClient::new(client);
+        let fixture = FixtureClient::new(client);
 
-        let res = debug
-            .p_prof(&PProfRequest {
+        let res = fixture
+            .echo(&EchoRequest {
                 name: "heap".into(),
-                debug: true,
-                gc: false,
+                flag: true,
+                other_flag: false,
             })
             .await
             .unwrap();
@@ -302,12 +293,12 @@ async fn unary_calls_and_errors_reach_the_caller() {
         assert_eq!(res.data.len(), 1000);
 
         assert_eq!(
-            debug.get_config(&GetConfigRequest::default()).await,
+            fixture.get(&GetRequest::default()).await,
             Err(CallError::Remote(Error::new(7, "no config")))
         );
         // a method the service leaves to the default
         assert_eq!(
-            debug.set_config(&Default::default()).await,
+            fixture.set(&Default::default()).await,
             Err(CallError::Remote(Error::unimplemented()))
         );
     })
@@ -318,9 +309,9 @@ async fn unary_calls_and_errors_reach_the_caller() {
 async fn streams_deliver_every_item_then_end() {
     local(async {
         let (client, ..) = serve(router_for(Rc::default()), Config::default());
-        let debug = DebugClient::new(client);
-        let items: Vec<_> = debug
-            .watch_metrics(&WatchMetricsRequest {
+        let fixture = FixtureClient::new(client);
+        let items: Vec<_> = fixture
+            .watch(&WatchRequest {
                 interval_ms: 50,
                 ..Default::default()
             })
@@ -333,8 +324,8 @@ async fn streams_deliver_every_item_then_end() {
             assert_eq!(item.unwrap().data, (i as u32).to_be_bytes());
         }
 
-        let mut failed = debug
-            .watch_metrics(&WatchMetricsRequest {
+        let mut failed = fixture
+            .watch(&WatchRequest {
                 interval_ms: -1,
                 ..Default::default()
             })
@@ -354,12 +345,9 @@ async fn dropping_a_stream_drops_its_handler() {
     local(async {
         let service = Rc::new(TestService::default());
         let (client, ..) = serve(router_for(service.clone()), Config::default());
-        let debug = DebugClient::new(client);
+        let fixture = FixtureClient::new(client);
         // endless
-        let mut stream = debug
-            .watch_metrics(&WatchMetricsRequest::default())
-            .await
-            .unwrap();
+        let mut stream = fixture.watch(&WatchRequest::default()).await.unwrap();
         stream.next().await.unwrap().unwrap();
         stream.next().await.unwrap().unwrap();
         drop(stream);
@@ -373,15 +361,15 @@ async fn unregistered_methods_are_not_found_until_registered() {
     local(async {
         let mut router = Router::new();
         let (client, ..) = serve(router.clone(), Config::default());
-        let debug = DebugClient::new(client);
+        let fixture = FixtureClient::new(client);
         assert_eq!(
-            debug.p_prof(&PProfRequest::default()).await,
+            fixture.echo(&EchoRequest::default()).await,
             Err(CallError::Remote(Error::method_not_found(
-                "strims.debug.v1.Debug.PProf"
+                "strims.rpc.fixture.Fixture.Echo"
             )))
         );
-        register_debug_service(&mut router, Rc::new(TestService::default()));
-        assert!(debug.p_prof(&PProfRequest::default()).await.is_ok());
+        register_fixture_service(&mut router, Rc::new(TestService::default()));
+        assert!(fixture.echo(&EchoRequest::default()).await.is_ok());
     })
     .await;
 }
@@ -393,8 +381,8 @@ async fn the_end_of_input_fails_open_calls() {
         let (client, conn) = connect(Config::default(), a.0, a.1, None);
         let conn = spawn_local(conn);
         // nobody serves the other end
-        let pending = DebugClient::new(client.clone());
-        let call = spawn_local(async move { pending.p_prof(&PProfRequest::default()).await });
+        let pending = FixtureClient::new(client.clone());
+        let call = spawn_local(async move { pending.echo(&EchoRequest::default()).await });
         tokio::time::sleep(Duration::from_millis(10)).await;
         drop(b);
         b_to_a.close();
@@ -402,8 +390,8 @@ async fn the_end_of_input_fails_open_calls() {
         assert_eq!(call.await.unwrap(), Err(CallError::Disconnected));
         // and later calls fail at once
         assert_eq!(
-            DebugClient::new(client)
-                .p_prof(&PProfRequest::default())
+            FixtureClient::new(client)
+                .echo(&EchoRequest::default())
                 .await,
             Err(CallError::Disconnected)
         );
@@ -419,8 +407,8 @@ async fn dropping_the_connection_fails_open_calls() {
         let conn = spawn_local(async move {
             let _ = conn.await;
         });
-        let debug = DebugClient::new(client);
-        let call = spawn_local(async move { debug.p_prof(&PProfRequest::default()).await });
+        let fixture = FixtureClient::new(client);
+        let call = spawn_local(async move { fixture.echo(&EchoRequest::default()).await });
         tokio::time::sleep(Duration::from_millis(10)).await;
         conn.abort();
         assert_eq!(call.await.unwrap(), Err(CallError::Disconnected));
@@ -438,9 +426,9 @@ async fn a_stalled_transport_stops_pulling_server_streams() {
         };
         let (client, _, _, _, b_to_a) = serve(router_for(service.clone()), config);
         b_to_a.stall(true);
-        let debug = DebugClient::new(client);
-        let stream = debug
-            .watch_metrics(&WatchMetricsRequest {
+        let fixture = FixtureClient::new(client);
+        let stream = fixture
+            .watch(&WatchRequest {
                 interval_ms: 5000,
                 ..Default::default()
             })
@@ -484,15 +472,15 @@ async fn peers_call_each_other_over_channel_pairs() {
         );
         spawn_local(a_conn);
         spawn_local(b_conn);
-        let from_a = DebugClient::new(a)
-            .p_prof(&PProfRequest {
+        let from_a = FixtureClient::new(a)
+            .echo(&EchoRequest {
                 name: "a".into(),
                 ..Default::default()
             })
             .await
             .unwrap();
-        let from_b = DebugClient::new(b)
-            .p_prof(&PProfRequest {
+        let from_b = FixtureClient::new(b)
+            .echo(&EchoRequest {
                 name: "b".into(),
                 ..Default::default()
             })
@@ -524,8 +512,8 @@ async fn handlers_can_start_and_drop_calls_on_connections() {
         *service.nested.borrow_mut() = Some(b_client);
         spawn_local(a_conn);
         spawn_local(b_conn);
-        let res = DebugClient::new(a_client)
-            .read_metrics(&ReadMetricsRequest::default())
+        let res = FixtureClient::new(a_client)
+            .read(&ReadRequest::default())
             .await
             .unwrap();
         assert_eq!(res.data, [1]);

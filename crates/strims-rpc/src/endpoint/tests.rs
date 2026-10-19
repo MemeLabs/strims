@@ -13,14 +13,14 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use proptest::prelude::*;
-use strims_proto::debug::v1::{PProfRequest, PProfResponse, WatchMetricsResponse};
+use strims_proto::rpc::fixture::{EchoRequest, EchoResponse, WatchResponse};
 use strims_proto::types::Certificate;
 
 use super::*;
 use crate::wire::{Encoded, put_uvarint};
 
-const PPROF: &str = "strims.debug.v1.Debug.PProf";
-const WATCH: &str = "strims.debug.v1.Debug.WatchMetrics";
+const ECHO: &str = "strims.rpc.fixture.Fixture.Echo";
+const WATCH: &str = "strims.rpc.fixture.Fixture.Watch";
 
 /// Moves everything `from` has to send into `to`, cutting byte streams
 /// every `chunk` bytes.
@@ -98,15 +98,15 @@ fn callback(parent_id: u64, kind: Kind, argument: Vec<u8>) -> Call {
     }
 }
 
-fn pprof(name: &str) -> PProfRequest {
-    PProfRequest {
+fn echo(name: &str) -> EchoRequest {
+    EchoRequest {
         name: name.into(),
         ..Default::default()
     }
 }
 
-fn item(n: u8) -> WatchMetricsResponse {
-    WatchMetricsResponse { data: vec![n; 4] }
+fn item(n: u8) -> WatchResponse {
+    WatchResponse { data: vec![n; 4] }
 }
 
 fn item_response(n: u8) -> Response {
@@ -119,13 +119,13 @@ fn unary_calls_round_trip_across_any_cut() {
         let mut client = Endpoint::new(Config::default());
         let mut server = Endpoint::new(Config::default());
 
-        let call = client.start_call(PPROF, false, &pprof("heap")).unwrap();
+        let call = client.start_call(ECHO, false, &echo("heap")).unwrap();
         pump(&mut client, &mut server, chunk);
         let (req, id, method, arg) = request(&mut server);
-        assert_eq!((id, method.as_str()), (call.get(), PPROF));
-        assert_eq!(PProfRequest::decode(arg.as_slice()).unwrap(), pprof("heap"));
+        assert_eq!((id, method.as_str()), (call.get(), ECHO));
+        assert_eq!(EchoRequest::decode(arg.as_slice()).unwrap(), echo("heap"));
 
-        let res = PProfResponse {
+        let res = EchoResponse {
             name: "heap".into(),
             data: vec![1, 2, 3],
         };
@@ -146,7 +146,7 @@ fn unary_calls_round_trip_across_any_cut() {
 fn streams_deliver_items_then_end() {
     let mut client = Endpoint::new(Config::default());
     let mut server = Endpoint::new(Config::default());
-    let call = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let call = client.start_call(WATCH, true, &echo("")).unwrap();
     pump(&mut client, &mut server, 5);
     let (req, ..) = request(&mut server);
 
@@ -174,8 +174,8 @@ fn streams_deliver_items_then_end() {
 fn stream_errors_arrive_before_or_after_items() {
     let mut client = Endpoint::new(Config::default());
     let mut server = Endpoint::new(Config::default());
-    let before = client.start_call(WATCH, true, &pprof("a")).unwrap();
-    let after = client.start_call(WATCH, true, &pprof("b")).unwrap();
+    let before = client.start_call(WATCH, true, &echo("a")).unwrap();
+    let after = client.start_call(WATCH, true, &echo("b")).unwrap();
     pump(&mut client, &mut server, 64);
     let reqs: Vec<InboundId> = events(&mut server)
         .into_iter()
@@ -209,7 +209,7 @@ fn stream_errors_arrive_before_or_after_items() {
 fn a_cancel_names_the_call_and_silences_the_server() {
     let mut client = Endpoint::new(Config::default());
     let mut server = Endpoint::new(Config::default());
-    let call = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let call = client.start_call(WATCH, true, &echo("")).unwrap();
     pump(&mut client, &mut server, 64);
     let (req, ..) = request(&mut server);
 
@@ -245,7 +245,7 @@ fn cancels_are_recognised_by_method_whatever_their_kind() {
     let mut server = Endpoint::new(Config::default());
     let req = Call {
         id: 3,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     };
     server.handle_input(&delimited(&req)).unwrap();
@@ -266,7 +266,7 @@ fn a_cancelled_request_id_can_be_reused_without_crossing_replies() {
     let mut server = Endpoint::new(Config::default());
     let req = Call {
         id: 3,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     };
     let cancel = Call {
@@ -284,8 +284,8 @@ fn a_cancelled_request_id_can_be_reused_without_crossing_replies() {
         panic!("{evs:?}");
     };
     assert_ne!(old, new);
-    assert!(!server.reply_value(*old, &PProfResponse::default()));
-    assert!(server.reply_value(*new, &PProfResponse::default()));
+    assert!(!server.reply_value(*old, &EchoResponse::default()));
+    assert!(server.reply_value(*new, &EchoResponse::default()));
     assert_eq!(sent(&mut server).len(), 1);
 }
 
@@ -297,7 +297,7 @@ fn a_client_only_endpoint_drops_requests() {
     });
     let req = Call {
         id: 1,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     };
     client.handle_input(&delimited(&req)).unwrap();
@@ -311,7 +311,7 @@ fn duplicate_and_zero_request_ids_are_dropped() {
     let mut server = Endpoint::new(Config::default());
     let req = |id| Call {
         id,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     };
     server.handle_input(&delimited(&req(5))).unwrap();
@@ -333,7 +333,7 @@ fn response_kinds_map_to_call_errors() {
     ];
     for (streaming, kind, want) in cases {
         let mut client = Endpoint::new(Config::default());
-        let call = client.start_call(WATCH, streaming, &pprof("")).unwrap();
+        let call = client.start_call(WATCH, streaming, &echo("")).unwrap();
         let mut res = callback(call.get(), Kind::CallKindDefault, Vec::new());
         res.kind = kind;
         client.handle_input(&delimited(&res)).unwrap();
@@ -342,7 +342,7 @@ fn response_kinds_map_to_call_errors() {
 
     // an error that doesn't decode
     let mut client = Endpoint::new(Config::default());
-    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call(ECHO, false, &echo("")).unwrap();
     client
         .handle_input(&delimited(&callback(
             call.get(),
@@ -364,7 +364,7 @@ fn requests_over_the_inbound_limit_are_answered_with_an_error() {
         ..Config::default()
     });
     let calls: Vec<CallId> = (0..3)
-        .map(|_| client.start_call(PPROF, false, &pprof("")).unwrap())
+        .map(|_| client.start_call(ECHO, false, &echo("")).unwrap())
         .collect();
     pump(&mut client, &mut server, 64);
     assert_eq!(events(&mut server).len(), 2);
@@ -385,20 +385,20 @@ fn calls_over_the_outbound_limit_fail_locally() {
         max_outbound_calls: 1,
         ..Config::default()
     });
-    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call(ECHO, false, &echo("")).unwrap();
     assert_eq!(
-        client.start_call(PPROF, false, &pprof("")),
+        client.start_call(ECHO, false, &echo("")),
         Err(CallError::TooManyCalls)
     );
     client.cancel(call);
-    client.start_call(PPROF, false, &pprof("")).unwrap();
+    client.start_call(ECHO, false, &echo("")).unwrap();
 }
 
 /// A request Call of exactly `len` bytes.
 fn request_of_len(len: usize) -> Call {
     let mut c = Call {
         id: 1,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     };
     let base = c.encoded_len();
@@ -425,7 +425,7 @@ fn a_call_of_the_maximum_length_passes_and_one_byte_more_closes() {
     assert_eq!(events(&mut server).len(), 1);
 
     let mut client = Endpoint::new(config);
-    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call(ECHO, false, &echo("")).unwrap();
     let err = client.handle_input(&delimited(&request_of_len(1001)));
     assert_eq!(
         err,
@@ -458,7 +458,7 @@ fn malformed_calls_are_skipped() {
     let mut data = vec![2, 0xff, 0xff];
     data.extend(delimited(&Call {
         id: 1,
-        method: PPROF.into(),
+        method: ECHO.into(),
         ..Default::default()
     }));
     server.handle_input(&data).unwrap();
@@ -470,8 +470,8 @@ fn malformed_calls_are_skipped() {
 fn every_call_sent_gets_a_fresh_id_from_one() {
     let mut a = Endpoint::new(Config::default());
     let mut b = Endpoint::new(Config::default());
-    let c1 = a.start_call(PPROF, false, &pprof("")).unwrap();
-    let c2 = a.start_call(PPROF, false, &pprof("")).unwrap();
+    let c1 = a.start_call(ECHO, false, &echo("")).unwrap();
+    let c2 = a.start_call(ECHO, false, &echo("")).unwrap();
     assert_eq!((c1.get(), c2.get()), (1, 2));
     pump(&mut a, &mut b, 64);
     let reqs: Vec<InboundId> = events(&mut b)
@@ -482,23 +482,23 @@ fn every_call_sent_gets_a_fresh_id_from_one() {
         })
         .collect();
     // b's own call and its answers share b's counter
-    b.start_call(PPROF, false, &pprof("")).unwrap();
-    b.reply_value(reqs[1], &PProfResponse::default());
-    b.reply_value(reqs[0], &PProfResponse::default());
+    b.start_call(ECHO, false, &echo("")).unwrap();
+    b.reply_value(reqs[1], &EchoResponse::default());
+    b.reply_value(reqs[0], &EchoResponse::default());
     let calls = sent(&mut b);
     let ids: Vec<(u64, u64, &str)> = calls
         .iter()
         .map(|c| (c.id, c.parent_id, c.method.as_str()))
         .collect();
-    assert_eq!(ids, [(1, 0, PPROF), (2, 2, CALLBACK), (3, 1, CALLBACK)]);
+    assert_eq!(ids, [(1, 0, ECHO), (2, 2, CALLBACK), (3, 1, CALLBACK)]);
 }
 
 #[test]
 fn encoded_requests_go_out_as_their_messages_do() {
     let mut e = Endpoint::new(Config::default());
-    let req = pprof("heap");
-    e.start_call(PPROF, false, &req).unwrap();
-    e.start_call(PPROF, false, &Encoded(&req.encode_to_vec()))
+    let req = echo("heap");
+    e.start_call(ECHO, false, &req).unwrap();
+    e.start_call(ECHO, false, &Encoded(&req.encode_to_vec()))
         .unwrap();
     let calls = sent(&mut e);
     assert_eq!(calls.len(), 2);
@@ -509,15 +509,15 @@ fn encoded_requests_go_out_as_their_messages_do() {
 #[test]
 fn a_request_is_queued_until_it_is_transmitted() {
     let mut e = Endpoint::new(Config::default());
-    let c1 = e.start_call(PPROF, false, &pprof("1")).unwrap();
-    let c2 = e.start_call(PPROF, false, &pprof("2")).unwrap();
+    let c1 = e.start_call(ECHO, false, &echo("1")).unwrap();
+    let c2 = e.start_call(ECHO, false, &echo("2")).unwrap();
     assert!(e.is_request_queued(c1) && e.is_request_queued(c2));
     e.poll_transmit().unwrap();
     assert!(!e.is_request_queued(c1) && e.is_request_queued(c2));
 
     // a cancel queued between requests holds its own place
     e.cancel(c1);
-    let c3 = e.start_call(PPROF, false, &pprof("3")).unwrap();
+    let c3 = e.start_call(ECHO, false, &echo("3")).unwrap();
     let queued: Vec<(bool, bool)> = std::iter::from_fn(|| {
         e.poll_transmit()?;
         Some((e.is_request_queued(c2), e.is_request_queued(c3)))
@@ -525,7 +525,7 @@ fn a_request_is_queued_until_it_is_transmitted() {
     .collect();
     assert_eq!(queued, [(false, true), (false, true), (false, false)]);
 
-    let c4 = e.start_call(PPROF, false, &pprof("4")).unwrap();
+    let c4 = e.start_call(ECHO, false, &echo("4")).unwrap();
     assert!(e.is_request_queued(c4));
     e.close();
     assert!(!e.is_request_queued(c4));
@@ -534,7 +534,7 @@ fn a_request_is_queued_until_it_is_transmitted() {
 #[test]
 fn part_of_a_call_counts_as_receiving() {
     let mut client = Endpoint::new(Config::default());
-    let call = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call(ECHO, false, &echo("")).unwrap();
     client.poll_transmit().unwrap();
     let answer = delimited(&callback(call.get(), Kind::CallKindDefault, vec![7; 300]));
     let (head, tail) = answer.split_at(100);
@@ -569,8 +569,8 @@ fn a_slow_stream_reader_overflows_its_call_only() {
         ..Config::default()
     });
     assert_eq!(client.config().max_queued_response_bytes, 164);
-    let slow = client.start_call(WATCH, true, &pprof("")).unwrap();
-    let other = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let slow = client.start_call(WATCH, true, &echo("")).unwrap();
+    let other = client.start_call(ECHO, false, &echo("")).unwrap();
     sent(&mut client);
     for n in 0..4 {
         let res = callback(slow.get(), Kind::CallKindDefault, item(n).encode_to_vec());
@@ -596,7 +596,7 @@ fn a_slow_stream_reader_overflows_its_call_only() {
     let res = callback(
         other.get(),
         Kind::CallKindDefault,
-        PProfResponse::default().encode_to_vec(),
+        EchoResponse::default().encode_to_vec(),
     );
     client.handle_input(&delimited(&res)).unwrap();
     assert_eq!(responses(&mut client, other), [Response::Item(vec![])]);
@@ -610,8 +610,8 @@ fn a_lone_response_always_fits() {
         max_queued_response_bytes: 0,
         ..Config::default()
     });
-    let stream = client.start_call(WATCH, true, &pprof("")).unwrap();
-    let unary = client.start_call(PPROF, false, &pprof("")).unwrap();
+    let stream = client.start_call(WATCH, true, &echo("")).unwrap();
+    let unary = client.start_call(ECHO, false, &echo("")).unwrap();
     sent(&mut client);
     for _ in 0..2 {
         let res = callback(stream.get(), Kind::CallKindDefault, vec![0; 60]);
@@ -640,8 +640,8 @@ fn oversized_replies_become_errors() {
         max_send_bytes: 100,
         ..Config::default()
     });
-    let unary = client.start_call(PPROF, false, &pprof("")).unwrap();
-    let stream = client.start_call(WATCH, true, &pprof("")).unwrap();
+    let unary = client.start_call(ECHO, false, &echo("")).unwrap();
+    let stream = client.start_call(WATCH, true, &echo("")).unwrap();
     pump(&mut client, &mut server, 64);
     let reqs: Vec<InboundId> = events(&mut server)
         .into_iter()
@@ -650,13 +650,13 @@ fn oversized_replies_become_errors() {
             e => panic!("{e:?}"),
         })
         .collect();
-    let big = PProfResponse {
+    let big = EchoResponse {
         name: String::new(),
         data: vec![0; 200],
     };
     assert!(!server.reply_value(reqs[0], &big));
     assert!(server.reply_item(reqs[1], &item(1)));
-    let big_item = WatchMetricsResponse { data: vec![0; 200] };
+    let big_item = WatchResponse { data: vec![0; 200] };
     assert!(!server.reply_item(reqs[1], &big_item));
     assert!(!server.is_serving(reqs[1]));
     assert_eq!(server.metrics().oversized_replies, 2);
@@ -681,8 +681,8 @@ fn oversized_requests_fail_locally() {
         max_send_bytes: 100,
         ..Config::default()
     });
-    let err = client.start_call(PPROF, false, &pprof(&"x".repeat(200)));
-    assert_eq!(err, Err(CallError::TooLarge { len: 237, max: 100 }));
+    let err = client.start_call(ECHO, false, &echo(&"x".repeat(200)));
+    assert_eq!(err, Err(CallError::TooLarge { len: 241, max: 100 }));
     assert_eq!(client.poll_transmit(), None);
 }
 
@@ -694,16 +694,16 @@ fn message_framing_carries_one_unprefixed_call_per_message() {
     };
     let mut client = Endpoint::new(config.clone());
     let mut server = Endpoint::new(config);
-    let call = client.start_call(PPROF, false, &pprof("a")).unwrap();
+    let call = client.start_call(ECHO, false, &echo("a")).unwrap();
     let frame = client.poll_transmit().unwrap();
     assert_eq!(
         Call::decode(frame.as_slice()).unwrap().method,
-        PPROF,
+        ECHO,
         "no prefix"
     );
     server.handle_input(&frame).unwrap();
     let (req, ..) = request(&mut server);
-    server.reply_value(req, &PProfResponse::default());
+    server.reply_value(req, &EchoResponse::default());
     pump(&mut server, &mut client, 1);
     assert_eq!(responses(&mut client, call), [Response::Item(vec![])]);
 }
@@ -756,10 +756,10 @@ fn requests_are_keyed_by_remote_and_caller_id() {
         body: vec![1; 32],
         ..Default::default()
     });
-    server.handle_call(A, request_call(7, PPROF, &pprof("a")), Some(cert.clone()));
-    server.handle_call(B, request_call(7, PPROF, &pprof("b")), None);
+    server.handle_call(A, request_call(7, ECHO, &echo("a")), Some(cert.clone()));
+    server.handle_call(B, request_call(7, ECHO, &echo("b")), None);
     // a duplicate from the same remote is dropped
-    server.handle_call(A, request_call(7, PPROF, &pprof("a")), None);
+    server.handle_call(A, request_call(7, ECHO, &echo("a")), None);
     assert_eq!(server.metrics().dropped, 1);
 
     let reqs: Vec<_> = events(&mut server)
@@ -794,7 +794,7 @@ fn requests_are_keyed_by_remote_and_caller_id() {
         None,
     );
     assert_eq!(events(&mut server), [Event::Cancelled { call: reqs[1].0 }]);
-    assert!(server.reply_value(reqs[0].0, &PProfResponse::default()));
+    assert!(server.reply_value(reqs[0].0, &EchoResponse::default()));
     let out = sent_to(&mut server);
     assert_eq!(out.len(), 1);
     assert_eq!((out[0].0, out[0].1.parent_id), (A, 7));
@@ -803,10 +803,10 @@ fn requests_are_keyed_by_remote_and_caller_id() {
 #[test]
 fn responses_from_another_remote_are_dropped() {
     let mut client = Endpoint::new(message_config());
-    let call = client.start_call_to(A, PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call_to(A, ECHO, false, &echo("")).unwrap();
     let (to, req) = sent_to(&mut client).remove(0);
     assert_eq!(to, A);
-    let value = PProfResponse::default().encode_to_vec();
+    let value = EchoResponse::default().encode_to_vec();
     client.handle_call(
         B,
         callback(req.id, Kind::CallKindDefault, value.clone()),
@@ -830,9 +830,9 @@ fn one_remote_cannot_hold_every_request_slot() {
         ..message_config()
     });
     for id in 1..=3 {
-        server.handle_call(A, request_call(id, PPROF, &pprof("")), None);
+        server.handle_call(A, request_call(id, ECHO, &echo("")), None);
     }
-    server.handle_call(B, request_call(1, PPROF, &pprof("")), None);
+    server.handle_call(B, request_call(1, ECHO, &echo("")), None);
     assert_eq!(server.metrics().requests, 3);
     assert_eq!(server.metrics().requests_rejected, 1);
     let rejected: Vec<_> = sent_to(&mut server)
@@ -846,16 +846,16 @@ fn one_remote_cannot_hold_every_request_slot() {
 fn a_remote_is_idle_once_its_last_reply_is_sent() {
     let mut server = Endpoint::new(message_config());
     assert!(server.is_remote_idle(A));
-    server.handle_call(A, request_call(1, PPROF, &pprof("")), None);
+    server.handle_call(A, request_call(1, ECHO, &echo("")), None);
     assert!(!server.is_remote_idle(A));
     let (req, ..) = request(&mut server);
-    server.reply_value(req, &PProfResponse::default());
+    server.reply_value(req, &EchoResponse::default());
     assert!(!server.is_remote_idle(A), "the reply is still queued");
     assert_eq!(sent_to(&mut server).len(), 1);
     assert!(server.is_remote_idle(A));
 
     let mut client = Endpoint::new(message_config());
-    let call = client.start_call_to(B, PPROF, false, &pprof("")).unwrap();
+    let call = client.start_call_to(B, ECHO, false, &echo("")).unwrap();
     let (_, req) = sent_to(&mut client).remove(0);
     assert!(!client.is_remote_idle(B), "the call is open");
     client.handle_call(B, callback(req.id, Kind::CallKindDefault, vec![]), None);
@@ -872,7 +872,7 @@ fn headers_go_on_every_call_and_count_towards_the_send_limit() {
     client.set_headers(&headers);
     server.set_headers(&headers);
 
-    let call = client.start_call_to(A, WATCH, true, &pprof("")).unwrap();
+    let call = client.start_call_to(A, WATCH, true, &echo("")).unwrap();
     for (_, c) in sent_to(&mut client) {
         server.handle_call(A, c, None);
     }
@@ -886,14 +886,14 @@ fn headers_go_on_every_call_and_count_towards_the_send_limit() {
         assert_eq!(c.headers, headers);
     }
 
-    let len = client.send_len(0, PPROF, Kind::CallKindDefault, pprof("").encoded_len());
+    let len = client.send_len(0, ECHO, Kind::CallKindDefault, echo("").encoded_len());
     let mut tight = Endpoint::new(Config {
         max_send_bytes: len - 1,
         ..message_config()
     });
     tight.set_headers(&headers);
     assert_eq!(
-        tight.start_call(PPROF, false, &pprof("")),
+        tight.start_call(ECHO, false, &echo("")),
         Err(CallError::TooLarge { len, max: len - 1 })
     );
 }
@@ -919,8 +919,8 @@ fn recorded_calls_are_understood() {
     let mut server = Endpoint::new(config.clone());
     server.handle_input(&golden("rpc_call_request")).unwrap();
     let (req, id, method, arg) = request(&mut server);
-    assert_eq!((id, method.as_str()), (1, PPROF));
-    assert_eq!(PProfRequest::decode(arg.as_slice()).unwrap().name, "heap");
+    assert_eq!((id, method.as_str()), (1, ECHO));
+    assert_eq!(EchoRequest::decode(arg.as_slice()).unwrap().name, "heap");
     server
         .handle_input(&golden("rpc_call_cancel_default_kind"))
         .unwrap();
@@ -938,7 +938,7 @@ fn recorded_calls_are_understood() {
     ];
     for (name, want) in answers {
         let mut client = Endpoint::new(config.clone());
-        let call = client.start_call(PPROF, false, &pprof("heap")).unwrap();
+        let call = client.start_call(ECHO, false, &echo("heap")).unwrap();
         client.handle_input(&golden(name)).unwrap();
         let got = responses(&mut client, call);
         match want {
@@ -946,7 +946,7 @@ fn recorded_calls_are_understood() {
                 let [Response::Item(b)] = got.as_slice() else {
                     panic!("{name}: {got:?}");
                 };
-                assert_eq!(PProfResponse::decode(b.as_slice()).unwrap().data.len(), 40);
+                assert_eq!(EchoResponse::decode(b.as_slice()).unwrap().data.len(), 40);
             }
             Some(e) => assert_eq!(got, [Response::Failed(e)], "{name}"),
         }
@@ -954,12 +954,12 @@ fn recorded_calls_are_understood() {
 
     // our request encodes as recorded
     let mut client = Endpoint::new(config);
-    let req = PProfRequest {
+    let req = EchoRequest {
         name: "heap".into(),
-        debug: true,
-        gc: false,
+        flag: true,
+        other_flag: false,
     };
-    client.start_call(PPROF, false, &req).unwrap();
+    client.start_call(ECHO, false, &req).unwrap();
     assert_eq!(client.poll_transmit().unwrap(), golden("rpc_call_request"));
 }
 
@@ -972,9 +972,9 @@ fn script() -> Vec<u8> {
         .map(|i| {
             client
                 .start_call(
-                    if i % 2 == 0 { PPROF } else { WATCH },
+                    if i % 2 == 0 { ECHO } else { WATCH },
                     i % 2 == 1,
-                    &pprof("s"),
+                    &echo("s"),
                 )
                 .unwrap()
         })
@@ -989,7 +989,7 @@ fn script() -> Vec<u8> {
                 server.reply_item(call, &item(1));
                 server.reply_close(call);
             } else {
-                server.reply_value(call, &PProfResponse::default());
+                server.reply_value(call, &EchoResponse::default());
             }
         }
     }
@@ -1011,8 +1011,8 @@ fn the_same_exchange_sends_the_same_bytes() {
 fn closing_fails_calls_and_cancels_requests() {
     let mut a = Endpoint::new(Config::default());
     let mut b = Endpoint::new(Config::default());
-    let call = a.start_call(WATCH, true, &pprof("")).unwrap();
-    b.start_call(PPROF, false, &pprof("")).unwrap();
+    let call = a.start_call(WATCH, true, &echo("")).unwrap();
+    b.start_call(ECHO, false, &echo("")).unwrap();
     pump(&mut b, &mut a, 64);
     let (req, ..) = request(&mut a);
 
@@ -1027,9 +1027,9 @@ fn closing_fails_calls_and_cancels_requests() {
         responses(&mut a, call),
         [Response::Failed(CallError::Disconnected)]
     );
-    assert!(!a.reply_value(req, &PProfResponse::default()));
+    assert!(!a.reply_value(req, &EchoResponse::default()));
     assert_eq!(
-        a.start_call(PPROF, false, &pprof("")),
+        a.start_call(ECHO, false, &echo("")),
         Err(CallError::Disconnected)
     );
 }
@@ -1041,16 +1041,16 @@ fn congestion_starts_at_the_high_water_mark() {
         ..Config::default()
     });
     client
-        .start_call(PPROF, false, &pprof(&"x".repeat(40)))
+        .start_call(ECHO, false, &echo(&"x".repeat(40)))
         .unwrap();
     assert!(!client.is_congested());
     client
-        .start_call(PPROF, false, &pprof(&"x".repeat(40)))
+        .start_call(ECHO, false, &echo(&"x".repeat(40)))
         .unwrap();
     assert!(client.is_congested());
     client.poll_transmit();
     assert!(!client.is_congested());
-    assert_eq!(client.transmit_buffered(), 76);
+    assert_eq!(client.transmit_buffered(), 80);
 }
 
 /// The per-remote counts, recomputed from the call tables.
@@ -1086,7 +1086,7 @@ proptest! {
         };
         let mut e = Endpoint::new(config);
         let calls: Vec<CallId> = (0..3)
-            .map(|i| e.start_call_to(RemoteId(i), WATCH, i != 0, &pprof("")).unwrap())
+            .map(|i| e.start_call_to(RemoteId(i), WATCH, i != 0, &echo("")).unwrap())
             .collect();
         let mut rest = data.as_slice();
         for cut in cuts.iter().cycle() {
@@ -1114,7 +1114,7 @@ proptest! {
             }
             while let Some(ev) = e.poll_event() {
                 if let Event::Request { call, .. } = ev {
-                    e.reply_value(call, &PProfResponse::default());
+                    e.reply_value(call, &EchoResponse::default());
                 }
             }
             prop_assert_eq!(&e.remotes, &recount(&e));

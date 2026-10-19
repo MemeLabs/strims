@@ -24,9 +24,6 @@ use strims_proto::chat::v1::{
     Emote, EmoteContributor, EmoteEffect, EmoteFileType, EmoteImage, EmoteScale, Modifier,
     StyleSheet, emote_effect, style_sheet,
 };
-use strims_proto::debug::v1::{
-    MetricsFormat, PProfRequest, PProfResponse, ReadMetricsRequest, WatchMetricsRequest,
-};
 use strims_proto::devtools::v1::ppspp::cap_conn_log::peer_log::{Event, event};
 use strims_proto::network::v1::directory::{
     ListingSnippet, ListingSnippetBody, ListingSnippetImage, SignedListingSnippet,
@@ -34,6 +31,7 @@ use strims_proto::network::v1::directory::{
 };
 use strims_proto::rpc;
 use strims_proto::rpc::call::Kind;
+use strims_proto::rpc::fixture::{EchoRequest, EchoResponse, ReadRequest, WatchRequest};
 use strims_proto::types::{
     Cache, CacheMeta, Certificate, CertificateBody, CertificateRequest, CertificateRequestBody,
     Image, ImageType, Key, KeyType, KeyUsage, cache,
@@ -620,12 +618,12 @@ fn rpc_messages(v: &mut Vectors) {
         &rpc_call(
             1,
             0,
-            "strims.debug.v1.Debug.PProf",
+            "strims.rpc.fixture.Fixture.Echo",
             Kind::CallKindDefault,
-            &PProfRequest {
+            &EchoRequest {
                 name: "heap".to_owned(),
-                debug: true,
-                gc: false,
+                flag: true,
+                other_flag: false,
             },
         ),
     );
@@ -636,7 +634,7 @@ fn rpc_messages(v: &mut Vectors) {
             1,
             "CALLBACK",
             Kind::CallKindDefault,
-            &PProfResponse {
+            &EchoResponse {
                 name: "heap".to_owned(),
                 data: seq(0x00, 40),
             },
@@ -681,11 +679,9 @@ fn rpc_messages(v: &mut Vectors) {
     let mut header = rpc_call(
         9,
         0,
-        "strims.debug.v1.Debug.ReadMetrics",
+        "strims.rpc.fixture.Fixture.Read",
         Kind::CallKindDefault,
-        &ReadMetricsRequest {
-            format: MetricsFormat::ProtoDelim as i32,
-        },
+        &ReadRequest { kind: 1 },
     );
     header
         .headers
@@ -696,10 +692,10 @@ fn rpc_messages(v: &mut Vectors) {
         &rpc_call(
             u64::MAX,
             u64::MAX - 1,
-            "strims.debug.v1.Debug.WatchMetrics",
+            "strims.rpc.fixture.Fixture.Watch",
             Kind::CallKindDefault,
-            &WatchMetricsRequest {
-                format: MetricsFormat::Text as i32,
+            &WatchRequest {
+                kind: 0,
                 interval_ms: -1,
             },
         ),
@@ -707,7 +703,7 @@ fn rpc_messages(v: &mut Vectors) {
     v.pin("rpc_call_empty", &rpc::Call::default());
     v.pin(
         "rpc_error",
-        &error("method not found: strims.debug.v1.Debug.Nope", 7),
+        &error("method not found: strims.rpc.fixture.Fixture.Nope", 7),
     );
 }
 

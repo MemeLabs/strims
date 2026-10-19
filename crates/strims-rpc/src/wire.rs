@@ -225,7 +225,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
-    use strims_proto::debug::v1::PProfRequest;
+    use strims_proto::rpc::fixture::EchoRequest;
     use strims_proto::rpc::{Close, Error};
 
     /// `encode_call` against prost's encoding of the same Call, in both
@@ -268,15 +268,15 @@ mod tests {
 
     #[test]
     fn calls_encode_as_prost_does() {
-        let req = PProfRequest {
+        let req = EchoRequest {
             name: "heap".into(),
-            debug: true,
-            gc: false,
+            flag: true,
+            other_flag: false,
         };
         check(
             1,
             0,
-            "strims.debug.v1.Debug.PProf",
+            "strims.rpc.fixture.Fixture.Echo",
             Kind::CallKindDefault,
             &req,
         );
@@ -288,7 +288,7 @@ mod tests {
         check(5, 1, CALLBACK, Kind::CallKindClose, &Close {});
         check(7, 1, CANCEL, Kind::CallKindCancel, &Close {});
         check(0, 0, "", Kind::CallKindDefault, &Close {});
-        let big = PProfRequest {
+        let big = EchoRequest {
             name: "x".repeat(300),
             ..Default::default()
         };
@@ -297,10 +297,10 @@ mod tests {
 
     #[test]
     fn encoded_arguments_are_written_as_they_are() {
-        let req = PProfRequest {
+        let req = EchoRequest {
             name: "heap".into(),
-            debug: true,
-            gc: true,
+            flag: true,
+            other_flag: true,
         };
         let bytes = req.encode_to_vec();
         for framing in [Framing::Message, Framing::Delimited] {
@@ -329,12 +329,17 @@ mod tests {
             (String::new(), vec![1]),
         ]);
         let encoded = encode_headers(&headers);
-        let req = PProfRequest {
+        let req = EchoRequest {
             name: "heap".into(),
             ..Default::default()
         };
         for (id, parent_id, method, kind) in [
-            (1, 0, "strims.debug.v1.Debug.PProf", Kind::CallKindDefault),
+            (
+                1,
+                0,
+                "strims.rpc.fixture.Fixture.Echo",
+                Kind::CallKindDefault,
+            ),
             (9, 1, CALLBACK, Kind::CallKindClose),
             (10, 1, CANCEL, Kind::CallKindCancel),
         ] {

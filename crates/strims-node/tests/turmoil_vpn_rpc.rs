@@ -4,7 +4,7 @@
 //! RPC over vpn between nodes under turmoil, with `strims_rpc::vpn` on
 //! ports from `Node::open_vpn_port`.
 //!
-//! - n0 serves a test Debug service on an ephemeral port and publishes the
+//! - n0 serves a test fixture service on an ephemeral port and publishes the
 //!   address in the hash table under the network key.
 //! - n1 dials n0; n2 dials n1, so n2's calls to n0 are relayed.
 //! - n1 and n2 resolve the address and call: a unary call whose answer
@@ -40,9 +40,9 @@ use strims_node::{
     Clock, HashTableGetOptions, HostAddr, HostId, NetworkId, NetworkOptions, Node, NodeConfig,
     SimClock, TurmoilNet,
 };
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, PProfRequest, PProfResponse, StartMockStreamRequest,
-    StartMockStreamResponse, WatchMetricsRequest, WatchMetricsResponse, register_debug_service,
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, StartRequest, StartResponse,
+    WatchRequest, WatchResponse, register_fixture_service,
 };
 use strims_proto::service::{Context as CallContext, Error, ServerStream};
 use strims_proto::types::{Certificate, Key, KeyUsage};
@@ -52,7 +52,7 @@ use tokio::task::spawn_local;
 
 const TCP_PORT: u16 = 7000;
 const VPN_PORT: u16 = 10_000;
-const SALT: &[u8] = b"debug";
+const SALT: &[u8] = b"fixture";
 const STEP: StdDuration = StdDuration::from_secs(30);
 
 fn epoch() -> Time {
@@ -113,10 +113,9 @@ impl World {
     }
 }
 
-/// PProf answers with the caller's host and profile keys, as its
-/// certificate names them; WatchMetrics streams IntervalMs items, or
-/// endlessly for 0; StartMockStream answers with the streams cancelled so
-/// far.
+/// Echo answers with the caller's host and profile keys, as its
+/// certificate names them; Watch streams IntervalMs items, or endlessly
+/// for 0; Start answers with the streams cancelled so far.
 #[derive(Default)]
 struct TestService {
     cancelled: Rc<Cell<u64>>,
@@ -130,23 +129,23 @@ impl Drop for CancelGuard {
     }
 }
 
-impl DebugService for TestService {
-    async fn p_prof(&self, ctx: &CallContext, _: PProfRequest) -> Result<PProfResponse, Error> {
+impl FixtureService for TestService {
+    async fn echo(&self, ctx: &CallContext, _: EchoRequest) -> Result<EchoResponse, Error> {
         let cert = ctx.certificate().ok_or(Error::new(1, "no certificate"))?;
         let cert = CertificateChain::decode(cert).map_err(|_| Error::new(3, "malformed"))?;
         let profile = cert.parent().ok_or(Error::new(2, "no membership"))?;
-        Ok(PProfResponse {
+        Ok(EchoResponse {
             name: hex::encode(&cert.key),
             data: profile.key.clone(),
         })
     }
 
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _: &CallContext,
-        req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
-        let item = |i: i32| WatchMetricsResponse {
+        req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
+        let item = |i: i32| WatchResponse {
             data: vec![i as u8],
         };
         if req.interval_ms > 0 {
@@ -163,12 +162,8 @@ impl DebugService for TestService {
         )))
     }
 
-    async fn start_mock_stream(
-        &self,
-        _: &CallContext,
-        _: StartMockStreamRequest,
-    ) -> Result<StartMockStreamResponse, Error> {
-        Ok(StartMockStreamResponse {
+    async fn start(&self, _: &CallContext, _: StartRequest) -> Result<StartResponse, Error> {
+        Ok(StartResponse {
             id: self.cancelled.get(),
         })
     }
@@ -265,7 +260,7 @@ async fn server_host(w: World) -> turmoil::Result {
     let h = Host::start(&w, 0).await;
     let service = Rc::new(TestService::default());
     let mut router = Router::new();
-    register_debug_service(&mut router, service);
+    register_fixture_service(&mut router, service);
     let (_, port) = h.connect(Some(router)).await;
     h.node
         .publish_vpn_address(h.net, w.network_key(), SALT.to_vec(), port)
@@ -281,31 +276,26 @@ async fn call_service(h: &Host, w: &World, i: u8, server: HostId) {
     let addr = h.resolve(w).await;
     assert_eq!(addr.host, server);
     let (vpn_client, _) = h.connect(None).await;
-    let debug = DebugClient::new(vpn_client.to(addr));
+    let fixture = FixtureClient::new(vpn_client.to(addr));
 
-    let res = debug.p_prof(&PProfRequest::default()).await.unwrap();
+    let res = fixture.echo(&EchoRequest::default()).await.unwrap();
     assert_eq!(res.name, hex::encode(h.node.host_id().to_bytes()));
     assert_eq!(res.data, w.profile_key(i).public);
     h.log("the server saw our certificate".to_owned());
 
-    let items: Vec<_> = debug
-        .watch_metrics(&watch(10))
-        .await
-        .unwrap()
-        .collect()
-        .await;
+    let items: Vec<_> = fixture.watch(&watch(10)).await.unwrap().collect().await;
     assert_eq!(items.len(), 10);
     assert!(items.iter().all(Result::is_ok));
     h.log("watch ok".to_owned());
 
-    let before = cancelled(&debug).await;
-    let mut endless = debug.watch_metrics(&watch(0)).await.unwrap();
+    let before = cancelled(&fixture).await;
+    let mut endless = fixture.watch(&watch(0)).await.unwrap();
     for _ in 0..3 {
         endless.next().await.unwrap().unwrap();
     }
     drop(endless);
     tokio::time::timeout(STEP, async {
-        while cancelled(&debug).await == before {
+        while cancelled(&fixture).await == before {
             tokio::time::sleep(StdDuration::from_millis(10)).await;
         }
     })
@@ -314,16 +304,12 @@ async fn call_service(h: &Host, w: &World, i: u8, server: HostId) {
     h.log("cancel reached the server".to_owned());
 }
 
-async fn cancelled(debug: &DebugClient<Client>) -> u64 {
-    debug
-        .start_mock_stream(&StartMockStreamRequest::default())
-        .await
-        .unwrap()
-        .id
+async fn cancelled(fixture: &FixtureClient<Client>) -> u64 {
+    fixture.start(&StartRequest::default()).await.unwrap().id
 }
 
-fn watch(interval_ms: i32) -> WatchMetricsRequest {
-    WatchMetricsRequest {
+fn watch(interval_ms: i32) -> WatchRequest {
+    WatchRequest {
         interval_ms,
         ..Default::default()
     }

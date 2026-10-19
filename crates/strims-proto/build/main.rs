@@ -4,7 +4,8 @@
 //! Build script for `strims-proto`.
 //!
 //! 1. Parses `schema/**/*.proto` and the crate's own `proto/**/*.proto` (the
-//!    `strims.rpc` envelope) with protox (pure Rust; no `protoc`).
+//!    `strims.rpc` envelope and the RPC tests' `strims.rpc.fixture`) with
+//!    protox (pure Rust; no `protoc`).
 //! 2. Generates prost message types, one file per proto package.
 //! 3. Generates the module tree: package `strims.vnic.v1` becomes
 //!    `strims_proto::vnic::v1`.

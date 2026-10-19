@@ -4,7 +4,7 @@
 //! Peer RPC between nodes under turmoil, over the vnic channel pair every
 //! peer gets, with `strims-rpc` running on it.
 //!
-//! - n0 serves a test Debug service on every peer's pair, and calls n1
+//! - n0 serves a test fixture service on every peer's pair, and calls n1
 //!   back over its pair.
 //! - n1 dials n0 over TCP and calls both ways: a response and a request
 //!   that each span several frames, a stream, a cancel seen by the server,
@@ -40,10 +40,9 @@ use strims_base::time::Time;
 use strims_crypto::key_from_seed;
 use strims_node::app::NodeTimer;
 use strims_node::{Clock, HostId, Node, NodeConfig, NodeEvent, NodeEvents, SimClock, TurmoilNet};
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, GetConfigRequest, GetConfigResponse, PProfRequest, PProfResponse,
-    StartMockStreamRequest, StartMockStreamResponse, WatchMetricsRequest, WatchMetricsResponse,
-    register_debug_service,
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, GetResponse,
+    StartRequest, StartResponse, WatchRequest, WatchResponse, register_fixture_service,
 };
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_proto::types::Key;
@@ -69,8 +68,8 @@ struct World {
     upload_cap: u64,
     trace: Trace,
     ids: Rc<RefCell<BTreeMap<u8, HostId>>>,
-    /// PProf requests served, by every host.
-    pprofs: Rc<Cell<u64>>,
+    /// Echo requests served, by every host.
+    echoes: Rc<Cell<u64>>,
 }
 
 impl World {
@@ -80,7 +79,7 @@ impl World {
             upload_cap,
             trace: Rc::default(),
             ids: Rc::default(),
-            pprofs: Rc::default(),
+            echoes: Rc::default(),
         }
     }
 }
@@ -110,15 +109,14 @@ impl World {
     }
 }
 
-/// The test service. PProf answers with the length of a long name, and
-/// with as many bytes of data as a numeric name spells; WatchMetrics
-/// streams IntervalMs items (endlessly for 0, one per millisecond);
-/// GetConfig fails with code 7; StartMockStream answers with the number
-/// of calls cancelled so far.
+/// The test service. Echo answers with the length of a long name, and
+/// with as many bytes of data as a numeric name spells; Watch streams
+/// IntervalMs items (endlessly for 0, one per millisecond); Get fails with
+/// code 7; Start answers with the number of calls cancelled so far.
 #[derive(Default)]
 struct TestService {
     cancelled: Rc<Cell<u64>>,
-    pprofs: Rc<Cell<u64>>,
+    echoes: Rc<Cell<u64>>,
 }
 
 struct CancelGuard(Rc<Cell<u64>>);
@@ -133,26 +131,26 @@ fn data(n: usize) -> Vec<u8> {
     (0..n).map(|i| (i * 7) as u8).collect()
 }
 
-impl DebugService for TestService {
-    async fn p_prof(&self, _: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
-        self.pprofs.set(self.pprofs.get() + 1);
+impl FixtureService for TestService {
+    async fn echo(&self, _: &CallContext, req: EchoRequest) -> Result<EchoResponse, Error> {
+        self.echoes.set(self.echoes.get() + 1);
         let name = if req.name.len() > 64 {
             req.name.len().to_string()
         } else {
             req.name.clone()
         };
-        Ok(PProfResponse {
+        Ok(EchoResponse {
             name,
             data: data(req.name.parse().unwrap_or(0)),
         })
     }
 
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _: &CallContext,
-        req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
-        let item = |i: i32| WatchMetricsResponse {
+        req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
+        let item = |i: i32| WatchResponse {
             data: vec![i as u8],
         };
         if req.interval_ms > 0 {
@@ -169,20 +167,12 @@ impl DebugService for TestService {
         )))
     }
 
-    async fn get_config(
-        &self,
-        _: &CallContext,
-        _: GetConfigRequest,
-    ) -> Result<GetConfigResponse, Error> {
+    async fn get(&self, _: &CallContext, _: GetRequest) -> Result<GetResponse, Error> {
         Err(Error::new(7, "no config"))
     }
 
-    async fn start_mock_stream(
-        &self,
-        _: &CallContext,
-        _: StartMockStreamRequest,
-    ) -> Result<StartMockStreamResponse, Error> {
-        Ok(StartMockStreamResponse {
+    async fn start(&self, _: &CallContext, _: StartRequest) -> Result<StartResponse, Error> {
+        Ok(StartResponse {
             id: self.cancelled.get(),
         })
     }
@@ -220,7 +210,7 @@ impl Host {
             clients: Rc::default(),
         };
         let service = Rc::new(TestService {
-            pprofs: w.pprofs.clone(),
+            echoes: w.echoes.clone(),
             ..TestService::default()
         });
         spawn_local(h.handle_events(events, serve, service));
@@ -258,7 +248,7 @@ impl Host {
                             strims_node::NodeError::RpcTaken
                         );
                         let mut router = Router::new();
-                        register_debug_service(&mut router, service.clone());
+                        register_fixture_service(&mut router, service.clone());
                         let (client, conn) = peer_connection(
                             Config::peer(),
                             (rpc.client.reader, rpc.client.writer),
@@ -282,8 +272,8 @@ impl Host {
         }
     }
 
-    async fn client(&self, peer: HostId) -> DebugClient<Client> {
-        DebugClient::new(self.rpc_client(peer).await)
+    async fn client(&self, peer: HostId) -> FixtureClient<Client> {
+        FixtureClient::new(self.rpc_client(peer).await)
     }
 
     async fn rpc_client(&self, peer: HostId) -> Client {
@@ -305,13 +295,10 @@ fn log(trace: &Trace, clock: &SimClock, name: &str, line: String) {
     trace.borrow_mut().push(format!("{t} {name} {line}"));
 }
 
-/// Waits until the service behind `debug` has seen `n` cancels.
-async fn wait_cancelled(debug: &DebugClient<Client>, n: u64) {
+/// Waits until the service behind `fixture` has seen `n` cancels.
+async fn wait_cancelled(fixture: &FixtureClient<Client>, n: u64) {
     for _ in 0..1000 {
-        let res = debug
-            .start_mock_stream(&StartMockStreamRequest::default())
-            .await
-            .unwrap();
+        let res = fixture.start(&StartRequest::default()).await.unwrap();
         if res.id >= n {
             return;
         }
@@ -320,15 +307,15 @@ async fn wait_cancelled(debug: &DebugClient<Client>, n: u64) {
     panic!("the server saw fewer than {n} cancels");
 }
 
-fn pprof(name: impl Into<String>) -> PProfRequest {
-    PProfRequest {
+fn echo(name: impl Into<String>) -> EchoRequest {
+    EchoRequest {
         name: name.into(),
         ..Default::default()
     }
 }
 
-fn watch(interval_ms: i32) -> WatchMetricsRequest {
-    WatchMetricsRequest {
+fn watch(interval_ms: i32) -> WatchRequest {
+    WatchRequest {
         interval_ms,
         ..Default::default()
     }
@@ -338,15 +325,15 @@ async fn server_host(w: World) -> turmoil::Result {
     let h = Host::start(&w, 0, true).await;
     // calls go the other way over the same pairs
     let n1 = w.id(1).await;
-    let res = h.client(n1).await.p_prof(&pprof("1000")).await.unwrap();
+    let res = h.client(n1).await.echo(&echo("1000")).await.unwrap();
     assert_eq!(res.data, data(1000));
     h.log("called n1".to_owned());
 
     // n2 never takes its pair: calls to it fill its input buffer
     let n2 = w.id(2).await;
-    let debug = h.client(n2).await;
+    let fixture = h.client(n2).await;
     for _ in 0..4 {
-        let call = debug.p_prof(&pprof("x".repeat(400 * 1024)));
+        let call = fixture.echo(&echo("x".repeat(400 * 1024)));
         let res = tokio::time::timeout(StdDuration::from_secs(2), call).await;
         h.log(format!("call to n2: {}", res.is_ok()));
     }
@@ -357,41 +344,36 @@ async fn server_host(w: World) -> turmoil::Result {
 async fn script_host(w: World) -> turmoil::Result {
     let h = Host::start(&w, 1, true).await;
     let n0 = h.node.dial(&w.uri("tcp", TCP_PORT, 0)).await.unwrap();
-    let debug = h.client(n0).await;
+    let fixture = h.client(n0).await;
 
     // a response of several frames
-    let res = debug.p_prof(&pprof("204800")).await.unwrap();
+    let res = fixture.echo(&echo("204800")).await.unwrap();
     assert_eq!(res.data, data(204_800));
     // a request of several frames
-    let res = debug.p_prof(&pprof("y".repeat(300 * 1024))).await.unwrap();
+    let res = fixture.echo(&echo("y".repeat(300 * 1024))).await.unwrap();
     assert_eq!(res.name, (300 * 1024).to_string());
-    h.log("pprof ok".to_owned());
+    h.log("echo ok".to_owned());
 
-    let items: Vec<_> = debug
-        .watch_metrics(&watch(20))
-        .await
-        .unwrap()
-        .collect()
-        .await;
+    let items: Vec<_> = fixture.watch(&watch(20)).await.unwrap().collect().await;
     assert_eq!(items.len(), 20);
     assert!(items.iter().all(Result::is_ok));
     h.log("watch ok".to_owned());
 
-    let mut endless = debug.watch_metrics(&watch(0)).await.unwrap();
+    let mut endless = fixture.watch(&watch(0)).await.unwrap();
     for _ in 0..3 {
         endless.next().await.unwrap().unwrap();
     }
     drop(endless);
-    wait_cancelled(&debug, 1).await;
+    wait_cancelled(&fixture, 1).await;
     h.log("cancel reached n0".to_owned());
 
     assert_eq!(
-        debug.get_config(&GetConfigRequest::default()).await,
+        fixture.get(&GetRequest::default()).await,
         Err(CallError::Remote(Error::new(7, "no config")))
     );
 
     // closing the peer ends the stream
-    let mut endless = debug.watch_metrics(&watch(0)).await.unwrap();
+    let mut endless = fixture.watch(&watch(0)).await.unwrap();
     endless.next().await.unwrap().unwrap();
     assert!(h.node.close_peer(n0).await.unwrap());
     let end = tokio::time::timeout(STEP, async {
@@ -471,17 +453,17 @@ async fn retrying_caller(w: World) -> turmoil::Result {
     let h = Host::start(&w, 1, true).await;
     let n0 = h.node.dial(&w.uri("tcp", TCP_PORT, 0)).await.unwrap();
     let policy = RetryPolicy::peer();
-    let debug = DebugClient::new(RetryClient::new(
+    let fixture = FixtureClient::new(RetryClient::new(
         h.rpc_client(n0).await,
         NodeTimer(h.clock),
         policy,
     ));
     let start = h.clock.now();
-    let res = debug.p_prof(&pprof(SLOW_ANSWER.to_string())).await.unwrap();
+    let res = fixture.echo(&echo(SLOW_ANSWER.to_string())).await.unwrap();
     let took = h.clock.now() - start;
     assert_eq!(res.data, data(SLOW_ANSWER));
     assert!(took > policy.attempt_timeout * 3, "answered in {took}");
-    assert_eq!(w.pprofs.get(), 1);
+    assert_eq!(w.echoes.get(), 1);
     h.log(format!("answered in {} ms", took.as_millis()));
     Ok(())
 }

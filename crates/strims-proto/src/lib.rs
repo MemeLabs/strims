@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Generated protobuf types for `schema/**/*.proto`, plus the `strims.rpc`
-//! envelope ([`rpc`]) from the crate's own `proto/`.
+//! envelope ([`rpc`]) and `strims.rpc.fixture` ([`rpc::fixture`]), the
+//! service the RPC tests serve, from the crate's own `proto/`.
 //!
 //! The build script compiles both with protox and prost-build; see
 //! `build/main.rs`.

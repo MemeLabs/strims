@@ -24,9 +24,9 @@ use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::StreamExt;
 use strims_base::time::{Duration, Time};
-use strims_proto::debug::v1::{
-    DebugClient, DebugService, GetConfigRequest, GetConfigResponse, PProfRequest, PProfResponse,
-    WatchMetricsRequest, WatchMetricsResponse, register_debug_service,
+use strims_proto::rpc::fixture::{
+    EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, GetResponse,
+    WatchRequest, WatchResponse, register_fixture_service,
 };
 use strims_proto::service::{CallError, Context as CallContext, Error, ServerStream};
 use strims_rpc::{Client, Config, RetryClient, RetryPolicy, Router, connect};
@@ -160,9 +160,9 @@ struct TestService {
     requests: RefCell<Vec<StdDuration>>,
     /// Handlers dropped before they answered.
     cancelled: Rc<Cell<usize>>,
-    /// The next this many `p_prof` calls never answer.
+    /// The next this many `echo` calls never answer.
     hang: Cell<usize>,
-    /// The bytes of each `p_prof` answer.
+    /// The bytes of each `echo` answer.
     answer_len: Cell<usize>,
     start: Cell<Option<Instant>>,
 }
@@ -189,8 +189,8 @@ impl Drop for Unfinished {
     }
 }
 
-impl DebugService for TestService {
-    async fn p_prof(&self, ctx: &CallContext, req: PProfRequest) -> Result<PProfResponse, Error> {
+impl FixtureService for TestService {
+    async fn echo(&self, ctx: &CallContext, req: EchoRequest) -> Result<EchoResponse, Error> {
         self.seen();
         let mut guard = Unfinished(Some(self.cancelled.clone()));
         if self.hang.get() > 0 {
@@ -198,27 +198,23 @@ impl DebugService for TestService {
             std::future::pending::<()>().await;
         }
         guard.0 = None;
-        Ok(PProfResponse {
+        Ok(EchoResponse {
             name: format!("{}@{}", req.name, ctx.id()),
             data: vec![7; self.answer_len.get()],
         })
     }
 
-    async fn watch_metrics(
+    async fn watch(
         &self,
         _ctx: &CallContext,
-        _req: WatchMetricsRequest,
-    ) -> Result<ServerStream<WatchMetricsResponse>, Error> {
+        _req: WatchRequest,
+    ) -> Result<ServerStream<WatchResponse>, Error> {
         self.seen();
-        let items = (0..3u8).map(|n| Ok(WatchMetricsResponse { data: vec![n] }));
+        let items = (0..3u8).map(|n| Ok(WatchResponse { data: vec![n] }));
         Ok(Box::pin(futures_util::stream::iter(items)))
     }
 
-    async fn get_config(
-        &self,
-        _ctx: &CallContext,
-        _req: GetConfigRequest,
-    ) -> Result<GetConfigResponse, Error> {
+    async fn get(&self, _ctx: &CallContext, _req: GetRequest) -> Result<GetResponse, Error> {
         self.seen();
         Err(Error::new(7, "no config"))
     }
@@ -226,7 +222,7 @@ impl DebugService for TestService {
 
 struct World {
     service: Rc<TestService>,
-    debug: DebugClient<RetryClient<TokioTimer>>,
+    fixture: FixtureClient<RetryClient<TokioTimer>>,
     /// The client's Calls to the server.
     up: Link,
     /// The server's Calls to the client.
@@ -240,7 +236,7 @@ fn world(policy: RetryPolicy) -> World {
     let service = Rc::new(TestService::default());
     service.start.set(Some(Instant::now()));
     let mut router = Router::new();
-    register_debug_service(&mut router, service.clone());
+    register_fixture_service(&mut router, service.clone());
     let reader = |link: &Link| Reader {
         link: link.clone(),
         tick: None,
@@ -264,7 +260,7 @@ fn world(policy: RetryPolicy) -> World {
     });
     World {
         service,
-        debug: DebugClient::new(retrying(client, policy)),
+        fixture: FixtureClient::new(retrying(client, policy)),
         up,
         down,
     }
@@ -289,8 +285,8 @@ async fn until(mut cond: impl FnMut() -> bool) {
     }
 }
 
-fn pprof(name: &str) -> PProfRequest {
-    PProfRequest {
+fn echo(name: &str) -> EchoRequest {
+    EchoRequest {
         name: name.into(),
         ..Default::default()
     }
@@ -308,7 +304,7 @@ async fn a_call_that_times_out_is_retried_after_the_delay() {
         let w = world(RetryPolicy::peer());
         w.service.hang.set(1);
         let start = Instant::now();
-        let res = w.debug.p_prof(&pprof("heap")).await.unwrap();
+        let res = w.fixture.echo(&echo("heap")).await.unwrap();
         // the first attempt's request was id 1, its cancel id 2
         assert_eq!(res.name, "heap@3");
         assert_eq!(start.elapsed(), ms(1100));
@@ -324,7 +320,7 @@ async fn retries_back_off_then_the_call_times_out() {
         let w = world(RetryPolicy::peer());
         w.service.hang.set(usize::MAX);
         let start = Instant::now();
-        let res = w.debug.p_prof(&pprof("heap")).await;
+        let res = w.fixture.echo(&echo("heap")).await;
         assert_eq!(res, Err(CallError::Timeout));
         // 1 s attempts, 100 ms delay doubling
         assert_eq!(start.elapsed(), ms(4700));
@@ -341,7 +337,7 @@ async fn retries_back_off_then_the_call_times_out() {
 async fn remote_errors_are_not_retried() {
     local(async {
         let w = world(RetryPolicy::peer());
-        let res = w.debug.get_config(&GetConfigRequest::default()).await;
+        let res = w.fixture.get(&GetRequest::default()).await;
         assert_eq!(res, Err(CallError::Remote(Error::new(7, "no config"))));
         sleep(StdDuration::from_secs(10)).await;
         assert_eq!(w.service.requests(), 1);
@@ -357,7 +353,7 @@ async fn a_large_answer_still_arriving_is_not_requested_again() {
         w.down.throttle(1000);
         w.service.answer_len.set(500_000);
         let start = Instant::now();
-        let res = w.debug.p_prof(&pprof("heap")).await.unwrap();
+        let res = w.fixture.echo(&echo("heap")).await.unwrap();
         assert_eq!(res.data.len(), 500_000);
         assert!(start.elapsed() >= StdDuration::from_secs(5));
         assert_eq!(w.service.requests(), 1);
@@ -377,7 +373,7 @@ async fn a_request_still_queued_is_not_sent_again() {
             up.stall(false);
         });
         let start = Instant::now();
-        w.debug.p_prof(&pprof("heap")).await.unwrap();
+        w.fixture.echo(&echo("heap")).await.unwrap();
         assert_eq!(start.elapsed(), ms(3000));
         assert_eq!(w.service.requests(), 1);
         assert_eq!(w.up.written(), 1);
@@ -396,7 +392,7 @@ async fn the_deadline_caps_an_answer_that_keeps_arriving() {
         w.down.throttle(100);
         w.service.answer_len.set(100_000);
         let start = Instant::now();
-        let res = w.debug.p_prof(&pprof("heap")).await;
+        let res = w.fixture.echo(&echo("heap")).await;
         assert_eq!(res, Err(CallError::Timeout));
         assert_eq!(start.elapsed(), ms(3000));
         assert_eq!(w.service.requests(), 1);
@@ -412,7 +408,7 @@ async fn dropping_a_retrying_call_cancels_its_attempt() {
         let w = world(RetryPolicy::peer());
         w.service.hang.set(usize::MAX);
         // the second attempt starts at 1.1 s
-        let res = timeout(ms(1500), w.debug.p_prof(&pprof("heap"))).await;
+        let res = timeout(ms(1500), w.fixture.echo(&echo("heap"))).await;
         assert!(res.is_err());
         until(|| w.service.cancelled.get() == 2).await;
         sleep(StdDuration::from_secs(10)).await;
@@ -425,11 +421,7 @@ async fn dropping_a_retrying_call_cancels_its_attempt() {
 async fn streams_have_no_deadline() {
     local(async {
         let w = world(RetryPolicy::peer());
-        let stream = w
-            .debug
-            .watch_metrics(&WatchMetricsRequest::default())
-            .await
-            .unwrap();
+        let stream = w.fixture.watch(&WatchRequest::default()).await.unwrap();
         sleep(StdDuration::from_secs(10)).await;
         let items: Vec<_> = stream.map(|r| r.unwrap().data).collect().await;
         assert_eq!(items, [vec![0], vec![1], vec![2]]);
