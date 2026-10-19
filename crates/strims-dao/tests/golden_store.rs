@@ -2,9 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A recorded profile store (`golden/store.hex`) that pins the store layout:
-//! its sign-in and session records open, its records read back, every key is the one this crate
-//! derives, the compressed delta matches, its stream keys name their
-//! channels, and its swarm cache reads back by swarm id and salt.
+//! its sign-in and session records open, its records read back, every key
+//! is the one this crate derives, the compressed delta matches, its stream
+//! keys name their channels, and its swarm cache reads back by swarm id and
+//! salt.
+//!
+//! [`record`] writes the store through this crate's API, from seeded rngs
+//! at a fixed time, and renders it as the file's lines: `now`, `auth`,
+//! `session`, `video_stream_key` and `swarm_cache` for what the scenario
+//! made, then every `kv` row (table, key, value), every `record` as this
+//! crate reads it back (namespace, id, encoding), and the compressed
+//! `delta` a replica at `delta_remote` lacks. Fields are hex, `=` when
+//! empty. A plain run checks that the recorder reproduces the file byte for
+//! byte; `STRIMS_GOLDEN=update` records it again (see `strims-golden`).
 
 // Tests panic on failure by design.
 #![allow(
@@ -16,47 +26,896 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::sync::OnceLock;
 
+use data_encoding::BASE32_NOPAD;
 use futures_util::FutureExt;
 use prost::Message;
 use strims_base::rng::det_rng;
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
+use strims_crypto::{
+    DEFAULT_CERT_TTL, certificate_network_key, generate_key, new_certificate_request,
+    new_self_signed_certificate, sign_certificate_request_with_network,
+};
 use strims_dao::auth::{self, ProfileKey, SessionToken};
 use strims_dao::key::{Namespace, index_entry_key, parse_base36};
 use strims_dao::replication::compressed_delta;
-use strims_dao::schema::autoseed::{AutoseedConfig, AutoseedRules};
+use strims_dao::schema::autoseed::{AutoseedConfig, AutoseedRules, new_rule};
 use strims_dao::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags, ChatUiConfig,
     ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
     profile_peer_key,
 };
-use strims_dao::schema::directory::{DirectoryListingRecords, DirectoryUserRecords, listing_key};
+use strims_dao::schema::directory::{
+    DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
+};
 use strims_dao::schema::network::{
     AliasReservations, BootstrapClients, BootstrapConfig, CertificateLogs, NetworkPeers,
     NetworkUiConfig, Networks, RESERVED_FOREVER, network_key, network_scoped_key,
+    new_alias_reservation, new_certificate_log, new_network_peer,
 };
-use strims_dao::schema::notification::Notifications;
+use strims_dao::schema::notification::{Notifications, network_subject, new_notification};
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::schema::swarm::{
     SwarmCacheMetas, SwarmCaches, cache_checksum, cache_key, get_cache, set_cache,
 };
 use strims_dao::schema::system::{Checkpoints, EventLogs, StoreVersions};
 use strims_dao::schema::video::{
-    HlsConfig, IngressConfig, VideoChannels, channel_by_stream_key, channel_network_key, owner_key,
+    HlsConfig, IngressConfig, VideoChannels, channel_by_stream_key, channel_network_key,
+    format_stream_key, new_channel, owner_key,
 };
 use strims_dao::schema::vnic::VnicConfig;
 use strims_dao::seal::StorageKey;
-use strims_dao::{ProfileStore, ReadTx, Singleton, Table, lease, ref_key};
+use strims_dao::{
+    ProfileStore, ReadTx, ReplicatedStore, Singleton, Table, WriteTx, lease, ref_key,
+};
 use strims_kv::{Dump, MemoryKv};
+use strims_proto::autoseed::v1 as autoseed;
+use strims_proto::chat::v1::{self as chat, emote_effect};
 use strims_proto::dao::v1::{Mutex, SecondaryIndexKey, VersionVector};
+use strims_proto::network::v1::bootstrap::{
+    self, BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client::ClientOptions,
+};
+use strims_proto::network::v1::directory::listing::{self, Content};
+use strims_proto::network::v1::directory::server_config::Integrations;
+use strims_proto::network::v1::directory::server_config::integrations::Swarm;
+use strims_proto::network::v1::directory::{
+    self as directory, Listing, ListingModeration, ListingSnippet, UserModeration,
+};
+use strims_proto::network::v1::{Network, ServerConfig, UiConfig};
+use strims_proto::notification::v1::notification::Status;
+use strims_proto::profile::v1::Device;
 use strims_proto::replication::v1::{Event, EventLog};
-use strims_proto::types::Cache;
+use strims_proto::types::cache::{Epoch, Integrity, MerkleIntegrity};
+use strims_proto::types::{Cache, Certificate, Image, ImageType, KeyUsage};
+use strims_proto::video::v1::video_channel::{Local, LocalShare, Owner, RemoteShare};
+use strims_proto::video::v1::{HlsEgressConfig, VideoChannel, VideoIngressConfig};
+use strims_proto::vnic::v1 as vnic;
 
-const STORE: &str = include_str!("../golden/store.hex");
+const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/store.hex");
 
 fn block<T>(f: impl Future<Output = T>) -> T {
     f.now_or_never()
         .expect("memory store operations are ready immediately")
+}
+
+/// The time the store is recorded at.
+const NOW: Time = Time::from_unix_millis(1_790_000_000_000);
+
+const PEER_SIGN: i32 = KeyUsage::Peer as i32 | KeyUsage::Sign as i32;
+
+/// How long a released alias stays reserved.
+const ALIAS_RESERVATION_COOLDOWN: Duration = Duration::from_secs(180 * 24 * 60 * 60);
+
+/// `n` bytes counting up from `start`.
+fn seq(start: u8, n: usize) -> Vec<u8> {
+    (0..n).map(|i| start.wrapping_add(i as u8)).collect()
+}
+
+/// A swarm URI naming swarm `id`.
+fn swarm_uri(id: &[u8]) -> String {
+    format!(
+        "magnet:?xt=urn:ppspp:{}&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=64&x.sc=1",
+        BASE32_NOPAD.encode(id)
+    )
+}
+
+/// The lines of a recording.
+#[derive(Default)]
+struct Lines(String);
+
+impl Lines {
+    fn out(&mut self, name: &str, values: &[&[u8]]) {
+        self.0.push_str(name);
+        for v in values {
+            self.0.push(' ');
+            if v.is_empty() {
+                self.0.push('=');
+            } else {
+                self.0.push_str(&hex::encode(v));
+            }
+        }
+        self.0.push('\n');
+    }
+
+    fn record(&mut self, ns: Namespace, id: u64, m: &impl Message) {
+        let ns = u64::try_from(ns.0).unwrap().to_be_bytes();
+        self.out("record", &[&ns, &id.to_be_bytes(), &m.encode_to_vec()]);
+    }
+
+    async fn table<T: Table>(&mut self, tx: &mut ReadTx<MemoryKv>) {
+        for r in T::get_all(tx).await.unwrap() {
+            self.record(T::NS, T::id(&r), &r);
+        }
+    }
+
+    async fn singleton<S: Singleton>(&mut self, tx: &mut ReadTx<MemoryKv>) {
+        self.record(S::NS, 0, &S::get(tx).await.unwrap().unwrap());
+    }
+}
+
+/// Runs `f` in a write transaction of its own: one operation of the
+/// recorded scenario.
+async fn write<T>(
+    rs: &ReplicatedStore<MemoryKv>,
+    f: impl AsyncFnOnce(&mut WriteTx<MemoryKv>) -> Result<T, strims_dao::Error>,
+) -> T {
+    let mut tx = rs.write(NOW).await.unwrap();
+    let v = f(&mut tx).await.unwrap();
+    tx.commit().await.unwrap();
+    v
+}
+
+/// Inserts the record `f` makes with a new id, in a transaction of its own.
+async fn insert<T: Table>(
+    rs: &ReplicatedStore<MemoryKv>,
+    f: impl FnOnce(u64) -> T::Record,
+) -> T::Record {
+    write(rs, async |tx| {
+        let id = tx.generate_id().await?;
+        T::insert(tx, f(id)).await
+    })
+    .await
+}
+
+/// A whisper in the conversation with `peer_key`, from the holder of
+/// `cert`, on the network with key `network_key`.
+fn whisper(
+    id: u64,
+    network_key: &[u8],
+    peer_key: &[u8],
+    cert: &Certificate,
+    body: &str,
+    peer_message_id: u64,
+) -> chat::WhisperRecord {
+    let state = if peer_key == cert.key {
+        chat::MessageState::Unread
+    } else {
+        chat::MessageState::Enqueued
+    };
+    chat::WhisperRecord {
+        id,
+        network_key: network_key.to_vec(),
+        peer_key: peer_key.to_vec(),
+        state: state as i32,
+        message: Some(chat::Message {
+            server_time: NOW.unix_millis(),
+            peer_key: cert.key.clone(),
+            nick: cert.subject.clone(),
+            body: body.to_owned(),
+            ..Default::default()
+        }),
+        peer_message_id,
+        ..Default::default()
+    }
+}
+
+/// Inserts a channel of `owner` listed as `title`.
+async fn insert_channel(rs: &ReplicatedStore<MemoryKv>, owner: Owner, title: &str) -> VideoChannel {
+    let snippet = ListingSnippet {
+        title: title.to_owned(),
+        description: format!("{title} stream"),
+        tags: vec!["video".to_owned()],
+        category: "games".to_owned(),
+        channel_name: title.to_owned(),
+        is_mature: true,
+        ..Default::default()
+    };
+    write(rs, async |tx| {
+        let c = new_channel(tx, owner, snippet).await?;
+        VideoChannels::insert(tx, c).await
+    })
+    .await
+}
+
+/// Records a profile store: writes it through this crate's API, one
+/// operation per transaction, and renders it as `store.hex`'s lines.
+///
+/// The profile `alice` has a persisted session; a network it runs, whose
+/// CA has an invitee, a renewal of the owner's certificate and a released
+/// alias; a network it joined and renamed; bootstrap clients and config;
+/// chat settings, with a highlight renamed and one deleted; a whisper
+/// thread absorbed by a second one, and whispers in it; a device added and
+/// one deleted; the owned network's directory; two chat servers on it, one
+/// deleted; a notification, and one deleted; video channels of each owner
+/// kind, one deleted, and both video configs; the vnic and autoseed configs
+/// with a rule on each network; a swarm cache; and the replication lease.
+async fn record_store() -> String {
+    let mut out = Lines::default();
+    let mut rng = det_rng(1);
+    out.out("now", &[&NOW.unix_nanos().to_be_bytes()]);
+
+    let kv = MemoryKv::new();
+    let (pk, store) = auth::sign_up(&kv, "alice", "hunter2", "linux", &mut rng, NOW)
+        .await
+        .unwrap();
+    out.out(
+        "auth",
+        &[b"alice", b"hunter2", &pk.id.to_be_bytes(), &pk.key],
+    );
+
+    let session_key: [u8; 32] = seq(200, 32).try_into().unwrap();
+    let sk = StorageKey::from_bytes(session_key);
+    let session = auth::create_session(&kv, &sk, &pk, &mut rng, NOW)
+        .await
+        .unwrap();
+    out.out(
+        "session",
+        &[&session_key, &session.eol.to_be_bytes(), &session.token],
+    );
+
+    let rs = ReplicatedStore::new(store).await.unwrap();
+    let profile = Profile::get(&mut rs.read().await.unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    let profile_key = profile.key.clone().unwrap();
+
+    // Networks: one this profile runs, one it joined.
+    let ca_key = generate_key(&mut rng);
+    let csr = new_certificate_request(&profile_key, PEER_SIGN, &profile.name).unwrap();
+    let membership = sign_certificate_request_with_network(
+        &csr,
+        &ca_key,
+        "owned",
+        DEFAULT_CERT_TTL,
+        NOW,
+        &mut rng,
+    )
+    .unwrap();
+    let server_config = ServerConfig {
+        name: "owned".to_owned(),
+        key: Some(ca_key.clone()),
+        directory: Some(directory::ServerConfig {
+            integrations: Some(Integrations {
+                swarm: Some(Swarm { enable: true }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let owned = insert::<Networks>(&rs, |id| Network {
+        id,
+        certificate: Some(membership),
+        server_config: Some(server_config),
+        ..Default::default()
+    })
+    .await;
+    let owner_cert = owned.certificate.clone().unwrap();
+    let owned_key = certificate_network_key(&owner_cert).to_vec();
+
+    let joined_key = generate_key(&mut rng);
+    let joined_cert = new_self_signed_certificate(
+        &joined_key,
+        PEER_SIGN,
+        Duration::HOUR,
+        "joined",
+        NOW,
+        &mut rng,
+    )
+    .unwrap();
+    let joined = insert::<Networks>(&rs, |id| Network {
+        id,
+        certificate: Some(joined_cert.clone()),
+        alias: "joined".to_owned(),
+        ..Default::default()
+    })
+    .await;
+    write(&rs, async |tx| {
+        Networks::transform(tx, joined.id, |n| {
+            n.alias = "renamed".to_owned();
+            Ok(())
+        })
+        .await
+    })
+    .await;
+
+    // The owned network's CA: an invitee, a renewal of the owner's
+    // certificate that takes over its subject and key, an alias given up,
+    // and the UI's network order.
+    let owner_peer = NetworkPeers::index_get(
+        &mut rs.read().await.unwrap(),
+        &NetworkPeers::BY_PUBLIC_KEY,
+        &network_scoped_key(owned.id, &owner_cert.key),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let invitee_key = generate_key(&mut rng);
+    let invitee_csr = new_certificate_request(&invitee_key, PEER_SIGN, "invitee").unwrap();
+    let invitee_cert = sign_certificate_request_with_network(
+        &invitee_csr,
+        &ca_key,
+        "owned",
+        DEFAULT_CERT_TTL,
+        NOW,
+        &mut rng,
+    )
+    .unwrap();
+    insert::<CertificateLogs>(&rs, |id| new_certificate_log(id, owned.id, &invitee_cert)).await;
+    insert::<NetworkPeers>(&rs, |id| {
+        new_network_peer(
+            id,
+            owned.id,
+            &invitee_key.public,
+            "invitee",
+            owner_peer.id,
+            NOW,
+        )
+    })
+    .await;
+    insert::<AliasReservations>(&rs, |id| {
+        new_alias_reservation(id, owned.id, "invitee", &invitee_key.public)
+    })
+    .await;
+    let renewal_csr = new_certificate_request(&profile_key, PEER_SIGN, &profile.name).unwrap();
+    let renewed = sign_certificate_request_with_network(
+        &renewal_csr,
+        &ca_key,
+        "owned",
+        DEFAULT_CERT_TTL,
+        NOW,
+        &mut rng,
+    )
+    .unwrap();
+    insert::<CertificateLogs>(&rs, |id| new_certificate_log(id, owned.id, &renewed)).await;
+    let spare = insert::<AliasReservations>(&rs, |id| {
+        new_alias_reservation(id, owned.id, "spare", &invitee_key.public)
+    })
+    .await;
+    write(&rs, async |tx| {
+        AliasReservations::transform(tx, spare.id, |r| {
+            r.peer_key.clear();
+            r.reserved_until = (NOW + ALIAS_RESERVATION_COOLDOWN).unix();
+            Ok(())
+        })
+        .await
+    })
+    .await;
+    write(&rs, async |tx| {
+        NetworkUiConfig::set(
+            tx,
+            UiConfig {
+                network_display_order: vec![joined.id, owned.id],
+            },
+        )
+        .await
+    })
+    .await;
+
+    // Bootstrap clients.
+    for (url, insecure) in [
+        ("wss://one.example/ws", false),
+        ("wss://two.example/ws", true),
+    ] {
+        insert::<BootstrapClients>(&rs, |id| BootstrapClient {
+            id,
+            client_options: Some(ClientOptions::WebsocketOptions(
+                BootstrapClientWebSocketOptions {
+                    url: url.to_owned(),
+                    insecure_skip_verify_tls: insecure,
+                },
+            )),
+            ..Default::default()
+        })
+        .await;
+    }
+    write(&rs, async |tx| {
+        BootstrapConfig::set(
+            tx,
+            bootstrap::Config {
+                enable_publishing: true,
+            },
+        )
+        .await
+    })
+    .await;
+
+    // Chat settings.
+    write(&rs, async |tx| {
+        ChatUiConfig::set(
+            tx,
+            chat::UiConfig {
+                replicate: true,
+                show_time: true,
+                highlight: true,
+                ..Default::default()
+            },
+        )
+        .await
+    })
+    .await;
+    let highlight = |alias: &str, peer_key: &[u8]| {
+        let (alias, peer_key) = (alias.to_owned(), peer_key.to_vec());
+        move |id| chat::UiConfigHighlight {
+            id,
+            alias,
+            peer_key,
+            ..Default::default()
+        }
+    };
+    let h1 = insert::<ChatUiConfigHighlights>(&rs, highlight("first", b"peer-a")).await;
+    let h2 = insert::<ChatUiConfigHighlights>(&rs, highlight("second", b"peer-b")).await;
+    write(&rs, async |tx| {
+        ChatUiConfigHighlights::transform(tx, h1.id, |h| {
+            h.alias = "first renamed".to_owned();
+            Ok(())
+        })
+        .await
+    })
+    .await;
+    write(&rs, async |tx| {
+        ChatUiConfigHighlights::delete(tx, h2.id).await
+    })
+    .await;
+    insert::<ChatUiConfigTags>(&rs, |id| chat::UiConfigTag {
+        id,
+        alias: "tagged".to_owned(),
+        peer_key: b"peer-c".to_vec(),
+        color: "#ff0000".to_owned(),
+        ..Default::default()
+    })
+    .await;
+    insert::<ChatUiConfigIgnores>(&rs, |id| chat::UiConfigIgnore {
+        id,
+        alias: "ignored".to_owned(),
+        peer_key: b"peer-d".to_vec(),
+        ..Default::default()
+    })
+    .await;
+
+    // Whispers: a second thread with a peer absorbs the first.
+    let peer_key = generate_key(&mut rng);
+    let peer_cert = new_self_signed_certificate(
+        &peer_key,
+        KeyUsage::Peer as i32,
+        Duration::HOUR,
+        "peer",
+        NOW,
+        &mut rng,
+    )
+    .unwrap();
+    let thread = |id| chat::WhisperThread {
+        id,
+        peer_key: peer_cert.key.clone(),
+        alias: peer_cert.subject.clone(),
+        ..Default::default()
+    };
+    insert::<WhisperThreads>(&rs, |id| chat::WhisperThread {
+        last_message_time: 100,
+        has_unread: true,
+        ..thread(id)
+    })
+    .await;
+    insert::<WhisperThreads>(&rs, thread).await;
+    let own_cert = Certificate {
+        key: profile_key.public.clone(),
+        subject: profile.name.clone(),
+        ..Default::default()
+    };
+    let (network, peer) = (&joined_cert.key, &peer_cert.key);
+    insert::<WhisperRecords>(&rs, |id| whisper(id, network, peer, &peer_cert, "hi", 5)).await;
+    insert::<WhisperRecords>(&rs, |id| whisper(id, network, peer, &own_cert, "hello", 0)).await;
+    let again =
+        insert::<WhisperRecords>(&rs, |id| whisper(id, network, peer, &peer_cert, "again", 6))
+            .await;
+    write(&rs, async |tx| {
+        WhisperRecords::transform(tx, again.id, |r| {
+            r.state = chat::MessageState::Read as i32;
+            Ok(())
+        })
+        .await
+    })
+    .await;
+
+    // Devices: one added, one added then deleted.
+    let device = |name: &str, os: &str| {
+        let (name, os) = (name.to_owned(), os.to_owned());
+        move |id| Device {
+            id,
+            device: name,
+            os,
+            ..Default::default()
+        }
+    };
+    insert::<Devices>(&rs, device("phone", "android")).await;
+    let old = insert::<Devices>(&rs, device("old", "windows")).await;
+    write(&rs, async |tx| Devices::delete(tx, old.id).await).await;
+
+    // The owned network's directory, whose admin is the owner: a listing
+    // of each kind (the media one moderated) and an invitee who may not
+    // join.
+    let swarm = swarm_uri(&generate_key(&mut rng).public);
+    let listings = [
+        Content::Chat(listing::Chat {
+            key: invitee_key.public.clone(),
+            name: "lobby".to_owned(),
+        }),
+        Content::Embed(listing::Embed {
+            service: listing::embed::Service::DirectoryListingEmbedServiceTwitchStream as i32,
+            id: "streamer".to_owned(),
+            ..Default::default()
+        }),
+        Content::Media(listing::Media {
+            mime_type: "video/mp4".to_owned(),
+            swarm_uri: swarm.clone(),
+        }),
+        Content::Service(listing::Service {
+            r#type: "game".to_owned(),
+            swarm_uri: swarm,
+        }),
+    ];
+    for content in listings {
+        let media = matches!(content, Content::Media(_));
+        insert::<DirectoryListingRecords>(&rs, |id| {
+            let listing = Listing {
+                content: Some(content),
+            };
+            let mut r = new_listing_record(id, owned.id, listing, None);
+            if media {
+                r.moderation = Some(ListingModeration {
+                    is_mature: Some(true),
+                    category: Some("games".to_owned()),
+                    ..Default::default()
+                });
+                r.notes = "checked".to_owned();
+            }
+            r
+        })
+        .await;
+    }
+    insert::<DirectoryUserRecords>(&rs, |id| {
+        let moderation = UserModeration {
+            disable_join: Some(true),
+            ..Default::default()
+        };
+        new_user_record(id, owned.id, &invitee_key.public, moderation)
+    })
+    .await;
+
+    // Chat servers on the owned network, each with an icon, two emotes, a
+    // modifier, a tag, and profiles of the invitee (muted) and the owner.
+    // The second server is deleted, and its icon with it.
+    let mut servers = Vec::new();
+    for name in ["kept", "deleted"] {
+        let key = generate_key(&mut rng);
+        let s = insert::<ChatServers>(&rs, |id| chat::Server {
+            id,
+            network_key: owned_key.clone(),
+            key: Some(key),
+            room: Some(chat::Room {
+                name: name.to_owned(),
+                css: format!(".{name} {{}}"),
+            }),
+            admin_peer_keys: vec![invitee_key.public.clone()],
+        })
+        .await;
+        let icon = chat::ServerIcon {
+            id: s.id,
+            image: Some(Image {
+                r#type: ImageType::Png as i32,
+                height: 1,
+                width: 1,
+                data: name.as_bytes().to_vec(),
+            }),
+        };
+        write(&rs, async |tx| ChatServerIcons::insert(tx, icon).await).await;
+        for emote in ["PeepoHappy", "FeelsBadMan"] {
+            insert::<ChatEmotes>(&rs, |id| chat::Emote {
+                id,
+                server_id: s.id,
+                name: emote.to_owned(),
+                images: vec![chat::EmoteImage {
+                    data: emote.as_bytes().to_vec(),
+                    file_type: chat::EmoteFileType::FileTypePng as i32,
+                    height: 28,
+                    width: 28,
+                    scale: chat::EmoteScale::EmoteScale2x as i32,
+                }],
+                effects: vec![chat::EmoteEffect {
+                    effect: Some(emote_effect::Effect::SpriteAnimation(
+                        emote_effect::SpriteAnimation {
+                            frame_count: 4,
+                            duration_ms: 400,
+                            loop_forever: true,
+                            ..Default::default()
+                        },
+                    )),
+                }],
+                contributor: Some(chat::EmoteContributor {
+                    name: "artist".to_owned(),
+                    link: "https://artist.example".to_owned(),
+                }),
+                labels: vec!["pepe".to_owned()],
+                enable: true,
+            })
+            .await;
+        }
+        insert::<ChatModifiers>(&rs, |id| chat::Modifier {
+            id,
+            server_id: s.id,
+            name: "wide".to_owned(),
+            priority: 1,
+            internal: false,
+            extra_wrap_count: 2,
+            proc_chance: 0.25,
+            style_sheet: Some(chat::StyleSheet {
+                css: ".wide {}".to_owned(),
+                ..Default::default()
+            }),
+        })
+        .await;
+        insert::<ChatTags>(&rs, |id| chat::Tag {
+            id,
+            server_id: s.id,
+            name: "nsfw".to_owned(),
+            color: "#ff0000".to_owned(),
+            sensitive: true,
+        })
+        .await;
+        insert::<ChatProfiles>(&rs, |id| chat::Profile {
+            id,
+            server_id: s.id,
+            peer_key: invitee_key.public.clone(),
+            alias: "invitee".to_owned(),
+            mutes: vec![chat::profile::Mute {
+                created_at: 100,
+                duration_secs: 60,
+                message: "spam".to_owned(),
+                moderator_peer_key: profile_key.public.clone(),
+            }],
+            mute_deadline: 160,
+        })
+        .await;
+        insert::<ChatProfiles>(&rs, |id| chat::Profile {
+            id,
+            server_id: s.id,
+            peer_key: profile_key.public.clone(),
+            alias: profile.name.clone(),
+            ..Default::default()
+        })
+        .await;
+        servers.push(s);
+    }
+    write(&rs, async |tx| ChatServers::delete(tx, servers[1].id).await).await;
+    write(&rs, async |tx| {
+        ChatServerIcons::delete(tx, servers[1].id).await
+    })
+    .await;
+
+    // Notifications: a failed renewal on the owned network, and one
+    // dismissed.
+    insert::<Notifications>(&rs, |id| {
+        let subject = Some(network_subject(owned.id));
+        let title = "Certificate renewal failed";
+        let n = new_notification(id, NOW, Status::Error, title, "rate limited", subject);
+        strims_proto::notification::v1::Notification { error_code: 2, ..n }
+    })
+    .await;
+    let dismissed = insert::<Notifications>(&rs, |id| {
+        new_notification(id, NOW, Status::Info, "dismissed", "", None)
+    })
+    .await;
+    write(&rs, async |tx| {
+        Notifications::delete(tx, dismissed.id).await
+    })
+    .await;
+
+    // Video channels: the profile's own on the owned network, the
+    // invitee's share of it, a remote share on the joined network, and a
+    // deleted one. Both configs, the ingress one naming both networks.
+    let local_owner = || {
+        Owner::Local(Local {
+            auth_key: profile_key.public.clone(),
+            network_key: owned_key.clone(),
+        })
+    };
+    let local = insert_channel(&rs, local_owner(), "local").await;
+    let share_owner = Owner::LocalShare(LocalShare {
+        certificate: Some(invitee_cert.clone()),
+    });
+    let share = insert_channel(&rs, share_owner, "share").await;
+    let remote_owner = Owner::RemoteShare(RemoteShare {
+        id: 42,
+        network_key: joined_cert.key.clone(),
+        service_key: generate_key(&mut rng).public,
+        service_salt: b"salt".to_vec(),
+        server_addr: "rtmp.example:1935".to_owned(),
+    });
+    insert_channel(&rs, remote_owner, "remote").await;
+    let deleted = insert_channel(&rs, local_owner(), "deleted").await;
+    write(&rs, async |tx| VideoChannels::delete(tx, deleted.id).await).await;
+    write(&rs, async |tx| {
+        let config = VideoIngressConfig {
+            enabled: true,
+            server_addr: "0.0.0.0:1935".to_owned(),
+            public_server_addr: "rtmp.example:1935".to_owned(),
+            service_network_keys: vec![owned_key.clone(), joined_cert.key.clone()],
+        };
+        IngressConfig::set(tx, config).await
+    })
+    .await;
+    write(&rs, async |tx| {
+        let config = HlsEgressConfig {
+            enabled: true,
+            public_server_addr: "https://hls.example".to_owned(),
+        };
+        HlsConfig::set(tx, config).await
+    })
+    .await;
+    for (c, key) in [(&local, &profile_key), (&share, &invitee_key)] {
+        let stream_key = format_stream_key(c.id, &c.token, key).unwrap();
+        out.out(
+            "video_stream_key",
+            &[&c.id.to_be_bytes(), stream_key.as_bytes()],
+        );
+    }
+
+    // The vnic config, an enabled autoseed config with a rule on each
+    // network, and a cache of a swarm under a salt.
+    write(&rs, async |tx| {
+        let config = vnic::Config {
+            max_upload_bytes_per_second: 1 << 20,
+            max_peers: 12,
+        };
+        VnicConfig::set(tx, config).await
+    })
+    .await;
+    write(&rs, async |tx| {
+        AutoseedConfig::set(tx, autoseed::Config { enable: true }).await
+    })
+    .await;
+    for (i, network_key) in [&owned_key, &joined_cert.key].into_iter().enumerate() {
+        let label = format!("rule {i}");
+        let rule = autoseed::Rule {
+            network_key: network_key.clone(),
+            swarm_id: generate_key(&mut rng).public,
+            salt: label.clone().into_bytes(),
+            label,
+            ..Default::default()
+        };
+        write(&rs, async |tx| {
+            let rule = new_rule(tx, rule).await?;
+            AutoseedRules::insert(tx, rule).await
+        })
+        .await;
+    }
+    let cache_swarm_id = generate_key(&mut rng).public;
+    let cache_salt = b"chat:assets";
+    let cache = Cache {
+        uri: swarm_uri(&cache_swarm_id),
+        epoch: Some(Epoch {
+            timestamp: 1_700_000_000_000_000_000,
+            signature: seq(1, 64),
+        }),
+        integrity: Some(Integrity {
+            merkle_integrity: Some(MerkleIntegrity {
+                timestamps: vec![1, 2],
+                signatures: vec![seq(64, 64), seq(128, 64)],
+            }),
+            ..Default::default()
+        }),
+        data: seq(7, 100),
+        ..Default::default()
+    };
+    write(&rs, async |tx| {
+        set_cache(tx, &cache_swarm_id, cache_salt, cache.clone()).await
+    })
+    .await;
+    out.out(
+        "swarm_cache",
+        &[&cache_swarm_id, cache_salt, &cache.encode_to_vec()],
+    );
+
+    let token = lease::new_token(&mut rng);
+    lease::try_lock(rs.store(), &lease::key(&["replication"]), &token, NOW)
+        .await
+        .unwrap();
+
+    for (table, rows) in kv.dump() {
+        for (key, value) in rows {
+            out.out("kv", &[table.as_bytes(), key.as_bytes(), &value]);
+        }
+    }
+
+    // The records as this crate reads them.
+    let mut tx = rs.read().await.unwrap();
+    out.singleton::<Profile>(&mut tx).await;
+    out.singleton::<ProfileIds>(&mut tx).await;
+    out.singleton::<ChatUiConfig>(&mut tx).await;
+    out.table::<Devices>(&mut tx).await;
+    out.table::<Networks>(&mut tx).await;
+    out.table::<BootstrapClients>(&mut tx).await;
+    out.singleton::<NetworkUiConfig>(&mut tx).await;
+    out.singleton::<BootstrapConfig>(&mut tx).await;
+    out.table::<CertificateLogs>(&mut tx).await;
+    out.table::<NetworkPeers>(&mut tx).await;
+    out.table::<AliasReservations>(&mut tx).await;
+    out.table::<ChatUiConfigHighlights>(&mut tx).await;
+    out.table::<ChatUiConfigTags>(&mut tx).await;
+    out.table::<ChatUiConfigIgnores>(&mut tx).await;
+    out.table::<WhisperThreads>(&mut tx).await;
+    out.table::<WhisperRecords>(&mut tx).await;
+    out.table::<EventLogs>(&mut tx).await;
+    out.table::<Checkpoints>(&mut tx).await;
+    out.table::<DirectoryListingRecords>(&mut tx).await;
+    out.table::<DirectoryUserRecords>(&mut tx).await;
+    out.table::<ChatServers>(&mut tx).await;
+    out.table::<ChatServerIcons>(&mut tx).await;
+    out.table::<ChatEmotes>(&mut tx).await;
+    out.table::<ChatModifiers>(&mut tx).await;
+    out.table::<ChatTags>(&mut tx).await;
+    out.table::<ChatProfiles>(&mut tx).await;
+    out.table::<Notifications>(&mut tx).await;
+    out.table::<VideoChannels>(&mut tx).await;
+    out.singleton::<IngressConfig>(&mut tx).await;
+    out.singleton::<HlsConfig>(&mut tx).await;
+    out.singleton::<VnicConfig>(&mut tx).await;
+    out.singleton::<AutoseedConfig>(&mut tx).await;
+    out.table::<AutoseedRules>(&mut tx).await;
+    let metas = SwarmCacheMetas::get_all(&mut tx).await.unwrap();
+    for m in &metas {
+        out.record(SwarmCacheMetas::NS, m.id, m);
+    }
+    for m in &metas {
+        let cache = SwarmCaches::get(&mut tx, m.id).await.unwrap().unwrap();
+        out.record(SwarmCaches::NS, m.id, &cache);
+    }
+    drop(tx);
+
+    // A replica that has seen the first three of this replica's logs.
+    let remote = VersionVector {
+        value: [(rs.replica_id(), 3)].into(),
+        ..Default::default()
+    };
+    out.out("delta_remote", &[&remote.encode_to_vec()]);
+    for l in compressed_delta(rs.store(), &remote).await.unwrap() {
+        out.out("delta", &[&l.encode_to_vec()]);
+    }
+    out.0
+}
+
+/// The recorded store, `store.hex` as [`record_store`] writes it.
+fn record() -> String {
+    block(record_store())
+}
+
+/// `store.hex`'s text. An update run records the file first, so every test
+/// reads the new recording.
+fn store_text() -> &'static str {
+    static TEXT: OnceLock<String> = OnceLock::new();
+    TEXT.get_or_init(|| {
+        if strims_golden::updating() {
+            strims_golden::check_file(PATH, &record());
+        }
+        std::fs::read_to_string(PATH).unwrap_or_else(|e| panic!("reading {PATH}: {e}"))
+    })
+}
+
+#[test]
+fn recorder_reproduces_the_recorded_store() {
+    strims_golden::check_file(PATH, &record());
 }
 
 struct Golden {
@@ -101,7 +960,7 @@ fn load() -> Golden {
         stream_keys: vec![],
         swarm_caches: vec![],
     };
-    for line in STORE.lines().filter(|l| !l.trim().is_empty()) {
+    for line in store_text().lines().filter(|l| !l.trim().is_empty()) {
         let mut parts = line.split(' ');
         let name = parts.next().unwrap();
         let v: Vec<Vec<u8>> = parts

@@ -1,9 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Recorded golden vectors (`golden/vectors.hex`): signatures, certificate
-//! chains and requests, signable messages, message checksums, curve25519
-//! conversions and key agreement.
+//! Golden vectors (`golden/vectors.hex`): signatures, certificate chains
+//! and requests, signable messages, message checksums, curve25519
+//! conversions and key agreement. `STRIMS_GOLDEN=update` rewrites them from
+//! the code (see `strims-golden`).
 
 // Tests panic on failure by design.
 #![allow(
@@ -13,69 +14,34 @@
     clippy::indexing_slicing
 )]
 
-use std::collections::BTreeMap;
-
 use prost::Message;
+use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::cert::{certificate_parent, verify_certificate};
 use strims_crypto::{
-    Error, SignableMessage, aes_link_key, certificate_network_key, crc32_message, key_from_seed,
-    key_to_curve25519, message_cipher_key, new_certificate_request, public_key_to_curve25519,
-    serialize_certificate, serialize_certificate_request, sign, verify, verify_certificate_request,
-    x25519,
+    DEFAULT_CERT_TTL, Error, SignableMessage, aes_link_key, certificate_network_key, crc32_message,
+    key_from_seed, key_to_curve25519, message_cipher_key, new_certificate_request,
+    new_self_signed_certificate, public_key_to_curve25519, serialize_certificate,
+    serialize_certificate_request, sign, sign_certificate_request, verify,
+    verify_certificate_request, x25519,
 };
+use strims_golden::Golden;
 use strims_proto::stable::{Signable, StableEncode};
-use strims_proto::types::{Certificate, CertificateRequest, Key, KeyUsage};
+use strims_proto::types::{Key, KeyUsage, certificate::ParentOneof};
 use strims_proto::{chat, network, types, vpn};
 
-const VECTORS: &str = include_str!("../golden/vectors.hex");
+fn open() -> Golden {
+    Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.hex"))
+}
 
-struct Vectors(BTreeMap<&'static str, Vec<Vec<u8>>>);
+fn key(g: &Golden, i: usize) -> Key {
+    let e = g.all(&format!("key_{i}"))[0];
+    key_from_seed(&arr32(&g.bytes(e, 0)))
+}
 
-impl Vectors {
-    fn load() -> Self {
-        let mut m = BTreeMap::new();
-        for line in VECTORS.lines().filter(|l| !l.trim().is_empty()) {
-            let mut parts = line.split(' ');
-            let name = parts.next().unwrap();
-            let values = parts
-                .map(|p| {
-                    if p == "=" {
-                        Vec::new()
-                    } else {
-                        hex::decode(p).unwrap()
-                    }
-                })
-                .collect();
-            m.insert(name, values);
-        }
-        Vectors(m)
-    }
-
-    fn get(&self, name: &str) -> &[Vec<u8>] {
-        self.0
-            .get(name)
-            .unwrap_or_else(|| panic!("missing vector {name}"))
-    }
-
-    fn with_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Iterator<Item = (&'static str, &'a [Vec<u8>])> + 'a {
-        self.0
-            .iter()
-            .filter(move |(k, _)| k.starts_with(prefix))
-            .map(|(k, v)| (*k, v.as_slice()))
-    }
-
-    fn key(&self, i: usize) -> Key {
-        Key::decode(self.get(&format!("key_{i}"))[1].as_slice()).unwrap()
-    }
-
-    fn now(&self) -> Time {
-        let b: [u8; 8] = self.get("now")[0].as_slice().try_into().unwrap();
-        Time::from_unix_nanos(i64::from_be_bytes(b))
-    }
+fn now(g: &Golden) -> Time {
+    let b: [u8; 8] = g.bytes(g.all("now")[0], 0).try_into().unwrap();
+    Time::from_unix_nanos(i64::from_be_bytes(b))
 }
 
 const SIGN: i32 = KeyUsage::Sign as i32;
@@ -86,19 +52,22 @@ fn arr32(b: &[u8]) -> [u8; 32] {
     b.try_into().unwrap()
 }
 
+/// The index in a vector name's `_`-separated suffix, e.g. `1` for `sign_1_3`.
+fn ids(name: &str, prefix: &str) -> Vec<usize> {
+    name[prefix.len()..]
+        .split('_')
+        .map(|s| s.parse().unwrap())
+        .collect()
+}
+
 #[test]
-fn keys_match_go_storage_format() {
-    let v = Vectors::load();
+fn keys_keep_their_storage_format() {
+    let mut g = open();
     for i in 0..4 {
-        let [seed, proto] = v.get(&format!("key_{i}")) else {
-            panic!()
-        };
-        let k = key_from_seed(&arr32(seed));
-        assert_eq!(
-            hex::encode(k.encode_to_vec()),
-            hex::encode(proto),
-            "key_{i}"
-        );
+        let e = g.entry(&format!("key_{i}"));
+        let seed = g.bytes(e, 0);
+        let k = key_from_seed(&arr32(&seed));
+        g.check_hex(e, 1, k.encode_to_vec());
         // the private key is the 64-byte expanded key: seed || public
         assert_eq!(&k.private[..32], seed.as_slice());
         assert_eq!(&k.private[32..], k.public.as_slice());
@@ -107,49 +76,60 @@ fn keys_match_go_storage_format() {
 
 #[test]
 fn signatures_match_vectors() {
-    let v = Vectors::load();
-    let mut n = 0;
-    for (name, values) in v.with_prefix("sign_") {
-        let [msg, sig] = values else { panic!() };
-        let i: usize = name[5..6].parse().unwrap();
-        let k = v.key(i);
-        assert_eq!(
-            sign(&k.private, msg).unwrap().as_slice(),
-            sig.as_slice(),
-            "{name}"
-        );
-        assert!(verify(&k.public, msg, sig), "{name}");
-        n += 1;
+    let mut g = open();
+    let entries = g.prefixed("sign_");
+    for &e in &entries {
+        let i = ids(g.name(e), "sign_")[0];
+        let (k, msg) = (key(&g, i), g.bytes(e, 0));
+        let sig = sign(&k.private, &msg).unwrap();
+        assert!(verify(&k.public, &msg, &sig), "{}", g.name(e));
+        g.check_hex(e, 1, sig);
     }
-    assert_eq!(n, 8);
+    assert_eq!(entries.len(), 8);
 }
 
 #[test]
 fn certificate_chain_matches_vectors() {
-    let v = Vectors::load();
-    let now = v.now();
-    let (network_key, member_key, leaf_key) = (v.key(0), v.key(1), v.key(2));
+    let mut g = open();
+    let now = now(&g);
+    let (network_key, member_key, leaf_key) = (key(&g, 0), key(&g, 1), key(&g, 2));
+    let mut rng = det_rng(1);
 
-    let proto = &v.get("cert_chain")[0];
-    let leaf = Certificate::decode(proto.as_slice()).unwrap();
-    assert_eq!(leaf.encode_to_vec(), *proto);
+    let root = new_self_signed_certificate(
+        &network_key,
+        SIGN,
+        DEFAULT_CERT_TTL,
+        "network",
+        now,
+        &mut rng,
+    )
+    .unwrap();
+    let member_csr = new_certificate_request(&member_key, PEER | SIGN, "alias").unwrap();
+    let mut member =
+        sign_certificate_request(&member_csr, DEFAULT_CERT_TTL, &network_key, now, &mut rng)
+            .unwrap();
+    member.parent_oneof = Some(ParentOneof::Parent(Box::new(root)));
+    let leaf_csr = new_certificate_request(&leaf_key, PEER | BOOTSTRAP, "").unwrap();
+    let mut leaf =
+        sign_certificate_request(&leaf_csr, Duration::HOUR * 24, &member_key, now, &mut rng)
+            .unwrap();
+    leaf.parent_oneof = Some(ParentOneof::Parent(Box::new(member)));
     verify_certificate(&leaf, now).unwrap();
+
+    let e = g.entry("cert_chain");
+    g.check_hex(e, 0, leaf.encode_to_vec());
 
     let member = certificate_parent(&leaf).unwrap();
     let root = certificate_parent(member).unwrap();
     assert!(certificate_parent(root).is_none());
-
     for (name, cert, signer) in [
         ("root", root, &network_key),
         ("member", member, &network_key),
         ("leaf", &leaf, &member_key),
     ] {
         let serialized = serialize_certificate(cert);
-        assert_eq!(
-            hex::encode(&serialized),
-            hex::encode(&v.get(&format!("cert_serialized_{name}"))[0]),
-            "{name}"
-        );
+        let e = g.entry(&format!("cert_serialized_{name}"));
+        g.check_hex(e, 0, &serialized);
         // ed25519 is deterministic: identical bytes, identical signature
         assert_eq!(
             sign(&signer.private, &serialized).unwrap().as_slice(),
@@ -160,12 +140,10 @@ fn certificate_chain_matches_vectors() {
     assert_eq!(leaf.key, leaf_key.public);
     assert_eq!(
         certificate_network_key(&leaf),
-        v.get("cert_network_key")[0].as_slice()
-    );
-    assert_eq!(
-        certificate_network_key(&leaf),
         network_key.public.as_slice()
     );
+    let e = g.entry("cert_network_key");
+    g.check_hex(e, 0, certificate_network_key(&leaf));
 
     // the leaf is valid for a day, predated by an hour
     let errs = verify_certificate(&leaf, now + Duration::HOUR * 25).unwrap_err();
@@ -176,162 +154,111 @@ fn certificate_chain_matches_vectors() {
 
 #[test]
 fn certificate_requests_match_vectors() {
-    let v = Vectors::load();
-    for (name, key, usage, subject) in [
-        ("csr_member", v.key(1), PEER | SIGN, "alias"),
-        ("csr_leaf", v.key(2), PEER | BOOTSTRAP, ""),
+    let mut g = open();
+    for (name, i, usage, subject) in [
+        ("csr_member", 1, PEER | SIGN, "alias"),
+        ("csr_leaf", 2, PEER | BOOTSTRAP, ""),
     ] {
-        let [proto, serialized] = v.get(name) else {
-            panic!()
-        };
-        let recorded = CertificateRequest::decode(proto.as_slice()).unwrap();
-        verify_certificate_request(&recorded, usage).unwrap();
+        let csr = new_certificate_request(&key(&g, i), usage, subject).unwrap();
+        verify_certificate_request(&csr, usage).unwrap();
         assert_eq!(
-            verify_certificate_request(&recorded, PEER),
+            verify_certificate_request(&csr, PEER),
             Err(Error::UnsupportedKeyUsage),
             "{name}: usage outside the allowed set"
         );
-        assert_eq!(
-            serialize_certificate_request(&recorded),
-            *serialized,
-            "{name}"
-        );
-        let ours = new_certificate_request(&key, usage, subject).unwrap();
-        assert_eq!(ours, recorded, "{name}");
-        assert_eq!(ours.encode_to_vec(), *proto, "{name}");
+        let e = g.entry(name);
+        g.check_hex(e, 0, csr.encode_to_vec());
+        g.check_hex(e, 1, serialize_certificate_request(&csr));
     }
 }
 
-fn check_signable<M: Message + Default + Signable + Clone>(v: &Vectors, name: &str, key: &Key) {
-    let [proto, unsigned] = v.get(&format!("signable_{name}")) else {
-        panic!()
-    };
-    let recorded = M::decode(proto.as_slice()).unwrap();
-    assert_eq!(recorded.encode_to_vec(), *proto, "{name}");
-    recorded.verify_message().unwrap();
-    assert_eq!(
-        hex::encode(recorded.stable_encode_unsigned_to_vec()),
-        hex::encode(unsigned),
-        "{name}"
-    );
-    assert_eq!(recorded.key(), key.public.as_slice());
-
-    let mut ours = recorded.clone();
-    ours.set_key(&[]);
-    ours.set_signature(Vec::new());
-    ours.sign_message(key).unwrap();
-    assert_eq!(
-        hex::encode(ours.signature()),
-        hex::encode(recorded.signature()),
-        "{name}"
-    );
-    assert_eq!(ours.encode_to_vec(), *proto, "{name}");
+/// Signs the vector's message, with its key and signature cleared, by `key`.
+fn check_signable<M: Message + Default + Signable + Clone>(g: &mut Golden, name: &str, key: &Key) {
+    let e = g.entry(&format!("signable_{name}"));
+    let mut m = M::decode(g.bytes(e, 0).as_slice()).unwrap();
+    m.set_key(&[]);
+    m.set_signature(Vec::new());
+    m.sign_message(key).unwrap();
+    m.verify_message().unwrap();
+    assert_eq!(m.key(), key.public.as_slice());
+    g.check_hex(e, 0, m.encode_to_vec());
+    g.check_hex(e, 1, m.stable_encode_unsigned_to_vec());
 }
 
 #[test]
 fn signable_messages_match_vectors() {
-    let v = Vectors::load();
-    check_signable::<vpn::v1::hash_table_message::Record>(&v, "hash_table_record", &v.key(3));
-    check_signable::<vpn::v1::peer_index_message::Record>(&v, "peer_index_record", &v.key(1));
-    check_signable::<network::v1::directory::ListingSnippet>(&v, "listing_snippet", &v.key(2));
+    let mut g = open();
+    let (k1, k2, k3) = (key(&g, 1), key(&g, 2), key(&g, 3));
+    check_signable::<vpn::v1::hash_table_message::Record>(&mut g, "hash_table_record", &k3);
+    check_signable::<vpn::v1::peer_index_message::Record>(&mut g, "peer_index_record", &k1);
+    check_signable::<network::v1::directory::ListingSnippet>(&mut g, "listing_snippet", &k2);
 }
 
-fn check_crc<M: Message + Default + StableEncode>(v: &Vectors, name: &str) {
-    let [proto, crc] = v.get(&format!("crc32_{name}")) else {
-        panic!()
-    };
-    let m = M::decode(proto.as_slice()).unwrap();
-    assert_eq!(
-        crc32_message(&m).to_be_bytes().as_slice(),
-        crc.as_slice(),
-        "{name}"
-    );
+/// Checksums the vector's message.
+fn check_crc<M: Message + Default + StableEncode>(g: &mut Golden, name: &str) {
+    let e = g.entry(&format!("crc32_{name}"));
+    let m = M::decode(g.bytes(e, 0).as_slice()).unwrap();
+    g.check_hex(e, 1, crc32_message(&m).to_be_bytes());
 }
 
 #[test]
 fn crc32_messages_match_vectors() {
-    let v = Vectors::load();
-    check_crc::<types::Cache>(&v, "swarm_cache");
-    check_crc::<types::Cache>(&v, "empty_cache");
-    check_crc::<chat::v1::Emote>(&v, "chat_emote");
-    check_crc::<chat::v1::Modifier>(&v, "chat_modifier");
-    check_crc::<chat::v1::Tag>(&v, "chat_tag");
-    check_crc::<chat::v1::Server>(&v, "chat_server");
-    check_crc::<chat::v1::ServerIcon>(&v, "chat_server_icon");
-    assert_eq!(v.with_prefix("crc32_").count(), 7);
+    let mut g = open();
+    check_crc::<types::Cache>(&mut g, "swarm_cache");
+    check_crc::<types::Cache>(&mut g, "empty_cache");
+    check_crc::<chat::v1::Emote>(&mut g, "chat_emote");
+    check_crc::<chat::v1::Modifier>(&mut g, "chat_modifier");
+    check_crc::<chat::v1::Tag>(&mut g, "chat_tag");
+    check_crc::<chat::v1::Server>(&mut g, "chat_server");
+    check_crc::<chat::v1::ServerIcon>(&mut g, "chat_server_icon");
+    assert_eq!(g.prefixed("crc32_").len(), 7);
 }
 
 #[test]
 fn curve25519_conversions_match_vectors() {
-    let v = Vectors::load();
+    let mut g = open();
     for i in 0..4 {
-        let c = key_to_curve25519(&v.key(i)).unwrap();
-        assert_eq!(
-            hex::encode(c.encode_to_vec()),
-            hex::encode(&v.get(&format!("curve_key_{i}"))[0]),
-            "curve_key_{i}"
-        );
+        let c = key_to_curve25519(&key(&g, i)).unwrap();
+        let e = g.entry(&format!("curve_key_{i}"));
+        g.check_hex(e, 0, c.encode_to_vec());
     }
-    let mut n = 0;
-    for (name, values) in v.with_prefix("pub2curve_") {
-        let [input, output] = values else { panic!() };
-        assert_eq!(
-            hex::encode(public_key_to_curve25519(&arr32(input))),
-            hex::encode(output),
-            "{name}"
-        );
-        n += 1;
+    let entries = g.prefixed("pub2curve_");
+    for &e in &entries {
+        let input = g.bytes(e, 0);
+        g.check_hex(e, 1, public_key_to_curve25519(&arr32(&input)));
     }
-    assert_eq!(n, 12);
+    assert_eq!(entries.len(), 12);
 }
 
 #[test]
 fn key_agreement_matches_vectors() {
-    let v = Vectors::load();
+    let mut g = open();
     let mut n = 0;
-    for (name, values) in v.with_prefix("aes_link_") {
-        let ids: Vec<usize> = name["aes_link_".len()..]
-            .split('_')
-            .map(|s| s.parse().unwrap())
-            .collect();
+    for e in g.prefixed("aes_link_") {
+        let ids = ids(g.name(e), "aes_link_");
         let (a, b) = (
-            key_to_curve25519(&v.key(ids[0])).unwrap(),
-            key_to_curve25519(&v.key(ids[1])).unwrap(),
+            key_to_curve25519(&key(&g, ids[0])).unwrap(),
+            key_to_curve25519(&key(&g, ids[1])).unwrap(),
         );
-        assert_eq!(
-            aes_link_key(&a, &b.public).unwrap().as_slice(),
-            values[0].as_slice(),
-            "{name}"
-        );
+        g.check_hex(e, 0, aes_link_key(&a, &b.public).unwrap());
         n += 1;
     }
-    for (name, values) in v.with_prefix("message_cipher_") {
-        let ids: Vec<usize> = name["message_cipher_".len()..]
-            .split('_')
-            .map(|s| s.parse().unwrap())
-            .collect();
-        let (a, b) = (v.key(ids[0]), v.key(ids[1]));
-        assert_eq!(
-            message_cipher_key(&a, &arr32(&b.public))
-                .unwrap()
-                .as_slice(),
-            values[0].as_slice(),
-            "{name}"
-        );
+    for e in g.prefixed("message_cipher_") {
+        let ids = ids(g.name(e), "message_cipher_");
+        let (a, b) = (key(&g, ids[0]), key(&g, ids[1]));
+        g.check_hex(e, 0, message_cipher_key(&a, &arr32(&b.public)).unwrap());
         n += 1;
     }
     assert_eq!(n, 8);
 
     let mut errors = 0;
-    for (name, values) in v.with_prefix("x25519_") {
-        let [scalar, point, out] = values else {
-            panic!()
-        };
-        match x25519(scalar, point) {
-            Ok(secret) => assert_eq!(secret.as_slice(), out.as_slice(), "{name}"),
-            Err(e) => {
-                assert_eq!(out.as_slice(), b"error", "{name}: {e}");
-                assert_eq!(e, Error::LowOrderPoint);
+    for e in g.prefixed("x25519_") {
+        let (scalar, point) = (g.bytes(e, 0), g.bytes(e, 1));
+        match x25519(&scalar, &point) {
+            Ok(secret) => g.check_hex(e, 2, secret),
+            Err(err) => {
+                assert_eq!(err, Error::LowOrderPoint);
+                g.check_hex(e, 2, b"error");
                 errors += 1;
             }
         }

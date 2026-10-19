@@ -23,6 +23,7 @@ slotmap.workspace = true
 rand_core.workspace = true
 
 [dev-dependencies]
+strims-golden.workspace = true
 hex.workspace = true
 prost.workspace = true
 proptest.workspace = true

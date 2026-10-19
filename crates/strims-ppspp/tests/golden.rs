@@ -1,19 +1,22 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Recorded golden vectors (`golden/vectors.txt`):
+//! Golden vectors (`golden/vectors.txt`):
 //!
 //! - every codec message, a multi-message payload, channel headers and a
-//!   frame: the recorded bytes decode to the expected messages and encode
+//!   frame: the pinned bytes decode to the expected messages and encode
 //!   back byte for byte;
 //! - Merkle digests of every bin for each supported hash function;
 //! - writer scenarios for Merkle (all hash functions, ed25519 and no
-//!   signatures), sign-all and no integrity: the `Writer`, replaying the
-//!   recorded writes at the recorded times, must produce identical epochs,
-//!   `Data` messages, integrity messages (with several peer have maps) and
-//!   swarm caches; the recorded caches must import and export again
-//!   unchanged;
+//!   signatures), sign-all and no integrity: the `Writer` replays the
+//!   scenario's writes at their times, and its epochs, `Data` messages,
+//!   integrity messages (with several peer have maps) and swarm caches are
+//!   pinned; each cache must import and export again unchanged;
 //! - swarm id and URI strings and parsing.
+//!
+//! `STRIMS_GOLDEN=update` rewrites the epoch signatures, integrity messages
+//! and caches from the code (see `strims-golden`). The other vectors are
+//! asserted, never rewritten.
 
 #![allow(
     clippy::unwrap_used,
@@ -23,10 +26,13 @@
 )]
 
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::str::FromStr;
 
 use prost::Message as _;
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Map};
+use strims_golden::Golden;
 use strims_ppspp::codec::{
     self, Ack, Cancel, ChannelHeader, ChannelWriter, Data, EpochOption, FrameReader, Handshake,
     Have, Integrity, Message, MessageWriter, Ping, Pong, ProtocolOption, ProtocolOptionType,
@@ -41,37 +47,11 @@ use strims_ppspp::store;
 use strims_ppspp::{Swarm, SwarmId, SwarmOptions, Uri, UriOptions, Writer, WriterOptions};
 use strims_proto::types::Cache;
 
-const VECTORS: &str = include_str!("../golden/vectors.txt");
-
-struct Line<'a> {
-    kind: &'a str,
-    kv: BTreeMap<&'a str, &'a str>,
+fn open() -> Golden {
+    Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.txt"))
 }
 
-impl<'a> Line<'a> {
-    fn get(&self, k: &str) -> &'a str {
-        self.kv
-            .get(k)
-            .copied()
-            .unwrap_or_else(|| panic!("{} has no {k}", self.kind))
-    }
-
-    fn opt(&self, k: &str) -> Option<&'a str> {
-        self.kv.get(k).copied()
-    }
-
-    fn hex(&self, k: &str) -> Vec<u8> {
-        unhex(self.get(k))
-    }
-
-    fn num<T: std::str::FromStr>(&self, k: &str) -> T
-    where
-        T::Err: std::fmt::Debug,
-    {
-        self.get(k).parse().unwrap()
-    }
-}
-
+/// Byte strings in the vectors are hex, with `-` for none.
 fn unhex(s: &str) -> Vec<u8> {
     if s == "-" {
         vec![]
@@ -80,19 +60,26 @@ fn unhex(s: &str) -> Vec<u8> {
     }
 }
 
-fn lines() -> impl Iterator<Item = Line<'static>> {
-    VECTORS
-        .lines()
-        .filter(|l| !l.starts_with('#') && !l.is_empty())
-        .map(|l| {
-            let mut it = l.split(' ');
-            let kind = it.next().unwrap();
-            let kv = it.map(|t| t.split_once('=').unwrap()).collect();
-            Line { kind, kv }
-        })
+fn hx(b: &[u8]) -> String {
+    if b.is_empty() {
+        "-".to_owned()
+    } else {
+        hex::encode(b)
+    }
 }
 
-/// The payload byte at stream offset `off` in the recorded writer scenarios.
+fn bytes(g: &Golden, e: usize, k: &str) -> Vec<u8> {
+    unhex(g.str(e, k))
+}
+
+fn num<T: FromStr>(g: &Golden, e: usize, k: &str) -> T
+where
+    T::Err: Debug,
+{
+    g.str(e, k).parse().unwrap()
+}
+
+/// The payload byte at stream offset `off` in the writer scenarios.
 fn data_byte(off: u64, salt: u64) -> u8 {
     ((off.wrapping_add(salt)).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 56) as u8
 }
@@ -272,26 +259,28 @@ fn codec_messages() {
         ("end", Message::End),
     ];
 
-    let msgs: BTreeMap<&str, Vec<u8>> = lines()
-        .filter(|l| l.kind == "msg")
-        .map(|l| (l.get("name"), l.hex("hex")))
+    let g = open();
+    let msgs: BTreeMap<&str, Vec<u8>> = g
+        .all("msg")
+        .into_iter()
+        .map(|e| (g.str(e, "name"), bytes(&g, e, "hex")))
         .collect();
     assert_eq!(msgs.len(), expected.len());
 
     for (name, want) in &expected {
-        let recorded = &msgs[name];
-        // encodes to the recorded bytes
-        assert_eq!(&encode(want), recorded, "encode {name}");
+        let pinned = &msgs[name];
+        // encodes to the pinned bytes
+        assert_eq!(&encode(want), pinned, "encode {name}");
         // and decodes them to the same message
-        let (got, n) = Message::decode(&config(), recorded).unwrap();
-        assert_eq!(n, recorded.len(), "decode length {name}");
+        let (got, n) = Message::decode(&config(), pinned).unwrap();
+        assert_eq!(n, pinned.len(), "decode length {name}");
         assert_eq!(&got, want, "decode {name}");
         // decode then encode is the identity
-        assert_eq!(&encode(&got), recorded, "re-encode {name}");
+        assert_eq!(&encode(&got), pinned, "re-encode {name}");
     }
 
     // a payload of every message, ended by End
-    let payload = lines().find(|l| l.kind == "payload").unwrap().hex("hex");
+    let payload = bytes(&g, g.all("payload")[0], "hex");
     let decoded: Vec<Message<'_>> = Reader::new(config(), &payload)
         .map(Result::unwrap)
         .collect();
@@ -311,19 +300,20 @@ fn codec_messages() {
 
 #[test]
 fn channel_headers_and_frames() {
-    for l in lines().filter(|l| l.kind == "header") {
+    let g = open();
+    for l in g.all("header") {
         let h = ChannelHeader {
-            channel: l.num("channel"),
-            length: l.num("length"),
+            channel: num(&g, l, "channel"),
+            length: num(&g, l, "length"),
         };
-        let recorded = l.hex("hex");
+        let pinned = bytes(&g, l, "hex");
         let mut b = vec![0u8; h.byte_len()];
-        assert_eq!(h.encode(&mut b), Ok(recorded.len()));
-        assert_eq!(b, recorded);
-        assert_eq!(ChannelHeader::decode(&recorded), Ok((h, recorded.len())));
+        assert_eq!(h.encode(&mut b), Ok(pinned.len()));
+        assert_eq!(b, pinned);
+        assert_eq!(ChannelHeader::decode(&pinned), Ok((h, pinned.len())));
     }
 
-    let frame = lines().find(|l| l.kind == "frame").unwrap().hex("hex");
+    let frame = bytes(&g, g.all("frame")[0], "hex");
     let want = [
         (
             0u64,
@@ -370,13 +360,14 @@ fn channel_headers_and_frames() {
 
 #[test]
 fn merkle_digests() {
+    let g = open();
     let mut n = 0;
-    for l in lines().filter(|l| l.kind == "merkle") {
-        let f = MerkleHashTreeFunction(l.num("fn"));
-        let cs: usize = l.num("cs");
-        let root = Bin(l.num("root"));
+    for l in g.all("merkle") {
+        let f = MerkleHashTreeFunction(num(&g, l, "fn"));
+        let cs: usize = num(&g, l, "cs");
+        let root = Bin(num(&g, l, "root"));
         let mut h = f.hasher().unwrap();
-        assert_eq!(h.size(), l.num::<usize>("size"));
+        assert_eq!(h.size(), num::<usize>(&g, l, "size"));
         assert_eq!(f.hash_size(), Some(h.size()));
 
         let data = stream_data(0, root.base_length() * cs as u64, u64::from(f.0));
@@ -388,7 +379,7 @@ fn merkle_digests() {
         }
         assert_eq!(
             hex::encode(digests),
-            l.get("digests"),
+            g.str(l, "digests"),
             "fn {} root {root}",
             f.0
         );
@@ -398,7 +389,7 @@ fn merkle_digests() {
     assert_eq!(MerkleHashTreeFunction::MD5.hasher().map(|h| h.size()), None);
 }
 
-/// Records encoded messages, like the generator's `encoder`.
+/// Collects the encoding of every message written to it.
 #[derive(Default)]
 struct Encoded(Vec<u8>);
 
@@ -410,32 +401,28 @@ impl MessageWriter for Encoded {
     }
 }
 
-/// Compares an error to the recorded one, whose spaces the vectors write as
+/// Compares an error to the pinned one, whose spaces the vectors write as
 /// underscores and which may carry a prefix.
-fn assert_recorded_err(recorded: &str, rust: &dyn std::fmt::Display, what: &str) {
-    let recorded = recorded.replace('_', " ");
+fn assert_pinned_err(pinned: &str, err: &dyn std::fmt::Display, what: &str) {
+    let pinned = pinned.replace('_', " ");
     assert!(
-        recorded.ends_with(&rust.to_string()),
-        "{what}: recorded {recorded:?}, rust {rust}"
+        pinned.ends_with(&err.to_string()),
+        "{what}: pinned {pinned:?}, got {err}"
     );
 }
 
-struct Scenario<'a> {
-    lines: Vec<Line<'a>>,
-}
-
-fn scenarios() -> Vec<Scenario<'static>> {
+/// The entries of each writer scenario, from its `writer` entry up to its
+/// `end`.
+fn scenarios(g: &Golden) -> Vec<Vec<usize>> {
     let mut out = vec![];
-    let mut cur: Option<Vec<Line<'static>>> = None;
-    for l in lines() {
-        match l.kind {
-            "writer" => cur = Some(vec![l]),
-            "end" => out.push(Scenario {
-                lines: cur.take().unwrap(),
-            }),
+    let mut cur: Option<Vec<usize>> = None;
+    for e in g.prefixed("") {
+        match g.name(e) {
+            "writer" => cur = Some(vec![e]),
+            "end" => out.push(cur.take().unwrap()),
             _ => {
                 if let Some(c) = &mut cur {
-                    c.push(l);
+                    c.push(e);
                 }
             }
         }
@@ -443,34 +430,38 @@ fn scenarios() -> Vec<Scenario<'static>> {
     out
 }
 
-/// Replays each recorded writer scenario through the `Writer`.
+/// Replays each writer scenario through the `Writer`. A `write len=<n>
+/// ts=<t>` entry writes the next `n` stream bytes at `t` Unix nanoseconds,
+/// or at the previous write's time when `t` isn't a number.
 #[test]
 fn writer_matches_vectors() {
-    let scenarios = scenarios();
+    let mut g = open();
+    let scenarios = scenarios(&g);
     assert_eq!(scenarios.len(), 12);
     let mut checked = BTreeMap::<&str, usize>::new();
 
     for sc in &scenarios {
-        let head = &sc.lines[0];
-        let name = head.get("name");
-        let seed: [u8; 32] = head.hex("seed").try_into().unwrap();
-        let salt: u64 = head.num("salt");
+        let head = sc[0];
+        let name = g.str(head, "name").to_owned();
+        let name = name.as_str();
+        let seed: [u8; 32] = bytes(&g, head, "seed").try_into().unwrap();
+        let salt: u64 = num(&g, head, "salt");
         let key = strims_crypto::key_from_seed(&seed);
         let options = SwarmOptions {
-            chunk_size: head.num("cs"),
-            chunks_per_signature: head.num("cps"),
-            live_window: head.num("lw"),
-            stream_count: head.num("sc"),
+            chunk_size: num(&g, head, "cs"),
+            chunks_per_signature: num(&g, head, "cps"),
+            live_window: num(&g, head, "lw"),
+            stream_count: num(&g, head, "sc"),
             integrity: VerifierOptions {
-                protection_method: ProtectionMethod(head.num("pm")),
-                merkle_hash_tree_function: MerkleHashTreeFunction(head.num("hf")),
-                live_signature_algorithm: LiveSignatureAlgorithm(head.num("sa")),
+                protection_method: ProtectionMethod(num(&g, head, "pm")),
+                merkle_hash_tree_function: MerkleHashTreeFunction(num(&g, head, "hf")),
+                live_signature_algorithm: LiveSignatureAlgorithm(num(&g, head, "sa")),
             },
             ..Default::default()
         };
 
-        let epoch = sc.lines.iter().find(|l| l.kind == "epoch").unwrap();
-        let epoch_ts = Time::from_unix_nanos(epoch.num("ts"));
+        let epoch = *sc.iter().find(|&&l| g.name(l) == "epoch").unwrap();
+        let epoch_ts = Time::from_unix_nanos(num(&g, epoch, "ts"));
         let (mut w, mut s) = Writer::new(
             WriterOptions {
                 swarm_options: options.clone(),
@@ -479,20 +470,18 @@ fn writer_matches_vectors() {
             epoch_ts,
         )
         .unwrap();
-        assert_eq!(
-            s.epoch().value(),
-            (epoch_ts, &epoch.hex("sig")[..]),
-            "{name}: epoch"
-        );
+        let (ts, sig) = s.epoch().value();
+        assert_eq!(ts, epoch_ts, "{name}: epoch");
+        g.check(epoch, "sig", hx(sig));
 
         let mut off = 0u64;
         let mut now = epoch_ts;
-        for l in &sc.lines[1..] {
-            match l.kind {
-                "uri" => assert_eq!(s.uri().to_string(), l.get("str"), "{name}: uri"),
+        for &l in &sc[1..] {
+            match g.name(l) {
+                "uri" => assert_eq!(s.uri().to_string(), g.str(l, "str"), "{name}: uri"),
                 "write" => {
-                    let n: u64 = l.num("len");
-                    if let Ok(t) = l.get("ts").parse::<i64>() {
+                    let n: u64 = num(&g, l, "len");
+                    if let Ok(t) = g.str(l, "ts").parse::<i64>() {
                         now = Time::from_unix_nanos(t);
                     }
                     let d = stream_data(off, n, salt);
@@ -500,50 +489,55 @@ fn writer_matches_vectors() {
                     off += n;
                 }
                 "phase" => {
-                    assert_eq!(s.store().tail(), Bin(l.num("tail")), "{name}: tail");
-                    assert_eq!(s.store().next(), Bin(l.num("next")), "{name}: next");
+                    assert_eq!(s.store().tail(), Bin(num(&g, l, "tail")), "{name}: tail");
+                    assert_eq!(s.store().next(), Bin(num(&g, l, "next")), "{name}: next");
                 }
                 "data" => {
-                    let b = Bin(l.num("bin"));
+                    let b = Bin(num(&g, l, "bin"));
                     let mut e = Encoded::default();
-                    match (s.write_data(b, ms(1_700_000_000_999), &mut e), l.opt("hex")) {
+                    match (
+                        s.write_data(b, ms(1_700_000_000_999), &mut e),
+                        g.opt(l, "hex"),
+                    ) {
                         (Ok(_), Some(h)) => assert_eq!(e.0, unhex(h), "{name}: data {b}"),
-                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: data {b}: rust {r:?}, recorded {:?}", l.kv),
+                        (Err(err), None) => assert_pinned_err(g.str(l, "err"), &err, name),
+                        (r, _) => {
+                            panic!("{name}: data {b}: got {r:?}, pinned {:?}", g.opt(l, "err"))
+                        }
                     }
                     *checked.entry("data").or_default() += 1;
                 }
                 "integrity" => {
-                    let b = Bin(l.num("bin"));
+                    let b = Bin(num(&g, l, "bin"));
                     let mut have = Map::new();
-                    if l.get("have") != "-" {
-                        for h in l.get("have").split(',') {
+                    if g.str(l, "have") != "-" {
+                        for h in g.str(l, "have").split(',') {
                             have.set(Bin(h.parse().unwrap()));
                         }
                     }
                     let mut e = Encoded::default();
-                    match (s.write_integrity(b, &have, &mut e), l.opt("hex")) {
-                        (Ok(_), Some(h)) => {
-                            assert_eq!(
-                                e.0,
-                                unhex(h),
-                                "{name}: integrity {b} have {}",
-                                l.get("have")
-                            )
-                        }
-                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: integrity {b}: rust {r:?}, recorded {:?}", l.kv),
+                    match (
+                        s.write_integrity(b, &have, &mut e),
+                        g.opt(l, "hex").is_some(),
+                    ) {
+                        (Ok(_), true) => g.check(l, "hex", hx(&e.0)),
+                        (Err(err), false) => assert_pinned_err(g.str(l, "err"), &err, name),
+                        (r, _) => panic!(
+                            "{name}: integrity {b}: got {r:?}, pinned {:?}",
+                            g.opt(l, "err")
+                        ),
                     }
                     *checked.entry("integrity").or_default() += 1;
                 }
                 "cache" => {
-                    match (s.export_cache(), l.opt("hex")) {
-                        (Ok(c), Some(h)) => {
-                            assert_eq!(hex::encode(c.encode_to_vec()), h, "{name}: cache");
-                            import_recorded_cache(name, &key, &options, &unhex(h), off, salt);
+                    match (s.export_cache(), g.opt(l, "hex").is_some()) {
+                        (Ok(c), true) => {
+                            let c = c.encode_to_vec();
+                            g.check(l, "hex", hx(&c));
+                            reimport_cache(name, &key, &options, &c, off, salt);
                         }
-                        (Err(err), None) => assert_recorded_err(l.get("err"), &err, name),
-                        (r, _) => panic!("{name}: cache: rust {r:?}, recorded {:?}", l.kv),
+                        (Err(err), false) => assert_pinned_err(g.str(l, "err"), &err, name),
+                        (r, _) => panic!("{name}: cache: got {r:?}, pinned {:?}", g.opt(l, "err")),
                     }
                     *checked.entry("cache").or_default() += 1;
                 }
@@ -553,31 +547,27 @@ fn writer_matches_vectors() {
     }
     // every vector was checked
     for kind in ["data", "integrity", "cache"] {
-        assert_eq!(
-            checked[kind],
-            lines().filter(|l| l.kind == kind).count(),
-            "{kind}"
-        );
+        assert_eq!(checked[kind], g.all(kind).len(), "{kind}");
     }
     assert_eq!(checked["cache"], 16);
 }
 
-/// Imports a recorded cache into a fresh swarm, exports it again
-/// and reads the stream back.
-fn import_recorded_cache(
+/// Imports an exported cache into a fresh swarm, exports it again and
+/// reads the stream back.
+fn reimport_cache(
     name: &str,
     key: &strims_proto::types::Key,
     options: &SwarmOptions,
-    recorded: &[u8],
+    exported: &[u8],
     len: u64,
     salt: u64,
 ) {
-    let c = Cache::decode(recorded).unwrap();
+    let c = Cache::decode(exported).unwrap();
     let mut s = Swarm::new(SwarmId::new(&key.public), options.clone()).unwrap();
     s.import_cache(&c)
         .unwrap_or_else(|e| panic!("{name}: import: {e}"));
     let again = s.export_cache().unwrap();
-    assert_eq!(again.encode_to_vec(), recorded, "{name}: cache re-export");
+    assert_eq!(again.encode_to_vec(), exported, "{name}: cache re-export");
 
     let mut r = s.reader();
     let mut out = vec![0u8; len as usize + 1];
@@ -605,34 +595,35 @@ fn import_recorded_cache(
 
 #[test]
 fn swarm_ids() {
+    let g = open();
     let mut n = 0;
-    for l in lines() {
-        match l.kind {
-            "swarmid" => {
-                assert_eq!(SwarmId::new(&l.hex("hex")).to_string(), l.get("str"));
-                n += 1;
-            }
-            "decodeid" => {
-                let s = String::from_utf8(l.hex("str")).unwrap();
-                match (SwarmId::decode(&s), l.opt("hex")) {
-                    (Ok(id), Some(h)) => assert_eq!(id.as_bytes(), unhex(h), "{s:?}"),
-                    (Err(_), None) => {}
-                    (r, _) => panic!("{s:?}: rust {r:?}, recorded {:?}", l.kv),
-                }
-                n += 1;
-            }
-            _ => {}
+    for l in g.all("swarmid") {
+        assert_eq!(
+            SwarmId::new(&bytes(&g, l, "hex")).to_string(),
+            g.str(l, "str")
+        );
+        n += 1;
+    }
+    for l in g.all("decodeid") {
+        let s = String::from_utf8(bytes(&g, l, "str")).unwrap();
+        match (SwarmId::decode(&s), g.opt(l, "hex")) {
+            (Ok(id), Some(h)) => assert_eq!(id.as_bytes(), unhex(h), "{s:?}"),
+            (Err(_), None) => {}
+            (r, _) => panic!("{s:?}: got {r:?}, pinned {:?}", g.opt(l, "hex")),
         }
+        n += 1;
     }
     assert_eq!(n, 20);
 }
 
 #[test]
 fn uris() {
+    let g = open();
     let id = SwarmId::new(&(0..32).map(|i| 0xa0 + i as u8).collect::<Vec<_>>());
-    let strings: Vec<&str> = lines()
-        .filter(|l| l.kind == "uristring")
-        .map(|l| l.get("str"))
+    let strings: Vec<&str> = g
+        .all("uristring")
+        .into_iter()
+        .map(|l| g.str(l, "str"))
         .collect();
     let mut partial = UriOptions::default();
     partial.insert(ProtocolOptionType::StreamCount, 32);
@@ -647,9 +638,9 @@ fn uris() {
     );
 
     let mut n = 0;
-    for l in lines().filter(|l| l.kind == "parseuri") {
-        let s = String::from_utf8(l.hex("str")).unwrap();
-        match (Uri::parse(&s), l.opt("id")) {
+    for l in g.all("parseuri") {
+        let s = String::from_utf8(bytes(&g, l, "str")).unwrap();
+        match (Uri::parse(&s), g.opt(l, "id")) {
             (Ok(u), Some(id)) => {
                 assert_eq!(u.id.as_bytes(), unhex(id), "{s:?}");
                 let opts: Vec<String> = u
@@ -663,10 +654,10 @@ fn uris() {
                 } else {
                     opts.join(",")
                 };
-                assert_eq!(opts, l.get("opts"), "{s:?}");
+                assert_eq!(opts, g.str(l, "opts"), "{s:?}");
             }
             (Err(_), None) => {}
-            (r, _) => panic!("{s:?}: rust {r:?}, recorded {:?}", l.kv),
+            (r, _) => panic!("{s:?}: got {r:?}, pinned {:?}", g.opt(l, "id")),
         }
         n += 1;
     }

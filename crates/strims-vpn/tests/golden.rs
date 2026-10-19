@@ -1,14 +1,19 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Recorded golden vectors (`golden/vectors.txt`):
+//! Golden vectors (`golden/vectors.txt`):
 //!
-//! - messages marshaled by up to five hosts in turn: re-encoded hop by hop
-//!   from the same keys and times, byte for byte, signatures included;
-//! - verification results on tampered copies;
+//! - messages marshaled by up to five hosts in turn, hop by hop from the
+//!   same keys and times, signatures included;
+//! - verification results on tampered copies of a message's last wire
+//!   (`verify message=<n>` tampers with the `n`th `message` vector, from 0);
 //! - the AES-GCM message filter with fixed keys and nonces, both ways;
 //! - signed hash table and peer index records and the service messages
 //!   that carry them, and peer exchange messages.
+//!
+//! `STRIMS_GOLDEN=update` rewrites the computed fields from the code (see
+//! `strims-golden`). Verification results and peer exchange messages are
+//! asserted, never rewritten.
 
 #![allow(
     clippy::unwrap_used,
@@ -17,11 +22,13 @@
     clippy::panic
 )]
 
-use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::str::FromStr;
 
 use prost::Message as _;
 use strims_base::time::Time;
 use strims_crypto::{SignableMessage, key_from_seed, signing_key};
+use strims_golden::Golden;
 use strims_kademlia::ID;
 use strims_proto::types::Key;
 use strims_proto::vnic::v1::LinkDescription;
@@ -29,122 +36,148 @@ use strims_proto::vpn::v1::{
     HashTableMessage, PeerExchangeMessage, PeerIndexMessage, hash_table_message as ht,
     peer_exchange_message as px, peer_index_message as pi,
 };
-use strims_vpn::message::{MessageHeader, MessageId, encode_message, encode_relay};
+use strims_vpn::message::{MessageHeader, encode_message, encode_relay};
 use strims_vpn::message_filter::MessageCipher;
 use strims_vpn::{MessageView, hash_table_record_hash, peer_index_record_hash};
 
-const VECTORS: &str = include_str!("../golden/vectors.txt");
-
-fn vectors(kind: &str) -> Vec<BTreeMap<&'static str, &'static str>> {
-    VECTORS
-        .lines()
-        .filter_map(|l| {
-            let mut parts = l.split(' ');
-            (parts.next() == Some(kind)).then(|| {
-                parts
-                    .map(|kv| kv.split_once('=').unwrap())
-                    .collect::<BTreeMap<_, _>>()
-            })
-        })
-        .collect()
+fn open() -> Golden {
+    Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.txt"))
 }
 
-fn hex(s: &str) -> Vec<u8> {
-    hex::decode(s).unwrap()
+fn num<T: FromStr>(g: &Golden, e: usize, k: &str) -> T
+where
+    T::Err: Debug,
+{
+    g.str(e, k).parse().unwrap()
 }
 
-fn key(seed_hex: &str) -> Key {
-    let seed: [u8; 32] = hex(seed_hex).try_into().unwrap();
-    key_from_seed(&seed)
+fn key(seed: &[u8]) -> Key {
+    key_from_seed(&seed.try_into().unwrap())
 }
 
 fn id_of(k: &Key) -> ID {
     ID::unmarshal(&k.public).unwrap().0
 }
 
-#[test]
-fn messages_are_byte_identical_hop_by_hop() {
-    let vs = vectors("message");
-    assert_eq!(vs.len(), 4);
-    for v in vs {
-        let body = hex(v["body"]);
-        let header = MessageHeader {
-            dst_id: id_of(&key(v["dst_seed"])),
-            dst_port: v["dst_port"].parse().unwrap(),
-            src_port: v["src_port"].parse().unwrap(),
-            seq: v["seq"].parse().unwrap(),
-            length: 0,
-            flags: v["flags"].parse().unwrap(),
-        };
-        let seeds: Vec<&str> = v["hop_seeds"].split(',').collect();
-        let times: Vec<Time> = v["times"]
+/// A `message` vector's inputs.
+struct MessageCase {
+    header: MessageHeader,
+    body: Vec<u8>,
+    hosts: Vec<Key>,
+    times: Vec<Time>,
+}
+
+impl MessageCase {
+    fn read(g: &Golden, e: usize) -> Self {
+        let hosts: Vec<Key> = g
+            .str(e, "hop_seeds")
+            .split(',')
+            .map(|s| key(&hex::decode(s).unwrap()))
+            .collect();
+        let times: Vec<Time> = g
+            .str(e, "times")
             .split(',')
             .map(|t| Time::from_unix_nanos(t.parse().unwrap()))
             .collect();
-        let wires: Vec<Vec<u8>> = v["wires"].split(',').map(hex).collect();
-        assert_eq!(seeds.len(), wires.len());
-
-        let mut prev: Option<Vec<u8>> = None;
-        for (hop, (seed, want)) in seeds.iter().zip(&wires).enumerate() {
-            let k = key(seed);
-            let sk = signing_key(&k).unwrap();
-            let mut got = Vec::new();
-            match &prev {
-                None => {
-                    encode_message(&mut got, &header, &body, times[hop], &id_of(&k), &sk).unwrap()
-                }
-                Some(p) => {
-                    let m = MessageView::decode(p).unwrap();
-                    encode_relay(&mut got, &m, times[hop], &id_of(&k), &sk);
-                }
-            }
-            assert_eq!(hex::encode(&got), hex::encode(want), "hop {hop}");
-
-            let m = MessageView::decode(want).unwrap();
-            assert_eq!(m.raw(), &want[..]);
-            assert_eq!(m.hops(), hop + 1);
-            assert_eq!(m.body, &body[..]);
-            assert_eq!(
-                m.header,
-                MessageHeader {
-                    length: body.len() as u16,
-                    ..header
-                }
-            );
-            for j in 0..=hop {
-                assert!(m.verify(j), "hop {hop} entry {j}");
-                let e = m.entry(j).unwrap();
-                assert_eq!(e.host_id, id_of(&key(seeds[j])));
-                assert_eq!(e.time, times[j]);
-            }
-            assert!(!m.verify(hop + 1));
-            prev = Some(got);
+        assert_eq!(hosts.len(), times.len());
+        MessageCase {
+            header: MessageHeader {
+                dst_id: id_of(&key(&g.bytes(e, "dst_seed"))),
+                dst_port: num(g, e, "dst_port"),
+                src_port: num(g, e, "src_port"),
+                seq: num(g, e, "seq"),
+                length: 0,
+                flags: num(g, e, "flags"),
+            },
+            body: g.bytes(e, "body"),
+            hosts,
+            times,
         }
-        let last = MessageView::decode(wires.last().unwrap()).unwrap();
-        assert_eq!(
-            last.id().unwrap(),
-            MessageId(hex(v["id"]).try_into().unwrap())
-        );
-        assert_eq!(last.src_host_id(), Some(id_of(&key(seeds[0]))));
+    }
+
+    /// The wire after each hop: the first host marshals the message and
+    /// each later one relays the previous hop's wire.
+    fn wires(&self) -> Vec<Vec<u8>> {
+        let mut wires: Vec<Vec<u8>> = Vec::new();
+        for (k, &time) in self.hosts.iter().zip(&self.times) {
+            let sk = signing_key(k).unwrap();
+            let mut wire = Vec::new();
+            match wires.last() {
+                None => encode_message(&mut wire, &self.header, &self.body, time, &id_of(k), &sk)
+                    .unwrap(),
+                Some(prev) => {
+                    let m = MessageView::decode(prev).unwrap();
+                    encode_relay(&mut wire, &m, time, &id_of(k), &sk);
+                }
+            }
+            wires.push(wire);
+        }
+        wires
     }
 }
 
 #[test]
-fn verify_matches_go_on_tampered_messages() {
-    let vs = vectors("verify");
-    assert!(vs.len() >= 30);
-    for v in vs {
-        let mut wire = hex(v["wire"]);
-        let pos: usize = v["pos"].parse().unwrap();
+fn messages_are_byte_identical_hop_by_hop() {
+    let mut g = open();
+    let entries = g.all("message");
+    assert_eq!(entries.len(), 4);
+    for e in entries {
+        let c = MessageCase::read(&g, e);
+        let wires = c.wires();
+        for (hop, wire) in wires.iter().enumerate() {
+            let m = MessageView::decode(wire).unwrap();
+            assert_eq!(m.raw(), &wire[..]);
+            assert_eq!(m.hops(), hop + 1);
+            assert_eq!(m.body, &c.body[..]);
+            assert_eq!(
+                m.header,
+                MessageHeader {
+                    length: c.body.len() as u16,
+                    ..c.header
+                }
+            );
+            for j in 0..=hop {
+                assert!(m.verify(j), "hop {hop} entry {j}");
+                let entry = m.entry(j).unwrap();
+                assert_eq!(entry.host_id, id_of(&c.hosts[j]));
+                assert_eq!(entry.time, c.times[j]);
+            }
+            assert!(!m.verify(hop + 1));
+        }
+        let last = MessageView::decode(wires.last().unwrap()).unwrap();
+        assert_eq!(last.src_host_id(), Some(id_of(&c.hosts[0])));
+        g.check_hex(e, "id", last.id().unwrap().0);
+        let wires: Vec<String> = wires.iter().map(hex::encode).collect();
+        g.check(e, "wires", wires.join(","));
+    }
+}
+
+#[test]
+fn tampered_bytes_fail_every_entry_that_signs_them() {
+    let g = open();
+    let last_wires: Vec<Vec<u8>> = g
+        .all("message")
+        .into_iter()
+        .map(|e| MessageCase::read(&g, e).wires().pop().unwrap())
+        .collect();
+    let entries = g.all("verify");
+    assert_eq!(entries.len(), 37);
+    for e in entries {
+        let mut wire = last_wires[num::<usize>(&g, e, "message")].clone();
+        let pos: usize = num(&g, e, "pos");
         wire[pos] ^= 1;
         let m = MessageView::decode(&wire);
-        if v.get("decode") == Some(&"error") {
+        if g.opt(e, "decode") == Some("error") {
             assert!(m.is_err(), "pos {pos}");
             continue;
         }
         let m = m.unwrap();
-        assert_eq!(m.hops(), v["hops"].parse::<usize>().unwrap(), "pos {pos}");
-        let want: Vec<bool> = v["results"].split(',').map(|r| r == "true").collect();
+        assert_eq!(m.hops(), num::<usize>(&g, e, "hops"), "pos {pos}");
+        let want: Vec<bool> = g
+            .str(e, "results")
+            .split(',')
+            .map(|r| r == "true")
+            .collect();
         let got: Vec<bool> = (0..=m.hops()).map(|j| m.verify(j)).collect();
         assert_eq!(got, want, "pos {pos}");
     }
@@ -152,49 +185,49 @@ fn verify_matches_go_on_tampered_messages() {
 
 #[test]
 fn message_cipher_matches_vectors() {
-    let vs = vectors("cipher");
-    assert_eq!(vs.len(), 4);
-    for v in vs {
-        let (a, b) = (key(v["a_seed"]), key(v["b_seed"]));
-        let nonce: [u8; 12] = hex(v["nonce"]).try_into().unwrap();
-        let plain = hex(v["plain"]);
-        let sealed = hex(v["sealed"]);
-        let mut got = Vec::new();
+    let mut g = open();
+    let entries = g.all("cipher");
+    assert_eq!(entries.len(), 4);
+    for e in entries {
+        let (a, b) = (key(&g.bytes(e, "a_seed")), key(&g.bytes(e, "b_seed")));
+        let nonce: [u8; 12] = g.bytes(e, "nonce").try_into().unwrap();
+        let plain = g.bytes(e, "plain");
+        let mut sealed = Vec::new();
         MessageCipher::new(&a, &id_of(&b))
             .unwrap()
-            .seal(&nonce, &plain, &mut got)
+            .seal(&nonce, &plain, &mut sealed)
             .unwrap();
-        assert_eq!(hex::encode(&got), hex::encode(&sealed));
         let mut opened = Vec::new();
         MessageCipher::new(&b, &id_of(&a))
             .unwrap()
             .open(&sealed, &mut opened)
             .unwrap();
         assert_eq!(opened, plain);
+        g.check_hex(e, "sealed", &sealed);
     }
 }
 
 #[test]
 fn hash_table_records_and_messages() {
-    let vs = vectors("ht_record");
-    assert_eq!(vs.len(), 3);
-    for v in vs {
-        let k = key(v["seed"]);
+    let mut g = open();
+    let entries = g.all("ht_record");
+    assert_eq!(entries.len(), 3);
+    for e in entries {
+        let k = key(&g.bytes(e, "seed"));
         let mut r = ht::Record {
-            salt: hex(v["salt"]),
-            value: hex(v["value"]),
-            timestamp: v["timestamp"].parse().unwrap(),
+            salt: g.bytes(e, "salt"),
+            value: g.bytes(e, "value"),
+            timestamp: num(&g, e, "timestamp"),
             ..Default::default()
         };
         r.sign_message(&k).unwrap();
-        assert_eq!(hex::encode(r.encode_to_vec()), v["record"]);
-        assert_eq!(
-            hash_table_record_hash(&k.public, &r.salt).to_vec(),
-            hex(v["hash"])
-        );
-        let decoded = ht::Record::decode(&hex(v["record"])[..]).unwrap();
+        let hash = hash_table_record_hash(&k.public, &r.salt);
+        let record = r.encode_to_vec();
+        let decoded = ht::Record::decode(&record[..]).unwrap();
         decoded.verify_message().unwrap();
         assert_eq!(decoded, r);
+        g.check_hex(e, "hash", hash);
+        g.check_hex(e, "record", &record);
 
         let msg = |body| HashTableMessage { body: Some(body) }.encode_to_vec();
         let publish = msg(ht::Body::Publish(ht::Publish {
@@ -205,7 +238,7 @@ fn hash_table_records_and_messages() {
         }));
         let get = msg(ht::Body::GetRequest(ht::GetRequest {
             request_id: 0x0123_4567_89ab_cdef,
-            hash: hex(v["hash"]),
+            hash: hash.to_vec(),
             if_modified_since: r.timestamp - 1,
         }));
         let res = msg(ht::Body::GetResponse(ht::GetResponse {
@@ -218,54 +251,50 @@ fn hash_table_records_and_messages() {
             (get, "get_request"),
             (res, "get_response"),
         ] {
-            assert_eq!(hex::encode(&got), v[name], "{name}");
             let m = HashTableMessage::decode(&got[..]).unwrap();
-            assert_eq!(m.encode_to_vec(), got);
+            assert_eq!(m.encode_to_vec(), got, "{name}");
+            g.check_hex(e, name, &got);
         }
     }
 }
 
 #[test]
 fn peer_index_records_and_messages() {
-    let vs = vectors("pi_record");
-    assert_eq!(vs.len(), 2);
+    let mut g = open();
+    let entries = g.all("pi_record");
+    assert_eq!(entries.len(), 2);
     let mut records = Vec::new();
-    for v in vs {
-        let host = key(v["seed"]);
-        let hash = peer_index_record_hash(&hex(v["key"]), &hex(v["salt"]));
+    for e in entries {
+        let host = key(&g.bytes(e, "seed"));
+        let hash = peer_index_record_hash(&g.bytes(e, "key"), &g.bytes(e, "salt"));
         let mut r = pi::Record {
             hash: hash.to_vec(),
             host_id: host.public.clone(),
-            port: v["port"].parse().unwrap(),
-            timestamp: v["timestamp"].parse().unwrap(),
+            port: num(&g, e, "port"),
+            timestamp: num(&g, e, "timestamp"),
             ..Default::default()
         };
         r.sign_message(&host).unwrap();
-        assert_eq!(hex::encode(r.encode_to_vec()), v["record"]);
-        pi::Record::decode(&hex(v["record"])[..])
-            .unwrap()
-            .verify_message()
-            .unwrap();
+        let record = r.encode_to_vec();
+        let decoded = pi::Record::decode(&record[..]).unwrap();
+        decoded.verify_message().unwrap();
+        assert_eq!(decoded, r);
+        g.check_hex(e, "record", &record);
+
         let msg = |body| PeerIndexMessage { body: Some(body) }.encode_to_vec();
-        assert_eq!(
-            hex::encode(msg(pi::Body::Publish(pi::Publish {
-                record: Some(r.clone())
-            }))),
-            v["publish"]
-        );
-        assert_eq!(
-            hex::encode(msg(pi::Body::Unpublish(pi::Unpublish {
-                record: Some(r.clone())
-            }))),
-            v["unpublish"]
-        );
-        assert_eq!(
-            hex::encode(msg(pi::Body::SearchRequest(pi::SearchRequest {
-                request_id: 99,
-                hash: hash.to_vec(),
-            }))),
-            v["search_request"]
-        );
+        let publish = msg(pi::Body::Publish(pi::Publish {
+            record: Some(r.clone()),
+        }));
+        let unpublish = msg(pi::Body::Unpublish(pi::Unpublish {
+            record: Some(r.clone()),
+        }));
+        let search = msg(pi::Body::SearchRequest(pi::SearchRequest {
+            request_id: 99,
+            hash: hash.to_vec(),
+        }));
+        g.check_hex(e, "publish", publish);
+        g.check_hex(e, "unpublish", unpublish);
+        g.check_hex(e, "search_request", search);
         records.push(r);
     }
     let res = PeerIndexMessage {
@@ -274,15 +303,14 @@ fn peer_index_records_and_messages() {
             records,
         })),
     };
-    assert_eq!(
-        hex::encode(res.encode_to_vec()),
-        vectors("pi_search_response")[0]["response"]
-    );
+    let e = g.entry("pi_search_response");
+    g.check_hex(e, "response", res.encode_to_vec());
 }
 
 #[test]
 fn peer_exchange_messages() {
-    let v = &vectors("px")[0];
+    let g = open();
+    let e = g.all("px")[0];
     let descs = vec![
         LinkDescription {
             interface: "tcp".into(),
@@ -308,7 +336,7 @@ fn peer_exchange_messages() {
         descriptions: vec![],
         error_message: strims_vpn::peer_exchange::ERR_NO_NEW_PEERS.into(),
     }));
-    assert_eq!(hex::encode(offer), v["offer"]);
-    assert_eq!(hex::encode(answer), v["answer"]);
-    assert_eq!(hex::encode(reject), v["reject"]);
+    assert_eq!(hex::encode(offer), g.str(e, "offer"));
+    assert_eq!(hex::encode(answer), g.str(e, "answer"));
+    assert_eq!(hex::encode(reject), g.str(e, "reject"));
 }

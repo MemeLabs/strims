@@ -1,10 +1,11 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Replays the recorded vectors in `golden/vectors.txt`: frames,
-//! `FrameWriter` batching, `TCPMuxInit`, the AES link handshake and
-//! ciphertext, `PeerInit`, listener URIs and the WebRTC session description
-//! JSON.
+//! Golden vectors (`golden/vectors.txt`): frames, `FrameWriter` batching,
+//! `TCPMuxInit`, the AES link handshake and ciphertext, a host's
+//! `PeerInit`, listener URIs and the WebRTC session description JSON.
+//! Values are hex, and lists are comma-separated. `STRIMS_GOLDEN=update`
+//! rewrites the vectors from the code (see `strims-golden`).
 
 #![allow(
     clippy::unwrap_used,
@@ -13,15 +14,13 @@
     clippy::panic
 )]
 
-use std::collections::BTreeMap;
-
 use strims_base::rng::det_rng;
 use strims_base::time::Time;
 use strims_crypto::{
     certificate_parent, key_from_seed, key_to_curve25519, public_key_to_curve25519,
     verify_certificate,
 };
-use strims_kademlia::ID;
+use strims_golden::Golden;
 use strims_proto::vnic::v1::PeerInit;
 use strims_vnic::stream::{MessageReader, decode_stream_message, encode_stream_message};
 use strims_vnic::tcp::{encode_tcp_mux_init, format_tcp_uri};
@@ -32,69 +31,53 @@ use strims_vnic::{
     LinkConfig, LinkKind, TcpMuxAcceptor,
 };
 
-struct Vector {
-    kind: String,
-    fields: BTreeMap<String, String>,
+fn open() -> Golden {
+    Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/vectors.txt"))
 }
 
-impl Vector {
-    fn s(&self, k: &str) -> &str {
-        self.fields
-            .get(k)
-            .unwrap_or_else(|| panic!("{} missing {k}", self.kind))
-    }
-    fn hex(&self, k: &str) -> Vec<u8> {
-        hex::decode(self.s(k)).unwrap()
-    }
-    fn text(&self, k: &str) -> String {
-        String::from_utf8(self.hex(k)).unwrap()
-    }
-    fn list(&self, k: &str) -> Vec<Vec<u8>> {
-        let s = self.s(k);
-        if s.is_empty() {
-            return vec![];
-        }
-        s.split(',').map(|x| hex::decode(x).unwrap()).collect()
-    }
-    fn num<T: std::str::FromStr>(&self, k: &str) -> T
-    where
-        T::Err: std::fmt::Debug,
-    {
-        self.s(k).parse().unwrap()
-    }
+/// The entries named `name`, of which there must be some.
+fn entries(g: &Golden, name: &str) -> Vec<usize> {
+    let es = g.all(name);
+    assert!(!es.is_empty(), "no {name} vectors");
+    es
 }
 
-fn vectors(kind: &str) -> Vec<Vector> {
-    let text = include_str!("../golden/vectors.txt");
-    let vs: Vec<Vector> = text
-        .lines()
-        .filter(|l| l.split(' ').next() == Some(kind))
-        .map(|l| {
-            let mut parts = l.split(' ');
-            let kind = parts.next().unwrap().to_owned();
-            let fields = parts
-                .map(|p| {
-                    let (k, v) = p.split_once('=').unwrap();
-                    (k.to_owned(), v.to_owned())
-                })
-                .collect();
-            Vector { kind, fields }
-        })
-        .collect();
-    assert!(!vs.is_empty(), "no {kind} vectors");
-    vs
+fn num<T: std::str::FromStr>(g: &Golden, e: usize, k: &str) -> T
+where
+    T::Err: std::fmt::Debug,
+{
+    g.str(e, k).parse().unwrap()
+}
+
+fn text(g: &Golden, e: usize, k: &str) -> String {
+    String::from_utf8(g.bytes(e, k)).unwrap()
+}
+
+fn arr<const N: usize>(b: Vec<u8>) -> [u8; N] {
+    b.try_into().unwrap()
+}
+
+fn list(g: &Golden, e: usize, k: &str) -> Vec<Vec<u8>> {
+    let s = g.str(e, k);
+    if s.is_empty() {
+        return vec![];
+    }
+    s.split(',').map(|x| hex::decode(x).unwrap()).collect()
+}
+
+fn hex_list(items: &[Vec<u8>]) -> String {
+    items.iter().map(hex::encode).collect::<Vec<_>>().join(",")
 }
 
 #[test]
 fn frames() {
-    for v in vectors("frame") {
-        let port: u16 = v.num("port");
-        let body = v.hex("body");
-        let wire = v.hex("wire");
+    let mut g = open();
+    for e in entries(&g, "frame") {
+        let port: u16 = num(&g, e, "port");
+        let body = g.bytes(e, "body");
         let f = Frame { port, body: &body };
-        let mut buf = vec![0u8; f.encoded_len()];
-        assert_eq!(f.encode(&mut buf).unwrap(), wire.len());
-        assert_eq!(buf, wire);
+        let mut wire = vec![0u8; f.encoded_len()];
+        assert_eq!(f.encode(&mut wire).unwrap(), wire.len());
         assert_eq!(Frame::decode(&wire).unwrap(), (f, wire.len()));
         for split in 0..=wire.len() {
             let mut d = FrameDecoder::new();
@@ -103,16 +86,20 @@ fn frames() {
             d.decode(&wire[split..], &mut |f| got.push((f.port, f.body.to_vec())));
             assert_eq!(got, vec![(port, body.clone())]);
         }
+        g.check_hex(e, "wire", &wire);
     }
 }
 
+/// `ops` are `w:<data>` (write), `wf:<data>` (write a frame) and `f`
+/// (flush); `writes` are the frames on a link with the given MTU.
 #[test]
 fn frame_writer_batching() {
-    for v in vectors("framewriter") {
-        let mtu: usize = v.num("mtu");
-        let port: u16 = v.num("port");
+    let mut g = open();
+    for e in entries(&g, "framewriter") {
+        let mtu: usize = num(&g, e, "mtu");
+        let port: u16 = num(&g, e, "port");
         let mut w = FrameWriter::new(mtu - FRAME_HEADER_LEN, 1 << 20);
-        for op in v.s("ops").split(',') {
+        for op in g.str(e, "ops").split(',') {
             match op.split_once(':') {
                 Some(("w", d)) => {
                     let d = hex::decode(d).unwrap();
@@ -125,8 +112,7 @@ fn frame_writer_batching() {
                 _ => panic!("op {op}"),
             }
         }
-        // Each recorded link write is one frame.
-        let mut got = vec![];
+        let mut writes = vec![];
         let mut body = vec![0u8; mtu - FRAME_HEADER_LEN];
         loop {
             let n = w.fill(&mut body);
@@ -140,109 +126,125 @@ fn frame_writer_batching() {
             }
             .encode(&mut frame)
             .unwrap();
-            got.push(frame);
+            writes.push(frame);
         }
-        assert_eq!(got, v.list("writes"), "mtu {mtu}");
+        g.check(e, "writes", hex_list(&writes));
     }
 }
 
 #[test]
 fn tcp_mux_init() {
-    for v in vectors("tcpmuxinit") {
-        let key: [u8; 32] = v.hex("peer_key").try_into().unwrap();
-        let wire = v.hex("wire");
-        let mut out = vec![];
-        encode_tcp_mux_init(&key, &mut out).unwrap();
-        assert_eq!(out, wire);
+    let mut g = open();
+    for e in entries(&g, "tcpmuxinit") {
+        let key: [u8; 32] = arr(g.bytes(e, "peer_key"));
+        let mut wire = vec![];
+        encode_tcp_mux_init(&key, &mut wire).unwrap();
         assert_eq!(
             TcpMuxAcceptor::new().handle_input(&wire).unwrap(),
             (wire.len(), Some(key))
         );
+        g.check_hex(e, "wire", &wire);
     }
 }
 
-/// The recorded handshake ran on both ends (A dialing B with B's key) with
-/// fixed IVs, then wrote the plaintext chunks each way.
+/// A dials B with B's key and B accepts any key, each with a fixed IV.
+/// Each side's wire is its handshake init, then its plaintext chunks
+/// encrypted in order.
 #[test]
 fn aes_link() {
-    for v in vectors("aes") {
-        let a = key_from_seed(&v.hex("a_seed").try_into().unwrap());
-        let b = key_from_seed(&v.hex("b_seed").try_into().unwrap());
-        let b_pub: [u8; 32] = b.public.as_slice().try_into().unwrap();
-        let (a_wire, b_wire) = (v.hex("a_wire"), v.hex("b_wire"));
-        let (a_plain, b_plain) = (v.list("a_plain"), v.list("b_plain"));
+    let mut g = open();
+    for e in entries(&g, "aes") {
+        let a = key_from_seed(&arr(g.bytes(e, "a_seed")));
+        let b = key_from_seed(&arr(g.bytes(e, "b_seed")));
+        let b_pub: [u8; 32] = arr(b.public.clone());
+        let (a_plain, b_plain) = (list(&g, e, "a_plain"), list(&g, e, "b_plain"));
 
-        // A's side: same init bytes, same ciphertext.
-        let hs = AesLinkHandshake::with_iv(
+        let mut a_hs = AesLinkHandshake::with_iv(
             key_to_curve25519(&a).unwrap(),
             Some(public_key_to_curve25519(&b_pub)),
-            v.hex("a_iv").try_into().unwrap(),
+            arr(g.bytes(e, "a_iv")),
         );
-        let mut init = vec![];
-        hs.write_init(&mut init).unwrap();
-        assert_eq!(init, a_wire[..init.len()]);
-        let mut hs = hs;
-        let (n, link) = hs.handle_input(&b_wire).unwrap();
-        let mut link = link.unwrap();
-        let mut ct = vec![];
-        for chunk in &a_plain {
-            let mut c = chunk.clone();
-            link.encrypt(&mut c);
-            ct.extend(c);
-        }
-        assert_eq!(ct, a_wire[init.len()..]);
-        // Decrypt B's ciphertext in odd pieces.
-        let mut pt = b_wire[n..].to_vec();
-        for c in pt.chunks_mut(3) {
-            link.decrypt(c);
-        }
-        assert_eq!(pt, b_plain.concat());
-
-        // B's side (the listener, accepting any key).
-        let mut hs = AesLinkHandshake::with_iv(
+        let mut b_hs = AesLinkHandshake::with_iv(
             key_to_curve25519(&b).unwrap(),
             None,
-            v.hex("b_iv").try_into().unwrap(),
+            arr(g.bytes(e, "b_iv")),
         );
-        let mut init = vec![];
-        hs.write_init(&mut init).unwrap();
-        assert_eq!(init, b_wire[..n]);
-        let (m, link) = hs.handle_input(&a_wire).unwrap();
-        let mut link = link.unwrap();
-        let mut pt = a_wire[m..].to_vec();
-        link.decrypt(&mut pt);
+        let (mut a_wire, mut b_wire) = (vec![], vec![]);
+        a_hs.write_init(&mut a_wire).unwrap();
+        b_hs.write_init(&mut b_wire).unwrap();
+        let (a_init, b_init) = (a_wire.len(), b_wire.len());
+        let (n, a_link) = a_hs.handle_input(&b_wire).unwrap();
+        assert_eq!(n, b_init);
+        let (n, b_link) = b_hs.handle_input(&a_wire).unwrap();
+        assert_eq!(n, a_init);
+        let (mut a_link, mut b_link) = (a_link.unwrap(), b_link.unwrap());
+        for (link, plain, wire) in [
+            (&mut a_link, &a_plain, &mut a_wire),
+            (&mut b_link, &b_plain, &mut b_wire),
+        ] {
+            for chunk in plain {
+                let mut c = chunk.clone();
+                link.encrypt(&mut c);
+                wire.extend(c);
+            }
+        }
+
+        // A decrypts B's ciphertext in odd pieces, B decrypts A's at once.
+        let mut pt = b_wire[b_init..].to_vec();
+        for c in pt.chunks_mut(3) {
+            a_link.decrypt(c);
+        }
+        assert_eq!(pt, b_plain.concat());
+        let mut pt = a_wire[a_init..].to_vec();
+        b_link.decrypt(&mut pt);
         assert_eq!(pt, a_plain.concat());
+
+        g.check_hex(e, "a_wire", &a_wire);
+        g.check_hex(e, "b_wire", &b_wire);
     }
 }
 
-/// Recorded `PeerInit`s.
+/// The `PeerInit` a host sends at `now`: its profile key from
+/// `profile_seed`, its host key from `det_rng(rng_seed)` and its `label`.
 #[test]
 fn peer_init() {
-    for v in vectors("peerinit") {
-        let wire = v.hex("wire");
-        let now = Time::from_unix_nanos(v.num("now")).truncate(Time::PRECISION);
-        let mut r = MessageReader::new();
-        let pushed = r.push(&wire);
-        assert_eq!(pushed.consumed, wire.len());
-        let init: PeerInit = decode_stream_message(pushed.message.unwrap()).unwrap();
-        // Re-encoding is byte-identical.
-        let mut again = vec![];
-        encode_stream_message(&init, &mut again).unwrap();
-        assert_eq!(again, wire);
+    let mut g = open();
+    for e in entries(&g, "peerinit") {
+        let now = Time::from_unix_nanos(num(&g, e, "now")).truncate(Time::PRECISION);
+        let label = text(&g, e, "label");
+        let config = HostConfig {
+            label: label.clone(),
+            ..HostConfig::default()
+        };
+        let profile = key_from_seed(&arr(g.bytes(e, "profile_seed")));
+        let mut a: Host<()> = Host::new(profile, config, det_rng(num(&g, e, "rng_seed"))).unwrap();
+        let init = a.peer_init(now).unwrap();
+        let mut wire = vec![];
+        encode_stream_message(&init, &mut wire).unwrap();
 
         assert_eq!(init.protocol_version, 1);
         assert_eq!(init.node_platform, "");
         assert_eq!(init.node_version, "dev");
         let cert = init.certificate.as_ref().unwrap();
         verify_certificate(cert, now).unwrap();
-        assert_eq!(cert.key, v.hex("host_id"));
-        assert_eq!(cert.subject, v.text("label"));
-        let parent = certificate_parent(cert).unwrap();
-        assert_eq!(parent.key, v.hex("profile_key"));
-        assert_eq!(parent.subject, "");
+        assert_eq!(cert.key, a.key().public);
+        assert_eq!(cert.subject, label);
         assert_eq!(cert.not_after - cert.not_before, 2 * 3600);
+        let parent = certificate_parent(cert).unwrap();
+        assert_eq!(parent.key, a.profile_key().public);
+        assert_eq!(parent.subject, "");
 
-        // A Rust host completes the handshake on it.
+        // Decoding and re-encoding is the identity.
+        let mut r = MessageReader::new();
+        let pushed = r.push(&wire);
+        assert_eq!(pushed.consumed, wire.len());
+        let decoded: PeerInit = decode_stream_message(pushed.message.unwrap()).unwrap();
+        assert_eq!(decoded, init);
+        let mut again = vec![];
+        encode_stream_message(&decoded, &mut again).unwrap();
+        assert_eq!(again, wire);
+
+        // Another host completes the handshake on it.
         let mut h: Host<()> =
             Host::new(key_from_seed(&[9; 32]), HostConfig::default(), det_rng(9)).unwrap();
         let link = h
@@ -254,84 +256,89 @@ fn peer_init() {
                 .unwrap(),
             wire.len()
         );
-        let host_id = ID::from_bytes(&v.hex("host_id").try_into().unwrap());
         assert_eq!(
             h.poll_event(),
             Some(Event::PeerAdded {
                 peer: link,
-                host_id
+                host_id: a.id()
             })
         );
         assert_eq!(
             h.peer(link).unwrap().certificate().key,
-            v.hex("profile_key")
+            a.profile_key().public
         );
 
-        // Rust's own PeerInit has the same shape.
-        let ours = h.peer_init(now).unwrap();
-        let c = ours.certificate.as_ref().unwrap();
-        assert_eq!(c.key, h.key().public);
-        assert_eq!(c.not_after - c.not_before, 2 * 3600);
-        assert_eq!(certificate_parent(c).unwrap().key, h.profile_key().public);
-        verify_certificate(c, now).unwrap();
+        g.check_hex(e, "host_id", &a.key().public);
+        g.check_hex(e, "profile_key", &a.profile_key().public);
+        g.check_hex(e, "wire", &wire);
     }
 }
 
+/// `out` is empty for an address that has no URI.
 #[test]
 fn tcp_uris() {
-    for v in vectors("tcpuri") {
-        let got = format_tcp_uri(&v.text("address"), &v.text("host_ip"), &v.hex("key"));
-        let want = v.text("out");
-        if want.is_empty() {
-            assert!(got.is_err(), "{} -> {got:?}", v.text("address"));
-        } else {
-            assert_eq!(got.unwrap(), want);
-        }
+    let mut g = open();
+    for e in entries(&g, "tcpuri") {
+        let address = text(&g, e, "address");
+        let out = match format_tcp_uri(&address, &text(&g, e, "host_ip"), &g.bytes(e, "key")) {
+            Ok(uri) => {
+                assert!(!uri.is_empty(), "{address}");
+                uri
+            }
+            Err(_) => String::new(),
+        };
+        g.check_hex(e, "out", out);
     }
 }
 
+/// `out` is empty for an address that has no URI.
 #[test]
 fn ws_uris() {
-    for v in vectors("wsuri") {
+    let mut g = open();
+    for e in entries(&g, "wsuri") {
         let addr = WsListenAddress {
-            address: v.text("address"),
-            public_hostname: v.text("public_hostname"),
-            public_port: v.num("public_port"),
-            secure: v.num("secure"),
+            address: text(&g, e, "address"),
+            public_hostname: text(&g, e, "public_hostname"),
+            public_port: num(&g, e, "public_port"),
+            secure: num(&g, e, "secure"),
         };
-        let got = format_ws_uri(&addr, &v.hex("key"));
-        let want = v.text("out");
-        if want.is_empty() {
-            assert!(got.is_err(), "{addr:?} -> {got:?}");
-        } else {
-            assert_eq!(got.unwrap(), want);
-        }
+        let out = match format_ws_uri(&addr, &g.bytes(e, "key")) {
+            Ok(uri) => {
+                assert!(!uri.is_empty(), "{addr:?}");
+                uri
+            }
+            Err(_) => String::new(),
+        };
+        g.check_hex(e, "out", out);
     }
 }
 
 #[test]
 fn sdp_json() {
-    for v in vectors("sdp") {
+    let mut g = open();
+    for e in entries(&g, "sdp") {
         let d = SessionDescription {
-            sdp_type: SdpType::parse(v.s("type")).unwrap(),
-            sdp: v.text("sdp"),
+            sdp_type: SdpType::parse(g.str(e, "type")).unwrap(),
+            sdp: text(&g, e, "sdp"),
         };
-        let json = v.text("json");
-        assert_eq!(d.to_json(), json);
+        let json = d.to_json();
         assert_eq!(SessionDescription::from_json(&json).unwrap(), d);
+        g.check_hex(e, "json", json);
     }
-    for v in vectors("sdpdecode") {
-        let json = v.text("json");
-        let got = SessionDescription::from_json(&json);
-        // Parsing succeeds exactly when the vector is marked ok and its type
-        // is a known name.
-        match SdpType::parse(v.s("type")) {
-            Some(t) if v.s("ok") == "true" => {
-                let d = got.unwrap();
-                assert_eq!(d.sdp_type, t, "{json}");
-                assert_eq!(d.sdp, v.text("sdp"));
+    // An accepted `json` pins the `type` and `sdp` it parses to. A rejected
+    // one must not be marked `ok` with a known type.
+    for e in entries(&g, "sdpdecode") {
+        let json = text(&g, e, "json");
+        match SessionDescription::from_json(&json) {
+            Ok(d) => {
+                g.check(e, "ok", "true");
+                g.check(e, "type", d.sdp_type.as_str());
+                g.check_hex(e, "sdp", d.sdp);
             }
-            _ => assert!(got.is_err(), "{json} -> {got:?}"),
+            Err(err) => assert!(
+                g.str(e, "ok") != "true" || SdpType::parse(g.str(e, "type")).is_none(),
+                "{json}: {err:?}"
+            ),
         }
     }
 }

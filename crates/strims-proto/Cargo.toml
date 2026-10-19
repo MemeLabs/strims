@@ -24,6 +24,7 @@ protox.workspace = true
 heck = "0.5"
 
 [dev-dependencies]
+strims-golden.workspace = true
 hex.workspace = true
 
 [[test]]

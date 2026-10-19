@@ -1,0 +1,14 @@
+[package]
+name = "strims-golden"
+description = "Golden vector files that pin wire and store formats, and their regeneration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hex.workspace = true
+
+[lints]
+workspace = true
