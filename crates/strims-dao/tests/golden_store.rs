@@ -47,6 +47,7 @@ use strims_dao::schema::chat::{
     ChatUiConfigHighlights, ChatUiConfigIgnores, ChatUiConfigTags, WhisperRecords, WhisperThreads,
     profile_peer_key,
 };
+use strims_dao::schema::debug::DebugConfig;
 use strims_dao::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
 };
@@ -74,6 +75,7 @@ use strims_kv::{Dump, MemoryKv};
 use strims_proto::autoseed::v1 as autoseed;
 use strims_proto::chat::v1::{self as chat, emote_effect};
 use strims_proto::dao::v1::{Mutex, SecondaryIndexKey, VersionVector};
+use strims_proto::debug::v1 as debug;
 use strims_proto::network::v1::bootstrap::{
     self, BootstrapClient, BootstrapClientWebSocketOptions, bootstrap_client::ClientOptions,
 };
@@ -843,6 +845,16 @@ async fn record_store() -> String {
         .await
         .unwrap();
 
+    // A debug config that reads the mock streams on the joined network.
+    write(&rs, async |tx| {
+        let config = debug::Config {
+            enable_mock_streams: true,
+            mock_stream_network_key: joined_network_key.clone(),
+        };
+        DebugConfig::set(tx, config).await
+    })
+    .await;
+
     for (table, rows) in kv.dump() {
         for (key, value) in rows {
             out.out("kv", &[table.as_bytes(), key.as_bytes(), &value]);
@@ -884,6 +896,7 @@ async fn record_store() -> String {
     out.singleton::<VnicConfig>(&mut tx).await;
     out.singleton::<AutoseedConfig>(&mut tx).await;
     out.table::<AutoseedRules>(&mut tx).await;
+    out.singleton::<DebugConfig>(&mut tx).await;
     let metas = SwarmCacheMetas::get_all(&mut tx).await.unwrap();
     for m in &metas {
         out.record(SwarmCacheMetas::NS, m.id, m);
@@ -1074,6 +1087,7 @@ fn canonical(ns: i64, bytes: &[u8]) -> Vec<u8> {
         VnicConfig::NS => re::<<VnicConfig as Singleton>::Record>(bytes),
         AutoseedConfig::NS => re::<<AutoseedConfig as Singleton>::Record>(bytes),
         AutoseedRules::NS => re::<<AutoseedRules as Table>::Record>(bytes),
+        DebugConfig::NS => re::<<DebugConfig as Singleton>::Record>(bytes),
         SwarmCacheMetas::NS => re::<<SwarmCacheMetas as Table>::Record>(bytes),
         SwarmCaches::NS => re::<<SwarmCaches as Table>::Record>(bytes),
         other => panic!("no record type for {other}"),
@@ -1122,6 +1136,7 @@ fn read(tx: &mut ReadTx<MemoryKv>, ns: i64, id: u64) -> Option<Vec<u8>> {
         VnicConfig::NS => s::<VnicConfig>(tx),
         AutoseedConfig::NS => s::<AutoseedConfig>(tx),
         AutoseedRules::NS => t::<AutoseedRules>(tx, id),
+        DebugConfig::NS => s::<DebugConfig>(tx),
         SwarmCacheMetas::NS => t::<SwarmCacheMetas>(tx, id),
         SwarmCaches::NS => t::<SwarmCaches>(tx, id),
         other => panic!("no record type for {other}"),
@@ -1229,6 +1244,7 @@ fn every_key_is_the_one_this_crate_derives() {
         HlsConfig::NS,
         VnicConfig::NS,
         AutoseedConfig::NS,
+        DebugConfig::NS,
     ] {
         derived.insert(ns.key());
     }
@@ -1245,6 +1261,7 @@ fn every_key_is_the_one_this_crate_derives() {
     known.extend(9001..=9006);
     known.extend(10001..=10002);
     known.extend(11001..=11003);
+    known.insert(12001);
 
     let table = &kv.dump()[&strims_dao::key::profile_table(g.profile.id)];
     let stored: BTreeSet<String> = table
@@ -1754,4 +1771,26 @@ fn vnic_autoseed_and_swarm_cache_records_read_back() {
     block(Networks::delete(&mut tx, owned.id)).unwrap();
     let left = block(AutoseedRules::get_all(&mut tx)).unwrap();
     assert_eq!(left, [rules[1].clone()]);
+}
+
+/// The enabled debug config names the joined network, and deleting that
+/// network clears its key.
+#[test]
+fn the_debug_config_reads_back() {
+    let g = load();
+    let (_, store) = open(&g);
+    let mut tx = block(store.write(g.now)).unwrap();
+    let networks = block(Networks::get_all(&mut tx)).unwrap();
+    let owned = networks.iter().find(|n| n.server_config.is_some()).unwrap();
+    let joined = networks.iter().find(|n| n.server_config.is_none()).unwrap();
+    let config = block(DebugConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(config.enable_mock_streams);
+    assert_eq!(config.mock_stream_network_key, network_key(joined));
+
+    block(Networks::delete(&mut tx, owned.id)).unwrap();
+    assert_eq!(block(DebugConfig::get(&mut tx)).unwrap(), Some(config));
+    block(Networks::delete(&mut tx, joined.id)).unwrap();
+    let cleared = block(DebugConfig::get(&mut tx)).unwrap().unwrap();
+    assert!(cleared.enable_mock_streams);
+    assert!(cleared.mock_stream_network_key.is_empty());
 }

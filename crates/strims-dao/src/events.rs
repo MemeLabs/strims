@@ -24,6 +24,7 @@ use futures_core::Stream;
 use slotmap::{SlotMap, new_key_type};
 use strims_proto::autoseed::v1 as autoseed;
 use strims_proto::chat::v1 as chat;
+use strims_proto::debug::v1 as debug;
 use strims_proto::network::v1 as network;
 use strims_proto::notification::v1::Notification;
 use strims_proto::profile::v1::Device;
@@ -86,6 +87,8 @@ pub enum Record {
     AutoseedConfig(autoseed::Config),
     /// An autoseed rule.
     AutoseedRule(autoseed::Rule),
+    /// Whether this device reads mock streams, and on which network.
+    DebugConfig(debug::Config),
 }
 
 /// Something that happened in the store.

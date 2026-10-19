@@ -28,6 +28,7 @@ use strims_kv::{Kv, MemoryKv, ReadTx as _};
 use strims_proto::autoseed::v1::{Config as AutoseedConfigRecord, Rule};
 use strims_proto::chat::v1::{self as chat, UiConfigHighlight};
 use strims_proto::dao::v1::{SecondaryIndexKey, StoreVersion};
+use strims_proto::debug::v1::Config as DebugConfigRecord;
 use strims_proto::network::v1::bootstrap;
 use strims_proto::network::v1::directory::{Listing, ListingSnippet, UserModeration, listing};
 use strims_proto::network::v1::{Network, ServerConfig};
@@ -47,6 +48,7 @@ use crate::schema::chat::{
     ChatEmotes, ChatModifiers, ChatProfiles, ChatServerIcons, ChatServers, ChatTags,
     profile_peer_key,
 };
+use crate::schema::debug::{DebugConfig, clear_network};
 use crate::schema::directory::{
     DirectoryListingRecords, DirectoryUserRecords, listing_key, new_listing_record, new_user_record,
 };
@@ -2244,6 +2246,113 @@ fn deleting_a_network_deletes_its_autoseed_rules() {
     tx.set_applying(77);
     block(Networks::delete(&mut tx, 2)).unwrap();
     assert_eq!(autoseed_rule_ids(&mut tx), [30, 31]);
+}
+
+fn debug_events(events: Vec<StoreEvent>) -> Vec<StoreEvent> {
+    events
+        .into_iter()
+        .filter(|e| matches!(e, StoreEvent::Changed(Record::DebugConfig(_))))
+        .collect()
+}
+
+#[test]
+fn deleting_a_network_clears_the_debug_configs_network_key() {
+    let kv = MemoryKv::new();
+    let store = new_store(&kv);
+    let (a, b, c) = (
+        owned_network(1, 1),
+        owned_network(2, 2),
+        owned_network(3, 3),
+    );
+    let (kb, kc) = (network_key(&b), network_key(&c));
+    let on_b = DebugConfigRecord {
+        enable_mock_streams: true,
+        mock_stream_network_key: kb,
+    };
+    block(async {
+        let mut tx = store.write(T0).await.unwrap();
+        for n in [&a, &b, &c] {
+            Networks::insert(&mut tx, n.clone()).await.unwrap();
+        }
+        DebugConfig::set(&mut tx, on_b.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+    });
+
+    let mut sub = store.events().subscribe();
+    let mut tx = block(store.write(T0)).unwrap();
+    // another network's deletion leaves the config alone
+    block(Networks::delete(&mut tx, 1)).unwrap();
+    assert_eq!(block(DebugConfig::get(&mut tx)).unwrap(), Some(on_b));
+    block(Networks::delete(&mut tx, 2)).unwrap();
+    let cleared = DebugConfigRecord {
+        enable_mock_streams: true,
+        mock_stream_network_key: Vec::new(),
+    };
+    assert_eq!(
+        block(DebugConfig::get(&mut tx)).unwrap(),
+        Some(cleared.clone())
+    );
+    block(tx.commit()).unwrap();
+    assert_eq!(
+        debug_events(drain(&mut sub)),
+        [StoreEvent::Changed(Record::DebugConfig(cleared))]
+    );
+
+    // a deletion applied from another replica too
+    let on_c = DebugConfigRecord {
+        enable_mock_streams: false,
+        mock_stream_network_key: kc,
+    };
+    let mut tx = block(store.write(T0)).unwrap();
+    block(DebugConfig::set(&mut tx, on_c)).unwrap();
+    block(tx.commit()).unwrap();
+    let mut tx = block(store.write(T0)).unwrap();
+    tx.set_applying(77);
+    block(Networks::delete(&mut tx, 3)).unwrap();
+    assert_eq!(
+        block(DebugConfig::get(&mut tx)).unwrap(),
+        Some(DebugConfigRecord::default())
+    );
+}
+
+#[test]
+fn debug_config_has_a_default_and_stays_on_the_device() {
+    let kv = MemoryKv::new();
+    let store = replicated(&kv);
+    let mut sub = store.events().subscribe();
+    let config = DebugConfigRecord {
+        enable_mock_streams: true,
+        mock_stream_network_key: b"net".to_vec(),
+    };
+    block(async {
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            DebugConfig::get(&mut tx).await.unwrap(),
+            Some(DebugConfigRecord {
+                enable_mock_streams: false,
+                mock_stream_network_key: Vec::new(),
+            })
+        );
+        drop(tx);
+
+        let mut tx = store.write(T0).await.unwrap();
+        // clearing a key the config doesn't hold writes nothing
+        clear_network(&mut tx, b"absent").await.unwrap();
+        DebugConfig::set(&mut tx, config.clone()).await.unwrap();
+        clear_network(&mut tx, b"absent").await.unwrap();
+        tx.commit().await.unwrap();
+        let mut tx = store.read().await.unwrap();
+        assert_eq!(
+            DebugConfig::get(&mut tx).await.unwrap(),
+            Some(config.clone())
+        );
+        assert!(EventLogs::get_all(&mut tx).await.unwrap().is_empty());
+    });
+    assert!(DebugConfig::REPLICATION.is_none());
+    assert_eq!(
+        drain(&mut sub),
+        [StoreEvent::Changed(Record::DebugConfig(config))]
+    );
 }
 
 /// A cache of a swarm holding `data`.

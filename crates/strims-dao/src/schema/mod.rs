@@ -9,6 +9,7 @@
 
 pub mod autoseed;
 pub mod chat;
+pub mod debug;
 pub mod directory;
 pub mod network;
 pub mod notification;
