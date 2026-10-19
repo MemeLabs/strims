@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A WebDriver session in headless Firefox through geckodriver, with only
-//! the commands the UI smoke test sends: navigate, find, type, click and
-//! read the URL.
+//! the commands the UI smoke test sends: navigate, find, type, click, and
+//! read the URL or an element's text.
 //!
 //! [`Session::start`] runs `$GECKODRIVER`, else `/snap/bin/geckodriver`,
 //! else `geckodriver` on PATH, on ports the OS picked, and skips with a
@@ -234,6 +234,13 @@ impl Session {
     pub async fn click(&self, element: &str) {
         let path = self.path(&format!("/element/{element}/click"));
         self.command("POST", &path, Some(&json!({}))).await;
+    }
+
+    /// The element's rendered text.
+    pub async fn text(&self, element: &str) -> String {
+        let path = self.path(&format!("/element/{element}/text"));
+        let v = self.command("GET", &path, None).await;
+        v.as_str().unwrap().to_owned()
     }
 
     /// Ends the session, which closes Firefox.

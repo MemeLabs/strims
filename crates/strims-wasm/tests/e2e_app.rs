@@ -15,6 +15,10 @@
 //!   at her CA, and both count a peer on the network;
 //! - alice opens a chat room, bob finds it in the network's directory,
 //!   and a message from each reaches both;
+//! - alice starts a mock stream on the network, bob enables mock streams
+//!   on it and reads alice's with its latency, and his metrics snapshot
+//!   counts the worker's heap and linear memory; when alice stops the
+//!   stream, bob's reader ends;
 //! - Firefox is killed and started again on the same profile: bob signs
 //!   in with the profile key his sign-up returned, finds his profile, his
 //!   network and his bootstrap client in IndexedDB, links to alice again
@@ -59,6 +63,7 @@ use strims_proto::chat::v1::{
     CreateServerRequest as CreateChatServerRequest, OpenClientRequest, OpenClientResponse, Room,
     server_event,
 };
+use strims_proto::debug::v1 as debug;
 use strims_proto::network::v1::bootstrap::{
     BootstrapClientWebSocketOptions, BootstrapFrontendClient, Config as BootstrapConfig,
     CreateBootstrapClientRequest, ListBootstrapClientsRequest, ListBootstrapPeersRequest,
@@ -224,6 +229,19 @@ impl Profile {
 
     fn bootstrap(&self) -> BootstrapFrontendClient<Client> {
         BootstrapFrontendClient::new(self.client.clone())
+    }
+
+    fn debug(&self) -> debug::DebugClient<Client> {
+        debug::DebugClient::new(self.client.clone())
+    }
+
+    /// The node's metrics snapshot.
+    async fn metrics(&self) -> Option<debug::Metrics> {
+        self.debug()
+            .read_metrics(&debug::ReadMetricsRequest {})
+            .await
+            .ok()?
+            .metrics
     }
 
     fn hex_key(&self) -> String {
@@ -549,7 +567,7 @@ impl Steps {
 
 #[tokio::test]
 #[ignore = "launches headless Firefox"]
-async fn a_browser_profile_joins_a_native_network_chats_and_persists() {
+async fn a_browser_profile_joins_a_native_network_chats_reads_a_mock_stream_and_persists() {
     LocalSet::new()
         .run_until(async {
             let Some(mut browser) = Browser::serve().await else {
@@ -671,6 +689,70 @@ async fn scenario(browser: &mut Browser) {
             let both = [("alice", "hi bob"), ("bob", "hey alice")];
             expect_messages("alice", &mut at_alice, &both).await;
             expect_messages("bob", &mut at_bob, &both).await;
+        })
+        .await;
+
+    let stream = steps
+        .run("bob reads alice's mock stream with its latency", async {
+            let id = alice
+                .debug()
+                .start_mock_stream(&debug::StartMockStreamRequest {
+                    bitrate_kbps: 1000,
+                    segment_interval_ms: 500,
+                    timeout_ms: 0,
+                    network_key: key.clone(),
+                })
+                .await
+                .unwrap()
+                .id;
+            bob.debug()
+                .set_config(&debug::SetConfigRequest {
+                    config: Some(debug::Config {
+                        enable_mock_streams: true,
+                        mock_stream_network_key: key.clone(),
+                    }),
+                })
+                .await
+                .unwrap();
+            let (reader, memory) = eventually("bob reading alice's mock stream", STEP, || async {
+                let m = bob.metrics().await?;
+                let reader = m
+                    .debug?
+                    .readers
+                    .into_iter()
+                    .find(|r| r.id == Some(id) && r.segments >= 3 && r.latency.is_some())?;
+                Some((reader, m.memory?))
+            })
+            .await;
+            assert_eq!(reader.network_key, key);
+            assert_eq!(reader.malformed, 0);
+            assert!(
+                memory.live_bytes > 0 && memory.linear_memory_bytes > 0,
+                "bob's worker counts its heap: {memory:?}"
+            );
+            eprintln!(
+                "bob read {} segments, the last {} µs after alice wrote it; \
+                 his worker's heap holds {} of {} bytes of linear memory",
+                reader.segments,
+                reader.latency.unwrap() / 1000,
+                memory.live_bytes,
+                memory.linear_memory_bytes
+            );
+            id
+        })
+        .await;
+    steps
+        .run("alice stops the mock stream and bob's reader ends", async {
+            alice
+                .debug()
+                .stop_mock_stream(&debug::StopMockStreamRequest { id: stream })
+                .await
+                .unwrap();
+            eventually("bob's reader to end", STEP, || async {
+                let readers = bob.metrics().await?.debug?.readers;
+                readers.is_empty().then_some(())
+            })
+            .await;
         })
         .await;
 
