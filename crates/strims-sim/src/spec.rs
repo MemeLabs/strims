@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SwarmOptions};
 use strims_vpn::Routing;
+use strims_wan::Site;
 
 use crate::stream::FRAME_LEN;
 
@@ -29,8 +30,9 @@ pub enum Transport {
 #[derive(Clone, Debug)]
 pub struct HostSpec {
     pub name: String,
-    /// The upload cap in bytes per second (`NodeConfig::rate_limit`), the
-    /// host's only bandwidth limit: turmoil models none.
+    /// The upload cap in bytes per second (`NodeConfig::rate_limit`).
+    /// Turmoil models no bandwidth, so outside WAN mode this is the host's
+    /// only rate limit.
     pub uplink: Option<u64>,
     pub max_peers: u32,
     /// vpn routing for this host; `None` uses [`Scenario::routing`].
@@ -41,6 +43,9 @@ pub struct HostSpec {
     /// A WebRTC UDP socket on [`crate::UDP_PORT`], offered in peer
     /// exchanges (`NodeConfig::webrtc`).
     pub webrtc: bool,
+    /// Where the host sits on the WAN ([`Scenario::wan`]); every host has
+    /// one in WAN mode.
+    pub site: Option<Site>,
 }
 
 /// A link the `from` host dials (and redials while it is down).
@@ -131,6 +136,12 @@ impl SwarmSpec {
         self
     }
 
+    /// A live window of `chunks` chunks (see [`Invariants::for_window`]).
+    pub fn with_live_window(mut self, chunks: usize) -> SwarmSpec {
+        self.options.live_window = chunks;
+        self
+    }
+
     /// The stream rate in bytes per second.
     pub fn rate(&self) -> f64 {
         (self.frames_per_write * FRAME_LEN) as f64 / self.write_interval.as_secs_f64()
@@ -188,7 +199,9 @@ pub enum Fault {
     /// streams that lose a segment stall until their read timeout.
     Partition(Vec<HostIx>, Vec<HostIx>),
     Repair(Vec<HostIx>, Vec<HostIx>),
-    /// Hold everything between the groups and deliver it on release.
+    /// Hold everything between the groups and deliver it on release. In
+    /// WAN mode, messages still cross the path and the receiver's downlink
+    /// meanwhile, and wait there.
     Hold(Vec<HostIx>, Vec<HostIx>),
     Release(Vec<HostIx>, Vec<HostIx>),
     /// Kill the host's software (`Sim::crash`), after partitioning it from
@@ -201,7 +214,9 @@ pub enum Fault {
     /// partition between the host and the others first, including those of
     /// a [`Fault::Partition`].
     Restart(HostIx),
-    /// Fixed latency between the groups (`Sim::set_link_latency`).
+    /// Fixed one-way latency between the groups (`Sim::set_link_latency`).
+    /// In WAN mode it replaces the paths' base latency, and jitter, loss
+    /// and bandwidth still apply.
     Latency(Vec<HostIx>, Vec<HostIx>, Duration),
     /// The host's swarm readers stop reading, or resume.
     PauseReading(HostIx),
@@ -259,6 +274,22 @@ pub struct Invariants {
     pub clean_input: bool,
 }
 
+impl Invariants {
+    /// The defaults of [`Scenario::new`] for swarms with a live window of
+    /// `chunks` chunks: no data queue above one window, ppspp's cap on
+    /// request deadlines for that window, clean input.
+    pub fn for_window(chunks: usize) -> Invariants {
+        Invariants {
+            max_data_queue: Some(chunks),
+            max_pending_requests: Some(strims_ppspp::scheduler_peer::max_pending_requests(
+                chunks as u64,
+            )),
+            clean_input: true,
+            ..Invariants::default()
+        }
+    }
+}
+
 /// The live window of [`SwarmSpec::live`], in chunks.
 pub const LIVE_WINDOW: usize = 1 << 10;
 /// The default [`Invariants::max_data_queue`]: one live window.
@@ -289,8 +320,12 @@ pub struct Scenario {
     pub invariants: Invariants,
     /// vpn routing of every host without its own (`HostSpec::routing`).
     pub routing: Routing,
-    /// turmoil's per-message latency range.
+    /// turmoil's per-message latency range, outside WAN mode.
     pub latency: (Duration, Duration),
+    /// WAN mode: when set, every host has a [`HostSpec::site`], and
+    /// messages between hosts cross [`strims_wan::Network`] paths (see
+    /// [WAN mode](crate#wan-mode)).
+    pub wan: Option<strims_wan::Options>,
     /// How long the run lasts (simulated).
     pub duration: Duration,
     /// How often the controller samples every node's metrics (and memory),
@@ -327,6 +362,7 @@ impl Scenario {
             },
             routing: Routing::default(),
             latency: (Duration::from_millis(2), Duration::from_millis(20)),
+            wan: None,
             duration: Duration::from_secs(60),
             sample_every: Duration::from_secs(5),
             stats_every: Some(Duration::from_secs(1)),
@@ -344,8 +380,30 @@ impl Scenario {
             routing: None,
             listen: true,
             webrtc: false,
+            site: None,
         });
         self.hosts.len() - 1
+    }
+
+    /// Adds a node at `site` and returns its index; turns on WAN mode. The
+    /// node caps its upload at 90 % of the site's uplink, so its own
+    /// scheduling, not the access link's queue, sets the pace.
+    pub fn host_at(&mut self, name: &str, site: Site) -> HostIx {
+        let h = self.host(name, Some(site.profile.up / 10 * 9));
+        if let Some(hs) = self.hosts.get_mut(h) {
+            hs.site = Some(site);
+        }
+        self.wan.get_or_insert_with(strims_wan::Options::default);
+        h
+    }
+
+    /// Adds a node named `<prefix><i>` at each of `sites`.
+    pub fn hosts_at(&mut self, prefix: &str, sites: &[Site]) -> Vec<HostIx> {
+        sites
+            .iter()
+            .enumerate()
+            .map(|(i, &site)| self.host_at(&format!("{prefix}{i}"), site))
+            .collect()
     }
 
     /// Adds `n` nodes named `<prefix><i>`.

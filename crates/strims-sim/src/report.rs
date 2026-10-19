@@ -23,9 +23,15 @@
 //!
 //! The runner counters behind the data share, duplicates and hit rate are
 //! described in [`crate::stats`].
+//!
+//! In WAN mode, [`Report::wan`] holds each host's site and access link
+//! counters, and [`Report::lag_by_region`] and [`Report::lag_by_access`]
+//! split the lag by the viewers' regions and access links.
 
 use std::collections::BTreeMap;
 use std::fmt;
+
+use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
 use crate::stats::{Peaks, RunnerReport, SwarmCounters};
@@ -192,6 +198,47 @@ impl MemoryReport {
     }
 }
 
+/// One host's access link in WAN mode.
+#[derive(Clone, Debug)]
+pub struct WanHostReport {
+    pub name: String,
+    pub site: Site,
+    pub stats: EndStats,
+}
+
+/// The access links of a WAN run, in host order.
+#[derive(Clone, Debug, Default)]
+pub struct WanReport {
+    pub hosts: Vec<WanHostReport>,
+}
+
+impl WanReport {
+    /// The longest waits for an uplink and for a downlink, with the hosts
+    /// that had them.
+    pub fn queue_peaks(&self) -> ((u32, &str), (u32, &str)) {
+        let peak = |f: fn(&EndStats) -> strims_base::time::Duration| {
+            self.hosts
+                .iter()
+                .map(|h| (ms(f(&h.stats)), h.name.as_str()))
+                .max_by_key(|&(d, _)| d)
+                .unwrap_or((0, "-"))
+        };
+        (peak(|s| s.up_queue_max), peak(|s| s.down_queue_max))
+    }
+
+    /// Stream messages that lost a packet, and lost datagrams, over every
+    /// host.
+    pub fn losses(&self) -> (u64, u64) {
+        self.hosts.iter().fold((0, 0), |(r, d), h| {
+            (r + h.stats.retransmits, d + h.stats.drops)
+        })
+    }
+}
+
+fn ms(d: strims_base::time::Duration) -> u32 {
+    u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX)
+}
+
 /// Everything one run measured.
 #[derive(Clone, Debug)]
 pub struct Report {
@@ -217,6 +264,8 @@ pub struct Report {
     /// `(ms, what)` for every invariant violation (see
     /// [`crate::Invariants`]).
     pub violations: Vec<(u64, String)>,
+    /// The access links, in WAN mode.
+    pub wan: Option<WanReport>,
 }
 
 impl Report {
@@ -251,6 +300,44 @@ impl Report {
                 .filter(|v| v.swarm == swarm)
                 .flat_map(|v| v.stats.lags.iter().map(|&(_, l)| l)),
         )
+    }
+
+    /// The lag of every frame read by the viewers of `swarm` among `hosts`.
+    pub fn lag_of(&self, swarm: usize, hosts: &[HostIx]) -> Percentiles {
+        Percentiles::of(
+            self.viewers
+                .iter()
+                .filter(|v| v.swarm == swarm && hosts.contains(&v.host))
+                .flat_map(|v| v.stats.lags.iter().map(|&(_, l)| l)),
+        )
+    }
+
+    /// The lag of `swarm`'s viewers by the region of their site, for the
+    /// regions that have viewers (WAN mode).
+    pub fn lag_by_region(&self, swarm: usize) -> Vec<(Region, Percentiles)> {
+        let mut by: BTreeMap<Region, Vec<HostIx>> = BTreeMap::new();
+        for v in self.viewers.iter().filter(|v| v.swarm == swarm) {
+            if let Some(site) = self.scenario.hosts.get(v.host).and_then(|h| h.site) {
+                by.entry(site.city.region()).or_default().push(v.host);
+            }
+        }
+        by.into_iter()
+            .map(|(region, hosts)| (region, self.lag_of(swarm, &hosts)))
+            .collect()
+    }
+
+    /// The lag of `swarm`'s viewers by their access link, for the kinds of
+    /// access that have viewers (WAN mode).
+    pub fn lag_by_access(&self, swarm: usize) -> Vec<(Access, Percentiles)> {
+        let mut by: BTreeMap<Access, Vec<HostIx>> = BTreeMap::new();
+        for v in self.viewers.iter().filter(|v| v.swarm == swarm) {
+            if let Some(site) = self.scenario.hosts.get(v.host).and_then(|h| h.site) {
+                by.entry(site.access).or_default().push(v.host);
+            }
+        }
+        by.into_iter()
+            .map(|(access, hosts)| (access, self.lag_of(swarm, &hosts)))
+            .collect()
     }
 
     /// Delivered over written frames, summed over `swarm`'s viewers: each
@@ -500,6 +587,30 @@ impl Report {
             s.push_str(&format!(
                 "\n    lookups (gets, searches): {}",
                 phases.join("; ")
+            ));
+        }
+        if let Some(wan) = &self.wan {
+            for (i, _) in self.scenario.swarms.iter().enumerate() {
+                let regions: Vec<String> = self
+                    .lag_by_region(i)
+                    .iter()
+                    .map(|(r, p)| format!("{r} {p}"))
+                    .collect();
+                let access: Vec<String> = self
+                    .lag_by_access(i)
+                    .iter()
+                    .map(|(a, p)| format!("{a} {p}"))
+                    .collect();
+                s.push_str(&format!(
+                    "\n  swarm {i} lag ms by region: {}\n  swarm {i} lag ms by access: {}",
+                    regions.join("; "),
+                    access.join("; ")
+                ));
+            }
+            let ((up, up_host), (down, down_host)) = wan.queue_peaks();
+            let (retransmits, drops) = wan.losses();
+            s.push_str(&format!(
+                "\n  wan: uplink queue peak {up} ms ({up_host}), downlink queue peak {down} ms ({down_host}), retransmissions {retransmits}, datagrams lost {drops}"
             ));
         }
         if let Some(m) = &self.memory {

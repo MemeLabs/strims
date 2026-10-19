@@ -11,8 +11,9 @@ use sha2::{Digest, Sha256};
 use turmoil::Sim;
 
 use crate::memory::MemoryGroup;
-use crate::report::{MemoryReport, Report, ViewerReport};
+use crate::report::{MemoryReport, Report, ViewerReport, WanReport};
 use crate::spec::{Fault, HostIx, Scenario};
+use crate::wan::{Scheduler, sim_time};
 use crate::world::World;
 use crate::{EPOCH_MS, control, host};
 
@@ -38,15 +39,15 @@ pub fn run(spec: Scenario, seed: u64) -> Result<Report, String> {
     let sim_secs = simulate(&w);
     let wall_secs = elapsed();
     drop(guard);
-    let sim_secs = sim_secs?;
+    let (sim_secs, wan) = sim_secs?;
     let memory = counters.filter(|c| c.peak() > 0).map(|c| MemoryReport {
         peak: c.peak(),
         samples: w.st.borrow().memory_samples.clone(),
     });
-    Ok(report(&w, sim_secs, wall_secs, memory))
+    Ok(report(&w, sim_secs, wall_secs, memory, wan))
 }
 
-fn simulate(w: &Rc<World>) -> Result<f64, String> {
+fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let spec = &w.spec;
     // str0m draws ICE credentials and SCTP details from a thread-local rng.
     strims_node::seed_str0m_thread_rng(w.seed);
@@ -65,6 +66,17 @@ fn simulate(w: &Rc<World>) -> Result<f64, String> {
         sim.host(hs.name.as_str(), move || host::host_main(wc.clone(), h));
     }
     sim.client(CONTROLLER, control::controller(w.clone()));
+    let mut wan = match spec.wan {
+        Some(options) => Some(Scheduler::new(&sim, spec, options, w.seed)?),
+        None => None,
+    };
+    if wan.is_some() {
+        for hs in &spec.hosts {
+            if let Some(site) = hs.site {
+                w.log_at(0, "wan", format!("{} {site}", hs.name));
+            }
+        }
+    }
 
     let mut faults = spec.faults.clone();
     faults.sort_by_key(|f| f.at);
@@ -73,8 +85,11 @@ fn simulate(w: &Rc<World>) -> Result<f64, String> {
         while let Some(f) = faults.get(next)
             && sim.elapsed() >= f.at
         {
-            apply(&mut sim, w, &f.fault);
+            apply(&mut sim, w, wan.as_mut(), &f.fault);
             next += 1;
+        }
+        if let Some(s) = wan.as_mut() {
+            s.walk(&sim)?;
         }
         match sim.step() {
             Ok(true) => break,
@@ -83,9 +98,27 @@ fn simulate(w: &Rc<World>) -> Result<f64, String> {
         }
     }
     let secs = sim.elapsed().as_secs_f64();
+    let ms = u64::try_from(sim.elapsed().as_millis()).unwrap_or(u64::MAX);
     // Dropping the simulation drops every runtime, and with them the nodes.
     drop(sim);
-    Ok(secs)
+    let wan = wan.map(|s| s.report(spec));
+    for h in wan.iter().flat_map(|r| &r.hosts) {
+        w.log_at(
+            ms,
+            "wan",
+            format!(
+                "{} up {} down {} uplink queue peak {} ms downlink queue peak {} ms retransmissions {} datagrams lost {}",
+                h.name,
+                h.stats.up_bytes,
+                h.stats.down_bytes,
+                h.stats.up_queue_max.as_millis(),
+                h.stats.down_queue_max.as_millis(),
+                h.stats.retransmits,
+                h.stats.drops,
+            ),
+        );
+    }
+    Ok((secs, wan))
 }
 
 fn names(w: &World, hs: &[HostIx]) -> String {
@@ -101,32 +134,60 @@ fn for_pairs(w: &World, a: &[HostIx], b: &[HostIx], mut f: impl FnMut(&str, &str
     }
 }
 
+fn for_ix_pairs(a: &[HostIx], b: &[HostIx], mut f: impl FnMut(HostIx, HostIx)) {
+    for &x in a {
+        for &y in b {
+            f(x, y);
+        }
+    }
+}
+
 /// Every other host of the scenario.
 fn others(w: &World, h: HostIx) -> Vec<HostIx> {
     (0..w.spec.hosts.len()).filter(|&x| x != h).collect()
 }
 
-fn apply(sim: &mut Sim<'_>, w: &World, f: &Fault) {
+/// Applies a fault. In WAN mode the scheduler holds every link between
+/// hosts, so turmoil's own hold, release and latency never apply to them:
+/// the scheduler freezes pairs, takes new latencies, and is told of every
+/// partition and repair (a repaired link is held anew).
+fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
     let ms = u64::try_from(sim.elapsed().as_millis()).unwrap_or(u64::MAX);
     let line = match f {
         Fault::Partition(a, b) => {
             for_pairs(w, a, b, |x, y| sim.partition(x, y));
+            if let Some(s) = wan {
+                for_ix_pairs(a, b, |x, y| s.partition(x, y));
+            }
             format!("partition {} | {}", names(w, a), names(w, b))
         }
         Fault::Repair(a, b) => {
             for_pairs(w, a, b, |x, y| sim.repair(x, y));
+            if let Some(s) = wan {
+                for_pairs(w, a, b, |x, y| sim.hold(x, y));
+                for_ix_pairs(a, b, |x, y| s.repair(x, y));
+            }
             format!("repair {} | {}", names(w, a), names(w, b))
         }
         Fault::Hold(a, b) => {
-            for_pairs(w, a, b, |x, y| sim.hold(x, y));
+            match wan {
+                Some(s) => for_ix_pairs(a, b, |x, y| s.freeze(x, y)),
+                None => for_pairs(w, a, b, |x, y| sim.hold(x, y)),
+            }
             format!("hold {} | {}", names(w, a), names(w, b))
         }
         Fault::Release(a, b) => {
-            for_pairs(w, a, b, |x, y| sim.release(x, y));
+            match wan {
+                Some(s) => for_ix_pairs(a, b, |x, y| s.thaw(x, y)),
+                None => for_pairs(w, a, b, |x, y| sim.release(x, y)),
+            }
             format!("release {} | {}", names(w, a), names(w, b))
         }
         Fault::Latency(a, b, d) => {
-            for_pairs(w, a, b, |x, y| sim.set_link_latency(x, y, *d));
+            match wan {
+                Some(s) => for_ix_pairs(a, b, |x, y| s.set_latency(x, y, (*d).into())),
+                None => for_pairs(w, a, b, |x, y| sim.set_link_latency(x, y, *d)),
+            }
             format!(
                 "latency {} | {} {} ms",
                 names(w, a),
@@ -143,6 +204,12 @@ fn apply(sim: &mut Sim<'_>, w: &World, f: &Fault) {
             for x in others(w, *h) {
                 sim.partition(w.name(*h), w.name(x));
             }
+            if let Some(s) = wan {
+                for x in others(w, *h) {
+                    s.partition(*h, x);
+                }
+                s.crashed(*h, sim_time(sim.elapsed()));
+            }
             sim.crash(w.name(*h));
             w.crashed(*h);
             format!("crash {}", w.name(*h))
@@ -150,6 +217,12 @@ fn apply(sim: &mut Sim<'_>, w: &World, f: &Fault) {
         Fault::Restart(h) => {
             for x in others(w, *h) {
                 sim.repair(w.name(*h), w.name(x));
+            }
+            if let Some(s) = wan {
+                for x in others(w, *h) {
+                    sim.hold(w.name(*h), w.name(x));
+                    s.repair(*h, x);
+                }
             }
             sim.bounce(w.name(*h));
             format!("restart {}", w.name(*h))
@@ -178,7 +251,13 @@ fn apply(sim: &mut Sim<'_>, w: &World, f: &Fault) {
     w.log_at(ms, "fault", line);
 }
 
-fn report(w: &World, sim_secs: f64, wall_secs: f64, memory: Option<MemoryReport>) -> Report {
+fn report(
+    w: &World,
+    sim_secs: f64,
+    wall_secs: f64,
+    memory: Option<MemoryReport>,
+    wan: Option<WanReport>,
+) -> Report {
     let mut st = w.st.borrow_mut();
     let mut vpn = st.vpn.clone();
     if w.spec.probes.is_some() {
@@ -244,6 +323,7 @@ fn report(w: &World, sim_secs: f64, wall_secs: f64, memory: Option<MemoryReport>
         vpn: w.spec.probes.is_some().then_some(vpn),
         memory,
         violations,
+        wan,
     };
     r.scenario.faults.sort_by_key(|f| f.at);
     r

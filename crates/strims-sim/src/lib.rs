@@ -26,10 +26,31 @@
 //!   [`Invariants`], generates the [`VpnProbes`] and takes a final
 //!   snapshot at [`Scenario::duration`].
 //! - [`Fault`]s apply between turmoil steps, at the first step at or after
-//!   their time. They are the only source of loss: turmoil's random
-//!   `fail_rate` stays off.
-//! - turmoil models no bandwidth; [`HostSpec::uplink`] is a run's only
-//!   rate limit.
+//!   their time. Outside WAN mode they are the only source of loss:
+//!   turmoil's random `fail_rate` stays off.
+//! - turmoil models no bandwidth; outside WAN mode [`HostSpec::uplink`] is
+//!   a run's only rate limit.
+//!
+//! # WAN mode
+//!
+//! With [`Scenario::wan`] set, every host has a [`HostSpec::site`] (a city
+//! and an access link from `strims-wan`), and messages between hosts take
+//! real-world paths: they queue for the sender's uplink, cross half the
+//! city pair's RTT plus both last miles and each end's jitter, and queue for
+//! the receiver's downlink, at the access links' rates. A TCP segment that
+//! loses a packet arrives a retransmission later, holding back the rest of
+//! its connection; a datagram that loses its packet is gone.
+//! [`Scenario::host_at`] caps a host's upload at 90 % of its uplink.
+//!
+//! Turmoil times nothing itself: the run holds every link between hosts
+//! and, between two steps, a scheduler releases each message once the path
+//! model says it is through. Delivery times round up to the next step, so
+//! with the default 1 ms tick each hop is exact to a millisecond.
+//! [`Fault`]s keep their meaning: partitions and repairs cut and restore
+//! paths, a hold keeps messages at their receivers until the release, and a
+//! latency fault replaces the paths' base latency. The report's
+//! [`Report::wan`] holds each access link's counters, and the trace logs
+//! each host's site at the start and its access link's totals at the end.
 //!
 //! | module | role |
 //! |---|---|
@@ -39,6 +60,7 @@
 //! | `host` | each host's software: node, event policy, redials, writer and readers |
 //! | `control` | the controller client: samples, vpn probes, final metrics |
 //! | `run` | the turmoil step loop and the faults |
+//! | `wan` | WAN mode's link scheduler |
 //! | [`stream`] | the self-checking stream format and per-viewer accounting |
 //! | [`report`] | results and summaries |
 //! | [`stats`] | the runner, link and network stats folded over a run |
@@ -60,7 +82,9 @@
 //! - the controller's probe choices come from an rng derived from the seed,
 //!   and frame payloads are a function of (seed, swarm, sequence number);
 //! - scenario builders take the seed and draw topologies and fault times
-//!   from it.
+//!   from it;
+//! - in WAN mode, the path model's rngs derive from the seed, and each
+//!   end's jitter is a function of the time alone.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -77,8 +101,10 @@
 //!
 //! Randomness the seed doesn't reach (tungstenite's WebSocket masks,
 //! WebRTC's DTLS and SCTP) changes bytes on the wire but not the bytes vnic
-//! carries. The trace records vnic byte counts only, never wire bytes or
-//! datagram sizes, and no memory or wall-clock figure.
+//! carries. The trace records vnic byte counts only, never datagram sizes,
+//! and no memory or wall-clock figure. WAN mode times messages by their
+//! wire size, and the sizes of STUN messages and DTLS handshake records
+//! depend on key material, so they are charged a fixed size.
 
 mod control;
 mod host;
@@ -90,9 +116,12 @@ pub mod stats;
 pub mod stream;
 pub mod sweep;
 pub mod topology;
+mod wan;
 mod world;
 
-pub use report::{HostReport, LookupPhase, Percentiles, Report, ViewerReport, VpnReport};
+pub use report::{
+    HostReport, LookupPhase, Percentiles, Report, ViewerReport, VpnReport, WanHostReport, WanReport,
+};
 pub use run::run;
 pub use spec::{
     Binding, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario, SwarmSpec,
