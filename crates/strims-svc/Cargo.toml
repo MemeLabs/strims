@@ -26,6 +26,9 @@ futures-util = { workspace = true, features = ["sink", "std"] }
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "signal"] }
 tokio-tungstenite.workspace = true
 getrandom = "0.3"
+# the binary's allocator counts the heap
+cap.workspace = true
+stats_alloc.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "env-filter", "ansi"] }
 
 [dev-dependencies]

@@ -272,6 +272,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "cap"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f125eb85b84a24c36b02ed1d22c9dd8632f53b3cde6e4d23512f94021030003"
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2071,6 +2077,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
 
 [[package]]
+name = "stats_alloc"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c0e04424e733e69714ca1bbb9204c1a57f09f5493439520f9f68c132ad25eec"
+
+[[package]]
 name = "str0m"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2543,12 +2555,14 @@ dependencies = [
 name = "strims-svc"
 version = "0.1.0"
 dependencies = [
+ "cap",
  "data-encoding",
  "futures-util",
  "getrandom 0.3.4",
  "httparse",
  "prost",
  "rand_core 0.10.1",
+ "stats_alloc",
  "strims-base",
  "strims-crypto",
  "strims-dao",
@@ -2683,6 +2697,7 @@ dependencies = [
 name = "strims-wasm"
 version = "0.1.0"
 dependencies = [
+ "cap",
  "futures-core",
  "futures-sink",
  "futures-util",
@@ -2693,6 +2708,7 @@ dependencies = [
  "rand_core 0.10.1",
  "serde_json",
  "slotmap",
+ "stats_alloc",
  "strims-base",
  "strims-crypto",
  "strims-dao",

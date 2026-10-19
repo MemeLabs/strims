@@ -3,9 +3,11 @@
 
 //! `strims-svc`: runs a profile's node, serves the UI's frontend RPC over
 //! WebSocket and, if asked, HLS over HTTP until interrupted. See
-//! [`args::USAGE`].
+//! [`args::USAGE`]. Its allocator counts the heap for the Debug service's
+//! snapshots ([`memory`]).
 
 mod args;
+mod memory;
 
 use std::process::ExitCode;
 
@@ -14,7 +16,7 @@ use tokio::task::LocalSet;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
-    let config = match args::parse(std::env::args().skip(1)) {
+    let mut config = match args::parse(std::env::args().skip(1)) {
         Ok(args::Command::Run(config)) => *config,
         Ok(args::Command::Help) => {
             println!("{}", args::USAGE);
@@ -25,6 +27,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    config.app.memory = Some(memory::metrics);
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),

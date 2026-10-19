@@ -10,6 +10,8 @@
 //!   `crypto.getRandomValues`, timed by [`WasmClock`].
 //! - Its PSI sessions compute in the PSI worker ([`WorkerPsi`]) when the
 //!   window started one, and inline otherwise.
+//! - The Debug service's snapshots count the worker's heap and its linear
+//!   memory ([`crate::memory`]).
 //! - The node hosts no RTMP ingress ([`NoVideoHost`]), and its HLS routes
 //!   aren't served. The directory makes its HTTPS requests with the
 //!   browser's `fetch` ([`BrowserFetch`]). The vnic config takes no
@@ -27,8 +29,8 @@ use strims_directory::Fetch;
 use strims_kv::Kv;
 use strims_network::psi::{InlinePsi, PsiEngine};
 use strims_node_core::app::{
-    AppPlatform, ProfileRuntime, ProfileSlot, ServicesConfig, Spawn, StartError, TaskHandle,
-    bind_profile,
+    AppPlatform, MemoryMetrics, ProfileRuntime, ProfileSlot, ServicesConfig, Spawn, StartError,
+    TaskHandle, bind_profile,
 };
 use strims_node_core::{Node, NodeConfig, NodeError, NodeEvents, NodeInfo};
 use strims_proto::types::Key;
@@ -157,6 +159,11 @@ impl AppPlatform for WasmPlatform {
             Some(engine) => Rc::new(engine.clone()),
             None => Rc::new(InlinePsi),
         }
+    }
+
+    /// The worker's heap and linear memory ([`crate::memory`]).
+    fn memory(&self) -> Option<fn() -> MemoryMetrics> {
+        Some(crate::memory::metrics)
     }
 }
 

@@ -51,6 +51,7 @@
 //! - [`options`]: the options the window starts the worker with.
 //! - [`psi`]: the PSI worker ([`psi::start_psi`]), and the node's engine
 //!   on it.
+//! - [`memory`]: the worker's counting allocator.
 //! - [`entry`]: `start`, the function the worker script calls.
 //! - `e2e` (feature `e2e`): the bare node the browser link tests drive.
 
@@ -70,6 +71,7 @@ pub mod io;
 mod js;
 pub mod kv;
 pub mod log;
+pub mod memory;
 pub mod node;
 pub mod options;
 pub mod psi;

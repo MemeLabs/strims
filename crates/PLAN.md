@@ -7,11 +7,6 @@ on it is in `CONVENTIONS.md`.
 
 ### App layer
 - Video; see Video below.
-- The UI's Debug service: metrics (`ReadMetrics`, `WatchMetrics`) from the
-  controls' metrics structs, a profiling endpoint to answer `PProf`, and
-  the debug config (12001) with its mock streams published on a network
-  for testing. Deleting that network clears the config's network key.
-  Until then the UI's debugger and debug settings get no answers.
 - A server for the devtools UI (`src/devtools`): `DevToolsService`, and
   `CapConnService`, which lists, watches and loads ppspp capture logs.
 
@@ -154,6 +149,11 @@ Egress and players:
     closing its connection releases it;
   - headless sessions started at boot, for bootstrap nodes;
   - an HTTP health check;
+  - a Prometheus `/metrics` endpoint rendering the Debug service's
+    snapshot. infra's `mock-stream-exporter` scrapes `:1971/metrics` for
+    delimited `io.prometheus.client.MetricFamily` messages and reads the
+    gauge `strims_debug_mock_stream_latency_ms{id,swarm_id}`, each mock
+    stream reader's last segment latency;
   - on the HLS listener: keep-alive, Range requests, CORS preflight, and
     a cap per address. One client's slow connections can hold every slot
     for up to 10 s on the request head or 60 s on the response.

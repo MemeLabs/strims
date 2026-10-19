@@ -33,6 +33,9 @@ futures-util = { workspace = true, features = ["alloc", "sink", "std"] }
 prost.workspace = true
 rand_core.workspace = true
 slotmap.workspace = true
+# the worker's allocator counts the heap
+cap.workspace = true
+stats_alloc.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 # The node's channels and `select!`: `sync` and `macros` need no runtime.
