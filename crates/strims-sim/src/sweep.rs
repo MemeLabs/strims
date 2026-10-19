@@ -9,10 +9,18 @@
 //! - `STRIMS_SIM_SEED=<s>` runs only seed `s` (the replay of a failure).
 //! - `STRIMS_SIM_TRACE=1` prints every run's trace.
 //!
-//! After the sweep the first seed runs again and must give the same trace
-//! hash.
+//! The first seed runs a second time and must give the same trace hash.
+//!
+//! A sweep starts every run at once, the second run of the first seed
+//! included, each on a thread of its own. Runs on separate threads are
+//! independent: turmoil keeps a simulation's world in thread-local state
+//! and runs all of its hosts on the thread that steps it, and [`run`] seeds
+//! str0m's thread-local rng and counts the heap of that thread only. Once
+//! every run has ended, the reports are printed and checked in seed order,
+//! so a failing sweep reports its lowest failing seed.
 
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+use std::thread;
 
 use crate::report::Report;
 use crate::run::run;
@@ -64,9 +72,13 @@ fn fail(test: &str, seed: u64, msg: &str, trace: &[String]) -> ! {
     );
 }
 
-fn run_one(test: &str, build: &impl Fn(u64) -> Scenario, seed: u64) -> Report {
-    let result = catch_unwind(AssertUnwindSafe(|| run(build(seed), seed)));
-    match result {
+/// How a run ended: its report, turmoil's error, or its panic.
+type Outcome = thread::Result<Result<Report, String>>;
+
+/// The report of a run that ended well. A run that failed fails the sweep
+/// with its seed; a panic resumes on the calling thread.
+fn report_of(test: &str, seed: u64, outcome: Outcome) -> Report {
+    match outcome {
         Ok(Ok(r)) => {
             if env("STRIMS_SIM_TRACE").is_some_and(|v| v != "0") {
                 for l in &r.trace {
@@ -83,26 +95,66 @@ fn run_one(test: &str, build: &impl Fn(u64) -> Scenario, seed: u64) -> Report {
     }
 }
 
-/// Runs scenario `build(seed)` for every seed of [`seeds`], checks each
-/// report with `check`, then replays the first seed and compares trace
-/// hashes. A failure panics with the seed and a one-line replay command.
-/// `test` is the test function's name (for the replay command).
+/// A run on a thread of its own, or one whose thread couldn't start, which
+/// then runs on the calling thread when joined.
+enum Run<'scope> {
+    Started(thread::ScopedJoinHandle<'scope, Result<Report, String>>),
+    Unstarted(u64),
+}
+
+impl Run<'_> {
+    /// The run's outcome once it has ended. Every run is joined, so a run's
+    /// panic reaches its outcome and never fails the scope.
+    fn join(self, build: &impl Fn(u64) -> Scenario) -> Outcome {
+        match self {
+            Run::Started(handle) => handle.join(),
+            Run::Unstarted(seed) => catch_unwind(AssertUnwindSafe(|| run(build(seed), seed))),
+        }
+    }
+}
+
+/// Runs scenario `build(seed)` for every seed of [`seeds`] and the first
+/// seed a second time, all at once, then checks each report with `check`
+/// and compares the first seed's trace hashes. A failure panics with the
+/// seed and a one-line replay command. `test` is the test function's name
+/// (for the replay command and the runs' thread names).
 pub fn sweep(
     test: &str,
-    build: impl Fn(u64) -> Scenario,
+    build: impl Fn(u64) -> Scenario + Sync,
     check: impl Fn(&Report) -> Result<(), String>,
 ) -> Vec<Report> {
+    let seeds = seeds();
+    let build = &build;
+    let (outcomes, again) = thread::scope(|s| {
+        let start = |seed: u64, name: String| match thread::Builder::new()
+            .name(name)
+            .spawn_scoped(s, move || run(build(seed), seed))
+        {
+            Ok(handle) => Run::Started(handle),
+            Err(_) => Run::Unstarted(seed),
+        };
+        let runs: Vec<Run<'_>> = seeds
+            .iter()
+            .map(|&seed| start(seed, format!("{test} seed {seed}")))
+            .collect();
+        let again = seeds
+            .first()
+            .map(|&seed| start(seed, format!("{test} replay")));
+        let outcomes: Vec<Outcome> = runs.into_iter().map(|r| r.join(build)).collect();
+        (outcomes, again.map(|r| r.join(build)))
+    });
+
     let mut reports = Vec::new();
-    for seed in seeds() {
-        let r = run_one(test, &build, seed);
+    for (&seed, outcome) in seeds.iter().zip(outcomes) {
+        let r = report_of(test, seed, outcome);
         eprintln!("{}", r.summary());
         if let Err(e) = check(&r) {
             fail(test, seed, &e, &r.trace);
         }
         reports.push(r);
     }
-    if let Some(first) = reports.first() {
-        let again = run_one(test, &build, first.seed);
+    if let (Some(first), Some(again)) = (reports.first(), again) {
+        let again = report_of(test, first.seed, again);
         if again.trace_hash != first.trace_hash {
             let at = first
                 .trace

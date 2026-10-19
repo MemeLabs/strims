@@ -18,7 +18,8 @@ cargo test -p strims-sim --release --test scenarios -- --ignored --nocapture
 | `STRIMS_SIM_SEED=<s>` | run only seed `s` |
 | `STRIMS_SIM_TRACE=1` | print each run's trace |
 
-With `--nocapture`, each run prints a summary.
+A sweep runs its seeds at once, each on a thread of its own. With
+`--nocapture`, each run prints a summary.
 
 ## Replaying a failure
 

@@ -13,10 +13,11 @@
 //!
 //! Each run then registers an allocation group and enters it on its
 //! thread. A turmoil simulation runs every host on that one thread, so the
-//! group sees every allocation of the run and nothing from tests running
-//! in parallel. Without the allocator the counters stay at zero and
-//! reports carry no memory section. Memory numbers never enter the trace:
-//! allocator behaviour is not part of the determinism contract.
+//! group sees every allocation of the run and nothing from runs on other
+//! threads: the other runs of its sweep, or tests running in parallel.
+//! Without the allocator the counters stay at zero and reports carry no
+//! memory section. Memory numbers never enter the trace: allocator
+//! behaviour is not part of the determinism contract.
 
 use std::sync::Once;
 use std::sync::atomic::{AtomicI64, Ordering};

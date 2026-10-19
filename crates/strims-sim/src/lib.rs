@@ -9,9 +9,9 @@
 //! on turmoil with real `strims-node` nodes on `TurmoilNet` and
 //! `SimClock`, and returns a [`Report`]: per-viewer delivery and lag,
 //! per-host upload, vpn delivery rates, memory, the simulated/wall time
-//! ratio, and the SHA-256 of a canonical trace. [`sweep`](fn@sweep) runs a scenario over many seeds,
-//! prints a replay command for a failing seed, and checks that re-running
-//! a seed gives the same trace hash.
+//! ratio, and the SHA-256 of a canonical trace. [`sweep`](fn@sweep) runs a
+//! scenario over many seeds at once, prints a replay command for a failing
+//! seed, and checks that re-running a seed gives the same trace hash.
 //!
 //! # How a run composes
 //!
