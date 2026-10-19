@@ -153,16 +153,18 @@ A change under `schema/` regenerates the UI's `src/apis` and infra's
 
 ## Checks
 
-From the repo root:
+`hack/check.sh` runs the checks below side by side and logs each to
+`target/check/`; `hack/check.sh --full` adds the browser suites and the
+release simulations. From the repo root:
 
-- `cargo fmt --all`
-- `cargo clippy --workspace --all-targets --features strims-node/turmoil`
+- `cargo fmt --all --check`
+- `cargo clippy --workspace --all-targets --features strims-node/turmoil -- -D warnings`
 - `cargo nextest run --workspace` and `cargo test --workspace --doc`:
   [cargo-nextest](https://nexte.st) runs every test in a process of its
   own, as many at once as there are cores, and skips doctests.
   `.config/nextest.toml` sets each heavy test's share of the cores.
 - `cargo check --workspace --exclude strims-node --exclude strims-sim --exclude strims-kv-redb --exclude strims-testworld --exclude strims-svc --target wasm32-unknown-unknown`
-- `cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e`
+- `cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e -- -D warnings`
 - `GECKODRIVER=<path to geckodriver> cargo test -p strims-wasm --target wasm32-unknown-unknown`
   runs strims-wasm's tests in a headless Firefox worker. It needs
   `wasm-bindgen-cli` at the crate's `wasm-bindgen` pin, whose

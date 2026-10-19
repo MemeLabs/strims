@@ -191,8 +191,13 @@ fn profiles_computing_psi_on_threads_join_a_network_and_bind() {
         assert_eq!(psi_threads().unwrap_or(0), 0);
         let alice = Profile::start("alice", 1).await;
         let bob = Profile::start("bob", 10).await;
-        if let Some(n) = psi_threads() {
-            assert_eq!(n, 2, "one psi thread per factory");
+        // A thread takes its name once it runs, which can be after its
+        // factory has started.
+        if psi_threads().is_some() {
+            eventually("one psi thread per factory", async || {
+                psi_threads() == Some(2)
+            })
+            .await;
         }
 
         let network = alice
