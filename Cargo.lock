@@ -2443,6 +2443,7 @@ dependencies = [
  "strims-crypto",
  "strims-golden",
  "strims-proto",
+ "strims-wan",
  "thiserror",
 ]
 

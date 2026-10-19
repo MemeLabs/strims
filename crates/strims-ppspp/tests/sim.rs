@@ -18,6 +18,16 @@
 //! from, and record each chunk's delivery lag (read time minus the time the
 //! seed published it).
 //!
+//! In WAN mode ([`Wan`]) every node sits at a [`Site`] of `strims_wan`: a
+//! major city and an access link, whose rates its uplink and downlink run
+//! at. A link's latency is both last miles plus half the city pair's round
+//! trip, and each end adds jitter that delays frames without reordering
+//! them. Frames travel as TCP stream data: their packets' headers take
+//! uplink and downlink time, and a frame that loses a packet arrives a
+//! retransmission later, holding back every frame behind it on its link.
+//! Nothing is dropped. The paths draw from an rng of their own, derived
+//! from the seed, so they shift no other draw.
+//!
 //! Adversarial nodes run a real runner (so they hold a real handshake and
 //! real data) and mutate what they send: HAVE floods, corrupted data, or
 //! huge and sentinel bins in every message type, or (for the push/pull
@@ -57,6 +67,11 @@ use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats,
     RequestControllerKind, Runner, SwarmId, SwarmKey, SwarmOptions, Writer, WriterOptions,
+};
+use strims_wan::sample::pick;
+use strims_wan::wire::tcp_wire;
+use strims_wan::{
+    Access, Carrier, City, EndStats, GLOBAL_AUDIENCE, Network, RESIDENTIAL, Region, Site,
 };
 
 /// A frame body: a 16 KiB link MTU minus vnic's 4 byte frame header.
@@ -180,6 +195,18 @@ struct Config {
     controller: RequestControllerKind,
     /// A second swarm sharing the nodes.
     cross: Option<Cross>,
+    /// Real-world paths. With them `latency_ms`, `loss`, `seed_up`,
+    /// `peer_up`, `peer_down` and `constrained` go unused, and `loss` must
+    /// stay zero.
+    wan: Option<Wan>,
+}
+
+/// Real-world paths ([`strims_wan`]): node `i` sits at `sites[i]`, the seed
+/// being node 0.
+#[derive(Clone, Debug)]
+struct Wan {
+    sites: Vec<Site>,
+    options: strims_wan::Options,
 }
 
 /// Cross traffic: a second swarm in every honest node's runner, at the
@@ -223,6 +250,7 @@ impl Config {
             progress: None,
             controller: RequestControllerKind::Default,
             cross: None,
+            wan: None,
         }
     }
 }
@@ -271,6 +299,10 @@ struct Node {
     removed: BTreeSet<PeerKey>,
     /// The cross-traffic swarm, if any.
     cross: Option<Side>,
+    /// Bytes through its uplink and downlink (TCP framing included in WAN
+    /// mode) and its downlink's longest queue. The path's counters are the
+    /// network's ([`Sim::wan_stats`]).
+    wire: EndStats,
 }
 
 struct Link {
@@ -284,6 +316,9 @@ struct Link {
     channel: u64,
     /// The peer key of `from` on `to`.
     rpeer: PeerKey,
+    /// In WAN mode, the latest arrival on the link: a frame waits for every
+    /// frame ahead of it, retransmissions included.
+    last_arrival: Time,
 }
 
 #[derive(Debug)]
@@ -325,6 +360,8 @@ struct Sim {
     read_buf: Vec<u8>,
     rcfg: ReaderConfig,
     end: Time,
+    /// The paths of a WAN run.
+    wan: Option<Network>,
 }
 
 // Every field is printed through `Debug`.
@@ -398,6 +435,10 @@ impl Sim {
         let mut roles = vec![Role::Seed];
         roles.extend((0..cfg.peers).map(|_| Role::Peer));
         roles.extend(cfg.adversaries.iter().map(|&a| Role::Adversary(a)));
+        if let Some(w) = &cfg.wan {
+            assert_eq!(w.sites.len(), roles.len(), "a site per node");
+            assert!(cfg.loss <= 0.0, "WAN paths lose packets of their own");
+        }
 
         let mut nodes = Vec::new();
         for (i, &role) in roles.iter().enumerate() {
@@ -453,12 +494,16 @@ impl Sim {
                 }
                 _ => None,
             };
-            let (up, mut down) = match role {
+            let (mut up, mut down) = match role {
                 Role::Seed => (cfg.seed_up, cfg.peer_down),
                 _ => (cfg.peer_up, cfg.peer_down),
             };
             if let Some(&(_, d)) = cfg.constrained.iter().find(|(n, _)| *n == i) {
                 down = d;
+            }
+            if let Some(w) = &cfg.wan {
+                let p = w.sites[i].profile;
+                (up, down) = (p.up, p.down);
             }
             nodes.push(Node {
                 role,
@@ -484,6 +529,7 @@ impl Sim {
                 errors: 0,
                 removed: BTreeSet::new(),
                 cross,
+                wire: EndStats::default(),
             });
         }
 
@@ -559,6 +605,7 @@ impl Sim {
                 peer: pa,
                 channel: ca,
                 rpeer: pb,
+                last_arrival: Time::NIL,
             });
             links.push(Link {
                 from: b,
@@ -568,12 +615,20 @@ impl Sim {
                 peer: pb,
                 channel: cb,
                 rpeer: pa,
+                last_arrival: Time::NIL,
             });
             nodes[a].links.insert(b, la);
             nodes[b].links.insert(a, la + 1);
             nodes[a].vtime.insert(la, 0);
             nodes[b].vtime.insert(la + 1, 0);
         }
+        let wan = cfg.wan.as_ref().map(|w| {
+            let net = Network::new(&w.sites, w.options, &mut det_rng(cfg.seed ^ 0x5741_4e00));
+            for l in &mut links {
+                l.latency = net.one_way(l.from, l.to);
+            }
+            net
+        });
 
         let munro = cfg.munro_chunks * CHUNK;
         let munros = (cfg.stream_rate * cfg.stream_secs) as usize / munro;
@@ -615,6 +670,7 @@ impl Sim {
             read_buf: vec![0; 64 * 1024],
             rcfg,
             end,
+            wan,
         }
     }
 
@@ -750,13 +806,19 @@ impl Sim {
             match entry.remove() {
                 Ev::Arrive { link, frame } => {
                     let to = self.links[link].to;
+                    let wire = match self.wan {
+                        Some(_) => tcp_wire(frame.len()).0,
+                        None => frame.len(),
+                    };
                     let node = &mut self.nodes[to];
                     let start = node.down_free.max(now);
                     let qd = start - now;
                     if now > t0() + Duration::from_secs(3) && qd > node.max_queue_delay {
                         node.max_queue_delay = qd;
                     }
-                    node.down_free = start + tx_time(frame.len(), node.down_bw);
+                    node.down_free = start + tx_time(wire, node.down_bw);
+                    node.wire.down_bytes += wire as u64;
+                    node.wire.down_queue_max = node.wire.down_queue_max.max(qd);
                     let at = node.down_free;
                     self.push(at, Ev::Deliver { link, frame });
                 }
@@ -798,6 +860,9 @@ impl Sim {
                     for l in &mut self.links {
                         if l.from == 0 || l.to == 0 {
                             l.latency = d;
+                            if let Some(net) = self.wan.as_mut() {
+                                net.set_one_way(l.from, l.to, Some(d));
+                            }
                         }
                     }
                 }
@@ -810,6 +875,9 @@ impl Sim {
                         }
                         let rchannel = self.links[l ^ 1].channel;
                         let channel = self.links[l].channel;
+                        // A redialed link is a new TCP connection: nothing
+                        // on it waits for the old one's frames.
+                        self.links[l].last_arrival = Time::NIL;
                         let n = &mut self.nodes[from];
                         n.runner.stop_swarm(peer, n.swarm);
                         n.runner
@@ -1071,11 +1139,16 @@ impl Sim {
                 }
             }
             let frame = self.buf[..n].to_vec();
+            let (wire, packets) = match self.wan {
+                Some(_) => tcp_wire(n),
+                None => (n, 1),
+            };
             let weight = node.weights.get(&peer).copied().unwrap_or(1000).max(1);
             let min_v = node.vtime.values().copied().min().unwrap_or(0);
             let v = node.vtime.get_mut(&l).unwrap();
-            *v = (*v).max(min_v) + (n as u128) * 1_000_000 / u128::from(weight);
-            node.up_free = now + tx_time(n, node.up_bw);
+            *v = (*v).max(min_v) + (wire as u128) * 1_000_000 / u128::from(weight);
+            node.up_free = now + tx_time(wire, node.up_bw);
+            node.wire.up_bytes += wire as u64;
             // A paced uplink (vnic's rate limit over turmoil, which models
             // no bandwidth) sends the frame at once and makes the next one
             // wait; a serial one takes the frame's transmission time.
@@ -1101,11 +1174,22 @@ impl Sim {
             fnv(&mut self.trace, &(l as u64).to_be_bytes());
             fnv(&mut self.trace, &frame);
 
-            let link = &self.links[l];
-            if link.loss > 0.0 && (self.rng.next_u64() as f64 / u64::MAX as f64) < link.loss {
-                continue;
-            }
-            let at = depart + link.latency;
+            let link = &mut self.links[l];
+            let at = match self.wan.as_mut() {
+                Some(net) => {
+                    let tr = net.transit(depart, link.from, link.to, packets, Carrier::Stream);
+                    let at = (tr.arrival + tr.retransmit).max(link.last_arrival);
+                    link.last_arrival = at;
+                    at
+                }
+                None => {
+                    if link.loss > 0.0 && (self.rng.next_u64() as f64 / u64::MAX as f64) < link.loss
+                    {
+                        continue;
+                    }
+                    depart + link.latency
+                }
+            };
             self.push(at, Ev::Arrive { link: l, frame });
         }
     }
@@ -1338,6 +1422,25 @@ impl Sim {
             .iter()
             .filter(|n| n.role == Role::Peer)
             .map(|n| n.read_chunks.iter().filter(|&&r| r).count() as u64)
+            .sum()
+    }
+
+    /// Node `i`'s link and path counters in WAN mode. A runner sends a frame
+    /// only when its uplink is free, so `up_queue_max` stays zero.
+    fn wan_stats(&self, i: usize) -> Option<EndStats> {
+        let path = self.wan.as_ref()?.stats(i);
+        Some(EndStats {
+            retransmits: path.retransmits,
+            drops: path.drops,
+            ..self.nodes[i].wire
+        })
+    }
+
+    /// Frames that lost a packet on the way, over every node.
+    fn retransmits(&self) -> u64 {
+        (0..self.nodes.len())
+            .filter_map(|i| self.wan_stats(i))
+            .map(|s| s.retransmits)
             .sum()
     }
 
@@ -1778,16 +1881,23 @@ enum Scenario {
     /// FullMesh plus two malicious parents that accept every subscription
     /// and withhold every push.
     Withholding,
+    /// 1+24 worldwide on real-world paths ([`wan_global_config`]).
+    WanGlobal,
+    /// 1+24 in North America and Europe, the seed on cable
+    /// ([`wan_residential_seed_config`]).
+    WanResidentialSeed,
 }
 
 impl Scenario {
-    const ALL: [Scenario; 6] = [
+    const ALL: [Scenario; 8] = [
         Scenario::FullMesh,
         Scenario::Sparse,
         Scenario::SeedConstrained,
         Scenario::ParentDies,
         Scenario::SlowParent,
         Scenario::Withholding,
+        Scenario::WanGlobal,
+        Scenario::WanResidentialSeed,
     ];
 
     fn config(self, mode: PushMode, streams: usize) -> Config {
@@ -1827,6 +1937,8 @@ impl Scenario {
                 cfg.adversaries = vec![Attack::WithholdPush, Attack::WithholdPush];
                 cfg
             }
+            Scenario::WanGlobal => wan_global_config(1),
+            Scenario::WanResidentialSeed => wan_residential_seed_config(1),
         };
         cfg.push_mode = mode;
         cfg.stream_count = streams;
@@ -1922,7 +2034,11 @@ fn push_pull_matrix() {
                 apply_knobs(&mut cfg);
                 let mut sim = Sim::new(cfg);
                 let r = sim.run();
-                println!("{}", row(sc, streams, mode, &r));
+                let mut line = row(sc, streams, mode, &r);
+                if sim.wan.is_some() {
+                    line += &format!(" retransmits {} |", sim.retransmits());
+                }
+                println!("{line}");
                 if verbose {
                     eprintln!("{:?}", r.push);
                 }
@@ -2479,16 +2595,26 @@ enum AbScenario {
     SeedStarved,
     /// A second swarm on every uplink ([`CROSS_UPLINK_TENTHS`]).
     CrossTraffic,
+    /// 1+24 worldwide on real-world paths ([`wan_global_config`]).
+    WanGlobal,
+    /// WanGlobal with every other viewer on LTE ([`wan_mobile_config`]).
+    WanMobile,
+    /// 1+24 in North America and Europe, the seed on cable
+    /// ([`wan_residential_seed_config`]).
+    WanResidentialSeed,
 }
 
 impl AbScenario {
-    const ALL: [AbScenario; 6] = [
+    const ALL: [AbScenario; 9] = [
         AbScenario::LiveMesh,
         AbScenario::SparseLossy,
         AbScenario::LatencyStep,
         AbScenario::CappedSeed,
         AbScenario::SeedStarved,
         AbScenario::CrossTraffic,
+        AbScenario::WanGlobal,
+        AbScenario::WanMobile,
+        AbScenario::WanResidentialSeed,
     ];
 
     /// The config for `seed`; `b` is the cross-traffic swarm's controller.
@@ -2513,6 +2639,9 @@ impl AbScenario {
                 let tenths = knob("SIM_CROSS_UP_X10").unwrap_or(CROSS_UPLINK_TENTHS);
                 cross_traffic_config(seed, mode, a, b, tenths)
             }
+            AbScenario::WanGlobal => wan_global_config(seed),
+            AbScenario::WanMobile => wan_mobile_config(seed),
+            AbScenario::WanResidentialSeed => wan_residential_seed_config(seed),
         };
         cfg.push_mode = mode;
         cfg.controller = a;
@@ -2527,7 +2656,11 @@ impl AbScenario {
             AbScenario::SeedStarved => Some((105, 131)),
             AbScenario::LatencyStep => Some((30, 61)),
             AbScenario::CappedSeed | AbScenario::CrossTraffic => Some((0, i64::MAX / 2)),
-            AbScenario::LiveMesh | AbScenario::SparseLossy => None,
+            AbScenario::LiveMesh
+            | AbScenario::SparseLossy
+            | AbScenario::WanGlobal
+            | AbScenario::WanMobile
+            | AbScenario::WanResidentialSeed => None,
         }
     }
 }
@@ -2829,5 +2962,181 @@ fn sim_bbr_same_seed_same_trace() {
     assert_eq!(a.frames, b.frames);
     cfg.controller = LEDBAT;
     let c = Sim::new(cfg).run();
+    assert_ne!(a.trace, c.trace);
+}
+
+// --- real-world paths -------------------------------------------------------
+//
+// Swarms over `strims_wan`'s paths between major cities, on real-world
+// access links, at the default stream rate (256 KiB/s, about 2 Mbit/s).
+
+/// The seed at `seed_site`, then `n_peers` peers in cities drawn from
+/// `cities` on access links drawn from `mix`, by weight. The draws depend on
+/// `seed` alone.
+fn wan_sites(
+    seed: u64,
+    n_peers: usize,
+    seed_site: Site,
+    cities: &[(City, u32)],
+    mix: &[(Access, u32)],
+) -> Vec<Site> {
+    let mut rng = det_rng(seed ^ 0x5349_5445);
+    let mut sites = vec![seed_site];
+    for _ in 0..n_peers {
+        let city = pick(&mut rng, cities).unwrap();
+        let access = pick(&mut rng, mix).unwrap();
+        sites.push(Site::new(city, access));
+    }
+    sites
+}
+
+/// A WAN run of the seed and peers at `sites` (the seed first): every peer
+/// linked to `degree` random others, and the seed to `seed_degree` peers (0
+/// for all).
+fn wan_config(seed: u64, sites: Vec<Site>, degree: usize, seed_degree: usize) -> Config {
+    let mut cfg = Config::new(seed, sites.len() - 1);
+    cfg.degree = degree;
+    cfg.seed_degree = seed_degree;
+    cfg.wan = Some(Wan {
+        sites,
+        options: strims_wan::Options::default(),
+    });
+    cfg
+}
+
+/// A seed in a Frankfurt datacenter.
+const DATACENTER_SEED: Site = Site::new(City::Frankfurt, Access::Datacenter);
+
+/// 24 viewers worldwide on residential links ([`GLOBAL_AUDIENCE`],
+/// [`RESIDENTIAL`]) of a seed in a Frankfurt datacenter, each viewer linked
+/// to 6 random others and the seed to 6 viewers: the other 18 get the
+/// stream through relays.
+fn wan_global_config(seed: u64) -> Config {
+    let sites = wan_sites(seed, 24, DATACENTER_SEED, GLOBAL_AUDIENCE, RESIDENTIAL);
+    wan_config(seed, sites, 6, 6)
+}
+
+/// [`wan_global_config`] with every other viewer (nodes 1, 3, …) on LTE.
+fn wan_mobile_config(seed: u64) -> Config {
+    let mut cfg = wan_global_config(seed);
+    let wan = cfg.wan.as_mut().unwrap();
+    for s in wan.sites.iter_mut().skip(1).step_by(2) {
+        *s = Site::new(s.city, Access::Lte);
+    }
+    cfg
+}
+
+/// 24 viewers in North America and Europe on residential links, degree 6,
+/// of a seed on cable in Chicago linked to every viewer. Its 20 Mbit/s
+/// uplink carries about 9.5 streams.
+fn wan_residential_seed_config(seed: u64) -> Config {
+    let cities: Vec<(City, u32)> = GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|&(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
+        .collect();
+    let seed_site = Site::new(City::Chicago, Access::Cable);
+    let sites = wan_sites(seed, 24, seed_site, &cities, RESIDENTIAL);
+    wan_config(seed, sites, 6, 0)
+}
+
+/// One WAN run's line: the table row and the path counters.
+fn wan_line(sc: Scenario, streams: usize, mode: PushMode, sim: &Sim, r: &Report) -> String {
+    let queue = (0..sim.nodes.len())
+        .filter_map(|i| sim.wan_stats(i))
+        .map(|s| s.down_queue_max)
+        .max()
+        .unwrap_or_default();
+    format!(
+        "{} retransmits {} longest downlink queue {} ms",
+        row(sc, streams, mode, r),
+        sim.retransmits(),
+        ms(queue)
+    )
+}
+
+#[test]
+fn sim_wan_global_audience() {
+    // Viewers on five continents, on residential links, of a datacenter
+    // seed in Frankfurt.
+    for mode in [PushMode::Off, PushMode::Hybrid] {
+        let mut sim = Sim::new(Scenario::WanGlobal.config(mode, 4));
+        let r = sim.run();
+        eprintln!(
+            "{}\n{:?}",
+            wan_line(Scenario::WanGlobal, 4, mode, &sim, &r),
+            r.push
+        );
+        check_delivery(&r, 4 * MUNRO as u64);
+        assert!(r.lag_p99 < Duration::from_millis(2500), "{r:?}");
+        assert!(r.lag_max < Duration::from_secs(5), "{r:?}");
+    }
+}
+
+#[test]
+fn sim_wan_residential_seed_relays() {
+    // The seed's cable uplink carries fewer than 10 of the 24 viewers'
+    // streams, so viewers relay the rest. Pull leaves more of the load on
+    // the seed, and its lags longer.
+    for (mode, share, p99) in [(PushMode::Off, 0.6, 10), (PushMode::Hybrid, 0.45, 3)] {
+        let mut sim = Sim::new(Scenario::WanResidentialSeed.config(mode, 4));
+        let r = sim.run();
+        eprintln!(
+            "{}\n{:?}",
+            wan_line(Scenario::WanResidentialSeed, 4, mode, &sim, &r),
+            r.push
+        );
+        check_delivery(&r, 4 * MUNRO as u64);
+        assert!(r.seed_share < share, "{r:?}");
+        assert!(r.lag_p99 < Duration::from_secs(p99), "{r:?}");
+    }
+}
+
+#[test]
+fn sim_wan_lossy_mobile_viewers() {
+    // Every other viewer on LTE: a frame that loses a packet holds back
+    // every frame behind it on its link, and the stream still arrives whole.
+    for controller in [LEDBAT, BBR] {
+        let mut cfg = wan_mobile_config(1);
+        cfg.controller = controller;
+        let mut sim = Sim::new(cfg);
+        let r = sim.run();
+        eprintln!(
+            "{controller:?}: lag {} / {} / {} ms, seed share {:.2}, retransmits {}",
+            ms(r.lag_p50),
+            ms(r.lag_p99),
+            ms(r.lag_max),
+            r.seed_share,
+            sim.retransmits()
+        );
+        check_delivery(&r, 4 * MUNRO as u64);
+        assert!(sim.retransmits() > 0);
+        assert!(r.lag_p99 < Duration::from_secs(4), "{r:?}");
+        assert!(r.lag_max < Duration::from_secs(5), "{r:?}");
+    }
+}
+
+#[test]
+fn sim_wan_same_seed_same_trace() {
+    let run = |seed| {
+        let mix = [(Access::Lte, 1), (Access::Starlink, 1)];
+        let sites = wan_sites(seed, 8, DATACENTER_SEED, GLOBAL_AUDIENCE, &mix);
+        let mut cfg = wan_config(seed, sites, 3, 0);
+        cfg.stream_secs = 4;
+        let mut sim = Sim::new(cfg);
+        let r = sim.run();
+        let stats: Vec<EndStats> = (0..sim.nodes.len())
+            .map(|i| sim.wan_stats(i).unwrap())
+            .collect();
+        (r, stats)
+    };
+    let (a, sa) = run(4);
+    let (b, sb) = run(4);
+    assert_eq!(a.trace, b.trace);
+    assert_eq!(a.frames, b.frames);
+    assert_eq!(a.bytes, b.bytes);
+    assert_eq!(sa, sb);
+    assert!(sa.iter().any(|s| s.retransmits > 0), "{sa:?}");
+    let (c, _) = run(5);
     assert_ne!(a.trace, c.trace);
 }
