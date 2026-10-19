@@ -204,6 +204,11 @@ Egress and players:
     distinct chunks. Scheduler-level decorrelation (rarest-first) should help
     both controllers.
   - Its p99 is about 9 % worse on sparse lossy meshes.
+  - On WAN paths behind a seed on a cable uplink, pull under it lags far
+    behind LEDBAT: strims-sim's `wan_residential_seed` misses frames on 3 of
+    8 seeds with p99 up to 15 s, and the ppspp sim's `WanResidentialSeed`
+    reaches a p99 of 12 s with the seed sending 68 % of the data. LEDBAT
+    delivers everything there, at a p99 of about 6 s in the ppspp sim.
   - On a shared parent it yields to LEDBAT, so a network should run one
     controller.
   - Next: a deadline-aware request scheduler. Each chunk's deadline is its
@@ -231,7 +236,9 @@ Egress and players:
     shield a new parent. Shedding on push queue wait helps slow parents but
     hurts `sim_push_parent_dies` and sparse meshes;
   - a seed admits every subscriber at startup, before its store rate has
-    ramped up.
+    ramped up;
+  - with one stream behind a seed on a cable uplink on WAN paths
+    (`WanResidentialSeed`), about 28 % of pushes hit.
 - **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
   test-only hook in `strims-node`. Automated attempts to build it were stopped
   by a safety check. Waiting on the user.
@@ -290,6 +297,17 @@ Egress and players:
     scenario input.
   - Nodes stop reporting a channel's counters once it closes, so run totals
     and the clean-input check are lower bounds.
+  - WAN paths (`strims-wan`) turn a lost packet into a retransmission delay
+    but model no TCP sender's congestion response, so a lossy connection
+    keeps its full rate. Below a node's upload cap nothing pushes back on a
+    sender either: writes queue on its access link. A `Net` wrapper with a
+    socket send buffer would bound that queue as `TCP_NOTSENT_LOWAT` does.
+  - Loss is independent per packet, and jitter changes every 20 ms per
+    end. Bursty mobile loss and satellite handover outages need their own
+    processes.
+  - No WAN scenario runs WebRTC yet. Show that a WAN run over WebRTC
+    replays over 16 seeds (DTLS handshake sizes vary between runs and are
+    charged a fixed size), then add one.
 - **Network membership.**
   - A peer that shares no network after a run, or after a `Close`, stays
     linked; decide whether membership should close it, given replication

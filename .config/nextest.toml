@@ -31,7 +31,7 @@ priority = 90
 # The longest single-threaded simulations: the release tables, and the
 # longest test of a debug run.
 [[profile.default.overrides]]
-filter = 'package(strims-ppspp) & (test(=node_sim_sweep) | test(=push_pull_matrix) | test(=sim_adversaries_dont_stall_honest_peers))'
+filter = 'package(strims-ppspp) & (test(=node_sim_sweep) | test(=push_pull_matrix) | test(=sim_adversaries_dont_stall_honest_peers) | test(=sim_wan_residential_seed_relays))'
 priority = 80
 
 # The WAN sweeps stream at 2 Mbit/s to up to 16 viewers, several times the

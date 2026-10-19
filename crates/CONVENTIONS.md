@@ -151,6 +151,9 @@ A change under `schema/` regenerates the UI's `src/apis` and infra's
 3. Whole-node deterministic simulation with turmoil in `strims-sim`. Failures
    print a one-line seed-replay command.
 
+Both kinds of simulation can run on real-world paths from `strims-wan`:
+city-pair latency, access link rates, jitter and loss.
+
 ## Checks
 
 `hack/check.sh` runs the checks below side by side and logs each to
