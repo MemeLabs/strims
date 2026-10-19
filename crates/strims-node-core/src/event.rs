@@ -6,7 +6,7 @@
 use strims_binmap::Bin;
 use strims_kademlia::ID;
 use strims_ppspp::{
-    ChannelStats, MetricsSnapshot, PeerStats, PushStats, SwarmKey, SwarmSchedulerStats,
+    ChannelStats, MetricsSnapshot, PeerStats, PushStats, SwarmId, SwarmKey, SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -190,6 +190,9 @@ pub struct RunnerMetrics {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SwarmInfo {
     pub swarm: SwarmKey,
+    pub id: SwarmId,
+    /// The swarm's `SwarmOptions::label`.
+    pub label: String,
     /// Peers running a channel for it.
     pub channels: usize,
     pub store: StoreInfo,

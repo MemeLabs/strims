@@ -1254,7 +1254,9 @@ impl State {
             .swarms
             .iter()
             .filter_map(|&key| {
-                let store = self.runner.swarm(key)?.store();
+                let swarm = self.runner.swarm(key)?;
+                let (id, label) = (swarm.id().clone(), swarm.options().label.clone());
+                let store = swarm.store();
                 let store = StoreInfo {
                     ready: store.is_ready(),
                     tail: store.tail(),
@@ -1265,6 +1267,8 @@ impl State {
                 let readers = self.readers.values().filter(|r| r.swarm == key);
                 Some(SwarmInfo {
                     swarm: key,
+                    id,
+                    label,
                     channels: self
                         .peers
                         .values()
