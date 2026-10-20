@@ -249,6 +249,16 @@ Egress and players:
     parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
     shield a new parent. Shedding on push queue wait helps slow parents but
     hurts `sim_push_parent_dies` and sparse meshes;
+  - a liar that announces first is grafted again after every
+    `PRUNE_BACKOFF`, with no escalation: each child loses about 1 s of
+    every 11 s on each stream it is the best candidate for. Back off a
+    parent pruned again and again longer, by the child's own count;
+  - pull from liars: a request that timed out may go back to the same
+    channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor reopens
+    its window, so liars among a viewer's few neighbours keep holding its
+    requests (the ppspp sim's lossy mobile viewers lag about 9 s at p99
+    against 2 s without them). BBR backs a silent channel off further but
+    still lags about 7 s;
   - a startup window for the admitting seed (`SeedAllocation::Admission`):
     before its upload and store rate are measured it admits more than a
     constrained uplink carries, and at 6 Mbit/s its pushes go stale. The
@@ -258,15 +268,34 @@ Egress and players:
   - **Defaults.** Decide whether a hybrid seed defaults to
     `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
     Hybrid and more than one stream. The adaptive seed needs the shares.
-  - **Holder quality.** The seed ranks holders only by the round trips it
-    measures, so a near peer with a weak uplink, or one that withholds,
-    keeps its copy. The signal must aggregate other nodes' observations,
-    never a peer's claim about itself. Candidates with no wire change:
-    inferring each neighbour's parent from HAVE timing, a neighbour
-    announcing a hop after its parent, scoring a holder by how fast its
-    followers announce. With a wire change: children reporting their
-    parents' push delay and misses, scored by the median per holder and
-    checked against when each reporter announced.
+  - **Liars.** A holder that announces what it is pushed and serves
+    none of it keeps its copy: telling it from an honest holder takes
+    other nodes' observations, in aggregate, never a claim about itself.
+    Branch `follower-probe` withholds one holder's last chunk of each
+    stream in a unit and confirms the neighbours whose HAVE of it lags
+    the stream's chunk before it at two probes in a row. It finds the
+    real subtrees and never proves a liar, but its late chunks and its
+    bars of honest holders cost WanResidentialSeed and WanSuperPeer
+    50-80 ms of p99 without greedy peers, and with them the honest
+    viewers' p99 stays where liars' grafts and pull timeouts put it.
+    ANNOUNCE (Wire changes) is the next candidate.
+  - **Holders nobody grafts onto.** The seed picks holders by its round
+    trip to them and children pick parents by announcement lag, so a far
+    holder can relay to nobody, and a near one with a weak uplink to few:
+    the follower probe found 2.5-2.8 holders per minute with nobody
+    downstream on WanResidentialSeed and WanSuperPeer. Decide whether a
+    copy should go to a neighbour shown to serve, by an aggregate signal
+    (ANNOUNCE).
+  - **Greedy peers at the admitting seed.** `SeedAllocation::Admission`
+    (the default) keeps a greedy subscriber's slot for as long as it asks;
+    the silent-holder rule is the adaptive seed's. Applying it there
+    changes a default.
+  - **Answers to silent neighbours.** A seed answers the requests of a
+    neighbour that never announces what it receives like anyone's, so
+    free riders share what pushes leave of the uplink with honest viewers.
+  - **Free riders at relays.** A relay admits and keeps a child whatever
+    the child gives back, so a free rider takes a slot of a relay's
+    interior stream like anyone.
   - **The first wave.** Every neighbour asks for every stream within about
     half a second of the first chunk, before the capacity and store rate
     read true, so copies that open later in the wave go to farther
@@ -380,6 +409,10 @@ Egress and players:
   - No WAN scenario runs WebRTC yet. Show that a WAN run over WebRTC
     replays over 16 seeds (DTLS handshake sizes vary between runs and are
     charged a fixed size), then add one.
+  - Every pair a sim links can reach each other. A model of peers that
+    accept no inbound links (an untraversable NAT) would show what they
+    cost the mesh and the seed's allocation, and whether either should
+    treat them as leechers.
 - **Network membership.**
   - A peer that shares no network after a run, or after a `Close`, stays
     linked; decide whether membership should close it, given replication
@@ -473,6 +506,13 @@ stack or a version gate.
 - Announce the interior stream and spare capacity.
 - Mark pushed DATA and echo send times.
 - Add a hop count or depth to STREAM_OPEN or HAVE.
+- ANNOUNCE, after BitTorrent's tracker announce: each viewer periodically
+  tells the seed, per parent, the chunks it was pushed, its hits and
+  misses, and the push delay. The seed scores a holder by the median over
+  the reporters that name it, checked against when each reporter
+  announced, and a report about oneself counts for nothing. Unlike the
+  follower probe (branch `follower-probe`) it delays no chunk and sees
+  subtrees outside the seed's neighbours.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the
   epoch, so peers don't reset.
 - Bump the protocol version.
