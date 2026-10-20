@@ -208,7 +208,9 @@ Egress and players:
     behind LEDBAT: strims-sim's `wan_residential_seed` misses frames on 3 of
     8 seeds with p99 up to 15 s, and the ppspp sim's `WanResidentialSeed`
     reaches a p99 of 12 s with the seed sending 68 % of the data. LEDBAT
-    delivers everything there, at a p99 of about 6 s in the ppspp sim.
+    delivers everything there, at a p99 of about 6 s in the ppspp sim. A
+    seed with no feedback serves whoever asks hardest, so the seed's
+    allocation (below) is the likelier lever.
   - On a shared parent it yields to LEDBAT, so a network should run one
     controller.
   - Next: a deadline-aware request scheduler. Each chunk's deadline is its
@@ -239,6 +241,53 @@ Egress and players:
     ramped up;
   - with one stream behind a seed on a cable uplink on WAN paths
     (`WanResidentialSeed`), about 28 % of pushes hit.
+- **Seed allocation.** A seed gets no reciprocity: upload weights are the
+  rate of verified new data a peer sends us, so a seed weighs every peer
+  alike and serves whoever asks, and Hybrid admits its subscribers
+  first-come by capacity. The seed should spend its measured upload on the
+  copies of the stream that help the swarm most.
+  - **Objective.** One copy of every stripe (stream `i % stream_count`) out
+    as fast as possible, then the rest of the budget on duplicates where
+    they cut delay most. A viewer reads in order, so its lag is its slowest
+    stripe's: minimize the p90, over the seed's neighbours, of each
+    neighbour's worst-stripe HAVE lag.
+  - **Signals**, all passive and already kept: ping RTTs to every neighbour,
+    Hybrid's HAVE lag per neighbour per stripe, and the runner's upload
+    meter (a budget of B/R copies of the stream).
+  - **L1 preference** combines latency and capacity. Capacity shows only
+    once it is used, so allocations grow: a new L1 peer gets one stripe,
+    gains stripes while they saturate as fast as their siblings, and loses
+    them when they lag. A peer with effectively unlimited upload ends up
+    with the whole stream, and the rest of the budget goes to duplicates.
+  - **Duplicates** go to the stripe with the worst tail, at a candidate near
+    the neighbours where it is late. That spreads copies across regions
+    and subtrees, for latency and resilience at once.
+  - **Actuators.** Every neighbour's graft prefers the seed, which announces
+    first, so accepting, declining and shedding STREAM_REQUESTs per stripe
+    places the copies. No wire change.
+  - **What changes with it:** a non-seed node forwards as many streams as
+    its upload carries (one interior stream would cap a super-peer at one
+    stripe); the seed's admission (`UNMEASURED_FANOUT`,
+    `INTERIOR_UTILIZATION`, first-come) becomes the allocator;
+    `stream_count` defaults above 1; a constrained seed answers pull
+    requests only near a chunk's deadline, so repairs neither spend the
+    budget nor hide the tails it steers by.
+  - **Open:** measurement windows, hysteresis, and how many slots move per
+    check; how many neighbours the seed needs for their p90 to stand for
+    the swarm; a peer that announces fast and serves its children badly,
+    whose children's misses the seed never sees.
+  - **Evaluation** on the WAN scenarios: `WanResidentialSeed` in Hybrid at
+    16 stripes against today's admission; a datacenter viewer among
+    residential ones, which should end up carrying most of the stream; the
+    global audience, where duplicates should spread across regions. Measure
+    worst-stripe lag p90/p99, the seed's distinct-chunk ratio against its
+    duplication factor, per-region p99, and each L1 peer's stripes over
+    time.
+- **Reciprocal topology.** Nodes keep their links whatever a peer
+  reciprocates. Dropping links that don't reciprocate and dialing random
+  new peers, with a budget for leechers, would move high-upload peers
+  toward the centre of the swarm: the half of the topology a seed's
+  allocation can't reach.
 - **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
   test-only hook in `strims-node`. Automated attempts to build it were stopped
   by a safety check. Waiting on the user.
