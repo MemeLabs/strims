@@ -78,12 +78,13 @@ use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
-    Cancel, ChannelWriter, Data, FrameReader, Have, Message, MessageWriter, Pong, Reader,
-    ReaderConfig, Request, StreamClose, StreamOpen, StreamRequest,
+    Announce, AnnounceEntry, Cancel, ChannelWriter, Data, FrameReader, Have, MAX_ANNOUNCE_ENTRIES,
+    Message, MessageWriter, Pong, Reader, ReaderConfig, Request, Stream, StreamClose, StreamOpen,
+    StreamRequest,
 };
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats,
+    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats, ReportCounters,
     RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
     SwarmOptions, Writer, WriterOptions,
 };
@@ -147,8 +148,8 @@ enum Attack {
 /// What a greedy viewer withholds; see [`withhold`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Greed {
-    /// Sends handshakes, requests and stream requests, and no HAVEs or
-    /// data: nobody asks it for anything.
+    /// Sends handshakes, requests, stream requests and reports, and no
+    /// HAVEs or data: nobody asks it for anything.
     FreeRider,
     /// Announces what it holds and serves none of it.
     Liar,
@@ -454,6 +455,60 @@ struct Sim {
     alloc: Vec<AllocSample>,
     next_alloc: Time,
     grafts: Grafts,
+    /// The reports' verdicts against the real subtrees.
+    verdicts: Verdicts,
+    /// Per liar, the samples in a row so far at which it held a copy, and
+    /// the finished runs.
+    liar_runs: BTreeMap<usize, u32>,
+    liar_spans: Vec<u32>,
+    /// ANNOUNCEs with entries that reached the seed from viewers, and
+    /// their bytes; the frame bytes the viewers sent.
+    announce: (u64, u64),
+    viewer_bytes: u64,
+    /// With `SIM_COLLUDE`, when each greedy viewer reports next.
+    collude_at: Vec<Time>,
+}
+
+impl Verdicts {
+    fn add(&mut self, o: &Verdicts) {
+        self.honest += o.honest;
+        self.with_children += o.with_children;
+        self.with_reporters += o.with_reporters;
+        self.judged += o.judged;
+        self.served += o.served;
+        self.served_childless += o.served_childless;
+        self.liars += o.liars;
+        self.liars_judged += o.liars_judged;
+        self.liars_served += o.liars_served;
+        self.not_kept += o.not_kept;
+        self.barred_with_children += o.barred_with_children;
+    }
+}
+
+/// An adaptive seed's report verdicts at each sample after the warm-up,
+/// against its holders' real children: the nodes whose open parent it is
+/// on some stream, from every node's push stats.
+#[derive(Clone, Copy, Debug, Default)]
+struct Verdicts {
+    /// Honest holder samples, those with a real child, and those with one
+    /// among the seed's neighbours (the ones that can report).
+    honest: u64,
+    with_children: u64,
+    with_reporters: u64,
+    /// Honest holder samples a quorum judged, those it saw serve, and of
+    /// those the ones without a real child.
+    judged: u64,
+    served: u64,
+    served_childless: u64,
+    /// Liar holder samples, those judged, and those served.
+    liars: u64,
+    liars_judged: u64,
+    liars_served: u64,
+    /// Honest holder samples at which the seed pushed to it and its pushes
+    /// didn't keep up.
+    not_kept: u64,
+    /// Honest holders barred that had a real child at the sample before.
+    barred_with_children: u64,
 }
 
 /// Honest viewers' open parents, sampled with the seed's allocation after
@@ -483,6 +538,8 @@ struct AllocSample {
     objective: Duration,
     /// The neighbours barred from holding a copy.
     barred: BTreeSet<usize>,
+    /// After the warm-up, the holders with a real child.
+    with_children: BTreeSet<usize>,
 }
 
 /// What a stream a neighbour stopped announcing counts as in the seed's
@@ -559,6 +616,17 @@ struct Report {
     /// The neighbours an adaptive seed barred from holding a copy, and
     /// how many of them were honest.
     barred: (u64, u64),
+    /// The reports' verdicts against the real subtrees.
+    verdicts: Verdicts,
+    /// How long a liar held a copy at a time: mean and longest.
+    liar_hold: (Duration, Duration),
+    /// ANNOUNCEs with entries that reached the seed, their bytes, and
+    /// those bytes' share of what the viewers sent; the asks the seed sent.
+    announce: (u64, u64, f64),
+    asks: u64,
+    /// What became of the report entries from honest and from greedy
+    /// viewers, at the end.
+    report_counts: (ReportCounters, ReportCounters),
 }
 
 /// The cross-traffic swarm, measured like the main one.
@@ -859,6 +927,7 @@ impl Sim {
             .reader_config();
         let end = t0() + Duration::from_secs(cfg.stream_secs as i64 + 20);
         let mtu = cfg.mtu;
+        let collude_at = vec![t0(); nodes.len()];
         Sim {
             cfg,
             nodes,
@@ -888,6 +957,12 @@ impl Sim {
             alloc: vec![],
             next_alloc: t0() + Duration::SECOND,
             grafts: Grafts::default(),
+            verdicts: Verdicts::default(),
+            liar_runs: BTreeMap::new(),
+            liar_spans: Vec::new(),
+            announce: (0, 0),
+            viewer_bytes: 0,
+            collude_at,
         }
     }
 
@@ -1186,6 +1261,24 @@ impl Sim {
         {
             self.record_arrivals(to, frame);
         }
+        if to == 0 {
+            for c in FrameReader::new(frame) {
+                let Ok((h, payload)) = c else { break };
+                if h.channel >= 1000 {
+                    continue;
+                }
+                for m in Reader::new(self.rcfg, payload) {
+                    match m {
+                        Ok(m @ Message::Announce(a)) if !a.is_empty() => {
+                            self.announce.0 += 1;
+                            self.announce.1 += m.encoded_len() as u64;
+                        }
+                        Ok(_) => {}
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
         let node = &mut self.nodes[to];
         if node.removed.contains(&rpeer) {
             return;
@@ -1257,12 +1350,22 @@ impl Sim {
                         Role::Greedy(Greed::Liar) => "L",
                         _ => "",
                     };
-                    format!("{id}{greed}{mark}:{}@{rtt}", nb.streams.len())
+                    let served = match nb.served {
+                        Some(true) => "+",
+                        Some(false) => "-",
+                        None => "",
+                    };
+                    let kept = if nb.holder && !nb.kept_up { "~" } else { "" };
+                    format!(
+                        "{id}{greed}{mark}{kept}:{}@{rtt}/r{}{served}",
+                        nb.streams.len(),
+                        nb.reporters
+                    )
                 })
                 .collect();
             let c = a.counters;
             eprintln!(
-                "t={} budget {} window {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} silenced {} {}",
+                "t={} budget {} window {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} silenced {} unserved {} {}",
                 ms(self.now - t0()),
                 a.budget,
                 a.window,
@@ -1274,9 +1377,16 @@ impl Sim {
                 c.joined,
                 c.left,
                 c.silenced,
+                c.unserved,
                 peers.join(" "),
             );
         }
+        self.score_verdicts(&a);
+        let with_children = if self.now > t0() + Duration::from_secs(self.cfg.warm_secs) {
+            self.holders_with_children(&holders)
+        } else {
+            BTreeSet::new()
+        };
         if holders.is_empty() {
             holders.extend(held.iter().filter(|&(_, &n)| n > 0).map(|(&id, _)| id));
         }
@@ -1286,7 +1396,158 @@ impl Sim {
             holders,
             objective: percentile(&worst, 90),
             barred,
+            with_children,
         });
+    }
+
+    /// With `SIM_COLLUDE`, greedy viewer `i`'s report due on link `l` to
+    /// the seed, once a second: for every holder at the latest sample, on
+    /// the stream its index picks, a liar is praised and anyone else
+    /// defamed, eight pushes each.
+    fn collusion(&mut self, i: usize, l: usize) -> Option<Vec<AnnounceEntry<'static>>> {
+        const IDS: [[u8; 1]; 256] = {
+            let mut ids = [[0u8]; 256];
+            let mut i = 0;
+            while i < 256 {
+                ids[i] = [i as u8];
+                i += 1;
+            }
+            ids
+        };
+        if self.links[l].to != 0
+            || self.now < self.collude_at[i]
+            || knob::<u32>("SIM_COLLUDE").is_none_or(|c| c == 0)
+        {
+            return None;
+        }
+        self.collude_at[i] = self.now + Duration::SECOND;
+        let streams = self.cfg.stream_count.max(1);
+        let holders = self
+            .alloc
+            .last()
+            .map(|a| a.holders.clone())
+            .unwrap_or_default();
+        let entries: Vec<AnnounceEntry<'static>> = holders
+            .iter()
+            .filter(|&&h| h != i && h < IDS.len())
+            .map(|&h| {
+                let liar = self.nodes[h].role == Role::Greedy(Greed::Liar);
+                AnnounceEntry {
+                    stream: (h % streams) as Stream,
+                    hits: if liar { 8 } else { 0 },
+                    late: 0,
+                    misses: if liar { 0 } else { 8 },
+                    delay: Duration::from_millis(20),
+                    parent: &IDS[h],
+                }
+            })
+            .collect();
+        (!entries.is_empty()).then_some(entries)
+    }
+
+    /// Every node's open parent per stream, by node index.
+    fn parents(&self) -> Vec<Vec<Option<usize>>> {
+        self.nodes
+            .iter()
+            .map(|n| {
+                n.runner.push_stats(n.swarm).map_or_else(Vec::new, |s| {
+                    s.parents
+                        .iter()
+                        .map(|x| {
+                            x.and_then(|k| n.runner.peer_id(k))
+                                .map(|id| usize::from(id[0]))
+                        })
+                        .collect()
+                })
+            })
+            .collect()
+    }
+
+    /// Scores the seed's report verdicts against its holders' real
+    /// children, into [`Sim::verdicts`], and tracks how long liars hold.
+    fn score_verdicts(&mut self, a: &strims_ppspp::SeedAllocationStats) {
+        let seed = &self.nodes[0];
+        let id = |k| seed.runner.peer_id(k).map_or(0, |id| usize::from(id[0]));
+        let holders: BTreeSet<usize> = a
+            .neighbours
+            .iter()
+            .filter(|n| n.holder)
+            .map(|n| id(n.peer))
+            .collect();
+        for (&i, run) in &mut self.liar_runs {
+            if !holders.contains(&i) && *run > 0 {
+                self.liar_spans.push(*run);
+                *run = 0;
+            }
+        }
+        for &h in &holders {
+            if self.nodes[h].role == Role::Greedy(Greed::Liar) {
+                *self.liar_runs.entry(h).or_default() += 1;
+            }
+        }
+        let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
+        if self.now <= warm {
+            return;
+        }
+        let parents = self.parents();
+        let children = |h: usize| -> BTreeSet<usize> {
+            parents
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.contains(&Some(h)))
+                .map(|(n, _)| n)
+                .collect()
+        };
+        let links = &self.nodes[0].links;
+        let was: BTreeSet<usize> = self
+            .alloc
+            .last()
+            .map(|x| x.barred.clone())
+            .unwrap_or_default();
+        let v = &mut self.verdicts;
+        for nb in &a.neighbours {
+            let h = id(nb.peer);
+            let kids = children(h);
+            if nb.barred && !was.contains(&h) && !matches!(self.nodes[h].role, Role::Greedy(_)) {
+                let had = self
+                    .alloc
+                    .last()
+                    .is_some_and(|x| x.with_children.contains(&h));
+                v.barred_with_children += u64::from(had);
+            }
+            if !nb.holder {
+                continue;
+            }
+            let judged = nb.served.is_some();
+            let served = nb.served == Some(true);
+            match self.nodes[h].role {
+                Role::Greedy(Greed::Liar) => {
+                    v.liars += 1;
+                    v.liars_judged += u64::from(judged);
+                    v.liars_served += u64::from(served);
+                }
+                Role::Greedy(Greed::FreeRider) => {}
+                _ => {
+                    v.honest += 1;
+                    v.with_children += u64::from(!kids.is_empty());
+                    v.with_reporters += u64::from(kids.iter().any(|k| links.contains_key(k)));
+                    v.judged += u64::from(judged);
+                    v.served += u64::from(served);
+                    v.served_childless += u64::from(served && kids.is_empty());
+                    v.not_kept += u64::from(!nb.kept_up && !nb.streams.is_empty());
+                }
+            }
+        }
+    }
+
+    /// The holders with a real child, for [`AllocSample::with_children`].
+    fn holders_with_children(&self, holders: &BTreeSet<usize>) -> BTreeSet<usize> {
+        let parents = self.parents();
+        holders
+            .iter()
+            .copied()
+            .filter(|&h| parents.iter().any(|p| p.contains(&Some(h))))
+            .collect()
     }
 
     /// See [`Report::barred`]: counted from the samples, once per bar.
@@ -1542,10 +1803,15 @@ impl Sim {
                 }
             }
             if let Role::Greedy(g) = node.role {
-                n = withhold(g, &mut self.buf, n, self.rcfg);
+                let collusion = self.collusion(i, l);
+                n = withhold(g, &mut self.buf, n, self.rcfg, collusion.as_deref());
                 if n == 0 {
                     continue;
                 }
+            }
+            let node = &mut self.nodes[i];
+            if i != 0 {
+                self.viewer_bytes += n as u64;
             }
             let frame = self.buf[..n].to_vec();
             let (wire, packets) = match self.wan {
@@ -1806,6 +2072,55 @@ impl Sim {
             greedy_slots,
             greedy_held,
             barred: self.barred(),
+            verdicts: self.verdicts,
+            liar_hold: {
+                let runs: Vec<u32> = self
+                    .liar_spans
+                    .iter()
+                    .chain(self.liar_runs.values().filter(|&&r| r > 0))
+                    .copied()
+                    .collect();
+                let mean = runs.iter().map(|&r| u64::from(r)).sum::<u64>() * 1000
+                    / runs.len().max(1) as u64;
+                let longest = runs.iter().copied().max().unwrap_or(0);
+                (
+                    Duration::from_millis(mean as i64),
+                    Duration::from_secs(i64::from(longest)),
+                )
+            },
+            announce: (
+                self.announce.0,
+                self.announce.1,
+                self.announce.1 as f64 / self.viewer_bytes.max(1) as f64,
+            ),
+            asks: {
+                let seed = &self.nodes[0];
+                seed.links
+                    .values()
+                    .filter_map(|&l| seed.runner.channel_stats(self.links[l].peer, seed.swarm))
+                    .map(|c| c.outbound.announce)
+                    .sum()
+            },
+            report_counts: {
+                let seed = &self.nodes[0];
+                let mut honest = ReportCounters::default();
+                let mut greedy = ReportCounters::default();
+                if let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) {
+                    for nb in &a.neighbours {
+                        let i = seed
+                            .runner
+                            .peer_id(nb.peer)
+                            .map_or(0, |id| usize::from(id[0]));
+                        let c = if matches!(self.nodes[i].role, Role::Greedy(_)) {
+                            &mut greedy
+                        } else {
+                            &mut honest
+                        };
+                        add_counts(c, &nb.reports);
+                    }
+                }
+                (honest, greedy)
+            },
             liar_grafts: g.to_liars as f64 / g.samples.max(1) as f64,
             liar_graft_span: Duration::from_millis(
                 (1000 * spans.iter().map(|&s| u64::from(s)).sum::<u64>()
@@ -2118,26 +2433,60 @@ fn greedy(cfg: &Config) -> BTreeMap<usize, Greed> {
 }
 
 /// What a greedy viewer's frame keeps of what its runner wrote: everything
-/// but data and its integrity, and a free rider's HAVEs. Returns the new
-/// length, 0 if nothing is left.
-fn withhold(g: Greed, buf: &mut [u8], n: usize, cfg: ReaderConfig) -> usize {
+/// but data and its integrity, and a free rider's HAVEs. A colluder's
+/// frame to the seed carries the `collusion` entries ([`Sim::collusion`])
+/// that fit in place of its own reports. Returns the new length, 0 if
+/// nothing is left.
+fn withhold(
+    g: Greed,
+    buf: &mut [u8],
+    n: usize,
+    cfg: ReaderConfig,
+    collusion: Option<&[AnnounceEntry<'_>]>,
+) -> usize {
     let frame = buf[..n].to_vec();
     let mut off = 0;
+    let mut injected = false;
     for c in FrameReader::new(&frame) {
         let (h, payload) = c.unwrap();
         let mut cw = ChannelWriter::new(&mut buf[off..], h.channel);
+        let main = h.channel < 1000;
         for m in Reader::new(cfg, payload) {
             match m.unwrap() {
                 Message::Data(_) | Message::Integrity(_) | Message::SignedIntegrity(_) => {}
                 Message::Have(_) if g == Greed::FreeRider => {}
+                Message::Announce(a) if main && collusion.is_some() && !a.is_empty() => {}
                 m => {
                     cw.write(&m).unwrap();
+                }
+            }
+        }
+        if let Some(e) = collusion.filter(|_| main && !injected) {
+            injected = true;
+            for part in e.chunks(MAX_ANNOUNCE_ENTRIES) {
+                if cw
+                    .write(&Message::Announce(Announce::new(part).unwrap()))
+                    .is_err()
+                {
+                    break;
                 }
             }
         }
         off += cw.finish();
     }
     off
+}
+
+/// Adds `b`'s counts to `a`'s.
+fn add_counts(a: &mut ReportCounters, b: &ReportCounters) {
+    a.tallied += b.tallied;
+    a.unknown += b.unknown;
+    a.invalid += b.invalid;
+    a.reporter_fed += b.reporter_fed;
+    a.subject_unfed += b.subject_unfed;
+    a.reporter_silent += b.reporter_silent;
+    a.too_early += b.too_early;
+    a.misses_unseen += b.misses_unseen;
 }
 
 fn shuffle<T>(v: &mut [T], rng: &mut DetRng) {
@@ -3683,6 +4032,14 @@ struct EvalRun {
     greedy_slots: (f64, f64),
     liar_grafts: f64,
     barred: (u64, u64),
+    /// [`Report::verdicts`], [`Report::liar_hold`] and
+    /// [`Report::report_counts`]'s honest half; ANNOUNCE bytes into the
+    /// seed per second of stream, and their share of the viewers' upload.
+    verdicts: Verdicts,
+    liar_hold: (Duration, Duration),
+    honest_reports: ReportCounters,
+    announce_rate: f64,
+    announce_share: f64,
 }
 
 fn eval_run(cfg: Config) -> EvalRun {
@@ -3719,11 +4076,53 @@ fn eval_run(cfg: Config) -> EvalRun {
         greedy_slots: r.greedy_slots,
         liar_grafts: r.liar_grafts,
         barred: r.barred,
+        verdicts: r.verdicts,
+        liar_hold: r.liar_hold,
+        honest_reports: r.report_counts.0,
+        announce_rate: r.announce.1 as f64 / sim.cfg.stream_secs.max(1) as f64,
+        announce_share: r.announce.2,
     }
 }
 
+/// The report columns of a run's row: liars' copies, the verdicts on
+/// honest holders and liars, honest bars with a real child, honest
+/// entries the seed's checks ruled out, and ANNOUNCE bytes.
+fn verdict_cols(
+    v: &Verdicts,
+    liar_hold: (Duration, Duration),
+    c: &ReportCounters,
+    announce: (f64, f64),
+) -> String {
+    let pc = |a: u64, b: u64| 100.0 * a as f64 / b.max(1) as f64;
+    let out = c.reporter_fed + c.reporter_silent + c.too_early + c.misses_unseen;
+    format!(
+        "{:.1} ({}) | {:.0}% / {:.0}% / {:.0}% ({:.0}%) | {} / {} | {:.0}% | {} | {:.1}% ({}/{}/{}/{}), {} about relays | {:.0} B/s ({:.2}%)",
+        liar_hold.0.as_secs_f64(),
+        liar_hold.1.as_secs(),
+        pc(v.with_reporters, v.honest),
+        pc(v.judged, v.honest),
+        pc(v.served, v.honest),
+        pc(v.served_childless, v.served),
+        v.liars_judged,
+        v.liars_served,
+        pc(v.not_kept, v.honest),
+        v.barred_with_children,
+        pc(out, c.tallied + out),
+        c.reporter_fed,
+        c.reporter_silent,
+        c.too_early,
+        c.misses_unseen,
+        c.subject_unfed,
+        announce.0,
+        100.0 * announce.1,
+    )
+}
+
+/// [`verdict_cols`]'s header.
+const VERDICT_HEADER: &str = "liar copy held s mean (max) | honest holders with a seed-neighbour child / judged / served (served without a child) | liar samples judged / served | honest holders pushed to and not kept up | honest bars with a child | honest entries ruled out (fed/silent/early/unseen), about relays | ANNOUNCE into the seed (share of viewer upload)";
+
 /// The seed allocation tables' header.
-const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined | seed slots at free riders / liars | streams grafted to liars | holders barred (honest) |";
+const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined | seed slots at free riders / liars | streams grafted to liars | holders barred (honest) | liar copy held s mean (max) | honest holders with a seed-neighbour child / judged / served (served without a child) | liar samples judged / served | honest holders pushed to and not kept up | honest bars with a child | honest entries ruled out (fed/silent/early/unseen), about relays | ANNOUNCE into the seed (share of viewer upload) |";
 
 fn eval_row(name: &str, runs: &[EvalRun]) -> String {
     let n = runs.len().max(1) as f64;
@@ -3731,6 +4130,22 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
     let med = |f: &dyn Fn(&EvalRun) -> Duration| median(runs.iter().map(|r| ms(f(r))).collect());
     let max = |f: &dyn Fn(&EvalRun) -> Duration| runs.iter().map(|r| ms(f(r))).max().unwrap_or(0);
     let min_delivery = runs.iter().map(|r| r.delivery).fold(1.0, f64::min);
+    let mut v = Verdicts::default();
+    let mut c = ReportCounters::default();
+    for r in runs {
+        v.add(&r.verdicts);
+        add_counts(&mut c, &r.honest_reports);
+    }
+    let hold = (
+        Duration::from_secs_f64(mean(&|r| r.liar_hold.0.as_secs_f64())),
+        runs.iter().map(|r| r.liar_hold.1).max().unwrap_or_default(),
+    );
+    let verdicts = verdict_cols(
+        &v,
+        hold,
+        &c,
+        (mean(&|r| r.announce_rate), mean(&|r| r.announce_share)),
+    );
     let super_peer = if runs.iter().any(|r| r.super_peer.is_some()) {
         format!(
             "{:.1} / {:.1}",
@@ -3741,7 +4156,7 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
         "-".into()
     };
     format!(
-        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} | {:.1}% / {:.1}% | {:.2}% | {:.1} ({:.1}) |",
+        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} | {:.1}% / {:.1}% | {:.2}% | {:.1} ({:.1}) | {verdicts} |",
         mean(&|r| r.delivery),
         min_delivery,
         med(&|r| r.p50),
@@ -4416,13 +4831,14 @@ fn wan_cable_seed_6mbit() {
         let last_write = t0() + Duration::SECOND + Duration::from_secs(sim.cfg.stream_secs as i64);
         let p = &r.push;
         format!(
-            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {} ({}) | {tag} |",
+            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {} ({}) | {} | {tag} |",
             policy.allocation,
             viewers,
             r.delivery,
             ms(r.lag_p50),
             ms(r.lag_p99),
             ms(r.lag_max),
+            ms(r.stripe_p99),
             (last_write - t0()).as_secs_f64(),
             span,
             p.hits,
@@ -4442,10 +4858,19 @@ fn wan_cable_seed_6mbit() {
             ms(r.liar_graft_span),
             r.barred.0,
             r.barred.1,
+            verdict_cols(
+                &r.verdicts,
+                r.liar_hold,
+                &r.report_counts.0,
+                (
+                    r.announce.1 as f64 / sim.cfg.stream_secs.max(1) as f64,
+                    r.announce.2
+                ),
+            ),
         )
     });
     println!(
-        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | holders barred (honest) | run tag |"
+        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | worst stripe p99 ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | holders barred (honest) | {VERDICT_HEADER} | run tag |"
     );
     for r in rows {
         println!("{r}");
@@ -4567,6 +4992,53 @@ fn sim_wan_adaptive_seed_spreads_whole_copies() {
     assert!(adaptive.0 < Duration::from_secs(1), "{lags:?}");
     assert!(adaptive.0 * 2 < admission.0, "{lags:?}");
     assert!(adaptive.1 < admission.1, "{lags:?}");
+}
+
+#[test]
+fn sim_wan_adaptive_seed_bars_liars_its_reporters_name() {
+    // Liars among the seed's nearest viewers take copies first; the
+    // children that graft onto them and miss everything report it, and
+    // the seed bars them. Holders that serve are never barred.
+    let mut cfg = alloc_config(
+        AbScenario::WanResidentialSeed,
+        1,
+        LEDBAT,
+        AllocCase::AdaptiveQos,
+        64,
+    );
+    cfg.greedy = Greedy::Nodes(vec![
+        (4, Greed::Liar),
+        (21, Greed::Liar),
+        (10, Greed::FreeRider),
+    ]);
+    cfg.stream_secs = 30;
+    cfg.warm_secs = 5;
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    let a = sim.nodes[0]
+        .runner
+        .seed_allocation(sim.nodes[0].swarm, sim.now)
+        .unwrap();
+    eprintln!(
+        "{}",
+        verdict_cols(
+            &r.verdicts,
+            r.liar_hold,
+            &r.report_counts.0,
+            (0.0, r.announce.2)
+        )
+    );
+    eprintln!("{r:?}");
+    check_delivery(&r, 4 * MUNRO as u64);
+    assert!(a.counters.unserved >= 2, "{:?}", a.counters);
+    assert_eq!(r.verdicts.liars_served, 0);
+    assert_eq!(r.verdicts.barred_with_children, 0);
+    assert!(r.greedy_slots.1 < 0.15, "{:?}", r.greedy_slots);
+    assert!(
+        r.liar_hold.1 <= Duration::from_secs(10),
+        "{:?}",
+        r.liar_hold
+    );
 }
 
 #[test]
