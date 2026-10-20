@@ -41,14 +41,20 @@ struct Pair {
     writer: Writer,
     now: Time,
     written: u64,
+    /// Every frame sent, in order.
+    frames: Vec<Vec<u8>>,
 }
 
 impl Pair {
     fn new(leech_options: SwarmOptions) -> Pair {
+        Pair::with(options(), leech_options)
+    }
+
+    fn with(seed_options: SwarmOptions, leech_options: SwarmOptions) -> Pair {
         let key = strims_crypto::key_from_seed(&[4; 32]);
         let (writer, swarm) = Writer::new(
             WriterOptions {
-                swarm_options: options(),
+                swarm_options: seed_options,
                 key: key.clone(),
             },
             t(0),
@@ -82,6 +88,7 @@ impl Pair {
             writer,
             now: t(0),
             written: 0,
+            frames: Vec::new(),
         }
     }
 
@@ -101,6 +108,7 @@ impl Pair {
                         break;
                     }
                     moved = true;
+                    self.frames.push(buf[..n].to_vec());
                     b.runner.handle_frame(b.peer, self.now, &buf[..n])?;
                 }
                 let _ = to;
@@ -766,4 +774,114 @@ fn late_data_behind_the_window_is_ignored_as_stale() {
     let after = stats(&p).inbound;
     assert_eq!(after.invalid_data, 0, "{after:?}");
     assert!(after.stale_data > before.stale_data, "{after:?}");
+}
+
+fn hybrid() -> SwarmOptions {
+    SwarmOptions {
+        push_mode: PushMode::Hybrid,
+        ..options()
+    }
+}
+
+/// A hybrid transfer: pulled at first, pushed once the leech subscribes
+/// (the seed's allocation is pinned to it). Returns the pair and the tap
+/// events of the seed and the leech.
+fn tapped_transfer(tap: bool) -> (Pair, Vec<TapEvent>, Vec<TapEvent>) {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.seed
+        .runner
+        .pin_seed_allocation(p.seed.swarm, Some(vec![vec![p.seed.peer]]))
+        .unwrap();
+    p.seed.runner.set_tap(tap);
+    p.leech.runner.set_tap(tap);
+    let (mut seed, mut leech) = (Vec::new(), Vec::new());
+    let mut step = |p: &mut Pair, ms: i64| {
+        p.tick(ms);
+        p.seed.runner.drain_tap(|e| seed.push(e));
+        p.leech.runner.drain_tap(|e| leech.push(e));
+    };
+    step(&mut p, 100);
+    p.write(2);
+    for _ in 0..10 {
+        step(&mut p, 50);
+    }
+    p.leech
+        .runner
+        .request_stream(p.leech.peer, p.leech.swarm, 0, Bin(0))
+        .unwrap();
+    for _ in 0..10 {
+        p.write(1);
+        for _ in 0..5 {
+            step(&mut p, 50);
+        }
+    }
+    (p, seed, leech)
+}
+
+#[test]
+fn the_tap_changes_no_frame() {
+    let (off, seed, leech) = tapped_transfer(false);
+    assert!(seed.is_empty() && leech.is_empty());
+    let (on, _, _) = tapped_transfer(true);
+    assert_eq!(off.frames, on.frames);
+}
+
+#[test]
+fn the_tap_tells_pushes_from_answers() {
+    let (mut p, seed, leech) = tapped_transfer(true);
+    let (mut pushed, mut answered) = (0, 0);
+    for e in &seed {
+        if let TapKind::DataSent { bin, push, .. } = e.kind {
+            assert_eq!((e.swarm, e.peer), (Some(p.seed.swarm), Some(p.seed.peer)));
+            if push {
+                pushed += bin.base_length();
+            } else {
+                answered += bin.base_length();
+            }
+        }
+    }
+    let stats = p.seed.runner.swarm_stats(p.seed.swarm).unwrap();
+    assert!(pushed > 0 && answered > 0, "{pushed} {answered}");
+    assert_eq!(pushed, stats.pushed_chunks);
+    assert_eq!(pushed + answered, stats.chunks_sent);
+    assert!(
+        seed.iter()
+            .any(|e| e.kind == TapKind::Admitted { stream: 0 })
+    );
+    let hits = leech
+        .iter()
+        .filter(|e| matches!(e.kind, TapKind::PushHit { .. }))
+        .count();
+    assert!(hits > 0);
+
+    // channel and peer lifecycle
+    p.leech.runner.remove_peer(p.leech.peer);
+    let mut gone = Vec::new();
+    p.leech.runner.drain_tap(|e| gone.push(e.kind));
+    assert_eq!(gone, [TapKind::ChannelClosed, TapKind::PeerRemoved]);
+    let peer = p.leech.runner.add_peer(b"again", p.now);
+    p.leech
+        .runner
+        .run_swarm(peer, p.leech.swarm, 7, 8, p.now)
+        .unwrap();
+    let mut back = Vec::new();
+    p.leech.runner.drain_tap(|e| back.push((e.peer, e.kind)));
+    assert_eq!(
+        back,
+        [
+            (Some(peer), TapKind::PeerAdded),
+            (
+                Some(peer),
+                TapKind::ChannelOpened {
+                    channel: 7,
+                    peer_channel: 8
+                }
+            ),
+        ]
+    );
+    assert_eq!(p.leech.runner.channels().count(), 1);
+    assert_eq!(
+        p.leech.runner.peers().map(|(_, id)| id).collect::<Vec<_>>(),
+        [&b"again"[..]]
+    );
 }

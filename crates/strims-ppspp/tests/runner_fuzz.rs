@@ -20,7 +20,7 @@ use strims_ppspp::codec::{
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::{
     DATA_QUEUE_CAP, MAX_BIN, PeerKey, PushMode, Runner, Swarm, SwarmId, SwarmKey, SwarmOptions,
-    Writer, WriterOptions,
+    TAP_CAP, Writer, WriterOptions,
 };
 
 const MTU: usize = 4096;
@@ -304,10 +304,12 @@ fn action() -> impl Strategy<Value = Action> {
 }
 
 /// Feeds the actions to a victim that got the peer's real handshake, and
-/// keeps it writing and ticking.
+/// keeps it writing and ticking, with its tap on and drained after every
+/// step.
 fn run(victim: &mut Node, corpus: &[Vec<u8>], handshake: &[u8], actions: &[Action]) {
     let mut now = t(100);
     let mut buf = vec![0u8; MTU];
+    victim.runner.set_tap(true);
     victim
         .runner
         .handle_frame(victim.peer, now, handshake)
@@ -344,6 +346,9 @@ fn run(victim: &mut Node, corpus: &[Vec<u8>], handshake: &[u8], actions: &[Actio
             polls += 1;
         }
         while victim.runner.poll_event().is_some() {}
+        let mut events = 0;
+        victim.runner.drain_tap(|_| events += 1);
+        assert!(events <= 2 * TAP_CAP + 1);
     }
 
     let ps = victim.runner.peer_stats(victim.peer).unwrap();

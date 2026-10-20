@@ -111,6 +111,7 @@ use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
 use crate::swarm::Swarm;
+use crate::tap::{Tap, TapKind};
 use crate::time_set::TimeSet;
 
 #[path = "scheduler_push.rs"]
@@ -324,6 +325,8 @@ pub(crate) struct SwarmState {
     seed: SeedPolicy,
     /// The hybrid's state, with [`PushMode::Hybrid`] only.
     push: Option<PushState>,
+    /// Decisions for the driver's capture.
+    pub(crate) tap: Tap,
 }
 
 impl SwarmState {
@@ -628,6 +631,10 @@ impl PeerChannelScheduler {
                 self.cancel_bins.set(x);
                 self.backoff_bins.set(x);
                 n += 1;
+                s.tap
+                    .emit(s.key, Some(self.peer), || TapKind::RequestTimeout {
+                        bin: x,
+                    });
             }
             // Requests are single chunks; anything left with a request
             // time arrived from elsewhere unanswered.
@@ -785,8 +792,13 @@ impl PeerChannelScheduler {
                 }
             }
             while x <= s.have_bin_max.0 {
-                if s.have_bins.filled_at(Bin(x)) {
-                    q.push_data(self.peer, s.key, Bin(x), queued, PeerPriority::High);
+                if s.have_bins.filled_at(Bin(x))
+                    && !q.push_data(self.peer, s.key, Bin(x), queued, PeerPriority::High)
+                {
+                    s.tap.emit(s.key, Some(self.peer), || TapKind::DataRefused {
+                        bin: Bin(x),
+                        push: true,
+                    });
                 }
                 x += stride;
             }
@@ -1081,6 +1093,7 @@ impl PeerSwarmScheduler {
                 seed: o.seed,
                 push: (o.push_mode == PushMode::Hybrid)
                     .then(|| PushState::new(usize::from(stream_count), now)),
+                tap: Tap::default(),
             },
             channels: IndexMap::new(),
         }
@@ -1205,8 +1218,14 @@ impl PeerSwarmScheduler {
                 wasted = wasted.saturating_sub(1);
                 if let Some(stream) = s.streams.get(usize::from(s.bin_stream(x))) {
                     for sub in &stream.subscribers {
-                        if sub.start_bin <= x {
-                            q.push_data(sub.channel, s.key, x, queued, PeerPriority::High);
+                        if sub.start_bin <= x
+                            && !q.push_data(sub.channel, s.key, x, queued, PeerPriority::High)
+                        {
+                            s.tap
+                                .emit(s.key, Some(sub.channel), || TapKind::DataRefused {
+                                    bin: x,
+                                    push: true,
+                                });
                         }
                     }
                 }
@@ -1360,6 +1379,11 @@ impl PeerSwarmScheduler {
         Some((&mut self.s, c))
     }
 
+    /// The swarm's tap buffer.
+    pub(crate) fn tap_mut(&mut self) -> &mut Tap {
+        &mut self.s.tap
+    }
+
     /// Whether `peer`'s handshake arrived on its channel.
     pub(crate) fn handshake_received(&self, peer: PeerKey) -> bool {
         self.channels
@@ -1457,6 +1481,8 @@ impl PeerSwarmScheduler {
         let Some((s, c)) = self.channel(peer) else {
             return;
         };
+        s.tap
+            .emit(s.key, Some(peer), || TapKind::DataStale { bin: b });
         if !c.handshake_received {
             return;
         }
@@ -1582,7 +1608,12 @@ impl PeerSwarmScheduler {
         if !crate::peer_bin_ok(b, s.window) {
             return false;
         }
-        q.push_data(peer, s.key, b, t, PeerPriority::Low);
+        if !q.push_data(peer, s.key, b, t, PeerPriority::Low) {
+            s.tap.emit(s.key, Some(peer), || TapKind::DataRefused {
+                bin: b,
+                push: false,
+            });
+        }
         c.enqueue_now = true;
         true
     }
@@ -1831,7 +1862,8 @@ impl PeerSwarmScheduler {
         frame_empty: bool,
         q: &mut impl PeerTaskQueue,
     ) -> Result<(), WriteDataError> {
-        if pri == PeerPriority::High && self.push_unwanted(peer, b, t, now) {
+        let push = pri == PeerPriority::High;
+        if push && self.push_unwanted(peer, b, t, now) {
             return Err(WriteDataError::Dropped);
         }
         let Some((s, c)) = self.channel(peer) else {
@@ -1847,14 +1879,25 @@ impl PeerSwarmScheduler {
                 match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
                     Ok(()) => {
                         s.count_sent(b, pri);
+                        s.tap.emit(s.key, Some(peer), || TapKind::DataSent {
+                            bin: b,
+                            push,
+                            queued: t,
+                        });
                         return Ok(());
                     }
                     Err(WriteDataError::NotEnoughSpace) => cw.reset(),
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        s.tap
+                            .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
+                        return Err(e);
+                    }
                 }
             }
             if b.is_base() {
                 if frame_empty {
+                    s.tap
+                        .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
                     return Err(WriteDataError::Dropped);
                 }
                 q.push_front_data(peer, s.key, b, t, pri);

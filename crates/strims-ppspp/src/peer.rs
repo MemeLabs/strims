@@ -190,13 +190,22 @@ impl PeerTaskQueue for Queues<'_> {
         }
     }
 
-    fn push_data(&mut self, peer: PeerKey, swarm: SwarmKey, b: Bin, t: Time, pri: PeerPriority) {
+    fn push_data(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        b: Bin,
+        t: Time,
+        pri: PeerPriority,
+    ) -> bool {
         if let Some(p) = self.peers.get_mut(peer)
             && let Some(q) = p.dq.get_mut(pri.index())
             && !q.push(swarm, b, t)
         {
             p.dropped = p.dropped.saturating_add(1);
+            return false;
         }
+        true
     }
 
     fn push_front_data(

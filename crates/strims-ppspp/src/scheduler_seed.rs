@@ -73,6 +73,7 @@ use crate::options::{SeedAllocation, SeedQos};
 use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
 use crate::scheduler::PeerTaskQueue;
 use crate::scheduler_peer::PeerSwarmScheduler;
+use crate::tap::TapKind;
 
 #[cfg(doc)]
 use crate::SeedPolicy;
@@ -243,6 +244,9 @@ impl PeerSwarmScheduler {
         if !h.holds && (a.unconstrained || holders < a.copies) {
             h.holds = true;
             a.stats.joined = a.stats.joined.saturating_add(1);
+            self.s
+                .tap
+                .emit(self.s.key, Some(peer), || TapKind::HolderJoined);
         }
         let ok = h.holds && held < a.streams;
         let n = if ok {
@@ -298,10 +302,19 @@ impl PeerSwarmScheduler {
         {
             a.budget = target;
         }
+        let before = (a.budget, a.copies, a.streams);
         a.copies = (a.budget / streams.max(1)).max(1);
         a.streams = a.budget.clamp(1, streams);
         a.unconstrained = a.budget >= neighbours.saturating_mul(streams);
         let (copies, room) = (a.copies, a.streams);
+        if before != (a.budget, a.copies, a.streams) {
+            let budget = a.budget as u64;
+            self.s.tap.emit(self.s.key, None, || TapKind::SeedBudget {
+                budget,
+                copies: copies as u64,
+                streams: room as u64,
+            });
+        }
         if a.unconstrained {
             return;
         }
@@ -320,8 +333,12 @@ impl PeerSwarmScheduler {
                 }
             }
         }
-        for (peer, s) in excess {
-            self.close_subscriber(peer, s, q);
+        for (peer, stream) in excess {
+            self.close_subscriber(peer, stream, q);
+            let key = self.s.key;
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::Shed { stream });
         }
 
         // Holders by round trip, unmeasured ones last; and the nearest
@@ -367,6 +384,8 @@ impl PeerSwarmScheduler {
                 .map(|pc| &mut pc.holder)
         {
             h.holds = true;
+            let key = self.s.key;
+            self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
             a.stats.left = a.stats.left.saturating_add(leave.len() as u64);
@@ -384,6 +403,8 @@ impl PeerSwarmScheduler {
         {
             h.holds = false;
         }
+        let key = self.s.key;
+        self.s.tap.emit(key, Some(peer), || TapKind::HolderLeft);
         let streams: Vec<Stream> = self
             .s
             .streams

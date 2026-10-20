@@ -35,6 +35,7 @@ use crate::scheduler_peer::{
     SwarmSchedulerStats, WriteDataError,
 };
 use crate::swarm::{Swarm, SwarmError, SwarmEvent};
+use crate::tap::{Tap, TapEvent, TapKind};
 use crate::writer::Writer;
 
 slotmap::new_key_type! {
@@ -265,6 +266,8 @@ pub struct Runner {
     /// Swarms in [`PushMode::Hybrid`]; the upload meter runs while any.
     hybrid_swarms: usize,
     upload: UploadMeter,
+    /// Lifecycle events; the schedulers keep their own.
+    tap: Tap,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -461,7 +464,60 @@ impl Runner {
             last_now: Time::NIL,
             hybrid_swarms: 0,
             upload: UploadMeter::new(),
+            tap: Tap::default(),
         }
+    }
+
+    // --- tap ------------------------------------------------------------
+
+    /// Turns the tap on or off (it starts off); see [`TapEvent`]. Off, it
+    /// costs a flag check per decision and holds no memory.
+    pub fn set_tap(&mut self, on: bool) {
+        self.tap.set(on);
+        for rs in self.swarms.values_mut() {
+            if let Some(s) = rs.scheduler.as_mut() {
+                s.tap_mut().set(on);
+            }
+        }
+    }
+
+    /// Hands the tap's events to `f`: the runner's, then each swarm's, then
+    /// a [`TapKind::Lost`] if any were dropped. Drain after every call
+    /// whose events must stay apart from the next call's: each buffer holds
+    /// [`TAP_CAP`](crate::TAP_CAP) events.
+    pub fn drain_tap(&mut self, mut f: impl FnMut(TapEvent)) {
+        let mut lost = self.tap.drain(&mut f);
+        for rs in self.swarms.values_mut() {
+            if let Some(s) = rs.scheduler.as_mut() {
+                lost = lost.saturating_add(s.tap_mut().drain(&mut f));
+            }
+        }
+        if lost > 0 {
+            f(TapEvent {
+                swarm: None,
+                peer: None,
+                kind: TapKind::Lost { count: lost },
+            });
+        }
+    }
+
+    /// The swarms.
+    pub fn swarms(&self) -> impl Iterator<Item = (SwarmKey, &Swarm)> + '_ {
+        self.swarms.iter().map(|(k, rs)| (k, &rs.swarm))
+    }
+
+    /// The peers and their ids.
+    pub fn peers(&self) -> impl Iterator<Item = (PeerKey, &[u8])> + '_ {
+        self.peers.iter().map(|(k, p)| (k, p.id.as_slice()))
+    }
+
+    /// The running channels: peer, swarm, our channel id and the peer's.
+    pub fn channels(&self) -> impl Iterator<Item = (PeerKey, SwarmKey, u64, u64)> + '_ {
+        self.swarms.iter().flat_map(|(key, rs)| {
+            rs.channels
+                .iter()
+                .map(move |(&peer, ch)| (peer, key, ch.id, ch.peer_channel))
+        })
     }
 
     /// Starts the clock on the first call that knows the time.
@@ -493,12 +549,18 @@ impl Runner {
         if swarm.options().push_mode == PushMode::Hybrid {
             self.hybrid_swarms += 1;
         }
-        self.swarms.insert(RunnerSwarm {
+        let key = self.swarms.insert(RunnerSwarm {
             swarm,
             scheduler: None,
             channels: IndexMap::new(),
             seed_pin: None,
-        })
+        });
+        self.tap.push(TapEvent {
+            swarm: Some(key),
+            peer: None,
+            kind: TapKind::SwarmAdded,
+        });
+        key
     }
 
     /// Stops the swarm's channels and returns it.
@@ -509,6 +571,11 @@ impl Runner {
         }
         self.events.readable.remove(&key);
         let swarm = self.swarms.remove(key).map(|rs| rs.swarm)?;
+        self.tap.push(TapEvent {
+            swarm: Some(key),
+            peer: None,
+            kind: TapKind::SwarmRemoved,
+        });
         if swarm.options().push_mode == PushMode::Hybrid {
             self.hybrid_swarms = self.hybrid_swarms.saturating_sub(1);
         }
@@ -607,6 +674,11 @@ impl Runner {
         p.qos_weight = Some(weight);
         let key = self.peers.insert(p);
         self.events.weights.insert(key, weight);
+        self.tap.push(TapEvent {
+            swarm: None,
+            peer: Some(key),
+            kind: TapKind::PeerAdded,
+        });
         key
     }
 
@@ -636,6 +708,11 @@ impl Runner {
         self.peers.remove(peer);
         self.events.transmit.remove(&peer);
         self.events.weights.remove(&peer);
+        self.tap.push(TapEvent {
+            swarm: None,
+            peer: Some(peer),
+            kind: TapKind::PeerRemoved,
+        });
     }
 
     /// The id given to [`Runner::add_peer`].
@@ -669,6 +746,7 @@ impl Runner {
             rng,
             events,
             next_tick,
+            tap,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -689,6 +767,15 @@ impl Runner {
         let sched = rs
             .scheduler
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
+        sched.tap_mut().set(tap.is_on());
+        tap.push(TapEvent {
+            swarm: Some(swarm),
+            peer: Some(peer),
+            kind: TapKind::ChannelOpened {
+                channel,
+                peer_channel,
+            },
+        });
         rs.channels.insert(
             peer,
             Channel {
@@ -724,6 +811,7 @@ impl Runner {
             swarms,
             peers,
             events,
+            tap,
             ..
         } = self;
         let Some(rs) = swarms.get_mut(key) else {
@@ -732,6 +820,11 @@ impl Runner {
         let Some(ch) = rs.channels.shift_remove(&peer) else {
             return;
         };
+        tap.push(TapEvent {
+            swarm: Some(key),
+            peer: Some(peer),
+            kind: TapKind::ChannelClosed,
+        });
         if let Some(p) = peers.get_mut(peer) {
             p.channels.remove(&ch.id);
         }
@@ -742,8 +835,10 @@ impl Runner {
         if let Some(sched) = rs.scheduler.as_mut() {
             sched.close_channel(peer, &rs.swarm, &mut q);
         }
-        if rs.channels.is_empty() {
-            rs.scheduler = None;
+        if rs.channels.is_empty()
+            && let Some(mut sched) = rs.scheduler.take()
+        {
+            tap.absorb(sched.tap_mut());
         }
     }
 

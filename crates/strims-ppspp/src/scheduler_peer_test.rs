@@ -31,8 +31,16 @@ impl PeerTaskQueue for MockQueue {
     fn enqueue_now(&mut self, peer: PeerKey, swarm: SwarmKey) {
         self.enqueued_now.push((peer, swarm));
     }
-    fn push_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, _: Time, pri: PeerPriority) {
+    fn push_data(
+        &mut self,
+        peer: PeerKey,
+        _: SwarmKey,
+        b: Bin,
+        _: Time,
+        pri: PeerPriority,
+    ) -> bool {
         self.pushed.push((peer, b, pri));
+        true
     }
     fn push_front_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, _: Time, pri: PeerPriority) {
         self.pushed_front.push((peer, b, pri));

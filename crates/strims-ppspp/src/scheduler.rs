@@ -42,8 +42,15 @@ pub(crate) trait PeerTaskQueue {
     fn enqueue_now(&mut self, peer: PeerKey, swarm: SwarmKey);
     /// Queues a bin to send. Doesn't start a write cycle: the caller
     /// enqueues the channel when the bin should go out. A full queue
-    /// refuses the bin.
-    fn push_data(&mut self, peer: PeerKey, swarm: SwarmKey, b: Bin, t: Time, pri: PeerPriority);
+    /// refuses the bin: false.
+    fn push_data(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        b: Bin,
+        t: Time,
+        pri: PeerPriority,
+    ) -> bool;
     /// Puts a bin back at the front.
     fn push_front_data(
         &mut self,

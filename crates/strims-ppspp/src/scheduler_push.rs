@@ -143,6 +143,7 @@ use crate::codec::Stream;
 use crate::options::PushMode;
 use crate::runner::PeerKey;
 use crate::scheduler::PeerTaskQueue;
+use crate::tap::TapKind;
 
 #[path = "scheduler_seed.rs"]
 pub mod seed;
@@ -703,11 +704,14 @@ impl PeerSwarmScheduler {
             // Chunks before the parent's start were expected from the one
             // it replaced.
             let stream = ((x.0 >> 1) & s.stream_bits) as Stream;
-            if let Some(sub) = p.sub(stream)
-                && sub.open.is_some_and(|o| x >= o.start)
-            {
-                sub.on_miss();
+            let mut parent = None;
+            if let Some(sub) = p.sub(stream) {
+                parent = sub.open.map(|o| o.peer);
+                if sub.open.is_some_and(|o| x >= o.start) {
+                    sub.on_miss();
+                }
             }
+            s.tap.emit(s.key, parent, || TapKind::PushMiss { bin: x });
         }
         if released == 0 {
             return;
@@ -744,6 +748,8 @@ impl PeerSwarmScheduler {
         };
         p.open = p.open.saturating_sub(1);
         p.stats.pruned = p.stats.pruned.saturating_add(1);
+        s.tap
+            .emit(s.key, Some(parent.peer), || TapKind::Pruned { stream });
         p.next_check = now;
         if let Some(c) = self.channels.get_mut(&parent.peer) {
             c.push_cancel(stream);
@@ -818,13 +824,18 @@ impl PeerSwarmScheduler {
                 continue;
             };
             if sub.open.is_some_and(|o| o.peer == peer && bin >= o.start) {
-                sub.lag.update(now - first, now);
+                let lag = now - first;
+                sub.lag.update(lag, now);
                 sub.pushes = sub.pushes.saturating_add(1);
                 if p.released.filled_at(bin) {
                     p.stats.late = p.stats.late.saturating_add(1);
+                    s.tap
+                        .emit(s.key, Some(peer), || TapKind::PushLate { bin, lag });
                 } else if new {
                     p.stats.hits = p.stats.hits.saturating_add(1);
                     sub.on_hit(now);
+                    s.tap
+                        .emit(s.key, Some(peer), || TapKind::PushHit { bin, lag });
                 }
             } else if sub.pending.is_some_and(|o| o.peer == peer)
                 || sub.open.is_some_and(|o| o.peer == peer)
@@ -832,6 +843,8 @@ impl PeerSwarmScheduler {
                 // Pushes racing the STREAM_OPEN, or before the start.
             } else {
                 p.stats.unsolicited = p.stats.unsolicited.saturating_add(1);
+                s.tap
+                    .emit(s.key, Some(peer), || TapKind::PushUnsolicited { bin });
                 // A peer pushing a stream we don't take from it: a lost
                 // STREAM_CANCEL, or an old parent. Cancel again, rate
                 // limited.
@@ -928,9 +941,13 @@ impl PeerSwarmScheduler {
                 p.interior = Some(stream);
             }
             p.stats.accepted = p.stats.accepted.saturating_add(1);
+            s.tap
+                .emit(s.key, Some(peer), || TapKind::Admitted { stream });
             return (true, extra);
         }
         p.stats.rejected = p.stats.rejected.saturating_add(1);
+        s.tap
+            .emit(s.key, Some(peer), || TapKind::Rejected { stream });
         self.close_subscriber(peer, stream, q);
         (false, extra)
     }
@@ -984,6 +1001,9 @@ impl PeerSwarmScheduler {
         }
         p.stats.declined = p.stats.declined.saturating_add(1);
         p.next_check = now;
+        self.s
+            .tap
+            .emit(key, Some(peer), || TapKind::Declined { stream });
         if let Some(c) = self.channels.get_mut(&peer) {
             c.push_cancel(stream);
             c.push_backoff(stream, now + PRUNE_BACKOFF);
@@ -1031,6 +1051,10 @@ impl PeerSwarmScheduler {
                     // pushes before our STREAM_CANCEL, and the deadlines
                     // still release what doesn't come.
                     p.stats.switched = p.stats.switched.saturating_add(1);
+                    self.s.tap.emit(key, Some(peer), || TapKind::Switched {
+                        stream,
+                        from: o.peer,
+                    });
                     if let Some(c) = self.channels.get_mut(&o.peer) {
                         c.push_cancel(stream);
                         q.enqueue_now(o.peer, key);
@@ -1064,9 +1088,11 @@ impl PeerSwarmScheduler {
         };
         let mut lost_parent = false;
         let mut known = false;
+        let mut declined = false;
         if sub.pending.is_some_and(|x| x.peer == peer) {
             sub.pending = None;
             p.stats.declined = p.stats.declined.saturating_add(1);
+            declined = true;
             known = true;
         }
         if sub.open.is_some_and(|x| x.peer == peer) {
@@ -1078,6 +1104,17 @@ impl PeerSwarmScheduler {
         }
         if !known {
             return;
+        }
+        let key = self.s.key;
+        if declined {
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::Declined { stream });
+        }
+        if lost_parent {
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::ShedBy { stream });
         }
         p.next_check = now;
         if let Some(c) = self.channels.get_mut(&peer) {
@@ -1294,6 +1331,9 @@ impl PeerSwarmScheduler {
             if let Some(p) = self.s.push.as_mut() {
                 p.stats.open_timeouts = p.stats.open_timeouts.saturating_add(1);
             }
+            self.s
+                .tap
+                .emit(key, Some(pending.peer), || TapKind::OpenTimeout { stream });
             if let Some(c) = self.channels.get_mut(&pending.peer) {
                 c.push_cancel(stream);
                 c.push_backoff(stream, now + DECLINE_BACKOFF);
@@ -1404,6 +1444,10 @@ impl PeerSwarmScheduler {
         victims.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         for &(_, _, stream, peer) in victims.iter().take(n) {
             self.close_subscriber(peer, stream, q);
+            let key = self.s.key;
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::Shed { stream });
         }
     }
 
@@ -1464,8 +1508,12 @@ impl PeerSwarmScheduler {
         let Some(p) = self.s.push.as_mut() else {
             return false;
         };
+        let key = self.s.key;
         if t != Time::EPOCH && now - t > PUSH_STALE {
             p.stats.stale_drops = p.stats.stale_drops.saturating_add(1);
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::PushStale { bin: b, queued: t });
             return true;
         }
         if self
@@ -1474,6 +1522,9 @@ impl PeerSwarmScheduler {
             .is_some_and(|c| c.peer_have_bins.filled_at(b))
         {
             p.stats.suppressed = p.stats.suppressed.saturating_add(1);
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::PushSuppressed { bin: b });
             return true;
         }
         false
