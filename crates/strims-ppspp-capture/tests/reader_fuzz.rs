@@ -3,16 +3,19 @@
 
 //! A dump is untrusted input: random, mutated and truncated dumps go
 //! through the reader, which never panics, yields at most one record per
-//! input byte, and resumes after a malformed record. Debug builds check
-//! arithmetic overflow, so an overflow is a failure too.
+//! input byte, and resumes after a malformed record, and through the
+//! export, which never panics either. Debug builds check arithmetic
+//! overflow, so an overflow is a failure too.
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use strims_base::time::{Duration, Time};
+use strims_binmap::Bin;
+use strims_ppspp::codec::{ChannelWriter, Data, Have, Message, MessageWriter, Request};
 use strims_ppspp_capture::{
-    Clock, Dir, Header, MAX_FRAME, Reader, Record, SwarmParams, TapRecord, Writer,
+    Clock, Dir, Header, MAX_FRAME, Reader, Record, SwarmParams, TapRecord, Writer, export,
 };
 
 /// 1024 cases, or more with `PROPTEST_CASES`.
@@ -41,7 +44,26 @@ fn corpus() -> &'static [u8] {
     CORPUS.get_or_init(|| {
         let mut w = Writer::new(Vec::new(), &header()).unwrap();
         let mut t = header().origin;
-        let frame: Vec<u8> = (0..200u32).map(|i| (i * 7) as u8).collect();
+        // peer 1's channel 1: a HAVE, a REQUEST and a short DATA
+        let mut frame = vec![0u8; 512];
+        let mut cw = ChannelWriter::new(&mut frame, 1);
+        let at = header().origin;
+        for m in [
+            Message::Have(Have { bin: Bin(3) }),
+            Message::Request(Request {
+                bin: Bin(4),
+                timestamp: at,
+            }),
+            Message::Data(Data {
+                bin: Bin(0),
+                timestamp: at,
+                data: &[9; 100],
+            }),
+        ] {
+            cw.write(&m).unwrap();
+        }
+        let n = cw.finish();
+        frame.truncate(n);
         let params = SwarmParams {
             chunk_size: 1024,
             integrity_hash_size: 32,
@@ -127,6 +149,8 @@ fn run(input: &[u8]) -> (usize, usize) {
     }
     assert!(r.next_record().is_none(), "the reader made no progress");
     assert!(ok + bad <= input.len());
+    let mut r = Reader::new(input).unwrap();
+    export(&mut r, &mut std::io::sink(), &mut |_| {}).unwrap();
     (ok, bad)
 }
 

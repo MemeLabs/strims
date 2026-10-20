@@ -76,11 +76,13 @@
 //! decodes on its own.
 
 mod capture;
+pub mod export;
 mod format;
 mod reader;
 mod writer;
 
 pub use capture::{Capture, Options, Sink, Stats, TAP_KINDS, TapKindInfo, tap_kind};
+pub use export::{ExportStats, export};
 
 pub use format::{
     Clock, Dir, Header, MAGIC, MAX_FRAME, MAX_LABEL, MAX_MESSAGE, MAX_NAME, MAX_PARAMS, MAX_RECORD,

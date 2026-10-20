@@ -2453,6 +2453,7 @@ name = "strims-ppspp-capture"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "serde_json",
  "strims-base",
  "strims-binmap",
  "strims-crypto",
