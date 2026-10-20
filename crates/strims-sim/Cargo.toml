@@ -25,5 +25,8 @@ tokio.workspace = true
 turmoil.workspace = true
 tracking-allocator = "0.4"
 
+[dev-dependencies]
+strims-ppspp-capture.workspace = true
+
 [lints]
 workspace = true

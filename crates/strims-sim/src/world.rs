@@ -9,13 +9,15 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
 use strims_node::{
-    ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, SwarmKey, WebRtcConfig,
+    ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, PpsppCapture, SwarmKey,
+    WebRtcConfig,
 };
 use strims_proto::types::Key;
 
@@ -291,6 +293,18 @@ impl World {
         c.max_peers = spec.max_peers;
         c.rate_limit = spec.uplink;
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
+        if let Some(dir) = &self.spec.capture {
+            let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
+            c.ppspp_capture = Some(PpsppCapture {
+                open: Arc::new(move |_, _| {
+                    std::fs::create_dir_all(path.parent().unwrap_or(&path))?;
+                    let f = std::fs::File::create(&path)?;
+                    Ok(Box::new(std::io::BufWriter::new(f)))
+                }),
+                max_file_bytes: 0,
+                tap: true,
+            });
+        }
         Some(c)
     }
 

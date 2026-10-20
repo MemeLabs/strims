@@ -6,6 +6,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
+use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
 use strims_svc::{Config, Db};
 
@@ -41,6 +42,10 @@ options:
                             the HLS config sets no public address (default
                             http:// and the HLS address; for an unspecified
                             address, the public IP or hostname at its port)
+  --ppspp-capture <dir>     capture the node's ppspp frames and scheduler
+                            decisions into <dir> (`ppspp-capture` reads them)
+  --ppspp-capture-max <MiB> the most a capture keeps, in its last 8 files
+                            (default 1024)
   --help                    print this
 
 The log level comes from RUST_LOG (default info).";
@@ -56,6 +61,8 @@ pub(crate) enum Command {
 pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> {
     let mut config = Config::default();
     let mut db = None;
+    let mut capture_dir = None;
+    let mut capture_max = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (flag, inline) = match arg.split_once('=') {
@@ -108,15 +115,31 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                 }
                 app.video.hls.base_url = url;
             }
+            "--ppspp-capture" => capture_dir = Some(PathBuf::from(value()?)),
+            "--ppspp-capture-max" => capture_max = Some(positive::<u64>(&flag, &value()?)?),
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
     config.db = db.ok_or("pass --db <path> or --db-memory")?;
+    match (capture_dir, capture_max) {
+        (Some(dir), max) => {
+            config.app.ppspp_capture = Some(CaptureConfig {
+                dir,
+                max_bytes: max.unwrap_or(DEFAULT_CAPTURE_MIB).saturating_mul(1 << 20),
+                tap: true,
+            });
+        }
+        (None, Some(_)) => return Err("--ppspp-capture-max needs --ppspp-capture".to_owned()),
+        (None, None) => {}
+    }
     if config.hls_listen.is_none() && !config.app.video.hls.base_url.is_empty() {
         return Err("--hls-public-url needs --hls-listen".to_owned());
     }
     Ok(Command::Run(Box::new(config)))
 }
+
+/// What a ppspp capture keeps without `--ppspp-capture-max`, in MiB.
+const DEFAULT_CAPTURE_MIB: u64 = 1024;
 
 fn number<T: std::str::FromStr>(flag: &str, v: &str) -> Result<T, String> {
     v.parse().map_err(|_| format!("{flag}: invalid value {v}"))
@@ -181,6 +204,9 @@ mod tests {
             "--hls-listen",
             "0.0.0.0:8082",
             "--hls-public-url=https://media.example",
+            "--ppspp-capture",
+            "/tmp/cap",
+            "--ppspp-capture-max=16",
         ])
         .unwrap();
         assert!(matches!(&c.db, Db::File(p) if p.to_str() == Some("/tmp/a.redb")));
@@ -199,6 +225,19 @@ mod tests {
         assert_eq!(c.max_connections, 8);
         assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
         assert_eq!(c.app.video.hls.base_url, "https://media.example");
+        assert_eq!(
+            c.app.ppspp_capture,
+            Some(CaptureConfig {
+                dir: "/tmp/cap".into(),
+                max_bytes: 16 << 20,
+                tap: true,
+            })
+        );
+        let c = run(&["--db-memory", "--ppspp-capture=/tmp/cap"]).unwrap();
+        assert_eq!(
+            c.app.ppspp_capture.map(|c| c.max_bytes),
+            Some(DEFAULT_CAPTURE_MIB << 20)
+        );
     }
 
     #[test]
@@ -214,6 +253,7 @@ mod tests {
         assert_eq!(c.app.psi, PsiMode::Thread);
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
+        assert_eq!(c.app.ppspp_capture, None);
     }
 
     #[test]
@@ -230,6 +270,16 @@ mod tests {
         assert!(run(&["--db-memory", "--tcp-listen"]).is_err());
         assert!(run(&["--db-memory", "--psi", "worker"]).is_err());
         assert!(run(&["--db-memory", "--bogus"]).is_err());
+        let max = run(&["--db-memory", "--ppspp-capture-max", "8"]);
+        assert!(max.err().unwrap().contains("needs --ppspp-capture"));
+        assert!(
+            run(&[
+                "--db-memory",
+                "--ppspp-capture=/tmp/cap",
+                "--ppspp-capture-max=0"
+            ])
+            .is_err()
+        );
         for url in ["media.example", "ftp://media.example", "http://"] {
             let args = ["--db-memory", "--hls-listen=:0", "--hls-public-url", url];
             assert!(run(&args).err().unwrap().contains("http(s)://"), "{url}");

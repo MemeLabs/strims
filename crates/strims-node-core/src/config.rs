@@ -3,7 +3,10 @@
 
 //! Node configuration.
 
+use std::fmt;
+use std::io;
 use std::net::IpAddr;
+use std::sync::Arc;
 
 use strims_base::time::Duration;
 use strims_proto::types::Key;
@@ -108,6 +111,36 @@ pub struct NodeConfig {
     /// Sent in `PeerInit`.
     pub node_platform: String,
     pub node_version: String,
+    /// Captures the ppspp runner's frames and decisions; `None` (the
+    /// default) captures nothing.
+    pub ppspp_capture: Option<PpsppCapture>,
+}
+
+/// Opens file `index` (from 0) of the capture of the node named `node`
+/// (its host id). Files the driver deletes as it opens later ones bound
+/// what a capture keeps.
+pub type CaptureOpen =
+    Arc<dyn Fn(&[u8], u64) -> io::Result<Box<dyn io::Write + Send>> + Send + Sync>;
+
+/// A capture of the ppspp runner (`strims_ppspp_capture`) into files the
+/// driver opens. A capture that fails to write stops, and the node goes on
+/// without it.
+#[derive(Clone)]
+pub struct PpsppCapture {
+    pub open: CaptureOpen,
+    /// A file past this size is followed by the next; 0 keeps one file.
+    pub max_file_bytes: u64,
+    /// Capture the runner's decisions, not only its frames.
+    pub tap: bool,
+}
+
+impl fmt::Debug for PpsppCapture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PpsppCapture")
+            .field("max_file_bytes", &self.max_file_bytes)
+            .field("tap", &self.tap)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The default `TCP_NOTSENT_LOWAT`: 16 KiB.
@@ -205,6 +238,7 @@ impl NodeConfig {
             query_delay: Duration::from_millis(200),
             node_platform: String::new(),
             node_version: "dev".to_owned(),
+            ppspp_capture: None,
         }
     }
 

@@ -8,6 +8,9 @@
 //!   `cargo test` stays short).
 //! - `STRIMS_SIM_SEED=<s>` runs only seed `s` (the replay of a failure).
 //! - `STRIMS_SIM_TRACE=1` prints every run's trace.
+//! - `STRIMS_SIM_CAPTURE=<dir>` captures every node's ppspp traffic
+//!   ([`Scenario::capture`]) into `<dir>/<test>/seed-<s>/`, and the replay's
+//!   into `seed-<s>-replay/`.
 //!
 //! The first seed runs a second time and must give the same trace hash.
 //!
@@ -124,24 +127,37 @@ pub fn sweep(
     check: impl Fn(&Report) -> Result<(), String>,
 ) -> Vec<Report> {
     let seeds = seeds();
-    let build = &build;
+    let capture = env("STRIMS_SIM_CAPTURE");
+    let with_capture = |seed: u64, replay: &str| {
+        let mut spec = build(seed);
+        if let Some(dir) = &capture {
+            let run = format!("seed-{seed}{replay}");
+            spec.capture = Some(std::path::Path::new(dir).join(test).join(run));
+        }
+        spec
+    };
+    let first = |seed: u64| with_capture(seed, "");
+    let replay = |seed: u64| with_capture(seed, "-replay");
+    let (first, replay) = (&first, &replay);
     let (outcomes, again) = thread::scope(|s| {
-        let start = |seed: u64, name: String| match thread::Builder::new()
+        let start = |seed: u64, name: String, again: bool| match thread::Builder::new()
             .name(name)
-            .spawn_scoped(s, move || run(build(seed), seed))
-        {
+            .spawn_scoped(s, move || {
+                let spec = if again { replay(seed) } else { first(seed) };
+                run(spec, seed)
+            }) {
             Ok(handle) => Run::Started(handle),
             Err(_) => Run::Unstarted(seed),
         };
         let runs: Vec<Run<'_>> = seeds
             .iter()
-            .map(|&seed| start(seed, format!("{test} seed {seed}")))
+            .map(|&seed| start(seed, format!("{test} seed {seed}"), false))
             .collect();
         let again = seeds
             .first()
-            .map(|&seed| start(seed, format!("{test} replay")));
-        let outcomes: Vec<Outcome> = runs.into_iter().map(|r| r.join(build)).collect();
-        (outcomes, again.map(|r| r.join(build)))
+            .map(|&seed| start(seed, format!("{test} replay"), true));
+        let outcomes: Vec<Outcome> = runs.into_iter().map(|r| r.join(first)).collect();
+        (outcomes, again.map(|r| r.join(replay)))
     });
 
     let mut reports = Vec::new();

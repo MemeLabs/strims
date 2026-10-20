@@ -28,6 +28,7 @@
 //! its events drained with the others.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::io;
 use std::task::Poll;
 
 use rand_core::SeedableRng;
@@ -50,7 +51,7 @@ use strims_vpn::{
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, VpnPortConfig};
+use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, PpsppCapture, VpnPortConfig};
 use crate::driver::{IdleOk, Interfaces, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
@@ -320,6 +321,45 @@ pub(crate) struct State {
     /// Set while the endpoint's events are drained, so handlers that drain
     /// events themselves (a data-channel read) don't recurse into it.
     rtc_draining: bool,
+    /// The runner's capture, if the config asks for one.
+    capture: Option<RunnerCapture>,
+    /// When the capture last flushed.
+    capture_flushed: Time,
+}
+
+type RunnerCapture = strims_ppspp_capture::Capture<
+    Box<dyn FnMut(u64) -> io::Result<Box<dyn io::Write + Send>> + Send>,
+>;
+
+/// How often a capture flushes its buffered records.
+const CAPTURE_FLUSH_INTERVAL: strims_base::time::Duration = strims_base::time::Duration::SECOND;
+
+/// Starts capturing `runner` for the node named `node`, or logs why not.
+fn start_capture(
+    c: &PpsppCapture,
+    node: &[u8],
+    label: &str,
+    now: Time,
+    runner: &mut Runner,
+) -> Option<RunnerCapture> {
+    let open = c.open.clone();
+    let name = node.to_vec();
+    let sink: Box<dyn FnMut(u64) -> io::Result<Box<dyn io::Write + Send>> + Send> =
+        Box::new(move |i| open(&name, i));
+    let opts = strims_ppspp_capture::Options {
+        clock: strims_ppspp_capture::Clock::Node,
+        node,
+        label,
+        max_file_bytes: c.max_file_bytes,
+        tap: c.tap,
+    };
+    match strims_ppspp_capture::Capture::new(sink, opts, now, runner) {
+        Ok(c) => Some(c),
+        Err(e) => {
+            tracing::warn!(error = %e, "ppspp capture didn't start");
+            None
+        }
+    }
 }
 
 impl State {
@@ -356,7 +396,11 @@ impl State {
         let transfer_class = vnic.add_qos_class(vnic.qos_root(), TRANSFER_QOS_WEIGHT)?;
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
-        let runner = Runner::new(fork(&mut rng));
+        let mut runner = Runner::new(fork(&mut rng));
+        let capture = config
+            .ppspp_capture
+            .as_ref()
+            .and_then(|c| start_capture(c, &vnic.id().to_bytes(), &config.label, now, &mut runner));
         let rtc = webrtc.map(|factory| {
             rtc::Rtc::new(
                 factory(now, fork(&mut rng)),
@@ -399,6 +443,8 @@ impl State {
             frame_errors: Vec::new(),
             rtc,
             rtc_draining: false,
+            capture,
+            capture_flushed: now,
         })
     }
 
@@ -432,6 +478,16 @@ impl State {
         if self.runner.poll_timeout().is_some_and(|t| t <= now) {
             self.runner.handle_timeout(now);
         }
+        if let Some(c) = &mut self.capture
+            && now - self.capture_flushed >= CAPTURE_FLUSH_INTERVAL
+        {
+            self.capture_flushed = now;
+            c.drain(now, &mut self.runner);
+            if let Err(e) = c.flush() {
+                tracing::warn!(error = %e, "ppspp capture flush");
+            }
+        }
+        self.drain_capture(now);
         if let Some(rtc) = &mut self.rtc
             && rtc.ep.poll_timeout().is_some_and(|t| t <= now)
         {
@@ -495,6 +551,7 @@ impl State {
                 peers,
                 rpc_closed,
                 peer_rpc,
+                capture,
                 ..
             } = self;
             let res =
@@ -508,7 +565,11 @@ impl State {
                         }
                     }
                     Tag::Ppspp(pp) => {
-                        if let Err(e) = runner.handle_frame(pp, now, f.body)
+                        let res = match capture.as_mut() {
+                            Some(c) => c.handle_frame(runner, pp, now, f.body),
+                            None => runner.handle_frame(pp, now, f.body),
+                        };
+                        if let Err(e) = res
                             && !frame_errors.iter().any(|(p, _)| *p == pp)
                         {
                             frame_errors.push((pp, e));
@@ -632,12 +693,16 @@ impl State {
                 runner,
                 peers,
                 metrics,
+                capture,
                 ..
             } = self;
             vnic.poll_egress(now, &mut |f| match f.tag {
                 Tag::Vpn(net) => vpn.fill_egress(net, f.peer, f.body),
                 Tag::Ppspp(pp) => {
-                    let len = runner.poll_transmit(pp, now, f.body);
+                    let len = match capture.as_mut() {
+                        Some(c) => c.poll_transmit(runner, pp, now, f.body),
+                        None => runner.poll_transmit(pp, now, f.body),
+                    };
                     Fill {
                         len,
                         more: runner.wants_transmit(pp),
@@ -654,11 +719,26 @@ impl State {
             });
             let moved = self.drain_transmit();
             let evented = self.process_events(now);
+            self.drain_capture(now);
             if !moved && !evented && !self.vpn.needs_flush() {
                 return false;
             }
         }
         true
+    }
+
+    /// Writes the runner's tap events to the capture. A capture whose
+    /// writes failed stops here.
+    fn drain_capture(&mut self, now: Time) {
+        let Some(c) = &mut self.capture else {
+            return;
+        };
+        c.drain(now, &mut self.runner);
+        if let Some(e) = c.error() {
+            tracing::warn!(error = %e, "ppspp capture stopped");
+            let _ = c.stop(&mut self.runner);
+            self.capture = None;
+        }
     }
 
     /// Copies pending link bytes into free write buffers and hands them to

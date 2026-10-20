@@ -107,6 +107,7 @@
 //!   AES; run large suites with `--release` or `opt-level = 1`.
 
 pub mod app;
+pub mod capture;
 pub mod clock;
 pub mod fetch;
 mod link;
@@ -133,10 +134,11 @@ pub mod config {
     }
 }
 
+pub use capture::CaptureConfig;
 pub use clock::{Clock, SimClock, SystemClock};
 pub use config::{
-    BufferConfig, DEFAULT_NOTSENT_LOWAT, NetworkOptions, NodeConfig, PeerRpcConfig,
-    TcpSocketConfig, VpnPortConfig, WebRtcConfig, random_seed,
+    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, NetworkOptions, NodeConfig, PeerRpcConfig,
+    PpsppCapture, TcpSocketConfig, VpnPortConfig, WebRtcConfig, random_seed,
 };
 pub use error::{NodeError, ReadError};
 pub use event::{

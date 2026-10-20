@@ -353,6 +353,10 @@ pub struct Scenario {
     pub redial_every: Duration,
     /// turmoil's step.
     pub tick: Duration,
+    /// Capture every node's ppspp traffic, decisions included, into
+    /// `<host>-<incarnation>.ppcap` files in this directory. Capture
+    /// changes no trace.
+    pub capture: Option<std::path::PathBuf>,
 }
 
 impl Scenario {
@@ -380,6 +384,7 @@ impl Scenario {
             stats_every: Some(Duration::from_secs(1)),
             redial_every: Duration::from_secs(1),
             tick: Duration::from_millis(1),
+            capture: None,
         }
     }
 

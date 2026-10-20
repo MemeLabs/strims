@@ -16,6 +16,7 @@ strims-qos.workspace = true
 strims-vnic.workspace = true
 strims-vpn.workspace = true
 strims-ppspp.workspace = true
+strims-ppspp-capture.workspace = true
 strims-webrtc.workspace = true
 # `SwarmRead` and `SwarmWrite` for the swarm handles, and the app layer.
 strims-transfer.workspace = true

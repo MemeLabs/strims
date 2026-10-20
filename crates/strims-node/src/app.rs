@@ -155,6 +155,9 @@ pub struct AppConfig {
     pub whispers: WhisperConfig,
     pub video: strims_video::Config,
     pub debug: strims_debug::Config,
+    /// Captures the node's ppspp traffic into files; `None` captures
+    /// nothing.
+    pub ppspp_capture: Option<crate::capture::CaptureConfig>,
 }
 
 impl AppConfig {
@@ -251,6 +254,10 @@ impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
         config.allow_insecure_ws = c.allow_insecure_ws;
         config.node_platform = format!("{}/{}", std::env::consts::OS, std::env::consts::ARCH);
         config.node_version = env!("CARGO_PKG_VERSION").to_owned();
+        config.ppspp_capture = c
+            .ppspp_capture
+            .as_ref()
+            .map(crate::capture::CaptureConfig::node_capture);
         config
     }
 
