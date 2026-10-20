@@ -10,6 +10,7 @@ members = [
   "crates/strims-kademlia",
   "crates/strims-mpc",
   "crates/strims-ppspp",
+  "crates/strims-ppspp-capture",
   "crates/strims-vnic",
   "crates/strims-vpn",
   "crates/strims-webrtc",
@@ -67,6 +68,7 @@ strims-qos = { path = "crates/strims-qos" }
 strims-kademlia = { path = "crates/strims-kademlia" }
 strims-mpc = { path = "crates/strims-mpc" }
 strims-ppspp = { path = "crates/strims-ppspp" }
+strims-ppspp-capture = { path = "crates/strims-ppspp-capture" }
 strims-vnic = { path = "crates/strims-vnic" }
 strims-vpn = { path = "crates/strims-vpn" }
 strims-webrtc = { path = "crates/strims-webrtc" }

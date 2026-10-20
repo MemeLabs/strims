@@ -2448,6 +2448,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-ppspp-capture"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "strims-base",
+ "thiserror",
+]
+
+[[package]]
 name = "strims-proto"
 version = "0.1.0"
 dependencies = [
