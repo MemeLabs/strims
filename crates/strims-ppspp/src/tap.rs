@@ -158,6 +158,9 @@ pub enum TapKind {
     HolderJoined,
     /// The seed took the peer's copy back.
     HolderLeft,
+    /// The seed barred the peer from holding a copy: it didn't announce
+    /// what it was pushed.
+    HolderSilent,
     /// The seed's budget changed: subscriptions its measured upload pays
     /// for, copies and streams per holder.
     SeedBudget {

@@ -481,6 +481,8 @@ struct AllocSample {
     /// HAVE lag after publishing, less half the round trip. A stream not
     /// announced lately counts as [`STALE`].
     objective: Duration,
+    /// The neighbours barred from holding a copy.
+    barred: BTreeSet<usize>,
 }
 
 /// What a stream a neighbour stopped announcing counts as in the seed's
@@ -554,6 +556,9 @@ struct Report {
     /// share whose parent is a liar, and how long that lasted on average.
     liar_grafts: f64,
     liar_graft_span: Duration,
+    /// The neighbours an adaptive seed barred from holding a copy, and
+    /// how many of them were honest.
+    barred: (u64, u64),
 }
 
 /// The cross-traffic swarm, measured like the main one.
@@ -1211,6 +1216,7 @@ impl Sim {
         };
         let mut held = BTreeMap::new();
         let mut holders = BTreeSet::new();
+        let mut barred = BTreeSet::new();
         let mut worst = Vec::new();
         for nb in &a.neighbours {
             let Some(id) = seed.runner.peer_id(nb.peer).map(|id| usize::from(id[0])) else {
@@ -1219,6 +1225,9 @@ impl Sim {
             held.insert(id, nb.streams.len());
             if nb.holder {
                 holders.insert(id);
+            }
+            if nb.barred {
+                barred.insert(id);
             }
             let half = nb.rtt / 2;
             let w = nb
@@ -1234,11 +1243,15 @@ impl Sim {
             let peers: Vec<String> = a
                 .neighbours
                 .iter()
-                .filter(|nb| !nb.streams.is_empty() || nb.holder)
+                .filter(|nb| !nb.streams.is_empty() || nb.holder || nb.barred)
                 .map(|nb| {
                     let id = seed.runner.peer_id(nb.peer).map_or(0, |id| id[0]);
                     let rtt = nb.min_rtt.map_or(-1, ms);
-                    let mark = if nb.holder { "*" } else { "" };
+                    let mark = match (nb.holder, nb.barred) {
+                        (true, _) => "*",
+                        (false, true) => "!",
+                        _ => "",
+                    };
                     let greed = match self.nodes[usize::from(id)].role {
                         Role::Greedy(Greed::FreeRider) => "F",
                         Role::Greedy(Greed::Liar) => "L",
@@ -1249,7 +1262,7 @@ impl Sim {
                 .collect();
             let c = a.counters;
             eprintln!(
-                "t={} budget {} window {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} {}",
+                "t={} budget {} window {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} silenced {} {}",
                 ms(self.now - t0()),
                 a.budget,
                 a.window,
@@ -1260,6 +1273,7 @@ impl Sim {
                 c.declined,
                 c.joined,
                 c.left,
+                c.silenced,
                 peers.join(" "),
             );
         }
@@ -1271,7 +1285,24 @@ impl Sim {
             held,
             holders,
             objective: percentile(&worst, 90),
+            barred,
         });
+    }
+
+    /// See [`Report::barred`]: counted from the samples, once per bar.
+    fn barred(&self) -> (u64, u64) {
+        let (mut all, mut honest) = (0, 0);
+        let mut was = BTreeSet::new();
+        for a in &self.alloc {
+            for &i in a.barred.difference(&was) {
+                all += 1;
+                if !matches!(self.nodes[i].role, Role::Greedy(_)) {
+                    honest += 1;
+                }
+            }
+            was.clone_from(&a.barred);
+        }
+        (all, honest)
     }
 
     /// Records which honest viewers' streams have a liar for a parent.
@@ -1774,6 +1805,7 @@ impl Sim {
             greedy: (count(Greed::FreeRider), count(Greed::Liar)),
             greedy_slots,
             greedy_held,
+            barred: self.barred(),
             liar_grafts: g.to_liars as f64 / g.samples.max(1) as f64,
             liar_graft_span: Duration::from_millis(
                 (1000 * spans.iter().map(|&s| u64::from(s)).sum::<u64>()
@@ -3646,9 +3678,11 @@ struct EvalRun {
     /// The datacenter viewer's push subscribers at the end, and the
     /// subscriptions it declined.
     super_peer: Option<(usize, u64)>,
-    /// [`Report::greedy_slots`] and [`Report::liar_grafts`].
+    /// [`Report::greedy_slots`], [`Report::liar_grafts`] and
+    /// [`Report::barred`].
     greedy_slots: (f64, f64),
     liar_grafts: f64,
+    barred: (u64, u64),
 }
 
 fn eval_run(cfg: Config) -> EvalRun {
@@ -3684,11 +3718,12 @@ fn eval_run(cfg: Config) -> EvalRun {
         }),
         greedy_slots: r.greedy_slots,
         liar_grafts: r.liar_grafts,
+        barred: r.barred,
     }
 }
 
 /// The seed allocation tables' header.
-const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined | seed slots at free riders / liars | streams grafted to liars |";
+const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined | seed slots at free riders / liars | streams grafted to liars | holders barred (honest) |";
 
 fn eval_row(name: &str, runs: &[EvalRun]) -> String {
     let n = runs.len().max(1) as f64;
@@ -3706,7 +3741,7 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
         "-".into()
     };
     format!(
-        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} | {:.1}% / {:.1}% | {:.2}% |",
+        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} | {:.1}% / {:.1}% | {:.2}% | {:.1} ({:.1}) |",
         mean(&|r| r.delivery),
         min_delivery,
         med(&|r| r.p50),
@@ -3729,6 +3764,8 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
         100.0 * mean(&|r| r.greedy_slots.0),
         100.0 * mean(&|r| r.greedy_slots.1),
         100.0 * mean(&|r| r.liar_grafts),
+        mean(&|r| r.barred.0 as f64),
+        mean(&|r| r.barred.1 as f64),
     )
 }
 
@@ -4006,7 +4043,7 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
         eval_run(alloc_config(sc, seed, controller, case, k))
     });
     println!("{EVAL_HEADER}");
-    println!("|{}", "---|".repeat(19));
+    println!("|{}", "---|".repeat(20));
     for (g, &(sc, controller)) in groups.iter().enumerate() {
         for case in cases(sc) {
             let mut of: Vec<EvalRun> = jobs
@@ -4379,7 +4416,7 @@ fn wan_cable_seed_6mbit() {
         let last_write = t0() + Duration::SECOND + Duration::from_secs(sim.cfg.stream_secs as i64);
         let p = &r.push;
         format!(
-            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {tag} |",
+            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {} ({}) | {tag} |",
             policy.allocation,
             viewers,
             r.delivery,
@@ -4403,10 +4440,12 @@ fn wan_cable_seed_6mbit() {
             r.greedy_held.as_secs(),
             100.0 * r.liar_grafts,
             ms(r.liar_graft_span),
+            r.barred.0,
+            r.barred.1,
         )
     });
     println!(
-        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | run tag |"
+        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | holders barred (honest) | run tag |"
     );
     for r in rows {
         println!("{r}");

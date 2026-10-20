@@ -1535,7 +1535,7 @@ impl PeerSwarmScheduler {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::PushStale { bin: b, queued: t });
-            self.note_push(peer, t, true, now);
+            self.note_push(peer, b, t, true, now);
             return true;
         }
         if self

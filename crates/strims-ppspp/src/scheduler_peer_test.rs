@@ -1280,9 +1280,24 @@ fn publish(f: &mut Fixture, from: Time, to: Time) {
     }
 }
 
+/// A chunk pushed at `t`: one per millisecond since the fixture's start.
+fn pushed_bin(t: Time) -> Bin {
+    Bin(2 * (t - now()).as_millis().max(0) as u64)
+}
+
+/// A push queued at `queued` written to `p` at `at`, which `p` announces
+/// once it arrived, `announce` later (never if `None`).
+fn push_to(f: &mut Fixture, p: PeerKey, queued: Time, at: Time, announce: Option<Duration>) {
+    let b = pushed_bin(at);
+    f.sched.note_push(p, b, queued, false, at);
+    if let Some(d) = announce {
+        f.sched.handle_have(p, b, at + d);
+    }
+}
+
 /// One check interval of the adaptive seed from `t`: publishing, a push
-/// written to each of `pushed` after `wait`, and the uplink busy `busy`
-/// of the time at `rate` bytes a second.
+/// written to each of `pushed` after `wait` and announced, and the uplink
+/// busy `busy` of the time at `rate` bytes a second.
 fn alloc_check(
     f: &mut Fixture,
     q: &mut MockQueue,
@@ -1294,7 +1309,7 @@ fn alloc_check(
     let next = t + push::seed::ALLOC_CHECK_INTERVAL;
     publish(f, t, next);
     for &p in pushed {
-        f.sched.note_push(p, t, false, t + wait);
+        push_to(f, p, t, t + wait, Some(Duration::from_millis(20)));
     }
     f.sched.set_upload(push::UploadInfo { rate, busy });
     f.sched.run_push(next, q);
@@ -1442,7 +1457,7 @@ fn an_adaptive_seeds_window_follows_its_pushes() {
     // Pushes queued before the window changed don't count. Queues that
     // don't empty hold it; queues near going stale at both holders halve
     // it, and the farther goes.
-    f.sched.note_push(peers[1], t - ms(1500), false, t);
+    push_to(&mut f, peers[1], t - ms(1500), t, Some(ms(20)));
     t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(20), saturated);
     assert_eq!(window(&f), 3);
     t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(300), saturated);
@@ -1453,11 +1468,75 @@ fn an_adaptive_seeds_window_follows_its_pushes() {
     assert!(!subscribed(&f, peers[1], 0));
     // A stale drop overloads: on an uplink with idle time it neither cuts
     // the window nor lets it grow.
-    f.sched.note_push(peers[0], t, true, t + ms(1100));
+    f.sched
+        .note_push(peers[0], pushed_bin(t), t, true, t + ms(1100));
     t = alloc_check(&mut f, &mut q, t, &[], ms(0), (2_000_000, 0.5));
     assert_eq!(window(&f), 1);
     alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (2_000_000, 0.5));
     assert_eq!(window(&f), 2);
+}
+
+#[test]
+fn an_adaptive_seed_bars_a_holder_that_doesnt_announce_its_pushes() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let ms = Duration::from_millis;
+    // Each interval peers[0] announces its push 800 ms after it arrived,
+    // peers[1] never.
+    let check = |f: &mut Fixture, q: &mut MockQueue, t: Time| -> Time {
+        let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+        publish(f, t, next);
+        push_to(f, peers[0], t, t + ms(5), Some(ms(800)));
+        if subscribed(f, peers[1], 0) {
+            push_to(f, peers[1], t, t + ms(5), None);
+        }
+        f.sched.set_upload(push::UploadInfo {
+            rate: 2_000_000,
+            busy: 1.0,
+        });
+        f.sched.run_push(next, q);
+        next
+    };
+    let neighbour = |f: &Fixture, p: PeerKey, t: Time| {
+        let a = f.sched.seed_allocation(t).unwrap();
+        a.neighbours.into_iter().find(|n| n.peer == p).unwrap()
+    };
+    let mut t = now();
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    assert!(!ask(&mut f, &mut q, peers[1], 0, t));
+    // The window doubles and the free copy goes to the one that asked.
+    t = check(&mut f, &mut q, t);
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    assert!(ask(&mut f, &mut q, peers[1], 0, t));
+    // A push is due at the check after next; three due in a row
+    // unannounced take its copy and bar it.
+    for _ in 0..3 {
+        t = check(&mut f, &mut q, t);
+        assert_eq!(holders(&f), peers[..2].to_vec());
+    }
+    t = check(&mut f, &mut q, t);
+    assert_eq!(holders(&f), vec![peers[0]]);
+    assert!(!subscribed(&f, peers[1], 0));
+    assert!(neighbour(&f, peers[1], t).barred);
+    assert_eq!(f.sched.seed_allocation(t).unwrap().counters.silenced, 1);
+    // While barred it is declined, and it is no asker for a free copy.
+    let barred = t;
+    while t < barred + push::seed::HOLDER_BAR - ms(1) {
+        assert!(!ask(&mut f, &mut q, peers[1], 0, t));
+        t = check(&mut f, &mut q, t);
+        assert_eq!(holders(&f), vec![peers[0]]);
+    }
+    // Then it may hold again; barred a second time, for twice as long.
+    t = check(&mut f, &mut q, t);
+    assert!(!neighbour(&f, peers[1], t).barred);
+    assert!(ask(&mut f, &mut q, peers[1], 0, t));
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    while holders(&f).len() == 2 {
+        t = check(&mut f, &mut q, t);
+    }
+    let barred = t;
+    assert!(neighbour(&f, peers[1], barred + push::seed::HOLDER_BAR * 2 - ms(1)).barred);
+    assert!(!neighbour(&f, peers[1], barred + push::seed::HOLDER_BAR * 2).barred);
+    assert_eq!(f.sched.seed_allocation(t).unwrap().counters.silenced, 2);
 }
 
 #[test]

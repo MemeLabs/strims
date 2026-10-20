@@ -72,6 +72,13 @@
 //!   [`ALLOC_CHECK_INTERVAL`], so jitter doesn't move the allocation and
 //!   no copy goes empty. A neighbour that stops being a holder loses all
 //!   its subscriptions (STREAM_CLOSE).
+//! - **Silent holders.** A holder announces what it is pushed. Each check
+//!   samples the first push written to each holder since the last; at the
+//!   check after next, at least [`ANNOUNCE_TIMEOUT`] later, the holder's
+//!   HAVEs must cover it. One that didn't at [`SILENT_CHECKS`] checks in a
+//!   row is barred: its copy goes, and it holds none for [`HOLDER_BAR`],
+//!   doubling with each bar. Both the pushes and the HAVEs are the seed's
+//!   own observations.
 //! - **Round trips** are each neighbour's smallest ping round trip over
 //!   the last one or two [`RTT_WINDOW`]s, which leaves out queueing.
 //! - With room for every neighbour's every stream, everything is accepted.
@@ -91,7 +98,7 @@
 //! # The seed's view
 //!
 //! [`SeedAllocationStats`] gives, per neighbour, its HAVE lag per stream
-//! after publishing. A seed samples each stream once per signature unit, at
+//! after publishing, and whether it is barred. A seed samples each stream once per signature unit, at
 //! the unit's last chunk of it: a unit is published at once, so that chunk
 //! tells when the neighbour had the unit's share of the stream whole.
 //!
@@ -103,6 +110,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use strims_base::time::{Duration, Time};
+use strims_binmap::Bin;
 
 use super::{PushChannel, SHED_UTILIZATION};
 use crate::codec::Stream;
@@ -144,6 +152,17 @@ pub const NEAR_MARGIN: Duration = Duration::from_millis(5);
 /// A round trip is the smallest over the current window of this length
 /// and the one before.
 pub const RTT_WINDOW: Duration = Duration::from_secs(10);
+/// A push written to a holder is announced within this long: about ten
+/// times a WAN holder's HAVE lag.
+pub const ANNOUNCE_TIMEOUT: Duration = Duration::SECOND;
+/// A holder that hasn't announced its sampled push at this many checks in
+/// a row is silent.
+pub const SILENT_CHECKS: u8 = 3;
+/// A neighbour whose copy was taken back for not serving holds none for
+/// this long, doubling with each bar up to [`MAX_BAR_DOUBLINGS`] times.
+pub const HOLDER_BAR: Duration = Duration::from_secs(30);
+/// See [`HOLDER_BAR`].
+pub const MAX_BAR_DOUBLINGS: u32 = 3;
 
 /// A seed's record of one neighbour.
 #[derive(Clone, Copy, Debug, Default)]
@@ -162,6 +181,15 @@ pub(crate) struct Holder {
     /// stale.
     wait: Option<Duration>,
     stale: bool,
+    /// The first push written in the current check interval, and the one
+    /// of the interval before: its bin, and when.
+    sample: Option<(Bin, Time)>,
+    due: Option<(Bin, Time)>,
+    /// Checks in a row at which the due push wasn't announced.
+    silent: u8,
+    /// No copy before then; and how often it was barred.
+    barred_until: Time,
+    bars: u32,
 }
 
 impl Holder {
@@ -178,6 +206,17 @@ impl Holder {
             self.window = w;
         }
         self.rtt = Some(self.rtt.map_or(rtt, |r| r.min(rtt)));
+    }
+
+    fn barred(&self, now: Time) -> bool {
+        now < self.barred_until
+    }
+
+    /// Bars it from holding a copy, for longer each time.
+    fn bar(&mut self, now: Time) {
+        self.barred_until = now + HOLDER_BAR * (1 << self.bars.min(MAX_BAR_DOUBLINGS));
+        self.bars = self.bars.saturating_add(1);
+        self.silent = 0;
     }
 
     /// The smallest round trip over the current window and the one before.
@@ -318,6 +357,8 @@ pub struct AllocCounters {
     /// Neighbours that became holders, and stopped being holders.
     pub joined: u64,
     pub left: u64,
+    /// Holders barred for not announcing their pushes.
+    pub silenced: u64,
 }
 
 /// A seed's view of its neighbours, for diagnostics and tests.
@@ -347,6 +388,8 @@ pub struct SeedNeighbour {
     pub min_rtt: Option<Duration>,
     /// An adaptive seed's holder.
     pub holder: bool,
+    /// Barred from holding a copy.
+    pub barred: bool,
 }
 
 /// A ping round trip to the channel's peer, at a seed.
@@ -373,13 +416,13 @@ impl PeerSwarmScheduler {
             .iter()
             .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
             .count();
-        let Some(holds) = self
+        let Some((holds, barred)) = self
             .channels
             .get_mut(&peer)
             .and_then(|c| c.push.as_mut())
             .map(|pc| {
                 pc.holder.active = now;
-                pc.holder.holds
+                (pc.holder.holds, pc.holder.barred(now))
             })
         else {
             return false;
@@ -409,7 +452,7 @@ impl PeerSwarmScheduler {
                 a.copies = w;
             }
         }
-        let holder = holds || a.unconstrained || holders < a.copies;
+        let holder = !barred && (holds || a.unconstrained || holders < a.copies);
         if holder
             && !holds
             && let Some(h) = self
@@ -439,15 +482,25 @@ impl PeerSwarmScheduler {
         ok
     }
 
-    /// An adaptive seed's push to `peer`, queued at `queued`, was written
-    /// at `now`, or dropped as stale.
-    pub(crate) fn note_push(&mut self, peer: PeerKey, queued: Time, stale: bool, now: Time) {
-        let Some(a) = self.s.push.as_ref().and_then(|p| p.alloc.as_ref()) else {
+    /// An adaptive seed's push of `bin` to `peer`, queued at `queued`, was
+    /// written at `now`, or dropped as stale.
+    pub(crate) fn note_push(
+        &mut self,
+        peer: PeerKey,
+        bin: Bin,
+        queued: Time,
+        stale: bool,
+        now: Time,
+    ) {
+        let Some(since) = self
+            .s
+            .push
+            .as_ref()
+            .and_then(|p| p.alloc.as_ref())
+            .map(|a| a.window.since)
+        else {
             return;
         };
-        if queued < a.window.since {
-            return;
-        }
         let Some(h) = self
             .channels
             .get_mut(&peer)
@@ -456,6 +509,12 @@ impl PeerSwarmScheduler {
         else {
             return;
         };
+        if !stale && h.sample.is_none() {
+            h.sample = Some((bin, now));
+        }
+        if queued < since {
+            return;
+        }
         if stale {
             h.stale = true;
         } else {
@@ -614,6 +673,39 @@ impl PeerSwarmScheduler {
                 .emit(key, Some(peer), || TapKind::Shed { stream });
         }
 
+        // A holder announces what it is pushed: the first push written to
+        // it in an interval is due announced at the check after next.
+        let mut silent: Vec<PeerKey> = Vec::new();
+        for (&peer, c) in &mut self.channels {
+            let have = &c.peer_have_bins;
+            let Some(h) = c.push.as_mut().map(|pc| &mut pc.holder) else {
+                continue;
+            };
+            let due = std::mem::replace(&mut h.due, h.sample.take());
+            if !h.holds {
+                h.silent = 0;
+                continue;
+            }
+            if let Some((bin, at)) = due
+                && now - at >= ANNOUNCE_TIMEOUT
+            {
+                h.silent = if have.filled_at(bin.base_left()) {
+                    0
+                } else {
+                    h.silent.saturating_add(1)
+                };
+            }
+            if h.silent >= SILENT_CHECKS {
+                h.bar(now);
+                silent.push(peer);
+            }
+        }
+        for &peer in &silent {
+            let key = self.s.key;
+            self.s.tap.emit(key, Some(peer), || TapKind::HolderSilent);
+            self.leave(peer, q);
+        }
+
         // Holders by round trip, unmeasured ones farthest. One without a
         // subscription is pending: it keeps its copy for HOLDER_GRACE after
         // it joined or last asked. Past the copies the farthest subscribed
@@ -640,6 +732,7 @@ impl PeerSwarmScheduler {
             if !h.holds {
                 if recent
                     && c.handshake_received
+                    && !h.barred(now)
                     && let Some(r) = rtt
                 {
                     askers.push((r, peer));
@@ -683,8 +776,10 @@ impl PeerSwarmScheduler {
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
-            a.stats.left = a.stats.left.saturating_add(leave.len() as u64);
+            let left = leave.len() + silent.len();
+            a.stats.left = a.stats.left.saturating_add(left as u64);
             a.stats.joined = a.stats.joined.saturating_add(join.len() as u64);
+            a.stats.silenced = a.stats.silenced.saturating_add(silent.len() as u64);
         }
     }
 
@@ -805,6 +900,7 @@ impl PeerSwarmScheduler {
                 rtt: c.controller.rtt(),
                 min_rtt: c.push.as_ref().and_then(|pc| pc.holder.min_rtt(now)),
                 holder: c.push.as_ref().is_some_and(|pc| pc.holder.holds),
+                barred: c.push.as_ref().is_some_and(|pc| pc.holder.barred(now)),
             })
             .collect();
         let mut out = SeedAllocationStats {

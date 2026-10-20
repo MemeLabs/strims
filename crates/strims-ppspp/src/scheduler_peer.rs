@@ -1915,7 +1915,7 @@ impl PeerSwarmScheduler {
             b = b.left();
         }
         if push {
-            self.note_push(peer, t, false, now);
+            self.note_push(peer, b, t, false, now);
         }
         Ok(())
     }
