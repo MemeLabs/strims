@@ -252,12 +252,19 @@ Egress and players:
     they bring p99 to what an allocation that knows the sites reaches.
     The adaptive seed needs the shares: without them its p99 is 35–140 %
     higher, up to 2.1 s on BBR's worst seed.
-  - **Capacity.** Nothing passive tells a holder's upload: a stream's tail
-    mixes all its holders, a holder's HAVE lag is mostly the seed's queue
-    and geography, and its own uplink never queues because children leave
-    a slow parent. The round trip ranks access links well (last miles)
-    but not a near peer with a weak uplink. An announced upload or spare
-    capacity (see Wire changes) would let the seed rank holders by it.
+  - **Holder quality.** The seed ranks holders by round trips it
+    measures, which a peer can inflate but not shrink. Nothing yet tells
+    it how well a holder serves: a stream's tail mixes all its holders, a
+    holder's HAVE lag is mostly the seed's queue and geography, and its
+    own uplink never queues because children leave a slow parent. So a
+    near peer with a weak uplink, or one that withholds, keeps its copy.
+    The signal must aggregate other nodes' observations (a peer's claim
+    about its capacity can be gamed). Candidates: inferring each
+    neighbour's parent from HAVE timing, a neighbour announcing a hop
+    after its parent, and scoring a holder by how fast its followers
+    announce, with no wire change; or children reporting their parents'
+    push delay and misses, scored by the median per holder and checked
+    against when each reporter announced, which is a wire change.
   - **Startup.** Before the budget is measured four neighbours hold
     copies. A neighbour declined then asks again only when the seed
     announces sooner than its parent by the switch margin, so a
@@ -435,8 +442,7 @@ stack or a version gate.
 - Stamp DATA at send time, not after the sender's queue.
 - STREAM_REQUEST: add an expiry or lease plus a rate limit. STREAM_CLOSE:
   add a reason.
-- Announce the interior stream and spare capacity (a seed could rank its
-  holders by it).
+- Announce the interior stream and spare capacity.
 - Mark pushed DATA and echo send times.
 - Add a hop count or depth to STREAM_OPEN or HAVE.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the

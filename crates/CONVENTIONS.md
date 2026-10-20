@@ -94,6 +94,10 @@ floods, or well-formed but malicious messages.
 - Work and memory per message are bounded. Every collection that peer input
   can grow has an explicit bound, documented where it's declared.
 - One peer's behaviour must not stall service to others.
+- Protocols tolerate Byzantine peers and assume a majority of cooperative
+  ones. A decision that ranks or trusts peers rests on what this node
+  measures or on an aggregate of other nodes' observations, never on a
+  peer's claim about itself.
 - `unsafe` is forbidden.
 
 ## Memory
