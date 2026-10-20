@@ -33,6 +33,13 @@
 //! huge and sentinel bins in every message type, or (for the push/pull
 //! hybrid) accepting every stream subscription and withholding the pushes.
 //!
+//! Every run also has greedy viewers ([`Greedy`]): 10–20 % of the viewers
+//! take the stream and serve none of it. Their runners are honest, and the
+//! harness drops their data on the way out, so what they withhold costs
+//! them no uplink. Free riders also drop their HAVEs; liars announce what
+//! they hold like any relay. Every result counts honest viewers only.
+//! `SIM_GREEDY=0` runs without them.
+//!
 //! The push/pull comparison runs the same scenarios with the same seed in
 //! every [`PushMode`] and stream count: `sim_push_*` tests assert the
 //! hybrid's behaviour, and the ignored `push_pull_matrix` prints the
@@ -137,10 +144,35 @@ enum Attack {
     WithholdPush,
 }
 
+/// What a greedy viewer withholds; see [`withhold`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Greed {
+    /// Sends handshakes, requests and stream requests, and no HAVEs or
+    /// data: nobody asks it for anything.
+    FreeRider,
+    /// Announces what it holds and serves none of it.
+    Liar,
+}
+
+/// Which viewers are greedy.
+#[derive(Clone, Debug)]
+enum Greedy {
+    /// [`GREEDY_SHARE`] of the viewers, drawn per run ([`greedy`]).
+    Drawn,
+    /// These viewers, by node index.
+    Nodes(Vec<(usize, Greed)>),
+}
+
+/// The share of the viewers a drawn run makes greedy: uniform between the
+/// bounds.
+const GREEDY_SHARE: (f64, f64) = (0.10, 0.20);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
     Seed,
     Peer,
+    /// A viewer that serves nothing: its runner's data never leaves.
+    Greedy(Greed),
     Adversary(Attack),
     /// A peer that disappeared mid-stream: it sends and receives nothing.
     Dead,
@@ -172,6 +204,10 @@ enum Incident {
 struct Config {
     seed: u64,
     peers: usize,
+    /// The viewers that take without serving.
+    greedy: Greedy,
+    /// Viewers the scenario singles out: never drawn greedy.
+    keep_honest: Vec<usize>,
     adversaries: Vec<Attack>,
     /// Links per peer in a random mesh; 0 for a full mesh.
     degree: usize,
@@ -266,6 +302,8 @@ impl Config {
         Config {
             seed,
             peers,
+            greedy: Greedy::Drawn,
+            keep_honest: vec![],
             adversaries: vec![],
             degree: 0,
             dial: 0,
@@ -415,6 +453,20 @@ struct Sim {
     /// The seed's allocation, once a second.
     alloc: Vec<AllocSample>,
     next_alloc: Time,
+    grafts: Grafts,
+}
+
+/// Honest viewers' open parents, sampled with the seed's allocation after
+/// the warm-up: how often, and how long at a time, a liar is one.
+#[derive(Default)]
+struct Grafts {
+    /// (viewer, stream) samples, and those whose parent is a liar.
+    samples: u64,
+    to_liars: u64,
+    /// Per (viewer, stream), the samples in a row so far with a liar.
+    runs: BTreeMap<(usize, usize), u32>,
+    /// Finished runs, in samples.
+    spans: Vec<u32>,
 }
 
 /// The seed's allocation at one moment (`Runner::seed_allocation`).
@@ -462,11 +514,12 @@ struct Report {
     finish: Time,
     /// The seed's share of all data bytes sent.
     seed_share: f64,
-    /// Data bytes sent by everyone.
+    /// Data bytes sent by everyone ([`Sim::uploaded`]).
     data_bytes: u64,
     /// Chunks honest peers received that they already had.
     wasted: u64,
-    /// Push counters summed over honest peers.
+    /// Push counters: a child's summed over honest peers, a parent's over
+    /// every node but the greedy viewers.
     push: PushStats,
     /// The seed's push subscribers, all streams, at the end.
     seed_children: usize,
@@ -489,6 +542,18 @@ struct Report {
     recovery: Option<(usize, Duration, Duration)>,
     /// The cross-traffic swarm's results.
     cross: Option<CrossReport>,
+    /// The greedy viewers: free riders and liars.
+    greedy: (usize, usize),
+    /// Of the seed's push slots (one stream at one neighbour) over the
+    /// samples after the warm-up, the shares at free riders and at liars.
+    greedy_slots: (f64, f64),
+    /// The longest a greedy viewer held a slot without a break, sampled
+    /// once a second over the run.
+    greedy_held: Duration,
+    /// Of honest viewers' streams over the samples after the warm-up, the
+    /// share whose parent is a liar, and how long that lasted on average.
+    liar_grafts: f64,
+    liar_graft_span: Duration,
 }
 
 /// The cross-traffic swarm, measured like the main one.
@@ -525,8 +590,11 @@ impl Sim {
             ..options.clone()
         });
 
+        let greedy = greedy(&cfg);
         let mut roles = vec![Role::Seed];
-        roles.extend((0..cfg.peers).map(|_| Role::Peer));
+        roles.extend(
+            (1..=cfg.peers).map(|i| greedy.get(&i).map_or(Role::Peer, |&g| Role::Greedy(g))),
+        );
         roles.extend(cfg.adversaries.iter().map(|&a| Role::Adversary(a)));
         if let Some(w) = &cfg.wan {
             assert_eq!(w.sites.len(), roles.len(), "a site per node");
@@ -814,6 +882,7 @@ impl Sim {
             wan,
             alloc: vec![],
             next_alloc: t0() + Duration::SECOND,
+            grafts: Grafts::default(),
         }
     }
 
@@ -885,6 +954,7 @@ impl Sim {
             if self.now >= self.next_alloc {
                 self.next_alloc += Duration::SECOND;
                 self.sample_alloc();
+                self.sample_grafts();
             }
             if let Some(every) = progress
                 && self.now >= next_progress
@@ -1169,7 +1239,12 @@ impl Sim {
                     let id = seed.runner.peer_id(nb.peer).map_or(0, |id| id[0]);
                     let rtt = nb.min_rtt.map_or(-1, ms);
                     let mark = if nb.holder { "*" } else { "" };
-                    format!("{id}{mark}:{}@{rtt}", nb.streams.len())
+                    let greed = match self.nodes[usize::from(id)].role {
+                        Role::Greedy(Greed::FreeRider) => "F",
+                        Role::Greedy(Greed::Liar) => "L",
+                        _ => "",
+                    };
+                    format!("{id}{greed}{mark}:{}@{rtt}", nb.streams.len())
                 })
                 .collect();
             let c = a.counters;
@@ -1197,6 +1272,34 @@ impl Sim {
             holders,
             objective: percentile(&worst, 90),
         });
+    }
+
+    /// Records which honest viewers' streams have a liar for a parent.
+    fn sample_grafts(&mut self) {
+        if self.now <= t0() + Duration::from_secs(self.cfg.warm_secs) {
+            return;
+        }
+        let g = &mut self.grafts;
+        for (i, n) in self.nodes.iter().enumerate() {
+            if n.role != Role::Peer {
+                continue;
+            }
+            let Some(p) = n.runner.push_stats(n.swarm) else {
+                continue;
+            };
+            for (s, parent) in p.parents.iter().enumerate() {
+                let liar = parent.and_then(|k| n.runner.peer_id(k)).is_some_and(|id| {
+                    self.nodes[usize::from(id[0])].role == Role::Greedy(Greed::Liar)
+                });
+                g.samples += 1;
+                if liar {
+                    g.to_liars += 1;
+                    *g.runs.entry((i, s)).or_default() += 1;
+                } else if let Some(run) = g.runs.remove(&(i, s)) {
+                    g.spans.push(run);
+                }
+            }
+        }
     }
 
     /// Notes the first arrival of each main-swarm chunk in `frame` at node
@@ -1407,6 +1510,12 @@ impl Sim {
                     continue;
                 }
             }
+            if let Role::Greedy(g) = node.role {
+                n = withhold(g, &mut self.buf, n, self.rcfg);
+                if n == 0 {
+                    continue;
+                }
+            }
             let frame = self.buf[..n].to_vec();
             let (wire, packets) = match self.wan {
                 Some(_) => tcp_wire(n),
@@ -1483,15 +1592,8 @@ impl Sim {
                 .unwrap_or_default()
         };
         let peers = self.nodes.iter().filter(|n| n.role == Role::Peer);
-        let sent = |n: &Node| -> u64 {
-            n.links
-                .values()
-                .filter_map(|&l| n.runner.channel_stats(self.links[l].peer, n.swarm))
-                .map(|s| s.outbound.data_bytes)
-                .sum()
-        };
-        let data_bytes: u64 = self.nodes.iter().map(sent).sum();
-        let seed_share = sent(&self.nodes[0]) as f64 / data_bytes.max(1) as f64;
+        let data_bytes: u64 = (0..self.nodes.len()).map(|i| self.uploaded(i)).sum();
+        let seed_share = self.uploaded(0) as f64 / data_bytes.max(1) as f64;
         let mut push = PushStats::default();
         for n in peers.clone() {
             if let Some(p) = n.runner.push_stats(n.swarm) {
@@ -1511,7 +1613,11 @@ impl Sim {
                 push.children += p.children;
             }
         }
-        for n in &self.nodes {
+        for n in self
+            .nodes
+            .iter()
+            .filter(|n| !matches!(n.role, Role::Greedy(_)))
+        {
             if let Some(p) = n.runner.push_stats(n.swarm) {
                 push.accepted += p.accepted;
                 push.rejected += p.rejected;
@@ -1546,6 +1652,48 @@ impl Sim {
         });
         let cross = self.cfg.cross.map(|c| self.cross_report(c, warm));
         let stripe = self.munro_lags();
+        let greed = |i: usize| match self.nodes[i].role {
+            Role::Greedy(g) => Some(g),
+            _ => None,
+        };
+        let count = |k: Greed| {
+            (1..self.nodes.len())
+                .filter(|&i| greed(i) == Some(k))
+                .count()
+        };
+        let greedy_slots = {
+            let (mut all, mut free, mut liar) = (0, 0, 0);
+            for a in self.alloc.iter().filter(|a| a.at > warm) {
+                for (&i, &n) in &a.held {
+                    all += n;
+                    match greed(i) {
+                        Some(Greed::FreeRider) => free += n,
+                        Some(Greed::Liar) => liar += n,
+                        None => {}
+                    }
+                }
+            }
+            let all = all.max(1) as f64;
+            (free as f64 / all, liar as f64 / all)
+        };
+        let greedy_held = {
+            let mut longest = 0;
+            let mut runs: BTreeMap<usize, i64> = BTreeMap::new();
+            for a in &self.alloc {
+                for i in (1..self.nodes.len()).filter(|&i| greed(i).is_some()) {
+                    let r = runs.entry(i).or_default();
+                    *r = if a.held.get(&i).is_some_and(|&n| n > 0) {
+                        *r + 1
+                    } else {
+                        0
+                    };
+                    longest = longest.max(*r);
+                }
+            }
+            Duration::from_secs(longest)
+        };
+        let g = &self.grafts;
+        let spans: Vec<u32> = g.spans.iter().chain(g.runs.values()).copied().collect();
         Report {
             trace: self.trace,
             frames: self.frames,
@@ -1623,6 +1771,14 @@ impl Sim {
                 }),
             recovery,
             cross,
+            greedy: (count(Greed::FreeRider), count(Greed::Liar)),
+            greedy_slots,
+            greedy_held,
+            liar_grafts: g.to_liars as f64 / g.samples.max(1) as f64,
+            liar_graft_span: Duration::from_millis(
+                (1000 * spans.iter().map(|&s| u64::from(s)).sum::<u64>()
+                    / spans.len().max(1) as u64) as i64,
+            ),
         }
     }
 
@@ -1756,9 +1912,13 @@ impl Sim {
             .collect()
     }
 
-    /// The data bytes node `i` uploaded.
+    /// The data bytes node `i` uploaded: none from a greedy viewer, whose
+    /// runner counts what the harness drops.
     fn uploaded(&self, i: usize) -> u64 {
         let n = &self.nodes[i];
+        if matches!(n.role, Role::Greedy(_)) {
+            return 0;
+        }
         n.links
             .values()
             .filter_map(|&l| n.runner.channel_stats(self.links[l].peer, n.swarm))
@@ -1877,6 +2037,75 @@ impl Sim {
             .max_by_key(|&i| (sent(&self.nodes[i]), std::cmp::Reverse(i)))
             .unwrap()
     }
+}
+
+/// A run's greedy viewers, by node index. A drawn set is [`GREEDY_SHARE`]
+/// of the viewers, the kinds alternating from a random first one, from an
+/// rng of its own: the mesh, the paths and every runner draw what they
+/// would without it. Viewers the config names (constrained ones, the
+/// cross-traffic seed, the traced node, `keep_honest`) are passed over,
+/// which leaves the rest of the draw as it was. `SIM_GREEDY=0` draws
+/// none.
+fn greedy(cfg: &Config) -> BTreeMap<usize, Greed> {
+    match &cfg.greedy {
+        Greedy::Nodes(v) => {
+            assert!(
+                v.iter().all(|&(i, _)| (1..=cfg.peers).contains(&i)),
+                "{v:?}"
+            );
+            v.iter().copied().collect()
+        }
+        Greedy::Drawn if knob::<u32>("SIM_GREEDY") == Some(0) => BTreeMap::new(),
+        Greedy::Drawn => {
+            let mut rng = det_rng(cfg.seed ^ 0x4752_4545);
+            let (lo, hi) = GREEDY_SHARE;
+            let share = lo + (hi - lo) * (rng.next_u64() as f64 / u64::MAX as f64);
+            let n = (cfg.peers as f64 * share).round() as usize;
+            let mut kinds = [Greed::FreeRider, Greed::Liar];
+            if rng.next_u64() % 2 == 1 {
+                kinds.swap(0, 1);
+            }
+            let named: BTreeSet<usize> = cfg
+                .constrained
+                .iter()
+                .map(|&(i, _)| i)
+                .chain(cfg.cross.map(|c| c.seed))
+                .chain(cfg.trace_node)
+                .chain(cfg.keep_honest.iter().copied())
+                .collect();
+            let mut order: Vec<usize> = (1..=cfg.peers).collect();
+            shuffle(&mut order, &mut rng);
+            order
+                .into_iter()
+                .filter(|i| !named.contains(i))
+                .take(n)
+                .zip(kinds.into_iter().cycle())
+                .collect()
+        }
+    }
+}
+
+/// What a greedy viewer's frame keeps of what its runner wrote: everything
+/// but data and its integrity, and a free rider's HAVEs. Returns the new
+/// length, 0 if nothing is left.
+fn withhold(g: Greed, buf: &mut [u8], n: usize, cfg: ReaderConfig) -> usize {
+    let frame = buf[..n].to_vec();
+    let mut off = 0;
+    for c in FrameReader::new(&frame) {
+        let (h, payload) = c.unwrap();
+        let mut cw = ChannelWriter::new(&mut buf[off..], h.channel);
+        for m in Reader::new(cfg, payload) {
+            match m.unwrap() {
+                Message::Data(_) | Message::Integrity(_) | Message::SignedIntegrity(_) => {}
+                Message::Have(_) if g == Greed::FreeRider => {}
+                m => {
+                    cw.write(&m).unwrap();
+                }
+            }
+        }
+        off += cw.finish();
+    }
+    off
 }
 
 fn shuffle<T>(v: &mut [T], rng: &mut DetRng) {
@@ -2070,13 +2299,12 @@ fn sim_1_plus_8_full_mesh() {
     let r = sim.run();
     for (i, n) in sim.nodes.iter().enumerate() {
         let ss = n.runner.swarm_stats(n.swarm).unwrap();
-        let up: u64 = n
-            .links
-            .values()
-            .filter_map(|&l| n.runner.channel_stats(sim.links[l].peer, n.swarm))
-            .map(|s| s.outbound.data_bytes)
-            .sum();
-        eprintln!("node {i}: wasted chunks {} uploaded {up}", ss.wasted_chunks);
+        eprintln!(
+            "node {i} {:?}: wasted chunks {} uploaded {}",
+            n.role,
+            ss.wasted_chunks,
+            sim.uploaded(i)
+        );
     }
     eprintln!("1+8: {r:?}");
     // LowLatency starts at the first chunk a peer gets: the first munro.
@@ -2392,7 +2620,8 @@ impl Scenario {
 /// the asserting tests use fixed configs, so the determinism guardrail
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
-/// capture changes no trace.
+/// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
+/// greedy viewers without them, for comparisons.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     std::env::var(name).ok().and_then(|s| s.parse().ok())
@@ -2606,7 +2835,10 @@ fn sim_push_full_mesh() {
     check_delivery(&r, MUNRO as u64);
     assert!(r.lag_p99 < Duration::from_millis(350), "{r:?}");
     assert!(hit_rate(&r) > 0.95, "{r:?}");
-    assert_eq!(r.push.pruned, 0, "{r:?}");
+    // A liar's children prune it.
+    if r.greedy.1 == 0 {
+        assert_eq!(r.push.pruned, 0, "{r:?}");
+    }
     // Every honest peer ends with a parent for every stream, and the seed
     // never subscribes.
     for n in &sim.nodes {
@@ -2625,7 +2857,8 @@ fn sim_eager_have_full_mesh() {
     let r = Sim::new(Scenario::FullMesh.config(PushMode::EagerHave, 4)).run();
     eprintln!("{}", row(Scenario::FullMesh, 4, PushMode::EagerHave, &r));
     check_delivery(&r, MUNRO as u64);
-    assert!(r.lag_p99 < Duration::from_millis(400), "{r:?}");
+    // Requests to a liar wait out their timeout before going elsewhere.
+    assert!(r.lag_p99 < Duration::from_millis(600), "{r:?}");
     assert_eq!(r.push.expected, 0);
 }
 
@@ -2641,7 +2874,9 @@ fn sim_push_relieves_a_constrained_seed() {
     );
     check_delivery(&r, 4 * MUNRO as u64);
     assert!(r.lag_p50 < Duration::from_millis(300), "{r:?}");
-    assert!(r.lag_p99 < Duration::from_millis(600), "{r:?}");
+    // The admitting seed keeps a greedy subscriber's slot as long as it
+    // asks.
+    assert!(r.lag_p99 < Duration::from_secs(1), "{r:?}");
     assert!(r.seed_share < 0.75, "{r:?}");
 }
 
@@ -2707,6 +2942,52 @@ fn sim_push_withholding_parent() {
             }
         }
     }
+}
+
+/// Greedy viewers take the stream and serve none of it: no data or
+/// integrity of theirs reaches anyone; a liar's HAVEs draw requests, and a
+/// free rider, announcing nothing, draws none.
+#[test]
+fn sim_greedy_viewers_serve_nothing() {
+    let mut cfg = Scenario::FullMesh.config(PushMode::Hybrid, 4);
+    cfg.greedy = Greedy::Nodes(vec![(1, Greed::FreeRider), (2, Greed::Liar)]);
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    eprintln!(
+        "{}\n{:?}",
+        row(Scenario::FullMesh, 4, PushMode::Hybrid, &r),
+        r.push
+    );
+    check_delivery(&r, 4 * MUNRO as u64);
+    // Per kind: what honest nodes asked of them, and they of honest nodes.
+    let (mut asked, mut asking) = ([0, 0], [0, 0]);
+    for n in sim
+        .nodes
+        .iter()
+        .filter(|n| n.role != Role::Greedy(Greed::FreeRider))
+    {
+        for (&remote, &l) in &n.links {
+            let Role::Greedy(g) = sim.nodes[remote].role else {
+                continue;
+            };
+            let cs = n.runner.channel_stats(sim.links[l].peer, n.swarm).unwrap();
+            let i = &cs.inbound;
+            assert_eq!(
+                (i.data, i.integrity, i.signed_integrity),
+                (0, 0, 0),
+                "{remote}: {i:?}"
+            );
+            match g {
+                Greed::FreeRider => assert_eq!(i.have, 0, "{remote}: {i:?}"),
+                Greed::Liar => assert!(i.have > 0, "{remote}: {i:?}"),
+            }
+            asked[usize::from(g == Greed::Liar)] += cs.outbound.request;
+            asking[usize::from(g == Greed::Liar)] += i.request + i.stream_request;
+        }
+    }
+    assert_eq!(asked[0], 0, "requests to the free rider");
+    assert!(asked[1] > 0, "no requests to the liar");
+    assert!(asking.iter().all(|&n| n > 0), "{asking:?}");
 }
 
 #[test]
@@ -3365,6 +3646,9 @@ struct EvalRun {
     /// The datacenter viewer's push subscribers at the end, and the
     /// subscriptions it declined.
     super_peer: Option<(usize, u64)>,
+    /// [`Report::greedy_slots`] and [`Report::liar_grafts`].
+    greedy_slots: (f64, f64),
+    liar_grafts: f64,
 }
 
 fn eval_run(cfg: Config) -> EvalRun {
@@ -3398,11 +3682,13 @@ fn eval_run(cfg: Config) -> EvalRun {
                 .push_stats(n.swarm)
                 .map(|s| (s.children, s.rejected))
         }),
+        greedy_slots: r.greedy_slots,
+        liar_grafts: r.liar_grafts,
     }
 }
 
 /// The seed allocation tables' header.
-const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined |";
+const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | holders settled s median (max) | holder changes | super-peer children / declined | seed slots at free riders / liars | streams grafted to liars |";
 
 fn eval_row(name: &str, runs: &[EvalRun]) -> String {
     let n = runs.len().max(1) as f64;
@@ -3420,7 +3706,7 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
         "-".into()
     };
     format!(
-        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} |",
+        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} | {:.1}% / {:.1}% | {:.2}% |",
         mean(&|r| r.delivery),
         min_delivery,
         med(&|r| r.p50),
@@ -3440,6 +3726,9 @@ fn eval_row(name: &str, runs: &[EvalRun]) -> String {
         med(&|r| r.settled) as f64 / 1000.0,
         max(&|r| r.settled) as f64 / 1000.0,
         mean(&|r| r.holder_changes as f64),
+        100.0 * mean(&|r| r.greedy_slots.0),
+        100.0 * mean(&|r| r.greedy_slots.1),
+        100.0 * mean(&|r| r.liar_grafts),
     )
 }
 
@@ -3519,15 +3808,18 @@ fn copies(slots: usize, streams: usize) -> (usize, usize) {
     (slots / streams.max(1), slots % streams.max(1))
 }
 
-/// `slots` stream slots on the viewers with the fastest uplinks: whole
-/// copies of the stream, then a partial one. Among equal uplinks the
+/// `slots` stream slots on the honest viewers with the fastest uplinks:
+/// whole copies of the stream, then a partial one. Among equal uplinks the
 /// nearest to the seed comes first, and each copy goes to another region
 /// than the last when one is left.
 fn oracle_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
     let w = cfg.wan.as_ref().unwrap();
     let streams = cfg.stream_count;
     let seed_city = w.sites[0].city;
-    let mut pool: Vec<usize> = (1..=cfg.peers).collect();
+    let greedy = greedy(cfg);
+    let mut pool: Vec<usize> = (1..=cfg.peers)
+        .filter(|i| !greedy.contains_key(i))
+        .collect();
     pool.sort_by_key(|&i| {
         (
             std::cmp::Reverse(w.sites[i].profile.up),
@@ -3714,7 +4006,7 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
         eval_run(alloc_config(sc, seed, controller, case, k))
     });
     println!("{EVAL_HEADER}");
-    println!("|{}", "---|".repeat(17));
+    println!("|{}", "---|".repeat(19));
     for (g, &(sc, controller)) in groups.iter().enumerate() {
         for case in cases(sc) {
             let mut of: Vec<EvalRun> = jobs
@@ -3772,8 +4064,12 @@ fn seed_allocation_trace() {
     let mut cfg = alloc_config(sc, seed, controller, case, knob("SIM_SLOTS").unwrap_or(64));
     cfg.trace_node = knob("SIM_TRACE_NODE");
     if let Some(w) = &cfg.wan {
+        let greedy = greedy(&cfg);
         for (i, site) in w.sites.iter().enumerate() {
-            eprintln!("node {i}: {site}");
+            match greedy.get(&i) {
+                Some(g) => eprintln!("node {i}: {site} {g:?}"),
+                None => eprintln!("node {i}: {site}"),
+            }
         }
     }
     let r = eval_run(cfg);
@@ -4083,7 +4379,7 @@ fn wan_cable_seed_6mbit() {
         let last_write = t0() + Duration::SECOND + Duration::from_secs(sim.cfg.stream_secs as i64);
         let p = &r.push;
         format!(
-            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {tag} |",
+            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {tag} |",
             policy.allocation,
             viewers,
             r.delivery,
@@ -4100,10 +4396,17 @@ fn wan_cable_seed_6mbit() {
             100.0 * up as f64 / (seed_up as f64 * span),
             r.underruns,
             r.resets,
+            r.greedy.0,
+            r.greedy.1,
+            100.0 * r.greedy_slots.0,
+            100.0 * r.greedy_slots.1,
+            r.greedy_held.as_secs(),
+            100.0 * r.liar_grafts,
+            ms(r.liar_graft_span),
         )
     });
     println!(
-        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | run tag |"
+        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | run tag |"
     );
     for r in rows {
         println!("{r}");
@@ -4116,7 +4419,9 @@ fn wan_cable_seed_6mbit() {
 fn wan_super_peer_config(seed: u64) -> Config {
     let mut sites = wan_residential_seed_config(seed).wan.unwrap().sites;
     sites.push(Site::new(City::NewYork, Access::Datacenter));
-    wan_config(seed, sites, 6, 0)
+    let mut cfg = wan_config(seed, sites, 6, 0);
+    cfg.keep_honest = vec![cfg.peers];
+    cfg
 }
 
 /// One WAN run's line: the table row and the path counters.
@@ -4190,8 +4495,10 @@ fn sim_wan_lossy_mobile_viewers() {
         );
         check_delivery(&r, 4 * MUNRO as u64);
         assert!(sim.retransmits() > 0);
-        assert!(r.lag_p99 < Duration::from_secs(4), "{r:?}");
-        assert!(r.lag_max < Duration::from_secs(5), "{r:?}");
+        // A viewer with liars among its few neighbours keeps losing its
+        // requests to them for a timeout each.
+        assert!(r.lag_p99 < Duration::from_secs(10), "{r:?}");
+        assert!(r.lag_max < Duration::from_secs(10), "{r:?}");
     }
 }
 
