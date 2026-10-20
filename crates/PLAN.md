@@ -309,6 +309,13 @@ Egress and players:
     - a child that prunes a parent for misses backs it off for
       `PRUNE_BACKOFF` whatever caused them; the probe no longer overloads
       at startup, but a seed's cut can still prune its holders.
+  - **Window growth.** The adaptive seed's window doubles until its first
+    cut, which is too aggressive: it should grow additively (AIMD) or
+    cubically (CUBIC). Its unit, a whole copy, is too coarse for the
+    larger chunks that higher bitrates need to keep protocol overhead
+    reasonable. The window and the budget need a finer step than a copy,
+    which the holder rules (a holder takes every stream) would have to
+    allow.
   - **Copies by region.** Copies go to the nearest neighbours. The fastest
     uplinks in alternating regions did no better on these paths, but no
     scenario has a seed whose nearest neighbours share one path or access
