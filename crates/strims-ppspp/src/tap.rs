@@ -161,6 +161,11 @@ pub enum TapKind {
     /// The seed barred the peer from holding a copy: it didn't announce
     /// what it was pushed.
     HolderSilent,
+    /// The seed barred the peer from holding a copy: most of the
+    /// `reporters` that named it as their parent saw it push nothing.
+    HolderUnserved {
+        reporters: u64,
+    },
     /// The seed's budget changed: subscriptions its measured upload pays
     /// for, copies and streams per holder.
     SeedBudget {

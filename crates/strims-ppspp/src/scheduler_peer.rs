@@ -79,8 +79,9 @@
 //! - a channel has at most [`max_pending_requests`] request deadlines, and a
 //!   request round collects at most a frame of requests plus one request
 //!   group;
-//! - extra messages are deduplicated: a handshake, a restart, one pong and
-//!   one message per stream and direction;
+//! - extra messages are deduplicated: a handshake, a restart, one pong,
+//!   one ask for reports and one message per stream and direction; a
+//!   report holds at most twice the stream count of entries;
 //! - STREAM_REQUEST walks only the stream's own bins, and none on a repeat;
 //!   STREAM_CLOSE walks only the bins left to sources, from the store's
 //!   window;
@@ -101,8 +102,8 @@ use crate::MAX_BIN;
 use crate::bin_queue::BinQueue;
 use crate::channel::MeteredWriter;
 use crate::codec::{
-    self, Cancel, Have, Message, MessageWriter, Ping, Pong, Request, Stream, StreamCancel,
-    StreamClose, StreamOpen, StreamRequest,
+    self, Announce, Cancel, Have, MAX_PEER_ID, Message, MessageWriter, Ping, Pong, Request, Stream,
+    StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
@@ -430,14 +431,16 @@ impl SwarmState {
 }
 
 /// The messages a channel sends besides HAVE/CANCEL/REQUEST/DATA,
-/// deduplicated so they are bounded: the handshake and
-/// restart are flags, only the latest pong is kept, and a stream keeps only
+/// deduplicated so they are bounded: the handshake, restart and ask for
+/// reports are flags, only the latest pong is kept, and a stream keeps only
 /// its latest message per direction (a later message supersedes an earlier
 /// one; their order across streams is first-queued).
 #[derive(Debug, Default)]
 struct ExtraMessages {
     handshake: bool,
     restart: bool,
+    /// An empty ANNOUNCE: an adaptive seed asks for the peer's reports.
+    ask: bool,
     pong: Option<u64>,
     /// Bound: two entries per stream.
     order: std::collections::VecDeque<(bool, Stream)>,
@@ -471,6 +474,7 @@ impl ExtraMessages {
     fn len(&self) -> usize {
         usize::from(self.handshake)
             + usize::from(self.restart)
+            + usize::from(self.ask)
             + usize::from(self.pong.is_some())
             + self.pending.len()
     }
@@ -481,6 +485,9 @@ impl ExtraMessages {
 #[derive(Debug)]
 pub(crate) struct PeerChannelScheduler {
     pub(crate) peer: PeerKey,
+    /// The peer's id, by which reports name it: `None` if the driver gave
+    /// none, or one longer than [`MAX_PEER_ID`].
+    id: Option<Vec<u8>>,
 
     choked: bool,
     /// When we requested each bin. Bound: requested bins, pruned behind the
@@ -532,10 +539,11 @@ pub(crate) struct PeerChannelScheduler {
 
 impl PeerChannelScheduler {
     /// A new channel; its first write is our handshake.
-    fn new(peer: PeerKey, s: &SwarmState, now: Time) -> PeerChannelScheduler {
+    fn new(peer: PeerKey, id: &[u8], s: &SwarmState, now: Time) -> PeerChannelScheduler {
         let streams = usize::from(s.stream_count);
         PeerChannelScheduler {
             peer,
+            id: (1..=MAX_PEER_ID).contains(&id.len()).then(|| id.to_vec()),
             choked: false,
             request_times: TimeSet::default(),
             have_bins: s.have_bins.clone(),
@@ -837,6 +845,10 @@ impl PeerChannelScheduler {
             cw.write(&Message::Pong(Pong { nonce, delay: 0 }))?;
             self.extra.pong = None;
         }
+        if self.extra.ask {
+            cw.write(&Message::Announce(Announce::ASK))?;
+            self.extra.ask = false;
+        }
         while let Some(&k) = self.extra.order.front() {
             if let Some(&m) = self.extra.pending.get(&k) {
                 let (_, stream) = k;
@@ -1096,8 +1108,11 @@ impl PeerSwarmScheduler {
                 controller: o.request_controller.resolve(),
                 is_seed: o.scheduling_method == SchedulingMethod::SEED,
                 seed: o.seed,
-                push: (o.push_mode == PushMode::Hybrid)
-                    .then(|| PushState::new(usize::from(stream_count), now)),
+                push: (o.push_mode == PushMode::Hybrid).then(|| {
+                    let report_at =
+                        now + rand_millis(rng, push::REPORT_INTERVAL.as_millis() as u64);
+                    PushState::new(usize::from(stream_count), now, report_at)
+                }),
                 tap: Tap::default(),
                 subscribers_changed: false,
             },
@@ -1276,9 +1291,15 @@ impl PeerSwarmScheduler {
         s.request_bins.set(bin);
     }
 
-    /// Adds the peer's channel.
-    pub(crate) fn add_channel(&mut self, peer: PeerKey, now: Time, q: &mut impl PeerTaskQueue) {
-        let c = PeerChannelScheduler::new(peer, &self.s, now);
+    /// Adds the peer's channel; `id` names the peer in reports.
+    pub(crate) fn add_channel(
+        &mut self,
+        peer: PeerKey,
+        id: &[u8],
+        now: Time,
+        q: &mut impl PeerTaskQueue,
+    ) {
+        let c = PeerChannelScheduler::new(peer, id, &self.s, now);
         self.channels.insert(peer, c);
         q.enqueue(peer, self.s.key);
     }
@@ -1831,8 +1852,9 @@ impl PeerSwarmScheduler {
     }
 
     /// Writes a ping when due, then
-    /// [`write0`](PeerChannelScheduler::write0) and requests. A full frame
-    /// returns [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
+    /// [`write0`](PeerChannelScheduler::write0), requests and the report
+    /// due to the peer. A full frame returns
+    /// [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
     pub(crate) fn write(
         &mut self,
         peer: PeerKey,
@@ -1850,7 +1872,8 @@ impl PeerSwarmScheduler {
             c.ping_nonce = nonce;
         }
         c.write0(swarm, cw)?;
-        c.write1(s, now, cw)
+        c.write1(s, now, cw)?;
+        c.write_report(cw)
     }
 
     /// Writes integrity and data for `b`, or for the leftmost part of `b`

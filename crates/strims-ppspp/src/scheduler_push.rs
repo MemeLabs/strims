@@ -63,6 +63,13 @@
 //!   miss, released at once. A peer that declined, shed or timed out is
 //!   backed off for [`DECLINE_BACKOFF`]; one pruned or with an unacceptable
 //!   OPEN for [`PRUNE_BACKOFF`].
+//! - **Reports.** Per parent and stream we tally its hits, its late pushes
+//!   and its misses, as the prune rules count them, and the hits' push
+//!   delay. Every [`REPORT_INTERVAL`] the tallies go out as ANNOUNCE
+//!   entries to each neighbour that asked for them (an empty ANNOUNCE)
+//!   within [`REPORT_LEASE`], leaving out the entries about that
+//!   neighbour, and start over. A parent is named by the id its driver
+//!   gave it. Only an adaptive seed asks ([`seed`]).
 //!
 //! # Parent side
 //!
@@ -115,14 +122,16 @@
 //! - Parent checks cost O(streams × channels) per [`PARENT_CHECK_INTERVAL`];
 //!   shedding sorts the subscribers at most once per [`SHED_INTERVAL`].
 //! - Per-stream state is fixed: one subscription per stream; one lag,
-//!   backoff and cancel time per channel and stream; one subscriber entry
-//!   per channel and stream.
+//!   backoff, cancel time and tally per channel and stream; one subscriber
+//!   entry per channel and stream. A report due to a neighbour holds at
+//!   most twice the stream count of entries.
 //!
 //! # Wire
 //!
-//! Only STREAM_REQUEST/OPEN/CANCEL/CLOSE are used, with their v2 meanings
+//! STREAM_REQUEST/OPEN/CANCEL/CLOSE are used with their v2 meanings
 //! (CLOSE from a provider: not, or no longer, pushing this stream), so the
-//! hybrid mixes with nodes in any mode. The child side assumes nothing more
+//! hybrid mixes with nodes in any mode, and ANNOUNCE carries reports to
+//! whoever asked for them. The child side assumes nothing more
 //! of a parent: one that never declines or sheds, or keeps pushing after
 //! STREAM_CANCEL, is contained by deadlines, silence pruning and repeated
 //! cancels.
@@ -139,7 +148,11 @@ use super::{
     PeerChannelScheduler, PeerSwarmScheduler, StreamMessage, SwarmState, max_pending_requests,
 };
 use crate::bin_queue::BinQueue;
-use crate::codec::Stream;
+use crate::channel::MeteredWriter;
+use crate::codec::{
+    self, Announce, AnnounceEntry, MAX_ANNOUNCE_ENTRIES, MESSAGE_TYPE_LEN, Message, MessageWriter,
+    Stream,
+};
 use crate::options::PushMode;
 use crate::runner::PeerKey;
 use crate::scheduler::PeerTaskQueue;
@@ -237,6 +250,10 @@ pub const INTERIOR_IDLE: Duration = Duration::from_secs(10);
 /// Unsolicited pushes from a peer trigger a STREAM_CANCEL for their stream
 /// at most this often.
 pub const UNSOLICITED_CANCEL_INTERVAL: Duration = Duration::SECOND;
+/// How often a node reports how its parents pushed to it.
+pub const REPORT_INTERVAL: Duration = Duration::SECOND;
+/// A node reports to a neighbour for this long after the neighbour asked.
+pub const REPORT_LEASE: Duration = Duration::from_secs(10);
 
 /// The node's upload as the runner measures it: what admission control and
 /// shedding decide on.
@@ -379,6 +396,50 @@ impl Subscription {
     }
 }
 
+/// How a parent pushed one stream to us since the last report tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Tally {
+    hits: u64,
+    late: u64,
+    misses: u64,
+    /// The hits' push delays, summed, in milliseconds.
+    delay_ms: u64,
+}
+
+impl Tally {
+    fn is_empty(&self) -> bool {
+        self.hits == 0 && self.late == 0 && self.misses == 0
+    }
+
+    fn hit(&mut self, delay: Duration) {
+        self.hits = self.hits.saturating_add(1);
+        let ms = u64::try_from(delay.as_millis()).unwrap_or(0);
+        self.delay_ms = self.delay_ms.saturating_add(ms);
+    }
+
+    fn entry<'a>(&self, stream: Stream, parent: &'a [u8]) -> AnnounceEntry<'a> {
+        let ms = self.delay_ms.checked_div(self.hits).unwrap_or(0);
+        AnnounceEntry {
+            stream,
+            hits: self.hits,
+            late: self.late,
+            misses: self.misses,
+            delay: Duration::from_millis(i64::try_from(ms).unwrap_or(i64::MAX)),
+            parent,
+        }
+    }
+}
+
+/// A report to one neighbour that asked: encoded ANNOUNCE entries, the end
+/// of each, and how many are written.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Report {
+    /// Bound: `2 × stream_count` entries.
+    bytes: Vec<u8>,
+    ends: Vec<usize>,
+    sent: usize,
+}
+
 /// Per channel, per stream: what we know about the peer as a parent.
 #[derive(Clone, Debug)]
 pub(crate) struct PushChannel {
@@ -390,8 +451,17 @@ pub(crate) struct PushChannel {
     /// When we last cancelled the peer's unsolicited pushes of the stream.
     /// Bound: one per stream.
     cancel_at: Vec<Time>,
+    /// How the peer pushed each stream to us since the last report tick.
+    /// Bound: one per stream.
+    tally: Vec<Tally>,
+    /// When the peer last asked for our reports (`NIL`: never), and the
+    /// report it is due.
+    asked: Time,
+    report: Report,
     /// An adaptive seed's record of the peer.
     holder: seed::Holder,
+    /// An adaptive seed's tallies of the peer's reports.
+    heard: seed::Heard,
 }
 
 impl PushChannel {
@@ -400,8 +470,16 @@ impl PushChannel {
             have_lag: vec![LagEwma::default(); streams],
             backoff: vec![Time::EPOCH; streams],
             cancel_at: vec![Time::EPOCH; streams],
+            tally: vec![Tally::default(); streams],
+            asked: Time::NIL,
+            report: Report::default(),
             holder: seed::Holder::default(),
+            heard: seed::Heard::default(),
         }
+    }
+
+    fn tally(&mut self, stream: Stream) -> Option<&mut Tally> {
+        self.tally.get_mut(usize::from(stream))
     }
 
     fn back_off(&mut self, stream: Stream, until: Time) {
@@ -455,6 +533,7 @@ pub(crate) struct PushState {
     interior_idle_since: Time,
     next_check: Time,
     next_shed: Time,
+    next_report: Time,
     /// Chunks stored per second, for a stream's rate.
     chunk_rate: Sma,
     /// When the first chunk was stored, and the chunks stored since.
@@ -470,7 +549,8 @@ pub(crate) struct PushState {
 }
 
 impl PushState {
-    pub(crate) fn new(streams: usize, now: Time) -> PushState {
+    /// `report_at` is the first report tick.
+    pub(crate) fn new(streams: usize, now: Time, report_at: Time) -> PushState {
         PushState {
             subs: vec![Subscription::default(); streams],
             open: 0,
@@ -481,6 +561,7 @@ impl PushState {
             interior_idle_since: Time::NIL,
             next_check: now,
             next_shed: now,
+            next_report: report_at,
             chunk_rate: Sma::new(10, Duration::from_millis(200), now),
             first_stored: Time::NIL,
             stored: 0,
@@ -670,6 +751,38 @@ impl SwarmState {
 }
 
 impl PeerChannelScheduler {
+    /// Writes the report due to the peer, as many ANNOUNCEs as it takes,
+    /// each with the entries that fit. An entry is at most 74 bytes, so one
+    /// always fits an empty frame.
+    pub(super) fn write_report(&mut self, cw: &mut MeteredWriter<'_>) -> Result<(), codec::Error> {
+        let Some(r) = self.push.as_mut().map(|pc| &mut pc.report) else {
+            return Ok(());
+        };
+        while r.sent < r.ends.len() {
+            let at = |i: usize| i.checked_sub(1).and_then(|i| r.ends.get(i)).copied();
+            let start = at(r.sent).unwrap_or(0);
+            let room = cw.available().saturating_sub(MESSAGE_TYPE_LEN + 1);
+            let mut end = r.sent;
+            while end < r.ends.len()
+                && end - r.sent < MAX_ANNOUNCE_ENTRIES
+                && at(end + 1).is_some_and(|e| e - start <= room)
+            {
+                end += 1;
+            }
+            if end == r.sent {
+                return Err(codec::Error::NotEnoughSpace);
+            }
+            let bytes = r.bytes.get(start..at(end).unwrap_or(start));
+            let Some(a) = bytes.and_then(|b| Announce::from_entry_bytes(end - r.sent, b)) else {
+                break;
+            };
+            cw.write(&Message::Announce(a))?;
+            r.sent = end;
+        }
+        *r = Report::default();
+        Ok(())
+    }
+
     /// Queues a STREAM_CANCEL for `stream` and forgets the request. Releases
     /// nothing: chunks requested from other channels stay theirs, and what
     /// this peer was expected to push is released by the caller or its
@@ -728,8 +841,16 @@ impl PeerSwarmScheduler {
             let mut parent = None;
             if let Some(sub) = p.sub(stream) {
                 parent = sub.open.map(|o| o.peer);
-                if sub.open.is_some_and(|o| x >= o.start) {
+                if let Some(o) = sub.open.filter(|o| x >= o.start) {
                     sub.on_miss();
+                    if let Some(t) = self
+                        .channels
+                        .get_mut(&o.peer)
+                        .and_then(|c| c.push.as_mut())
+                        .and_then(|pc| pc.tally(stream))
+                    {
+                        t.misses = t.misses.saturating_add(1);
+                    }
                 }
             }
             s.tap.emit(s.key, parent, || TapKind::PushMiss { bin: x });
@@ -751,6 +872,74 @@ impl PeerSwarmScheduler {
                 .is_some_and(|sub| sub.should_prune(now));
             if prune {
                 self.prune(stream, now, q);
+            }
+        }
+    }
+
+    /// The report tick: each neighbour that asked within [`REPORT_LEASE`]
+    /// is due the tallies of our other parents, at most twice the stream
+    /// count of entries, the most expected first; then every tally starts
+    /// over.
+    fn report(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
+        let Some(p) = self.s.push.as_mut() else {
+            return;
+        };
+        if now < p.next_report {
+            return;
+        }
+        p.next_report = now + REPORT_INTERVAL;
+        let mut tallies: Vec<(u64, PeerKey, Stream, Tally)> = Vec::new();
+        for (&peer, c) in &mut self.channels {
+            let named = c.id.is_some();
+            let Some(pc) = c.push.as_mut() else {
+                continue;
+            };
+            for (i, t) in pc.tally.iter_mut().enumerate() {
+                let t = std::mem::take(t);
+                if named && !t.is_empty() {
+                    let expected = t.hits.saturating_add(t.misses);
+                    tallies.push((expected, peer, i as Stream, t));
+                }
+            }
+        }
+        if tallies.is_empty() {
+            return;
+        }
+        tallies.sort_by(|a, b| b.0.cmp(&a.0).then((a.1, a.2).cmp(&(b.1, b.2))));
+        let askers: Vec<PeerKey> = self
+            .channels
+            .iter()
+            .filter(|(_, c)| {
+                c.handshake_received
+                    && c.push
+                        .as_ref()
+                        .is_some_and(|pc| !pc.asked.is_nil() && now - pc.asked <= REPORT_LEASE)
+            })
+            .map(|(&peer, _)| peer)
+            .collect();
+        let cap = 2 * usize::from(self.s.stream_count);
+        for asker in askers {
+            let mut r = Report::default();
+            for &(_, parent, stream, t) in tallies.iter().filter(|x| x.1 != asker).take(cap) {
+                let Some(id) = self.channels.get(&parent).and_then(|c| c.id.as_deref()) else {
+                    continue;
+                };
+                let e = t.entry(stream, id);
+                let start = r.bytes.len();
+                r.bytes.resize(start + e.byte_len(), 0);
+                match r.bytes.get_mut(start..).map(|b| e.encode(b)) {
+                    Some(Ok(_)) => r.ends.push(r.bytes.len()),
+                    _ => r.bytes.truncate(start),
+                }
+            }
+            if let Some(pc) = self
+                .channels
+                .get_mut(&asker)
+                .and_then(|c| c.push.as_mut())
+                .filter(|_| !r.ends.is_empty())
+            {
+                pc.report = r;
+                q.enqueue(asker, self.s.key);
             }
         }
     }
@@ -848,13 +1037,20 @@ impl PeerSwarmScheduler {
                 let lag = now - first;
                 sub.lag.update(lag, now);
                 sub.pushes = sub.pushes.saturating_add(1);
+                let tally = c.push.as_mut().and_then(|pc| pc.tally(stream));
                 if p.released.filled_at(bin) {
                     p.stats.late = p.stats.late.saturating_add(1);
+                    if let Some(t) = tally {
+                        t.late = t.late.saturating_add(1);
+                    }
                     s.tap
                         .emit(s.key, Some(peer), || TapKind::PushLate { bin, lag });
                 } else if new {
                     p.stats.hits = p.stats.hits.saturating_add(1);
                     sub.on_hit(now);
+                    if let Some(t) = tally {
+                        t.hit(lag);
+                    }
                     s.tap
                         .emit(s.key, Some(peer), || TapKind::PushHit { bin, lag });
                 }
@@ -886,6 +1082,7 @@ impl PeerSwarmScheduler {
     /// parent sent it.
     pub(crate) fn push_invalid(&mut self, peer: PeerKey, b: Bin) {
         let s = &mut self.s;
+        let tally = self.channels.get_mut(&peer).and_then(|c| c.push.as_mut());
         let stream_bits = s.stream_bits;
         let Some(p) = s.push.as_mut() else {
             return;
@@ -901,6 +1098,9 @@ impl PeerSwarmScheduler {
         {
             sub.on_miss();
             p.stats.misses = p.stats.misses.saturating_add(1);
+            if let Some(t) = tally.and_then(|pc| pc.tally(stream)) {
+                t.misses = t.misses.saturating_add(1);
+            }
         }
     }
 
@@ -1308,6 +1508,7 @@ impl PeerSwarmScheduler {
             return;
         }
         if self.adaptive_seed() {
+            self.ask_reports(now, q);
             self.check_allocation(now, q);
         } else {
             self.shed(now, q);
@@ -1317,6 +1518,7 @@ impl PeerSwarmScheduler {
         if self.s.is_seed {
             return;
         }
+        self.report(now, q);
 
         let due = self.s.push.as_ref().is_some_and(|p| now >= p.next_check);
         if !due || !self.s.first_chunk_set {
@@ -1512,7 +1714,7 @@ impl PeerSwarmScheduler {
         if let Some(p) = self.s.push.as_mut() {
             let stats = p.stats;
             let pin = p.pin.take();
-            *p = PushState::new(streams, now);
+            *p = PushState::new(streams, now, p.next_report);
             p.stats = stats;
             p.pin = pin;
         }

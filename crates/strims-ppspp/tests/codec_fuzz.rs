@@ -10,7 +10,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Map};
 use strims_ppspp::codec::{
     ChannelWriter, FrameReader, Message, MessageWriter, Reader, ReaderConfig, Writer as CodecWriter,
@@ -323,9 +323,25 @@ proptest! {
     ) {
         let cfg = ReaderConfig { chunk_size: 0, integrity_hash_size: 0, integrity_signature_size: 0 };
         let t = Time::from_unix_millis(ts / 1_000_000);
+        let ids: Vec<[u8; 4]> = bins.iter().map(|b| (*b as u32).to_be_bytes()).collect();
+        let entries: Vec<strims_ppspp::codec::AnnounceEntry<'_>> = bins
+            .iter()
+            .zip(&ids)
+            .map(|(&b, id)| strims_ppspp::codec::AnnounceEntry {
+                stream,
+                hits: b,
+                late: b >> 7,
+                misses: b.rotate_left(3),
+                delay: Duration::from_millis((b % 100_000) as i64),
+                parent: &id[..1 + (b % 4) as usize],
+            })
+            .collect();
         let msgs: Vec<Message<'_>> = bins.iter().enumerate().map(|(i, &b)| {
             let bin = Bin(b);
-            match i % 6 {
+            match i % 7 {
+                5 => Message::Announce(
+                    strims_ppspp::codec::Announce::new(std::slice::from_ref(&entries[i])).unwrap(),
+                ),
                 0 => Message::Have(strims_ppspp::codec::Have { bin }),
                 1 => Message::Request(strims_ppspp::codec::Request { bin, timestamp: t }),
                 2 => Message::StreamOpen(strims_ppspp::codec::StreamOpen { stream, bin }),

@@ -1,7 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The PPSPP wire format, protocol version 2.
+//! The PPSPP wire format: protocol version 2, plus ANNOUNCE (message type
+//! 18), a report on the sender's parents or a request for the receiver's.
 //!
 //! A frame is a sequence of channel payloads, each behind a
 //! [`ChannelHeader`]. A channel payload is a sequence of messages, each a
@@ -16,8 +17,8 @@
 //!   an option list may lack its end marker.
 //! - Decoding never panics and allocates nothing: [`Reader`] is an iterator
 //!   of [`Message`] views whose byte strings (data, hashes, signatures,
-//!   swarm ids, handshake options) borrow from the input, and re-encoding a
-//!   decoded message reproduces its input bytes.
+//!   swarm ids, handshake options, ANNOUNCE entries) borrow from the input,
+//!   and re-encoding a decoded message reproduces its input bytes.
 //! - Encoders write into caller buffers. A message that doesn't fit fails
 //!   with [`Error::NotEnoughSpace`] and writes nothing, so a frame filler
 //!   can stop at the first message that doesn't fit.
@@ -33,9 +34,10 @@ mod messages_test;
 use core::fmt;
 
 pub use messages::{
-    Ack, Cancel, ChannelHeader, Data, EpochOption, Handshake, HandshakeOptions, Have, Integrity,
-    Message, Ping, Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request,
-    SignedIntegrity, Stream, StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    Ack, Announce, AnnounceEntry, AnnounceIter, Cancel, ChannelHeader, Data, EpochOption,
+    Handshake, HandshakeOptions, Have, Integrity, MAX_ANNOUNCE_ENTRIES, MAX_PEER_ID, Message, Ping,
+    Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request, SignedIntegrity, Stream,
+    StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 pub use reader::{FrameReader, Reader, ReaderConfig};
 pub use wire::{uvarint_len, varint_len};
@@ -63,6 +65,10 @@ pub enum Error {
     /// A swarm identifier longer than its 16 bit length prefix allows.
     #[error("swarm identifier too long")]
     SwarmIdentifierTooLong,
+    /// An ANNOUNCE past its bounds: too many entries, a stream past 16
+    /// bits, or a parent id of the wrong length.
+    #[error("invalid announce")]
+    InvalidAnnounce,
 }
 
 macro_rules! wire_enum {
@@ -122,6 +128,7 @@ wire_enum! {
         StreamCancel = 15 => "StreamCancel",
         StreamOpen = 16 => "StreamOpen",
         StreamClose = 17 => "StreamClose",
+        Announce = 18 => "Announce",
         /// Ends a channel payload early. The reader stops at it.
         End = 255 => "End",
     }

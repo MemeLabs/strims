@@ -346,6 +346,7 @@ message ChannelMetrics {
   uint64 rejected = 24;
   uint64 stale_stream_open = 25;
   uint64 stale_data = 26;
+  uint64 announce = 27;
 }
 
 message NetworkInfo {

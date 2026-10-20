@@ -446,6 +446,11 @@ fn handle_payload(
                 let window_start = swarm.store().window_start();
                 sched.handle_stream_close(peer, s.stream, window_start, now, q)?
             }
+            Message::Announce(a) => {
+                if !sched.handle_announce(peer, a, now) {
+                    ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
+                }
+            }
             // The reader stops at End.
             Message::End => {}
         }
@@ -671,7 +676,9 @@ impl Runner {
 
     // --- peers ----------------------------------------------------------
 
-    /// Adds a peer; `id` is only kept for the driver. The peer gets an
+    /// Adds a peer; `id` names it in the reports a swarm's seed asks for,
+    /// so it must name the same peer at every node, in at most
+    /// [`MAX_PEER_ID`](crate::codec::MAX_PEER_ID) bytes. The peer gets an
     /// upload weight at once (an [`Event::QosWeight`]): the median of the
     /// current peers' weights, or the maximum if it is the only peer, so
     /// it never waits for the first update at the transport's default.
@@ -767,6 +774,7 @@ impl Runner {
             return Err(RunnerError::ChannelInUse);
         }
         p.channels.insert(channel, swarm);
+        let id = p.id.clone();
         // The clock doesn't tick while no channel runs; the first tick after
         // an idle spell is a full interval away, not in the past.
         if *next_tick < now {
@@ -805,7 +813,7 @@ impl Runner {
         if rs.channels.len() == 1 && rs.seed_pin.is_some() {
             sched.pin_allocation(rs.seed_pin.clone(), &mut q);
         }
-        sched.add_channel(peer, now, &mut q);
+        sched.add_channel(peer, &id, now, &mut q);
         Ok(())
     }
 

@@ -153,6 +153,7 @@ pub struct ChannelMetrics {
     pub stream_cancel: u64,
     pub stream_open: u64,
     pub stream_close: u64,
+    pub announce: u64,
     pub data_bytes: u64,
     pub overhead_bytes: u64,
     /// Inbound `Data` messages that failed verification.
@@ -163,7 +164,9 @@ pub struct ChannelMetrics {
     pub invalid_bytes: u64,
     /// Inbound messages ignored as invalid: a bin past `MAX_BIN` or wider
     /// than the window, a STREAM_OPEN for a stream we never asked the peer
-    /// for, or one far past our request. Honest peers don't send these.
+    /// for, or one far past our request, an ANNOUNCE naming its sender as
+    /// its parent, a stream past the count, or more entries than a seed
+    /// takes. Honest peers don't send these.
     pub rejected: u64,
     /// Inbound STREAM_OPENs ignored because they answer a STREAM_REQUEST we
     /// cancelled before the answer arrived: a race between honest peers.
@@ -202,6 +205,7 @@ impl ChannelMetrics {
             Message::StreamCancel(_) => &mut self.stream_cancel,
             Message::StreamOpen(_) => &mut self.stream_open,
             Message::StreamClose(_) => &mut self.stream_close,
+            Message::Announce(_) => &mut self.announce,
             Message::End => return,
         };
         add(c, 1);
@@ -228,6 +232,7 @@ impl ChannelMetrics {
             stream_cancel,
             stream_open,
             stream_close,
+            announce,
             data_bytes,
             overhead_bytes,
             invalid_data,
@@ -255,6 +260,7 @@ impl ChannelMetrics {
         add(&mut self.stream_cancel, *stream_cancel);
         add(&mut self.stream_open, *stream_open);
         add(&mut self.stream_close, *stream_close);
+        add(&mut self.announce, *announce);
         add(&mut self.data_bytes, *data_bytes);
         add(&mut self.overhead_bytes, *overhead_bytes);
         add(&mut self.invalid_data, *invalid_data);

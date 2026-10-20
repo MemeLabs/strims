@@ -14,7 +14,7 @@
 //! | `frame` | the frame's number in the dump, from 1; on a tap row, the last frame's |
 //! | `swarm` | the swarm's id in the dump |
 //! | `channel` | the wire channel id |
-//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, or a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)) |
+//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`, `ANNOUNCE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, or a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)) |
 //! | `bin` | the bin |
 //! | `first`, `last` | its first and last chunk |
 //! | `stream` | the stream: a message's, or a single chunk's (`chunk % stream_count`) |
@@ -25,7 +25,7 @@
 //! | `lag` | on DATA in and push hits and late pushes, ns since the chunk was first seen |
 //! | `from` | the previous parent of a switch, hex |
 //! | `delay` | ACK and PONG delays, ns |
-//! | `budget`, `copies`, `streams`, `count` | other fields of a decision |
+//! | `budget`, `copies`, `streams`, `count` | other fields of a decision; `count` on ANNOUNCE, its entries |
 //!
 //! A tap row carries its decision's fields by these names. Decisions about
 //! data go onto the DATA row they describe, in the frame just before them:
@@ -513,6 +513,11 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
         Message::StreamClose(s) => Row {
             kind: "STREAM_CLOSE",
             stream: Some(s.stream.into()),
+            ..row
+        },
+        Message::Announce(a) => Row {
+            kind: "ANNOUNCE",
+            other: [Some(("count", a.len() as i64)), None, None],
             ..row
         },
         Message::End => Row { kind: "END", ..row },

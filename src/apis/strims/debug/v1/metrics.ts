@@ -2110,6 +2110,7 @@ export type IChannelMetrics = {
   rejected?: bigint;
   staleStreamOpen?: bigint;
   staleData?: bigint;
+  announce?: bigint;
 }
 
 export class ChannelMetrics {
@@ -2139,6 +2140,7 @@ export class ChannelMetrics {
   rejected: bigint;
   staleStreamOpen: bigint;
   staleData: bigint;
+  announce: bigint;
 
   constructor(v?: IChannelMetrics) {
     this.handshake = v?.handshake || BigInt(0);
@@ -2167,6 +2169,7 @@ export class ChannelMetrics {
     this.rejected = v?.rejected || BigInt(0);
     this.staleStreamOpen = v?.staleStreamOpen || BigInt(0);
     this.staleData = v?.staleData || BigInt(0);
+    this.announce = v?.announce || BigInt(0);
   }
 
   static encode(m: ChannelMetrics, w?: Writer): Writer {
@@ -2197,6 +2200,7 @@ export class ChannelMetrics {
     if (m.rejected) w.uint32(192).uint64(m.rejected);
     if (m.staleStreamOpen) w.uint32(200).uint64(m.staleStreamOpen);
     if (m.staleData) w.uint32(208).uint64(m.staleData);
+    if (m.announce) w.uint32(216).uint64(m.announce);
     return w;
   }
 
@@ -2284,6 +2288,9 @@ export class ChannelMetrics {
         break;
         case 26:
         m.staleData = r.uint64();
+        break;
+        case 27:
+        m.announce = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

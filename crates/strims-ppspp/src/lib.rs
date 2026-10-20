@@ -59,7 +59,9 @@
 //! # Compatibility
 //!
 //! The wire format, signed messages, Merkle digests, swarm ids and URIs
-//! must stay byte-identical to protocol v2; `tests/golden.rs` pins them.
+//! must stay byte-identical to protocol v2 plus ANNOUNCE (message type
+//! 18, the reports an adaptive seed asks for); `tests/golden.rs` pins
+//! them.
 //! Local options ([`PushMode`], the request controller, the delivery and
 //! scheduling methods) never reach the wire, so nodes with different local
 //! options interoperate.
@@ -108,7 +110,9 @@ pub use runner::{
     PeerKey, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,
 };
 pub use scheduler_peer::push::PushStats;
-pub use scheduler_peer::push::seed::{AllocCounters, SeedAllocationStats, SeedNeighbour};
+pub use scheduler_peer::push::seed::{
+    AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
+};
 pub use scheduler_peer::{ChannelSchedulerStats, SwarmSchedulerStats};
 pub use tap::{TAP_CAP, TapEvent, TapKind, TapLevel};
 

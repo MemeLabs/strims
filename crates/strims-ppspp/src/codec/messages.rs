@@ -453,6 +453,241 @@ pub struct StreamClose {
     pub stream: Stream,
 }
 
+/// The most entries an [`Announce`] holds.
+pub const MAX_ANNOUNCE_ENTRIES: usize = 32;
+/// The longest peer id an [`AnnounceEntry`] names.
+pub const MAX_PEER_ID: usize = 32;
+
+/// How one parent pushed one stream to the sender over its last report
+/// interval.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AnnounceEntry<'a> {
+    pub stream: Stream,
+    /// Pushes that arrived before their deadline.
+    pub hits: u64,
+    /// Pushes that arrived after their chunk was released to pull.
+    pub late: u64,
+    /// Deadlines that passed; a late push was a miss first.
+    pub misses: u64,
+    /// The hits' mean push delay after their unit was first announced to
+    /// the sender, in whole milliseconds on the wire.
+    pub delay: Duration,
+    /// The parent, by the peer id the sender's driver knows it by:
+    /// 1..=[`MAX_PEER_ID`] bytes.
+    pub parent: &'a [u8],
+}
+
+impl<'a> AnnounceEntry<'a> {
+    /// Whether the entry can be encoded: its parent id's length is in
+    /// bounds.
+    pub fn is_valid(&self) -> bool {
+        (1..=MAX_PEER_ID).contains(&self.parent.len())
+    }
+
+    pub fn byte_len(&self) -> usize {
+        uvarint_len(u64::from(self.stream))
+            + uvarint_len(self.hits)
+            + uvarint_len(self.late)
+            + uvarint_len(self.misses)
+            + uvarint_len(delay_to_wire(self.delay))
+            + 1
+            + self.parent.len()
+    }
+
+    /// Writes the entry into `buf` and returns its length. Fails with
+    /// [`Error::InvalidAnnounce`] for an invalid entry, and with
+    /// [`Error::NotEnoughSpace`] if `buf` is shorter than
+    /// [`AnnounceEntry::byte_len`], before writing anything.
+    pub fn encode(&self, buf: &mut [u8]) -> Result<usize, Error> {
+        if !self.is_valid() {
+            return Err(Error::InvalidAnnounce);
+        }
+        let buf = buf
+            .get_mut(..self.byte_len())
+            .ok_or(Error::NotEnoughSpace)?;
+        let mut e = Enc::new(buf);
+        self.write(&mut e)?;
+        Ok(e.pos())
+    }
+
+    fn write(&self, e: &mut Enc<'_>) -> Result<(), Error> {
+        let n = u8::try_from(self.parent.len()).map_err(|_| Error::InvalidAnnounce)?;
+        e.uvarint(u64::from(self.stream))?;
+        e.uvarint(self.hits)?;
+        e.uvarint(self.late)?;
+        e.uvarint(self.misses)?;
+        e.uvarint(delay_to_wire(self.delay))?;
+        e.u8(n)?;
+        e.bytes(self.parent)
+    }
+
+    fn decode(d: &mut Dec<'a>) -> Result<AnnounceEntry<'a>, Error> {
+        let stream = Stream::try_from(d.uvarint()?).map_err(|_| Error::InvalidAnnounce)?;
+        let hits = d.uvarint()?;
+        let late = d.uvarint()?;
+        let misses = d.uvarint()?;
+        let delay = delay_from_wire(d.uvarint()?);
+        let n = usize::from(d.u8()?);
+        if !(1..=MAX_PEER_ID).contains(&n) {
+            return Err(Error::InvalidAnnounce);
+        }
+        Ok(AnnounceEntry {
+            stream,
+            hits,
+            late,
+            misses,
+            delay,
+            parent: d.bytes(n)?,
+        })
+    }
+}
+
+/// Whole milliseconds, negative as zero.
+fn delay_to_wire(d: Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(0)
+}
+
+/// Saturates past `i64::MAX` milliseconds.
+fn delay_from_wire(ms: u64) -> Duration {
+    Duration::from_millis(i64::try_from(ms).unwrap_or(i64::MAX))
+}
+
+#[derive(Clone, Copy)]
+enum AnnounceRepr<'a> {
+    List(&'a [AnnounceEntry<'a>]),
+    /// `count` validated entries.
+    Wire {
+        count: u8,
+        bytes: &'a [u8],
+    },
+}
+
+/// A report on the sender's parents, one entry per parent and stream;
+/// without entries, a request for the receiver's reports.
+///
+/// Built from entries for encoding ([`Announce::new`],
+/// [`Announce::from_entry_bytes`]); a decoded one keeps the validated wire
+/// bytes and parses them on iteration, so decoding allocates nothing and
+/// re-encoding reproduces the input exactly. Equality compares the
+/// entries, not the representation.
+#[derive(Clone, Copy)]
+pub struct Announce<'a>(AnnounceRepr<'a>);
+
+impl<'a> Announce<'a> {
+    /// The request for reports.
+    pub const ASK: Announce<'static> = Announce(AnnounceRepr::List(&[]));
+
+    /// `None` past [`MAX_ANNOUNCE_ENTRIES`] or with an invalid entry.
+    pub fn new(entries: &'a [AnnounceEntry<'a>]) -> Option<Announce<'a>> {
+        (entries.len() <= MAX_ANNOUNCE_ENTRIES && entries.iter().all(AnnounceEntry::is_valid))
+            .then_some(Announce(AnnounceRepr::List(entries)))
+    }
+
+    /// `count` entries in `bytes`, each written by [`AnnounceEntry::encode`];
+    /// `None` unless `bytes` holds exactly that.
+    pub fn from_entry_bytes(count: usize, bytes: &'a [u8]) -> Option<Announce<'a>> {
+        let count = u8::try_from(count)
+            .ok()
+            .filter(|&n| usize::from(n) <= MAX_ANNOUNCE_ENTRIES)?;
+        let mut d = Dec::new(bytes);
+        for _ in 0..count {
+            AnnounceEntry::decode(&mut d).ok()?;
+        }
+        d.is_empty()
+            .then_some(Announce(AnnounceRepr::Wire { count, bytes }))
+    }
+
+    pub fn len(&self) -> usize {
+        match self.0 {
+            AnnounceRepr::List(l) => l.len(),
+            AnnounceRepr::Wire { count, .. } => usize::from(count),
+        }
+    }
+
+    /// A request for reports.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn iter(&self) -> AnnounceIter<'a> {
+        AnnounceIter(match self.0 {
+            AnnounceRepr::List(l) => AnnounceIterRepr::List(l.iter()),
+            AnnounceRepr::Wire { count, bytes } => AnnounceIterRepr::Wire {
+                dec: Dec::new(bytes),
+                left: count,
+            },
+        })
+    }
+
+    fn byte_len(&self) -> usize {
+        1 + match self.0 {
+            AnnounceRepr::List(l) => l.iter().map(AnnounceEntry::byte_len).sum(),
+            AnnounceRepr::Wire { bytes, .. } => bytes.len(),
+        }
+    }
+
+    fn encode(&self, e: &mut Enc<'_>) -> Result<(), Error> {
+        let n = u8::try_from(self.len()).map_err(|_| Error::InvalidAnnounce)?;
+        e.u8(n)?;
+        match self.0 {
+            AnnounceRepr::List(l) => l.iter().try_for_each(|x| x.write(e)),
+            AnnounceRepr::Wire { bytes, .. } => e.bytes(bytes),
+        }
+    }
+
+    fn decode(d: &mut Dec<'a>) -> Result<Announce<'a>, Error> {
+        let count = d.u8()?;
+        if usize::from(count) > MAX_ANNOUNCE_ENTRIES {
+            return Err(Error::InvalidAnnounce);
+        }
+        let mut scan = Dec::new(d.rest_peek());
+        for _ in 0..count {
+            AnnounceEntry::decode(&mut scan)?;
+        }
+        Ok(Announce(AnnounceRepr::Wire {
+            count,
+            bytes: d.bytes(scan.pos())?,
+        }))
+    }
+}
+
+impl PartialEq for Announce<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl Eq for Announce<'_> {}
+
+impl fmt::Debug for Announce<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+enum AnnounceIterRepr<'a> {
+    List(core::slice::Iter<'a, AnnounceEntry<'a>>),
+    Wire { dec: Dec<'a>, left: u8 },
+}
+
+/// Iterator over an [`Announce`]'s entries.
+pub struct AnnounceIter<'a>(AnnounceIterRepr<'a>);
+
+impl<'a> Iterator for AnnounceIter<'a> {
+    type Item = AnnounceEntry<'a>;
+
+    fn next(&mut self) -> Option<AnnounceEntry<'a>> {
+        match &mut self.0 {
+            AnnounceIterRepr::List(l) => l.next().copied(),
+            AnnounceIterRepr::Wire { dec, left } => {
+                *left = left.checked_sub(1)?;
+                // The bytes were validated when the message was decoded.
+                AnnounceEntry::decode(dec).ok()
+            }
+        }
+    }
+}
+
 /// A message.
 ///
 /// [`Reader`](super::Reader) never yields [`Message::End`]: it stops there.
@@ -475,6 +710,7 @@ pub enum Message<'a> {
     StreamCancel(StreamCancel),
     StreamOpen(StreamOpen),
     StreamClose(StreamClose),
+    Announce(Announce<'a>),
     End,
 }
 
@@ -498,6 +734,7 @@ impl<'a> Message<'a> {
             Message::StreamCancel(_) => MessageType::StreamCancel,
             Message::StreamOpen(_) => MessageType::StreamOpen,
             Message::StreamClose(_) => MessageType::StreamClose,
+            Message::Announce(_) => MessageType::Announce,
             Message::End => MessageType::End,
         }
     }
@@ -520,6 +757,7 @@ impl<'a> Message<'a> {
             Message::StreamRequest(StreamRequest { bin, .. })
             | Message::StreamOpen(StreamOpen { bin, .. }) => 2 + uvarint_len(bin.0),
             Message::StreamCancel(_) | Message::StreamClose(_) => 2,
+            Message::Announce(m) => m.byte_len(),
         }
     }
 
@@ -578,6 +816,7 @@ impl<'a> Message<'a> {
             }
             Message::StreamCancel(StreamCancel { stream })
             | Message::StreamClose(StreamClose { stream }) => e.u16(stream)?,
+            Message::Announce(m) => m.encode(&mut e)?,
         }
         Ok(e.pos())
     }
@@ -655,6 +894,7 @@ impl<'a> Message<'a> {
                 bin: Bin(d.uvarint()?),
             }),
             MessageType::StreamClose => Message::StreamClose(StreamClose { stream: d.u16()? }),
+            MessageType::Announce => Message::Announce(Announce::decode(&mut d)?),
             MessageType::End => Message::End,
         };
         Ok((m, d.pos()))

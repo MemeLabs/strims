@@ -26,6 +26,25 @@ fn ms(n: i64) -> Time {
     Time::from_unix_millis(n)
 }
 
+const ANNOUNCED: [AnnounceEntry<'static>; 2] = [
+    AnnounceEntry {
+        stream: 3,
+        hits: 60,
+        late: 2,
+        misses: 4,
+        delay: Duration::from_millis(35),
+        parent: &[7],
+    },
+    AnnounceEntry {
+        stream: 300,
+        hits: 0,
+        late: 0,
+        misses: 1234,
+        delay: Duration::ZERO,
+        parent: &FF16,
+    },
+];
+
 fn round_trip(m: Message<'_>) {
     let mut buf = vec![0u8; m.encoded_len()];
     assert_eq!(
@@ -122,6 +141,8 @@ fn message_marshal_unmarshal() {
             bin: Bin(1234),
         }),
         Message::StreamClose(StreamClose { stream: 16 }),
+        Message::Announce(Announce::ASK),
+        Message::Announce(Announce::new(&ANNOUNCED).unwrap()),
         Message::Choke,
         Message::Unchoke,
         Message::Restart,
@@ -389,9 +410,73 @@ fn type_names_and_wire_values() {
     assert_eq!(MessageType::End.to_string(), "End");
     assert_eq!(ProtocolOptionType::End.to_string(), "EndOption");
     assert_eq!(MessageType::from_u8(0), None);
-    assert_eq!(MessageType::from_u8(18), None);
+    assert_eq!(MessageType::from_u8(18), Some(MessageType::Announce));
+    assert_eq!(MessageType::from_u8(19), None);
     assert_eq!(
         ProtocolOptionType::from_u8(12),
         Some(ProtocolOptionType::Epoch)
     );
+}
+
+#[test]
+fn announce_bounds_are_decode_errors() {
+    fn decode(b: &[u8]) -> Result<(), Error> {
+        Message::decode(&config(), b).map(|_| ())
+    }
+    let entry = |stream: u64, id_len: u8| {
+        let mut e = vec![0x80 | (stream & 0x7f) as u8, (stream >> 7) as u8];
+        e.extend([1, 0, 0, 5, id_len]);
+        e.extend(std::iter::repeat_n(9u8, usize::from(id_len)));
+        e
+    };
+    let message = |entries: &[Vec<u8>]| {
+        let mut m = vec![MessageType::Announce.as_u8(), entries.len() as u8];
+        for e in entries {
+            m.extend(e);
+        }
+        m
+    };
+    let ok = entry(5, MAX_PEER_ID as u8);
+    assert!(decode(&message(std::slice::from_ref(&ok))).is_ok());
+    assert_eq!(
+        decode(&message(&[entry(5, 0)])),
+        Err(Error::InvalidAnnounce)
+    );
+    assert_eq!(
+        decode(&message(&[entry(5, MAX_PEER_ID as u8 + 1)])),
+        Err(Error::InvalidAnnounce)
+    );
+    // A stream past 16 bits.
+    let mut wide = vec![0xff, 0xff, 0x04];
+    wide.extend([1, 0, 0, 5, 1, 9]);
+    assert_eq!(decode(&message(&[wide])), Err(Error::InvalidAnnounce));
+    let many = vec![ok; MAX_ANNOUNCE_ENTRIES + 1];
+    assert_eq!(decode(&message(&many)), Err(Error::InvalidAnnounce));
+    // A count past the entries is truncated input.
+    let mut short = message(&[entry(5, 1)]);
+    short[1] = 2;
+    assert_eq!(decode(&short), Err(Error::Truncated));
+}
+
+#[test]
+fn announce_entries_are_built_from_their_encodings() {
+    let mut bytes = Vec::new();
+    for e in &ANNOUNCED {
+        let start = bytes.len();
+        bytes.resize(start + e.byte_len(), 0);
+        assert_eq!(e.encode(&mut bytes[start..]), Ok(e.byte_len()));
+    }
+    let a = Announce::from_entry_bytes(2, &bytes).unwrap();
+    assert_eq!(a, Announce::new(&ANNOUNCED).unwrap());
+    assert!(Announce::from_entry_bytes(1, &bytes).is_none());
+    assert!(Announce::from_entry_bytes(3, &bytes).is_none());
+    let unnamed = AnnounceEntry {
+        parent: &[],
+        ..ANNOUNCED[0]
+    };
+    assert!(Announce::new(&[unnamed]).is_none());
+    assert_eq!(unnamed.encode(&mut [0; 64]), Err(Error::InvalidAnnounce));
+    let mut small = [0u8; 4];
+    assert_eq!(ANNOUNCED[0].encode(&mut small), Err(Error::NotEnoughSpace));
+    assert_eq!(small, [0; 4]);
 }

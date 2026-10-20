@@ -34,10 +34,10 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Map};
 use strims_golden::Golden;
 use strims_ppspp::codec::{
-    self, Ack, Cancel, ChannelHeader, ChannelWriter, Data, EpochOption, FrameReader, Handshake,
-    Have, Integrity, Message, MessageWriter, Ping, Pong, ProtocolOption, ProtocolOptionType,
-    ProtocolOptions, Reader, ReaderConfig, Request, SignedIntegrity, StreamCancel, StreamClose,
-    StreamOpen, StreamRequest, Writer as CodecWriter,
+    self, Ack, Announce, AnnounceEntry, Cancel, ChannelHeader, ChannelWriter, Data, EpochOption,
+    FrameReader, Handshake, Have, Integrity, Message, MessageWriter, Ping, Pong, ProtocolOption,
+    ProtocolOptionType, ProtocolOptions, Reader, ReaderConfig, Request, SignedIntegrity,
+    StreamCancel, StreamClose, StreamOpen, StreamRequest, Writer as CodecWriter,
 };
 use strims_ppspp::integrity::{
     LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod, VerifierOptions,
@@ -112,6 +112,24 @@ fn codec_messages() {
     let hash32: Vec<u8> = (0..32).map(|i| 0xff - i as u8).collect();
     let id: Vec<u8> = (0..32).map(|i| 0xa0 + i as u8).collect();
     let ff32 = [0xffu8; 32];
+    let announced = [
+        AnnounceEntry {
+            stream: 3,
+            hits: 60,
+            late: 2,
+            misses: 4,
+            delay: Duration::from_millis(35),
+            parent: &id,
+        },
+        AnnounceEntry {
+            stream: 300,
+            hits: 0,
+            late: 0,
+            misses: 1234,
+            delay: Duration::ZERO,
+            parent: &[7],
+        },
+    ];
     let d1 = stream_data(0, 16, 1);
     let d2 = stream_data(0, 16, 2);
 
@@ -256,6 +274,11 @@ fn codec_messages() {
             "stream_close",
             Message::StreamClose(StreamClose { stream: 3 }),
         ),
+        (
+            "announce",
+            Message::Announce(Announce::new(&announced).unwrap()),
+        ),
+        ("announce_ask", Message::Announce(Announce::ASK)),
         ("end", Message::End),
     ];
 

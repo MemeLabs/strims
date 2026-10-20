@@ -653,6 +653,7 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         stream_cancel,
         stream_open,
         stream_close,
+        announce,
         data_bytes,
         overhead_bytes,
         invalid_data,
@@ -689,6 +690,7 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         rejected,
         stale_stream_open,
         stale_data,
+        announce,
     }
 }
 

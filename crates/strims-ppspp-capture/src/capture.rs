@@ -41,6 +41,7 @@
 //! | 22 | `SeedBudget` | budget, copies, streams |
 //! | 23 | `SeedWindow` | copies, pushed, behind |
 //! | 24 | `HolderSilent` | |
+//! | 25 | `HolderUnserved` | reporters |
 //!
 //! [`strims_ppspp::TapKind`] documents what each means.
 
@@ -91,6 +92,7 @@ pub const TAP_KINDS: &[TapKindInfo] = &[
     info(22, "SeedBudget", &["budget", "copies", "streams"]),
     info(23, "SeedWindow", &["copies", "pushed", "behind"]),
     info(24, "HolderSilent", &[]),
+    info(25, "HolderUnserved", &["reporters"]),
 ];
 
 const fn info(code: u32, name: &'static str, fields: &'static [&'static str]) -> TapKindInfo {
@@ -480,6 +482,7 @@ impl<S: Sink> Capture<S> {
                 behind,
             } => (23, [copies as i64, pushed as i64, behind as i64]),
             TapKind::HolderSilent => (24, [0; 3]),
+            TapKind::HolderUnserved { reporters } => (25, [reporters as i64, 0, 0]),
             _ => return None,
         })
         .map(|(code, f)| {

@@ -14,13 +14,14 @@ use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
-    Ack, Cancel, ChannelWriter, Data, Have, Integrity, Message, MessageWriter, Ping, Pong, Request,
-    SignedIntegrity, StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    Ack, Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Have, Integrity, Message,
+    MessageWriter, Ping, Pong, Request, SignedIntegrity, StreamCancel, StreamClose, StreamOpen,
+    StreamRequest,
 };
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, MAX_BIN, PeerKey, PushMode, Runner, Swarm, SwarmId, SwarmKey, SwarmOptions,
-    TAP_CAP, TapLevel, Writer, WriterOptions,
+    DATA_QUEUE_CAP, MAX_BIN, PeerKey, PushMode, Runner, SeedAllocation, SeedPolicy, SeedQos, Swarm,
+    SwarmId, SwarmKey, SwarmOptions, TAP_CAP, TapLevel, Writer, WriterOptions,
 };
 
 const MTU: usize = 4096;
@@ -37,8 +38,13 @@ fn config() -> Config {
 }
 
 fn options_with(pm: ProtectionMethod, push_mode: PushMode) -> SwarmOptions {
+    options_seed(pm, push_mode, SeedPolicy::default())
+}
+
+fn options_seed(pm: ProtectionMethod, push_mode: PushMode, seed: SeedPolicy) -> SwarmOptions {
     SwarmOptions {
         push_mode,
+        seed,
         chunk_size: 64,
         chunks_per_signature: 4,
         live_window: WINDOW,
@@ -75,10 +81,15 @@ fn victims(pm: ProtectionMethod) -> (Node, Node, Writer) {
 /// Victims in a push mode (the corpus is always Off traffic; the
 /// synthetic messages cover every STREAM_* message).
 fn victims_with(pm: ProtectionMethod, push: PushMode) -> (Node, Node, Writer) {
+    victims_seed(pm, push, SeedPolicy::default())
+}
+
+/// Victims whose seed spends its upload by `policy`.
+fn victims_seed(pm: ProtectionMethod, push: PushMode, policy: SeedPolicy) -> (Node, Node, Writer) {
     let key = strims_crypto::key_from_seed(&[7; 32]);
     let (mut w, swarm) = Writer::new(
         WriterOptions {
-            swarm_options: options_with(pm, push),
+            swarm_options: options_seed(pm, push, policy),
             key: key.clone(),
         },
         t(0),
@@ -194,9 +205,20 @@ enum Msg {
     StreamCancel(u16),
     StreamOpen(u16, Bin),
     StreamClose(u16),
+    /// Entries: stream, hits, late, misses, delay in ms, parent id.
+    Announce(Vec<(u16, u64, u64, u64, u64, Vec<u8>)>),
     Restart,
     Choke,
     Unchoke,
+}
+
+/// A parent id: the peer's own, an unknown one, or one of any length.
+fn parent_id() -> impl Strategy<Value = Vec<u8>> {
+    prop_oneof![
+        Just(b"peer".to_vec()),
+        Just(b"none".to_vec()),
+        prop::collection::vec(any::<u8>(), 0..40),
+    ]
 }
 
 fn msg() -> impl Strategy<Value = Msg> {
@@ -216,6 +238,11 @@ fn msg() -> impl Strategy<Value = Msg> {
         1 => stream().prop_map(Msg::StreamCancel),
         2 => (stream(), bin()).prop_map(|(s, b)| Msg::StreamOpen(s, b)),
         1 => stream().prop_map(Msg::StreamClose),
+        2 => prop::collection::vec(
+            (stream(), any::<u64>(), any::<u64>(), any::<u64>(), 0u64..100_000, parent_id()),
+            0..40,
+        )
+        .prop_map(Msg::Announce),
         1 => Just(Msg::Restart),
         1 => Just(Msg::Choke),
         1 => Just(Msg::Unchoke),
@@ -226,6 +253,7 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
     let mut buf = vec![0u8; MTU];
     let mut cw = ChannelWriter::new(&mut buf, channel);
     for m in msgs {
+        let entries: Vec<AnnounceEntry<'_>>;
         let m = match m {
             Msg::Have(b) => Message::Have(Have { bin: *b }),
             Msg::Request(b, t) => Message::Request(Request {
@@ -263,6 +291,22 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
                 bin: *b,
             }),
             Msg::StreamClose(s) => Message::StreamClose(StreamClose { stream: *s }),
+            Msg::Announce(e) => {
+                entries = e
+                    .iter()
+                    .map(|(stream, hits, late, misses, ms, id)| AnnounceEntry {
+                        stream: *stream,
+                        hits: *hits,
+                        late: *late,
+                        misses: *misses,
+                        delay: Duration::from_millis(*ms as i64),
+                        parent: id,
+                    })
+                    .filter(AnnounceEntry::is_valid)
+                    .take(strims_ppspp::codec::MAX_ANNOUNCE_ENTRIES)
+                    .collect();
+                Message::Announce(Announce::new(&entries).unwrap())
+            }
             Msg::Restart => Message::Restart,
             Msg::Choke => Message::Choke,
             Msg::Unchoke => Message::Unchoke,
@@ -362,7 +406,7 @@ fn run(victim: &mut Node, corpus: &[Vec<u8>], handshake: &[u8], actions: &[Actio
         .unwrap();
     let s = cs.scheduler;
     assert!(s.pending_requests <= WINDOW, "{s:?}");
-    assert!(s.extra_messages <= 3 + 2 * STREAMS, "{s:?}");
+    assert!(s.extra_messages <= 4 + 2 * STREAMS, "{s:?}");
     assert!(s.peer_have_map_size < 512, "{s:?}");
     let ss = victim.runner.swarm_stats(victim.swarm).unwrap();
     assert!(ss.bin_time_nodes <= 16 * WINDOW + 128, "{ss:?}");
@@ -388,6 +432,21 @@ proptest! {
         let corpus = corpus(pm);
         let (mut seed, _, _) = victims_with(pm, push);
         // The leech's handshake is in the corpus' first leech frame.
+        let hs = handshake_from(corpus, seed.runner.swarm(seed.swarm).unwrap());
+        run(&mut seed, corpus, &hs, &actions);
+    }
+
+    #[test]
+    fn adaptive_seed_survives_peer_input(
+        pm in prop::sample::select(METHODS.to_vec()),
+        actions in prop::collection::vec(action(), 1..30),
+    ) {
+        let corpus = corpus(pm);
+        let policy = SeedPolicy {
+            allocation: SeedAllocation::Adaptive,
+            qos: SeedQos::ByAllocation,
+        };
+        let (mut seed, _, _) = victims_seed(pm, PushMode::Hybrid, policy);
         let hs = handshake_from(corpus, seed.runner.swarm(seed.swarm).unwrap());
         run(&mut seed, corpus, &hs, &actions);
     }
