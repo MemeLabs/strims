@@ -24,7 +24,7 @@ priority = 100
 
 # These spread their simulations over every core.
 [[profile.default.overrides]]
-filter = 'test(=controller_ab) | (package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep)))'
+filter = 'test(=controller_ab) | test(=seed_allocation_bounds) | test(=seed_allocation_ab) | (package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep)))'
 threads-required = "num-test-threads"
 priority = 90
 

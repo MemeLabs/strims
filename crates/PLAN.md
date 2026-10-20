@@ -210,11 +210,10 @@ Egress and players:
   - Its p99 is about 9 % worse on sparse lossy meshes.
   - On WAN paths behind a seed on a cable uplink, pull under it lags far
     behind LEDBAT: strims-sim's `wan_residential_seed` misses frames on 3 of
-    8 seeds with p99 up to 15 s, and the ppspp sim's `WanResidentialSeed`
-    reaches a p99 of 12 s with the seed sending 68 % of the data. LEDBAT
-    delivers everything there, at a p99 of about 6 s in the ppspp sim. A
-    seed with no feedback serves whoever asks hardest, so the seed's
-    allocation (below) is the likelier lever.
+    8 seeds with p99 up to 15 s, and over 60 s the ppspp sim's
+    `WanResidentialSeed` delivers half the stream. In Hybrid behind an
+    adaptive seed (below) the two controllers are level, so this weighs
+    only where pull carries the stream.
   - On a shared parent it yields to LEDBAT, so a network should run one
     controller.
   - Next: a deadline-aware request scheduler. Each chunk's deadline is its
@@ -225,68 +224,53 @@ Egress and players:
 - **Push/pull hybrid.** Draft behind `push_mode`, off by default. Open items:
   - convergence on sparse meshes;
   - coalescing HAVE-only frames;
-  - seed capacity reservation;
   - reciprocity versus tree children (children get the minimum weight);
   - push bypassing congestion control;
   - cycles longer than two;
-  - the default stream count;
+  - the default stream count: 16 streams with an adaptive seed (below)
+    cut the WAN p99 behind a cable seed about fourfold, while one stream
+    hits about 28 % of pushes there;
   - the upload meter assumes the driver drains at link speed, so it reads low
     under vnic QoS, and swarms share one meter but admit independently.
     strims-node could report link capacity;
   - cancel a missed chunk at the parent to cut duplicates;
-  - interior stream assignment is first-come;
+  - a non-seed's interior stream is the first it accepts a subscriber
+    for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
+    capacity, so a datacenter viewer forwards every stream it holds;
   - slow parents are detected late, so `sim_push_slow_parent`'s p99 can still
     pass 1 s on some seeds. The upload meter's 2 s busy window takes about
     1.5 s to reach `SHED_UTILIZATION`, a child's deadline stretches with its
     parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
     shield a new parent. Shedding on push queue wait helps slow parents but
     hurts `sim_push_parent_dies` and sparse meshes;
-  - a seed admits every subscriber at startup, before its store rate has
-    ramped up;
-  - with one stream behind a seed on a cable uplink on WAN paths
-    (`WanResidentialSeed`), about 28 % of pushes hit.
-- **Seed allocation.** A seed gets no reciprocity: upload weights are the
-  rate of verified new data a peer sends us, so a seed weighs every peer
-  alike and serves whoever asks, and Hybrid admits its subscribers
-  first-come by capacity. The seed should spend its measured upload on the
-  copies of the stream that help the swarm most.
-  - **Objective.** One copy of every stripe (stream `i % stream_count`) out
-    as fast as possible, then the rest of the budget on duplicates where
-    they cut delay most. A viewer reads in order, so its lag is its slowest
-    stripe's: minimize the p90, over the seed's neighbours, of each
-    neighbour's worst-stripe HAVE lag.
-  - **Signals**, all passive and already kept: ping RTTs to every neighbour,
-    Hybrid's HAVE lag per neighbour per stripe, and the runner's upload
-    meter (a budget of B/R copies of the stream).
-  - **L1 preference** combines latency and capacity. Capacity shows only
-    once it is used, so allocations grow: a new L1 peer gets one stripe,
-    gains stripes while they saturate as fast as their siblings, and loses
-    them when they lag. A peer with effectively unlimited upload ends up
-    with the whole stream, and the rest of the budget goes to duplicates.
-  - **Duplicates** go to the stripe with the worst tail, at a candidate near
-    the neighbours where it is late. That spreads copies across regions
-    and subtrees, for latency and resilience at once.
-  - **Actuators.** Every neighbour's graft prefers the seed, which announces
-    first, so accepting, declining and shedding STREAM_REQUESTs per stripe
-    places the copies. No wire change.
-  - **What changes with it:** a non-seed node forwards as many streams as
-    its upload carries (one interior stream would cap a super-peer at one
-    stripe); the seed's admission (`UNMEASURED_FANOUT`,
-    `INTERIOR_UTILIZATION`, first-come) becomes the allocator;
-    `stream_count` defaults above 1; a constrained seed answers pull
-    requests only near a chunk's deadline, so repairs neither spend the
-    budget nor hide the tails it steers by.
-  - **Open:** measurement windows, hysteresis, and how many slots move per
-    check; how many neighbours the seed needs for their p90 to stand for
-    the swarm; a peer that announces fast and serves its children badly,
-    whose children's misses the seed never sees.
-  - **Evaluation** on the WAN scenarios: `WanResidentialSeed` in Hybrid at
-    16 stripes against today's admission; a datacenter viewer among
-    residential ones, which should end up carrying most of the stream; the
-    global audience, where duplicates should spread across regions. Measure
-    worst-stripe lag p90/p99, the seed's distinct-chunk ratio against its
-    duplication factor, per-region p99, and each L1 peer's stripes over
-    time.
+  - an admitting seed (`SeedAllocation::Admission`) accepts every
+    subscriber at startup, before its store rate has ramped up.
+- **Seed allocation.** Open items:
+  - **Defaults.** Whether a hybrid seed defaults to
+    `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
+    Hybrid and more than one stream. Behind a cable seed at 16 streams
+    they bring p99 to what an allocation that knows the sites reaches.
+    The adaptive seed needs the shares: without them pull from the seed
+    takes its uplink, and BBR's pull collapses behind it.
+  - **Capacity.** Nothing passive tells a holder's upload: a stream's tail
+    mixes all its holders, a holder's HAVE lag is mostly the seed's queue
+    and geography, and its own uplink never queues because children leave
+    a slow parent. The round trip ranks access links well (last miles)
+    but not a near peer with a weak uplink. An announced upload or spare
+    capacity (see Wire changes) would let the seed rank holders by it.
+  - **Startup.** Before the budget is measured four neighbours hold
+    copies. A neighbour declined then asks again only when the seed
+    announces sooner than its parent by the switch margin, so a
+    datacenter seed with spare upload can leave a few neighbours on
+    relays (the global audience's worst region). Accepting everyone
+    instead overloads a cable seed's first seconds, and the misses prune
+    it for `PRUNE_BACKOFF`.
+  - **Copies by region.** Copies go to the nearest neighbours. The fastest
+    uplinks in alternating regions did no better on these paths, but no
+    scenario has a seed whose nearest neighbours share one path or access
+    network.
+  - **Pull from a constrained seed** is 3–4 % of what it sends behind
+    the shares, so it isn't gated by deadline; revisit if it grows.
 - **Reciprocal topology.** Nodes keep their links whatever a peer
   reciprocates. Dropping links that don't reciprocate and dialing random
   new peers, with a budget for leechers, would move high-upload peers
@@ -451,7 +435,8 @@ stack or a version gate.
 - Stamp DATA at send time, not after the sender's queue.
 - STREAM_REQUEST: add an expiry or lease plus a rate limit. STREAM_CLOSE:
   add a reason.
-- Announce the interior stream and spare capacity.
+- Announce the interior stream and spare capacity (a seed could rank its
+  holders by it).
 - Mark pushed DATA and echo send times.
 - Add a hop count or depth to STREAM_OPEN or HAVE.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the

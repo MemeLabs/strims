@@ -50,7 +50,10 @@
 //! spends it, at 16 streams on WAN paths: the ignored
 //! `seed_allocation_bounds` pins allocations the seed can't know (random
 //! viewers, the fastest uplinks first) against the default admission, each
-//! with and without uplink shares by allocation (`SeedQos`).
+//! with and without uplink shares by allocation (`SeedQos`), and
+//! `seed_allocation_ab` compares pull, the admission, the adaptive seed and
+//! two pins across the WAN scenarios. Both default to 4 seeds of 30 s;
+//! `SIM_SEEDS=8 SIM_SECS=60` gives the full tables.
 
 #![allow(
     clippy::unwrap_used,
@@ -3472,7 +3475,7 @@ fn random_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
 }
 
 /// A seed allocation run's config: Hybrid at `SIM_STREAMS` (16)
-/// streams for `SIM_SECS` (60) seconds, lags from `SIM_WARM` (10); a pin
+/// streams for `SIM_SECS` (30) seconds, lags from `SIM_WARM` (10); a pin
 /// gets `slots`.
 fn alloc_config(
     sc: AbScenario,
@@ -3488,7 +3491,7 @@ fn alloc_config(
     };
     let mut cfg = sc.config(seed, mode, controller, controller);
     cfg.stream_count = knob("SIM_STREAMS").unwrap_or(16);
-    cfg.stream_secs = knob("SIM_SECS").unwrap_or(60);
+    cfg.stream_secs = knob("SIM_SECS").unwrap_or(30);
     cfg.warm_secs = knob("SIM_WARM").unwrap_or(10);
     let qos = matches!(
         case,
@@ -3517,11 +3520,11 @@ fn alloc_config(
 }
 
 /// Prints the seed allocation table: each of `scenarios` under LEDBAT and
-/// BBR in each of its `cases`, over `SIM_SEEDS` (8) seeds. `SIM_SCENARIO`
+/// BBR in each of its `cases`, over `SIM_SEEDS` (4) seeds. `SIM_SCENARIO`
 /// picks one scenario and `SIM_CASES` (comma-separated) some cases. The
 /// admission runs first when a case is pinned: they set each seed's slots.
 fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<AllocCase>) {
-    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(8);
+    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(4);
     let only: Option<String> = knob("SIM_SCENARIO");
     let picked: Option<String> = knob("SIM_CASES");
     let cases = |sc: AbScenario| -> Vec<AllocCase> {
