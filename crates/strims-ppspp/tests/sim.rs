@@ -294,6 +294,9 @@ struct Node {
     lags: Vec<(Time, Duration)>,
     /// The chunks it read, by index.
     read_chunks: Vec<bool>,
+    /// When each chunk's data first reached it from an honest node, by
+    /// index (`NIL` until then).
+    arrived: Vec<Time>,
     max_queue_delay: Duration,
     errors: u64,
     removed: BTreeSet<PeerKey>,
@@ -382,6 +385,11 @@ struct Report {
     lag_p50: Duration,
     lag_p99: Duration,
     lag_max: Duration,
+    /// Worst-stripe lag ([`Sim::munro_lags`]): p90 and p99.
+    stripe_p90: Duration,
+    stripe_p99: Duration,
+    /// In WAN mode, the lag p99 of each region's peers.
+    regions: Vec<(Region, Duration)>,
     max_queue_delay: Duration,
     finish: Time,
     /// The seed's share of all data bytes sent.
@@ -392,6 +400,8 @@ struct Report {
     wasted: u64,
     /// Push counters summed over honest peers.
     push: PushStats,
+    /// The seed's push subscribers, all streams, at the end.
+    seed_children: usize,
     /// The incident's victim, and the p99 and worst lag of the chunks read
     /// in the 3 s after it.
     recovery: Option<(usize, Duration, Duration)>,
@@ -525,6 +535,7 @@ impl Sim {
                 resets: 0,
                 lags: vec![],
                 read_chunks: vec![],
+                arrived: vec![],
                 max_queue_delay: Duration::ZERO,
                 errors: 0,
                 removed: BTreeSet::new(),
@@ -634,6 +645,7 @@ impl Sim {
         let munros = (cfg.stream_rate * cfg.stream_secs) as usize / munro;
         for node in &mut nodes {
             node.read_chunks = vec![false; munros * cfg.munro_chunks];
+            node.arrived = vec![Time::NIL; munros * cfg.munro_chunks];
             if let Some(x) = node.cross.as_mut() {
                 x.read_chunks = vec![false; munros * cfg.munro_chunks];
             }
@@ -945,6 +957,12 @@ impl Sim {
                 }
             }
         }
+        if self.nodes[to].role == Role::Peer
+            && matches!(self.nodes[from].role, Role::Seed | Role::Peer)
+            && !self.nodes[to].removed.contains(&rpeer)
+        {
+            self.record_arrivals(to, frame);
+        }
         let node = &mut self.nodes[to];
         if node.removed.contains(&rpeer) {
             return;
@@ -960,6 +978,36 @@ impl Sim {
             node.errors += 1;
             node.runner.remove_peer(rpeer);
             node.removed.insert(rpeer);
+        }
+    }
+
+    /// Notes the first arrival of each main-swarm chunk in `frame` at node
+    /// `to`. Cross-traffic channels are numbered from 1000.
+    fn record_arrivals(&mut self, to: usize, frame: &[u8]) {
+        let now = self.now;
+        let arrived = &mut self.nodes[to].arrived;
+        for c in FrameReader::new(frame) {
+            let Ok((h, payload)) = c else { break };
+            if h.channel >= 1000 {
+                continue;
+            }
+            for m in Reader::new(self.rcfg, payload) {
+                match m {
+                    Ok(Message::Data(d)) => {
+                        let (mut x, r) = d.bin.base();
+                        while x <= r {
+                            if let Some(a) = arrived.get_mut(x.base_offset() as usize)
+                                && a.is_nil()
+                            {
+                                *a = now;
+                            }
+                            x += 2;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
         }
     }
 
@@ -1272,6 +1320,7 @@ impl Sim {
             (victim, p99, after.last().copied().unwrap_or_default())
         });
         let cross = self.cfg.cross.map(|c| self.cross_report(c, warm));
+        let stripe = self.munro_lags();
         Report {
             trace: self.trace,
             frames: self.frames,
@@ -1296,15 +1345,72 @@ impl Sim {
             lag_p50: pct(50),
             lag_p99: pct(99),
             lag_max: lags.last().copied().unwrap_or_default(),
+            stripe_p90: percentile(&stripe, 90),
+            stripe_p99: percentile(&stripe, 99),
+            regions: self.region_p99(),
             max_queue_delay: peers.map(|n| n.max_queue_delay).max().unwrap_or_default(),
             finish: self.now,
             seed_share,
             data_bytes,
             wasted,
             push,
+            seed_children: self.nodes[0]
+                .runner
+                .push_stats(self.nodes[0].swarm)
+                .map_or(0, |p| p.children),
             recovery,
             cross,
         }
+    }
+
+    /// Per peer and munro published after the warm-up, sorted: how long
+    /// after it was published its last chunk arrived. A peer reads in
+    /// order, so that is the lag of the munro's slowest stripe. Munros
+    /// before the peer's start, and ones it never received whole (which
+    /// delivery counts), are left out.
+    fn munro_lags(&self) -> Vec<Duration> {
+        let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
+        let per = self.cfg.munro_chunks;
+        let mut out = Vec::new();
+        for n in self.nodes.iter().filter(|n| n.role == Role::Peer) {
+            let Some(start) = n.start else { continue };
+            let first = (start / CHUNK as u64).div_ceil(per as u64) as usize;
+            for m in first..self.publish_times.len() / per {
+                let published = self.publish_times[m * per];
+                let chunks = &n.arrived[m * per..(m + 1) * per];
+                if published <= warm || chunks.iter().any(|t| t.is_nil()) {
+                    continue;
+                }
+                let last = chunks.iter().copied().max().unwrap_or(published);
+                out.push(last - published);
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// In WAN mode, the lag p99 after the warm-up of the peers in each
+    /// region.
+    fn region_p99(&self) -> Vec<(Region, Duration)> {
+        let Some(w) = &self.cfg.wan else {
+            return vec![];
+        };
+        let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
+        let mut by: BTreeMap<Region, Vec<Duration>> = BTreeMap::new();
+        for (i, n) in self.nodes.iter().enumerate() {
+            if n.role != Role::Peer {
+                continue;
+            }
+            by.entry(w.sites[i].city.region())
+                .or_default()
+                .extend(n.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l));
+        }
+        by.into_iter()
+            .map(|(r, mut v)| {
+                v.sort();
+                (r, percentile(&v, 99))
+            })
+            .collect()
     }
 
     fn cross_report(&self, c: Cross, warm: Time) -> CrossReport {
@@ -1506,6 +1612,14 @@ fn shuffle<T>(v: &mut [T], rng: &mut DetRng) {
         let j = (rng.next_u64() % (i as u64 + 1)) as usize;
         v.swap(i, j);
     }
+}
+
+/// The `p`th percentile of sorted durations (zero if empty).
+fn percentile(sorted: &[Duration], p: usize) -> Duration {
+    sorted
+        .get(sorted.len().saturating_sub(1) * p / 100)
+        .copied()
+        .unwrap_or_default()
 }
 
 fn tx_time(n: usize, bw: u64) -> Duration {
@@ -1886,10 +2000,13 @@ enum Scenario {
     /// 1+24 in North America and Europe, the seed on cable
     /// ([`wan_residential_seed_config`]).
     WanResidentialSeed,
+    /// WanResidentialSeed plus a datacenter viewer
+    /// ([`wan_super_peer_config`]).
+    WanSuperPeer,
 }
 
 impl Scenario {
-    const ALL: [Scenario; 8] = [
+    const ALL: [Scenario; 9] = [
         Scenario::FullMesh,
         Scenario::Sparse,
         Scenario::SeedConstrained,
@@ -1898,6 +2015,7 @@ impl Scenario {
         Scenario::Withholding,
         Scenario::WanGlobal,
         Scenario::WanResidentialSeed,
+        Scenario::WanSuperPeer,
     ];
 
     fn config(self, mode: PushMode, streams: usize) -> Config {
@@ -1939,6 +2057,7 @@ impl Scenario {
             }
             Scenario::WanGlobal => wan_global_config(1),
             Scenario::WanResidentialSeed => wan_residential_seed_config(1),
+            Scenario::WanSuperPeer => wan_super_peer_config(1),
         };
         cfg.push_mode = mode;
         cfg.stream_count = streams;
@@ -1970,6 +2089,20 @@ fn apply_knobs(cfg: &mut Config) {
         Some("ledbat") => cfg.controller = RequestControllerKind::Ledbat,
         Some("bbr") => cfg.controller = RequestControllerKind::BbrLike,
         _ => {}
+    }
+}
+
+/// The knobs the A/B tables take: stream count, stream length and
+/// warm-up.
+fn ab_knobs(cfg: &mut Config) {
+    if let Some(n) = knob("SIM_STREAMS") {
+        cfg.stream_count = n;
+    }
+    if let Some(secs) = knob("SIM_SECS") {
+        cfg.stream_secs = secs;
+    }
+    if let Some(secs) = knob("SIM_WARM") {
+        cfg.warm_secs = secs;
     }
 }
 
@@ -2602,10 +2735,13 @@ enum AbScenario {
     /// 1+24 in North America and Europe, the seed on cable
     /// ([`wan_residential_seed_config`]).
     WanResidentialSeed,
+    /// WanResidentialSeed plus a datacenter viewer
+    /// ([`wan_super_peer_config`]).
+    WanSuperPeer,
 }
 
 impl AbScenario {
-    const ALL: [AbScenario; 9] = [
+    const ALL: [AbScenario; 10] = [
         AbScenario::LiveMesh,
         AbScenario::SparseLossy,
         AbScenario::LatencyStep,
@@ -2615,6 +2751,7 @@ impl AbScenario {
         AbScenario::WanGlobal,
         AbScenario::WanMobile,
         AbScenario::WanResidentialSeed,
+        AbScenario::WanSuperPeer,
     ];
 
     /// The config for `seed`; `b` is the cross-traffic swarm's controller.
@@ -2642,6 +2779,7 @@ impl AbScenario {
             AbScenario::WanGlobal => wan_global_config(seed),
             AbScenario::WanMobile => wan_mobile_config(seed),
             AbScenario::WanResidentialSeed => wan_residential_seed_config(seed),
+            AbScenario::WanSuperPeer => wan_super_peer_config(seed),
         };
         cfg.push_mode = mode;
         cfg.controller = a;
@@ -2660,7 +2798,8 @@ impl AbScenario {
             | AbScenario::SparseLossy
             | AbScenario::WanGlobal
             | AbScenario::WanMobile
-            | AbScenario::WanResidentialSeed => None,
+            | AbScenario::WanResidentialSeed
+            | AbScenario::WanSuperPeer => None,
         }
     }
 }
@@ -2690,7 +2829,9 @@ fn ab_run(
     a: RequestControllerKind,
     b: RequestControllerKind,
 ) -> AbRun {
-    let mut sim = Sim::new(sc.config(seed, mode, a, b));
+    let mut cfg = sc.config(seed, mode, a, b);
+    ab_knobs(&mut cfg);
+    let mut sim = Sim::new(cfg);
     let r = sim.run();
     let mut missing: usize = match sc.required() {
         Some((from, to)) => sim.missing(from, to).iter().map(|m| m.1).sum(),
@@ -3037,6 +3178,15 @@ fn wan_residential_seed_config(seed: u64) -> Config {
         .collect();
     let seed_site = Site::new(City::Chicago, Access::Cable);
     let sites = wan_sites(seed, 24, seed_site, &cities, RESIDENTIAL);
+    wan_config(seed, sites, 6, 0)
+}
+
+/// [`wan_residential_seed_config`]'s seed and viewers plus a 25th viewer
+/// (the last node) in a New York datacenter: a super-peer whose uplink
+/// could carry the whole swarm.
+fn wan_super_peer_config(seed: u64) -> Config {
+    let mut sites = wan_residential_seed_config(seed).wan.unwrap().sites;
+    sites.push(Site::new(City::NewYork, Access::Datacenter));
     wan_config(seed, sites, 6, 0)
 }
 
