@@ -250,8 +250,8 @@ Egress and players:
     `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
     Hybrid and more than one stream. Behind a cable seed at 16 streams
     they bring p99 to what an allocation that knows the sites reaches.
-    The adaptive seed needs the shares: without them pull from the seed
-    takes its uplink, and BBR's pull collapses behind it.
+    The adaptive seed needs the shares: without them its p99 is 35–140 %
+    higher, up to 2.1 s on BBR's worst seed.
   - **Capacity.** Nothing passive tells a holder's upload: a stream's tail
     mixes all its holders, a holder's HAVE lag is mostly the seed's queue
     and geography, and its own uplink never queues because children leave
