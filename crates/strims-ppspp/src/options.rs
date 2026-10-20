@@ -61,6 +61,28 @@ pub enum PushMode {
     Hybrid,
 }
 
+/// How a seed in [`PushMode::Hybrid`] spends its upload; see
+/// [`scheduler_peer::push`](crate::scheduler_peer::push). Local to this
+/// node, like `push_mode`; a non-seed ignores it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SeedPolicy {
+    pub qos: SeedQos,
+}
+
+/// How a seed weights its peers' shares of its uplink.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SeedQos {
+    /// By reciprocity, like any node: a seed receives no data, so every
+    /// peer gets an equal share.
+    #[default]
+    Equal,
+    /// Each peer at least in proportion to the streams pushed to it, and
+    /// the minimum weight for peers it pushes nothing to: pushes leave at
+    /// the rate each subscriber needs, and pull answers take what they
+    /// leave.
+    ByAllocation,
+}
+
 /// Swarm options. Sizes are in bytes and counts in chunks.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SwarmOptions {
@@ -80,6 +102,8 @@ pub struct SwarmOptions {
     /// The channels' request window model, local to this node.
     /// `Default` resolves to [`RequestControllerKind::DEFAULT`].
     pub request_controller: RequestControllerKind,
+    /// How a hybrid seed spends its upload, local to this node.
+    pub seed: SeedPolicy,
 }
 
 impl SwarmOptions {
@@ -99,6 +123,7 @@ impl SwarmOptions {
             buffer_layout: BufferLayout::CIRCULAR,
             push_mode: PushMode::Off,
             request_controller: RequestControllerKind::DEFAULT,
+            seed: SeedPolicy::default(),
         }
     }
 
@@ -134,6 +159,7 @@ impl SwarmOptions {
             buffer_layout: or(self.buffer_layout, d.buffer_layout),
             push_mode: or(self.push_mode, d.push_mode),
             request_controller: or(self.request_controller, d.request_controller),
+            seed: or(self.seed, d.seed),
         }
     }
 
@@ -199,6 +225,9 @@ mod tests {
             buffer_layout: BufferLayout::CIRCULAR,
             push_mode: PushMode::Hybrid,
             request_controller: RequestControllerKind::BbrLike,
+            seed: SeedPolicy {
+                qos: SeedQos::ByAllocation,
+            },
         };
         assert_eq!(custom.clone().assign_defaults(&defaults), custom);
         // Both controllers can be chosen whichever is the default.

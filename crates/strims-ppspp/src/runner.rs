@@ -28,7 +28,7 @@ use crate::peer::{
     MetricsSnapshot, PeerMetricsSnapshot, PeerStats, Queues, RunnerPeer, TransferMetrics, Wake,
 };
 use crate::scheduler::PeerPriority;
-use crate::scheduler_peer::push::{PushStats, UploadInfo};
+use crate::scheduler_peer::push::{PushStats, SeedAllocationStats, UploadInfo};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
     SwarmSchedulerStats, WriteDataError,
@@ -120,6 +120,8 @@ struct RunnerSwarm {
     /// Exists while the swarm has channels.
     scheduler: Option<PeerSwarmScheduler>,
     channels: IndexMap<PeerKey, Channel>,
+    /// A hybrid seed's pinned allocation, given to each new scheduler.
+    seed_pin: Option<Vec<Vec<PeerKey>>>,
 }
 
 #[derive(Debug, Default)]
@@ -308,6 +310,7 @@ fn handle_payload(
         swarm,
         scheduler,
         channels,
+        ..
     } = rs;
     let (Some(ch), Some(sched)) = (channels.get_mut(&peer), scheduler.as_mut()) else {
         return Ok(());
@@ -493,6 +496,7 @@ impl Runner {
             swarm,
             scheduler: None,
             channels: IndexMap::new(),
+            seed_pin: None,
         })
     }
 
@@ -701,6 +705,9 @@ impl Runner {
             peers,
             transmit: &mut events.transmit,
         };
+        if rs.channels.len() == 1 && rs.seed_pin.is_some() {
+            sched.pin_allocation(rs.seed_pin.clone(), &mut q);
+        }
         sched.add_channel(peer, now, &mut q);
         Ok(())
     }
@@ -1071,8 +1078,18 @@ impl Runner {
     /// Rates are normalized to the top peer's (it gets the maximum), so
     /// weights keep their spread however many peers contribute. When nobody
     /// sent anything useful in the window (a seed, a pause) every peer gets
-    /// the maximum, an equal share.
+    /// the maximum, an equal share. A hybrid seed under
+    /// [`SeedQos::ByAllocation`](crate::SeedQos::ByAllocation) gives each
+    /// peer at least its share of the streams pushed to it, and the minimum
+    /// instead of the maximum when nobody sent anything.
     fn update_peer_weights(&mut self, now: Time) {
+        let mut seed_weights = BTreeMap::new();
+        let mut seeding = false;
+        for rs in self.swarms.values() {
+            if let Some(sched) = rs.scheduler.as_ref() {
+                seeding |= sched.seed_weights(&mut seed_weights);
+            }
+        }
         let top = self
             .peers
             .values_mut()
@@ -1081,12 +1098,18 @@ impl Runner {
             .unwrap_or(0);
         for (key, p) in self.peers.iter_mut() {
             let weight = if top == 0 {
-                MAX_PEER_QOS_WEIGHT
+                if seeding {
+                    MIN_PEER_QOS_WEIGHT
+                } else {
+                    MAX_PEER_QOS_WEIGHT
+                }
             } else {
                 let rate = u128::from(p.useful.rate(now));
                 (rate * u128::from(MAX_PEER_QOS_WEIGHT) / u128::from(top)) as u64
             };
-            let weight = weight.clamp(MIN_PEER_QOS_WEIGHT, MAX_PEER_QOS_WEIGHT);
+            let weight = weight
+                .max(seed_weights.get(&key).copied().unwrap_or(0))
+                .clamp(MIN_PEER_QOS_WEIGHT, MAX_PEER_QOS_WEIGHT);
             if p.qos_weight != Some(weight) {
                 p.qos_weight = Some(weight);
                 self.events.weights.insert(key, weight);
@@ -1166,6 +1189,43 @@ impl Runner {
         Some(self.swarms.get(swarm)?.scheduler.as_ref()?.push_stats())
     }
 
+    /// A hybrid seed's view of its neighbours, while it has channels.
+    pub fn seed_allocation(&self, swarm: SwarmKey, now: Time) -> Option<SeedAllocationStats> {
+        self.swarms
+            .get(swarm)?
+            .scheduler
+            .as_ref()?
+            .seed_allocation(now)
+    }
+
+    /// Fixes the peers a hybrid seed pushes each stream to, one list per
+    /// stream; `None` lifts the pin. While pinned, the seed accepts a
+    /// stream's STREAM_REQUESTs from its listed peers only, closes its
+    /// other subscribers and sheds none: an experiment's fixed allocation.
+    /// The pin outlives the swarm's channels.
+    pub fn pin_seed_allocation(
+        &mut self,
+        swarm: SwarmKey,
+        pin: Option<Vec<Vec<PeerKey>>>,
+    ) -> Result<(), RunnerError> {
+        let Runner {
+            swarms,
+            peers,
+            events,
+            ..
+        } = self;
+        let rs = swarms.get_mut(swarm).ok_or(RunnerError::UnknownSwarm)?;
+        rs.seed_pin = pin.clone();
+        if let Some(sched) = rs.scheduler.as_mut() {
+            let mut q = Queues {
+                peers,
+                transmit: &mut events.transmit,
+            };
+            sched.pin_allocation(pin, &mut q);
+        }
+        Ok(())
+    }
+
     /// The peer's queue state.
     pub fn peer_stats(&self, peer: PeerKey) -> Option<PeerStats> {
         self.peers.get(peer).map(|p| p.stats())
@@ -1189,6 +1249,7 @@ fn write_channel(
         swarm,
         scheduler,
         channels,
+        ..
     } = rs;
     let (Some(sched), Some(ch)) = (scheduler.as_mut(), channels.get_mut(&peer)) else {
         return (0, false);
@@ -1220,6 +1281,7 @@ fn write_channel_data(
         swarm,
         scheduler,
         channels,
+        ..
     } = rs;
     let (Some(sched), Some(ch)) = (scheduler.as_mut(), channels.get_mut(&peer)) else {
         return Err(WriteDataError::Dropped);

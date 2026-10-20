@@ -10,6 +10,7 @@ use super::*;
 use crate::codec::{Message, Reader};
 use crate::{SwarmId, SwarmOptions};
 use slotmap::SlotMap;
+use std::collections::BTreeMap;
 use strims_base::rng::det_rng;
 
 /// A [`PeerTaskQueue`] that records the calls.
@@ -1152,6 +1153,106 @@ fn pull_load_does_not_shed_subscribers() {
     f.sched.run_push(t, &mut q);
     let st = f.sched.push_stats();
     assert_eq!((st.children, st.sheds_sent), (2, 2));
+}
+
+fn seed_hybrid(streams: usize) -> SwarmOptions {
+    SwarmOptions {
+        scheduling_method: SchedulingMethod::SEED,
+        ..hybrid(streams)
+    }
+}
+
+/// Whether `peer` subscribes to `stream`.
+fn subscribed(f: &Fixture, peer: PeerKey, stream: usize) -> bool {
+    f.sched.s.streams[stream]
+        .subscribers
+        .iter()
+        .any(|x| x.channel == peer)
+}
+
+#[test]
+fn a_pinned_seed_pushes_each_stream_to_its_pin() {
+    let mut f = fixture(seed_hybrid(4));
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let r = add_ready(&mut f, &mut q, 1);
+    f.sched
+        .handle_stream_request(r, 0, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    assert!(subscribed(&f, r, 0));
+
+    // Pinning closes the subscribers outside the pin.
+    assert!(
+        f.sched
+            .pin_allocation(Some(vec![vec![p], vec![r], vec![], vec![]]), &mut q)
+    );
+    assert!(!subscribed(&f, r, 0));
+    assert!(
+        next_messages(&mut f, r, now())
+            .iter()
+            .any(|m| matches!(m, Message::StreamClose(c) if c.stream == 0))
+    );
+    // Only the pinned peers' requests are accepted, whatever the upload.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        busy: 0.1,
+    });
+    for (peer, stream) in [(p, 0), (r, 0), (p, 1), (r, 1), (p, 2)] {
+        f.sched
+            .handle_stream_request(peer, stream, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    assert!(subscribed(&f, p, 0) && subscribed(&f, r, 1));
+    assert!(!subscribed(&f, r, 0) && !subscribed(&f, p, 1) && !subscribed(&f, p, 2));
+    // Nothing is shed while pinned.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 1_000,
+        busy: 0.99,
+    });
+    f.sched.run_push(now() + Duration::from_secs(10), &mut q);
+    assert_eq!(f.sched.push_stats().children, 2);
+
+    // Lifted, the admission decides again.
+    assert!(f.sched.pin_allocation(None, &mut q));
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        busy: 0.1,
+    });
+    f.sched
+        .handle_stream_request(p, 2, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    assert!(subscribed(&f, p, 2));
+
+    // A non-seed can't be pinned.
+    let mut f = fixture(hybrid(4));
+    assert!(!f.sched.pin_allocation(Some(vec![vec![]; 4]), &mut q));
+}
+
+#[test]
+fn seed_weights_follow_the_streams_pushed() {
+    let mut f = fixture(SwarmOptions {
+        seed: crate::SeedPolicy {
+            qos: crate::SeedQos::ByAllocation,
+        },
+        ..seed_hybrid(4)
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let r = add_ready(&mut f, &mut q, 1);
+    let idle = add_ready(&mut f, &mut q, 2);
+    for (peer, stream) in [(p, 0), (p, 1), (p, 2), (p, 3), (r, 0)] {
+        f.sched
+            .handle_stream_request(peer, stream, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    let mut w = BTreeMap::new();
+    w.insert(r, 600);
+    assert!(f.sched.seed_weights(&mut w));
+    assert_eq!((w[&p], w[&r], w[&idle]), (1000, 600, 50));
+
+    // Equal shares: the weights are reciprocity's alone.
+    let f = fixture(seed_hybrid(4));
+    assert!(!f.sched.seed_weights(&mut BTreeMap::new()));
 }
 
 #[test]

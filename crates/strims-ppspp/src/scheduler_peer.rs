@@ -106,7 +106,7 @@ use crate::codec::{
 };
 use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
-use crate::options::{DeliveryMode, PushMode, SchedulingMethod};
+use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
@@ -320,6 +320,8 @@ pub(crate) struct SwarmState {
     controller: RequestControllerKind,
     /// The node publishes the swarm (`SchedulingMethod::SEED`).
     is_seed: bool,
+    /// How a hybrid seed spends its upload.
+    seed: SeedPolicy,
     /// The hybrid's state, with [`PushMode::Hybrid`] only.
     push: Option<PushState>,
 }
@@ -1076,6 +1078,7 @@ impl PeerSwarmScheduler {
                 mode: o.push_mode,
                 controller: o.request_controller.resolve(),
                 is_seed: o.scheduling_method == SchedulingMethod::SEED,
+                seed: o.seed,
                 push: (o.push_mode == PushMode::Hybrid)
                     .then(|| PushState::new(usize::from(stream_count), now)),
             },
@@ -1493,13 +1496,18 @@ impl PeerSwarmScheduler {
             let mut it = c.peer_have_bins.iterate_empty_at(b);
             let mut next = it.next_base_after(b.base_left().max(lo));
             found = next.is_some();
-            // Only the hybrid's per-stream HAVE lag needs every new bin.
+            // Only the hybrid's per-stream HAVE lag needs every new bin. A
+            // seed samples a stream's last chunk of each signature unit
+            // alone: a unit is published at once, so that chunk tells when
+            // the peer had the unit's share of the stream whole.
+            let unit = 1u64 << s.signature_layer;
+            let last = unit.saturating_sub(u64::from(s.stream_count));
             if s.push.is_some() {
                 while let Some(x) = next {
                     // A bin with no time (pruned, or never published by a
                     // seed) gives no sample.
                     let t = s.bin_time(x);
-                    if t != Time::EPOCH {
+                    if t != Time::EPOCH && (!s.is_seed || x.base_offset() % unit >= last) {
                         let stream = usize::from(s.bin_stream(x));
                         Self::push_have_lag(&mut c.push, stream, now - t, now);
                     }

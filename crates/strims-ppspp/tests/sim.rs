@@ -45,6 +45,12 @@
 //! BBR-style one, and the ignored `controller_ab` prints the table. Cross
 //! traffic is a second swarm in the same runners, seeded by a peer, viewed
 //! by every other node, sharing every uplink.
+//!
+//! The seed allocation runs measure how a seed on a constrained uplink
+//! spends it, at 16 streams on WAN paths: the ignored
+//! `seed_allocation_bounds` pins allocations the seed can't know (random
+//! viewers, the fastest uplinks first) against the default admission, each
+//! with and without uplink shares by allocation (`SeedQos`).
 
 #![allow(
     clippy::unwrap_used,
@@ -66,7 +72,8 @@ use strims_ppspp::codec::{
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats,
-    RequestControllerKind, Runner, SwarmId, SwarmKey, SwarmOptions, Writer, WriterOptions,
+    RequestControllerKind, Runner, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions, Writer,
+    WriterOptions,
 };
 use strims_wan::sample::pick;
 use strims_wan::wire::tcp_wire;
@@ -195,6 +202,11 @@ struct Config {
     controller: RequestControllerKind,
     /// A second swarm sharing the nodes.
     cross: Option<Cross>,
+    /// How the seed spends its upload in Hybrid.
+    seed_policy: SeedPolicy,
+    /// A fixed seed allocation: per stream, the nodes the seed pushes it
+    /// to (`Runner::pin_seed_allocation`).
+    pin: Option<Vec<Vec<usize>>>,
     /// Real-world paths. With them `latency_ms`, `loss`, `seed_up`,
     /// `peer_up`, `peer_down` and `constrained` go unused, and `loss` must
     /// stay zero.
@@ -250,6 +262,8 @@ impl Config {
             progress: None,
             controller: RequestControllerKind::Default,
             cross: None,
+            seed_policy: SeedPolicy::default(),
+            pin: None,
             wan: None,
         }
     }
@@ -365,7 +379,25 @@ struct Sim {
     end: Time,
     /// The paths of a WAN run.
     wan: Option<Network>,
+    /// The seed's allocation, once a second.
+    alloc: Vec<AllocSample>,
+    next_alloc: Time,
 }
+
+/// The seed's allocation at one moment (`Runner::seed_allocation`).
+struct AllocSample {
+    at: Time,
+    /// Per neighbour (node index): the streams pushed to it.
+    held: BTreeMap<usize, usize>,
+    /// The seed's objective: the p90 over neighbours of the latest stream's
+    /// HAVE lag after publishing, less half the round trip. A stream not
+    /// announced lately counts as [`STALE`].
+    objective: Duration,
+}
+
+/// What a stream a neighbour stopped announcing counts as in the seed's
+/// objective (`push::CANDIDATE_FRESHNESS`).
+const STALE: Duration = Duration::from_secs(2);
 
 // Every field is printed through `Debug`.
 #[allow(dead_code)]
@@ -402,6 +434,22 @@ struct Report {
     push: PushStats,
     /// The seed's push subscribers, all streams, at the end.
     seed_children: usize,
+    /// The seed's push subscriptions (stream slots), mean over the samples
+    /// after the warm-up.
+    seed_slots: f64,
+    /// The seed's objective ([`AllocSample::objective`]), median over the
+    /// samples after the warm-up.
+    seed_objective: Duration,
+    /// When the seed's allocation settled, after the stream started: the
+    /// last sample at which a neighbour's stream count differed from its
+    /// last by more than one.
+    settled: Duration,
+    /// Direction changes of a neighbour's stream count, per neighbour that
+    /// ever got a stream.
+    reversals: f64,
+    /// Of the chunks the seed sent: request answers, and distinct chunks.
+    seed_pull_share: f64,
+    seed_distinct: f64,
     /// The incident's victim, and the p99 and worst lag of the chunks read
     /// in the 3 s after it.
     recovery: Option<(usize, Duration, Duration)>,
@@ -433,6 +481,7 @@ impl Sim {
             stream_count: cfg.stream_count,
             push_mode: cfg.push_mode,
             request_controller: cfg.controller,
+            seed: cfg.seed_policy,
             ..Default::default()
         };
         let cross_key = strims_crypto::key_from_seed(&[10; 32]);
@@ -641,6 +690,22 @@ impl Sim {
             net
         });
 
+        if let Some(pin) = &cfg.pin {
+            let peers = pin
+                .iter()
+                .map(|ns| {
+                    ns.iter()
+                        .filter_map(|n| nodes[0].links.get(n).map(|&l| links[l].peer))
+                        .collect()
+                })
+                .collect();
+            let swarm = nodes[0].swarm;
+            nodes[0]
+                .runner
+                .pin_seed_allocation(swarm, Some(peers))
+                .unwrap();
+        }
+
         let munro = cfg.munro_chunks * CHUNK;
         let munros = (cfg.stream_rate * cfg.stream_secs) as usize / munro;
         for node in &mut nodes {
@@ -683,6 +748,8 @@ impl Sim {
             rcfg,
             end,
             wan,
+            alloc: vec![],
+            next_alloc: t0() + Duration::SECOND,
         }
     }
 
@@ -751,6 +818,10 @@ impl Sim {
             }
             self.now = self.now.max(t);
             self.step();
+            if self.now >= self.next_alloc {
+                self.next_alloc += Duration::SECOND;
+                self.sample_alloc();
+            }
             if let Some(every) = progress
                 && self.now >= next_progress
             {
@@ -979,6 +1050,36 @@ impl Sim {
             node.runner.remove_peer(rpeer);
             node.removed.insert(rpeer);
         }
+    }
+
+    /// Records the seed's allocation and objective.
+    fn sample_alloc(&mut self) {
+        let seed = &self.nodes[0];
+        let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) else {
+            return;
+        };
+        let mut held = BTreeMap::new();
+        let mut worst = Vec::new();
+        for nb in &a.neighbours {
+            let Some(id) = seed.runner.peer_id(nb.peer).map(|id| usize::from(id[0])) else {
+                continue;
+            };
+            held.insert(id, nb.streams.len());
+            let half = nb.rtt / 2;
+            let w = nb
+                .lags
+                .iter()
+                .map(|l| l.map_or(STALE, |l| (l - half).max(Duration::ZERO)))
+                .max()
+                .unwrap_or(STALE);
+            worst.push(w);
+        }
+        worst.sort();
+        self.alloc.push(AllocSample {
+            at: self.now,
+            held,
+            objective: percentile(&worst, 90),
+        });
     }
 
     /// Notes the first arrival of each main-swarm chunk in `frame` at node
@@ -1358,6 +1459,40 @@ impl Sim {
                 .runner
                 .push_stats(self.nodes[0].swarm)
                 .map_or(0, |p| p.children),
+            seed_slots: {
+                let after: Vec<f64> = self
+                    .alloc
+                    .iter()
+                    .filter(|a| a.at > warm)
+                    .map(|a| a.held.values().sum::<usize>() as f64)
+                    .collect();
+                after.iter().sum::<f64>() / after.len().max(1) as f64
+            },
+            seed_objective: {
+                let mut v: Vec<Duration> = self
+                    .alloc
+                    .iter()
+                    .filter(|a| a.at > warm)
+                    .map(|a| a.objective)
+                    .collect();
+                v.sort();
+                percentile(&v, 50)
+            },
+            settled: self.alloc_settled(),
+            reversals: self.alloc_reversals(),
+            seed_pull_share: self.nodes[0]
+                .runner
+                .swarm_stats(self.nodes[0].swarm)
+                .map_or(0.0, |s| {
+                    s.chunks_sent.saturating_sub(s.pushed_chunks) as f64
+                        / s.chunks_sent.max(1) as f64
+                }),
+            seed_distinct: self.nodes[0]
+                .runner
+                .swarm_stats(self.nodes[0].swarm)
+                .map_or(0.0, |s| {
+                    s.distinct_chunks_sent as f64 / s.chunks_sent.max(1) as f64
+                }),
             recovery,
             cross,
         }
@@ -1387,6 +1522,52 @@ impl Sim {
         }
         out.sort();
         out
+    }
+
+    /// See [`Report::settled`].
+    fn alloc_settled(&self) -> Duration {
+        let Some(last) = self.alloc.last() else {
+            return Duration::ZERO;
+        };
+        let start = t0() + Duration::SECOND;
+        let off = |a: &AllocSample| {
+            a.held.keys().chain(last.held.keys()).any(|n| {
+                let x = a.held.get(n).copied().unwrap_or(0);
+                let y = last.held.get(n).copied().unwrap_or(0);
+                x.abs_diff(y) > 1
+            })
+        };
+        self.alloc
+            .iter()
+            .rfind(|a| off(a))
+            .map_or(Duration::ZERO, |a| (a.at - start).max(Duration::ZERO))
+    }
+
+    /// See [`Report::reversals`].
+    fn alloc_reversals(&self) -> f64 {
+        let mut nodes = BTreeSet::new();
+        for a in &self.alloc {
+            nodes.extend(a.held.iter().filter(|&(_, &h)| h > 0).map(|(&n, _)| n));
+        }
+        let mut total = 0usize;
+        for &n in &nodes {
+            let mut last_dir = 0i64;
+            let mut prev: Option<usize> = None;
+            for a in &self.alloc {
+                let h = a.held.get(&n).copied().unwrap_or(0);
+                if let Some(p) = prev {
+                    let dir = (h as i64 - p as i64).signum();
+                    if dir != 0 {
+                        if last_dir != 0 && dir != last_dir {
+                            total += 1;
+                        }
+                        last_dir = dir;
+                    }
+                }
+                prev = Some(h);
+            }
+        }
+        total as f64 / nodes.len().max(1) as f64
     }
 
     /// In WAN mode, the lag p99 after the warm-up of the peers in each
@@ -2999,6 +3180,322 @@ fn controller_ab() {
             format!("{sc:?} {mode:?} {a:?}")
         };
         println!("{}", ab_row(&name, &runs));
+    }
+}
+
+// --- seed allocation --------------------------------------------------------
+//
+// How a seed on a constrained uplink spends it: who its first-level peers
+// are and which streams each gets. The bounds pin allocations the seed
+// can't know (the sites' uplinks), against the default admission.
+
+/// One run's measurements for the seed allocation tables.
+#[derive(Clone, Debug)]
+struct EvalRun {
+    delivery: f64,
+    p50: Duration,
+    p99: Duration,
+    stripe_p90: Duration,
+    stripe_p99: Duration,
+    worst_region: Duration,
+    seed_share: f64,
+    seed_pull: f64,
+    seed_distinct: f64,
+    seed_slots: f64,
+    seed_objective: Duration,
+    hit_rate: f64,
+    dup: f64,
+    settled: Duration,
+    reversals: f64,
+    /// The datacenter viewer's push subscribers at the end, and the
+    /// subscriptions it declined.
+    super_peer: Option<(usize, u64)>,
+}
+
+fn eval_run(cfg: Config) -> EvalRun {
+    let super_peer = cfg
+        .wan
+        .as_ref()
+        .and_then(|w| w.sites.iter().rposition(|s| s.access == Access::Datacenter))
+        .filter(|&i| i > 0);
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    let p = &r.push;
+    EvalRun {
+        delivery: r.delivery,
+        p50: r.lag_p50,
+        p99: r.lag_p99,
+        stripe_p90: r.stripe_p90,
+        stripe_p99: r.stripe_p99,
+        worst_region: r.regions.iter().map(|&(_, l)| l).max().unwrap_or_default(),
+        seed_share: r.seed_share,
+        seed_pull: r.seed_pull_share,
+        seed_distinct: r.seed_distinct,
+        seed_slots: r.seed_slots,
+        seed_objective: r.seed_objective,
+        hit_rate: p.hits as f64 / (p.hits + p.misses).max(1) as f64,
+        dup: r.wasted as f64 / sim.chunks_read().max(1) as f64,
+        settled: r.settled,
+        reversals: r.reversals,
+        super_peer: super_peer.and_then(|i| {
+            let n = &sim.nodes[i];
+            n.runner
+                .push_stats(n.swarm)
+                .map(|s| (s.children, s.rejected))
+        }),
+    }
+}
+
+/// The seed allocation tables' header.
+const EVAL_HEADER: &str = "| case | delivery mean (min) | lag p50 ms | p99 ms median (max) | worst stripe p90 ms | p99 ms median (max) | worst region p99 ms | seed share | seed pulls | seed distinct | seed slots | seed objective ms | hit rate | duplicates | settled s median (max) | reversals | super-peer children / declined |";
+
+fn eval_row(name: &str, runs: &[EvalRun]) -> String {
+    let n = runs.len().max(1) as f64;
+    let mean = |f: &dyn Fn(&EvalRun) -> f64| runs.iter().map(f).sum::<f64>() / n;
+    let med = |f: &dyn Fn(&EvalRun) -> Duration| median(runs.iter().map(|r| ms(f(r))).collect());
+    let max = |f: &dyn Fn(&EvalRun) -> Duration| runs.iter().map(|r| ms(f(r))).max().unwrap_or(0);
+    let min_delivery = runs.iter().map(|r| r.delivery).fold(1.0, f64::min);
+    let super_peer = if runs.iter().any(|r| r.super_peer.is_some()) {
+        format!(
+            "{:.1} / {:.1}",
+            mean(&|r| r.super_peer.map_or(0.0, |s| s.0 as f64)),
+            mean(&|r| r.super_peer.map_or(0.0, |s| s.1 as f64))
+        )
+    } else {
+        "-".into()
+    };
+    format!(
+        "| {name} | {:.4} ({:.4}) | {} | {} ({}) | {} | {} ({}) | {} | {:.0}% | {:.0}% | {:.2} | {:.1} | {} | {:.1}% | {:.2}% | {:.0} ({:.0}) | {:.1} | {super_peer} |",
+        mean(&|r| r.delivery),
+        min_delivery,
+        med(&|r| r.p50),
+        med(&|r| r.p99),
+        max(&|r| r.p99),
+        med(&|r| r.stripe_p90),
+        med(&|r| r.stripe_p99),
+        max(&|r| r.stripe_p99),
+        med(&|r| r.worst_region),
+        100.0 * mean(&|r| r.seed_share),
+        100.0 * mean(&|r| r.seed_pull),
+        mean(&|r| r.seed_distinct),
+        mean(&|r| r.seed_slots),
+        med(&|r| r.seed_objective),
+        100.0 * mean(&|r| r.hit_rate),
+        100.0 * mean(&|r| r.dup),
+        med(&|r| r.settled) as f64 / 1000.0,
+        max(&|r| r.settled) as f64 / 1000.0,
+        mean(&|r| r.reversals),
+    )
+}
+
+/// Runs `f` over `jobs` on every core; results in job order.
+fn par_map<J: Sync, R: Send>(jobs: &[J], f: impl Fn(&J) -> R + Sync) -> Vec<R> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            let (tx, next, f) = (tx.clone(), &next, &f);
+            scope.spawn(move || {
+                loop {
+                    let j = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(job) = jobs.get(j) else { break };
+                    tx.send((j, f(job))).unwrap();
+                }
+            });
+        }
+    });
+    drop(tx);
+    let mut out: Vec<(usize, R)> = rx.into_iter().collect();
+    out.sort_by_key(|(j, _)| *j);
+    out.into_iter().map(|(_, r)| r).collect()
+}
+
+/// A seed allocation of the bounding runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bound {
+    /// The default admission, which sets the slots the pins get.
+    Admission,
+    /// The default admission, with the seed's uplink shares by allocation.
+    AdmissionQos,
+    /// As many slots as the admission used, each stream's copies at
+    /// random viewers.
+    Random,
+    /// Random, with the seed's uplink shares by allocation.
+    RandomQos,
+    /// As many slots, best uplinks first ([`oracle_pin`]).
+    Oracle,
+    /// The oracle, with the seed's uplink shares by allocation.
+    OracleQos,
+    /// The whole stream to the datacenter viewer alone.
+    DcOnly,
+}
+
+/// The stream copies `slots` pays for over `streams`: `full` whole copies
+/// and `rem` streams of one more.
+fn copies(slots: usize, streams: usize) -> (usize, usize) {
+    (slots / streams.max(1), slots % streams.max(1))
+}
+
+/// `slots` stream slots on the viewers with the fastest uplinks: whole
+/// copies of the stream, then a partial one. Among equal uplinks the
+/// nearest to the seed comes first, and each copy goes to another region
+/// than the last when one is left.
+fn oracle_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
+    let w = cfg.wan.as_ref().unwrap();
+    let streams = cfg.stream_count;
+    let seed_city = w.sites[0].city;
+    let mut pool: Vec<usize> = (1..=cfg.peers).collect();
+    pool.sort_by_key(|&i| {
+        (
+            std::cmp::Reverse(w.sites[i].profile.up),
+            w.sites[i].city.rtt(seed_city),
+            i,
+        )
+    });
+    let (full, rem) = copies(slots, streams);
+    let mut holders = Vec::new();
+    let mut last = None;
+    while holders.len() < full + usize::from(rem > 0) && !pool.is_empty() {
+        let best = w.sites[pool[0]].profile.up;
+        let k = pool
+            .iter()
+            .take_while(|&&i| w.sites[i].profile.up == best)
+            .position(|&i| Some(w.sites[i].city.region()) != last)
+            .unwrap_or(0);
+        let i = pool.remove(k);
+        last = Some(w.sites[i].city.region());
+        holders.push(i);
+    }
+    (0..streams)
+        .map(|s| {
+            let n = full + usize::from(s < rem);
+            holders.iter().copied().take(n).collect()
+        })
+        .collect()
+}
+
+/// `slots` stream slots with each stream's copies at random viewers.
+fn random_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
+    let mut rng = det_rng(cfg.seed ^ 0x5241_4e44);
+    let (full, rem) = copies(slots, cfg.stream_count);
+    (0..cfg.stream_count)
+        .map(|s| {
+            let mut v: Vec<usize> = (1..=cfg.peers).collect();
+            shuffle(&mut v, &mut rng);
+            v.truncate(full + usize::from(s < rem));
+            v
+        })
+        .collect()
+}
+
+/// A bounding run's config: Hybrid at `SIM_STREAMS` (16) streams for
+/// `SIM_SECS` (60) seconds, lags from `SIM_WARM` (10).
+fn bound_config(
+    sc: AbScenario,
+    seed: u64,
+    controller: RequestControllerKind,
+    bound: Bound,
+    slots: usize,
+) -> Config {
+    let mut cfg = sc.config(seed, PushMode::Hybrid, controller, controller);
+    cfg.stream_count = knob("SIM_STREAMS").unwrap_or(16);
+    cfg.stream_secs = knob("SIM_SECS").unwrap_or(60);
+    cfg.warm_secs = knob("SIM_WARM").unwrap_or(10);
+    match bound {
+        Bound::Admission => {}
+        Bound::AdmissionQos => cfg.seed_policy.qos = SeedQos::ByAllocation,
+        Bound::Random => cfg.pin = Some(random_pin(&cfg, slots)),
+        Bound::RandomQos => {
+            cfg.pin = Some(random_pin(&cfg, slots));
+            cfg.seed_policy.qos = SeedQos::ByAllocation;
+        }
+        Bound::Oracle => cfg.pin = Some(oracle_pin(&cfg, slots)),
+        Bound::OracleQos => {
+            cfg.pin = Some(oracle_pin(&cfg, slots));
+            cfg.seed_policy.qos = SeedQos::ByAllocation;
+        }
+        Bound::DcOnly => cfg.pin = Some(vec![vec![cfg.peers]; cfg.stream_count]),
+    }
+    cfg
+}
+
+#[test]
+#[ignore = "the seed allocation bounds; run in release with --ignored --nocapture"]
+fn seed_allocation_bounds() {
+    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(8);
+    let only: Option<String> = knob("SIM_SCENARIO");
+    let mut cases = Vec::new();
+    for sc in [AbScenario::WanResidentialSeed, AbScenario::WanSuperPeer] {
+        if only
+            .as_ref()
+            .is_some_and(|o| !format!("{sc:?}").eq_ignore_ascii_case(o))
+        {
+            continue;
+        }
+        for controller in [LEDBAT, BBR] {
+            cases.push((sc, controller));
+        }
+    }
+    // The admission runs first: they set each seed's slots.
+    let jobs: Vec<(usize, u64)> = (0..cases.len())
+        .flat_map(|c| (1..=seeds).map(move |s| (c, s)))
+        .collect();
+    let admission = par_map(&jobs, |&(c, seed)| {
+        let (sc, controller) = cases[c];
+        eval_run(bound_config(sc, seed, controller, Bound::Admission, 0))
+    });
+    let slots: BTreeMap<(usize, u64), usize> = jobs
+        .iter()
+        .zip(&admission)
+        .map(|(&j, r)| (j, r.seed_slots.round() as usize))
+        .collect();
+    let bounds = |sc: AbScenario| {
+        let mut b = vec![
+            Bound::AdmissionQos,
+            Bound::Random,
+            Bound::RandomQos,
+            Bound::Oracle,
+            Bound::OracleQos,
+        ];
+        if sc == AbScenario::WanSuperPeer {
+            b.push(Bound::DcOnly);
+        }
+        b
+    };
+    let pinned: Vec<(usize, u64, Bound)> = jobs
+        .iter()
+        .flat_map(|&(c, seed)| bounds(cases[c].0).into_iter().map(move |b| (c, seed, b)))
+        .collect();
+    let runs = par_map(&pinned, |&(c, seed, bound)| {
+        let (sc, controller) = cases[c];
+        eval_run(bound_config(sc, seed, controller, bound, slots[&(c, seed)]))
+    });
+    println!("{EVAL_HEADER}");
+    println!("|{}", "---|".repeat(17));
+    for (c, &(sc, controller)) in cases.iter().enumerate() {
+        let of = |b: Bound| -> Vec<EvalRun> {
+            if b == Bound::Admission {
+                return jobs
+                    .iter()
+                    .zip(&admission)
+                    .filter(|((jc, _), _)| *jc == c)
+                    .map(|(_, r)| r.clone())
+                    .collect();
+            }
+            pinned
+                .iter()
+                .zip(&runs)
+                .filter(|((jc, _, jb), _)| *jc == c && *jb == b)
+                .map(|(_, r)| r.clone())
+                .collect()
+        };
+        for b in std::iter::once(Bound::Admission).chain(bounds(sc)) {
+            println!(
+                "{}",
+                eval_row(&format!("{sc:?} {controller:?} {b:?}"), &of(b))
+            );
+        }
     }
 }
 

@@ -88,6 +88,24 @@
 //!   written over the time any peer had data queued. A rarely busy link
 //!   counts as busy at least 5 % of the time.
 //!
+//! # Seed allocation
+//!
+//! A seed receives no data, so reciprocity weighs its peers alike, and
+//! every neighbour's graft prefers it: it announces first. What it pushes
+//! to whom is therefore its own choice, made by accepting, declining and
+//! closing subscriptions ([`SeedPolicy`](crate::SeedPolicy)).
+//!
+//! - **Its view of the swarm** is each neighbour's HAVE lag per stream
+//!   after publishing: when a stream's last chunk of each signature unit
+//!   was announced ([`SeedAllocationStats`]).
+//! - **A pin** (`Runner::pin_seed_allocation`) fixes the peers each stream
+//!   is pushed to: their requests are accepted, everyone else's declined
+//!   and every other subscriber closed, and nothing is shed.
+//! - **Uplink shares.** With [`SeedQos::ByAllocation`] the runner weights
+//!   each peer at least in proportion to the streams pushed to it, and the
+//!   peers it pushes nothing to at the minimum, so pull answers take the
+//!   upload pushes leave.
+//!
 //! # Interaction with pull and reciprocity
 //!
 //! - Pushes add nothing to the request window's flight and give it no
@@ -127,6 +145,8 @@
 //! scheduler's private state; the hooks there call into it only in
 //! `Hybrid`.
 
+use std::collections::BTreeMap;
+
 use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, Map};
@@ -136,8 +156,9 @@ use super::{
 };
 use crate::bin_queue::BinQueue;
 use crate::codec::Stream;
-use crate::options::PushMode;
-use crate::runner::PeerKey;
+use crate::controller::RequestController;
+use crate::options::{PushMode, SeedQos};
+use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
 use crate::scheduler::PeerTaskQueue;
 
 /// How often streams look for a parent, re-evaluate the one they have, and
@@ -448,6 +469,9 @@ pub(crate) struct PushState {
     chunk_rate: Sma,
     pub(crate) upload: UploadInfo,
     stats: PushCounters,
+    /// A seed's fixed peers per stream (`Runner::pin_seed_allocation`).
+    /// Bound: the caller's lists, one per stream.
+    pin: Option<Vec<Vec<PeerKey>>>,
 }
 
 impl PushState {
@@ -465,6 +489,7 @@ impl PushState {
             chunk_rate: Sma::new(10, Duration::from_millis(200), now),
             upload: UploadInfo::default(),
             stats: PushCounters::default(),
+            pin: None,
         }
     }
 
@@ -527,6 +552,26 @@ pub struct PushStats {
     /// Pushes not sent because the child had announced the chunk (it got
     /// it elsewhere, e.g. pulled it after a miss).
     pub suppressed: u64,
+}
+
+/// A seed's view of its neighbours, for diagnostics and tests.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SeedAllocationStats {
+    pub neighbours: Vec<SeedNeighbour>,
+}
+
+/// One neighbour of a seed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedNeighbour {
+    pub peer: PeerKey,
+    /// The streams pushed to it.
+    pub streams: Vec<Stream>,
+    /// Per stream, how long after publishing it announces the stream
+    /// (each signature unit's last chunk of it, on average), if it did
+    /// within [`CANDIDATE_FRESHNESS`].
+    pub lags: Vec<Option<Duration>>,
+    /// The channel's round trip.
+    pub rtt: Duration,
 }
 
 /// The first bin of `stream` after chunk `b`'s.
@@ -881,10 +926,15 @@ impl PeerSwarmScheduler {
         };
         let interior = is_seed || p.interior.is_none_or(|i| i == stream);
         let extra = !interior;
+        let pinned = p.pin.as_ref().map(|pin| {
+            pin.get(usize::from(stream))
+                .is_some_and(|v| v.contains(&peer))
+        });
         let ok = already
-            || match p.upload.capacity() {
-                None => !extra && stream_children < UNMEASURED_FANOUT,
-                Some(cap) => {
+            || match (pinned, p.upload.capacity()) {
+                (Some(pinned), _) => pinned,
+                (None, None) => !extra && stream_children < UNMEASURED_FANOUT,
+                (None, Some(cap)) => {
                     let target = if extra {
                         EXTRA_UTILIZATION
                     } else {
@@ -902,14 +952,19 @@ impl PeerSwarmScheduler {
             return (true, extra);
         }
         p.stats.rejected = p.stats.rejected.saturating_add(1);
-        if let Some(c) = self.channels.get_mut(&peer) {
-            if let Some(st) = s.streams.get_mut(usize::from(stream)) {
-                st.remove_subscriber(peer);
-            }
-            c.extra.push_stream(stream, StreamMessage::Close);
-            q.enqueue_now(peer, s.key);
-        }
+        self.close_subscriber(peer, stream, q);
         (false, extra)
+    }
+
+    /// Ends `peer`'s subscription to `stream`, if any, with a STREAM_CLOSE.
+    fn close_subscriber(&mut self, peer: PeerKey, stream: Stream, q: &mut impl PeerTaskQueue) {
+        if let Some(st) = self.s.streams.get_mut(usize::from(stream)) {
+            st.remove_subscriber(peer);
+        }
+        if let Some(c) = self.channels.get_mut(&peer) {
+            c.extra.push_stream(stream, StreamMessage::Close);
+            q.enqueue_now(peer, self.s.key);
+        }
     }
 
     /// Hybrid check of a STREAM_OPEN from a peer we asked: a start more
@@ -1330,7 +1385,8 @@ impl PeerSwarmScheduler {
         let Some(p) = s.push.as_mut() else {
             return;
         };
-        if children == 0 || now < p.next_shed || p.upload.busy < SHED_UTILIZATION {
+        if children == 0 || now < p.next_shed || p.upload.busy < SHED_UTILIZATION || p.pin.is_some()
+        {
             return;
         }
         let Some(cap) = p.upload.capacity() else {
@@ -1364,14 +1420,94 @@ impl PeerSwarmScheduler {
         // Extra streams first, then the newest.
         victims.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         for &(_, _, stream, peer) in victims.iter().take(n) {
-            if let Some(st) = s.streams.get_mut(usize::from(stream)) {
-                st.remove_subscriber(peer);
-            }
-            if let Some(c) = self.channels.get_mut(&peer) {
-                c.extra.push_stream(stream, StreamMessage::Close);
-                q.enqueue_now(peer, s.key);
+            self.close_subscriber(peer, stream, q);
+        }
+    }
+
+    /// Fixes the peers a seed pushes each stream to, one list per stream
+    /// (`None` lifts the pin): subscribers outside it are closed. False if
+    /// this isn't a hybrid seed.
+    pub(crate) fn pin_allocation(
+        &mut self,
+        pin: Option<Vec<Vec<PeerKey>>>,
+        q: &mut impl PeerTaskQueue,
+    ) -> bool {
+        if !self.s.is_seed {
+            return false;
+        }
+        let Some(p) = self.s.push.as_mut() else {
+            return false;
+        };
+        p.pin = pin;
+        let Some(pin) = p.pin.as_ref() else {
+            return true;
+        };
+        let mut outside = Vec::new();
+        for (i, st) in self.s.streams.iter().enumerate() {
+            for sub in &st.subscribers {
+                if !pin.get(i).is_some_and(|v| v.contains(&sub.channel)) {
+                    outside.push((sub.channel, i as Stream));
+                }
             }
         }
+        for (peer, stream) in outside {
+            self.close_subscriber(peer, stream, q);
+        }
+        true
+    }
+
+    /// A seed under [`SeedQos::ByAllocation`] raises each channel's weight
+    /// in `weights` to its share of the streams pushed to it (at least the
+    /// minimum). False, touching nothing, for any other swarm.
+    pub(crate) fn seed_weights(&self, weights: &mut BTreeMap<PeerKey, u64>) -> bool {
+        let s = &self.s;
+        if !s.is_seed || s.push.is_none() || s.seed.qos != SeedQos::ByAllocation {
+            return false;
+        }
+        let mut held: BTreeMap<PeerKey, u64> = BTreeMap::new();
+        for st in &s.streams {
+            for sub in &st.subscribers {
+                *held.entry(sub.channel).or_default() += 1;
+            }
+        }
+        let n = u64::from(s.stream_count.max(1));
+        for &peer in self.channels.keys() {
+            let h = held.get(&peer).copied().unwrap_or(0);
+            let w = (MAX_PEER_QOS_WEIGHT * h / n).max(MIN_PEER_QOS_WEIGHT);
+            let e = weights.entry(peer).or_insert(0);
+            *e = (*e).max(w);
+        }
+        true
+    }
+
+    /// A seed's view of its neighbours; `None` for any other swarm.
+    pub(crate) fn seed_allocation(&self, now: Time) -> Option<SeedAllocationStats> {
+        let s = &self.s;
+        if !s.is_seed || s.push.is_none() {
+            return None;
+        }
+        let neighbours = self
+            .channels
+            .iter()
+            .map(|(&peer, c)| SeedNeighbour {
+                peer,
+                streams: s
+                    .streams
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, st)| st.subscribers.iter().any(|x| x.channel == peer))
+                    .map(|(i, _)| i as Stream)
+                    .collect(),
+                lags: c.push.as_ref().map_or_else(Vec::new, |pc| {
+                    pc.have_lag
+                        .iter()
+                        .map(|l| l.fresh(now).then(|| l.mean()))
+                        .collect()
+                }),
+                rtt: c.controller.rtt(),
+            })
+            .collect();
+        Some(SeedAllocationStats { neighbours })
     }
 
     fn release_idle_interior(&mut self, now: Time) {
@@ -1407,13 +1543,16 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// Hybrid `Reset`: a new stream starts; every subscription ends.
+    /// Hybrid `Reset`: a new stream starts; every subscription ends. A pin
+    /// stays.
     pub(crate) fn reset_push(&mut self, now: Time) {
         let streams = usize::from(self.s.stream_count);
         if let Some(p) = self.s.push.as_mut() {
             let stats = p.stats;
+            let pin = p.pin.take();
             *p = PushState::new(streams, now);
             p.stats = stats;
+            p.pin = pin;
         }
         for c in self.channels.values_mut() {
             if c.push.is_some() {
