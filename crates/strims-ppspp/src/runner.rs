@@ -228,6 +228,9 @@ pub struct ChannelStats {
 ///   updates upload weights every
 ///   [`PEER_QOS_UPDATE_INTERVAL`]. In [`PushMode::Hybrid`] it can also
 ///   return an earlier push deadline. `None` means no channel runs.
+///   A hybrid seed under [`SeedQos::ByAllocation`](crate::SeedQos::ByAllocation)
+///   also updates them in the call that changed its subscribers (or the
+///   next one, after a pin).
 /// - **Events.** Drain [`Runner::poll_event`] after every call that takes
 ///   input or time (`add_peer`, `run_swarm`, `handle_frame`,
 ///   `handle_timeout`, `write` and the [`SwarmMut`] guard,
@@ -628,6 +631,7 @@ impl Runner {
             &mut events.readable,
         );
         self.observe_upload(now);
+        self.refresh_seed_weights(now);
     }
 
     /// Publishes `data` through `writer` into the swarm; new chunks reach
@@ -932,6 +936,7 @@ impl Runner {
         let upload = (self.hybrid_swarms > 0).then(|| self.upload.info(now));
         let r = self.handle_frame_inner(peer, now, body, upload);
         self.observe_upload(now);
+        self.refresh_seed_weights(now);
         r
     }
 
@@ -1147,6 +1152,7 @@ impl Runner {
             self.next_weight_update += PEER_QOS_UPDATE_INTERVAL * behind;
             self.update_peer_weights(now);
         }
+        self.refresh_seed_weights(now);
         self.observe_upload(now);
     }
 
@@ -1169,6 +1175,21 @@ impl Runner {
                 };
                 sched.expire_push(now, &mut q);
             }
+        }
+    }
+
+    /// Recomputes the weights at once when a hybrid seed under
+    /// [`SeedQos::ByAllocation`](crate::SeedQos::ByAllocation) changed its
+    /// subscribers, so its uplink shares follow its pushes.
+    fn refresh_seed_weights(&mut self, now: Time) {
+        let mut changed = false;
+        for rs in self.swarms.values_mut() {
+            if let Some(sched) = rs.scheduler.as_mut() {
+                changed |= sched.take_seed_weights_changed();
+            }
+        }
+        if changed {
+            self.update_peer_weights(now);
         }
     }
 
@@ -1219,7 +1240,8 @@ impl Runner {
     }
 
     /// The peer's upload weight (set when it was added, then every
-    /// [`PEER_QOS_UPDATE_INTERVAL`]).
+    /// [`PEER_QOS_UPDATE_INTERVAL`], and when a seed's push subscribers
+    /// change).
     pub fn peer_qos_weight(&self, peer: PeerKey) -> Option<u64> {
         self.peers.get(peer).and_then(|p| p.qos_weight)
     }

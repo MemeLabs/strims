@@ -1242,11 +1242,15 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
 }
 
 fn adaptive_seed(streams: usize, peers: usize) -> Fixture {
+    adaptive_seed_with(streams, peers, crate::SeedQos::ByAllocation)
+}
+
+fn adaptive_seed_with(streams: usize, peers: usize, qos: crate::SeedQos) -> Fixture {
     let key = strims_crypto::key_from_seed(&[5; 32]);
     let options = SwarmOptions {
         seed: crate::SeedPolicy {
             allocation: crate::SeedAllocation::Adaptive,
-            ..Default::default()
+            qos,
         },
         ..seed_hybrid(streams)
     };
@@ -1276,73 +1280,218 @@ fn publish(f: &mut Fixture, from: Time, to: Time) {
     }
 }
 
-#[test]
-fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
+/// One check interval of the adaptive seed from `t`: publishing, a push
+/// written to each of `pushed` after `wait`, and the uplink busy `busy`
+/// of the time at `rate` bytes a second.
+fn alloc_check(
+    f: &mut Fixture,
+    q: &mut MockQueue,
+    t: Time,
+    pushed: &[PeerKey],
+    wait: Duration,
+    (rate, busy): (u64, f64),
+) -> Time {
+    let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+    publish(f, t, next);
+    for &p in pushed {
+        f.sched.note_push(p, t, false, t + wait);
+    }
+    f.sched.set_upload(push::UploadInfo { rate, busy });
+    f.sched.run_push(next, q);
+    next
+}
+
+/// Six neighbours of an adaptive seed at 4 streams, with round trips of
+/// 10, 20, ... 60 ms.
+fn adaptive_seed_with_rtts() -> (Fixture, MockQueue, Vec<PeerKey>) {
     let mut f = adaptive_seed(4, 6);
     let mut q = MockQueue::default();
     let peers: Vec<PeerKey> = (0..6).map(|i| add_ready(&mut f, &mut q, i)).collect();
-    // Round trips of 10, 20, ... 60 ms.
     for (i, &p) in peers.iter().enumerate() {
         let rtt = Duration::from_millis(10 * (i as i64 + 1));
         push::seed::ping(&mut f.sched.channels[&p].push, rtt, now());
     }
-    let ask = |f: &mut Fixture, q: &mut MockQueue, p: PeerKey, s: u16| {
-        f.sched
-            .handle_stream_request(p, s, Bin(0), Bin(0), now(), q)
-            .unwrap();
-        subscribed(f, p, usize::from(s))
-    };
+    (f, q, peers)
+}
 
-    // Before the budget is measured, the first four to ask hold copies;
-    // here the farthest ask first.
+/// `p` asks the seed for stream `s` at `t`; whether it is subscribed.
+fn ask(f: &mut Fixture, q: &mut MockQueue, p: PeerKey, s: u16, t: Time) -> bool {
+    f.sched
+        .handle_stream_request(p, s, Bin(0), Bin(0), t, q)
+        .unwrap();
+    subscribed(f, p, usize::from(s))
+}
+
+#[test]
+fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    // With nothing measured the window is one copy: the first to ask
+    // holds it, here the farthest.
     for &p in peers.iter().rev() {
-        ask(&mut f, &mut q, p, 0);
+        ask(&mut f, &mut q, p, 0, now());
     }
-    assert_eq!(holders(&f), peers[2..].to_vec());
+    assert_eq!(holders(&f), vec![peers[5]]);
     // A holder may take every stream; anyone else none.
-    assert!(ask(&mut f, &mut q, peers[5], 1));
-    assert!(!ask(&mut f, &mut q, peers[0], 1));
+    assert!(ask(&mut f, &mut q, peers[5], 1, now()));
+    assert!(!ask(&mut f, &mut q, peers[0], 1, now()));
 
-    // A budget of two copies: 8 subscribers at about 100 KB/s, at 70 % of
-    // the measured capacity.
-    let t = now() + Duration::from_secs(1);
-    publish(&mut f, now(), t);
+    // Its pushes keep up on an uplink with idle time: the window doubles
+    // at each check, up to what the uplink pays for at the store rate so
+    // far (three copies), and the free copies go to the nearest that
+    // asked.
+    let ms = Duration::from_millis;
+    let mut t = now();
+    for _ in 0..2 {
+        t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), (1_200_000, 0.5));
+    }
+    assert_eq!(holders(&f), vec![peers[0], peers[1], peers[5]]);
+    for &p in &peers[..2] {
+        assert!(ask(&mut f, &mut q, p, 0, t));
+    }
+    assert!(!ask(&mut f, &mut q, peers[2], 0, t));
+
+    // Once measured, a budget of two copies (8 subscribers at about
+    // 100 KB/s, at 70 % of the capacity): the farthest go, losing their
+    // subscriptions.
+    t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (1_200_000, 1.0));
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    assert!(!subscribed(&f, peers[5], 0) && !subscribed(&f, peers[5], 1));
+    assert!(ask(&mut f, &mut q, peers[1], 2, t));
+
+    // A holder that gives up every subscription gives its copy back once
+    // the grace since it last asked has passed.
+    for s in [0, 2] {
+        f.sched.handle_stream_cancel(peers[1], s).unwrap();
+    }
+    t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (1_200_000, 1.0));
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    let asked = t - push::seed::ALLOC_CHECK_INTERVAL;
+    while t <= asked + push::seed::HOLDER_GRACE {
+        t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (1_200_000, 1.0));
+    }
+    assert_eq!(holders(&f), vec![peers[0]]);
+    assert!(ask(&mut f, &mut q, peers[2], 0, t));
+
+    // With room for everyone's every stream, the window grows into it, and
+    // then everyone is accepted.
+    for _ in 0..3 {
+        t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (100_000_000, 0.5));
+    }
+    assert!(ask(&mut f, &mut q, peers[4], 3, t));
+}
+
+#[test]
+fn a_nearer_neighbour_takes_a_copy_once_it_subscribed() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let ms = Duration::from_millis;
+    let saturated = (300_000, 1.0);
+    assert!(ask(&mut f, &mut q, peers[5], 0, now()));
+    assert!(!ask(&mut f, &mut q, peers[0], 0, now()));
+    assert!(!ask(&mut f, &mut q, peers[4], 0, now()));
+    // The nearest that asked is given the copy, and the farthest keeps it
+    // until the new holder subscribes ...
+    let mut t = alloc_check(&mut f, &mut q, now(), &[peers[5]], ms(5), saturated);
+    assert_eq!(holders(&f), vec![peers[0], peers[5]]);
+    assert!(subscribed(&f, peers[5], 0));
+    assert!(!ask(&mut f, &mut q, peers[4], 0, t));
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), saturated);
+    assert_eq!(holders(&f), vec![peers[0]]);
+    assert!(!subscribed(&f, peers[5], 0));
+    // ... and a holder left without a subscription gives it back after the
+    // grace, for the next to ask.
+    f.sched.handle_stream_cancel(peers[0], 0).unwrap();
+    let asked = t - push::seed::ALLOC_CHECK_INTERVAL;
+    while t <= asked + push::seed::HOLDER_GRACE {
+        t = alloc_check(&mut f, &mut q, t, &[], ms(5), saturated);
+    }
+    assert!(holders(&f).is_empty());
+    assert!(ask(&mut f, &mut q, peers[3], 0, t));
+}
+
+#[test]
+fn an_adaptive_seeds_window_follows_its_pushes() {
+    let mut f = adaptive_seed(4, 3);
+    let mut q = MockQueue::default();
+    let peers: Vec<PeerKey> = (0..3).map(|i| add_ready(&mut f, &mut q, i)).collect();
+    for (i, &p) in peers.iter().enumerate() {
+        let rtt = Duration::from_millis(10 * (i as i64 + 1));
+        push::seed::ping(&mut f.sched.channels[&p].push, rtt, now());
+    }
+    for &p in &peers[..2] {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    assert_eq!(holders(&f), vec![peers[0]]);
+    let window = |f: &Fixture| f.sched.seed_allocation(now()).unwrap().window;
+    let ms = Duration::from_millis;
+    // A budget of three copies once measured.
+    let saturated = (2_000_000, 1.0);
+
+    // No pushes, no evidence.
+    let mut t = alloc_check(&mut f, &mut q, now(), &[], ms(0), saturated);
+    assert_eq!(window(&f), 1);
+    // Pushes that keep up on a saturated uplink: the window leads the
+    // copies in use twice at most, and the free copy goes to the one that
+    // asked.
+    t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(20), saturated);
+    assert_eq!(window(&f), 2);
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(20), saturated);
+    assert_eq!(window(&f), 2);
+    assert!(ask(&mut f, &mut q, peers[1], 0, t));
+    // Pushes queued before the window changed don't count. Queues that
+    // don't empty hold it; queues near going stale at both holders halve
+    // it, and the farther goes.
+    f.sched.note_push(peers[1], t - ms(1500), false, t);
+    t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(20), saturated);
+    assert_eq!(window(&f), 3);
+    t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(300), saturated);
+    assert_eq!(window(&f), 3);
+    t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(600), saturated);
+    assert_eq!(window(&f), 1);
+    assert_eq!(holders(&f), vec![peers[0]]);
+    assert!(!subscribed(&f, peers[1], 0));
+    // A stale drop overloads: on an uplink with idle time it neither cuts
+    // the window nor lets it grow.
+    f.sched.note_push(peers[0], t, true, t + ms(1100));
+    t = alloc_check(&mut f, &mut q, t, &[], ms(0), (2_000_000, 0.5));
+    assert_eq!(window(&f), 1);
+    alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (2_000_000, 0.5));
+    assert_eq!(window(&f), 2);
+}
+
+#[test]
+fn an_adaptive_seeds_first_wave_takes_what_its_uplink_pays_for() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    // Publishing for a second on an uplink measured at 2 MB/s: two copies
+    // at 70 %, at the store rate since the first chunk.
+    publish(&mut f, now(), now() + Duration::SECOND);
+    let t = now() + Duration::SECOND;
     f.sched.set_upload(push::UploadInfo {
-        rate: 1_200_000,
+        rate: 2_000_000,
         busy: 1.0,
     });
-    f.sched.run_push(t, &mut q);
-    publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
-    let t = t + push::seed::ALLOC_MEASURE;
-    f.sched.run_push(t, &mut q);
-    // The farthest go, losing their subscriptions ...
-    assert_eq!(holders(&f), peers[2..4].to_vec());
-    assert!(!subscribed(&f, peers[5], 0) && !subscribed(&f, peers[5], 1));
-    // ... and the nearer neighbours displace the rest, one per check.
-    let mut t = t;
-    for _ in 0..2 {
-        publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
-        t += push::seed::ALLOC_CHECK_INTERVAL;
-        f.sched.run_push(t, &mut q);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, t);
     }
     assert_eq!(holders(&f), peers[..2].to_vec());
-    assert!(ask(&mut f, &mut q, peers[0], 2));
-    assert!(!subscribed(&f, peers[2], 0));
-    // A round trip within the margin of a holder's displaces nobody.
-    publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
-    t += push::seed::ALLOC_CHECK_INTERVAL;
-    f.sched.run_push(t, &mut q);
-    assert_eq!(holders(&f), peers[..2].to_vec());
+}
 
-    // With room for everyone's every stream, everyone is accepted.
-    f.sched.set_upload(push::UploadInfo {
-        rate: 100_000_000,
-        busy: 1.0,
-    });
-    publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
-    t += push::seed::ALLOC_CHECK_INTERVAL;
-    f.sched.run_push(t, &mut q);
-    assert!(ask(&mut f, &mut q, peers[4], 3));
+#[test]
+fn without_uplink_shares_an_adaptive_seeds_window_is_its_budget() {
+    let mut f = adaptive_seed_with(4, 3, crate::SeedQos::Equal);
+    let mut q = MockQueue::default();
+    let peers: Vec<PeerKey> = (0..3).map(|i| add_ready(&mut f, &mut q, i)).collect();
+    let window = |f: &Fixture| f.sched.seed_allocation(now()).unwrap().window;
+    ask(&mut f, &mut q, peers[0], 0, now());
+    // Overloaded pushes on a saturated uplink cut nothing: the window is
+    // what the uplink pays for (three copies at 2 MB/s once measured).
+    let ms = Duration::from_millis;
+    let mut t = now();
+    for _ in 0..4 {
+        t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(600), (2_000_000, 1.0));
+    }
+    assert_eq!(window(&f), 3);
 }
 
 #[test]

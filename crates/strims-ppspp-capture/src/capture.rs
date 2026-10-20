@@ -39,6 +39,7 @@
 //! | 20 | `HolderJoined` | |
 //! | 21 | `HolderLeft` | |
 //! | 22 | `SeedBudget` | budget, copies, streams |
+//! | 23 | `SeedWindow` | copies, pushed, behind |
 //!
 //! [`strims_ppspp::TapKind`] documents what each means.
 
@@ -87,6 +88,7 @@ pub const TAP_KINDS: &[TapKindInfo] = &[
     info(20, "HolderJoined", &[]),
     info(21, "HolderLeft", &[]),
     info(22, "SeedBudget", &["budget", "copies", "streams"]),
+    info(23, "SeedWindow", &["copies", "pushed", "behind"]),
 ];
 
 const fn info(code: u32, name: &'static str, fields: &'static [&'static str]) -> TapKindInfo {
@@ -470,6 +472,11 @@ impl<S: Sink> Capture<S> {
                 copies,
                 streams,
             } => (22, [budget as i64, copies as i64, streams as i64]),
+            TapKind::SeedWindow {
+                copies,
+                pushed,
+                behind,
+            } => (23, [copies as i64, pushed as i64, behind as i64]),
             _ => return None,
         })
         .map(|(code, f)| {

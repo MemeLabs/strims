@@ -1174,9 +1174,10 @@ impl Sim {
                 .collect();
             let c = a.counters;
             eprintln!(
-                "t={} budget {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} {}",
+                "t={} budget {} window {} copies {} slots {} objective {} accepted {} declined {} joined {} left {} {}",
                 ms(self.now - t0()),
                 a.budget,
+                a.window,
                 a.copies,
                 held.values().sum::<usize>(),
                 ms(percentile(&worst, 90)),
@@ -4016,16 +4017,22 @@ fn wan_residential_seed_config(seed: u64) -> Config {
     wan_config(seed, sites, 6, 0)
 }
 
-/// A 6 Mbit/s stream behind a Chicago cable seed: `viewers` residential
-/// viewers in North America and Europe, each linked to 6 others, the seed
-/// to 32; 16 streams in Hybrid, a 32 MiB window of `chunk`-byte chunks.
-fn wan_cable_seed_6mbit_config(viewers: usize, chunk: usize, policy: SeedPolicy) -> Config {
+/// A 6 Mbit/s stream behind a Chicago seed on `seed_access`: `viewers`
+/// residential viewers in North America and Europe, each linked to 6
+/// others, the seed to 32; 16 streams in Hybrid, a 32 MiB window of
+/// `chunk`-byte chunks.
+fn wan_cable_seed_6mbit_config(
+    viewers: usize,
+    chunk: usize,
+    policy: SeedPolicy,
+    seed_access: Access,
+) -> Config {
     let cities: Vec<(City, u32)> = GLOBAL_AUDIENCE
         .iter()
         .copied()
         .filter(|&(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
         .collect();
-    let seed_site = Site::new(City::Chicago, Access::Cable);
+    let seed_site = Site::new(City::Chicago, seed_access);
     let sites = wan_sites(1, viewers, seed_site, &cities, RESIDENTIAL);
     let mut cfg = wan_config(1, sites, 6, 32);
     cfg.stream_rate = 750_000;
@@ -4041,14 +4048,18 @@ fn wan_cable_seed_6mbit_config(viewers: usize, chunk: usize, policy: SeedPolicy)
 
 /// [`wan_cable_seed_6mbit_config`] under both seed policies. Knobs:
 /// `SIM_PEERS` viewers (default 50), `SIM_CHUNK` bytes per chunk (default
-/// 1024), `SIM_SECS`, and `SIM_SEED_POLICY=adaptive` or `admission` for
-/// one policy; with `SIM_CAPTURE` each run's dumps go to a directory it
-/// prints.
+/// 1024), `SIM_SECS`, `SIM_SEED_POLICY=adaptive` or `admission` for one
+/// policy, and `SIM_SEED_ACCESS=datacenter` for a seed in a datacenter;
+/// with `SIM_CAPTURE` each run's dumps go to a directory it prints.
 #[test]
 #[ignore = "a 6 Mbit/s probe; run in release with --ignored --nocapture"]
 fn wan_cable_seed_6mbit() {
     let viewers = knob("SIM_PEERS").unwrap_or(50);
     let chunk = knob("SIM_CHUNK").unwrap_or(CHUNK);
+    let access = match knob::<String>("SIM_SEED_ACCESS").as_deref() {
+        Some("datacenter") => Access::Datacenter,
+        _ => Access::Cable,
+    };
     let adaptive = SeedPolicy {
         allocation: SeedAllocation::Adaptive,
         qos: SeedQos::ByAllocation,
@@ -4059,7 +4070,7 @@ fn wan_cable_seed_6mbit() {
         _ => vec![SeedPolicy::default(), adaptive],
     };
     let rows = par_map(&policies, |&policy| {
-        let mut cfg = wan_cable_seed_6mbit_config(viewers, chunk, policy);
+        let mut cfg = wan_cable_seed_6mbit_config(viewers, chunk, policy, access);
         if let Some(secs) = knob("SIM_SECS") {
             cfg.stream_secs = secs;
         }

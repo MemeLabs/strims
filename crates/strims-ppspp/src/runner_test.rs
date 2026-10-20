@@ -820,6 +820,56 @@ fn tapped_transfer(tap: bool) -> (Pair, Vec<TapEvent>, Vec<TapEvent>) {
 }
 
 #[test]
+fn a_seeds_shares_follow_its_subscribers_at_once() {
+    // A hybrid seed whose uplink shares follow its pushes weighs a
+    // subscriber in the call that admitted or lost it, not at the next
+    // update.
+    let seed = SwarmOptions {
+        seed: crate::SeedPolicy {
+            qos: crate::SeedQos::ByAllocation,
+            ..Default::default()
+        },
+        ..hybrid()
+    };
+    let mut p = Pair::with(seed, hybrid());
+    for _ in 0..15 {
+        p.write(1);
+        p.tick(100);
+    }
+    let weight = |p: &Pair| p.seed.runner.peer_qos_weight(p.seed.peer);
+    assert_eq!(weight(&p), Some(MIN_PEER_QOS_WEIGHT));
+    while p.seed.runner.poll_event().is_some() {}
+
+    p.leech
+        .runner
+        .request_stream(p.leech.peer, p.leech.swarm, 0, Bin(0))
+        .unwrap();
+    p.pump().unwrap();
+    assert_eq!(weight(&p), Some(MAX_PEER_QOS_WEIGHT));
+    let mut events = Vec::new();
+    while let Some(e) = p.seed.runner.poll_event() {
+        events.push(e);
+    }
+    assert!(
+        events.contains(&Event::QosWeight {
+            peer: p.seed.peer,
+            weight: MAX_PEER_QOS_WEIGHT
+        }),
+        "{events:?}"
+    );
+
+    // The leech's cancel goes out at its next tick; the seed only reads it.
+    p.leech
+        .runner
+        .cancel_stream(p.leech.peer, p.leech.swarm, 0)
+        .unwrap();
+    p.now += Duration::from_millis(100);
+    p.leech.runner.handle_timeout(p.now);
+    p.pump().unwrap();
+    assert_eq!(weight(&p), Some(MIN_PEER_QOS_WEIGHT));
+}
+
+#[test]
 fn the_tap_changes_no_frame() {
     let (off, seed, leech) = tapped_transfer(false);
     assert!(seed.is_empty() && leech.is_empty());

@@ -251,11 +251,13 @@ impl PeerSchedulerStream {
         });
     }
 
-    /// Unsubscribes `channel`.
-    fn remove_subscriber(&mut self, channel: PeerKey) {
-        if let Some(i) = self.subscribers.iter().position(|s| s.channel == channel) {
+    /// Unsubscribes `channel`; true if it was subscribed.
+    fn remove_subscriber(&mut self, channel: PeerKey) -> bool {
+        let i = self.subscribers.iter().position(|s| s.channel == channel);
+        if let Some(i) = i {
             self.subscribers.swap_remove(i);
         }
+        i.is_some()
     }
 }
 
@@ -327,6 +329,8 @@ pub(crate) struct SwarmState {
     push: Option<PushState>,
     /// Decisions for the driver's capture.
     pub(crate) tap: Tap,
+    /// Our subscribers changed since the runner last asked.
+    subscribers_changed: bool,
 }
 
 impl SwarmState {
@@ -779,6 +783,7 @@ impl PeerChannelScheduler {
             .iter()
             .any(|sub| sub.channel == self.peer && sub.start_bin <= b);
         st.add_subscriber(self.peer, b, extra, now);
+        s.subscribers_changed = true;
         if !resubscribed && !b.is_none() {
             // The stream's chunks are every `stream_count`th: the walk
             // visits only those.
@@ -812,7 +817,7 @@ impl PeerChannelScheduler {
     #[allow(dead_code)]
     fn add_stream_close(&mut self, s: &mut SwarmState, stream: Stream) {
         if let Some(st) = s.streams.get_mut(usize::from(stream)) {
-            st.remove_subscriber(self.peer);
+            s.subscribers_changed |= st.remove_subscriber(self.peer);
         }
         self.extra.push_stream(stream, StreamMessage::Close);
     }
@@ -1094,6 +1099,7 @@ impl PeerSwarmScheduler {
                 push: (o.push_mode == PushMode::Hybrid)
                     .then(|| PushState::new(usize::from(stream_count), now)),
                 tap: Tap::default(),
+                subscribers_changed: false,
             },
             channels: IndexMap::new(),
         }
@@ -1184,6 +1190,7 @@ impl PeerSwarmScheduler {
         s.source_bins = Map::new();
         s.sent_bins = Map::new();
         s.streams = vec![PeerSchedulerStream::default(); usize::from(s.stream_count)];
+        s.subscribers_changed = true;
         s.stream_sources = 0;
         s.first_chunk_set = false;
         // The new stream starts at bin 0; see `PeerChannelScheduler::reset`.
@@ -1294,10 +1301,11 @@ impl PeerSwarmScheduler {
             let Some(st) = s.streams.get_mut(usize::from(i)) else {
                 continue;
             };
-            st.remove_subscriber(peer);
+            let removed = st.remove_subscriber(peer);
             if !hybrid && st.source.is_some_and(|src| src.channel == peer) {
                 c.close_stream(s, i, window_start);
             }
+            s.subscribers_changed |= removed;
         }
         c.clear_requests(s);
         // Hybrid: subscriptions to the peer end; what it was expected to
@@ -1706,7 +1714,7 @@ impl PeerSwarmScheduler {
         }
         s.check_stream(stream)?;
         if let Some(st) = s.streams.get_mut(usize::from(stream)) {
-            st.remove_subscriber(peer);
+            s.subscribers_changed |= st.remove_subscriber(peer);
         }
         Ok(())
     }
@@ -1884,7 +1892,7 @@ impl PeerSwarmScheduler {
                             push,
                             queued: t,
                         });
-                        return Ok(());
+                        break;
                     }
                     Err(WriteDataError::NotEnoughSpace) => cw.reset(),
                     Err(e) => {
@@ -1906,6 +1914,10 @@ impl PeerSwarmScheduler {
             q.push_front_data(peer, s.key, b.right(), t, pri);
             b = b.left();
         }
+        if push {
+            self.note_push(peer, t, false, now);
+        }
+        Ok(())
     }
 
     /// Diagnostics for one channel.

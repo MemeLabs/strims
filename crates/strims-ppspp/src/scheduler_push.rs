@@ -457,6 +457,9 @@ pub(crate) struct PushState {
     next_shed: Time,
     /// Chunks stored per second, for a stream's rate.
     chunk_rate: Sma,
+    /// When the first chunk was stored, and the chunks stored since.
+    first_stored: Time,
+    stored: u64,
     pub(crate) upload: UploadInfo,
     stats: PushCounters,
     /// A seed's fixed peers per stream (`Runner::pin_seed_allocation`).
@@ -479,6 +482,8 @@ impl PushState {
             next_check: now,
             next_shed: now,
             chunk_rate: Sma::new(10, Duration::from_millis(200), now),
+            first_stored: Time::NIL,
+            stored: 0,
             upload: UploadInfo::default(),
             stats: PushCounters::default(),
             pin: None,
@@ -606,6 +611,10 @@ impl SwarmState {
             p.marked.reset(b);
             if new_chunks > 0 {
                 p.chunk_rate.add(new_chunks, now);
+                if p.first_stored.is_nil() {
+                    p.first_stored = now;
+                }
+                p.stored = p.stored.saturating_add(new_chunks);
             }
         }
     }
@@ -641,6 +650,18 @@ impl SwarmState {
         };
         p.chunk_rate.rate(Duration::SECOND, now) as f64 * self.chunk_size as f64 * PUSH_OVERHEAD
             / streams
+    }
+
+    /// [`SwarmState::stream_rate`] from every chunk stored since the
+    /// first, over the time since it: high while the first munros arrive.
+    pub(crate) fn early_stream_rate(&self, now: Time) -> Option<f64> {
+        let p = self.push.as_ref()?;
+        let secs = (now - p.first_stored).as_secs_f64();
+        (!p.first_stored.is_nil() && secs > 0.0).then(|| {
+            p.stored as f64 * self.chunk_size as f64 * PUSH_OVERHEAD
+                / f64::from(self.stream_count.max(1))
+                / secs
+        })
     }
 
     fn children(&self) -> usize {
@@ -955,7 +976,7 @@ impl PeerSwarmScheduler {
     /// Ends `peer`'s subscription to `stream`, if any, with a STREAM_CLOSE.
     fn close_subscriber(&mut self, peer: PeerKey, stream: Stream, q: &mut impl PeerTaskQueue) {
         if let Some(st) = self.s.streams.get_mut(usize::from(stream)) {
-            st.remove_subscriber(peer);
+            self.s.subscribers_changed |= st.remove_subscriber(peer);
         }
         if let Some(c) = self.channels.get_mut(&peer) {
             c.extra.push_stream(stream, StreamMessage::Close);
@@ -1514,6 +1535,7 @@ impl PeerSwarmScheduler {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::PushStale { bin: b, queued: t });
+            self.note_push(peer, t, true, now);
             return true;
         }
         if self

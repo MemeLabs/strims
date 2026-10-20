@@ -165,6 +165,13 @@ pub enum TapKind {
         copies: u64,
         streams: u64,
     },
+    /// An adaptive seed's check: its window in copies, and of the holders
+    /// pushed to since the last check, those behind.
+    SeedWindow {
+        copies: u64,
+        pushed: u64,
+        behind: u64,
+    },
 
     /// Events dropped because a buffer filled between drains.
     Lost {

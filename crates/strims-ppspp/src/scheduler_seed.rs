@@ -21,21 +21,57 @@
 //!
 //! - **Budget.** K stream slots (one subscriber of one stream each) are
 //!   what [`ALLOC_UTILIZATION`] of the measured upload capacity carries at
-//!   a subscriber's cost; they pay for K / streams copies, or K of the
+//!   a subscriber's cost, once the store rate has been measured for
+//!   [`ALLOC_MEASURE`]; they pay for K / streams copies, or K of the
 //!   streams at one holder when K is under one copy (the rest go to pull).
 //!   It falls only once it is [`OVER_BUDGET`] too high. Pull answers take
 //!   what pushes leave of the uplink, so neither they nor the time the
 //!   uplink is busy with them bound it: [`SeedQos::ByAllocation`] puts
 //!   them behind the pushes.
-//! - **Holders.** While there are fewer holders than copies, the next
-//!   neighbour to ask becomes one; until the store rate has been measured
-//!   for [`ALLOC_MEASURE`] there are [`UNMEASURED_COPIES`], so the first
-//!   to ask (the nearest) hold the stream. Past the copies, the farthest
-//!   holders go. A neighbour
-//!   displaces the farthest holder only with a round trip [`NEAR_MARGIN`]
-//!   (or a tenth) shorter, one per [`ALLOC_CHECK_INTERVAL`], so jitter
-//!   doesn't move the allocation. A neighbour that stops being a holder
-//!   loses all its subscriptions (STREAM_CLOSE).
+//! - **Window.** The copies are at most a window, and at most the
+//!   budget's copies once it is measured. The window starts at one copy.
+//!   Until the budget is measured and the window first cut, each request
+//!   raises it to what [`ALLOC_UTILIZATION`] of the measured capacity pays
+//!   for at the store rate since the first chunk, which reads high while
+//!   the first munros arrive: the first wave, every neighbour asking for
+//!   every stream, is what places whole copies.
+//!
+//!   From then on the window follows the pushes. Each check reads, per
+//!   holder, the shortest wait of the pushes written to it since the last
+//!   check, which stays long only while its queue never empties between
+//!   munro bursts, and its stale drops; pushes queued before the window
+//!   last changed don't count. A holder is behind past
+//!   [`PUSH_WAIT_TARGET`], and overloaded past [`PUSH_WAIT_OVERLOAD`] or
+//!   after a stale drop.
+//!   - While the uplink is busy [`SHED_UTILIZATION`] of the time and
+//!     more than half the holders pushed to are overloaded, the window
+//!     halves (at least one copy), and doubling stops there (at two copies
+//!     at least).
+//!   - With no majority behind and pushes written, it grows, provided it
+//!     is under twice the holders with a subscription or the uplink has
+//!     idle time: so a wave of neighbours asking at once can at most
+//!     double a load that kept up. It doubles until the first cut, then
+//!     takes one copy per [`WINDOW_PROBE`].
+//!
+//!   A holder that is slow by its own path, or stops reading, leaves the
+//!   window alone while the uplink has room or most holders keep up. A
+//!   child's STREAM_CANCEL is its own decision and counts for nothing.
+//!   Without [`SeedQos::ByAllocation`] a holder's share of the uplink is
+//!   the same whatever the copies, so its waits tell nothing about them:
+//!   the window is the first wave's size, then the budget's copies.
+//! - **Holders.** A neighbour that asks while there are fewer holders than
+//!   copies becomes one, so the first to ask hold the stream. One without
+//!   a subscription is pending: it keeps its copy for [`HOLDER_GRACE`]
+//!   after it joined or last asked, then gives it back (a holder that gave
+//!   up every subscription frees only its own copy). At each check the
+//!   farthest subscribed holders past the copies go, and free copies go to
+//!   the nearest neighbours that asked within the grace. With none free,
+//!   the nearest of those, if its round trip is [`NEAR_MARGIN`] (or a
+//!   tenth) shorter than the farthest holder's, is given one, which that
+//!   holder gives up once the new one subscribed: one move per
+//!   [`ALLOC_CHECK_INTERVAL`], so jitter doesn't move the allocation and
+//!   no copy goes empty. A neighbour that stops being a holder loses all
+//!   its subscriptions (STREAM_CLOSE).
 //! - **Round trips** are each neighbour's smallest ping round trip over
 //!   the last one or two [`RTT_WINDOW`]s, which leaves out queueing.
 //! - With room for every neighbour's every stream, everything is accepted.
@@ -48,7 +84,9 @@
 //! - **Uplink shares.** With [`SeedQos::ByAllocation`] the runner weights
 //!   each peer at least in proportion to the streams pushed to it, and the
 //!   peers it pushes nothing to at the minimum: pushes leave at the rate
-//!   each holder needs, and pull answers take what they leave.
+//!   each holder needs, and pull answers take what they leave. The weights
+//!   follow each change of the seed's subscribers in the runner call that
+//!   made it.
 //!
 //! # The seed's view
 //!
@@ -62,11 +100,11 @@
 //! Per channel a fixed record. A check costs O(channels × log
 //! channels) plus the subscribers; an admission O(channels).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use strims_base::time::{Duration, Time};
 
-use super::PushChannel;
+use super::{PushChannel, SHED_UTILIZATION};
 use crate::codec::Stream;
 use crate::controller::RequestController;
 use crate::options::{SeedAllocation, SeedQos};
@@ -84,8 +122,20 @@ pub const ALLOC_CHECK_INTERVAL: Duration = Duration::SECOND;
 pub const ALLOC_UTILIZATION: f64 = 0.7;
 /// How long the store rate is measured before the budget follows it.
 pub const ALLOC_MEASURE: Duration = Duration::from_secs(2);
-/// The copies before the budget is measured.
-pub const UNMEASURED_COPIES: usize = 4;
+/// A holder whose pushes all waited longer than this between two checks
+/// is behind: its queue never emptied.
+pub const PUSH_WAIT_TARGET: Duration = Duration::from_millis(100);
+/// ... and past this, or after a stale drop, overloaded: its pushes near
+/// [`PUSH_STALE`](super::PUSH_STALE).
+pub const PUSH_WAIT_OVERLOAD: Duration = Duration::from_millis(500);
+/// After its first cut, the window grows by one copy at most this often:
+/// each holder that leaves costs its children a backoff and a graft.
+pub const WINDOW_PROBE: Duration = Duration::from_secs(10);
+/// A holder with no subscription keeps its copy this long after it joined
+/// or last asked, and a neighbour that asked this recently may be given a
+/// free copy: a declined neighbour asks again after its
+/// [`DECLINE_BACKOFF`](super::DECLINE_BACKOFF).
+pub const HOLDER_GRACE: Duration = Duration::from_secs(4);
 /// How far the budget must fall before it is lowered.
 pub const OVER_BUDGET: f64 = 0.1;
 /// How much nearer (or a tenth, if more) a neighbour must be to displace
@@ -100,11 +150,18 @@ pub const RTT_WINDOW: Duration = Duration::from_secs(10);
 pub(crate) struct Holder {
     /// It holds a copy.
     holds: bool,
+    /// When it last asked for a stream, or became a holder.
+    active: Time,
     /// The smallest ping round trip in the current [`RTT_WINDOW`] (its
     /// index) and in the one before.
     window: i64,
     rtt: Option<Duration>,
     rtt_before: Option<Duration>,
+    /// Since the last check, of the pushes queued since the window last
+    /// changed: the shortest wait of one written, and whether one went
+    /// stale.
+    wait: Option<Duration>,
+    stale: bool,
 }
 
 impl Holder {
@@ -136,31 +193,116 @@ impl Holder {
     }
 }
 
+/// One check interval's evidence for the [`Window`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Signals {
+    /// Holders with a push written or dropped as stale, and those of them
+    /// behind and overloaded.
+    pub(crate) pushed: usize,
+    pub(crate) behind: usize,
+    pub(crate) overloaded: usize,
+    /// Holders with a subscription.
+    pub(crate) in_use: usize,
+    /// The uplink was busy at least [`SHED_UTILIZATION`] of the time.
+    pub(crate) saturated: bool,
+}
+
+/// The slow start's window; see the module docs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Window {
+    /// Whole copies, at least one.
+    copies: usize,
+    /// Doubling stops here: `usize::MAX` until the first cut.
+    ssthresh: usize,
+    /// When the window last changed: earlier pushes don't count.
+    since: Time,
+    /// Past the first cut, when it may grow by one copy next.
+    probe_at: Time,
+}
+
+impl Window {
+    fn new(now: Time) -> Window {
+        Window {
+            copies: 1,
+            ssthresh: usize::MAX,
+            since: now,
+            probe_at: Time::NIL,
+        }
+    }
+
+    /// A check's update with the interval's signals, to at most `cap`
+    /// copies. True if the window changed.
+    fn update(&mut self, s: Signals, cap: usize, now: Time) -> bool {
+        let before = self.copies;
+        let majority = s.behind.saturating_mul(2) > s.pushed;
+        if s.saturated && s.overloaded.saturating_mul(2) > s.pushed {
+            // At one copy the cut changes nothing, so doubling may still
+            // take the next step.
+            self.ssthresh = (self.copies / 2).max(2);
+            self.copies = (self.copies / 2).max(1);
+            self.probe_at = now + WINDOW_PROBE;
+        } else if !majority
+            && s.pushed > 0
+            && (self.copies < s.in_use.saturating_mul(2) || !s.saturated)
+        {
+            if self.copies < self.ssthresh {
+                self.copies = self.copies.saturating_mul(2).min(self.ssthresh);
+            } else if now >= self.probe_at {
+                self.copies = self.copies.saturating_add(1);
+                self.probe_at = now + WINDOW_PROBE;
+            }
+        }
+        self.set(self.copies.min(cap), before, now)
+    }
+
+    /// Without uplink shares by allocation: the window is `cap` copies. A
+    /// holder's share is then the same whatever the copies, so its waits
+    /// tell nothing about them.
+    fn track(&mut self, cap: usize, now: Time) -> bool {
+        let before = self.copies;
+        self.set(cap, before, now)
+    }
+
+    fn set(&mut self, copies: usize, before: usize, now: Time) -> bool {
+        self.copies = copies.max(1);
+        let changed = self.copies != before;
+        if changed {
+            self.since = now;
+        }
+        changed
+    }
+}
+
 /// An adaptive seed's state; see the module docs.
 #[derive(Debug)]
 pub(crate) struct Allocator {
     next_check: Time,
     /// When the store rate was first seen (`NIL` before).
     measuring_since: Time,
-    /// The budget in stream slots, once measured; the copies it pays for,
-    /// and the streams a holder may take (fewer than all only under one
-    /// copy).
+    /// Once measured, the budget in stream slots.
+    measured: bool,
     budget: usize,
+    /// The copies in effect, and the streams a holder may take (fewer
+    /// than all only under one copy).
     copies: usize,
     streams: usize,
-    /// Not measured yet, or room for every neighbour's every stream.
+    window: Window,
+    /// Room for every neighbour's every stream.
     unconstrained: bool,
     stats: AllocCounters,
 }
 
 impl Allocator {
     fn new(now: Time) -> Allocator {
+        let window = Window::new(now);
         Allocator {
             next_check: now,
             measuring_since: Time::NIL,
+            measured: false,
             budget: 0,
-            copies: UNMEASURED_COPIES,
+            copies: window.copies,
             streams: usize::MAX,
+            window,
             unconstrained: false,
             stats: AllocCounters::default(),
         }
@@ -183,8 +325,10 @@ pub struct AllocCounters {
 pub struct SeedAllocationStats {
     pub neighbours: Vec<SeedNeighbour>,
     /// An adaptive seed's latest check (zero otherwise): the budget in
-    /// stream slots, the copies it pays for, and the counters.
+    /// stream slots (zero until measured), the window and the copies in
+    /// effect, and the counters.
     pub budget: usize,
+    pub window: usize,
     pub copies: usize,
     pub counters: AllocCounters,
 }
@@ -229,26 +373,63 @@ impl PeerSwarmScheduler {
             .iter()
             .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
             .count();
-        let Some(h) = self
+        let Some(holds) = self
             .channels
             .get_mut(&peer)
             .and_then(|c| c.push.as_mut())
-            .map(|pc| &mut pc.holder)
+            .map(|pc| {
+                pc.holder.active = now;
+                pc.holder.holds
+            })
         else {
             return false;
         };
+        let early = self.s.early_stream_rate(now);
+        let streams = usize::from(self.s.stream_count.max(1));
+        let neighbours = self
+            .channels
+            .values()
+            .filter(|c| c.handshake_received)
+            .count();
         let Some(p) = self.s.push.as_mut() else {
             return false;
         };
+        let cap = p.upload.capacity();
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
-        if !h.holds && (a.unconstrained || holders < a.copies) {
-            h.holds = true;
-            a.stats.joined = a.stats.joined.saturating_add(1);
-            self.s
-                .tap
-                .emit(self.s.key, Some(peer), || TapKind::HolderJoined);
+        // The first wave's size, from the early measurements.
+        if !a.measured
+            && a.window.ssthresh == usize::MAX
+            && let (Some(cap), Some(rate)) = (cap, early)
+        {
+            let paid = (cap * ALLOC_UTILIZATION / rate) as usize / streams;
+            let w = paid.min(neighbours).max(a.window.copies);
+            if w > a.window.copies {
+                a.window.copies = w;
+                a.window.since = now;
+                a.copies = w;
+            }
         }
-        let ok = h.holds && held < a.streams;
+        let holder = holds || a.unconstrained || holders < a.copies;
+        if holder
+            && !holds
+            && let Some(h) = self
+                .channels
+                .get_mut(&peer)
+                .and_then(|c| c.push.as_mut())
+                .map(|pc| &mut pc.holder)
+        {
+            h.holds = true;
+            h.active = now;
+            let key = self.s.key;
+            self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
+            if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
+                a.stats.joined = a.stats.joined.saturating_add(1);
+            }
+        }
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return false;
+        };
+        let ok = holder && held < a.streams;
         let n = if ok {
             &mut a.stats.accepted
         } else {
@@ -256,6 +437,67 @@ impl PeerSwarmScheduler {
         };
         *n = n.saturating_add(1);
         ok
+    }
+
+    /// An adaptive seed's push to `peer`, queued at `queued`, was written
+    /// at `now`, or dropped as stale.
+    pub(crate) fn note_push(&mut self, peer: PeerKey, queued: Time, stale: bool, now: Time) {
+        let Some(a) = self.s.push.as_ref().and_then(|p| p.alloc.as_ref()) else {
+            return;
+        };
+        if queued < a.window.since {
+            return;
+        }
+        let Some(h) = self
+            .channels
+            .get_mut(&peer)
+            .and_then(|c| c.push.as_mut())
+            .map(|pc| &mut pc.holder)
+        else {
+            return;
+        };
+        if stale {
+            h.stale = true;
+        } else {
+            let w = now - queued;
+            h.wait = Some(h.wait.map_or(w, |x| x.min(w)));
+        }
+    }
+
+    /// The window's signals since the last check; they start over.
+    fn window_signals(&mut self, saturated: bool) -> Signals {
+        let in_use: BTreeSet<PeerKey> = self
+            .s
+            .streams
+            .iter()
+            .flat_map(|st| st.subscribers.iter().map(|x| x.channel))
+            .collect();
+        let mut s = Signals {
+            saturated,
+            ..Signals::default()
+        };
+        for (peer, c) in &mut self.channels {
+            let Some(h) = c.push.as_mut().map(|pc| &mut pc.holder) else {
+                continue;
+            };
+            let (wait, stale) = (h.wait.take(), std::mem::take(&mut h.stale));
+            if !h.holds {
+                continue;
+            }
+            if in_use.contains(peer) {
+                s.in_use += 1;
+            }
+            if wait.is_some() || stale {
+                s.pushed += 1;
+                if stale || wait.is_some_and(|w| w > PUSH_WAIT_TARGET) {
+                    s.behind += 1;
+                }
+                if stale || wait.is_some_and(|w| w > PUSH_WAIT_OVERLOAD) {
+                    s.overloaded += 1;
+                }
+            }
+        }
+        s
     }
 
     /// The neighbours holding a copy.
@@ -266,7 +508,8 @@ impl PeerSwarmScheduler {
             .count()
     }
 
-    /// An adaptive seed's check: the budget, then the holders.
+    /// An adaptive seed's check: the budget and the window, then the
+    /// holders.
     pub(crate) fn check_allocation(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
         if !self.adaptive_seed() {
             return;
@@ -287,29 +530,59 @@ impl PeerSwarmScheduler {
             return;
         }
         a.next_check = now + ALLOC_CHECK_INTERVAL;
+        let signals = self.window_signals(upload.busy >= SHED_UTILIZATION);
+        let early = self.s.early_stream_rate(now);
+        let follows = self.s.seed.qos == SeedQos::ByAllocation;
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return;
+        };
 
         if rate > 0.0 && a.measuring_since.is_nil() {
             a.measuring_since = now;
         }
-        let measured = !a.measuring_since.is_nil() && now - a.measuring_since >= ALLOC_MEASURE;
-        let Some(cap) = upload.capacity().filter(|_| measured && rate > 0.0) else {
-            return;
-        };
-        let target = (cap * ALLOC_UTILIZATION / rate) as usize;
-        if a.budget == 0
-            || target > a.budget
-            || (target as f64) < a.budget as f64 * (1.0 - OVER_BUDGET)
-        {
-            a.budget = target;
+        let measuring = !a.measuring_since.is_nil() && now - a.measuring_since >= ALLOC_MEASURE;
+        if let Some(cap) = upload.capacity().filter(|_| measuring && rate > 0.0) {
+            let target = (cap * ALLOC_UTILIZATION / rate) as usize;
+            if !a.measured
+                || target > a.budget
+                || (target as f64) < a.budget as f64 * (1.0 - OVER_BUDGET)
+            {
+                a.budget = target;
+            }
+            a.measured = true;
         }
         let before = (a.budget, a.copies, a.streams);
-        a.copies = (a.budget / streams.max(1)).max(1);
-        a.streams = a.budget.clamp(1, streams);
-        a.unconstrained = a.budget >= neighbours.saturating_mul(streams);
+        let paid = if a.measured {
+            (a.budget / streams.max(1)).max(1)
+        } else if let (Some(cap), Some(rate)) = (upload.capacity(), early) {
+            ((cap * ALLOC_UTILIZATION / rate) as usize / streams.max(1)).max(a.window.copies)
+        } else {
+            usize::MAX
+        };
+        let cap = paid.min(neighbours);
+        let changed = if follows {
+            a.window.update(signals, cap, now)
+        } else {
+            a.window.track(cap, now)
+        };
+        a.copies = a.window.copies;
+        if a.measured {
+            a.streams = a.budget.clamp(1, streams);
+        }
+        a.unconstrained =
+            a.measured && a.budget >= neighbours.saturating_mul(streams) && a.copies >= neighbours;
         let (copies, room) = (a.copies, a.streams);
+        let key = self.s.key;
+        if changed || signals.pushed > 0 {
+            self.s.tap.emit(key, None, || TapKind::SeedWindow {
+                copies: copies as u64,
+                pushed: signals.pushed as u64,
+                behind: signals.behind as u64,
+            });
+        }
         if before != (a.budget, a.copies, a.streams) {
             let budget = a.budget as u64;
-            self.s.tap.emit(self.s.key, None, || TapKind::SeedBudget {
+            self.s.tap.emit(key, None, || TapKind::SeedBudget {
                 budget,
                 copies: copies as u64,
                 streams: room as u64,
@@ -341,55 +614,77 @@ impl PeerSwarmScheduler {
                 .emit(key, Some(peer), || TapKind::Shed { stream });
         }
 
-        // Holders by round trip, unmeasured ones last; and the nearest
-        // neighbour that isn't one.
-        let mut holders: Vec<(bool, Option<Duration>, PeerKey)> = Vec::new();
-        let mut nearest: Option<(Duration, PeerKey)> = None;
+        // Holders by round trip, unmeasured ones farthest. One without a
+        // subscription is pending: it keeps its copy for HOLDER_GRACE after
+        // it joined or last asked. Past the copies the farthest subscribed
+        // holders go; free copies go to the nearest neighbours that asked
+        // within the grace; and with none free, the nearest of those, if
+        // nearer than the farthest holder by the margin, is given one that
+        // holder gives up once it subscribed.
+        let subscribed: BTreeSet<PeerKey> = self
+            .s
+            .streams
+            .iter()
+            .flat_map(|st| st.subscribers.iter().map(|x| x.channel))
+            .collect();
+        let mut held: Vec<(bool, Option<Duration>, PeerKey)> = Vec::new();
+        let mut askers: Vec<(Duration, PeerKey)> = Vec::new();
+        let mut leave: Vec<PeerKey> = Vec::new();
+        let mut pending = 0;
         for (&peer, c) in &self.channels {
             let Some(h) = c.push.as_ref().map(|pc| pc.holder) else {
                 continue;
             };
+            let recent = now - h.active <= HOLDER_GRACE;
             let rtt = h.min_rtt(now);
-            if h.holds {
-                holders.push((rtt.is_none(), rtt, peer));
-            } else if c.handshake_received
-                && let Some(r) = rtt
-                && nearest.is_none_or(|(n, _)| r < n)
-            {
-                nearest = Some((r, peer));
+            if !h.holds {
+                if recent
+                    && c.handshake_received
+                    && let Some(r) = rtt
+                {
+                    askers.push((r, peer));
+                }
+            } else if subscribed.contains(&peer) {
+                held.push((rtt.is_none(), rtt, peer));
+            } else if recent {
+                pending += 1;
+            } else {
+                leave.push(peer);
             }
         }
-        holders.sort();
-        let mut leave: Vec<PeerKey> = holders.iter().skip(copies).map(|h| h.2).collect();
-        let mut join = None;
-        if let Some((r, peer)) = nearest {
-            if holders.len() < copies {
-                join = Some(peer);
-            } else if holders.len() == copies
-                && let Some(&(_, far, holder)) = holders.last()
-                && far.is_none_or(|f| r + NEAR_MARGIN.max(f / 10) < f)
-            {
-                leave.push(holder);
-                join = Some(peer);
-            }
+        held.sort();
+        askers.sort();
+        leave.extend(held.iter().skip(copies).map(|h| h.2));
+        let kept = held.len().min(copies);
+        let free = copies.saturating_sub(kept + pending);
+        let mut join: Vec<PeerKey> = askers.iter().take(free).map(|a| a.1).collect();
+        let farthest = kept.checked_sub(1).and_then(|i| held.get(i));
+        if free == 0
+            && pending == 0
+            && let (Some(&(r, peer)), Some(&(_, far, _))) = (askers.first(), farthest)
+            && far.is_none_or(|f| r + NEAR_MARGIN.max(f / 10) < f)
+        {
+            join.push(peer);
         }
         for &peer in &leave {
             self.leave(peer, q);
         }
-        if let Some(peer) = join
-            && let Some(h) = self
+        for &peer in &join {
+            if let Some(h) = self
                 .channels
                 .get_mut(&peer)
                 .and_then(|c| c.push.as_mut())
                 .map(|pc| &mut pc.holder)
-        {
-            h.holds = true;
+            {
+                h.holds = true;
+                h.active = now;
+            }
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
             a.stats.left = a.stats.left.saturating_add(leave.len() as u64);
-            a.stats.joined = a.stats.joined.saturating_add(u64::from(join.is_some()));
+            a.stats.joined = a.stats.joined.saturating_add(join.len() as u64);
         }
     }
 
@@ -474,6 +769,14 @@ impl PeerSwarmScheduler {
         true
     }
 
+    /// Whether our subscribers changed since the last call, for a hybrid
+    /// seed under [`SeedQos::ByAllocation`]: its weights follow them.
+    pub(crate) fn take_seed_weights_changed(&mut self) -> bool {
+        let s = &mut self.s;
+        let changed = std::mem::take(&mut s.subscribers_changed);
+        changed && s.is_seed && s.push.is_some() && s.seed.qos == SeedQos::ByAllocation
+    }
+
     /// A seed's view of its neighbours; `None` for any other swarm.
     pub(crate) fn seed_allocation(&self, now: Time) -> Option<SeedAllocationStats> {
         let s = &self.s;
@@ -510,6 +813,7 @@ impl PeerSwarmScheduler {
         };
         if let Some(a) = p.alloc.as_ref() {
             out.budget = a.budget;
+            out.window = a.window.copies;
             out.copies = a.copies;
             out.counters = a.stats;
         }
@@ -539,5 +843,68 @@ mod tests {
         assert_eq!(h.min_rtt(t(21)), Some(ms(60)));
         assert_eq!(h.min_rtt(t(31)), Some(ms(70)));
         assert_eq!(h.min_rtt(t(45)), None);
+    }
+
+    fn signals(pushed: usize, behind: usize, over: usize, in_use: usize, sat: bool) -> Signals {
+        Signals {
+            pushed,
+            behind,
+            overloaded: over,
+            in_use,
+            saturated: sat,
+        }
+    }
+
+    #[test]
+    fn the_window_doubles_while_pushes_keep_up() {
+        let t = |s: i64| Time::from_unix_millis(1_000_000_000) + Duration::from_secs(s);
+        let mut w = Window::new(t(0));
+        // No pushes, no evidence.
+        assert!(!w.update(signals(0, 0, 0, 0, false), 64, t(1)));
+        assert_eq!(w.copies, 1);
+        // On a saturated uplink it leads the copies in use at most twice.
+        assert!(w.update(signals(1, 0, 0, 1, true), 64, t(2)));
+        assert_eq!((w.copies, w.since), (2, t(2)));
+        assert!(!w.update(signals(1, 0, 0, 1, true), 64, t(3)));
+        assert!(w.update(signals(2, 0, 0, 2, true), 64, t(4)));
+        assert_eq!(w.copies, 4);
+        // An uplink with idle time lets it run ahead, up to the cap.
+        assert!(w.update(signals(1, 0, 0, 1, false), 64, t(5)));
+        assert_eq!(w.copies, 8);
+        assert!(w.update(signals(1, 0, 0, 1, false), 5, t(6)));
+        assert_eq!(w.copies, 5);
+        // A minority behind doesn't hold it back; a majority does.
+        assert!(w.update(signals(3, 1, 0, 3, true), 64, t(7)));
+        assert_eq!(w.copies, 10);
+        assert!(!w.update(signals(10, 6, 0, 10, true), 64, t(8)));
+    }
+
+    #[test]
+    fn the_window_halves_when_most_holders_are_overloaded() {
+        let t = |s: i64| Time::from_unix_millis(1_000_000_000) + Duration::from_secs(s);
+        let mut w = Window::new(t(0));
+        for i in 1..=3 {
+            w.update(signals(1, 0, 0, 1, false), 64, t(i));
+        }
+        assert_eq!(w.copies, 8);
+        // Overloaded on an uplink with idle time: their own paths.
+        assert!(!w.update(signals(8, 8, 8, 8, false), 64, t(4)));
+        // Behind on a saturated one holds it.
+        assert!(!w.update(signals(8, 8, 4, 8, true), 64, t(5)));
+        // Overloaded on a saturated one: halved, and doubling stops there.
+        assert!(w.update(signals(8, 8, 5, 8, true), 64, t(6)));
+        assert_eq!(w.copies, 4);
+        // It then grows by one copy per probe interval.
+        let probe = t(6) + WINDOW_PROBE;
+        assert!(!w.update(signals(4, 0, 0, 4, true), 64, probe - Duration::SECOND));
+        assert!(w.update(signals(4, 0, 0, 4, true), 64, probe));
+        assert_eq!(w.copies, 5);
+        assert!(!w.update(signals(5, 0, 0, 5, true), 64, probe + Duration::SECOND));
+        // At one copy there is nothing to cut, and the next step doubles.
+        let mut w = Window::new(t(0));
+        assert!(!w.update(signals(1, 1, 1, 1, true), 64, t(1)));
+        assert!(w.update(signals(1, 0, 0, 1, true), 64, t(2)));
+        assert_eq!(w.copies, 2);
+        assert!(!w.update(signals(1, 0, 0, 1, true), 64, t(3)));
     }
 }
