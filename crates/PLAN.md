@@ -175,6 +175,19 @@ Egress and players:
 - strims-node's TLS runs on ring, which compiles C, so each desktop and
   mobile cross build needs a C toolchain for its target.
 
+### Capture
+- strims-wasm nodes capture nothing: the browser driver has no file to
+  write (OPFS, or dumps streamed to the UI).
+- A capture runs for its node's life, from a driver flag. A runtime
+  toggle (the Debug service's config) is a stored-record change.
+- The receiving side's tap marks push hits and late and unsolicited
+  pushes, but can't tell a pull answer from a duplicate push; that takes
+  the sender's dump.
+- Dumps are uncompressed. A node's dump grows about as fast as its
+  traffic, nearly all of it DATA payload, which video leaves
+  incompressible; a mode that keeps DATA messages' headers and drops
+  their payloads would cut it about eightfold.
+
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
@@ -271,13 +284,31 @@ Egress and players:
     datacenter seed with spare upload can leave a few neighbours on
     relays (the global audience's worst region). Accepting everyone
     instead overloads a cable seed's first seconds, and the misses prune
-    it for `PRUNE_BACKOFF`.
+    it for `PRUNE_BACKOFF`. At 6 Mbit/s four whole copies are more than
+    a cable uplink carries (3.3), so the startup copies alone go stale
+    (`PUSH_STALE`) within two seconds; once the budget is measured (one
+    copy), the holder left has pruned the seed, and nothing forms the
+    tree again.
   - **Copies by region.** Copies go to the nearest neighbours. The fastest
     uplinks in alternating regions did no better on these paths, but no
     scenario has a seed whose nearest neighbours share one path or access
     network.
-  - **Pull from a constrained seed** is 3–4 % of what it sends behind
-    the shares, so it isn't gated by deadline; revisit if it grows.
+  - **Pull from a constrained seed** is 3–4 % of what a cable seed sends
+    behind the shares at 2 Mbit/s, but at 6 Mbit/s it takes the whole
+    uplink (the ppspp sim's ignored `wan_cable_seed_6mbit`): with the push
+    tree gone (Startup), the seed's 32 neighbours pull the newest chunks
+    from it at once. It sends each chunk about ten times, so its distinct
+    output (130–300 chunks a second against 732 published) falls behind
+    the stream and every viewer with it (8 s at the median), while fiber
+    relays idle for want of new chunks. 71 % of what neighbours pull from
+    the seed another peer has announced first, and 43 % of requests to it
+    time out, against 2 % to other peers. 4 KiB chunks halve the copies
+    and the p99 but leave the median. Candidates, none a wire change: a
+    constrained seed answers a fresh chunk to a bounded number of
+    neighbours, by its own count of what it sent; a viewer's requests to
+    a peer whose answers lag (its own measurement) yield to peers that
+    announce the chunk, and queued ones are cancelled; pull from the seed
+    gated by deadline.
 - **Reciprocal topology.** Nodes keep their links whatever a peer
   reciprocates. Dropping links that don't reciprocate and dialing random
   new peers, with a budget for leechers, would move high-upload peers

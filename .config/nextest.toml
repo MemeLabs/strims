@@ -49,6 +49,12 @@ filter = 'package(strims-sim) & binary(scenarios)'
 threads-required = 3
 priority = 50
 
+# Two 51-node simulations of a 6 Mbit/s stream at once.
+[[profile.default.overrides]]
+filter = 'package(strims-ppspp) & test(=wan_cable_seed_6mbit)'
+threads-required = 2
+priority = 85
+
 [[profile.default.overrides]]
 filter = '(package(strims-ppspp) | package(strims-vpn)) & binary(sim)'
 priority = 50

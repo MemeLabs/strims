@@ -4016,6 +4016,89 @@ fn wan_residential_seed_config(seed: u64) -> Config {
     wan_config(seed, sites, 6, 0)
 }
 
+/// A 6 Mbit/s stream behind a Chicago cable seed: `viewers` residential
+/// viewers in North America and Europe, each linked to 6 others, the seed
+/// to 32; 16 streams in Hybrid, a 32 MiB window of `chunk`-byte chunks.
+fn wan_cable_seed_6mbit_config(viewers: usize, chunk: usize, policy: SeedPolicy) -> Config {
+    let cities: Vec<(City, u32)> = GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|&(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
+        .collect();
+    let seed_site = Site::new(City::Chicago, Access::Cable);
+    let sites = wan_sites(1, viewers, seed_site, &cities, RESIDENTIAL);
+    let mut cfg = wan_config(1, sites, 6, 32);
+    cfg.stream_rate = 750_000;
+    cfg.chunk_size = chunk;
+    cfg.munro_chunks = MUNRO / chunk;
+    cfg.live_window = (32 << 20) / chunk;
+    cfg.stream_secs = 10;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 16;
+    cfg.seed_policy = policy;
+    cfg
+}
+
+/// [`wan_cable_seed_6mbit_config`] under both seed policies. Knobs:
+/// `SIM_PEERS` viewers (default 50), `SIM_CHUNK` bytes per chunk (default
+/// 1024), `SIM_SECS`, and `SIM_SEED_POLICY=adaptive` or `admission` for
+/// one policy; with `SIM_CAPTURE` each run's dumps go to a directory it
+/// prints.
+#[test]
+#[ignore = "a 6 Mbit/s probe; run in release with --ignored --nocapture"]
+fn wan_cable_seed_6mbit() {
+    let viewers = knob("SIM_PEERS").unwrap_or(50);
+    let chunk = knob("SIM_CHUNK").unwrap_or(CHUNK);
+    let adaptive = SeedPolicy {
+        allocation: SeedAllocation::Adaptive,
+        qos: SeedQos::ByAllocation,
+    };
+    let policies: Vec<SeedPolicy> = match knob::<String>("SIM_SEED_POLICY").as_deref() {
+        Some("adaptive") => vec![adaptive],
+        Some("admission") => vec![SeedPolicy::default()],
+        _ => vec![SeedPolicy::default(), adaptive],
+    };
+    let rows = par_map(&policies, |&policy| {
+        let mut cfg = wan_cable_seed_6mbit_config(viewers, chunk, policy);
+        if let Some(secs) = knob("SIM_SECS") {
+            cfg.stream_secs = secs;
+        }
+        let tag = run_tag(&cfg);
+        let mut sim = Sim::new(cfg);
+        let r = sim.run();
+        let seed_up = sim.nodes[0].up_bw;
+        let span = (r.finish - t0()).as_secs_f64();
+        let up = sim.nodes[0].wire.up_bytes;
+        let last_write = t0() + Duration::SECOND + Duration::from_secs(sim.cfg.stream_secs as i64);
+        let p = &r.push;
+        format!(
+            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {tag} |",
+            policy.allocation,
+            viewers,
+            r.delivery,
+            ms(r.lag_p50),
+            ms(r.lag_p99),
+            ms(r.lag_max),
+            (last_write - t0()).as_secs_f64(),
+            span,
+            p.hits,
+            p.misses,
+            p.late,
+            p.unsolicited,
+            up as f64 / 1e6,
+            100.0 * up as f64 / (seed_up as f64 * span),
+            r.underruns,
+            r.resets,
+        )
+    });
+    println!(
+        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | run tag |"
+    );
+    for r in rows {
+        println!("{r}");
+    }
+}
+
 /// [`wan_residential_seed_config`]'s seed and viewers plus a 25th viewer
 /// (the last node) in a New York datacenter: a super-peer whose uplink
 /// could carry the whole swarm.
