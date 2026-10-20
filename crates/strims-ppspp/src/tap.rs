@@ -20,6 +20,17 @@ use crate::runner::{PeerKey, SwarmKey};
 /// Events a buffer holds between drains; later ones are counted as lost.
 pub const TAP_CAP: usize = 4096;
 
+/// What the tap reports.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TapLevel {
+    #[default]
+    Off,
+    /// Peers, swarms and channels coming and going.
+    Lifecycle,
+    /// The lifecycle and every decision.
+    All,
+}
+
 /// One event: what happened, in which swarm, about which peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TapEvent {
@@ -176,10 +187,6 @@ impl Tap {
             *self = Tap::default();
         }
         self.on = on;
-    }
-
-    pub(crate) fn is_on(&self) -> bool {
-        self.on
     }
 
     /// Records the event `f` makes, if on.

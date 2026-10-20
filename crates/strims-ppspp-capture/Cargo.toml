@@ -9,10 +9,13 @@ publish = false
 
 [dependencies]
 strims-base.workspace = true
+strims-binmap.workspace = true
+strims-ppspp.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+strims-crypto.workspace = true
 
 [lints]
 workspace = true

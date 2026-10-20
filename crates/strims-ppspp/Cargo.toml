@@ -27,6 +27,7 @@ hex.workspace = true
 prost.workspace = true
 proptest.workspace = true
 strims-wan.workspace = true
+strims-ppspp-capture.workspace = true
 
 [lints]
 workspace = true

@@ -20,7 +20,7 @@ use strims_ppspp::codec::{
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::{
     DATA_QUEUE_CAP, MAX_BIN, PeerKey, PushMode, Runner, Swarm, SwarmId, SwarmKey, SwarmOptions,
-    TAP_CAP, Writer, WriterOptions,
+    TAP_CAP, TapLevel, Writer, WriterOptions,
 };
 
 const MTU: usize = 4096;
@@ -309,7 +309,7 @@ fn action() -> impl Strategy<Value = Action> {
 fn run(victim: &mut Node, corpus: &[Vec<u8>], handshake: &[u8], actions: &[Action]) {
     let mut now = t(100);
     let mut buf = vec![0u8; MTU];
-    victim.runner.set_tap(true);
+    victim.runner.set_tap(TapLevel::All);
     victim
         .runner
         .handle_frame(victim.peer, now, handshake)

@@ -2442,6 +2442,7 @@ dependencies = [
  "strims-binmap",
  "strims-crypto",
  "strims-golden",
+ "strims-ppspp-capture",
  "strims-proto",
  "strims-wan",
  "thiserror",
@@ -2453,6 +2454,9 @@ version = "0.1.0"
 dependencies = [
  "proptest",
  "strims-base",
+ "strims-binmap",
+ "strims-crypto",
+ "strims-ppspp",
  "thiserror",
 ]
 

@@ -110,7 +110,7 @@ pub use runner::{
 pub use scheduler_peer::push::PushStats;
 pub use scheduler_peer::push::seed::{AllocCounters, SeedAllocationStats, SeedNeighbour};
 pub use scheduler_peer::{ChannelSchedulerStats, SwarmSchedulerStats};
-pub use tap::{TAP_CAP, TapEvent, TapKind};
+pub use tap::{TAP_CAP, TapEvent, TapKind, TapLevel};
 
 /// The first bin a peer may name. Bins at or past it start at chunk 2^61,
 /// which no stream reaches; refusing them keeps every binmap's root below

@@ -75,9 +75,12 @@
 //! peers, swarms and open channels that exist when it starts, so each file
 //! decodes on its own.
 
+mod capture;
 mod format;
 mod reader;
 mod writer;
+
+pub use capture::{Capture, Options, Sink, Stats, TAP_KINDS, TapKindInfo, tap_kind};
 
 pub use format::{
     Clock, Dir, Header, MAGIC, MAX_FRAME, MAX_LABEL, MAX_MESSAGE, MAX_NAME, MAX_PARAMS, MAX_RECORD,

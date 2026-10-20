@@ -63,6 +63,8 @@
 )]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{self, BufWriter};
+use std::path::{Path, PathBuf};
 
 use rand_core::Rng;
 use strims_base::rng::{DetRng, det_rng, fork};
@@ -78,6 +80,7 @@ use strims_ppspp::{
     RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
     SwarmOptions, Writer, WriterOptions,
 };
+use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions};
 use strims_wan::sample::pick;
 use strims_wan::wire::tcp_wire;
 use strims_wan::{
@@ -102,6 +105,14 @@ fn stream_byte(o: u64) -> u8 {
 /// The cross-traffic swarm's stream.
 fn cross_byte(o: u64) -> u8 {
     stream_byte(o ^ 0x5bd1_e995_0000_0000)
+}
+
+/// A directory name for a run's captures: its seed and a hash of its
+/// config.
+fn run_tag(cfg: &Config) -> String {
+    let mut h = 0xcbf2_9ce4_8422_2325;
+    fnv(&mut h, format!("{cfg:?}").as_bytes());
+    format!("s{}-{:08x}", cfg.seed, h as u32)
 }
 
 fn fnv(h: &mut u64, bytes: &[u8]) {
@@ -171,6 +182,8 @@ struct Config {
     seed_degree: usize,
     /// Bytes per second the seed writes, in whole munros.
     stream_rate: u64,
+    /// Bytes per chunk.
+    chunk_size: usize,
     /// Chunks per munro (one signature, one write).
     munro_chunks: usize,
     /// The largest frame body a link carries.
@@ -214,7 +227,21 @@ struct Config {
     /// `peer_up`, `peer_down` and `constrained` go unused, and `loss` must
     /// stay zero.
     wan: Option<Wan>,
+    /// Capture every node's frames (see [`CaptureTo`]); `SIM_CAPTURE`
+    /// sets it for any run.
+    capture: Option<CaptureTo>,
 }
+
+/// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
+/// named by node index like the peers in its runner.
+#[derive(Clone, Debug)]
+struct CaptureTo {
+    dir: PathBuf,
+    /// Capture the runners' decisions too.
+    tap: bool,
+}
+
+type SimCapture = Capture<Box<dyn FnMut(u64) -> io::Result<BufWriter<std::fs::File>>>>;
 
 /// Real-world paths ([`strims_wan`]): node `i` sits at `sites[i]`, the seed
 /// being node 0.
@@ -244,6 +271,7 @@ impl Config {
             dial: 0,
             seed_degree: 0,
             stream_rate: 256 * 1024,
+            chunk_size: CHUNK,
             munro_chunks: MUNRO / CHUNK,
             mtu: MTU,
             paced_uplinks: false,
@@ -268,6 +296,7 @@ impl Config {
             seed_policy: SeedPolicy::default(),
             pin: None,
             wan: None,
+            capture: None,
         }
     }
 }
@@ -323,6 +352,7 @@ struct Node {
     /// mode) and its downlink's longest queue. The path's counters are the
     /// network's ([`Sim::wan_stats`]).
     wire: EndStats,
+    cap: Option<SimCapture>,
 }
 
 struct Link {
@@ -478,7 +508,7 @@ impl Sim {
         let mut rng = det_rng(cfg.seed);
         let key = strims_crypto::key_from_seed(&[9; 32]);
         let options = SwarmOptions {
-            chunk_size: CHUNK,
+            chunk_size: cfg.chunk_size,
             chunks_per_signature: cfg.munro_chunks,
             live_window: cfg.live_window,
             delivery_mode: cfg.delivery_mode,
@@ -594,6 +624,7 @@ impl Sim {
                 removed: BTreeSet::new(),
                 cross,
                 wire: EndStats::default(),
+                cap: None,
             });
         }
 
@@ -710,7 +741,36 @@ impl Sim {
                 .unwrap();
         }
 
-        let munro = cfg.munro_chunks * CHUNK;
+        let capture = cfg.capture.clone().or_else(|| {
+            knob::<String>("SIM_CAPTURE").map(|dir| CaptureTo {
+                dir: Path::new(&dir).join(run_tag(&cfg)),
+                tap: knob::<String>("SIM_CAPTURE_TAP").as_deref() != Some("0"),
+            })
+        });
+        if let Some(to) = &capture {
+            std::fs::create_dir_all(&to.dir).unwrap();
+            for (i, n) in nodes.iter_mut().enumerate() {
+                let label = match &cfg.wan {
+                    Some(w) => {
+                        format!("{:?} {:?} {:?}", n.role, w.sites[i].city, w.sites[i].access)
+                    }
+                    None => format!("{:?}", n.role),
+                };
+                let path = to.dir.join(format!("node-{i}.ppcap"));
+                let sink: Box<dyn FnMut(u64) -> io::Result<BufWriter<std::fs::File>>> =
+                    Box::new(move |_| Ok(BufWriter::new(std::fs::File::create(&path)?)));
+                let opts = CaptureOptions {
+                    clock: Clock::Sim,
+                    node: &[i as u8],
+                    label: &label,
+                    max_file_bytes: 0,
+                    tap: to.tap,
+                };
+                n.cap = Some(Capture::new(sink, opts, t0(), &mut n.runner).unwrap());
+            }
+        }
+
+        let munro = cfg.munro_chunks * cfg.chunk_size;
         let munros = (cfg.stream_rate * cfg.stream_secs) as usize / munro;
         for node in &mut nodes {
             node.read_chunks = vec![false; munros * cfg.munro_chunks];
@@ -834,7 +894,7 @@ impl Sim {
                     .nodes
                     .iter()
                     .skip(1)
-                    .map(|n| n.pos / CHUNK as u64)
+                    .map(|n| n.pos / self.cfg.chunk_size as u64)
                     .collect();
                 let copies: u64 = self.seed_sent.values().map(|&c| u64::from(c)).sum();
                 eprintln!(
@@ -879,6 +939,13 @@ impl Sim {
                         p.upload_busy_permille
                     );
                 }
+            }
+        }
+        for n in &mut self.nodes {
+            if let Some(c) = n.cap.as_mut() {
+                c.drain(self.now, &mut n.runner);
+                c.flush().unwrap();
+                assert!(c.error().is_none(), "capture: {:?}", c.error());
             }
         }
         self.report()
@@ -982,6 +1049,12 @@ impl Sim {
         for i in 0..self.nodes.len() {
             self.transmit(i);
         }
+
+        for n in &mut self.nodes {
+            if let Some(c) = n.cap.as_mut() {
+                c.drain(now, &mut n.runner);
+            }
+        }
     }
 
     fn write(&mut self) {
@@ -1003,7 +1076,7 @@ impl Sim {
             }
         }
         self.publish_times
-            .extend(std::iter::repeat_n(now, munro / CHUNK));
+            .extend(std::iter::repeat_n(now, munro / self.cfg.chunk_size));
         self.written += 1;
         self.next_write += Duration::from_nanos(
             (munro as i64).saturating_mul(1_000_000_000) / self.cfg.stream_rate as i64,
@@ -1042,7 +1115,11 @@ impl Sim {
         if node.removed.contains(&rpeer) {
             return;
         }
-        if let Err(e) = node.runner.handle_frame(rpeer, now, frame) {
+        let res = match node.cap.as_mut() {
+            Some(c) => c.handle_frame(&mut node.runner, rpeer, now, frame),
+            None => node.runner.handle_frame(rpeer, now, frame),
+        };
+        if let Err(e) = res {
             // The driver drops a peer whose frame fails.
             assert!(
                 matches!(node.role, Role::Adversary(_))
@@ -1199,8 +1276,8 @@ impl Sim {
                             x.mismatches += 1;
                         }
                     }
-                    let first = x.pos.div_ceil(CHUNK as u64);
-                    let end = (x.pos + n as u64) / CHUNK as u64;
+                    let first = x.pos.div_ceil(self.cfg.chunk_size as u64);
+                    let end = (x.pos + n as u64) / self.cfg.chunk_size as u64;
                     for c in first..end {
                         if let Some(&pt) = self.publish_times.get(c as usize) {
                             x.lags.push((now, now - pt));
@@ -1251,8 +1328,8 @@ impl Sim {
                             node.mismatches += 1;
                         }
                     }
-                    let first = node.pos.div_ceil(CHUNK as u64);
-                    let end = (node.pos + n as u64) / CHUNK as u64;
+                    let first = node.pos.div_ceil(self.cfg.chunk_size as u64);
+                    let end = (node.pos + n as u64) / self.cfg.chunk_size as u64;
                     for c in first..end {
                         if let Some(&pt) = self.publish_times.get(c as usize) {
                             node.lags.push((now, now - pt));
@@ -1305,6 +1382,9 @@ impl Sim {
             };
             let peer = self.links[l].peer;
             let node = &mut self.nodes[i];
+            if let Some(c) = node.cap.as_mut() {
+                c.drain(now, &mut node.runner);
+            }
             let mut n = node.runner.poll_transmit(peer, now, &mut self.buf);
             if n == 0 {
                 continue;
@@ -1355,6 +1435,10 @@ impl Sim {
                         }
                     }
                 }
+            }
+            if let Some(c) = node.cap.as_mut() {
+                c.frame(now, Dir::Out, peer, &frame);
+                c.drain(now, &mut node.runner);
             }
             self.frames += 1;
             self.bytes += n as u64;
@@ -1552,7 +1636,7 @@ impl Sim {
         let mut out = Vec::new();
         for n in self.nodes.iter().filter(|n| n.role == Role::Peer) {
             let Some(start) = n.start else { continue };
-            let first = (start / CHUNK as u64).div_ceil(per as u64) as usize;
+            let first = (start / self.cfg.chunk_size as u64).div_ceil(per as u64) as usize;
             for m in first..self.publish_times.len() / per {
                 let published = self.publish_times[m * per];
                 let chunks = &n.arrived[m * per..(m + 1) * per];
@@ -1746,7 +1830,7 @@ impl Sim {
                 "node {i} {:?} up {} pos {} next {:?} tail {:?} underruns {} read {}/{}",
                 n.role,
                 n.up_bw,
-                n.pos / CHUNK as u64,
+                n.pos / self.cfg.chunk_size as u64,
                 store.next(),
                 store.tail(),
                 n.underruns,
@@ -1770,8 +1854,8 @@ impl Sim {
                     s.peer_max_have_bin,
                     cs.outbound.request,
                     cs.outbound.cancel,
-                    cs.inbound.data_bytes / CHUNK as u64,
-                    cs.outbound.data_bytes / CHUNK as u64,
+                    cs.inbound.data_bytes / self.cfg.chunk_size as u64,
+                    cs.outbound.data_bytes / self.cfg.chunk_size as u64,
                     ps.map(|p| p.queued_data),
                 );
             }
@@ -2044,6 +2128,55 @@ fn sim_same_seed_same_trace() {
     assert_ne!(a.trace, c.trace);
 }
 
+/// Capture only observes: a captured run, with or without the runners'
+/// decisions, sends the frames an uncaptured one does, and its dumps hold
+/// every frame the run sent.
+#[test]
+fn sim_capture_changes_no_trace() {
+    let mut cfg = Config::new(3, 8);
+    cfg.stream_secs = 4;
+    cfg.degree = 4;
+    cfg.loss = 0.01;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    let plain = Sim::new(cfg.clone()).run();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sim_capture_changes_no_trace");
+    let _ = std::fs::remove_dir_all(&dir);
+    for tap in [false, true] {
+        let to = dir.join(if tap { "tap" } else { "frames" });
+        cfg.capture = Some(CaptureTo {
+            dir: to.clone(),
+            tap,
+        });
+        let r = Sim::new(cfg.clone()).run();
+        assert_eq!(
+            (r.trace, r.frames, r.bytes),
+            (plain.trace, plain.frames, plain.bytes)
+        );
+        assert_eq!(format!("{:?}", r.push), format!("{:?}", plain.push));
+        let (mut frames, mut bytes, mut taps) = (0, 0, 0);
+        for i in 0..=cfg.peers {
+            let f = std::fs::read(to.join(format!("node-{i}.ppcap"))).unwrap();
+            let mut rd = strims_ppspp_capture::Reader::new(&f[..]).unwrap();
+            assert_eq!(rd.header().node, [i as u8]);
+            while let Some(e) = rd.next_record() {
+                match e.unwrap().record {
+                    strims_ppspp_capture::Record::Frame {
+                        dir: Dir::Out, len, ..
+                    } => {
+                        frames += 1;
+                        bytes += len;
+                    }
+                    strims_ppspp_capture::Record::Tap(_) => taps += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert_eq!((frames, bytes), (plain.frames, plain.bytes));
+        assert_eq!(taps > 0, tap);
+    }
+}
+
 #[test]
 fn sim_ledbat_constrained_downlink() {
     // One peer's downlink is 1.5x the stream rate; everyone else would
@@ -2256,7 +2389,9 @@ impl Scenario {
 /// (`SIM_SCENARIO`, `SIM_STREAMS`, `SIM_SECS`, `SIM_WARM`, `SIM_SEED_POLICY`,
 /// `SIM_TRACE_NODE`, `SIM_VERBOSE`, `SIM_CONTROLLER`, `SIM_CROSS_UP_X10`);
 /// the asserting tests use fixed configs, so the determinism guardrail
-/// holds for them.
+/// holds for them. `SIM_CAPTURE=<dir>` captures any run into
+/// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
+/// capture changes no trace.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     std::env::var(name).ok().and_then(|s| s.parse().ok())
@@ -3038,7 +3173,7 @@ fn ab_run(
         None => {
             r.positions
                 .iter()
-                .map(|&(_, pos)| (r.total.saturating_sub(pos) / CHUNK as u64) as usize)
+                .map(|&(_, pos)| (r.total.saturating_sub(pos) / sim.cfg.chunk_size as u64) as usize)
                 .sum::<usize>()
                 + (r.mismatches + r.underruns + r.resets) as usize
         }

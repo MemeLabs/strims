@@ -792,8 +792,9 @@ fn tapped_transfer(tap: bool) -> (Pair, Vec<TapEvent>, Vec<TapEvent>) {
         .runner
         .pin_seed_allocation(p.seed.swarm, Some(vec![vec![p.seed.peer]]))
         .unwrap();
-    p.seed.runner.set_tap(tap);
-    p.leech.runner.set_tap(tap);
+    let level = if tap { TapLevel::All } else { TapLevel::Off };
+    p.seed.runner.set_tap(level);
+    p.leech.runner.set_tap(level);
     let (mut seed, mut leech) = (Vec::new(), Vec::new());
     let mut step = |p: &mut Pair, ms: i64| {
         p.tick(ms);

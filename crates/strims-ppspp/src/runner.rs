@@ -35,7 +35,7 @@ use crate::scheduler_peer::{
     SwarmSchedulerStats, WriteDataError,
 };
 use crate::swarm::{Swarm, SwarmError, SwarmEvent};
-use crate::tap::{Tap, TapEvent, TapKind};
+use crate::tap::{Tap, TapEvent, TapKind, TapLevel};
 use crate::writer::Writer;
 
 slotmap::new_key_type! {
@@ -268,6 +268,7 @@ pub struct Runner {
     upload: UploadMeter,
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
+    tap_level: TapLevel,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -465,18 +466,21 @@ impl Runner {
             hybrid_swarms: 0,
             upload: UploadMeter::new(),
             tap: Tap::default(),
+            tap_level: TapLevel::Off,
         }
     }
 
     // --- tap ------------------------------------------------------------
 
-    /// Turns the tap on or off (it starts off); see [`TapEvent`]. Off, it
-    /// costs a flag check per decision and holds no memory.
-    pub fn set_tap(&mut self, on: bool) {
-        self.tap.set(on);
+    /// Sets what the tap reports (it starts off); see [`TapEvent`]. A
+    /// decision the tap doesn't report costs a flag check, and a tap that
+    /// reports nothing holds no memory.
+    pub fn set_tap(&mut self, level: TapLevel) {
+        self.tap_level = level;
+        self.tap.set(level != TapLevel::Off);
         for rs in self.swarms.values_mut() {
             if let Some(s) = rs.scheduler.as_mut() {
-                s.tap_mut().set(on);
+                s.tap_mut().set(level == TapLevel::All);
             }
         }
     }
@@ -747,6 +751,7 @@ impl Runner {
             events,
             next_tick,
             tap,
+            tap_level,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -767,7 +772,7 @@ impl Runner {
         let sched = rs
             .scheduler
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
-        sched.tap_mut().set(tap.is_on());
+        sched.tap_mut().set(*tap_level == TapLevel::All);
         tap.push(TapEvent {
             swarm: Some(swarm),
             peer: Some(peer),
