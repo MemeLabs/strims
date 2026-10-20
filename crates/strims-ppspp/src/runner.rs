@@ -28,7 +28,8 @@ use crate::peer::{
     MetricsSnapshot, PeerMetricsSnapshot, PeerStats, Queues, RunnerPeer, TransferMetrics, Wake,
 };
 use crate::scheduler::PeerPriority;
-use crate::scheduler_peer::push::{PushStats, SeedAllocationStats, UploadInfo};
+use crate::scheduler_peer::push::seed::SeedAllocationStats;
+use crate::scheduler_peer::push::{PushStats, UploadInfo};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
     SwarmSchedulerStats, WriteDataError,

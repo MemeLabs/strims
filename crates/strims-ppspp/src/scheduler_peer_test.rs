@@ -64,10 +64,15 @@ pub(crate) fn fixture(options: SwarmOptions) -> Fixture {
 
 /// A scheduler for `swarm`, with four peer keys.
 fn fixture_with(swarm: Swarm) -> Fixture {
+    fixture_peers(swarm, 4)
+}
+
+/// A scheduler for `swarm`, with `n` peer keys.
+fn fixture_peers(swarm: Swarm, n: usize) -> Fixture {
     let mut keys: SlotMap<SwarmKey, ()> = SlotMap::with_key();
     let key = keys.insert(());
     let mut peers: SlotMap<PeerKey, ()> = SlotMap::with_key();
-    let peers = (0..4).map(|_| peers.insert(())).collect();
+    let peers = (0..n).map(|_| peers.insert(())).collect();
     let sched = PeerSwarmScheduler::new(&swarm, key, &mut det_rng(1), now());
     Fixture {
         swarm,
@@ -1228,11 +1233,142 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     assert!(!f.sched.pin_allocation(Some(vec![vec![]; 4]), &mut q));
 }
 
+fn adaptive_seed(streams: usize, peers: usize) -> Fixture {
+    let key = strims_crypto::key_from_seed(&[5; 32]);
+    let options = SwarmOptions {
+        seed: crate::SeedPolicy {
+            allocation: crate::SeedAllocation::Adaptive,
+            ..Default::default()
+        },
+        ..seed_hybrid(streams)
+    };
+    fixture_peers(
+        Swarm::new(SwarmId::new(&key.public), options).unwrap(),
+        peers,
+    )
+}
+
+/// The peers a seed's allocation holds copies at.
+fn holders(f: &Fixture) -> Vec<PeerKey> {
+    let a = f.sched.seed_allocation(now()).unwrap();
+    a.neighbours
+        .iter()
+        .filter(|n| n.holder)
+        .map(|n| n.peer)
+        .collect()
+}
+
+/// Publishes about 320 chunks a second after `from` until `to`, so a
+/// stream's subscriber costs about 400 KB/s over the stream count.
+fn publish(f: &mut Fixture, from: Time, to: Time) {
+    let mut at = from;
+    while at < to {
+        at += Duration::from_millis(200);
+        f.sched.s.push_consumed(Bin(0), 64, at);
+    }
+}
+
+#[test]
+fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
+    let mut f = adaptive_seed(4, 6);
+    let mut q = MockQueue::default();
+    let peers: Vec<PeerKey> = (0..6).map(|i| add_ready(&mut f, &mut q, i)).collect();
+    // Round trips of 10, 20, ... 60 ms.
+    for (i, &p) in peers.iter().enumerate() {
+        let rtt = Duration::from_millis(10 * (i as i64 + 1));
+        push::seed::ping(&mut f.sched.channels[&p].push, rtt, now());
+    }
+    let ask = |f: &mut Fixture, q: &mut MockQueue, p: PeerKey, s: u16| {
+        f.sched
+            .handle_stream_request(p, s, Bin(0), Bin(0), now(), q)
+            .unwrap();
+        subscribed(f, p, usize::from(s))
+    };
+
+    // Before the budget is measured, the first four to ask hold copies;
+    // here the farthest ask first.
+    for &p in peers.iter().rev() {
+        ask(&mut f, &mut q, p, 0);
+    }
+    assert_eq!(holders(&f), peers[2..].to_vec());
+    // A holder may take every stream; anyone else none.
+    assert!(ask(&mut f, &mut q, peers[5], 1));
+    assert!(!ask(&mut f, &mut q, peers[0], 1));
+
+    // A budget of two copies: 8 subscribers at about 100 KB/s, at 70 % of
+    // the measured capacity.
+    let t = now() + Duration::from_secs(1);
+    publish(&mut f, now(), t);
+    f.sched.set_upload(push::UploadInfo {
+        rate: 1_200_000,
+        busy: 1.0,
+    });
+    f.sched.run_push(t, &mut q);
+    publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+    let t = t + push::seed::ALLOC_MEASURE;
+    f.sched.run_push(t, &mut q);
+    // The farthest go, losing their subscriptions ...
+    assert_eq!(holders(&f), peers[2..4].to_vec());
+    assert!(!subscribed(&f, peers[5], 0) && !subscribed(&f, peers[5], 1));
+    // ... and the nearer neighbours displace the rest, one per check.
+    let mut t = t;
+    for _ in 0..2 {
+        publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
+        t += push::seed::ALLOC_CHECK_INTERVAL;
+        f.sched.run_push(t, &mut q);
+    }
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    assert!(ask(&mut f, &mut q, peers[0], 2));
+    assert!(!subscribed(&f, peers[2], 0));
+    // A round trip within the margin of a holder's displaces nobody.
+    publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
+    t += push::seed::ALLOC_CHECK_INTERVAL;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(holders(&f), peers[..2].to_vec());
+
+    // With room for everyone's every stream, everyone is accepted.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000_000,
+        busy: 1.0,
+    });
+    publish(&mut f, t, t + push::seed::ALLOC_CHECK_INTERVAL);
+    t += push::seed::ALLOC_CHECK_INTERVAL;
+    f.sched.run_push(t, &mut q);
+    assert!(ask(&mut f, &mut q, peers[4], 3));
+}
+
+#[test]
+fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
+    let mut f = adaptive_seed(4, 2);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    for s in 0..4 {
+        f.sched
+            .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    assert_eq!(f.sched.push_stats().children, 4);
+    // Two subscribers' worth.
+    let t = now() + Duration::from_secs(1);
+    publish(&mut f, now(), t);
+    f.sched.set_upload(push::UploadInfo {
+        rate: 300_000,
+        busy: 1.0,
+    });
+    f.sched.run_push(t, &mut q);
+    publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+    let t = t + push::seed::ALLOC_MEASURE;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(f.sched.push_stats().children, 2);
+    assert_eq!(holders(&f), vec![p]);
+}
+
 #[test]
 fn seed_weights_follow_the_streams_pushed() {
     let mut f = fixture(SwarmOptions {
         seed: crate::SeedPolicy {
             qos: crate::SeedQos::ByAllocation,
+            ..Default::default()
         },
         ..seed_hybrid(4)
     });

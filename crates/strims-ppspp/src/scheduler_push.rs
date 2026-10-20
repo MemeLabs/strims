@@ -90,21 +90,7 @@
 //!
 //! # Seed allocation
 //!
-//! A seed receives no data, so reciprocity weighs its peers alike, and
-//! every neighbour's graft prefers it: it announces first. What it pushes
-//! to whom is therefore its own choice, made by accepting, declining and
-//! closing subscriptions ([`SeedPolicy`](crate::SeedPolicy)).
-//!
-//! - **Its view of the swarm** is each neighbour's HAVE lag per stream
-//!   after publishing: when a stream's last chunk of each signature unit
-//!   was announced ([`SeedAllocationStats`]).
-//! - **A pin** (`Runner::pin_seed_allocation`) fixes the peers each stream
-//!   is pushed to: their requests are accepted, everyone else's declined
-//!   and every other subscriber closed, and nothing is shed.
-//! - **Uplink shares.** With [`SeedQos::ByAllocation`] the runner weights
-//!   each peer at least in proportion to the streams pushed to it, and the
-//!   peers it pushes nothing to at the minimum, so pull answers take the
-//!   upload pushes leave.
+//! What a seed pushes to whom is its admission's choice: see [`seed`].
 //!
 //! # Interaction with pull and reciprocity
 //!
@@ -145,8 +131,6 @@
 //! scheduler's private state; the hooks there call into it only in
 //! `Hybrid`.
 
-use std::collections::BTreeMap;
-
 use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, Map};
@@ -156,10 +140,12 @@ use super::{
 };
 use crate::bin_queue::BinQueue;
 use crate::codec::Stream;
-use crate::controller::RequestController;
-use crate::options::{PushMode, SeedQos};
-use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
+use crate::options::PushMode;
+use crate::runner::PeerKey;
 use crate::scheduler::PeerTaskQueue;
+
+#[path = "scheduler_seed.rs"]
+pub mod seed;
 
 /// How often streams look for a parent, re-evaluate the one they have, and
 /// time out unanswered requests.
@@ -403,6 +389,8 @@ pub(crate) struct PushChannel {
     /// When we last cancelled the peer's unsolicited pushes of the stream.
     /// Bound: one per stream.
     cancel_at: Vec<Time>,
+    /// An adaptive seed's record of the peer.
+    holder: seed::Holder,
 }
 
 impl PushChannel {
@@ -411,6 +399,7 @@ impl PushChannel {
             have_lag: vec![LagEwma::default(); streams],
             backoff: vec![Time::EPOCH; streams],
             cancel_at: vec![Time::EPOCH; streams],
+            holder: seed::Holder::default(),
         }
     }
 
@@ -472,6 +461,8 @@ pub(crate) struct PushState {
     /// A seed's fixed peers per stream (`Runner::pin_seed_allocation`).
     /// Bound: the caller's lists, one per stream.
     pin: Option<Vec<Vec<PeerKey>>>,
+    /// An adaptive seed's allocation, from its first request or check.
+    alloc: Option<seed::Allocator>,
 }
 
 impl PushState {
@@ -490,6 +481,7 @@ impl PushState {
             upload: UploadInfo::default(),
             stats: PushCounters::default(),
             pin: None,
+            alloc: None,
         }
     }
 
@@ -552,26 +544,6 @@ pub struct PushStats {
     /// Pushes not sent because the child had announced the chunk (it got
     /// it elsewhere, e.g. pulled it after a miss).
     pub suppressed: u64,
-}
-
-/// A seed's view of its neighbours, for diagnostics and tests.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SeedAllocationStats {
-    pub neighbours: Vec<SeedNeighbour>,
-}
-
-/// One neighbour of a seed.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SeedNeighbour {
-    pub peer: PeerKey,
-    /// The streams pushed to it.
-    pub streams: Vec<Stream>,
-    /// Per stream, how long after publishing it announces the stream
-    /// (each signature unit's last chunk of it, on average), if it did
-    /// within [`CANDIDATE_FRESHNESS`].
-    pub lags: Vec<Option<Duration>>,
-    /// The channel's round trip.
-    pub rtt: Duration,
 }
 
 /// The first bin of `stream` after chunk `b`'s.
@@ -912,6 +884,13 @@ impl PeerSwarmScheduler {
         if !self.s.hybrid() {
             return (true, false);
         }
+        let granted = (self.adaptive_seed()
+            && !self
+                .s
+                .streams
+                .get(usize::from(stream))
+                .is_some_and(|st| st.subscribers.iter().any(|x| x.channel == peer)))
+        .then(|| self.grant(peer, now));
         let rate = self.s.stream_rate(now);
         let children = self.s.children();
         let s = &mut self.s;
@@ -931,8 +910,8 @@ impl PeerSwarmScheduler {
                 .is_some_and(|v| v.contains(&peer))
         });
         let ok = already
-            || match (pinned, p.upload.capacity()) {
-                (Some(pinned), _) => pinned,
+            || match (pinned.or(granted), p.upload.capacity()) {
+                (Some(ok), _) => ok,
                 (None, None) => !extra && stream_children < UNMEASURED_FANOUT,
                 (None, Some(cap)) => {
                     let target = if extra {
@@ -1270,7 +1249,11 @@ impl PeerSwarmScheduler {
         if !self.s.hybrid() {
             return;
         }
-        self.shed(now, q);
+        if self.adaptive_seed() {
+            self.check_allocation(now, q);
+        } else {
+            self.shed(now, q);
+        }
         self.release_idle_interior(now);
         // The seed has every chunk first: it is a parent only.
         if self.s.is_seed {
@@ -1422,92 +1405,6 @@ impl PeerSwarmScheduler {
         for &(_, _, stream, peer) in victims.iter().take(n) {
             self.close_subscriber(peer, stream, q);
         }
-    }
-
-    /// Fixes the peers a seed pushes each stream to, one list per stream
-    /// (`None` lifts the pin): subscribers outside it are closed. False if
-    /// this isn't a hybrid seed.
-    pub(crate) fn pin_allocation(
-        &mut self,
-        pin: Option<Vec<Vec<PeerKey>>>,
-        q: &mut impl PeerTaskQueue,
-    ) -> bool {
-        if !self.s.is_seed {
-            return false;
-        }
-        let Some(p) = self.s.push.as_mut() else {
-            return false;
-        };
-        p.pin = pin;
-        let Some(pin) = p.pin.as_ref() else {
-            return true;
-        };
-        let mut outside = Vec::new();
-        for (i, st) in self.s.streams.iter().enumerate() {
-            for sub in &st.subscribers {
-                if !pin.get(i).is_some_and(|v| v.contains(&sub.channel)) {
-                    outside.push((sub.channel, i as Stream));
-                }
-            }
-        }
-        for (peer, stream) in outside {
-            self.close_subscriber(peer, stream, q);
-        }
-        true
-    }
-
-    /// A seed under [`SeedQos::ByAllocation`] raises each channel's weight
-    /// in `weights` to its share of the streams pushed to it (at least the
-    /// minimum). False, touching nothing, for any other swarm.
-    pub(crate) fn seed_weights(&self, weights: &mut BTreeMap<PeerKey, u64>) -> bool {
-        let s = &self.s;
-        if !s.is_seed || s.push.is_none() || s.seed.qos != SeedQos::ByAllocation {
-            return false;
-        }
-        let mut held: BTreeMap<PeerKey, u64> = BTreeMap::new();
-        for st in &s.streams {
-            for sub in &st.subscribers {
-                *held.entry(sub.channel).or_default() += 1;
-            }
-        }
-        let n = u64::from(s.stream_count.max(1));
-        for &peer in self.channels.keys() {
-            let h = held.get(&peer).copied().unwrap_or(0);
-            let w = (MAX_PEER_QOS_WEIGHT * h / n).max(MIN_PEER_QOS_WEIGHT);
-            let e = weights.entry(peer).or_insert(0);
-            *e = (*e).max(w);
-        }
-        true
-    }
-
-    /// A seed's view of its neighbours; `None` for any other swarm.
-    pub(crate) fn seed_allocation(&self, now: Time) -> Option<SeedAllocationStats> {
-        let s = &self.s;
-        if !s.is_seed || s.push.is_none() {
-            return None;
-        }
-        let neighbours = self
-            .channels
-            .iter()
-            .map(|(&peer, c)| SeedNeighbour {
-                peer,
-                streams: s
-                    .streams
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, st)| st.subscribers.iter().any(|x| x.channel == peer))
-                    .map(|(i, _)| i as Stream)
-                    .collect(),
-                lags: c.push.as_ref().map_or_else(Vec::new, |pc| {
-                    pc.have_lag
-                        .iter()
-                        .map(|l| l.fresh(now).then(|| l.mean()))
-                        .collect()
-                }),
-                rtt: c.controller.rtt(),
-            })
-            .collect();
-        Some(SeedAllocationStats { neighbours })
     }
 
     fn release_idle_interior(&mut self, now: Time) {

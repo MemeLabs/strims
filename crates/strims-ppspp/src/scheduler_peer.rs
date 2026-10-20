@@ -1507,7 +1507,8 @@ impl PeerSwarmScheduler {
                     // A bin with no time (pruned, or never published by a
                     // seed) gives no sample.
                     let t = s.bin_time(x);
-                    if t != Time::EPOCH && (!s.is_seed || x.base_offset() % unit >= last) {
+                    let unit_last = x.base_offset() % unit >= last;
+                    if t != Time::EPOCH && (!s.is_seed || unit_last) {
                         let stream = usize::from(s.bin_stream(x));
                         Self::push_have_lag(&mut c.push, stream, now - t, now);
                     }
@@ -1616,8 +1617,11 @@ impl PeerSwarmScheduler {
             && nonce == c.ping_nonce
         {
             c.ping_nonce = 0;
-            c.controller
-                .on_ping_rtt(now, now - Time::from_unix_nanos(nonce as i64));
+            let rtt = now - Time::from_unix_nanos(nonce as i64);
+            c.controller.on_ping_rtt(now, rtt);
+            if self.s.is_seed {
+                push::seed::ping(&mut c.push, rtt, now);
+            }
         }
     }
 

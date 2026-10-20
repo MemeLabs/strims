@@ -66,7 +66,21 @@ pub enum PushMode {
 /// node, like `push_mode`; a non-seed ignores it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SeedPolicy {
+    pub allocation: SeedAllocation,
     pub qos: SeedQos,
+}
+
+/// Which push subscriptions a seed accepts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SeedAllocation {
+    /// First come, while the projected upload stays under the admission
+    /// target.
+    #[default]
+    Admission,
+    /// The whole copies its measured upload pays for, to the neighbours
+    /// nearest it; see
+    /// [`scheduler_peer::push::seed`](crate::scheduler_peer::push::seed).
+    Adaptive,
 }
 
 /// How a seed weights its peers' shares of its uplink.
@@ -226,6 +240,7 @@ mod tests {
             push_mode: PushMode::Hybrid,
             request_controller: RequestControllerKind::BbrLike,
             seed: SeedPolicy {
+                allocation: SeedAllocation::Adaptive,
                 qos: SeedQos::ByAllocation,
             },
         };

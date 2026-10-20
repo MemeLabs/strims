@@ -91,7 +91,9 @@ mod writer;
 pub use constants::{MINIMUM_PROTOCOL_VERSION, PROTOCOL_VERSION};
 pub use controller::RequestControllerKind;
 pub use epoch::{Epoch, EpochError};
-pub use options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy, SeedQos, SwarmOptions};
+pub use options::{
+    DeliveryMode, PushMode, SchedulingMethod, SeedAllocation, SeedPolicy, SeedQos, SwarmOptions,
+};
 pub use swarm::{Published, Swarm, SwarmError, SwarmEvent, SwarmHandshake};
 pub use swarm_id::{SwarmId, SwarmIdError};
 pub use uri::{Uri, UriError, UriOptions};
@@ -104,7 +106,8 @@ pub use runner::{
     ChannelStats, Event, MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PEER_QOS_UPDATE_INTERVAL,
     PeerKey, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,
 };
-pub use scheduler_peer::push::{PushStats, SeedAllocationStats, SeedNeighbour};
+pub use scheduler_peer::push::PushStats;
+pub use scheduler_peer::push::seed::{AllocCounters, SeedAllocationStats, SeedNeighbour};
 pub use scheduler_peer::{ChannelSchedulerStats, SwarmSchedulerStats};
 
 /// The first bin a peer may name. Bins at or past it start at chunk 2^61,
