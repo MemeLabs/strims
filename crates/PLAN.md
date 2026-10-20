@@ -178,6 +178,10 @@ Egress and players:
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
+- A HAVE far past the stream's head moves a non-seed's newest bin time
+  and prunes its bin times, so deadlines and HAVE lags lose their start
+  until the stream catches up. It needs a bound on how far past the
+  newest chunk a peer may announce.
 - `add_stream_close` is unused.
 
 ### strims-chat defects

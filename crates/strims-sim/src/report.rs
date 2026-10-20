@@ -403,6 +403,20 @@ impl Report {
         ratio(seed, self.swarm_counters(swarm).data_sent)
     }
 
+    /// The seed's distinct chunks over the chunks it sent, from the runner
+    /// stats: 1 when it sent each chunk once, 1/k for k copies of each.
+    pub fn seed_distinct_ratio(&self, swarm: usize) -> f64 {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return 0.0;
+        };
+        let c = self
+            .hosts
+            .get(s.seed)
+            .map(|h| h.runner.swarm(swarm))
+            .unwrap_or_default();
+        ratio(c.distinct_chunks_sent, c.chunks_sent)
+    }
+
     /// Viewers and relays of the swarm that sent at least `min` data bytes
     /// on its channels (runner stats).
     pub fn data_uploaders(&self, swarm: usize, min: u64) -> usize {
@@ -477,8 +491,9 @@ impl Report {
         for (i, spec) in self.scenario.swarms.iter().enumerate() {
             let c = self.swarm_counters(i);
             s.push_str(&format!(
-                "\n  swarm {i} runner: seed data share {:.0}%, duplicates {:.2}%, requests {}, haves {}, invalid {}, rejected {}",
+                "\n  swarm {i} runner: seed data share {:.0}%, seed distinct ratio {:.3}, duplicates {:.2}%, requests {}, haves {}, invalid {}, rejected {}",
                 self.data_share(i) * 100.0,
+                self.seed_distinct_ratio(i),
                 self.duplicates(i) * 100.0,
                 c.requests,
                 c.haves,

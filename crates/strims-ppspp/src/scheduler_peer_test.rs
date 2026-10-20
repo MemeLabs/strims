@@ -247,6 +247,42 @@ fn huge_have_costs_a_bounded_walk() {
 }
 
 #[test]
+fn a_far_have_leaves_a_seeds_publish_times() {
+    // A seed's bin times are its publish times: a HAVE far past the
+    // stream's head prunes none of them.
+    let mut f = fixture(SwarmOptions {
+        scheduling_method: SchedulingMethod::SEED,
+        ..hybrid(1)
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.sched.s.set_bin_time(Bin::new(6, 0), now());
+    assert!(
+        f.sched
+            .handle_have(p, Bin(1 << 40), now() + Duration::from_millis(10))
+    );
+    assert!(
+        f.sched
+            .handle_have(p, Bin(0), now() + Duration::from_millis(80))
+    );
+    assert_eq!(f.sched.s.bin_time(Bin(0)), now());
+    assert_eq!(f.sched.s.bin_times_max, Bin::new(6, 0).base_right());
+}
+
+#[test]
+fn sent_chunks_count_pushes_and_distinct_chunks() {
+    let mut f = fixture(hybrid(1));
+    f.sched.s.count_sent(Bin::new(1, 0), PeerPriority::High);
+    f.sched.s.count_sent(Bin(2), PeerPriority::Low);
+    f.sched.s.count_sent(Bin(4), PeerPriority::Low);
+    let st = f.sched.stats();
+    assert_eq!(
+        (st.chunks_sent, st.pushed_chunks, st.distinct_chunks_sent),
+        (4, 2, 3)
+    );
+}
+
+#[test]
 fn have_flood_is_bounded() {
     let mut f = fixture(SwarmOptions {
         live_window: 1 << 10,

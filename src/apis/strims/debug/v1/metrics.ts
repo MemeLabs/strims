@@ -1214,6 +1214,9 @@ export type ISwarmSchedulerStats = {
   requestMapSize?: bigint;
   streamSources?: bigint;
   subscribers?: bigint;
+  chunksSent?: bigint;
+  pushedChunks?: bigint;
+  distinctChunksSent?: bigint;
 }
 
 export class SwarmSchedulerStats {
@@ -1226,6 +1229,9 @@ export class SwarmSchedulerStats {
   requestMapSize: bigint;
   streamSources: bigint;
   subscribers: bigint;
+  chunksSent: bigint;
+  pushedChunks: bigint;
+  distinctChunksSent: bigint;
 
   constructor(v?: ISwarmSchedulerStats) {
     this.firstChunkSet = v?.firstChunkSet || false;
@@ -1237,6 +1243,9 @@ export class SwarmSchedulerStats {
     this.requestMapSize = v?.requestMapSize || BigInt(0);
     this.streamSources = v?.streamSources || BigInt(0);
     this.subscribers = v?.subscribers || BigInt(0);
+    this.chunksSent = v?.chunksSent || BigInt(0);
+    this.pushedChunks = v?.pushedChunks || BigInt(0);
+    this.distinctChunksSent = v?.distinctChunksSent || BigInt(0);
   }
 
   static encode(m: SwarmSchedulerStats, w?: Writer): Writer {
@@ -1250,6 +1259,9 @@ export class SwarmSchedulerStats {
     if (m.requestMapSize) w.uint32(56).uint64(m.requestMapSize);
     if (m.streamSources) w.uint32(64).uint64(m.streamSources);
     if (m.subscribers) w.uint32(72).uint64(m.subscribers);
+    if (m.chunksSent) w.uint32(80).uint64(m.chunksSent);
+    if (m.pushedChunks) w.uint32(88).uint64(m.pushedChunks);
+    if (m.distinctChunksSent) w.uint32(96).uint64(m.distinctChunksSent);
     return w;
   }
 
@@ -1286,6 +1298,15 @@ export class SwarmSchedulerStats {
         break;
         case 9:
         m.subscribers = r.uint64();
+        break;
+        case 10:
+        m.chunksSent = r.uint64();
+        break;
+        case 11:
+        m.pushedChunks = r.uint64();
+        break;
+        case 12:
+        m.distinctChunksSent = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

@@ -72,7 +72,8 @@
 //! - per channel, a peer's HAVEs are tracked only for the last
 //!   [`HISTORY_WINDOWS`] windows before the highest bin it announced, so a
 //!   HAVE of a huge bin costs at most that much;
-//! - bin times are kept for the same span before the newest bin seen;
+//! - bin times are kept for the same span before the newest bin seen; a
+//!   seed's are its publish times, which no HAVE sets or prunes;
 //! - the swarm's have and request maps are pruned behind the store's
 //!   window, so the HAVEs we send never claim more than a window behind it;
 //! - a channel has at most [`max_pending_requests`] request deadlines, and a
@@ -277,6 +278,13 @@ pub(crate) struct SwarmState {
     pub(crate) have_bins: Map,
     pub(crate) have_bin_max: Bin,
     pub(crate) wasted_chunks: u64,
+    /// Chunks written to peers, pushes included, and the pushes alone.
+    chunks_sent: u64,
+    pushed_chunks: u64,
+    /// The chunks written to anyone. Bound: pruned behind the store's
+    /// window at GC.
+    sent_bins: Map,
+    distinct_chunks_sent: u64,
 
     /// Bins requested from someone or had. Bound: filled before the store's
     /// window; the rest is the window plus outstanding requests.
@@ -353,6 +361,23 @@ impl SwarmState {
 
     fn bin_time(&self, b: Bin) -> Time {
         self.bin_times.get(b).map_or(Time::EPOCH, |(_, t)| t)
+    }
+
+    /// Counts the chunks of `b`, written to a peer at `pri`.
+    fn count_sent(&mut self, b: Bin, pri: PeerPriority) {
+        let n = b.base_length();
+        self.chunks_sent = self.chunks_sent.saturating_add(n);
+        if pri == PeerPriority::High {
+            self.pushed_chunks = self.pushed_chunks.saturating_add(n);
+        }
+        let (mut x, r) = b.base();
+        while x <= r {
+            if self.sent_bins.empty_at(x) {
+                self.distinct_chunks_sent = self.distinct_chunks_sent.saturating_add(1);
+            }
+            x += 2;
+        }
+        self.sent_bins.set(b);
     }
 
     fn set_stream_source(&mut self, stream: Stream, channel: PeerKey, b: Bin) {
@@ -1034,6 +1059,10 @@ impl PeerSwarmScheduler {
                 have_bins,
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
+                chunks_sent: 0,
+                pushed_chunks: 0,
+                sent_bins: Map::new(),
+                distinct_chunks_sent: 0,
                 streams: vec![PeerSchedulerStream::default(); usize::from(stream_count)],
                 stream_sources: 0,
                 chunk_size: o.chunk_size,
@@ -1109,6 +1138,7 @@ impl PeerSwarmScheduler {
         let store = swarm.store();
         self.s.request_bins.fill_before(store.window_start());
         self.s.source_bins.reset_before(store.window_start());
+        self.s.sent_bins.reset_before(store.window_start());
         self.gc_push(store.window_start());
 
         // Request times go at the read position or the window start,
@@ -1136,6 +1166,7 @@ impl PeerSwarmScheduler {
         s.have_bin_max = Bin(0);
         s.request_bins = Map::new();
         s.source_bins = Map::new();
+        s.sent_bins = Map::new();
         s.streams = vec![PeerSchedulerStream::default(); usize::from(s.stream_count)];
         s.stream_sources = 0;
         s.first_chunk_set = false;
@@ -1448,7 +1479,11 @@ impl PeerSwarmScheduler {
             return false;
         }
 
-        s.set_bin_time(b, now);
+        // A seed's bin times are its publish times: a HAVE can neither set
+        // nor prune them.
+        if !s.is_seed {
+            s.set_bin_time(b, now);
+        }
 
         let br = b.base_right();
         let new_max = c.peer_max_have_bin.max(br);
@@ -1461,9 +1496,13 @@ impl PeerSwarmScheduler {
             // Only the hybrid's per-stream HAVE lag needs every new bin.
             if s.push.is_some() {
                 while let Some(x) = next {
-                    let lag = now - s.bin_time(x);
-                    let stream = usize::from(s.bin_stream(x));
-                    Self::push_have_lag(&mut c.push, stream, lag, now);
+                    // A bin with no time (pruned, or never published by a
+                    // seed) gives no sample.
+                    let t = s.bin_time(x);
+                    if t != Time::EPOCH {
+                        let stream = usize::from(s.bin_stream(x));
+                        Self::push_have_lag(&mut c.push, stream, now - t, now);
+                    }
                     next = it.next_base();
                 }
             }
@@ -1794,7 +1833,10 @@ impl PeerSwarmScheduler {
             let chunks = (b.base_length() as usize).saturating_mul(s.chunk_size);
             if chunks <= cw.available() {
                 match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
-                    Ok(()) => return Ok(()),
+                    Ok(()) => {
+                        s.count_sent(b, pri);
+                        return Ok(());
+                    }
                     Err(WriteDataError::NotEnoughSpace) => cw.reset(),
                     Err(e) => return Err(e),
                 }
@@ -1847,6 +1889,9 @@ impl PeerSwarmScheduler {
             request_map_size: map_size(&s.request_bins),
             stream_sources: s.stream_sources,
             subscribers: s.streams.iter().map(|st| st.subscribers.len()).sum(),
+            chunks_sent: s.chunks_sent,
+            pushed_chunks: s.pushed_chunks,
+            distinct_chunks_sent: s.distinct_chunks_sent,
         }
     }
 }
@@ -1925,6 +1970,13 @@ pub struct SwarmSchedulerStats {
     pub request_map_size: usize,
     pub stream_sources: usize,
     pub subscribers: usize,
+    /// Chunks written to peers: pushes and request answers.
+    pub chunks_sent: u64,
+    /// Of `chunks_sent`, pushes to subscribers.
+    pub pushed_chunks: u64,
+    /// Chunks written to anyone at least once (a seed's count of distinct
+    /// chunks uploaded).
+    pub distinct_chunks_sent: u64,
 }
 
 #[cfg(test)]

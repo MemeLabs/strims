@@ -120,6 +120,13 @@ pub struct SwarmCounters {
     /// chunk.
     pub stale_drops: u64,
     pub suppressed: u64,
+    /// Chunks sent to peers (pushes and request answers), the pushes among
+    /// them, and the chunks sent to anyone at least once
+    /// (`SwarmSchedulerStats::chunks_sent`, `pushed_chunks`,
+    /// `distinct_chunks_sent`).
+    pub chunks_sent: u64,
+    pub pushed_chunks: u64,
+    pub distinct_chunks_sent: u64,
 }
 
 impl SwarmCounters {
@@ -159,6 +166,9 @@ impl SwarmCounters {
             self.sheds_sent,
             self.stale_drops,
             self.suppressed,
+            self.chunks_sent,
+            self.pushed_chunks,
+            self.distinct_chunks_sent,
         ]
     }
 
@@ -183,6 +193,9 @@ impl SwarmCounters {
             sheds_sent,
             stale_drops,
             suppressed,
+            chunks_sent,
+            pushed_chunks,
+            distinct_chunks_sent,
         ] = a;
         SwarmCounters {
             data_sent,
@@ -204,6 +217,9 @@ impl SwarmCounters {
             sheds_sent,
             stale_drops,
             suppressed,
+            chunks_sent,
+            pushed_chunks,
+            distinct_chunks_sent,
         }
     }
 }
@@ -278,7 +294,7 @@ impl<const N: usize> Tracked<N> {
 }
 
 /// Swarm counters, in [`SwarmCounters`]' field order.
-const SWARM_COUNTERS: usize = 19;
+const SWARM_COUNTERS: usize = 22;
 
 /// Channel counters: data sent, data received, invalid, rejected,
 /// requests, haves.
@@ -392,6 +408,9 @@ impl HostStats {
                 sheds_sent: push.sheds_sent,
                 stale_drops: push.stale_drops,
                 suppressed: push.suppressed,
+                chunks_sent: sched.chunks_sent,
+                pushed_chunks: sched.pushed_chunks,
+                distinct_chunks_sent: sched.distinct_chunks_sent,
                 ..SwarmCounters::default()
             };
             self.swarms.entry(s).or_default().observe(c.to_array());

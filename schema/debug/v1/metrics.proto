@@ -197,6 +197,11 @@ message SwarmSchedulerStats {
   uint64 request_map_size = 7;
   uint64 stream_sources = 8;
   uint64 subscribers = 9;
+  // Chunks written to peers (pushes and request answers), the pushes
+  // among them, and the chunks written to anyone at least once.
+  uint64 chunks_sent = 10;
+  uint64 pushed_chunks = 11;
+  uint64 distinct_chunks_sent = 12;
 }
 
 enum PushMode {

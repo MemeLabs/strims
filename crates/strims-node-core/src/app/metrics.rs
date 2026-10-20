@@ -401,6 +401,9 @@ fn swarm_scheduler(s: SwarmSchedulerStats) -> v1::SwarmSchedulerStats {
         request_map_size,
         stream_sources,
         subscribers,
+        chunks_sent,
+        pushed_chunks,
+        distinct_chunks_sent,
     } = s;
     v1::SwarmSchedulerStats {
         first_chunk_set,
@@ -412,6 +415,9 @@ fn swarm_scheduler(s: SwarmSchedulerStats) -> v1::SwarmSchedulerStats {
         request_map_size: count(request_map_size),
         stream_sources: count(stream_sources),
         subscribers: count(subscribers),
+        chunks_sent,
+        pushed_chunks,
+        distinct_chunks_sent,
     }
 }
 
