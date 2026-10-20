@@ -256,8 +256,14 @@ Egress and players:
     parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
     shield a new parent. Shedding on push queue wait helps slow parents but
     hurts `sim_push_parent_dies` and sparse meshes;
-  - an admitting seed (`SeedAllocation::Admission`) accepts every
-    subscriber at startup, before its store rate has ramped up.
+  - an admitting seed (`SeedAllocation::Admission`) accepts
+    `UNMEASURED_FANOUT` subscribers per stream before its upload is
+    measured, then admits on a store rate still ramping up: at 6 Mbit/s
+    behind a cable seed that is more than its uplink carries, and 9,676
+    pushes go stale. The adaptive seed's window doesn't carry over as it
+    is: its signals are per holder and its steps whole copies, while
+    admission places single streams by projected upload, so it would need
+    a window in slots and shedding down to it.
 - **Seed allocation.** Open items:
   - **Defaults.** Whether a hybrid seed defaults to
     `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
@@ -278,37 +284,50 @@ Egress and players:
     announce, with no wire change; or children reporting their parents'
     push delay and misses, scored by the median per holder and checked
     against when each reporter announced, which is a wire change.
-  - **Startup.** Before the budget is measured four neighbours hold
-    copies. A neighbour declined then asks again only when the seed
-    announces sooner than its parent by the switch margin, so a
-    datacenter seed with spare upload can leave a few neighbours on
-    relays (the global audience's worst region). Accepting everyone
-    instead overloads a cable seed's first seconds, and the misses prune
-    it for `PRUNE_BACKOFF`. At 6 Mbit/s four whole copies are more than
-    a cable uplink carries (3.3), so the startup copies alone go stale
-    (`PUSH_STALE`) within two seconds; once the budget is measured (one
-    copy), the holder left has pruned the seed, and nothing forms the
-    tree again.
+  - **Startup.** The first wave, every neighbour asking for every stream
+    within about half a second of the first chunk, places the whole
+    copies: a neighbour declined then asks again only for the streams it
+    found no other parent for. The adaptive seed sizes that wave from the
+    measured capacity and the store rate since the first chunk, which
+    read low in the first tenths of a second, when the nearest neighbours
+    ask, so copies that open later go to farther ones. With the uplink
+    shares that costs nothing measurable at 2 Mbit/s, but without them
+    the cable seed's p99 is 50–75 % higher than with four fixed startup
+    copies. A copy that waits for a nearer neighbour
+    that asked recently fixes that and costs 15–20 % with the shares.
+    Candidates: answering the first wave a few hundred milliseconds late
+    (within the child's `OPEN_TIMEOUT`), once capacity and rate are
+    measured, or ranking the wave's askers before admitting any. Also
+    open:
+    - the budget's hysteresis is in slots, so at a copy boundary (29–36
+      slots at 6 Mbit/s, 32 a copy) a holder joins and leaves with each
+      swing;
+    - a lone holder's share under full pull is 1000 / (1000 + 50 × the
+      other neighbours): with 32 neighbours 39 %, just over the 37.6 % a
+      6 Mbit/s copy needs, so its queue stands at about 400 ms for the
+      first two seconds;
+    - a child that prunes a parent for misses backs it off for
+      `PRUNE_BACKOFF` whatever caused them; the probe no longer overloads
+      at startup, but a seed's cut can still prune its holders.
   - **Copies by region.** Copies go to the nearest neighbours. The fastest
     uplinks in alternating regions did no better on these paths, but no
     scenario has a seed whose nearest neighbours share one path or access
     network.
   - **Pull from a constrained seed** is 3–4 % of what a cable seed sends
-    behind the shares at 2 Mbit/s, but at 6 Mbit/s it takes the whole
-    uplink (the ppspp sim's ignored `wan_cable_seed_6mbit`): with the push
-    tree gone (Startup), the seed's 32 neighbours pull the newest chunks
-    from it at once. It sends each chunk about ten times, so its distinct
-    output (130–300 chunks a second against 732 published) falls behind
-    the stream and every viewer with it (8 s at the median), while fiber
-    relays idle for want of new chunks. 71 % of what neighbours pull from
-    the seed another peer has announced first, and 43 % of requests to it
-    time out, against 2 % to other peers. 4 KiB chunks halve the copies
-    and the p99 but leave the median. Candidates, none a wire change: a
-    constrained seed answers a fresh chunk to a bounded number of
-    neighbours, by its own count of what it sent; a viewer's requests to
-    a peer whose answers lag (its own measurement) yield to peers that
-    announce the chunk, and queued ones are cancelled; pull from the seed
-    gated by deadline.
+    behind the shares at 2 Mbit/s. At 6 Mbit/s (the ppspp sim's ignored
+    `wan_cable_seed_6mbit`) with 50 viewers its push tree carries the
+    stream: the seed sends each chunk 1.8 times, and its answers fade to
+    20–60 a second once the tree has formed. With 100 viewers and 1 KiB
+    chunks the tree holds too, a copy pushed all through, but the seed's
+    31 other neighbours keep pulling the newest chunks from it, 1,300–
+    1,400 answers a second to the end: it sends each chunk 4.1 times, its
+    uplink is 89 % busy, 67 % of what neighbours pull from it another
+    peer announced first, and the median viewer lags 4 s (under a second
+    with 4 KiB chunks). Candidates, none a wire change: a constrained
+    seed answers a fresh chunk to a bounded number of neighbours, by its
+    own count of what it sent; a viewer's requests to a peer whose answers
+    lag (its own measurement) yield to peers that announce the chunk, and
+    queued ones are cancelled; pull from the seed gated by deadline.
 - **Reciprocal topology.** Nodes keep their links whatever a peer
   reciprocates. Dropping links that don't reciprocate and dialing random
   new peers, with a budget for leechers, would move high-upload peers
