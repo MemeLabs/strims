@@ -16,7 +16,9 @@
 use std::time::Duration;
 
 use strims_base::rng::det_rng;
-use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind};
+use strims_ppspp::{
+    DeliveryMode, PushMode, RequestControllerKind, SeedAllocation, SeedPolicy, SeedQos,
+};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SwarmSpec, Transport,
@@ -81,6 +83,30 @@ fn streaming(
 
 const LEDBAT: RequestControllerKind = RequestControllerKind::Ledbat;
 const BBR: RequestControllerKind = RequestControllerKind::BbrLike;
+
+/// The stream count of the striped WAN cases.
+const STRIPES: usize = 16;
+
+/// An adaptive seed with uplink shares by allocation.
+const ADAPTIVE: SeedPolicy = SeedPolicy {
+    allocation: SeedAllocation::Adaptive,
+    qos: SeedQos::ByAllocation,
+};
+
+/// `s` with every swarm in `streams` streams and its seed on `policy`.
+fn striped(mut s: Scenario, streams: usize, policy: SeedPolicy) -> Scenario {
+    for sw in &mut s.swarms {
+        sw.options.stream_count = streams;
+        sw.options.seed = policy;
+    }
+    let adaptive = if policy == SeedPolicy::default() {
+        ""
+    } else {
+        " adaptive"
+    };
+    s.name = format!("{} x{streams}{adaptive}", s.name);
+    s
+}
 
 /// `s` with every swarm running request controller `kind`.
 fn with_controller(mut s: Scenario, kind: RequestControllerKind) -> Scenario {
@@ -1536,6 +1562,22 @@ fn wan_residential_seed(seed: u64, push: PushMode) -> Scenario {
     .s
 }
 
+/// [`wan_residential_seed`]'s viewers plus a 17th in a New York
+/// datacenter: a super-peer whose uplink could carry the whole swarm.
+fn wan_super_peer(seed: u64, push: PushMode) -> Scenario {
+    let mut sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
+    sites.push(Site::new(City::NewYork, Access::Datacenter));
+    wan(
+        &format!("wan_super_peer {push:?}"),
+        seed,
+        Site::new(City::Chicago, Access::Cable),
+        &sites,
+        push,
+        (5, 65),
+    )
+    .s
+}
+
 /// Everyone gets the stream from 10 s on while the seed sends at most 60 %
 /// of the data and at least 2 viewers relay.
 fn check_wan_residential_seed(r: &Report) -> Result<(), String> {
@@ -1569,6 +1611,26 @@ fn wan_residential_seed_hybrid() {
     sweep(
         "wan_residential_seed_hybrid",
         |s| wan_residential_seed(s, PushMode::Hybrid),
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive() {
+    sweep(
+        "wan_residential_seed_adaptive",
+        |s| striped(wan_residential_seed(s, PushMode::Hybrid), STRIPES, ADAPTIVE),
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 18 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_super_peer_adaptive() {
+    sweep(
+        "wan_super_peer_adaptive",
+        |s| striped(wan_super_peer(s, PushMode::Hybrid), STRIPES, ADAPTIVE),
         check_wan_residential_seed,
     );
 }
@@ -1698,6 +1760,8 @@ struct AbRun {
     p99: [u32; 2],
     duplicates: f64,
     seed_share: f64,
+    /// The seed's distinct chunks over the chunks it sent.
+    seed_distinct: f64,
     settle: Duration,
     swarms: usize,
     /// The highest p99 lag of a region's viewers, and the region (WAN
@@ -1715,6 +1779,7 @@ fn ab_measure(r: &Report, check: Check, step: bool) -> AbRun {
         p99: [0; 2],
         duplicates: r.duplicates(0),
         seed_share: r.data_share(0),
+        seed_distinct: r.seed_distinct_ratio(0),
         settle: if step {
             settled_after(r, 0, secs(STEP_AT), 1000)
         } else {
@@ -1759,10 +1824,11 @@ fn ab_row(name: &str, runs: &[AbRun]) -> String {
     let settle: Vec<u128> = runs.iter().map(|r| r.settle.as_millis()).collect();
     let failed: Vec<u64> = runs.iter().filter(|r| !r.passed).map(|r| r.seed).collect();
     let mut row = format!(
-        "| {name} | {} | {:.2}% | {:.0}% | {} ({}) | {failed:?} |",
+        "| {name} | {} | {:.2}% | {:.0}% | {:.2} | {} ({}) | {failed:?} |",
         sw(0),
         100.0 * runs.iter().map(|r| r.duplicates).sum::<f64>() / n,
         100.0 * runs.iter().map(|r| r.seed_share).sum::<f64>() / n,
+        runs.iter().map(|r| r.seed_distinct).sum::<f64>() / n,
         median_of(settle.clone()),
         settle.iter().max().unwrap_or(&0),
     );
@@ -1998,6 +2064,78 @@ fn controller_ab() {
             false,
         ),
         (
+            "wan_residential_seed hybrid x16 ledbat",
+            |s| {
+                let s = wan_residential_seed(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, SeedPolicy::default()), LEDBAT)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed hybrid x16 bbr",
+            |s| {
+                let s = wan_residential_seed(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, SeedPolicy::default()), BBR)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed hybrid x16 adaptive ledbat",
+            |s| {
+                let s = wan_residential_seed(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, ADAPTIVE), LEDBAT)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_residential_seed hybrid x16 adaptive bbr",
+            |s| {
+                let s = wan_residential_seed(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, ADAPTIVE), BBR)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_super_peer hybrid x16 ledbat",
+            |s| {
+                let s = wan_super_peer(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, SeedPolicy::default()), LEDBAT)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_super_peer hybrid x16 bbr",
+            |s| {
+                let s = wan_super_peer(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, SeedPolicy::default()), BBR)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_super_peer hybrid x16 adaptive ledbat",
+            |s| {
+                let s = wan_super_peer(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, ADAPTIVE), LEDBAT)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
+            "wan_super_peer hybrid x16 adaptive bbr",
+            |s| {
+                let s = wan_super_peer(s, PushMode::Hybrid);
+                with_controller(striped(s, STRIPES, ADAPTIVE), BBR)
+            },
+            check_wan_residential_seed,
+            false,
+        ),
+        (
             "wan_mobile_viewers pull ledbat",
             |s| with_controller(wan_mobile_viewers(s, PushMode::Off), LEDBAT),
             check_wan_mobile_viewers,
@@ -2047,9 +2185,9 @@ fn controller_ab() {
         results[c].push(m);
     }
     println!(
-        "| scenario, mode, controller | delivery mean (min) | lag p50 ms | p99 ms median (max) | duplicates | seed data share | settle ms median (max) | failed seeds |"
+        "| scenario, mode, controller | delivery mean (min) | lag p50 ms | p99 ms median (max) | duplicates | seed data share | seed distinct | settle ms median (max) | failed seeds |"
     );
-    println!("|---|---|---|---|---|---|---|---|");
+    println!("|---|---|---|---|---|---|---|---|---|");
     for (c, case) in cases.iter().enumerate() {
         results[c].sort_by_key(|r| r.seed);
         println!("{}", ab_row(case.0, &results[c]));

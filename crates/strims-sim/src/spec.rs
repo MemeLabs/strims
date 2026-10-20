@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SwarmOptions};
+use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy, SwarmOptions};
 use strims_vpn::Routing;
 use strims_wan::Site;
 
@@ -133,6 +133,18 @@ impl SwarmSpec {
     /// The request controller every node runs for this swarm.
     pub fn with_controller(mut self, kind: RequestControllerKind) -> SwarmSpec {
         self.options.request_controller = kind;
+        self
+    }
+
+    /// `n` streams: chunk `i` is pushed in stream `i % n` (Hybrid).
+    pub fn with_stream_count(mut self, n: usize) -> SwarmSpec {
+        self.options.stream_count = n;
+        self
+    }
+
+    /// How the seed spends its upload in Hybrid.
+    pub fn with_seed_policy(mut self, policy: SeedPolicy) -> SwarmSpec {
+        self.options.seed = policy;
         self
     }
 
