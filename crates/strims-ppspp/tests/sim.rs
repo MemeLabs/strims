@@ -61,6 +61,10 @@
 //! `seed_allocation_ab` compares pull, the admission, the adaptive seed and
 //! two pins across the WAN scenarios. Both default to 4 seeds of 30 s;
 //! `SIM_SEEDS=8 SIM_SECS=60` gives the full tables.
+//!
+//! Matrices too large for one machine run on the sim farm
+//! (`hack/sim-farm`), one process per run: the ignored `sim_job` runs the
+//! config its knobs name and prints its row as JSON.
 
 #![allow(
     clippy::unwrap_used,
@@ -4245,6 +4249,21 @@ enum AllocCase {
 }
 
 impl AllocCase {
+    const ALL: [AllocCase; 12] = [
+        AllocCase::Pull,
+        AllocCase::Admission,
+        AllocCase::AdmissionQos,
+        AllocCase::Random,
+        AllocCase::RandomQos,
+        AllocCase::WholeQos,
+        AllocCase::NearestQos,
+        AllocCase::Oracle,
+        AllocCase::OracleQos,
+        AllocCase::DcOnly,
+        AllocCase::Adaptive,
+        AllocCase::AdaptiveQos,
+    ];
+
     fn pinned(self) -> bool {
         matches!(
             self,
@@ -4770,13 +4789,15 @@ fn wan_residential_seed_config(seed: u64) -> Config {
     wan_config(seed, sites, 6, 0)
 }
 
-/// A 6 Mbit/s stream behind a Chicago seed on `seed_access`: `viewers`
-/// residential viewers in North America and Europe, each linked to 6
-/// others, the seed to 32; 16 streams in Hybrid, a 32 MiB window of
+/// A stream at `mbit` Mbit/s behind a Chicago seed on `seed_access`:
+/// `viewers` residential viewers in North America and Europe, each linked
+/// to 6 others, the seed to 32; 16 streams in Hybrid, a 32 MiB window of
 /// `chunk`-byte chunks.
-fn wan_cable_seed_6mbit_config(
+fn wan_cable_seed_config(
+    seed: u64,
     viewers: usize,
     chunk: usize,
+    mbit: u64,
     policy: SeedPolicy,
     seed_access: Access,
 ) -> Config {
@@ -4786,9 +4807,9 @@ fn wan_cable_seed_6mbit_config(
         .filter(|&(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
         .collect();
     let seed_site = Site::new(City::Chicago, seed_access);
-    let sites = wan_sites(1, viewers, seed_site, &cities, RESIDENTIAL);
-    let mut cfg = wan_config(1, sites, 6, 32);
-    cfg.stream_rate = 750_000;
+    let sites = wan_sites(seed, viewers, seed_site, &cities, RESIDENTIAL);
+    let mut cfg = wan_config(seed, sites, 6, 32);
+    cfg.stream_rate = mbit * 125_000;
     cfg.chunk_size = chunk;
     cfg.munro_chunks = MUNRO / chunk;
     cfg.live_window = (32 << 20) / chunk;
@@ -4799,34 +4820,58 @@ fn wan_cable_seed_6mbit_config(
     cfg
 }
 
-/// [`wan_cable_seed_6mbit_config`] under both seed policies. Knobs:
-/// `SIM_PEERS` viewers (default 50), `SIM_CHUNK` bytes per chunk (default
-/// 1024), `SIM_SECS`, `SIM_SEED_POLICY=adaptive` or `admission` for one
-/// policy, and `SIM_SEED_ACCESS=datacenter` for a seed in a datacenter;
-/// with `SIM_CAPTURE` each run's dumps go to a directory it prints.
-#[test]
-#[ignore = "a 6 Mbit/s probe; run in release with --ignored --nocapture"]
-fn wan_cable_seed_6mbit() {
-    let viewers = knob("SIM_PEERS").unwrap_or(50);
-    let chunk = knob("SIM_CHUNK").unwrap_or(CHUNK);
+/// [`wan_cable_seed_config`] for `seed` under `policy`, from the knobs:
+/// `SIM_PEERS` viewers (default 50), `SIM_CHUNK` bytes per chunk (1024),
+/// `SIM_MBIT` (6), `SIM_SEED_ACCESS` (`cable`, `fiber` or `datacenter`)
+/// and `SIM_SECS`.
+fn wan_cable_seed_knobs(seed: u64, policy: SeedPolicy) -> Config {
     let access = match knob::<String>("SIM_SEED_ACCESS").as_deref() {
+        None | Some("cable") => Access::Cable,
+        Some("fiber") => Access::Fiber,
         Some("datacenter") => Access::Datacenter,
-        _ => Access::Cable,
+        Some(a) => panic!("SIM_SEED_ACCESS={a}: cable, fiber or datacenter"),
     };
-    let adaptive = SeedPolicy {
-        allocation: SeedAllocation::Adaptive,
-        qos: SeedQos::ByAllocation,
-    };
+    let mut cfg = wan_cable_seed_config(
+        seed,
+        knob("SIM_PEERS").unwrap_or(50),
+        knob("SIM_CHUNK").unwrap_or(CHUNK),
+        knob("SIM_MBIT").unwrap_or(6),
+        policy,
+        access,
+    );
+    if let Some(secs) = knob("SIM_SECS") {
+        cfg.stream_secs = secs;
+    }
+    cfg
+}
+
+/// The adaptive seed, with uplink shares by allocation.
+const ADAPTIVE_QOS: SeedPolicy = SeedPolicy {
+    allocation: SeedAllocation::Adaptive,
+    qos: SeedQos::ByAllocation,
+};
+
+/// [`wan_cable_seed_knobs`] under both seed policies, over `SIM_SEEDS`
+/// seeds (default 1). `SIM_SEED_POLICY=adaptive` or `admission` runs one
+/// policy; with `SIM_CAPTURE` each run's dumps go to a directory it prints.
+#[test]
+#[ignore = "a probe at production bitrates; run in release with --ignored --nocapture"]
+fn wan_cable_seed() {
+    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(1);
     let policies: Vec<SeedPolicy> = match knob::<String>("SIM_SEED_POLICY").as_deref() {
-        Some("adaptive") => vec![adaptive],
+        Some("adaptive") => vec![ADAPTIVE_QOS],
         Some("admission") => vec![SeedPolicy::default()],
-        _ => vec![SeedPolicy::default(), adaptive],
+        _ => vec![SeedPolicy::default(), ADAPTIVE_QOS],
     };
-    let rows = par_map(&policies, |&policy| {
-        let mut cfg = wan_cable_seed_6mbit_config(viewers, chunk, policy, access);
-        if let Some(secs) = knob("SIM_SECS") {
-            cfg.stream_secs = secs;
-        }
+    let jobs: Vec<(SeedPolicy, u64)> = policies
+        .iter()
+        .flat_map(|&p| (1..=seeds).map(move |s| (p, s)))
+        .collect();
+    let rows = par_map(&jobs, |&(policy, seed)| {
+        let cfg = wan_cable_seed_knobs(seed, policy);
+        let (viewers, chunk) = (cfg.peers, cfg.chunk_size);
+        let mbit = cfg.stream_rate as f64 * 8e-6;
+        let access = cfg.wan.as_ref().unwrap().sites[0].access;
         let tag = run_tag(&cfg);
         let mut sim = Sim::new(cfg);
         let r = sim.run();
@@ -4836,9 +4881,8 @@ fn wan_cable_seed_6mbit() {
         let last_write = t0() + Duration::SECOND + Duration::from_secs(sim.cfg.stream_secs as i64);
         let p = &r.push;
         format!(
-            "| {:?} | {} | {chunk} | {:.4} | {} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {} ({}) | {} | {tag} |",
+            "| {:?} | {seed} | {mbit} | {access} | {viewers} | {chunk} | {:.4} | {} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} | {} | {:.0} | {:.0}% | {} | {} | {} / {} | {:.1}% / {:.1}% ({} s) | {:.2}% ({} ms) | {} ({}) | {} | {tag} | {:016x} |",
             policy.allocation,
-            viewers,
             r.delivery,
             ms(r.lag_p50),
             ms(r.lag_p99),
@@ -4872,13 +4916,227 @@ fn wan_cable_seed_6mbit() {
                     r.announce.2
                 ),
             ),
+            r.trace,
         )
     });
     println!(
-        "| seed allocation | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | worst stripe p99 ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | holders barred (honest) | {VERDICT_HEADER} | run tag |"
+        "| seed allocation | sim seed | Mbit/s | seed access | viewers | chunk | delivery | lag p50 ms | p99 ms | max ms | worst stripe p99 ms | stream ends s | reads end s | push hits | misses | late | unsolicited | seed MB up | seed uplink over the run | underruns | resets | free riders / liars | seed slots at free riders / liars (longest held) | streams grafted to liars (mean span) | holders barred (honest) | {VERDICT_HEADER} | run tag | trace |"
     );
     for r in rows {
         println!("{r}");
+    }
+}
+
+/// One run for the sim farm (`hack/sim-farm`), printed as one line: `ROW`
+/// and a flat JSON object of its config, its trace and its measurements.
+/// `SIM_SCENARIO` is `cable-seed` (default), [`wan_cable_seed_knobs`]
+/// under `SIM_SEED_POLICY` (`adaptive`, the default, or `admission`), or an
+/// [`AbScenario`] run as the allocation tables run `SIM_CASE` (an
+/// [`AllocCase`], default `AdaptiveQos`) under `SIM_CONTROLLER` (`ledbat`
+/// or `bbr`); a pinned case takes the admission run's slots from
+/// `SIM_SLOTS`. `SIM_SEED` (1) is the sim seed.
+#[test]
+#[ignore = "one sim farm job; run in release with --ignored --nocapture"]
+fn sim_job() {
+    let seed = knob("SIM_SEED").unwrap_or(1);
+    let scenario = knob::<String>("SIM_SCENARIO").unwrap_or_else(|| "cable-seed".into());
+    let (scenario, case, cfg) = if scenario == "cable-seed" {
+        let policy = match knob::<String>("SIM_SEED_POLICY").as_deref() {
+            None | Some("adaptive") => ADAPTIVE_QOS,
+            Some("admission") => SeedPolicy::default(),
+            Some(p) => panic!("SIM_SEED_POLICY={p}: adaptive or admission"),
+        };
+        (
+            scenario,
+            format!("{:?}", policy.allocation),
+            wan_cable_seed_knobs(seed, policy),
+        )
+    } else {
+        let sc = AbScenario::ALL
+            .into_iter()
+            .find(|sc| format!("{sc:?}").eq_ignore_ascii_case(&scenario))
+            .unwrap_or_else(|| panic!("SIM_SCENARIO={scenario}: cable-seed or an AbScenario"));
+        let name = knob::<String>("SIM_CASE").unwrap_or_else(|| "AdaptiveQos".into());
+        let case = AllocCase::ALL
+            .into_iter()
+            .find(|c| format!("{c:?}").eq_ignore_ascii_case(&name))
+            .unwrap_or_else(|| panic!("SIM_CASE={name}: an AllocCase"));
+        let controller = match knob::<String>("SIM_CONTROLLER").as_deref() {
+            None | Some("ledbat") => LEDBAT,
+            Some("bbr") => BBR,
+            Some(c) => panic!("SIM_CONTROLLER={c}: ledbat or bbr"),
+        };
+        let slots = match case.pinned() {
+            true => knob("SIM_SLOTS").expect("a pinned SIM_CASE takes SIM_SLOTS"),
+            false => 0,
+        };
+        (
+            format!("{sc:?}"),
+            format!("{case:?}"),
+            alloc_config(sc, seed, controller, case, slots),
+        )
+    };
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    println!("ROW {}", job_row(&scenario, &case, &sim, &r));
+}
+
+/// [`sim_job`]'s row: the run's config, including the knobs its run tag
+/// misses, the trace that a rerun must reproduce, and its measurements,
+/// with counts left raw so rows can be summed before taking shares.
+fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
+    let cfg = &sim.cfg;
+    let seed = &sim.nodes[0];
+    let span = (r.finish - t0()).as_secs_f64();
+    let up = seed.wire.up_bytes;
+    let p = &r.push;
+    let v = &r.verdicts;
+    let c = &r.report_counts.0;
+    let super_peer = cfg
+        .wan
+        .as_ref()
+        .and_then(|w| w.sites.iter().rposition(|s| s.access == Access::Datacenter))
+        .filter(|&i| i > 0)
+        .and_then(|i| {
+            let n = &sim.nodes[i];
+            n.runner
+                .push_stats(n.swarm)
+                .map(|s| (s.children as u64, s.rejected))
+        });
+    let mut row = JsonRow::default();
+    row.str("scenario", scenario)
+        .str("case", case)
+        .str("controller", &format!("{:?}", cfg.controller))
+        .int("seed", cfg.seed)
+        .int("peers", cfg.peers as u64)
+        .num("mbit", cfg.stream_rate as f64 * 8e-6)
+        .int("chunk", cfg.chunk_size as u64)
+        .int("streams", cfg.stream_count as u64)
+        .int("secs", cfg.stream_secs)
+        .int("warm", cfg.warm_secs as u64)
+        .str(
+            "access",
+            &cfg.wan
+                .as_ref()
+                .map_or("-".into(), |w| w.sites[0].access.to_string()),
+        )
+        .int("greedy", u64::from(knob::<u32>("SIM_GREEDY") != Some(0)))
+        .int(
+            "collude",
+            u64::from(knob::<u32>("SIM_COLLUDE").is_some_and(|c| c != 0)),
+        )
+        .str("run_tag", &run_tag(cfg))
+        .str("trace", &format!("{:016x}", r.trace))
+        .int("frames", r.frames)
+        .int("bytes", r.bytes)
+        .num("delivery", r.delivery)
+        .int("lag_p50_ms", ms(r.lag_p50) as u64)
+        .int("lag_p99_ms", ms(r.lag_p99) as u64)
+        .int("lag_max_ms", ms(r.lag_max) as u64)
+        .int("stripe_p90_ms", ms(r.stripe_p90) as u64)
+        .int("stripe_p99_ms", ms(r.stripe_p99) as u64)
+        .int(
+            "worst_region_p99_ms",
+            r.regions.iter().map(|&(_, l)| ms(l)).max().unwrap_or(0) as u64,
+        )
+        .num("stream_end_s", 1.0 + cfg.stream_secs as f64)
+        .num("reads_end_s", span)
+        .int("mismatches", r.mismatches)
+        .int("underruns", r.underruns)
+        .int("resets", r.resets)
+        .int("wasted", r.wasted)
+        .int("chunks_read", sim.chunks_read())
+        .int("push_hits", p.hits)
+        .int("push_misses", p.misses)
+        .int("push_late", p.late)
+        .int("push_unsolicited", p.unsolicited)
+        .num("seed_mb_up", up as f64 / 1e6)
+        .num("seed_uplink", up as f64 / (seed.up_bw as f64 * span))
+        .num("seed_share", r.seed_share)
+        .num("seed_pull_share", r.seed_pull_share)
+        .num("seed_distinct", r.seed_distinct)
+        .num("seed_slots", r.seed_slots)
+        .int("seed_objective_ms", ms(r.seed_objective) as u64)
+        .num("settled_s", r.settled.as_secs_f64())
+        .int("holder_changes", r.holder_changes as u64)
+        .int("super_peer_children", super_peer.map_or(0, |s| s.0))
+        .int("super_peer_declined", super_peer.map_or(0, |s| s.1))
+        .int("free_riders", r.greedy.0 as u64)
+        .int("liars", r.greedy.1 as u64)
+        .num("free_rider_slots", r.greedy_slots.0)
+        .num("liar_slots", r.greedy_slots.1)
+        .int("greedy_held_s", r.greedy_held.as_secs() as u64)
+        .num("liar_grafts", r.liar_grafts)
+        .int("liar_graft_span_ms", ms(r.liar_graft_span) as u64)
+        .int("barred", r.barred.0)
+        .int("barred_honest", r.barred.1)
+        .int("v_honest", v.honest)
+        .int("v_with_children", v.with_children)
+        .int("v_with_reporters", v.with_reporters)
+        .int("v_judged", v.judged)
+        .int("v_served", v.served)
+        .int("v_served_childless", v.served_childless)
+        .int("v_liars", v.liars)
+        .int("v_liars_judged", v.liars_judged)
+        .int("v_liars_served", v.liars_served)
+        .int("v_not_kept", v.not_kept)
+        .int("v_barred_with_children", v.barred_with_children)
+        .num("liar_hold_s", r.liar_hold.0.as_secs_f64())
+        .num("liar_hold_max_s", r.liar_hold.1.as_secs_f64())
+        .int("reports_tallied", c.tallied)
+        .int("reports_unknown", c.unknown)
+        .int("reports_invalid", c.invalid)
+        .int("reports_reporter_fed", c.reporter_fed)
+        .int("reports_subject_unfed", c.subject_unfed)
+        .int("reports_reporter_silent", c.reporter_silent)
+        .int("reports_too_early", c.too_early)
+        .int("reports_misses_unseen", c.misses_unseen)
+        .int("announces", r.announce.0)
+        .int("announce_bytes", r.announce.1)
+        .num(
+            "announce_bps",
+            r.announce.1 as f64 / cfg.stream_secs.max(1) as f64,
+        )
+        .num("announce_share", r.announce.2)
+        .int("asks", r.asks);
+    row.finish()
+}
+
+/// A flat JSON object, field by field: numbers and plain tokens.
+#[derive(Default)]
+struct JsonRow(String);
+
+impl JsonRow {
+    fn field(&mut self, key: &str, value: std::fmt::Arguments) -> &mut Self {
+        use std::fmt::Write;
+        self.0.push(if self.0.is_empty() { '{' } else { ',' });
+        write!(self.0, "\"{key}\":{value}").unwrap();
+        self
+    }
+
+    fn int(&mut self, key: &str, v: u64) -> &mut Self {
+        self.field(key, format_args!("{v}"))
+    }
+
+    /// A number; JSON has no NaN or infinity, so those are null.
+    fn num(&mut self, key: &str, v: f64) -> &mut Self {
+        match v.is_finite() {
+            true => self.field(key, format_args!("{v}")),
+            false => self.field(key, format_args!("null")),
+        }
+    }
+
+    fn str(&mut self, key: &str, v: &str) -> &mut Self {
+        assert!(
+            !v.contains(|c: char| c == '"' || c == '\\' || c.is_control()),
+            "{v:?}"
+        );
+        self.field(key, format_args!("\"{v}\""))
+    }
+
+    fn finish(&mut self) -> String {
+        self.0.push('}');
+        std::mem::take(&mut self.0)
     }
 }
 
