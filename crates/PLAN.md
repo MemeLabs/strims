@@ -192,10 +192,6 @@ Egress and players:
 - The allocation tables' pinned cases need the admission run's slots for
   the same scenario and seed first; the farm has no jobs that wait on
   others, so `sim_job` takes them from `SIM_SLOTS` by hand.
-- A spot quota error cuts a run's vCPU budget to what it has running, for
-  the rest of the run. A run started while another's instances are still
-  terminating gets one and, with nothing running, waits for good. Re-read
-  the quota after a while.
 
 ### Push/pull hybrid
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
