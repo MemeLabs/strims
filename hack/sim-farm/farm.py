@@ -76,16 +76,29 @@ rows, and an arm whose source changed runs again.
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job.
 
-AWS: the aws CLI's default credentials and region. The user needs
+AWS: the aws CLI's credentials and region (its default profile, or the
+config file's). The user needs
 ec2:RunInstances (spot, with tags on launch), ec2:TerminateInstances on
 tagged instances, ec2:ImportKeyPair, ec2:CreateSecurityGroup,
 ec2:AuthorizeSecurityGroupIngress, the Describe calls for instances,
 images, key pairs, security groups, subnets, instance types, type
 offerings and spot prices, and servicequotas:GetServiceQuota. SSH uses
---ssh-key ($STRIMS_FARM_SSH_KEY, default ~/.ssh/id_rsa), whose .pub is
-imported as the key pair strims-sim-farm-<file name>; it must work without
-a prompt (no passphrase, or loaded into ssh-agent). The security group
-strims-sim-farm admits SSH from this host's public address.
+--ssh-key ($STRIMS_FARM_SSH_KEY, the config file's ssh_key, or
+~/.ssh/id_rsa), whose .pub is imported as the key pair
+strims-sim-farm-<file name>; it must work without a prompt (no
+passphrase, or loaded into ssh-agent). The security group strims-sim-farm
+admits SSH from this host's public address.
+
+What's particular to the person running the farm goes in
+hack/sim-farm/config.toml, which git ignores; flags and the environment
+override it:
+
+  ssh_key = "~/.ssh/id_rsa-me"
+  aws_profile = "farm"          # else $AWS_PROFILE, or the CLI's default
+  aws_region = "us-west-2"      # else $AWS_REGION, or the profile's
+  [run]                         # defaults for run's options
+  max_vcpus = 128
+  hours = 4
 """
 
 import argparse
@@ -111,6 +124,7 @@ import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+CONFIG = HERE / "config.toml"
 ROOT = HERE.parent.parent
 FARM = ROOT / "target" / "sim-farm"
 BIN = FARM / "bin"
@@ -966,7 +980,7 @@ class Run:
     def setup_aws(self) -> None:
         key = Path(self.args.ssh_key).expanduser()
         if not key.exists() or not Path(f"{key}.pub").exists():
-            sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY)")
+            sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY, ssh_key in {CONFIG})")
         self.ssh = Ssh(key, self.state)
         self.key_name = ensure_key(key)
         vpc, self.zones = network()
@@ -1265,7 +1279,24 @@ def down(name: str | None) -> None:
     print(f"terminating {len(ids)} instances" if ids else "no instances")
 
 
+def config() -> dict:
+    """The config file's settings, with AWS's applied to this process's
+    environment, where the aws CLI reads them."""
+    if not CONFIG.exists():
+        return {}
+    cfg = tomllib.loads(CONFIG.read_text())
+    unknown = set(cfg) - {"ssh_key", "aws_profile", "aws_region", "run"}
+    if unknown:
+        sys.exit(f"{CONFIG}: unknown settings {sorted(unknown)}")
+    if "aws_profile" in cfg:
+        os.environ.setdefault("AWS_PROFILE", cfg["aws_profile"])
+    if "aws_region" in cfg:
+        os.environ.setdefault("AWS_REGION", cfg["aws_region"])
+    return cfg
+
+
 def main() -> int:
+    cfg = config()
     p = argparse.ArgumentParser(
         description=__doc__.splitlines()[0], formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -1284,7 +1315,15 @@ def main() -> int:
     r.add_argument("--keep", action="store_true")
     r.add_argument("--local", action="store_true")
     r.add_argument("--slots", type=int)
-    r.add_argument("--ssh-key", default=os.environ.get("STRIMS_FARM_SSH_KEY", "~/.ssh/id_rsa"))
+    r.add_argument(
+        "--ssh-key",
+        default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
+    )
+    defaults = cfg.get("run", {})
+    known = {a.dest for a in r._actions} - {"help", "matrix", "ssh_key"}
+    if set(defaults) - known:
+        sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
+    r.set_defaults(**defaults)
     s = sub.add_parser("status")
     s.add_argument("matrix", nargs="?")
     d = sub.add_parser("down")
