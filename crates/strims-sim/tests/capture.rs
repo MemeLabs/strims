@@ -51,7 +51,11 @@ fn mesh(seed: u64) -> Scenario {
 #[test]
 fn a_captured_run_keeps_its_trace() {
     let plain = run(mesh(1), 1).unwrap();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("a_captured_run_keeps_its_trace");
+    // Per process: test binaries running at once share the directory.
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_captured_run_keeps_its_trace-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     let mut spec = mesh(1);
     spec.capture = Some(dir.clone());
@@ -73,4 +77,5 @@ fn a_captured_run_keeps_its_trace() {
         }
         assert!(frames_in > 0 && frames_out > 0 && taps > 0, "{name}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -2750,7 +2750,11 @@ fn sim_capture_changes_no_trace() {
     cfg.push_mode = PushMode::Hybrid;
     cfg.stream_count = 4;
     let plain = Sim::new(cfg.clone()).run();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sim_capture_changes_no_trace");
+    // Per process: test binaries running at once share the directory.
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_capture_changes_no_trace-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     for tap in [false, true] {
         let to = dir.join(if tap { "tap" } else { "frames" });
@@ -2785,6 +2789,7 @@ fn sim_capture_changes_no_trace() {
         assert_eq!((frames, bytes), (plain.frames, plain.bytes));
         assert_eq!(taps > 0, tap);
     }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
