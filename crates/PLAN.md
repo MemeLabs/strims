@@ -185,6 +185,26 @@ Egress and players:
   Dumps grow about as fast as the node's traffic, nearly all of it
   incompressible payload; this would cut them about eightfold.
 
+### Simulation farm
+- Run the sims' trial matrices on EC2 spot instances. A matrix runs in
+  one process over one machine's cores (the ppspp sim's `par_map`), and a
+  run at production bitrates (6-12 Mbit/s, 100 viewers) takes 5-15 min,
+  so a matrix of a hundred or more takes hours. First workload: ANNOUNCE
+  against the follower probe (branches `follower-probe`,
+  `announce-probe`) at 6, 8 and 12 Mbit/s, 50 and 100 viewers, 4 KiB
+  chunks, cable and fiber seeds, several sim seeds, greedy on and off;
+  `wan_cable_seed_6mbit` needs a bitrate knob and a sim-seed loop first.
+  - One job per run: an entry point that takes one config (scenario, sim
+    seed, case, knobs) and prints its row, so a matrix shards into jobs
+    and its tables are assembled from the rows.
+  - Runs are deterministic, so a job a spot interruption kills is
+    reissued anywhere and must print the same row; each row carries its
+    trace hash to check it.
+  - Arm binaries are built once (release) and shipped with the job list;
+    rows go to S3. Provisioning belongs in `infra/`.
+  - Tests that write fixed paths (`sim_capture_changes_no_trace` under
+    `CARGO_TARGET_TMPDIR`) collide when jobs share a host.
+
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
