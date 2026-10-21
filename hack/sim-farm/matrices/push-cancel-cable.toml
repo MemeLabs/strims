@@ -1,0 +1,41 @@
+# A child's CANCEL of the pushes it gave up on (push-cancel), and the same
+# with the parent backed off for those chunks' pull (push-cancel-backoff),
+# against main, behind a residential seed.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 1.5
+
+[arms]
+main = "325bc2f8"
+push-cancel = "push-cancel"
+push-cancel-backoff = "push-cancel-backoff"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_CHUNK = "4096"
+
+[axes]
+SIM_SEED_POLICY = ["adaptive", "admission"]
+SIM_MBIT = ["2", "6", "8"]
+SIM_PEERS = ["50", "100"]
+SIM_SEED_ACCESS = ["cable", "fiber"]
+SIM_GREEDY = ["1", "0"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "stripe_p99_ms:median,max",
+  "wasted/chunks_read:ratio",
+  "push_late/push_hits:ratio",
+  "push_misses/push_hits:ratio",
+  "seed_uplink:mean",
+]
