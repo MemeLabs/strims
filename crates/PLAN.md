@@ -193,6 +193,47 @@ Egress and players:
   the same scenario and seed first; the farm has no jobs that wait on
   others, so `sim_job` takes them from `SIM_SLOTS` by hand.
 
+### Push/pull hybrid
+Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
+and pull repairs what they miss.
+- Make it the default. `SwarmOptions::default_options` sets
+  `PushMode::Off`, and nothing outside the sims and tests turns it on,
+  strims-video's swarms included.
+- Open items:
+  - convergence on sparse meshes;
+  - coalescing HAVE-only frames;
+  - reciprocity versus tree children (children get the minimum weight);
+  - push bypassing congestion control;
+  - cycles longer than two;
+  - the upload meter assumes the driver drains at link speed, so it reads low
+    under vnic QoS, and swarms share one meter but admit independently.
+    strims-node could report link capacity;
+  - cancel a missed chunk at the parent to cut duplicates;
+  - a non-seed's interior stream is the first it accepts a subscriber
+    for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
+    capacity, so a datacenter viewer forwards every stream it holds;
+  - slow parents are detected late, so `sim_push_slow_parent`'s p99 can still
+    pass 1 s on some seeds. The upload meter's 2 s busy window takes about
+    1.5 s to reach `SHED_UTILIZATION`, a child's deadline stretches with its
+    parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
+    shield a new parent. Shedding on push queue wait helps slow parents but
+    hurts `sim_push_parent_dies` and sparse meshes;
+  - a liar that announces first is grafted again after every
+    `PRUNE_BACKOFF`, with no escalation: each child loses about 1 s of
+    every 11 s on each stream it is the best candidate for. Back off a
+    parent pruned again and again longer, by the child's own count;
+  - pull from liars: a request that timed out may go back to the same
+    channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor reopens
+    its window, so liars among a viewer's few neighbours keep holding its
+    requests (the ppspp sim's lossy mobile viewers lag about 9 s at p99
+    against 2 s without them). BBR backs a silent channel off further but
+    still lags about 7 s;
+  - a startup window for the admitting seed (`SeedAllocation::Admission`):
+    before its upload and store rate are measured it admits more than a
+    constrained uplink carries, and at 6 Mbit/s its pushes go stale. The
+    adaptive seed's window counts whole copies at holders; this one needs
+    slots, with shedding down to it.
+
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
@@ -236,46 +277,14 @@ Egress and players:
   backlog ÷ rate + min RTT. Assign each chunk to the earliest peer that meets
   its deadline, and skip chunks no peer can meet. `RequestController`
   already exposes the rate, min RTT and answer delay this needs.
-- **Push/pull hybrid.** Draft behind `push_mode`, off by default. Open items:
-  - convergence on sparse meshes;
-  - coalescing HAVE-only frames;
-  - reciprocity versus tree children (children get the minimum weight);
-  - push bypassing congestion control;
-  - cycles longer than two;
-  - the default stream count (16 streams behind an adaptive seed cut the
-    WAN p99 behind a cable seed about fourfold);
-  - the upload meter assumes the driver drains at link speed, so it reads low
-    under vnic QoS, and swarms share one meter but admit independently.
-    strims-node could report link capacity;
-  - cancel a missed chunk at the parent to cut duplicates;
-  - a non-seed's interior stream is the first it accepts a subscriber
-    for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
-    capacity, so a datacenter viewer forwards every stream it holds;
-  - slow parents are detected late, so `sim_push_slow_parent`'s p99 can still
-    pass 1 s on some seeds. The upload meter's 2 s busy window takes about
-    1.5 s to reach `SHED_UTILIZATION`, a child's deadline stretches with its
-    parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
-    shield a new parent. Shedding on push queue wait helps slow parents but
-    hurts `sim_push_parent_dies` and sparse meshes;
-  - a liar that announces first is grafted again after every
-    `PRUNE_BACKOFF`, with no escalation: each child loses about 1 s of
-    every 11 s on each stream it is the best candidate for. Back off a
-    parent pruned again and again longer, by the child's own count;
-  - pull from liars: a request that timed out may go back to the same
-    channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor reopens
-    its window, so liars among a viewer's few neighbours keep holding its
-    requests (the ppspp sim's lossy mobile viewers lag about 9 s at p99
-    against 2 s without them). BBR backs a silent channel off further but
-    still lags about 7 s;
-  - a startup window for the admitting seed (`SeedAllocation::Admission`):
-    before its upload and store rate are measured it admits more than a
-    constrained uplink carries, and at 6 Mbit/s its pushes go stale. The
-    adaptive seed's window counts whole copies at holders; this one needs
-    slots, with shedding down to it.
 - **Seed allocation.** Open items:
-  - **Defaults.** Decide whether a hybrid seed defaults to
-    `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
-    Hybrid and more than one stream. The adaptive seed needs the shares.
+  - **Defaults.** A hybrid seed defaults to the admitting seed with equal
+    uplink shares, and a swarm to one stream. Settle the defaults with a
+    farm matrix: the admitting seed against `SeedAllocation::Adaptive`
+    with `SeedQos::ByAllocation` (the adaptive seed needs the shares), at
+    1, 4 and 16 streams (16 behind an adaptive seed cut the WAN p99
+    behind a cable seed about fourfold), at 2-12 Mbit/s behind cable,
+    fiber and datacenter seeds.
   - **Liars after a bar.** Reports bar a liar a few seconds after it
     takes a copy, but the bar lapses after `HOLDER_BAR` and the liar
     takes a copy again, at the price of its would-be children's grafts
