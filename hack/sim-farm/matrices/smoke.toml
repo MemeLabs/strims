@@ -1,0 +1,34 @@
+# The sim farm's smoke test: the first workload's arms in short runs.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 1
+
+[arms]
+announce = "main"
+follower-probe = "follower-probe"
+announce-probe = "announce-probe"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_PEERS = "20"
+SIM_SECS = "6"
+SIM_CHUNK = "4096"
+
+[axes]
+SIM_MBIT = ["2", "6"]
+SIM_SEED = ["1", "2"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "liar_slots:mean",
+]

@@ -1,0 +1,43 @@
+# ANNOUNCE (main) against the follower probe (follower-probe) and against
+# ANNOUNCE with the probe for the holders its reports leave unjudged
+# (announce-probe), at production bitrates behind a residential seed.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 1.5
+
+[arms]
+announce = "main"
+follower-probe = "follower-probe"
+announce-probe = "announce-probe"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_CHUNK = "4096"
+
+[axes]
+SIM_MBIT = ["6", "8", "12"]
+SIM_PEERS = ["50", "100"]
+SIM_SEED_ACCESS = ["cable", "fiber"]
+SIM_GREEDY = ["1", "0"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "stripe_p99_ms:median,max",
+  "seed_uplink:mean",
+  "liar_slots:mean",
+  "liar_grafts:mean",
+  "barred_honest:mean",
+  "v_judged/v_honest:ratio",
+  "announce_share:mean",
+]
