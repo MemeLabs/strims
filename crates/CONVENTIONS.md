@@ -185,6 +185,9 @@ its tests.
 
 The release simulations, the ignored ones included:
 `cargo nextest run --release -p strims-sim -p strims-ppspp --run-ignored all`.
+Trial matrices too large for one machine run on EC2 spot instances,
+one process per run: `hack/sim-farm/farm.py` (its docstring has the
+usage).
 
 Every `.rs` file starts with:
 

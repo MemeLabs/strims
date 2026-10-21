@@ -186,24 +186,12 @@ Egress and players:
   incompressible payload; this would cut them about eightfold.
 
 ### Simulation farm
-- Run the sims' trial matrices on EC2 spot instances. A matrix runs in
-  one process over one machine's cores (the ppspp sim's `par_map`), and a
-  run at production bitrates (6-12 Mbit/s, 100 viewers) takes 5-15 min,
-  so a matrix of a hundred or more takes hours. First workload: ANNOUNCE
-  against the follower probe (branches `follower-probe`,
-  `announce-probe`) at 6, 8 and 12 Mbit/s, 50 and 100 viewers, 4 KiB
-  chunks, cable and fiber seeds, several sim seeds, greedy on and off;
-  `wan_cable_seed_6mbit` needs a bitrate knob and a sim-seed loop first.
-  - One job per run: an entry point that takes one config (scenario, sim
-    seed, case, knobs) and prints its row, so a matrix shards into jobs
-    and its tables are assembled from the rows.
-  - Runs are deterministic, so a job a spot interruption kills is
-    reissued anywhere and must print the same row; each row carries its
-    trace hash to check it.
-  - Arm binaries are built once (release) and shipped with the job list;
-    rows go to S3. Provisioning belongs in `infra/`.
-  - Tests that write fixed paths (`sim_capture_changes_no_trace` under
-    `CARGO_TARGET_TMPDIR`) collide when jobs share a host.
+- strims-sim's sweeps can't shard onto the farm (`hack/sim-farm`): a
+  sweep runs a test's seeds on threads of one process, and no entry point
+  runs one config and prints its row, as the ppspp sim's `sim_job` does.
+- The allocation tables' pinned cases need the admission run's slots for
+  the same scenario and seed first; the farm has no jobs that wait on
+  others, so `sim_job` takes them from `SIM_SLOTS` by hand.
 
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
@@ -354,7 +342,7 @@ Egress and players:
     current paths.
   - **Pull from a constrained seed.** Bound the answers a constrained seed
     sends for each fresh chunk. With 100 viewers at 6 Mbit/s and 1 KiB
-    chunks (the ppspp sim's ignored `wan_cable_seed_6mbit`) its push tree
+    chunks (the ppspp sim's ignored `wan_cable_seed`) its push tree
     holds, but its other neighbours pull the newest chunks from it: it
     sends each chunk 4 times, its uplink stays 89 % busy and the median
     viewer lags 4 s. Candidates, none a wire change: answer a fresh chunk
