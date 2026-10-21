@@ -268,24 +268,30 @@ Egress and players:
   - **Defaults.** Decide whether a hybrid seed defaults to
     `SeedAllocation::Adaptive` with `SeedQos::ByAllocation`, together with
     Hybrid and more than one stream. The adaptive seed needs the shares.
-  - **Liars.** A holder that announces what it is pushed and serves
-    none of it keeps its copy: telling it from an honest holder takes
-    other nodes' observations, in aggregate, never a claim about itself.
-    Branch `follower-probe` withholds one holder's last chunk of each
-    stream in a unit and confirms the neighbours whose HAVE of it lags
-    the stream's chunk before it at two probes in a row. It finds the
-    real subtrees and never proves a liar, but its late chunks and its
-    bars of honest holders cost WanResidentialSeed and WanSuperPeer
-    50-80 ms of p99 without greedy peers, and with them the honest
-    viewers' p99 stays where liars' grafts and pull timeouts put it.
-    ANNOUNCE (Wire changes) is the next candidate.
+  - **Liars after a bar.** Reports bar a liar a few seconds after it
+    takes a copy, but the bar lapses after `HOLDER_BAR` and the liar
+    takes a copy again, at the price of its would-be children's grafts
+    and misses until the reports bar it once more (WanSuperPeer under
+    BBR at 60 s). Decide whether a holder barred as unserved stays out
+    longer, or holds again only once reports show it serving as a relay.
+  - **Colluders.** A verdict is a majority over a holder's reporters, so
+    greedy viewers that praise a liar or defame an honest holder decide
+    it where they outnumber its honest reporters: holders with few (far
+    ones, and at 6 Mbit/s those whose children aren't the seed's
+    neighbours). In the ppspp sim's `SIM_COLLUDE` rows they get honest
+    holders barred and save no liar. Weigh a reporter by how long the
+    seed has seen it announce, or require a quorum that grows with the
+    reporters seen; decide whether colluders join the default greedy
+    mix.
   - **Holders nobody grafts onto.** The seed picks holders by its round
     trip to them and children pick parents by announcement lag, so a far
-    holder can relay to nobody, and a near one with a weak uplink to few:
-    the follower probe found 2.5-2.8 holders per minute with nobody
-    downstream on WanResidentialSeed and WanSuperPeer. Decide whether a
-    copy should go to a neighbour shown to serve, by an aggregate signal
-    (ANNOUNCE).
+    holder can relay to nobody, and a near one with a weak uplink to few.
+    No reporter votes on them, and they keep their copies: barring them
+    after 15 s without a reporter (branch `announce-drop`) and probing
+    them (branch `announce-probe`, the follower probe of branch
+    `follower-probe` for holders the reports leave unjudged) both barred
+    honest holders without improving p99. Decide whether a copy should
+    go to a neighbour the reports show serving as a relay.
   - **Greedy peers at the admitting seed.** `SeedAllocation::Admission`
     (the default) keeps a greedy subscriber's slot for as long as it asks;
     the silent-holder rule is the adaptive seed's. Applying it there
@@ -506,13 +512,12 @@ stack or a version gate.
 - Announce the interior stream and spare capacity.
 - Mark pushed DATA and echo send times.
 - Add a hop count or depth to STREAM_OPEN or HAVE.
-- ANNOUNCE, after BitTorrent's tracker announce: each viewer periodically
-  tells the seed, per parent, the chunks it was pushed, its hits and
-  misses, and the push delay. The seed scores a holder by the median over
-  the reporters that name it, checked against when each reporter
-  announced, and a report about oneself counts for nothing. Unlike the
-  follower probe (branch `follower-probe`) it delays no chunk and sees
-  subtrees outside the seed's neighbours.
+- ANNOUNCE's reach: a report names the reporter's direct parent and
+  reaches only the seed's own neighbours, so a holder whose children
+  aren't among them goes unjudged (at 6 Mbit/s the seed links to 32 of
+  100 viewers). Name the reporter's root holder, carried down the tree
+  (with the hop count above), or relay reports up the tree, signed by
+  viewer identities the seed can check.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the
   epoch, so peers don't reset.
 - Bump the protocol version.
