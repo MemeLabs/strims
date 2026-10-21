@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Runs the sims' trial matrices on EC2 spot instances, one job per run.
 
-  hack/sim-farm/farm.py build  MATRIX
-  hack/sim-farm/farm.py run    MATRIX [--max-vcpus N] [--families F,...]
+  hack/sim-farm/farm.py build  MATRIX...
+  hack/sim-farm/farm.py run    MATRIX... [--max-vcpus N] [--families F,...]
                                [--max-instance-cores N] [--hours H]
                                [--verify N] [--job-timeout MIN] [--keep]
                                [--local [--slots N]]
@@ -37,29 +37,42 @@ target/sim-farm/bin/<crate>-<target>-<source>. Arms build from commits,
 never from the working tree.
 
 run builds what's missing, then keeps spot instances busy until every job
-has a row. Its state is target/sim-farm/<matrix>/: rows.jsonl (a row per
-finished job, with its arm, commit, environment, host, CPU time and peak
-RSS), failures.jsonl, mismatches.jsonl and farm.log. A job's id hashes its
-arm's source and its environment, so a rerun skips the jobs that have
-rows, and an arm whose source changed runs again.
+has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
+row per finished job, with its arm, commit, environment, host, CPU time
+and peak RSS), failures.jsonl, mismatches.jsonl and farm.log. A job's id
+hashes its arm's source and its environment, so a rerun skips the jobs
+that have rows, and an arm whose source changed runs again.
 
-- Instances run one job per physical core, fewer if memory binds
-  (slot_mem_gib each, and 4 GiB for the system). The candidates are the
-  x86 types of --families from 8xlarge up to --max-instance-cores (64)
-  cores, in the zones the VPC's public subnets cover, ranked by spot price
-  per slot it would fill, then by the quota's vCPUs per slot (an SMT core
-  costs two).
+run takes several matrices at once: one queue holds their jobs, matrix by
+matrix in the order given, and one set of instances runs them. A job two
+matrices share (the same source and environment) runs once, and its row
+goes to each under that matrix's arm; a row one of them already has is
+copied into the others. The run is named for its matrices, their names
+sorted and joined with "+", and keeps its own files (the canary's trace,
+SSH host keys, --local's worker) in target/sim-farm/<run>/, which for one
+matrix is that matrix's state. Each matrix's farm.log gets the whole log.
+
+- Instances run one job per physical core, fewer if memory binds (the
+  largest slot_mem_gib of the run's matrices each, and 4 GiB for the
+  system). The candidates are the x86 types of --families from 8xlarge up
+  to --max-instance-cores (64) cores, in the zones the VPC's public
+  subnets cover, ranked by spot price per slot it would fill, then by the
+  quota's vCPUs per slot (an SMT core costs two).
   No pool (a type in a zone) takes more than half of the vCPU budget: the
-  spot quota, less spot vCPUs running outside this matrix, or --max-vcpus.
-  A pool out of capacity is skipped for 10 minutes.
-- Instances are one-time spot instances, tagged strims-sim-farm=<matrix>,
+  spot quota less the spot vCPUs it counts outside this run's instances
+  (those shutting down count too), at most --max-vcpus. The budget is read
+  again every 2 minutes while the run wants more instances; a quota error
+  holds it at what the run has until then. A pool out of capacity is
+  skipped for 10 minutes.
+- Instances are one-time spot instances, tagged strims-sim-farm=<run>,
   that terminate when they shut down. Each shuts itself down after
   --hours (6), and its worker powers it off after --idle-minutes (15) with
   nothing to do and no word from the controller, so a controller that
-  dies costs little. `down` terminates them.
-- Each new instance first runs the canary: the first job with the
-  [canary] overrides, also run here. A different trace means the binaries
-  don't reproduce across hosts, and the run stops.
+  dies costs little. `down` terminates them; `status` and `down` given a
+  matrix act on every run that includes it.
+- Each new instance first runs the canary: the first matrix's first job
+  with its [canary] overrides, also run here. A different trace means the
+  binaries don't reproduce across hosts, and the run stops.
 - Every 15 s the controller syncs each instance over SSH (worker.py sync):
   it tops the instance's queue up to its slots plus a quarter, stores the
   rows that came back (fsync), and acks them on the next sync.
@@ -67,11 +80,13 @@ rows, and an arm whose source changed runs again.
   for 3 minutes is terminated, and its jobs go back to the head of the
   queue. Runs are deterministic, so a reissued job must print the same
   row: a job whose row arrives twice is compared on (trace, frames,
-  bytes), and --verify N (2) runs N jobs twice on purpose, on different
-  instances. A job that fails twice is recorded and dropped.
-- Instances with nothing left to run are terminated. On ^C (or SIGTERM or
-  SIGHUP) the run's instances are terminated unless --keep; a rerun finds
-  instances by tag and adopts their jobs.
+  bytes), and --verify N (2) runs N jobs of each matrix twice on purpose,
+  on different instances. A job that fails twice is recorded and dropped.
+- Once the queue is empty, instances with nothing left to run are
+  terminated; until then they take the next matrix's jobs. On ^C (or
+  SIGTERM or SIGHUP) the run's instances are terminated unless --keep; a
+  rerun of the same matrices, in any order, finds its instances by tag
+  and adopts their jobs.
 
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job.
@@ -137,6 +152,7 @@ TICK = 15
 SSH_GRACE = 180
 POOL_BACKOFF = 600
 PRICE_REFRESH = 600
+BUDGET_REFRESH = 120
 SYSTEM_GIB = 4
 # What a test binary is built from: commits that change none of it share
 # a binary, and jobs.
@@ -152,20 +168,20 @@ QUOTA_ERRORS = {"MaxSpotInstanceCountExceeded", "VcpuLimitExceeded"}
 
 class Log:
     def __init__(self) -> None:
-        self.file = None
+        self.files = []
         self.lock = threading.Lock()
 
     def open(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.file = path.open("a")
+        self.files.append(path.open("a"))
 
     def __call__(self, msg: str) -> None:
         line = f"[{time.strftime('%H:%M:%S')}] {msg}"
         with self.lock:
             print(line, flush=True)
-            if self.file:
-                self.file.write(line + "\n")
-                self.file.flush()
+            for f in self.files:
+                f.write(line + "\n")
+                f.flush()
 
 
 log = Log()
@@ -259,6 +275,21 @@ class Matrix:
         return self.job(first.arm, {**dict(first.env), **self.canary})
 
 
+def run_name(matrices: list[Matrix]) -> str:
+    """The matrices' names, sorted and joined with "+": the run's tag, so a
+    rerun of the same matrices adopts its instances."""
+    names = sorted(m.name for m in matrices)
+    if len(set(names)) < len(names):
+        sys.exit(f"two matrices share a name: {names}")
+    if len(names) > 1 and any("+" in n for n in names):
+        sys.exit(f"a matrix run with others can't have a + in its name: {names}")
+    name = "+".join(names)
+    # EC2 tag values take 256 characters, and the Name tag is sim-farm-<run>.
+    if len(f"sim-farm-{name}") > 256:
+        sys.exit("too many matrices for one run: its name passes EC2's 256-character tag limit")
+    return name
+
+
 def read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -347,8 +378,14 @@ def tag_of(inst: dict, key: str) -> str | None:
     return next((t["Value"] for t in inst.get("Tags", []) if t["Key"] == key), None)
 
 
-def farm_instances(name: str | None) -> list[dict]:
-    flt = f"Name=tag:{TAG},Values={name}" if name else f"Name=tag-key,Values={TAG}"
+def in_run(inst: dict, matrix: str) -> bool:
+    """Whether the instance is a run's that includes the matrix."""
+    run = tag_of(inst, TAG) or ""
+    return matrix == run or matrix in run.split("+")
+
+
+def farm_instances(run: str | None) -> list[dict]:
+    flt = f"Name=tag:{TAG},Values={run}" if run else f"Name=tag-key,Values={TAG}"
     r = aws(
         "ec2", "describe-instances", "--filters", flt,
         "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down",
@@ -440,15 +477,17 @@ def spot_quota() -> int | None:
         return None
 
 
-def spot_vcpus_outside(name: str) -> int:
+def spot_vcpus_outside(mine: set[str]) -> int:
+    """The spot vCPUs the quota counts, but for the instances `mine`.
+    Instances shutting down still count."""
     r = aws(
         "ec2", "describe-instances", "--filters", "Name=instance-lifecycle,Values=spot",
-        "Name=instance-state-name,Values=pending,running",
+        "Name=instance-state-name,Values=pending,running,shutting-down",
     )
     total = 0
     for res in r["Reservations"]:
         for i in res["Instances"]:
-            if tag_of(i, TAG) != name:
+            if i["InstanceId"] not in mine:
                 c = i["CpuOptions"]
                 total += c["CoreCount"] * c["ThreadsPerCore"]
     return total
@@ -479,7 +518,7 @@ class Pool:
         return (self.type, self.zone)
 
 
-def specs(matrix: Matrix, types: list[str] | None = None, families: list[str] = (),
+def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[str] = (),
           min_vcpus: int = 0, max_cores: int = 1 << 30) -> dict[str, Spec]:
     if types is not None:
         flt = ["Name=instance-type,Values=" + ",".join(types)]
@@ -496,14 +535,14 @@ def specs(matrix: Matrix, types: list[str] | None = None, families: list[str] = 
         mem = t["MemoryInfo"]["SizeInMiB"] / 1024
         if v < min_vcpus or c > max_cores:
             continue
-        slots = min(c, int((mem - SYSTEM_GIB) // matrix.slot_mem_gib))
+        slots = min(c, int((mem - SYSTEM_GIB) // slot_mem_gib))
         if slots >= 1:
             out[t["InstanceType"]] = Spec(v, c, mem, slots)
     return out
 
 
-def pools(matrix: Matrix, families: list[str], max_cores: int, zones: dict[str, str]) -> list[Pool]:
-    sp = specs(matrix, families=families, min_vcpus=32, max_cores=max_cores)
+def pools(slot_mem_gib: float, families: list[str], max_cores: int, zones: dict[str, str]) -> list[Pool]:
+    sp = specs(slot_mem_gib, families=families, min_vcpus=32, max_cores=max_cores)
     if not sp:
         return []
     names = sorted(sp)
@@ -528,9 +567,9 @@ def pools(matrix: Matrix, families: list[str], max_cores: int, zones: dict[str, 
     return out
 
 
-def launch(matrix: Matrix, pool: Pool, ami: tuple[str, str], sg: str, key_name: str,
+def launch(run: str, pool: Pool, ami: tuple[str, str], sg: str, key_name: str,
            user_data: Path) -> str:
-    tags = f"{{Key={TAG},Value={matrix.name}}},{{Key=Name,Value=sim-farm-{matrix.name}}}"
+    tags = f"{{Key={TAG},Value={run}}},{{Key=Name,Value=sim-farm-{run}}}"
     r = aws(
         "ec2", "run-instances", "--count", "1",
         "--image-id", ami[0], "--instance-type", pool.type, "--subnet-id", pool.subnet,
@@ -614,67 +653,109 @@ class Ssh:
 
 
 class Run:
-    def __init__(self, matrix: Matrix, args: argparse.Namespace) -> None:
-        self.m = matrix
+    def __init__(self, matrices: list[Matrix], args: argparse.Namespace) -> None:
+        self.ms = matrices
+        self.name = run_name(matrices)
         self.args = args
         self.local = args.local
-        self.state = matrix.state
-        self.rows_path = self.state / "rows.jsonl"
-        self.jobs = matrix.jobs()
+        # The run's own files; each matrix's rows and log are in its state.
+        self.state = FARM / self.name
+        self.slot_mem_gib = max(m.slot_mem_gib for m in matrices)
         self.items: dict[str, Item] = {}
-        self.rows: dict[str, dict] = {}
-        for r in read_jsonl(self.rows_path):
-            self.rows.setdefault(r["id"], r)
+        self.rows: dict[str, dict] = {}  # job id -> its first row, in any matrix
+        self.have: dict[str, set[str]] = {}  # matrix -> job ids with rows
+        counts: collections.Counter = collections.Counter()
+        for m in matrices:
+            c = collections.Counter()
+            for r in read_jsonl(m.state / "rows.jsonl"):
+                self.rows.setdefault(r["id"], r)
+                c[r["id"]] += 1
+            self.have[m.name] = set(c)
+            counts |= c
+        # job id -> the matrices that have it, each with its own arm and commit
+        self.owners: dict[str, list[tuple[Matrix, Job]]] = {}
+        self.njobs: dict[str, int] = {}
         self.done: set[str] = set()  # wids with a row, or failed for good
         self.attempts: collections.Counter = collections.Counter()
         self.took: dict[str, set[str]] = collections.defaultdict(set)  # job id -> hosts
         self.queue: collections.deque[Item] = collections.deque()
         self.hosts: list[Host] = []
         self.pool = cf.ThreadPoolExecutor(max_workers=16)
+        self.budget: int | None = None
         self.verified = 0
         self.mismatches = 0
         self.failed = 0
         self.walls: list[float] = []
         self.boot_failures = 0
         self.stopping = threading.Event()
-        counts = collections.Counter(r["id"] for r in read_jsonl(self.rows_path))
-        for j in self.jobs:
-            item = Item(j)
+
+        def add(item: Item, done: bool) -> None:
             self.items[item.wid] = item
-            if j.id in self.rows:
+            if done:
                 self.done.add(item.wid)
             else:
                 self.queue.append(item)
-        # The verify copies: the first jobs by id that haven't two rows yet.
-        for j in sorted(self.jobs, key=lambda j: j.id)[: args.verify]:
-            item = Item(j, "v")
-            self.items[item.wid] = item
-            if counts[j.id] >= 2:
-                self.done.add(item.wid)
-            else:
-                self.queue.append(item)
+
+        # One queue, matrix by matrix; a job two matrices share runs once.
+        for m in matrices:
+            jobs = m.jobs()
+            self.njobs[m.name] = len(jobs)
+            for j in jobs:
+                own = self.owners.setdefault(j.id, [])
+                if any(o is m for o, _ in own):
+                    continue
+                own.append((m, j))
+                if len(own) == 1:
+                    add(Item(j), j.id in self.rows)
+            # The verify copies: the first jobs by id that haven't two rows yet.
+            for j in sorted(jobs, key=lambda j: j.id)[: args.verify]:
+                item = Item(self.owners[j.id][0][1], "v")
+                if item.wid not in self.items:
+                    add(item, counts[j.id] >= 2)
+        self.bins = sorted({own[0][1].bin for own in self.owners.values()})
 
     # -- results
 
+    def share_rows(self) -> None:
+        """Copies into each matrix the rows another has of its jobs: runs
+        are deterministic, so a job runs once for every matrix."""
+        n = 0
+        for m in self.ms:
+            recs = [
+                {**self.rows[j.id], "arm": j.arm, "commit": j.commit}
+                for jid, own in self.owners.items()
+                for o, j in own
+                if o is m and jid in self.rows and jid not in self.have[m.name]
+            ]
+            append_jsonl(m.state / "rows.jsonl", recs)
+            n += len(recs)
+        if n:
+            log(f"copied {n} rows from one matrix to another")
+
     def store(self, host: Host, item: Item, res: dict) -> None:
-        rec = {
-            "id": item.job.id,
-            "arm": item.job.arm,
-            "commit": item.job.commit,
-            "env": dict(item.job.env),
-            "copy": item.copy,
-            "host": host.id,
-            "type": host.type,
-            "wall_s": res.get("wall_s"),
-            "cpu_s": res.get("cpu_s"),
-            "max_rss_mb": res.get("max_rss_mb"),
-            "at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
-            "row": res["row"],
-        }
-        append_jsonl(self.rows_path, [rec])
+        at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        recs = []
+        for m, j in self.owners[item.job.id]:
+            rec = {
+                "id": j.id,
+                "arm": j.arm,
+                "commit": j.commit,
+                "env": dict(j.env),
+                "copy": item.copy,
+                "host": host.id,
+                "type": host.type,
+                "wall_s": res.get("wall_s"),
+                "cpu_s": res.get("cpu_s"),
+                "max_rss_mb": res.get("max_rss_mb"),
+                "at": at,
+                "row": res["row"],
+            }
+            append_jsonl(m.state / "rows.jsonl", [rec])
+            recs.append((m, rec))
         self.done.add(item.wid)
         if res.get("wall_s"):
             self.walls.append(res["wall_s"])
+        rec = recs[0][1]
         first = self.rows.setdefault(item.job.id, rec)
         if first is not rec:
             key = lambda r: tuple(r["row"].get(k) for k in ("trace", "frames", "bytes"))
@@ -682,7 +763,8 @@ class Run:
                 self.verified += 1
             else:
                 self.mismatches += 1
-                append_jsonl(self.state / "mismatches.jsonl", [{"first": first, "again": rec}])
+                for m, r in recs:
+                    append_jsonl(m.state / "mismatches.jsonl", [{"first": first, "again": r}])
                 log(f"MISMATCH: job {item.job.id} ({item.job.arm} {dict(item.job.env)}): "
                     f"{key(first)} on {first['host']}, {key(rec)} on {host.id}")
 
@@ -695,10 +777,10 @@ class Run:
         else:
             self.done.add(item.wid)
             self.failed += 1
-            append_jsonl(self.state / "failures.jsonl", [{
-                "id": item.job.id, "arm": item.job.arm, "env": dict(item.job.env),
-                "host": host.id, **res,
-            }])
+            for m, j in self.owners[item.job.id]:
+                append_jsonl(m.state / "failures.jsonl", [{
+                    "id": j.id, "arm": j.arm, "env": dict(j.env), "host": host.id, **res,
+                }])
 
     def requeue(self, host: Host) -> None:
         back = [i for i in host.assigned.values() if i.wid not in self.done and i.copy != "canary"]
@@ -799,7 +881,7 @@ class Run:
     # -- the canary
 
     def local_canary(self) -> str:
-        job = self.m.canary_job()
+        job = self.ms[0].canary_job()
         path = self.state / "canary.json"
         if path.exists():
             saved = json.loads(path.read_text())
@@ -874,11 +956,11 @@ class Run:
                 raise RuntimeError(f"no SSH after 10 minutes: {why}")
             time.sleep(5)
         self.ssh.put(host, [HERE / "worker.py"], "farm/")
-        self.ssh.put(host, [BIN / b for b in sorted({j.bin for j in self.jobs})], "farm/bin/")
+        self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
         self.start_worker(host)
 
     def refresh(self, now: float) -> None:
-        by_id = {i["InstanceId"]: i for i in farm_instances(self.m.name)}
+        by_id = {i["InstanceId"]: i for i in farm_instances(self.name)}
         for h in self.hosts:
             if h.state == "lost":
                 continue
@@ -902,6 +984,21 @@ class Run:
                     self.boot_failures += 1
                     if self.boot_failures >= 3:
                         raise SystemExit("instances keep failing to bootstrap; stopping")
+
+    def read_budget(self, now: float) -> None:
+        """The spot quota less what else counts against it, or --max-vcpus."""
+        self.next_budget = now + BUDGET_REFRESH
+        quota = spot_quota()
+        if quota is None and self.args.max_vcpus is None:
+            if self.budget is None:
+                sys.exit("can't read the spot vCPU quota; pass --max-vcpus")
+            return
+        outside = spot_vcpus_outside({h.id for h in self.hosts if h.state != "lost"})
+        cap = quota - outside if quota is not None else self.args.max_vcpus
+        budget = min(cap, self.args.max_vcpus or cap)
+        if budget != self.budget:
+            log(f"budget {budget} vCPUs (quota {quota}, {outside} in other spot instances)")
+        self.budget = budget
 
     def budget_room(self) -> int:
         live = sum(h.spec.vcpus for h in self.hosts if h.state != "lost")
@@ -930,6 +1027,8 @@ class Run:
         live = [h for h in self.hosts if h.state != "lost"]
         demand = len(self.queue) + sum(len(h.assigned) for h in live)
         deficit = demand - sum(h.slots for h in live)
+        if deficit > 0 and now >= self.next_budget:
+            self.read_budget(now)
         launched = 0
         while deficit > 0 and launched < 3:
             pool = self.pick(deficit, now)
@@ -939,15 +1038,18 @@ class Run:
                     log("no pool fits the budget or has capacity; waiting")
                 return
             try:
-                hid = launch(self.m, pool, self.ami, self.sg, self.key_name, self.user_data)
+                hid = launch(self.name, pool, self.ami, self.sg, self.key_name, self.user_data)
             except AwsError as e:
                 if e.code in CAPACITY_ERRORS:
                     log(f"{pool.type} in {pool.zone}: {e.code}; skipping it for {POOL_BACKOFF // 60} min")
                     self.backoff[pool.key] = now + POOL_BACKOFF
                     continue
                 if e.code in QUOTA_ERRORS:
+                    # Until the quota is read again: what counts against it
+                    # can lag what's running.
                     self.budget = self.budget - self.budget_room()
-                    log(f"{e.code}: the budget is now {self.budget} vCPUs")
+                    self.next_budget = now + BUDGET_REFRESH
+                    log(f"{e.code}: the budget is {self.budget} vCPUs for {BUDGET_REFRESH // 60} min")
                     return
                 if e.code == "AuthFailure.ServiceLinkedRoleCreationNotPermitted":
                     raise SystemExit(
@@ -986,37 +1088,24 @@ class Run:
         vpc, self.zones = network()
         self.sg = ensure_sg(vpc)
         self.ami = image()
-        quota = spot_quota()
-        outside = spot_vcpus_outside(self.m.name)
-        if quota is None and self.args.max_vcpus is None:
-            sys.exit("can't read the spot vCPU quota; pass --max-vcpus")
-        cap = quota - outside if quota is not None else self.args.max_vcpus
-        self.budget = min(cap, self.args.max_vcpus or cap)
         self.families = self.args.families.split(",")
-        self.pools = pools(self.m, self.families, self.args.max_instance_cores, self.zones)
+        self.pools = pools(self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones)
         self.priced = time.time()
         if not self.pools:
             sys.exit("no instance type fits (families, sizes, slot_mem_gib, zones)")
-        log(
-            f"budget {self.budget} vCPUs (quota {quota}, {outside} in other spot instances); "
-            f"best pools: " + ", ".join(
-                f"{p.type}@{p.zone[-1]} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
-                for p in self.pools[:5]
-            )
-        )
         self.backoff: dict[tuple[str, str], float] = {}
         self.last_stuck = 0.0
         minutes = int(self.args.hours * 60)
         self.user_data = self.state / "user-data.sh"
         self.user_data.write_text((HERE / "user-data.sh").read_text().replace("@MINUTES@", str(minutes)))
-        canary = self.m.canary_job()
+        canary = self.ms[0].canary_job()
         self.canary_item = Item(canary, "canary")
         self.items[self.canary_item.wid] = self.canary_item
         self.canary_trace = self.local_canary()
         # Instances a previous controller left running.
-        found = [i for i in farm_instances(self.m.name) if i["State"]["Name"] in ("pending", "running")]
+        found = [i for i in farm_instances(self.name) if i["State"]["Name"] in ("pending", "running")]
         if found:
-            sp = specs(self.m, types=sorted({i["InstanceType"] for i in found}))
+            sp = specs(self.slot_mem_gib, types=sorted({i["InstanceType"] for i in found}))
             for i in found:
                 spec = sp.get(i["InstanceType"])
                 if spec is None:
@@ -1026,11 +1115,16 @@ class Run:
                 h = Host(i["InstanceId"], i["InstanceType"], i["Placement"]["AvailabilityZone"], spec, price, launched, state="adopting")
                 self.hosts.append(h)
                 log(f"adopting {h.id} ({h.type} in {h.zone})")
+        self.read_budget(time.time())
+        log("best pools: " + ", ".join(
+            f"{p.type}@{p.zone[-1]} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
+            for p in self.pools[:5]
+        ))
 
     def setup_local(self) -> None:
         self.local_dir = self.state / "local"
         (self.local_dir / "bin").mkdir(parents=True, exist_ok=True)
-        for b in sorted({j.bin for j in self.jobs}):
+        for b in self.bins:
             dst = self.local_dir / "bin" / b
             if not dst.exists():
                 shutil.copy2(BIN / b, dst)
@@ -1070,7 +1164,7 @@ class Run:
     def tick(self, now: float) -> None:
         if not self.local:
             if now - self.priced > PRICE_REFRESH:
-                self.pools = pools(self.m, self.families, self.args.max_instance_cores, self.zones)
+                self.pools = pools(self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones)
                 self.priced = now
             self.refresh(now)
         ready = [h for h in self.hosts if h.state in ("canary", "ready")]
@@ -1099,9 +1193,19 @@ class Run:
 
     def run(self) -> int:
         self.state.mkdir(parents=True, exist_ok=True)
-        log.open(self.state / "farm.log")
-        log(f"{self.m.name}: {len(self.jobs)} jobs over {len(self.m.arms)} arms, "
-            f"{sum(1 for i in self.items.values() if i.wid not in self.done)} to run")
+        for m in self.ms:
+            log.open(m.state / "farm.log")
+        to_run = sum(1 for i in self.items.values() if i.wid not in self.done)
+        if len(self.ms) == 1:
+            m = self.ms[0]
+            log(f"{m.name}: {self.njobs[m.name]} jobs over {len(m.arms)} arms, {to_run} to run")
+        else:
+            for m in self.ms:
+                log(f"{m.name}: {self.njobs[m.name]} jobs over {len(m.arms)} arms")
+            shared = sum(1 for own in self.owners.values() if len(own) > 1)
+            log(f"{self.name}: {len(self.owners)} jobs, {shared} of them in more than one "
+                f"matrix; {to_run} to run")
+            self.share_rows()
         if self.local:
             self.setup_local()
         else:
@@ -1136,11 +1240,13 @@ class Run:
         finally:
             self.stopping.set()
             if self.local:
-                # The worker may be one a previous controller started.
+                # The worker may be one a previous controller started, or
+                # this one's, before it has written its pid.
                 try:
                     os.kill(int((self.local_dir / "serve.pid").read_text()), signal.SIGTERM)
                 except (OSError, ValueError):
                     pass
+                self.serve.terminate()
                 self.serve.wait()
             elif not (interrupted and self.args.keep):
                 live = [h for h in self.hosts if h.state != "lost"]
@@ -1156,7 +1262,10 @@ class Run:
             self.progress(time.time())
         if interrupted:
             return 130
-        report(self.m, [], None)
+        for m in self.ms:
+            if len(self.ms) > 1:
+                print(f"\n{m.name}:\n")
+            report(m, [], None)
         return 1 if self.mismatches or self.failed else 0
 
 
@@ -1259,7 +1368,9 @@ def matrix_at(arg: str) -> Matrix:
 def status(arg: str | None) -> None:
     m = matrix_at(arg) if arg else None
     now = time.time()
-    for i in farm_instances(m.name if m else None):
+    for i in farm_instances(None):
+        if m and not in_run(i, m.name):
+            continue
         launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
         print(
             f"{i['InstanceId']}  {tag_of(i, TAG):20} {i['InstanceType']:14} "
@@ -1274,7 +1385,10 @@ def status(arg: str | None) -> None:
 
 
 def down(name: str | None) -> None:
-    ids = [i["InstanceId"] for i in farm_instances(name) if i["State"]["Name"] != "shutting-down"]
+    ids = [
+        i["InstanceId"] for i in farm_instances(None)
+        if i["State"]["Name"] != "shutting-down" and (name is None or in_run(i, name))
+    ]
     terminate(ids)
     print(f"terminating {len(ids)} instances" if ids else "no instances")
 
@@ -1302,9 +1416,9 @@ def main() -> int:
     )
     sub = p.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
-    b.add_argument("matrix")
+    b.add_argument("matrices", nargs="+")
     r = sub.add_parser("run")
-    r.add_argument("matrix")
+    r.add_argument("matrices", nargs="+")
     r.add_argument("--max-vcpus", type=int)
     r.add_argument("--families", default=FAMILIES)
     r.add_argument("--max-instance-cores", type=int, default=64)
@@ -1320,7 +1434,7 @@ def main() -> int:
         default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
     )
     defaults = cfg.get("run", {})
-    known = {a.dest for a in r._actions} - {"help", "matrix", "ssh_key"}
+    known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key"}
     if set(defaults) - known:
         sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
     r.set_defaults(**defaults)
@@ -1338,11 +1452,14 @@ def main() -> int:
         return Path(m).stem if m else None
 
     if args.cmd == "build":
-        build(Matrix(args.matrix))
+        for m in args.matrices:
+            build(Matrix(m))
     elif args.cmd == "run":
-        m = Matrix(args.matrix)
-        build(m)
-        return Run(m, args).run()
+        ms = [Matrix(m) for m in args.matrices]
+        run_name(ms)  # its checks, before the builds
+        for m in ms:
+            build(m)
+        return Run(ms, args).run()
     elif args.cmd == "status":
         status(args.matrix)
     elif args.cmd == "down":
