@@ -29,9 +29,10 @@
 //!   chunks from the same peer at the same time ask it for different ones
 //!   and can trade the rest.
 //! - **Away from peers that fail to deliver.** A bin whose request timed
-//!   out or whose data was invalid is left to the other channels for
-//!   `REQUEST_BACKOFF`, and every channel gets a write cycle, so a peer
-//!   that announces chunks and withholds them can't keep them.
+//!   out, whose data was invalid, or whose push we gave up on is left to
+//!   the other channels for `REQUEST_BACKOFF`, and every channel gets a
+//!   write cycle, so a peer that announces chunks and withholds them can't
+//!   keep them.
 //! - **Enough to carry the stream.** LEDBAT's window has a floor of
 //!   [`STREAM_WINDOW_FLOOR`] times the stream's bandwidth-delay product,
 //!   which yields to losses ([`Ledbat::set_min_cwnd`]).
@@ -496,13 +497,14 @@ pub(crate) struct PeerChannelScheduler {
 
     /// Bins to send HAVEs for. Bound: our window.
     have_bins: Map,
-    /// Bins to send CANCELs for. Bound: timed out requests.
+    /// Bins to send CANCELs for. Bound: timed out requests and chunks
+    /// released from the peer as a parent, within the window.
     cancel_bins: Map,
     /// Request deadlines. Bound: [`max_pending_requests`].
     request_bins: BinQueue,
-    /// Bins this peer failed to deliver (a request timed out or its data
-    /// was invalid), left to the other channels until `backoff_until`
-    /// Bound: timed out requests and invalid data in the window.
+    /// Bins this peer failed to deliver (a request timed out, its data was
+    /// invalid, or we gave up on its push), left to the other channels
+    /// until `backoff_until`. Bound: those bins in the window.
     backoff_bins: Map,
     backoff_until: Time,
     /// Bound: one per stream.
@@ -1647,10 +1649,18 @@ impl PeerSwarmScheduler {
         true
     }
 
-    /// The peer cancelled a request: drop the queued answer.
-    pub(crate) fn handle_cancel(&mut self, peer: PeerKey, b: Bin, q: &mut impl PeerTaskQueue) {
+    /// The peer cancelled `b`: drop the queued answer, and in hybrid mode
+    /// any push of it (at write time, so one queued later is dropped too).
+    pub(crate) fn handle_cancel(
+        &mut self,
+        peer: PeerKey,
+        b: Bin,
+        window_start: Bin,
+        q: &mut impl PeerTaskQueue,
+    ) {
         if self.channels.contains_key(&peer) {
             q.remove_data(peer, self.s.key, b, PeerPriority::Low);
+            self.push_cancelled(peer, b, window_start);
         }
     }
 
@@ -1938,7 +1948,7 @@ impl PeerSwarmScheduler {
             b = b.left();
         }
         if push {
-            self.note_push(peer, b, t, false, now);
+            self.note_push(peer, b, t, push::seed::PushFate::Written, now);
         }
         Ok(())
     }

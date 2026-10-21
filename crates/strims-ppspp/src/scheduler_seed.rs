@@ -38,7 +38,8 @@
 //!   every stream, is what places whole copies.
 //!
 //!   From then on the window follows the pushes. Each check reads, per
-//!   holder, the shortest wait of the pushes written to it since the last
+//!   holder, the shortest wait of the pushes written to it or dropped
+//!   because it cancelled them (they waited all the same) since the last
 //!   check, which stays long only while its queue never empties between
 //!   munro bursts, and its stale drops; pushes queued before the window
 //!   last changed don't count. A holder is behind past
@@ -107,7 +108,7 @@
 //!   [`UNSERVED_SHARE`] of what they expected; most getting
 //!   [`SERVED_SHARE`] as hits proves it. The seed blames a holder only
 //!   after [`KEPT_CHECKS`] checks in a row at which its own pushes to it
-//!   kept up (none stale, one written within
+//!   kept up (none stale, one written or cancelled within
 //!   [`PUSH_WAIT_OVERLOAD`]), and drops the reports about it at a check
 //!   that didn't: children miss what the seed was slow to send. A verdict
 //!   is a majority over other nodes' observations, each checked against
@@ -235,6 +236,16 @@ pub fn report_entry_limit(streams: u16) -> u32 {
     4 * u32::from(streams)
 }
 
+/// What became of a push at write time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PushFate {
+    Written,
+    /// Dropped for waiting longer than [`PUSH_STALE`](super::PUSH_STALE).
+    Stale,
+    /// Dropped because the child cancelled the chunk.
+    Cancelled,
+}
+
 /// A seed's record of one neighbour.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Holder {
@@ -248,8 +259,8 @@ pub(crate) struct Holder {
     rtt: Option<Duration>,
     rtt_before: Option<Duration>,
     /// Since the last check, of the pushes queued since the window last
-    /// changed: the shortest wait of one written, and whether one went
-    /// stale.
+    /// changed: the shortest wait of one written or cancelled, and whether
+    /// one went stale.
     wait: Option<Duration>,
     stale: bool,
     /// The first push written in the current check interval, and the one
@@ -264,7 +275,7 @@ pub(crate) struct Holder {
     /// When it last became a holder.
     joined: Time,
     /// Since the last check, whatever the window: the shortest wait of a
-    /// push written to it, and whether one went stale.
+    /// push written to it or cancelled by it, and whether one went stale.
     fed: Option<Duration>,
     starved: bool,
     /// Whether the pushes to it kept up at each recent check, the latest
@@ -799,14 +810,15 @@ impl PeerSwarmScheduler {
         ok
     }
 
-    /// An adaptive seed's push of `bin` to `peer`, queued at `queued`, was
-    /// written at `now`, or dropped as stale.
+    /// An adaptive seed's push of `bin` to `peer`, queued at `queued`, met
+    /// `fate` at `now`. A cancelled push's wait counts as a written one's:
+    /// it waited in our queue all the same, though the peer never got it.
     pub(crate) fn note_push(
         &mut self,
         peer: PeerKey,
         bin: Bin,
         queued: Time,
-        stale: bool,
+        fate: PushFate,
         now: Time,
     ) {
         let Some(since) = self
@@ -826,9 +838,10 @@ impl PeerSwarmScheduler {
         else {
             return;
         };
-        if !stale && h.sample.is_none() {
+        if fate == PushFate::Written && h.sample.is_none() {
             h.sample = Some((bin, now));
         }
+        let stale = fate == PushFate::Stale;
         if stale {
             h.starved = true;
         } else {

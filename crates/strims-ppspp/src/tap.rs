@@ -88,6 +88,10 @@ pub enum TapKind {
     PushSuppressed {
         bin: Bin,
     },
+    /// A push dropped at write time: the child cancelled the chunk.
+    PushCancelled {
+        bin: Bin,
+    },
 
     /// Data from the peer behind our window.
     DataStale {

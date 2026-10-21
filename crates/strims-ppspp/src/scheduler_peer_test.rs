@@ -6,6 +6,7 @@
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
+use super::push::seed::PushFate;
 use super::*;
 use crate::codec::{Announce, AnnounceEntry, Message, Reader};
 use crate::{SwarmId, SwarmOptions};
@@ -1289,7 +1290,7 @@ fn pushed_bin(t: Time) -> Bin {
 /// once it arrived, `announce` later (never if `None`).
 fn push_to(f: &mut Fixture, p: PeerKey, queued: Time, at: Time, announce: Option<Duration>) {
     let b = pushed_bin(at);
-    f.sched.note_push(p, b, queued, false, at);
+    f.sched.note_push(p, b, queued, PushFate::Written, at);
     if let Some(d) = announce {
         f.sched.handle_have(p, b, at + d);
     }
@@ -1469,7 +1470,7 @@ fn an_adaptive_seeds_window_follows_its_pushes() {
     // A stale drop overloads: on an uplink with idle time it neither cuts
     // the window nor lets it grow.
     f.sched
-        .note_push(peers[0], pushed_bin(t), t, true, t + ms(1100));
+        .note_push(peers[0], pushed_bin(t), t, PushFate::Stale, t + ms(1100));
     t = alloc_check(&mut f, &mut q, t, &[], ms(0), (2_000_000, 0.5));
     assert_eq!(window(&f), 1);
     alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (2_000_000, 0.5));
@@ -1537,6 +1538,61 @@ fn an_adaptive_seed_bars_a_holder_that_doesnt_announce_its_pushes() {
     assert!(neighbour(&f, peers[1], barred + push::seed::HOLDER_BAR * 2 - ms(1)).barred);
     assert!(!neighbour(&f, peers[1], barred + push::seed::HOLDER_BAR * 2).barred);
     assert_eq!(f.sched.seed_allocation(t).unwrap().counters.silenced, 2);
+}
+
+#[test]
+fn an_adaptive_seed_times_cancelled_pushes() {
+    // A push its holder cancelled waited in the seed's queue all the same,
+    // so its wait drives the window; the holder never got it, so it isn't
+    // due to announce it.
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let ms = Duration::from_millis;
+    let cancelled = |f: &mut Fixture, p: PeerKey, t: Time, wait: Duration| {
+        f.sched
+            .note_push(p, pushed_bin(t + wait), t, PushFate::Cancelled, t + wait);
+    };
+    // Each interval peers[0] is pushed to and announces it; peers[1]
+    // cancels every push.
+    let check = |f: &mut Fixture, q: &mut MockQueue, t: Time| -> Time {
+        let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+        publish(f, t, next);
+        push_to(f, peers[0], t, t + ms(5), Some(ms(20)));
+        if subscribed(f, peers[1], 0) {
+            cancelled(f, peers[1], t, ms(5));
+        }
+        f.sched.set_upload(push::UploadInfo {
+            rate: 2_000_000,
+            busy: 1.0,
+        });
+        f.sched.run_push(next, q);
+        next
+    };
+    let mut t = now();
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    assert!(!ask(&mut f, &mut q, peers[1], 0, t));
+    t = check(&mut f, &mut q, t);
+    assert!(ask(&mut f, &mut q, peers[1], 0, t));
+    // Past the checks that bar a silent holder, it still holds.
+    for _ in 0..push::seed::SILENT_CHECKS + 2 {
+        t = check(&mut f, &mut q, t);
+        assert_eq!(holders(&f), peers[..2].to_vec());
+    }
+    assert_eq!(f.sched.seed_allocation(t).unwrap().counters.silenced, 0);
+
+    // Cancelled pushes alone, 600 ms in the queue of a saturated uplink,
+    // halve the window.
+    let window = |f: &Fixture| f.sched.seed_allocation(now()).unwrap().window;
+    let before = window(&f);
+    assert!(before >= 2, "{before}");
+    let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+    publish(&mut f, t, next);
+    cancelled(&mut f, peers[1], t, ms(600));
+    f.sched.set_upload(push::UploadInfo {
+        rate: 2_000_000,
+        busy: 1.0,
+    });
+    f.sched.run_push(next, &mut q);
+    assert_eq!(window(&f), before / 2);
 }
 
 #[test]
@@ -1694,6 +1750,125 @@ fn hybrid_deadlines_release_to_pull_and_silence_prunes() {
             .iter()
             .any(|m| matches!(m, Message::StreamRequest(r) if r.stream == 0))
     );
+}
+
+#[test]
+fn a_missed_push_is_cancelled_at_its_parent() {
+    // What a child gives up on, at a deadline or with the parent, is
+    // cancelled at the parent, which drops the pushes it hasn't sent.
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let parent = ready_channel(&mut f, &mut q);
+    let other = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+    assert_eq!(
+        f.sched.handle_stream_open(parent, 0, Bin(0), now(), &mut q),
+        Ok(StreamOpenOutcome::Accepted)
+    );
+    let cancels = |f: &mut Fixture, p: PeerKey, t: Time| -> Vec<Bin> {
+        next_messages(f, p, t)
+            .iter()
+            .filter_map(|m| match m {
+                Message::Cancel(c) => Some(c.bin),
+                _ => None,
+            })
+            .collect()
+    };
+
+    // Chunks 0..=3 miss their deadline: the parent gets a CANCEL for them,
+    // and the peer pull asks for them none.
+    f.sched.handle_have(other, Bin::new(2, 0), now());
+    let deadline = f.sched.next_push_deadline().unwrap();
+    f.sched.expire_push(deadline, &mut q);
+    assert_eq!(cancels(&mut f, parent, deadline), vec![Bin::new(2, 0)]);
+    assert!(cancels(&mut f, other, deadline).is_empty());
+
+    // Chunks 4..=7 are still expected when we unsubscribe: they go to pull
+    // and are cancelled at the parent with the stream.
+    f.sched.handle_have(other, Bin::new(2, 1), deadline);
+    assert!(
+        f.sched
+            .cancel_stream_sub(parent, 0, &f.swarm, deadline, &mut q)
+    );
+    assert!(f.sched.s.request_bins.empty_at(Bin::new(2, 1)));
+    let msgs = next_messages(&mut f, parent, deadline);
+    assert!(
+        msgs.iter()
+            .any(|m| matches!(m, Message::StreamCancel(c) if c.stream == 0))
+    );
+    assert!(
+        msgs.iter()
+            .any(|m| matches!(m, Message::Cancel(c) if c.bin == Bin::new(2, 1)))
+    );
+}
+
+#[test]
+fn a_missed_push_is_pulled_from_the_others_first() {
+    // The parent's answer would queue behind its pushes, so a chunk it
+    // missed is left to the other channels for REQUEST_BACKOFF.
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let parent = ready_channel(&mut f, &mut q);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+    assert_eq!(
+        f.sched.handle_stream_open(parent, 0, Bin(0), now(), &mut q),
+        Ok(StreamOpenOutcome::Accepted)
+    );
+    f.sched.handle_have(parent, Bin::new(2, 0), now());
+    let deadline = f.sched.next_push_deadline().unwrap();
+    f.sched.expire_push(deadline, &mut q);
+    let requests = |f: &mut Fixture, t: Time| {
+        next_messages(f, parent, t)
+            .iter()
+            .filter(|m| matches!(m, Message::Request(_)))
+            .count()
+    };
+    assert_eq!(requests(&mut f, deadline), 0);
+    assert_eq!(requests(&mut f, deadline + REQUEST_BACKOFF), 4);
+}
+
+#[test]
+fn a_cancelled_push_is_not_sent() {
+    // A CANCEL drops its chunk's push at write time, whenever the push was
+    // queued; a request after it is still answered. Only bins in our
+    // window count.
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let child = ready_channel(&mut f, &mut q);
+    let ms = Duration::from_millis;
+    let t = now();
+    f.sched.handle_cancel(child, Bin(2), Bin(0), &mut q);
+    assert!(q.removed.contains(&(child, Bin(2))));
+    assert!(f.sched.push_unwanted(child, Bin(2), t - ms(100), t));
+    assert!(
+        f.sched
+            .push_unwanted(child, Bin(2), t + ms(100), t + ms(100))
+    );
+    assert!(!f.sched.push_unwanted(child, Bin(4), t, t));
+    assert_eq!(f.sched.push_stats().suppressed, 2);
+    // A stale push is stale first.
+    assert!(
+        f.sched
+            .push_unwanted(child, Bin(2), t, t + push::PUSH_STALE + ms(1))
+    );
+    let st = f.sched.push_stats();
+    assert_eq!((st.suppressed, st.stale_drops), (2, 1));
+    assert!(f.sched.handle_request(child, Bin(2), t, &mut q));
+    assert_eq!(q.pushed.last(), Some(&(child, Bin(2), PeerPriority::Low)));
+
+    // Behind the window, past a live window beyond our newest chunk, or
+    // wider than a window: ignored.
+    let past = Bin(f.sched.s.live_window.0 + 2);
+    for (b, window_start) in [(Bin(6), Bin(8)), (past, Bin(0)), (Bin::ALL, Bin(0))] {
+        f.sched.handle_cancel(child, b, window_start, &mut q);
+    }
+    assert!(!f.sched.push_unwanted(child, Bin(6), t, t));
+    assert!(!f.sched.push_unwanted(child, past, t, t));
+    // GC forgets the cancels behind the window.
+    f.sched.gc_push(Bin(4));
+    assert!(!f.sched.push_unwanted(child, Bin(2), t, t));
 }
 
 #[test]
@@ -2075,7 +2250,8 @@ fn report_check(
         }
     }
     for &p in fed {
-        f.sched.note_push(p, last(0), t, false, t + wait);
+        f.sched
+            .note_push(p, last(0), t, PushFate::Written, t + wait);
     }
     for &(r, parent, hits, misses) in reports {
         let e = [AnnounceEntry {

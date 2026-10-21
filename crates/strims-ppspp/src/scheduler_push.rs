@@ -21,7 +21,10 @@
 //!   chunk, the chunks of streams with an open parent that we neither have
 //!   nor requested, from the parent's start on, are marked requested (so
 //!   pull leaves them alone) with a deadline. A chunk whose deadline passes
-//!   goes back to pull at once and counts as a miss against the parent.
+//!   goes back to pull at once, counts as a miss against the parent, and is
+//!   cancelled at the parent (CANCEL), which then drops its push if it
+//!   hasn't sent it. Pull leaves it to the other channels for
+//!   `REQUEST_BACKOFF`: the parent's answer would queue behind its pushes.
 //! - **Deadlines** run from when anyone first announced the chunk, and come
 //!   from the parent's push delay (see [`DEADLINE_K`] to
 //!   [`DEADLINE_GRANULARITY`]). Pushes leave in munro bursts, so the delay
@@ -49,11 +52,14 @@
 //!   rate is too high ([`PRUNE_MISS_RATE`]) is cancelled (STREAM_CANCEL).
 //!   Misses in a row alone prune nothing: one lost frame carries a dozen
 //!   pushes.
-//! - **Release.** A prune, a shed (STREAM_CLOSE from the parent) or a
-//!   closed channel releases the stream's expected chunks to pull at once
-//!   and gives every channel a write cycle. A switch keeps them expected:
-//!   the old parent queued those pushes before our cancel, and the
-//!   deadlines catch what doesn't come.
+//! - **Release.** A prune, a shed (STREAM_CLOSE from the parent), an
+//!   unsubscribe or a closed channel releases the stream's expected chunks
+//!   to pull at once, cancels those due from the parent at it if it is
+//!   still a neighbour (its queued pushes outlive the subscription) and
+//!   leaves them to the other channels as a miss is, and gives every
+//!   channel a write cycle. A switch keeps them expected: the old parent
+//!   queued those pushes before our cancel, and the deadlines catch what
+//!   doesn't come.
 //! - **Bad answers.** A request answered by neither OPEN nor CLOSE within
 //!   [`OPEN_TIMEOUT`] is cancelled. An OPEN more than a live window past the
 //!   request would never be expected to deliver anything, so nothing could
@@ -90,7 +96,10 @@
 //!   first, then the newest.
 //! - **Pushes** carry the time they were queued. At write time a push that
 //!   waited longer than [`PUSH_STALE`] is dropped (the child has released
-//!   it), and so is one of a chunk the child has announced since.
+//!   it), and so is one of a chunk the child has announced or cancelled
+//!   since. A CANCEL covers a chunk whatever the child asked for it by: a
+//!   child that cancelled a request doesn't want the chunk's push either. An
+//!   adaptive seed still counts a cancelled push's wait in its queue.
 //! - **Upload measurement** is the runner's, shared by its swarms: bytes
 //!   written over the time any peer had data queued. A rarely busy link
 //!   counts as busy at least 5 % of the time.
@@ -117,8 +126,9 @@
 //! - Expected-chunk marking is clipped like the HAVE walk (the new chunks
 //!   within the tracked history) and stops at a window of deadlines
 //!   ([`max_pending_requests`]); chunks past it are left to pull.
-//! - The expected and released chunk maps are bounded by the window and
-//!   pruned at GC. A release walks only the expected map, once per event.
+//! - The expected and released chunk maps, and a channel's cancelled
+//!   chunks, are bounded by the window and pruned at GC. A release walks
+//!   only the expected map, once per event.
 //! - Parent checks cost O(streams × channels) per [`PARENT_CHECK_INTERVAL`];
 //!   shedding sorts the subscribers at most once per [`SHED_INTERVAL`].
 //! - Per-stream state is fixed: one subscription per stream; one lag,
@@ -131,10 +141,10 @@
 //! STREAM_REQUEST/OPEN/CANCEL/CLOSE are used with their v2 meanings
 //! (CLOSE from a provider: not, or no longer, pushing this stream), so the
 //! hybrid mixes with nodes in any mode, and ANNOUNCE carries reports to
-//! whoever asked for them. The child side assumes nothing more
-//! of a parent: one that never declines or sheds, or keeps pushing after
-//! STREAM_CANCEL, is contained by deadlines, silence pruning and repeated
-//! cancels.
+//! whoever asked for them. CANCEL of a chunk covers its push as well as its
+//! request. The child side assumes nothing more of a parent: one that never
+//! declines or sheds, or keeps pushing after STREAM_CANCEL or CANCEL, is
+//! contained by deadlines, silence pruning and repeated cancels.
 //!
 //! This is a child module of `scheduler_peer` so it can reach the
 //! scheduler's private state; the hooks there call into it only in
@@ -145,7 +155,8 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, Map};
 
 use super::{
-    PeerChannelScheduler, PeerSwarmScheduler, StreamMessage, SwarmState, max_pending_requests,
+    PeerChannelScheduler, PeerSwarmScheduler, REQUEST_BACKOFF, StreamMessage, SwarmState,
+    max_pending_requests,
 };
 use crate::bin_queue::BinQueue;
 use crate::channel::MeteredWriter;
@@ -451,6 +462,10 @@ pub(crate) struct PushChannel {
     /// When we last cancelled the peer's unsolicited pushes of the stream.
     /// Bound: one per stream.
     cancel_at: Vec<Time>,
+    /// Chunks the peer cancelled: their pushes are dropped at write time.
+    /// Bound: the window ([`PeerSwarmScheduler::push_cancelled`] admits
+    /// only bins within a live window of our newest, pruned at GC).
+    cancelled: Map,
     /// How the peer pushed each stream to us since the last report tick.
     /// Bound: one per stream.
     tally: Vec<Tally>,
@@ -470,6 +485,7 @@ impl PushChannel {
             have_lag: vec![LagEwma::default(); streams],
             backoff: vec![Time::EPOCH; streams],
             cancel_at: vec![Time::EPOCH; streams],
+            cancelled: Map::new(),
             tally: vec![Tally::default(); streams],
             asked: Time::NIL,
             report: Report::default(),
@@ -629,7 +645,7 @@ pub struct PushStats {
     /// Pushes dropped after waiting longer than [`PUSH_STALE`].
     pub stale_drops: u64,
     /// Pushes not sent because the child had announced the chunk (it got
-    /// it elsewhere, e.g. pulled it after a miss).
+    /// it elsewhere, e.g. pulled it after a miss) or cancelled it.
     pub suppressed: u64,
 }
 
@@ -701,8 +717,13 @@ impl SwarmState {
     }
 
     /// Releases the chunks of `stream` still expected from its parent to
-    /// pull. O(expected chunks), at most a window.
-    fn release_marked(&mut self, stream: Stream) -> u64 {
+    /// pull; the parent in `cancel` gives up those from its start on at
+    /// that time. O(expected chunks), at most a window.
+    fn release_marked(
+        &mut self,
+        stream: Stream,
+        mut cancel: Option<(Bin, &mut PeerChannelScheduler, Time)>,
+    ) -> u64 {
         let Some(p) = self.push.as_mut() else {
             return 0;
         };
@@ -715,6 +736,11 @@ impl SwarmState {
                 if self.have_bins.empty_at(x) {
                     self.request_bins.reset(x);
                     n += 1;
+                    if let Some((start, c, now)) = cancel.as_mut()
+                        && x >= *start
+                    {
+                        c.give_up_push(x, *now);
+                    }
                 }
             }
             next = cur.next_base(&p.marked);
@@ -800,6 +826,15 @@ impl PeerChannelScheduler {
             pc.back_off(stream, until);
         }
     }
+
+    /// Gives up on the peer's push of `x`: CANCEL, and pull leaves the
+    /// chunk to the other channels for [`REQUEST_BACKOFF`], as it does a
+    /// timed-out request's.
+    fn give_up_push(&mut self, x: Bin, now: Time) {
+        self.cancel_bins.set(x);
+        self.backoff_bins.set(x);
+        self.backoff_until = now + REQUEST_BACKOFF;
+    }
 }
 
 impl PeerSwarmScheduler {
@@ -843,13 +878,11 @@ impl PeerSwarmScheduler {
                 parent = sub.open.map(|o| o.peer);
                 if let Some(o) = sub.open.filter(|o| x >= o.start) {
                     sub.on_miss();
-                    if let Some(t) = self
-                        .channels
-                        .get_mut(&o.peer)
-                        .and_then(|c| c.push.as_mut())
-                        .and_then(|pc| pc.tally(stream))
-                    {
-                        t.misses = t.misses.saturating_add(1);
+                    if let Some(c) = self.channels.get_mut(&o.peer) {
+                        c.give_up_push(x, now);
+                        if let Some(t) = c.push.as_mut().and_then(|pc| pc.tally(stream)) {
+                            t.misses = t.misses.saturating_add(1);
+                        }
                     }
                 }
             }
@@ -966,12 +999,19 @@ impl PeerSwarmScheduler {
             c.push_backoff(stream, now + PRUNE_BACKOFF);
             q.enqueue_now(parent.peer, s.key);
         }
-        self.drop_parent(stream, q);
+        self.drop_parent(stream, Some((parent, now)), q);
     }
 
     /// After the open parent of `stream` went away: its expected chunks go
-    /// to pull, and it is no longer the stream's source.
-    fn drop_parent(&mut self, stream: Stream, q: &mut impl PeerTaskQueue) {
+    /// to pull, and it is no longer the stream's source. If it is still a
+    /// neighbour (`parent`, and when it went), we give up its pushes of
+    /// those due from it.
+    fn drop_parent(
+        &mut self,
+        stream: Stream,
+        parent: Option<(Parent, Time)>,
+        q: &mut impl PeerTaskQueue,
+    ) {
         let s = &mut self.s;
         if s.streams
             .get(usize::from(stream))
@@ -979,7 +1019,9 @@ impl PeerSwarmScheduler {
         {
             s.reset_stream_source(stream);
         }
-        if s.release_marked(stream) > 0 {
+        let cancel =
+            parent.and_then(|(o, now)| self.channels.get_mut(&o.peer).map(|c| (o.start, c, now)));
+        if s.release_marked(stream, cancel) > 0 {
             for &peer in self.channels.keys() {
                 q.enqueue_now(peer, s.key);
             }
@@ -1215,8 +1257,8 @@ impl PeerSwarmScheduler {
         if sub.pending.is_some_and(|x| x.peer == peer) {
             sub.pending = None;
         }
-        let was_open = sub.open.is_some_and(|x| x.peer == peer);
-        if was_open {
+        let was_open = sub.open.filter(|x| x.peer == peer);
+        if was_open.is_some() {
             sub.open = None;
             p.open = p.open.saturating_sub(1);
         }
@@ -1230,8 +1272,8 @@ impl PeerSwarmScheduler {
             c.push_backoff(stream, now + PRUNE_BACKOFF);
             q.enqueue_now(peer, key);
         }
-        if was_open {
-            self.drop_parent(stream, q);
+        if was_open.is_some() {
+            self.drop_parent(stream, was_open.map(|o| (o, now)), q);
         }
         false
     }
@@ -1307,7 +1349,7 @@ impl PeerSwarmScheduler {
         let Some(sub) = p.subs.get_mut(usize::from(stream)) else {
             return;
         };
-        let mut lost_parent = false;
+        let mut lost_parent = None;
         let mut known = false;
         let mut declined = false;
         if sub.pending.is_some_and(|x| x.peer == peer) {
@@ -1316,11 +1358,11 @@ impl PeerSwarmScheduler {
             declined = true;
             known = true;
         }
-        if sub.open.is_some_and(|x| x.peer == peer) {
+        if let Some(o) = sub.open.filter(|x| x.peer == peer) {
             sub.open = None;
             p.open = p.open.saturating_sub(1);
             p.stats.shed = p.stats.shed.saturating_add(1);
-            lost_parent = true;
+            lost_parent = Some(o);
             known = true;
         }
         if !known {
@@ -1332,7 +1374,7 @@ impl PeerSwarmScheduler {
                 .tap
                 .emit(key, Some(peer), || TapKind::Declined { stream });
         }
-        if lost_parent {
+        if lost_parent.is_some() {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::ShedBy { stream });
@@ -1344,8 +1386,8 @@ impl PeerSwarmScheduler {
             }
             c.push_backoff(stream, now + DECLINE_BACKOFF);
         }
-        if lost_parent {
-            self.drop_parent(stream, q);
+        if lost_parent.is_some() {
+            self.drop_parent(stream, lost_parent.map(|o| (o, now)), q);
         }
     }
 
@@ -1368,7 +1410,7 @@ impl PeerSwarmScheduler {
         }
         p.next_check = Time::EPOCH;
         for stream in lost {
-            self.drop_parent(stream, q);
+            self.drop_parent(stream, None, q);
         }
     }
 
@@ -1418,8 +1460,8 @@ impl PeerSwarmScheduler {
         if sub.pending.is_some_and(|x| x.peer == peer) {
             sub.pending = None;
         }
-        let was_open = sub.open.is_some_and(|x| x.peer == peer);
-        if was_open {
+        let was_open = sub.open.filter(|x| x.peer == peer);
+        if was_open.is_some() {
             sub.open = None;
             p.open = p.open.saturating_sub(1);
         }
@@ -1427,8 +1469,8 @@ impl PeerSwarmScheduler {
             c.push_cancel(stream);
             c.push_backoff(stream, now + DECLINE_BACKOFF);
         }
-        if was_open {
-            self.drop_parent(stream, q);
+        if was_open.is_some() {
+            self.drop_parent(stream, was_open.map(|o| (o, now)), q);
         }
         true
     }
@@ -1699,11 +1741,32 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// Hybrid GC: forget expectations and releases behind the window.
+    /// Hybrid GC: forget expectations, releases and cancels behind the
+    /// window.
     pub(crate) fn gc_push(&mut self, window_start: Bin) {
-        if let Some(p) = self.s.push.as_mut() {
-            p.marked.reset_before(window_start);
-            p.released.reset_before(window_start);
+        let Some(p) = self.s.push.as_mut() else {
+            return;
+        };
+        p.marked.reset_before(window_start);
+        p.released.reset_before(window_start);
+        for pc in self.channels.values_mut().filter_map(|c| c.push.as_mut()) {
+            pc.cancelled.reset_before(window_start);
+        }
+    }
+
+    /// Hybrid CANCEL: the peer doesn't want `b` from us, so a push of it is
+    /// dropped. Bins behind our window or more than a live window past our
+    /// newest chunk are ignored.
+    pub(crate) fn push_cancelled(&mut self, peer: PeerKey, b: Bin, window_start: Bin) {
+        let s = &self.s;
+        let ok = crate::peer_bin_ok(b, s.window)
+            && b.base_left() >= window_start
+            && b.base_right().0 <= s.have_bin_max.0.saturating_add(s.live_window.0);
+        if !ok {
+            return;
+        }
+        if let Some(pc) = self.channels.get_mut(&peer).and_then(|c| c.push.as_mut()) {
+            pc.cancelled.set(b);
         }
     }
 
@@ -1726,7 +1789,7 @@ impl PeerSwarmScheduler {
     }
 
     /// Hybrid write-time check: a push that waited too long, or of a
-    /// chunk the child announced since, is dropped.
+    /// chunk the child announced or cancelled since, is dropped.
     pub(crate) fn push_unwanted(&mut self, peer: PeerKey, b: Bin, t: Time, now: Time) -> bool {
         let Some(p) = self.s.push.as_mut() else {
             return false;
@@ -1737,18 +1800,25 @@ impl PeerSwarmScheduler {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::PushStale { bin: b, queued: t });
-            self.note_push(peer, b, t, true, now);
+            self.note_push(peer, b, t, seed::PushFate::Stale, now);
             return true;
         }
-        if self
-            .channels
-            .get(&peer)
-            .is_some_and(|c| c.peer_have_bins.filled_at(b))
-        {
+        let Some(c) = self.channels.get(&peer) else {
+            return false;
+        };
+        if c.peer_have_bins.filled_at(b) {
             p.stats.suppressed = p.stats.suppressed.saturating_add(1);
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::PushSuppressed { bin: b });
+            return true;
+        }
+        if c.push.as_ref().is_some_and(|pc| pc.cancelled.filled_at(b)) {
+            p.stats.suppressed = p.stats.suppressed.saturating_add(1);
+            self.s
+                .tap
+                .emit(key, Some(peer), || TapKind::PushCancelled { bin: b });
+            self.note_push(peer, b, t, seed::PushFate::Cancelled, now);
             return true;
         }
         false

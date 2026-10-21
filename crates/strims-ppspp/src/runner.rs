@@ -418,7 +418,7 @@ fn handle_payload(
                     ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
                 }
             }
-            Message::Cancel(c) => sched.handle_cancel(peer, c.bin, q),
+            Message::Cancel(c) => sched.handle_cancel(peer, c.bin, swarm.store().window_start(), q),
             Message::Choke => sched.handle_choke(peer, true),
             Message::Unchoke => sched.handle_choke(peer, false),
             Message::Ping(p) => sched.handle_ping(peer, p.nonce),
