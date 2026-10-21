@@ -192,6 +192,10 @@ Egress and players:
 - The allocation tables' pinned cases need the admission run's slots for
   the same scenario and seed first; the farm has no jobs that wait on
   others, so `sim_job` takes them from `SIM_SLOTS` by hand.
+- A spot quota error cuts a run's vCPU budget to what it has running, for
+  the rest of the run. A run started while another's instances are still
+  terminating gets one and, with nothing running, waits for good. Re-read
+  the quota after a while.
 
 ### Push/pull hybrid
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
@@ -208,7 +212,13 @@ and pull repairs what they miss.
   - the upload meter assumes the driver drains at link speed, so it reads low
     under vnic QoS, and swarms share one meter but admit independently.
     strims-node could report link capacity;
-  - cancel a missed chunk at the parent to cut duplicates;
+  - a push its child cancelled never arrives late, so the parent's delay
+    estimate (`LagEwma`) sees only the pushes that beat the cancels:
+    behind the admitting seed misses rose from about a fifth to a quarter
+    of hits. A miss could count as a sample at its deadline;
+  - chunks still expected from a parent a switch replaced aren't
+    cancelled at it (`Subscription` doesn't remember it), so its late
+    pushes still duplicate what pull fetched;
   - a non-seed's interior stream is the first it accepts a subscriber
     for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
     capacity, so a datacenter viewer forwards every stream it holds;
