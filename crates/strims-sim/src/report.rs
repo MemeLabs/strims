@@ -31,6 +31,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
+use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
 use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
@@ -463,6 +465,115 @@ impl Report {
     }
 
     /// One line per seed for the sweep's log.
+    /// Swarm `swarm`'s data rate in bytes per second, as its seed writes.
+    fn swarm_rate(&self, swarm: usize) -> f64 {
+        self.scenario.swarms.get(swarm).map_or(0.0, |s| {
+            (s.frames_per_write * s.options.chunk_size) as f64 / s.write_interval.as_secs_f64()
+        })
+    }
+
+    /// The upload meter's readings at `h` while a swarm was live, as
+    /// fractions of the host's upload cap: (capacity ÷ cap, the push rate
+    /// its subscriptions commit ÷ cap) per sample. Empty without a cap.
+    pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
+        let (Some(spec), Some(host)) = (self.scenario.hosts.get(h), self.hosts.get(h)) else {
+            return Vec::new();
+        };
+        let Some(cap) = spec.uplink.filter(|&c| c > 0) else {
+            return Vec::new();
+        };
+        let cap = cap as f64;
+        let live = |t: std::time::Duration| {
+            self.scenario
+                .swarms
+                .iter()
+                .any(|s| t >= s.start && t <= s.stop)
+        };
+        host.runner
+            .meter
+            .iter()
+            .filter(|m| live(m.t) && m.capacity > 0)
+            .map(|m| {
+                let committed: f64 = m
+                    .children
+                    .iter()
+                    .map(|(&s, &n)| {
+                        let streams = self
+                            .scenario
+                            .swarms
+                            .get(s)
+                            .map_or(1, |x| x.options.stream_count.max(1));
+                        n as f64 * self.swarm_rate(s) / streams as f64 * PUSH_OVERHEAD
+                    })
+                    .sum();
+                (m.capacity as f64 / cap, committed / cap)
+            })
+            .collect()
+    }
+
+    /// The meter summary: capacity ÷ upload cap at the 10th, 50th and 90th
+    /// percentile of the seeds' samples and the viewers', and the highest
+    /// push commitment ÷ upload cap at any host.
+    fn meter_line(&self) -> Option<String> {
+        let seeds: Vec<HostIx> = self.scenario.swarms.iter().map(|s| s.seed).collect();
+        let (mut at_seeds, mut at_viewers, mut peak) = (Vec::new(), Vec::new(), (0.0f64, 0));
+        for h in 0..self.hosts.len() {
+            for (c, k) in self.meter_readings(h) {
+                if seeds.contains(&h) {
+                    at_seeds.push(c);
+                } else {
+                    at_viewers.push(c);
+                }
+                if k > peak.0 {
+                    peak = (k, h);
+                }
+            }
+        }
+        if at_seeds.is_empty() && at_viewers.is_empty() {
+            return None;
+        }
+        let pct = |v: &mut Vec<f64>| {
+            v.sort_by(f64::total_cmp);
+            let at = |q: f64| {
+                v.get(((v.len() as f64 - 1.0) * q).round() as usize)
+                    .copied()
+                    .unwrap_or(0.0)
+            };
+            format!("{:.2}/{:.2}/{:.2}", at(0.1), at(0.5), at(0.9))
+        };
+        Some(format!(
+            "\n  meter: capacity/cap p10/p50/p90 seeds {} viewers {}, peak committed/cap {:.2} at {}",
+            pct(&mut at_seeds),
+            pct(&mut at_viewers),
+            peak.0,
+            self.hosts.get(peak.1).map_or("-", |h| h.name.as_str()),
+        ))
+    }
+
+    /// Swarm `swarm`'s adaptive seed: its first wave against what its
+    /// upload cap pays for (the window's sizing rule with the true
+    /// capacity), and its last budget, window and copies.
+    fn first_wave_line(&self, swarm: usize) -> Option<String> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let seed = self.hosts.get(spec.seed)?.runner.seeds.get(&swarm)?;
+        let cap = self.scenario.hosts.get(spec.seed)?.uplink?;
+        let rate = self.swarm_rate(swarm) * PUSH_OVERHEAD;
+        let oracle = if rate > 0.0 {
+            ((cap as f64 * ALLOC_UTILIZATION / rate) as usize).min(spec.viewers.len())
+        } else {
+            0
+        };
+        Some(format!(
+            "\n  swarm {swarm} seed: first wave {} copies from {} KiB/s (cap {} KiB/s pays for {oracle}), budget {} slots, window {}, copies {}",
+            seed.first_wave,
+            seed.first_wave_capacity / 1024,
+            cap / 1024,
+            seed.budget,
+            seed.window,
+            seed.copies,
+        ))
+    }
+
     pub fn summary(&self) -> String {
         let mut s = format!(
             "{} seed {}: {:.0} s sim in {:.2} s wall ({:.1}x), trace {} lines {}",
@@ -516,6 +627,14 @@ impl Report {
                     c.stale_drops,
                     c.suppressed,
                 ));
+            }
+        }
+        if let Some(line) = self.meter_line() {
+            s.push_str(&line);
+        }
+        for i in 0..self.scenario.swarms.len() {
+            if let Some(line) = self.first_wave_line(i) {
+                s.push_str(&line);
             }
         }
         let p = self.peaks();

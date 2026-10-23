@@ -544,6 +544,8 @@ struct AllocSample {
     barred: BTreeSet<usize>,
     /// After the warm-up, the holders with a real child.
     with_children: BTreeSet<usize>,
+    /// The seed's upload capacity estimate (`PushStats::upload_capacity`).
+    capacity: u64,
 }
 
 /// What a stream a neighbour stopped announcing counts as in the seed's
@@ -592,6 +594,9 @@ struct Report {
     /// The seed's objective ([`AllocSample::objective`]), median over the
     /// samples after the warm-up.
     seed_objective: Duration,
+    /// The seed's capacity estimate ([`AllocSample::capacity`]), median
+    /// over the samples after the warm-up while it writes.
+    seed_capacity: u64,
     /// When the seed's holders ([`AllocSample::holders`]) last changed,
     /// after the stream started.
     settled: Duration,
@@ -1394,6 +1399,11 @@ impl Sim {
         if holders.is_empty() {
             holders.extend(held.iter().filter(|&(_, &n)| n > 0).map(|(&id, _)| id));
         }
+        let seed = &self.nodes[0];
+        let capacity = seed
+            .runner
+            .push_stats(seed.swarm)
+            .map_or(0, |p| p.upload_capacity);
         self.alloc.push(AllocSample {
             at: self.now,
             held,
@@ -1401,6 +1411,7 @@ impl Sim {
             objective: percentile(&worst, 90),
             barred,
             with_children,
+            capacity,
         });
     }
 
@@ -2040,6 +2051,18 @@ impl Sim {
                     .map(|a| a.held.values().sum::<usize>() as f64)
                     .collect();
                 after.iter().sum::<f64>() / after.len().max(1) as f64
+            },
+            seed_capacity: {
+                let end =
+                    t0() + Duration::SECOND + Duration::from_secs(self.cfg.stream_secs as i64);
+                let mut v: Vec<u64> = self
+                    .alloc
+                    .iter()
+                    .filter(|a| a.at > warm && a.at <= end)
+                    .map(|a| a.capacity)
+                    .collect();
+                v.sort_unstable();
+                v.get(v.len() / 2).copied().unwrap_or(0)
             },
             seed_objective: {
                 let mut v: Vec<Duration> = self
@@ -5035,6 +5058,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
                 .push_stats(n.swarm)
                 .map(|s| (s.children as u64, s.rejected))
         });
+    let seed_push = seed.runner.push_stats(seed.swarm).unwrap_or_default();
     let mut row = JsonRow::default();
     row.str("scenario", scenario)
         .str("case", case)
@@ -5089,6 +5113,13 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .num("seed_pull_share", r.seed_pull_share)
         .num("seed_distinct", r.seed_distinct)
         .num("seed_slots", r.seed_slots)
+        .int("seed_up_bw", seed.up_bw)
+        .int("seed_capacity", r.seed_capacity)
+        .int("seed_first_wave", seed_push.seed_first_wave as u64)
+        .int(
+            "seed_first_wave_capacity",
+            seed_push.seed_first_wave_capacity,
+        )
         .int("seed_objective_ms", ms(r.seed_objective) as u64)
         .num("settled_s", r.settled.as_secs_f64())
         .int("holder_changes", r.holder_changes as u64)

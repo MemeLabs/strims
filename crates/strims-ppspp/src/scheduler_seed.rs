@@ -572,6 +572,11 @@ pub(crate) struct Allocator {
     /// Room for every neighbour's every stream.
     unconstrained: bool,
     stats: AllocCounters,
+    /// The first wave: the most copies the window opened before the
+    /// budget was measured, and the capacity reading (bytes per second)
+    /// that sized them.
+    first_wave: usize,
+    first_wave_capacity: u64,
 }
 
 impl Allocator {
@@ -587,7 +592,18 @@ impl Allocator {
             window,
             unconstrained: false,
             stats: AllocCounters::default(),
+            first_wave: 0,
+            first_wave_capacity: 0,
         }
+    }
+
+    /// Fills `out`'s seed fields.
+    pub(super) fn push_stats(&self, out: &mut super::PushStats) {
+        out.seed_budget = self.budget;
+        out.seed_window = self.window.copies;
+        out.seed_copies = self.copies;
+        out.seed_first_wave = self.first_wave;
+        out.seed_first_wave_capacity = self.first_wave_capacity;
     }
 }
 
@@ -779,6 +795,8 @@ impl PeerSwarmScheduler {
                 a.window.copies = w;
                 a.window.since = now;
                 a.copies = w;
+                a.first_wave = w;
+                a.first_wave_capacity = cap as u64;
             }
         }
         let holder = !barred && (holds || a.unconstrained || holders < a.copies);

@@ -618,7 +618,7 @@ impl World {
                 return;
             };
             let swarms = std::mem::take(&mut hs.swarms);
-            let g = hs.stats.observe(m, &swarms);
+            let g = hs.stats.observe(m, &swarms, sim_now());
             hs.swarms = swarms;
             let mut check = |kind: &'static str, broken: bool, what: String| {
                 if broken && hs.broken.insert(kind) {

@@ -607,6 +607,9 @@ pub struct PushStats {
     /// second, and the busy fraction in thousandths.
     pub upload_rate: u64,
     pub upload_busy_permille: u32,
+    /// The upload capacity admission control estimated from it, in bytes
+    /// per second (0 before anything was sent).
+    pub upload_capacity: u64,
     /// The stream a non-seed node forwards.
     pub interior: Option<Stream>,
     /// Subscriptions we serve, all streams.
@@ -647,6 +650,16 @@ pub struct PushStats {
     /// Pushes not sent because the child had announced the chunk (it got
     /// it elsewhere, e.g. pulled it after a miss) or cancelled it.
     pub suppressed: u64,
+    /// An adaptive seed's latest check (zero otherwise): the budget in
+    /// stream slots (zero until measured), the window and the copies in
+    /// effect; and its first wave, the most copies the window opened
+    /// before the budget was measured, with the capacity reading (bytes per
+    /// second) that sized them.
+    pub seed_budget: usize,
+    pub seed_window: usize,
+    pub seed_copies: usize,
+    pub seed_first_wave: usize,
+    pub seed_first_wave_capacity: u64,
 }
 
 /// The first bin of `stream` after chunk `b`'s.
@@ -1842,6 +1855,7 @@ impl PeerSwarmScheduler {
                 .collect();
             out.upload_rate = p.upload.rate;
             out.upload_busy_permille = (p.upload.busy * 1000.0) as u32;
+            out.upload_capacity = p.upload.capacity().map_or(0, |c| c as u64);
             out.interior = if s.is_seed { None } else { p.interior };
             out.expected = c.expected;
             out.hits = c.hits;
@@ -1860,6 +1874,9 @@ impl PeerSwarmScheduler {
             out.sheds_sent = c.sheds_sent;
             out.stale_drops = c.stale_drops;
             out.suppressed = c.suppressed;
+            if let Some(a) = p.alloc.as_ref() {
+                a.push_stats(&mut out);
+            }
         }
         out
     }

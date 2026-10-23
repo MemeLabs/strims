@@ -456,6 +456,12 @@ fn push(s: PushStats) -> v1::PushStats {
         sheds_sent,
         stale_drops,
         suppressed,
+        upload_capacity: _,
+        seed_budget: _,
+        seed_window: _,
+        seed_copies: _,
+        seed_first_wave: _,
+        seed_first_wave_capacity: _,
     } = s;
     let streams = parents.len().max(parent_lag.len());
     let parents = (0..streams)

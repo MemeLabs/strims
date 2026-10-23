@@ -25,8 +25,10 @@
 //! rate) are described in [`crate::report`].
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use strims_node::{HostId, NodeMetrics, SwarmKey};
+use strims_ppspp::PushMode;
 
 /// Extremes of the gauges over every sample of a host (all incarnations).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -234,6 +236,34 @@ pub struct RunnerReport {
     /// Requests and pushes refused because a peer's data queue was full
     /// (`PeerStats::dropped`).
     pub queue_drops: u64,
+    /// The upload meter at each sample while a swarm ran in hybrid mode,
+    /// every incarnation.
+    pub meter: Vec<MeterSample>,
+    /// Per scenario swarm, an adaptive seed's state at its last sample.
+    pub seeds: BTreeMap<usize, SeedSample>,
+}
+
+/// A node's upload meter at one sample (`PushStats::upload_rate`,
+/// `upload_busy_permille`, `upload_capacity`), with the subscriptions it
+/// served per scenario swarm (`PushStats::children`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MeterSample {
+    /// Simulated time since the start of the run.
+    pub t: Duration,
+    pub rate: u64,
+    pub busy_permille: u32,
+    pub capacity: u64,
+    pub children: BTreeMap<usize, usize>,
+}
+
+/// An adaptive seed's `PushStats` seed fields.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SeedSample {
+    pub budget: usize,
+    pub window: usize,
+    pub copies: usize,
+    pub first_wave: usize,
+    pub first_wave_capacity: u64,
 }
 
 impl RunnerReport {
@@ -250,6 +280,8 @@ impl RunnerReport {
             a.add(b);
         }
         self.queue_drops += o.queue_drops;
+        self.meter.extend(o.meter.iter().cloned());
+        self.seeds.extend(o.seeds.iter().map(|(&s, &x)| (s, x)));
     }
 }
 
@@ -313,6 +345,11 @@ pub(crate) struct HostStats {
     peers: BTreeMap<HostId, Tracked<1>>,
     /// Scheduler and push counters by scenario swarm.
     swarms: BTreeMap<usize, Tracked<SWARM_COUNTERS>>,
+    /// The upload meter, one entry per sample (a run takes tens to
+    /// hundreds).
+    meter: Vec<MeterSample>,
+    /// Adaptive seeds by scenario swarm.
+    seeds: BTreeMap<usize, SeedSample>,
 }
 
 /// What one sample showed that the invariants check.
@@ -327,9 +364,14 @@ pub(crate) struct SampleGauges {
 }
 
 impl HostStats {
-    /// Folds one sample of the current incarnation. `swarms` maps the
-    /// node's swarm keys to scenario swarm indexes.
-    pub fn observe(&mut self, m: &NodeMetrics, swarms: &[Option<SwarmKey>]) -> SampleGauges {
+    /// Folds one sample of the current incarnation, taken at `t`. `swarms`
+    /// maps the node's swarm keys to scenario swarm indexes.
+    pub fn observe(
+        &mut self,
+        m: &NodeMetrics,
+        swarms: &[Option<SwarmKey>],
+        t: Duration,
+    ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
         let mut g = SampleGauges::default();
         let p = &mut self.peaks;
@@ -389,11 +431,35 @@ impl HostStats {
                 tracked.observe(c);
             }
         }
+        let mut meter: Option<MeterSample> = None;
         for sw in &m.runner.swarms {
             let (Some(s), Some(sched), Some(push)) = (index(sw.swarm), sw.scheduler, &sw.push)
             else {
                 continue;
             };
+            if push.mode.resolve() == PushMode::Hybrid {
+                // One meter per node: every hybrid swarm reads the same.
+                let ms = meter.get_or_insert_with(|| MeterSample {
+                    t,
+                    rate: push.upload_rate,
+                    busy_permille: push.upload_busy_permille,
+                    capacity: push.upload_capacity,
+                    children: BTreeMap::new(),
+                });
+                ms.children.insert(s, push.children);
+                if push.seed_window > 0 {
+                    self.seeds.insert(
+                        s,
+                        SeedSample {
+                            budget: push.seed_budget,
+                            window: push.seed_window,
+                            copies: push.seed_copies,
+                            first_wave: push.seed_first_wave,
+                            first_wave_capacity: push.seed_first_wave_capacity,
+                        },
+                    );
+                }
+            }
             let c = SwarmCounters {
                 wasted_chunks: sched.wasted_chunks,
                 expected: push.expected,
@@ -415,6 +481,7 @@ impl HostStats {
             };
             self.swarms.entry(s).or_default().observe(c.to_array());
         }
+        self.meter.extend(meter);
         for l in &m.links {
             p.link_pending = p.link_pending.max(l.transmit_pending);
             p.write_blocked += u64::from(l.write_blocked);
@@ -437,6 +504,8 @@ impl HostStats {
         self.channels.clear();
         self.peers.clear();
         self.swarms.clear();
+        self.meter.clear();
+        self.seeds.clear();
     }
 
     fn current(&self) -> RunnerReport {
@@ -472,6 +541,8 @@ impl HostStats {
             }
         }
         r.queue_drops = self.peers.values().map(|t| t.total()[0]).sum();
+        r.meter = self.meter.clone();
+        r.seeds = self.seeds.clone();
         r
     }
 
