@@ -1,0 +1,39 @@
+# The adaptive seed's stream count, chunk size and munro size, behind a
+# cable, fiber or datacenter seed at 2-12 Mbit/s, for the swarm defaults.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 2
+
+[arms]
+main = "fb3e3ea4"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_PEERS = "100"
+
+[axes]
+SIM_STREAMS = ["1", "4", "16"]
+SIM_CHUNK = ["1024", "4096"]
+SIM_MUNRO = ["32768", "65536"]
+SIM_MBIT = ["2", "4", "6", "8", "12"]
+SIM_SEED_ACCESS = ["cable", "fiber", "datacenter"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "stripe_p99_ms:median,max",
+  "bytes/payload_bytes:ratio",
+  "wasted/chunks_read:ratio",
+  "push_misses/push_hits:ratio",
+  "seed_uplink:mean",
+]

@@ -1,0 +1,36 @@
+# The adaptive seed's stream count, chunk size and munro size in the A/B
+# scenarios, checking the swarm defaults beyond a single seed's uplink.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 2
+
+[arms]
+main = "fb3e3ea4"
+
+[env]
+SIM_CASE = "AdaptiveQos"
+
+[axes]
+SIM_SCENARIO = ["LiveMesh", "SparseLossy", "WanGlobal", "WanMobile", "WanResidentialSeed", "WanSuperPeer"]
+SIM_STREAMS = ["1", "4", "16"]
+SIM_CHUNK = ["1024", "4096"]
+SIM_MUNRO = ["32768", "65536"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_SECS = "2"
+SIM_WARM = "1"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "stripe_p99_ms:median,max",
+  "bytes/payload_bytes:ratio",
+  "wasted/chunks_read:ratio",
+  "push_misses/push_hits:ratio",
+  "seed_uplink:mean",
+]
