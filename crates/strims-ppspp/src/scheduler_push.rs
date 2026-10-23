@@ -250,6 +250,10 @@ pub const PUSH_OVERHEAD: f64 = 1.25;
 /// The busy fraction below which the upload measurement can't tell the
 /// capacity apart from more: the capacity estimate uses at least this.
 const MIN_BUSY: f64 = 0.05;
+/// The busy fraction from which the measurement shows a saturated uplink:
+/// below it a known capacity stands, since a link that isn't saturated
+/// shows only a lower bound.
+const SATURATED_BUSY: f64 = 0.5;
 /// The busy fraction (time with data queued) at which a provider sheds
 /// subscribers ...
 pub const SHED_UTILIZATION: f64 = 0.9;
@@ -279,15 +283,17 @@ pub(crate) struct UploadInfo {
 }
 
 impl UploadInfo {
-    /// The upload capacity in bytes per second: the rate while busy, at
-    /// most the driver's hint. A link that is rarely busy has at least
-    /// `rate / MIN_BUSY`. Before anything was sent, the hint or `None`.
+    /// The upload capacity in bytes per second. With the driver's hint, the
+    /// hint, or less while the link is saturated (at least
+    /// [`SATURATED_BUSY`]) at a lower rate. Without, the rate while busy: a
+    /// link that is rarely busy has at least `rate / MIN_BUSY`. `None`
+    /// before anything was sent and without a hint.
     fn capacity(&self) -> Option<f64> {
         let measured = (self.rate > 0).then(|| self.rate as f64 / self.busy.max(MIN_BUSY));
-        let hint = self.hint.map(|h| h as f64);
-        match (measured, hint) {
-            (Some(m), Some(h)) => Some(m.min(h)),
-            (m, h) => m.or(h),
+        match (measured, self.hint.map(|h| h as f64)) {
+            (Some(m), Some(h)) if self.busy >= SATURATED_BUSY => Some(m.min(h)),
+            (_, Some(h)) => Some(h),
+            (m, None) => m,
         }
     }
 }
@@ -1957,7 +1963,7 @@ mod tests {
     }
 
     #[test]
-    fn capacity_takes_the_smaller_of_hint_and_measurement() {
+    fn a_saturated_link_takes_the_smaller_of_hint_and_measurement() {
         let busy = UploadInfo {
             rate: 1000,
             busy: 0.5,
@@ -1969,6 +1975,13 @@ mod tests {
         };
         assert_eq!(hinted(1500).capacity(), Some(1500.0));
         assert_eq!(hinted(5000).capacity(), Some(2000.0));
+        // A link that isn't saturated shows only a lower bound.
+        let idle = UploadInfo {
+            busy: 0.1,
+            hint: Some(5000),
+            ..busy
+        };
+        assert_eq!(idle.capacity(), Some(5000.0));
         // Before anything was sent, the hint alone.
         let unsent = UploadInfo {
             hint: Some(1500),

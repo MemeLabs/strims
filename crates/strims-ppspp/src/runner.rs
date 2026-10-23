@@ -487,8 +487,9 @@ impl Runner {
     /// The node's upload capacity in bytes per second, when its driver
     /// knows it (an upload limit it was configured with); `None` leaves
     /// the measurement alone. Push admission, shedding and seed allocation
-    /// take the smaller of it and the measurement, and it before there is
-    /// one. It comes from the node's own configuration, never from a peer.
+    /// take it as the capacity, or the measurement where that shows a
+    /// saturated link below it. It comes from the node's own
+    /// configuration, never from a peer.
     pub fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
         self.upload.hint = bytes_per_sec.filter(|&b| b > 0);
     }
