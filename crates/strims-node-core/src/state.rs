@@ -262,6 +262,12 @@ struct PublisherSlot {
     reply: mpsc::Sender<WriteReply>,
 }
 
+/// The upload capacity ppspp takes as known: `capacity` when set, else a
+/// rate limit below QoS's default (which means none).
+fn upload_hint(capacity: Option<u64>, rate_limit: Option<u64>) -> Option<u64> {
+    capacity.or(rate_limit.filter(|&l| l < strims_qos::DEFAULT_RATE_LIMIT))
+}
+
 /// vnic, vpn and the ppspp runner, composed.
 #[derive(Debug)]
 pub(crate) struct State {
@@ -284,6 +290,8 @@ pub(crate) struct State {
     /// The link interfaces the driver has.
     interfaces: Interfaces,
     allow_insecure_ws: bool,
+    /// `NodeConfig::upload_capacity`.
+    upload_capacity: Option<u64>,
     /// Bounded by the transports the driver attaches.
     links: SecondaryMap<LinkKey, LinkSlot>,
     /// Established peers (one per link).
@@ -397,6 +405,7 @@ impl State {
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let mut runner = Runner::new(fork(&mut rng));
+        runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
         let capture = config
             .ppspp_capture
             .as_ref()
@@ -421,6 +430,7 @@ impl State {
             local_ws,
             interfaces,
             allow_insecure_ws: config.allow_insecure_ws,
+            upload_capacity: config.upload_capacity,
             links: SecondaryMap::new(),
             peers: SecondaryMap::new(),
             ppspp_peers: SecondaryMap::new(),
@@ -446,6 +456,14 @@ impl State {
             capture,
             capture_flushed: now,
         })
+    }
+
+    /// Applies the upload cap to vnic's QoS, and to ppspp's known upload
+    /// capacity unless the config set that.
+    pub(crate) fn set_rate_limit(&mut self, bytes_per_sec: u64) {
+        self.vnic.set_rate_limit(bytes_per_sec);
+        self.runner
+            .set_upload_capacity(upload_hint(self.upload_capacity, Some(bytes_per_sec)));
     }
 
     fn emit(&mut self, e: NodeEvent) {
@@ -1874,4 +1892,21 @@ fn read_swarm(
         Err(store::Error::Closed) => Err(ReadError::Closed),
         Err(e) => Err(ReadError::Store(e.to_string())),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_rate_limit_is_a_known_upload_capacity_unless_it_is_the_default() {
+        assert_eq!(upload_hint(None, None), None);
+        assert_eq!(upload_hint(None, Some(1000)), Some(1000));
+        assert_eq!(
+            upload_hint(None, Some(strims_qos::DEFAULT_RATE_LIMIT)),
+            None
+        );
+        assert_eq!(upload_hint(Some(500), Some(1000)), Some(500));
+        assert_eq!(upload_hint(Some(500), None), Some(500));
+    }
 }

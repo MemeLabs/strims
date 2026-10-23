@@ -139,9 +139,11 @@ struct Events {
 /// The node's upload, for push admission control (runs while any swarm is
 /// in [`PushMode::Hybrid`]): bytes written, and the time during which data
 /// was queued to send. Bytes over busy time is the capacity, provided the
-/// driver drains queued data as fast as the link allows; under a driver
-/// that throttles further it reads low, which only makes admission more
-/// conservative.
+/// driver drains queued data as fast as the link allows. A driver that
+/// queues data further on (a rate limit's burst, kernel socket buffers)
+/// hides that time, and the reading runs high; one that holds a peer's data
+/// back for that peer alone makes it read low. The driver's hint, when it
+/// has one, bounds it.
 #[derive(Debug)]
 struct UploadMeter {
     busy_since: Option<Time>,
@@ -149,6 +151,8 @@ struct UploadMeter {
     busy: Sma,
     /// Bytes written; the same window.
     bytes: Sma,
+    /// The capacity the driver knows ([`Runner::set_upload_capacity`]).
+    hint: Option<u64>,
 }
 
 impl UploadMeter {
@@ -157,6 +161,7 @@ impl UploadMeter {
             busy_since: None,
             busy: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
             bytes: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
+            hint: None,
         }
     }
 
@@ -177,6 +182,7 @@ impl UploadMeter {
         UploadInfo {
             rate: self.bytes.rate(Duration::SECOND, now),
             busy: busy.clamp(0.0, 1.0),
+            hint: self.hint,
         }
     }
 }
@@ -476,6 +482,15 @@ impl Runner {
             tap: Tap::default(),
             tap_level: TapLevel::Off,
         }
+    }
+
+    /// The node's upload capacity in bytes per second, when its driver
+    /// knows it (an upload limit it was configured with); `None` leaves
+    /// the measurement alone. Push admission, shedding and seed allocation
+    /// take the smaller of it and the measurement, and it before there is
+    /// one. It comes from the node's own configuration, never from a peer.
+    pub fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
+        self.upload.hint = bytes_per_sec.filter(|&b| b > 0);
     }
 
     // --- tap ------------------------------------------------------------

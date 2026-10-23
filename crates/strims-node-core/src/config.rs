@@ -59,6 +59,11 @@ pub struct NodeConfig {
     /// effectively uncapped and unweighted). Change it at runtime with
     /// `Node::set_rate_limit`.
     pub rate_limit: Option<u64>,
+    /// The node's upload capacity in bytes per second, when it is known:
+    /// ppspp's push admission and seed allocation take it over a
+    /// measurement that reads more (see `Runner::set_upload_capacity`).
+    /// `None` takes `rate_limit`, when one below QoS's default is set.
+    pub upload_capacity: Option<u64>,
     /// vnic's peer budget, which gates peer exchange. 0 is unlimited.
     /// Change it at runtime with `Node::set_max_peers`.
     pub max_peers: u32,
@@ -222,6 +227,7 @@ impl NodeConfig {
             ws_public_port: 0,
             allow_insecure_ws: false,
             rate_limit: None,
+            upload_capacity: None,
             max_peers: 0,
             tcp: TcpOptions::default(),
             tcp_socket: TcpSocketConfig::default(),

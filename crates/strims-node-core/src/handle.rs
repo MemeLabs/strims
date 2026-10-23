@@ -241,10 +241,11 @@ impl Node {
         self.call(move |s, _| s.take_peer_broker(&host_id)).await?
     }
 
-    /// Changes the upload cap (see [`NodeConfig::rate_limit`]).
+    /// Changes the upload cap (see [`NodeConfig::rate_limit`]), and with
+    /// it the upload capacity ppspp takes as known, unless
+    /// [`NodeConfig::upload_capacity`] set one.
     pub async fn set_rate_limit(&self, bytes_per_sec: u64) -> Result<(), NodeError> {
-        self.call(move |s, _| s.vnic.set_rate_limit(bytes_per_sec))
-            .await
+        self.call(move |s, _| s.set_rate_limit(bytes_per_sec)).await
     }
 
     /// Changes vnic's peer budget (see [`NodeConfig::max_peers`]). Peers

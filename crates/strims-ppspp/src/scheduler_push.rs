@@ -274,14 +274,21 @@ pub(crate) struct UploadInfo {
     pub(crate) rate: u64,
     /// The fraction of the window during which data was queued to send.
     pub(crate) busy: f64,
+    /// The capacity the driver knows, in bytes per second.
+    pub(crate) hint: Option<u64>,
 }
 
 impl UploadInfo {
-    /// The upload capacity in bytes per second: the rate while busy. A link
-    /// that is rarely busy has at least `rate / MIN_BUSY`. `None` before
-    /// anything was sent.
+    /// The upload capacity in bytes per second: the rate while busy, at
+    /// most the driver's hint. A link that is rarely busy has at least
+    /// `rate / MIN_BUSY`. Before anything was sent, the hint or `None`.
     fn capacity(&self) -> Option<f64> {
-        (self.rate > 0).then(|| self.rate as f64 / self.busy.max(MIN_BUSY))
+        let measured = (self.rate > 0).then(|| self.rate as f64 / self.busy.max(MIN_BUSY));
+        let hint = self.hint.map(|h| h as f64);
+        match (measured, hint) {
+            (Some(m), Some(h)) => Some(m.min(h)),
+            (m, h) => m.or(h),
+        }
     }
 }
 
@@ -1937,14 +1944,37 @@ mod tests {
         let u = UploadInfo {
             rate: 1000,
             busy: 0.5,
+            hint: None,
         };
         assert_eq!(u.capacity(), Some(2000.0));
         let idle = UploadInfo {
             rate: 1000,
             busy: 0.0,
+            hint: None,
         };
         assert_eq!(idle.capacity(), Some(1000.0 / MIN_BUSY));
         assert_eq!(UploadInfo::default().capacity(), None);
+    }
+
+    #[test]
+    fn capacity_takes_the_smaller_of_hint_and_measurement() {
+        let busy = UploadInfo {
+            rate: 1000,
+            busy: 0.5,
+            hint: None,
+        };
+        let hinted = |hint| UploadInfo {
+            hint: Some(hint),
+            ..busy
+        };
+        assert_eq!(hinted(1500).capacity(), Some(1500.0));
+        assert_eq!(hinted(5000).capacity(), Some(2000.0));
+        // Before anything was sent, the hint alone.
+        let unsent = UploadInfo {
+            hint: Some(1500),
+            ..UploadInfo::default()
+        };
+        assert_eq!(unsent.capacity(), Some(1500.0));
     }
 
     #[test]

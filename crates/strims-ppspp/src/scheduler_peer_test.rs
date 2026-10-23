@@ -1101,6 +1101,7 @@ fn hybrid_thicket_constraint_and_admission() {
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.95,
+        hint: None,
     });
     f.sched
         .handle_stream_request(r, 5, Bin(0), Bin(0), now(), &mut q)
@@ -1110,6 +1111,7 @@ fn hybrid_thicket_constraint_and_admission() {
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.1,
+        hint: None,
     });
     f.sched
         .handle_stream_request(r, 5, Bin(0), Bin(0), now(), &mut q)
@@ -1163,6 +1165,7 @@ fn pull_load_does_not_shed_subscribers() {
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000_000,
         busy: 0.95,
+        hint: None,
     });
     f.sched.run_push(t, &mut q);
     assert_eq!(f.sched.push_stats().children, 4);
@@ -1172,6 +1175,7 @@ fn pull_load_does_not_shed_subscribers() {
     f.sched.set_upload(push::UploadInfo {
         rate: 1_390_000,
         busy: 0.95,
+        hint: None,
     });
     f.sched.run_push(t, &mut q);
     let st = f.sched.push_stats();
@@ -1219,6 +1223,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.1,
+        hint: None,
     });
     for (peer, stream) in [(p, 0), (r, 0), (p, 1), (r, 1), (p, 2)] {
         f.sched
@@ -1231,6 +1236,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     f.sched.set_upload(push::UploadInfo {
         rate: 1_000,
         busy: 0.99,
+        hint: None,
     });
     f.sched.run_push(now() + Duration::from_secs(10), &mut q);
     assert_eq!(f.sched.push_stats().children, 2);
@@ -1240,6 +1246,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.1,
+        hint: None,
     });
     f.sched
         .handle_stream_request(p, 2, Bin(0), Bin(0), now(), &mut q)
@@ -1321,7 +1328,11 @@ fn alloc_check(
     for &p in pushed {
         push_to(f, p, t, t + wait, Some(Duration::from_millis(20)));
     }
-    f.sched.set_upload(push::UploadInfo { rate, busy });
+    f.sched.set_upload(push::UploadInfo {
+        rate,
+        busy,
+        hint: None,
+    });
     f.sched.run_push(next, q);
     next
 }
@@ -1502,6 +1513,7 @@ fn an_adaptive_seed_bars_a_holder_that_doesnt_announce_its_pushes() {
         f.sched.set_upload(push::UploadInfo {
             rate: 2_000_000,
             busy: 1.0,
+            hint: None,
         });
         f.sched.run_push(next, q);
         next
@@ -1572,6 +1584,7 @@ fn an_adaptive_seed_times_cancelled_pushes() {
         f.sched.set_upload(push::UploadInfo {
             rate: 2_000_000,
             busy: 1.0,
+            hint: None,
         });
         f.sched.run_push(next, q);
         next
@@ -1599,6 +1612,7 @@ fn an_adaptive_seed_times_cancelled_pushes() {
     f.sched.set_upload(push::UploadInfo {
         rate: 2_000_000,
         busy: 1.0,
+        hint: None,
     });
     f.sched.run_push(next, &mut q);
     assert_eq!(window(&f), before / 2);
@@ -1614,6 +1628,7 @@ fn an_adaptive_seeds_first_wave_takes_what_its_uplink_pays_for() {
     f.sched.set_upload(push::UploadInfo {
         rate: 2_000_000,
         busy: 1.0,
+        hint: None,
     });
     for &p in &peers {
         ask(&mut f, &mut q, p, 0, t);
@@ -1655,6 +1670,7 @@ fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
     f.sched.set_upload(push::UploadInfo {
         rate: 300_000,
         busy: 1.0,
+        hint: None,
     });
     f.sched.run_push(t, &mut q);
     publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
@@ -2280,6 +2296,7 @@ fn report_check(
     f.sched.set_upload(push::UploadInfo {
         rate: 2_000_000,
         busy: 1.0,
+        hint: None,
     });
     f.sched.run_push(next, q);
     next

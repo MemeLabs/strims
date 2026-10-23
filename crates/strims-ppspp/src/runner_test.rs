@@ -820,6 +820,30 @@ fn tapped_transfer(tap: bool) -> (Pair, Vec<TapEvent>, Vec<TapEvent>) {
 }
 
 #[test]
+fn the_capacity_hint_bounds_the_measured_capacity() {
+    let mut p = Pair::with(hybrid(), hybrid());
+    for _ in 0..15 {
+        p.write(1);
+        p.tick(100);
+    }
+    let capacity = |p: &Pair| {
+        p.seed
+            .runner
+            .push_stats(p.seed.swarm)
+            .unwrap()
+            .upload_capacity
+    };
+    let measured = capacity(&p);
+    assert!(measured > 1000, "{measured}");
+    p.seed.runner.set_upload_capacity(Some(1000));
+    p.tick(100);
+    assert_eq!(capacity(&p), 1000);
+    p.seed.runner.set_upload_capacity(None);
+    p.tick(100);
+    assert!(capacity(&p) > 1000);
+}
+
+#[test]
 fn a_seeds_shares_follow_its_subscribers_at_once() {
     // A hybrid seed whose uplink shares follow its pushes weighs a
     // subscriber in the call that admitted or lost it, not at the next
