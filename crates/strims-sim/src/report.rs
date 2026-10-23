@@ -525,13 +525,18 @@ impl Report {
     }
 
     /// The meter summary: capacity ÷ upload cap at the 10th, 50th and 90th
-    /// percentile of the seeds' samples and the viewers', and the highest
-    /// push commitment ÷ upload cap at any host.
+    /// percentile of the seeds' samples and the viewers', the highest push
+    /// commitment ÷ upload cap at any host, and the most samples in a row
+    /// any host committed more than [`ALLOC_UTILIZATION`] of its cap.
     fn meter_line(&self) -> Option<String> {
         let seeds: Vec<HostIx> = self.scenario.swarms.iter().map(|s| s.seed).collect();
         let (mut at_seeds, mut at_viewers, mut peak) = (Vec::new(), Vec::new(), (0.0f64, 0));
+        let mut over = 0;
         for h in 0..self.hosts.len() {
+            let mut run = 0;
             for (c, k) in self.meter_readings(h) {
+                run = if k > ALLOC_UTILIZATION { run + 1 } else { 0 };
+                over = over.max(run);
                 if seeds.contains(&h) {
                     at_seeds.push(c);
                 } else {
@@ -555,7 +560,7 @@ impl Report {
             format!("{:.2}/{:.2}/{:.2}", at(0.1), at(0.5), at(0.9))
         };
         Some(format!(
-            "\n  meter: capacity/cap p10/p50/p90 seeds {} viewers {}, peak committed/cap {:.2} at {}",
+            "\n  meter: capacity/cap p10/p50/p90 seeds {} viewers {}, peak committed/cap {:.2} at {}, over {ALLOC_UTILIZATION} for {over} samples",
             pct(&mut at_seeds),
             pct(&mut at_viewers),
             peak.0,

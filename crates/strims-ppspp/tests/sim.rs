@@ -5087,6 +5087,18 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .int("bytes", r.bytes)
         .int("payload_bytes", sim.chunks_read() * cfg.chunk_size as u64)
         .num("delivery", r.delivery)
+        .num(
+            "cross_delivery",
+            r.cross.as_ref().map_or(0.0, |c| c.delivery),
+        )
+        .int(
+            "cross_p50_ms",
+            r.cross.as_ref().map_or(0, |c| ms(c.lag_p50) as u64),
+        )
+        .int(
+            "cross_p99_ms",
+            r.cross.as_ref().map_or(0, |c| ms(c.lag_p99) as u64),
+        )
         .int("lag_p50_ms", ms(r.lag_p50) as u64)
         .int("lag_p99_ms", ms(r.lag_p99) as u64)
         .int("lag_max_ms", ms(r.lag_max) as u64)
