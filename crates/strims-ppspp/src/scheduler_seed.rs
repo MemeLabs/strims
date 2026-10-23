@@ -789,7 +789,8 @@ impl PeerSwarmScheduler {
             && a.window.ssthresh == usize::MAX
             && let (Some(cap), Some(rate)) = (cap, early)
         {
-            let paid = (cap * ALLOC_UTILIZATION / rate) as usize / streams;
+            let paid =
+                ((cap * ALLOC_UTILIZATION - p.upload.others).max(0.0) / rate) as usize / streams;
             let w = paid.min(neighbours).max(a.window.copies);
             if w > a.window.copies {
                 a.window.copies = w;
@@ -960,7 +961,7 @@ impl PeerSwarmScheduler {
         }
         let measuring = !a.measuring_since.is_nil() && now - a.measuring_since >= ALLOC_MEASURE;
         if let Some(cap) = upload.capacity().filter(|_| measuring && rate > 0.0) {
-            let target = (cap * ALLOC_UTILIZATION / rate) as usize;
+            let target = ((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize;
             if !a.measured
                 || target > a.budget
                 || (target as f64) < a.budget as f64 * (1.0 - OVER_BUDGET)
@@ -973,7 +974,8 @@ impl PeerSwarmScheduler {
         let paid = if a.measured {
             (a.budget / streams.max(1)).max(1)
         } else if let (Some(cap), Some(rate)) = (upload.capacity(), early) {
-            ((cap * ALLOC_UTILIZATION / rate) as usize / streams.max(1)).max(a.window.copies)
+            (((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize / streams.max(1))
+                .max(a.window.copies)
         } else {
             usize::MAX
         };

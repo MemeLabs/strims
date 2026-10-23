@@ -280,6 +280,10 @@ pub(crate) struct UploadInfo {
     pub(crate) busy: f64,
     /// The capacity the driver knows, in bytes per second.
     pub(crate) hint: Option<u64>,
+    /// The push rate the node's other swarms commit (their subscriptions
+    /// at their stream rates), in bytes per second: this swarm's
+    /// admission, shedding and seed budget leave it room.
+    pub(crate) others: f64,
 }
 
 impl UploadInfo {
@@ -876,6 +880,16 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// The push rate this swarm's subscriptions commit, in bytes per second
+    /// (0 outside hybrid mode).
+    pub(crate) fn committed_push(&mut self, now: Time) -> f64 {
+        if !self.s.hybrid() {
+            return 0.0;
+        }
+        let rate = self.s.stream_rate(now);
+        self.s.children() as f64 * rate
+    }
+
     /// Releases the push-expected chunks whose deadline passed to pull and
     /// counts the misses; prunes parents over the miss limit.
     pub(crate) fn expire_push(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
@@ -1221,7 +1235,7 @@ impl PeerSwarmScheduler {
                     } else {
                         INTERIOR_UTILIZATION
                     };
-                    let committed = children as f64 * rate;
+                    let committed = children as f64 * rate + p.upload.others;
                     (p.upload.rate as f64).max(committed) + rate <= cap * target
                 }
             };
@@ -1707,12 +1721,15 @@ impl PeerSwarmScheduler {
             return;
         };
         // Pull answers don't count: closing a subscriber turns its pushes
-        // into pulls, so it can't relieve them.
+        // into pulls, so it can't relieve them. Each swarm sheds its share
+        // of the node's excess.
         let committed = children as f64 * rate;
-        let excess = committed - cap * INTERIOR_UTILIZATION;
-        if excess <= 0.0 {
+        let total = committed + p.upload.others;
+        let excess = total - cap * INTERIOR_UTILIZATION;
+        if excess <= 0.0 || total <= 0.0 {
             return;
         }
+        let excess = excess * committed / total;
         let n = if rate > 0.0 {
             ((excess / rate).ceil() as usize).clamp(1, children)
         } else {
@@ -1950,13 +1967,13 @@ mod tests {
         let u = UploadInfo {
             rate: 1000,
             busy: 0.5,
-            hint: None,
+            ..Default::default()
         };
         assert_eq!(u.capacity(), Some(2000.0));
         let idle = UploadInfo {
             rate: 1000,
             busy: 0.0,
-            hint: None,
+            ..Default::default()
         };
         assert_eq!(idle.capacity(), Some(1000.0 / MIN_BUSY));
         assert_eq!(UploadInfo::default().capacity(), None);
@@ -1967,7 +1984,7 @@ mod tests {
         let busy = UploadInfo {
             rate: 1000,
             busy: 0.5,
-            hint: None,
+            ..Default::default()
         };
         let hinted = |hint| UploadInfo {
             hint: Some(hint),

@@ -124,6 +124,8 @@ struct RunnerSwarm {
     channels: IndexMap<PeerKey, Channel>,
     /// A hybrid seed's pinned allocation, given to each new scheduler.
     seed_pin: Option<Vec<Vec<PeerKey>>>,
+    /// The push rate its subscriptions committed at the last tick.
+    committed: f64,
 }
 
 #[derive(Debug, Default)]
@@ -183,6 +185,7 @@ impl UploadMeter {
             rate: self.bytes.rate(Duration::SECOND, now),
             busy: busy.clamp(0.0, 1.0),
             hint: self.hint,
+            others: 0.0,
         }
     }
 }
@@ -275,6 +278,8 @@ pub struct Runner {
     /// Swarms in [`PushMode::Hybrid`]; the upload meter runs while any.
     hybrid_swarms: usize,
     upload: UploadMeter,
+    /// The push rate every swarm's subscriptions committed at the last tick.
+    committed: f64,
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
     tap_level: TapLevel,
@@ -479,6 +484,7 @@ impl Runner {
             last_now: Time::NIL,
             hybrid_swarms: 0,
             upload: UploadMeter::new(),
+            committed: 0.0,
             tap: Tap::default(),
             tap_level: TapLevel::Off,
         }
@@ -582,6 +588,7 @@ impl Runner {
             scheduler: None,
             channels: IndexMap::new(),
             seed_pin: None,
+            committed: 0.0,
         });
         self.tap.push(TapEvent {
             swarm: Some(key),
@@ -976,6 +983,7 @@ impl Runner {
             peers,
             events,
             touched,
+            committed,
             ..
         } = self;
         if !peers.contains_key(peer) {
@@ -994,7 +1002,10 @@ impl Runner {
                 continue;
             };
             if let (Some(info), Some(sched)) = (upload, rs.scheduler.as_mut()) {
-                sched.set_upload(info);
+                sched.set_upload(UploadInfo {
+                    others: *committed - rs.committed,
+                    ..info
+                });
             }
             let mut q = Queues {
                 peers,
@@ -1143,17 +1154,31 @@ impl Runner {
             swarms,
             peers,
             events,
+            committed,
             ..
         } = self;
+        if upload.is_some() {
+            *committed = 0.0;
+            for rs in swarms.values_mut() {
+                rs.committed = rs.scheduler.as_mut().map_or(0.0, |s| s.committed_push(now));
+                *committed += rs.committed;
+            }
+        }
         for (key, rs) in swarms.iter_mut() {
             let RunnerSwarm {
-                swarm, scheduler, ..
+                swarm,
+                scheduler,
+                committed: own,
+                ..
             } = rs;
             let Some(sched) = scheduler.as_mut() else {
                 continue;
             };
             if let Some(info) = upload {
-                sched.set_upload(info);
+                sched.set_upload(UploadInfo {
+                    others: *committed - *own,
+                    ..info
+                });
             }
             let mut q = Queues {
                 peers,
