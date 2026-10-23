@@ -26,13 +26,14 @@ use crate::control::{Reply, Shared, Stop};
 use crate::{Config, DebugError, MAX_SEGMENT_BYTES, MOCK_FRAME, MOCK_STREAM_SERVICE};
 
 /// The options of a mock stream's swarm; its URI carries every one but the
-/// window.
+/// window. A video ingest's sizes: 4 KiB chunks, 8 per signature
+/// ([`MOCK_FRAME`]), 16 streams, a 4 Ki-chunk (16 MiB) window.
 pub fn mock_stream_options() -> SwarmOptions {
     SwarmOptions {
-        chunk_size: 1024,
-        chunks_per_signature: 32,
+        chunk_size: 4096,
+        chunks_per_signature: 8,
         stream_count: 16,
-        live_window: 16 * 1024,
+        live_window: 4 * 1024,
         integrity: VerifierOptions {
             protection_method: ProtectionMethod::MERKLE_TREE,
             merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE2B256,
@@ -390,7 +391,7 @@ mod tests {
         let o = mock_stream_options();
         let uri = Uri::new(SwarmId::new(&[0; 32]), o.uri_options()).to_string();
         assert!(
-            uri.ends_with("&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=32&x.sc=16"),
+            uri.ends_with("&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
             "{uri}"
         );
         assert_eq!(o.live_window * o.chunk_size, crate::MOCK_WINDOW_BYTES);

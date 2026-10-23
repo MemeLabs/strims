@@ -11,9 +11,9 @@ fn an_ingest_uri_carries_its_options() {
     let uri = Uri::new(id.clone(), o.uri_options()).to_string();
     assert_eq!(
         uri,
-        format!("magnet:?xt=urn:ppspp:{id}&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=32&x.sc=16")
+        format!("magnet:?xt=urn:ppspp:{id}&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16")
     );
-    assert_eq!(o.live_window, 16 * 1024);
+    assert_eq!(o.live_window, 4 * 1024);
 }
 
 #[test]

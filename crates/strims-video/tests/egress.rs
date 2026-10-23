@@ -277,9 +277,10 @@ fn joining_mid_stream_drops_the_partial_first_record() {
         let b = node_in(&world, 2).await;
         let (net, _pipes) = owned_network(&a, &[&b], 10).await;
         // A 256 KiB window, which the first records leave.
+        let o = capture_options();
         let options = SwarmOptions {
-            live_window: 256,
-            ..capture_options()
+            live_window: (256 << 10) / o.chunk_size,
+            ..o
         };
         let mut p = Publisher::new(&a, 7, options).await;
         let mut written = records(0, 8);

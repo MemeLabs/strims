@@ -169,14 +169,16 @@ const CHANNEL_DELETED: &str = "the channel was deleted";
 const CHANNEL_MOVED: &str = "the channel moved to another network";
 
 /// The options of an ingest session's swarm; its URI carries every one
-/// but the window. 1 KiB chunks, 32 per signature, 16 streams, a 16
-/// Ki-chunk window, Merkle/BLAKE2b-256/Ed25519.
+/// but the window. 4 KiB chunks, 8 per signature (32 KiB integrity units),
+/// 16 streams, a 4 Ki-chunk (16 MiB) window, Merkle/BLAKE2b-256/Ed25519.
+/// Below 4 KiB, HAVEs, requests and hashes take a large share of the wire,
+/// and a larger integrity unit holds a chunk back until the unit is signed.
 pub fn ingress_options() -> SwarmOptions {
     SwarmOptions {
-        chunk_size: 1024,
-        chunks_per_signature: 32,
+        chunk_size: 4096,
+        chunks_per_signature: 8,
         stream_count: 16,
-        live_window: 16 * 1024,
+        live_window: 4 * 1024,
         integrity: VerifierOptions {
             protection_method: ProtectionMethod::MERKLE_TREE,
             merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE2B256,

@@ -73,7 +73,7 @@ Wire formats:
 - The fMP4 format stays playable by the current UI. That format is one
   chunkstream record per segment,
   `[u16 init length][init segment][media segment]`, starting at a
-  keyframe, in 1 KiB chunks with BLAKE2b-256 Merkle trees and Ed25519 live
+  keyframe, in 4 KiB chunks with BLAKE2b-256 Merkle trees and Ed25519 live
   signatures. The rule for cutting segments is a parameter. The codecs in
   the MIME type come from the decoder configs.
 - The frame format is one chunkstream record per access unit, with the
@@ -204,11 +204,11 @@ in each.
 
 1. **Ship it.** Swarms run Hybrid with the adaptive seed by default, and
    each later trial should measure against the defaults it would change.
-   - Settle a media swarm's stream count, chunk size and munro size with a
-     farm matrix: the adaptive seed at 1, 4 and 16 streams, 1 and 4 KiB
-     chunks and 32 and 64 KiB munros, at 2-12 Mbit/s behind cable, fiber
-     and datacenter seeds. At 1 KiB a large share of the wire is HAVEs,
-     requests and hashes.
+   - Choose a media swarm's stream count from its bitrate. Fewer streams
+     do better at 2-4 Mbit/s (1 or 4 against 16 behind a cable seed and in
+     the ppspp sim's A/B scenarios) and 16 at 8-12 Mbit/s, and across both
+     they tie; media swarms run 16 meanwhile. An ingest could take the
+     bitrate from the publisher's metadata, a capture from its encoder.
    - The upload meter counts the node as busy while any peer has data
      queued. Below the vnic rate limit queues empty within a pump, so it
      reads many times the uplink, and one peer's blocked link makes it
@@ -261,8 +261,8 @@ in each.
      child loses about 1 s of every 11 s on each stream it is the best
      candidate for. Back off by cause, and a parent pruned again and
      again longer, by the child's own count.
-   - **Protocol overhead.** Find where the bytes go at the chunk size the
-     matrix picks, from a capture. Coalesce HAVE-only frames. One chunk
+   - **Protocol overhead.** Find where the bytes go at the media swarms'
+     4 KiB chunks, from a capture. Coalesce HAVE-only frames. One chunk
      per request costs about 27 % at 1 KiB chunks; requesting runs of
      chunks needs no wire change.
 3. **Greedy peers.** Free riders and liars cost honest viewers more tail

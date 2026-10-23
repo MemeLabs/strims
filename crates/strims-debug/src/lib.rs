@@ -12,8 +12,8 @@
 //!
 //! # Format
 //!
-//! - **Swarm.** [`mock_stream_options`]: 1 KiB chunks, 32 per signature,
-//!   16 streams, a 16 Ki-chunk (16 MiB) live window,
+//! - **Swarm.** [`mock_stream_options`]: 4 KiB chunks, 8 per signature,
+//!   16 streams, a 4 Ki-chunk (16 MiB) live window,
 //!   Merkle/BLAKE2b-256/Ed25519, under a fresh ed25519 key. Its transfer
 //!   is under the empty salt.
 //! - **Listing.** A `Service` listing of type [`MOCK_STREAM_SERVICE`]
