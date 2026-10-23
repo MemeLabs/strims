@@ -34,6 +34,9 @@ pub struct HostSpec {
     /// Turmoil models no bandwidth, so outside WAN mode this is the host's
     /// only rate limit.
     pub uplink: Option<u64>,
+    /// The upload capacity the node knows (`NodeConfig::upload_capacity`);
+    /// `None` leaves ppspp to `uplink`, if set, and its measurement.
+    pub upload_capacity: Option<u64>,
     pub max_peers: u32,
     /// vpn routing for this host; `None` uses [`Scenario::routing`].
     pub routing: Option<Routing>,
@@ -410,6 +413,7 @@ impl Scenario {
         self.hosts.push(HostSpec {
             name: name.to_owned(),
             uplink,
+            upload_capacity: None,
             max_peers: 64,
             routing: None,
             listen: true,

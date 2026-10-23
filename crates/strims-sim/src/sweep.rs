@@ -14,6 +14,9 @@
 //! - `STRIMS_SIM_SEND_BUFFER=<ms>` gives every WAN scenario without send
 //!   buffers ([`Scenario::send_buffer`]) an uplink queue of `ms`
 //!   milliseconds, for comparisons.
+//! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
+//!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
+//!   oracle the upload meter is measured against.
 //!
 //! The first seed runs a second time and must give the same trace hash.
 //!
@@ -133,6 +136,7 @@ pub fn sweep(
     let seeds = seeds();
     let capture = env("STRIMS_SIM_CAPTURE");
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
+    let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").is_some_and(|s| s.trim() == "1");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -142,6 +146,13 @@ pub fn sweep(
             spec.send_buffer = Some(SendBuffer {
                 uplink_queue: Duration::from_millis(ms),
             });
+        }
+        if known_uplink {
+            for h in &mut spec.hosts {
+                if let Some(site) = h.site {
+                    h.upload_capacity = Some(site.profile.up);
+                }
+            }
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");
