@@ -3011,10 +3011,39 @@ impl Scenario {
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
-/// greedy viewers without them, for comparisons.
+/// greedy viewers without them, for comparisons. A knob that is set but
+/// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
-    std::env::var(name).ok().and_then(|s| s.parse().ok())
+    let s = std::env::var(name).ok()?;
+    match s.parse() {
+        Ok(v) => Some(v),
+        Err(_) => panic!("{name}={s} doesn't parse"),
+    }
+}
+
+/// `SIM_CHUNK` bytes per chunk and `SIM_MUNRO` bytes per munro, each
+/// default `cfg`'s; the window keeps its size in bytes. Both are powers of
+/// two, and a munro holds at least one chunk.
+fn size_knobs(cfg: &mut Config) {
+    let window = cfg.live_window * cfg.chunk_size;
+    let chunk: usize = knob("SIM_CHUNK").unwrap_or(cfg.chunk_size);
+    let munro: usize = knob("SIM_MUNRO").unwrap_or(cfg.munro_chunks * cfg.chunk_size);
+    assert!(
+        chunk.is_power_of_two() && munro.is_power_of_two() && munro >= chunk,
+        "SIM_CHUNK={chunk}, SIM_MUNRO={munro}: powers of two, a munro at least a chunk"
+    );
+    cfg.chunk_size = chunk;
+    cfg.munro_chunks = munro / chunk;
+    cfg.live_window = (window / chunk).max(1);
+}
+
+/// `SIM_STREAMS` streams, default `cfg`'s.
+fn streams_knob(cfg: &mut Config) {
+    if let Some(n) = knob::<usize>("SIM_STREAMS") {
+        assert!(n >= 1, "SIM_STREAMS={n}: at least 1");
+        cfg.stream_count = n;
+    }
 }
 
 /// The knobs that change a config: stream length, warm-up and tracing.
@@ -3050,9 +3079,7 @@ fn seed_policy_knob(cfg: &mut Config) {
 /// and the seed's policy.
 fn ab_knobs(cfg: &mut Config) {
     seed_policy_knob(cfg);
-    if let Some(n) = knob("SIM_STREAMS") {
-        cfg.stream_count = n;
-    }
+    streams_knob(cfg);
     if let Some(secs) = knob("SIM_SECS") {
         cfg.stream_secs = secs;
     }
@@ -4379,8 +4406,9 @@ fn random_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
 }
 
 /// A seed allocation run's config: Hybrid at `SIM_STREAMS` (16)
-/// streams for `SIM_SECS` (30) seconds, lags from `SIM_WARM` (10); a pin
-/// gets `slots`.
+/// streams for `SIM_SECS` (30) seconds, lags from `SIM_WARM` (10), with
+/// the scenario's chunk and munro sizes unless [`size_knobs`] sets them; a
+/// pin gets `slots`.
 fn alloc_config(
     sc: AbScenario,
     seed: u64,
@@ -4394,7 +4422,9 @@ fn alloc_config(
         PushMode::Hybrid
     };
     let mut cfg = sc.config(seed, mode, controller, controller);
-    cfg.stream_count = knob("SIM_STREAMS").unwrap_or(16);
+    cfg.stream_count = 16;
+    streams_knob(&mut cfg);
+    size_knobs(&mut cfg);
     cfg.stream_secs = knob("SIM_SECS").unwrap_or(30);
     cfg.warm_secs = knob("SIM_WARM").unwrap_or(10);
     let qos = matches!(
@@ -4821,9 +4851,9 @@ fn wan_cable_seed_config(
 }
 
 /// [`wan_cable_seed_config`] for `seed` under `policy`, from the knobs:
-/// `SIM_PEERS` viewers (default 50), `SIM_CHUNK` bytes per chunk (1024),
-/// `SIM_MBIT` (6), `SIM_SEED_ACCESS` (`cable`, `fiber` or `datacenter`)
-/// and `SIM_SECS`.
+/// `SIM_PEERS` viewers (default 50), `SIM_MBIT` (6), `SIM_SEED_ACCESS`
+/// (`cable`, `fiber` or `datacenter`), `SIM_STREAMS` (16), `SIM_SECS`,
+/// and [`size_knobs`]' `SIM_CHUNK` (1024) and `SIM_MUNRO` (64 KiB).
 fn wan_cable_seed_knobs(seed: u64, policy: SeedPolicy) -> Config {
     let access = match knob::<String>("SIM_SEED_ACCESS").as_deref() {
         None | Some("cable") => Access::Cable,
@@ -4834,11 +4864,13 @@ fn wan_cable_seed_knobs(seed: u64, policy: SeedPolicy) -> Config {
     let mut cfg = wan_cable_seed_config(
         seed,
         knob("SIM_PEERS").unwrap_or(50),
-        knob("SIM_CHUNK").unwrap_or(CHUNK),
+        CHUNK,
         knob("SIM_MBIT").unwrap_or(6),
         policy,
         access,
     );
+    streams_knob(&mut cfg);
+    size_knobs(&mut cfg);
     if let Some(secs) = knob("SIM_SECS") {
         cfg.stream_secs = secs;
     }
@@ -5029,6 +5061,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .str("trace", &format!("{:016x}", r.trace))
         .int("frames", r.frames)
         .int("bytes", r.bytes)
+        .int("payload_bytes", sim.chunks_read() * cfg.chunk_size as u64)
         .num("delivery", r.delivery)
         .int("lag_p50_ms", ms(r.lag_p50) as u64)
         .int("lag_p99_ms", ms(r.lag_p99) as u64)
