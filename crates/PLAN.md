@@ -561,7 +561,7 @@ stack or a version gate.
 - Stamp DATA at send time, not after the sender's queue.
 - STREAM_REQUEST: add an expiry or lease plus a rate limit. STREAM_CLOSE:
   add a reason.
-- Announce the interior stream and spare capacity.
+- Announce the interior stream.
 - Mark pushed DATA and echo send times.
 - Add a hop count or depth to STREAM_OPEN or HAVE.
 - ANNOUNCE's reach: a report names the reporter's direct parent and
