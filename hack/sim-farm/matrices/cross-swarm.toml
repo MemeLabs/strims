@@ -1,0 +1,36 @@
+# Swarms that leave room for the node's other swarms' pushes
+# (cross-swarm-commit) against main, in the ppspp sim's cross traffic
+# scenario: a second swarm on every uplink, at 2.5-8x the stream rate.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 1.5
+
+[arms]
+main = "cb2bd961"
+cross-swarm-commit = "cross-swarm-commit"
+
+[env]
+SIM_SCENARIO = "CrossTraffic"
+SIM_CASE = "AdaptiveQos"
+
+[axes]
+SIM_CROSS_UP_X10 = ["25", "35", "50", "80"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"]
+
+[canary]
+SIM_SECS = "2"
+SIM_WARM = "1"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "cross_delivery:mean,min",
+  "cross_p50_ms:median",
+  "cross_p99_ms:median,max",
+  "wasted/chunks_read:ratio",
+  "push_misses/push_hits:ratio",
+]
