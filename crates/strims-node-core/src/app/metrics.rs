@@ -423,6 +423,7 @@ fn swarm_scheduler(s: SwarmSchedulerStats) -> v1::SwarmSchedulerStats {
 
 fn push_mode(m: PushMode) -> v1::PushMode {
     match m {
+        PushMode::Default => push_mode(PushMode::DEFAULT),
         PushMode::Off => v1::PushMode::Off,
         PushMode::EagerHave => v1::PushMode::EagerHave,
         PushMode::Hybrid => v1::PushMode::Hybrid,

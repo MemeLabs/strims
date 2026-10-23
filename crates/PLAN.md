@@ -202,21 +202,19 @@ fall seconds behind, and the defences against greedy peers are the
 adaptive seed's. The groups are in priority order, and so are the items
 in each.
 
-1. **Ship it.** Nothing below reaches a viewer until Hybrid is the
-   default, and each later trial should measure against the defaults it
-   would change.
-   - Settle a swarm's stream count and chunk size with a farm matrix: the
-     adaptive seed at 1, 4 and 16 streams and 1 and 4 KiB chunks, at
-     2-12 Mbit/s behind cable, fiber and datacenter seeds. At 1 KiB a
-     large share of the wire is HAVEs, requests and hashes.
-   - Make it the default. `SwarmOptions::default_options` sets
-     `PushMode::Off` and the admitting seed, and nothing outside the sims
-     and tests turns Hybrid on, strims-video's swarms included. Check it
-     on strims-sim's WAN scenarios too: only whole nodes run vnic QoS.
-   - The upload meter assumes the driver drains at link speed, so it
-     reads low under vnic QoS, and swarms share one meter but admit
-     independently. The adaptive seed sizes its first wave from it.
-     strims-node could report link capacity.
+1. **Ship it.** Swarms run Hybrid with the adaptive seed by default, and
+   each later trial should measure against the defaults it would change.
+   - Settle a media swarm's stream count, chunk size and munro size with a
+     farm matrix: the adaptive seed at 1, 4 and 16 streams, 1 and 4 KiB
+     chunks and 32 and 64 KiB munros, at 2-12 Mbit/s behind cable, fiber
+     and datacenter seeds. At 1 KiB a large share of the wire is HAVEs,
+     requests and hashes.
+   - The upload meter counts the node as busy while any peer has data
+     queued. Below the vnic rate limit queues empty within a pump, so it
+     reads many times the uplink, and one peer's blocked link makes it
+     read low; swarms share the meter but admit independently. The
+     adaptive seed sizes its first wave from it. strims-node could report
+     link capacity.
 2. **A residential seed at a real bitrate.** Behind a cable seed at
    6-8 Mbit/s honest viewers lag several times what they do behind fiber,
    and behind well-provisioned seeds the adaptive seed trails the
@@ -376,6 +374,10 @@ in each.
    - **Allocations.** `TimeSet` allocates per node (one ring entry per
      munro would do); the data queue's `BTreeMap` index allocates;
      `channel_stats` sizes binmaps from their debug dump.
+   - **Record swarms.** Chat's and the directory's event and asset swarms
+     run pull only (`PushMode::Off`). Measure Off, EagerHave and Hybrid on
+     a chat-like workload (sparse, small, signed records) before they take
+     the default.
 6. **The admitting seed** (`SeedAllocation::Admission`). Decide whether
    it stays; while it does:
    - a startup window: before its upload and store rate are measured it

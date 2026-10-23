@@ -10,7 +10,7 @@
 
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::store::BufferLayout;
-use strims_ppspp::{DeliveryMode, SwarmId, SwarmOptions};
+use strims_ppspp::{DeliveryMode, PushMode, SwarmId, SwarmOptions};
 
 /// The hash table salt of the server's address.
 pub const ADDRESS_SALT: &[u8] = b"chat";
@@ -31,8 +31,8 @@ pub const ASSET_FRAME: usize = 128 * 1024;
 pub const ASSET_WINDOW_BYTES: usize = 32 * 1024 * 1024;
 
 /// The event swarm of the server with key `server_key`: 256 B chunks,
-/// each signed, a 1024 chunk (256 KiB) window, best effort delivery, with
-/// the defaults for the rest.
+/// each signed, a 1024 chunk (256 KiB) window, best effort delivery, pull
+/// only, with the defaults for the rest.
 pub fn event_options(server_key: &[u8]) -> SwarmOptions {
     SwarmOptions {
         label: label(server_key, "events"),
@@ -44,6 +44,7 @@ pub fn event_options(server_key: &[u8]) -> SwarmOptions {
             ..VerifierOptions::default()
         },
         delivery_mode: DeliveryMode::BEST_EFFORT,
+        push_mode: PushMode::Off,
         ..SwarmOptions::default()
     }
     .assign_defaults(&SwarmOptions::default_options())
@@ -51,7 +52,8 @@ pub fn event_options(server_key: &[u8]) -> SwarmOptions {
 
 /// The asset swarm of the server with key `server_key`: 1 KiB chunks
 /// under Merkle trees of 128, a 32 Ki chunk (32 MiB) window, mandatory
-/// delivery and an elastic buffer, with the defaults for the rest.
+/// delivery and an elastic buffer, pull only, with the defaults for the
+/// rest.
 pub fn asset_options(server_key: &[u8]) -> SwarmOptions {
     SwarmOptions {
         label: label(server_key, "assets"),
@@ -64,6 +66,7 @@ pub fn asset_options(server_key: &[u8]) -> SwarmOptions {
         },
         delivery_mode: DeliveryMode::MANDATORY,
         buffer_layout: BufferLayout::ELASTIC,
+        push_mode: PushMode::Off,
         ..SwarmOptions::default()
     }
     .assign_defaults(&SwarmOptions::default_options())

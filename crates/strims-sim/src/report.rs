@@ -500,7 +500,7 @@ impl Report {
                 c.invalid,
                 c.rejected,
             ));
-            if spec.options.push_mode == strims_ppspp::PushMode::Hybrid {
+            if spec.options.push_mode.resolve() == strims_ppspp::PushMode::Hybrid {
                 s.push_str(&format!(
                     "\n  swarm {i} push: hits {} misses {} ({:.1}%), late {}, unsolicited {}, switched {} pruned {} shed {}, accepted {}, sheds sent {}, stale {}, suppressed {}",
                     c.hits,

@@ -336,7 +336,7 @@ impl Config {
             progress: None,
             controller: RequestControllerKind::Default,
             cross: None,
-            seed_policy: SeedPolicy::default(),
+            seed_policy: SeedPolicy::ADMISSION,
             pin: None,
             wan: None,
             capture: None,
@@ -4892,8 +4892,8 @@ fn wan_cable_seed() {
     let seeds: u64 = knob("SIM_SEEDS").unwrap_or(1);
     let policies: Vec<SeedPolicy> = match knob::<String>("SIM_SEED_POLICY").as_deref() {
         Some("adaptive") => vec![ADAPTIVE_QOS],
-        Some("admission") => vec![SeedPolicy::default()],
-        _ => vec![SeedPolicy::default(), ADAPTIVE_QOS],
+        Some("admission") => vec![SeedPolicy::ADMISSION],
+        _ => vec![SeedPolicy::ADMISSION, ADAPTIVE_QOS],
     };
     let jobs: Vec<(SeedPolicy, u64)> = policies
         .iter()
@@ -4975,7 +4975,7 @@ fn sim_job() {
     let (scenario, case, cfg) = if scenario == "cable-seed" {
         let policy = match knob::<String>("SIM_SEED_POLICY").as_deref() {
             None | Some("adaptive") => ADAPTIVE_QOS,
-            Some("admission") => SeedPolicy::default(),
+            Some("admission") => SeedPolicy::ADMISSION,
             Some(p) => panic!("SIM_SEED_POLICY={p}: adaptive or admission"),
         };
         (
@@ -5271,7 +5271,7 @@ fn sim_wan_adaptive_seed_spreads_whole_copies() {
         qos: SeedQos::ByAllocation,
     };
     let mut lags = Vec::new();
-    for seed_policy in [SeedPolicy::default(), policy] {
+    for seed_policy in [SeedPolicy::ADMISSION, policy] {
         let mut cfg = Scenario::WanResidentialSeed.config(PushMode::Hybrid, 16);
         cfg.seed_policy = seed_policy;
         let mut sim = Sim::new(cfg);

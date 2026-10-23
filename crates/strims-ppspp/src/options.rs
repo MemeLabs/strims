@@ -46,9 +46,12 @@ impl DeliveryMode {
 /// modes interoperate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PushMode {
+    /// The crate's default, resolved by `SwarmOptions::default_options`
+    /// (zero means default, as for every other option).
+    #[default]
+    Default,
     /// Pull only; HAVEs and the requests they trigger wait for the next
     /// tick.
-    #[default]
     Off,
     /// Pull only, but HAVEs go out as soon as chunks are stored and
     /// requests as soon as HAVEs make bins requestable (coalesced per frame
@@ -61,6 +64,19 @@ pub enum PushMode {
     Hybrid,
 }
 
+impl PushMode {
+    /// The mode `Default` resolves to.
+    pub const DEFAULT: PushMode = PushMode::Hybrid;
+
+    /// `Default` resolved.
+    pub fn resolve(self) -> PushMode {
+        match self {
+            PushMode::Default => PushMode::DEFAULT,
+            m => m,
+        }
+    }
+}
+
 /// How a seed in [`PushMode::Hybrid`] spends its upload; see
 /// [`scheduler_peer::push`](crate::scheduler_peer::push). Local to this
 /// node, like `push_mode`; a non-seed ignores it.
@@ -70,12 +86,35 @@ pub struct SeedPolicy {
     pub qos: SeedQos,
 }
 
+impl SeedPolicy {
+    /// The admitting seed, with equal uplink shares.
+    pub const ADMISSION: SeedPolicy = SeedPolicy {
+        allocation: SeedAllocation::Admission,
+        qos: SeedQos::Equal,
+    };
+    /// The adaptive seed, with uplink shares by allocation.
+    pub const ADAPTIVE: SeedPolicy = SeedPolicy {
+        allocation: SeedAllocation::Adaptive,
+        qos: SeedQos::ByAllocation,
+    };
+
+    /// Each `Default` field resolved.
+    pub fn resolve(self) -> SeedPolicy {
+        SeedPolicy {
+            allocation: self.allocation.resolve(),
+            qos: self.qos.resolve(),
+        }
+    }
+}
+
 /// Which push subscriptions a seed accepts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeedAllocation {
+    /// The crate's default, resolved by `SwarmOptions::default_options`.
+    #[default]
+    Default,
     /// First come, while the projected upload stays under the admission
     /// target.
-    #[default]
     Admission,
     /// The whole copies its measured upload pays for, to the neighbours
     /// nearest it; see
@@ -83,18 +122,46 @@ pub enum SeedAllocation {
     Adaptive,
 }
 
+impl SeedAllocation {
+    /// The allocation `Default` resolves to.
+    pub const DEFAULT: SeedAllocation = SeedAllocation::Adaptive;
+
+    /// `Default` resolved.
+    pub fn resolve(self) -> SeedAllocation {
+        match self {
+            SeedAllocation::Default => SeedAllocation::DEFAULT,
+            a => a,
+        }
+    }
+}
+
 /// How a seed weights its peers' shares of its uplink.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeedQos {
+    /// The crate's default, resolved by `SwarmOptions::default_options`.
+    #[default]
+    Default,
     /// By reciprocity, like any node: a seed receives no data, so every
     /// peer gets an equal share.
-    #[default]
     Equal,
     /// Each peer at least in proportion to the streams pushed to it, and
     /// the minimum weight for peers it pushes nothing to: pushes leave at
     /// the rate each subscriber needs, and pull answers take what they
     /// leave.
     ByAllocation,
+}
+
+impl SeedQos {
+    /// The shares `Default` resolves to.
+    pub const DEFAULT: SeedQos = SeedQos::ByAllocation;
+
+    /// `Default` resolved.
+    pub fn resolve(self) -> SeedQos {
+        match self {
+            SeedQos::Default => SeedQos::DEFAULT,
+            q => q,
+        }
+    }
 }
 
 /// Swarm options. Sizes are in bytes and counts in chunks.
@@ -111,19 +178,21 @@ pub struct SwarmOptions {
     pub delivery_mode: DeliveryMode,
     pub buffer_layout: BufferLayout,
     /// How push is mixed into pull; local, in neither handshakes nor
-    /// URIs.
+    /// URIs. `Default` resolves to [`PushMode::DEFAULT`].
     pub push_mode: PushMode,
     /// The channels' request window model, local to this node.
     /// `Default` resolves to [`RequestControllerKind::DEFAULT`].
     pub request_controller: RequestControllerKind,
-    /// How a hybrid seed spends its upload, local to this node.
+    /// How a hybrid seed spends its upload, local to this node. Each
+    /// `Default` field resolves to its type's `DEFAULT`.
     pub seed: SeedPolicy,
 }
 
 impl SwarmOptions {
     /// The defaults: 1 KiB chunks, 64 per signature, one
     /// stream, a 64 Ki chunk (64 MiB) window, Merkle/BLAKE2b-256/ed25519,
-    /// the peer scheduler, low latency delivery and a circular buffer.
+    /// the peer scheduler, low latency delivery, a circular buffer, and
+    /// hybrid push with the adaptive seed.
     pub fn default_options() -> SwarmOptions {
         SwarmOptions {
             label: String::new(),
@@ -135,14 +204,17 @@ impl SwarmOptions {
             scheduling_method: SchedulingMethod::PEER,
             delivery_mode: DeliveryMode::LOW_LATENCY,
             buffer_layout: BufferLayout::CIRCULAR,
-            push_mode: PushMode::Off,
+            push_mode: PushMode::DEFAULT,
             request_controller: RequestControllerKind::DEFAULT,
-            seed: SeedPolicy::default(),
+            seed: SeedPolicy {
+                allocation: SeedAllocation::DEFAULT,
+                qos: SeedQos::DEFAULT,
+            },
         }
     }
 
     /// Each zero field of `self` replaced by the field of `defaults`,
-    /// recursing into `integrity`.
+    /// recursing into `integrity` and `seed`.
     pub fn assign_defaults(self, defaults: &SwarmOptions) -> SwarmOptions {
         fn or<T: Default + PartialEq>(v: T, d: T) -> T {
             if v == T::default() { d } else { v }
@@ -173,7 +245,10 @@ impl SwarmOptions {
             buffer_layout: or(self.buffer_layout, d.buffer_layout),
             push_mode: or(self.push_mode, d.push_mode),
             request_controller: or(self.request_controller, d.request_controller),
-            seed: or(self.seed, d.seed),
+            seed: SeedPolicy {
+                allocation: or(self.seed.allocation, d.seed.allocation),
+                qos: or(self.seed.qos, d.seed.qos),
+            },
         }
     }
 
@@ -263,6 +338,51 @@ mod tests {
                 .request_controller,
             RequestControllerKind::DEFAULT
         );
+    }
+
+    /// Every push mode and seed policy can be chosen whichever is the
+    /// default, a policy field by field.
+    #[test]
+    fn explicit_push_modes_and_seed_policies_survive_defaults() {
+        let defaults = SwarmOptions::default_options();
+        let o = SwarmOptions::default().assign_defaults(&defaults);
+        assert_eq!(o.push_mode, PushMode::DEFAULT);
+        assert_eq!(
+            o.seed,
+            SeedPolicy {
+                allocation: SeedAllocation::DEFAULT,
+                qos: SeedQos::DEFAULT,
+            }
+        );
+        for mode in [PushMode::Off, PushMode::EagerHave, PushMode::Hybrid] {
+            let o = SwarmOptions {
+                push_mode: mode,
+                ..Default::default()
+            }
+            .assign_defaults(&defaults);
+            assert_eq!(o.push_mode, mode);
+        }
+        for seed in [SeedPolicy::ADMISSION, SeedPolicy::ADAPTIVE] {
+            let o = SwarmOptions {
+                seed,
+                ..Default::default()
+            }
+            .assign_defaults(&defaults);
+            assert_eq!(o.seed, seed);
+        }
+        let o = SwarmOptions {
+            seed: SeedPolicy {
+                allocation: SeedAllocation::Admission,
+                qos: SeedQos::Default,
+            },
+            ..Default::default()
+        }
+        .assign_defaults(&defaults);
+        assert_eq!(o.seed.allocation, SeedAllocation::Admission);
+        assert_eq!(o.seed.qos, SeedQos::DEFAULT);
+        assert_ne!(PushMode::DEFAULT, PushMode::Default);
+        assert_ne!(SeedAllocation::DEFAULT, SeedAllocation::Default);
+        assert_ne!(SeedQos::DEFAULT, SeedQos::Default);
     }
 
     #[test]

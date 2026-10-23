@@ -16,9 +16,7 @@
 use std::time::Duration;
 
 use strims_base::rng::det_rng;
-use strims_ppspp::{
-    DeliveryMode, PushMode, RequestControllerKind, SeedAllocation, SeedPolicy, SeedQos,
-};
+use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SwarmSpec, Transport,
@@ -88,10 +86,7 @@ const BBR: RequestControllerKind = RequestControllerKind::BbrLike;
 const STRIPES: usize = 16;
 
 /// An adaptive seed with uplink shares by allocation.
-const ADAPTIVE: SeedPolicy = SeedPolicy {
-    allocation: SeedAllocation::Adaptive,
-    qos: SeedQos::ByAllocation,
-};
+const ADAPTIVE: SeedPolicy = SeedPolicy::ADAPTIVE;
 
 /// `s` with every swarm in `streams` streams and its seed on `policy`.
 fn striped(mut s: Scenario, streams: usize, policy: SeedPolicy) -> Scenario {
@@ -99,7 +94,7 @@ fn striped(mut s: Scenario, streams: usize, policy: SeedPolicy) -> Scenario {
         sw.options.stream_count = streams;
         sw.options.seed = policy;
     }
-    let adaptive = if policy == SeedPolicy::default() {
+    let adaptive = if policy == SeedPolicy::ADMISSION {
         ""
     } else {
         " adaptive"
@@ -284,7 +279,7 @@ fn check_capped_seed(r: &Report) -> Result<(), String> {
     // carry most of the data. Pull spreads it over many of them; a push
     // tree over its interior nodes, a few viewers each feeding several.
     let share = r.data_share(0);
-    let min_uploaders = match r.scenario.swarms[0].options.push_mode {
+    let min_uploaders = match r.scenario.swarms[0].options.push_mode.resolve() {
         PushMode::Hybrid => 3,
         _ => 8,
     };
@@ -2067,7 +2062,7 @@ fn controller_ab() {
             "wan_residential_seed hybrid x16 ledbat",
             |s| {
                 let s = wan_residential_seed(s, PushMode::Hybrid);
-                with_controller(striped(s, STRIPES, SeedPolicy::default()), LEDBAT)
+                with_controller(striped(s, STRIPES, SeedPolicy::ADMISSION), LEDBAT)
             },
             check_wan_residential_seed,
             false,
@@ -2076,7 +2071,7 @@ fn controller_ab() {
             "wan_residential_seed hybrid x16 bbr",
             |s| {
                 let s = wan_residential_seed(s, PushMode::Hybrid);
-                with_controller(striped(s, STRIPES, SeedPolicy::default()), BBR)
+                with_controller(striped(s, STRIPES, SeedPolicy::ADMISSION), BBR)
             },
             check_wan_residential_seed,
             false,
@@ -2103,7 +2098,7 @@ fn controller_ab() {
             "wan_super_peer hybrid x16 ledbat",
             |s| {
                 let s = wan_super_peer(s, PushMode::Hybrid);
-                with_controller(striped(s, STRIPES, SeedPolicy::default()), LEDBAT)
+                with_controller(striped(s, STRIPES, SeedPolicy::ADMISSION), LEDBAT)
             },
             check_wan_residential_seed,
             false,
@@ -2112,7 +2107,7 @@ fn controller_ab() {
             "wan_super_peer hybrid x16 bbr",
             |s| {
                 let s = wan_super_peer(s, PushMode::Hybrid);
-                with_controller(striped(s, STRIPES, SeedPolicy::default()), BBR)
+                with_controller(striped(s, STRIPES, SeedPolicy::ADMISSION), BBR)
             },
             check_wan_residential_seed,
             false,

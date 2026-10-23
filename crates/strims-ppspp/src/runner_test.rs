@@ -826,8 +826,8 @@ fn a_seeds_shares_follow_its_subscribers_at_once() {
     // update.
     let seed = SwarmOptions {
         seed: crate::SeedPolicy {
+            allocation: crate::SeedAllocation::Admission,
             qos: crate::SeedQos::ByAllocation,
-            ..Default::default()
         },
         ..hybrid()
     };

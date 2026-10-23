@@ -605,23 +605,26 @@ fn swarm_record(id: u32, swarm: &Swarm) -> Record<'_> {
             scheduling_method: o.scheduling_method.0.into(),
             delivery_mode: o.delivery_mode.0.into(),
             buffer_layout: o.buffer_layout.0.into(),
-            push_mode: match o.push_mode {
+            push_mode: match o.push_mode.resolve() {
                 PushMode::Off => 1,
                 PushMode::EagerHave => 2,
                 PushMode::Hybrid => 3,
+                PushMode::Default => 0,
             },
             request_controller: match o.request_controller.resolve() {
                 RequestControllerKind::Ledbat => 1,
                 RequestControllerKind::BbrLike => 2,
                 RequestControllerKind::Default => 0,
             },
-            seed_allocation: match o.seed.allocation {
+            seed_allocation: match o.seed.allocation.resolve() {
                 SeedAllocation::Admission => 1,
                 SeedAllocation::Adaptive => 2,
+                SeedAllocation::Default => 0,
             },
-            seed_qos: match o.seed.qos {
+            seed_qos: match o.seed.qos.resolve() {
                 SeedQos::Equal => 1,
                 SeedQos::ByAllocation => 2,
+                SeedQos::Default => 0,
             },
         },
     }

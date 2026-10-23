@@ -10,7 +10,7 @@
 
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::store::BufferLayout;
-use strims_ppspp::{DeliveryMode, SwarmId, SwarmOptions};
+use strims_ppspp::{DeliveryMode, PushMode, SwarmId, SwarmOptions};
 
 /// The hash table salt of the server's address.
 pub const ADDRESS_SALT: &[u8] = b"directory";
@@ -25,8 +25,8 @@ pub const EVENT_FRAME: usize = 1024;
 pub const ASSET_FRAME: usize = 128 * 1024;
 
 /// The event swarm of the network with key `network_key`: 1 KiB chunks,
-/// each signed, a 2 MiB window, best effort delivery, with the defaults
-/// for the rest.
+/// each signed, a 2 MiB window, best effort delivery, pull only, with the
+/// defaults for the rest.
 pub fn event_options(network_key: &[u8]) -> SwarmOptions {
     SwarmOptions {
         label: label(network_key, "events"),
@@ -38,6 +38,7 @@ pub fn event_options(network_key: &[u8]) -> SwarmOptions {
             ..VerifierOptions::default()
         },
         delivery_mode: DeliveryMode::BEST_EFFORT,
+        push_mode: PushMode::Off,
         ..SwarmOptions::default()
     }
     .assign_defaults(&SwarmOptions::default_options())
@@ -45,7 +46,7 @@ pub fn event_options(network_key: &[u8]) -> SwarmOptions {
 
 /// The asset swarm of the network with key `network_key`: 1 KiB chunks
 /// under Merkle trees of 128, a 2 MiB window, mandatory delivery and an
-/// elastic buffer, with the defaults for the rest.
+/// elastic buffer, pull only, with the defaults for the rest.
 pub fn asset_options(network_key: &[u8]) -> SwarmOptions {
     SwarmOptions {
         label: label(network_key, "assets"),
@@ -58,6 +59,7 @@ pub fn asset_options(network_key: &[u8]) -> SwarmOptions {
         },
         delivery_mode: DeliveryMode::MANDATORY,
         buffer_layout: BufferLayout::ELASTIC,
+        push_mode: PushMode::Off,
         ..SwarmOptions::default()
     }
     .assign_defaults(&SwarmOptions::default_options())

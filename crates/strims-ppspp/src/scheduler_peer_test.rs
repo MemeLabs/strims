@@ -90,10 +90,19 @@ fn fixture_peers(swarm: Swarm, n: usize) -> Fixture {
     }
 }
 
+/// Options for the pull scheduler's tests: the mechanisms they test run
+/// without push.
+fn pull() -> SwarmOptions {
+    SwarmOptions {
+        push_mode: PushMode::Off,
+        ..Default::default()
+    }
+}
+
 fn eight_streams() -> SwarmOptions {
     SwarmOptions {
         stream_count: 8,
-        ..Default::default()
+        ..pull()
     }
 }
 
@@ -301,7 +310,7 @@ fn sent_chunks_count_pushes_and_distinct_chunks() {
 fn have_flood_is_bounded() {
     let mut f = fixture(SwarmOptions {
         live_window: 1 << 10,
-        ..Default::default()
+        ..pull()
     });
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -360,7 +369,7 @@ fn unsolicited_stream_open_is_ignored() {
 
 #[test]
 fn stream_close_keeps_chunks_requested_from_other_channels() {
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     let o = add_ready(&mut f, &mut q, 1);
@@ -384,7 +393,7 @@ fn stream_close_keeps_chunks_requested_from_other_channels() {
 
 #[test]
 fn stream_close_from_a_replaced_source_keeps_the_new_one() {
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let a = ready_channel(&mut f, &mut q);
     let b = add_ready(&mut f, &mut q, 1);
@@ -409,7 +418,7 @@ fn stream_close_from_a_replaced_source_keeps_the_new_one() {
 
 #[test]
 fn invalid_data_hands_a_source_chunk_to_pull() {
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     let o = add_ready(&mut f, &mut q, 1);
@@ -584,7 +593,7 @@ const CONTROLLERS: [RequestControllerKind; 2] = [
 #[test]
 fn pong_needs_an_outstanding_ping() {
     for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(SwarmOptions::default(), kind));
+        let mut f = fixture(with_controller(pull(), kind));
         let mut q = MockQueue::default();
         let p = ready_channel(&mut f, &mut q);
         assert_eq!(f.sched.channels[&p].controller.kind(), kind);
@@ -618,7 +627,7 @@ fn requests_are_bounded_by_the_window() {
     let mut f = fixture(SwarmOptions {
         live_window: 256,
         request_controller: RequestControllerKind::Ledbat,
-        ..Default::default()
+        ..pull()
     });
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -662,7 +671,7 @@ fn requests_are_bounded_by_the_window() {
 fn reset_forgets_peer_positions() {
     // A reset forgets the peers' newest HAVEs and stream requests: a new
     // stream starts at bin 0 and must be requested from there.
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     f.sched.handle_have(p, Bin::new(10, 50), now());
@@ -676,7 +685,7 @@ fn reset_forgets_peer_positions() {
 
 #[test]
 fn time_outs_cancel_and_release() {
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     f.sched.s.first_chunk_set = true;
@@ -712,7 +721,7 @@ fn gc_keeps_request_times_before_the_read_offset() {
     // Before the read offset is set `store.next()` is NONE; GC must not
     // prune request times there, or the answers would no longer count as
     // acks.
-    let mut f = fixture(SwarmOptions::default());
+    let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     f.sched.handle_have(p, Bin::new(2, 0), now());
@@ -734,7 +743,7 @@ fn unanswered_requests_filled_elsewhere_leave_the_flight() {
     // It must leave the flight without a loss: two such requests stuck in
     // flight would fill the minimum window and stop the channel.
     for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(SwarmOptions::default(), kind));
+        let mut f = fixture(with_controller(pull(), kind));
         let mut q = MockQueue::default();
         let p = ready_channel(&mut f, &mut q);
         let other = f.peers[1];
@@ -792,10 +801,7 @@ fn bbr_like_measures_with_local_times_only() {
         Duration::from_secs(-7200),
         Duration::from_secs(36_000),
     ] {
-        let mut f = fixture(with_controller(
-            SwarmOptions::default(),
-            RequestControllerKind::BbrLike,
-        ));
+        let mut f = fixture(with_controller(pull(), RequestControllerKind::BbrLike));
         let mut q = MockQueue::default();
         let p = ready_channel(&mut f, &mut q);
         f.sched.s.first_chunk_set = true;
@@ -854,7 +860,7 @@ fn requests_stay_inside_the_peers_window() {
     let mut f = fixture(SwarmOptions {
         live_window: window as usize,
         chunks_per_signature: 16,
-        ..Default::default()
+        ..pull()
     });
     let mut q = MockQueue::default();
     let p = f.peers[0];
@@ -879,7 +885,7 @@ fn requests_stay_inside_the_peers_window() {
     let mut f2 = fixture(SwarmOptions {
         live_window: window as usize,
         chunks_per_signature: 16,
-        ..Default::default()
+        ..pull()
     });
     f2.sched.add_channel(p, &[], now(), &mut q);
     f2.sched.handle_handshake(p, window as u32);
@@ -905,7 +911,7 @@ fn nodes_ask_a_shared_peer_for_different_chunks() {
     let window = 1u64 << 10;
     let options = SwarmOptions {
         live_window: window as usize,
-        ..Default::default()
+        ..pull()
     };
     let mut asked = vec![];
     for seed in [1, 2, 3] {
@@ -951,7 +957,7 @@ fn requests_take_the_oldest_groups_across_streams() {
     let mut f = fixture(SwarmOptions {
         live_window: 1 << 10,
         stream_count: 8,
-        ..Default::default()
+        ..pull()
     });
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -982,7 +988,7 @@ fn window_floor_carries_the_stream() {
         live_window: 1 << 10,
         chunks_per_signature: 8,
         request_controller: RequestControllerKind::Ledbat,
-        ..Default::default()
+        ..pull()
     });
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -1032,10 +1038,13 @@ fn window_floor_carries_the_stream() {
 
 // --- push/pull hybrid ---------------------------------------------------------
 
+/// Hybrid at `streams` streams, a seed admitting subscribers first come
+/// (the adaptive seed's tests name their policy).
 fn hybrid(streams: usize) -> SwarmOptions {
     SwarmOptions {
         stream_count: streams,
         push_mode: PushMode::Hybrid,
+        seed: crate::SeedPolicy::ADMISSION,
         ..Default::default()
     }
 }
@@ -1659,8 +1668,8 @@ fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
 fn seed_weights_follow_the_streams_pushed() {
     let mut f = fixture(SwarmOptions {
         seed: crate::SeedPolicy {
+            allocation: crate::SeedAllocation::Admission,
             qos: crate::SeedQos::ByAllocation,
-            ..Default::default()
         },
         ..seed_hybrid(4)
     });
