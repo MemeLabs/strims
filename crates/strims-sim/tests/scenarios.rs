@@ -19,8 +19,8 @@ use strims_base::rng::det_rng;
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SwarmSpec, Transport,
-    VpnProbes, sweep,
+    Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer, SwarmSpec,
+    Transport, VpnProbes, sweep,
 };
 use strims_vpn::Routing;
 use strims_wan::sample::pick;
@@ -1626,6 +1626,54 @@ fn wan_super_peer_adaptive() {
     sweep(
         "wan_super_peer_adaptive",
         |s| striped(wan_super_peer(s, PushMode::Hybrid), STRIPES, ADAPTIVE),
+        check_wan_residential_seed,
+    );
+}
+
+/// The uplink queue of the uncapped WAN cases.
+const UPLINK_QUEUE: Duration = Duration::from_millis(100);
+
+/// `s` with no upload limits: each node's uplink paces it through its
+/// sockets' send buffers, as on a node that sets no limit.
+fn uncapped(mut s: Scenario) -> Scenario {
+    for h in &mut s.hosts {
+        h.uplink = None;
+    }
+    s.send_buffer = Some(SendBuffer {
+        uplink_queue: UPLINK_QUEUE,
+    });
+    s.name = format!("{} uncapped", s.name);
+    s
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped() {
+    sweep(
+        "wan_residential_seed_adaptive_uncapped",
+        |s| {
+            uncapped(striped(
+                wan_residential_seed(s, PushMode::Hybrid),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 18 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_super_peer_adaptive_uncapped() {
+    sweep(
+        "wan_super_peer_adaptive_uncapped",
+        |s| {
+            uncapped(striped(
+                wan_super_peer(s, PushMode::Hybrid),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
         check_wan_residential_seed,
     );
 }

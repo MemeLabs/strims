@@ -67,7 +67,13 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     }
     sim.client(CONTROLLER, control::controller(w.clone()));
     let mut wan = match spec.wan {
-        Some(options) => Some(Scheduler::new(&sim, spec, options, w.seed)?),
+        Some(options) => Some(Scheduler::new(
+            &sim,
+            spec,
+            options,
+            w.seed,
+            w.send_buffers.clone(),
+        )?),
         None => None,
     };
     if wan.is_some() {

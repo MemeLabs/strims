@@ -460,9 +460,12 @@ in each.
     and the clean-input check are lower bounds.
   - WAN paths (`strims-wan`) turn a lost packet into a retransmission delay
     but model no TCP sender's congestion response, so a lossy connection
-    keeps its full rate. Below a node's upload cap nothing pushes back on a
-    sender either: writes queue on its access link. A `Net` wrapper with a
-    socket send buffer would bound that queue as `TCP_NOTSENT_LOWAT` does.
+    keeps its full rate. Send buffers (`Scenario::send_buffer`) push back
+    on a sender only through its uplink, not through one slow path (a slow
+    receiver, a congestion window over a long round trip). Only the
+    uncapped WAN cases run them: with them on (a 100 ms uplink queue)
+    `wan_mobile_viewers_pull`'s LTE p99 passes its 3.5 s bound on one seed
+    of 8.
   - Loss is independent per packet, and jitter changes every 20 ms per
     end. Bursty mobile loss and satellite handover outages need their own
     processes.

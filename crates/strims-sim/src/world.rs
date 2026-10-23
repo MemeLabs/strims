@@ -22,6 +22,7 @@ use strims_node::{
 use strims_proto::types::Key;
 
 use crate::memory::GroupCounters;
+use crate::net::SendBuffers;
 use crate::report::{HostReport, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::HostStats;
@@ -173,6 +174,8 @@ pub(crate) struct World {
     pub swarm_keys: Vec<Key>,
     pub network_keys: Vec<Key>,
     pub memory: Option<GroupCounters>,
+    /// WAN mode's TCP send buffers ([`Scenario::send_buffer`]).
+    pub send_buffers: Option<SendBuffers>,
     pub st: RefCell<WorldState>,
 }
 
@@ -204,6 +207,7 @@ impl World {
             progress: BTreeMap::new(),
             rng: det_rng(seed ^ 0xc0_47_01),
         };
+        let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         World {
             seed,
             spec,
@@ -211,6 +215,7 @@ impl World {
             swarm_keys,
             network_keys,
             memory,
+            send_buffers,
             st: RefCell::new(st),
         }
     }

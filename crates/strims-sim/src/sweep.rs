@@ -11,6 +11,9 @@
 //! - `STRIMS_SIM_CAPTURE=<dir>` captures every node's ppspp traffic
 //!   ([`Scenario::capture`]) into `<dir>/<test>/seed-<s>/`, and the replay's
 //!   into `seed-<s>-replay/`.
+//! - `STRIMS_SIM_SEND_BUFFER=<ms>` gives every WAN scenario without send
+//!   buffers ([`Scenario::send_buffer`]) an uplink queue of `ms`
+//!   milliseconds, for comparisons.
 //!
 //! The first seed runs a second time and must give the same trace hash.
 //!
@@ -24,10 +27,11 @@
 
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::thread;
+use std::time::Duration;
 
 use crate::report::Report;
 use crate::run::run;
-use crate::spec::Scenario;
+use crate::spec::{Scenario, SendBuffer};
 
 /// Seeds per sweep when `STRIMS_SIM_SEEDS` isn't set.
 pub const DEFAULT_SEEDS: u64 = 8;
@@ -128,8 +132,17 @@ pub fn sweep(
 ) -> Vec<Report> {
     let seeds = seeds();
     let capture = env("STRIMS_SIM_CAPTURE");
+    let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
+        if let Some(ms) = send_buffer
+            && spec.wan.is_some()
+            && spec.send_buffer.is_none()
+        {
+            spec.send_buffer = Some(SendBuffer {
+                uplink_queue: Duration::from_millis(ms),
+            });
+        }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");
             spec.capture = Some(std::path::Path::new(dir).join(test).join(run));

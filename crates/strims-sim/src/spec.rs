@@ -357,6 +357,22 @@ pub struct Scenario {
     /// `<host>-<incarnation>.ppcap` files in this directory. Capture
     /// changes no trace.
     pub capture: Option<std::path::PathBuf>,
+    /// WAN mode: TCP send buffers, so a sender's sockets push back on
+    /// vnic once its uplink queue is full (see [`SendBuffer`]). `None`
+    /// accepts every write at once.
+    pub send_buffer: Option<SendBuffer>,
+}
+
+/// The TCP send buffer model of WAN mode. A connection whose node set a
+/// `TCP_NOTSENT_LOWAT` mark holds its writes while its bytes not yet in
+/// the sender's uplink queue reach the mark; a segment enters that queue
+/// once the queue holds less than `uplink_queue` of transmission time.
+/// Pushback from one path (a slow receiver, or a congestion window over a
+/// long round trip) isn't modelled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SendBuffer {
+    /// The access network's buffer, in transmission time.
+    pub uplink_queue: Duration,
 }
 
 impl Scenario {
@@ -385,6 +401,7 @@ impl Scenario {
             redial_every: Duration::from_secs(1),
             tick: Duration::from_millis(1),
             capture: None,
+            send_buffer: None,
         }
     }
 

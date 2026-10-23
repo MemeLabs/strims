@@ -242,6 +242,11 @@ impl Network {
         &mut self.dirs[a * n + b]
     }
 
+    /// When `h`'s uplink has sent everything handed to it so far.
+    pub fn up_free(&self, h: usize) -> Time {
+        self.end(h).up_free
+    }
+
     /// The base latency from `a` to `b`.
     pub fn one_way(&self, a: usize, b: usize) -> Duration {
         if let Some(d) = self.dir(a, b).one_way {

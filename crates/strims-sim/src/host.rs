@@ -18,13 +18,14 @@ use futures_util::stream::{Empty, empty};
 use strims_node::app::{NodeTimer, PeerHandler, PeerServices};
 use strims_node::{
     HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents, PeerInfo, ReadError,
-    SimClock, SwarmId, SwarmKey, SwarmWriter, TurmoilNet, WriterOptions,
+    SimClock, SwarmId, SwarmKey, SwarmWriter, WriterOptions,
 };
 use strims_rpc::{Client, Router};
 use strims_transfer::TransferControl;
 use tokio::task::spawn_local;
 
 use crate::APP_PORT;
+use crate::net::SimNet;
 use crate::spec::{Binding, Fault, HostIx, LinkSpec};
 use crate::stream::{FRAME_LEN, FrameParser, encode_frame};
 use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, epoch, sim_now, sim_now_ms};
@@ -35,7 +36,8 @@ const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let inc = w.begin_incarnation(h);
     let config = w.node_config(h, inc).ok_or("unknown host")?;
-    let (node, events) = Node::spawn(config, TurmoilNet, SimClock::turmoil(epoch())).await?;
+    let net = SimNet::new(w.send_buffers.clone());
+    let (node, events) = Node::spawn(config, net, SimClock::turmoil(epoch())).await?;
     // Peers may link before the setup below finishes; they must know us.
     w.register_id(h, node.host_id());
 

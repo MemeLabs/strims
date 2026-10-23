@@ -27,6 +27,13 @@
 //!   connection, and only that connection.
 //!
 //! The controller's links carry nothing and stay with turmoil.
+//!
+//! With send buffers ([`Scenario::send_buffer`]), each data segment is
+//! admitted to its sender's uplink queue once the queue holds less than
+//! the model's `uplink_queue` of transmission time, and its bytes then
+//! stop counting against its socket's mark (see [`crate::net`]). Admitted
+//! segments are credited, and their writers woken, in admission time and
+//! record order at the end of the walk that reaches that time.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::{IpAddr, SocketAddr};
@@ -37,6 +44,7 @@ use strims_wan::wire::{tcp_wire, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
+use crate::net::SendBuffers;
 use crate::report::{WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
@@ -157,16 +165,23 @@ pub(crate) struct Scheduler {
     frozen: BTreeSet<(HostIx, HostIx)>,
     partitioned: BTreeSet<(HostIx, HostIx)>,
     tick: Duration,
+    buffers: Option<SendBuffers>,
+    /// Data segments waiting for room in their sender's uplink queue, by
+    /// admission time and record: their connection and length. Bound: the
+    /// records in flight.
+    admits: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
 }
 
 impl Scheduler {
     /// Holds every link between `spec`'s hosts, which `sim` has registered
-    /// under their names. Fails when a host has no site.
+    /// under their names, with `buffers` when the scenario has send buffers.
+    /// Fails when a host has no site.
     pub fn new(
         sim: &Sim<'_>,
         spec: &Scenario,
         options: Options,
         seed: u64,
+        buffers: Option<SendBuffers>,
     ) -> Result<Scheduler, String> {
         let sites = spec
             .hosts
@@ -220,6 +235,8 @@ impl Scheduler {
             frozen: BTreeSet::new(),
             partitioned: BTreeSet::new(),
             tick: Duration::from(spec.tick),
+            buffers,
+            admits: BTreeMap::new(),
         })
     }
 
@@ -234,7 +251,25 @@ impl Scheduler {
         let (fresh, released) = self.match_queues(sim)?;
         self.send(now - self.tick, fresh);
         self.purge(sim, &released);
+        self.admit(now);
         Ok(())
+    }
+
+    /// Credits the segments admitted by `now` to their sockets and wakes
+    /// the writers they free.
+    fn admit(&mut self, now: Time) {
+        let Some(b) = &self.buffers else {
+            return;
+        };
+        while let Some(entry) = self.admits.first_entry() {
+            if entry.key().0 > now {
+                break;
+            }
+            let (conn, len) = entry.remove();
+            if let Some(w) = b.admit(conn, len) {
+                w.wake();
+            }
+        }
     }
 
     /// Processes the events due by `now`, in time order: arrivals enter the
@@ -395,6 +430,11 @@ impl Scheduler {
             What::Datagram(_) => Carrier::Datagram,
             _ => Carrier::Stream,
         };
+        if let (Some(b), What::Data { len, .. }) = (&self.buffers, r.what) {
+            let q = b.model().uplink_queue;
+            let admit = at.max(self.net.up_free(r.from) - Duration::from(q));
+            self.admits.insert((admit, id), ((r.src, r.dst), len));
+        }
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
         if t.dropped {
             r.state = State::Dropped;
@@ -544,7 +584,11 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
     use std::time::Duration as StdDuration;
+    use strims_node::{Net, TcpSocketConfig};
     use strims_wan::{Access, City, Profile};
+
+    use crate::net::SimNet;
+    use crate::spec::SendBuffer;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use turmoil::net::{TcpListener, TcpStream, UdpSocket};
 
@@ -627,7 +671,7 @@ mod tests {
         echo(&mut sim, "a");
         let out = Rc::new(Cell::new((0, 0)));
         echo_client(&mut sim, "b", "a", out.clone());
-        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
         let rtt = wan.net.rtt(0, 1).as_millis();
         drive(&mut sim, &mut wan);
         let (connect, echo) = out.get();
@@ -665,7 +709,7 @@ mod tests {
             g.set(ms(turmoil::sim_elapsed().unwrap() - t0));
             Ok(())
         });
-        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
         drive(&mut sim, &mut wan);
         // 144 800 bytes in 100 packets of 52 header bytes: 150 000 bytes
         // on the wire, 1.2 s at 1 Mbit/s.
@@ -675,6 +719,76 @@ mod tests {
             wan.report(&spec(&sites)).hosts[0].stats.up_bytes,
             150_000 + 52
         );
+    }
+
+    /// A 1 Mbit/s sender writes 144 800 bytes through [`SimNet`] with
+    /// `buffers`, and `b` reads them. Returns when the last write returned,
+    /// when the read finished (ms from the connect) and the sender's
+    /// uplink queue peak.
+    fn buffered_writes(buffers: Option<SendBuffers>) -> (i64, i64, Duration) {
+        let mut sim = build();
+        let sites = [
+            (
+                "a",
+                Site::new(City::Frankfurt, Access::Fiber).with_up(125_000),
+            ),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        let (wrote, got) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+        let net = SimNet::new(buffers.clone());
+        let w = wrote.clone();
+        sim.host("a", move || {
+            let (net, w) = (net.clone(), w.clone());
+            async move {
+                let l = net.tcp_bind("0.0.0.0:9000".into()).await?;
+                let (mut s, _) = net.tcp_accept(&l).await?;
+                net.configure_tcp_send_queue(&s, &TcpSocketConfig::default())?;
+                let t0 = turmoil::sim_elapsed().unwrap();
+                for _ in 0..10 {
+                    s.write_all(&[1u8; 14_480]).await?;
+                }
+                w.set(ms(turmoil::sim_elapsed().unwrap() - t0));
+                Ok(())
+            }
+        });
+        let g = got.clone();
+        sim.client("b", async move {
+            let mut s = TcpStream::connect(("a", 9000)).await?;
+            let t0 = turmoil::sim_elapsed().unwrap();
+            let mut buf = vec![0u8; 144_800];
+            s.read_exact(&mut buf).await?;
+            g.set(ms(turmoil::sim_elapsed().unwrap() - t0));
+            Ok(())
+        });
+        let spec = spec(&sites);
+        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, buffers).unwrap();
+        drive(&mut sim, &mut wan);
+        let peak = wan.report(&spec).hosts[0].stats.up_queue_max;
+        (wrote.get(), got.get(), peak)
+    }
+
+    #[test]
+    fn send_buffers_hold_writes_until_the_uplink_queue_has_room() {
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+        });
+        let (wrote, got, peak) = buffered_writes(Some(buffers));
+        // The writes run ahead of the uplink by its 100 ms queue and the two
+        // writes the socket holds (one starts under the 16 KiB mark and ends
+        // past it), about 0.46 s of the 1.2 s the bytes take on the wire.
+        assert!((700..800).contains(&wrote), "last write after {wrote} ms");
+        assert!((1190..1215).contains(&got), "{got} ms");
+        // A segment waits at the uplink for at most the queue and those two
+        // writes; the FIN, sent with the last write, also for that write.
+        assert!(peak <= Duration::from_millis(470), "{peak:?}");
+    }
+
+    #[test]
+    fn without_send_buffers_writes_never_wait() {
+        let (wrote, got, peak) = buffered_writes(None);
+        assert!(wrote < 10, "last write after {wrote} ms");
+        assert!((1190..1215).contains(&got), "{got} ms");
+        assert!(peak >= Duration::from_millis(1000), "{peak:?}");
     }
 
     #[test]
@@ -697,7 +811,7 @@ mod tests {
             o.set((ms(turmoil::sim_elapsed().unwrap() - t0), 0));
             Ok(())
         });
-        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
         let rtt = wan.net.rtt(0, 1).as_millis();
         for step in 0.. {
             if step == 500 {
@@ -757,7 +871,7 @@ mod tests {
             jitter: true,
             loss: true,
         };
-        let mut wan = Scheduler::new(&sim, &spec(&sites), options, 1).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec(&sites), options, 1, None).unwrap();
         drive(&mut sim, &mut wan);
         // Each datagram crosses two links losing 30 %: 49 % arrive.
         let got = got.get();
@@ -776,7 +890,7 @@ mod tests {
         echo(&mut sim, "a");
         let out = Rc::new(Cell::new((0, 0)));
         echo_client(&mut sim, "b", "a", out);
-        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
         for _ in 0..5 {
             wan.walk(&sim).unwrap();
             sim.step().unwrap();

@@ -472,14 +472,27 @@ impl Report {
         })
     }
 
+    /// The most host `h` can upload, in bytes per second: the smaller of
+    /// its rate limit and its site's uplink. `None` with neither.
+    pub fn upload_cap(&self, h: HostIx) -> Option<u64> {
+        let spec = self.scenario.hosts.get(h)?;
+        let site = spec.site.map(|s| s.profile.up);
+        match (spec.uplink, site) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+        .filter(|&c| c > 0)
+    }
+
     /// The upload meter's readings at `h` while a swarm was live, as
-    /// fractions of the host's upload cap: (capacity ÷ cap, the push rate
-    /// its subscriptions commit ÷ cap) per sample. Empty without a cap.
+    /// fractions of the host's [`upload_cap`](Report::upload_cap):
+    /// (capacity ÷ cap, the push rate its subscriptions commit ÷ cap) per
+    /// sample. Empty without a cap.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
-        let (Some(spec), Some(host)) = (self.scenario.hosts.get(h), self.hosts.get(h)) else {
+        let Some(host) = self.hosts.get(h) else {
             return Vec::new();
         };
-        let Some(cap) = spec.uplink.filter(|&c| c > 0) else {
+        let Some(cap) = self.upload_cap(h) else {
             return Vec::new();
         };
         let cap = cap as f64;
@@ -556,7 +569,7 @@ impl Report {
     fn first_wave_line(&self, swarm: usize) -> Option<String> {
         let spec = self.scenario.swarms.get(swarm)?;
         let seed = self.hosts.get(spec.seed)?.runner.seeds.get(&swarm)?;
-        let cap = self.scenario.hosts.get(spec.seed)?.uplink?;
+        let cap = self.upload_cap(spec.seed)?;
         let rate = self.swarm_rate(swarm) * PUSH_OVERHEAD;
         let oracle = if rate > 0.0 {
             ((cap as f64 * ALLOC_UTILIZATION / rate) as usize).min(spec.viewers.len())

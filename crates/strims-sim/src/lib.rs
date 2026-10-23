@@ -109,6 +109,7 @@
 mod control;
 mod host;
 pub mod memory;
+mod net;
 pub mod report;
 mod run;
 pub mod spec;
@@ -124,8 +125,8 @@ pub use report::{
 };
 pub use run::run;
 pub use spec::{
-    Binding, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario, SwarmSpec,
-    Transport, VpnProbes,
+    Binding, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario, SendBuffer,
+    SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, RunnerReport, SwarmCounters};
 pub use sweep::{seeds, sweep};
