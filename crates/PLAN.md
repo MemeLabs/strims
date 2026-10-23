@@ -193,60 +193,201 @@ Egress and players:
   the same scenario and seed first; the farm has no jobs that wait on
   others, so `sim_job` takes them from `SIM_SLOTS` by hand.
 
-### Push/pull hybrid
+### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
-and pull repairs what they miss.
-- Make it the default. `SwarmOptions::default_options` sets
-  `PushMode::Off`, and nothing outside the sims and tests turns it on,
-  strims-video's swarms included.
-- Open items:
-  - convergence on sparse meshes;
-  - coalescing HAVE-only frames;
-  - reciprocity versus tree children (children get the minimum weight);
-  - push bypassing congestion control;
-  - cycles longer than two;
-  - the upload meter assumes the driver drains at link speed, so it reads low
-    under vnic QoS, and swarms share one meter but admit independently.
-    strims-node could report link capacity;
-  - a push its child cancelled never arrives late, so the parent's delay
-    estimate (`LagEwma`) sees only the pushes that beat the cancels:
-    behind the admitting seed misses rose from about a fifth to a quarter
-    of hits. A miss could count as a sample at its deadline;
-  - chunks still expected from a parent a switch replaced aren't
-    cancelled at it (`Subscription` doesn't remember it), so its late
-    pushes still duplicate what pull fetched;
-  - a non-seed's interior stream is the first it accepts a subscriber
-    for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
-    capacity, so a datacenter viewer forwards every stream it holds;
-  - slow parents are detected late, so `sim_push_slow_parent`'s p99 can still
-    pass 1 s on some seeds. The upload meter's 2 s busy window takes about
-    1.5 s to reach `SHED_UTILIZATION`, a child's deadline stretches with its
-    parent's lag up to `DEADLINE_MAX`, and `PRUNE_MIN_AGE` and `SWITCH_HOLD`
-    shield a new parent. Shedding on push queue wait helps slow parents but
-    hurts `sim_push_parent_dies` and sparse meshes;
-  - a liar that announces first is grafted again after every
-    `PRUNE_BACKOFF`, with no escalation: each child loses about 1 s of
-    every 11 s on each stream it is the best candidate for. Back off a
-    parent pruned again and again longer, by the child's own count;
-  - pull from liars: a request that timed out may go back to the same
-    channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor reopens
-    its window, so liars among a viewer's few neighbours keep holding its
-    requests (the ppspp sim's lossy mobile viewers lag about 9 s at p99
-    against 2 s without them). BBR backs a silent channel off further but
-    still lags about 7 s;
-  - a startup window for the admitting seed (`SeedAllocation::Admission`):
-    before its upload and store rate are measured it admits more than a
-    constrained uplink carries, and at 6 Mbit/s its pushes go stale. The
-    adaptive seed's window counts whole copies at holders; this one needs
-    slots, with shedding down to it.
+and pull repairs what they miss. Its seed is the adaptive seed
+(`SeedAllocation::Adaptive` with `SeedQos::ByAllocation`): behind a
+constrained uplink the admitting seed's pushes go stale and its viewers
+fall seconds behind, and the defences against greedy peers are the
+adaptive seed's. The groups are in priority order, and so are the items
+in each.
+
+1. **Ship it.** Nothing below reaches a viewer until Hybrid is the
+   default, and each later trial should measure against the defaults it
+   would change.
+   - Settle a swarm's stream count and chunk size with a farm matrix: the
+     adaptive seed at 1, 4 and 16 streams and 1 and 4 KiB chunks, at
+     2-12 Mbit/s behind cable, fiber and datacenter seeds. At 1 KiB a
+     large share of the wire is HAVEs, requests and hashes.
+   - Make it the default. `SwarmOptions::default_options` sets
+     `PushMode::Off` and the admitting seed, and nothing outside the sims
+     and tests turns Hybrid on, strims-video's swarms included. Check it
+     on strims-sim's WAN scenarios too: only whole nodes run vnic QoS.
+   - The upload meter assumes the driver drains at link speed, so it
+     reads low under vnic QoS, and swarms share one meter but admit
+     independently. The adaptive seed sizes its first wave from it.
+     strims-node could report link capacity.
+2. **A residential seed at a real bitrate.** Behind a cable seed at
+   6-8 Mbit/s honest viewers lag several times what they do behind fiber,
+   and behind well-provisioned seeds the adaptive seed trails the
+   admitting one.
+   - **Pull from a constrained seed.** Bound the answers a constrained
+     seed sends for each fresh chunk. With 100 viewers at 6 Mbit/s and
+     1 KiB chunks (the ppspp sim's ignored `wan_cable_seed`) its push
+     tree holds, but its other neighbours pull the newest chunks from it:
+     it sends each chunk 4 times, its uplink stays 89 % busy and the
+     median viewer lags 4 s. Candidates, none a wire change: answer a
+     fresh chunk to a bounded number of neighbours, by the seed's own
+     count of what it sent; a viewer's requests to a peer whose answers
+     lag (its own measurement) yield to peers that announce the chunk,
+     and queued ones are cancelled; gate pull from the seed by deadline.
+   - **Holders' shares under pull.** `SeedQos::ByAllocation` gives a lone
+     holder 1000 / (1000 + 50 × the other neighbours) of the uplink,
+     which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
+     holder's weight should cover its pushes whatever the neighbour
+     count.
+   - **The first wave.** Every neighbour asks for every stream within
+     about half a second of the first chunk, before the capacity and
+     store rate read true, so copies that open later in the wave go to
+     farther neighbours; those declined come back a stream at a time.
+     Without the shares this makes the adaptive cable seed's p99 at
+     2 Mbit/s 50–75 % worse than with four fixed startup copies. Letting
+     a copy wait for a nearer recent asker fixes that but costs 15–20 %
+     with the shares. Candidates: answer the first wave a few hundred
+     milliseconds late (within the child's `OPEN_TIMEOUT`), or rank its
+     askers before admitting any.
+   - **Window growth.** The adaptive seed's window doubles until its
+     first cut, which is too aggressive: it should grow additively (AIMD)
+     or cubically (CUBIC). Its unit, a whole copy, is too coarse for the
+     larger chunks that higher bitrates need to keep protocol overhead
+     reasonable. The window and the budget need a finer step than a
+     copy, which the holder rules (a holder takes every stream) would
+     have to allow.
+   - **Budget hysteresis in copies.** The budget's hysteresis is in
+     slots, so at a copy boundary a holder joins and leaves with each
+     swing.
+   - **Prune backoff.** A child backs a pruned parent off for
+     `PRUNE_BACKOFF` whatever caused the misses and however often it has
+     pruned it. A seed's cut can cost it a holder for 10 s, and a liar
+     that announces first is grafted again after every backoff: each
+     child loses about 1 s of every 11 s on each stream it is the best
+     candidate for. Back off by cause, and a parent pruned again and
+     again longer, by the child's own count.
+   - **Protocol overhead.** Find where the bytes go at the chunk size the
+     matrix picks, from a capture. Coalesce HAVE-only frames. One chunk
+     per request costs about 27 % at 1 KiB chunks; requesting runs of
+     chunks needs no wire change.
+3. **Greedy peers.** Free riders and liars cost honest viewers more tail
+   lag than anything but a constrained seed, most of it on the child
+   side (with the prune backoff above).
+   - **Pull from liars.** A request that timed out may go back to the
+     same channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor
+     reopens its window, so liars among a viewer's few neighbours keep
+     holding its requests (the ppspp sim's lossy mobile viewers lag
+     about 9 s at p99 against 2 s without them). BBR backs a silent
+     channel off further but still lags about 7 s.
+   - **HAVEs past the head.** A HAVE far past the stream's head moves a
+     non-seed's newest bin time and prunes its bin times, so deadlines
+     and HAVE lags lose their start until the stream catches up. It
+     needs a bound on how far past the newest chunk a peer may announce.
+   - **Liars after a bar.** Reports bar a liar a few seconds after it
+     takes a copy, but the bar lapses after `HOLDER_BAR` and the liar
+     takes a copy again, at the price of its would-be children's grafts
+     and misses until the reports bar it once more (WanSuperPeer under
+     BBR at 60 s). Decide whether a holder barred as unserved stays out
+     longer, or holds again only once reports show it serving as a
+     relay.
+   - **Answers to silent neighbours.** A seed answers the requests of a
+     neighbour that never announces what it receives like anyone's, so
+     free riders share what pushes leave of the uplink with honest
+     viewers.
+   - **Free riders at relays.** A relay admits and keeps a child whatever
+     the child gives back, so a free rider takes a slot of a relay's
+     interior stream like anyone.
+   - **Colluders.** A verdict is a majority over a holder's reporters, so
+     greedy viewers that praise a liar or defame an honest holder decide
+     it where they outnumber its honest reporters: holders with few (far
+     ones, and at 6 Mbit/s those whose children aren't the seed's
+     neighbours). In the ppspp sim's `SIM_COLLUDE` rows they get honest
+     holders barred and save no liar. Weigh a reporter by how long the
+     seed has seen it announce, or require a quorum that grows with the
+     reporters seen; decide whether colluders join the default greedy
+     mix.
+   - **ANNOUNCE's reach** (Wire changes, ppspp), then **holders nobody
+     grafts onto.** The seed picks holders by its round trip to them and
+     children pick parents by announcement lag, so a far holder can
+     relay to nobody, and a near one with a weak uplink to few. No
+     reporter votes on them, and they keep their copies: barring them
+     after 15 s without a reporter (branch `announce-drop`) and probing
+     them (branch `announce-probe`, the follower probe of branch
+     `follower-probe` for holders the reports leave unjudged) both barred
+     honest holders without improving p99. Decide whether a copy should
+     go to a neighbour the reports show serving as a relay.
+4. **Pull on lossy, sparse and mobile paths.** The worst scenarios after
+   a constrained seed, where pull does the most repair.
+   - **A deadline-aware request scheduler.** Each chunk's deadline is its
+     publish time plus the target lag. A peer's expected arrival time is
+     its backlog ÷ rate + min RTT. Assign each chunk to the earliest peer
+     that meets its deadline, and skip chunks no peer can meet.
+     `RequestController` already exposes the rate, min RTT and answer
+     delay this needs. It is the general form of the pull candidates for
+     liars and a constrained seed above.
+   - **Congestion control.** Decide whether `BbrLike`
+     (`SwarmOptions::request_controller`) replaces LEDBAT as the default.
+     LEDBAT is a scavenger: it needs a cwnd floor and randomized 64-chunk
+     request groups, which cost about 70 ms of p99 in well-provisioned
+     meshes. `BbrLike` halves tail lag behind capped seeds and recovers
+     from RTT steps in about a second. Blockers:
+     - behind a seed with less upload than the stream bitrate it delivers
+       1.5–2.5 points less, because viewers' requests overlap;
+       scheduler-level decorrelation (rarest-first) should help both
+       controllers;
+     - its p99 is about 9 % worse on sparse lossy meshes;
+     - pulling behind a cable seed on WAN paths it lags far behind LEDBAT
+       (strims-sim's `wan_residential_seed`, the ppspp sim's
+       `WanResidentialSeed`); in Hybrid behind an adaptive seed they're
+       level;
+     - on a shared parent it yields to LEDBAT, so a network should run
+       one controller.
+   - Convergence on sparse meshes.
+5. **Push-tree refinements.** Smaller or narrower costs.
+   - A push its child cancelled never arrives late, so the parent's
+     delay estimate (`LagEwma`) sees only the pushes that beat the
+     cancels: behind the admitting seed misses rose from about a fifth to
+     a quarter of hits. A miss could count as a sample at its deadline.
+   - Chunks still expected from a parent a switch replaced aren't
+     cancelled at it (`Subscription` doesn't remember it), so its late
+     pushes still duplicate what pull fetched.
+   - Slow parents are detected late, so `sim_push_slow_parent`'s p99 can
+     still pass 1 s on some seeds. The upload meter's 2 s busy window
+     takes about 1.5 s to reach `SHED_UTILIZATION`, a child's deadline
+     stretches with its parent's lag up to `DEADLINE_MAX`, and
+     `PRUNE_MIN_AGE` and `SWITCH_HOLD` shield a new parent. Shedding on
+     push queue wait helps slow parents but hurts `sim_push_parent_dies`
+     and sparse meshes.
+   - A non-seed's interior stream is the first it accepts a subscriber
+     for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
+     capacity, so a datacenter viewer forwards every stream it holds.
+   - Reciprocity versus tree children (children get the minimum weight).
+   - Cycles longer than two; a hop count (Wire changes, ppspp) would
+     show them.
+   - Push bypassing congestion control. Judging it needs the WAN model's
+     sender backpressure (Simulation coverage and fidelity).
+   - **Copies by region.** Copies go to the nearest neighbours. Try a
+     scenario whose nearest neighbours share one path or access network;
+     the fastest uplinks in alternating regions did no better on the
+     current paths.
+   - **Reciprocal topology.** Nodes keep their links whatever a peer
+     reciprocates. Dropping links that don't reciprocate and dialing
+     random new peers, with a budget for leechers, would move high-upload
+     peers toward the centre of the swarm: the half of the topology a
+     seed's allocation can't reach. The untraversable-NAT model
+     (Simulation coverage and fidelity) would show what leechers cost.
+   - **Allocations.** `TimeSet` allocates per node (one ring entry per
+     munro would do); the data queue's `BTreeMap` index allocates;
+     `channel_stats` sizes binmaps from their debug dump.
+6. **The admitting seed** (`SeedAllocation::Admission`). Decide whether
+   it stays; while it does:
+   - a startup window: before its upload and store rate are measured it
+     admits more than a constrained uplink carries, and at 6 Mbit/s its
+     pushes go stale. The adaptive seed's window counts whole copies at
+     holders; this one needs slots, with shedding down to it;
+   - it keeps a greedy subscriber's slot for as long as it asks; the
+     silent-holder rule is the adaptive seed's.
 
 ### strims-ppspp defects
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
-- A HAVE far past the stream's head moves a non-seed's newest bin time
-  and prunes its bin times, so deadlines and HAVE lags lose their start
-  until the stream catches up. It needs a bound on how far past the
-  newest chunk a peer may announce.
 - Remove the unused `add_stream_close`.
 
 ### strims-chat defects
@@ -262,114 +403,6 @@ and pull repairs what they miss.
 
 ## Open questions
 
-- **Congestion control.** Decide whether `BbrLike`
-  (`SwarmOptions::request_controller`) replaces LEDBAT as the default.
-  LEDBAT is a scavenger: it needs a cwnd floor and randomized 64-chunk
-  request groups, which cost about 70 ms of p99 in well-provisioned meshes.
-  `BbrLike` halves tail lag behind capped seeds and recovers from RTT steps
-  in about a second. Blockers:
-  - behind a seed with less upload than the stream bitrate it delivers
-    1.5–2.5 points less, because viewers' requests overlap; scheduler-level
-    decorrelation (rarest-first) should help both controllers;
-  - its p99 is about 9 % worse on sparse lossy meshes;
-  - pulling behind a cable seed on WAN paths it lags far behind LEDBAT
-    (strims-sim's `wan_residential_seed`, the ppspp sim's
-    `WanResidentialSeed`); in Hybrid behind an adaptive seed they're level;
-  - on a shared parent it yields to LEDBAT, so a network should run one
-    controller.
-
-  Next: a deadline-aware request scheduler. Each chunk's deadline is its
-  publish time plus the target lag. A peer's expected arrival time is its
-  backlog ÷ rate + min RTT. Assign each chunk to the earliest peer that meets
-  its deadline, and skip chunks no peer can meet. `RequestController`
-  already exposes the rate, min RTT and answer delay this needs.
-- **Seed allocation.** Open items:
-  - **Defaults.** A hybrid seed defaults to the admitting seed with equal
-    uplink shares, and a swarm to one stream. Settle the defaults with a
-    farm matrix: the admitting seed against `SeedAllocation::Adaptive`
-    with `SeedQos::ByAllocation` (the adaptive seed needs the shares), at
-    1, 4 and 16 streams (16 behind an adaptive seed cut the WAN p99
-    behind a cable seed about fourfold), at 2-12 Mbit/s behind cable,
-    fiber and datacenter seeds.
-  - **Liars after a bar.** Reports bar a liar a few seconds after it
-    takes a copy, but the bar lapses after `HOLDER_BAR` and the liar
-    takes a copy again, at the price of its would-be children's grafts
-    and misses until the reports bar it once more (WanSuperPeer under
-    BBR at 60 s). Decide whether a holder barred as unserved stays out
-    longer, or holds again only once reports show it serving as a relay.
-  - **Colluders.** A verdict is a majority over a holder's reporters, so
-    greedy viewers that praise a liar or defame an honest holder decide
-    it where they outnumber its honest reporters: holders with few (far
-    ones, and at 6 Mbit/s those whose children aren't the seed's
-    neighbours). In the ppspp sim's `SIM_COLLUDE` rows they get honest
-    holders barred and save no liar. Weigh a reporter by how long the
-    seed has seen it announce, or require a quorum that grows with the
-    reporters seen; decide whether colluders join the default greedy
-    mix.
-  - **Holders nobody grafts onto.** The seed picks holders by its round
-    trip to them and children pick parents by announcement lag, so a far
-    holder can relay to nobody, and a near one with a weak uplink to few.
-    No reporter votes on them, and they keep their copies: barring them
-    after 15 s without a reporter (branch `announce-drop`) and probing
-    them (branch `announce-probe`, the follower probe of branch
-    `follower-probe` for holders the reports leave unjudged) both barred
-    honest holders without improving p99. Decide whether a copy should
-    go to a neighbour the reports show serving as a relay.
-  - **Greedy peers at the admitting seed.** `SeedAllocation::Admission`
-    (the default) keeps a greedy subscriber's slot for as long as it asks;
-    the silent-holder rule is the adaptive seed's. Applying it there
-    changes a default.
-  - **Answers to silent neighbours.** A seed answers the requests of a
-    neighbour that never announces what it receives like anyone's, so
-    free riders share what pushes leave of the uplink with honest viewers.
-  - **Free riders at relays.** A relay admits and keeps a child whatever
-    the child gives back, so a free rider takes a slot of a relay's
-    interior stream like anyone.
-  - **The first wave.** Every neighbour asks for every stream within about
-    half a second of the first chunk, before the capacity and store rate
-    read true, so copies that open later in the wave go to farther
-    neighbours; those declined come back a stream at a time. Without the
-    shares this makes the adaptive cable seed's p99 at 2 Mbit/s 50–75 %
-    worse than with four fixed startup copies. Letting a copy wait for a
-    nearer recent asker fixes that but costs 15–20 % with the shares.
-    Candidates: answer the first wave a few hundred milliseconds late
-    (within the child's `OPEN_TIMEOUT`), or rank its askers before
-    admitting any.
-  - **Window growth.** The adaptive seed's window doubles until its first
-    cut, which is too aggressive: it should grow additively (AIMD) or
-    cubically (CUBIC). Its unit, a whole copy, is too coarse for the
-    larger chunks that higher bitrates need to keep protocol overhead
-    reasonable. The window and the budget need a finer step than a copy,
-    which the holder rules (a holder takes every stream) would have to
-    allow.
-  - **Budget hysteresis in copies.** The budget's hysteresis is in slots,
-    so at a copy boundary a holder joins and leaves with each swing.
-  - **Holders' shares under pull.** `SeedQos::ByAllocation` gives a lone
-    holder 1000 / (1000 + 50 × the other neighbours) of the uplink, which
-    with 32 neighbours is barely what a 6 Mbit/s copy needs. A holder's
-    weight should cover its pushes whatever the neighbour count.
-  - **Prune backoff.** A child backs a pruned parent off for
-    `PRUNE_BACKOFF` whatever caused the misses, so a seed's cut can cost it
-    a holder for 10 s.
-  - **Copies by region.** Copies go to the nearest neighbours. Try a
-    scenario whose nearest neighbours share one path or access network;
-    the fastest uplinks in alternating regions did no better on the
-    current paths.
-  - **Pull from a constrained seed.** Bound the answers a constrained seed
-    sends for each fresh chunk. With 100 viewers at 6 Mbit/s and 1 KiB
-    chunks (the ppspp sim's ignored `wan_cable_seed`) its push tree
-    holds, but its other neighbours pull the newest chunks from it: it
-    sends each chunk 4 times, its uplink stays 89 % busy and the median
-    viewer lags 4 s. Candidates, none a wire change: answer a fresh chunk
-    to a bounded number of neighbours, by the seed's own count of what it
-    sent; a viewer's requests to a peer whose answers lag (its own
-    measurement) yield to peers that announce the chunk, and queued ones
-    are cancelled; gate pull from the seed by deadline.
-- **Reciprocal topology.** Nodes keep their links whatever a peer
-  reciprocates. Dropping links that don't reciprocate and dialing random
-  new peers, with a budget for leechers, would move high-upload peers
-  toward the centre of the swarm: the half of the topology a seed's
-  allocation can't reach.
 - **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
   test-only hook in `strims-node`. Waiting on the user.
 - **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
@@ -400,10 +433,6 @@ and pull repairs what they miss.
   - whether a ppspp frame error should drop the peer rather than close its
     transfers until it relinks, and a minimum link MTU, since chunks that
     don't fit a frame are dropped.
-- **ppspp overhead.** `TimeSet` allocates per node (one ring entry per munro
-  would do); the data queue's `BTreeMap` index allocates; `channel_stats`
-  sizes binmaps from their debug dump. One chunk per request costs about 27 %
-  at 1 KiB chunks; requesting runs of chunks needs no wire change.
 - **WebRTC send buffering.** strims-webrtc's buffered amount includes
   unacked bytes, so the node's cap also limits throughput per RTT. It needs an
   unsent-only count, a configurable low threshold, per-connection RTT, cwnd
