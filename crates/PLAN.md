@@ -207,6 +207,10 @@ in each.
      the ppspp sim's A/B scenarios) and 16 at 8-12 Mbit/s, and across both
      they tie; media swarms run 16 meanwhile. An ingest could take the
      bitrate from the publisher's metadata, a capture from its encoder.
+     The matrices that chose 4 KiB chunks and 32 KiB munros ran 10 s
+     streams, which weigh startup heavily: rerun `defaults-cable` and
+     `defaults-ab` at 2-minute streams to confirm or revise them and the
+     stream count.
    - Without a known capacity (a node that sets no upload limit) the
      upload meter reads many times the uplink: socket send buffers and the
      access network's queue hide the time data waits, so busy stays low
@@ -218,9 +222,37 @@ in each.
      changes about 40 times a minute against once in ten. Capping the
      reading at twice the rate while busy shows no saturation, and sizing
      no first wave without a known capacity, both made it worse in 60 s
-     runs. Candidates (branch `upload-meter`, `UploadEstimate`): a
-     saturation detector on `PushStats::upload_queue_delay`, a probe below
-     saturation, a hold of the settled saturated rate.
+     runs. Candidates live on branch `upload-meter` (`UploadEstimate`,
+     `STRIMS_SIM_METER`): a saturation detector on
+     `PushStats::upload_queue_delay`, a reading of twice the rate below
+     saturation, and a hold of the capacity measured while saturated. In
+     a screen of 5 uncapped cells (paired by seed against main, with
+     `STRIMS_SIM_TCP`): the detector with a hold for the stream's life
+     cut p99 16 %, with a 30 s hold 11 %, alone nothing; twice the rate
+     made it 55-64 % worse (relays decline everything); knowing the uplink
+     cuts 35 %. The detector's threshold (80-160 ms) didn't matter.
+   - Before ranking estimators, give strims-sim varying upload capacity:
+     competing flows that come and go on hosts' access links, so an
+     estimate that never forgets a measurement pays for it. The screen's
+     uplinks never change, which is all that made a hold for the stream's
+     life win; it isn't viable on real links. Then screen only rules that
+     keep adapting (holds of 10, 30, 60 s and the like) on fixed and
+     changing cells, scoring how long the estimate stays off after each
+     change. Handoff: `~/.claude/plans/handoff-varying-uplink.md`.
+   - Relays read about a fifth of their uplink under every screened rule,
+     and over half their declines come while they use under half of it
+     (with a known uplink about a seventh): a relay rarely saturates, so
+     it never measures anything, and the rate over busy of a tiny rate
+     reads low. Candidate: until a node has seen saturation it admits by
+     count, a few subscriptions past those it serves.
+   - The full comparison: main, a known uplink, the screen's survivors and
+     the winner with the blocked-peer rule below, over the uncapped cases
+     (residential and super-peer seeds, a datacenter seed, mobile viewers,
+     two streams from one seed, a slow viewer) at uplink queues of 20,
+     100, 250 and 1000 ms, 60 s and 10-minute streams, 16 seeds; and the
+     ppspp sim's `defaults-ab` and cable-seed matrices on the farm at
+     `SIM_SECS=120`, where the meter already reads true. The winner lands
+     as fixed code, and the options go.
    - Calibration (`hack/testbed` against `calibration_star`): with
      `STRIMS_SIM_TCP` the sim matches a real shaped link's busy fraction,
      meter reading, uplink queue, detection time and a slow viewer's
@@ -510,7 +542,9 @@ in each.
     processes.
   - No WAN scenario runs WebRTC yet. Show that a WAN run over WebRTC
     replays over 16 seeds (DTLS handshake sizes vary between runs and are
-    charged a fixed size), then add one.
+    charged a fixed size), then add one. Browser seeds stream over WebRTC,
+    so the upload meter's defaults need it measured before they cover
+    them.
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should
