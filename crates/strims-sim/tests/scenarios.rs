@@ -1891,13 +1891,15 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         ..Invariants::for_window(WAN_WINDOW)
     };
     s.duration = secs(5 + c.secs + 10);
+    s.transfer_samples = true;
     striped(s, STRIPES, ADAPTIVE)
 }
 
 /// The seed's meter, the upload it had, its push subscribers, its
-/// adaptive budget and copies and its true uplink queue per sample, and
-/// the viewers' p99 lag per second of stream, as one JSON object
-/// (`SERIES {json}`).
+/// adaptive budget and copies and its true uplink queue per sample, the
+/// viewers' p99 lag per second of stream, and every node's transfers per
+/// sample (`[s, transfers]` lists by host, the testbed's `transfers`), as
+/// one JSON object (`SERIES {json}`).
 fn calibration_series(r: &Report) -> String {
     let spec = &r.scenario.swarms[0];
     let seed = spec.seed;
@@ -1969,12 +1971,26 @@ fn calibration_series(r: &Report) -> String {
         .filter(|(t, _)| *t >= spec.start && *t <= spec.stop)
         .map(|&(t, w)| format!("[{:.1},{w}]", (t - spec.start).as_secs_f64()))
         .collect();
+    let transfers: Vec<String> = r
+        .hosts
+        .iter()
+        .map(|h| {
+            let xs: Vec<String> = h
+                .transfers
+                .iter()
+                .filter(|(t, s, _)| *s == 0 && *t >= spec.start && *t <= spec.stop)
+                .map(|(t, _, x)| format!("[{:.1},{}]", (*t - spec.start).as_secs_f64(), x.json()))
+                .collect();
+            format!("[{}]", xs.join(","))
+        })
+        .collect();
     format!(
-        "{{\"up\":{up},\"goodput\":{:.0},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}]}}",
+        "{{\"up\":{up},\"goodput\":{:.0},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}],\"transfers\":[{}]}}",
         r.hosts[seed].uploaded as f64 / stream_secs,
         rows.join(","),
         lags.join(","),
-        waits.join(",")
+        waits.join(","),
+        transfers.join(",")
     )
 }
 
@@ -2310,6 +2326,34 @@ fn stats_sampling_is_passive_without_contention() {
     // The stats samples saw the push tree.
     assert!(b.swarm_counters(0).hits > 0);
     assert!(b.peaks().cwnd_max > 0);
+}
+
+/// Transfer samples change no trace, and say who serves whom: in the
+/// chain, the seed serves the first viewer alone, which has it as a parent.
+#[test]
+fn transfer_samples_name_who_serves_whom() {
+    let a = strims_sim::run(uncontended(Some(secs(1))), 1).unwrap();
+    let mut s = uncontended(Some(secs(1)));
+    s.transfer_samples = true;
+    let b = strims_sim::run(s, 1).unwrap();
+    assert_eq!(a.trace_hash, b.trace_hash);
+    let at = |h: usize| {
+        let (_, _, x) = b.hosts[h]
+            .transfers
+            .iter()
+            .find(|(t, ..)| *t >= secs(15))
+            .unwrap();
+        x
+    };
+    let seed = at(0);
+    assert_eq!(
+        seed.peers.iter().map(|p| p.peer).collect::<Vec<_>>(),
+        [Some(1)]
+    );
+    assert!(seed.peers[0].sent > 0 && seed.pushed_chunks > 0);
+    let v0 = at(1);
+    assert!(v0.parents > 0);
+    assert!(v0.peers.iter().any(|p| p.peer == Some(0) && p.received > 0));
 }
 
 // --- transports ---------------------------------------------------------------

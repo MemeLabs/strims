@@ -25,7 +25,7 @@ use crate::memory::GroupCounters;
 use crate::net::SendBuffers;
 use crate::report::{HostReport, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
-use crate::stats::HostStats;
+use crate::stats::{HostStats, TransferSample};
 use crate::stream::{FrameParser, Parsed, SeqSet, ViewerStats};
 use crate::{EPOCH_MS, TCP_PORT, UDP_PORT, WS_PORT};
 
@@ -87,6 +87,9 @@ pub(crate) struct HostState {
     pub last: Option<NodeMetrics>,
     /// Runner, link and network stats over every stats sample.
     pub stats: HostStats,
+    /// Transfers per stats sample, every incarnation (see
+    /// [`HostReport::transfers`]).
+    pub transfers: Vec<(Duration, usize, TransferSample)>,
     /// Runner invariants this host already broke (each is logged once).
     pub broken: BTreeSet<&'static str>,
 }
@@ -100,6 +103,7 @@ impl HostState {
             r.links = m.links.len();
         }
         r.runner = self.stats.report();
+        r.transfers = self.transfers.clone();
         r
     }
 
@@ -620,11 +624,22 @@ impl World {
         let mut found = Vec::new();
         {
             let mut st = self.st.borrow_mut();
+            let st = &mut *st;
             let Some(hs) = st.hosts.get_mut(h) else {
                 return;
             };
             let swarms = std::mem::take(&mut hs.swarms);
             let g = hs.stats.observe(m, &swarms, sim_now());
+            if self.spec.transfer_samples {
+                for (s, key) in swarms.iter().enumerate() {
+                    let index = |id: &HostId| st.ids.get(id).copied();
+                    if let Some(key) = key
+                        && let Some(t) = TransferSample::of(m, *key, index)
+                    {
+                        hs.transfers.push((sim_now(), s, t));
+                    }
+                }
+            }
             hs.swarms = swarms;
             let mut check = |kind: &'static str, broken: bool, what: String| {
                 if broken && hs.broken.insert(kind) {

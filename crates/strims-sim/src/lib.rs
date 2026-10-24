@@ -131,7 +131,7 @@ pub use spec::{
     Binding, Competing, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario,
     SendBuffer, SwarmSpec, Transport, VpnProbes,
 };
-pub use stats::{Peaks, RunnerReport, SwarmCounters};
+pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_n};
 
 /// The TCP listener port of every host.

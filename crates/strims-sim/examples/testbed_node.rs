@@ -19,7 +19,8 @@
 //! connects runs the swarm. The seed starts writing at `--start` (all
 //! nodes share the clock) and writes for `--secs`; a viewer dials its
 //! links `--join-at` seconds after the start. Each node prints one JSON line
-//! per second on stdout: its upload meter, its channels' round trips and,
+//! per second on stdout: its upload meter, its channels' round trips, its
+//! transfers per peer (`strims_sim::TransferSample`, peers by index) and,
 //! at a viewer, the lag of the frames it read in that second.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -28,12 +29,12 @@ use std::time::Duration;
 
 use strims_crypto::key_from_seed;
 use strims_node::{
-    CaptureConfig, Node, NodeConfig, NodeEvent, ReadError, SwarmId, SystemClock, TokioNet,
+    CaptureConfig, HostId, Node, NodeConfig, NodeEvent, ReadError, SwarmId, SystemClock, TokioNet,
     WriterOptions,
 };
 use strims_ppspp::{PushMode, SeedPolicy};
-use strims_sim::SwarmSpec;
 use strims_sim::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
+use strims_sim::{SwarmSpec, TransferSample};
 
 /// The stream rate of strims-sim's WAN cases.
 const WAN_RATE: u64 = 256 * 1024;
@@ -194,14 +195,22 @@ async fn run() -> Result<(), String> {
         (swarm, None)
     };
 
-    // Every peer that connects runs the swarm, whoever dialed.
+    // Every peer that connects runs the swarm, whoever dialed. Its index
+    // comes from its profile key; its host key is fresh.
+    let ids = std::rc::Rc::new(std::cell::RefCell::new(Vec::<(HostId, usize)>::new()));
     let peers = {
         let node = node.clone();
+        let ids = ids.clone();
+        let n = topo.nodes.len();
         async move {
             while let Some(e) = events.recv().await {
-                if let NodeEvent::PeerAdded(p) = e
-                    && let Err(e) = node.run_swarm(p.host_id, swarm, 1, 1).await
-                {
+                let NodeEvent::PeerAdded(p) = e else {
+                    continue;
+                };
+                if let Some(i) = (0..n).find(|&i| key_of(i).public == p.profile_key) {
+                    ids.borrow_mut().push((p.host_id, i));
+                }
+                if let Err(e) = node.run_swarm(p.host_id, swarm, 1, 1).await {
                     eprintln!("run swarm: {e}");
                 }
             }
@@ -336,8 +345,12 @@ async fn run() -> Result<(), String> {
                 })
                 .collect();
             let p = push.unwrap_or_default();
+            let ids = ids.borrow();
+            let index = |id: &HostId| ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
+            let transfers =
+                TransferSample::of(&m, swarm, index).map_or("null".to_owned(), |x| x.json());
             println!(
-                "{{\"t_ms\":{t},\"rel_ms\":{},\"index\":{},\"seed\":{seed},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}]}}",
+                "{{\"t_ms\":{t},\"rel_ms\":{},\"index\":{},\"seed\":{seed},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"transfers\":{transfers}}}",
                 t as i64 - start_ms as i64,
                 a.index,
                 m.driver.bytes_written,

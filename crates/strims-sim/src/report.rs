@@ -40,7 +40,7 @@ use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
 use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
-use crate::stats::{Peaks, RunnerReport, SwarmCounters};
+use crate::stats::{Peaks, RunnerReport, SwarmCounters, TransferSample};
 use crate::stream::{SeqSet, ViewerStats};
 
 /// Percentiles of a sample (milliseconds, or any `u32` measure): the
@@ -115,6 +115,10 @@ pub struct HostReport {
     pub vpn_bad_input: u64,
     /// The runner, link and network stats (see [`crate::stats`]).
     pub runner: RunnerReport,
+    /// With [`Scenario::transfer_samples`], the node's transfers at every
+    /// stats sample: (time since the start, scenario swarm, transfers),
+    /// peers indexed by host.
+    pub transfers: Vec<(std::time::Duration, usize, TransferSample)>,
 }
 
 /// vpn probe results (see [`crate::spec::VpnProbes`]).

@@ -382,6 +382,10 @@ pub struct Scenario {
     /// vnic once its uplink queue is full (see [`SendBuffer`]). `None`
     /// accepts every write at once.
     pub send_buffer: Option<SendBuffer>,
+    /// Keep every node's transfers per swarm at every stats sample
+    /// ([`crate::HostReport::transfers`]), as `calibration_star` does to
+    /// compare with the testbed's nodes. Changes no trace.
+    pub transfer_samples: bool,
 }
 
 /// The TCP send buffer model of WAN mode. A connection whose node set a
@@ -429,6 +433,7 @@ impl Scenario {
             tick: Duration::from_millis(1),
             capture: None,
             send_buffer: None,
+            transfer_samples: false,
         }
     }
 
