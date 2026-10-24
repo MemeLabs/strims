@@ -30,7 +30,7 @@ use crate::peer::{
 use crate::queue_delay;
 use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
-use crate::scheduler_peer::push::{PushStats, SATURATED_BUSY, UploadInfo};
+use crate::scheduler_peer::push::{PushStats, UploadInfo};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
     SwarmSchedulerStats, WriteDataError,
@@ -164,10 +164,6 @@ struct UploadMeter {
     excesses: Vec<Duration>,
 }
 
-/// While the queueing delay reads at least this, the peers' round trips
-/// don't count toward their bases.
-const BASE_FREEZE_DELAY: Duration = Duration::from_millis(40);
-
 impl UploadMeter {
     fn new() -> UploadMeter {
         UploadMeter {
@@ -180,14 +176,12 @@ impl UploadMeter {
         }
     }
 
-    /// Folds the peers' round trips into their bases (while the uplink
-    /// doesn't read saturated) and takes the node's queueing delay.
+    /// Folds the peers' round trips into their bases and takes the node's
+    /// queueing delay.
     fn update_queue_delay(&mut self, now: Time, peers: &mut SlotMap<PeerKey, RunnerPeer>) {
-        let busy = self.busy.rate(Duration::SECOND, now) as f64 / 1e9;
-        let clean = busy < SATURATED_BUSY && self.queue_delay.is_none_or(|d| d < BASE_FREEZE_DELAY);
         self.excesses.clear();
         for p in peers.values_mut() {
-            p.path.fold(clean);
+            p.path.fold();
             if let Some(e) = p.path.excess(now) {
                 self.excesses.push(e);
             }

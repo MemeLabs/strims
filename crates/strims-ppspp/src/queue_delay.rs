@@ -14,16 +14,17 @@
 //! it.
 //!
 //! Each peer's base is its least round trip over [`BASE_BUCKETS`] buckets of
-//! [`BASE_BUCKET`], taken only from samples the owner calls clean (while
-//! the uplink isn't saturated), so a standing queue doesn't become the
-//! base. A peer with no clean sample in the window counts as unqueued.
+//! [`BASE_BUCKET`] (ten minutes). Queued samples can't raise a minimum,
+//! and a channel's first ping goes out with its handshake, before any
+//! data, so a queue that builds later reads as excess; one that stands
+//! for the whole window becomes the base.
 
 use strims_base::time::{Duration, Time};
 
 /// The span of one base bucket ...
 pub(crate) const BASE_BUCKET: Duration = Duration::from_secs(30);
 /// ... and how many make up the base window.
-pub(crate) const BASE_BUCKETS: usize = 10;
+pub(crate) const BASE_BUCKETS: usize = 20;
 /// Round trips that arrived this recently stand for the path's current
 /// delay: the least of them, so one sample that met a burst doesn't read
 /// as a standing queue.
@@ -61,29 +62,26 @@ impl PathDelay {
         }
     }
 
-    /// Folds the samples that arrived since the last fold into the base,
-    /// if they are `clean`.
-    pub(crate) fn fold(&mut self, clean: bool) {
+    /// Folds the samples that arrived since the last fold into the base.
+    pub(crate) fn fold(&mut self) {
         let Some(newest) = self.recent_samples().last().map(|s| s.0) else {
             return;
         };
-        if clean {
-            for i in 0..self.len {
-                let Some(&(t, rtt)) = self.samples.get(i) else {
-                    continue;
-                };
-                if t <= self.folded {
-                    continue;
-                }
-                let index = t.unix_nanos() / BASE_BUCKET.as_nanos();
-                let slot = self
-                    .base
-                    .get_mut(index.rem_euclid(BASE_BUCKETS as i64) as usize);
-                if let Some(slot) = slot {
-                    match slot {
-                        Some((i, min)) if *i == index => *min = (*min).min(rtt),
-                        _ => *slot = Some((index, rtt)),
-                    }
+        for i in 0..self.len {
+            let Some(&(t, rtt)) = self.samples.get(i) else {
+                continue;
+            };
+            if t <= self.folded {
+                continue;
+            }
+            let index = t.unix_nanos() / BASE_BUCKET.as_nanos();
+            let slot = self
+                .base
+                .get_mut(index.rem_euclid(BASE_BUCKETS as i64) as usize);
+            if let Some(slot) = slot {
+                match slot {
+                    Some((i, min)) if *i == index => *min = (*min).min(rtt),
+                    _ => *slot = Some((index, rtt)),
                 }
             }
         }
@@ -95,7 +93,7 @@ impl PathDelay {
     }
 
     /// How far the least round trip of the last [`RECENT`] stands above
-    /// the base; zero without a base. `None` without a recent sample.
+    /// the base. `None` without a recent sample.
     pub(crate) fn excess(&self, now: Time) -> Option<Duration> {
         let current = self
             .recent_samples()
@@ -140,24 +138,24 @@ mod tests {
     }
 
     #[test]
-    fn excess_is_the_recent_minimum_over_the_clean_base() {
+    fn excess_is_the_recent_minimum_over_the_base() {
         let mut p = PathDelay::default();
         p.add(at(0), ms(40));
-        p.fold(true);
+        p.fold();
         p.add(at(5000), ms(140));
         p.add(at(6000), ms(120));
-        p.fold(false);
+        p.fold();
         assert_eq!(p.excess(at(6000)), Some(ms(80)));
     }
 
     #[test]
-    fn a_saturated_link_doesnt_raise_the_base() {
+    fn a_standing_queue_doesnt_raise_the_base() {
         let mut p = PathDelay::default();
         p.add(at(0), ms(40));
-        p.fold(true);
+        p.fold();
         for s in 1..200 {
             p.add(at(s * 1000), ms(240));
-            p.fold(false);
+            p.fold();
         }
         assert_eq!(p.excess(at(199_000)), Some(ms(200)));
     }
@@ -166,10 +164,10 @@ mod tests {
     fn a_base_ages_out_of_its_window() {
         let mut p = PathDelay::default();
         p.add(at(0), ms(40));
-        p.fold(true);
+        p.fold();
         let later = BASE_BUCKET.as_millis() * (BASE_BUCKETS as i64 + 1);
         p.add(at(later), ms(240));
-        p.fold(false);
+        p.fold();
         assert_eq!(p.excess(at(later)), Some(Duration::ZERO));
     }
 
@@ -177,7 +175,7 @@ mod tests {
     fn stale_samples_give_no_reading() {
         let mut p = PathDelay::default();
         p.add(at(0), ms(40));
-        p.fold(true);
+        p.fold();
         assert_eq!(p.excess(at(RECENT.as_millis() + 1)), None);
     }
 
