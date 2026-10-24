@@ -277,11 +277,17 @@ in each.
      and pull those streams from it, so its queue never drains (busy over
      0.9, viewers holding at most 3/4 of their parents, lag about 3.5 s).
      Real runs spend a median 56 % of the two minutes after the drop in
-     it (stretches up to 56 s), the sim 9 % (up to 22 s). Inside it the
-     one large difference is the seed's queue of answers to requests
-     (about 160 chunks real, 36 sim, at the same request rate): compare
-     viewers' request windows to the seed to find why. The loop itself
-     is worth breaking in ppspp too. Beside a competing upload the
+     it (stretches up to 56 s), the sim 9 % (up to 22 s). Inside it real
+     viewers keep twice the sim's requests outstanding to the seed (about
+     410 kB against 200), and the extra waits at the seed as queued
+     answers (about 210 kB against 36). Their request windows sit at
+     LEDBAT's floor (twice the stream rate times the ping round trip) or,
+     after a timed-out request, below it; the real round trip in the loop
+     is 1.6x the sim's (about 600 ms against 370), and matches it outside
+     the loop. Next: where real pings wait longer, from captures of the
+     seed (ping in, pong out) and viewers on both sides. The loop itself
+     is worth breaking in ppspp too: the floor follows a round trip that
+     grows while the seed is backlogged. Beside a competing upload the
      sim's worst second of lag is half the real one (real TCP's
      retransmission timeouts aren't modelled).
    - One peer whose link blocks keeps its data queued, so the meter reads
