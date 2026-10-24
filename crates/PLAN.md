@@ -213,21 +213,34 @@ in each.
      upload meter reads many times the uplink: socket send buffers and the
      access network's queue hide the time data waits, so busy stays low
      until they fill, and an adaptive seed's first wave and budget
-     overshoot. The reading never settles, and lag worsens with the
-     stream's length: in a 10-minute run of strims-sim's uncapped
-     residential seed p99 rises from about 1.5 s to 5-12 s after four
-     minutes, where knowing the uplink (`STRIMS_SIM_KNOWN_UPLINK`) holds
-     it near 0.37 s throughout. Find why it degrades (a capture of the
-     long run). Capping the reading at twice the rate while the link
-     isn't saturated, and sizing no first wave without a known capacity,
-     both made it worse in 60 s runs.
-     Candidates: queueing delay from the channels' round trips over their
-     minimum, across peers; measuring the uplink once at start.
+     overshoot; relays read a few percent of theirs and decline children
+     while idle. In strims-sim's uncapped residential case p99 holds about
+     1-1.5 s over 10 minutes where knowing the uplink
+     (`STRIMS_SIM_KNOWN_UPLINK`) holds 0.37 s, and the seed's budget
+     changes about 40 times a minute against once in ten. Capping the
+     reading at twice the rate while busy shows no saturation, and sizing
+     no first wave without a known capacity, both made it worse in 60 s
+     runs. Candidates (branch `upload-meter`, `UploadEstimate`): a
+     saturation detector on `PushStats::upload_queue_delay`, a probe below
+     saturation, a hold of the settled saturated rate.
+   - Calibration (`hack/testbed` against `calibration_star`): with
+     `STRIMS_SIM_TCP` the sim matches a real shaped link's busy fraction,
+     meter reading, uplink queue, detection time and a slow viewer's
+     pushback; without it, it misses the pushback. It reads the queueing
+     delay 1.4-1.7 times high under saturation behind 500 ms queues (its
+     pings wait out each connection's backlog where real ones see the
+     queue's troughs), and below saturation it reads none where a real
+     link reads 20-80 ms at p90 from bursts. Close both before trusting a
+     ranking that turns on the delay's level.
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer
-     that had data queued still has; judging it needs pushback from one
-     path in strims-sim's send buffers.
+     that had data queued still has (judge it in
+     `wan_slow_viewer_adaptive_uncapped` with `STRIMS_SIM_TCP`).
+   - Pushes queue toward a peer whose connection is backed up past one
+     window, to ppspp's cap, and are dropped as stale only when written;
+     and a viewer that falls a window behind sends its neighbours messages
+     they count as invalid (strims-sim's slow viewer).
 2. **A residential seed at a real bitrate.** Behind a cable seed at
    6-8 Mbit/s honest viewers lag several times what they do behind fiber,
    and behind well-provisioned seeds the adaptive seed trails the
