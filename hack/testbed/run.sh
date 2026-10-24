@@ -32,14 +32,25 @@
 #   SECS=<s>               the stream's length (default 180)
 #   JOIN_AT=<s>            when viewers dial in, after the start (default 0)
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
+#   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
+#                          seconds after the stream starts (tc qdisc change;
+#                          the queue keeps QUEUE_MS at the new rate)
+#   COMPETE="<s>:<d> ..."  a bulk TCP upload (iperf3, CUBIC) from the seed's
+#                          namespace, through its shaped uplink, to a sink
+#                          container (10 ms egress delay), from <s> seconds
+#                          after the stream starts for <d> seconds
 #   TOPOLOGY=<file>        links (`link a b` lines); default a star
 #   NODE_BIN=<path>        the testbed_node binary (default
 #                          target/release/examples/testbed_node)
+#   NODE_ARGS=<args>       more flags for every node
 #   CAPTURE=1              ppspp captures in <out dir>/capture
 #
 # Writes to <out dir>: topology, node-<i>.jsonl (a JSON line per second
 # from each node), node-<i>.err, tc-<i>.log (the seed's tbf backlog
-# at 10 Hz) and ss-<i>.log (its sockets once a second), and settings.
+# at 10 Hz) and ss-<i>.log (its sockets once a second), steps.log (when
+# each of SEED_UP_STEPS applied, ms since the epoch, and its rate),
+# compete-<s>.json (each upload's iperf3 report) and compete.log (when
+# each started), and settings.
 #
 # Needs Docker (the user's docker group) and the sch_netem, sch_tbf and
 # (for a slow downlink) ifb modules; if tc can't load them, run
@@ -58,6 +69,9 @@ viewer_delay=${VIEWER_DELAY_MS:-10}
 secs=${SECS:-180}
 join_at=${JOIN_AT:-0}
 slow=${SLOW_DOWN_KBIT:-}
+steps=${SEED_UP_STEPS:-}
+compete=${COMPETE:-}
+node_args=${NODE_ARGS:-}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 image=strims-testbed
 net=strims-testbed
@@ -81,7 +95,7 @@ n=$((viewers + 1))
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|TOPOLOGY|CAPTURE)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|NODE_ARGS|TOPOLOGY|CAPTURE)=' \
   > "$out/settings" || true
 
 start=$(( $(date +%s%3N) + 8000 ))
@@ -118,8 +132,46 @@ tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue
 $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $capture > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
 done
+
+if [ -n "$steps" ]; then
+  (
+    for step in $steps; do
+      at=${step%%:*}
+      rate=${step#*:}
+      ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 }")
+      wait=$(( ms - $(date +%s%3N) ))
+      if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
+      limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
+      docker exec tb-0 tc qdisc change dev eth0 parent 1:1 handle 10: \
+        tbf rate "${rate}mbit" burst 3028 limit "$limit"
+      echo "$(date +%s%3N) $rate" >> "$out/steps.log"
+    done
+  ) &
+fi
+
+if [ -n "$compete" ]; then
+  sink=$subnet.250
+  names+=(tb-sink)
+  docker rm -f tb-sink >/dev/null 2>&1 || true
+  docker run -d --name tb-sink --network "$net" --ip "$sink" --cap-add NET_ADMIN "$image" \
+    bash -c "set -e
+tc qdisc replace dev eth0 root netem delay 10ms limit 100000
+exec iperf3 -s" >/dev/null
+  (
+    for flow in $compete; do
+      at=${flow%%:*}
+      dur=${flow#*:}
+      ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 }")
+      wait=$(( ms - $(date +%s%3N) ))
+      if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
+      echo "$(date +%s%3N) $at $dur" >> "$out/compete.log"
+      docker exec tb-0 iperf3 -c "$sink" -t "$dur" -i 1 -C cubic -J \
+        > "$out/compete-$at.json" 2>&1 || true
+    done
+  ) &
+fi
 
 wait_ms=$(( start + (secs + 15) * 1000 - $(date +%s%3N) ))
 echo "testbed: $n nodes, stream of $secs s; results in $out"
