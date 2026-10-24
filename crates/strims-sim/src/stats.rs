@@ -326,6 +326,14 @@ pub struct PeerTransfer {
     pub requests_out: u64,
     /// Its data queues (all swarms): pushes, then request answers.
     pub queued: [usize; 2],
+    /// Our request window toward it: the cap and the bytes requested and
+    /// not yet received, the round trip the window reads and the request
+    /// timeout (ms), and the request deadlines outstanding.
+    pub cwnd: i64,
+    pub flight: i64,
+    pub rtt_ms: u64,
+    pub cto_ms: u64,
+    pub pending: usize,
 }
 
 impl TransferSample {
@@ -346,6 +354,7 @@ impl TransferSample {
                 let (requests_in, requests_out) = ch
                     .stats
                     .map_or((0, 0), |s| (s.inbound.request, s.outbound.request));
+                let w = ch.stats.map(|s| s.scheduler);
                 Some(PeerTransfer {
                     peer: index_of(&p.host_id),
                     sent: ch.metrics.write.count,
@@ -353,6 +362,11 @@ impl TransferSample {
                     requests_in,
                     requests_out,
                     queued: p.queues.queued_data,
+                    cwnd: w.map_or(0, |w| w.cwnd),
+                    flight: w.map_or(0, |w| w.flight_size),
+                    rtt_ms: w.map_or(0, |w| w.rtt_mean.as_millis() as u64),
+                    cto_ms: w.map_or(0, |w| w.cto.as_millis() as u64),
+                    pending: w.map_or(0, |w| w.pending_requests),
                 })
             })
             .collect();
@@ -390,7 +404,7 @@ impl TransferSample {
             .iter()
             .map(|p| {
                 format!(
-                    "{{\"peer\":{},\"sent\":{},\"received\":{},\"requests_in\":{},\"requests_out\":{},\"queued\":[{},{}]}}",
+                    "{{\"peer\":{},\"sent\":{},\"received\":{},\"requests_in\":{},\"requests_out\":{},\"queued\":[{},{}],\"cwnd\":{},\"flight\":{},\"rtt_ms\":{},\"cto_ms\":{},\"pending\":{}}}",
                     p.peer.map_or("null".to_owned(), |i| i.to_string()),
                     p.sent,
                     p.received,
@@ -398,6 +412,11 @@ impl TransferSample {
                     p.requests_out,
                     p.queued[0],
                     p.queued[1],
+                    p.cwnd,
+                    p.flight,
+                    p.rtt_ms,
+                    p.cto_ms,
+                    p.pending,
                 )
             })
             .collect();

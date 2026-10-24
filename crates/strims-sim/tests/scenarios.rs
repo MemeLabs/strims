@@ -2353,7 +2353,8 @@ fn transfer_samples_name_who_serves_whom() {
     assert!(seed.peers[0].sent > 0 && seed.pushed_chunks > 0);
     let v0 = at(1);
     assert!(v0.parents > 0);
-    assert!(v0.peers.iter().any(|p| p.peer == Some(0) && p.received > 0));
+    let to_seed = v0.peers.iter().find(|p| p.peer == Some(0)).unwrap();
+    assert!(to_seed.received > 0 && to_seed.cwnd > 0 && to_seed.rtt_ms > 0);
 }
 
 // --- transports ---------------------------------------------------------------
