@@ -623,6 +623,39 @@ fn pong_needs_an_outstanding_ping() {
 }
 
 #[test]
+fn round_trips_longer_than_the_ping_interval_reach_the_meter() {
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let cfg = f.swarm.reader_config();
+    let mut nonces = Vec::new();
+    for at in [now(), now() + PING_INTERVAL + Duration::from_millis(100)] {
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+        let Message::Ping(ping) = msgs[0] else {
+            panic!("{msgs:?}")
+        };
+        nonces.push(ping.nonce);
+    }
+    let back = now() + Duration::from_millis(2500);
+    assert_eq!(
+        f.sched.handle_pong(p, nonces[0], back),
+        Some(Duration::from_millis(2500))
+    );
+    // The first ping was superseded, so its round trip skips the controller.
+    assert_eq!(f.sched.channels[&p].controller.rtt(), Duration::ZERO);
+    assert_eq!(f.sched.handle_pong(p, nonces[0], back), None);
+    assert_eq!(
+        f.sched.handle_pong(p, nonces[1], back),
+        Some(Duration::from_millis(1400))
+    );
+    assert_eq!(
+        f.sched.channels[&p].controller.rtt(),
+        Duration::from_millis(1400)
+    );
+}
+
+#[test]
 fn requests_are_bounded_by_the_window() {
     let mut f = fixture(SwarmOptions {
         live_window: 256,

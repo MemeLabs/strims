@@ -80,6 +80,7 @@ mod options;
 mod peer;
 mod peer_data_queue;
 mod peer_writer_queue;
+mod queue_delay;
 mod runner;
 mod scheduler;
 pub mod scheduler_peer;

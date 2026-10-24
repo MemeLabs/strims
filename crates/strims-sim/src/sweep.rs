@@ -5,18 +5,23 @@
 //!
 //! - `STRIMS_SIM_SEEDS=<n>` runs seeds `1..=n` (default [`DEFAULT_SEEDS`],
 //!   or [`DEFAULT_SEEDS_DEBUG`] in a debug build, so the plain
-//!   `cargo test` stays short).
+//!   `cargo test` stays short), and with `STRIMS_SIM_SEED_FROM=<k>` the
+//!   `n` seeds from `k`.
 //! - `STRIMS_SIM_SEED=<s>` runs only seed `s` (the replay of a failure).
 //! - `STRIMS_SIM_TRACE=1` prints every run's trace.
 //! - `STRIMS_SIM_CAPTURE=<dir>` captures every node's ppspp traffic
 //!   ([`Scenario::capture`]) into `<dir>/<test>/seed-<s>/`, and the replay's
 //!   into `seed-<s>-replay/`.
-//! - `STRIMS_SIM_SEND_BUFFER=<ms>` gives every WAN scenario without send
-//!   buffers ([`Scenario::send_buffer`]) an uplink queue of `ms`
-//!   milliseconds, for comparisons.
+//! - `STRIMS_SIM_SEND_BUFFER=<ms>` gives every WAN scenario send buffers
+//!   ([`Scenario::send_buffer`]) with an uplink queue of `ms` milliseconds,
+//!   replacing the scenario's own, for comparisons.
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
 //!   oracle the upload meter is measured against.
+//! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
+//!   take one ([`stream_minutes`]).
+//! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
+//!   `ROW {json}`, on stdout ([`Report::row`]).
 //!
 //! The first seed runs a second time and must give the same trace hash.
 //!
@@ -50,18 +55,26 @@ fn env(name: &str) -> Option<String> {
 
 /// The seeds a sweep runs (see the module docs).
 pub fn seeds() -> Vec<u64> {
+    seeds_or(if cfg!(debug_assertions) {
+        DEFAULT_SEEDS_DEBUG
+    } else {
+        DEFAULT_SEEDS
+    })
+}
+
+/// [`seeds`], with `n` seeds when `STRIMS_SIM_SEEDS` isn't set.
+fn seeds_or(n: u64) -> Vec<u64> {
     if let Some(s) = env("STRIMS_SIM_SEED").and_then(|s| s.trim().parse().ok()) {
         return vec![s];
     }
     let n = env("STRIMS_SIM_SEEDS")
         .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(if cfg!(debug_assertions) {
-            DEFAULT_SEEDS_DEBUG
-        } else {
-            DEFAULT_SEEDS
-        })
+        .unwrap_or(n)
         .max(1);
-    (1..=n).collect()
+    let from: u64 = env("STRIMS_SIM_SEED_FROM")
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1);
+    (from..from.saturating_add(n)).collect()
 }
 
 fn replay(test: &str, seed: u64) -> String {
@@ -123,6 +136,15 @@ impl Run<'_> {
     }
 }
 
+/// The stream length of a scenario that takes it from the run's settings:
+/// `STRIMS_SIM_MINUTES=<m>`, else `default` minutes.
+pub fn stream_minutes(default: u64) -> u64 {
+    env("STRIMS_SIM_MINUTES")
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(default)
+        .max(1)
+}
+
 /// Runs scenario `build(seed)` for every seed of [`seeds`] and the first
 /// seed a second time, all at once, then checks each report with `check`
 /// and compares the first seed's trace hashes. A failure panics with the
@@ -133,15 +155,34 @@ pub fn sweep(
     build: impl Fn(u64) -> Scenario + Sync,
     check: impl Fn(&Report) -> Result<(), String>,
 ) -> Vec<Report> {
-    let seeds = seeds();
+    sweep_seeds(test, seeds(), build, check)
+}
+
+/// [`sweep`] over `n` seeds unless `STRIMS_SIM_SEEDS` says otherwise, for
+/// scenarios too long for the default count.
+pub fn sweep_n(
+    test: &str,
+    n: u64,
+    build: impl Fn(u64) -> Scenario + Sync,
+    check: impl Fn(&Report) -> Result<(), String>,
+) -> Vec<Report> {
+    sweep_seeds(test, seeds_or(n), build, check)
+}
+
+fn sweep_seeds(
+    test: &str,
+    seeds: Vec<u64>,
+    build: impl Fn(u64) -> Scenario + Sync,
+    check: impl Fn(&Report) -> Result<(), String>,
+) -> Vec<Report> {
     let capture = env("STRIMS_SIM_CAPTURE");
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").is_some_and(|s| s.trim() == "1");
+    let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
             && spec.wan.is_some()
-            && spec.send_buffer.is_none()
         {
             spec.send_buffer = Some(SendBuffer {
                 uplink_queue: Duration::from_millis(ms),
@@ -188,6 +229,9 @@ pub fn sweep(
     for (&seed, outcome) in seeds.iter().zip(outcomes) {
         let r = report_of(test, seed, outcome);
         eprintln!("{}", r.summary());
+        if rows {
+            println!("ROW {}", r.row(test));
+        }
         if let Err(e) = check(&r) {
             fail(test, seed, &e, &r.trace);
         }

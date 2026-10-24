@@ -457,6 +457,7 @@ fn push(s: PushStats) -> v1::PushStats {
         stale_drops,
         suppressed,
         upload_capacity: _,
+        upload_queue_delay: _,
         seed_budget: _,
         seed_window: _,
         seed_copies: _,

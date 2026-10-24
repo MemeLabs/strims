@@ -170,7 +170,14 @@ pub(crate) struct Scheduler {
     /// admission time and record: their connection and length. Bound: the
     /// records in flight.
     admits: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
+    /// Per host, its uplink queue's wait every [`QUEUE_SAMPLE_EVERY`]:
+    /// (time since the start, wait).
+    up_queue: Vec<Vec<(Duration, Duration)>>,
+    next_queue_sample: Time,
 }
+
+/// How often the scheduler samples each host's uplink queue.
+const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
 
 impl Scheduler {
     /// Holds every link between `spec`'s hosts, which `sim` has registered
@@ -237,6 +244,8 @@ impl Scheduler {
             tick: Duration::from(spec.tick),
             buffers,
             admits: BTreeMap::new(),
+            up_queue: vec![Vec::new(); spec.hosts.len()],
+            next_queue_sample: epoch(),
         })
     }
 
@@ -252,6 +261,13 @@ impl Scheduler {
         self.send(now - self.tick, fresh);
         self.purge(sim, &released);
         self.admit(now);
+        if now >= self.next_queue_sample {
+            self.next_queue_sample = now + QUEUE_SAMPLE_EVERY;
+            for (h, samples) in self.up_queue.iter_mut().enumerate() {
+                let wait = (self.net.up_free(h) - now).max(Duration::ZERO);
+                samples.push((now - epoch(), wait));
+            }
+        }
         Ok(())
     }
 
@@ -558,6 +574,7 @@ impl Scheduler {
                         name: hs.name.clone(),
                         site: *self.net.site(h)?,
                         stats: self.net.stats(h),
+                        up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                     })
                 })
                 .collect(),

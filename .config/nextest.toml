@@ -22,6 +22,12 @@ filter = 'package(strims-sim) & test(=long_run)'
 threads-required = 9
 priority = 100
 
+# 3 runs of a 10-minute WAN stream each, the longest of the WAN sweeps.
+[[profile.default.overrides]]
+filter = 'package(strims-sim) & test(=wan_residential_seed_adaptive_uncapped_long)'
+threads-required = 3
+priority = 100
+
 # These spread their simulations over every core.
 [[profile.default.overrides]]
 filter = 'test(=controller_ab) | test(=seed_allocation_bounds) | test(=seed_allocation_ab) | (package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep)))'

@@ -128,6 +128,9 @@ pub(crate) const SCHEDULER_GC_INTERVAL: Duration = Duration::from_secs(5);
 pub(crate) const SCHEDULER_RESTART_COOLDOWN: Duration = Duration::from_secs(1);
 /// How often a channel that writes also pings.
 pub(crate) const PING_INTERVAL: Duration = Duration::from_secs(1);
+/// Pings whose round trips a channel still accepts for the upload meter:
+/// a queue up to this many [`PING_INTERVAL`]s long still shows.
+const SENT_PINGS: usize = 4;
 /// How long a channel leaves bins alone after its peer failed to deliver
 /// them: two ticks, so every other channel gets a write cycle to request
 /// them first.
@@ -529,6 +532,9 @@ pub(crate) struct PeerChannelScheduler {
     next_ping_time: Time,
     /// The nonce of the outstanding ping, 0 if none.
     ping_nonce: u64,
+    /// The nonces of the latest pings, unanswered ones nonzero: their
+    /// round trips go to the upload meter, however long they take.
+    sent_pings: [u64; SENT_PINGS],
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group, and [`CANDIDATE_CAPACITY`] between rounds.
@@ -568,6 +574,7 @@ impl PeerChannelScheduler {
             handshake_received: false,
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
+            sent_pings: [0; SENT_PINGS],
             candidate_bins: Vec::new(),
             push: s.push.as_ref().map(|_| PushChannel::new(streams)),
         }
@@ -1681,18 +1688,27 @@ impl PeerSwarmScheduler {
 
     /// A pong counts once, and only for the outstanding ping: its round
     /// trip sets the request timeout, so a forged or repeated pong must not.
-    pub(crate) fn handle_pong(&mut self, peer: PeerKey, nonce: u64, now: Time) {
-        if let Some(c) = self.channels.get_mut(&peer)
-            && c.ping_nonce != 0
-            && nonce == c.ping_nonce
-        {
+    /// Returns the round trip of any of the latest [`SENT_PINGS`] pings,
+    /// once each, for the upload meter.
+    pub(crate) fn handle_pong(&mut self, peer: PeerKey, nonce: u64, now: Time) -> Option<Duration> {
+        let c = self.channels.get_mut(&peer)?;
+        let rtt = now - Time::from_unix_nanos(nonce as i64);
+        let sample = c
+            .sent_pings
+            .iter_mut()
+            .find(|n| nonce != 0 && **n == nonce)
+            .map(|n| {
+                *n = 0;
+                rtt
+            });
+        if c.ping_nonce != 0 && nonce == c.ping_nonce {
             c.ping_nonce = 0;
-            let rtt = now - Time::from_unix_nanos(nonce as i64);
             c.controller.on_ping_rtt(now, rtt);
             if self.s.is_seed {
                 push::seed::ping(&mut c.push, rtt, now);
             }
         }
+        sample
     }
 
     /// The peer asks us to push `stream` from `b`. In hybrid mode the
@@ -1880,6 +1896,10 @@ impl PeerSwarmScheduler {
             cw.write(&Message::Ping(Ping { nonce }))?;
             c.next_ping_time = now + PING_INTERVAL;
             c.ping_nonce = nonce;
+            c.sent_pings.rotate_left(1);
+            if let Some(last) = c.sent_pings.last_mut() {
+                *last = nonce;
+            }
         }
         c.write0(swarm, cw)?;
         c.write1(s, now, cw)?;

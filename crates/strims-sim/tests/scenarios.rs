@@ -20,7 +20,7 @@ use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer, SwarmSpec,
-    Transport, VpnProbes, sweep,
+    Transport, VpnProbes, stream_minutes, sweep, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::sample::pick;
@@ -1545,6 +1545,11 @@ fn wan_global_audience_hybrid() {
 // viewers around the Atlantic: the viewers relay.
 
 fn wan_residential_seed(seed: u64, push: PushMode) -> Scenario {
+    wan_residential_seed_for(seed, push, (5, 65))
+}
+
+/// [`wan_residential_seed`] streaming over `window` (seconds).
+fn wan_residential_seed_for(seed: u64, push: PushMode, window: (u64, u64)) -> Scenario {
     let sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
     wan(
         &format!("wan_residential_seed {push:?}"),
@@ -1552,7 +1557,7 @@ fn wan_residential_seed(seed: u64, push: PushMode) -> Scenario {
         Site::new(City::Chicago, Access::Cable),
         &sites,
         push,
-        (5, 65),
+        window,
     )
     .s
 }
@@ -1659,6 +1664,37 @@ fn wan_residential_seed_adaptive_uncapped() {
             ))
         },
         check_wan_residential_seed,
+    );
+}
+
+/// Minutes the long WAN cases stream unless `STRIMS_SIM_MINUTES` says.
+const LONG_MINUTES: u64 = 10;
+/// Seeds the long WAN cases run unless `STRIMS_SIM_SEEDS` says.
+const LONG_SEEDS: u64 = 2;
+
+/// The long WAN cases measure how lag and the upload meter evolve over a
+/// stream's length (the summary's per-bucket line, `STRIMS_SIM_ROWS`);
+/// their check holds only what every run must: sound frames and no
+/// invariant violated.
+fn check_wan_long(r: &Report) -> Result<(), String> {
+    sound(r)
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s for minutes; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped_long() {
+    let stop = 5 + 60 * stream_minutes(LONG_MINUTES);
+    sweep_n(
+        "wan_residential_seed_adaptive_uncapped_long",
+        LONG_SEEDS,
+        |s| {
+            uncapped(striped(
+                wan_residential_seed_for(s, PushMode::Hybrid, (5, stop)),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_long,
     );
 }
 

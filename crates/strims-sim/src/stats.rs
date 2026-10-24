@@ -244,8 +244,11 @@ pub struct RunnerReport {
 }
 
 /// A node's upload meter at one sample (`PushStats::upload_rate`,
-/// `upload_busy_permille`, `upload_capacity`), with the subscriptions it
-/// served per scenario swarm (`PushStats::children`).
+/// `upload_busy_permille`, `upload_capacity`, `upload_queue_delay`), with
+/// the subscriptions it served per scenario swarm (`PushStats::children`),
+/// the STREAM_REQUESTs it answered (`accepted` plus `rejected`, over its
+/// hybrid swarms, since the incarnation started) and an adaptive seed's
+/// state per scenario swarm.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -253,7 +256,11 @@ pub struct MeterSample {
     pub rate: u64,
     pub busy_permille: u32,
     pub capacity: u64,
+    pub queue_delay: Option<strims_base::time::Duration>,
     pub children: BTreeMap<usize, usize>,
+    pub requests_in: u64,
+    pub rejected: u64,
+    pub seeds: BTreeMap<usize, SeedSample>,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -444,20 +451,22 @@ impl HostStats {
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
                     capacity: push.upload_capacity,
-                    children: BTreeMap::new(),
+                    queue_delay: push.upload_queue_delay,
+                    ..MeterSample::default()
                 });
                 ms.children.insert(s, push.children);
+                ms.requests_in += push.accepted + push.rejected;
+                ms.rejected += push.rejected;
                 if push.seed_window > 0 {
-                    self.seeds.insert(
-                        s,
-                        SeedSample {
-                            budget: push.seed_budget,
-                            window: push.seed_window,
-                            copies: push.seed_copies,
-                            first_wave: push.seed_first_wave,
-                            first_wave_capacity: push.seed_first_wave_capacity,
-                        },
-                    );
+                    let seed = SeedSample {
+                        budget: push.seed_budget,
+                        window: push.seed_window,
+                        copies: push.seed_copies,
+                        first_wave: push.seed_first_wave,
+                        first_wave_capacity: push.seed_first_wave_capacity,
+                    };
+                    ms.seeds.insert(s, seed);
+                    self.seeds.insert(s, seed);
                 }
             }
             let c = SwarmCounters {

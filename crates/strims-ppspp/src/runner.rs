@@ -27,9 +27,10 @@ use crate::options::PushMode;
 use crate::peer::{
     MetricsSnapshot, PeerMetricsSnapshot, PeerStats, Queues, RunnerPeer, TransferMetrics, Wake,
 };
+use crate::queue_delay;
 use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
-use crate::scheduler_peer::push::{PushStats, UploadInfo};
+use crate::scheduler_peer::push::{PushStats, SATURATED_BUSY, UploadInfo};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
     SwarmSchedulerStats, WriteDataError,
@@ -145,7 +146,9 @@ struct Events {
 /// queues data further on (a rate limit's burst, kernel socket buffers)
 /// hides that time, and the reading runs high; one that holds a peer's data
 /// back for that peer alone makes it read low. The driver's hint, when it
-/// has one, bounds it.
+/// has one, bounds it. The queueing delay past the runner, from the peers'
+/// ping round trips ([`queue_delay`](crate::queue_delay)), shows the time
+/// those further queues hold data.
 #[derive(Debug)]
 struct UploadMeter {
     busy_since: Option<Time>,
@@ -155,7 +158,15 @@ struct UploadMeter {
     bytes: Sma,
     /// The capacity the driver knows ([`Runner::set_upload_capacity`]).
     hint: Option<u64>,
+    /// The queueing delay at the last tick.
+    queue_delay: Option<Duration>,
+    /// Scratch for the peers' excesses. Bound: one per peer.
+    excesses: Vec<Duration>,
 }
+
+/// While the queueing delay reads at least this, the peers' round trips
+/// don't count toward their bases.
+const BASE_FREEZE_DELAY: Duration = Duration::from_millis(40);
 
 impl UploadMeter {
     fn new() -> UploadMeter {
@@ -164,7 +175,24 @@ impl UploadMeter {
             busy: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
             bytes: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
             hint: None,
+            queue_delay: None,
+            excesses: Vec::new(),
         }
+    }
+
+    /// Folds the peers' round trips into their bases (while the uplink
+    /// doesn't read saturated) and takes the node's queueing delay.
+    fn update_queue_delay(&mut self, now: Time, peers: &mut SlotMap<PeerKey, RunnerPeer>) {
+        let busy = self.busy.rate(Duration::SECOND, now) as f64 / 1e9;
+        let clean = busy < SATURATED_BUSY && self.queue_delay.is_none_or(|d| d < BASE_FREEZE_DELAY);
+        self.excesses.clear();
+        for p in peers.values_mut() {
+            p.path.fold(clean);
+            if let Some(e) = p.path.excess(now) {
+                self.excesses.push(e);
+            }
+        }
+        self.queue_delay = queue_delay::aggregate(&mut self.excesses);
     }
 
     /// Accounts the time since the last call as busy if data was queued
@@ -186,6 +214,7 @@ impl UploadMeter {
             busy: busy.clamp(0.0, 1.0),
             hint: self.hint,
             others: 0.0,
+            queue_delay: self.queue_delay,
         }
     }
 }
@@ -433,7 +462,13 @@ fn handle_payload(
             Message::Choke => sched.handle_choke(peer, true),
             Message::Unchoke => sched.handle_choke(peer, false),
             Message::Ping(p) => sched.handle_ping(peer, p.nonce),
-            Message::Pong(p) => sched.handle_pong(peer, p.nonce, now),
+            Message::Pong(p) => {
+                if let Some(rtt) = sched.handle_pong(peer, p.nonce, now)
+                    && let Some(rp) = q.peers.get_mut(peer)
+                {
+                    rp.path.add(now, rtt);
+                }
+            }
             Message::StreamRequest(s) => {
                 let tail = swarm.store().tail();
                 if !sched.handle_stream_request(peer, s.stream, s.bin, tail, now, q)? {
@@ -1149,6 +1184,9 @@ impl Runner {
         let behind = (now - self.next_tick).as_nanos() / TICK_INTERVAL.as_nanos() + 1;
         self.next_tick += TICK_INTERVAL * behind;
 
+        if self.hybrid_swarms > 0 {
+            self.upload.update_queue_delay(now, &mut self.peers);
+        }
         let upload = (self.hybrid_swarms > 0).then(|| self.upload.info(now));
         let Runner {
             swarms,

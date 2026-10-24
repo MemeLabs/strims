@@ -24,6 +24,7 @@ use strims_binmap::Bin;
 
 use crate::peer_data_queue::PeerDataQueue;
 use crate::peer_writer_queue::PeerTaskRunnerQueue;
+use crate::queue_delay::PathDelay;
 use crate::runner::{PeerKey, SwarmKey};
 use crate::scheduler::{PeerPriority, PeerTaskQueue};
 
@@ -129,6 +130,8 @@ pub(crate) struct RunnerPeer {
     pub(crate) useful: TransferMetrics,
     pub(crate) qos_weight: Option<u64>,
     pub(crate) dropped: u64,
+    /// Ping round trips, for the upload meter's queueing delay.
+    pub(crate) path: PathDelay,
 }
 
 impl RunnerPeer {
@@ -144,6 +147,7 @@ impl RunnerPeer {
             useful: TransferMetrics::new(now),
             qos_weight: None,
             dropped: 0,
+            path: PathDelay::default(),
         }
     }
 

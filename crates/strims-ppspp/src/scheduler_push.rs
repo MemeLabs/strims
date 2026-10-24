@@ -253,7 +253,7 @@ const MIN_BUSY: f64 = 0.05;
 /// The busy fraction from which the measurement shows a saturated uplink:
 /// below it a known capacity stands, since a link that isn't saturated
 /// shows only a lower bound.
-const SATURATED_BUSY: f64 = 0.5;
+pub(crate) const SATURATED_BUSY: f64 = 0.5;
 /// The busy fraction (time with data queued) at which a provider sheds
 /// subscribers ...
 pub const SHED_UTILIZATION: f64 = 0.9;
@@ -284,6 +284,9 @@ pub(crate) struct UploadInfo {
     /// at their stream rates), in bytes per second: this swarm's
     /// admission, shedding and seed budget leave it room.
     pub(crate) others: f64,
+    /// The queueing delay past the runner, from the peers' ping round
+    /// trips; `None` with too few peers.
+    pub(crate) queue_delay: Option<Duration>,
 }
 
 impl UploadInfo {
@@ -627,6 +630,9 @@ pub struct PushStats {
     /// The upload capacity admission control estimated from it, in bytes
     /// per second (0 before anything was sent).
     pub upload_capacity: u64,
+    /// The node's queueing delay past the runner, from its peers' ping
+    /// round trips; `None` with too few peers.
+    pub upload_queue_delay: Option<Duration>,
     /// The stream a non-seed node forwards.
     pub interior: Option<Stream>,
     /// Subscriptions we serve, all streams.
@@ -1886,6 +1892,7 @@ impl PeerSwarmScheduler {
             out.upload_rate = p.upload.rate;
             out.upload_busy_permille = (p.upload.busy * 1000.0) as u32;
             out.upload_capacity = p.upload.capacity().map_or(0, |c| c as u64);
+            out.upload_queue_delay = p.upload.queue_delay;
             out.interior = if s.is_seed { None } else { p.interior };
             out.expected = c.expected;
             out.hits = c.hits;

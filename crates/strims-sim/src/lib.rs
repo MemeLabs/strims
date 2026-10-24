@@ -108,6 +108,7 @@
 
 mod control;
 mod host;
+pub mod measures;
 pub mod memory;
 mod net;
 pub mod report;
@@ -129,7 +130,7 @@ pub use spec::{
     SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, RunnerReport, SwarmCounters};
-pub use sweep::{seeds, sweep};
+pub use sweep::{seeds, stream_minutes, sweep, sweep_n};
 
 /// The TCP listener port of every host.
 pub const TCP_PORT: u16 = 7000;

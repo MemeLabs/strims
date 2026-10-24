@@ -27,6 +27,10 @@
 //! In WAN mode, [`Report::wan`] holds each host's site and access link
 //! counters, and [`Report::lag_by_region`] and [`Report::lag_by_access`]
 //! split the lag by the viewers' regions and access links.
+//!
+//! [`crate::measures`] splits lag and the upload meter's readings over a
+//! stream's length and by the hosts' roles, and writes a run's measures as
+//! one JSON row.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -206,6 +210,8 @@ pub struct WanHostReport {
     pub name: String,
     pub site: Site,
     pub stats: EndStats,
+    /// The uplink queue's wait every 100 ms: (time since the start, wait).
+    pub up_queue: Vec<(strims_base::time::Duration, strims_base::time::Duration)>,
 }
 
 /// The access links of a WAN run, in host order.
@@ -489,6 +495,14 @@ impl Report {
     /// (capacity ÷ cap, the push rate its subscriptions commit ÷ cap) per
     /// sample. Empty without a cap.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
+        self.meter_series(h)
+            .into_iter()
+            .map(|(_, c, k)| (c, k))
+            .collect()
+    }
+
+    /// [`meter_readings`](Report::meter_readings) with each sample's time.
+    pub fn meter_series(&self, h: HostIx) -> Vec<(std::time::Duration, f64, f64)> {
         let Some(host) = self.hosts.get(h) else {
             return Vec::new();
         };
@@ -496,16 +510,10 @@ impl Report {
             return Vec::new();
         };
         let cap = cap as f64;
-        let live = |t: std::time::Duration| {
-            self.scenario
-                .swarms
-                .iter()
-                .any(|s| t >= s.start && t <= s.stop)
-        };
         host.runner
             .meter
             .iter()
-            .filter(|m| live(m.t) && m.capacity > 0)
+            .filter(|m| self.live(m.t) && m.capacity > 0)
             .map(|m| {
                 let committed: f64 = m
                     .children
@@ -519,9 +527,17 @@ impl Report {
                         n as f64 * self.swarm_rate(s) / streams as f64 * PUSH_OVERHEAD
                     })
                     .sum();
-                (m.capacity as f64 / cap, committed / cap)
+                (m.t, m.capacity as f64 / cap, committed / cap)
             })
             .collect()
+    }
+
+    /// Whether any swarm streams at `t`.
+    pub(crate) fn live(&self, t: std::time::Duration) -> bool {
+        self.scenario
+            .swarms
+            .iter()
+            .any(|s| t >= s.start && t <= s.stop)
     }
 
     /// The meter summary: capacity ÷ upload cap at the 10th, 50th and 90th
@@ -654,6 +670,9 @@ impl Report {
             if let Some(line) = self.first_wave_line(i) {
                 s.push_str(&line);
             }
+        }
+        if let Some(line) = self.bucket_line() {
+            s.push_str(&line);
         }
         let p = self.peaks();
         if !self.scenario.swarms.is_empty() {
