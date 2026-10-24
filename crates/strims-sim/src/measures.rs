@@ -15,6 +15,10 @@
 //!   than [`STANDING_QUEUE`] (WAN mode).
 //! - **wrongly declined** ([`Report::declined`]): STREAM_REQUESTs declined
 //!   in samples where the node's upload rate was under half its cap.
+//! - **queueing delay accuracy** ([`Report::queue_delay_accuracy`]): the
+//!   meter's queueing delay against the standing queue on the host's
+//!   uplink, the least wait of the WAN model's queue over the last
+//!   [`STANDING_WINDOW`] (WAN mode).
 
 use std::fmt::Write;
 use std::time::Duration;
@@ -27,6 +31,11 @@ pub const BUCKET: Duration = Duration::from_secs(30);
 /// Streams longer than this get a line of per-bucket measures in the
 /// summary.
 pub const LONG_STREAM: Duration = Duration::from_secs(120);
+/// The standing queue at a moment is the least uplink wait over this long
+/// before it, the meter's own window for a recent round trip.
+pub const STANDING_WINDOW: Duration = Duration::from_secs(3);
+/// The threshold [`Report::row`] judges the queueing delay's errors at.
+pub const QUEUE_DELAY_THRESHOLD_MS: u32 = 80;
 /// An uplink queue that waits longer than this stands.
 pub const STANDING_QUEUE: strims_base::time::Duration =
     strims_base::time::Duration::from_millis(50);
@@ -218,6 +227,68 @@ impl Report {
         if n == 0 { 0.0 } else { over as f64 / n as f64 }
     }
 
+    /// The meter's queueing delay at `hosts` against their standing uplink
+    /// queues, over the samples that had a delay while a swarm streamed:
+    /// the median absolute error in milliseconds; the share of samples
+    /// below `threshold_ms` of standing queue where the delay read at least
+    /// it (false positives); and the share at or above it where the delay
+    /// read less (false negatives). `None` outside WAN mode or without
+    /// samples.
+    pub fn queue_delay_accuracy(&self, hosts: &[HostIx], threshold_ms: u32) -> Option<[f64; 3]> {
+        let wan = self.wan.as_ref()?;
+        let (mut errors, mut neg, mut pos) = (Vec::new(), (0u64, 0u64), (0u64, 0u64));
+        for &h in hosts {
+            let name = self.scenario.hosts.get(h)?.name.as_str();
+            let Some(w) = wan.hosts.iter().find(|w| w.name == name) else {
+                continue;
+            };
+            let queue: Vec<(Duration, u32)> = w
+                .up_queue
+                .iter()
+                .filter_map(|&(t, d)| {
+                    Some((
+                        t.to_std()?,
+                        u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX),
+                    ))
+                })
+                .collect();
+            for m in self
+                .hosts
+                .get(h)?
+                .runner
+                .meter
+                .iter()
+                .filter(|m| self.live(m.t))
+            {
+                let Some(delay) = m.queue_delay_ms else {
+                    continue;
+                };
+                let from = m.t.saturating_sub(STANDING_WINDOW);
+                let Some(standing) = queue
+                    .iter()
+                    .filter(|(t, _)| *t >= from && *t <= m.t)
+                    .map(|&(_, d)| d)
+                    .min()
+                else {
+                    continue;
+                };
+                errors.push(f64::from(delay.abs_diff(standing)));
+                if standing < threshold_ms {
+                    neg.1 += 1;
+                    neg.0 += u64::from(delay >= threshold_ms);
+                } else {
+                    pos.1 += 1;
+                    pos.0 += u64::from(delay < threshold_ms);
+                }
+            }
+        }
+        if errors.is_empty() {
+            return None;
+        }
+        let share = |(k, n): (u64, u64)| if n == 0 { 0.0 } else { k as f64 / n as f64 };
+        Some([deciles(&mut errors)[1], share(neg), share(pos)])
+    }
+
     /// STREAM_REQUESTs declined while the node's upload rate was under half
     /// its cap, and all declined, over every host.
     pub fn declined(&self) -> (u64, u64) {
@@ -374,6 +445,15 @@ impl Report {
                 self.standing_queue(&roles.forwarders),
             )
             .num("peak_committed", self.peak_committed());
+        for (name, hosts) in [("seeds", &roles.seeds), ("forwarders", &roles.forwarders)] {
+            if let Some([err, fp, fneg]) =
+                self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS)
+            {
+                j.num(&format!("qd_err_{name}_ms"), err)
+                    .num(&format!("qd_fp_{name}"), fp)
+                    .num(&format!("qd_fn_{name}"), fneg);
+            }
+        }
         let (wrong, declined) = self.declined();
         j.int("declined_wrongly", wrong).int("declined", declined);
         let (budget, copies) = self.seed_changes(swarm);
