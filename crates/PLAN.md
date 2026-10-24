@@ -282,12 +282,19 @@ in each.
      410 kB against 200), and the extra waits at the seed as queued
      answers (about 210 kB against 36). Their request windows sit at
      LEDBAT's floor (twice the stream rate times the ping round trip) or,
-     after a timed-out request, below it; the real round trip in the loop
-     is 1.6x the sim's (about 600 ms against 370), and matches it outside
-     the loop. Next: where real pings wait longer, from captures of the
-     seed (ping in, pong out) and viewers on both sides. The loop itself
-     is worth breaking in ppspp too: the floor follows a round trip that
-     grows while the seed is backlogged. Beside a competing upload the
+     after a timed-out request, below it. In the loop a ping's round trip
+     is mostly the bytes below ppspp ahead of its pong, on both sides at
+     most about 130 kB per link (the seed's frames run to 64 KiB, and
+     vnic holds one frame and one write past QoS, then the kernel's
+     unsent bytes and TCP's in flight), draining at a third of the
+     halved uplink: 0.5-0.8 s. Real round trips there run 1.4x the
+     sim's (median 790 ms against 560): the real pipe is full more often
+     (66 % of pings against 51 %) and drains about 10 % slower when
+     full. Next: find the 10 % (per-byte overhead on the seed's link,
+     real against sim). The loop itself is worth breaking in ppspp too:
+     the window floor follows a round trip made of our own buffers. Try
+     the floor on the minimum round trip, and smaller TCP frames, on the
+     step test in the sim, then on the testbed. Beside a competing upload the
      sim's worst second of lag is half the real one (real TCP's
      retransmission timeouts aren't modelled).
    - One peer whose link blocks keeps its data queued, so the meter reads
