@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Measures of the upload meter and of lag over a stream's length, and the
-//! run's one-line JSON row (`STRIMS_SIM_ROWS=1`).
+//! run's one-line JSON row (`STRIMS_SIM_ROWS=1`, and a sim farm job's).
 //!
 //! - **buckets** ([`Report::buckets`]): a swarm's stream in [`BUCKET`]s of
 //!   stream time from its start. The first is the startup; the steady
@@ -384,15 +384,18 @@ impl Report {
     }
 
     /// The run's measures as one JSON object, for scripts: the test, seed
-    /// and knobs, then per scenario swarm 0 its delivery, lag (overall,
-    /// startup bucket, steady state, per bucket) and the meter's measures
-    /// (see the module docs).
-    pub fn row(&self, test: &str) -> String {
+    /// and knobs, whether the test's check passed (`passed`, 0 or 1, and
+    /// its `failure`, empty when it passed), then per scenario swarm 0 its
+    /// delivery, lag (overall, startup bucket, steady state, per bucket)
+    /// and the meter's measures (see the module docs).
+    pub fn row(&self, test: &str, failure: Option<&str>) -> String {
         let mut j = JsonRow::default();
         j.str("test", test)
             .str("scenario", &self.scenario.name)
             .int("seed", self.seed)
             .str("trace", self.trace_hash.get(..16).unwrap_or_default())
+            .int("passed", u64::from(failure.is_none()))
+            .str("failure", failure.unwrap_or_default())
             .int(
                 "send_buffer_ms",
                 self.scenario

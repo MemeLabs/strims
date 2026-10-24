@@ -24,8 +24,14 @@
 //!   take one ([`stream_minutes`]).
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
+//! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
+//!   (`hack/sim-farm`): the one seed `STRIMS_SIM_SEED` names, once, and its
+//!   row. The farm checks that runs reproduce, so the seed isn't replayed
+//!   here. A failed check goes into the row (`passed`, `failure`) and to
+//!   stderr, and doesn't fail the test: a trial counts it.
 //!
-//! The first seed runs a second time and must give the same trace hash.
+//! Outside a farm job, the first seed runs a second time and must give the
+//! same trace hash.
 //!
 //! A sweep starts every run at once, the second run of the first seed
 //! included, each on a thread of its own. Runs on separate threads are
@@ -186,6 +192,11 @@ fn sweep_seeds(
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").is_some_and(|s| s.trim() == "1");
     let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
+    let job = env("STRIMS_SIM_JOB").is_some_and(|s| s.trim() == "1");
+    assert!(
+        !job || seeds.len() == 1,
+        "STRIMS_SIM_JOB runs one seed: set STRIMS_SIM_SEED"
+    );
     let window = env("STRIMS_SIM_TCP").is_some_and(|s| s.trim() == "1");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
@@ -232,23 +243,38 @@ fn sweep_seeds(
             .collect();
         let again = seeds
             .first()
+            .filter(|_| !job)
             .map(|&seed| start(seed, format!("{test} replay"), true));
         let outcomes: Vec<Outcome> = runs.into_iter().map(|r| r.join(first)).collect();
         (outcomes, again.map(|r| r.join(replay)))
     });
 
     let mut reports = Vec::new();
+    let mut verdicts = Vec::new();
     for (&seed, outcome) in seeds.iter().zip(outcomes) {
         let r = report_of(test, seed, outcome);
         eprintln!("{}", r.summary());
-        if rows {
-            println!("ROW {}", r.row(test));
+        let verdict = check(&r);
+        if rows || job {
+            println!(
+                "ROW {}",
+                r.row(test, verdict.as_ref().err().map(String::as_str))
+            );
         }
         reports.push(r);
+        verdicts.push(verdict);
     }
-    for r in &reports {
-        if let Err(e) = check(r) {
-            fail(test, r.seed, &e, &r.trace);
+    for (r, verdict) in reports.iter().zip(verdicts) {
+        if let Err(e) = verdict {
+            if job {
+                eprintln!(
+                    "{test} failed with seed {}: {e}\n{}",
+                    r.seed,
+                    self::replay(test, r.seed)
+                );
+            } else {
+                fail(test, r.seed, &e, &r.trace);
+            }
         }
     }
     if let (Some(first), Some(again)) = (reports.first(), again) {
