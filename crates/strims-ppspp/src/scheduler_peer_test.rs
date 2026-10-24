@@ -765,7 +765,7 @@ fn gc_keeps_request_times_before_the_read_offset() {
     let before = f.sched.channels[&p].request_times.size();
     assert!(before > 0);
     assert_eq!(f.swarm.store().next(), Bin::NONE);
-    f.sched.gc(&f.swarm);
+    f.sched.gc(&f.swarm, now());
     assert_eq!(f.sched.channels[&p].request_times.size(), before);
 }
 
@@ -819,6 +819,54 @@ fn unanswered_requests_filled_elsewhere_leave_the_flight() {
         let c = &f.sched.channels[&p];
         assert_eq!(c.controller.in_flight(), 0, "{kind:?}");
         assert!(c.cancel_bins.is_empty());
+        assert!(c.backoff_bins.is_empty());
+    }
+}
+
+#[test]
+fn requests_pruned_behind_the_store_leave_the_flight() {
+    // A request filled elsewhere whose time GC prunes (the store moved past
+    // it) before its deadline: the deadline can't settle it, so the prune
+    // must. Stranded flight accumulates until it fills the window, and a
+    // channel whose flight never drains stops requesting for good.
+    for kind in CONTROLLERS {
+        let mut f = fixture(with_controller(pull(), kind));
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        let other = f.peers[1];
+        f.sched.add_channel(other, &[], now(), &mut q);
+        f.sched.handle_handshake(other, 1 << 16);
+        f.sched.s.first_chunk_set = true;
+        f.swarm.set_offset(Bin(0));
+        f.sched.handle_have(p, Bin::new(1, 0), now());
+        let cfg = f.swarm.reader_config();
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+        assert_eq!(
+            msgs.iter()
+                .filter(|m| matches!(m, Message::Request(_)))
+                .count(),
+            2
+        );
+        assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
+
+        // Both chunks come from the other peer and fill the store past them.
+        let chunk = vec![0u8; f.swarm.options().chunk_size];
+        for b in [Bin(0), Bin(2)] {
+            f.swarm.publish(b, &chunk).unwrap();
+            f.sched.consume(b, now(), &f.swarm, &mut q);
+            f.sched
+                .handle_data(other, b, now(), true, true, now(), Bin(0), &mut q);
+        }
+        assert_eq!(f.swarm.store().next(), Bin(4));
+        f.sched.gc(&f.swarm, now());
+        assert_eq!(f.sched.channels[&p].controller.in_flight(), 0, "{kind:?}");
+
+        let later = now() + Duration::from_secs(2);
+        let mut swarm = f.swarm;
+        f.sched.run(later, &mut swarm, &mut q);
+        let c = &f.sched.channels[&p];
+        assert_eq!(c.controller.in_flight(), 0, "{kind:?}");
         assert!(c.backoff_bins.is_empty());
     }
 }

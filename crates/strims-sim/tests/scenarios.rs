@@ -1673,11 +1673,19 @@ const LONG_MINUTES: u64 = 10;
 const LONG_SEEDS: u64 = 2;
 
 /// The long WAN cases measure how lag and the upload meter evolve over a
-/// stream's length (the summary's per-bucket line, `STRIMS_SIM_ROWS`);
-/// their check holds only what every run must: sound frames and no
-/// invariant violated.
+/// stream's length (the summary's per-bucket line, `STRIMS_SIM_ROWS`).
+/// Everyone gets the stream from 10 s on, up to the last 20 s, whose
+/// frames may still be in flight when the run ends: a channel that stops
+/// requesting for good shows up here.
 fn check_wan_long(r: &Report) -> Result<(), String> {
-    sound(r)
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(
+        r,
+        &all_viewers(r),
+        secs(10),
+        spec.stop.saturating_sub(secs(20)),
+    )
 }
 
 #[test]

@@ -19,6 +19,8 @@
 //! counts, so a node straddling the threshold can look full afterwards.
 //! Its owners only prune bins they never set again, so the stale counts
 //! only make lookups of pruned bins fail, as they should.
+//! [`TimeSet::take_before`] drops exactly the bins before its threshold,
+//! keeps the counts, and says how many chunks had a time.
 
 use strims_base::time::Time;
 use strims_binmap::Bin;
@@ -141,6 +143,14 @@ impl Node {
         n
     }
 
+    /// Base chunks with a time under this node.
+    fn timed(&self) -> u64 {
+        if self.time != Time::EPOCH {
+            return self.bin.base_length();
+        }
+        self.left.as_ref().map_or(0, |n| n.timed()) + self.right.as_ref().map_or(0, |n| n.timed())
+    }
+
     fn prune(&mut self, b: Bin) {
         if self.bin < b {
             self.left = None;
@@ -201,6 +211,33 @@ impl TimeSet {
             return None;
         }
         Some((n.bin, n.time))
+    }
+
+    /// Drops the times of every bin wholly before base bin `bin` and
+    /// returns how many base chunks had one. A node whose own time covers
+    /// chunks on both sides stays. The counts stay exact.
+    pub(crate) fn take_before(&mut self, bin: Bin) -> u64 {
+        fn take(slot: &mut Option<Box<Node>>, b: Bin) -> u64 {
+            let Some(n) = slot else {
+                return 0;
+            };
+            if n.bin.base_right() < b {
+                let t = n.timed();
+                *slot = None;
+                return t;
+            }
+            if n.bin.base_left() >= b || n.time != Time::EPOCH {
+                return 0;
+            }
+            let t = take(&mut n.left, b) + take(&mut n.right, b);
+            n.count =
+                n.left.as_ref().map_or(0, |c| c.count) + n.right.as_ref().map_or(0, |c| c.count);
+            if n.count == 0 && n.left.is_none() && n.right.is_none() {
+                *slot = None;
+            }
+            t
+        }
+        take(&mut self.root, bin)
     }
 
     /// Drops the times of (roughly) the bins before `bin`.
@@ -294,6 +331,27 @@ mod tests {
         assert_get(&s, 2, 0, false);
         assert_get(&s, 10, 0, false);
         assert_get(&s, 25, 300, true);
+    }
+
+    #[test]
+    fn take_before_counts_exactly_what_it_drops() {
+        let mut s = TimeSet::default();
+        for b in [0, 2, 6, 8, 12] {
+            s.set(Bin(b), ts(b as i64 + 1));
+        }
+        // Chunks 0, 1 and 3 lie before chunk 4 (bin 8).
+        assert_eq!(s.take_before(Bin(8)), 3);
+        for b in [0, 2, 6] {
+            assert_eq!(s.get(Bin(b)), None);
+        }
+        assert_eq!(s.get(Bin(8)), Some((Bin(8), ts(9))));
+        assert_eq!(s.get(Bin(12)), Some((Bin(12), ts(13))));
+        assert_eq!(s.take_before(Bin(8)), 0);
+        // The counts stay exact: an unset and a set after the take behave.
+        s.unset(Bin(8));
+        assert_eq!(s.get(Bin(8)), None);
+        assert_eq!(s.take_before(Bin(14)), 1);
+        assert_eq!(s.size(), 0);
     }
 
     #[test]

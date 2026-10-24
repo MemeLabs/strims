@@ -1134,7 +1134,7 @@ impl PeerSwarmScheduler {
     pub(crate) fn run(&mut self, now: Time, swarm: &mut Swarm, q: &mut impl PeerTaskQueue) {
         if now > self.s.next_gc_time {
             self.s.next_gc_time = now + SCHEDULER_GC_INTERVAL;
-            self.gc(swarm);
+            self.gc(swarm, now);
         }
 
         let mut timed_out = false;
@@ -1174,7 +1174,7 @@ impl PeerSwarmScheduler {
 
     /// Prunes bin times, the request map, the hybrid's maps and request
     /// times behind the window.
-    fn gc(&mut self, swarm: &Swarm) {
+    fn gc(&mut self, swarm: &Swarm, now: Time) {
         if self.s.live_window < self.s.have_bin_max {
             self.s
                 .bin_times
@@ -1190,13 +1190,23 @@ impl PeerSwarmScheduler {
         // Request times go at the read position or the window start,
         // whichever is later: none before the read position is set (answers
         // still need them to count), and a relay nobody reads from still
-        // prunes at its window.
+        // prunes at its window. A request time left before `next` is a
+        // request the peer never answered for a chunk the store got
+        // elsewhere: it leaves the flight here, since its deadline finds the
+        // chunk and no request time, and settles nothing. Missing chunks
+        // behind the window time out at their deadlines.
         let next = store.next();
         if next.is_none() {
             return;
         }
         let threshold = next.max(store.window_start());
+        let size = self.s.chunk_size as i64;
         for c in self.channels.values_mut() {
+            let settled = c.request_times.take_before(next);
+            if settled > 0 {
+                c.controller
+                    .on_settled(now, (settled as i64).saturating_mul(size));
+            }
             c.request_times.prune(threshold);
         }
     }
