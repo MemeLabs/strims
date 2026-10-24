@@ -209,12 +209,21 @@ in each.
      the ppspp sim's A/B scenarios) and 16 at 8-12 Mbit/s, and across both
      they tie; media swarms run 16 meanwhile. An ingest could take the
      bitrate from the publisher's metadata, a capture from its encoder.
-   - The upload meter counts the node as busy while any peer has data
-     queued. Below the vnic rate limit queues empty within a pump, so it
-     reads many times the uplink, and one peer's blocked link makes it
-     read low; swarms share the meter but admit independently. The
-     adaptive seed sizes its first wave from it. strims-node could report
-     link capacity.
+   - Without a known capacity (a node that sets no upload limit) the
+     upload meter reads many times the uplink: socket send buffers and the
+     access network's queue hide the time data waits, so busy stays low
+     until they fill, and an adaptive seed's first wave and budget
+     overshoot. In strims-sim's uncapped WAN cases knowing the uplink
+     (`STRIMS_SIM_KNOWN_UPLINK`) cuts p99 by about a third; capping the
+     reading at twice the rate while the link isn't saturated, and sizing
+     no first wave without a known capacity, both made it worse.
+     Candidates: queueing delay from the channels' round trips over their
+     minimum, across peers; measuring the uplink once at start.
+   - One peer whose link blocks keeps its data queued, so the meter reads
+     the node busy: its parent sheds subscribers and an adaptive seed's
+     budget falls to that link's rate. Count busy only while every peer
+     that had data queued still has; judging it needs pushback from one
+     path in strims-sim's send buffers.
 2. **A residential seed at a real bitrate.** Behind a cable seed at
    6-8 Mbit/s honest viewers lag several times what they do behind fiber,
    and behind well-provisioned seeds the adaptive seed trails the
@@ -250,7 +259,9 @@ in each.
      larger chunks that higher bitrates need to keep protocol overhead
      reasonable. The window and the budget need a finer step than a
      copy, which the holder rules (a holder takes every stream) would
-     have to allow.
+     have to allow. Once doubled, the window keeps two copies even where
+     the uplink pays for one (strims-sim's cross traffic, whose seeds
+     commit about twice their cap).
    - **Budget hysteresis in copies.** The budget's hysteresis is in
      slots, so at a copy boundary a holder joins and leaves with each
      swing.

@@ -1182,6 +1182,75 @@ fn pull_load_does_not_shed_subscribers() {
     assert_eq!((st.children, st.sheds_sent), (2, 2));
 }
 
+#[test]
+fn other_swarms_pushes_count_against_admission() {
+    let mut f = fixture(seed_hybrid(4));
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let r = add_ready(&mut f, &mut q, 1);
+    // A measured uplink with room ...
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        busy: 0.1,
+        ..Default::default()
+    });
+    f.sched
+        .handle_stream_request(p, 0, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    assert_eq!(f.sched.push_stats().children, 1);
+    // ... that the node's other swarms have committed.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        busy: 0.1,
+        others: 900_000.0,
+        ..Default::default()
+    });
+    f.sched
+        .handle_stream_request(r, 1, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    assert_eq!(f.sched.push_stats().children, 1);
+}
+
+#[test]
+fn a_swarm_sheds_its_share_of_the_nodes_excess() {
+    // Four subscribers at about 410 KB/s each on a saturated 2 MB/s
+    // uplink, whose interior target is 1.4 MB/s.
+    let shed = |others: f64| {
+        let mut f = fixture(SwarmOptions {
+            scheduling_method: SchedulingMethod::SEED,
+            ..hybrid(1)
+        });
+        let mut q = MockQueue::default();
+        ready_channel(&mut f, &mut q);
+        for i in 1..4 {
+            add_ready(&mut f, &mut q, i);
+        }
+        for i in 0..4 {
+            f.sched
+                .handle_stream_request(f.peers[i], 0, Bin(0), Bin(0), now(), &mut q)
+                .unwrap();
+        }
+        let mut t = now();
+        for i in 0..11 {
+            t = now() + Duration::from_millis(100 + 200 * i);
+            f.sched.s.push_consumed(Bin(0), 64, t);
+        }
+        f.sched.set_upload(push::UploadInfo {
+            rate: 1_900_000,
+            busy: 0.95,
+            others,
+            ..Default::default()
+        });
+        f.sched.run_push(t, &mut q);
+        f.sched.push_stats().sheds_sent
+    };
+    // Alone, about 240 KB/s over: one subscriber.
+    assert_eq!(shed(0.0), 1);
+    // With as much again from the node's other swarms, about 1.9 MB/s
+    // over, half of it this swarm's: three.
+    assert_eq!(shed(1_638_400.0), 3);
+}
+
 fn seed_hybrid(streams: usize) -> SwarmOptions {
     SwarmOptions {
         scheduling_method: SchedulingMethod::SEED,
@@ -1634,6 +1703,25 @@ fn an_adaptive_seeds_first_wave_takes_what_its_uplink_pays_for() {
         ask(&mut f, &mut q, p, 0, t);
     }
     assert_eq!(holders(&f), peers[..2].to_vec());
+}
+
+#[test]
+fn an_adaptive_seeds_first_wave_leaves_room_for_other_swarms() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    // The uplink of the test above, half of whose 70 % the node's other
+    // swarms have committed: one copy.
+    publish(&mut f, now(), now() + Duration::SECOND);
+    let t = now() + Duration::SECOND;
+    f.sched.set_upload(push::UploadInfo {
+        rate: 2_000_000,
+        busy: 1.0,
+        others: 700_000.0,
+        ..Default::default()
+    });
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, t);
+    }
+    assert_eq!(holders(&f), peers[..1].to_vec());
 }
 
 #[test]
