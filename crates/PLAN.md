@@ -213,10 +213,14 @@ in each.
      upload meter reads many times the uplink: socket send buffers and the
      access network's queue hide the time data waits, so busy stays low
      until they fill, and an adaptive seed's first wave and budget
-     overshoot. In strims-sim's uncapped WAN cases knowing the uplink
-     (`STRIMS_SIM_KNOWN_UPLINK`) cuts p99 by about a third; capping the
-     reading at twice the rate while the link isn't saturated, and sizing
-     no first wave without a known capacity, both made it worse.
+     overshoot. The reading never settles, and lag worsens with the
+     stream's length: in a 10-minute run of strims-sim's uncapped
+     residential seed p99 rises from about 1.5 s to 5-12 s after four
+     minutes, where knowing the uplink (`STRIMS_SIM_KNOWN_UPLINK`) holds
+     it near 0.37 s throughout. Find why it degrades (a capture of the
+     long run). Capping the reading at twice the rate while the link
+     isn't saturated, and sizing no first wave without a known capacity,
+     both made it worse in 60 s runs.
      Candidates: queueing delay from the channels' round trips over their
      minimum, across peers; measuring the uplink once at start.
    - One peer whose link blocks keeps its data queued, so the meter reads
