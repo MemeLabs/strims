@@ -10,15 +10,13 @@
 //! a `TCP_NOTSENT_LOWAT` mark (the node's
 //! [`TcpSocketConfig`](strims_node::TcpSocketConfig)) holds its writes while
 //! its unsent bytes reach the mark, as a kernel socket does. A byte is
-//! unsent from its write until the WAN scheduler admits its segment to the
-//! sender's uplink queue, which it does once that queue holds less than
-//! [`SendBuffer::uplink_queue`] of transmission time (see the WAN
-//! scheduler). The segment's timing on the WAN doesn't change; only
-//! when the writer may write again does.
-//!
-//! The model leaves out pushback from one path: a slow receiver or a
-//! congestion window over a long round trip holds back one connection
-//! while the uplink idles. Admission depends on the sender's uplink only.
+//! unsent from its write until the WAN scheduler admits its segment: to
+//! the sender's uplink queue once that queue holds less than
+//! [`SendBuffer::uplink_queue`] of transmission time, where the segment's
+//! timing on the WAN doesn't change (only when the writer may write again
+//! does); or, with [`SendBuffer::window`], when the connection's
+//! congestion window lets it out, so a slow receiver or a long round trip
+//! holds back that connection alone (see the WAN scheduler).
 
 // `Net` sockets are `Send`, so the state they share with the scheduler
 // sits behind a lock, which only this module names. Everything runs on
