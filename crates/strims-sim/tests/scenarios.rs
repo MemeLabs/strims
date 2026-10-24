@@ -16,6 +16,7 @@
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
+use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
@@ -2132,6 +2133,9 @@ fn wan_slow_viewer_adaptive_uncapped() {
 // 10f. Upload that comes and goes: other traffic takes half of some
 // hosts' uplinks for a while, so a node's upload estimate must follow.
 
+/// The copies of its streams a seed's uplink keeps in [`varying`].
+const SEED_COPIES_KEPT: f64 = 2.0;
+
 /// A uniform draw from `[lo, hi)` seconds, to the millisecond.
 fn uniform_secs(rng: &mut DetRng, lo: u64, hi: u64) -> Duration {
     Duration::from_millis(lo * 1000 + (unit(rng) * ((hi - lo) * 1000) as f64) as u64)
@@ -2140,7 +2144,9 @@ fn uniform_secs(rng: &mut DetRng, lo: u64, hi: u64) -> Duration {
 /// `m` with the seed and a random third of the viewers sharing their
 /// uplinks, as with another app's upload that comes and goes: from
 /// U[10, 50] s into the run, each has half its uplink for U[30, 120] s,
-/// then all of it for U[20, 120] s, and again.
+/// then all of it for U[20, 120] s, and again. The seed keeps at least
+/// [`SEED_COPIES_KEPT`] copies of its streams, so a drop tests how it
+/// spends its upload, not whether one copy fits.
 fn varying(mut m: Streaming) -> Scenario {
     let mut hosts = vec![m.seed];
     hosts.extend(
@@ -2149,11 +2155,14 @@ fn varying(mut m: Streaming) -> Scenario {
             .copied()
             .filter(|_| unit(&mut m.rng) < 1.0 / 3.0),
     );
+    let seed_rate: f64 = m.s.swarms.iter().map(SwarmSpec::rate).sum();
+    let seed_floor = (SEED_COPIES_KEPT * seed_rate * PUSH_OVERHEAD) as u64;
     for h in hosts {
         let up = m.s.hosts[h].site.map_or(0, |s| s.profile.up);
+        let floor = if h == m.seed { seed_floor.min(up) } else { 0 };
         let mut t = uniform_secs(&mut m.rng, 10, 50);
         while t < m.s.duration {
-            m.s.hosts[h].up_steps.push((t, up / 2));
+            m.s.hosts[h].up_steps.push((t, (up / 2).max(floor)));
             t += uniform_secs(&mut m.rng, 30, 120);
             m.s.hosts[h].up_steps.push((t, up));
             t += uniform_secs(&mut m.rng, 20, 120);
