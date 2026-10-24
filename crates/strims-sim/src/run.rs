@@ -82,6 +82,18 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
                 w.log_at(0, "wan", format!("{} {site}", hs.name));
             }
         }
+        for hs in spec.hosts.iter().filter(|hs| !hs.up_steps.is_empty()) {
+            let steps: Vec<String> = hs
+                .up_steps
+                .iter()
+                .map(|(at, rate)| format!("{rate} B/s from {} ms", at.as_millis()))
+                .collect();
+            w.log_at(
+                0,
+                "capacity",
+                format!("{} up {}", hs.name, steps.join(", ")),
+            );
+        }
     }
 
     let mut faults = spec.faults.clone();

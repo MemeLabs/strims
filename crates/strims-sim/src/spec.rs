@@ -49,6 +49,11 @@ pub struct HostSpec {
     /// Where the host sits on the WAN ([`Scenario::wan`]); every host has
     /// one in WAN mode.
     pub site: Option<Site>,
+    /// WAN mode: the upload available on the site's uplink from each time
+    /// on, in bytes per second, as when other traffic takes part of it for
+    /// a while (`strims_wan::Network::set_up_steps`). Empty keeps the
+    /// site's rate throughout.
+    pub up_steps: Vec<(Duration, u64)>,
 }
 
 /// A link the `from` host dials (and redials while it is down).
@@ -425,6 +430,7 @@ impl Scenario {
             listen: true,
             webrtc: false,
             site: None,
+            up_steps: Vec::new(),
         });
         self.hosts.len() - 1
     }

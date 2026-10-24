@@ -490,8 +490,29 @@ impl Report {
         .filter(|&c| c > 0)
     }
 
+    /// The most host `h` can upload at `t` (time since the start), in bytes
+    /// per second: the smaller of its rate limit and what its site's uplink
+    /// has available then ([`HostSpec::up_steps`](crate::spec::HostSpec)).
+    /// `None` with neither.
+    pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
+        let spec = self.scenario.hosts.get(h)?;
+        let site = spec.site.map(|s| {
+            spec.up_steps
+                .iter()
+                .filter(|&&(at, _)| at <= t)
+                .max_by_key(|&&(at, _)| at)
+                .map_or(s.profile.up, |&(_, rate)| rate)
+        });
+        match (spec.uplink, site) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+        .filter(|&c| c > 0)
+    }
+
     /// The upload meter's readings at `h` while a swarm was live, as
-    /// fractions of the host's [`upload_cap`](Report::upload_cap):
+    /// fractions of what the host could upload at each sample
+    /// ([`upload_cap_at`](Report::upload_cap_at)):
     /// (capacity ÷ cap, the push rate its subscriptions commit ÷ cap) per
     /// sample. Empty without a cap.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
@@ -506,15 +527,12 @@ impl Report {
         let Some(host) = self.hosts.get(h) else {
             return Vec::new();
         };
-        let Some(cap) = self.upload_cap(h) else {
-            return Vec::new();
-        };
-        let cap = cap as f64;
         host.runner
             .meter
             .iter()
             .filter(|m| self.live(m.t) && m.capacity > 0)
-            .map(|m| {
+            .filter_map(|m| {
+                let cap = self.upload_cap_at(h, m.t)? as f64;
                 let committed: f64 = m
                     .children
                     .iter()
@@ -527,7 +545,7 @@ impl Report {
                         n as f64 * self.swarm_rate(s) / streams as f64 * PUSH_OVERHEAD
                     })
                     .sum();
-                (m.t, m.capacity as f64 / cap, committed / cap)
+                Some((m.t, m.capacity as f64 / cap, committed / cap))
             })
             .collect()
     }
@@ -672,6 +690,9 @@ impl Report {
             }
         }
         if let Some(line) = self.bucket_line() {
+            s.push_str(&line);
+        }
+        if let Some(line) = self.tracking_line() {
             s.push_str(&line);
         }
         let p = self.peaks();

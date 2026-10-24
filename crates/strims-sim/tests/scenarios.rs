@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use strims_base::rng::det_rng;
+use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
@@ -23,7 +23,7 @@ use strims_sim::{
     Transport, VpnProbes, knob, stream_minutes, sweep, sweep_n,
 };
 use strims_vpn::Routing;
-use strims_wan::sample::pick;
+use strims_wan::sample::{pick, unit};
 use strims_wan::{Access, City, GLOBAL_AUDIENCE, RESIDENTIAL, Region, Site};
 
 #[global_allocator]
@@ -45,11 +45,12 @@ fn ms(d: Duration) -> u64 {
 
 /// A seed and `n` viewers in a seeded random mesh (each host dials up to 3
 /// earlier ones, 40 % over WebSocket), streaming `RATE` from `start` to
-/// `stop`.
+/// `stop`. Draws that vary the scenario further continue from `rng`.
 struct Streaming {
     s: Scenario,
     seed: HostIx,
     viewers: Vec<HostIx>,
+    rng: DetRng,
 }
 
 fn streaming(
@@ -76,6 +77,7 @@ fn streaming(
         s,
         seed: seed_host,
         viewers: vs,
+        rng,
     }
 }
 
@@ -1381,6 +1383,7 @@ fn wan(
         s,
         seed: seed_host,
         viewers: vs,
+        rng,
     }
 }
 
@@ -1550,6 +1553,11 @@ fn wan_residential_seed(seed: u64, push: PushMode) -> Scenario {
 
 /// [`wan_residential_seed`] streaming over `window` (seconds).
 fn wan_residential_seed_for(seed: u64, push: PushMode, window: (u64, u64)) -> Scenario {
+    residential_seed_mesh(seed, push, window).s
+}
+
+/// [`wan_residential_seed_for`] with its rng.
+fn residential_seed_mesh(seed: u64, push: PushMode, window: (u64, u64)) -> Streaming {
     let sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
     wan(
         &format!("wan_residential_seed {push:?}"),
@@ -1559,12 +1567,16 @@ fn wan_residential_seed_for(seed: u64, push: PushMode, window: (u64, u64)) -> Sc
         push,
         window,
     )
-    .s
 }
 
 /// [`wan_residential_seed`]'s viewers plus a 17th in a New York
 /// datacenter: a super-peer whose uplink could carry the whole swarm.
 fn wan_super_peer(seed: u64, push: PushMode) -> Scenario {
+    super_peer_mesh(seed, push).s
+}
+
+/// [`wan_super_peer`] with its rng.
+fn super_peer_mesh(seed: u64, push: PushMode) -> Streaming {
     let mut sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
     sites.push(Site::new(City::NewYork, Access::Datacenter));
     wan(
@@ -1575,7 +1587,6 @@ fn wan_super_peer(seed: u64, push: PushMode) -> Scenario {
         push,
         (5, 65),
     )
-    .s
 }
 
 /// Everyone gets the stream from 10 s on while the seed sends at most 60 %
@@ -1742,6 +1753,9 @@ struct Calibration {
     /// `link <a> <b>` lines, node 0 the seed and node `i` viewer `i - 1`;
     /// a star without.
     topology: Option<String>,
+    /// The seed's uplink from given seconds of stream on, in Mbit/s
+    /// (`<s>:<mbit> ...`).
+    seed_up_steps: Vec<(f64, f64)>,
 }
 
 fn calibration_settings() -> Calibration {
@@ -1756,6 +1770,14 @@ fn calibration_settings() -> Calibration {
         slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
         topology: knob::<String>("STRIMS_SIM_CAL_TOPOLOGY")
             .map(|path| std::fs::read_to_string(&path).unwrap()),
+        seed_up_steps: knob::<String>("STRIMS_SIM_CAL_SEED_UP_STEPS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(|step| {
+                let (at, mbit) = step.split_once(':').unwrap();
+                (at.parse().unwrap(), mbit.parse().unwrap())
+            })
+            .collect(),
     }
 }
 
@@ -1781,6 +1803,11 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     for h in &mut s.hosts {
         h.uplink = None;
     }
+    s.hosts[seed_host].up_steps = c
+        .seed_up_steps
+        .iter()
+        .map(|&(at, mbit)| (Duration::from_secs_f64(5.0 + at), (mbit * 125_000.0) as u64))
+        .collect();
     s.wan = Some(strims_wan::Options {
         jitter: false,
         loss: false,
@@ -1846,8 +1873,9 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     striped(s, STRIPES, ADAPTIVE)
 }
 
-/// The seed's meter and true uplink queue per sample, and the viewers' p99
-/// lag per second of stream, as one JSON object (`SERIES {json}`).
+/// The seed's meter, the upload it had and its true uplink queue per
+/// sample, and the viewers' p99 lag per second of stream, as one JSON
+/// object (`SERIES {json}`).
 fn calibration_series(r: &Report) -> String {
     let spec = &r.scenario.swarms[0];
     let seed = spec.seed;
@@ -1884,11 +1912,12 @@ fn calibration_series(r: &Report) -> String {
             format!("{:.1}", q.iter().sum::<f64>() / q.len() as f64)
         };
         rows.push(format!(
-            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"qd\":{},\"q\":{q}}}",
+            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"avail\":{},\"qd\":{},\"q\":{q}}}",
             (m.t - spec.start).as_secs_f64(),
             m.rate,
             m.busy_permille,
             m.capacity,
+            r.upload_cap_at(seed, m.t).unwrap_or(0),
             m.queue_delay_ms
                 .map_or("null".to_owned(), |d| d.to_string()),
         ));
@@ -2097,6 +2126,111 @@ fn wan_slow_viewer_adaptive_uncapped() {
         "wan_slow_viewer_adaptive_uncapped",
         |s| uncapped(striped(wan_slow_viewer(s), STRIPES, ADAPTIVE)),
         check_wan_slow_viewer,
+    );
+}
+
+// 10f. Upload that comes and goes: other traffic takes half of some
+// hosts' uplinks for a while, so a node's upload estimate must follow.
+
+/// A uniform draw from `[lo, hi)` seconds, to the millisecond.
+fn uniform_secs(rng: &mut DetRng, lo: u64, hi: u64) -> Duration {
+    Duration::from_millis(lo * 1000 + (unit(rng) * ((hi - lo) * 1000) as f64) as u64)
+}
+
+/// `m` with the seed and a random third of the viewers sharing their
+/// uplinks, as with another app's upload that comes and goes: from
+/// U[10, 50] s into the run, each has half its uplink for U[30, 120] s,
+/// then all of it for U[20, 120] s, and again.
+fn varying(mut m: Streaming) -> Scenario {
+    let mut hosts = vec![m.seed];
+    hosts.extend(
+        m.viewers
+            .iter()
+            .copied()
+            .filter(|_| unit(&mut m.rng) < 1.0 / 3.0),
+    );
+    for h in hosts {
+        let up = m.s.hosts[h].site.map_or(0, |s| s.profile.up);
+        let mut t = uniform_secs(&mut m.rng, 10, 50);
+        while t < m.s.duration {
+            m.s.hosts[h].up_steps.push((t, up / 2));
+            t += uniform_secs(&mut m.rng, 30, 120);
+            m.s.hosts[h].up_steps.push((t, up));
+            t += uniform_secs(&mut m.rng, 20, 120);
+        }
+    }
+    m.s.name = format!("{} varying", m.s.name);
+    m.s
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped_varying() {
+    sweep(
+        "wan_residential_seed_adaptive_uncapped_varying",
+        |s| {
+            uncapped(striped(
+                varying(residential_seed_mesh(s, PushMode::Hybrid, (5, 65))),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 18 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_super_peer_adaptive_uncapped_varying() {
+    sweep(
+        "wan_super_peer_adaptive_uncapped_varying",
+        |s| {
+            uncapped(striped(
+                varying(super_peer_mesh(s, PushMode::Hybrid)),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s for minutes; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped_long_varying() {
+    let stop = 5 + 60 * stream_minutes(LONG_MINUTES);
+    sweep_n(
+        "wan_residential_seed_adaptive_uncapped_long_varying",
+        LONG_SEEDS,
+        |s| {
+            uncapped(striped(
+                varying(residential_seed_mesh(s, PushMode::Hybrid, (5, stop))),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_long,
+    );
+}
+
+/// [`wan_residential_seed`] streaming for 4 minutes, the seed's uplink
+/// halved from 60 s to 180 s.
+fn wan_residential_seed_step(seed: u64) -> Scenario {
+    let mut m = residential_seed_mesh(seed, PushMode::Hybrid, (5, 245));
+    let seed_host = &mut m.s.hosts[m.seed];
+    let up = seed_host.site.map_or(0, |s| s.profile.up);
+    seed_host.up_steps = vec![(secs(60), up / 2), (secs(180), up)];
+    m.s.name = format!("{} step", m.s.name);
+    m.s
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s for minutes; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped_step() {
+    sweep(
+        "wan_residential_seed_adaptive_uncapped_step",
+        |s| uncapped(striped(wan_residential_seed_step(s), STRIPES, ADAPTIVE)),
+        check_wan_long,
     );
 }
 

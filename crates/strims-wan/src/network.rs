@@ -25,6 +25,11 @@
 //!   direction's rng. A lost datagram is dropped. A stream message that
 //!   lost a packet arrives late by [`retransmission`], and the caller keeps
 //!   later stream data behind it.
+//! - **Rate steps.** An uplink runs at its site's rate unless
+//!   [`Network::set_up_steps`] gives it rates from given times on. A
+//!   message that is still serializing when a step comes pays the new rate
+//!   for the rest of its bytes, so a step applies from its time, whatever
+//!   the queue holds then.
 
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
@@ -108,6 +113,30 @@ pub fn retransmission(packets: u32, rtt: Duration) -> Duration {
     }
 }
 
+/// When `wire` bytes that start through an uplink at `start` are through:
+/// at `rate`, then from each of `steps` (in time order) on at its rate.
+fn through(rate: u64, steps: &[(Time, u64)], start: Time, wire: usize) -> Time {
+    let next = steps.partition_point(|&(t, _)| t <= start);
+    let mut rate = next
+        .checked_sub(1)
+        .and_then(|i| steps.get(i))
+        .map_or(rate, |&(_, r)| r)
+        .max(1);
+    let mut at = start;
+    // Byte-nanoseconds, so a step's share of a message stays exact.
+    let mut left = i128::try_from(wire).unwrap_or(i128::MAX) * 1_000_000_000;
+    for &(t, r) in steps.iter().skip(next) {
+        let fits = i128::from(rate) * i128::from((t - at).as_nanos());
+        if left <= fits {
+            break;
+        }
+        left -= fits;
+        at = t;
+        rate = r.max(1);
+    }
+    at + Duration::from_nanos(i64::try_from(left / i128::from(rate)).unwrap_or(i64::MAX))
+}
+
 /// A piecewise-constant jitter offset.
 #[derive(Clone, Debug)]
 struct Jitter {
@@ -147,6 +176,8 @@ impl Jitter {
 #[derive(Clone, Debug)]
 struct End {
     site: Site,
+    /// The uplink's rate from each time on, in time order.
+    up_steps: Vec<(Time, u64)>,
     up_free: Time,
     down_free: Time,
     up_jitter: Jitter,
@@ -182,6 +213,7 @@ impl Network {
                 let down = rng.next_u64();
                 End {
                     site,
+                    up_steps: Vec::new(),
                     up_free: Time::NIL,
                     down_free: Time::NIL,
                     up_jitter: Jitter::new(up, site.profile.jitter),
@@ -273,6 +305,13 @@ impl Network {
         self.dir_mut(b, a).one_way = d;
     }
 
+    /// From each of `steps`' times on, `h`'s uplink runs at that step's
+    /// rate (bytes per second) instead of its site's.
+    pub fn set_up_steps(&mut self, h: usize, mut steps: Vec<(Time, u64)>) {
+        steps.sort_by_key(|&(t, _)| t);
+        self.end_mut(h).up_steps = steps;
+    }
+
     /// Sends `wire` bytes in `packets` packets from `a` to `b`, handed to
     /// `a`'s uplink at `sent`: they wait for the uplink, serialize at its
     /// rate, then cross the path ([`Network::transit`]). Calls for one
@@ -288,7 +327,7 @@ impl Network {
     ) -> Transit {
         let end = self.end_mut(a);
         let start = sent.max(end.up_free);
-        end.up_free = start + tx_time(wire, end.site.profile.up);
+        end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(wire as u64);
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
         let depart = end.up_free;
@@ -457,6 +496,34 @@ mod tests {
         assert_eq!(n.stats(1).down_bytes, 2500);
         n.reset(1, t(105));
         assert_eq!(n.receive(t(105), 1, 1250), t(115));
+    }
+
+    #[test]
+    fn uplink_steps_apply_from_their_time() {
+        let up = 125_000; // 1 Mbit/s: 1250 bytes in 10 ms
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber).with_up(up),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut n = net(&sites, QUIET);
+        n.set_up_steps(0, vec![(t(100), up), (t(15), up / 2)]);
+        let mut depart = |at| n.send(t(at), 0, 1, 1250, 1, Carrier::Stream).depart;
+        assert_eq!(depart(0), t(10));
+        // 5 ms at the full rate carry half, the half rate the rest in 10.
+        assert_eq!(depart(0), t(25));
+        assert_eq!(depart(0), t(45));
+        // Back to the full rate at 100 ms, mid-message.
+        assert_eq!(depart(90), t(105));
+        assert_eq!(depart(200), t(210));
+    }
+
+    #[test]
+    fn without_steps_an_uplink_serializes_at_its_sites_rate() {
+        for rate in [1, 999, 125_000, 2_500_000, 125_000_000] {
+            for wire in [0, 1, 53, 1500, 65_535, 1 << 30] {
+                assert_eq!(through(rate, &[], t(3), wire), t(3) + tx_time(wire, rate));
+            }
+        }
     }
 
     #[test]

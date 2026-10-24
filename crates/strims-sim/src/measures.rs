@@ -14,7 +14,17 @@
 //!   hosts' uplink queue samples, while a swarm streams, that wait longer
 //!   than [`STANDING_QUEUE`] (WAN mode).
 //! - **wrongly declined** ([`Report::declined`]): STREAM_REQUESTs declined
-//!   in samples where the node's upload rate was under half its cap.
+//!   in samples where the node's upload rate was under half of what it
+//!   could upload then.
+//! - **tracking** ([`Report::tracking`]): after each change of a seed's or
+//!   forwarder's available upload while a swarm streams
+//!   ([`HostSpec::up_steps`](crate::spec::HostSpec)), how long its meter
+//!   reads more than [`TRACK_BAND`] off the new rate: the time until
+//!   [`TRACK_SAMPLES`] samples in a row read within the band, censored at
+//!   the host's next change or the stream's end.
+//! - **lag after changes** ([`Report::lag_after_changes`]): the lag of the
+//!   frames a swarm's seed wrote in the [`AFTER_CHANGE`] after each drop, or
+//!   each rise, of its available upload.
 //! - **queueing delay accuracy** ([`Report::queue_delay_accuracy`]): the
 //!   meter's queueing delay against the standing queue on the host's
 //!   uplink, the least wait of the WAN model's queue over the last
@@ -44,6 +54,28 @@ pub const SATURATED_STANDING_MS: u32 = 5;
 /// An uplink queue that waits longer than this stands.
 pub const STANDING_QUEUE: strims_base::time::Duration =
     strims_base::time::Duration::from_millis(50);
+/// A meter reading tracks the available upload within this share of it.
+pub const TRACK_BAND: f64 = 0.2;
+/// Samples in a row within [`TRACK_BAND`] that make a meter track.
+pub const TRACK_SAMPLES: usize = 3;
+/// How long after a change of the seed's available upload its frames count
+/// toward [`Report::lag_after_changes`].
+pub const AFTER_CHANGE: Duration = Duration::from_secs(30);
+
+/// One change of a host's available upload and how its meter followed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tracking {
+    pub host: HostIx,
+    /// When the change came, since the start of the run.
+    pub at: Duration,
+    /// Whether the rate fell.
+    pub drop: bool,
+    /// How long the meter read off the new rate.
+    pub off: Duration,
+    /// The meter never tracked before the next change or the stream's end,
+    /// which [`off`](Tracking::off) runs to.
+    pub censored: bool,
+}
 
 /// The hosts of a run by their part in its swarms.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -84,16 +116,25 @@ impl Report {
     /// The lag of the frames of `swarm` written in `[from, to)` of run
     /// time, over every viewer.
     pub fn lag_between(&self, swarm: usize, from: Duration, to: Duration) -> Percentiles {
+        self.lag_within(swarm, &[(from, to)])
+    }
+
+    /// The lag of the frames of `swarm` written in any of `spans` of run
+    /// time, over every viewer.
+    pub fn lag_within(&self, swarm: usize, spans: &[(Duration, Duration)]) -> Percentiles {
         let Some(s) = self.scenario.swarms.get(swarm) else {
             return Percentiles::default();
         };
-        let range = s.frames_between(from, to);
+        let ranges: Vec<_> = spans
+            .iter()
+            .map(|&(from, to)| s.frames_between(from, to))
+            .collect();
         Percentiles::of(
             self.viewers
                 .iter()
                 .filter(|v| v.swarm == swarm)
                 .flat_map(|v| v.stats.lags.iter())
-                .filter(|(seq, _)| range.contains(seq))
+                .filter(|(seq, _)| ranges.iter().any(|r| r.contains(seq)))
                 .map(|&(_, l)| l),
         )
     }
@@ -295,11 +336,10 @@ impl Report {
     }
 
     /// STREAM_REQUESTs declined while the node's upload rate was under half
-    /// its cap, and all declined, over every host.
+    /// of what it could upload, and all declined, over every host.
     pub fn declined(&self) -> (u64, u64) {
         let (mut wrong, mut all) = (0, 0);
         for (h, host) in self.hosts.iter().enumerate() {
-            let cap = self.upload_cap(h).unwrap_or(0) as f64;
             let mut last = 0;
             for m in &host.runner.meter {
                 let d = if m.rejected >= last {
@@ -309,12 +349,100 @@ impl Report {
                 };
                 last = m.rejected;
                 all += u64::from(d);
+                let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
                 if cap > 0.0 && (m.rate as f64) < cap / 2.0 {
                     wrong += u64::from(d);
                 }
             }
         }
         (wrong, all)
+    }
+
+    /// The changes of host `h`'s available upload while a swarm streams:
+    /// when each came and whether the rate fell.
+    pub fn upload_changes(&self, h: HostIx) -> Vec<(Duration, bool)> {
+        let Some(spec) = self.scenario.hosts.get(h) else {
+            return Vec::new();
+        };
+        let mut times: Vec<Duration> = spec.up_steps.iter().map(|&(at, _)| at).collect();
+        times.sort_unstable();
+        times.dedup();
+        times
+            .into_iter()
+            .filter(|&at| self.live(at))
+            .filter_map(|at| {
+                let before = self.upload_cap_at(h, at.checked_sub(Duration::from_nanos(1))?)?;
+                let after = self.upload_cap_at(h, at)?;
+                (after != before).then_some((at, after < before))
+            })
+            .collect()
+    }
+
+    /// How the meters of the seeds and forwarders followed each change of
+    /// their available upload, in host and time order.
+    pub fn tracking(&self) -> Vec<Tracking> {
+        let roles = self.roles();
+        let end = self
+            .scenario
+            .swarms
+            .iter()
+            .map(|s| s.stop)
+            .max()
+            .unwrap_or_default();
+        let mut out = Vec::new();
+        for h in roles.seeds.iter().chain(&roles.forwarders).copied() {
+            let changes = self.upload_changes(h);
+            let Some(host) = self.hosts.get(h) else {
+                continue;
+            };
+            for (i, &(at, drop)) in changes.iter().enumerate() {
+                let until = changes.get(i + 1).map_or(end, |&(t, _)| t);
+                let within: Vec<(Duration, bool)> = host
+                    .runner
+                    .meter
+                    .iter()
+                    .filter(|m| m.t >= at && m.t < until)
+                    .map(|m| {
+                        let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
+                        let off = (m.capacity as f64 / cap - 1.0).abs();
+                        (m.t, cap > 0.0 && off <= TRACK_BAND)
+                    })
+                    .collect();
+                let tracked = within
+                    .windows(TRACK_SAMPLES)
+                    .find(|w| w.iter().all(|&(_, ok)| ok))
+                    .and_then(|w| w.first())
+                    .map(|&(t, _)| t);
+                out.push(Tracking {
+                    host: h,
+                    at,
+                    drop,
+                    off: tracked.unwrap_or(until).saturating_sub(at),
+                    censored: tracked.is_none(),
+                });
+            }
+        }
+        out
+    }
+
+    /// The lag of the frames swarm `swarm`'s seed wrote in the
+    /// [`AFTER_CHANGE`] after each drop of its available upload, and after
+    /// each rise.
+    pub fn lag_after_changes(&self, swarm: usize) -> (Percentiles, Percentiles) {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return (Percentiles::default(), Percentiles::default());
+        };
+        let spans = |drop: bool| -> Vec<(Duration, Duration)> {
+            self.upload_changes(s.seed)
+                .into_iter()
+                .filter(|&(_, d)| d == drop)
+                .map(|(at, _)| (at, at + AFTER_CHANGE))
+                .collect()
+        };
+        (
+            self.lag_within(swarm, &spans(true)),
+            self.lag_within(swarm, &spans(false)),
+        )
     }
 
     /// An adaptive seed's budget changes and copies changes per minute of
@@ -348,6 +476,40 @@ impl Report {
             changes(|x| x.budget) / minutes,
             changes(|x| x.copies) / minutes,
         )
+    }
+
+    /// With changes of available upload, how the seeds' and forwarders'
+    /// meters followed them ([`Report::tracking`]) and the lag after the
+    /// seed's changes.
+    pub(crate) fn tracking_line(&self) -> Option<String> {
+        let tracking = self.tracking();
+        if tracking.is_empty() {
+            return None;
+        }
+        let side = |drop: bool| {
+            let mut v: Vec<f64> = tracking
+                .iter()
+                .filter(|x| x.drop == drop)
+                .map(|x| x.off.as_secs_f64())
+                .collect();
+            let censored = tracking
+                .iter()
+                .filter(|x| x.drop == drop && x.censored)
+                .count();
+            let max = v.iter().copied().fold(0.0, f64::max);
+            format!(
+                "{} {:.1}/{max:.1} s ({censored} never)",
+                v.len(),
+                deciles(&mut v)[1]
+            )
+        };
+        let (drop, rise) = self.lag_after_changes(0);
+        Some(format!(
+            "\n  capacity changes: meter off median/max after drops {}, after rises {}; swarm 0 lag {}s after the seed's drops {drop}, rises {rise}",
+            side(true),
+            side(false),
+            AFTER_CHANGE.as_secs(),
+        ))
     }
 
     /// For streams longer than [`LONG_STREAM`], swarm 0's p99 lag and the
@@ -464,6 +626,30 @@ impl Report {
         }
         let (wrong, declined) = self.declined();
         j.int("declined_wrongly", wrong).int("declined", declined);
+        let tracking = self.tracking();
+        if !tracking.is_empty() {
+            for (name, drop) in [("drop", true), ("rise", false)] {
+                let mut v: Vec<f64> = tracking
+                    .iter()
+                    .filter(|x| x.drop == drop)
+                    .map(|x| x.off.as_secs_f64())
+                    .collect();
+                let n = v.len() as u64;
+                let max = v.iter().copied().fold(0.0, f64::max);
+                j.nums(
+                    &format!("track_{name}_s"),
+                    [deciles(&mut v)[1], max].into_iter(),
+                )
+                .int(&format!("track_{name}_n"), n);
+            }
+            j.int(
+                "track_censored",
+                tracking.iter().filter(|x| x.censored).count() as u64,
+            );
+            let (drop, rise) = self.lag_after_changes(swarm);
+            j.int("seed_drop_p99_ms", u64::from(drop.p99))
+                .int("seed_rise_p99_ms", u64::from(rise.p99));
+        }
         let (budget, copies) = self.seed_changes(swarm);
         j.num("seed_budget_changes_per_min", budget)
             .num("seed_copies_changes_per_min", copies);
@@ -552,5 +738,90 @@ impl JsonRow {
         }
         self.0.push('}');
         std::mem::take(&mut self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+
+    use super::*;
+    use crate::report::HostReport;
+    use crate::spec::{Scenario, SwarmSpec};
+    use crate::stats::MeterSample;
+    use strims_wan::{Access, City, Site};
+
+    /// A seed on a 1000 B/s uplink that halves from 20 s to 60 s, its
+    /// meter reading `capacity(s)` each second of a 100 s stream.
+    fn seed_reading(capacity: impl Fn(u64) -> u64) -> Report {
+        let mut s = Scenario::new("tracking");
+        let seed = s.host_at(
+            "seed",
+            Site::new(City::Chicago, Access::Cable).with_up(1000),
+        );
+        let viewer = s.host_at("v", Site::new(City::Chicago, Access::Cable));
+        s.hosts[seed].uplink = None;
+        s.hosts[seed].up_steps = vec![
+            (Duration::from_secs(20), 500),
+            (Duration::from_secs(60), 1000),
+        ];
+        s.swarm(SwarmSpec::live(
+            seed,
+            vec![viewer],
+            1024,
+            Duration::ZERO,
+            Duration::from_secs(100),
+        ));
+        let mut host = HostReport::default();
+        host.runner.meter = (0..100)
+            .map(|t| MeterSample {
+                t: Duration::from_secs(t),
+                capacity: capacity(t),
+                ..MeterSample::default()
+            })
+            .collect();
+        Report {
+            scenario: s,
+            seed: 1,
+            trace_hash: String::new(),
+            trace: Vec::new(),
+            sim_secs: 0.0,
+            wall_secs: 0.0,
+            viewers: Vec::new(),
+            hosts: vec![host, HostReport::default()],
+            written: Vec::new(),
+            vpn: None,
+            memory: None,
+            violations: Vec::new(),
+            wan: None,
+        }
+    }
+
+    #[test]
+    fn tracking_waits_for_samples_in_a_row_within_the_band() {
+        let r = seed_reading(|t| match t {
+            30..=64 => 500,
+            66 => 600,
+            _ => 1000,
+        });
+        assert_eq!(r.upload_cap_at(0, Duration::from_secs(19)), Some(1000));
+        assert_eq!(r.upload_cap_at(0, Duration::from_secs(20)), Some(500));
+        let t = r.tracking();
+        assert_eq!(t.len(), 2);
+        assert!(t[0].drop && !t[0].censored);
+        assert_eq!(t[0].off, Duration::from_secs(10));
+        // 65 reads true, 66 doesn't: tracking starts at 67.
+        assert!(!t[1].drop && !t[1].censored);
+        assert_eq!(t[1].off, Duration::from_secs(7));
+    }
+
+    #[test]
+    fn a_meter_that_never_tracks_is_censored_at_the_next_change() {
+        let r = seed_reading(|_| 1000);
+        let t = r.tracking();
+        assert!(t[0].censored);
+        assert_eq!(t[0].off, Duration::from_secs(40));
+        assert!(!t[1].censored);
+        assert_eq!(t[1].off, Duration::ZERO);
     }
 }

@@ -265,7 +265,13 @@ impl Scheduler {
                     .ok_or_else(|| format!("wan: host {} has no site", h.name))
             })
             .collect::<Result<Vec<Site>, String>>()?;
-        let net = Network::new(&sites, options, &mut det_rng(seed ^ 0x5741_4e00));
+        let mut net = Network::new(&sites, options, &mut det_rng(seed ^ 0x5741_4e00));
+        for (h, hs) in spec.hosts.iter().enumerate() {
+            if !hs.up_steps.is_empty() {
+                let steps = hs.up_steps.iter().map(|&(at, rate)| (sim_time(at), rate));
+                net.set_up_steps(h, steps.collect());
+            }
+        }
         let names: Vec<String> = spec.hosts.iter().map(|h| h.name.clone()).collect();
         let ip_host: BTreeMap<IpAddr, HostIx> = names
             .iter()
@@ -955,10 +961,14 @@ mod tests {
     }
 
     /// A 1 Mbit/s sender writes 144 800 bytes through [`SimNet`] with
-    /// `buffers`, and `b` reads them. Returns when the last write returned,
-    /// when the read finished (ms from the connect) and the sender's
-    /// uplink queue peak.
-    fn buffered_writes(buffers: Option<SendBuffers>) -> (i64, i64, Duration) {
+    /// `buffers`, its uplink running at `up_steps`' rates from their times,
+    /// and `b` reads them. Returns when the last write returned, when the
+    /// read finished (ms from the connect) and the sender's uplink queue
+    /// peak.
+    fn buffered_writes(
+        buffers: Option<SendBuffers>,
+        up_steps: Vec<(StdDuration, u64)>,
+    ) -> (i64, i64, Duration) {
         let mut sim = build();
         let sites = [
             (
@@ -993,7 +1003,8 @@ mod tests {
             g.set(ms(turmoil::sim_elapsed().unwrap() - t0));
             Ok(())
         });
-        let spec = spec(&sites);
+        let mut spec = spec(&sites);
+        spec.hosts[0].up_steps = up_steps;
         let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, buffers).unwrap();
         drive(&mut sim, &mut wan);
         let peak = wan.report(&spec).hosts[0].stats.up_queue_max;
@@ -1006,7 +1017,7 @@ mod tests {
             uplink_queue: StdDuration::from_millis(100),
             window: false,
         });
-        let (wrote, got, peak) = buffered_writes(Some(buffers));
+        let (wrote, got, peak) = buffered_writes(Some(buffers), Vec::new());
         // The writes run ahead of the uplink by its 100 ms queue and the two
         // writes the socket holds (one starts under the 16 KiB mark and ends
         // past it), about 0.46 s of the 1.2 s the bytes take on the wire.
@@ -1023,7 +1034,7 @@ mod tests {
             uplink_queue: StdDuration::from_millis(100),
             window: true,
         });
-        let (wrote, got, peak) = buffered_writes(Some(buffers));
+        let (wrote, got, peak) = buffered_writes(Some(buffers), Vec::new());
         // The window, not the queue, paces the writes: the bytes still take
         // their 1.2 s on the wire, and a message waits at most the queue
         // and the segment let in last (116 ms at 1 Mbit/s).
@@ -1105,8 +1116,34 @@ mod tests {
     }
 
     #[test]
+    fn a_stream_follows_its_uplinks_steps() {
+        // The uplink halves 300 ms into the run, after about 36 of the
+        // 150 kB on the wire (the connect takes the first few ms): the
+        // rest take 1.8 s at 62.5 kB/s.
+        let halved = || vec![(StdDuration::from_millis(300), 62_500)];
+        let (_, got, _) = buffered_writes(None, halved());
+        assert!((2100..2135).contains(&got), "{got} ms");
+        for window in [false, true] {
+            let buffers = SendBuffers::new(SendBuffer {
+                uplink_queue: StdDuration::from_millis(100),
+                window,
+            });
+            let (_, got, _) = buffered_writes(Some(buffers), halved());
+            assert!((2100..2500).contains(&got), "window {window}: {got} ms");
+        }
+        // Back to the full rate at 600 ms, after 18.75 kB more at the half
+        // rate: the other 95 kB take 0.76 s.
+        let back = vec![
+            (StdDuration::from_millis(300), 62_500),
+            (StdDuration::from_millis(600), 125_000),
+        ];
+        let (_, got, _) = buffered_writes(None, back);
+        assert!((1345..1380).contains(&got), "{got} ms");
+    }
+
+    #[test]
     fn without_send_buffers_writes_never_wait() {
-        let (wrote, got, peak) = buffered_writes(None);
+        let (wrote, got, peak) = buffered_writes(None, Vec::new());
         assert!(wrote < 10, "last write after {wrote} ms");
         assert!((1190..1215).contains(&got), "{got} ms");
         assert!(peak >= Duration::from_millis(1000), "{peak:?}");
