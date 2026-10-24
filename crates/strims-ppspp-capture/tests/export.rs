@@ -9,7 +9,7 @@
 use serde_json::{Value, json};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
-use strims_ppspp::codec::{ChannelWriter, Data, Have, Message, MessageWriter, Request};
+use strims_ppspp::codec::{ChannelWriter, Data, Have, Message, MessageWriter, Ping, Pong, Request};
 use strims_ppspp_capture::{
     Clock, Dir, Header, Reader, Record, SwarmParams, TapRecord, Writer, export, tap_kind,
 };
@@ -75,16 +75,23 @@ fn rows_describe_messages_and_decisions() {
                 bin: Bin(6),
                 timestamp: t(9),
             }),
+            Message::Ping(Ping { nonce: 42 }),
         ],
     )]);
     let inbound = frame(&[
         (
             3,
-            &[Message::Data(Data {
-                bin: Bin(8),
-                timestamp: t(11),
-                data: &[5, 6, 7, 8],
-            })],
+            &[
+                Message::Data(Data {
+                    bin: Bin(8),
+                    timestamp: t(11),
+                    data: &[5, 6, 7, 8],
+                }),
+                Message::Pong(Pong {
+                    nonce: 42,
+                    delay: 3,
+                }),
+            ],
         ),
         (77, &[Message::Have(Have { bin: Bin(0) })]),
     ]);
@@ -217,6 +224,10 @@ fn rows_describe_messages_and_decisions() {
             }),
         ),
         with(
+            base(10, "00", "out", 1),
+            json!({"swarm": 1, "channel": 9, "type": "PING", "len": 1 + 8, "nonce": 42}),
+        ),
+        with(
             base(20, "00", "in", 2),
             json!({"type": "FRAME", "len": inbound.len()}),
         ),
@@ -226,6 +237,13 @@ fn rows_describe_messages_and_decisions() {
                 "swarm": 1, "channel": 3, "type": "DATA", "bin": 8, "first": 4, "last": 4,
                 "stream": 0, "ts": n(11), "len": 1 + 1 + 6 + 4, "ann": "hit",
                 "lag": Duration::from_millis(7).as_nanos(),
+            }),
+        ),
+        with(
+            base(20, "00", "in", 2),
+            json!({
+                "swarm": 1, "channel": 3, "type": "PONG", "len": 1 + 16, "delay": 3,
+                "nonce": 42,
             }),
         ),
         with(

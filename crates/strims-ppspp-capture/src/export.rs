@@ -25,6 +25,7 @@
 //! | `lag` | on DATA in and push hits and late pushes, ns since the chunk was first seen |
 //! | `from` | the previous parent of a switch, hex |
 //! | `delay` | ACK and PONG delays, ns |
+//! | `nonce` | PING and PONG nonces: a pong carries its ping's |
 //! | `budget`, `copies`, `streams`, `count` | other fields of a decision; `count` on ANNOUNCE, its entries |
 //!
 //! A tap row carries its decision's fields by these names. Decisions about
@@ -86,6 +87,7 @@ struct Row {
     lag: Option<i64>,
     from: Option<u32>,
     delay: Option<i64>,
+    nonce: Option<u64>,
     other: [Option<(&'static str, i64)>; 3],
 }
 
@@ -427,6 +429,9 @@ impl<W: Write> Dump<'_, W> {
                 write!(o, ",\"{k}\":{v}")?;
             }
         }
+        if let Some(n) = r.nonce {
+            write!(o, ",\"nonce\":{n}")?;
+        }
         if let Some(f) = r.from {
             match self.peers.get(&f) {
                 Some(p) => write!(o, ",\"from\":\"{p}\"")?,
@@ -484,13 +489,15 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
             kind: "UNCHOKE",
             ..row
         },
-        Message::Ping(_) => Row {
+        Message::Ping(p) => Row {
             kind: "PING",
+            nonce: Some(p.nonce),
             ..row
         },
         Message::Pong(p) => Row {
             kind: "PONG",
             delay: i64::try_from(p.delay).ok(),
+            nonce: Some(p.nonce),
             ..row
         },
         Message::StreamRequest(s) => Row {
