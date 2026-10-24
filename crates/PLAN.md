@@ -301,7 +301,15 @@ in each.
    - **Protocol overhead.** Find where the bytes go at the media swarms'
      4 KiB chunks, from a capture. Coalesce HAVE-only frames. One chunk
      per request costs about 27 % at 1 KiB chunks; requesting runs of
-     chunks needs no wire change.
+     chunks needs no wire change. Ping per peer, not per channel: every
+     channel to a peer shares its link, but each pings once a second for
+     its controller (and a hybrid one every 200 ms for the meter while
+     it sends data), so peers that share a media, chat and directory
+     swarm ping three times over. One ping loop per peer in the runner
+     would feed the meter and every channel's controller to that peer,
+     riding the first channel payload written to it, with no wire change.
+     It changes what the controllers see: gate it on the ppspp sim's A/B
+     matrix and strims-sim's WAN cases.
 3. **Greedy peers.** Free riders and liars cost honest viewers more tail
    lag than anything but a constrained seed, most of it on the child
    side (with the prune backoff above).
