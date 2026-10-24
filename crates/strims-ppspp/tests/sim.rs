@@ -4314,7 +4314,10 @@ impl AllocCase {
         AllocCase::AdaptiveQos,
     ];
 
-    fn pinned(self) -> bool {
+    /// Whether the case pins as many slots as the admission used at the
+    /// same scenario, controller and seed, so the admission runs first.
+    /// [`AllocCase::DcOnly`] pins the datacenter viewer whatever the count.
+    fn takes_slots(self) -> bool {
         matches!(
             self,
             AllocCase::Random
@@ -4323,7 +4326,6 @@ impl AllocCase {
                 | AllocCase::NearestQos
                 | AllocCase::Oracle
                 | AllocCase::OracleQos
-                | AllocCase::DcOnly
         )
     }
 }
@@ -4508,7 +4510,7 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
         }
     }
     let first: Vec<(usize, u64)> = (0..groups.len())
-        .filter(|&g| cases(groups[g].0).iter().any(|c| c.pinned()))
+        .filter(|&g| cases(groups[g].0).iter().any(|c| c.takes_slots()))
         .flat_map(|g| (1..=seeds).map(move |s| (g, s)))
         .collect();
     let admission = par_map(&first, |&(g, seed)| {
@@ -4988,8 +4990,10 @@ fn wan_cable_seed() {
 /// under `SIM_SEED_POLICY` (`adaptive`, the default, or `admission`), or an
 /// [`AbScenario`] run as the allocation tables run `SIM_CASE` (an
 /// [`AllocCase`], default `AdaptiveQos`) under `SIM_CONTROLLER` (`ledbat`
-/// or `bbr`); a pinned case takes the admission run's slots from
-/// `SIM_SLOTS`. `SIM_SEED` (1) is the sim seed.
+/// or `bbr`). A case that [takes slots](AllocCase::takes_slots) takes them
+/// from `SIM_SLOTS`: the `seed_slots` of the `Admission` job's row, rounded,
+/// which a matrix's `[[derive]]` table gives it. `SIM_SEED` (1) is the sim
+/// seed.
 #[test]
 #[ignore = "one sim farm job; run in release with --ignored --nocapture"]
 fn sim_job() {
@@ -5021,8 +5025,10 @@ fn sim_job() {
             Some("bbr") => BBR,
             Some(c) => panic!("SIM_CONTROLLER={c}: ledbat or bbr"),
         };
-        let slots = match case.pinned() {
-            true => knob("SIM_SLOTS").expect("a pinned SIM_CASE takes SIM_SLOTS"),
+        let slots = match case.takes_slots() {
+            true => knob("SIM_SLOTS").unwrap_or_else(|| {
+                panic!("SIM_CASE={case:?} takes SIM_SLOTS: the Admission row's seed_slots")
+            }),
             false => 0,
         };
         (
