@@ -1741,7 +1741,8 @@ fn wan_super_peer_adaptive_uncapped() {
 
 /// The testbed's settings, under the names `run.sh` takes with a
 /// `STRIMS_SIM_CAL_` prefix (and the uplink queue from
-/// `STRIMS_SIM_SEND_BUFFER`).
+/// `STRIMS_SIM_SEND_BUFFER`). `STRIMS_SIM_CAL_JITTER=1` adds the cable
+/// profile's jitter, so seeds differ the way a real link's timing does.
 struct Calibration {
     viewers: usize,
     seed_up_mbit: u64,
@@ -1810,7 +1811,7 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         .map(|&(at, mbit)| (Duration::from_secs_f64(5.0 + at), (mbit * 125_000.0) as u64))
         .collect();
     s.wan = Some(strims_wan::Options {
-        jitter: false,
+        jitter: knob("STRIMS_SIM_CAL_JITTER").unwrap_or(0) == 1,
         loss: false,
     });
     s.send_buffer = Some(SendBuffer {
@@ -1874,9 +1875,10 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     striped(s, STRIPES, ADAPTIVE)
 }
 
-/// The seed's meter, the upload it had and its true uplink queue per
-/// sample, and the viewers' p99 lag per second of stream, as one JSON
-/// object (`SERIES {json}`).
+/// The seed's meter, the upload it had, its push subscribers, its
+/// adaptive budget and copies and its true uplink queue per sample, and
+/// the viewers' p99 lag per second of stream, as one JSON object
+/// (`SERIES {json}`).
 fn calibration_series(r: &Report) -> String {
     let spec = &r.scenario.swarms[0];
     let seed = spec.seed;
@@ -1897,11 +1899,21 @@ fn calibration_series(r: &Report) -> String {
                 .collect()
         })
         .unwrap_or_default();
+    let seed_state = |t: Duration| {
+        r.hosts[seed]
+            .runner
+            .seed_changes
+            .iter()
+            .rev()
+            .find(|(at, sw, _)| *sw == 0 && *at <= t)
+            .map_or((0, 0), |(_, _, x)| (x.budget, x.copies))
+    };
     let mut rows = Vec::new();
     for m in &r.hosts[seed].runner.meter {
         if m.t < spec.start || m.t > spec.stop {
             continue;
         }
+        let (budget, copies) = seed_state(m.t);
         let q = queue
             .iter()
             .filter(|(t, _)| t.abs_diff(m.t) <= Duration::from_millis(500))
@@ -1913,12 +1925,13 @@ fn calibration_series(r: &Report) -> String {
             format!("{:.1}", q.iter().sum::<f64>() / q.len() as f64)
         };
         rows.push(format!(
-            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"avail\":{},\"qd\":{},\"q\":{q}}}",
+            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"avail\":{},\"children\":{},\"budget\":{budget},\"copies\":{copies},\"qd\":{},\"q\":{q}}}",
             (m.t - spec.start).as_secs_f64(),
             m.rate,
             m.busy_permille,
             m.capacity,
             r.upload_cap_at(seed, m.t).unwrap_or(0),
+            m.children.get(&0).copied().unwrap_or(0),
             m.queue_delay_ms
                 .map_or("null".to_owned(), |d| d.to_string()),
         ));
