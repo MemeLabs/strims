@@ -40,7 +40,9 @@
 //! the receiver's downlink, at the access links' rates. A TCP segment that
 //! loses a packet arrives a retransmission later, holding back the rest of
 //! its connection; a datagram that loses its packet is gone.
-//! [`Scenario::host_at`] caps a host's upload at 90 % of its uplink.
+//! [`Scenario::host_at`] caps a host's upload at 90 % of its uplink. An
+//! uplink's rate may change during the run ([`HostSpec::up_steps`]), and
+//! other software's bulk uploads may share it ([`HostSpec::competing`]).
 //!
 //! Turmoil times nothing itself: the run holds every link between hosts
 //! and, between two steps, a scheduler releases each message once the path
@@ -126,8 +128,8 @@ pub use report::{
 };
 pub use run::run;
 pub use spec::{
-    Binding, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario, SendBuffer,
-    SwarmSpec, Transport, VpnProbes,
+    Binding, Competing, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario,
+    SendBuffer, SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, RunnerReport, SwarmCounters};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_n};

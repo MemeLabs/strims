@@ -212,6 +212,11 @@ pub struct WanHostReport {
     pub stats: EndStats,
     /// The uplink queue's wait every 100 ms: (time since the start, wait).
     pub up_queue: Vec<(strims_base::time::Duration, strims_base::time::Duration)>,
+    /// With competing uploads
+    /// ([`HostSpec::competing`](crate::spec::HostSpec::competing)), the
+    /// wire bytes they have sent, every 100 ms: (time since the start,
+    /// bytes).
+    pub competing: Vec<(strims_base::time::Duration, u64)>,
 }
 
 /// The access links of a WAN run, in host order.
@@ -492,8 +497,12 @@ impl Report {
 
     /// The most host `h` can upload at `t` (time since the start), in bytes
     /// per second: the smaller of its rate limit and what its site's uplink
-    /// has available then ([`HostSpec::up_steps`](crate::spec::HostSpec)).
+    /// has available then: its rate ([`HostSpec::up_steps`]) less what its
+    /// competing uploads sent in the second before ([`HostSpec::competing`]).
     /// `None` with neither.
+    ///
+    /// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
+    /// [`HostSpec::competing`]: crate::spec::HostSpec::competing
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let site = spec.site.map(|s| {
@@ -502,12 +511,36 @@ impl Report {
                 .filter(|&&(at, _)| at <= t)
                 .max_by_key(|&&(at, _)| at)
                 .map_or(s.profile.up, |&(_, rate)| rate)
+                .saturating_sub(self.competing_rate(h, t))
         });
         match (spec.uplink, site) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         }
         .filter(|&c| c > 0)
+    }
+
+    /// The wire rate of host `h`'s competing uploads over the second
+    /// before `t`, in bytes per second.
+    pub fn competing_rate(&self, h: HostIx, t: std::time::Duration) -> u64 {
+        let Some(name) = self.scenario.hosts.get(h).map(|s| s.name.as_str()) else {
+            return 0;
+        };
+        let Some(w) = self
+            .wan
+            .as_ref()
+            .and_then(|w| w.hosts.iter().find(|w| w.name == name))
+        else {
+            return 0;
+        };
+        let sent = |t: strims_base::time::Duration| {
+            let i = w.competing.partition_point(|&(at, _)| at <= t);
+            i.checked_sub(1)
+                .and_then(|i| w.competing.get(i))
+                .map_or(0, |&(_, b)| b)
+        };
+        let t = strims_base::time::Duration::from(t);
+        sent(t).saturating_sub(sent(t - strims_base::time::Duration::from_secs(1)))
     }
 
     /// The upload meter's readings at `h` while a swarm was live, as

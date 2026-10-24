@@ -17,11 +17,13 @@
 //!   in samples where the node's upload rate was under half of what it
 //!   could upload then.
 //! - **tracking** ([`Report::tracking`]): after each change of a seed's or
-//!   forwarder's available upload while a swarm streams
-//!   ([`HostSpec::up_steps`](crate::spec::HostSpec)), how long its meter
-//!   reads more than [`TRACK_BAND`] off the new rate: the time until
-//!   [`TRACK_SAMPLES`] samples in a row read within the band, censored at
-//!   the host's next change or the stream's end.
+//!   forwarder's available upload while a swarm streams (a step of its
+//!   uplink's rate, or a competing upload's start or stop), the share of
+//!   the meter's samples until the host's next change, or the stream's
+//!   end, that read more than [`TRACK_BAND`] off what was available. A
+//!   meter that swings between true and far off reads off for as long as
+//!   it swings, where the time until it first reads true would turn on
+//!   chance.
 //! - **lag after changes** ([`Report::lag_after_changes`]): the lag of the
 //!   frames a swarm's seed wrote in the [`AFTER_CHANGE`] after each drop, or
 //!   each rise, of its available upload.
@@ -56,8 +58,6 @@ pub const STANDING_QUEUE: strims_base::time::Duration =
     strims_base::time::Duration::from_millis(50);
 /// A meter reading tracks the available upload within this share of it.
 pub const TRACK_BAND: f64 = 0.2;
-/// Samples in a row within [`TRACK_BAND`] that make a meter track.
-pub const TRACK_SAMPLES: usize = 3;
 /// How long after a change of the seed's available upload its frames count
 /// toward [`Report::lag_after_changes`].
 pub const AFTER_CHANGE: Duration = Duration::from_secs(30);
@@ -70,11 +70,9 @@ pub struct Tracking {
     pub at: Duration,
     /// Whether the rate fell.
     pub drop: bool,
-    /// How long the meter read off the new rate.
-    pub off: Duration,
-    /// The meter never tracked before the next change or the stream's end,
-    /// which [`off`](Tracking::off) runs to.
-    pub censored: bool,
+    /// The share of the meter's samples until the next change that read
+    /// more than [`TRACK_BAND`] off.
+    pub off: f64,
 }
 
 /// The hosts of a run by their part in its swarms.
@@ -359,23 +357,40 @@ impl Report {
     }
 
     /// The changes of host `h`'s available upload while a swarm streams:
-    /// when each came and whether the rate fell.
+    /// when each came and whether the rate fell. A step of its uplink's
+    /// rate is one; a competing upload falls at its start and rises at its
+    /// stop.
     pub fn upload_changes(&self, h: HostIx) -> Vec<(Duration, bool)> {
         let Some(spec) = self.scenario.hosts.get(h) else {
             return Vec::new();
         };
-        let mut times: Vec<Duration> = spec.up_steps.iter().map(|&(at, _)| at).collect();
-        times.sort_unstable();
-        times.dedup();
-        times
-            .into_iter()
-            .filter(|&at| self.live(at))
-            .filter_map(|at| {
-                let before = self.upload_cap_at(h, at.checked_sub(Duration::from_nanos(1))?)?;
-                let after = self.upload_cap_at(h, at)?;
+        let rate = |t: Duration| {
+            spec.up_steps
+                .iter()
+                .filter(|&&(at, _)| at <= t)
+                .max_by_key(|&&(at, _)| at)
+                .map(|&(_, r)| r)
+        };
+        let mut changes: Vec<(Duration, bool)> = spec
+            .up_steps
+            .iter()
+            .filter_map(|&(at, after)| {
+                let before = at
+                    .checked_sub(Duration::from_nanos(1))
+                    .and_then(rate)
+                    .or(spec.site.map(|s| s.profile.up))?;
                 (after != before).then_some((at, after < before))
             })
-            .collect()
+            .chain(
+                spec.competing
+                    .iter()
+                    .flat_map(|c| [(c.start, true), (c.stop, false)]),
+            )
+            .filter(|&(at, _)| self.live(at))
+            .collect();
+        changes.sort_by_key(|&(at, _)| at);
+        changes.dedup_by_key(|&mut (at, _)| at);
+        changes
     }
 
     /// How the meters of the seeds and forwarders followed each change of
@@ -397,28 +412,25 @@ impl Report {
             };
             for (i, &(at, drop)) in changes.iter().enumerate() {
                 let until = changes.get(i + 1).map_or(end, |&(t, _)| t);
-                let within: Vec<(Duration, bool)> = host
+                let within: Vec<bool> = host
                     .runner
                     .meter
                     .iter()
                     .filter(|m| m.t >= at && m.t < until)
                     .map(|m| {
                         let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
-                        let off = (m.capacity as f64 / cap - 1.0).abs();
-                        (m.t, cap > 0.0 && off <= TRACK_BAND)
+                        cap <= 0.0 || (m.capacity as f64 / cap - 1.0).abs() > TRACK_BAND
                     })
                     .collect();
-                let tracked = within
-                    .windows(TRACK_SAMPLES)
-                    .find(|w| w.iter().all(|&(_, ok)| ok))
-                    .and_then(|w| w.first())
-                    .map(|&(t, _)| t);
+                if within.is_empty() {
+                    continue;
+                }
+                let off = within.iter().filter(|&&off| off).count();
                 out.push(Tracking {
                     host: h,
                     at,
                     drop,
-                    off: tracked.unwrap_or(until).saturating_sub(at),
-                    censored: tracked.is_none(),
+                    off: off as f64 / within.len() as f64,
                 });
             }
         }
@@ -490,22 +502,14 @@ impl Report {
             let mut v: Vec<f64> = tracking
                 .iter()
                 .filter(|x| x.drop == drop)
-                .map(|x| x.off.as_secs_f64())
+                .map(|x| x.off)
                 .collect();
-            let censored = tracking
-                .iter()
-                .filter(|x| x.drop == drop && x.censored)
-                .count();
             let max = v.iter().copied().fold(0.0, f64::max);
-            format!(
-                "{} {:.1}/{max:.1} s ({censored} never)",
-                v.len(),
-                deciles(&mut v)[1]
-            )
+            format!("{} {:.2}/{max:.2}", v.len(), deciles(&mut v)[1])
         };
         let (drop, rise) = self.lag_after_changes(0);
         Some(format!(
-            "\n  capacity changes: meter off median/max after drops {}, after rises {}; swarm 0 lag {}s after the seed's drops {drop}, rises {rise}",
+            "\n  capacity changes: share of meter samples off median/max after drops {}, after rises {}; swarm 0 lag {}s after the seed's drops {drop}, rises {rise}",
             side(true),
             side(false),
             AFTER_CHANGE.as_secs(),
@@ -632,20 +636,16 @@ impl Report {
                 let mut v: Vec<f64> = tracking
                     .iter()
                     .filter(|x| x.drop == drop)
-                    .map(|x| x.off.as_secs_f64())
+                    .map(|x| x.off)
                     .collect();
                 let n = v.len() as u64;
                 let max = v.iter().copied().fold(0.0, f64::max);
                 j.nums(
-                    &format!("track_{name}_s"),
+                    &format!("off_{name}"),
                     [deciles(&mut v)[1], max].into_iter(),
                 )
-                .int(&format!("track_{name}_n"), n);
+                .int(&format!("off_{name}_n"), n);
             }
-            j.int(
-                "track_censored",
-                tracking.iter().filter(|x| x.censored).count() as u64,
-            );
             let (drop, rise) = self.lag_after_changes(swarm);
             j.int("seed_drop_p99_ms", u64::from(drop.p99))
                 .int("seed_rise_p99_ms", u64::from(rise.p99));
@@ -798,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn tracking_waits_for_samples_in_a_row_within_the_band() {
+    fn tracking_counts_the_samples_off_until_the_next_change() {
         let r = seed_reading(|t| match t {
             30..=64 => 500,
             66 => 600,
@@ -808,20 +808,19 @@ mod tests {
         assert_eq!(r.upload_cap_at(0, Duration::from_secs(20)), Some(500));
         let t = r.tracking();
         assert_eq!(t.len(), 2);
-        assert!(t[0].drop && !t[0].censored);
-        assert_eq!(t[0].off, Duration::from_secs(10));
-        // 65 reads true, 66 doesn't: tracking starts at 67.
-        assert!(!t[1].drop && !t[1].censored);
-        assert_eq!(t[1].off, Duration::from_secs(7));
+        // 20-29 of 20-59 read twice the half rate.
+        assert!(t[0].drop);
+        assert!((t[0].off - 0.25).abs() < 1e-9, "{}", t[0].off);
+        // 60-64 and 66 of 60-99 read off the full rate.
+        assert!(!t[1].drop);
+        assert!((t[1].off - 0.15).abs() < 1e-9, "{}", t[1].off);
     }
 
     #[test]
-    fn a_meter_that_never_tracks_is_censored_at_the_next_change() {
+    fn a_meter_that_never_follows_reads_off_throughout() {
         let r = seed_reading(|_| 1000);
         let t = r.tracking();
-        assert!(t[0].censored);
-        assert_eq!(t[0].off, Duration::from_secs(40));
-        assert!(!t[1].censored);
-        assert_eq!(t[1].off, Duration::ZERO);
+        assert!((t[0].off - 1.0).abs() < 1e-9);
+        assert!(t[1].off.abs() < 1e-9);
     }
 }

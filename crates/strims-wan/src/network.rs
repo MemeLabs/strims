@@ -334,6 +334,17 @@ impl Network {
         self.transit(depart, a, b, packets, carrier)
     }
 
+    /// `wire` bytes of traffic that isn't between hosts, handed to `h`'s
+    /// uplink at `at`: they wait for the uplink and serialize at its rate
+    /// like a message, and count in no host's stats. Returns when their
+    /// last bit left.
+    pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize) -> Time {
+        let end = self.end_mut(h);
+        let start = at.max(end.up_free);
+        end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
+        end.up_free
+    }
+
     /// A message of `packets` packets crossing from `a` to `b`, its last
     /// bit having left `a`'s uplink at `depart`.
     pub fn transit(
@@ -515,6 +526,19 @@ mod tests {
         // Back to the full rate at 100 ms, mid-message.
         assert_eq!(depart(90), t(105));
         assert_eq!(depart(200), t(210));
+    }
+
+    #[test]
+    fn other_traffic_shares_the_uplink_and_counts_nowhere() {
+        let up = 125_000;
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber).with_up(up),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut n = net(&sites, QUIET);
+        assert_eq!(n.occupy_up(t(0), 0, 1250), t(10));
+        assert_eq!(n.send(t(0), 0, 1, 1250, 1, Carrier::Stream).depart, t(20));
+        assert_eq!(n.stats(0).up_bytes, 1250);
     }
 
     #[test]

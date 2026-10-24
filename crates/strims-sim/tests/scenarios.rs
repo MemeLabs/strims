@@ -16,12 +16,11 @@
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
-use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer, SwarmSpec,
-    Transport, VpnProbes, knob, stream_minutes, sweep, sweep_n,
+    Binding, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer,
+    SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::sample::{pick, unit};
@@ -1758,6 +1757,11 @@ struct Calibration {
     /// The seed's uplink from given seconds of stream on, in Mbit/s
     /// (`<s>:<mbit> ...`).
     seed_up_steps: Vec<(f64, f64)>,
+    /// Bulk uploads from the seed's host, from given seconds of stream on
+    /// for given seconds (`<s>:<d> ...`), to a sink 30 ms away (the seed's
+    /// delay and the testbed sink's). They need the window model
+    /// (`STRIMS_SIM_TCP=1`).
+    compete: Vec<(f64, f64)>,
 }
 
 fn calibration_settings() -> Calibration {
@@ -1772,15 +1776,21 @@ fn calibration_settings() -> Calibration {
         slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
         topology: knob::<String>("STRIMS_SIM_CAL_TOPOLOGY")
             .map(|path| std::fs::read_to_string(&path).unwrap()),
-        seed_up_steps: knob::<String>("STRIMS_SIM_CAL_SEED_UP_STEPS")
-            .unwrap_or_default()
-            .split_whitespace()
-            .map(|step| {
-                let (at, mbit) = step.split_once(':').unwrap();
-                (at.parse().unwrap(), mbit.parse().unwrap())
-            })
-            .collect(),
+        seed_up_steps: pairs_knob("STRIMS_SIM_CAL_SEED_UP_STEPS"),
+        compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
     }
+}
+
+/// `<a>:<b> ...` from knob `name`.
+fn pairs_knob(name: &str) -> Vec<(f64, f64)> {
+    knob::<String>(name)
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(|pair| {
+            let (a, b) = pair.split_once(':').unwrap();
+            (a.parse().unwrap(), b.parse().unwrap())
+        })
+        .collect()
 }
 
 /// A seed and `viewers` viewers, each linked to the seed alone (a star:
@@ -1809,6 +1819,15 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         .seed_up_steps
         .iter()
         .map(|&(at, mbit)| (Duration::from_secs_f64(5.0 + at), (mbit * 125_000.0) as u64))
+        .collect();
+    s.hosts[seed_host].competing = c
+        .compete
+        .iter()
+        .map(|&(at, secs)| Competing {
+            start: Duration::from_secs_f64(5.0 + at),
+            stop: Duration::from_secs_f64(5.0 + at + secs),
+            rtt: Duration::from_millis(c.seed_delay_ms + 10),
+        })
         .collect();
     s.wan = Some(strims_wan::Options {
         jitter: knob("STRIMS_SIM_CAL_JITTER").unwrap_or(0) == 1,
@@ -2143,11 +2162,8 @@ fn wan_slow_viewer_adaptive_uncapped() {
     );
 }
 
-// 10f. Upload that comes and goes: other traffic takes half of some
+// 10f. Upload that comes and goes: other apps' bulk uploads share some
 // hosts' uplinks for a while, so a node's upload estimate must follow.
-
-/// The copies of its streams a seed's uplink keeps in [`varying`].
-const SEED_COPIES_KEPT: f64 = 2.0;
 
 /// A uniform draw from `[lo, hi)` seconds, to the millisecond.
 fn uniform_secs(rng: &mut DetRng, lo: u64, hi: u64) -> Duration {
@@ -2155,11 +2171,11 @@ fn uniform_secs(rng: &mut DetRng, lo: u64, hi: u64) -> Duration {
 }
 
 /// `m` with the seed and a random third of the viewers sharing their
-/// uplinks, as with another app's upload that comes and goes: from
-/// U[10, 50] s into the run, each has half its uplink for U[30, 120] s,
-/// then all of it for U[20, 120] s, and again. The seed keeps at least
-/// [`SEED_COPIES_KEPT`] copies of its streams, so a drop tests how it
-/// spends its upload, not whether one copy fits.
+/// uplinks with another app's bulk upload that comes and goes: from
+/// U[10, 50] s into the run, each runs one for U[30, 120] s, to a sink
+/// U[20, 80] ms away, then none for U[20, 120] s, and again. The uploads
+/// take what TCP's sharing gives them, so they need the window model
+/// ([`windowed`]).
 fn varying(mut m: Streaming) -> Scenario {
     let mut hosts = vec![m.seed];
     hosts.extend(
@@ -2168,21 +2184,29 @@ fn varying(mut m: Streaming) -> Scenario {
             .copied()
             .filter(|_| unit(&mut m.rng) < 1.0 / 3.0),
     );
-    let seed_rate: f64 = m.s.swarms.iter().map(SwarmSpec::rate).sum();
-    let seed_floor = (SEED_COPIES_KEPT * seed_rate * PUSH_OVERHEAD) as u64;
     for h in hosts {
-        let up = m.s.hosts[h].site.map_or(0, |s| s.profile.up);
-        let floor = if h == m.seed { seed_floor.min(up) } else { 0 };
         let mut t = uniform_secs(&mut m.rng, 10, 50);
         while t < m.s.duration {
-            m.s.hosts[h].up_steps.push((t, (up / 2).max(floor)));
-            t += uniform_secs(&mut m.rng, 30, 120);
-            m.s.hosts[h].up_steps.push((t, up));
-            t += uniform_secs(&mut m.rng, 20, 120);
+            let stop = t + uniform_secs(&mut m.rng, 30, 120);
+            let rtt = Duration::from_millis(20 + (unit(&mut m.rng) * 60.0) as u64);
+            m.s.hosts[h].competing.push(Competing {
+                start: t,
+                stop,
+                rtt,
+            });
+            t = stop + uniform_secs(&mut m.rng, 20, 120);
         }
     }
     m.s.name = format!("{} varying", m.s.name);
     m.s
+}
+
+/// `s` with its send buffers' window model.
+fn windowed(mut s: Scenario) -> Scenario {
+    if let Some(b) = &mut s.send_buffer {
+        b.window = true;
+    }
+    s
 }
 
 #[test]
@@ -2191,11 +2215,11 @@ fn wan_residential_seed_adaptive_uncapped_varying() {
     sweep(
         "wan_residential_seed_adaptive_uncapped_varying",
         |s| {
-            uncapped(striped(
+            windowed(uncapped(striped(
                 varying(residential_seed_mesh(s, PushMode::Hybrid, (5, 65))),
                 STRIPES,
                 ADAPTIVE,
-            ))
+            )))
         },
         check_wan_residential_seed,
     );
@@ -2207,11 +2231,11 @@ fn wan_super_peer_adaptive_uncapped_varying() {
     sweep(
         "wan_super_peer_adaptive_uncapped_varying",
         |s| {
-            uncapped(striped(
+            windowed(uncapped(striped(
                 varying(super_peer_mesh(s, PushMode::Hybrid)),
                 STRIPES,
                 ADAPTIVE,
-            ))
+            )))
         },
         check_wan_residential_seed,
     );
@@ -2225,11 +2249,11 @@ fn wan_residential_seed_adaptive_uncapped_long_varying() {
         "wan_residential_seed_adaptive_uncapped_long_varying",
         LONG_SEEDS,
         |s| {
-            uncapped(striped(
+            windowed(uncapped(striped(
                 varying(residential_seed_mesh(s, PushMode::Hybrid, (5, stop))),
                 STRIPES,
                 ADAPTIVE,
-            ))
+            )))
         },
         check_wan_long,
     );

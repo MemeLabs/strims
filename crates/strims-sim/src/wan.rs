@@ -55,6 +55,16 @@
 //!
 //! The connection's order on the wire is its send order, and a resent
 //! segment holds back the rest of its connection at the receiver.
+//!
+//! A host's competing uploads
+//! ([`HostSpec::competing`](crate::spec::HostSpec::competing)) are TCP
+//! connections that always have data and reach no host: full segments
+//! enter the host's uplink queue within their window, are lost when it is
+//! full, and are acknowledged the upload's round trip after they leave the
+//! uplink. Their windows follow CUBIC (RFC 8312), as bulk uploads' do:
+//! after a loss a window climbs back quickly and lingers near the size it
+//! lost at, so it keeps the queue fuller than the window model's own
+//! connections. They need the window model's bounded queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::{IpAddr, SocketAddr};
@@ -156,10 +166,19 @@ enum Event {
         conn: (SocketAddr, SocketAddr),
         len: usize,
     },
+    /// A competing upload's segment is acknowledged.
+    CrossAck(usize),
+    /// A competing upload learns its segment was lost.
+    CrossLost(usize),
 }
 
 /// The window model's segment size, for the window's growth.
 pub(crate) const MSS: f64 = 1448.0;
+/// A competing upload's segment: its payload and its bytes on the wire.
+const CROSS_SEGMENT: usize = 1448;
+const CROSS_WIRE: usize = 1500;
+/// CUBIC's scaling constant, in segments per second cubed.
+const CUBIC_C: f64 = 0.4;
 /// Its initial window: 10 segments.
 const INIT_WINDOW: f64 = 10.0 * MSS;
 /// The window after a loss, as a share of the window (CUBIC's beta).
@@ -204,6 +223,20 @@ struct LinkState {
 /// One sender's new messages, by receiver and connection addresses.
 type Queues = BTreeMap<(HostIx, IpAddr, IpAddr), VecDeque<u64>>;
 
+/// One competing upload (see the module docs).
+struct Cross {
+    host: HostIx,
+    start: Time,
+    stop: Time,
+    rtt: Duration,
+    flow: Flow,
+    started: bool,
+    /// CUBIC's window before its last cut, in segments, and how long the
+    /// window takes to grow back to it.
+    w_max: f64,
+    k: f64,
+}
+
 /// A host pair as a set key.
 fn pair_key(a: HostIx, b: HostIx) -> (HostIx, HostIx) {
     (a.min(b), a.max(b))
@@ -241,6 +274,13 @@ pub(crate) struct Scheduler {
     /// (time since the start, wait).
     up_queue: Vec<Vec<(Duration, Duration)>>,
     next_queue_sample: Time,
+    /// The competing uploads, in host order.
+    cross: Vec<Cross>,
+    /// Per host, the wire bytes its competing uploads have sent.
+    cross_bytes: Vec<u64>,
+    /// Per host with competing uploads, [`Scheduler::cross_bytes`] every
+    /// [`QUEUE_SAMPLE_EVERY`]: (time since the start, bytes).
+    cross_sent: Vec<Vec<(Duration, u64)>>,
 }
 
 /// How often the scheduler samples each host's uplink queue.
@@ -271,6 +311,27 @@ impl Scheduler {
                 let steps = hs.up_steps.iter().map(|&(at, rate)| (sim_time(at), rate));
                 net.set_up_steps(h, steps.collect());
             }
+        }
+        let cross: Vec<Cross> = spec
+            .hosts
+            .iter()
+            .enumerate()
+            .flat_map(|(h, hs)| {
+                hs.competing.iter().map(move |c| Cross {
+                    host: h,
+                    start: sim_time(c.start),
+                    stop: sim_time(c.stop),
+                    rtt: Duration::from(c.rtt),
+                    flow: Flow::default(),
+                    started: false,
+                    w_max: 0.0,
+                    k: 0.0,
+                })
+            })
+            .collect();
+        let windowed = buffers.as_ref().is_some_and(|b| b.model().window);
+        if !cross.is_empty() && !windowed {
+            return Err("wan: competing uploads need the window model".to_owned());
         }
         let names: Vec<String> = spec.hosts.iter().map(|h| h.name.clone()).collect();
         let ip_host: BTreeMap<IpAddr, HostIx> = names
@@ -321,6 +382,9 @@ impl Scheduler {
             sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
             next_queue_sample: epoch(),
+            cross,
+            cross_bytes: vec![0; spec.hosts.len()],
+            cross_sent: vec![Vec::new(); spec.hosts.len()],
         })
     }
 
@@ -332,6 +396,16 @@ impl Scheduler {
     pub fn walk(&mut self, sim: &Sim<'_>) -> Result<(), String> {
         let now = sim_time(sim.elapsed());
         self.run_events(now);
+        for i in 0..self.cross.len() {
+            if let Some(c) = self.cross.get_mut(i)
+                && !c.started
+                && now >= c.start
+            {
+                c.started = true;
+                let start = c.start;
+                self.cross_pump(start, i);
+            }
+        }
         let (fresh, released) = self.match_queues(sim)?;
         self.send(now - self.tick, fresh);
         self.purge(sim, &released);
@@ -341,6 +415,17 @@ impl Scheduler {
             for (h, samples) in self.up_queue.iter_mut().enumerate() {
                 let wait = (self.net.up_free(h) - now).max(Duration::ZERO);
                 samples.push((now - epoch(), wait));
+            }
+            for c in &self.cross {
+                let (Some(samples), Some(&bytes)) = (
+                    self.cross_sent.get_mut(c.host),
+                    self.cross_bytes.get(c.host),
+                ) else {
+                    continue;
+                };
+                if samples.last().is_none_or(|&(t, _)| t < now - epoch()) {
+                    samples.push((now - epoch(), bytes));
+                }
             }
         }
         Ok(())
@@ -372,9 +457,20 @@ impl Scheduler {
                 break;
             }
             let event = entry.remove();
-            if let Event::Ack { conn, len } = event {
-                self.acked(t, conn, len);
-                continue;
+            match event {
+                Event::Ack { conn, len } => {
+                    self.acked(t, conn, len);
+                    continue;
+                }
+                Event::CrossAck(i) => {
+                    self.cross_acked(t, i);
+                    continue;
+                }
+                Event::CrossLost(i) => {
+                    self.cross_lost(t, i);
+                    continue;
+                }
+                _ => {}
             }
             let window = self.window();
             let Some(r) = self.records.get_mut(&id) else {
@@ -425,7 +521,7 @@ impl Scheduler {
                     f.pending.push_front(id);
                     self.pump(t, &[conn]);
                 }
-                Event::Ack { .. } => {}
+                Event::Ack { .. } | Event::CrossAck(_) | Event::CrossLost(_) => {}
             }
         }
     }
@@ -451,6 +547,82 @@ impl Scheduler {
             f.cwnd += MSS * len as f64 / f.cwnd.max(MSS);
         }
         self.pump(t, &[conn]);
+    }
+
+    /// Competing upload `i`'s segment was acknowledged at `t`.
+    fn cross_acked(&mut self, t: Time, i: usize) {
+        if let Some(c) = self.cross.get_mut(i) {
+            let f = &mut c.flow;
+            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            if f.cwnd < f.ssthresh {
+                f.cwnd += CROSS_SEGMENT as f64;
+            } else {
+                // RFC 8312: the cubic window a round trip ahead, or the
+                // window Reno would have, whichever is larger.
+                let (cwnd, rtt) = (f.cwnd / MSS, c.rtt.as_secs_f64().max(1e-3));
+                let since = (t - f.cut).as_secs_f64();
+                let cubic = CUBIC_C * (since + rtt - c.k).powi(3) + c.w_max;
+                let reno = c.w_max * BETA + 3.0 * (1.0 - BETA) / (1.0 + BETA) * since / rtt;
+                let next = if cubic < reno {
+                    reno
+                } else {
+                    cwnd + (cubic - cwnd).max(0.0) / cwnd
+                };
+                f.cwnd = next.max(cwnd) * MSS;
+            }
+        }
+        self.cross_pump(t, i);
+    }
+
+    /// Competing upload `i` learned at `t` that a segment was lost.
+    fn cross_lost(&mut self, t: Time, i: usize) {
+        if let Some(c) = self.cross.get_mut(i) {
+            let f = &mut c.flow;
+            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            if f.cut.is_nil() || t - f.cut >= c.rtt {
+                c.w_max = f.cwnd / MSS;
+                c.k = (c.w_max * (1.0 - BETA) / CUBIC_C).cbrt();
+                f.ssthresh = (f.cwnd * BETA).max(2.0 * MSS);
+                f.cwnd = f.ssthresh;
+                f.cut = t;
+            }
+        }
+        self.cross_pump(t, i);
+    }
+
+    /// Sends what competing upload `i`'s window allows at `at`, while it
+    /// runs.
+    fn cross_pump(&mut self, at: Time, i: usize) {
+        let Some(cap) = self.window() else {
+            return;
+        };
+        loop {
+            let Some(c) = self.cross.get_mut(i) else {
+                return;
+            };
+            let f = &mut c.flow;
+            if at < c.start
+                || at >= c.stop
+                || (f.in_flight > 0 && (f.in_flight + CROSS_SEGMENT) as f64 > f.cwnd)
+            {
+                return;
+            }
+            f.in_flight += CROSS_SEGMENT;
+            let (host, rtt) = (c.host, c.rtt);
+            let id = self.next;
+            self.next += 1;
+            let wait = (self.net.up_free(host) - at).max(Duration::ZERO);
+            if wait >= cap {
+                self.events
+                    .insert((at + rtt + wait, id), Event::CrossLost(i));
+                continue;
+            }
+            let depart = self.net.occupy_up(at, host, CROSS_WIRE);
+            if let Some(b) = self.cross_bytes.get_mut(host) {
+                *b += CROSS_WIRE as u64;
+            }
+            self.events.insert((depart + rtt, id), Event::CrossAck(i));
+        }
     }
 
     /// Sends what `conns`' windows allow at `at`, a segment from each in
@@ -797,6 +969,7 @@ impl Scheduler {
                         site: *self.net.site(h)?,
                         stats: self.net.stats(h),
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
+                        competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                     })
                 })
                 .collect(),
@@ -827,7 +1000,8 @@ mod tests {
     use strims_wan::{Access, City, Profile};
 
     use crate::net::SimNet;
-    use crate::spec::SendBuffer;
+    use crate::report::WanHostReport;
+    use crate::spec::{Competing, HostSpec, SendBuffer};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use turmoil::net::{TcpListener, TcpStream, UdpSocket};
 
@@ -960,15 +1134,22 @@ mod tests {
         );
     }
 
-    /// A 1 Mbit/s sender writes 144 800 bytes through [`SimNet`] with
-    /// `buffers`, its uplink running at `up_steps`' rates from their times,
-    /// and `b` reads them. Returns when the last write returned, when the
-    /// read finished (ms from the connect) and the sender's uplink queue
-    /// peak.
+    /// A 1 Mbit/s sender, its spec adjusted by `shape`, writes 144 800
+    /// bytes through [`SimNet`] with `buffers`, and `b` reads them. Returns
+    /// when the last write returned, when the read finished (ms from the
+    /// connect) and the sender's uplink queue peak.
     fn buffered_writes(
         buffers: Option<SendBuffers>,
-        up_steps: Vec<(StdDuration, u64)>,
+        shape: impl FnOnce(&mut HostSpec),
     ) -> (i64, i64, Duration) {
+        buffered_report(buffers, shape).0
+    }
+
+    /// [`buffered_writes`] and the sender's access link report.
+    fn buffered_report(
+        buffers: Option<SendBuffers>,
+        shape: impl FnOnce(&mut HostSpec),
+    ) -> ((i64, i64, Duration), WanHostReport) {
         let mut sim = build();
         let sites = [
             (
@@ -1004,11 +1185,11 @@ mod tests {
             Ok(())
         });
         let mut spec = spec(&sites);
-        spec.hosts[0].up_steps = up_steps;
+        shape(&mut spec.hosts[0]);
         let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, buffers).unwrap();
         drive(&mut sim, &mut wan);
-        let peak = wan.report(&spec).hosts[0].stats.up_queue_max;
-        (wrote.get(), got.get(), peak)
+        let a = wan.report(&spec).hosts.swap_remove(0);
+        ((wrote.get(), got.get(), a.stats.up_queue_max), a)
     }
 
     #[test]
@@ -1017,7 +1198,7 @@ mod tests {
             uplink_queue: StdDuration::from_millis(100),
             window: false,
         });
-        let (wrote, got, peak) = buffered_writes(Some(buffers), Vec::new());
+        let (wrote, got, peak) = buffered_writes(Some(buffers), |_| {});
         // The writes run ahead of the uplink by its 100 ms queue and the two
         // writes the socket holds (one starts under the 16 KiB mark and ends
         // past it), about 0.46 s of the 1.2 s the bytes take on the wire.
@@ -1034,7 +1215,7 @@ mod tests {
             uplink_queue: StdDuration::from_millis(100),
             window: true,
         });
-        let (wrote, got, peak) = buffered_writes(Some(buffers), Vec::new());
+        let (wrote, got, peak) = buffered_writes(Some(buffers), |_| {});
         // The window, not the queue, paces the writes: the bytes still take
         // their 1.2 s on the wire, and a message waits at most the queue
         // and the segment let in last (116 ms at 1 Mbit/s).
@@ -1120,30 +1301,122 @@ mod tests {
         // The uplink halves 300 ms into the run, after about 36 of the
         // 150 kB on the wire (the connect takes the first few ms): the
         // rest take 1.8 s at 62.5 kB/s.
-        let halved = || vec![(StdDuration::from_millis(300), 62_500)];
-        let (_, got, _) = buffered_writes(None, halved());
+        let halved = |h: &mut HostSpec| h.up_steps = vec![(StdDuration::from_millis(300), 62_500)];
+        let (_, got, _) = buffered_writes(None, halved);
         assert!((2100..2135).contains(&got), "{got} ms");
         for window in [false, true] {
             let buffers = SendBuffers::new(SendBuffer {
                 uplink_queue: StdDuration::from_millis(100),
                 window,
             });
-            let (_, got, _) = buffered_writes(Some(buffers), halved());
+            let (_, got, _) = buffered_writes(Some(buffers), halved);
             assert!((2100..2500).contains(&got), "window {window}: {got} ms");
         }
         // Back to the full rate at 600 ms, after 18.75 kB more at the half
         // rate: the other 95 kB take 0.76 s.
-        let back = vec![
-            (StdDuration::from_millis(300), 62_500),
-            (StdDuration::from_millis(600), 125_000),
-        ];
+        let back = |h: &mut HostSpec| {
+            h.up_steps = vec![
+                (StdDuration::from_millis(300), 62_500),
+                (StdDuration::from_millis(600), 125_000),
+            ];
+        };
         let (_, got, _) = buffered_writes(None, back);
         assert!((1345..1380).contains(&got), "{got} ms");
     }
 
+    /// `a`, on a 10 Mbit/s uplink with 100 ms windowed queues and a
+    /// competing upload over `competing` (s), writes `bytes` to `b` from
+    /// 1 s on. Returns when `b` had them (ms from 1 s) and `a`'s access
+    /// link report.
+    fn beside_an_upload(bytes: usize, competing: (u64, u64)) -> (i64, WanHostReport) {
+        let mut sim = build();
+        let sites = [
+            (
+                "a",
+                Site::new(City::Frankfurt, Access::Fiber).with_up(1_250_000),
+            ),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        let net = SimNet::new(Some(buffers.clone()));
+        sim.host("a", move || {
+            let net = net.clone();
+            async move {
+                let l = net.tcp_bind("0.0.0.0:9000".into()).await?;
+                let (mut s, _) = net.tcp_accept(&l).await?;
+                net.configure_tcp_send_queue(&s, &TcpSocketConfig::default())?;
+                for _ in 0..bytes / 14_480 {
+                    s.write_all(&[1u8; 14_480]).await?;
+                }
+                Ok(())
+            }
+        });
+        let got = Rc::new(Cell::new(0));
+        let g = got.clone();
+        sim.client("b", async move {
+            tokio::time::sleep(StdDuration::from_secs(1)).await;
+            let mut s = TcpStream::connect(("a", 9000)).await?;
+            if bytes > 0 {
+                let mut buf = vec![0u8; bytes / 14_480 * 14_480];
+                s.read_exact(&mut buf).await?;
+            }
+            g.set(ms(turmoil::sim_elapsed().unwrap()) - 1000);
+            tokio::time::sleep(StdDuration::from_secs(2)).await;
+            Ok(())
+        });
+        let mut spec = spec(&sites);
+        spec.hosts[0].competing = vec![Competing {
+            start: StdDuration::from_secs(competing.0),
+            stop: StdDuration::from_secs(competing.1),
+            rtt: StdDuration::from_millis(30),
+        }];
+        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        drive(&mut sim, &mut wan);
+        (got.get(), wan.report(&spec).hosts.swap_remove(0))
+    }
+
+    #[test]
+    fn a_competing_upload_shares_the_uplink() {
+        let sent = |a: &WanHostReport, s: i64| {
+            a.competing
+                .iter()
+                .rev()
+                .find(|&&(t, _)| t <= Duration::from_secs(s))
+                .map_or(0, |&(_, b)| b)
+        };
+        // Alone, the upload fills the uplink, through a queue it keeps from
+        // emptying.
+        let (_, a) = beside_an_upload(0, (0, 30));
+        let alone = sent(&a, 3) - sent(&a, 1);
+        assert!(alone >= 2_250_000, "{alone} bytes in 2 s");
+        let busy = a
+            .up_queue
+            .iter()
+            .filter(|&&(t, w)| t > Duration::from_secs(1) && w > Duration::from_millis(5));
+        assert!(busy.count() > 15, "{:?}", a.up_queue);
+        // 1.45 MB take about 1.2 s alone and longer beside it, which then
+        // sends less.
+        let (quiet, _) = beside_an_upload(1_448_000, (30, 30));
+        let (shared, a) = beside_an_upload(1_448_000, (0, 30));
+        assert!((1150..1500).contains(&quiet), "{quiet} ms");
+        assert!(shared > quiet * 3 / 2, "{shared} ms against {quiet} ms");
+        assert!(sent(&a, 2) - sent(&a, 1) < alone / 2 * 3 / 4);
+        // Without windows nothing bounds the upload's queue.
+        let mut s = spec(&[("a", Site::new(City::Frankfurt, Access::Fiber))]);
+        s.hosts[0].competing = vec![Competing {
+            start: StdDuration::ZERO,
+            stop: StdDuration::from_secs(1),
+            rtt: StdDuration::from_millis(30),
+        }];
+        assert!(Scheduler::new(&build(), &s, QUIET, 1, None).is_err());
+    }
+
     #[test]
     fn without_send_buffers_writes_never_wait() {
-        let (wrote, got, peak) = buffered_writes(None, Vec::new());
+        let (wrote, got, peak) = buffered_writes(None, |_| {});
         assert!(wrote < 10, "last write after {wrote} ms");
         assert!((1190..1215).contains(&got), "{got} ms");
         assert!(peak >= Duration::from_millis(1000), "{peak:?}");

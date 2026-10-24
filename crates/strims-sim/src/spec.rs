@@ -54,6 +54,19 @@ pub struct HostSpec {
     /// a while (`strims_wan::Network::set_up_steps`). Empty keeps the
     /// site's rate throughout.
     pub up_steps: Vec<(Duration, u64)>,
+    /// WAN mode with [`SendBuffer::window`]: bulk uploads by other
+    /// software on the host, which share its uplink with the node's
+    /// traffic (see the WAN scheduler).
+    pub competing: Vec<Competing>,
+}
+
+/// A bulk upload that isn't the node's: a TCP connection that always has
+/// data, from `start` to `stop`, to a sink `rtt` away.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Competing {
+    pub start: Duration,
+    pub stop: Duration,
+    pub rtt: Duration,
 }
 
 /// A link the `from` host dials (and redials while it is down).
@@ -431,6 +444,7 @@ impl Scenario {
             webrtc: false,
             site: None,
             up_steps: Vec::new(),
+            competing: Vec::new(),
         });
         self.hosts.len() - 1
     }
