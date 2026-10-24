@@ -20,7 +20,7 @@ use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Binding, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer, SwarmSpec,
-    Transport, VpnProbes, stream_minutes, sweep, sweep_n,
+    Transport, VpnProbes, knob, stream_minutes, sweep, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::sample::pick;
@@ -1646,6 +1646,7 @@ fn uncapped(mut s: Scenario) -> Scenario {
     }
     s.send_buffer = Some(SendBuffer {
         uplink_queue: UPLINK_QUEUE,
+        window: false,
     });
     s.name = format!("{} uncapped", s.name);
     s
@@ -1722,6 +1723,215 @@ fn wan_super_peer_adaptive_uncapped() {
     );
 }
 
+// 11. Calibration: the shaped links of hack/testbed/run.sh in the WAN
+// model, so the upload meter's readings on a real link and on the
+// simulated one can be compared.
+
+/// The testbed's settings, under the names `run.sh` takes with a
+/// `STRIMS_SIM_CAL_` prefix (and the uplink queue from
+/// `STRIMS_SIM_SEND_BUFFER`).
+struct Calibration {
+    viewers: usize,
+    seed_up_mbit: u64,
+    viewer_up_mbit: u64,
+    seed_delay_ms: u64,
+    viewer_delay_ms: u64,
+    secs: u64,
+    join_at: u64,
+    slow_down_kbit: Option<u64>,
+    /// `link <a> <b>` lines, node 0 the seed and node `i` viewer `i - 1`;
+    /// a star without.
+    topology: Option<String>,
+}
+
+fn calibration_settings() -> Calibration {
+    Calibration {
+        viewers: knob("STRIMS_SIM_CAL_VIEWERS").unwrap_or(3),
+        seed_up_mbit: knob("STRIMS_SIM_CAL_SEED_UP_MBIT").unwrap_or(10),
+        viewer_up_mbit: knob("STRIMS_SIM_CAL_VIEWER_UP_MBIT").unwrap_or(20),
+        seed_delay_ms: knob("STRIMS_SIM_CAL_SEED_DELAY_MS").unwrap_or(20),
+        viewer_delay_ms: knob("STRIMS_SIM_CAL_VIEWER_DELAY_MS").unwrap_or(10),
+        secs: knob("STRIMS_SIM_CAL_SECS").unwrap_or(180),
+        join_at: knob("STRIMS_SIM_CAL_JOIN_AT").unwrap_or(0),
+        slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
+        topology: knob::<String>("STRIMS_SIM_CAL_TOPOLOGY")
+            .map(|path| std::fs::read_to_string(&path).unwrap()),
+    }
+}
+
+/// A seed and `viewers` viewers, each linked to the seed alone (a star:
+/// whatever the seed doesn't push its viewers pull from it, so its load is
+/// the viewers times the stream rate), or as the topology says. No jitter
+/// or loss; fixed delays; no upload limits, and send buffers.
+fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
+    let mut s = Scenario::new("calibration_star");
+    let site = |mbit: u64| Site::new(City::Chicago, Access::Cable).with_up(mbit * 125_000);
+    let seed_host = s.host_at("seed", site(c.seed_up_mbit));
+    let vs: Vec<HostIx> = (0..c.viewers)
+        .map(|i| {
+            let mut st = site(c.viewer_up_mbit);
+            if i == 0
+                && let Some(k) = c.slow_down_kbit
+            {
+                st = st.with_down(k * 125);
+            }
+            s.host_at(&format!("v{i}"), st)
+        })
+        .collect();
+    for h in &mut s.hosts {
+        h.uplink = None;
+    }
+    s.wan = Some(strims_wan::Options {
+        jitter: false,
+        loss: false,
+    });
+    s.send_buffer = Some(SendBuffer {
+        uplink_queue: UPLINK_QUEUE,
+        window: false,
+    });
+    let all: Vec<HostIx> = std::iter::once(seed_host)
+        .chain(vs.iter().copied())
+        .collect();
+    match &c.topology {
+        Some(t) => {
+            for line in t.lines() {
+                if let ["link", a, b] = line.split_whitespace().collect::<Vec<_>>()[..] {
+                    let (a, b): (usize, usize) = (a.parse().unwrap(), b.parse().unwrap());
+                    s.link(all[a.max(b)], all[a.min(b)], Transport::Tcp);
+                }
+            }
+        }
+        None => {
+            for &v in &vs {
+                s.link(v, seed_host, Transport::Tcp);
+            }
+        }
+    }
+    if vs.len() > 1 {
+        s.at(
+            Duration::ZERO,
+            Fault::Latency(
+                vs.clone(),
+                vs.clone(),
+                Duration::from_millis(c.viewer_delay_ms),
+            ),
+        );
+    }
+    // The model's latencies are the same both ways: the seed's paths take
+    // the mean of the testbed's two one-way delays.
+    s.at(
+        Duration::ZERO,
+        Fault::Latency(
+            vec![seed_host],
+            vs.clone(),
+            Duration::from_millis((c.seed_delay_ms + c.viewer_delay_ms) / 2),
+        ),
+    );
+    if c.join_at > 0 {
+        for &v in &vs {
+            s.at(Duration::ZERO, Fault::Crash(v));
+            s.at(secs(5 + c.join_at), Fault::Restart(v));
+        }
+    }
+    s.swarm(
+        SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
+            .with_push_mode(PushMode::Hybrid)
+            .with_live_window(WAN_WINDOW),
+    );
+    s.invariants = Invariants {
+        max_heap: Some(256 * MIB),
+        ..Invariants::for_window(WAN_WINDOW)
+    };
+    s.duration = secs(5 + c.secs + 10);
+    striped(s, STRIPES, ADAPTIVE)
+}
+
+/// The seed's meter and true uplink queue per sample, and the viewers' p99
+/// lag per second of stream, as one JSON object (`SERIES {json}`).
+fn calibration_series(r: &Report) -> String {
+    let spec = &r.scenario.swarms[0];
+    let seed = spec.seed;
+    let up = r.upload_cap(seed).unwrap_or(0);
+    let queue: Vec<(Duration, u32)> = r
+        .wan
+        .as_ref()
+        .and_then(|w| w.hosts.iter().find(|h| h.name == r.scenario.name_of(seed)))
+        .map(|h| {
+            h.up_queue
+                .iter()
+                .filter_map(|&(t, w)| {
+                    Some((
+                        t.to_std()?,
+                        u32::try_from(w.as_millis().max(0)).unwrap_or(u32::MAX),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut rows = Vec::new();
+    for m in &r.hosts[seed].runner.meter {
+        if m.t < spec.start || m.t > spec.stop {
+            continue;
+        }
+        let q = queue
+            .iter()
+            .filter(|(t, _)| t.abs_diff(m.t) <= Duration::from_millis(500))
+            .map(|&(_, w)| f64::from(w))
+            .collect::<Vec<_>>();
+        let q = if q.is_empty() {
+            "null".to_owned()
+        } else {
+            format!("{:.1}", q.iter().sum::<f64>() / q.len() as f64)
+        };
+        rows.push(format!(
+            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"qd\":{},\"q\":{q}}}",
+            (m.t - spec.start).as_secs_f64(),
+            m.rate,
+            m.busy_permille,
+            m.capacity,
+            m.queue_delay_ms
+                .map_or("null".to_owned(), |d| d.to_string()),
+        ));
+    }
+    let secs_n = spec.stop.saturating_sub(spec.start).as_secs();
+    let lags: Vec<String> = (0..secs_n)
+        .map(|k| {
+            let a = spec.start + Duration::from_secs(k);
+            let p = r.lag_between(0, a, a + Duration::from_secs(1));
+            format!("[{k},{}]", p.p99)
+        })
+        .collect();
+    let stream_secs = spec.stop.saturating_sub(spec.start).as_secs_f64();
+    let waits: Vec<String> = queue
+        .iter()
+        .filter(|(t, _)| *t >= spec.start && *t <= spec.stop)
+        .map(|&(t, w)| format!("[{:.1},{w}]", (t - spec.start).as_secs_f64()))
+        .collect();
+    format!(
+        "{{\"up\":{up},\"goodput\":{:.0},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}]}}",
+        r.hosts[seed].uploaded as f64 / stream_secs,
+        rows.join(","),
+        lags.join(","),
+        waits.join(",")
+    )
+}
+
+#[test]
+#[ignore = "calibration against hack/testbed; run in release with --include-ignored"]
+fn calibration_star() {
+    let c = calibration_settings();
+    // A measurement: it checks nothing beyond the replay.
+    let reports = sweep_n(
+        "calibration_star",
+        1,
+        |s| calibration_star_scenario(s, &c),
+        |_| Ok(()),
+    );
+    for r in &reports {
+        println!("SERIES {}", calibration_series(r));
+    }
+}
+
 // 10d. Mobile viewers: six on LTE and six on cable in North America.
 
 fn wan_mobile_viewers(seed: u64, push: PushMode) -> Scenario {
@@ -1786,6 +1996,107 @@ fn wan_mobile_viewers_hybrid() {
         "wan_mobile_viewers_hybrid",
         |s| wan_mobile_viewers(s, PushMode::Hybrid),
         check_wan_mobile_viewers,
+    );
+}
+
+// 10e. The upload meter's cases without known uplinks: the WAN cases
+// above with no upload limits, and send buffers.
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_global_audience_adaptive_uncapped() {
+    sweep(
+        "wan_global_audience_adaptive_uncapped",
+        |s| {
+            uncapped(striped(
+                wan_global_audience(s, PushMode::Hybrid),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_global_audience,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 13 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_mobile_viewers_adaptive_uncapped() {
+    sweep(
+        "wan_mobile_viewers_adaptive_uncapped",
+        |s| {
+            uncapped(striped(
+                wan_mobile_viewers(s, PushMode::Hybrid),
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_mobile_viewers,
+    );
+}
+
+/// [`wan_residential_seed`] with a second stream from the same seed to the
+/// same viewers: two swarms share every uplink.
+fn wan_residential_two_streams(seed: u64) -> Scenario {
+    let mut s = wan_residential_seed(seed, PushMode::Hybrid);
+    let first = s.swarms[0].clone();
+    s.swarm(first);
+    s.name = "wan_residential_two_streams".to_owned();
+    s
+}
+
+/// Everyone gets both streams from 10 s on.
+fn check_wan_two_streams(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    for sw in 0..r.scenario.swarms.len() {
+        let spec = &r.scenario.swarms[sw];
+        complete_swarm(r, sw, &spec.viewers, secs(10), spec.stop)?;
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 x 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_two_streams_adaptive_uncapped() {
+    sweep(
+        "wan_residential_two_streams_adaptive_uncapped",
+        |s| uncapped(striped(wan_residential_two_streams(s), STRIPES, ADAPTIVE)),
+        check_wan_two_streams,
+    );
+}
+
+/// [`wan_residential_seed`] with its first viewer behind a 1 Mbit/s
+/// downlink, half the stream: it can't keep up, and whoever sends to it
+/// finds that one connection backed up.
+fn wan_slow_viewer(seed: u64) -> Scenario {
+    let mut s = wan_residential_seed(seed, PushMode::Hybrid);
+    let v = s.swarms[0].viewers[0];
+    if let Some(site) = s.hosts[v].site.as_mut() {
+        *site = site.with_down(125_000);
+    }
+    // Pushes queue toward the slow viewer while its connection is backed
+    // up, past one window, up to ppspp's cap; and what it sends about the
+    // chunks it still lacks can be behind its neighbours' windows, which
+    // they count as invalid.
+    s.invariants.max_data_queue = Some(strims_ppspp::DATA_QUEUE_CAP);
+    s.invariants.clean_input = false;
+    s.name = "wan_slow_viewer".to_owned();
+    s
+}
+
+/// The viewers other than the slow one get the stream from 10 s on.
+fn check_wan_slow_viewer(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    complete(r, &spec.viewers[1..], secs(10), spec.stop)
+}
+
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_slow_viewer_adaptive_uncapped() {
+    sweep(
+        "wan_slow_viewer_adaptive_uncapped",
+        |s| uncapped(striped(wan_slow_viewer(s), STRIPES, ADAPTIVE)),
+        check_wan_slow_viewer,
     );
 }
 

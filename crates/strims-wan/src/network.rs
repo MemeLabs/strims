@@ -247,6 +247,11 @@ impl Network {
         self.end(h).up_free
     }
 
+    /// When `h`'s downlink has delivered everything that reached it so far.
+    pub fn down_free(&self, h: usize) -> Time {
+        self.end(h).down_free
+    }
+
     /// The base latency from `a` to `b`.
     pub fn one_way(&self, a: usize, b: usize) -> Duration {
         if let Some(d) = self.dir(a, b).one_way {

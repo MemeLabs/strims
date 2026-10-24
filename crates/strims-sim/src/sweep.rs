@@ -15,6 +15,8 @@
 //! - `STRIMS_SIM_SEND_BUFFER=<ms>` gives every WAN scenario send buffers
 //!   ([`Scenario::send_buffer`]) with an uplink queue of `ms` milliseconds,
 //!   replacing the scenario's own, for comparisons.
+//! - `STRIMS_SIM_TCP=1` gives the send buffers congestion windows and
+//!   bounded access queues ([`SendBuffer::window`]).
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
 //!   oracle the upload meter is measured against.
@@ -136,6 +138,11 @@ impl Run<'_> {
     }
 }
 
+/// A scenario setting from the run's environment, if set and it parses.
+pub fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
+    env(name).and_then(|s| s.trim().parse().ok())
+}
+
 /// The stream length of a scenario that takes it from the run's settings:
 /// `STRIMS_SIM_MINUTES=<m>`, else `default` minutes.
 pub fn stream_minutes(default: u64) -> u64 {
@@ -179,6 +186,7 @@ fn sweep_seeds(
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").is_some_and(|s| s.trim() == "1");
     let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
+    let window = env("STRIMS_SIM_TCP").is_some_and(|s| s.trim() == "1");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -186,7 +194,11 @@ fn sweep_seeds(
         {
             spec.send_buffer = Some(SendBuffer {
                 uplink_queue: Duration::from_millis(ms),
+                window: false,
             });
+        }
+        if window && let Some(b) = &mut spec.send_buffer {
+            b.window = true;
         }
         if known_uplink {
             for h in &mut spec.hosts {
@@ -232,10 +244,12 @@ fn sweep_seeds(
         if rows {
             println!("ROW {}", r.row(test));
         }
-        if let Err(e) = check(&r) {
-            fail(test, seed, &e, &r.trace);
-        }
         reports.push(r);
+    }
+    for r in &reports {
+        if let Err(e) = check(r) {
+            fail(test, r.seed, &e, &r.trace);
+        }
     }
     if let (Some(first), Some(again)) = (reports.first(), again) {
         let again = report_of(test, first.seed, again);

@@ -34,6 +34,27 @@
 //! stop counting against its socket's mark (see [`crate::net`]). Admitted
 //! segments are credited, and their writers woken, in admission time and
 //! record order at the end of the walk that reaches that time.
+//!
+//! With the window model ([`SendBuffer::window`]) each TCP connection
+//! sends its data segments within a congestion window instead, and is
+//! credited as it sends them:
+//!
+//! - A segment waits in its connection's queue while the bytes in flight
+//!   (sent, neither acknowledged nor known lost) and it would pass the
+//!   window; a connection with nothing in flight sends one anyway.
+//! - The access queues hold `uplink_queue` of transmission time, up and
+//!   down. A segment that finds one full is lost there (segments are whole
+//!   writes, up to a socket's mark, so a queue can pass its bound by one),
+//!   and its sender learns so a round trip later: the segment goes to the front of
+//!   its connection's queue, and the window falls to [`BETA`] of itself,
+//!   at most once per round trip.
+//! - A segment through the receiver's downlink is acknowledged once the
+//!   acknowledgement crosses back, after the receiver's uplink queue: the
+//!   window grows by the bytes acknowledged below its threshold (slow
+//!   start) and by one [`MSS`] a window above it.
+//!
+//! The connection's order on the wire is its send order, and a resent
+//! segment holds back the rest of its connection at the receiver.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::{IpAddr, SocketAddr};
@@ -127,6 +148,47 @@ enum Event {
     Arrive,
     /// The message is through the receiver's downlink.
     Deliver,
+    /// The window model: the sender learns the segment was lost.
+    Lost,
+    /// The window model: an acknowledgement of `len` bytes of `conn`
+    /// reaches the sender.
+    Ack {
+        conn: (SocketAddr, SocketAddr),
+        len: usize,
+    },
+}
+
+/// The window model's segment size, for the window's growth.
+pub(crate) const MSS: f64 = 1448.0;
+/// Its initial window: 10 segments.
+const INIT_WINDOW: f64 = 10.0 * MSS;
+/// The window after a loss, as a share of the window (CUBIC's beta).
+pub(crate) const BETA: f64 = 0.7;
+
+/// One TCP connection in the window model.
+#[derive(Debug)]
+struct Flow {
+    cwnd: f64,
+    ssthresh: f64,
+    /// Bytes sent, neither acknowledged nor known lost.
+    in_flight: usize,
+    /// Data records waiting for the window, in send order. Bound: the
+    /// connection's records in flight.
+    pending: VecDeque<u64>,
+    /// When the window last fell.
+    cut: Time,
+}
+
+impl Default for Flow {
+    fn default() -> Flow {
+        Flow {
+            cwnd: INIT_WINDOW,
+            ssthresh: f64::INFINITY,
+            in_flight: 0,
+            pending: VecDeque::new(),
+            cut: Time::NIL,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -170,6 +232,11 @@ pub(crate) struct Scheduler {
     /// admission time and record: their connection and length. Bound: the
     /// records in flight.
     admits: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
+    /// The window model's connections. Bound: one per TCP connection that
+    /// sent data.
+    flows: BTreeMap<(SocketAddr, SocketAddr), Flow>,
+    /// Scratch for [`Scheduler::pump`].
+    sending: Vec<u64>,
     /// Per host, its uplink queue's wait every [`QUEUE_SAMPLE_EVERY`]:
     /// (time since the start, wait).
     up_queue: Vec<Vec<(Duration, Duration)>>,
@@ -244,6 +311,8 @@ impl Scheduler {
             tick: Duration::from(spec.tick),
             buffers,
             admits: BTreeMap::new(),
+            flows: BTreeMap::new(),
+            sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
             next_queue_sample: epoch(),
         })
@@ -297,21 +366,148 @@ impl Scheduler {
                 break;
             }
             let event = entry.remove();
+            if let Event::Ack { conn, len } = event {
+                self.acked(t, conn, len);
+                continue;
+            }
+            let window = self.window();
             let Some(r) = self.records.get_mut(&id) else {
                 continue;
             };
             match event {
                 Event::Arrive => {
+                    let data = match r.what {
+                        What::Data { len, .. } => Some(len),
+                        _ => None,
+                    };
+                    if let (Some(cap), Some(_)) = (window, data)
+                        && self.net.down_free(r.to) - t >= cap
+                    {
+                        let back = self.net.one_way(r.to, r.from);
+                        self.events.insert((t + back, id), Event::Lost);
+                        continue;
+                    }
                     let done = self.net.receive(t, r.to, r.wire);
                     if done <= now {
                         r.state = State::Due;
                     } else {
                         self.events.insert((done, id), Event::Deliver);
                     }
+                    if let (Some(_), Some(len)) = (window, data) {
+                        let back = self.net.one_way(r.to, r.from)
+                            + (self.net.up_free(r.to) - done).max(Duration::ZERO);
+                        let conn = (r.src, r.dst);
+                        self.events
+                            .insert((done + back, id), Event::Ack { conn, len });
+                    }
                 }
                 Event::Deliver => r.state = State::Due,
+                Event::Lost => {
+                    let (conn, from, to) = ((r.src, r.dst), r.from, r.to);
+                    let len = match r.what {
+                        What::Data { len, .. } => len,
+                        _ => 0,
+                    };
+                    let rtt = self.net.rtt(from, to);
+                    let f = self.flows.entry(conn).or_default();
+                    f.in_flight = f.in_flight.saturating_sub(len);
+                    if f.cut.is_nil() || t - f.cut >= rtt {
+                        f.ssthresh = (f.cwnd * BETA).max(2.0 * MSS);
+                        f.cwnd = f.ssthresh;
+                        f.cut = t;
+                    }
+                    f.pending.push_front(id);
+                    self.pump(t, &[conn]);
+                }
+                Event::Ack { .. } => {}
             }
         }
+    }
+
+    /// The window model's access queue bound, if it runs.
+    fn window(&self) -> Option<Duration> {
+        self.buffers
+            .as_ref()
+            .map(|b| b.model())
+            .filter(|m| m.window)
+            .map(|m| Duration::from(m.uplink_queue))
+    }
+
+    /// `len` bytes of `conn` were acknowledged at `t`.
+    fn acked(&mut self, t: Time, conn: (SocketAddr, SocketAddr), len: usize) {
+        let Some(f) = self.flows.get_mut(&conn) else {
+            return;
+        };
+        f.in_flight = f.in_flight.saturating_sub(len);
+        if f.cwnd < f.ssthresh {
+            f.cwnd += len as f64;
+        } else {
+            f.cwnd += MSS * len as f64 / f.cwnd.max(MSS);
+        }
+        self.pump(t, &[conn]);
+    }
+
+    /// Sends what `conns`' windows allow at `at`, a segment from each in
+    /// turn.
+    fn pump(&mut self, at: Time, conns: &[(SocketAddr, SocketAddr)]) {
+        let mut open: Vec<(SocketAddr, SocketAddr)> = conns.to_vec();
+        while !open.is_empty() {
+            open.retain(|conn| {
+                let Some(f) = self.flows.get_mut(conn) else {
+                    return false;
+                };
+                loop {
+                    let Some(&id) = f.pending.front() else {
+                        return false;
+                    };
+                    let Some(len) = self.records.get(&id).and_then(|r| match r.what {
+                        What::Data { len, .. } => Some(len),
+                        _ => None,
+                    }) else {
+                        f.pending.pop_front();
+                        continue;
+                    };
+                    if f.in_flight > 0 && (f.in_flight + len) as f64 > f.cwnd {
+                        return false;
+                    }
+                    f.pending.pop_front();
+                    f.in_flight += len;
+                    self.sending.push(id);
+                    return true;
+                }
+            });
+            for id in std::mem::take(&mut self.sending) {
+                self.transmit_window(at, id);
+            }
+        }
+    }
+
+    /// The window model's send of data record `id` at `at`: credited to
+    /// its socket at once, and lost if the uplink queue would overflow.
+    fn transmit_window(&mut self, at: Time, id: u64) {
+        let Some(cap) = self.window() else {
+            return;
+        };
+        let Some(r) = self.records.get(&id) else {
+            return;
+        };
+        let (from, to, wire, packets, conn) = (r.from, r.to, r.wire, r.packets, (r.src, r.dst));
+        let len = match r.what {
+            What::Data { len, .. } => len,
+            _ => 0,
+        };
+        if self.buffers.is_some() {
+            self.admits.insert((at, id), (conn, len));
+        }
+        let wait = (self.net.up_free(from) - at).max(Duration::ZERO);
+        if wait >= cap {
+            let back = self.net.rtt(from, to) + wait;
+            self.events.insert((at + back, id), Event::Lost);
+            return;
+        }
+        let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
+        self.events
+            .insert((t.arrival + t.retransmit, id), Event::Arrive);
     }
 
     /// Lines every queue up against its records, releases the due ones and
@@ -426,15 +622,31 @@ impl Scheduler {
                     .push_back(id);
             }
         }
+        let window = self.window().is_some();
         for queues in by_sender.into_values() {
             let mut queues: Vec<VecDeque<u64>> = queues.into_values().collect();
+            let mut flows = Vec::new();
             while queues.iter().any(|q| !q.is_empty()) {
                 for q in &mut queues {
-                    if let Some(id) = q.pop_front() {
-                        self.transmit(at, id);
+                    let Some(id) = q.pop_front() else {
+                        continue;
+                    };
+                    let data = self.records.get(&id).and_then(|r| match r.what {
+                        What::Data { .. } if window => Some((r.src, r.dst)),
+                        _ => None,
+                    });
+                    match data {
+                        Some(conn) => {
+                            self.flows.entry(conn).or_default().pending.push_back(id);
+                            if !flows.contains(&conn) {
+                                flows.push(conn);
+                            }
+                        }
+                        None => self.transmit(at, id),
                     }
                 }
             }
+            self.pump(at, &flows);
         }
     }
 
@@ -560,6 +772,10 @@ impl Scheduler {
     /// `h` lost power at `now`: its access links forget their queues.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
         self.net.reset(h, now);
+        let ip_host = &self.ip_host;
+        self.flows.retain(|(src, dst), _| {
+            ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
+        });
     }
 
     /// Each host's site and counters.
@@ -788,6 +1004,7 @@ mod tests {
     fn send_buffers_hold_writes_until_the_uplink_queue_has_room() {
         let buffers = SendBuffers::new(SendBuffer {
             uplink_queue: StdDuration::from_millis(100),
+            window: false,
         });
         let (wrote, got, peak) = buffered_writes(Some(buffers));
         // The writes run ahead of the uplink by its 100 ms queue and the two
@@ -798,6 +1015,93 @@ mod tests {
         // A segment waits at the uplink for at most the queue and those two
         // writes; the FIN, sent with the last write, also for that write.
         assert!(peak <= Duration::from_millis(470), "{peak:?}");
+    }
+
+    #[test]
+    fn windows_keep_the_uplink_queue_bounded() {
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        let (wrote, got, peak) = buffered_writes(Some(buffers));
+        // The window, not the queue, paces the writes: the bytes still take
+        // their 1.2 s on the wire, and a message waits at most the queue
+        // and the segment let in last (116 ms at 1 Mbit/s).
+        assert!(wrote > 700, "last write after {wrote} ms");
+        assert!((1190..1600).contains(&got), "{got} ms");
+        assert!(peak <= Duration::from_millis(220), "{peak:?}");
+    }
+
+    /// `a`, on a 1 Mbit/s uplink, writes 144 800 bytes to each of `b` and
+    /// `c` at once; `c`'s downlink takes 200 kbit/s. Returns when `b` and
+    /// when `c` had everything (ms from the start).
+    fn two_receivers(buffers: SendBuffers) -> (i64, i64) {
+        let mut sim = build();
+        let sites = [
+            (
+                "a",
+                Site::new(City::Frankfurt, Access::Fiber).with_up(125_000),
+            ),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+            (
+                "c",
+                Site::new(City::Frankfurt, Access::Fiber).with_down(25_000),
+            ),
+        ];
+        let net = SimNet::new(Some(buffers.clone()));
+        sim.host("a", move || {
+            let net = net.clone();
+            async move {
+                let l = net.tcp_bind("0.0.0.0:9000".into()).await?;
+                let mut writers = Vec::new();
+                for _ in 0..2 {
+                    let (mut s, _) = net.tcp_accept(&l).await?;
+                    net.configure_tcp_send_queue(&s, &TcpSocketConfig::default())?;
+                    writers.push(tokio::task::spawn_local(async move {
+                        for _ in 0..10 {
+                            s.write_all(&[1u8; 14_480]).await?;
+                        }
+                        Ok::<_, std::io::Error>(s)
+                    }));
+                }
+                for w in writers {
+                    let _ = w.await;
+                }
+                Ok(())
+            }
+        });
+        let (b, c) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+        for (name, done) in [("b", b.clone()), ("c", c.clone())] {
+            sim.client(name, async move {
+                let mut s = TcpStream::connect(("a", 9000)).await?;
+                let mut buf = vec![0u8; 144_800];
+                s.read_exact(&mut buf).await?;
+                done.set(ms(turmoil::sim_elapsed().unwrap()));
+                Ok(())
+            });
+        }
+        let spec = spec(&sites);
+        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        drive(&mut sim, &mut wan);
+        (b.get(), c.get())
+    }
+
+    #[test]
+    fn a_slow_receiver_holds_back_its_connection_alone() {
+        let model = |window| {
+            SendBuffers::new(SendBuffer {
+                uplink_queue: StdDuration::from_millis(100),
+                window,
+            })
+        };
+        let (b_fifo, c_fifo) = two_receivers(model(false));
+        let (b, c) = two_receivers(model(true));
+        // Without windows the uplink splits evenly however slow `c` reads:
+        // `b` waits for `c`'s half. With them `c`'s window follows its
+        // downlink, and `b` gets the rest of the uplink.
+        assert!(b_fifo > 2000, "{b_fifo} ms");
+        assert!(b < b_fifo * 3 / 4, "{b} ms against {b_fifo} ms");
+        assert!(c >= 5800 && c_fifo >= 5800, "{c} and {c_fifo} ms");
     }
 
     #[test]

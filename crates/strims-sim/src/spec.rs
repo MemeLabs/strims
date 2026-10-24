@@ -368,14 +368,20 @@ pub struct Scenario {
 
 /// The TCP send buffer model of WAN mode. A connection whose node set a
 /// `TCP_NOTSENT_LOWAT` mark holds its writes while its bytes not yet in
-/// the sender's uplink queue reach the mark; a segment enters that queue
-/// once the queue holds less than `uplink_queue` of transmission time.
-/// Pushback from one path (a slow receiver, or a congestion window over a
-/// long round trip) isn't modelled.
+/// the sender's uplink queue reach the mark.
+///
+/// Without `window`, a segment enters that queue once the queue holds
+/// less than `uplink_queue` of transmission time, and nothing pushes back
+/// from one path (a slow receiver, or a congestion window over a long
+/// round trip). With `window`, each connection sends within a congestion
+/// window, and the access queues hold at most `uplink_queue` of
+/// transmission time both ways (see the WAN scheduler).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SendBuffer {
     /// The access network's buffer, in transmission time.
     pub uplink_queue: Duration,
+    /// Congestion windows and bounded access queues.
+    pub window: bool,
 }
 
 impl Scenario {
