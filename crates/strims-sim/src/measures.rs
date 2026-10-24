@@ -18,7 +18,9 @@
 //! - **queueing delay accuracy** ([`Report::queue_delay_accuracy`]): the
 //!   meter's queueing delay against the standing queue on the host's
 //!   uplink, the least wait of the WAN model's queue over the last
-//!   [`STANDING_WINDOW`] (WAN mode).
+//!   [`STANDING_WINDOW`], and whether the delay reads past a threshold
+//!   exactly when the uplink stayed busy throughout that window (WAN
+//!   mode).
 
 use std::fmt::Write;
 use std::time::Duration;
@@ -36,6 +38,9 @@ pub const LONG_STREAM: Duration = Duration::from_secs(120);
 pub const STANDING_WINDOW: Duration = Duration::from_secs(3);
 /// The threshold [`Report::row`] judges the queueing delay's errors at.
 pub const QUEUE_DELAY_THRESHOLD_MS: u32 = 80;
+/// An uplink whose least wait over the window is at least this never
+/// emptied in it: it was saturated.
+pub const SATURATED_STANDING_MS: u32 = 5;
 /// An uplink queue that waits longer than this stands.
 pub const STANDING_QUEUE: strims_base::time::Duration =
     strims_base::time::Duration::from_millis(50);
@@ -230,10 +235,10 @@ impl Report {
     /// The meter's queueing delay at `hosts` against their standing uplink
     /// queues, over the samples that had a delay while a swarm streamed:
     /// the median absolute error in milliseconds; the share of samples
-    /// below `threshold_ms` of standing queue where the delay read at least
-    /// it (false positives); and the share at or above it where the delay
-    /// read less (false negatives). `None` outside WAN mode or without
-    /// samples.
+    /// whose uplink emptied in the window where the delay read at least
+    /// `threshold_ms` (false positives); and the share whose uplink stayed
+    /// busy where it read less (false negatives). `None` outside WAN mode
+    /// or without samples.
     pub fn queue_delay_accuracy(&self, hosts: &[HostIx], threshold_ms: u32) -> Option<[f64; 3]> {
         let wan = self.wan.as_ref()?;
         let (mut errors, mut neg, mut pos) = (Vec::new(), (0u64, 0u64), (0u64, 0u64));
@@ -273,7 +278,7 @@ impl Report {
                     continue;
                 };
                 errors.push(f64::from(delay.abs_diff(standing)));
-                if standing < threshold_ms {
+                if standing < SATURATED_STANDING_MS {
                     neg.1 += 1;
                     neg.0 += u64::from(delay >= threshold_ms);
                 } else {
