@@ -8,7 +8,7 @@
   worker.py sync [--dir D]
 
 `serve` runs up to N jobs at once from D/queue/, oldest first. A job is a
-test binary in D/bin/ run as one test (`--exact <test> --ignored
+test binary in D/bin/ run as one test (`--exact <test> --include-ignored
 --nocapture`) with the job's environment, in D/work/<id>/, its output in
 out.log there. A finished job leaves D/done/<id>.json: its exit, the
 single `ROW {json}` it printed, its wall and CPU time, its peak RSS,
@@ -218,7 +218,7 @@ def serve(args: argparse.Namespace) -> None:
                 str(d["bin"] / job["bin"]),
                 "--exact",
                 job["test"],
-                "--ignored",
+                "--include-ignored",
                 "--nocapture",
                 "--test-threads",
                 "1",

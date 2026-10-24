@@ -1,0 +1,25 @@
+# The sim farm's smoke test for strims-sim's sweeps: two of them, a seed
+# per job.
+
+package = "strims-sim"
+target = "scenarios"
+test = ["live_mesh_hybrid", "wan_residential_seed_adaptive_uncapped"]
+slot_mem_gib = 1
+
+[arms]
+main = "main"
+
+[env]
+STRIMS_SIM_JOB = "1"
+
+[axes]
+STRIMS_SIM_SEED = ["1", "2"]
+
+[report]
+columns = [
+  "passed:mean",
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "steady_p99_ms:median,max",
+]

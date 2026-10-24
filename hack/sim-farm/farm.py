@@ -12,21 +12,37 @@
   hack/sim-farm/farm.py down   [MATRIX]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
 
-A matrix (matrices/*.toml) names a test that runs one config from its
-environment and prints one `ROW {json}` line (the ppspp sim's `sim_job`),
-the arms to run it at (git refs), the environment every job shares, and
-the axes whose product gives the jobs:
+A matrix (matrices/*.toml) names tests that run one config from their
+environment and print one `ROW {json}` line: the ppspp sim's `sim_job`,
+or a strims-sim sweep (target "scenarios") under STRIMS_SIM_JOB=1, which
+runs the one seed STRIMS_SIM_SEED names. It names the arms to run them at
+(git refs), the environment every job shares, and the axes whose product
+gives the jobs:
 
-  package = "strims-ppspp"      # the test's crate,
+  package = "strims-ppspp"      # the tests' crate,
   target = "sim"                # integration test target
-  test = "sim_job"              # and test
+  test = "sim_job"              # and test, or a list of tests (an axis)
   slot_mem_gib = 3              # the memory one job needs
   [arms]    name = "git ref"
   [env]     SIM_X = "fixed"
   [axes]    SIM_Y = ["a", "b"]
   [canary]  SIM_SECS = "2"      # overrides for the canary job (below)
   [report]  columns = ["field:mean,max", "num/den:ratio"]
-            group = ["arm", "SIM_Y"]   # default: arm and every axis but SIM_SEED
+            group = ["arm", "SIM_Y"]   # default: arm, test if there are
+                                       # several, every axis but the seed
+  [[derive]]                    # jobs that wait for another job's row:
+  when = { SIM_Y = ["b"] }      # the jobs it selects
+  from = { SIM_Y = "a" }        # wait for the job with this env instead,
+  set = { SIM_Z = "field:round" }  # and take SIM_Z from its row
+
+A [[derive]] table's jobs each wait for the job of the same arm, test
+and environment but for `from`, which is a job of the matrix whether or
+not the axes give it. They run once it has a row, with each variable of
+`set` from a field of that row: as it is, or with `:round` to the nearest
+integer, halves away from zero as Rust's f64::round does. A job matches
+at most one table, and a job waited on waits on none. A derived job's id
+hashes its environment and its table, not the values it takes: the job it
+waits on fixes those.
 
 An arm's source is the tree of what its binary is built from (Cargo.toml,
 Cargo.lock, rust-toolchain.toml and crates/ at its commit), so commits
@@ -71,8 +87,9 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   dies costs little. `down` terminates them; `status` and `down` given a
   matrix act on every run that includes it.
 - Each new instance first runs the canary: the first matrix's first job
-  with its [canary] overrides, also run here. A different trace means the
-  binaries don't reproduce across hosts, and the run stops.
+  that waits on none, with its [canary] overrides, also run here. A
+  different trace means the binaries don't reproduce across hosts, and the
+  run stops.
 - Every 15 s the controller syncs each instance over SSH (worker.py sync):
   it tops the instance's queue up to its slots plus a quarter, stores the
   rows that came back (fsync), and acks them on the next sync.
@@ -82,6 +99,9 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   row: a job whose row arrives twice is compared on (trace, frames,
   bytes), and --verify N (2) runs N jobs of each matrix twice on purpose,
   on different instances. A job that fails twice is recorded and dropped.
+- A job that waits goes to the head of the queue once the job it waits
+  on has a row, and fails for good when that job does. Waiting jobs count
+  towards the instances the run wants, and keep them from being retired.
 - Once the queue is empty, instances with nothing left to run are
   terminated; until then they take the next matrix's jobs. On ^C (or
   SIGTERM or SIGHUP) the run's instances are terminated unless --keep; a
@@ -124,6 +144,7 @@ import datetime
 import hashlib
 import itertools
 import json
+import math
 import os
 import re
 import shutil
@@ -154,6 +175,8 @@ POOL_BACKOFF = 600
 PRICE_REFRESH = 600
 BUDGET_REFRESH = 120
 SYSTEM_GIB = 4
+# The seed knobs, which reports don't group by.
+SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
 # a binary, and jobs.
 SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates"]
@@ -205,6 +228,49 @@ class Job:
     bin: str
     test: str
     env: tuple[tuple[str, str], ...]
+    # The id of the job whose row this one waits for, and the variables it
+    # takes from that row (its [[derive]] table's `set`).
+    after: str = ""
+    derive: tuple[tuple[str, str], ...] = ()
+
+
+@dataclasses.dataclass
+class Derive:
+    """A [[derive]] table."""
+
+    when: dict[str, set[str]]
+    src: dict[str, str]
+    set: tuple[tuple[str, str], ...]
+
+    def matches(self, env: dict[str, str]) -> bool:
+        return all(env.get(k) in vs for k, vs in self.when.items())
+
+
+def round_half_away(x: float) -> int:
+    """x to the nearest integer, halves away from zero, as Rust's
+    f64::round does."""
+    a = abs(x)
+    r = math.floor(a)
+    if a - r >= 0.5:
+        r += 1
+    return int(math.copysign(r, x))
+
+
+def derived_env(job: "Job", row: dict) -> tuple[dict[str, str], str | None]:
+    """The variables `job` takes from the row of the job it waits on, or
+    why it can't."""
+    out = {}
+    for var, spec in job.derive:
+        field, _, how = spec.partition(":")
+        v = row.get(field)
+        if how == "round":
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return {}, f"{var}: the row's {field} is {v!r}, not a number"
+            v = round_half_away(v)
+        elif isinstance(v, bool) or not isinstance(v, (int, float, str)):
+            return {}, f"{var}: the row's {field} is {v!r}"
+        out[var] = str(v)
+    return out, None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -219,9 +285,6 @@ class Item:
     def wid(self) -> str:
         return self.job.id + self.copy
 
-    def wire(self) -> dict:
-        return {"id": self.wid, "bin": self.job.bin, "test": self.job.test, "env": dict(self.job.env)}
-
 
 class Matrix:
     def __init__(self, path: str) -> None:
@@ -230,20 +293,56 @@ class Matrix:
         m = tomllib.loads(self.path.read_text())
         self.package = m["package"]
         self.target = m["target"]
-        self.test = m["test"]
+        test = m["test"]
+        self.tests = [str(t) for t in test] if isinstance(test, list) else [str(test)]
         self.slot_mem_gib = float(m.get("slot_mem_gib", 2))
         self.arms = {k: str(v) for k, v in m["arms"].items()}
         self.env = {k: str(v) for k, v in m.get("env", {}).items()}
         self.axes = {k: [str(x) for x in v] for k, v in m.get("axes", {}).items()}
         self.canary = {k: str(v) for k, v in m.get("canary", {}).items()}
+        self.derives = [self.parse_derive(i, d) for i, d in enumerate(m.get("derive", []))]
         rep = m.get("report", {})
         self.columns = rep.get(
             "columns", ["delivery:mean,min", "lag_p50_ms:median", "lag_p99_ms:median,max"]
         )
-        self.group = rep.get("group", ["arm"] + [k for k in self.axes if k != "SIM_SEED"])
+        self.group = rep.get(
+            "group",
+            ["arm"]
+            + (["test"] if len(self.tests) > 1 else [])
+            + [k for k in self.axes if k not in SEED_KEYS],
+        )
         self.state = FARM / self.name
         self.commits: dict[str, str] = {}
         self.sources: dict[str, str] = {}
+
+    def parse_derive(self, i: int, d: dict) -> Derive:
+        def bad(msg: str):
+            sys.exit(f"{self.path}: [[derive]] {i + 1}: {msg}")
+
+        known = set(self.env) | set(self.axes)
+        when = {
+            k: {str(x) for x in (v if isinstance(v, list) else [v])}
+            for k, v in d.get("when", {}).items()
+        }
+        src = {k: str(v) for k, v in d.get("from", {}).items()}
+        sets = tuple(sorted((k, str(v)) for k, v in d.get("set", {}).items()))
+        if not when or not src or not sets:
+            bad("it needs when, from and set")
+        if set(when) - known or set(src) - known:
+            bad(f"when and from name {sorted((set(when) | set(src)) - known)}, not in [env] or [axes]")
+        if {k for k, _ in sets} & known:
+            bad(f"set names {sorted({k for k, _ in sets} & known)}, which [env] or [axes] set")
+        for k, spec in sets:
+            field, _, how = spec.partition(":")
+            if not field or how not in ("", "round"):
+                bad(f"set {k} = {spec!r}: a row field, or field:round")
+        return Derive(when, src, sets)
+
+    def derive_of(self, env: dict[str, str]) -> Derive | None:
+        hits = [d for d in self.derives if d.matches(env)]
+        if len(hits) > 1:
+            sys.exit(f"{self.path}: a job matches two [[derive]] tables: {env}")
+        return hits[0] if hits else None
 
     def resolve(self) -> None:
         for arm, ref in self.arms.items():
@@ -255,24 +354,51 @@ class Matrix:
     def bin_name(self, source: str) -> str:
         return f"{self.package}-{self.target}-{source}"
 
-    def job(self, arm: str, env: dict[str, str]) -> Job:
+    def job(self, arm: str, test: str, env: dict[str, str], derive: Derive | None = None,
+            after: str = "") -> Job:
         source = self.sources[arm]
         env_t = tuple(sorted(env.items()))
-        key = json.dumps([source, self.package, self.target, self.test, env_t])
-        jid = hashlib.sha256(key.encode()).hexdigest()[:16]
-        return Job(jid, arm, self.commits[arm], source, self.bin_name(source), self.test, env_t)
+        key = [source, self.package, self.target, test, env_t]
+        if derive is not None:
+            key.append([sorted(derive.src.items()), derive.set])
+        jid = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
+        return Job(
+            jid, arm, self.commits[arm], source, self.bin_name(source), test, env_t,
+            after, derive.set if derive is not None else (),
+        )
 
     def jobs(self) -> list[Job]:
+        """The axes' jobs, and the jobs derived ones wait on, then the
+        derived jobs."""
         keys = list(self.axes)
-        return [
-            self.job(arm, {**self.env, **dict(zip(keys, combo))})
-            for arm in self.arms
-            for combo in itertools.product(*(self.axes[k] for k in keys))
-        ]
+        plain, derived = [], []
+        ids = set()
+        for arm in self.arms:
+            for test in self.tests:
+                for combo in itertools.product(*(self.axes[k] for k in keys)):
+                    env = {**self.env, **dict(zip(keys, combo))}
+                    d = self.derive_of(env)
+                    if d is None:
+                        plain.append(self.job(arm, test, env))
+                        ids.add(plain[-1].id)
+                        continue
+                    src_env = {**env, **d.src}
+                    if src_env == env:
+                        sys.exit(f"{self.path}: a [[derive]] job would wait on itself: {env}")
+                    if self.derive_of(src_env) is not None:
+                        sys.exit(f"{self.path}: a job waited on waits on another: {src_env}")
+                    src = self.job(arm, test, src_env)
+                    derived.append((src, self.job(arm, test, env, d, src.id)))
+        out = list(plain)
+        for src, _ in derived:
+            if src.id not in ids:
+                out.append(src)
+                ids.add(src.id)
+        return out + [j for _, j in derived]
 
     def canary_job(self) -> Job:
-        first = self.jobs()[0]
-        return self.job(first.arm, {**dict(first.env), **self.canary})
+        first = next(j for j in self.jobs() if not j.after)
+        return self.job(first.arm, first.test, {**dict(first.env), **self.canary})
 
 
 def run_name(matrices: list[Matrix]) -> str:
@@ -679,6 +805,9 @@ class Run:
         self.attempts: collections.Counter = collections.Counter()
         self.took: dict[str, set[str]] = collections.defaultdict(set)  # job id -> hosts
         self.queue: collections.deque[Item] = collections.deque()
+        # job id -> the items that wait for its row
+        self.waiting: dict[str, list[Item]] = {}
+        self.derived: dict[str, dict[str, str]] = {}  # job id -> what it took from the row
         self.hosts: list[Host] = []
         self.pool = cf.ThreadPoolExecutor(max_workers=16)
         self.budget: int | None = None
@@ -693,6 +822,9 @@ class Run:
             self.items[item.wid] = item
             if done:
                 self.done.add(item.wid)
+            elif item.job.after:
+                # Queued by run(), once the logs are open, if it has its row.
+                self.waiting.setdefault(item.job.after, []).append(item)
             else:
                 self.queue.append(item)
 
@@ -732,6 +864,25 @@ class Run:
         if n:
             log(f"copied {n} rows from one matrix to another")
 
+    def env_of(self, job: Job) -> dict[str, str]:
+        return {**dict(job.env), **self.derived.get(job.id, {})}
+
+    def wire(self, item: Item) -> dict:
+        return {"id": item.wid, "bin": item.job.bin, "test": item.job.test, "env": self.env_of(item.job)}
+
+    def release(self, jid: str) -> None:
+        """Queues the items that wait for job `jid`'s row, at the head."""
+        ready = []
+        for item in self.waiting.pop(jid, []):
+            if item.job.id not in self.derived:
+                took, why = derived_env(item.job, self.rows[jid]["row"])
+                if why is not None:
+                    self.give_up(None, item, {"error": f"waited on {jid}: {why}"})
+                    continue
+                self.derived[item.job.id] = took
+            ready.append(item)
+        self.queue.extendleft(reversed(ready))
+
     def store(self, host: Host, item: Item, res: dict) -> None:
         at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         recs = []
@@ -740,7 +891,8 @@ class Run:
                 "id": j.id,
                 "arm": j.arm,
                 "commit": j.commit,
-                "env": dict(j.env),
+                "test": j.test,
+                "env": self.env_of(j),
                 "copy": item.copy,
                 "host": host.id,
                 "type": host.type,
@@ -757,6 +909,7 @@ class Run:
             self.walls.append(res["wall_s"])
         rec = recs[0][1]
         first = self.rows.setdefault(item.job.id, rec)
+        self.release(item.job.id)
         if first is not rec:
             key = lambda r: tuple(r["row"].get(k) for k in ("trace", "frames", "bytes"))
             if key(first) == key(rec):
@@ -775,12 +928,24 @@ class Run:
         if self.attempts[item.wid] < 2:
             self.queue.appendleft(item)
         else:
-            self.done.add(item.wid)
-            self.failed += 1
-            for m, j in self.owners[item.job.id]:
-                append_jsonl(m.state / "failures.jsonl", [{
-                    "id": j.id, "arm": j.arm, "env": dict(j.env), "host": host.id, **res,
-                }])
+            self.give_up(host.id, item, res)
+
+    def give_up(self, host: str | None, item: Item, res: dict) -> None:
+        """Records the item as failed for good, and so the items that wait
+        on its job if that job is done without a row."""
+        self.done.add(item.wid)
+        self.failed += 1
+        for m, j in self.owners[item.job.id]:
+            append_jsonl(m.state / "failures.jsonl", [{
+                "id": j.id, "arm": j.arm, "env": self.env_of(j), "host": host, **res,
+            }])
+        jid = item.job.id
+        if jid in self.waiting and jid not in self.rows and all(
+            i.wid in self.done for i in self.items.values() if i.job.id == jid and i.copy != "canary"
+        ):
+            for w in self.waiting.pop(jid):
+                log(f"job {w.wid} waited on {jid}, which failed")
+                self.give_up(None, w, {"error": f"waited on {jid}, which failed"})
 
     def requeue(self, host: Host) -> None:
         back = [i for i in host.assigned.values() if i.wid not in self.done and i.copy != "canary"]
@@ -827,7 +992,7 @@ class Run:
         return out
 
     def sync(self, host: Host, jobs: list[Item], acks: list[str]) -> dict:
-        req = json.dumps({"ack": acks, "jobs": [i.wire() for i in jobs]})
+        req = json.dumps({"ack": acks, "jobs": [self.wire(i) for i in jobs]})
         if self.local:
             p = subprocess.run(
                 [sys.executable, str(HERE / "worker.py"), "sync", "--dir", str(self.local_dir)],
@@ -864,6 +1029,11 @@ class Run:
                     self.queue.remove(item)
                 except ValueError:
                     pass
+                waits = self.waiting.get(item.job.after, [])
+                if item in waits:
+                    waits.remove(item)
+                    if not waits:
+                        del self.waiting[item.job.after]
         gone = [host.assigned.pop(w) for w in list(host.assigned) if w not in there]
         back = [i for i in gone if i.copy != "canary" and i.wid not in self.done]
         if back:
@@ -892,7 +1062,7 @@ class Run:
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True)
         p = subprocess.run(
-            [str(BIN / job.bin), "--exact", job.test, "--ignored", "--nocapture", "--test-threads", "1"],
+            [str(BIN / job.bin), "--exact", job.test, "--include-ignored", "--nocapture", "--test-threads", "1"],
             cwd=work, env={**os.environ, **dict(job.env)}, capture_output=True, text=True,
         )
         rows = [l[l.index("ROW {") + 4 :] for l in p.stdout.splitlines() if "ROW {" in l]
@@ -1025,7 +1195,8 @@ class Run:
 
     def scale(self, now: float) -> None:
         live = [h for h in self.hosts if h.state != "lost"]
-        demand = len(self.queue) + sum(len(h.assigned) for h in live)
+        waiting = sum(len(w) for w in self.waiting.values())
+        demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
         deficit = demand - sum(h.slots for h in live)
         if deficit > 0 and now >= self.next_budget:
             self.read_budget(now)
@@ -1065,7 +1236,7 @@ class Run:
             launched += 1
 
     def retire_idle(self) -> None:
-        if self.queue:
+        if self.queue or self.waiting:
             return
         for h in self.hosts:
             if h.state == "ready" and not h.assigned:
@@ -1154,9 +1325,11 @@ class Run:
             left = len(self.queue) + out
             mins = statistics.fmean(self.walls) * left / slots / 60
             eta = f", about {mins:.0f} min left"
+        waiting = sum(len(w) for w in self.waiting.values())
         log(
             f"{ndone}/{total} done ({self.failed} failed, {self.verified} verified, "
-            f"{self.mismatches} mismatched), {out} out, {len(self.queue)} queued; "
+            f"{self.mismatches} mismatched), {out} out, {len(self.queue)} queued"
+            + (f", {waiting} waiting" if waiting else "") + "; "
             + (", ".join(f"{k} x{n}" for k, n in sorted(kinds.items())) or "no instances")
             + (f"; ${spend:.2f}" if not self.local else "") + eta
         )
@@ -1187,7 +1360,7 @@ class Run:
             self.scale(now)
 
     def finished(self) -> bool:
-        return not self.queue and not any(
+        return not self.queue and not self.waiting and not any(
             i.copy != "canary" for h in self.hosts if h.state != "lost" for i in h.assigned.values()
         )
 
@@ -1206,6 +1379,8 @@ class Run:
             log(f"{self.name}: {len(self.owners)} jobs, {shared} of them in more than one "
                 f"matrix; {to_run} to run")
             self.share_rows()
+        for jid in [j for j in self.waiting if j in self.rows]:
+            self.release(jid)
         if self.local:
             self.setup_local()
         else:
@@ -1289,7 +1464,10 @@ def fmt(x: float | None) -> str:
 
 
 def short(key: str) -> str:
-    return key.removeprefix("SIM_").lower() if key.startswith("SIM_") else key
+    for prefix in ("STRIMS_SIM_", "SIM_"):
+        if key.startswith(prefix):
+            return key.removeprefix(prefix).lower()
+    return key
 
 
 def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
@@ -1306,10 +1484,13 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     conds = [w.split("=", 1) for w in where]
 
     def value(rec: dict, key: str) -> str:
-        if key == "arm":
-            return rec["arm"]
+        if key in ("arm", "test"):
+            return rec.get(key, "")
         env = rec["env"]
-        return env.get(key, env.get(f"SIM_{key.upper()}", ""))
+        for k in (key, f"SIM_{key.upper()}", f"STRIMS_SIM_{key.upper()}"):
+            if k in env:
+                return env[k]
+        return ""
 
     groups: dict[tuple, list[dict]] = {}
     for j in jobs:
