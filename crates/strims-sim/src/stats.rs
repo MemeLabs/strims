@@ -241,26 +241,27 @@ pub struct RunnerReport {
     pub meter: Vec<MeterSample>,
     /// Per scenario swarm, an adaptive seed's state at its last sample.
     pub seeds: BTreeMap<usize, SeedSample>,
+    /// An adaptive seed's state each time it changed: (time since the
+    /// start, scenario swarm, state).
+    pub seed_changes: Vec<(Duration, usize, SeedSample)>,
 }
 
 /// A node's upload meter at one sample (`PushStats::upload_rate`,
-/// `upload_busy_permille`, `upload_capacity`, `upload_queue_delay`), with
-/// the subscriptions it served per scenario swarm (`PushStats::children`),
-/// the STREAM_REQUESTs it answered (`accepted` plus `rejected`, over its
-/// hybrid swarms, since the incarnation started) and an adaptive seed's
-/// state per scenario swarm.
+/// `upload_busy_permille`, `upload_capacity`, `upload_queue_delay` in
+/// milliseconds), with the subscriptions it served per scenario swarm
+/// (`PushStats::children`) and the STREAM_REQUESTs it answered (`accepted`
+/// plus `rejected`, over its hybrid swarms, since the incarnation started).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
     pub t: Duration,
     pub rate: u64,
     pub busy_permille: u32,
+    pub queue_delay_ms: Option<u32>,
     pub capacity: u64,
-    pub queue_delay: Option<strims_base::time::Duration>,
     pub children: BTreeMap<usize, usize>,
-    pub requests_in: u64,
-    pub rejected: u64,
-    pub seeds: BTreeMap<usize, SeedSample>,
+    pub requests_in: u32,
+    pub rejected: u32,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -289,6 +290,7 @@ impl RunnerReport {
         self.queue_drops += o.queue_drops;
         self.meter.extend(o.meter.iter().cloned());
         self.seeds.extend(o.seeds.iter().map(|(&s, &x)| (s, x)));
+        self.seed_changes.extend(o.seed_changes.iter().copied());
     }
 }
 
@@ -357,6 +359,8 @@ pub(crate) struct HostStats {
     meter: Vec<MeterSample>,
     /// Adaptive seeds by scenario swarm.
     seeds: BTreeMap<usize, SeedSample>,
+    /// Their changes (see [`RunnerReport::seed_changes`]).
+    seed_changes: Vec<(Duration, usize, SeedSample)>,
 }
 
 /// What one sample showed that the invariants check.
@@ -451,12 +455,17 @@ impl HostStats {
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
                     capacity: push.upload_capacity,
-                    queue_delay: push.upload_queue_delay,
+                    queue_delay_ms: push
+                        .upload_queue_delay
+                        .map(|d| u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX)),
                     ..MeterSample::default()
                 });
                 ms.children.insert(s, push.children);
-                ms.requests_in += push.accepted + push.rejected;
-                ms.rejected += push.rejected;
+                let count = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
+                ms.requests_in = ms
+                    .requests_in
+                    .saturating_add(count(push.accepted + push.rejected));
+                ms.rejected = ms.rejected.saturating_add(count(push.rejected));
                 if push.seed_window > 0 {
                     let seed = SeedSample {
                         budget: push.seed_budget,
@@ -465,8 +474,9 @@ impl HostStats {
                         first_wave: push.seed_first_wave,
                         first_wave_capacity: push.seed_first_wave_capacity,
                     };
-                    ms.seeds.insert(s, seed);
-                    self.seeds.insert(s, seed);
+                    if self.seeds.insert(s, seed) != Some(seed) {
+                        self.seed_changes.push((t, s, seed));
+                    }
                 }
             }
             let c = SwarmCounters {
@@ -515,6 +525,7 @@ impl HostStats {
         self.swarms.clear();
         self.meter.clear();
         self.seeds.clear();
+        self.seed_changes.clear();
     }
 
     fn current(&self) -> RunnerReport {
@@ -552,6 +563,7 @@ impl HostStats {
         r.queue_drops = self.peers.values().map(|t| t.total()[0]).sum();
         r.meter = self.meter.clone();
         r.seeds = self.seeds.clone();
+        r.seed_changes = self.seed_changes.clone();
         r
     }
 

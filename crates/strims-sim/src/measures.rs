@@ -168,8 +168,8 @@ impl Report {
             .collect();
         let mut v: Vec<f64> = samples
             .iter()
-            .filter_map(|m| m.queue_delay)
-            .map(|d| d.as_millis() as f64)
+            .filter_map(|m| m.queue_delay_ms)
+            .map(f64::from)
             .collect();
         let had = if samples.is_empty() {
             0.0
@@ -232,9 +232,9 @@ impl Report {
                     m.rejected
                 };
                 last = m.rejected;
-                all += d;
+                all += u64::from(d);
                 if cap > 0.0 && (m.rate as f64) < cap / 2.0 {
-                    wrong += d;
+                    wrong += u64::from(d);
                 }
             }
         }
@@ -252,10 +252,10 @@ impl Report {
         };
         let samples: Vec<_> = host
             .runner
-            .meter
+            .seed_changes
             .iter()
-            .filter(|m| m.t >= s.start && m.t <= s.stop)
-            .filter_map(|m| m.seeds.get(&swarm))
+            .filter(|(t, x, _)| *x == swarm && *t >= s.start && *t <= s.stop)
+            .map(|(_, _, seed)| seed)
             .collect();
         let changes = |f: fn(&crate::stats::SeedSample) -> usize| {
             samples
