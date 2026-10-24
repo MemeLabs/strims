@@ -190,12 +190,6 @@ Egress and players:
   its crashes, in allocations under 400 KiB (no larger one grows), which
   puts it near its check's bound; find whether the nodes or the harness
   hold it.
-- strims-sim's sweeps can't shard onto the farm (`hack/sim-farm`): a
-  sweep runs a test's seeds on threads of one process, and no entry point
-  runs one config and prints its row, as the ppspp sim's `sim_job` does.
-- The allocation tables' pinned cases need the admission run's slots for
-  the same scenario and seed first; the farm has no jobs that wait on
-  others, so `sim_job` takes them from `SIM_SLOTS` by hand.
 
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
