@@ -3,6 +3,12 @@
 
 //! Queueing delay on the node's uplink, from ping round trips.
 //!
+//! A channel pings once a second for its request controller, and in a
+//! hybrid swarm every [`METER_PING`] while it sends data, for the meter
+//! alone: with a sample
+//! every few hundred milliseconds the least of the recent ones finds the
+//! standing queue between bursts.
+//!
 //! A ping's nonce is our clock when its frame was built, so its round trip
 //! includes whatever waits past the runner: the driver's link buffers, the
 //! kernel's unsent bytes and congestion window, the access network's queue.
@@ -30,7 +36,9 @@ pub(crate) const BASE_BUCKETS: usize = 20;
 /// as a standing queue.
 pub(crate) const RECENT: Duration = Duration::from_secs(3);
 /// Round trips a peer keeps between folds into its base.
-const SAMPLES: usize = 8;
+const SAMPLES: usize = 32;
+/// While a channel sends data it also pings this often, for the meter.
+pub(crate) const METER_PING: Duration = Duration::from_millis(200);
 /// The fewest peers with recent samples that give a reading.
 pub(crate) const MIN_PEERS: usize = 3;
 

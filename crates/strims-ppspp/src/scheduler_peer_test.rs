@@ -872,6 +872,41 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
 }
 
 #[test]
+fn channels_that_send_data_ping_for_the_meter() {
+    let mut f = fixture(SwarmOptions {
+        push_mode: PushMode::Hybrid,
+        ..Default::default()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let cfg = f.swarm.reader_config();
+    let pings = |f: &mut Fixture, at: Time| {
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+        msgs.iter()
+            .filter_map(|m| match m {
+                Message::Ping(x) => Some(x.nonce),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(pings(&mut f, now()).len(), 1);
+    // Without data sent, the next ping waits for the interval ...
+    assert!(pings(&mut f, now() + Duration::from_millis(300)).is_empty());
+    // ... and with data, the meter pings every `METER_PING`; only the
+    // meter takes their round trips.
+    f.sched.channels.get_mut(&p).unwrap().last_data_sent = now() + Duration::from_millis(300);
+    let meter = pings(&mut f, now() + Duration::from_millis(400));
+    assert_eq!(meter.len(), 1);
+    let back = now() + Duration::from_millis(450);
+    assert_eq!(
+        f.sched.handle_pong(p, meter[0], back),
+        Some(Duration::from_millis(50))
+    );
+    assert_eq!(f.sched.channels[&p].controller.rtt(), Duration::ZERO);
+}
+
+#[test]
 fn bbr_like_measures_with_local_times_only() {
     // The BBR-style window takes its round trip from our request to the
     // data, on our clock: data stamped by a peer clock hours off changes

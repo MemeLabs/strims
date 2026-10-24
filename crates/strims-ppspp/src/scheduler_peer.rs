@@ -109,6 +109,7 @@ use crate::codec::{
 use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
 use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
+use crate::queue_delay::METER_PING;
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
@@ -129,8 +130,8 @@ pub(crate) const SCHEDULER_RESTART_COOLDOWN: Duration = Duration::from_secs(1);
 /// How often a channel that writes also pings.
 pub(crate) const PING_INTERVAL: Duration = Duration::from_secs(1);
 /// Pings whose round trips a channel still accepts for the upload meter:
-/// a queue up to this many [`PING_INTERVAL`]s long still shows.
-const SENT_PINGS: usize = 4;
+/// a queue up to this many [`METER_PING`]s long still shows.
+const SENT_PINGS: usize = 16;
 /// How long a channel leaves bins alone after its peer failed to deliver
 /// them: two ticks, so every other channel gets a write cycle to request
 /// them first.
@@ -535,6 +536,10 @@ pub(crate) struct PeerChannelScheduler {
     /// The nonces of the latest pings, unanswered ones nonzero: their
     /// round trips go to the upload meter, however long they take.
     sent_pings: [u64; SENT_PINGS],
+    /// The next ping for the meter alone, while we send the peer data.
+    next_meter_ping: Time,
+    /// When we last sent the peer data.
+    last_data_sent: Time,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group, and [`CANDIDATE_CAPACITY`] between rounds.
@@ -575,6 +580,8 @@ impl PeerChannelScheduler {
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             sent_pings: [0; SENT_PINGS],
+            next_meter_ping: Time::EPOCH,
+            last_data_sent: Time::NIL,
             candidate_bins: Vec::new(),
             push: s.push.as_ref().map(|_| PushChannel::new(streams)),
         }
@@ -1901,11 +1908,20 @@ impl PeerSwarmScheduler {
         let Some((s, c)) = self.channel(peer) else {
             return Ok(());
         };
-        if now > c.next_ping_time {
+        // The controller takes a ping a second; while data flows in a
+        // hybrid swarm the meter takes one every `METER_PING` too.
+        let meter_ping = s.push.is_some()
+            && !c.last_data_sent.is_nil()
+            && now - c.last_data_sent <= Duration::SECOND
+            && now > c.next_meter_ping;
+        if now > c.next_ping_time || meter_ping {
             let nonce = now.unix_nanos() as u64;
             cw.write(&Message::Ping(Ping { nonce }))?;
-            c.next_ping_time = now + PING_INTERVAL;
-            c.ping_nonce = nonce;
+            if now > c.next_ping_time {
+                c.next_ping_time = now + PING_INTERVAL;
+                c.ping_nonce = nonce;
+            }
+            c.next_meter_ping = now + METER_PING;
             c.sent_pings.rotate_left(1);
             if let Some(last) = c.sent_pings.last_mut() {
                 *last = nonce;
@@ -1949,6 +1965,7 @@ impl PeerSwarmScheduler {
             if chunks <= cw.available() {
                 match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
                     Ok(()) => {
+                        c.last_data_sent = now;
                         s.count_sent(b, pri);
                         s.tap.emit(s.key, Some(peer), || TapKind::DataSent {
                             bin: b,
