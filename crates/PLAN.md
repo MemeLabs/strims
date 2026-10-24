@@ -186,6 +186,10 @@ Egress and players:
   incompressible payload; this would cut them about eightfold.
 
 ### Simulation farm
+- `long_run`'s heap grows about 4 MB over its 10 minutes even without
+  its crashes, in allocations under 400 KiB (no larger one grows), which
+  puts it near its check's bound; find whether the nodes or the harness
+  hold it.
 - strims-sim's sweeps can't shard onto the farm (`hack/sim-farm`): a
   sweep runs a test's seeds on threads of one process, and no entry point
   runs one config and prints its row, as the ppspp sim's `sim_job` does.
@@ -226,12 +230,17 @@ in each.
    - Calibration (`hack/testbed` against `calibration_star`): with
      `STRIMS_SIM_TCP` the sim matches a real shaped link's busy fraction,
      meter reading, uplink queue, detection time and a slow viewer's
-     pushback; without it, it misses the pushback. It reads the queueing
-     delay 1.4-1.7 times high under saturation behind 500 ms queues (its
-     pings wait out each connection's backlog where real ones see the
-     queue's troughs), and below saturation it reads none where a real
-     link reads 20-80 ms at p90 from bursts. Close both before trusting a
-     ranking that turns on the delay's level.
+     pushback; without it, it misses the pushback. Its queueing delay
+     reads within 20 % of the real link's behind 500-1000 ms queues but
+     half of it behind 100 ms ones, and below saturation it reads none
+     where a real link reads about 50 ms at p90 from bursts. The window
+     model also holds our data in its senders' queues far longer than real
+     TCP: at 0.8 of the uplink, data's one-way delay stands about 120 ms
+     over its base in the sim and about 5 ms on the real link. Close these
+     before trusting a ranking that turns on the delay's level. (HAVE
+     round trips and ACK one-way delays as the delay's samples measured no
+     better than the meter's pings on the real link; branch
+     `queue-delay-source`.)
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer

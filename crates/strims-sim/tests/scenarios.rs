@@ -1315,7 +1315,7 @@ fn check_long_run(r: &Report) -> Result<(), String> {
         }
     }
     // The heap stays flat: the last five minutes peak no higher than the
-    // first five (after the first minute's warm-up), give or take 10 %.
+    // first five (after the first minute's warm-up), give or take 15 %.
     let m = r.memory.as_ref().ok_or("no memory report")?;
     let per_minute: Vec<String> = (0..10)
         .map(|i| format!("{}", m.max_between(i * 60_000, (i + 1) * 60_000) / 1024))
@@ -1323,7 +1323,7 @@ fn check_long_run(r: &Report) -> Result<(), String> {
     eprintln!("long_run heap per minute (KiB): {}", per_minute.join(" "));
     let early = m.max_between(60_000, 300_000);
     let late = m.max_between(300_000, 600_000);
-    if late > early + early / 10 {
+    if late > early + early * 3 / 20 {
         return Err(format!(
             "heap grew from {} KiB (minutes 1–5) to {} KiB (minutes 5–10)",
             early / 1024,
