@@ -231,14 +231,17 @@ in each.
      cut p99 16 %, with a 30 s hold 11 %, alone nothing; twice the rate
      made it 55-64 % worse (relays decline everything); knowing the uplink
      cuts 35 %. The detector's threshold (80-160 ms) didn't matter.
-   - Before ranking estimators, give strims-sim varying upload capacity:
-     competing flows that come and go on hosts' access links, so an
-     estimate that never forgets a measurement pays for it. The screen's
-     uplinks never change, which is all that made a hold for the stream's
-     life win; it isn't viable on real links. Then screen only rules that
-     keep adapting (holds of 10, 30, 60 s and the like) on fixed and
-     changing cells, scoring how long the estimate stays off after each
-     change. Handoff: `~/.claude/plans/handoff-varying-uplink.md`.
+   - Screen only rules that keep adapting (holds of 10, 30, 60 s and the
+     like) on the fixed uncapped cells and their `_varying` and `_step`
+     versions, where other apps' bulk uploads come and go on the seed's
+     and a third of the viewers' uplinks (`HostSpec::competing`), scoring
+     the share of time the meter reads more than 20 % off after each
+     change (`off_drop`, `off_rise`). A hold for the stream's life won
+     the earlier screen only because no uplink changed. Mind the
+     detector's threshold: beside a competing upload pings read a
+     standing queue of about 20-30 ms (p90 60-80 ms) behind a 100 ms
+     queue, and a threshold at or above the queue fires only from data in
+     socket buffers. Handoff: `~/.claude/plans/handoff-varying-uplink.md`.
    - Relays read about a fifth of their uplink under every screened rule,
      and over half their declines come while they use under half of it
      (with a known uplink about a seventh): a relay rarely saturates, so
@@ -266,7 +269,16 @@ in each.
      before trusting a ranking that turns on the delay's level. (HAVE
      round trips and ACK one-way delays as the delay's samples measured no
      better than the meter's pings on the real link; branch
-     `queue-delay-source`.)
+     `queue-delay-source`.) Through a halving of the seed's uplink and
+     beside a competing upload (testbed `SEED_UP_STEPS`, `COMPETE`), the
+     uplink queue, lag and the share of time the meter reads off match
+     within 2x, with two gaps. After the halving real seeds often lock
+     into shedding their pushes while viewers pull everything from them
+     (busy over 0.9 most seconds, lag about 3.5 s; 2 of 3 runs on main),
+     a state the sim leaves within seconds: find why simulated viewers
+     stop pulling from a shedding seed. Beside a competing upload the
+     sim's worst second of lag is half the real one (real TCP's
+     retransmission timeouts aren't modelled).
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer
