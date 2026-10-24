@@ -272,11 +272,16 @@ in each.
      `queue-delay-source`.) Through a halving of the seed's uplink and
      beside a competing upload (testbed `SEED_UP_STEPS`, `COMPETE`), the
      uplink queue, lag and the share of time the meter reads off match
-     within 2x, with two gaps. After the halving real seeds often lock
-     into shedding their pushes while viewers pull everything from them
-     (busy over 0.9 most seconds, lag about 3.5 s; 2 of 3 runs on main),
-     a state the sim leaves within seconds: find why simulated viewers
-     stop pulling from a shedding seed. Beside a competing upload the
+     within 2x, with two gaps. After the halving both fall into a loop:
+     the seed's pushes come late, viewers drop it as a parent for misses
+     and pull those streams from it, so its queue never drains (busy over
+     0.9, viewers holding at most 3/4 of their parents, lag about 3.5 s).
+     Real runs spend a median 56 % of the two minutes after the drop in
+     it (stretches up to 56 s), the sim 9 % (up to 22 s). Inside it the
+     one large difference is the seed's queue of answers to requests
+     (about 160 chunks real, 36 sim, at the same request rate): compare
+     viewers' request windows to the seed to find why. The loop itself
+     is worth breaking in ppspp too. Beside a competing upload the
      sim's worst second of lag is half the real one (real TCP's
      retransmission timeouts aren't modelled).
    - One peer whose link blocks keeps its data queued, so the meter reads
