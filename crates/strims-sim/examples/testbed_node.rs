@@ -20,8 +20,9 @@
 //! nodes share the clock) and writes for `--secs`; a viewer dials its
 //! links `--join-at` seconds after the start. Each node prints one JSON line
 //! per second on stdout: its upload meter, its channels' round trips, its
-//! transfers per peer (`strims_sim::TransferSample`, peers by index) and,
-//! at a viewer, the lag of the frames it read in that second.
+//! transfers per peer (`strims_sim::TransferSample`, peers by index), the
+//! process's CPU time so far and, at a viewer, the lag of the frames it
+//! read in that second.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -118,6 +119,18 @@ fn now_ms() -> u64 {
     let now = std::time::SystemTime::now();
     now.duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
+}
+
+/// The process's user and system CPU time so far, in milliseconds, from
+/// `/proc/self/stat` (fields 14 and 15, in clock ticks of 10 ms: Linux's
+/// `USER_HZ` is 100). `None` off Linux.
+fn cpu_ms() -> Option<u64> {
+    let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+    // The command name, field 2, is in parentheses and may hold spaces.
+    let mut rest = stat.get(stat.rfind(')')? + 1..)?.split_whitespace();
+    let utime: u64 = rest.nth(11)?.parse().ok()?;
+    let stime: u64 = rest.next()?.parse().ok()?;
+    Some((utime + stime) * 10)
 }
 
 fn key_of(i: usize) -> strims_proto::types::Key {
@@ -350,7 +363,7 @@ async fn run() -> Result<(), String> {
             let transfers =
                 TransferSample::of(&m, swarm, index).map_or("null".to_owned(), |x| x.json());
             println!(
-                "{{\"t_ms\":{t},\"rel_ms\":{},\"index\":{},\"seed\":{seed},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"transfers\":{transfers}}}",
+                "{{\"t_ms\":{t},\"rel_ms\":{},\"index\":{},\"seed\":{seed},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers}}}",
                 t as i64 - start_ms as i64,
                 a.index,
                 m.driver.bytes_written,
@@ -369,6 +382,7 @@ async fn run() -> Result<(), String> {
                 pct(&lag, 0.99),
                 lag.last().copied().unwrap_or(0),
                 rtts.join(","),
+                cpu_ms().map_or("null".to_owned(), |c| c.to_string()),
             );
             if t >= end_ms + 5000 {
                 return;
