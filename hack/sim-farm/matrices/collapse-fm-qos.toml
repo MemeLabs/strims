@@ -1,0 +1,37 @@
+# collapse-fm.toml's cells on main with every node's rate limit at 90 % of
+# its uplink (STRIMS_SIM_CAL_RATE_LIMIT_PCT), so the node's QoS, not the
+# access link, is where its peers' data waits, and an adaptive seed's
+# holders' weights apply. The limit is also the capacity the meter knows.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+main = "89eba75b"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CAL_MESH = "full"
+STRIMS_SIM_CHUNK = "4096"
+STRIMS_SIM_MUNRO = "32768"
+STRIMS_SIM_CAL_RATE_LIMIT_PCT = "90"
+
+[axes]
+STRIMS_SIM_CAL_VIEWERS = ["3", "7", "15", "31"]
+STRIMS_SIM_CAL_SEED_UP_MBIT = ["5", "10", "20"]
+STRIMS_SIM_CAL_SEED_UP_SCALE = ["", "60:0.5 180:1"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+]
