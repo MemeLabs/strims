@@ -1128,7 +1128,7 @@ fn window_floor_carries_the_stream() {
             l.digest_delay_samples(t);
         }
         assert_eq!(l.cwnd(), 2 * 1024);
-        l.add_rtt_sample(Duration::from_millis(300));
+        l.add_rtt_sample(Duration::from_millis(300), t);
     }
     let requests = requests_at(&mut f, p, t);
     let floor = 2 * rate as i64 * 1024 * 300 / 1000;
@@ -1146,10 +1146,24 @@ fn window_floor_carries_the_stream() {
         .controller
         .ledbat_mut()
         .unwrap()
-        .add_rtt_sample(Duration::from_secs(600));
+        .add_rtt_sample(Duration::from_secs(600), t);
     let _ = requests_at(&mut f, p, t);
     let cap = 2 * rate as i64 * 1024 * STREAM_WINDOW_FLOOR_RTT.as_millis() / 1000;
     assert!(f.sched.channels[&p].controller.ledbat().unwrap().min_cwnd() <= cap);
+}
+
+#[test]
+fn hybrid_window_floor_reads_the_minimum_round_trip() {
+    for (options, on_min) in [(pull(), false), (hybrid(4), true)] {
+        let mut f = fixture(SwarmOptions {
+            request_controller: RequestControllerKind::Ledbat,
+            ..options
+        });
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        let l = f.sched.channels[&p].controller.ledbat().unwrap();
+        assert_eq!(l.floor_on_min(), on_min);
+    }
 }
 
 // --- push/pull hybrid ---------------------------------------------------------

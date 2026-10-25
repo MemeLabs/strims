@@ -590,7 +590,15 @@ impl PeerChannelScheduler {
     /// A fresh request window. Its probing phase derives from the peer's
     /// key, so channels probe at different times, deterministically.
     fn new_controller(peer: PeerKey, s: &SwarmState, now: Time) -> ChannelController {
-        ChannelController::new(s.controller, s.chunk_size, peer.data().as_ffi(), now)
+        let mut c = ChannelController::new(s.controller, s.chunk_size, peer.data().as_ffi(), now);
+        // The hybrid's pushes share the peer's uplink with the answers to
+        // our requests (`<Ledbat as RequestController>::on_round`).
+        if s.push.is_some()
+            && let Some(l) = c.ledbat_mut()
+        {
+            l.set_floor_on_min(true);
+        }
+        c
     }
 
     /// Forgets the old stream after a swarm reset (a new epoch).

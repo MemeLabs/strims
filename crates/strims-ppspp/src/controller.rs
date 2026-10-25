@@ -110,8 +110,11 @@ pub trait RequestController {
 
 impl RequestController for Ledbat {
     /// Sets the window floor: [`STREAM_WINDOW_FLOOR`] times the
-    /// stream's bandwidth-delay product over the ping round trip (at most
-    /// [`STREAM_WINDOW_FLOOR_RTT`]).
+    /// stream's bandwidth-delay product over the ping round trip
+    /// ([`Ledbat::floor_rtt`], at most [`STREAM_WINDOW_FLOOR_RTT`]): in
+    /// [`PushMode::Hybrid`](crate::PushMode::Hybrid) the smallest of the
+    /// last [`MIN_RTT_WINDOW`](crate::ledbat::MIN_RTT_WINDOW), otherwise
+    /// the smoothed one.
     ///
     /// LEDBAT's minimum of 2 chunks carries 2 chunks per round trip, a
     /// fifth of a 32 KiB/s stream at 300 ms. A rise in the path's base
@@ -121,9 +124,25 @@ impl RequestController for Ledbat {
     /// still carries the stream and can catch up. The floor overrides only
     /// LEDBAT's delay signal; after a timed out request LEDBAT governs
     /// alone for a while ([`crate::ledbat::FLOOR_LOSS_HOLD`]).
+    ///
+    /// When the peer's uplink is full, a ping waits behind every byte the
+    /// peer has already written to us, in its frames, its socket and the
+    /// path, so the mean grows with what we asked for, and a floor on it
+    /// lets the channel keep more requested from a congested peer the
+    /// more congested it gets. In Hybrid those answers share the peer's
+    /// uplink with its pushes, to us and to others, and hold them back
+    /// until the children give up on them and pull the streams from the
+    /// peer instead: a loop that keeps its uplink full. The floor there
+    /// follows the minimum: a ping that finds the pipe briefly drained
+    /// reads close to the path's delay, and one in the window is enough;
+    /// a real rise in the path's delay reaches the floor once the older
+    /// pings leave the window. Pull swarms keep the mean: with no pushes
+    /// to hold back, a congested seed's uplink is best kept full of
+    /// distinct requests, and a floor on the minimum costs them lag on
+    /// long paths.
     fn on_round(&mut self, now: Time, stream_rate: u64) {
         let rtt = self
-            .rtt_mean()
+            .floor_rtt()
             .min(STREAM_WINDOW_FLOOR_RTT)
             .as_nanos()
             .max(0) as i128;
@@ -150,8 +169,8 @@ impl RequestController for Ledbat {
         self.forget_sent(bytes);
     }
 
-    fn on_ping_rtt(&mut self, _now: Time, rtt: Duration) {
-        self.add_rtt_sample(rtt);
+    fn on_ping_rtt(&mut self, now: Time, rtt: Duration) {
+        self.add_rtt_sample(rtt, now);
     }
 
     fn on_frame_end(&mut self, now: Time) {
@@ -179,7 +198,7 @@ impl RequestController for Ledbat {
     }
 
     fn min_rtt(&self) -> Duration {
-        Duration::ZERO
+        self.rtt_min()
     }
 
     fn delivery_rate(&self) -> u64 {
@@ -234,7 +253,8 @@ impl ChannelController {
         }
     }
 
-    /// The LEDBAT controller, if it runs one (tests).
+    /// The LEDBAT controller, if it runs one (the scheduler's setup,
+    /// tests).
     pub fn ledbat_mut(&mut self) -> Option<&mut Ledbat> {
         match self {
             ChannelController::Ledbat(l) => Some(l),
@@ -316,7 +336,7 @@ impl RequestController for ChannelController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ledbat::MSS;
+    use crate::ledbat::{MIN_RTT_WINDOW, MSS};
 
     fn t(ms: i64) -> Time {
         Time::from_unix_millis(1_700_000_000_000 + ms)
@@ -352,6 +372,44 @@ mod tests {
         // An unknown rate leaves LEDBAT's own minimum.
         c.on_round(t(1), 0);
         assert_eq!(c.ledbat().map(Ledbat::min_cwnd), Some(2 * MSS));
+    }
+
+    #[test]
+    fn ledbat_floor_follows_the_minimum_round_trip() {
+        // Pings that wait behind the peer's full uplink inflate the mean;
+        // the floor follows the quickest of the window.
+        let mut c = ChannelController::new(RequestControllerKind::Ledbat, 1024, 0, t(0));
+        if let Some(l) = c.ledbat_mut() {
+            l.set_floor_on_min(true);
+        }
+        let step = MIN_RTT_WINDOW / 10;
+        c.on_ping_rtt(t(0), Duration::from_millis(50));
+        for i in 1..10 {
+            c.on_ping_rtt(t(0) + step * i, Duration::from_millis(700));
+        }
+        assert!(c.rtt() > Duration::from_millis(400), "{:?}", c.rtt());
+        assert_eq!(c.min_rtt(), Duration::from_millis(50));
+        c.on_round(t(0) + step * 9, 32 * 1024);
+        let floor = 2 * 32 * 1024 * 50 / 1000;
+        assert_eq!(c.ledbat().map(Ledbat::min_cwnd), Some(floor));
+        // The path's delay rose: the floor follows within the window.
+        let later = t(0) + MIN_RTT_WINDOW;
+        c.on_ping_rtt(later, Duration::from_millis(700));
+        c.on_round(later, 32 * 1024);
+        let floor = 2 * 32 * 1024 * 700 / 1000;
+        assert_eq!(c.ledbat().map(Ledbat::min_cwnd), Some(floor));
+    }
+
+    #[test]
+    fn ledbat_floor_follows_the_mean_by_default() {
+        let mut c = ChannelController::new(RequestControllerKind::Ledbat, 1024, 0, t(0));
+        c.on_ping_rtt(t(0), Duration::from_millis(50));
+        c.on_ping_rtt(t(1_000), Duration::from_millis(700));
+        let rtt = c.rtt();
+        assert!(rtt > Duration::from_millis(50), "{rtt:?}");
+        c.on_round(t(1_000), 32 * 1024);
+        let floor = 2 * 32 * 1024 * rtt.as_nanos() / Duration::SECOND.as_nanos();
+        assert_eq!(c.ledbat().map(Ledbat::min_cwnd), Some(floor));
     }
 
     #[test]

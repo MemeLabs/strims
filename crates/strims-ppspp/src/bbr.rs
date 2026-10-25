@@ -7,6 +7,7 @@
 use strims_base::time::{Duration, Time};
 
 use crate::controller::RequestController;
+use crate::windowed::{WindowedMax, WindowedMin};
 
 /// The in-flight cap never goes below this many chunks. Kept small: at a
 /// peer that many channels ask and that can't serve them all, each
@@ -20,9 +21,6 @@ pub const INITIAL_CHUNKS: i64 = 32;
 pub const MIN_RTT_WINDOW: Duration = Duration::from_secs(10);
 /// How long a delivery-rate sample counts toward the maximum.
 pub const RATE_WINDOW: Duration = Duration::from_secs(2);
-/// Buckets of the windowed maxima (delivery rate, round trip) over
-/// [`RATE_WINDOW`].
-const RATE_BUCKETS: usize = 8;
 /// Request rounds remembered for delivery-rate samples: an answer to a
 /// request older than the oldest gives no sample.
 const SEND_MARKS: usize = 64;
@@ -133,8 +131,8 @@ pub enum Mode {
 /// - **Answer delay:** the smoothed request-to-data round trip.
 ///
 /// Invariants: the peer's data timestamps are never read, so clock skew
-/// can't move the model; the state is fixed-size (scalars, three
-/// `RATE_BUCKETS`-bucket windows and a `SEND_MARKS`-entry ring); the
+/// can't move the model; the state is fixed-size (scalars, four
+/// `windowed::BUCKETS`-bucket windows and a `SEND_MARKS`-entry ring); the
 /// arithmetic is integer and saturating.
 #[derive(Clone, Debug)]
 pub struct BbrLike {
@@ -218,7 +216,7 @@ impl BbrLike {
             srtt: Duration::ZERO,
             rttvar: Duration::ZERO,
             have_rtt: false,
-            ping_min: WindowedMin::default(),
+            ping_min: WindowedMin::new(PING_WINDOW),
             ping_max: WindowedMax::new(PING_WINDOW),
             ping_srtt: Duration::ZERO,
             ping_var: Duration::ZERO,
@@ -464,97 +462,6 @@ impl BbrLike {
             (Some(a), None) | (None, Some(a)) => a,
             (None, None) => TIMEOUT_INITIAL,
         }
-    }
-}
-
-/// The largest sample over a window of time, in `RATE_BUCKETS` buckets.
-#[derive(Clone, Copy, Debug)]
-struct WindowedMax {
-    /// Per bucket: its index (time / width) and its largest sample.
-    buckets: [(i64, i64); RATE_BUCKETS],
-    /// Bucket width, nanoseconds.
-    width: i64,
-}
-
-impl WindowedMax {
-    fn new(window: Duration) -> WindowedMax {
-        WindowedMax {
-            buckets: [(i64::MIN, 0); RATE_BUCKETS],
-            width: (window.as_nanos() / RATE_BUCKETS as i64).max(1),
-        }
-    }
-
-    fn index(&self, now: Time) -> i64 {
-        now.unix_nanos() / self.width
-    }
-
-    fn add(&mut self, now: Time, v: i64) {
-        let index = self.index(now);
-        let slot = usize::try_from(index.rem_euclid(RATE_BUCKETS as i64)).unwrap_or(0);
-        if let Some(b) = self.buckets.get_mut(slot) {
-            if b.0 == index {
-                b.1 = b.1.max(v);
-            } else {
-                *b = (index, v);
-            }
-        }
-    }
-
-    /// The largest sample in the window ending at `now`, or 0.
-    fn get(&self, now: Time) -> i64 {
-        let current = self.index(now);
-        let oldest = current.saturating_sub(RATE_BUCKETS as i64 - 1);
-        self.buckets
-            .iter()
-            .filter(|(i, _)| *i >= oldest && *i <= current)
-            .map(|&(_, v)| v)
-            .max()
-            .unwrap_or(0)
-    }
-}
-
-/// The smallest sample over the last [`PING_WINDOW`], in `RATE_BUCKETS`
-/// buckets of time.
-#[derive(Clone, Copy, Debug)]
-struct WindowedMin {
-    /// Per bucket: its index (time / width) and its smallest sample.
-    buckets: [(i64, i64); RATE_BUCKETS],
-}
-
-impl Default for WindowedMin {
-    fn default() -> WindowedMin {
-        WindowedMin {
-            buckets: [(i64::MIN, i64::MAX); RATE_BUCKETS],
-        }
-    }
-}
-
-impl WindowedMin {
-    fn index(now: Time) -> i64 {
-        now.unix_nanos() / (PING_WINDOW.as_nanos() / RATE_BUCKETS as i64)
-    }
-
-    fn add(&mut self, now: Time, v: i64) {
-        let index = Self::index(now);
-        let slot = usize::try_from(index.rem_euclid(RATE_BUCKETS as i64)).unwrap_or(0);
-        if let Some(b) = self.buckets.get_mut(slot) {
-            if b.0 == index {
-                b.1 = b.1.min(v);
-            } else {
-                *b = (index, v);
-            }
-        }
-    }
-
-    /// The smallest sample in the window ending at `now`, if any.
-    fn get(&self, now: Time) -> Option<i64> {
-        let current = Self::index(now);
-        let oldest = current.saturating_sub(RATE_BUCKETS as i64 - 1);
-        self.buckets
-            .iter()
-            .filter(|(i, _)| *i >= oldest && *i <= current)
-            .map(|&(_, v)| v)
-            .min()
     }
 }
 

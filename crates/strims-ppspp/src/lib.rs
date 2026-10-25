@@ -90,6 +90,7 @@ mod swarm_id;
 mod tap;
 mod time_set;
 mod uri;
+mod windowed;
 mod writer;
 
 pub use constants::{MINIMUM_PROTOCOL_VERSION, PROTOCOL_VERSION};

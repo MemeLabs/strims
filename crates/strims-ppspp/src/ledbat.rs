@@ -3,7 +3,7 @@
 
 //! The LEDBAT congestion controller (RFC 6817) that sizes a channel's
 //! request window, with an RFC 6298 style congestion timeout from ping
-//! round trips.
+//! round trips and their minimum over the last [`MIN_RTT_WINDOW`].
 //!
 //! Delays are signed [`Duration`]s: delay samples are one-way delays
 //! computed from the sender's data timestamps, so clock skew makes them
@@ -17,6 +17,8 @@
 
 use strims_base::stats::Ema;
 use strims_base::time::{Duration, Time};
+
+use crate::windowed::WindowedMin;
 
 /// RFC 6817 `TARGET`: the queuing delay LEDBAT aims for, in nanoseconds.
 const TARGET: i64 = 100_000_000;
@@ -35,6 +37,14 @@ pub const MSS: i64 = 1024;
 /// How long after a loss the owner's window floor
 /// ([`Ledbat::set_min_cwnd`]) doesn't hold.
 pub const FLOOR_LOSS_HOLD: Duration = Duration::from_secs(2);
+
+/// How long a ping round trip counts toward [`Ledbat::rtt_min`]. Short:
+/// a floor on the minimum follows a real rise in the path's delay only
+/// once the older pings have left the window, and the stream can't wait
+/// long (strims-sim's `latency_step` wants it flowing 10 s after a step).
+/// Long enough to hold a few pings (they come about once a second), one
+/// of which likely found the peer's pipe drained.
+pub const MIN_RTT_WINDOW: Duration = Duration::from_secs(4);
 
 /// RFC 6298 `G`: the clock granularity floor of the variance term, 100 ms.
 const COEF_G: f64 = 100_000_000.0;
@@ -73,6 +83,10 @@ pub struct Ledbat {
     last_ack_time: Time,
     rtt_mean: Ema,
     rtt_var: Ema,
+    /// Ping round trips over [`MIN_RTT_WINDOW`], nanoseconds, and the
+    /// latest one's time (`Time::NIL` before the first).
+    rtt_min: WindowedMin,
+    last_rtt_sample: Time,
 
     ack_size: i64,
 
@@ -81,6 +95,9 @@ pub struct Ledbat {
     min_cwnd: i64,
     /// The floor doesn't hold until then: a loss was seen.
     floor_held_until: Time,
+    /// The owner sizes the floor on [`Ledbat::rtt_min`], not
+    /// [`Ledbat::rtt_mean`] ([`Ledbat::floor_rtt`]).
+    floor_on_min: bool,
 }
 
 impl Default for Ledbat {
@@ -105,9 +122,12 @@ impl Ledbat {
             last_ack_time: Time::MAX,
             rtt_mean: Ema::new(COEF_ALPHA),
             rtt_var: Ema::new(COEF_BETA),
+            rtt_min: WindowedMin::new(MIN_RTT_WINDOW),
+            last_rtt_sample: Time::NIL,
             ack_size: 0,
             min_cwnd: MIN_CWND * MSS,
             floor_held_until: Time::EPOCH,
+            floor_on_min: false,
         }
     }
 
@@ -127,6 +147,28 @@ impl Ledbat {
     pub fn set_min_cwnd(&mut self, bytes: i64, now: Time) {
         self.min_cwnd = bytes.max(MIN_CWND * MSS);
         self.cwnd = self.cwnd.max(self.floor(now));
+    }
+
+    /// Sizes the owner's floor on the minimum round trip
+    /// ([`Ledbat::floor_rtt`]).
+    pub fn set_floor_on_min(&mut self, on: bool) {
+        self.floor_on_min = on;
+    }
+
+    /// Whether the owner's floor is sized on the minimum round trip.
+    pub fn floor_on_min(&self) -> bool {
+        self.floor_on_min
+    }
+
+    /// The round trip the owner sizes its floor on:
+    /// [`Ledbat::rtt_min`] after [`Ledbat::set_floor_on_min`], otherwise
+    /// [`Ledbat::rtt_mean`].
+    pub fn floor_rtt(&self) -> Duration {
+        if self.floor_on_min {
+            self.rtt_min()
+        } else {
+            self.rtt_mean()
+        }
     }
 
     /// The floor set by [`Ledbat::set_min_cwnd`], in bytes.
@@ -167,6 +209,19 @@ impl Ledbat {
     /// The smoothed round trip from ping samples.
     pub fn rtt_mean(&self) -> Duration {
         Duration::from_nanos(self.rtt_mean.value() as i64)
+    }
+
+    /// The smallest ping round trip over the [`MIN_RTT_WINDOW`] up to the
+    /// latest one, or zero before the first. Measured up to the latest
+    /// sample, not to now, so the minimum holds while pings go
+    /// unanswered.
+    pub fn rtt_min(&self) -> Duration {
+        if self.last_rtt_sample.is_nil() {
+            return Duration::ZERO;
+        }
+        self.rtt_min
+            .get(self.last_rtt_sample)
+            .map_or(Duration::ZERO, Duration::from_nanos)
     }
 
     /// The round trip's mean deviation.
@@ -252,8 +307,11 @@ impl Ledbat {
         self.ack_size = 0;
     }
 
-    /// Updates the RTT estimate and the congestion timeout.
-    pub fn add_rtt_sample(&mut self, rtt: Duration) {
+    /// Updates the RTT estimates and the congestion timeout with a ping
+    /// round trip measured at `now`.
+    pub fn add_rtt_sample(&mut self, rtt: Duration, now: Time) {
+        self.rtt_min.add(now, rtt.as_nanos().max(0));
+        self.last_rtt_sample = now;
         let rtt = rtt.as_nanos() as f64;
         if self.rtt_mean.value() == 0.0 {
             self.rtt_mean.set(rtt);
@@ -398,16 +456,39 @@ mod tests {
     #[test]
     fn rtt_sets_cto() {
         let mut l = Ledbat::new();
-        l.add_rtt_sample(Duration::from_millis(200));
+        l.add_rtt_sample(Duration::from_millis(200), t(0));
         // mean 200 ms + max(100 ms, 4 * 100 ms)
         assert_eq!(l.cto(), Duration::from_millis(600));
         assert_eq!(l.rtt_mean(), Duration::from_millis(200));
     }
 
     #[test]
+    fn rtt_min_over_the_window() {
+        let mut l = Ledbat::new();
+        assert_eq!(l.rtt_min(), Duration::ZERO);
+        // One quick ping among slow ones: the minimum holds it while it is
+        // in the window, and the mean doesn't.
+        let step = MIN_RTT_WINDOW / 10;
+        l.add_rtt_sample(Duration::from_millis(50), t(0));
+        for i in 1..10 {
+            l.add_rtt_sample(Duration::from_millis(600), t(0) + step * i);
+        }
+        assert_eq!(l.rtt_min(), Duration::from_millis(50));
+        assert!(
+            l.rtt_mean() > Duration::from_millis(400),
+            "{:?}",
+            l.rtt_mean()
+        );
+        // A rise in the path's delay: the minimum follows once the quick
+        // ping leaves the window.
+        l.add_rtt_sample(Duration::from_millis(600), t(0) + MIN_RTT_WINDOW);
+        assert_eq!(l.rtt_min(), Duration::from_millis(600));
+    }
+
+    #[test]
     fn loss_halves_once_per_rtt() {
         let mut l = Ledbat::new();
-        l.add_rtt_sample(Duration::from_millis(100));
+        l.add_rtt_sample(Duration::from_millis(100), t(0));
         l.add_sent(10 * 1024);
         l.add_data_loss(1024, false, t(0));
         assert_eq!(l.cwnd(), 16 * 1024);
