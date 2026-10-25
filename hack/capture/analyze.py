@@ -14,6 +14,9 @@ delivery or latency collapsed.
   hack/capture/analyze.py prunes run.jsonl [--node NAME] [--from S] [--until S]
   hack/capture/analyze.py pulls  run.jsonl [--source NAME] [--from S] [--until S]
   hack/capture/analyze.py node   run.jsonl NODE [--from S] [--until S]
+  hack/capture/analyze.py answers run.jsonl [--node NAME] [--from S] [--until S]
+  hack/capture/analyze.py holders run.jsonl [--node NAME] [--holder NAME]
+                                  [--from S] [--until S]
 
 `reduce` writes the rows the other commands read: `ppspp-capture swarm
 --labels --start` over every node's dumps (the capture crate's swarm module
@@ -42,6 +45,13 @@ The other commands print tables about one question each, `--from` and
           the request windows behind them, and request timeouts
   node    one node's decisions and traffic per second, its first admissions
           with their numbers, and its upload meter
+  answers per second, what a node (the seed) sent: chunks new to it, pushes,
+          answers, the copies of each fresh chunk it sent as answers, and
+          how long pushes and answers waited in its queue
+  holders per holder of a node (the seed), per second while it holds: the
+          copy's rate against what the node wrote to it, the pushes queued
+          for it and its connection's window, what it relayed, its pushes
+          dropped, and its children's prunes of it
 
 Runs, second by second (no capture needed):
 
@@ -66,8 +76,9 @@ SIM_ prefix.
   collapse  one line per run: its verdicts, onsets, course and feasibility
   map       per cell (the runs that share every setting but the seed): the
             share of runs whose trees failed, delivery collapsed and latency
-            collapsed, the share absorbing, the median onsets, and whether
-            the cell is feasible
+            collapsed, the share absorbing, the median share of the stream's
+            seconds that weren't healthy (any verdict's condition held), the
+            median onsets, and whether the cell is feasible
 
 The verdicts, judged over the stream's seconds (not the run's tail):
 
@@ -455,7 +466,7 @@ def runs(paths):
                     continue
                 r = json.loads(line)
                 if "row" in r:
-                    env = {**r.get("env", {}), "arm": r.get("arm", "")}
+                    env = {**r.get("env", {}), "arm": r.get("arm", ""), "test": r.get("test", "")}
                     if r.get("kind") == "testbed":
                         env["repeat"] = r.get("repeat")
                         yield r["id"], env, r["row"], testbed_series(rows.parent / r["run_dir"], r.get("env", {}))
@@ -570,6 +581,7 @@ def verdict(s):
     return {
         "trees": trees, "delivery": delivery, "latency": latency, "recovered": recovered,
         "absorbing": absorbing, "feasible": feasible(s), "lag_p50": med([x for x in lag if x is not None]),
+        "unhealthy": 1 - sum(healthy) / n if n else None,
         "lag_max": max((x for x in lag if x is not None), default=None),
     }
 
@@ -628,15 +640,94 @@ def map_(a):
     pct = lambda vs, f: f"{100 * sum(1 for v in vs if f(v)) // len(vs):3d}%"
     onset = lambda vs, k: med([v[k] for v in vs if v[k] is not None])
     num = lambda x: (0, float(x)) if x.replace(".", "", 1).isdigit() else (1, x)
-    print(" ".join(short(k) for k in group) + " | n feasible | trees delivery latency absorbing | onsets: trees delivery latency | lag_p50")
+    print(" ".join(short(k) for k in group) + " | n feasible | trees delivery latency absorbing | unhealthy | onsets: trees delivery latency | lag_p50")
     for cell in sorted(cells, key=lambda c: [num(x) for x in c]):
         vs = cells[cell]
         fe = "/".join(sorted({str(v["feasible"]) for v in vs}))
         print(
             f"{' '.join(cell)} | {len(vs)} {fe} | {pct(vs, lambda v: v['trees'] is not None)} {pct(vs, lambda v: v['delivery'] is not None)}"
             f" {pct(vs, lambda v: v['latency'] is not None)} {pct(vs, lambda v: v['absorbing'])} |"
+            f" {100 * (med([v['unhealthy'] for v in vs if v['unhealthy'] is not None]) or 0):3.0f}% |"
             f" {onset(vs, 'trees')} {onset(vs, 'delivery')} {onset(vs, 'latency')} | {med([v['lag_p50'] for v in vs if v['lag_p50'] is not None])}"
         )
+
+
+# A copy sent within this long of a chunk's first copy is of a fresh chunk.
+FRESH_MS = 2000
+
+
+def answers(a):
+    rows = [r for r in load(a) if r["node"] == a.node and r["type"] == "DATA" and r["dir"] == "out"]
+    first = {}
+    per = collections.defaultdict(lambda: collections.defaultdict(list))
+    for r in rows:
+        b = (r["swarm"], r["bin"])
+        f = first.setdefault(b, r["t"])
+        d = per[int(r["t"] // 1000)]
+        d["new"].append(f == r["t"])
+        d[r.get("ann") or "answer"].append(r.get("wait", 0) / 1e6)
+        if r.get("ann") != "push" and r["t"] - f <= FRESH_MS:
+            d["fresh"].append(b)
+    print(f"-- {a.node}'s DATA per second: chunks new to it, pushes, answers, answers of fresh chunks (sent within"
+          f" {FRESH_MS} ms of a chunk's first copy) per fresh chunk answered, median waits in its queue (ms)")
+    for k in sorted(per):
+        d = per[k]
+        fresh = collections.Counter(d["fresh"])
+        print(
+            f"  {k:5d}s new {sum(d['new']):5d} push {len(d['push']):5d} answer {len(d['answer']):5d} fresh answers"
+            f" {len(d['fresh']):5d} per chunk {len(d['fresh']) / max(len(fresh), 1):4.1f} (max {max(fresh.values(), default=0)})"
+            f" wait push {med(d['push']) or 0:6.0f} answer {med(d['answer']) or 0:6.0f}"
+        )
+
+
+def holders(a):
+    rows = load(a)
+    spans = collections.defaultdict(list)
+    for r in rows:
+        if r["node"] == a.node and r["type"] in ("HolderJoined", "HolderLeft"):
+            if r["type"] == "HolderJoined":
+                spans[r["peer"]].append([r["t"], None, None])
+            elif spans[r["peer"]]:
+                spans[r["peer"]][-1][1:] = [r["t"], r["why"]]
+    stream = med([r["stream_rate"] for r in rows if r["type"] == "SeedBudget"])
+    per = collections.defaultdict(lambda: collections.defaultdict(list))
+    for r in rows:
+        k = int(r["t"] // 1000)
+        if r["node"] == a.node and r.get("peer") in spans:
+            d = per[(r["peer"], k)]
+            if r["type"] == "DATA" and r["dir"] == "out" and r.get("ann") == "push":
+                d["pushed"].append(r["len"])
+            elif r["type"] == "Queues":
+                d["queued"].append(r["runner_pushes"])
+            elif r["type"] in ("SimConn", "Tcp"):
+                d["cwnd"].append(r["cwnd"])
+                d["flight"].append(r["in_flight"] if r["type"] == "SimConn" else r["unacked"])
+                d["pending"].append(max(r.get("pending", 0), 0) + max(r["unsent"], 0))
+        elif r["node"] in spans:
+            d = per[(r["node"], k)]
+            if r["type"] == "DATA" and r["dir"] == "out" and r.get("ann") == "push":
+                d["relayed"].append(r["len"])
+            elif r["type"] in ("PushStale", "PushSuppressed", "PushCancelled", "DataDropped"):
+                d["dropped"].append(r["type"])
+        if r["type"] == "Pruned" and r.get("peer") in spans:
+            per[(r["peer"], k)]["pruned by"].append(f"{r['node']}:{r['rule']}")
+    print(f"-- {a.node}'s holders; a copy is its streams times {stream} B/s a stream (the seed's budget rate)")
+    for h in sorted(spans, key=lambda h: spans[h][0][0]):
+        if a.holder and h != a.holder:
+            continue
+        for t0, t1, why in spans[h]:
+            print(f"== {h} held {t0 / 1000:.3f}-{'end' if t1 is None else f'{t1 / 1000:.3f}'} s{'' if why is None else f' (left: {why})'}")
+            last = (int(t1 // 1000) if t1 is not None else max(k for p, k in per if p == h)) + 3
+            for k in range(int(t0 // 1000), last + 1):
+                d = per.get((h, k))
+                if not d:
+                    continue
+                print(
+                    f"  {k:5d}s pushed {sum(d['pushed']) // 1000:5d} kB queued {med(d['queued']) if d['queued'] else '-':>5}"
+                    f" cwnd {med(d['cwnd']) or '-':>6} in flight {med(d['flight']) or '-':>7} waiting {med(d['pending']) or '-':>8}"
+                    f" | relayed {sum(d['relayed']) // 1000:5d} kB dropped {dict(collections.Counter(d['dropped']))}"
+                    f" pruned by {sorted(collections.Counter(d['pruned by']).items())}"
+                )
 
 
 def main():
@@ -674,6 +765,13 @@ def main():
     p = command("pulls", pulls)
     p.add_argument("rows")
     p.add_argument("--source", default="seed")
+    p = command("answers", answers)
+    p.add_argument("rows")
+    p.add_argument("--node", default="seed")
+    p = command("holders", holders)
+    p.add_argument("rows")
+    p.add_argument("--node", default="seed")
+    p.add_argument("--holder", help="one holder only")
     for name, f in (("series", series), ("collapse", collapse), ("map", map_)):
         p = sub.add_parser(name)
         p.set_defaults(f=f)
