@@ -2,10 +2,12 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# The calibration testbed: real strims nodes (strims-sim's testbed_node
-# example) in Docker containers on one bridge, each shaping its own uplink,
-# so the upload meter can be measured on a real shaped link and compared
-# with strims-sim's model of one (its calibration scenarios).
+# The calibration testbed: real strims nodes in Docker containers on one
+# bridge, each shaping its own uplink, so the upload meter can be measured
+# on a real shaped link and compared with strims-sim's model of one (its
+# calibration scenarios). A node is native (strims-sim's testbed_node
+# example) or a headless browser running strims-wasm's node
+# (strims-testbed's testbed_browser example, in the node's container).
 #
 #   hack/testbed/run.sh <out dir>
 #
@@ -21,6 +23,18 @@
 # socket's memory for the packets it holds, so TCP Small Queues doesn't
 # keep the tbf queue empty. Offloads are off, so tbf shapes real packets.
 # One viewer can get a slow downlink (an ifb device with a tbf).
+#
+# Browser nodes (KINDS) are shaped the same way. The harness in a browser
+# container serves the page and drives it on the container's loopback, so
+# the shaped eth0 is the browser's only other interface and carries every
+# link. Browsers can't listen, so a run with a browser node also runs a
+# relay (tb-relay, 10.77.0.5, unshaped): a native node in the testbed
+# network that runs no swarm. Every node dials it and joins the network,
+# and browsers make their WebRTC links by peer exchange through it.
+# Natives link to natives over TCP; a browser links to a native over a
+# WebSocket (BROWSER_LINKS=ws) or WebRTC (webrtc), and to a browser over
+# WebRTC. The topology file's header (strims-testbed's topology module)
+# says who makes which link.
 #
 # Settings (environment):
 #   VIEWERS=<n>            viewers (default 3)
@@ -41,16 +55,39 @@
 #                          after the stream starts for <d> seconds
 #   TOPOLOGY=<file>        links (`link a b` lines); default a star
 #   NODE_BIN=<path>        the testbed_node binary (default
-#                          target/release/examples/testbed_node)
-#   NODE_ARGS=<args>       more flags for every node
-#   CAPTURE=1              ppspp captures in <out dir>/capture
+#                          target/release/examples/testbed_node), built by
+#                          `cargo build --release -p strims-sim --example
+#                          testbed_node`
+#   NODE_ARGS=<args>       more flags for every native node
+#   CAPTURE=1              ppspp captures in <out dir>/capture (native nodes)
+#   KINDS="<k0> <k1> ..."  node i's kind: native (the default for nodes not
+#                          listed), firefox or chromium
+#   BROWSER_LINKS=ws|webrtc  how browsers link to native nodes (default ws)
+#   BROWSER_BIN=<path>     the testbed_browser binary (default
+#                          target/release/examples/testbed_browser), built by
+#                          `cargo build --release -p strims-testbed --example
+#                          testbed_browser`
+#   WEB_BUNDLE=<dir>       the browsers' page (default dist/wasm-testbed),
+#                          built by `npx webpack --mode production --env
+#                          TARGET=wasm-testbed` (node_modules, the pinned
+#                          wasm-bindgen-cli and the wasm32 target)
 #
 # Writes to <out dir>: topology, node-<i>.jsonl (a JSON line per second
-# from each node), node-<i>.err, tc-<i>.log (the seed's tbf backlog
-# at 10 Hz) and ss-<i>.log (its sockets once a second), steps.log (when
-# each of SEED_UP_STEPS applied, ms since the epoch, and its rate),
-# compete-<s>.json (each upload's iperf3 report) and compete.log (when
-# each started), and settings.
+# from each node, strims-testbed's node module; a browser's adds post_ms
+# and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
+# container's CPU time and memory once a second: ms since the epoch, the
+# cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (the
+# seed's tbf backlog at 10 Hz) and ss-<i>.log (its sockets once a second),
+# steps.log (when each of SEED_UP_STEPS applied, ms since the epoch, and
+# its rate), compete-<s>.json (each upload's iperf3 report) and
+# compete.log (when each started), and settings. With a browser node also
+# node-relay.err, cpu-relay.log and hosts/ (each node's host id).
+#
+# Images: strims-testbed (Dockerfile) for native nodes, the relay and the
+# sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
+# built here. Container names (tb-<i>, tb-relay, tb-sink), the network
+# (strims-testbed) and its subnet (10.77.0.0/24) are fixed: one testbed
+# per Docker host at a time.
 #
 # Needs Docker (the user's docker group) and the sch_netem, sch_tbf and
 # (for a slow downlink) ifb modules; if tc can't load them, run
@@ -73,35 +110,93 @@ steps=${SEED_UP_STEPS:-}
 compete=${COMPETE:-}
 node_args=${NODE_ARGS:-}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
+browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
+web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
+read -r -a kinds <<< "${KINDS:-}"
+browser_links=${BROWSER_LINKS:-ws}
 image=strims-testbed
+browser_image=strims-testbed-browser
 net=strims-testbed
 subnet=10.77.0
+relay=$subnet.5
+
+n=$((viewers + 1))
+kind_of() { echo "${kinds[$1]:-native}"; }
+browsers=0
+nbrowsers=0
+for i in $(seq 0 $((n - 1))); do
+  case $(kind_of "$i") in
+    native) ;;
+    firefox|chromium) browsers=1; nbrowsers=$((nbrowsers + 1)) ;;
+    *) echo "node $i: unknown kind $(kind_of "$i")" >&2; exit 1 ;;
+  esac
+done
+case $browser_links in ws|webrtc) ;; *) echo "BROWSER_LINKS: ws or webrtc" >&2; exit 1 ;; esac
 
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 [ -x "$bin" ] || { echo "no testbed_node at $bin" >&2; exit 1; }
 docker build -q -t "$image" "$root/hack/testbed" >/dev/null
+if [ "$browsers" = 1 ]; then
+  [ -x "$browser_bin" ] || { echo "no testbed_browser at $browser_bin" >&2; exit 1; }
+  [ -f "$web/e2e.html" ] || { echo "no web bundle at $web" >&2; exit 1; }
+  web=$(cd "$web" && pwd)
+  docker build -q -t "$browser_image" -f "$root/hack/testbed/browser.Dockerfile" \
+    "$root/hack/testbed" >/dev/null
+  # Written by the nodes, whatever user each runs as.
+  mkdir -p "$out/hosts"
+  chmod 1777 "$out/hosts"
+fi
 docker network inspect "$net" >/dev/null 2>&1 \
   || docker network create --subnet "$subnet.0/24" "$net" >/dev/null
 
-n=$((viewers + 1))
 {
   for i in $(seq 0 $((n - 1))); do
-    echo "node $i $subnet.$((10 + i)):4000"
+    if [ "$browsers" = 1 ]; then
+      echo "node $i $subnet.$((10 + i)):4000 $(kind_of "$i")"
+    else
+      echo "node $i $subnet.$((10 + i)):4000"
+    fi
   done
+  if [ "$browsers" = 1 ]; then
+    echo "relay $relay:4000 $relay:4001"
+    echo "browser-links $browser_links"
+  fi
   if [ -n "${TOPOLOGY:-}" ]; then
     command grep '^link ' "$TOPOLOGY"
   else
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|NODE_ARGS|TOPOLOGY|CAPTURE)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS)=' \
   > "$out/settings" || true
 
-start=$(( $(date +%s%3N) + 8000 ))
+# The containers start one after another before the stream does, and
+# browsers then load the page and compile its wasm.
+lead=$(( 8000 + 1500 * (n > 4 ? n - 4 : 0) ))
+if [ "$browsers" = 1 ]; then
+  lead=$(( lead + 20000 + 1000 * nbrowsers ))
+fi
+start=$(( $(date +%s%3N) + lead ))
 names=()
 cleanup() { docker rm -f "${names[@]}" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
+
+# The container's CPU time and memory, once a second, in the background of
+# its script.
+cpu_log() {
+  echo "( while :; do echo \"\$(date +%s%3N) \$(sed -n 's/^usage_usec //p' /sys/fs/cgroup/cpu.stat) \$(cat /sys/fs/cgroup/memory.current)\"; sleep 1; done > /out/cpu-$1.log ) &"
+}
+hosts=""
+if [ "$browsers" = 1 ]; then
+  hosts="--hosts /out/hosts"
+  names+=(tb-relay)
+  docker rm -f tb-relay >/dev/null 2>&1 || true
+  docker run -d --name tb-relay --network "$net" --ip "$relay" \
+    -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
+    bash -c "$(cpu_log relay)
+exec /testbed_node --relay-only --topology /out/topology --start $start --secs $secs 2> /out/node-relay.err" >/dev/null
+fi
 
 for i in $(seq 0 $((n - 1))); do
   if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; else up=$viewer_up; delay=$viewer_delay; fi
@@ -126,13 +221,30 @@ tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue
   name=tb-$i
   names+=("$name")
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
-    --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
-    bash -c "set -e
+  if [ "$(kind_of "$i")" = native ]; then
+    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
+      --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
+      bash -c "set -e
 $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+$(cpu_log "$i")
+exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+  else
+    # The browser runs as the image's unprivileged user, after root has
+    # shaped the link. Its profile, in /tmp, stays in memory, so its
+    # writes don't stall the other containers' on the host's disk.
+    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
+      --cap-add NET_ADMIN --shm-size 1g --tmpfs /tmp:size=1g \
+      -v "$browser_bin:/testbed_browser:ro" \
+      -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
+      bash -c "set -e
+$shape
+tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
+$sample
+$(cpu_log "$i")
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $hosts > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+  fi
 done
 
 if [ -n "$steps" ]; then
@@ -182,3 +294,6 @@ sleep $(( wait_ms / 1000 + 1 ))
 for i in $(seq 0 $((n - 1))); do
   docker logs "tb-$i" > "$out/docker-$i.log" 2>&1 || true
 done
+if [ "$browsers" = 1 ]; then
+  docker logs tb-relay > "$out/docker-relay.log" 2>&1 || true
+fi
