@@ -14,6 +14,7 @@ use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
 
+use strims_node_core::LinkProbe;
 use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -56,6 +57,13 @@ pub trait Net: Clone + Send + Sync + 'static {
     ) -> io::Result<Option<u32>> {
         let _ = (stream, config);
         Ok(None)
+    }
+
+    /// A probe of the socket under a link (a WebSocket's when `ws`), for
+    /// the ppspp capture. The default reads nothing.
+    fn link_probe(&self, stream: &Self::TcpStream, ws: bool) -> Option<Box<dyn LinkProbe>> {
+        let _ = (stream, ws);
+        None
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send;
@@ -148,6 +156,27 @@ impl Net for TokioNet {
         let sock = socket2::SockRef::from(stream);
         set_congestion(&sock, config.congestion.as_deref());
         set_notsent_lowat(&sock, config.notsent_lowat)
+    }
+
+    /// `TCP_INFO`, queried through `NETLINK_SOCK_DIAG` by the socket's
+    /// addresses (Linux only).
+    fn link_probe(&self, stream: &Self::TcpStream, ws: bool) -> Option<Box<dyn LinkProbe>> {
+        #[cfg(target_os = "linux")]
+        {
+            let (local, peer) = (stream.local_addr().ok()?, stream.peer_addr().ok()?);
+            match crate::sock_diag::TcpProbe::new(local, peer, ws) {
+                Ok(p) => Some(Box::new(p)),
+                Err(e) => {
+                    tracing::debug!(error = %e, "no TCP_INFO for the capture");
+                    None
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (stream, ws);
+            None
+        }
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {

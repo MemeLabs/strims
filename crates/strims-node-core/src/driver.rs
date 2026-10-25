@@ -181,6 +181,9 @@ pub struct LinkChannels<T> {
     /// ends (the link went), it ends the transport.
     pub writes: mpsc::Receiver<Vec<u8>>,
     pub inputs: Inputs<T>,
+    /// The node captures its ppspp traffic: the driver returns a
+    /// [`LinkProbe`] if it can read the transport.
+    pub probe: bool,
 }
 
 /// What [`NodeIo::spawn_link`] started.
@@ -191,6 +194,17 @@ pub struct LinkTasks {
     pub reader: TaskGuard,
     /// Set when the reader honours [`IdleOk`].
     pub idle_ok: Option<IdleOk>,
+    /// Reads the transport for the capture, when [`LinkChannels::probe`]
+    /// asked and the driver can.
+    pub probe: Option<Box<dyn LinkProbe>>,
+}
+
+/// Reads the state under a link for a ppspp capture: the socket's or the
+/// channel's, or in a simulation, its model's. The node samples it at
+/// passes it already makes; it must not block.
+pub trait LinkProbe: Send + fmt::Debug {
+    /// The state now, if the transport can tell.
+    fn sample(&mut self, now: Time) -> Option<strims_ppspp_capture::Sample>;
 }
 
 /// Aborts a task when dropped (or at [`TaskGuard::abort`]).
@@ -689,15 +703,18 @@ impl<I: NodeIo> NodeTask<I> {
                 read_free: read_free_rx,
                 writes: write_rx,
                 inputs: self.input_tx.clone(),
+                probe: self.state.capturing(),
             },
         );
         LinkIo {
             write_tx,
             free_write,
+            write_buffers: nw,
             max_write,
             read_free_tx,
             reader: tasks.reader,
             idle_ok: tasks.idle_ok,
+            probe: tasks.probe,
         }
     }
 }
@@ -762,6 +779,7 @@ mod tests {
             LinkTasks {
                 reader: TaskGuard::new(|| {}),
                 idle_ok: None,
+                probe: None,
             }
         }
 

@@ -27,6 +27,8 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use js_sys::{ArrayBuffer, Uint8Array};
 use strims_base::time::{Duration, Time};
@@ -166,13 +168,14 @@ impl WsSocket {
 
     /// Sends `buf` as one binary message once the socket holds at most
     /// [`MAX_BUFFERED`] bytes, waiting at most `write_timeout` (none when
-    /// it isn't positive).
-    async fn send(&self, buf: &[u8], write_timeout: Duration) -> Result<(), String> {
+    /// it isn't positive). Returns the `bufferedAmount` it sent at.
+    async fn send(&self, buf: &[u8], write_timeout: Duration) -> Result<u32, String> {
         let s = &self.0.socket;
-        if s.buffered_amount() > MAX_BUFFERED {
+        let mut buffered = s.buffered_amount();
+        if buffered > MAX_BUFFERED {
             let deadline = (write_timeout > Duration::ZERO).then(|| clock::now() + write_timeout);
             let mut sleep = Sleep::until(Time::NIL);
-            while s.buffered_amount() > MAX_BUFFERED {
+            while buffered > MAX_BUFFERED {
                 if s.ready_state() > WebSocket::OPEN {
                     break;
                 }
@@ -181,6 +184,7 @@ impl WsSocket {
                 }
                 sleep.reset(clock::now() + WRITE_POLL);
                 (&mut sleep).await;
+                buffered = s.buffered_amount();
             }
         }
         // A closing socket would take the message and drop it.
@@ -191,23 +195,34 @@ impl WsSocket {
                 .ended()
                 .unwrap_or_else(|| "connection closed".to_owned()));
         }
-        s.send_with_u8_array(buf).map_err(|e| js::describe(&e))
+        s.send_with_u8_array(buf)
+            .map(|()| buffered)
+            .map_err(|e| js::describe(&e))
     }
 }
 
 /// Writes the node's buffers to the socket, returning each, and closes it
-/// with code 1000 when the node drops the link.
+/// with code 1000 when the node drops the link. `buffered` gets the
+/// socket's `bufferedAmount` after each send.
 pub(crate) async fn writer(
     link: LinkKey,
     ws: WsSocket,
     mut writes: mpsc::Receiver<Vec<u8>>,
     inputs: Inputs<WasmTransport>,
     write_timeout: Duration,
+    buffered: Option<Arc<AtomicU64>>,
 ) {
     while let Some(buf) = writes.recv().await {
-        if let Err(error) = ws.send(&buf, write_timeout).await {
-            let _ = inputs.send(Input::LinkDown { link, error }).await;
-            return;
+        match ws.send(&buf, write_timeout).await {
+            Err(error) => {
+                let _ = inputs.send(Input::LinkDown { link, error }).await;
+                return;
+            }
+            Ok(b) => {
+                if let Some(g) = &buffered {
+                    g.store(u64::from(b) + buf.len() as u64, Ordering::Relaxed);
+                }
+            }
         }
         if inputs.send(Input::WriteDone { link, buf }).await.is_err() {
             return;

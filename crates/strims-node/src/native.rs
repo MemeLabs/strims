@@ -278,10 +278,15 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
             read_free,
             writes,
             inputs,
+            probe,
         } = channels;
         let mut idle_ok = None;
+        let mut link_probe = None;
         let reader = match transport {
             Transport::Tcp(stream) => {
+                if probe {
+                    link_probe = self.net.link_probe(&stream, false);
+                }
                 let (r, w) = tokio::io::split(stream);
                 let flag = IdleOk::default();
                 idle_ok = Some(flag.clone());
@@ -303,6 +308,9 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                 reader
             }
             Transport::Ws(ws) => {
+                if probe {
+                    link_probe = self.net.link_probe(ws.get_ref(), true);
+                }
                 let (sink, stream) = (*ws).split();
                 let reader = tokio::spawn(link::ws_reader(
                     link,
@@ -325,6 +333,7 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
         LinkTasks {
             reader: abort_guard(reader.abort_handle()),
             idle_ok,
+            probe: link_probe,
         }
     }
 

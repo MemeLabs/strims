@@ -115,6 +115,8 @@ mod native;
 pub mod net;
 pub mod psi;
 mod rtc;
+#[cfg(target_os = "linux")]
+mod sock_diag;
 mod transport;
 mod udp;
 pub mod video_host;
@@ -150,7 +152,8 @@ pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};
 pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
 pub use strims_node_core::{
-    HashTableGet, Interfaces, Node, NodeEvents, NodeInfo, PeerIndexSearch, SwarmReader, SwarmWriter,
+    CaptureSample, HashTableGet, Interfaces, LinkProbe, Node, NodeEvents, NodeInfo,
+    PeerIndexSearch, SwarmReader, SwarmWriter,
 };
 pub use vpn_port::{VpnPort, VpnReader, VpnWriter};
 

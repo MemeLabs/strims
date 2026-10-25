@@ -51,8 +51,9 @@ use strims_vpn::{
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::CaptureSample;
 use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, PpsppCapture, VpnPortConfig};
-use crate::driver::{IdleOk, Interfaces, TaskGuard};
+use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
@@ -110,6 +111,8 @@ pub(crate) struct LinkIo {
     pub(crate) write_tx: mpsc::Sender<Vec<u8>>,
     /// Write buffers back from the writer task.
     pub(crate) free_write: Vec<Vec<u8>>,
+    /// The write buffers the link has.
+    pub(crate) write_buffers: usize,
     /// The most bytes per write: the link MTU, so a message transport
     /// sends at most one MTU per message.
     pub(crate) max_write: usize,
@@ -120,6 +123,8 @@ pub(crate) struct LinkIo {
     /// Lets the reader outwait its read timeout while the peer is
     /// established and hasn't sent a keepalive (see [`IdleOk`]).
     pub(crate) idle_ok: Option<IdleOk>,
+    /// Reads the transport for the capture.
+    pub(crate) probe: Option<Box<dyn LinkProbe>>,
 }
 
 impl Drop for LinkIo {
@@ -331,8 +336,9 @@ pub(crate) struct State {
     rtc_draining: bool,
     /// The runner's capture, if the config asks for one.
     capture: Option<RunnerCapture>,
-    /// When the capture last flushed.
+    /// When the capture last flushed, and last sampled the links.
     capture_flushed: Time,
+    capture_sampled: Time,
 }
 
 type RunnerCapture = strims_ppspp_capture::Capture<
@@ -341,6 +347,10 @@ type RunnerCapture = strims_ppspp_capture::Capture<
 
 /// How often a capture flushes its buffered records.
 const CAPTURE_FLUSH_INTERVAL: strims_base::time::Duration = strims_base::time::Duration::SECOND;
+/// How often a capture samples the links' queues and transports: the
+/// runner's tick, which wakes the node at least this often while it has
+/// channels.
+const CAPTURE_SAMPLE_INTERVAL: strims_base::time::Duration = strims_ppspp::TICK_INTERVAL;
 
 /// Starts capturing `runner` for the node named `node`, or logs why not.
 fn start_capture(
@@ -455,6 +465,7 @@ impl State {
             rtc_draining: false,
             capture,
             capture_flushed: now,
+            capture_sampled: Time::EPOCH,
         })
     }
 
@@ -506,6 +517,7 @@ impl State {
             }
         }
         self.drain_capture(now);
+        self.sample_links(now);
         if let Some(rtc) = &mut self.rtc
             && rtc.ep.poll_timeout().is_some_and(|t| t <= now)
         {
@@ -743,6 +755,72 @@ impl State {
             }
         }
         true
+    }
+
+    /// Whether the runner is captured.
+    pub(crate) fn capturing(&self) -> bool {
+        self.capture.is_some()
+    }
+
+    /// Samples for the capture, at most every [`CAPTURE_SAMPLE_INTERVAL`],
+    /// what is queued for each ppspp peer below the runner's scheduler,
+    /// and the transport under its link.
+    fn sample_links(&mut self, now: Time) {
+        let State {
+            capture,
+            capture_sampled,
+            peers,
+            links,
+            vnic,
+            runner,
+            rtc,
+            ..
+        } = self;
+        let Some(c) = capture.as_mut() else {
+            return;
+        };
+        if now - *capture_sampled < CAPTURE_SAMPLE_INTERVAL {
+            return;
+        }
+        *capture_sampled = now;
+        let qos = vnic.qos();
+        for (link, ps) in peers.iter() {
+            let [pushes, answers] = runner.peer_stats(ps.pp).map_or([0, 0], |s| s.queued_data);
+            let session = ps.transfer.and_then(|w| vnic.writer_session(w));
+            let slot = links.get_mut(link);
+            let (held, max_write, transport) = match slot.map(|s| (&mut s.io, s.rtc)) {
+                Some((LinkTransport::Stream(io), _)) => (
+                    io.write_buffers.saturating_sub(io.free_write.len()),
+                    io.max_write,
+                    io.probe.as_mut().and_then(|p| p.sample(now)),
+                ),
+                Some((LinkTransport::DataChannel(_), Some(conn))) => (
+                    0,
+                    0,
+                    rtc.as_mut().map(|r| CaptureSample::WebRtc {
+                        buffered: r.ep.buffered_amount(conn) as u64,
+                    }),
+                ),
+                _ => (0, 0, None),
+            };
+            let queues = CaptureSample::Queues {
+                runner_pushes: pushes as u64,
+                runner_answers: answers as u64,
+                qos_backlog: session.and_then(|s| qos.backlog_of(s).ok().flatten()),
+                qos_blocked: session.is_some_and(|s| qos.is_blocked(s).unwrap_or(false)),
+                qos_parked: session.is_some_and(|s| qos.is_parked(s).unwrap_or(false)),
+                qos_weight: session.and_then(|s| qos.weight_of(s).ok()).unwrap_or(0),
+                link_pending: vnic.poll_link_transmit(link).map_or(0, <[u8]>::len) as u64,
+                link_capacity: vnic.link_send_buffer(link).unwrap_or(0) as u64,
+                link_blocked: vnic.link_blocked(link).unwrap_or(false),
+                write_held: held as u64,
+                write_max: max_write as u64,
+            };
+            c.sample(now, Some(ps.pp), &queues);
+            if let Some(t) = transport {
+                c.sample(now, Some(ps.pp), &t);
+            }
+        }
     }
 
     /// Writes the runner's tap events to the capture. A capture whose

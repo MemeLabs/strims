@@ -118,8 +118,8 @@ pub use config::{
     PpsppCapture, TcpSocketConfig, VpnPortConfig, WebRtcConfig,
 };
 pub use driver::{
-    IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkTasks, NodeIo, NodeSetup, NodeTask,
-    TaskGuard, start,
+    IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkProbe, LinkTasks, NodeIo, NodeSetup,
+    NodeTask, TaskGuard, start,
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
@@ -135,6 +135,7 @@ pub use rtc::{
     RtcSignal,
 };
 pub use state::DialId;
+pub use strims_ppspp_capture::Sample as CaptureSample;
 pub use vpn_port::{VpnPort, VpnReader, VpnWriter};
 
 pub use strims_kademlia::ID as HostId;

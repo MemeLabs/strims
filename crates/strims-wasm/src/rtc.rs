@@ -51,6 +51,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::future::poll_fn;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 
 use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
@@ -564,10 +566,10 @@ impl DcSocket {
     }
 
     /// Sends `buf` as one message once the channel holds less than
-    /// `max_buffered` bytes.
-    async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<(), String> {
+    /// `max_buffered` bytes. Returns the buffered amount it sent at.
+    async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<u32, String> {
         let c = &self.0.channel;
-        loop {
+        let buffered = loop {
             if c.ready_state() != RtcDataChannelState::Open {
                 return Err(self
                     .0
@@ -575,28 +577,40 @@ impl DcSocket {
                     .ended()
                     .unwrap_or_else(|| "data channel closed".to_owned()));
             }
-            if (c.buffered_amount() as usize) < max_buffered {
-                break;
+            let b = c.buffered_amount();
+            if (b as usize) < max_buffered {
+                break b;
             }
             poll_fn(|cx| self.0.low.poll_wait(cx)).await;
-        }
-        c.send_with_u8_array(buf).map_err(|e| js::describe(&e))
+        };
+        c.send_with_u8_array(buf)
+            .map(|()| buffered)
+            .map_err(|e| js::describe(&e))
     }
 }
 
 /// Writes the node's buffers to the channel, returning each, and closes
-/// the channel when the node drops the link.
+/// the channel when the node drops the link. `buffered` gets the
+/// channel's buffered amount after each send.
 pub(crate) async fn writer(
     link: LinkKey,
     channel: DcSocket,
     mut writes: mpsc::Receiver<Vec<u8>>,
     inputs: Inputs<WasmTransport>,
     max_buffered: usize,
+    buffered: Option<Arc<AtomicU64>>,
 ) {
     while let Some(buf) = writes.recv().await {
-        if let Err(error) = channel.send(&buf, max_buffered).await {
-            let _ = inputs.send(Input::LinkDown { link, error }).await;
-            return;
+        match channel.send(&buf, max_buffered).await {
+            Err(error) => {
+                let _ = inputs.send(Input::LinkDown { link, error }).await;
+                return;
+            }
+            Ok(b) => {
+                if let Some(g) = &buffered {
+                    g.store(u64::from(b) + buf.len() as u64, Ordering::Relaxed);
+                }
+            }
         }
         if inputs.send(Input::WriteDone { link, buf }).await.is_err() {
             return;

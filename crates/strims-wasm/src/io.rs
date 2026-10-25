@@ -31,11 +31,13 @@ use std::cell::Cell;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
-    DialId, IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkKey, LinkTasks, NodeConfig,
-    NodeError, NodeIo, NodeSetup, ProxyRtc, RtcCommand, TaskGuard,
+    CaptureSample, DialId, IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkKey, LinkProbe,
+    LinkTasks, NodeConfig, NodeError, NodeIo, NodeSetup, ProxyRtc, RtcCommand, TaskGuard,
 };
 use strims_vnic::ws::WsOptions;
 use strims_vnic::{DialTarget, LinkConfig};
@@ -284,7 +286,9 @@ impl NodeIo for WasmIo {
             read_free,
             writes,
             inputs,
+            probe,
         } = channels;
+        let gauge = probe.then(|| Arc::new(AtomicU64::new(0)));
         match transport {
             WasmTransport::Ws(socket) => {
                 let flag = IdleOk::default();
@@ -302,10 +306,12 @@ impl NodeIo for WasmIo {
                     writes,
                     inputs,
                     self.ws.write_timeout,
+                    gauge.clone(),
                 )));
                 LinkTasks {
                     reader: guard(reader),
                     idle_ok: Some(flag),
+                    probe: gauge.map(|g| BufferedProbe::boxed(g, true)),
                 }
             }
             // ICE and the connection state end a dead channel: no read
@@ -325,16 +331,43 @@ impl NodeIo for WasmIo {
                     writes,
                     inputs,
                     self.max_buffered,
+                    gauge.clone(),
                 )));
                 LinkTasks {
                     reader: guard(reader),
                     idle_ok: None,
+                    probe: gauge.map(|g| BufferedProbe::boxed(g, false)),
                 }
             }
         }
     }
 
     fn stop(&mut self) {}
+}
+
+/// A link's socket or data channel as its writer last saw it: the
+/// `bufferedAmount` after its latest send, for the capture.
+#[derive(Debug)]
+struct BufferedProbe {
+    buffered: Arc<AtomicU64>,
+    ws: bool,
+}
+
+impl BufferedProbe {
+    fn boxed(buffered: Arc<AtomicU64>, ws: bool) -> Box<dyn LinkProbe> {
+        Box::new(BufferedProbe { buffered, ws })
+    }
+}
+
+impl LinkProbe for BufferedProbe {
+    fn sample(&mut self, _: Time) -> Option<CaptureSample> {
+        let buffered = self.buffered.load(Ordering::Relaxed);
+        Some(if self.ws {
+            CaptureSample::WebSocket { buffered }
+        } else {
+            CaptureSample::WebRtc { buffered }
+        })
+    }
 }
 
 #[cfg(test)]

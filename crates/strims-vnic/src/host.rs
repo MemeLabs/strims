@@ -995,6 +995,16 @@ impl<T: Copy> Host<T> {
         self.links.get(link).map(|l| l.metrics)
     }
 
+    /// The bytes the link buffers for its transport, at most.
+    pub fn link_send_buffer(&self, link: PeerKey) -> Option<usize> {
+        self.links.get(link).map(|l| l.send_buffer)
+    }
+
+    /// Whether the link's writers are blocked on its full buffer.
+    pub fn link_blocked(&self, link: PeerKey) -> Option<bool> {
+        self.links.get(link).map(|l| l.blocked)
+    }
+
     /// Bytes held for a frame or handshake message split across reads.
     pub fn link_input_buffered(&self, link: PeerKey) -> Option<usize> {
         self.links.get(link).map(|l| match &l.stage {

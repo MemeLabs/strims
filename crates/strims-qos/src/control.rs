@@ -478,6 +478,17 @@ impl Control {
         Ok(self.n(self.session(s)?).blocked)
     }
 
+    /// The session's length hint of its next frame, if it is backlogged.
+    pub fn backlog_of(&self, s: SessionId) -> Result<Option<u64>, Error> {
+        Ok(self.n(self.session(s)?).backlog)
+    }
+
+    /// Whether the session left the queue while backlogged because its
+    /// link was blocked.
+    pub fn is_parked(&self, s: SessionId) -> Result<bool, Error> {
+        Ok(self.n(self.session(s)?).parked)
+    }
+
     /// Whether `id` refers to a live node.
     pub fn contains(&self, id: impl Into<NodeId>) -> bool {
         self.node_key(id.into()).is_ok()

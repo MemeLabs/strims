@@ -51,6 +51,11 @@ socket2 = { version = "0.6", features = ["all"] }
 getrandom = "0.3"
 turmoil = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# `TCP_INFO` through `NETLINK_SOCK_DIAG`, for the ppspp capture's link
+# samples; `net` builds only with a feature that brings its timespec
+rustix = { version = "1.1", features = ["net", "time"] }
+
 [dev-dependencies]
 prost.workspace = true
 # a local TLS server for the HTTPS client tests

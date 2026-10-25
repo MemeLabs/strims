@@ -9,7 +9,7 @@
 //!
 //! | source | name | fields |
 //! |---|---|---|
-//! | 1 | `Queues` | `qos_backlog`, `qos_blocked`, `qos_weight`, `qos_in_flight`, `link_pending`, `link_capacity`, `link_blocked`, `write_held`, `write_max` |
+//! | 1 | `Queues` | `runner_pushes`, `runner_answers`, `qos_backlog`, `qos_blocked`, `qos_parked`, `qos_weight`, `link_pending`, `link_capacity`, `link_blocked`, `write_held`, `write_max` |
 //! | 2 | `Tcp` | `ws`, `unsent`, `unacked`, `cwnd`, `srtt`, `rttvar`, `retrans`, `delivery_rate` |
 //! | 3 | `WebRtc` | `buffered` |
 //! | 4 | `WebSocket` | `buffered` |
@@ -28,10 +28,12 @@ pub const SAMPLE_KINDS: &[KindInfo] = &[
         1,
         "Queues",
         &[
+            num("runner_pushes"),
+            num("runner_answers"),
             num("qos_backlog"),
             num("qos_blocked"),
+            num("qos_parked"),
             num("qos_weight"),
-            num("qos_in_flight"),
             num("link_pending"),
             num("link_capacity"),
             num("link_blocked"),
@@ -84,17 +86,21 @@ pub fn sample_kind(code: u32) -> Option<&'static KindInfo> {
 /// One reading below ppspp.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sample {
-    /// The node's own queues for a link, past the runner: the link's QoS
-    /// session (its backlog hint, `None` when it has none, whether it is
-    /// blocked, its weight and the bytes it has in flight), vnic's link
-    /// buffer (bytes pending, its size, whether its writers are blocked)
-    /// and the driver's write buffers (held by the transport's writer, and
-    /// the bytes each holds at most).
+    /// The node's own queues for a link: the runner's data queue for the
+    /// peer (entries of pushes and of answers to requests), the ppspp
+    /// writer's QoS session (the length of its next frame, `None` with
+    /// nothing to send; whether its link is blocked, and whether it left
+    /// the queue for that; its weight), vnic's link buffer (bytes pending,
+    /// its size, whether its writers are blocked) and the driver's write
+    /// buffers (held by the transport's writer, and the bytes each holds at
+    /// most).
     Queues {
+        runner_pushes: u64,
+        runner_answers: u64,
         qos_backlog: Option<u64>,
         qos_blocked: bool,
+        qos_parked: bool,
         qos_weight: u64,
-        qos_in_flight: u64,
         link_pending: u64,
         link_capacity: u64,
         link_blocked: bool,
@@ -155,10 +161,12 @@ impl Sample {
         let opt = |v: Option<u64>| v.map_or(-1, u);
         match *self {
             Sample::Queues {
+                runner_pushes,
+                runner_answers,
                 qos_backlog,
                 qos_blocked,
+                qos_parked,
                 qos_weight,
-                qos_in_flight,
                 link_pending,
                 link_capacity,
                 link_blocked,
@@ -167,10 +175,12 @@ impl Sample {
             } => (
                 1,
                 vec![
+                    u(runner_pushes),
+                    u(runner_answers),
                     opt(qos_backlog),
                     b(qos_blocked),
+                    b(qos_parked),
                     u(qos_weight),
-                    u(qos_in_flight),
                     u(link_pending),
                     u(link_capacity),
                     b(link_blocked),
@@ -245,10 +255,12 @@ mod tests {
         let d = Duration::from_millis(3);
         let all = [
             Sample::Queues {
+                runner_pushes: 1,
+                runner_answers: 2,
                 qos_backlog: None,
                 qos_blocked: true,
+                qos_parked: false,
                 qos_weight: 1,
-                qos_in_flight: 2,
                 link_pending: 3,
                 link_capacity: 4,
                 link_blocked: false,
