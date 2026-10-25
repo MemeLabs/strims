@@ -334,6 +334,35 @@ module.exports = (env, argv) => {
           ],
         },
       ];
+    // The testbed's browser nodes (hack/testbed): e2e.html alone, in its own
+    // dist dir, so a production build (release wasm) leaves the tests' alone.
+    case "wasm-testbed":
+      return [
+        {
+          target: "web",
+          entry: {
+            e2e: path.join(__dirname, "src", "web", "e2e.ts"),
+          },
+          devtool,
+          output: {
+            filename: "[name].[contenthash].js",
+            chunkFilename: "[id].[chunkhash].js",
+            path: path.resolve(__dirname, "dist", "wasm-testbed"),
+            publicPath: "/",
+            clean: true,
+          },
+          module: {
+            rules: [strimsWasmRule(["e2e"]), wasmAssetRule, scriptRule(false)],
+          },
+          resolve,
+          optimization,
+          plugins: [
+            new HtmlWebpackPlugin({ filename: "e2e.html", chunks: ["e2e"], title: "e2e" }),
+            providePlugin(),
+            definePlugin(),
+          ],
+        },
+      ];
     case "web":
     default:
       return [

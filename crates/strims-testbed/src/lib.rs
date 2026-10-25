@@ -9,6 +9,8 @@
 //! one line for line.
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod browser;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod node;
 pub mod shape;

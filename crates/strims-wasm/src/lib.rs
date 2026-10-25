@@ -27,7 +27,8 @@
 //!   without suspending yields with [`clock::yield_now`], a
 //!   `MessageChannel` message, which is a macrotask: the events queued
 //!   before it run first.
-//! - [`clock::now`] is the crate's only clock read.
+//! - [`clock::now`] is the node's only clock read. The `e2e` testbed reads
+//!   `Date.now()` for its own measurements.
 //!
 //! # Modules
 //!
@@ -53,7 +54,8 @@
 //!   on it.
 //! - [`memory`]: the worker's counting allocator.
 //! - [`entry`]: `start`, the function the worker script calls.
-//! - `e2e` (feature `e2e`): the bare node the browser link tests drive.
+//! - `e2e` (feature `e2e`): the bare node the browser link tests and the
+//!   testbed's browser nodes drive.
 
 #![cfg(target_arch = "wasm32")]
 

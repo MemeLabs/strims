@@ -11,15 +11,16 @@
 //!   one lock file in the target dir, so two test binaries don't build at
 //!   once, and its files are then read into memory, so another binary's
 //!   build can't change what a running test serves.
-//! - **Server** ([`Site`]). One listener on 127.0.0.1 serves the bundle
-//!   at its root. Every WebSocket upgrade goes to the test, by its path
-//!   and query: e2e.html's `/control?i=<n>`, or whatever a page was told
-//!   to connect to, such as test.html's `?manage=`.
+//! - **Server** ([`Site`], strims-testbed's). One listener on 127.0.0.1
+//!   serves the bundle at its root. Every WebSocket upgrade goes to the
+//!   test, by its path and query: e2e.html's `/control?i=<n>`, or whatever
+//!   a page was told to connect to, such as test.html's `?manage=`.
 //! - **Firefox.** `firefox --headless --no-remote` on a new profile under
 //!   `~/snap/firefox/common`, since a snap Firefox can't see `/tmp`. Its
-//!   prefs leave ICE host candidates as addresses, so two pages in one
-//!   browser link without mDNS, and put the pages' console on stdout. The
-//!   output is captured and printed when the test fails. A test binary
+//!   prefs (`strims_testbed::browser::FIREFOX_PREFS`) leave ICE host
+//!   candidates as addresses, so two pages in one browser link without
+//!   mDNS, and put the pages' console on stdout. The output is captured
+//!   and printed when the test fails. A test binary
 //!   runs one [`Browser`] at a time; its Firefox can be closed and opened
 //!   again on the same profile, which keeps its storage and loads only
 //!   the page opened, and is killed when it drops.
@@ -31,10 +32,10 @@
 //! [`Control`] for each, which speaks the protocol of strims-wasm's `e2e`
 //! module.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
-use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,16 +45,10 @@ use std::time::{Duration, Instant};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use strims_crypto::key_from_seed;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
-use tokio_tungstenite::WebSocketStream;
+pub use strims_testbed::browser::{Bundle, Site, Socket};
+use strims_testbed::browser::{args, firefox_profile};
+use strims_testbed::topology::Kind;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
-use tokio_tungstenite::tungstenite::protocol::Role;
-
-/// A WebSocket a page opened to the server.
-pub type Socket = WebSocketStream<TcpStream>;
 
 /// How long a page has to open its sockets and start its nodes: the
 /// first load compiles the wasm module.
@@ -122,9 +117,6 @@ fn missing_tool() -> Option<String> {
     }
 }
 
-/// Built pages, by path below the server's root.
-pub struct Bundle(BTreeMap<String, Vec<u8>>);
-
 pub enum Unavailable {
     Skip(String),
     Failed(String),
@@ -178,149 +170,16 @@ pub fn build(name: &str, args: &[&str], out: &str) -> Result<Bundle, Unavailable
             String::from_utf8_lossy(&res.stderr)
         )));
     }
-    let mut files = BTreeMap::new();
-    read_tree(&root.join(out), "", &mut files).map_err(|e| failed(out, e))?;
+    let bundle = Bundle::read(&root.join(out)).map_err(|e| failed(out, e))?;
     drop(lock);
     eprintln!(
         "built the {name} bundle in {:.1?}: {} files, {} bytes",
         started.elapsed(),
-        files.len(),
-        files.values().map(Vec::len).sum::<usize>()
+        bundle.0.len(),
+        bundle.0.values().map(Vec::len).sum::<usize>()
     );
-    Ok(Bundle(files))
+    Ok(bundle)
 }
-
-fn read_tree(
-    dir: &Path,
-    prefix: &str,
-    files: &mut BTreeMap<String, Vec<u8>>,
-) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let name = format!("{prefix}{}", entry.file_name().to_string_lossy());
-        if entry.file_type()?.is_dir() {
-            read_tree(&entry.path(), &format!("{name}/"), files)?;
-        } else {
-            files.insert(name, std::fs::read(entry.path())?);
-        }
-    }
-    Ok(())
-}
-
-/// Serves one HTTP request: a file of the bundle, or a WebSocket upgrade
-/// handed to `sockets` with its path and query.
-async fn serve(
-    mut conn: TcpStream,
-    bundle: &Bundle,
-    sockets: &mpsc::UnboundedSender<(String, Socket)>,
-) -> std::io::Result<()> {
-    let mut head = Vec::new();
-    let mut buf = [0u8; 4096];
-    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
-        if head.len() > 64 * 1024 {
-            return Ok(());
-        }
-        let n = conn.read(&mut buf).await?;
-        if n == 0 {
-            return Ok(());
-        }
-        head.extend_from_slice(&buf[..n]);
-    }
-    let (method, target, accept) = {
-        let mut headers = [httparse::EMPTY_HEADER; 64];
-        let mut req = httparse::Request::new(&mut headers);
-        if !matches!(req.parse(&head), Ok(httparse::Status::Complete(_))) {
-            return respond(conn, "400 Bad Request", "text/plain", b"").await;
-        }
-        let header = |name: &str| {
-            req.headers
-                .iter()
-                .find(|h| h.name.eq_ignore_ascii_case(name))
-                .map(|h| h.value)
-        };
-        let upgrade = header("upgrade").is_some_and(|v| v.eq_ignore_ascii_case(b"websocket"));
-        let accept = header("sec-websocket-key")
-            .filter(|_| upgrade)
-            .map(derive_accept_key);
-        (
-            req.method.unwrap_or("").to_owned(),
-            req.path.unwrap_or("/").to_owned(),
-            accept,
-        )
-    };
-    if let Some(accept) = accept {
-        let reply = format!(
-            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\
-             Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
-        );
-        conn.write_all(reply.as_bytes()).await?;
-        let ws = WebSocketStream::from_raw_socket(conn, Role::Server, None).await;
-        let _ = sockets.send((target, ws));
-        return Ok(());
-    }
-    let mut path = target
-        .split('?')
-        .next()
-        .unwrap_or("")
-        .trim_start_matches('/');
-    // A route of a single-page app, whose router reads the path.
-    let is_route = !path.rsplit('/').next().unwrap_or("").contains('.');
-    if !bundle.0.contains_key(path) && is_route && bundle.0.contains_key("index.html") {
-        path = "index.html";
-    }
-    match bundle.0.get(path) {
-        Some(body) if method == "GET" => respond(conn, "200 OK", content_type(path), body).await,
-        _ => respond(conn, "404 Not Found", "text/plain", b"").await,
-    }
-}
-
-async fn respond(
-    mut conn: TcpStream,
-    status: &str,
-    content_type: &str,
-    body: &[u8],
-) -> std::io::Result<()> {
-    let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
-         Cache-Control: no-store\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    conn.write_all(head.as_bytes()).await?;
-    conn.write_all(body).await?;
-    conn.shutdown().await
-}
-
-fn content_type(path: &str) -> &'static str {
-    match path.rsplit('.').next() {
-        Some("html") => "text/html; charset=utf-8",
-        Some("js") => "text/javascript",
-        Some("css") => "text/css",
-        Some("wasm") => "application/wasm",
-        Some("json" | "map") => "application/json",
-        Some("webmanifest") => "application/manifest+json",
-        Some("svg") => "image/svg+xml",
-        Some("png") => "image/png",
-        Some("ico") => "image/x-icon",
-        Some("woff2") => "font/woff2",
-        _ => "application/octet-stream",
-    }
-}
-
-const FIREFOX_PREFS: &str = concat!(
-    "user_pref(\"browser.shell.checkDefaultBrowser\", false);\n",
-    "user_pref(\"datareporting.policy.dataSubmissionEnabled\", false);\n",
-    // Host candidates as addresses, so two pages of one browser link
-    // without resolving each other's mDNS names.
-    "user_pref(\"media.peerconnection.ice.obfuscate_host_addresses\", false);\n",
-    // The pages' and workers' console, on stdout.
-    "user_pref(\"devtools.console.stdout.content\", true);\n",
-    // An `open` after a `close` on the same profile loads only the page it
-    // names. `close` kills Firefox, so its session isn't restored; and
-    // thumbnail capture would load the profile's top sites, the pages
-    // opened before, in a hidden browser.
-    "user_pref(\"browser.sessionstore.resume_from_crash\", false);\n",
-    "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
-);
 
 /// A new Firefox profile with the harness's prefs. A snap Firefox has a
 /// private /tmp; its own common dir is visible.
@@ -335,8 +194,7 @@ fn new_profile() -> PathBuf {
         std::process::id(),
         PROFILES.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&profile).unwrap();
-    std::fs::write(profile.join("user.js"), FIREFOX_PREFS).unwrap();
+    firefox_profile(&profile).unwrap();
     profile
 }
 
@@ -347,9 +205,7 @@ struct Firefox(Child);
 impl Firefox {
     fn launch(profile: &Path, url: &str, output: &Arc<Mutex<Vec<String>>>) -> Firefox {
         let mut child = Command::new("firefox")
-            .args(["--headless", "--no-remote", "--profile"])
-            .arg(profile)
-            .arg(url)
+            .args(args(Kind::Firefox, profile, url))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -385,43 +241,6 @@ pub fn outbound_ip() -> Option<IpAddr> {
     probe.connect("192.0.2.1:9").ok()?;
     let ip = probe.local_addr().ok()?.ip();
     (!ip.is_unspecified() && !ip.is_loopback()).then_some(ip)
-}
-
-/// A server of a bundle on 127.0.0.1, until it drops. A route of the
-/// bundle's single-page app, a path whose last segment has no `.`, gets
-/// its `index.html`.
-pub struct Site {
-    pub addr: SocketAddr,
-    /// The WebSockets pages opened, with their paths and queries.
-    pub sockets: mpsc::UnboundedReceiver<(String, Socket)>,
-    task: tokio::task::JoinHandle<()>,
-}
-
-impl Drop for Site {
-    fn drop(&mut self) {
-        self.task.abort();
-    }
-}
-
-impl Site {
-    pub async fn serve(bundle: Arc<Bundle>) -> Site {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let (tx, sockets) = mpsc::unbounded_channel();
-        let task = tokio::spawn(async move {
-            while let Ok((conn, _)) = listener.accept().await {
-                let (bundle, tx) = (bundle.clone(), tx.clone());
-                tokio::spawn(async move {
-                    let _ = serve(conn, &bundle, &tx).await;
-                });
-            }
-        });
-        Site {
-            addr,
-            sockets,
-            task,
-        }
-    }
 }
 
 /// The server, a Firefox profile, and the Firefox on it while a page is
@@ -461,7 +280,7 @@ impl Browser {
         let bundle = bundle()?;
         let turn = TURN.lock().await;
         Some(Browser {
-            site: Site::serve(bundle).await,
+            site: Site::serve(bundle).await.unwrap(),
             pending: Vec::new(),
             profile: new_profile(),
             firefox: None,

@@ -12,7 +12,7 @@
 //! the host's clock. It ends 5 s after the stream does.
 //!
 //! Every second from 5 s before the start, the node emits one JSON line
-//! ([`Runtime::emit`]):
+//! ([`Runtime::emit`]); a second it missed has none:
 //!
 //! | field | |
 //! |---|---|
@@ -188,7 +188,11 @@ pub async fn run(
             rt.sleep_until_ms(next).await;
             let t = rt.now_ms();
             let tick_late = t.saturating_sub(next);
-            next += 1000;
+            // A node that started late, or stalled, skips the seconds it
+            // missed.
+            while next <= t {
+                next += 1000;
+            }
             let Ok(m) = node.metrics().await else {
                 continue;
             };

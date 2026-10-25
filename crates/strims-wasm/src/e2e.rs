@@ -1,14 +1,16 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A bare node for the browser link tests, driven over the frontend port.
+//! A bare node for the browser link tests and the testbed's browser
+//! nodes, driven over the frontend port.
 //!
 //! The e2e page (`src/web/e2e.ts`) starts its workers with `options.e2e`
 //! set, and relays each worker's frontend port to a WebSocket of the
-//! native test harness, one binary WebSocket message per port message.
+//! native harness, one binary WebSocket message per port message.
 //! [`start`] runs the control task on that port: the harness starts a
 //! node, has it dial, link and send, and hears about its peers and
-//! messages.
+//! messages. A testbed harness (strims-testbed's `testbed_browser`) also
+//! has it run the testbed's swarm ([`strims_testbed::node`]).
 //!
 //! # Protocol
 //!
@@ -25,6 +27,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -38,27 +41,35 @@
 //! | `exchangeClosed` | `hostId`, `outcome` | A peer exchange ended; `outcome` is the `ExchangeOutcome`'s debug form. |
 //! | `message` | `from`, `bytes` | A vpn message arrived on `replyPort`. |
 //! | `stats` | `echoed`, `echoErrors`, `eventsDropped`, `linkQueueFull`, `deliveriesDropped`, `links: [{kind, mtu, readBytes, writeBytes}]` | Answers `stats`. |
-//! | `error` | `command`, `message` | A command didn't parse or failed, or an echo failed (`command` `echo`). |
+//! | `sample` | `line`, `postMs` | The testbed's line of a second, a JSON object in a string, with `cpu_ms` `null`; and `Date.now()` as it's posted. |
+//! | `error` | `command`, `message` | A command didn't parse or failed, an echo failed (`command` `echo`), or the testbed reported something (`command` `testbed`). |
 //!
 //! Every vpn message on `echoPort` goes back to its sender's port,
 //! unchanged and from `echoPort`, in the order the messages arrived; it
 //! isn't reported. Commands run in the order they arrive, and each runs
 //! to completion before the next, except `dial` and `connectPeer`, which
-//! report when they finish.
+//! report when they finish, and `testbed`, which runs on.
+//!
+//! The testbed measures lag and its timers' lateness on `Date.now()`, read
+//! at the moment: [`clock::now`] holds the time a turn of the event loop
+//! started.
 
 use std::cell::Cell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
 use js_sys::{Array, ArrayBuffer, JSON, Object, Reflect, Uint8Array};
-use strims_node_core::{HostId, LinkKind, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents};
+use strims_base::time::Time;
+use strims_node_core::{HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo};
 use strims_proto::types::Key;
+use strims_testbed::node::{Runtime, Settings, kind_name};
+use strims_testbed::shape::RATE;
 use tokio::sync::mpsc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, MessagePort};
 
-use crate::{js, node, runtime};
+use crate::{clock, js, node, runtime};
 
 /// Whether `options` asks for the e2e node: `options.e2e` is `true`.
 pub fn requested(options: &JsValue) -> bool {
@@ -83,6 +94,7 @@ pub fn start(frontend: MessagePort, signal: MessagePort) {
         out: Out(frontend),
         signal: Some(signal),
         running: None,
+        peers: None,
         _on_message: on_message,
     };
     // Detached: the worker runs it for as long as it lives.
@@ -146,6 +158,8 @@ struct Control {
     /// Until `start` hands it to the node.
     signal: Option<MessagePort>,
     running: Option<Running>,
+    /// The peers added since `start`, until `testbed` takes them.
+    peers: Option<mpsc::UnboundedReceiver<PeerInfo>>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
 }
 
@@ -219,7 +233,7 @@ impl Control {
                         let set = |k: &str, v: JsValue| {
                             let _ = Reflect::set(&o, &JsValue::from_str(k), &v);
                         };
-                        set("kind", link_kind(l.kind).into());
+                        set("kind", kind_name(l.kind).into());
                         set("mtu", number(l.mtu as u64));
                         set("readBytes", number(l.metrics.read_bytes));
                         set("writeBytes", number(l.metrics.write_bytes));
@@ -235,6 +249,28 @@ impl Control {
                     ("deliveriesDropped", number(m.vpn.deliveries_dropped)),
                     ("links", links.into()),
                 ]);
+            }
+            "testbed" => {
+                let peers = self.peers.take().ok_or("the testbed already runs")?;
+                let rate = match property(cmd, "rate") {
+                    v if v.is_undefined() => RATE,
+                    _ => int(cmd, "rate")?,
+                };
+                let settings = Settings {
+                    index: usize::try_from(int(cmd, "index")?).map_err(|e| e.to_string())?,
+                    nodes: usize::try_from(int(cmd, "nodes")?).map_err(|e| e.to_string())?,
+                    start_ms: int(cmd, "startMs")?,
+                    secs: int(cmd, "secs")?,
+                    rate,
+                };
+                let out = self.out.clone();
+                // Detached: it ends 5 s after the stream does.
+                drop(runtime::spawn(async move {
+                    let rt = Testbed(out.clone());
+                    if let Err(e) = strims_testbed::node::run(&r.node, peers, settings, &rt).await {
+                        out.error("testbed", &e);
+                    }
+                }));
             }
             _ => return Err("unknown command".to_owned()),
         }
@@ -285,11 +321,14 @@ impl Control {
             reply_port,
             counts: Rc::default(),
         };
+        let (peers_tx, peers) = mpsc::unbounded_channel();
+        self.peers = Some(peers);
         // It runs once this task waits: after `started` is posted.
         drop(runtime::spawn(watch(
             running.clone(),
             events,
             self.out.clone(),
+            peers_tx,
         )));
         let id = running.node.host_id();
         tracing::info!(host_id = %id, "e2e node started");
@@ -300,17 +339,26 @@ impl Control {
     }
 }
 
-/// Reports the node's events and echoes the messages on the echo port,
-/// until the node stops.
-async fn watch(r: Running, mut events: NodeEvents, out: Out) {
+/// Reports the node's events, hands added peers to `peers` for the
+/// testbed, and echoes the messages on the echo port, until the node
+/// stops.
+async fn watch(
+    r: Running,
+    mut events: NodeEvents,
+    out: Out,
+    peers: mpsc::UnboundedSender<PeerInfo>,
+) {
     while let Some(e) = events.recv().await {
         match e {
-            NodeEvent::PeerAdded(p) => out.post(&[
-                ("type", "peerAdded".into()),
-                ("hostId", host_id(p.host_id)),
-                ("kind", link_kind(p.kind).into()),
-                ("dialed", p.dialed.into()),
-            ]),
+            NodeEvent::PeerAdded(p) => {
+                out.post(&[
+                    ("type", "peerAdded".into()),
+                    ("hostId", host_id(p.host_id)),
+                    ("kind", kind_name(p.kind).into()),
+                    ("dialed", p.dialed.into()),
+                ]);
+                let _ = peers.send(p);
+            }
             NodeEvent::PeerRemoved { host_id: h } => {
                 out.post(&[("type", "peerRemoved".into()), ("hostId", host_id(h))])
             }
@@ -347,12 +395,33 @@ async fn watch(r: Running, mut events: NodeEvents, out: Out) {
     }
 }
 
-fn link_kind(kind: LinkKind) -> &'static str {
-    match kind {
-        LinkKind::Tcp => "tcp",
-        LinkKind::Ws => "ws",
-        LinkKind::WebRtc => "webrtc",
-        LinkKind::Other => "other",
+/// The testbed's side of the worker: its lines go out as `sample` events.
+struct Testbed(Out);
+
+impl Runtime for Testbed {
+    fn now_ms(&self) -> u64 {
+        // `as` saturates, and NaN is 0.
+        js_sys::Date::now() as u64
+    }
+
+    async fn sleep_until_ms(&self, at_ms: u64) {
+        clock::Sleep::until(Time::from_unix_millis(at_ms as i64)).await;
+    }
+
+    fn cpu_ms(&self) -> Option<u64> {
+        None
+    }
+
+    fn emit(&self, line: String) {
+        self.0.post(&[
+            ("type", "sample".into()),
+            ("line", line.into()),
+            ("postMs", js_sys::Date::now().into()),
+        ]);
+    }
+
+    fn error(&self, message: String) {
+        self.0.error("testbed", &message);
     }
 }
 

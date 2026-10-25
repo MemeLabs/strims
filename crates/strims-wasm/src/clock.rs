@@ -73,7 +73,7 @@ pub fn now() -> Time {
         if let Some(now) = t.now.get() {
             return now;
         }
-        // The worker's clock, and the one place the crate reads the time.
+        // The worker's clock, and the one place the node reads the time.
         // `as` saturates, and NaN is 0.
         let now = Time::from_unix_millis(js_sys::Date::now() as i64);
         t.now.set(Some(now));

@@ -2604,12 +2604,16 @@ dependencies = [
 name = "strims-testbed"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "hex",
+ "httparse",
+ "serde_json",
  "strims-crypto",
  "strims-node-core",
  "strims-ppspp",
  "strims-proto",
  "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
@@ -2760,6 +2764,7 @@ dependencies = [
  "strims-rpc",
  "strims-session",
  "strims-svc",
+ "strims-testbed",
  "strims-video",
  "strims-vnic",
  "thiserror",

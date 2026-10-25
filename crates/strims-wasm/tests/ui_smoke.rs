@@ -59,7 +59,7 @@ async fn a_sign_up_through_the_production_ui_reaches_the_layout_and_its_activity
         }
         Err(Unavailable::Failed(why)) => panic!("{why}"),
     };
-    let site = Site::serve(bundle).await;
+    let site = Site::serve(bundle).await.unwrap();
     let prefs = json!({"devtools.console.stdout.content": true});
     let Some(session) = Session::start(prefs).await else {
         return;
