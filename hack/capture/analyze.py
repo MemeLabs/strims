@@ -65,6 +65,10 @@ Runs, second by second (no capture needed):
   hack/capture/analyze.py series   RUNS... [--where K=V...] [--every S]
   hack/capture/analyze.py collapse RUNS... [--where K=V...]
   hack/capture/analyze.py map      RUNS... [--where K=V...] [--group K,...]
+  hack/capture/analyze.py pair     RUNS... --a K=V[,K=V] --b K=V[,K=V]...
+                                   [--where K=V...] [--ignore K,...]
+  hack/capture/analyze.py track    RUNS... [--where K=V...] [--group K,...]
+                                   [--runs]
 
 RUNS are farm matrix dirs (`target/sim-farm/<matrix>`: its rows.jsonl, and
 a testbed matrix's run dirs), rows.jsonl files, stdout with `ROW {json}`
@@ -73,8 +77,8 @@ carries `series` with `STRIMS_SIM_SERIES=1` (strims-sim, where
 `calibration_star` always has it; `Report::series` documents the fields)
 or `SIM_SERIES=1` (the ppspp sim's `sim_job`); a testbed run's comes from
 its nodes' lines. `--where` keeps the runs whose env (or row field) has
-the value; keys match with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or
-SIM_ prefix.
+the value (a blank value matches a setting the run lacks); keys match
+with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
 
   series    per second: viewers present, on-time pushes against the chunks
             the viewers needed, the median viewer's delivery, the swarm's
@@ -86,6 +90,23 @@ SIM_ prefix.
             collapsed, the share absorbing, the median share of the stream's
             seconds that weren't healthy (any verdict's condition held), the
             median onsets, and whether the cell is feasible
+  pair      arms compared seed by seed within each cell: an arm is the runs
+            whose env (or row) has every K=V of its --a or --b (several --b
+            compare each with --a), and a cell is every other setting but
+            the seed and the keys --ignore names (a setting one arm lacks
+            reads as blank). Per cell and --b: the pairs, each arm's median
+            unhealthy share and absorbing runs, the median per-seed
+            difference in unhealthy share, and the geometric mean of the
+            per-seed ratios of lag p50 and p99 (B over A) with bootstrap 95 %
+            intervals
+  track     how the seed's capacity reading (a pacer's estimate, or a known
+            capacity) follows its true uplink: per cell, the median of its
+            runs' reading over the uplink (p10, p50, p90), the seconds after
+            each drop until it reads at most the new uplink and after each
+            rise until it reads 80 % of it, the share of the uplink the seed's
+            chunks used, the median viewer's first frame (seconds into the
+            stream) and the row's startup p50 lag, and the row's off_drop
+            and off_rise medians when it has them; --runs prints each run
 
 The verdicts, judged over the stream's seconds (not the run's tail):
 
@@ -487,7 +508,7 @@ def matches(env, row, where):
     for w in where or ():
         k, _, v = w.partition("=")
         have = {short(x): str(y) for x, y in {**row, **env}.items()}
-        if have.get(short(k)) != v:
+        if have.get(short(k), "") != v:
             return False
     return True
 
@@ -656,6 +677,148 @@ def map_(a):
             f" {pct(vs, lambda v: v['latency'] is not None)} {pct(vs, lambda v: v['absorbing'])} |"
             f" {100 * (med([v['unhealthy'] for v in vs if v['unhealthy'] is not None]) or 0):3.0f}% |"
             f" {onset(vs, 'trees')} {onset(vs, 'delivery')} {onset(vs, 'latency')} | {med([v['lag_p50'] for v in vs if v['lag_p50'] is not None])}"
+        )
+
+
+BOOTSTRAP = 2000
+
+
+def selector(spec):
+    """A --a/--b selector: K=V pairs, comma-separated."""
+    return [w for w in spec.split(",") if w]
+
+
+def boot_ci(v, rounds=BOOTSTRAP):
+    """The mean of `v` and a bootstrap 95 % interval, from a fixed seed."""
+    import random
+
+    if not v:
+        return None, None, None
+    rng = random.Random(0x5EED)
+    means = sorted(sum(rng.choice(v) for _ in v) / len(v) for _ in range(rounds))
+    return sum(v) / len(v), means[int(0.025 * rounds)], means[int(0.975 * rounds) - 1]
+
+
+def pair(a):
+    import math
+
+    sel_a = selector(a.a)
+    sels_b = [selector(b) for b in a.b]
+    arm_keys = {short(w.partition("=")[0]) for sel in [sel_a, *sels_b] for w in sel}
+    arm_keys |= {short(k) for k in (a.ignore or "").split(",") if k}
+    arm_keys |= {"arm", "test"}
+    seed_keys = {short(k) for k in SEED_KEYS}
+    found = []
+    for _, env, row, s in runs(a.runs):
+        if not matches(env, row, a.where):
+            continue
+        which = [i for i, sel in enumerate([sel_a, *sels_b]) if matches(env, row, sel)]
+        if not which:
+            continue
+        found.append((env, row, s, which))
+    cell_keys = sorted({short(k) for env, *_ in found for k in env} - arm_keys - seed_keys)
+
+    def key(env):
+        e = {short(k): str(v) for k, v in env.items()}
+        seed = next((e[k] for k in seed_keys if k in e), "")
+        return tuple(e.get(k, "") for k in cell_keys), seed
+
+    arms = [collections.defaultdict(dict) for _ in range(1 + len(sels_b))]
+    for env, row, s, which in found:
+        cell, seed = key(env)
+        v = verdict(s)
+        for i in which:
+            arms[i][cell][seed] = (v, row)
+    shown = [k for k in cell_keys if len({c[cell_keys.index(k)] for arm in arms for c in arm}) > 1]
+    num = lambda x: (0, float(x)) if x.replace(".", "", 1).isdigit() else (1, x)
+    ratio = lambda xs: "-" if xs[0] is None else f"{math.exp(xs[0]):.2f} [{math.exp(xs[1]):.2f},{math.exp(xs[2]):.2f}]"
+    print(f"A = {a.a}")
+    for i, b in enumerate(a.b):
+        print(f"B{i + 1} = {b}")
+    print(" ".join(shown) + " | B | pairs | unhealthy A B | absorbing A B | d unhealthy | lag_p50 B/A | lag_p99 B/A")
+    for cell in sorted(arms[0], key=lambda c: [num(x) for x in c]):
+        label = " ".join(cell[cell_keys.index(k)] or "-" for k in shown)
+        for i in range(1, len(arms)):
+            seeds = sorted(set(arms[0][cell]) & set(arms[i].get(cell, {})), key=lambda x: num(x))
+            if not seeds:
+                continue
+            pa = [arms[0][cell][x] for x in seeds]
+            pb = [arms[i][cell][x] for x in seeds]
+            un = lambda ps: med([v["unhealthy"] for v, _ in ps if v["unhealthy"] is not None]) or 0
+            ab = lambda ps: sum(1 for v, _ in ps if v["absorbing"])
+            d = med([(vb["unhealthy"] or 0) - (va["unhealthy"] or 0) for (va, _), (vb, _) in zip(pa, pb)])
+            logs = lambda f: [
+                math.log(rb[f] / ra[f]) for (_, ra), (_, rb) in zip(pa, pb) if ra.get(f) and rb.get(f)
+            ]
+            print(
+                f"{label} | B{i} | {len(seeds)} | {100 * un(pa):3.0f}% {100 * un(pb):3.0f}% | {ab(pa)} {ab(pb)} |"
+                f" {100 * (d or 0):+4.0f} | {ratio(boot_ci(logs('lag_p50_ms')))} | {ratio(boot_ci(logs('lag_p99_ms')))}"
+            )
+
+
+TRACK_RISE = 0.8
+
+
+def track_run(s, row):
+    """One run's tracking measures (see `track`)."""
+    n = min(s["secs"], len(s["capacity"]))
+    up = lambda k: [u for t, u in s["seed_up"] if t <= k + 0.5][-1]
+    ratios = [s["capacity"][k] / up(k) for k in range(n) if s["capacity"][k] > 0 and up(k) > 0]
+    falls, climbs = [], []
+    for (t, u), (_, before) in zip(s["seed_up"][1:], s["seed_up"]):
+        t = int(round(t))
+        later = [k for k in range(t, n) if s["capacity"][k] > 0]
+        if u < before:
+            falls.append(next((k - t for k in later if s["capacity"][k] <= u), None))
+        elif u > before:
+            climbs.append(next((k - t for k in later if s["capacity"][k] >= TRACK_RISE * u), None))
+    used = med([s["sent"][k] * s["chunk"] / up(k) for k in range(n) if up(k) > 0])
+    firsts = [next((k for k, f in enumerate(frames) if f), None) for frames in s["frames"]]
+    off = lambda f: row.get(f, [None])[0] if isinstance(row.get(f), list) else None
+    return {
+        "ratio": (quantile(ratios, 0.1), quantile(ratios, 0.5), quantile(ratios, 0.9)),
+        "fall": falls, "climb": climbs, "used": used,
+        "first": med([x for x in firsts if x is not None]), "startup": row.get("startup_p50_ms"),
+        "off_drop": off("off_drop"), "off_rise": off("off_rise"),
+    }
+
+
+def track(a):
+    done = [(label, env, track_run(s, row)) for label, env, row, s in runs(a.runs) if matches(env, row, a.where)]
+    keys = {k for _, env, _ in done for k in env}
+    if a.group:
+        group = [k for g in a.group.split(",") for k in sorted(keys) if short(k) == short(g)]
+    else:
+        group = sorted(k for k in keys if k not in SEED_KEYS and len({str(e.get(k)) for _, e, _ in done}) > 1)
+    f = lambda x, fmt=".2f": "-" if x is None else format(x, fmt)
+    lst = lambda xs: ",".join("-" if x is None else str(x) for x in xs) or "-"
+    if a.runs_:
+        print("run | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | off_drop off_rise")
+        for label, env, t in done:
+            cell = " ".join(f"{short(k)}={env.get(k)}" for k in group)
+            r = t["ratio"]
+            print(
+                f"{label} {cell} | {f(r[0])} {f(r[1])} {f(r[2])} | {lst(t['fall'])} | {lst(t['climb'])} |"
+                f" {f(t['used'])} | {f(t['first'], 'd')} {f(t['startup'], 'd')} | {f(t['off_drop'])} {f(t['off_rise'])}"
+            )
+        return
+    cells = collections.defaultdict(list)
+    for _, env, t in done:
+        cells[tuple(str(env.get(k, "")) for k in group)].append(t)
+    num = lambda x: (0, float(x)) if x.replace(".", "", 1).isdigit() else (1, x)
+    # A drop or rise the reading never followed counts as the stream's length.
+    never = lambda ts, k: med([x if x is not None else 10**6 for t in ts for x in t[k]])
+    print(" ".join(short(k) for k in group) + " | n | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | off_drop off_rise")
+    for cell in sorted(cells, key=lambda c: [num(x) for x in c]):
+        ts = cells[cell]
+        r = [med([t["ratio"][i] for t in ts if t["ratio"][i] is not None]) for i in range(3)]
+        fall, climb = never(ts, "fall"), never(ts, "climb")
+        nv = lambda x: "never" if x == 10**6 else f(x, "d") if isinstance(x, int) else f(x, ".1f")
+        print(
+            f"{' '.join(x or '-' for x in cell)} | {len(ts)} | {f(r[0])} {f(r[1])} {f(r[2])} | {nv(fall)} | {nv(climb)} |"
+            f" {f(med([t['used'] for t in ts if t['used'] is not None]))} | {f(med([t['first'] for t in ts if t['first'] is not None]), '.1f')}"
+            f" {f(med([t['startup'] for t in ts if t['startup'] is not None]), '.0f')} |"
+            f" {f(med([t['off_drop'] for t in ts if t['off_drop'] is not None]))} {f(med([t['off_rise'] for t in ts if t['off_rise'] is not None]))}"
         )
 
 
@@ -845,7 +1008,7 @@ def main():
     p = command("diverge", diverge)
     p.add_argument("runs", nargs=2)
     p.add_argument("--source", default="seed")
-    for name, f in (("series", series), ("collapse", collapse), ("map", map_)):
+    for name, f in (("series", series), ("collapse", collapse), ("map", map_), ("pair", pair), ("track", track)):
         p = sub.add_parser(name)
         p.set_defaults(f=f)
         p.add_argument("runs", nargs="+")
@@ -854,6 +1017,13 @@ def main():
     p.add_argument("--every", type=int, default=1, help="seconds between lines")
     p = sub.choices["map"]
     p.add_argument("--group", help="the env keys of a cell (default: every key that varies)")
+    p = sub.choices["pair"]
+    p.add_argument("--a", required=True, help="K=V[,K=V]: the runs of arm A")
+    p.add_argument("--b", required=True, action="append", help="K=V[,K=V]: the runs of an arm B")
+    p.add_argument("--ignore", help="K,...: settings that don't tell cells apart")
+    p = sub.choices["track"]
+    p.add_argument("--group", help="the env keys of a cell (default: every key that varies)")
+    p.add_argument("--runs", dest="runs_", action="store_true", help="one line per run")
     a = ap.parse_args()
     try:
         a.f(a)
