@@ -303,6 +303,7 @@ fn summarize(bytes: &[u8]) -> Summary {
                 Record::Peer { .. } => "peer",
                 Record::Swarm { .. } => "swarm",
                 Record::ChannelOpen { .. } => "channel",
+                Record::Tap(_) => "tap",
                 _ => "other",
             });
         }
@@ -321,7 +322,13 @@ fn a_capture_holds_frames_and_decisions() {
     let seed = summarize(&files[0].get()[0]);
     let leech = summarize(&files[1].get()[0]);
     let stats = p.nodes[0].cap.as_ref().unwrap().stats();
-    assert_eq!(seed.lead, ["peer", "swarm", "channel"]);
+    // The snapshot, then decisions made before the first frame.
+    assert_eq!(seed.lead[..3], ["peer", "swarm", "channel"]);
+    assert!(
+        seed.lead[3..].iter().all(|&k| k == "tap"),
+        "{:?}",
+        seed.lead
+    );
     let params = seed.swarm.unwrap();
     assert_eq!((params.chunk_size, params.stream_count), (1024, 1));
     assert_eq!((params.push_mode, params.scheduling_method), (3, 1));

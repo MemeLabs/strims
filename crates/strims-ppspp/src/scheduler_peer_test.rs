@@ -1995,6 +1995,190 @@ fn hybrid_deadlines_release_to_pull_and_silence_prunes() {
     );
 }
 
+/// The decisions the tap recorded since the last call, in order.
+fn tapped(f: &mut Fixture) -> Vec<crate::TapEvent> {
+    let mut v = Vec::new();
+    f.sched.s.tap.drain(&mut |e| v.push(e));
+    v
+}
+
+#[test]
+fn the_tap_gives_misses_and_prunes_their_deadlines_and_rules() {
+    let mut f = fixture(hybrid(1));
+    f.sched.s.tap.set(true);
+    let mut q = MockQueue::default();
+    let parent = ready_channel(&mut f, &mut q);
+    let other = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+    f.sched
+        .handle_stream_open(parent, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    f.sched.handle_have(other, Bin::new(2, 0), now());
+    let deadline = f.sched.next_push_deadline().unwrap();
+    tapped(&mut f);
+    f.sched.expire_push(deadline, &mut q);
+    let misses: Vec<_> = tapped(&mut f)
+        .into_iter()
+        .filter_map(|e| match e.kind {
+            TapKind::PushMiss {
+                deadline,
+                first_seen,
+                counted,
+                lag,
+                ..
+            } => Some((e.peer, deadline, first_seen, counted, lag.deadline)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        misses,
+        vec![(Some(parent), deadline, now(), true, push::DEADLINE_INITIAL); 4]
+    );
+
+    // A parent silent for a second is pruned by the silence rule.
+    let later = now() + push::PRUNE_SILENCE;
+    f.sched.handle_have(other, Bin::new(2, 1), later);
+    let deadline = f.sched.next_push_deadline().unwrap();
+    f.sched.expire_push(deadline, &mut q);
+    let pruned: Vec<_> = tapped(&mut f)
+        .into_iter()
+        .filter_map(|e| match e.kind {
+            TapKind::Pruned { why, .. } => Some((e.peer, why)),
+            _ => None,
+        })
+        .collect();
+    let [(peer, why)] = pruned[..] else {
+        panic!("{pruned:?}");
+    };
+    assert_eq!(peer, Some(parent));
+    assert!(why.silent && !why.lossy, "{why:?}");
+    // Chunk 3 went to pull unrequested, so the next announcement expects
+    // it again.
+    assert_eq!((why.silent_misses, why.expected, why.pushes), (9, 9, 0));
+    assert_eq!(why.since_hit, Some(deadline - now()));
+    assert_eq!(why.age, Some(deadline - now()));
+    assert_eq!(why.lag.deadline, push::DEADLINE_INITIAL);
+
+    // The next check passes over the backed-off parent and grafts `other`.
+    f.sched
+        .run_push(deadline + push::PARENT_CHECK_INTERVAL, &mut q);
+    let choices: Vec<_> = tapped(&mut f)
+        .into_iter()
+        .filter_map(|e| match e.kind {
+            TapKind::ParentChoice { choice, .. } => Some((e.peer, choice)),
+            _ => None,
+        })
+        .collect();
+    let [(peer, c)] = choices[..] else {
+        panic!("{choices:?}");
+    };
+    assert_eq!(peer, Some(other));
+    assert_eq!(c.action, crate::ParentAction::Graft);
+    assert_eq!(c.best.map(|b| b.0), Some(other));
+    assert_eq!((c.runner_up, c.backed_off, c.stale), (None, 1, 0));
+}
+
+#[test]
+fn the_tap_gives_admissions_their_rule_and_numbers() {
+    let mut f = fixture(hybrid(8));
+    f.sched.s.tap.set(true);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let r = add_ready(&mut f, &mut q, 1);
+    let admissions = |f: &mut Fixture| -> Vec<(bool, crate::Admission)> {
+        tapped(f)
+            .into_iter()
+            .filter_map(|e| match e.kind {
+                TapKind::Admitted { why, .. } => Some((true, why)),
+                TapKind::Rejected { why, .. } => Some((false, why)),
+                _ => None,
+            })
+            .collect()
+    };
+    f.sched
+        .handle_stream_request(p, 2, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    f.sched
+        .handle_stream_request(r, 5, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    let got = admissions(&mut f);
+    assert_eq!(got.len(), 2, "{got:?}");
+    assert!(got[0].0 && got[0].1.rule == crate::AdmitRule::Unmeasured && !got[0].1.extra);
+    assert!(!got[1].0 && got[1].1.rule == crate::AdmitRule::Unmeasured && got[1].1.extra);
+
+    // Measured: the rate plus a subscriber against the capacity at the
+    // extra target.
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        busy: 0.95,
+        ..Default::default()
+    });
+    f.sched
+        .handle_stream_request(r, 5, Bin(0), Bin(0), now(), &mut q)
+        .unwrap();
+    let got = admissions(&mut f);
+    let [(false, a)] = got[..] else {
+        panic!("{got:?}");
+    };
+    assert_eq!(a.rule, crate::AdmitRule::Measured);
+    assert_eq!(
+        (a.upload_rate, a.capacity, a.target_permille, a.extra),
+        (100_000, Some(105_263), 500, true)
+    );
+    assert_eq!(a.stream_children, 0);
+}
+
+#[test]
+fn the_tap_gives_a_shed_its_numbers() {
+    let mut f = fixture(seed_hybrid(1));
+    f.sched.s.tap.set(true);
+    let mut q = MockQueue::default();
+    ready_channel(&mut f, &mut q);
+    for i in 1..4 {
+        add_ready(&mut f, &mut q, i);
+    }
+    for i in 0..4 {
+        f.sched
+            .handle_stream_request(f.peers[i], 0, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    let mut t = now();
+    for i in 0..11 {
+        t = now() + Duration::from_millis(100 + 200 * i);
+        f.sched.s.push_consumed(Bin(0), 64, t);
+    }
+    f.sched.set_upload(push::UploadInfo {
+        rate: 1_900_000,
+        busy: 0.95,
+        ..Default::default()
+    });
+    tapped(&mut f);
+    f.sched.run_push(t, &mut q);
+    let sheds: Vec<_> = tapped(&mut f)
+        .into_iter()
+        .filter_map(|e| match e.kind {
+            TapKind::Shed { why, .. } => Some(why),
+            _ => None,
+        })
+        .collect();
+    let [
+        crate::Shed::Saturated {
+            busy,
+            capacity,
+            excess,
+            count,
+            others,
+            ..
+        },
+    ] = sheds[..]
+    else {
+        panic!("{sheds:?}");
+    };
+    assert_eq!((busy, capacity, count, others), (950, 2_000_000, 1, 0));
+    assert!(excess > 0, "{excess}");
+}
+
 #[test]
 fn a_missed_push_is_cancelled_at_its_parent() {
     // What a child gives up on, at a deadline or with the parent, is

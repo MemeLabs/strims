@@ -12,8 +12,8 @@
 //! [`Capture::drain`] before the next frame.
 //!
 //! Tap kinds and their fields, in order (bins are bin numbers, times
-//! nanoseconds since the Unix epoch, durations nanoseconds, peers dump
-//! ids):
+//! nanoseconds since the Unix epoch, durations nanoseconds, rates bytes
+//! per second, peers dump ids, 0 for none; -1 is unknown):
 //!
 //! | kind | name | fields |
 //! |---|---|---|
@@ -26,34 +26,44 @@
 //! | 7 | `PushHit` | bin, lag |
 //! | 8 | `PushLate` | bin, lag |
 //! | 9 | `PushUnsolicited` | bin |
-//! | 10 | `PushMiss` | bin |
-//! | 11 | `RequestTimeout` | bin |
-//! | 12 | `Pruned` | stream |
-//! | 13 | `Switched` | stream, from peer |
-//! | 14 | `OpenTimeout` | stream |
+//! | 10 | `PushMiss` | bin, deadline (time), first_seen (time), counted, lag_mean, lag_dev, lag_peak, lag_deadline |
+//! | 11 | `RequestTimeout` | bin, requested (time), timeout |
+//! | 12 | `Pruned` | stream, rule (`silent`, `lossy`, `both`), silent_misses, since_hit, miss_rate (millionths), expected, pushes, age, lag_mean, lag_dev, lag_peak, lag_deadline |
+//! | 13 | `Switched` | stream, from (peer) |
+//! | 14 | `OpenTimeout` | stream, waited |
 //! | 15 | `Declined` | stream |
 //! | 16 | `ShedBy` | stream |
-//! | 17 | `Admitted` | stream |
-//! | 18 | `Rejected` | stream |
-//! | 19 | `Shed` | stream |
+//! | 17 | `Admitted` | stream, rule (`subscribed`, `pin`, `seed_holder`, `seed_barred`, `seed_no_copy`, `seed_streams_held`, `unmeasured`, `measured`), extra, upload_rate, committed, others, stream_rate, capacity, target (thousandths), stream_children, holders, copies, held, per_holder |
+//! | 18 | `Rejected` | as `Admitted` |
+//! | 19 | `Shed` | stream, cause (`saturated`, `seed_budget`), busy (thousandths), committed, others, capacity, excess, count, room |
 //! | 20 | `HolderJoined` | |
-//! | 21 | `HolderLeft` | |
-//! | 22 | `SeedBudget` | budget, copies, streams |
+//! | 21 | `HolderLeft` | why (`silent`, `unserved`, `past_copies`, `idle`, `closed`), copies, rtt |
+//! | 22 | `SeedBudget` | budget, copies, streams, capacity, stream_rate, others |
 //! | 23 | `SeedWindow` | copies, pushed, behind |
 //! | 24 | `HolderSilent` | |
 //! | 25 | `HolderUnserved` | reporters |
 //! | 26 | `PushCancelled` | bin |
+//! | 27 | `ParentChoice` | stream, action (`graft`, `none`, `vote`, `switch`, `reset`), chosen (peer), chosen_lag, runner_up (peer), runner_up_lag, unready, subscriber, backed_off, stale, votes, parent_have, parent_push |
+//! | 28 | `RequestRound` | floor (bin), cap, in_flight, room, fit, candidates, requested |
+//! | 29 | `Upload` | rate, busy (thousandths), capacity, hint, others, committed, queue_delay |
+//! | 30 | `SeedFirstWave` | capacity, early_rate, others, neighbours, copies |
+//!
+//! Version 1 dumps hold only the fields of kinds 1 to 26 up to `Switched`'s
+//! `from`, `SeedBudget`'s `streams` and the first of the others
+//! ([`KindInfo::v1_fields`]).
 //!
 //! [`strims_ppspp::TapKind`] documents what each means.
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
+use strims_ppspp::codec::Stream;
 use strims_ppspp::{
-    PeerKey, PushMode, RequestControllerKind, Runner, SeedAllocation, SeedQos, Swarm, SwarmKey,
-    TapEvent, TapKind, TapLevel,
+    Admission, AdmitRule, HolderLeft, LagEstimate, ParentAction, PeerKey, PushMode,
+    RequestControllerKind, Runner, SeedAllocation, SeedQos, Shed, Swarm, SwarmKey, TapEvent,
+    TapKind, TapLevel,
 };
 
 use crate::format::{Clock, Dir, Header, Record, SampleRecord, SwarmParams, TapRecord};
@@ -100,6 +110,11 @@ impl KindInfo {
         }
     }
 
+    /// A kind that has more fields than it had in version 1.
+    const fn since_v1(self, v1_fields: usize) -> KindInfo {
+        KindInfo { v1_fields, ..self }
+    }
+
     /// How many of a record's `n` fields a reader of a version `version`
     /// dump takes.
     pub fn fields_of(&self, version: u16, n: usize) -> usize {
@@ -135,6 +150,46 @@ const fn peer(name: &'static str) -> Field {
     }
 }
 
+const fn named(name: &'static str, names: &'static [&'static str]) -> Field {
+    Field {
+        name,
+        kind: FieldKind::Enum(names),
+    }
+}
+
+const ADMIT_RULES: &[&str] = &[
+    "subscribed",
+    "pin",
+    "seed_holder",
+    "seed_barred",
+    "seed_no_copy",
+    "seed_streams_held",
+    "unmeasured",
+    "measured",
+];
+const ADMISSION: &[Field] = &[
+    num("stream"),
+    named("rule", ADMIT_RULES),
+    num("extra"),
+    num("upload_rate"),
+    num("committed"),
+    num("others"),
+    num("stream_rate"),
+    num("capacity"),
+    num("target"),
+    num("stream_children"),
+    num("holders"),
+    num("copies"),
+    num("held"),
+    num("per_holder"),
+];
+const LAG: [Field; 4] = [
+    num("lag_mean"),
+    num("lag_dev"),
+    num("lag_peak"),
+    num("lag_deadline"),
+];
+
 /// The tap kinds this crate writes.
 pub const TAP_KINDS: &[KindInfo] = &[
     KindInfo::new(1, "DataSent", &[num("bin"), num("push"), num("queued")]),
@@ -146,23 +201,95 @@ pub const TAP_KINDS: &[KindInfo] = &[
     KindInfo::new(7, "PushHit", &[num("bin"), num("lag")]),
     KindInfo::new(8, "PushLate", &[num("bin"), num("lag")]),
     KindInfo::new(9, "PushUnsolicited", &[num("bin")]),
-    KindInfo::new(10, "PushMiss", &[num("bin")]),
-    KindInfo::new(11, "RequestTimeout", &[num("bin")]),
-    KindInfo::new(12, "Pruned", &[num("stream")]),
+    KindInfo::new(
+        10,
+        "PushMiss",
+        &[
+            num("bin"),
+            num("deadline"),
+            num("first_seen"),
+            num("counted"),
+            LAG[0],
+            LAG[1],
+            LAG[2],
+            LAG[3],
+        ],
+    )
+    .since_v1(1),
+    KindInfo::new(
+        11,
+        "RequestTimeout",
+        &[num("bin"), num("requested"), num("timeout")],
+    )
+    .since_v1(1),
+    KindInfo::new(
+        12,
+        "Pruned",
+        &[
+            num("stream"),
+            named("rule", &["silent", "lossy", "both"]),
+            num("silent_misses"),
+            num("since_hit"),
+            num("miss_rate"),
+            num("expected"),
+            num("pushes"),
+            num("age"),
+            LAG[0],
+            LAG[1],
+            LAG[2],
+            LAG[3],
+        ],
+    )
+    .since_v1(1),
     KindInfo::new(13, "Switched", &[num("stream"), peer("from")]),
-    KindInfo::new(14, "OpenTimeout", &[num("stream")]),
+    KindInfo::new(14, "OpenTimeout", &[num("stream"), num("waited")]).since_v1(1),
     KindInfo::new(15, "Declined", &[num("stream")]),
     KindInfo::new(16, "ShedBy", &[num("stream")]),
-    KindInfo::new(17, "Admitted", &[num("stream")]),
-    KindInfo::new(18, "Rejected", &[num("stream")]),
-    KindInfo::new(19, "Shed", &[num("stream")]),
+    KindInfo::new(17, "Admitted", ADMISSION).since_v1(1),
+    KindInfo::new(18, "Rejected", ADMISSION).since_v1(1),
+    KindInfo::new(
+        19,
+        "Shed",
+        &[
+            num("stream"),
+            named("cause", &["saturated", "seed_budget"]),
+            num("busy"),
+            num("committed"),
+            num("others"),
+            num("capacity"),
+            num("excess"),
+            num("count"),
+            num("room"),
+        ],
+    )
+    .since_v1(1),
     KindInfo::new(20, "HolderJoined", &[]),
-    KindInfo::new(21, "HolderLeft", &[]),
+    KindInfo::new(
+        21,
+        "HolderLeft",
+        &[
+            named(
+                "why",
+                &["silent", "unserved", "past_copies", "idle", "closed"],
+            ),
+            num("copies"),
+            num("rtt"),
+        ],
+    )
+    .since_v1(0),
     KindInfo::new(
         22,
         "SeedBudget",
-        &[num("budget"), num("copies"), num("streams")],
-    ),
+        &[
+            num("budget"),
+            num("copies"),
+            num("streams"),
+            num("capacity"),
+            num("stream_rate"),
+            num("others"),
+        ],
+    )
+    .since_v1(3),
     KindInfo::new(
         23,
         "SeedWindow",
@@ -171,6 +298,62 @@ pub const TAP_KINDS: &[KindInfo] = &[
     KindInfo::new(24, "HolderSilent", &[]),
     KindInfo::new(25, "HolderUnserved", &[num("reporters")]),
     KindInfo::new(26, "PushCancelled", &[num("bin")]),
+    KindInfo::new(
+        27,
+        "ParentChoice",
+        &[
+            num("stream"),
+            named("action", &["graft", "none", "vote", "switch", "reset"]),
+            peer("chosen"),
+            num("chosen_lag"),
+            peer("runner_up"),
+            num("runner_up_lag"),
+            num("unready"),
+            num("subscriber"),
+            num("backed_off"),
+            num("stale"),
+            num("votes"),
+            num("parent_have"),
+            num("parent_push"),
+        ],
+    ),
+    KindInfo::new(
+        28,
+        "RequestRound",
+        &[
+            num("floor"),
+            num("cap"),
+            num("in_flight"),
+            num("room"),
+            num("fit"),
+            num("candidates"),
+            num("requested"),
+        ],
+    ),
+    KindInfo::new(
+        29,
+        "Upload",
+        &[
+            num("rate"),
+            num("busy"),
+            num("capacity"),
+            num("hint"),
+            num("others"),
+            num("committed"),
+            num("queue_delay"),
+        ],
+    ),
+    KindInfo::new(
+        30,
+        "SeedFirstWave",
+        &[
+            num("capacity"),
+            num("early_rate"),
+            num("others"),
+            num("neighbours"),
+            num("copies"),
+        ],
+    ),
 ];
 
 /// The kind with `code`.
@@ -501,7 +684,8 @@ impl<S: Sink> Capture<S> {
             }
             TapKind::Lost { count } => self.write(now, &Record::TapLost { count })?,
             kind if self.tap => {
-                if let Some(r) = self.tap_record(kind, peer.unwrap_or(0), swarm.unwrap_or(0)) {
+                let id = |p| i64::from(self.peers.get(&p).copied().unwrap_or(0));
+                if let Some(r) = tap_record(kind, peer.unwrap_or(0), swarm.unwrap_or(0), id) {
                     self.stats.tap_records += 1;
                     self.write(now, &Record::Tap(r))?;
                 }
@@ -509,60 +693,6 @@ impl<S: Sink> Capture<S> {
             _ => {}
         }
         Ok(())
-    }
-
-    /// A decision's record, with the fields its kind's table names.
-    fn tap_record(&self, kind: TapKind, peer: u32, swarm: u32) -> Option<TapRecord> {
-        let b = |b: Bin| b.0 as i64;
-        let push = |p: bool| i64::from(p);
-        let s = i64::from;
-        let r = |code: u32, fields: &[i64]| Some(TapRecord::new(code, peer, swarm, fields));
-        match kind {
-            TapKind::DataSent {
-                bin,
-                push: p,
-                queued,
-            } => r(1, &[b(bin), push(p), queued.unix_nanos()]),
-            TapKind::DataRefused { bin, push: p } => r(2, &[b(bin), push(p)]),
-            TapKind::DataDropped { bin, push: p } => r(3, &[b(bin), push(p)]),
-            TapKind::PushStale { bin, queued } => r(4, &[b(bin), queued.unix_nanos()]),
-            TapKind::PushSuppressed { bin } => r(5, &[b(bin)]),
-            TapKind::DataStale { bin } => r(6, &[b(bin)]),
-            TapKind::PushHit { bin, lag } => r(7, &[b(bin), lag.as_nanos()]),
-            TapKind::PushLate { bin, lag } => r(8, &[b(bin), lag.as_nanos()]),
-            TapKind::PushUnsolicited { bin } => r(9, &[b(bin)]),
-            TapKind::PushMiss { bin } => r(10, &[b(bin)]),
-            TapKind::RequestTimeout { bin } => r(11, &[b(bin)]),
-            TapKind::Pruned { stream } => r(12, &[s(stream)]),
-            TapKind::Switched { stream, from } => r(13, &[s(stream), self.peer_field(from)]),
-            TapKind::OpenTimeout { stream } => r(14, &[s(stream)]),
-            TapKind::Declined { stream } => r(15, &[s(stream)]),
-            TapKind::ShedBy { stream } => r(16, &[s(stream)]),
-            TapKind::Admitted { stream } => r(17, &[s(stream)]),
-            TapKind::Rejected { stream } => r(18, &[s(stream)]),
-            TapKind::Shed { stream } => r(19, &[s(stream)]),
-            TapKind::HolderJoined => r(20, &[]),
-            TapKind::HolderLeft => r(21, &[]),
-            TapKind::SeedBudget {
-                budget,
-                copies,
-                streams,
-            } => r(22, &[budget as i64, copies as i64, streams as i64]),
-            TapKind::SeedWindow {
-                copies,
-                pushed,
-                behind,
-            } => r(23, &[copies as i64, pushed as i64, behind as i64]),
-            TapKind::HolderSilent => r(24, &[]),
-            TapKind::HolderUnserved { reporters } => r(25, &[reporters as i64]),
-            TapKind::PushCancelled { bin } => r(26, &[b(bin)]),
-            _ => None,
-        }
-    }
-
-    /// A peer's dump id as a field, 0 if the capture doesn't know it.
-    fn peer_field(&self, peer: PeerKey) -> i64 {
-        i64::from(self.peers.get(&peer).copied().unwrap_or(0))
     }
 
     /// Writes a sample of the state below ppspp: of `peer`'s link, or of
@@ -667,6 +797,268 @@ impl<S: Sink> Capture<S> {
     }
 }
 
+/// A decision's record, with the fields its kind's table names.
+/// `id` gives a peer's id in the dump, 0 if it has none.
+fn tap_record(
+    kind: TapKind,
+    peer: u32,
+    swarm: u32,
+    id: impl Fn(PeerKey) -> i64,
+) -> Option<TapRecord> {
+    let b = |b: Bin| b.0 as i64;
+    let flag = i64::from;
+    let s = i64::from;
+    let n = |v: u64| i64::try_from(v).unwrap_or(i64::MAX);
+    let t = |t: Time| t.unix_nanos();
+    let d = |d: Duration| d.as_nanos();
+    let od = |v: Option<Duration>| v.map_or(-1, Duration::as_nanos);
+    let on = |v: Option<u64>| v.map_or(-1, n);
+    let lag = |l: LagEstimate| [d(l.mean), d(l.dev), d(l.peak), d(l.deadline)];
+    let r = |code: u32, fields: &[i64]| Some(TapRecord::new(code, peer, swarm, fields));
+    let admission = |code: u32, stream: Stream, a: Admission| {
+        let rule = match a.rule {
+            AdmitRule::Subscribed => 0,
+            AdmitRule::Pin => 1,
+            AdmitRule::SeedHolder => 2,
+            AdmitRule::SeedBarred => 3,
+            AdmitRule::SeedNoCopy => 4,
+            AdmitRule::SeedStreamsHeld => 5,
+            AdmitRule::Unmeasured => 6,
+            AdmitRule::Measured => 7,
+        };
+        r(
+            code,
+            &[
+                s(stream),
+                rule,
+                flag(a.extra),
+                n(a.upload_rate),
+                n(a.committed),
+                n(a.others),
+                n(a.stream_rate),
+                on(a.capacity),
+                n(a.target_permille),
+                n(a.stream_children),
+                n(a.holders),
+                n(a.copies),
+                n(a.held),
+                n(a.per_holder),
+            ],
+        )
+    };
+    match kind {
+        TapKind::DataSent {
+            bin,
+            push: p,
+            queued,
+        } => r(1, &[b(bin), flag(p), t(queued)]),
+        TapKind::DataRefused { bin, push: p } => r(2, &[b(bin), flag(p)]),
+        TapKind::DataDropped { bin, push: p } => r(3, &[b(bin), flag(p)]),
+        TapKind::PushStale { bin, queued } => r(4, &[b(bin), t(queued)]),
+        TapKind::PushSuppressed { bin } => r(5, &[b(bin)]),
+        TapKind::DataStale { bin } => r(6, &[b(bin)]),
+        TapKind::PushHit { bin, lag } => r(7, &[b(bin), d(lag)]),
+        TapKind::PushLate { bin, lag } => r(8, &[b(bin), d(lag)]),
+        TapKind::PushUnsolicited { bin } => r(9, &[b(bin)]),
+        TapKind::PushMiss {
+            bin,
+            deadline,
+            first_seen,
+            counted,
+            lag: l,
+        } => {
+            let [m, dv, pk, dl] = lag(l);
+            r(
+                10,
+                &[
+                    b(bin),
+                    t(deadline),
+                    t(first_seen),
+                    flag(counted),
+                    m,
+                    dv,
+                    pk,
+                    dl,
+                ],
+            )
+        }
+        TapKind::RequestTimeout {
+            bin,
+            requested,
+            timeout,
+        } => r(11, &[b(bin), t(requested), d(timeout)]),
+        TapKind::Pruned { stream, why } => {
+            let rule = match (why.silent, why.lossy) {
+                (true, true) => 2,
+                (false, true) => 1,
+                _ => 0,
+            };
+            let [m, dv, pk, dl] = lag(why.lag);
+            r(
+                12,
+                &[
+                    s(stream),
+                    rule,
+                    n(why.silent_misses),
+                    od(why.since_hit),
+                    n(why.miss_rate_ppm),
+                    n(why.expected),
+                    n(why.pushes),
+                    od(why.age),
+                    m,
+                    dv,
+                    pk,
+                    dl,
+                ],
+            )
+        }
+        TapKind::Switched { stream, from } => r(13, &[s(stream), id(from)]),
+        TapKind::OpenTimeout { stream, waited } => r(14, &[s(stream), d(waited)]),
+        TapKind::Declined { stream } => r(15, &[s(stream)]),
+        TapKind::ShedBy { stream } => r(16, &[s(stream)]),
+        TapKind::Admitted { stream, why } => admission(17, stream, why),
+        TapKind::Rejected { stream, why } => admission(18, stream, why),
+        TapKind::Shed { stream, why } => match why {
+            Shed::Saturated {
+                busy,
+                committed,
+                others,
+                capacity,
+                excess,
+                count,
+            } => r(
+                19,
+                &[
+                    s(stream),
+                    0,
+                    n(busy),
+                    n(committed),
+                    n(others),
+                    n(capacity),
+                    n(excess),
+                    n(count),
+                    0,
+                ],
+            ),
+            Shed::SeedBudget { room } => r(19, &[s(stream), 1, 0, 0, 0, 0, 0, 0, n(room)]),
+        },
+        TapKind::HolderJoined => r(20, &[]),
+        TapKind::HolderLeft { why, copies, rtt } => {
+            let why = match why {
+                HolderLeft::Silent => 0,
+                HolderLeft::Unserved => 1,
+                HolderLeft::PastCopies => 2,
+                HolderLeft::Idle => 3,
+                HolderLeft::Closed => 4,
+            };
+            r(21, &[why, n(copies), od(rtt)])
+        }
+        TapKind::SeedBudget {
+            budget,
+            copies,
+            streams,
+            capacity,
+            stream_rate,
+            others,
+        } => r(
+            22,
+            &[
+                n(budget),
+                n(copies),
+                n(streams),
+                on(capacity),
+                n(stream_rate),
+                n(others),
+            ],
+        ),
+        TapKind::SeedWindow {
+            copies,
+            pushed,
+            behind,
+        } => r(23, &[n(copies), n(pushed), n(behind)]),
+        TapKind::HolderSilent => r(24, &[]),
+        TapKind::HolderUnserved { reporters } => r(25, &[n(reporters)]),
+        TapKind::PushCancelled { bin } => r(26, &[b(bin)]),
+        TapKind::ParentChoice { stream, choice: c } => {
+            let action = match c.action {
+                ParentAction::Graft => 0,
+                ParentAction::None => 1,
+                ParentAction::Vote => 2,
+                ParentAction::Switch => 3,
+                ParentAction::Reset => 4,
+            };
+            let who = |x: Option<(PeerKey, Duration)>| x.map_or((0, -1), |(p, l)| (id(p), d(l)));
+            let (best, best_lag) = who(c.best);
+            let (next, next_lag) = who(c.runner_up);
+            r(
+                27,
+                &[
+                    s(stream),
+                    action,
+                    best,
+                    best_lag,
+                    next,
+                    next_lag,
+                    n(c.unready),
+                    n(c.subscriber),
+                    n(c.backed_off),
+                    n(c.stale),
+                    n(c.votes),
+                    od(c.parent_have),
+                    od(c.parent_push),
+                ],
+            )
+        }
+        TapKind::RequestRound(q) => r(
+            28,
+            &[
+                b(q.floor),
+                n(q.cap),
+                n(q.in_flight),
+                n(q.room),
+                n(q.fit),
+                n(q.candidates),
+                n(q.requested),
+            ],
+        ),
+        TapKind::Upload(u) => r(
+            29,
+            &[
+                n(u.rate),
+                n(u.busy),
+                on(u.capacity),
+                on(u.hint),
+                n(u.others),
+                n(u.committed),
+                od(u.queue_delay),
+            ],
+        ),
+        TapKind::SeedFirstWave {
+            capacity,
+            early_rate,
+            others,
+            neighbours,
+            copies,
+        } => r(
+            30,
+            &[
+                n(capacity),
+                n(early_rate),
+                n(others),
+                n(neighbours),
+                n(copies),
+            ],
+        ),
+        TapKind::PeerAdded
+        | TapKind::PeerRemoved
+        | TapKind::SwarmAdded
+        | TapKind::SwarmRemoved
+        | TapKind::ChannelOpened { .. }
+        | TapKind::ChannelClosed
+        | TapKind::Lost { .. } => None,
+    }
+}
+
 /// What the dump says of a swarm.
 fn swarm_record(id: u32, swarm: &Swarm) -> Record<'_> {
     let o = swarm.options();
@@ -709,5 +1101,157 @@ fn swarm_record(id: u32, swarm: &Swarm) -> Record<'_> {
                 SeedQos::Default => 0,
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic)]
+
+    use strims_ppspp::{ParentChoice, Prune, RequestRound, Upload};
+
+    use super::*;
+
+    /// One of each decision the tap reports.
+    fn decisions() -> Vec<TapKind> {
+        let (b, t, d) = (Bin(4), Time::from_unix_millis(5), Duration::MILLISECOND);
+        let peer = PeerKey::default();
+        let lag = LagEstimate::default();
+        let why = Admission::default();
+        vec![
+            TapKind::DataSent {
+                bin: b,
+                push: true,
+                queued: t,
+            },
+            TapKind::DataRefused { bin: b, push: true },
+            TapKind::DataDropped { bin: b, push: true },
+            TapKind::PushStale { bin: b, queued: t },
+            TapKind::PushSuppressed { bin: b },
+            TapKind::PushCancelled { bin: b },
+            TapKind::DataStale { bin: b },
+            TapKind::PushHit { bin: b, lag: d },
+            TapKind::PushLate { bin: b, lag: d },
+            TapKind::PushUnsolicited { bin: b },
+            TapKind::PushMiss {
+                bin: b,
+                deadline: t,
+                first_seen: t,
+                counted: true,
+                lag,
+            },
+            TapKind::RequestTimeout {
+                bin: b,
+                requested: t,
+                timeout: d,
+            },
+            TapKind::RequestRound(RequestRound {
+                floor: b,
+                cap: 1,
+                in_flight: 1,
+                room: 1,
+                fit: 1,
+                candidates: 1,
+                requested: 1,
+            }),
+            TapKind::Pruned {
+                stream: 1,
+                why: Prune {
+                    silent: true,
+                    lossy: true,
+                    silent_misses: 1,
+                    since_hit: None,
+                    miss_rate_ppm: 1,
+                    expected: 1,
+                    pushes: 1,
+                    age: Some(d),
+                    lag,
+                },
+            },
+            TapKind::Switched {
+                stream: 1,
+                from: peer,
+            },
+            TapKind::OpenTimeout {
+                stream: 1,
+                waited: d,
+            },
+            TapKind::ParentChoice {
+                stream: 1,
+                choice: ParentChoice {
+                    action: ParentAction::Vote,
+                    best: Some((peer, d)),
+                    runner_up: None,
+                    unready: 1,
+                    subscriber: 1,
+                    backed_off: 1,
+                    stale: 1,
+                    votes: 1,
+                    parent_have: None,
+                    parent_push: Some(d),
+                },
+            },
+            TapKind::Declined { stream: 1 },
+            TapKind::ShedBy { stream: 1 },
+            TapKind::Admitted { stream: 1, why },
+            TapKind::Rejected { stream: 1, why },
+            TapKind::Shed {
+                stream: 1,
+                why: Shed::SeedBudget { room: 1 },
+            },
+            TapKind::Shed {
+                stream: 1,
+                why: Shed::Saturated {
+                    busy: 1,
+                    committed: 1,
+                    others: 1,
+                    capacity: 1,
+                    excess: 1,
+                    count: 1,
+                },
+            },
+            TapKind::HolderJoined,
+            TapKind::HolderLeft {
+                why: HolderLeft::Closed,
+                copies: 1,
+                rtt: None,
+            },
+            TapKind::HolderSilent,
+            TapKind::HolderUnserved { reporters: 1 },
+            TapKind::SeedBudget {
+                budget: 1,
+                copies: 1,
+                streams: 1,
+                capacity: None,
+                stream_rate: 1,
+                others: 1,
+            },
+            TapKind::SeedFirstWave {
+                capacity: 1,
+                early_rate: 1,
+                others: 1,
+                neighbours: 1,
+                copies: 1,
+            },
+            TapKind::SeedWindow {
+                copies: 1,
+                pushed: 1,
+                behind: 1,
+            },
+            TapKind::Upload(Upload::default()),
+        ]
+    }
+
+    #[test]
+    fn every_decision_has_its_tables_fields() {
+        let mut seen = std::collections::BTreeSet::new();
+        for k in decisions() {
+            let r = tap_record(k, 1, 1, |_| 1).unwrap_or_else(|| panic!("{k:?}"));
+            let info = tap_kind(r.kind).unwrap_or_else(|| panic!("{k:?}"));
+            assert_eq!(r.fields().len(), info.fields.len(), "{k:?}");
+            assert!(info.v1_fields <= info.fields.len(), "{k:?}");
+            seen.insert(r.kind);
+        }
+        assert_eq!(seen.len(), TAP_KINDS.len());
     }
 }

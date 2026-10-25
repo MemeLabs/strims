@@ -158,7 +158,7 @@ use crate::options::{SeedAllocation, SeedQos};
 use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
 use crate::scheduler::PeerTaskQueue;
 use crate::scheduler_peer::PeerSwarmScheduler;
-use crate::tap::TapKind;
+use crate::tap::{AdmitRule, HolderLeft, Shed, TapKind};
 
 #[cfg(doc)]
 use crate::SeedPolicy;
@@ -737,6 +737,18 @@ pub struct SeedNeighbour {
     pub reports: ReportCounters,
 }
 
+/// An adaptive seed's admission of a request: whether it holds, by which
+/// rule, and the numbers the rule compared.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Grant {
+    pub(crate) ok: bool,
+    pub(crate) rule: AdmitRule,
+    pub(crate) holders: usize,
+    pub(crate) copies: usize,
+    pub(crate) held: usize,
+    pub(crate) per_holder: usize,
+}
+
 /// A ping round trip to the channel's peer, at a seed.
 pub(crate) fn ping(pc: &mut Option<PushChannel>, rtt: Duration, now: Time) {
     if let Some(pc) = pc.as_mut() {
@@ -753,7 +765,7 @@ impl PeerSwarmScheduler {
     }
 
     /// An adaptive seed's admission of `peer`'s new request for a stream.
-    pub(crate) fn grant(&mut self, peer: PeerKey, now: Time) -> bool {
+    pub(crate) fn grant(&mut self, peer: PeerKey, now: Time) -> Grant {
         let holders = self.holders();
         let held = self
             .s
@@ -770,7 +782,10 @@ impl PeerSwarmScheduler {
                 (pc.holder.holds, pc.holder.barred(now))
             })
         else {
-            return false;
+            return Grant {
+                rule: AdmitRule::SeedNoCopy,
+                ..Grant::default()
+            };
         };
         let early = self.s.early_stream_rate(now);
         let streams = usize::from(self.s.stream_count.max(1));
@@ -780,7 +795,10 @@ impl PeerSwarmScheduler {
             .filter(|c| c.handshake_received)
             .count();
         let Some(p) = self.s.push.as_mut() else {
-            return false;
+            return Grant {
+                rule: AdmitRule::SeedNoCopy,
+                ..Grant::default()
+            };
         };
         let cap = p.upload.capacity();
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
@@ -798,6 +816,16 @@ impl PeerSwarmScheduler {
                 a.copies = w;
                 a.first_wave = w;
                 a.first_wave_capacity = cap as u64;
+                let others = p.upload.others;
+                self.s
+                    .tap
+                    .emit(self.s.key, None, || TapKind::SeedFirstWave {
+                        capacity: cap as u64,
+                        early_rate: rate as u64,
+                        others: others as u64,
+                        neighbours: neighbours as u64,
+                        copies: w as u64,
+                    });
             }
         }
         let holder = !barred && (holds || a.unconstrained || holders < a.copies);
@@ -817,7 +845,10 @@ impl PeerSwarmScheduler {
             }
         }
         let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
-            return false;
+            return Grant {
+                rule: AdmitRule::SeedNoCopy,
+                ..Grant::default()
+            };
         };
         let ok = holder && held < a.streams;
         let n = if ok {
@@ -826,7 +857,23 @@ impl PeerSwarmScheduler {
             &mut a.stats.declined
         };
         *n = n.saturating_add(1);
-        ok
+        let rule = if ok {
+            AdmitRule::SeedHolder
+        } else if barred {
+            AdmitRule::SeedBarred
+        } else if !holder {
+            AdmitRule::SeedNoCopy
+        } else {
+            AdmitRule::SeedStreamsHeld
+        };
+        Grant {
+            ok,
+            rule,
+            holders,
+            copies: a.copies,
+            held,
+            per_holder: a.streams,
+        }
     }
 
     /// An adaptive seed's push of `bin` to `peer`, queued at `queued`, met
@@ -1006,6 +1053,9 @@ impl PeerSwarmScheduler {
                 budget,
                 copies: copies as u64,
                 streams: room as u64,
+                capacity: upload.capacity().map(|c| c as u64),
+                stream_rate: rate as u64,
+                others: upload.others as u64,
             });
         }
         if a.unconstrained {
@@ -1029,9 +1079,10 @@ impl PeerSwarmScheduler {
         for (peer, stream) in excess {
             self.close_subscriber(peer, stream, q);
             let key = self.s.key;
-            self.s
-                .tap
-                .emit(key, Some(peer), || TapKind::Shed { stream });
+            self.s.tap.emit(key, Some(peer), || TapKind::Shed {
+                stream,
+                why: Shed::SeedBudget { room: room as u64 },
+            });
         }
 
         // A holder announces what it is pushed: the first push written to
@@ -1064,7 +1115,7 @@ impl PeerSwarmScheduler {
         for &peer in &silent {
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderSilent);
-            self.leave(peer, q);
+            self.leave(peer, HolderLeft::Silent, now, q);
         }
         let unserved = self.judge(now, q);
 
@@ -1083,7 +1134,7 @@ impl PeerSwarmScheduler {
             .collect();
         let mut held: Vec<(bool, Option<Duration>, PeerKey)> = Vec::new();
         let mut askers: Vec<(Duration, PeerKey)> = Vec::new();
-        let mut leave: Vec<PeerKey> = Vec::new();
+        let mut leave: Vec<(PeerKey, HolderLeft)> = Vec::new();
         let mut pending = 0;
         for (&peer, c) in &self.channels {
             let Some(h) = c.push.as_ref().map(|pc| pc.holder) else {
@@ -1104,12 +1155,16 @@ impl PeerSwarmScheduler {
             } else if recent {
                 pending += 1;
             } else {
-                leave.push(peer);
+                leave.push((peer, HolderLeft::Idle));
             }
         }
         held.sort();
         askers.sort();
-        leave.extend(held.iter().skip(copies).map(|h| h.2));
+        leave.extend(
+            held.iter()
+                .skip(copies)
+                .map(|h| (h.2, HolderLeft::PastCopies)),
+        );
         let kept = held.len().min(copies);
         let free = copies.saturating_sub(kept + pending);
         let mut join: Vec<PeerKey> = askers.iter().take(free).map(|a| a.1).collect();
@@ -1121,8 +1176,8 @@ impl PeerSwarmScheduler {
         {
             join.push(peer);
         }
-        for &peer in &leave {
-            self.leave(peer, q);
+        for &(peer, why) in &leave {
+            self.leave(peer, why, now, q);
         }
         for &peer in &join {
             if let Some(h) = self
@@ -1224,7 +1279,7 @@ impl PeerSwarmScheduler {
                 .emit(key, Some(peer), || TapKind::HolderUnserved {
                     reporters: n as u64,
                 });
-            self.leave(peer, q);
+            self.leave(peer, HolderLeft::Unserved, now, q);
         }
         unserved.len()
     }
@@ -1388,8 +1443,8 @@ impl PeerSwarmScheduler {
         Ok(())
     }
 
-    /// `peer` stops being a holder: every subscription it has goes.
-    fn leave(&mut self, peer: PeerKey, q: &mut impl PeerTaskQueue) {
+    /// `peer` stops being a holder (`why`): every subscription it has goes.
+    fn leave(&mut self, peer: PeerKey, why: HolderLeft, now: Time, q: &mut impl PeerTaskQueue) {
         if let Some(h) = self
             .channels
             .get_mut(&peer)
@@ -1398,8 +1453,19 @@ impl PeerSwarmScheduler {
         {
             h.holds = false;
         }
-        let key = self.s.key;
-        self.s.tap.emit(key, Some(peer), || TapKind::HolderLeft);
+        let PeerSwarmScheduler { s, channels } = self;
+        s.tap.emit(s.key, Some(peer), || TapKind::HolderLeft {
+            why,
+            copies: s
+                .push
+                .as_ref()
+                .and_then(|p| p.alloc.as_ref())
+                .map_or(0, |a| a.copies as u64),
+            rtt: channels
+                .get(&peer)
+                .and_then(|c| c.push.as_ref())
+                .and_then(|pc| pc.holder.min_rtt(now)),
+        });
         let streams: Vec<Stream> = self
             .s
             .streams
@@ -1411,6 +1477,34 @@ impl PeerSwarmScheduler {
         for s in streams {
             self.close_subscriber(peer, s, q);
         }
+    }
+
+    /// Reports a holder whose channel is closing.
+    pub(crate) fn tap_holder_closed(&mut self, peer: PeerKey) {
+        if !self.s.tap.is_on() {
+            return;
+        }
+        let Some(h) = self
+            .channels
+            .get(&peer)
+            .and_then(|c| c.push.as_ref())
+            .map(|pc| pc.holder)
+            .filter(|h| h.holds)
+        else {
+            return;
+        };
+        let copies = self
+            .s
+            .push
+            .as_ref()
+            .and_then(|p| p.alloc.as_ref())
+            .map_or(0, |a| a.copies as u64);
+        let key = self.s.key;
+        self.s.tap.emit(key, Some(peer), || TapKind::HolderLeft {
+            why: HolderLeft::Closed,
+            copies,
+            rtt: h.rtt.or(h.rtt_before),
+        });
     }
 
     /// Fixes the peers a seed pushes each stream to, one list per stream

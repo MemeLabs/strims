@@ -114,7 +114,7 @@ use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
 use crate::swarm::Swarm;
-use crate::tap::{Tap, TapKind};
+use crate::tap::{RequestRound, Tap, TapKind};
 use crate::time_set::TimeSet;
 
 #[path = "scheduler_push.rs"]
@@ -659,18 +659,22 @@ impl PeerChannelScheduler {
     ) -> bool {
         let mut n: u64 = 0;
         let mut settled: u64 = 0;
-        while let Some(b) = self.request_bins.pop_le(now) {
+        while let Some((b, deadline)) = self.request_bins.pop_le_at(now) {
             let mut it = s.have_bins.iterate_empty_at(b);
             while let Some(x) = it.next_base() {
+                s.tap.emit(s.key, Some(self.peer), || {
+                    let requested = self.request_times.get(x).map_or(Time::EPOCH, |(_, t)| t);
+                    TapKind::RequestTimeout {
+                        bin: x,
+                        requested,
+                        timeout: deadline - requested,
+                    }
+                });
                 s.request_bins.reset(x);
                 self.request_times.unset(x);
                 self.cancel_bins.set(x);
                 self.backoff_bins.set(x);
                 n += 1;
-                s.tap
-                    .emit(s.key, Some(self.peer), || TapKind::RequestTimeout {
-                        bin: x,
-                    });
             }
             // Requests are single chunks; anything left with a request
             // time arrived from elsewhere unanswered.
@@ -958,7 +962,8 @@ impl PeerChannelScheduler {
         self.controller
             .on_round(now, rate.saturating_mul(s.chunk_size as u64));
         let timeout = now + self.controller.request_timeout();
-        let budget = (self.controller.in_flight_cap() - self.controller.in_flight()).max(0) / chunk;
+        let (cap, in_flight) = (self.controller.in_flight_cap(), self.controller.in_flight());
+        let budget = (cap - in_flight).max(0) / chunk;
         let room = max_pending_requests(s.window).saturating_sub(self.request_bins.len());
         // A request is at least `MIN_REQUEST_LEN` bytes: no more than this
         // many fit the frame.
@@ -1013,17 +1018,38 @@ impl PeerChannelScheduler {
         }
 
         let size = (s.chunk_size as i64).max(1);
+        let mut requested = 0u64;
+        let mut written = Ok(());
         for &b in self.candidate_bins.iter().take(n) {
-            cw.write(&Message::Request(Request {
+            if let Err(e) = cw.write(&Message::Request(Request {
                 bin: b,
                 timestamp: now,
-            }))?;
+            })) {
+                written = Err(e);
+                break;
+            }
             s.request_bins.set(b);
             self.request_times.set(b, now);
             self.request_bins.push(b, timeout);
             self.controller
                 .on_sent(now, (b.base_length() as i64).saturating_mul(size));
+            requested += 1;
         }
+        if requested > 0 {
+            let candidates = self.candidate_bins.len() as u64;
+            s.tap.emit(s.key, Some(self.peer), || {
+                TapKind::RequestRound(RequestRound {
+                    floor: min,
+                    cap: cap.max(0) as u64,
+                    in_flight: in_flight.max(0) as u64,
+                    room: room as u64,
+                    fit: fit as u64,
+                    candidates,
+                    requested,
+                })
+            });
+        }
+        written?;
         self.candidate_bins.clear();
         self.candidate_bins.shrink_to(CANDIDATE_CAPACITY);
         Ok(())
@@ -1346,6 +1372,7 @@ impl PeerSwarmScheduler {
         swarm: &Swarm,
         q: &mut impl PeerTaskQueue,
     ) {
+        self.tap_holder_closed(peer);
         let Some(c) = self.channels.get_mut(&peer) else {
             return;
         };

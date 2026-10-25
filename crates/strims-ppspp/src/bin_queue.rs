@@ -28,11 +28,16 @@ impl BinQueue {
 
     /// Pops the earliest bin whose time is at or before `t`.
     pub(crate) fn pop_le(&mut self, t: Time) -> Option<Bin> {
+        self.pop_le_at(t).map(|(b, _)| b)
+    }
+
+    /// Pops the earliest bin whose time is at or before `t`, with its time.
+    pub(crate) fn pop_le_at(&mut self, t: Time) -> Option<(Bin, Time)> {
         let Reverse((bt, _, _)) = self.heap.peek()?;
         if *bt > t {
             return None;
         }
-        self.heap.pop().map(|Reverse((_, _, b))| b)
+        self.heap.pop().map(|Reverse((t, _, b))| (b, t))
     }
 
     pub(crate) fn len(&self) -> usize {

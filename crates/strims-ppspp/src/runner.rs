@@ -1211,6 +1211,7 @@ impl Runner {
                     others: *committed - *own,
                     ..info
                 });
+                sched.tap_upload(*own);
             }
             let mut q = Queues {
                 peers,

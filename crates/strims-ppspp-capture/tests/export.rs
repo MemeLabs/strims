@@ -348,3 +348,108 @@ fn samples_become_rows() {
     ];
     assert_eq!(got, want);
 }
+
+/// One dump of `recs` by node 1, whose peers are 2 and 3, written as
+/// `version`.
+fn decisions(version: u8, recs: &[(Time, Record<'_>)]) -> Vec<Value> {
+    let mut w = Writer::new(
+        Vec::new(),
+        &Header {
+            clock: Clock::Node,
+            origin: t(0),
+            file: 0,
+            node: &[1],
+            label: "",
+        },
+    )
+    .unwrap();
+    for (peer, name) in [(1, [2]), (2, [3])] {
+        w.write(t(0), &Record::Peer { peer, name: &name }).unwrap();
+    }
+    for (at, r) in recs {
+        w.write(*at, r).unwrap();
+    }
+    let mut bytes = w.into_inner();
+    bytes[9] = version;
+    rows(&bytes)
+}
+
+#[test]
+fn version_1_decisions_keep_their_fields() {
+    // Version 1 writers padded every tap record to 3 fields.
+    let got = decisions(
+        1,
+        &[(
+            t(1),
+            Record::Tap(TapRecord::new(code("PushMiss"), 1, 0, &[10, 0, 0])),
+        )],
+    );
+    assert_eq!(
+        got,
+        [
+            json!({"t": t(1).unix_nanos(), "node": "01", "peer": "02", "dir": "tap", "frame": 0,
+            "type": "PushMiss", "bin": 10, "first": 5, "last": 5})
+        ]
+    );
+}
+
+#[test]
+fn decisions_name_their_rules_and_peers() {
+    let ms = |v: i64| Duration::from_millis(v).as_nanos();
+    let got = decisions(
+        2,
+        &[
+            (
+                t(1),
+                Record::Tap(TapRecord::new(
+                    code("Rejected"),
+                    1,
+                    0,
+                    &[3, 7, 1, 90_000, 80_000, 0, 16_000, -1, 500, 2, 0, 0, 0, 0],
+                )),
+            ),
+            (
+                t(2),
+                Record::Tap(TapRecord::new(
+                    code("ParentChoice"),
+                    1,
+                    0,
+                    &[4, 0, 1, ms(20), 2, ms(30), 0, 1, 2, 3, 0, -1, -1],
+                )),
+            ),
+            (
+                t(3),
+                Record::Tap(TapRecord::new(code("HolderLeft"), 2, 0, &[9, 2, ms(5)])),
+            ),
+        ],
+    );
+    let base = |ms: i64, peer: &str| json!({"t": t(ms).unix_nanos(), "node": "01", "peer": peer, "dir": "tap", "frame": 0});
+    let with = |mut v: Value, extra: Value| {
+        for (k, x) in extra.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        v
+    };
+    let want = [
+        with(
+            base(1, "02"),
+            json!({"type": "Rejected", "stream": 3, "rule": "measured", "extra": 1,
+                "upload_rate": 90_000, "committed": 80_000, "others": 0, "stream_rate": 16_000,
+                "capacity": -1, "target": 500, "stream_children": 2, "holders": 0, "copies": 0,
+                "held": 0, "per_holder": 0}),
+        ),
+        with(
+            base(2, "02"),
+            json!({"type": "ParentChoice", "stream": 4, "action": "graft", "chosen": "02",
+                "chosen_lag": ms(20), "runner_up": "03", "runner_up_lag": ms(30), "unready": 0,
+                "subscriber": 1, "backed_off": 2, "stale": 3, "votes": 0, "parent_have": -1,
+                "parent_push": -1}),
+        ),
+        // A value past an enum's names stays a number.
+        with(
+            base(3, "03"),
+            json!({"type": "HolderLeft", "why": 9, "copies": 2, "rtt": ms(5)}),
+        ),
+    ];
+    assert_eq!(got, want);
+}

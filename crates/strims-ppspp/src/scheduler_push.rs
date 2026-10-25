@@ -167,7 +167,9 @@ use crate::codec::{
 use crate::options::PushMode;
 use crate::runner::PeerKey;
 use crate::scheduler::PeerTaskQueue;
-use crate::tap::TapKind;
+use crate::tap::{
+    Admission, AdmitRule, LagEstimate, ParentAction, ParentChoice, Prune, Shed, TapKind, Upload,
+};
 
 #[path = "scheduler_seed.rs"]
 pub mod seed;
@@ -355,6 +357,17 @@ impl LagEwma {
         let d = (self.mean + DEADLINE_K * self.dev).max(DEADLINE_PEAK_FACTOR * self.peak);
         (Duration::from_nanos(d as i64) + DEADLINE_MARGIN).clamp(DEADLINE_MARGIN, DEADLINE_MAX)
     }
+
+    /// The estimate as the tap reports it.
+    fn estimate(&self) -> LagEstimate {
+        let d = |x: f64| Duration::from_nanos(x as i64);
+        LagEstimate {
+            mean: d(self.mean),
+            dev: d(self.dev),
+            peak: d(self.peak),
+            deadline: self.deadline(),
+        }
+    }
 }
 
 /// A peer we asked for a stream, or receive it from.
@@ -412,10 +425,10 @@ impl Subscription {
         self.miss_rate = self.miss_rate * (1.0 - MISS_ALPHA) + MISS_ALPHA;
     }
 
-    fn should_prune(&self, now: Time) -> bool {
-        let Some(open) = self.open else {
-            return false;
-        };
+    /// Whether the parent is due a prune: the rules that hold, silent and
+    /// lossy, if either does.
+    fn prune_rule(&self, now: Time) -> Option<(bool, bool)> {
+        let open = self.open?;
         let silent = self.silent_misses >= PRUNE_SILENT_MISSES
             && !self.last_hit.is_nil()
             && now - self.last_hit >= PRUNE_SILENCE;
@@ -423,7 +436,24 @@ impl Subscription {
             && self.miss_rate > PRUNE_MISS_RATE
             && !open.since.is_nil()
             && now - open.since >= PRUNE_MIN_AGE;
-        silent || lossy
+        (silent || lossy).then_some((silent, lossy))
+    }
+
+    /// A prune by `rule` of `parent` (already taken from `open`), as the
+    /// tap reports it.
+    fn prune_why(&self, (silent, lossy): (bool, bool), parent: &Parent, now: Time) -> Prune {
+        let since = |t: Time| (!t.is_nil()).then(|| now - t);
+        Prune {
+            silent,
+            lossy,
+            silent_misses: self.silent_misses.into(),
+            since_hit: since(self.last_hit),
+            miss_rate_ppm: (self.miss_rate * 1e6) as u64,
+            expected: self.expected,
+            pushes: self.pushes.into(),
+            age: since(parent.since),
+            lag: self.lag.estimate(),
+        }
     }
 }
 
@@ -582,6 +612,9 @@ pub(crate) struct PushState {
     pin: Option<Vec<Vec<PeerKey>>>,
     /// An adaptive seed's allocation, from its first request or check.
     alloc: Option<seed::Allocator>,
+    /// The upload measurement the tap last reported; set only while the
+    /// tap is on.
+    tapped_upload: Option<Upload>,
 }
 
 impl PushState {
@@ -605,6 +638,7 @@ impl PushState {
             stats: PushCounters::default(),
             pin: None,
             alloc: None,
+            tapped_upload: None,
         }
     }
 
@@ -886,6 +920,33 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// Reports the upload measurement to the tap, with this swarm's
+    /// committed push rate, if it changed since the last report.
+    pub(crate) fn tap_upload(&mut self, committed: f64) {
+        let s = &mut self.s;
+        if !s.tap.is_on() {
+            return;
+        }
+        let Some(p) = s.push.as_mut() else {
+            return;
+        };
+        let u = p.upload;
+        let sample = Upload {
+            rate: u.rate,
+            busy: (u.busy * 1000.0) as u64,
+            capacity: u.capacity().map(|c| c as u64),
+            hint: u.hint,
+            others: u.others as u64,
+            committed: committed as u64,
+            queue_delay: u.queue_delay,
+        };
+        if p.tapped_upload == Some(sample) {
+            return;
+        }
+        p.tapped_upload = Some(sample);
+        s.tap.emit(s.key, None, || TapKind::Upload(sample));
+    }
+
     /// The push rate this swarm's subscriptions commit, in bytes per second
     /// (0 outside hybrid mode).
     pub(crate) fn committed_push(&mut self, now: Time) -> f64 {
@@ -904,7 +965,7 @@ impl PeerSwarmScheduler {
             return;
         };
         let mut released = 0u64;
-        while let Some(x) = p.deadlines.pop_le(now) {
+        while let Some((x, deadline)) = p.deadlines.pop_le_at(now) {
             if !p.marked.filled_at(x) {
                 continue;
             }
@@ -920,9 +981,11 @@ impl PeerSwarmScheduler {
             // it replaced.
             let stream = ((x.0 >> 1) & s.stream_bits) as Stream;
             let mut parent = None;
+            let mut counted = false;
             if let Some(sub) = p.sub(stream) {
                 parent = sub.open.map(|o| o.peer);
                 if let Some(o) = sub.open.filter(|o| x >= o.start) {
+                    counted = true;
                     sub.on_miss();
                     if let Some(c) = self.channels.get_mut(&o.peer) {
                         c.give_up_push(x, now);
@@ -932,7 +995,17 @@ impl PeerSwarmScheduler {
                     }
                 }
             }
-            s.tap.emit(s.key, parent, || TapKind::PushMiss { bin: x });
+            s.tap.emit(s.key, parent, || TapKind::PushMiss {
+                bin: x,
+                deadline,
+                first_seen: s.bin_times.get(x).map_or(Time::EPOCH, |(_, t)| t),
+                counted,
+                lag: p
+                    .subs
+                    .get(usize::from(stream))
+                    .map(|sub| sub.lag.estimate())
+                    .unwrap_or_default(),
+            });
         }
         if released == 0 {
             return;
@@ -943,14 +1016,14 @@ impl PeerSwarmScheduler {
             q.enqueue_now(peer, key);
         }
         for stream in 0..self.s.stream_count {
-            let prune = self
+            let rule = self
                 .s
                 .push
                 .as_ref()
                 .and_then(|p| p.subs.get(usize::from(stream)))
-                .is_some_and(|sub| sub.should_prune(now));
-            if prune {
-                self.prune(stream, now, q);
+                .and_then(|sub| sub.prune_rule(now));
+            if let Some(rule) = rule {
+                self.prune(stream, rule, now, q);
             }
         }
     }
@@ -1023,8 +1096,8 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// Cancels the stream's parent for misses.
-    fn prune(&mut self, stream: Stream, now: Time, q: &mut impl PeerTaskQueue) {
+    /// Cancels the stream's parent for misses, by `rule` (silent, lossy).
+    fn prune(&mut self, stream: Stream, rule: (bool, bool), now: Time, q: &mut impl PeerTaskQueue) {
         let s = &mut self.s;
         let Some(p) = s.push.as_mut() else {
             return;
@@ -1035,10 +1108,12 @@ impl PeerSwarmScheduler {
         let Some(parent) = sub.open.take() else {
             return;
         };
+        s.tap.emit(s.key, Some(parent.peer), || TapKind::Pruned {
+            stream,
+            why: sub.prune_why(rule, &parent, now),
+        });
         p.open = p.open.saturating_sub(1);
         p.stats.pruned = p.stats.pruned.saturating_add(1);
-        s.tap
-            .emit(s.key, Some(parent.peer), || TapKind::Pruned { stream });
         p.next_check = now;
         if let Some(c) = self.channels.get_mut(&parent.peer) {
             c.push_cancel(stream);
@@ -1231,32 +1306,66 @@ impl PeerSwarmScheduler {
             pin.get(usize::from(stream))
                 .is_some_and(|v| v.contains(&peer))
         });
-        let ok = already
-            || match (pinned.or(granted), p.upload.capacity()) {
-                (Some(ok), _) => ok,
-                (None, None) => !extra && stream_children < UNMEASURED_FANOUT,
+        let target = if extra {
+            EXTRA_UTILIZATION
+        } else {
+            INTERIOR_UTILIZATION
+        };
+        let (ok, rule) = if already {
+            (true, AdmitRule::Subscribed)
+        } else {
+            match (pinned.or(granted.map(|g| g.ok)), p.upload.capacity()) {
+                (Some(ok), _) => (
+                    ok,
+                    match (pinned, granted) {
+                        (None, Some(g)) => g.rule,
+                        _ => AdmitRule::Pin,
+                    },
+                ),
+                (None, None) => (
+                    !extra && stream_children < UNMEASURED_FANOUT,
+                    AdmitRule::Unmeasured,
+                ),
                 (None, Some(cap)) => {
-                    let target = if extra {
-                        EXTRA_UTILIZATION
-                    } else {
-                        INTERIOR_UTILIZATION
-                    };
                     let committed = children as f64 * rate + p.upload.others;
-                    (p.upload.rate as f64).max(committed) + rate <= cap * target
+                    (
+                        (p.upload.rate as f64).max(committed) + rate <= cap * target,
+                        AdmitRule::Measured,
+                    )
                 }
-            };
+            }
+        };
+        let why = || Admission {
+            rule,
+            extra,
+            upload_rate: p.upload.rate,
+            committed: (children as f64 * rate + p.upload.others) as u64,
+            others: p.upload.others as u64,
+            stream_rate: rate as u64,
+            capacity: p.upload.capacity().map(|c| c as u64),
+            target_permille: (target * 1000.0) as u64,
+            stream_children: stream_children as u64,
+            holders: granted.map_or(0, |g| g.holders as u64),
+            copies: granted.map_or(0, |g| g.copies as u64),
+            held: granted.map_or(0, |g| g.held as u64),
+            per_holder: granted.map_or(0, |g| g.per_holder as u64),
+        };
         if ok {
+            s.tap.emit(s.key, Some(peer), || TapKind::Admitted {
+                stream,
+                why: why(),
+            });
             if !is_seed && p.interior.is_none() {
                 p.interior = Some(stream);
             }
             p.stats.accepted = p.stats.accepted.saturating_add(1);
-            s.tap
-                .emit(s.key, Some(peer), || TapKind::Admitted { stream });
             return (true, extra);
         }
+        s.tap.emit(s.key, Some(peer), || TapKind::Rejected {
+            stream,
+            why: why(),
+        });
         p.stats.rejected = p.stats.rejected.saturating_add(1);
-        s.tap
-            .emit(s.key, Some(peer), || TapKind::Rejected { stream });
         self.close_subscriber(peer, stream, q);
         (false, extra)
     }
@@ -1557,6 +1666,79 @@ impl PeerSwarmScheduler {
         best
     }
 
+    /// Reports a parent check of `stream` that did `action`: the
+    /// candidates [`PeerSwarmScheduler::best_candidate`] weighs, the parent
+    /// excluded, and why it passed over the others.
+    #[allow(clippy::too_many_arguments)]
+    fn tap_choice(
+        &mut self,
+        stream: Stream,
+        parent: Option<PeerKey>,
+        action: ParentAction,
+        votes: u32,
+        parent_have: Option<Duration>,
+        parent_push: Option<Duration>,
+        now: Time,
+    ) {
+        let PeerSwarmScheduler { s, channels } = self;
+        if !s.tap.is_on() {
+            return;
+        }
+        let i = usize::from(stream);
+        let Some(st) = s.streams.get(i) else {
+            return;
+        };
+        let mut c = ParentChoice {
+            action,
+            best: None,
+            runner_up: None,
+            unready: 0,
+            subscriber: 0,
+            backed_off: 0,
+            stale: 0,
+            votes: votes.into(),
+            parent_have,
+            parent_push,
+        };
+        for (&peer, ch) in channels.iter() {
+            if Some(peer) == parent {
+                continue;
+            }
+            if !ch.handshake_received || ch.choked {
+                c.unready += 1;
+                continue;
+            }
+            if st.subscribers.iter().any(|sub| sub.channel == peer) {
+                c.subscriber += 1;
+                continue;
+            }
+            let Some(pc) = ch.push.as_ref() else {
+                c.unready += 1;
+                continue;
+            };
+            if pc.backoff.get(i).is_some_and(|&t| t > now) {
+                c.backed_off += 1;
+                continue;
+            }
+            let Some(lag) = pc.have_lag.get(i).filter(|l| l.fresh(now)) else {
+                c.stale += 1;
+                continue;
+            };
+            let m = lag.mean();
+            if c.best.is_none_or(|(_, b)| m < b) {
+                c.runner_up = c.best;
+                c.best = Some((peer, m));
+            } else if c.runner_up.is_none_or(|(_, r)| m < r) {
+                c.runner_up = Some((peer, m));
+            }
+        }
+        let chosen = c.best.map(|b| b.0);
+        s.tap.emit(s.key, chosen, || TapKind::ParentChoice {
+            stream,
+            choice: c,
+        });
+    }
+
     /// Sends a STREAM_REQUEST for `stream` to `peer`.
     fn graft(&mut self, peer: PeerKey, stream: Stream, now: Time, q: &mut impl PeerTaskQueue) {
         let hint = self
@@ -1644,7 +1826,10 @@ impl PeerSwarmScheduler {
             }
             self.s
                 .tap
-                .emit(key, Some(pending.peer), || TapKind::OpenTimeout { stream });
+                .emit(key, Some(pending.peer), || TapKind::OpenTimeout {
+                    stream,
+                    waited: now - pending.since,
+                });
             if let Some(c) = self.channels.get_mut(&pending.peer) {
                 c.push_cancel(stream);
                 c.push_backoff(stream, now + DECLINE_BACKOFF);
@@ -1661,7 +1846,14 @@ impl PeerSwarmScheduler {
         };
         match sub.open {
             None => {
-                if let Some((peer, _)) = self.best_candidate(stream, None, now) {
+                let best = self.best_candidate(stream, None, now);
+                let action = if best.is_some() {
+                    ParentAction::Graft
+                } else {
+                    ParentAction::None
+                };
+                self.tap_choice(stream, None, action, 0, None, None, now);
+                if let Some((peer, _)) = best {
                     self.graft(peer, stream, now, q);
                 }
             }
@@ -1696,14 +1888,29 @@ impl PeerSwarmScheduler {
                 else {
                     return;
                 };
-                match better {
-                    Some((peer, _)) => {
+                let (action, votes) = match better {
+                    Some(_) => {
                         sub.switch_votes += 1;
-                        if sub.switch_votes >= SWITCH_CHECKS {
-                            self.graft(peer, stream, now, q);
-                        }
+                        let v = sub.switch_votes;
+                        let a = if v >= SWITCH_CHECKS {
+                            ParentAction::Switch
+                        } else {
+                            ParentAction::Vote
+                        };
+                        (Some(a), v)
                     }
-                    None => sub.switch_votes = 0,
+                    None => {
+                        let v = std::mem::take(&mut sub.switch_votes);
+                        ((v > 0).then_some(ParentAction::Reset), v)
+                    }
+                };
+                if let Some(a) = action {
+                    self.tap_choice(stream, Some(parent.peer), a, votes, have, push, now);
+                }
+                if action == Some(ParentAction::Switch)
+                    && let Some((peer, _)) = better
+                {
+                    self.graft(peer, stream, now, q);
                 }
             }
         }
@@ -1741,6 +1948,7 @@ impl PeerSwarmScheduler {
         } else {
             1
         };
+        let (busy, others) = (p.upload.busy, p.upload.others);
         p.next_shed = now + SHED_INTERVAL;
         p.stats.sheds_sent = p.stats.sheds_sent.saturating_add(n as u64);
 
@@ -1759,9 +1967,17 @@ impl PeerSwarmScheduler {
         for &(_, _, stream, peer) in victims.iter().take(n) {
             self.close_subscriber(peer, stream, q);
             let key = self.s.key;
-            self.s
-                .tap
-                .emit(key, Some(peer), || TapKind::Shed { stream });
+            self.s.tap.emit(key, Some(peer), || TapKind::Shed {
+                stream,
+                why: Shed::Saturated {
+                    busy: (busy * 1000.0) as u64,
+                    committed: committed as u64,
+                    others: others as u64,
+                    capacity: cap as u64,
+                    excess: excess as u64,
+                    count: n as u64,
+                },
+            });
         }
     }
 
@@ -2032,8 +2248,8 @@ mod tests {
             s.expected += 1;
             s.on_miss();
         }
-        assert!(!s.should_prune(t(900)));
-        assert!(s.should_prune(t(1000)));
+        assert!(s.prune_rule(t(900)).is_none());
+        assert!(s.prune_rule(t(1000)).is_some());
 
         // A lost frame (a burst of 14 misses) between hits doesn't prune,
         // and neither do scattered misses (1 in 25).
@@ -2046,7 +2262,7 @@ mod tests {
             } else {
                 s.on_hit(t(i));
             }
-            assert!(!s.should_prune(t(i)), "{i}");
+            assert!(s.prune_rule(t(i)).is_none(), "{i}");
         }
 
         // Missing every other chunk does, once the parent had its chance.
@@ -2060,7 +2276,7 @@ mod tests {
             } else {
                 s.on_hit(t(i * 10));
             }
-            if pruned.is_none() && s.should_prune(t(i * 10)) {
+            if pruned.is_none() && s.prune_rule(t(i * 10)).is_some() {
                 pruned = Some(i * 10);
             }
         }

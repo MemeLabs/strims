@@ -902,6 +902,33 @@ fn the_tap_changes_no_frame() {
 }
 
 #[test]
+fn the_tap_gives_request_rounds_and_upload_readings() {
+    let (_, seed, leech) = tapped_transfer(true);
+    let rounds: Vec<_> = leech
+        .iter()
+        .filter_map(|e| match e.kind {
+            TapKind::RequestRound(r) => Some(r),
+            _ => None,
+        })
+        .collect();
+    assert!(!rounds.is_empty());
+    for r in &rounds {
+        assert!(r.requested > 0 && r.requested <= r.candidates, "{r:?}");
+        assert!(r.requested <= r.room && r.requested <= r.fit, "{r:?}");
+    }
+    let uploads: Vec<_> = seed
+        .iter()
+        .filter_map(|e| match e.kind {
+            TapKind::Upload(u) => Some(u),
+            _ => None,
+        })
+        .collect();
+    assert!(uploads.iter().any(|u| u.rate > 0), "{uploads:?}");
+    // A reading is reported when it changes.
+    assert!(uploads.windows(2).all(|w| w[0] != w[1]), "{uploads:?}");
+}
+
+#[test]
 fn the_tap_tells_pushes_from_answers() {
     let (mut p, seed, leech) = tapped_transfer(true);
     let (mut pushed, mut answered) = (0, 0);
@@ -921,7 +948,7 @@ fn the_tap_tells_pushes_from_answers() {
     assert_eq!(pushed + answered, stats.chunks_sent);
     assert!(
         seed.iter()
-            .any(|e| e.kind == TapKind::Admitted { stream: 0 })
+            .any(|e| matches!(e.kind, TapKind::Admitted { stream: 0, .. }))
     );
     let hits = leech
         .iter()
