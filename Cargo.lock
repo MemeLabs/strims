@@ -2761,6 +2761,7 @@ dependencies = [
  "strims-network",
  "strims-node",
  "strims-node-core",
+ "strims-ppspp-capture",
  "strims-proto",
  "strims-rpc",
  "strims-session",

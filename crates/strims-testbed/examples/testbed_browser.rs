@@ -9,6 +9,7 @@
 //! testbed_browser --index <i> --topology <file> --web <dir>
 //!                 [--browser-bin <path>] [--secs <s>] [--start <unix ms>]
 //!                 [--rate <bytes/s>] [--join-at <s>] [--hosts <dir>]
+//!                 [--capture <dir>]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -35,12 +36,20 @@
 //! container's agree when `host_t_ms` stays a few ms past `post_ms`. Everything else (the browser's output, the node's errors and
 //! peers) goes to stderr. The harness ends 5 s after the stream does,
 //! like `testbed_node`, and kills the browser.
+//!
+//! With `--capture`, the node captures its ppspp traffic as a native
+//! node's `--capture` does, and the harness writes what the page sends of
+//! it to `<dir>/<host id hex>-<n>.ppcap`. It reads on for
+//! [`CAPTURE_GRACE`] after the last line, so the capture's last flush
+//! arrives before the browser is killed.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 // Indexing a `serde_json::Value` by key gives `Null` for a missing key.
 #![allow(clippy::indexing_slicing)]
 
-use std::io::{BufRead, BufReader, Read};
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -62,6 +71,13 @@ const STEP: Duration = Duration::from_secs(30);
 /// The e2e node's vpn ports, which the testbed doesn't use.
 const ECHO_PORT: u16 = 20_000;
 const REPLY_PORT: u16 = 20_001;
+/// How long the harness reads the capture after the last line: two of the
+/// node's flush intervals.
+const CAPTURE_GRACE: Duration = Duration::from_secs(2);
+/// A capture file's size before the next, as `testbed_node`'s.
+const CAPTURE_FILE_BYTES: u64 = 512 << 20;
+/// The first byte of a message of capture bytes (strims-wasm's `e2e`).
+const CAPTURE_BYTES: u8 = 0x01;
 
 struct Args {
     index: usize,
@@ -73,6 +89,7 @@ struct Args {
     rate: u64,
     join_at: u64,
     hosts: Option<PathBuf>,
+    capture: Option<PathBuf>,
 }
 
 fn args() -> Result<Args, String> {
@@ -89,6 +106,7 @@ fn args() -> Result<Args, String> {
         rate: RATE,
         join_at: 0,
         hosts: None,
+        capture: None,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -103,6 +121,7 @@ fn args() -> Result<Args, String> {
             "--rate" => a.rate = num(value()?)?,
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
+            "--capture" => a.capture = Some(value()?.into()),
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -204,6 +223,62 @@ impl Control {
     }
 }
 
+/// A capture's files as the page sends them.
+struct CaptureFiles {
+    dir: PathBuf,
+    /// By file index. Bound: the capture's files.
+    files: BTreeMap<u64, BufWriter<File>>,
+}
+
+impl CaptureFiles {
+    fn new(dir: PathBuf) -> Result<CaptureFiles, String> {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        Ok(CaptureFiles {
+            dir,
+            files: BTreeMap::new(),
+        })
+    }
+
+    /// `captureOpen`: file `file` of the node named `node` starts.
+    fn open(&mut self, node: &str, file: u64) {
+        let path = self.dir.join(format!("{node}-{file}.ppcap"));
+        match File::create(&path) {
+            Ok(f) => {
+                self.files.insert(file, BufWriter::new(f));
+            }
+            Err(e) => eprintln!("{}: {e}", path.display()),
+        }
+    }
+
+    /// A message of capture bytes: the file's index, then its bytes.
+    fn write(&mut self, msg: &[u8]) {
+        let mut file = 0u64;
+        let mut at = 1;
+        for (i, &b) in msg.iter().enumerate().skip(1).take(10) {
+            file |= u64::from(b & 0x7f) << (7 * (i - 1));
+            at = i + 1;
+            if b < 0x80 {
+                break;
+            }
+        }
+        let Some(f) = self.files.get_mut(&file) else {
+            eprintln!("capture bytes for file {file}, which didn't open");
+            return;
+        };
+        if let Err(e) = f.write_all(msg.get(at..).unwrap_or_default()) {
+            eprintln!("capture file {file}: {e}");
+        }
+    }
+
+    fn flush(&mut self) {
+        for (i, f) in &mut self.files {
+            if let Err(e) = f.flush() {
+                eprintln!("capture file {i}: {e}");
+            }
+        }
+    }
+}
+
 /// Copies `pipe`'s lines to stderr, on a thread.
 fn relay_output(pipe: impl Read + Send + 'static, tag: &'static str) {
     // A blocking pipe, read until the browser closes it.
@@ -270,6 +345,7 @@ async fn run() -> Result<(), String> {
             Ok(None) | Err(_) => return Err("the page didn't open its control socket".to_owned()),
         }
     };
+    let mut capture = a.capture.clone().map(CaptureFiles::new).transpose()?;
     let (mut sink, mut stream) = ws.split();
     let (commands, mut queued) = mpsc::unbounded_channel::<Value>();
     let (events, _) = broadcast::channel(1024);
@@ -285,15 +361,34 @@ async fn run() -> Result<(), String> {
             }
         }
     };
-    // Lines and events, until the line 5 s after the stream's end.
+    // Lines, events and capture bytes, until the line 5 s after the
+    // stream's end, and with a capture, a grace after it.
     let last_rel = (a.secs * 1000 + 5000) as i64;
     let receive = {
         let events = control.events.clone();
+        let capture = &mut capture;
         async move {
-            while let Some(Ok(msg)) = stream.next().await {
+            let mut until = None;
+            loop {
+                let next = match until {
+                    Some(t) => match tokio::time::timeout_at(t, stream.next()).await {
+                        Ok(m) => m,
+                        Err(_) => return,
+                    },
+                    None => stream.next().await,
+                };
+                let Some(Ok(msg)) = next else {
+                    break;
+                };
                 let Message::Binary(b) = msg else {
                     continue;
                 };
+                if b.first() == Some(&CAPTURE_BYTES) {
+                    if let Some(c) = capture.as_mut() {
+                        c.write(&b);
+                    }
+                    continue;
+                }
                 let Ok(e) = serde_json::from_slice::<Value>(&b) else {
                     eprintln!("an event that isn't JSON");
                     continue;
@@ -314,8 +409,19 @@ async fn run() -> Result<(), String> {
                     let rel = serde_json::from_str::<Value>(&line)
                         .ok()
                         .and_then(|v| v["rel_ms"].as_i64());
-                    if rel.is_some_and(|r| r >= last_rel) {
-                        return;
+                    if rel.is_some_and(|r| r >= last_rel) && until.is_none() {
+                        if capture.is_none() {
+                            return;
+                        }
+                        until = Some(tokio::time::Instant::now() + CAPTURE_GRACE);
+                    }
+                    continue;
+                }
+                if e["type"] == "captureOpen" {
+                    if let (Some(c), Some(node), Some(file)) =
+                        (capture.as_mut(), e["node"].as_str(), e["file"].as_u64())
+                    {
+                        c.open(node, file);
                     }
                     continue;
                 }
@@ -329,7 +435,7 @@ async fn run() -> Result<(), String> {
     };
     let drive = async {
         let key = key_of(a.index);
-        let start = json!({
+        let mut start = json!({
             "type": "start",
             "profileKey": {
                 "type": key.r#type,
@@ -342,6 +448,13 @@ async fn run() -> Result<(), String> {
             "echoPort": ECHO_PORT,
             "replyPort": REPLY_PORT,
         });
+        if a.capture.is_some() {
+            start["capture"] = json!({
+                "maxFileBytes": CAPTURE_FILE_BYTES,
+                "tap": true,
+                "label": format!("testbed-{}", a.index),
+            });
+        }
         let Some(started) = control.ask(start, |e| e["type"] == "started").await else {
             eprintln!("the node didn't start");
             return;
@@ -397,6 +510,9 @@ async fn run() -> Result<(), String> {
         () = receive => {}
         () = async { tokio::join!(send, drive); } => {}
         () = tokio::time::sleep(deadline) => eprintln!("the page sent no last line"),
+    }
+    if let Some(c) = capture.as_mut() {
+        c.flush();
     }
     let _ = std::fs::remove_dir_all(&profile);
     Ok(())

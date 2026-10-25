@@ -32,7 +32,7 @@
 //! [`Control`] for each, which speaks the protocol of strims-wasm's `e2e`
 //! module.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, UdpSocket};
@@ -303,6 +303,7 @@ impl Browser {
                 index,
                 ws,
                 seen: VecDeque::new(),
+                captured: BTreeMap::new(),
             });
         }
         Some((browser, controls))
@@ -378,6 +379,8 @@ pub struct StartOptions {
     pub echo_port: u16,
     pub reply_port: u16,
     pub max_buffered_amount: Option<usize>,
+    /// Capture the node's ppspp traffic into one file, labelled `page`.
+    pub capture: bool,
 }
 
 /// A page's peer, from `peerAdded`.
@@ -393,6 +396,8 @@ pub struct Control {
     ws: Socket,
     /// Events that arrived while a wait looked for another.
     seen: VecDeque<Value>,
+    /// The capture's bytes so far, by file.
+    captured: BTreeMap<u64, Vec<u8>>,
 }
 
 /// `event` with its byte strings replaced by their lengths.
@@ -426,6 +431,21 @@ impl Control {
                 Ok(Some(Ok(m))) => m,
             };
             match msg {
+                // Capture bytes: 0x01, the file as a varint, its bytes.
+                Message::Binary(b) if b.first() == Some(&1) => {
+                    let (mut file, mut at) = (0u64, 1);
+                    for (i, &x) in b.iter().enumerate().skip(1).take(10) {
+                        file |= u64::from(x & 0x7f) << (7 * (i - 1));
+                        at = i + 1;
+                        if x < 0x80 {
+                            break;
+                        }
+                    }
+                    self.captured
+                        .entry(file)
+                        .or_default()
+                        .extend_from_slice(b.get(at..).unwrap_or_default());
+                }
                 Message::Binary(b) => {
                     return Some(serde_json::from_slice(&b).unwrap_or_else(|e| {
                         panic!("node {}: an event that isn't JSON: {e}", self.index)
@@ -503,11 +523,34 @@ impl Control {
         if let Some(m) = o.max_buffered_amount {
             cmd["maxBufferedAmount"] = m.into();
         }
+        if o.capture {
+            cmd["capture"] = json!({"maxFileBytes": 0, "tap": true, "label": "page"});
+        }
         self.command(cmd).await;
         let e = self
             .wait("started", PAGE_TIMEOUT, |e| e["type"] == "started")
             .await;
         e["hostId"].as_str().unwrap().to_owned()
+    }
+
+    /// The capture's file `file` once it holds at least `len` bytes,
+    /// waiting up to `timeout`; events that arrive meanwhile are kept.
+    pub async fn captured(&mut self, file: u64, len: usize, timeout: Duration) -> Vec<u8> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let have = self.captured.get(&file).map_or(0, Vec::len);
+            if have >= len {
+                return self.captured.get(&file).cloned().unwrap_or_default();
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.recv(left.min(Duration::from_millis(200))).await {
+                Some(e) => self.seen.push_back(e),
+                None if left.is_zero() => {
+                    panic!("node {}: capture file {file} has {have} bytes", self.index)
+                }
+                None => {}
+            }
+        }
     }
 
     /// Dials `uri` and returns the peer's host id.

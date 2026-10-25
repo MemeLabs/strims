@@ -115,6 +115,7 @@ wasm-bindgen-test = "=0.3.79"
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 strims-crypto.workspace = true
 strims-node.workspace = true
+strims-ppspp-capture.workspace = true
 # the app test's native profile, and the UI's side of both profiles' APIs
 strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true

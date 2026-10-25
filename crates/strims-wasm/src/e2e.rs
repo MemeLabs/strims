@@ -22,7 +22,7 @@
 //!
 //! | `type` | fields | what the node does |
 //! |---|---|---|
-//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
+//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
 //! | `dial` | `uri` | Dials `uri` and reports `dialed`. |
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
@@ -43,6 +43,12 @@
 //! | `stats` | `echoed`, `echoErrors`, `eventsDropped`, `linkQueueFull`, `deliveriesDropped`, `links: [{kind, mtu, readBytes, writeBytes}]` | Answers `stats`. |
 //! | `sample` | `line`, `postMs` | The testbed's line of a second, a JSON object in a string, with `cpu_ms` `null`; and `Date.now()` as it's posted. |
 //! | `error` | `command`, `message` | A command didn't parse or failed, an echo failed (`command` `echo`), or the testbed reported something (`command` `testbed`). |
+//! | `captureOpen` | `file`, `node` | The capture started file `file` of the node named `node`. |
+//!
+//! A capture's bytes come as binary messages that aren't JSON: `0x01`,
+//! then the file's index as a LEB128 varint, then the bytes that follow
+//! in that file. The node sends them each time the capture flushes, which
+//! is between records, about once a second.
 //!
 //! Every vpn message on `echoPort` goes back to its sender's port,
 //! unchanged and from `echoPort`, in the order the messages arrived; it
@@ -56,11 +62,15 @@
 
 use std::cell::Cell;
 use std::fmt::Write as _;
+use std::io;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use js_sys::{Array, ArrayBuffer, JSON, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
-use strims_node_core::{HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo};
+use strims_node_core::{
+    HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo, PpsppCapture,
+};
 use strims_proto::types::Key;
 use strims_testbed::node::{Runtime, Settings, kind_name};
 use strims_testbed::shape::RATE;
@@ -120,6 +130,17 @@ impl Out {
             }
         };
         let buffer = Uint8Array::from(text.as_bytes()).buffer();
+        if let Err(e) = self
+            .0
+            .post_message_with_transferable(&buffer, &Array::of1(&buffer))
+        {
+            tracing::warn!(error = %js::describe(&e), "e2e: frontend port");
+        }
+    }
+
+    /// Posts `bytes` as one binary message.
+    fn post_bytes(&self, bytes: &[u8]) {
+        let buffer = Uint8Array::from(bytes).buffer();
         if let Err(e) = self
             .0
             .post_message_with_transferable(&buffer, &Array::of1(&buffer))
@@ -293,6 +314,14 @@ impl Control {
             v if v.is_undefined() => None,
             _ => Some(usize::try_from(int(cmd, "maxBufferedAmount")?).map_err(|e| e.to_string())?),
         };
+        let capture = match property(cmd, "capture") {
+            c if c.is_undefined() || c.is_null() => None,
+            c => Some((
+                int(&c, "maxFileBytes")?,
+                property(&c, "tap").as_bool().unwrap_or(true),
+                property(&c, "label").as_string().unwrap_or_default(),
+            )),
+        };
         let signal = self.signal.take().ok_or("already started")?;
 
         let mut config = node::browser_config(profile_key, rng_seed);
@@ -300,6 +329,26 @@ impl Control {
         config.webrtc.endpoint.ice_servers = Some(Vec::new());
         if let Some(m) = max_buffered {
             config.webrtc.max_buffered_amount = m;
+        }
+        if let Some((max_file_bytes, tap, label)) = capture {
+            let (chunks, rx) = mpsc::unbounded_channel();
+            config.label = label;
+            config.ppspp_capture = Some(PpsppCapture {
+                open: Arc::new(move |node: &[u8], file| {
+                    let _ = chunks.send(Chunk::Open {
+                        node: node.to_vec(),
+                        file,
+                    });
+                    Ok(Box::new(ChunkWriter {
+                        chunks: chunks.clone(),
+                        file,
+                        buf: Vec::new(),
+                    }) as Box<dyn io::Write + Send>)
+                }),
+                max_file_bytes,
+                tap,
+            });
+            drop(runtime::spawn(post_capture(self.out.clone(), rx)));
         }
         let (node, events) = node::spawn(config, signal).map_err(|e| e.to_string())?;
         let options = NetworkOptions {
@@ -338,6 +387,76 @@ impl Control {
         Ok(())
     }
 }
+
+/// What the capture's files send the harness.
+enum Chunk {
+    Open { node: Vec<u8>, file: u64 },
+    Bytes { file: u64, bytes: Vec<u8> },
+}
+
+/// A capture file whose bytes go to the harness at each flush, so each
+/// message ends on a record.
+struct ChunkWriter {
+    chunks: mpsc::UnboundedSender<Chunk>,
+    file: u64,
+    buf: Vec<u8>,
+}
+
+impl io::Write for ChunkWriter {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        self.buf.extend_from_slice(b);
+        Ok(b.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if self.buf.is_empty() {
+            return Ok(());
+        }
+        let bytes = std::mem::take(&mut self.buf);
+        self.chunks
+            .send(Chunk::Bytes {
+                file: self.file,
+                bytes,
+            })
+            .map_err(|_| io::Error::other("the control task ended"))
+    }
+}
+
+impl Drop for ChunkWriter {
+    fn drop(&mut self) {
+        let _ = io::Write::flush(self);
+    }
+}
+
+/// Posts the capture's files to the harness as they come.
+async fn post_capture(out: Out, mut chunks: mpsc::UnboundedReceiver<Chunk>) {
+    let mut msg = Vec::new();
+    while let Some(c) = chunks.recv().await {
+        match c {
+            Chunk::Open { node, file } => out.post(&[
+                ("type", "captureOpen".into()),
+                ("file", number(file)),
+                ("node", hex(&node).into()),
+            ]),
+            Chunk::Bytes { file, bytes } => {
+                msg.clear();
+                msg.push(CAPTURE_BYTES);
+                let mut v = file;
+                while v >= 0x80 {
+                    msg.push(v as u8 | 0x80);
+                    v >>= 7;
+                }
+                msg.push(v as u8);
+                msg.extend_from_slice(&bytes);
+                out.post_bytes(&msg);
+            }
+        }
+    }
+}
+
+/// The first byte of a binary message of capture bytes; a JSON message's
+/// is `{`.
+pub const CAPTURE_BYTES: u8 = 0x01;
 
 /// Reports the node's events, hands added peers to `peers` for the
 /// testbed, and echoes the messages on the echo port, until the node

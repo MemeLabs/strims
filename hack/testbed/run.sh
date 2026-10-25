@@ -59,7 +59,8 @@
 #                          `cargo build --release -p strims-sim --example
 #                          testbed_node`
 #   NODE_ARGS=<args>       more flags for every native node
-#   CAPTURE=1              ppspp captures in <out dir>/capture (native nodes)
+#   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
+#                          per node (native and browser), named by host id
 #   KINDS="<k0> <k1> ..."  node i's kind: native (the default for nodes not
 #                          listed), firefox or chromium
 #   BROWSER_LINKS=ws|webrtc  how browsers link to native nodes (default ws)
@@ -146,6 +147,10 @@ if [ "$browsers" = 1 ]; then
   # Written by the nodes, whatever user each runs as.
   mkdir -p "$out/hosts"
   chmod 1777 "$out/hosts"
+fi
+if [ "${CAPTURE:-0}" = 1 ]; then
+  mkdir -p "$out/capture"
+  chmod 1777 "$out/capture"
 fi
 docker network inspect "$net" >/dev/null 2>&1 \
   || docker network create --subnet "$subnet.0/24" "$net" >/dev/null
@@ -243,7 +248,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $hosts > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $hosts $capture > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

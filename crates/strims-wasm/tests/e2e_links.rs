@@ -256,6 +256,17 @@ impl Native {
 /// Starts page node `i`, has it dial the relay over `ws://` and waits for
 /// both ends. Returns its host id.
 async fn join_page(page: &mut Control, i: u8, relay: &mut Native) -> HostId {
+    join_page_capturing(page, i, relay, false).await
+}
+
+/// [`join_page`], with the node capturing its ppspp traffic when
+/// `capture` is set.
+async fn join_page_capturing(
+    page: &mut Control,
+    i: u8,
+    relay: &mut Native,
+    capture: bool,
+) -> HostId {
     let id = page
         .start(&StartOptions {
             profile_seed: [0x10 + i; 32],
@@ -265,6 +276,7 @@ async fn join_page(page: &mut Control, i: u8, relay: &mut Native) -> HostId {
             echo_port: ECHO_PORT,
             reply_port: REPLY_PORT,
             max_buffered_amount: Some(MAX_BUFFERED),
+            capture,
         })
         .await;
     let uri = relay.node.ws_uri().unwrap().to_owned();
@@ -404,6 +416,32 @@ async fn browser_offers_to_native() {
     drop_relay(b, &mut [&mut a], &mut [&mut *page]).await;
     echo_from_native(&mut a, p, page).await;
     a.node.shutdown().await.unwrap();
+}
+
+/// A page node started with a capture sends its dump over the control
+/// socket: a file that opens with its header.
+#[tokio::test]
+#[ignore = "launches headless Firefox"]
+async fn a_page_node_sends_its_capture() {
+    let Some((_browser, mut pages)) = Browser::start(1).await else {
+        return;
+    };
+    let mut b = Native::relay(2).await;
+    let page = &mut pages[0];
+    let p = join_page_capturing(page, 0, &mut b, true).await;
+    let open = page
+        .wait("captureOpen", Duration::from_secs(10), |e| {
+            e["type"] == "captureOpen"
+        })
+        .await;
+    assert_eq!(open["file"], 0);
+    assert_eq!(open["node"], hex_id(p));
+    // The capture flushes once a second.
+    let dump = page.captured(0, 64, Duration::from_secs(10)).await;
+    let r = strims_ppspp_capture::Reader::new(&dump[..]).unwrap();
+    assert_eq!(hex::encode(&r.header().node), hex_id(p));
+    assert_eq!(r.header().label, "page");
+    b.node.shutdown().await.unwrap();
 }
 
 /// Two page nodes in one browser link over WebRTC: node 0 offers, node 1
