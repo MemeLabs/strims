@@ -1,0 +1,25 @@
+# The seed's lock-in on the testbed, its uplink halved 60 s in and back
+# at 180 s, on the four-node mesh: with LEDBAT's window floor on the
+# minimum round trip (floor, the commit that adds it) and without it
+# (ref, the commit before). Each instance runs one repeat of both arms.
+
+kind = "testbed"
+repeats = 3
+host_cores = 4
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+
+[files]
+TOPOLOGY = "mesh3"
+
+[arms]
+floor = "3be12df5"
+ref = "1388ada4"
+
+[env]
+SECS = "240"
+SEED_UP_STEPS = "60:5 180:10"

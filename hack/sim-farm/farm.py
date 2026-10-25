@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Runs the sims' trial matrices on EC2 spot instances, one job per run.
+"""Runs the sims' trial matrices, and the testbed's, on EC2 spot instances.
 
   hack/sim-farm/farm.py build  MATRIX...
   hack/sim-farm/farm.py run    MATRIX... [--max-vcpus N] [--families F,...]
@@ -68,12 +68,12 @@ sorted and joined with "+", and keeps its own files (the canary's trace,
 SSH host keys, --local's worker) in target/sim-farm/<run>/, which for one
 matrix is that matrix's state. Each matrix's farm.log gets the whole log.
 
-- Instances run one job per physical core, fewer if memory binds (the
-  largest slot_mem_gib of the run's matrices each, and 4 GiB for the
-  system). The candidates are the x86 types of --families from 8xlarge up
-  to --max-instance-cores (64) cores, in the zones the VPC's public
-  subnets cover, ranked by spot price per slot it would fill, then by the
-  quota's vCPUs per slot (an SMT core costs two).
+- Test jobs' instances run one job per physical core, fewer if memory
+  binds (the largest slot_mem_gib of the run's matrices each, and 4 GiB
+  for the system). The candidates are the x86 types of --families from
+  8xlarge up to --max-instance-cores (64) cores, in the zones the VPC's
+  public subnets cover, ranked by spot price per slot it would fill, then
+  by the quota's vCPUs per slot (an SMT core costs two).
   No pool (a type in a zone) takes more than half of the vCPU budget: the
   spot quota less the spot vCPUs it counts outside this run's instances
   (those shutting down count too), at most --max-vcpus. The budget is read
@@ -86,10 +86,10 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   nothing to do and no word from the controller, so a controller that
   dies costs little. `down` terminates them; `status` and `down` given a
   matrix act on every run that includes it.
-- Each new instance first runs the canary: the first matrix's first job
-  that waits on none, with its [canary] overrides, also run here. A
-  different trace means the binaries don't reproduce across hosts, and the
-  run stops.
+- Each new instance of test jobs first runs the canary: the first
+  matrix's first job that waits on none, with its [canary] overrides, also
+  run here. A different trace means the binaries don't reproduce across
+  hosts, and the run stops.
 - Every 15 s the controller syncs each instance over SSH (worker.py sync):
   it tops the instance's queue up to its slots plus a quarter, stores the
   rows that came back (fsync), and acks them on the next sync.
@@ -110,6 +110,73 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
 
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job.
+Testbed jobs run here one at a time.
+
+A testbed matrix (kind = "testbed") runs hack/testbed/run.sh as a black
+box: `run.sh <out dir>` with the job's environment, real nodes in Docker
+containers in real time. Its jobs are its arms by its axes by `repeats`:
+
+  kind = "testbed"
+  repeats = 3                   # job ids hash the repeat; more adds jobs
+  host_cores = 4                # an instance's physical cores, exactly,
+  host_mem_gib = 8              # and at least this memory (default 0)
+  sources = ["crates", ...]     # an arm's source (default as for tests;
+                                # hack/testbed is always in it)
+  paired = true                 # the default (below)
+  [build]     commands = ["cargo build --release ..."]
+  [artifacts] NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+  [files]     TOPOLOGY = "mesh3"
+  [arms] [env] [axes] [report]  as above; [report] over the row below
+
+build runs the commands with bash in the arm's worktree, with
+CARGO_TARGET_DIR at target/sim-farm/cargo (in the shared target/, an old
+arm's build would replace the example run.sh finds by default),
+CARGO_INCREMENTAL=0, and STRIMS_ROOT at this checkout. It packs the
+worktree's hack/testbed and each artifact (a file or a directory at a
+path in the worktree, where $VAR and ${VAR} take the build's environment)
+into the arm's bundle, target/sim-farm/bin/testbed-<hash>.tar.gz, which
+hashes the arm's source, the commands and the artifacts. A host runs
+run.sh from the bundle's hack/testbed with each artifact's variable set
+to its path there, and each [files] variable (a file relative to the
+matrix, the same for every arm) to the host's copy. A job's id hashes its
+source, build, files, environment and repeat.
+
+Testbed runs are real time, so nothing checks that they reproduce: no
+canary, no --verify, and a reissued job just runs again (a job's second
+result is dropped). Instances are the --families types with host_cores
+cores, one job at a time each, and of one type where it has capacity:
+the type of the run's first launch comes first in every zone. Docker and
+the qdisc modules are set up at boot, and shaping is tried on a dummy
+device; a host that fails is dropped with its log, as one that fails to
+boot. A host runs a testbed job once no container named tb-* (run.sh's)
+is running.
+
+With `paired`, the jobs of one environment and repeat, one per arm, go to
+one instance together and run there one after another, the arms' order
+rotated a place per group (A B, B A, A B, ...), so what differs between
+hosts hits every arm alike and runs compare within a host. Each arm goes
+first equally often only when the groups are a multiple of the arms (3
+repeats of 2 arms put one first twice). A comparison takes as many runs'
+time as it has arms; paired = false sends every job its own way.
+
+A finished run's out dir comes back to target/sim-farm/<matrix>/runs/<id>/
+(packed on the host, as root if the worker can't read it), and its row
+records its arm, commit, environment, repeat, group (the jobs that went
+to one host together) and order there, the instance (id, type, zone, CPU
+model, kernel, Docker version), when it started, its wall time and exit,
+and in `row` what reports aggregate: wall_s, the host's steal and busy
+shares of CPU time over the run (steal_pct, busy_pct), steal's worst 10 s
+(steal_peak_pct), the 1-minute load's mean and max (load_mean, load_max),
+and node-<i>.jsonl's line counts (node_lines, node_lines_min). A run that
+leaves no node-<i>.jsonl fails. report adds each instance's runs in order,
+and each group's run dirs as <group>=<dir>,..., the testbed scoring
+scripts' form.
+
+run.sh's images pull their bases from Docker Hub, whose anonymous limit
+counts pulls per address. Each instance has an address of its own, so
+instances don't add up against it; one that comes with an address over
+the limit fails its builds, and its jobs go to other instances, failing
+for good the second time.
 
 AWS: the aws CLI's credentials and region (its default profile, or the
 config file's). The user needs
@@ -139,6 +206,7 @@ override it:
 import argparse
 import collections
 import concurrent.futures as cf
+import contextlib
 import dataclasses
 import datetime
 import hashlib
@@ -152,6 +220,7 @@ import signal
 import statistics
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import tomllib
@@ -180,6 +249,11 @@ SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
 # a binary, and jobs.
 SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates"]
+# What a testbed arm's source always covers: run.sh and its images.
+TESTBED = "hack/testbed"
+TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]
+# The keys only test matrices take.
+TEST_KEYS = {"package", "target", "test", "slot_mem_gib", "canary", "derive"}
 CAPACITY_ERRORS = {
     "InsufficientInstanceCapacity",
     "InsufficientCapacity",
@@ -232,6 +306,13 @@ class Job:
     # takes from that row (its [[derive]] table's `set`).
     after: str = ""
     derive: tuple[tuple[str, str], ...] = ()
+    # A testbed job's (its bin is its arm's bundle): its repeat, the group
+    # it goes to a host with, and the matrix's files as (variable, name in
+    # bin/).
+    kind: str = "test"
+    repeat: int = 0
+    group: str = ""
+    files: tuple[tuple[str, str], ...] = ()
 
 
 @dataclasses.dataclass
@@ -291,20 +372,26 @@ class Matrix:
         self.path = Path(path)
         self.name = self.path.stem
         m = tomllib.loads(self.path.read_text())
-        self.package = m["package"]
-        self.target = m["target"]
-        test = m["test"]
-        self.tests = [str(t) for t in test] if isinstance(test, list) else [str(test)]
-        self.slot_mem_gib = float(m.get("slot_mem_gib", 2))
+        self.kind = m.get("kind", "test")
         self.arms = {k: str(v) for k, v in m["arms"].items()}
         self.env = {k: str(v) for k, v in m.get("env", {}).items()}
         self.axes = {k: [str(x) for x in v] for k, v in m.get("axes", {}).items()}
-        self.canary = {k: str(v) for k, v in m.get("canary", {}).items()}
-        self.derives = [self.parse_derive(i, d) for i, d in enumerate(m.get("derive", []))]
+        if self.kind == "testbed":
+            self.parse_testbed(m)
+            columns = TESTBED_COLUMNS
+        elif self.kind == "test":
+            self.package = m["package"]
+            self.target = m["target"]
+            test = m["test"]
+            self.tests = [str(t) for t in test] if isinstance(test, list) else [str(test)]
+            self.slot_mem_gib = float(m.get("slot_mem_gib", 2))
+            self.canary = {k: str(v) for k, v in m.get("canary", {}).items()}
+            self.derives = [self.parse_derive(i, d) for i, d in enumerate(m.get("derive", []))]
+            columns = ["delivery:mean,min", "lag_p50_ms:median", "lag_p99_ms:median,max"]
+        else:
+            sys.exit(f'{self.path}: kind = {self.kind!r}: "test" (the default) or "testbed"')
         rep = m.get("report", {})
-        self.columns = rep.get(
-            "columns", ["delivery:mean,min", "lag_p50_ms:median", "lag_p99_ms:median,max"]
-        )
+        self.columns = rep.get("columns", columns)
         self.group = rep.get(
             "group",
             ["arm"]
@@ -314,6 +401,35 @@ class Matrix:
         self.state = FARM / self.name
         self.commits: dict[str, str] = {}
         self.sources: dict[str, str] = {}
+
+    def parse_testbed(self, m: dict) -> None:
+        def bad(msg: str):
+            sys.exit(f"{self.path}: {msg}")
+
+        if TEST_KEYS & set(m):
+            bad(f"a testbed matrix takes no {', '.join(sorted(TEST_KEYS & set(m)))}")
+        self.tests, self.slot_mem_gib, self.canary, self.derives = [""], 0.0, {}, []
+        self.repeats = int(m.get("repeats", 1))
+        if self.repeats < 1:
+            bad("repeats is at least 1")
+        self.host_cores = int(m.get("host_cores", 4))
+        self.host_mem_gib = float(m.get("host_mem_gib", 0))
+        self.paired = bool(m.get("paired", True))
+        self.source_paths = sorted({*map(str, m.get("sources", SOURCES)), TESTBED})
+        self.commands = [str(c) for c in m.get("build", {}).get("commands", [])]
+        self.artifacts = {k: str(v) for k, v in m.get("artifacts", {}).items()}
+        # variable -> (the file here, its name in bin/)
+        self.files: dict[str, tuple[Path, str]] = {}
+        for var, rel in m.get("files", {}).items():
+            p = (self.path.parent / str(rel)).resolve()
+            if not p.is_file():
+                bad(f"[files] {var}: no file {p}")
+            sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+            self.files[var] = (p, f"file-{sha}-{p.name}")
+        given = [set(self.env) | set(self.axes), set(self.artifacts), set(self.files)]
+        twice = set().union(*(a & b for a, b in itertools.combinations(given, 2)))
+        if twice:
+            bad(f"{sorted(twice)} set twice ([env] or [axes], [artifacts], [files])")
 
     def parse_derive(self, i: int, d: dict) -> Derive:
         def bad(msg: str):
@@ -345,13 +461,17 @@ class Matrix:
         return hits[0] if hits else None
 
     def resolve(self) -> None:
+        paths = self.source_paths if self.kind == "testbed" else SOURCES
         for arm, ref in self.arms.items():
             commit = git("rev-parse", "--verify", f"{ref}^{{commit}}")
-            tree = git("ls-tree", commit, *SOURCES)
+            tree = git("ls-tree", commit, *paths)
             self.commits[arm] = commit
             self.sources[arm] = hashlib.sha256(tree.encode()).hexdigest()[:12]
 
     def bin_name(self, source: str) -> str:
+        if self.kind == "testbed":
+            key = json.dumps([source, self.commands, sorted(self.artifacts.items())])
+            return f"testbed-{hashlib.sha256(key.encode()).hexdigest()[:12]}.tar.gz"
         return f"{self.package}-{self.target}-{source}"
 
     def job(self, arm: str, test: str, env: dict[str, str], derive: Derive | None = None,
@@ -367,9 +487,39 @@ class Matrix:
             after, derive.set if derive is not None else (),
         )
 
+    def testbed_job(self, arm: str, env: dict[str, str], repeat: int, group: str) -> Job:
+        source = self.sources[arm]
+        env_t = tuple(sorted(env.items()))
+        files = tuple(sorted((k, name) for k, (_, name) in self.files.items()))
+        key = ["testbed", source, self.commands, sorted(self.artifacts.items()), files, env_t, repeat]
+        jid = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
+        return Job(
+            jid, arm, self.commits[arm], source, self.bin_name(source), "", env_t,
+            kind="testbed", repeat=repeat, group=group or jid, files=files,
+        )
+
+    def testbed_jobs(self) -> list[Job]:
+        """Group by group, repeat by repeat: each group's arms in turn, their
+        order rotated a place per group."""
+        keys = list(self.axes)
+        arms = list(self.arms)
+        out = []
+        for repeat in range(1, self.repeats + 1):
+            for combo in itertools.product(*(self.axes[k] for k in keys)):
+                env = {**self.env, **dict(zip(keys, combo))}
+                group = ""
+                if self.paired:
+                    key = json.dumps([self.name, sorted(env.items()), repeat])
+                    group = hashlib.sha256(key.encode()).hexdigest()[:12]
+                k = len(out) // len(arms) % len(arms)
+                out += [self.testbed_job(a, env, repeat, group) for a in arms[k:] + arms[:k]]
+        return out
+
     def jobs(self) -> list[Job]:
         """The axes' jobs, and the jobs derived ones wait on, then the
         derived jobs."""
+        if self.kind == "testbed":
+            return self.testbed_jobs()
         keys = list(self.axes)
         plain, derived = [], []
         ids = set()
@@ -439,21 +589,34 @@ def append_jsonl(path: Path, recs: list[dict]) -> None:
 # --- build --------------------------------------------------------------
 
 
+@contextlib.contextmanager
+def checkout(commit: str):
+    """A worktree of the commit under target/sim-farm/src, for as long as
+    the block runs."""
+    src = FARM / "src" / commit[:12]
+    if src.exists():
+        subprocess.run(["git", "worktree", "remove", "--force", str(src)], cwd=ROOT)
+        shutil.rmtree(src, ignore_errors=True)
+        git("worktree", "prune")
+    git("worktree", "add", "--detach", str(src), commit)
+    try:
+        yield src
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", str(src)], cwd=ROOT)
+
+
 def build(matrix: Matrix) -> None:
     matrix.resolve()
     BIN.mkdir(parents=True, exist_ok=True)
+    if matrix.kind == "testbed":
+        build_testbed(matrix)
+        return
     for arm, commit in matrix.commits.items():
         out = BIN / matrix.bin_name(matrix.sources[arm])
         if out.exists():
             continue
-        src = FARM / "src" / commit[:12]
-        if src.exists():
-            subprocess.run(["git", "worktree", "remove", "--force", str(src)], cwd=ROOT)
-            shutil.rmtree(src, ignore_errors=True)
-            git("worktree", "prune")
         log(f"building {arm} at {commit[:12]}")
-        git("worktree", "add", "--detach", str(src), commit)
-        try:
+        with checkout(commit) as src:
             env = {**os.environ, "CARGO_TARGET_DIR": str(ROOT / "target"), "CARGO_INCREMENTAL": "0"}
             cmd = [
                 "cargo", "test", "--release", "--locked", "-p", matrix.package,
@@ -479,8 +642,51 @@ def build(matrix: Matrix) -> None:
             tmp = out.with_name(out.name + ".tmp")
             shutil.copy2(exe, tmp)
             os.replace(tmp, out)
-        finally:
-            subprocess.run(["git", "worktree", "remove", "--force", str(src)], cwd=ROOT)
+
+
+def expand(spec: str, env: dict[str, str]) -> str:
+    """$VAR and ${VAR} in an artifact's path, from the build's environment."""
+    def var(m: re.Match) -> str:
+        name = m.group(1) or m.group(2)
+        if name not in env:
+            sys.exit(f"artifact {spec!r}: ${name} isn't set")
+        return env[name]
+
+    return re.sub(r"\$(?:\{(\w+)\}|(\w+))", var, spec)
+
+
+def build_testbed(matrix: Matrix) -> None:
+    for path, name in matrix.files.values():
+        out = BIN / name
+        if not out.exists():
+            tmp = out.with_name(out.name + ".tmp")
+            shutil.copy2(path, tmp)
+            os.replace(tmp, out)
+    for arm, commit in matrix.commits.items():
+        out = BIN / matrix.bin_name(matrix.sources[arm])
+        if out.exists():
+            continue
+        log(f"building {arm} at {commit[:12]}")
+        with checkout(commit) as src:
+            env = {
+                **os.environ, "CARGO_TARGET_DIR": str(FARM / "cargo"), "CARGO_INCREMENTAL": "0",
+                "STRIMS_ROOT": str(ROOT),
+            }
+            for cmd in matrix.commands:
+                if subprocess.run(["bash", "-c", cmd], cwd=src, env=env).returncode:
+                    sys.exit(f"building {arm} ({commit[:12]}): `{cmd}` failed")
+            if not (src / TESTBED).is_dir():
+                sys.exit(f"{arm} ({commit[:12]}) has no {TESTBED}")
+            tmp = out.with_name(out.name + ".tmp")
+            with tarfile.open(tmp, "w:gz", dereference=True) as tar:
+                tar.add(src / TESTBED, arcname=TESTBED)
+                for var, spec in sorted(matrix.artifacts.items()):
+                    path = src / expand(spec, env)
+                    if not path.exists():
+                        sys.exit(f"building {arm} ({commit[:12]}): no artifact {var} at {path}")
+                    tar.add(path, arcname=f"artifacts/{var}")
+            os.replace(tmp, out)
+        log(f"packed {arm} as {out.name} ({out.stat().st_size / 1e6:.1f} MB)")
 
 
 # --- AWS ----------------------------------------------------------------
@@ -644,8 +850,17 @@ class Pool:
         return (self.type, self.zone)
 
 
+@dataclasses.dataclass(frozen=True)
+class Testbed:
+    """A testbed run's hosts: one slot each, of exactly `cores` cores."""
+
+    cores: int
+    mem_gib: float
+
+
 def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[str] = (),
-          min_vcpus: int = 0, max_cores: int = 1 << 30) -> dict[str, Spec]:
+          min_vcpus: int = 0, max_cores: int = 1 << 30,
+          testbed: Testbed | None = None) -> dict[str, Spec]:
     if types is not None:
         flt = ["Name=instance-type,Values=" + ",".join(types)]
     else:
@@ -659,6 +874,10 @@ def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[st
         v = t["VCpuInfo"]["DefaultVCpus"]
         c = t["VCpuInfo"].get("DefaultCores", v)
         mem = t["MemoryInfo"]["SizeInMiB"] / 1024
+        if testbed is not None:
+            if types is not None or (c == testbed.cores and mem >= testbed.mem_gib):
+                out[t["InstanceType"]] = Spec(v, c, mem, 1)
+            continue
         if v < min_vcpus or c > max_cores:
             continue
         slots = min(c, int((mem - SYSTEM_GIB) // slot_mem_gib))
@@ -667,8 +886,12 @@ def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[st
     return out
 
 
-def pools(slot_mem_gib: float, families: list[str], max_cores: int, zones: dict[str, str]) -> list[Pool]:
-    sp = specs(slot_mem_gib, families=families, min_vcpus=32, max_cores=max_cores)
+def pools(slot_mem_gib: float, families: list[str], max_cores: int, zones: dict[str, str],
+          testbed: Testbed | None = None) -> list[Pool]:
+    if testbed is not None:
+        sp = specs(0, families=families, testbed=testbed)
+    else:
+        sp = specs(slot_mem_gib, families=families, min_vcpus=32, max_cores=max_cores)
     if not sp:
         return []
     names = sorted(sp)
@@ -736,6 +959,7 @@ class Host:
     acks: list[str] = dataclasses.field(default_factory=list)
     failing_since: float | None = None
     ended: float | None = None
+    note: str | None = None  # why its worker waits, as it last said
 
     @property
     def slots(self) -> int:
@@ -769,6 +993,14 @@ class Ssh:
     def put(self, host: Host, files: list[Path], dest: str) -> None:
         p = subprocess.run(
             ["scp", "-q", *self.opts(host), *map(str, files), f"ubuntu@{host.ip}:{dest}"],
+            capture_output=True, text=True, timeout=600,
+        )
+        if p.returncode:
+            raise RuntimeError(f"scp: {p.stderr.strip()}")
+
+    def get(self, host: Host, src: str, dest: Path) -> None:
+        p = subprocess.run(
+            ["scp", "-q", *self.opts(host), f"ubuntu@{host.ip}:{src}", str(dest)],
             capture_output=True, text=True, timeout=600,
         )
         if p.returncode:
@@ -817,6 +1049,20 @@ class Run:
         self.walls: list[float] = []
         self.boot_failures = 0
         self.stopping = threading.Event()
+        kinds = {m.kind for m in matrices}
+        if len(kinds) > 1:
+            sys.exit("testbed matrices run apart from test matrices: they want other instances")
+        self.testbed: Testbed | None = None
+        if kinds == {"testbed"}:
+            cores = {m.host_cores for m in matrices}
+            if len(cores) > 1:
+                sys.exit(f"testbed matrices run together want one host_cores, not {sorted(cores)}")
+            self.testbed = Testbed(cores.pop(), max(m.host_mem_gib for m in matrices))
+        # A testbed job's place in the queue it went to a host with, and its
+        # order there; the type the run's instances take where they can.
+        self.seqs: dict[str, int] = {}
+        self.order: dict[str, int] = {}
+        self.pinned: str | None = None
 
         def add(item: Item, done: bool) -> None:
             self.items[item.wid] = item
@@ -840,11 +1086,12 @@ class Run:
                 if len(own) == 1:
                     add(Item(j), j.id in self.rows)
             # The verify copies: the first jobs by id that haven't two rows yet.
-            for j in sorted(jobs, key=lambda j: j.id)[: args.verify]:
+            for j in sorted(jobs, key=lambda j: j.id)[: args.verify if m.kind == "test" else 0]:
                 item = Item(self.owners[j.id][0][1], "v")
                 if item.wid not in self.items:
                     add(item, counts[j.id] >= 2)
-        self.bins = sorted({own[0][1].bin for own in self.owners.values()})
+        firsts = [own[0][1] for own in self.owners.values()]
+        self.bins = sorted({j.bin for j in firsts} | {name for j in firsts for _, name in j.files})
 
     # -- results
 
@@ -859,16 +1106,31 @@ class Run:
                 for o, j in own
                 if o is m and jid in self.rows and jid not in self.have[m.name]
             ]
+            for r in recs:
+                if r.get("kind") == "testbed":
+                    self.share_run(r["id"], m)
             append_jsonl(m.state / "rows.jsonl", recs)
             n += len(recs)
         if n:
             log(f"copied {n} rows from one matrix to another")
 
+    def share_run(self, jid: str, m: Matrix) -> None:
+        """Copies a testbed job's run dir into m's from a matrix that has it."""
+        dest = m.state / "runs" / jid
+        src = next((o.state / "runs" / jid for o in self.ms if (o.state / "runs" / jid).is_dir()), None)
+        if src is not None and not dest.exists():
+            shutil.copytree(src, dest)
+
     def env_of(self, job: Job) -> dict[str, str]:
         return {**dict(job.env), **self.derived.get(job.id, {})}
 
     def wire(self, item: Item) -> dict:
-        return {"id": item.wid, "bin": item.job.bin, "test": item.job.test, "env": self.env_of(item.job)}
+        j = item.job
+        w = {"id": item.wid, "kind": j.kind, "bin": j.bin, "test": j.test, "env": self.env_of(j)}
+        if j.kind == "testbed":
+            w["files"] = dict(j.files)
+            w["seq"] = self.seqs.get(item.wid, 0)
+        return w
 
     def release(self, jid: str) -> None:
         """Queues the items that wait for job `jid`'s row, at the head."""
@@ -883,7 +1145,43 @@ class Run:
             ready.append(item)
         self.queue.extendleft(reversed(ready))
 
+    def store_testbed(self, host: Host, item: Item, res: dict) -> None:
+        """A testbed run's row, its run dir fetched already (fetch)."""
+        self.done.add(item.wid)
+        jid = item.job.id
+        if jid in self.rows:
+            log(f"job {jid} ran again on {host.id}; keeping its first run")
+            return
+        at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        for m, j in self.owners[jid]:
+            self.share_run(jid, m)
+            rec = {
+                "id": j.id,
+                "kind": "testbed",
+                "arm": j.arm,
+                "commit": j.commit,
+                "env": self.env_of(j),
+                "repeat": j.repeat,
+                "group": j.group,
+                "order": self.order.get(item.wid),
+                "host": host.id,
+                "type": host.type,
+                "zone": host.zone,
+                **{k: res.get(k) for k in ("cpu_model", "kernel", "docker", "started", "wall_s", "exit")},
+                "at": at,
+                "run_dir": f"runs/{jid}",
+                "row": res["row"],
+            }
+            append_jsonl(m.state / "rows.jsonl", [rec])
+            self.rows.setdefault(jid, rec)
+        if res.get("wall_s"):
+            self.walls.append(res["wall_s"])
+        self.release(jid)
+
     def store(self, host: Host, item: Item, res: dict) -> None:
+        if item.job.kind == "testbed":
+            self.store_testbed(host, item, res)
+            return
         at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         recs = []
         for m, j in self.owners[item.job.id]:
@@ -974,8 +1272,10 @@ class Run:
             return [item]
         if host.state != "ready":
             return []
-        want = host.slots + max(1, host.slots // 4) - len(host.assigned)
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
+        if self.testbed is not None:
+            return self.take_group(host, others)
+        want = host.slots + max(1, host.slots // 4) - len(host.assigned)
         out, skipped = [], []
         while want > 0 and self.queue:
             item = self.queue.popleft()
@@ -990,6 +1290,70 @@ class Run:
             want -= 1
         self.queue.extendleft(reversed(skipped))
         return out
+
+    def take_group(self, host: Host, others: int) -> list[Item]:
+        """A testbed host's next group, whole, once it has nothing left: the
+        first queued group none of whose jobs it took, while there are other
+        hosts to take those."""
+        if host.assigned:
+            return []
+        self.queue = collections.deque(i for i in self.queue if i.wid not in self.done)
+        for g in dict.fromkeys(i.job.group for i in self.queue):
+            items = [i for i in self.queue if i.job.group == g]
+            if others and any(host.id in self.took[i.job.id] for i in items):
+                continue
+            self.queue = collections.deque(i for i in self.queue if i.job.group != g)
+            for k, item in enumerate(items):
+                host.assigned[item.wid] = item
+                self.took[item.job.id].add(host.id)
+                self.order[item.wid] = k
+                self.seqs[item.wid] = len(self.seqs) + 1
+            return items
+        return []
+
+    def exchange(self, host: Host, jobs: list[Item], acks: list[str]) -> dict:
+        """A sync, then the fetch of the testbed runs it reports done: one
+        that didn't come is held back from absorb until a later sync."""
+        reply = self.sync(host, jobs, acks)
+        if self.testbed is not None:
+            done = []
+            for res in reply["done"]:
+                if self.fetch(host, res):
+                    done.append(res)
+                else:
+                    reply.setdefault("held", []).append(res["id"])
+            reply["done"] = done
+        return reply
+
+    def fetch(self, host: Host, res: dict) -> bool:
+        """Brings a finished testbed run's out dir here, as the first owner's
+        runs/<id>, extracted as this user."""
+        item = self.items.get(res["id"])
+        if res.get("row") is None or item is None:
+            return True
+        jid = item.job.id
+        dest = self.owners[jid][0][0].state / "runs" / jid
+        if dest.exists():
+            return True
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(f".{jid}.tmp")
+        tar = dest.with_name(f".{jid}.tar.gz")
+        try:
+            if self.local:
+                shutil.copyfile(self.local_dir / "done" / f"{res['id']}.tar.gz", tar)
+            else:
+                self.ssh.get(host, f"farm/done/{res['id']}.tar.gz", tar)
+            shutil.rmtree(tmp, ignore_errors=True)
+            with tarfile.open(tar) as t:
+                t.extractall(tmp, filter="data")
+            os.replace(tmp / "out", dest)
+            return True
+        except Exception as e:
+            log(f"fetching job {jid}'s run from {host.id}: {e}")
+            return False
+        finally:
+            tar.unlink(missing_ok=True)
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def sync(self, host: Host, jobs: list[Item], acks: list[str]) -> dict:
         req = json.dumps({"ack": acks, "jobs": [self.wire(i) for i in jobs]})
@@ -1019,7 +1383,12 @@ class Run:
                 self.store(host, item, res)
             else:
                 self.fail(host, item, res)
-        there = set(reply["queued"]) | set(reply["running"])
+        there = set(reply["queued"]) | set(reply["running"]) | set(reply.get("held", []))
+        note = reply.get("note")
+        if note != host.note:
+            if note:
+                log(f"{host.id}: {note}")
+            host.note = note
         for wid in there - set(host.assigned):
             item = self.items.get(wid)
             if item is not None and wid not in self.done:
@@ -1090,7 +1459,8 @@ class Run:
             "sudo systemctl reset-failed sim-farm-worker 2>/dev/null; "
             "systemctl is-active --quiet sim-farm-worker || "
             "sudo systemd-run --unit sim-farm-worker --uid ubuntu --gid ubuntu "
-            "--working-directory /home/ubuntu/farm "
+            + ("-p SupplementaryGroups=docker " if self.testbed is not None else "")
+            + "--working-directory /home/ubuntu/farm "
             f"python3 /home/ubuntu/farm/worker.py serve --slots {host.slots} "
             f"--job-timeout {self.args.job_timeout} --idle-minutes {self.args.idle_minutes} "
             "--imds --poweroff"
@@ -1106,9 +1476,15 @@ class Run:
             if self.stopping.is_set():
                 raise RuntimeError("stopping")
             try:
-                p = self.ssh.run(host, "test -d farm/bin", timeout=30)
+                # The boot leaves farm/bin last, or a failed setup's log.
+                p = self.ssh.run(
+                    host, "if [ -e farm/host-failed ]; then tail -n 20 farm/host-failed; exit 3; fi; "
+                    "test -d farm/bin", timeout=30,
+                )
                 if p.returncode == 0:
                     break
+                if p.returncode == 3:
+                    raise RuntimeError("its setup failed:\n" + p.stdout.rstrip())
                 why = p.stderr.strip()
             except subprocess.TimeoutExpired:
                 why = "timeout"
@@ -1148,7 +1524,12 @@ class Run:
             elif h.boot is not None and h.boot.done() and h.state in ("booting", "adopting"):
                 try:
                     h.boot.result()
-                    h.state = "canary" if h.state == "booting" else "ready"
+                    if h.state == "booting" and self.testbed is None:
+                        h.state = "canary"
+                    else:
+                        h.state = "ready"
+                        if self.testbed is not None:
+                            log(f"{h.id} ({h.type} in {h.zone}) is ready")
                 except Exception as e:
                     self.lose(h, f"bootstrap failed: {e}")
                     self.boot_failures += 1
@@ -1187,17 +1568,26 @@ class Run:
             and per_pool[p.key] + p.spec.vcpus <= max(self.budget / 2, p.spec.vcpus)
         ]
         # The price per slot it can fill: as the queue drains, smaller types.
+        # A testbed run's first type comes first, so its hosts are alike.
         return min(
             cands,
-            key=lambda p: (p.price / min(p.spec.slots, deficit), p.spec.vcpus / p.spec.slots),
+            key=lambda p: (
+                self.pinned is not None and p.type != self.pinned,
+                p.price / min(p.spec.slots, deficit), p.spec.vcpus / p.spec.slots,
+            ),
             default=None,
         )
 
     def scale(self, now: float) -> None:
         live = [h for h in self.hosts if h.state != "lost"]
-        waiting = sum(len(w) for w in self.waiting.values())
-        demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
-        deficit = demand - sum(h.slots for h in live)
+        if self.testbed is not None:
+            # A host per group, and a host with nothing assigned takes one.
+            groups = {i.job.group for i in self.queue if i.wid not in self.done}
+            deficit = len(groups) - sum(1 for h in live if not h.assigned)
+        else:
+            waiting = sum(len(w) for w in self.waiting.values())
+            demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
+            deficit = demand - sum(h.slots for h in live)
         if deficit > 0 and now >= self.next_budget:
             self.read_budget(now)
         launched = 0
@@ -1231,6 +1621,8 @@ class Run:
                 raise
             h = Host(hid, pool.type, pool.zone, pool.spec, pool.price, now)
             self.hosts.append(h)
+            if self.testbed is not None and self.pinned is None:
+                self.pinned = pool.type
             log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, ${pool.price:.3f}/h")
             deficit -= pool.spec.slots
             launched += 1
@@ -1260,23 +1652,26 @@ class Run:
         self.sg = ensure_sg(vpc)
         self.ami = image()
         self.families = self.args.families.split(",")
-        self.pools = pools(self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones)
-        self.priced = time.time()
+        self.find_pools()
         if not self.pools:
-            sys.exit("no instance type fits (families, sizes, slot_mem_gib, zones)")
+            sys.exit("no instance type fits (families, sizes, slot_mem_gib or host_cores, zones)")
         self.backoff: dict[tuple[str, str], float] = {}
         self.last_stuck = 0.0
         minutes = int(self.args.hours * 60)
         self.user_data = self.state / "user-data.sh"
-        self.user_data.write_text((HERE / "user-data.sh").read_text().replace("@MINUTES@", str(minutes)))
-        canary = self.ms[0].canary_job()
-        self.canary_item = Item(canary, "canary")
-        self.items[self.canary_item.wid] = self.canary_item
-        self.canary_trace = self.local_canary()
+        self.user_data.write_text(
+            (HERE / "user-data.sh").read_text().replace("@MINUTES@", str(minutes))
+            .replace("@DOCKER@", "1" if self.testbed is not None else "0")
+        )
+        if self.testbed is None:
+            canary = self.ms[0].canary_job()
+            self.canary_item = Item(canary, "canary")
+            self.items[self.canary_item.wid] = self.canary_item
+            self.canary_trace = self.local_canary()
         # Instances a previous controller left running.
         found = [i for i in farm_instances(self.name) if i["State"]["Name"] in ("pending", "running")]
         if found:
-            sp = specs(self.slot_mem_gib, types=sorted({i["InstanceType"] for i in found}))
+            sp = specs(self.slot_mem_gib, types=sorted({i["InstanceType"] for i in found}), testbed=self.testbed)
             for i in found:
                 spec = sp.get(i["InstanceType"])
                 if spec is None:
@@ -1285,12 +1680,20 @@ class Run:
                 launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
                 h = Host(i["InstanceId"], i["InstanceType"], i["Placement"]["AvailabilityZone"], spec, price, launched, state="adopting")
                 self.hosts.append(h)
+                if self.testbed is not None and self.pinned is None:
+                    self.pinned = h.type
                 log(f"adopting {h.id} ({h.type} in {h.zone})")
         self.read_budget(time.time())
         log("best pools: " + ", ".join(
             f"{p.type}@{p.zone[-1]} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
             for p in self.pools[:5]
         ))
+
+    def find_pools(self) -> None:
+        self.pools = pools(
+            self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones, self.testbed
+        )
+        self.priced = time.time()
 
     def setup_local(self) -> None:
         self.local_dir = self.state / "local"
@@ -1299,7 +1702,10 @@ class Run:
             dst = self.local_dir / "bin" / b
             if not dst.exists():
                 shutil.copy2(BIN / b, dst)
-        slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
+        if self.testbed is not None:
+            slots = 1
+        else:
+            slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
         self.hosts.append(Host("local", "local", "-", Spec(slots, slots, 0, slots), 0.0, time.time(), state="ready"))
         self.budget = slots
         self.start_local()
@@ -1337,12 +1743,11 @@ class Run:
     def tick(self, now: float) -> None:
         if not self.local:
             if now - self.priced > PRICE_REFRESH:
-                self.pools = pools(self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones)
-                self.priced = now
+                self.find_pools()
             self.refresh(now)
         ready = [h for h in self.hosts if h.state in ("canary", "ready")]
         batches = {h.id: (self.take(h), list(h.acks)) for h in ready}
-        futs = {h.id: self.pool.submit(self.sync, h, *batches[h.id]) for h in ready}
+        futs = {h.id: self.pool.submit(self.exchange, h, *batches[h.id]) for h in ready}
         for h in ready:
             try:
                 reply = futs[h.id].result()
@@ -1435,6 +1840,9 @@ class Run:
                         h.state, h.ended = "lost", time.time()
             self.pool.shutdown(wait=False, cancel_futures=True)
             self.progress(time.time())
+            if not self.local and self.hosts:
+                used = collections.Counter(f"{h.type} in {h.zone}" for h in self.hosts)
+                log("instances: " + ", ".join(f"{k} x{n}" for k, n in sorted(used.items())))
         if interrupted:
             return 130
         for m in self.ms:
@@ -1490,14 +1898,16 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
         for k in (key, f"SIM_{key.upper()}", f"STRIMS_SIM_{key.upper()}"):
             if k in env:
                 return env[k]
-        return ""
+        # The row's own fields: host, type, zone, repeat, ...
+        v = rec.get(key)
+        return "" if v is None or isinstance(v, dict) else str(v)
 
     groups: dict[tuple, list[dict]] = {}
     for j in jobs:
         rec = first.get(j.id)
         if rec is None or any(value(rec, k) != v for k, v in conds):
             continue
-        groups.setdefault(tuple(value(rec, g) for g in group), []).append(rec["row"])
+        groups.setdefault(tuple(value(rec, g) for g in group), []).append(rec)
 
     heads, cols = [], []
     for spec in matrix.columns:
@@ -1512,7 +1922,8 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
                 cols.append(("agg", field, a))
     print("| " + " | ".join([*map(short, group), "n", *heads]) + " |")
     print("|" + "---|" * (len(group) + 1 + len(heads)))
-    for key, rows in groups.items():
+    for key, recs in groups.items():
+        rows = [r["row"] for r in recs]
         cells = [*key, str(len(rows))]
         for kind, a, b in cols:
             if kind == "ratio":
@@ -1523,6 +1934,8 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
                 vs = [r[a] for r in rows if r.get(a) is not None]
                 cells.append(fmt(AGGS[b](vs)) if vs else "–")
         print("| " + " | ".join(cells) + " |")
+    if matrix.kind == "testbed":
+        testbed_report(matrix, groups)
     missing = len(ids) - len(first)
     notes = [f"{len(first)}/{len(ids)} jobs have rows"]
     if stale:
@@ -1536,6 +1949,31 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     if missing:
         notes.append(f"{missing} missing")
     print("\n" + "; ".join(notes))
+
+
+def testbed_report(matrix: Matrix, groups: dict[tuple, list[dict]]) -> None:
+    """Each instance's runs in the order they ran, and each group's run
+    dirs in the form the testbed scoring scripts take."""
+    recs = sorted((r for rs in groups.values() for r in rs), key=lambda r: r.get("started") or "")
+    hosts: dict[str, list[dict]] = {}
+    for r in recs:
+        hosts.setdefault(r["host"], []).append(r)
+    print("\n| host | type | zone | cpu | steal % max | load max | runs |")
+    print("|" + "---|" * 7)
+    for h, rs in hosts.items():
+        steal = max(r["row"].get("steal_pct") or 0 for r in rs)
+        load = max(r["row"].get("load_max") or 0 for r in rs)
+        runs = ", ".join(
+            " ".join([r["arm"], *(r["env"].get(k, "") for k in matrix.axes), f"r{r['repeat']}"])
+            for r in rs
+        )
+        print(f"| {h} | {rs[0]['type']} | {rs[0].get('zone') or '-'} | "
+              f"{rs[0].get('cpu_model') or '-'} | {fmt(steal)} | {fmt(load)} | {runs} |")
+    print()
+    for key, rs in groups.items():
+        label = "-".join(key).replace(" ", "_") or "all"
+        dirs = [str(matrix.state / r["run_dir"]) for r in sorted(rs, key=lambda r: r["repeat"])]
+        print(f"{label}={','.join(dirs)}")
 
 
 # --- status and down ----------------------------------------------------

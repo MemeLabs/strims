@@ -1,0 +1,21 @@
+# The sim farm's smoke test for testbed jobs: one short run of main on
+# the four-node mesh.
+
+kind = "testbed"
+repeats = 1
+host_cores = 4
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+
+[files]
+TOPOLOGY = "mesh3"
+
+[arms]
+main = "main"
+
+[env]
+SECS = "60"

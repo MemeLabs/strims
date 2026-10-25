@@ -1,0 +1,7 @@
+# The testbed's four nodes, each linked to every other.
+link 0 1
+link 0 2
+link 0 3
+link 1 2
+link 1 3
+link 2 3
