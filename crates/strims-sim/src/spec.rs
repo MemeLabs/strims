@@ -10,7 +10,8 @@
 
 use std::time::Duration;
 
-use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy, SwarmOptions};
+use strims_ppspp::{PushMode, RequestControllerKind, SeedPolicy, SwarmOptions};
+use strims_testbed::shape::LiveShape;
 use strims_vpn::Routing;
 use strims_wan::Site;
 
@@ -123,24 +124,14 @@ impl SwarmSpec {
         start: Duration,
         stop: Duration,
     ) -> SwarmSpec {
-        let interval = Duration::from_millis(250);
-        let frames = usize::try_from(rate / 4 / FRAME_LEN as u64)
-            .unwrap_or(1)
-            .max(1);
-        let frames = 1usize << frames.ilog2();
+        let shape = LiveShape::live(rate, LIVE_WINDOW);
         SwarmSpec {
             seed,
             viewers,
             relays: Vec::new(),
-            options: SwarmOptions {
-                chunk_size: FRAME_LEN,
-                chunks_per_signature: frames,
-                live_window: LIVE_WINDOW,
-                delivery_mode: DeliveryMode::MANDATORY,
-                ..SwarmOptions::default()
-            },
-            write_interval: interval,
-            frames_per_write: frames,
+            options: shape.options,
+            write_interval: shape.write_interval,
+            frames_per_write: shape.frames_per_write,
             start,
             stop,
         }

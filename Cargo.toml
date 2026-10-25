@@ -32,6 +32,7 @@ members = [
   "crates/strims-node-core",
   "crates/strims-node",
   "crates/strims-sim",
+  "crates/strims-testbed",
   "crates/strims-svc",
   "crates/strims-wasm",
 ]
@@ -90,6 +91,7 @@ strims-wan = { path = "crates/strims-wan" }
 strims-node-core = { path = "crates/strims-node-core" }
 strims-node = { path = "crates/strims-node" }
 strims-sim = { path = "crates/strims-sim" }
+strims-testbed = { path = "crates/strims-testbed" }
 strims-svc = { path = "crates/strims-svc" }
 strims-wasm = { path = "crates/strims-wasm" }
 

@@ -2561,6 +2561,7 @@ dependencies = [
  "strims-ppspp-capture",
  "strims-proto",
  "strims-rpc",
+ "strims-testbed",
  "strims-transfer",
  "strims-vpn",
  "strims-wan",
@@ -2597,6 +2598,14 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "strims-testbed"
+version = "0.1.0"
+dependencies = [
+ "strims-node-core",
+ "strims-ppspp",
 ]
 
 [[package]]
