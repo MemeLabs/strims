@@ -31,7 +31,8 @@
 //!
 //! A tap row carries its decision's fields, and a sample row its
 //! source's, by their tables' names: a peer as its name in hex, a named
-//! value as its name, any other as a number. Decisions about data go onto
+//! value as its name, a time as `t` is (`null` when unknown), any other as
+//! a number. Decisions about data go onto
 //! the DATA row they describe, in the frame just before them: `DataSent`
 //! on DATA out, and `PushHit`, `PushLate`, `PushUnsolicited` and
 //! `DataStale` on DATA in.
@@ -81,6 +82,7 @@ enum Val {
     Num(i64),
     Peer(u32),
     Name(&'static str),
+    Time(i64),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -138,23 +140,41 @@ pub(crate) enum Join {
     },
 }
 
-/// Where a dump's rows go: each as its JSON object without the closing
-/// brace, and when the sink asks for them, its join.
+/// A row as a sink gets it: its time, direction and type, its JSON object
+/// without the closing brace, and when the sink asks for them, its join.
+pub(crate) struct Rendered<'a> {
+    pub(crate) t: i64,
+    pub(crate) dir: &'static str,
+    pub(crate) kind: &'static str,
+    pub(crate) json: &'a str,
+    pub(crate) join: Option<Join>,
+}
+
+/// Where a dump's rows go.
 pub(crate) trait RowSink {
     fn wants_joins(&self) -> bool {
         false
     }
-    fn row(&mut self, t: i64, json: &str, join: Option<Join>) -> io::Result<()>;
+    fn row(&mut self, row: Rendered<'_>) -> io::Result<()>;
 }
 
 /// Writes rows as JSON lines.
 struct Lines<'w, W: Write>(&'w mut W);
 
 impl<W: Write> RowSink for Lines<'_, W> {
-    fn row(&mut self, _: i64, json: &str, _: Option<Join>) -> io::Result<()> {
-        self.0.write_all(json.as_bytes())?;
+    fn row(&mut self, row: Rendered<'_>) -> io::Result<()> {
+        self.0.write_all(row.json.as_bytes())?;
         self.0.write_all(b"}\n")
     }
+}
+
+/// Writes time `v` (ns since the Unix epoch): as is, or with an `origin`,
+/// as ms since it, to the µs.
+pub(crate) fn put_time(o: &mut String, origin: Option<i64>, v: i64) {
+    let _ = match origin {
+        Some(origin) => write!(o, "{:.3}", v.saturating_sub(origin) as f64 / 1e6),
+        None => write!(o, "{v}"),
+    };
 }
 
 /// One node's dump state, across the files of a rotated capture.
@@ -173,6 +193,10 @@ pub(crate) struct Dump<S> {
     held: Vec<Row>,
     held_from: (u32, RowDir),
     buf: String,
+    /// Display names by hex name, for the node and its peers.
+    names: BTreeMap<String, String>,
+    /// Times are ms since this, when set.
+    origin: Option<i64>,
     pub(crate) stats: ExportStats,
 }
 
@@ -211,8 +235,21 @@ impl<S: RowSink> Dump<S> {
             held: Vec::new(),
             held_from: (0, RowDir::Tap),
             buf: String::new(),
+            names: BTreeMap::new(),
+            origin: None,
             stats: ExportStats::default(),
         }
+    }
+
+    /// Names the node and its peers by `names` (hex names to display
+    /// names), and writes times as ms since `origin`, when set.
+    pub(crate) fn view(mut self, names: BTreeMap<String, String>, origin: Option<i64>) -> Dump<S> {
+        if let Some(n) = names.get(&self.node) {
+            self.node = n.clone();
+        }
+        self.names = names;
+        self.origin = origin;
+        self
     }
 
     /// The next file of the same node's capture: its version may differ.
@@ -227,7 +264,9 @@ impl<S: RowSink> Dump<S> {
         match *r {
             Record::Peer { peer, name } => {
                 if self.peers.len() < MAX_TRACKED || self.peers.contains_key(&peer) {
-                    self.peers.insert(peer, hex(name));
+                    let h = hex(name);
+                    let name = self.names.get(&h).cloned().unwrap_or(h);
+                    self.peers.insert(peer, name);
                 }
             }
             Record::Swarm { swarm, id, params } => {
@@ -496,22 +535,25 @@ impl<S: RowSink> Dump<S> {
         } else {
             None
         };
-        let res = self.sink.row(r.t, &o, join);
+        let res = self.sink.row(Rendered {
+            t: r.t,
+            dir: dir_name(r.dir),
+            kind: r.kind,
+            json: &o,
+            join,
+        });
         self.buf = o;
         res
     }
 
     fn render(&self, o: &mut String, r: &Row) {
-        let _ = write!(o, "{{\"t\":{},\"node\":\"{}\"", r.t, self.node);
+        o.push_str("{\"t\":");
+        put_time(o, self.origin, r.t);
+        let _ = write!(o, ",\"node\":\"{}\"", self.node);
         if r.peer != 0 {
             let _ = write!(o, ",\"peer\":\"{}\"", self.peer_name(r.peer));
         }
-        let dir = match r.dir {
-            RowDir::In => "in",
-            RowDir::Out => "out",
-            RowDir::Tap => "tap",
-            RowDir::Sample => "sample",
-        };
+        let dir = dir_name(r.dir);
         let _ = write!(o, ",\"dir\":\"{dir}\",\"frame\":{}", r.frame);
         if r.swarm != 0 {
             let _ = write!(o, ",\"swarm\":{}", r.swarm);
@@ -529,15 +571,15 @@ impl<S: RowSink> Dump<S> {
                 b.base_right().0 >> 1
             );
         }
-        let nums = [
-            ("stream", r.stream.map(|v| v as i64)),
-            ("ts", r.ts),
-            ("len", r.len.map(|v| v as i64)),
-        ];
-        for (k, v) in nums {
-            if let Some(v) = v {
-                let _ = write!(o, ",\"{k}\":{v}");
-            }
+        if let Some(v) = r.stream {
+            let _ = write!(o, ",\"stream\":{v}");
+        }
+        if let Some(v) = r.ts {
+            o.push_str(",\"ts\":");
+            put_time(o, self.origin, v);
+        }
+        if let Some(v) = r.len {
+            let _ = write!(o, ",\"len\":{v}");
         }
         if let Some(a) = r.ann {
             let _ = write!(o, ",\"ann\":\"{a}\"");
@@ -559,6 +601,12 @@ impl<S: RowSink> Dump<S> {
                 Val::Peer(0) => write!(o, ",\"{k}\":null"),
                 Val::Peer(p) => write!(o, ",\"{k}\":\"{}\"", self.peer_name(*p)),
                 Val::Name(n) => write!(o, ",\"{k}\":\"{n}\""),
+                Val::Time(0) => write!(o, ",\"{k}\":null"),
+                Val::Time(v) => {
+                    let _ = write!(o, ",\"{k}\":");
+                    put_time(o, self.origin, *v);
+                    Ok(())
+                }
             };
         }
     }
@@ -609,7 +657,17 @@ fn value(info: &KindInfo, i: usize, v: i64) -> Val {
     match info.fields.get(i).map(|f| f.kind) {
         Some(FieldKind::Peer) => Val::Peer(u32::try_from(v).unwrap_or(0)),
         Some(FieldKind::Enum(_)) => info.value_name(i, v).map_or(Val::Num(v), Val::Name),
+        Some(FieldKind::Time) => Val::Time(v),
         _ => Val::Num(v),
+    }
+}
+
+fn dir_name(d: RowDir) -> &'static str {
+    match d {
+        RowDir::In => "in",
+        RowDir::Out => "out",
+        RowDir::Tap => "tap",
+        RowDir::Sample => "sample",
     }
 }
 

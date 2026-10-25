@@ -77,6 +77,8 @@ pub enum FieldKind {
     Num,
     /// A peer's id in the dump; an export names the peer.
     Peer,
+    /// A time, ns since the Unix epoch; 0 is unknown.
+    Time,
     /// The index of one of these names.
     Enum(&'static [&'static str]),
 }
@@ -150,6 +152,13 @@ const fn peer(name: &'static str) -> Field {
     }
 }
 
+const fn time(name: &'static str) -> Field {
+    Field {
+        name,
+        kind: FieldKind::Time,
+    }
+}
+
 const fn named(name: &'static str, names: &'static [&'static str]) -> Field {
     Field {
         name,
@@ -206,8 +215,8 @@ pub const TAP_KINDS: &[KindInfo] = &[
         "PushMiss",
         &[
             num("bin"),
-            num("deadline"),
-            num("first_seen"),
+            time("deadline"),
+            time("first_seen"),
             num("counted"),
             LAG[0],
             LAG[1],
@@ -219,7 +228,7 @@ pub const TAP_KINDS: &[KindInfo] = &[
     KindInfo::new(
         11,
         "RequestTimeout",
-        &[num("bin"), num("requested"), num("timeout")],
+        &[num("bin"), time("requested"), num("timeout")],
     )
     .since_v1(1),
     KindInfo::new(

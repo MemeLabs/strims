@@ -13,20 +13,15 @@
   hack/capture/analyze.py pulls  run.jsonl [--source NAME] [--from S] [--until S]
   hack/capture/analyze.py node   run.jsonl NODE [--from S] [--until S]
 
-`reduce` merges every node's dumps with `ppspp-capture swarm` (the capture
-crate's swarm module documents the rows) and writes the rows the other
-commands read, one JSON object per line:
-
-- nodes and peers by their capture labels ("seed", "v3", "testbed-2"),
-  or the first 8 hex digits of their host id without one;
-- `t`, and the time fields of decisions (`deadline`, `first_seen`,
-  `requested`) and joins (`sent`), in ms since the earliest dump's start;
-- decisions, samples, DATA, REQUEST and STREAM_* rows (all rows with
-  `--all`), from `--from` to `--until` seconds after the start.
-
-Durations stay in ns and rates in bytes per second, as the capture writes
-them. Build the tool with `cargo build --release -p strims-ppspp-capture`;
-`--bin` or PPSPP_CAPTURE names another.
+`reduce` writes the rows the other commands read: `ppspp-capture swarm
+--labels --start` over every node's dumps (the capture crate's swarm module
+documents the rows and options), one JSON object per line, with nodes and
+peers by their capture labels ("seed", "v3", "testbed-2"), times in ms
+since the capture's start, durations in ns and rates in bytes per second.
+It keeps the decisions, samples, DATA, REQUEST and STREAM_* rows (all rows
+with `--all`) from `--from` to `--until` seconds after the start. Build
+the tool with `cargo build --release -p strims-ppspp-capture`; `--bin` or
+PPSPP_CAPTURE names another.
 
 The other commands print tables about one question each, `--from` and
 `--until` in seconds:
@@ -51,105 +46,27 @@ import argparse
 import collections
 import json
 import os
-import struct
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-MAGIC = b"STRIMSPC"
-# Rows `reduce` keeps besides decisions and samples.
-MESSAGES = {"DATA", "REQUEST", "STREAM_REQUEST", "STREAM_OPEN", "STREAM_CLOSE", "STREAM_CANCEL"}
-# Fields holding a peer's name, and absolute times.
-PEER_FIELDS = ("node", "peer", "from", "chosen", "runner_up")
-TIME_FIELDS = ("sent", "deadline", "first_seen", "requested")
-
-
-def uvarint(b, i):
-    x = s = 0
-    while True:
-        c = b[i]
-        i += 1
-        x |= (c & 0x7F) << s
-        if c < 0x80:
-            return x, i
-        s += 7
-
-
-def header(path):
-    """A dump's node id (hex), label and origin (ns), from its header
-    record (the capture crate's format docs)."""
-    with open(path, "rb") as f:
-        b = f.read(1024)
-    if b[:8] != MAGIC:
-        raise ValueError(f"{path}: not a capture")
-    i = 10
-    _, i = uvarint(b, i)  # record length
-    i += 1  # kind 0
-    _, i = uvarint(b, i)  # dt
-    i += 1  # clock
-    (origin,) = struct.unpack(">q", b[i : i + 8])
-    i += 8
-    _, i = uvarint(b, i)  # file
-    n, i = uvarint(b, i)
-    node = b[i : i + n].hex()
-    i += n
-    n, i = uvarint(b, i)
-    label = b[i : i + n].decode("utf-8", "replace")
-    return node, label, origin
-
-
-def dumps(args):
-    out = []
-    for a in args:
-        p = Path(a)
-        out += sorted(p.glob("*.ppcap")) if p.is_dir() else [p]
-    return out
+# The rows `reduce` keeps.
+TYPES = "decisions,samples,DATA,REQUEST,STREAM_*"
 
 
 def reduce(a):
-    paths = dumps(a.dumps)
-    if not paths:
-        sys.exit("reduce: no dumps")
-    heads = [header(p) for p in paths]
-    names = {node: label or node[:8] for node, label, _ in heads}
-    origin = min(o for _, _, o in heads)
     tool = a.bin or os.environ.get("PPSPP_CAPTURE") or REPO / "target/release/ppspp-capture"
     if not Path(tool).exists():
         sys.exit(f"no {tool}: cargo build --release -p strims-ppspp-capture")
-    lo = a.from_ * 1000 if a.from_ is not None else float("-inf")
-    hi = a.until * 1000 if a.until is not None else float("inf")
-
-    def ms(ns):
-        return round((ns - origin) / 1e6, 3)
-
-    def rename(r):
-        r["t"] = ms(r["t"])
-        for k in PEER_FIELDS:
-            v = r.get(k)
-            if isinstance(v, str):
-                r[k] = names.get(v, v[:8])
-        # `requested` is also RequestRound's count of chunks.
-        for k in TIME_FIELDS:
-            v = r.get(k)
-            if isinstance(v, int) and v > origin // 2:
-                r[k] = ms(v)
-        if isinstance(r.get("by"), dict):
-            rename(r["by"])
-
-    p = subprocess.Popen([str(tool), "swarm", *map(str, paths)], stdout=subprocess.PIPE, text=True)
-    out = sys.stdout
-    for line in p.stdout:
-        r = json.loads(line)
-        if not a.all and r["dir"] not in ("tap", "sample") and r["type"] not in MESSAGES:
-            continue
-        rename(r)
-        if r["t"] > hi:
-            break
-        if r["t"] >= lo:
-            out.write(json.dumps(r, separators=(",", ":")) + "\n")
-    p.terminate()
-    p.wait()
+    cmd = [str(tool), "swarm", "--labels", "--start"]
+    if a.from_ is not None:
+        cmd += ["--from", str(a.from_)]
+    if a.until is not None:
+        cmd += ["--until", str(a.until)]
+    if not a.all:
+        cmd += ["--types", TYPES]
+    sys.exit(subprocess.call(cmd + a.dumps))
 
 
 def load(a):

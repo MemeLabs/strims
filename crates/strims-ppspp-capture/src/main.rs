@@ -8,12 +8,13 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use strims_ppspp_capture::{
-    Clock, Dir, Error, Reader, Record, export, sample_kind, swarm::swarm, tap_kind,
-};
+use strims_ppspp_capture::swarm::{Options, swarm};
+use strims_ppspp_capture::{Clock, Dir, Error, Reader, Record, export, sample_kind, tap_kind};
 
 const USAGE: &str = "\
 usage: ppspp-capture <command> [file...]
+       ppspp-capture swarm [--labels] [--start] [--from <s>] [--until <s>]
+                           [--types <type,...>] <file|dir>...
 
 Reads ppspp capture dumps: each file, or standard input for none or `-`.
 
@@ -26,7 +27,14 @@ commands:
            DATA out and each refusal a child hears to its parent's
            decision (the crate's swarm module documents them)
   info     each file's header and swarms, and what it holds
-  help     print this";
+  help     print this
+
+swarm options:
+  --labels        name nodes and peers by their capture labels
+  --start         times in ms since the capture's start
+  --from, --until only the rows from or until these seconds after the start
+  --types         only the rows of these types: a type, a prefix ending in
+                  `*`, `decisions` or `samples` (comma-separated)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -98,27 +106,40 @@ fn main() -> ExitCode {
     }
 }
 
-/// `swarm`: the dumps named, and those in the directories named.
+/// `swarm`: its options, then the dumps named and those in the
+/// directories named.
 fn swarm_command(args: &[String], out: &mut impl Write) -> ExitCode {
+    let mut opts = Options::default();
     let mut paths = Vec::new();
-    for a in args {
-        let p = PathBuf::from(a);
-        if p.is_dir() {
-            let entries = match std::fs::read_dir(&p) {
-                Ok(e) => e,
-                Err(e) => {
-                    eprintln!("{a}: {e}");
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let secs = |v: Option<&String>| {
+            v.and_then(|v| v.parse::<f64>().ok())
+                .filter(|s| s.is_finite())
+                .map(|s| (s * 1e9) as i64)
+        };
+        match a.as_str() {
+            "--labels" => opts.labels = true,
+            "--start" => opts.start = true,
+            "--from" | "--until" => {
+                let Some(ns) = secs(it.next()) else {
+                    eprintln!("swarm: {a} needs seconds\n\n{USAGE}");
                     return ExitCode::FAILURE;
+                };
+                if a == "--from" {
+                    opts.from = Some(ns);
+                } else {
+                    opts.until = Some(ns);
                 }
-            };
-            let mut found: Vec<PathBuf> = entries
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|x| x == "ppcap"))
-                .collect();
-            found.sort();
-            paths.extend(found);
-        } else {
-            paths.push(p);
+            }
+            "--types" => {
+                let Some(v) = it.next() else {
+                    eprintln!("swarm: --types needs a list\n\n{USAGE}");
+                    return ExitCode::FAILURE;
+                };
+                opts.types = Some(v.split(',').map(str::to_owned).collect());
+            }
+            _ => paths_of(a, &mut paths),
         }
     }
     if paths.is_empty() {
@@ -126,7 +147,7 @@ fn swarm_command(args: &[String], out: &mut impl Write) -> ExitCode {
         return ExitCode::FAILURE;
     }
     let mut ok = true;
-    let res = swarm(&paths, out, &mut |e| {
+    let res = swarm(&paths, &opts, out, &mut |e| {
         eprintln!("{e}");
         ok = false;
     });
@@ -147,6 +168,23 @@ fn swarm_command(args: &[String], out: &mut impl Write) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// `a`, or the `.ppcap` files in it if it is a directory, in name order.
+fn paths_of(a: &str, paths: &mut Vec<PathBuf>) {
+    let p = PathBuf::from(a);
+    match std::fs::read_dir(&p) {
+        Ok(entries) => {
+            let mut found: Vec<PathBuf> = entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "ppcap"))
+                .collect();
+            found.sort();
+            paths.extend(found);
+        }
+        // Not a directory: a file, which the view opens.
+        Err(_) => paths.push(p),
     }
 }
 
