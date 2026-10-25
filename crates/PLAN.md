@@ -272,31 +272,27 @@ in each.
      `queue-delay-source`.) Through a halving of the seed's uplink and
      beside a competing upload (testbed `SEED_UP_STEPS`, `COMPETE`), the
      uplink queue, lag and the share of time the meter reads off match
-     within 2x, with two gaps. After the halving both fall into a loop:
-     the seed's pushes come late, viewers drop it as a parent for misses
-     and pull those streams from it, so its queue never drains (busy over
-     0.9, viewers holding at most 3/4 of their parents, lag about 3.5 s).
-     Real runs spend a median 56 % of the two minutes after the drop in
-     it (stretches up to 56 s), the sim 9 % (up to 22 s). Inside it real
-     viewers keep twice the sim's requests outstanding to the seed (about
-     410 kB against 200), and the extra waits at the seed as queued
-     answers (about 210 kB against 36). Their request windows sit at
-     LEDBAT's floor (twice the stream rate times the ping round trip) or,
-     after a timed-out request, below it. In the loop a ping's round trip
-     is mostly the bytes below ppspp ahead of its pong, on both sides at
-     most about 130 kB per link (the seed's frames run to 64 KiB, and
-     vnic holds one frame and one write past QoS, then the kernel's
-     unsent bytes and TCP's in flight), draining at a third of the
-     halved uplink: 0.5-0.8 s. Real round trips there run 1.4x the
-     sim's (median 790 ms against 560): the real pipe is full more often
+     within 2x, with two gaps. After the halving both can fall into a
+     loop: the seed's pushes come late, viewers drop it as a parent for
+     misses and pull those streams from it, so its queue never drains
+     (busy over 0.9, viewers holding at most 3/4 of their parents). In
+     the loop a ping's round trip is mostly the bytes below ppspp ahead
+     of its pong, up to about 130 kB per link (the seed's frames run to
+     64 KiB, and vnic holds one frame and one write past QoS, then the
+     kernel's unsent bytes and TCP's in flight), which is why LEDBAT's
+     window floor reads the minimum round trip in Hybrid. The testbed
+     falls in deeper than its twin: 8-25 % of the two minutes after the
+     drop against `calibration_star`'s median 6 % (worst seed 27 %).
+     Smaller ppspp frames (16 or 32 KiB, branches `ab-cap`, `ab-cap32`)
+     shorten the loop in the sim too, but cost pull-mode lag behind
+     QoS-paced uplinks (16 KiB: 11 % in `capped_seed_pull`, 16 % in
+     `cross_traffic_pull`; 32 KiB: 8 % in the latter). Real round trips
+     in the loop run 1.4x the sim's: the real pipe is full more often
      (66 % of pings against 51 %) and drains about 10 % slower when
      full. Next: find the 10 % (per-byte overhead on the seed's link,
-     real against sim). The loop itself is worth breaking in ppspp too:
-     the window floor follows a round trip made of our own buffers. Try
-     the floor on the minimum round trip, and smaller TCP frames, on the
-     step test in the sim, then on the testbed. Beside a competing upload the
-     sim's worst second of lag is half the real one (real TCP's
-     retransmission timeouts aren't modelled).
+     real against sim). Beside a competing upload the sim's worst second
+     of lag is half the real one (real TCP's retransmission timeouts
+     aren't modelled).
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer
