@@ -67,7 +67,10 @@
 //! connections. They need the window model's bounded queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt;
 use std::net::{IpAddr, SocketAddr};
+#[allow(clippy::disallowed_types)]
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
@@ -242,6 +245,41 @@ fn pair_key(a: HostIx, b: HostIx) -> (HostIx, HostIx) {
     (a.min(b), a.max(b))
 }
 
+/// The run's WAN schedule, shared with the hosts' sockets: a capture's
+/// link probes read the model's view of their connections. The run locks
+/// it between steps, the probes during a host's turn, all on turmoil's
+/// thread, so it is never contended.
+#[derive(Clone, Default)]
+#[allow(clippy::disallowed_types)]
+pub(crate) struct SharedWan(Arc<Mutex<Option<Scheduler>>>);
+
+impl fmt::Debug for SharedWan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SharedWan")
+    }
+}
+
+impl SharedWan {
+    pub(crate) fn lock(&self) -> MutexGuard<'_, Option<Scheduler>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// The model's view of one TCP connection and its sender's uplink: the
+/// window model's congestion window, slow start threshold and bytes in
+/// flight and waiting for the window (`None` without the model or the
+/// connection), and the uplink's queue as the time to drain it and its
+/// rate.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ConnState {
+    pub cwnd: Option<u64>,
+    pub ssthresh: Option<u64>,
+    pub in_flight: Option<u64>,
+    pub pending: Option<u64>,
+    pub uplink_queue: Option<Duration>,
+    pub uplink_rate: Option<u64>,
+}
+
 /// The WAN schedule of one run.
 pub(crate) struct Scheduler {
     net: Network,
@@ -390,6 +428,30 @@ impl Scheduler {
 
     fn name(&self, h: HostIx) -> &str {
         self.names.get(h).map_or("?", String::as_str)
+    }
+
+    /// The model's view at `now` of the connection whose sender's address
+    /// pair is `conn`.
+    pub(crate) fn conn_state(&self, conn: (SocketAddr, SocketAddr), now: Time) -> ConnState {
+        let flow = self.flows.get(&conn);
+        let pending = flow.map(|f| {
+            f.pending
+                .iter()
+                .filter_map(|id| match self.records.get(id)?.what {
+                    What::Data { len, .. } => Some(len as u64),
+                    _ => None,
+                })
+                .sum()
+        });
+        let host = self.ip_host.get(&conn.0.ip()).copied();
+        ConnState {
+            cwnd: flow.map(|f| f.cwnd as u64),
+            ssthresh: flow.and_then(|f| f.ssthresh.is_finite().then_some(f.ssthresh as u64)),
+            in_flight: flow.map(|f| f.in_flight as u64),
+            pending,
+            uplink_queue: host.map(|h| (self.net.up_free(h) - now).max(Duration::ZERO)),
+            uplink_rate: host.map(|h| self.net.up_rate(h, now)),
+        }
     }
 
     /// One walk, between two steps (see the module docs).

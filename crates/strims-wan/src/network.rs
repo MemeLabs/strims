@@ -279,6 +279,15 @@ impl Network {
         self.end(h).up_free
     }
 
+    /// `h`'s uplink rate at `at`, in bytes per second.
+    pub fn up_rate(&self, h: usize, at: Time) -> u64 {
+        let end = self.end(h);
+        let next = end.up_steps.partition_point(|&(t, _)| t <= at);
+        next.checked_sub(1)
+            .and_then(|i| end.up_steps.get(i))
+            .map_or(end.site.profile.up, |&(_, r)| r)
+    }
+
     /// When `h`'s downlink has delivered everything that reached it so far.
     pub fn down_free(&self, h: usize) -> Time {
         self.end(h).down_free

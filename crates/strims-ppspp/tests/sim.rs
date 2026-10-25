@@ -92,7 +92,7 @@ use strims_ppspp::{
     RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
     SwarmOptions, Writer, WriterOptions,
 };
-use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions};
+use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::sample::pick;
 use strims_wan::wire::tcp_wire;
 use strims_wan::{
@@ -1859,6 +1859,21 @@ impl Sim {
                 }
             }
             if let Some(c) = node.cap.as_mut() {
+                // The uplink holds no queue of its own: it pulls a frame
+                // when free, so its state is the time this one takes.
+                c.sample(
+                    now,
+                    None,
+                    &Sample::SimUplink {
+                        free_in: node.up_free - now,
+                        rate: node.up_bw,
+                        vtime: node
+                            .vtime
+                            .get(&l)
+                            .map_or(0, |&v| u64::try_from(v).unwrap_or(u64::MAX)),
+                        weight,
+                    },
+                );
                 c.frame(now, Dir::Out, peer, &frame);
                 c.drain(now, &mut node.runner);
             }

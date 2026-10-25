@@ -36,7 +36,7 @@ const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let inc = w.begin_incarnation(h);
     let config = w.node_config(h, inc).ok_or("unknown host")?;
-    let net = SimNet::new(w.send_buffers.clone());
+    let net = SimNet::new(w.send_buffers.clone()).with_wan(w.wan.clone());
     let (node, events) = Node::spawn(config, net, SimClock::turmoil(epoch())).await?;
     // Peers may link before the setup below finishes; they must know us.
     w.register_id(h, node.host_id());

@@ -66,7 +66,7 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         sim.host(hs.name.as_str(), move || host::host_main(wc.clone(), h));
     }
     sim.client(CONTROLLER, control::controller(w.clone()));
-    let mut wan = match spec.wan {
+    let wan = match spec.wan {
         Some(options) => Some(Scheduler::new(
             &sim,
             spec,
@@ -76,7 +76,9 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         )?),
         None => None,
     };
-    if wan.is_some() {
+    let has_wan = wan.is_some();
+    *w.wan.lock() = wan;
+    if has_wan {
         for hs in &spec.hosts {
             if let Some(site) = hs.site {
                 w.log_at(0, "wan", format!("{} {site}", hs.name));
@@ -103,10 +105,10 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         while let Some(f) = faults.get(next)
             && sim.elapsed() >= f.at
         {
-            apply(&mut sim, w, wan.as_mut(), &f.fault);
+            apply(&mut sim, w, w.wan.lock().as_mut(), &f.fault);
             next += 1;
         }
-        if let Some(s) = wan.as_mut() {
+        if let Some(s) = w.wan.lock().as_mut() {
             s.walk(&sim)?;
         }
         match sim.step() {
@@ -119,7 +121,7 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let ms = u64::try_from(sim.elapsed().as_millis()).unwrap_or(u64::MAX);
     // Dropping the simulation drops every runtime, and with them the nodes.
     drop(sim);
-    let wan = wan.map(|s| s.report(spec));
+    let wan = w.wan.lock().take().map(|s| s.report(spec));
     for h in wan.iter().flat_map(|r| &r.hosts) {
         w.log_at(
             ms,

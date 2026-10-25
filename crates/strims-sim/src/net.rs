@@ -31,10 +31,12 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
-use strims_node::{Net, TcpOptions, TcpSocketConfig, TurmoilNet};
+use strims_base::time::Time;
+use strims_node::{CaptureSample, LinkProbe, Net, TcpOptions, TcpSocketConfig, TurmoilNet};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::spec::SendBuffer;
+use crate::wan::SharedWan;
 
 /// A TCP connection by its local and peer addresses.
 pub(crate) type ConnKey = (SocketAddr, SocketAddr);
@@ -76,6 +78,11 @@ impl SendBuffers {
         self.with(|b| b.model)
     }
 
+    /// `conn`'s unsent bytes and `TCP_NOTSENT_LOWAT`, while it is open.
+    fn conn(&self, conn: ConnKey) -> Option<(u64, Option<u64>)> {
+        self.with(|b| b.conns.get(&conn).map(|c| (c.unsent, c.lowat)))
+    }
+
     /// `len` bytes of `conn` reached the uplink queue. Returns the writer
     /// to wake, if it waits.
     pub fn admit(&self, conn: ConnKey, len: usize) -> Option<Waker> {
@@ -96,11 +103,21 @@ impl SendBuffers {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct SimNet {
     buffers: Option<SendBuffers>,
+    /// The run's WAN model, for the capture's link probes.
+    wan: Option<SharedWan>,
 }
 
 impl SimNet {
     pub fn new(buffers: Option<SendBuffers>) -> SimNet {
-        SimNet { buffers }
+        SimNet { buffers, wan: None }
+    }
+
+    /// Lets the capture's link probes read `wan`.
+    pub fn with_wan(self, wan: SharedWan) -> SimNet {
+        SimNet {
+            wan: Some(wan),
+            ..self
+        }
     }
 
     fn wrap(&self, stream: turmoil::net::TcpStream) -> SimTcpStream {
@@ -115,6 +132,39 @@ impl SimNet {
             inner: stream,
             conn,
         }
+    }
+}
+
+/// A link's connection as the model holds it, for the capture.
+#[derive(Debug)]
+struct SimProbe {
+    conn: ConnKey,
+    buffers: Option<SendBuffers>,
+    wan: Option<SharedWan>,
+}
+
+impl LinkProbe for SimProbe {
+    fn sample(&mut self, now: Time) -> Option<CaptureSample> {
+        let (unsent, lowat) = self
+            .buffers
+            .as_ref()
+            .and_then(|b| b.conn(self.conn))
+            .unwrap_or((0, None));
+        let s = self
+            .wan
+            .as_ref()
+            .and_then(|w| w.lock().as_ref().map(|s| s.conn_state(self.conn, now)))
+            .unwrap_or_default();
+        Some(CaptureSample::SimConn {
+            unsent,
+            lowat,
+            cwnd: s.cwnd,
+            ssthresh: s.ssthresh,
+            in_flight: s.in_flight,
+            pending: s.pending,
+            uplink_queue: s.uplink_queue,
+            uplink_rate: s.uplink_rate,
+        })
     }
 }
 
@@ -232,6 +282,24 @@ impl Net for SimNet {
             }
         });
         Ok(Some(lowat))
+    }
+
+    /// The model's view of the stream's connection: its send buffer, and
+    /// with the WAN model, its window and its host's uplink.
+    fn link_probe(&self, stream: &SimTcpStream, _ws: bool) -> Option<Box<dyn LinkProbe>> {
+        let wan = self.wan.clone().filter(|w| w.lock().is_some());
+        if self.buffers.is_none() && wan.is_none() {
+            return None;
+        }
+        let conn = (
+            stream.inner.local_addr().ok()?,
+            stream.inner.peer_addr().ok()?,
+        );
+        Some(Box::new(SimProbe {
+            conn,
+            buffers: self.buffers.clone(),
+            wan,
+        }))
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {

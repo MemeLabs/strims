@@ -27,6 +27,7 @@ use crate::report::{HostReport, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
 use crate::stream::{FrameParser, Parsed, SeqSet, ViewerStats};
+use crate::wan::SharedWan;
 use crate::{EPOCH_MS, TCP_PORT, UDP_PORT, WS_PORT};
 
 /// The peer index key every host publishes under (with its name as salt).
@@ -180,6 +181,8 @@ pub(crate) struct World {
     pub memory: Option<GroupCounters>,
     /// WAN mode's TCP send buffers ([`Scenario::send_buffer`]).
     pub send_buffers: Option<SendBuffers>,
+    /// The WAN schedule, once the run made it.
+    pub wan: SharedWan,
     pub st: RefCell<WorldState>,
 }
 
@@ -220,6 +223,7 @@ impl World {
             network_keys,
             memory,
             send_buffers,
+            wan: SharedWan::default(),
             st: RefCell::new(st),
         }
     }
