@@ -5,8 +5,8 @@
 
 use strims_base::time::{Duration, Time};
 use strims_ppspp_capture::{
-    Clock, Dir, Error, Header, MAX_FRAME, MAX_LABEL, MAX_NAME, MAX_RECORD, Reader, Record,
-    SwarmParams, TapRecord, Writer,
+    Clock, Dir, Error, Header, MAX_FRAME, MAX_LABEL, MAX_NAME, MAX_RECORD, MAX_SAMPLE_FIELDS,
+    MAX_TAP_FIELDS, Reader, Record, SampleRecord, SwarmParams, TapRecord, Writer,
 };
 
 fn t0() -> Time {
@@ -102,12 +102,41 @@ fn records(frame: &[u8]) -> Vec<(Time, Record<'_>)> {
             },
         ),
         (t0() + ms * 3, Record::Tap(TapRecord::new(1, 0, 0, &[]))),
+        (
+            t0() + ms * 3,
+            Record::Tap(TapRecord::new(27, 1, 1, &FULL[..MAX_TAP_FIELDS])),
+        ),
         (t0() + ms * 4, Record::TapLost { count: 12 }),
+        (
+            t0() + ms * 4,
+            Record::Sample(SampleRecord::new(2, 1, &FULL[..MAX_SAMPLE_FIELDS])),
+        ),
+        (t0() + ms * 4, Record::Sample(SampleRecord::new(6, 0, &[]))),
         (t0() + ms * 5, Record::ChannelClose { peer: 1, swarm: 1 }),
         (t0() + ms * 5, Record::SwarmGone { swarm: 1 }),
         (t0() + ms * 5, Record::PeerGone { peer: 1 }),
     ]
 }
+
+/// Field values of every size and sign.
+const FULL: [i64; 16] = [
+    0,
+    -1,
+    1,
+    i64::MIN,
+    i64::MAX,
+    1 << 40,
+    -(1 << 40),
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+];
 
 fn write(header: &Header<'_>, records: &[(Time, Record<'_>)]) -> Vec<u8> {
     let mut w = Writer::new(Vec::new(), header).unwrap();
@@ -279,13 +308,58 @@ fn other_files_are_refused() {
         Err(Error::BadMagic)
     ));
     let mut bytes = write(&header(), &[]);
-    bytes[9] = 2;
+    bytes[9] = 3;
     assert!(matches!(
         Reader::new(&bytes[..]),
-        Err(Error::UnsupportedVersion(2))
+        Err(Error::UnsupportedVersion(3))
+    ));
+    bytes[9] = 0;
+    assert!(matches!(
+        Reader::new(&bytes[..]),
+        Err(Error::UnsupportedVersion(0))
     ));
     assert!(matches!(
         Reader::new(&b"STRIMSPC\x00\x01"[..]),
         Err(Error::BadHeader(_))
     ));
+}
+
+#[test]
+fn version_1_dumps_still_decode() {
+    // Version 1 is version 2 without samples and with at most 4 tap
+    // fields; its writers padded tap records to 3.
+    let recs = [
+        (
+            t0(),
+            Record::Peer {
+                peer: 1,
+                name: b"0",
+            },
+        ),
+        (t0(), Record::Tap(TapRecord::new(10, 1, 0, &[6, 0, 0]))),
+        (t0(), Record::TapLost { count: 1 }),
+    ];
+    let mut bytes = write(&header(), &recs);
+    bytes[9] = 1;
+    let mut r = Reader::new(&bytes[..]).unwrap();
+    assert_eq!(r.header().version, 1);
+    for (t, rec) in &recs {
+        let e = r.next_record().unwrap().unwrap();
+        assert_eq!((e.time, e.record), (*t, *rec));
+    }
+    assert!(r.next_record().is_none());
+}
+
+#[test]
+fn records_past_the_field_limits_are_malformed() {
+    let mut w = Writer::new(Vec::new(), &header()).unwrap();
+    w.write(t0(), &Record::Sample(SampleRecord::new(1, 0, &[1])))
+        .unwrap();
+    let mut bytes = w.into_inner();
+    // [len, kind, dt, source, peer, n, field]: n becomes 17
+    let at = bytes.len() - 2;
+    bytes[at] = (MAX_SAMPLE_FIELDS + 1) as u8;
+    let mut r = Reader::new(&bytes[..]).unwrap();
+    let e = r.next_record().unwrap().unwrap_err();
+    assert!(e.is_recoverable(), "{e}");
 }

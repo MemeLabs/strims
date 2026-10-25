@@ -9,7 +9,7 @@ use std::io::{self, Read};
 use strims_base::time::{Duration, Time};
 
 use crate::format::{
-    Clock, Dec, Header, KIND_HEADER, MAGIC, MAX_RECORD, RawHeader, Record, VERSION,
+    Clock, Dec, Header, KIND_HEADER, MAGIC, MAX_RECORD, OLDEST_VERSION, RawHeader, Record, VERSION,
 };
 
 /// Why a dump can't be read further, or why one record was skipped.
@@ -103,7 +103,7 @@ impl<R: Read> Reader<R> {
             return Err(Error::BadMagic);
         }
         let version = u16::from_be_bytes([v0, v1]);
-        if version != VERSION {
+        if !(OLDEST_VERSION..=VERSION).contains(&version) {
             return Err(Error::UnsupportedVersion(version));
         }
         let mut rd = Reader {

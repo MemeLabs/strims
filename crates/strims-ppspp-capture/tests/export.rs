@@ -11,7 +11,8 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{ChannelWriter, Data, Have, Message, MessageWriter, Ping, Pong, Request};
 use strims_ppspp_capture::{
-    Clock, Dir, Header, Reader, Record, SwarmParams, TapRecord, Writer, export, tap_kind,
+    Clock, Dir, Header, Reader, Record, Sample, SampleRecord, SwarmParams, TapRecord, Writer,
+    export, tap_kind,
 };
 
 fn t(ms: i64) -> Time {
@@ -299,4 +300,51 @@ fn malformed_frames_become_rows() {
     let kinds: Vec<&str> = got.iter().map(|r| r["type"].as_str().unwrap()).collect();
     assert_eq!(kinds, ["FRAME", "MALFORMED"]);
     assert_eq!(got[0]["peer"], "?4");
+}
+
+#[test]
+fn samples_become_rows() {
+    let mut w = Writer::new(
+        Vec::new(),
+        &Header {
+            clock: Clock::Node,
+            origin: t(0),
+            file: 0,
+            node: &[1],
+            label: "",
+        },
+    )
+    .unwrap();
+    w.write(
+        t(0),
+        &Record::Peer {
+            peer: 1,
+            name: &[2],
+        },
+    )
+    .unwrap();
+    let (source, fields) = Sample::WebSocket { buffered: 300 }.encode();
+    w.write(t(5), &Record::Sample(SampleRecord::new(source, 1, &fields)))
+        .unwrap();
+    let (source, fields) = Sample::SimUplink {
+        free_in: Duration::from_millis(2),
+        rate: 1000,
+        vtime: 7,
+        weight: 1,
+    }
+    .encode();
+    w.write(t(6), &Record::Sample(SampleRecord::new(source, 0, &fields)))
+        .unwrap();
+    w.write(t(7), &Record::Sample(SampleRecord::new(999, 0, &[1])))
+        .unwrap();
+    let got = rows(&w.into_inner());
+    let want = [
+        json!({"t": t(5).unix_nanos(), "node": "01", "peer": "02", "dir": "sample", "frame": 0,
+            "type": "WebSocket", "buffered": 300}),
+        json!({"t": t(6).unix_nanos(), "node": "01", "dir": "sample", "frame": 0,
+            "type": "SimUplink", "free_in": 2_000_000, "rate": 1000, "vtime": 7, "weight": 1}),
+        json!({"t": t(7).unix_nanos(), "node": "01", "dir": "sample", "frame": 0,
+            "type": "SAMPLE_UNKNOWN"}),
+    ];
+    assert_eq!(got, want);
 }

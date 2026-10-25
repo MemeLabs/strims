@@ -5,9 +5,12 @@
 
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-use strims_ppspp_capture::{Clock, Dir, Error, Reader, Record, export, tap_kind};
+use strims_ppspp_capture::{
+    Clock, Dir, Error, Reader, Record, export, sample_kind, swarm::swarm, tap_kind,
+};
 
 const USAGE: &str = "\
 usage: ppspp-capture <command> [file...]
@@ -15,9 +18,13 @@ usage: ppspp-capture <command> [file...]
 Reads ppspp capture dumps: each file, or standard input for none or `-`.
 
 commands:
-  export   one JSON object per line: a row per frame, per ppspp message
-           and per scheduler decision that annotates no message (the
-           crate's export module documents the fields)
+  export   one JSON object per line: a row per frame, per ppspp message,
+           per scheduler decision that annotates no message and per
+           sample (the crate's export module documents the fields)
+  swarm    the export rows of several nodes' dumps (files, or directories
+           of .ppcap files) in time order, with each DATA in tied to its
+           DATA out and each refusal a child hears to its parent's
+           decision (the crate's swarm module documents them)
   info     each file's header and swarms, and what it holds
   help     print this";
 
@@ -28,11 +35,14 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let mut files: Vec<String> = args.collect();
+    let stdout = io::stdout();
+    let mut out = BufWriter::new(stdout.lock());
+    if cmd == "swarm" {
+        return swarm_command(&files, &mut out);
+    }
     if files.is_empty() {
         files.push("-".into());
     }
-    let stdout = io::stdout();
-    let mut out = BufWriter::new(stdout.lock());
     let mut ok = true;
     for path in &files {
         let input: Box<dyn Read> = if path == "-" {
@@ -88,6 +98,58 @@ fn main() -> ExitCode {
     }
 }
 
+/// `swarm`: the dumps named, and those in the directories named.
+fn swarm_command(args: &[String], out: &mut impl Write) -> ExitCode {
+    let mut paths = Vec::new();
+    for a in args {
+        let p = PathBuf::from(a);
+        if p.is_dir() {
+            let entries = match std::fs::read_dir(&p) {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("{a}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let mut found: Vec<PathBuf> = entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "ppcap"))
+                .collect();
+            found.sort();
+            paths.extend(found);
+        } else {
+            paths.push(p);
+        }
+    }
+    if paths.is_empty() {
+        eprintln!("swarm: no dumps\n\n{USAGE}");
+        return ExitCode::FAILURE;
+    }
+    let mut ok = true;
+    let res = swarm(&paths, out, &mut |e| {
+        eprintln!("{e}");
+        ok = false;
+    });
+    match res.and_then(|s| out.flush().map(|()| s)) {
+        Ok(s) => {
+            eprintln!(
+                "{} nodes, {} rows, {} frames; {} DATA and {} refusals tied; {} errors",
+                s.nodes, s.rows, s.frames, s.data_joined, s.decisions_joined, s.errors
+            );
+        }
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("swarm: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 /// What a file holds, in a few lines.
 fn info<R: Read>(
     path: &str,
@@ -114,6 +176,7 @@ fn info<R: Read>(
     let (mut records, mut taps, mut lost, mut errors, mut peers) = (0u64, 0u64, 0u64, 0u64, 0u64);
     let mut last = h.origin;
     let mut by_kind = std::collections::BTreeMap::<&str, u64>::new();
+    let mut by_source = std::collections::BTreeMap::<&str, u64>::new();
     while let Some(e) = r.next_record() {
         let e = match e {
             Ok(e) => e,
@@ -161,6 +224,11 @@ fn info<R: Read>(
                     .or_default() += 1;
             }
             Record::TapLost { count } => lost += count,
+            Record::Sample(s) => {
+                *by_source
+                    .entry(sample_kind(s.source).map_or("unknown", |k| k.name))
+                    .or_default() += 1;
+            }
             _ => {}
         }
     }
@@ -174,6 +242,10 @@ fn info<R: Read>(
     if !by_kind.is_empty() {
         let kinds: Vec<String> = by_kind.iter().map(|(k, n)| format!("{k} {n}")).collect();
         writeln!(out, "  decisions: {}", kinds.join(", "))?;
+    }
+    if !by_source.is_empty() {
+        let sources: Vec<String> = by_source.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        writeln!(out, "  samples: {}", sources.join(", "))?;
     }
     Ok(())
 }

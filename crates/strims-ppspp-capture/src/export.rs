@@ -1,20 +1,21 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A dump as rows: one per frame, one per ppspp message in it, and one per
-//! tap decision that annotates no message. [`export`] writes them as JSON
-//! lines, an object per row, leaving out fields a row doesn't have:
+//! A dump as rows: one per frame, one per ppspp message in it, one per
+//! tap decision that annotates no message, and one per sample. [`export`]
+//! writes them as JSON lines, an object per row, leaving out fields a row
+//! doesn't have:
 //!
 //! | field | value |
 //! |---|---|
 //! | `t` | the record's time, ns since the Unix epoch |
 //! | `node` | the capturing node's name, hex |
 //! | `peer` | the peer's name, hex |
-//! | `dir` | `in`, `out` or `tap` |
-//! | `frame` | the frame's number in the dump, from 1; on a tap row, the last frame's |
+//! | `dir` | `in`, `out`, `tap` or `sample` |
+//! | `frame` | the frame's number in the dump, from 1; on a tap or sample row, the last frame's |
 //! | `swarm` | the swarm's id in the dump |
 //! | `channel` | the wire channel id |
-//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`, `ANNOUNCE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, or a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)) |
+//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`, `ANNOUNCE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)), or a sample source's ([`SAMPLE_KINDS`](crate::SAMPLE_KINDS)) |
 //! | `bin` | the bin |
 //! | `first`, `last` | its first and last chunk |
 //! | `stream` | the stream: a message's, or a single chunk's (`chunk % stream_count`) |
@@ -26,22 +27,26 @@
 //! | `from` | the previous parent of a switch, hex |
 //! | `delay` | ACK and PONG delays, ns |
 //! | `nonce` | PING and PONG nonces: a pong carries its ping's |
-//! | `budget`, `copies`, `streams`, `count` | other fields of a decision; `count` on ANNOUNCE, its entries |
+//! | `count` | on ANNOUNCE, its entries; on `TapLost`, the events lost |
 //!
-//! A tap row carries its decision's fields by these names. Decisions about
-//! data go onto the DATA row they describe, in the frame just before them:
-//! `DataSent` on DATA out, and `PushHit`, `PushLate`, `PushUnsolicited`
-//! and `DataStale` on DATA in.
+//! A tap row carries its decision's fields, and a sample row its
+//! source's, by their tables' names: a peer as its name in hex, a named
+//! value as its name, any other as a number. Decisions about data go onto
+//! the DATA row they describe, in the frame just before them: `DataSent`
+//! on DATA out, and `PushHit`, `PushLate`, `PushUnsolicited` and
+//! `DataStale` on DATA in.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 
 use strims_binmap::Bin;
 use strims_ppspp::codec::{FrameReader, Message, Reader as MessageReader, ReaderConfig};
 
-use crate::capture::tap_kind;
-use crate::format::{Dir, Record, SwarmParams, TapRecord};
+use crate::capture::{FieldKind, KindInfo, tap_kind};
+use crate::format::{Dir, MAX_TAP_FIELDS, Record, SampleRecord, SwarmParams, TapRecord};
 use crate::reader::{Error, Reader};
+use crate::sample::sample_kind;
 
 /// Rows a frame holds while the decisions after it may annotate them;
 /// rows past it are written at once.
@@ -67,6 +72,15 @@ enum RowDir {
     Out,
     #[default]
     Tap,
+    Sample,
+}
+
+/// A decision's or a sample's field value.
+#[derive(Clone, Copy, Debug)]
+enum Val {
+    Num(i64),
+    Peer(u32),
+    Name(&'static str),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -88,24 +102,78 @@ struct Row {
     from: Option<u32>,
     delay: Option<i64>,
     nonce: Option<u64>,
-    other: [Option<(&'static str, i64)>; 3],
+    other: [Option<(&'static str, Val)>; MAX_TAP_FIELDS],
 }
 
-/// One dump's state.
-struct Dump<'w, W: Write> {
-    out: &'w mut W,
+/// What ties a row to a row in another node's dump.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Join {
+    /// DATA sent to `to`: `ann` is `push` or `answer` once known.
+    Sent {
+        to: String,
+        swarm: String,
+        bin: u64,
+        ann: Option<&'static str>,
+    },
+    /// DATA received from `from`.
+    Received {
+        from: String,
+        swarm: String,
+        bin: u64,
+    },
+    /// A decision about `child`'s subscription that the child hears of as
+    /// `heard` (a `Rejected` as `Declined`, a `Shed` as `ShedBy`).
+    Decided {
+        child: String,
+        swarm: String,
+        stream: u64,
+        heard: &'static str,
+    },
+    /// A child's `Declined` or `ShedBy` from `parent`.
+    Heard {
+        parent: String,
+        swarm: String,
+        stream: u64,
+        kind: &'static str,
+    },
+}
+
+/// Where a dump's rows go: each as its JSON object without the closing
+/// brace, and when the sink asks for them, its join.
+pub(crate) trait RowSink {
+    fn wants_joins(&self) -> bool {
+        false
+    }
+    fn row(&mut self, t: i64, json: &str, join: Option<Join>) -> io::Result<()>;
+}
+
+/// Writes rows as JSON lines.
+struct Lines<'w, W: Write>(&'w mut W);
+
+impl<W: Write> RowSink for Lines<'_, W> {
+    fn row(&mut self, _: i64, json: &str, _: Option<Join>) -> io::Result<()> {
+        self.0.write_all(json.as_bytes())?;
+        self.0.write_all(b"}\n")
+    }
+}
+
+/// One node's dump state, across the files of a rotated capture.
+pub(crate) struct Dump<S> {
+    pub(crate) sink: S,
     node: String,
+    version: u16,
     /// Bound: [`MAX_TRACKED`].
     peers: BTreeMap<u32, String>,
     /// Bound: [`MAX_TRACKED`].
-    swarms: BTreeMap<u32, SwarmParams>,
+    swarms: BTreeMap<u32, (SwarmParams, String)>,
     /// (peer, frames in, wire channel) to swarm. Bound: [`MAX_TRACKED`].
     channels: BTreeMap<(u32, bool, u64), u32>,
     frame: u64,
     /// The last frame's rows. Bound: [`MAX_HELD`].
     held: Vec<Row>,
     held_from: (u32, RowDir),
-    stats: ExportStats,
+    buf: String,
+    pub(crate) stats: ExportStats,
 }
 
 /// Writes `reader`'s records as JSON lines. Records that don't decode go
@@ -116,18 +184,7 @@ pub fn export<R: Read, W: Write>(
     out: &mut W,
     on_error: &mut dyn FnMut(&Error),
 ) -> io::Result<ExportStats> {
-    let node = hex(&reader.header().node);
-    let mut d = Dump {
-        out,
-        node,
-        peers: BTreeMap::new(),
-        swarms: BTreeMap::new(),
-        channels: BTreeMap::new(),
-        frame: 0,
-        held: Vec::new(),
-        held_from: (0, RowDir::Tap),
-        stats: ExportStats::default(),
-    };
+    let mut d = Dump::new(Lines(out), &reader.header().node, reader.header().version);
     while let Some(e) = reader.next_record() {
         match e {
             Ok(e) => d.record(e.time.unix_nanos(), &e.record)?,
@@ -141,8 +198,29 @@ pub fn export<R: Read, W: Write>(
     Ok(d.stats)
 }
 
-impl<W: Write> Dump<'_, W> {
-    fn record(&mut self, t: i64, r: &Record<'_>) -> io::Result<()> {
+impl<S: RowSink> Dump<S> {
+    pub(crate) fn new(sink: S, node: &[u8], version: u16) -> Dump<S> {
+        Dump {
+            sink,
+            node: hex(node),
+            version,
+            peers: BTreeMap::new(),
+            swarms: BTreeMap::new(),
+            channels: BTreeMap::new(),
+            frame: 0,
+            held: Vec::new(),
+            held_from: (0, RowDir::Tap),
+            buf: String::new(),
+            stats: ExportStats::default(),
+        }
+    }
+
+    /// The next file of the same node's capture: its version may differ.
+    pub(crate) fn set_version(&mut self, version: u16) {
+        self.version = version;
+    }
+
+    pub(crate) fn record(&mut self, t: i64, r: &Record<'_>) -> io::Result<()> {
         if !matches!(r, Record::Tap(_) | Record::TapLost { .. }) {
             self.flush()?;
         }
@@ -152,9 +230,9 @@ impl<W: Write> Dump<'_, W> {
                     self.peers.insert(peer, hex(name));
                 }
             }
-            Record::Swarm { swarm, params, .. } => {
+            Record::Swarm { swarm, id, params } => {
                 if self.swarms.len() < MAX_TRACKED || self.swarms.contains_key(&swarm) {
-                    self.swarms.insert(swarm, params);
+                    self.swarms.insert(swarm, (params, hex(id)));
                 }
             }
             Record::SwarmGone { swarm } => {
@@ -198,10 +276,11 @@ impl<W: Write> Dump<'_, W> {
                     t,
                     frame: self.frame,
                     kind: "TapLost",
-                    other: [Some(("count", count as i64)), None, None],
+                    other: count_field(count as i64),
                     ..Row::default()
                 })?;
             }
+            Record::Sample(sr) => self.sample(t, &sr)?,
             Record::PeerGone { .. } | Record::Unknown { .. } => {}
         }
         Ok(())
@@ -241,7 +320,7 @@ impl<W: Write> Dump<'_, W> {
                 .get(&(peer, dir == Dir::In, h.channel))
                 .copied();
             let Some((swarm, params)) = swarm
-                .and_then(|s| self.swarms.get(&s).map(|p| (s, *p)))
+                .and_then(|s| self.swarms.get(&s).map(|p| (s, p.0)))
                 .filter(|(_, p)| {
                     p.chunk_size <= MAX_CHUNK
                         && p.integrity_hash_size <= MAX_INTEGRITY
@@ -298,7 +377,7 @@ impl<W: Write> Dump<'_, W> {
         }
     }
 
-    fn flush(&mut self) -> io::Result<()> {
+    pub(crate) fn flush(&mut self) -> io::Result<()> {
         let held = std::mem::take(&mut self.held);
         for row in &held {
             self.write(row)?;
@@ -353,25 +432,27 @@ impl<W: Write> Dump<'_, W> {
             kind: name,
             ..Row::default()
         };
-        let mut other = 0;
-        let fields = info.map_or(&[][..], |k| k.fields);
-        for (i, &f) in fields.iter().enumerate() {
-            let v = tr.field(i);
-            match f {
-                "bin" => {
-                    let b = Bin(v as u64);
-                    row.bin = Some(b);
-                    row.stream = chunk_stream(b, self.swarms.get(&tr.swarm));
-                }
-                "push" => row.ann = Some(if v == 1 { "push" } else { "answer" }),
-                "queued" => row.wait = wait(t, v),
-                "lag" => row.lag = Some(v),
-                "stream" => row.stream = Some(v as u64),
-                "from" => row.from = u32::try_from(v).ok(),
-                f => {
-                    if let Some(slot) = row.other.get_mut(other) {
-                        *slot = Some((f, v));
-                        other += 1;
+        if let Some(info) = info {
+            let n = info.fields_of(self.version, tr.fields().len());
+            let mut other = 0;
+            for (i, f) in info.fields.iter().enumerate().take(n) {
+                let v = tr.field(i);
+                match f.name {
+                    "bin" => {
+                        let b = Bin(v as u64);
+                        row.bin = Some(b);
+                        row.stream = chunk_stream(b, self.swarms.get(&tr.swarm).map(|s| &s.0));
+                    }
+                    "push" => row.ann = Some(if v == 1 { "push" } else { "answer" }),
+                    "queued" => row.wait = wait(t, v),
+                    "lag" => row.lag = Some(v),
+                    "stream" => row.stream = Some(v as u64),
+                    "from" => row.from = u32::try_from(v).ok(),
+                    _ => {
+                        if let Some(slot) = row.other.get_mut(other) {
+                            *slot = Some((f.name, value(info, i, v)));
+                            other += 1;
+                        }
                     }
                 }
             }
@@ -379,37 +460,74 @@ impl<W: Write> Dump<'_, W> {
         self.hold(row)
     }
 
+    fn sample(&mut self, t: i64, sr: &SampleRecord) -> io::Result<()> {
+        let info = sample_kind(sr.source);
+        let mut row = Row {
+            t,
+            dir: RowDir::Sample,
+            peer: sr.peer,
+            frame: self.frame,
+            kind: info.map_or("SAMPLE_UNKNOWN", |k| k.name),
+            ..Row::default()
+        };
+        if let Some(info) = info {
+            let n = sr.fields().len().min(info.fields.len());
+            for (i, (slot, f)) in row.other.iter_mut().zip(info.fields).take(n).enumerate() {
+                *slot = Some((f.name, value(info, i, sr.field(i))));
+            }
+        }
+        self.write(&row)
+    }
+
+    fn peer_name(&self, peer: u32) -> String {
+        self.peers
+            .get(&peer)
+            .cloned()
+            .unwrap_or_else(|| format!("?{peer}"))
+    }
+
     fn write(&mut self, r: &Row) -> io::Result<()> {
         self.stats.rows += 1;
-        let o = &mut *self.out;
-        write!(o, "{{\"t\":{},\"node\":\"{}\"", r.t, self.node)?;
+        let mut o = std::mem::take(&mut self.buf);
+        o.clear();
+        self.render(&mut o, r);
+        let join = if self.sink.wants_joins() {
+            self.join(r)
+        } else {
+            None
+        };
+        let res = self.sink.row(r.t, &o, join);
+        self.buf = o;
+        res
+    }
+
+    fn render(&self, o: &mut String, r: &Row) {
+        let _ = write!(o, "{{\"t\":{},\"node\":\"{}\"", r.t, self.node);
         if r.peer != 0 {
-            match self.peers.get(&r.peer) {
-                Some(p) => write!(o, ",\"peer\":\"{p}\"")?,
-                None => write!(o, ",\"peer\":\"?{}\"", r.peer)?,
-            }
+            let _ = write!(o, ",\"peer\":\"{}\"", self.peer_name(r.peer));
         }
         let dir = match r.dir {
             RowDir::In => "in",
             RowDir::Out => "out",
             RowDir::Tap => "tap",
+            RowDir::Sample => "sample",
         };
-        write!(o, ",\"dir\":\"{dir}\",\"frame\":{}", r.frame)?;
+        let _ = write!(o, ",\"dir\":\"{dir}\",\"frame\":{}", r.frame);
         if r.swarm != 0 {
-            write!(o, ",\"swarm\":{}", r.swarm)?;
+            let _ = write!(o, ",\"swarm\":{}", r.swarm);
         }
         if let Some(c) = r.channel {
-            write!(o, ",\"channel\":{c}")?;
+            let _ = write!(o, ",\"channel\":{c}");
         }
-        write!(o, ",\"type\":\"{}\"", r.kind)?;
+        let _ = write!(o, ",\"type\":\"{}\"", r.kind);
         if let Some(b) = r.bin {
-            write!(
+            let _ = write!(
                 o,
                 ",\"bin\":{},\"first\":{},\"last\":{}",
                 b.0,
                 b.base_offset(),
                 b.base_right().0 >> 1
-            )?;
+            );
         }
         let nums = [
             ("stream", r.stream.map(|v| v as i64)),
@@ -418,30 +536,80 @@ impl<W: Write> Dump<'_, W> {
         ];
         for (k, v) in nums {
             if let Some(v) = v {
-                write!(o, ",\"{k}\":{v}")?;
+                let _ = write!(o, ",\"{k}\":{v}");
             }
         }
         if let Some(a) = r.ann {
-            write!(o, ",\"ann\":\"{a}\"")?;
+            let _ = write!(o, ",\"ann\":\"{a}\"");
         }
         for (k, v) in [("wait", r.wait), ("lag", r.lag), ("delay", r.delay)] {
             if let Some(v) = v {
-                write!(o, ",\"{k}\":{v}")?;
+                let _ = write!(o, ",\"{k}\":{v}");
             }
         }
         if let Some(n) = r.nonce {
-            write!(o, ",\"nonce\":{n}")?;
+            let _ = write!(o, ",\"nonce\":{n}");
         }
         if let Some(f) = r.from {
-            match self.peers.get(&f) {
-                Some(p) => write!(o, ",\"from\":\"{p}\"")?,
-                None => write!(o, ",\"from\":\"?{f}\"")?,
-            }
+            let _ = write!(o, ",\"from\":\"{}\"", self.peer_name(f));
         }
         for (k, v) in r.other.iter().flatten() {
-            write!(o, ",\"{k}\":{v}")?;
+            let _ = match v {
+                Val::Num(v) => write!(o, ",\"{k}\":{v}"),
+                Val::Peer(0) => write!(o, ",\"{k}\":null"),
+                Val::Peer(p) => write!(o, ",\"{k}\":\"{}\"", self.peer_name(*p)),
+                Val::Name(n) => write!(o, ",\"{k}\":\"{n}\""),
+            };
         }
-        o.write_all(b"}\n")
+    }
+
+    /// What ties the row to another node's dump, if anything.
+    fn join(&self, r: &Row) -> Option<Join> {
+        let peer = self.peers.get(&r.peer)?.clone();
+        let swarm = self.swarms.get(&r.swarm)?.1.clone();
+        Some(match (r.dir, r.kind) {
+            (RowDir::Out, "DATA") => Join::Sent {
+                to: peer,
+                swarm,
+                bin: r.bin?.0,
+                ann: r.ann,
+            },
+            (RowDir::In, "DATA") => Join::Received {
+                from: peer,
+                swarm,
+                bin: r.bin?.0,
+            },
+            (RowDir::Tap, "Rejected" | "Shed") => Join::Decided {
+                child: peer,
+                swarm,
+                stream: r.stream?,
+                heard: if r.kind == "Shed" {
+                    "ShedBy"
+                } else {
+                    "Declined"
+                },
+            },
+            (RowDir::Tap, kind @ ("Declined" | "ShedBy")) => Join::Heard {
+                parent: peer,
+                swarm,
+                stream: r.stream?,
+                kind,
+            },
+            _ => return None,
+        })
+    }
+
+    pub(crate) fn node(&self) -> &str {
+        &self.node
+    }
+}
+
+/// Field `i`'s value, as its kind reads it.
+fn value(info: &KindInfo, i: usize, v: i64) -> Val {
+    match info.fields.get(i).map(|f| f.kind) {
+        Some(FieldKind::Peer) => Val::Peer(u32::try_from(v).unwrap_or(0)),
+        Some(FieldKind::Enum(_)) => info.value_name(i, v).map_or(Val::Num(v), Val::Name),
+        _ => Val::Num(v),
     }
 }
 
@@ -524,11 +692,20 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
         },
         Message::Announce(a) => Row {
             kind: "ANNOUNCE",
-            other: [Some(("count", a.len() as i64)), None, None],
+            other: count_field(a.len() as i64),
             ..row
         },
         Message::End => Row { kind: "END", ..row },
     }
+}
+
+/// Fields holding only `count`.
+fn count_field(count: i64) -> [Option<(&'static str, Val)>; MAX_TAP_FIELDS] {
+    let mut other = [None; MAX_TAP_FIELDS];
+    if let Some(f) = other.first_mut() {
+        *f = Some(("count", Val::Num(count)));
+    }
+    other
 }
 
 /// A single chunk's stream.
@@ -542,8 +719,7 @@ fn wait(t: i64, queued: i64) -> Option<i64> {
     (queued != 0).then(|| t.saturating_sub(queued))
 }
 
-fn hex(b: &[u8]) -> String {
-    use std::fmt::Write as _;
+pub(crate) fn hex(b: &[u8]) -> String {
     let mut s = String::with_capacity(b.len() * 2);
     for x in b {
         let _ = write!(s, "{x:02x}");

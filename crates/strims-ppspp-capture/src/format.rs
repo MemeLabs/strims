@@ -7,8 +7,11 @@ use strims_base::time::Time;
 
 /// The first bytes of a dump.
 pub const MAGIC: [u8; 8] = *b"STRIMSPC";
-/// The format version this crate writes and reads.
-pub const VERSION: u16 = 1;
+/// The format version this crate writes.
+pub const VERSION: u16 = 2;
+/// The oldest version this crate reads. Version 1 is version 2 without
+/// sample records and with at most 4 fields per tap record.
+pub const OLDEST_VERSION: u16 = 1;
 /// The most bytes a record's `len` may count.
 pub const MAX_RECORD: usize = 256 * 1024;
 /// The most frame body bytes a record keeps.
@@ -22,7 +25,9 @@ pub const MAX_MESSAGE: usize = 256;
 /// The most params a swarm record may carry.
 pub const MAX_PARAMS: usize = 32;
 /// The most fields a tap record carries.
-pub const MAX_TAP_FIELDS: usize = 4;
+pub const MAX_TAP_FIELDS: usize = 16;
+/// The most fields a sample record carries.
+pub const MAX_SAMPLE_FIELDS: usize = 16;
 
 pub(crate) const KIND_HEADER: u8 = 0;
 const KIND_PEER: u8 = 1;
@@ -36,6 +41,7 @@ const KIND_FRAME_OUT: u8 = 8;
 const KIND_FRAME_ERROR: u8 = 9;
 const KIND_TAP: u8 = 10;
 const KIND_TAP_LOST: u8 = 11;
+const KIND_SAMPLE: u8 = 12;
 
 /// The time source of a capture's records.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -230,6 +236,42 @@ impl TapRecord {
     }
 }
 
+/// One reading of the state below ppspp: a link's or its node's. The
+/// capture's writer defines the sources and their fields.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SampleRecord {
+    pub source: u32,
+    /// The peer whose link it describes, or 0 for the node.
+    pub peer: u32,
+    fields: [i64; MAX_SAMPLE_FIELDS],
+    len: u8,
+}
+
+impl SampleRecord {
+    /// A record with the first [`MAX_SAMPLE_FIELDS`] of `fields`.
+    pub fn new(source: u32, peer: u32, fields: &[i64]) -> SampleRecord {
+        let mut r = SampleRecord {
+            source,
+            peer,
+            ..SampleRecord::default()
+        };
+        for (dst, &src) in r.fields.iter_mut().zip(fields) {
+            *dst = src;
+            r.len += 1;
+        }
+        r
+    }
+
+    pub fn fields(&self) -> &[i64] {
+        self.fields.get(..usize::from(self.len)).unwrap_or_default()
+    }
+
+    /// Field `i`, or 0 when the record has fewer.
+    pub fn field(&self, i: usize) -> i64 {
+        self.fields().get(i).copied().unwrap_or(0)
+    }
+}
+
 /// A record after the header. Ids are the dump's, from 1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Record<'a> {
@@ -275,6 +317,7 @@ pub enum Record<'a> {
     TapLost {
         count: u64,
     },
+    Sample(SampleRecord),
     /// A kind this version doesn't know.
     Unknown {
         kind: u8,
@@ -295,6 +338,7 @@ impl Record<'_> {
             Record::FrameError { .. } => KIND_FRAME_ERROR,
             Record::Tap(_) => KIND_TAP,
             Record::TapLost { .. } => KIND_TAP_LOST,
+            Record::Sample(_) => KIND_SAMPLE,
             Record::Unknown { kind } => *kind,
         }
     }
@@ -353,6 +397,14 @@ impl Record<'_> {
                 }
             }
             Record::TapLost { count } => put_uvarint(buf, count),
+            Record::Sample(r) => {
+                put_uvarint(buf, r.source.into());
+                put_uvarint(buf, r.peer.into());
+                put_uvarint(buf, u64::from(r.len));
+                for &f in r.fields() {
+                    put_svarint(buf, f);
+                }
+            }
             Record::Unknown { .. } => {}
         }
         &[]
@@ -441,6 +493,20 @@ impl Record<'_> {
             KIND_TAP_LOST => Record::TapLost {
                 count: d.uvarint()?,
             },
+            KIND_SAMPLE => {
+                let source = d.u32()?;
+                let peer = d.u32()?;
+                let n = d.uvarint()?;
+                if n > MAX_SAMPLE_FIELDS as u64 {
+                    return Err("too many sample fields");
+                }
+                let mut fields = [0; MAX_SAMPLE_FIELDS];
+                let fields = fields.get_mut(..n as usize).unwrap_or_default();
+                for f in fields.iter_mut() {
+                    *f = d.svarint()?;
+                }
+                Record::Sample(SampleRecord::new(source, peer, fields))
+            }
             KIND_HEADER => return Err("a second header"),
             kind => Record::Unknown { kind },
         })

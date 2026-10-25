@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Captures of one node's ppspp traffic: every frame it sends and receives,
-//! the lifecycle of its peers, swarms and channels, and the scheduler
-//! decisions its runner's tap reports. A dump is one stream of records per
-//! capturing node, and it decodes without the code that wrote it.
+//! the lifecycle of its peers, swarms and channels, the scheduler
+//! decisions its runner's tap reports, and samples of the state below
+//! ppspp that those decisions react to ([`sample`]). A dump is one stream
+//! of records per capturing node, and it decodes without the code that
+//! wrote it.
 //!
 //! [`Writer`] encodes records into any [`std::io::Write`], and [`Reader`]
 //! decodes them from any [`std::io::Read`]. A dump is untrusted input to
@@ -14,7 +16,9 @@
 //!
 //! Integers are LEB128 varints: `uvarint` is at most 10 bytes and must fit
 //! a `u64`, and `svarint` is a zigzag-encoded `uvarint`. `bytes` is a
-//! `uvarint` length followed by that many bytes. Version 1:
+//! `uvarint` length followed by that many bytes. Version 2 ([`VERSION`]);
+//! readers also read version 1 ([`OLDEST_VERSION`]), which has no sample
+//! records and at most 4 fields per tap record:
 //!
 //! ```text
 //! dump   = magic version header record*
@@ -46,6 +50,7 @@
 //! | 9 | frame error | `peer:uvarint message:bytes` |
 //! | 10 | tap | `kind:uvarint peer:uvarint swarm:uvarint n:uvarint field:svarint{n}` |
 //! | 11 | tap lost | `count:uvarint` |
+//! | 12 | sample | `source:uvarint peer:uvarint n:uvarint field:svarint{n}` |
 //!
 //! - **Header.** `clock` names the time source ([`Clock`]). `origin` is
 //!   the time the capture started. `file` counts the files of a rotated
@@ -70,6 +75,9 @@
 //!   writer of a capture defines the kinds. Tap records follow the frame of
 //!   the runner call that produced them. Tap lost counts events dropped
 //!   because the runner's buffer filled between drains.
+//! - **Samples** carry one reading of the state below ppspp, of a peer's
+//!   link or (peer 0) of the node, as up to [`MAX_SAMPLE_FIELDS`] signed
+//!   fields. The writer defines the sources ([`SAMPLE_KINDS`]).
 //!
 //! Every file of a capture begins, after its header, with records for the
 //! peers, swarms and open channels that exist when it starts, so each file
@@ -79,14 +87,18 @@ mod capture;
 pub mod export;
 mod format;
 mod reader;
+pub mod sample;
+pub mod swarm;
 mod writer;
 
-pub use capture::{Capture, Options, Sink, Stats, TAP_KINDS, TapKindInfo, tap_kind};
+pub use capture::{Capture, Field, FieldKind, KindInfo, Options, Sink, Stats, TAP_KINDS, tap_kind};
 pub use export::{ExportStats, export};
+pub use sample::{SAMPLE_KINDS, Sample, sample_kind};
 
 pub use format::{
     Clock, Dir, Header, MAGIC, MAX_FRAME, MAX_LABEL, MAX_MESSAGE, MAX_NAME, MAX_PARAMS, MAX_RECORD,
-    MAX_TAP_FIELDS, Record, SwarmParams, TapRecord, VERSION,
+    MAX_SAMPLE_FIELDS, MAX_TAP_FIELDS, OLDEST_VERSION, Record, SampleRecord, SwarmParams,
+    TapRecord, VERSION,
 };
 pub use reader::{Entry, Error, OwnedHeader, Reader};
 pub use writer::Writer;

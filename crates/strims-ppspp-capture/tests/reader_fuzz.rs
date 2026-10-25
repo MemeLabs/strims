@@ -15,7 +15,8 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{ChannelWriter, Data, Have, Message, MessageWriter, Request};
 use strims_ppspp_capture::{
-    Clock, Dir, Header, MAX_FRAME, Reader, Record, SwarmParams, TapRecord, Writer, export,
+    Clock, Dir, Header, MAX_FRAME, Reader, Record, SampleRecord, SwarmParams, TapRecord, Writer,
+    export,
 };
 
 /// 1024 cases, or more with `PROPTEST_CASES`.
@@ -109,6 +110,7 @@ fn corpus() -> &'static [u8] {
                     message: b"error",
                 },
                 Record::TapLost { count: 3 },
+                Record::Sample(SampleRecord::new(i, i % 2, &[-1, 1 << 50, 0, 3, 4, 5])),
                 Record::ChannelClose { peer: i, swarm: i },
                 Record::SwarmGone { swarm: i },
                 Record::PeerGone { peer: i },
@@ -157,7 +159,7 @@ fn run(input: &[u8]) -> (usize, usize) {
 #[test]
 fn corpus_is_valid() {
     let (ok, bad) = run(corpus());
-    assert_eq!((ok, bad), (33, 0));
+    assert_eq!((ok, bad), (36, 0));
 }
 
 #[derive(Clone, Debug)]

@@ -56,53 +56,125 @@ use strims_ppspp::{
     TapEvent, TapKind, TapLevel,
 };
 
-use crate::format::{Clock, Dir, Header, Record, SwarmParams, TapRecord};
+use crate::format::{Clock, Dir, Header, Record, SampleRecord, SwarmParams, TapRecord};
+use crate::sample::Sample;
 use crate::writer::Writer;
 
-/// A tap kind's code, name and field names.
+/// How a field reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldKind {
+    /// A number, in the unit its table gives.
+    Num,
+    /// A peer's id in the dump; an export names the peer.
+    Peer,
+    /// The index of one of these names.
+    Enum(&'static [&'static str]),
+}
+
+/// A field's name and how it reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Field {
+    pub name: &'static str,
+    pub kind: FieldKind,
+}
+
+/// A tap kind's or a sample source's code, name and fields.
 #[derive(Clone, Copy, Debug)]
-pub struct TapKindInfo {
+pub struct KindInfo {
     pub code: u32,
     pub name: &'static str,
-    pub fields: &'static [&'static str],
+    pub fields: &'static [Field],
+    /// The fields the kind had in a version 1 dump. Version 1 writers
+    /// padded every tap record to 3 fields with zeros, so a reader takes
+    /// only these.
+    pub v1_fields: usize,
+}
+
+impl KindInfo {
+    pub(crate) const fn new(code: u32, name: &'static str, fields: &'static [Field]) -> KindInfo {
+        KindInfo {
+            code,
+            name,
+            fields,
+            v1_fields: fields.len(),
+        }
+    }
+
+    /// How many of a record's `n` fields a reader of a version `version`
+    /// dump takes.
+    pub fn fields_of(&self, version: u16, n: usize) -> usize {
+        let n = n.min(self.fields.len());
+        if version == 1 {
+            n.min(self.v1_fields)
+        } else {
+            n
+        }
+    }
+
+    /// Field `i`'s name of `v`, if it is an [`FieldKind::Enum`] that names
+    /// it.
+    pub fn value_name(&self, i: usize, v: i64) -> Option<&'static str> {
+        match self.fields.get(i)?.kind {
+            FieldKind::Enum(names) => names.get(usize::try_from(v).ok()?).copied(),
+            _ => None,
+        }
+    }
+}
+
+pub(crate) const fn num(name: &'static str) -> Field {
+    Field {
+        name,
+        kind: FieldKind::Num,
+    }
+}
+
+const fn peer(name: &'static str) -> Field {
+    Field {
+        name,
+        kind: FieldKind::Peer,
+    }
 }
 
 /// The tap kinds this crate writes.
-pub const TAP_KINDS: &[TapKindInfo] = &[
-    info(1, "DataSent", &["bin", "push", "queued"]),
-    info(2, "DataRefused", &["bin", "push"]),
-    info(3, "DataDropped", &["bin", "push"]),
-    info(4, "PushStale", &["bin", "queued"]),
-    info(5, "PushSuppressed", &["bin"]),
-    info(6, "DataStale", &["bin"]),
-    info(7, "PushHit", &["bin", "lag"]),
-    info(8, "PushLate", &["bin", "lag"]),
-    info(9, "PushUnsolicited", &["bin"]),
-    info(10, "PushMiss", &["bin"]),
-    info(11, "RequestTimeout", &["bin"]),
-    info(12, "Pruned", &["stream"]),
-    info(13, "Switched", &["stream", "from"]),
-    info(14, "OpenTimeout", &["stream"]),
-    info(15, "Declined", &["stream"]),
-    info(16, "ShedBy", &["stream"]),
-    info(17, "Admitted", &["stream"]),
-    info(18, "Rejected", &["stream"]),
-    info(19, "Shed", &["stream"]),
-    info(20, "HolderJoined", &[]),
-    info(21, "HolderLeft", &[]),
-    info(22, "SeedBudget", &["budget", "copies", "streams"]),
-    info(23, "SeedWindow", &["copies", "pushed", "behind"]),
-    info(24, "HolderSilent", &[]),
-    info(25, "HolderUnserved", &["reporters"]),
-    info(26, "PushCancelled", &["bin"]),
+pub const TAP_KINDS: &[KindInfo] = &[
+    KindInfo::new(1, "DataSent", &[num("bin"), num("push"), num("queued")]),
+    KindInfo::new(2, "DataRefused", &[num("bin"), num("push")]),
+    KindInfo::new(3, "DataDropped", &[num("bin"), num("push")]),
+    KindInfo::new(4, "PushStale", &[num("bin"), num("queued")]),
+    KindInfo::new(5, "PushSuppressed", &[num("bin")]),
+    KindInfo::new(6, "DataStale", &[num("bin")]),
+    KindInfo::new(7, "PushHit", &[num("bin"), num("lag")]),
+    KindInfo::new(8, "PushLate", &[num("bin"), num("lag")]),
+    KindInfo::new(9, "PushUnsolicited", &[num("bin")]),
+    KindInfo::new(10, "PushMiss", &[num("bin")]),
+    KindInfo::new(11, "RequestTimeout", &[num("bin")]),
+    KindInfo::new(12, "Pruned", &[num("stream")]),
+    KindInfo::new(13, "Switched", &[num("stream"), peer("from")]),
+    KindInfo::new(14, "OpenTimeout", &[num("stream")]),
+    KindInfo::new(15, "Declined", &[num("stream")]),
+    KindInfo::new(16, "ShedBy", &[num("stream")]),
+    KindInfo::new(17, "Admitted", &[num("stream")]),
+    KindInfo::new(18, "Rejected", &[num("stream")]),
+    KindInfo::new(19, "Shed", &[num("stream")]),
+    KindInfo::new(20, "HolderJoined", &[]),
+    KindInfo::new(21, "HolderLeft", &[]),
+    KindInfo::new(
+        22,
+        "SeedBudget",
+        &[num("budget"), num("copies"), num("streams")],
+    ),
+    KindInfo::new(
+        23,
+        "SeedWindow",
+        &[num("copies"), num("pushed"), num("behind")],
+    ),
+    KindInfo::new(24, "HolderSilent", &[]),
+    KindInfo::new(25, "HolderUnserved", &[num("reporters")]),
+    KindInfo::new(26, "PushCancelled", &[num("bin")]),
 ];
 
-const fn info(code: u32, name: &'static str, fields: &'static [&'static str]) -> TapKindInfo {
-    TapKindInfo { code, name, fields }
-}
-
 /// The kind with `code`.
-pub fn tap_kind(code: u32) -> Option<&'static TapKindInfo> {
+pub fn tap_kind(code: u32) -> Option<&'static KindInfo> {
     TAP_KINDS.iter().find(|k| k.code == code)
 }
 
@@ -146,6 +218,7 @@ pub struct Stats {
     pub frames_out: u64,
     pub bytes_out: u64,
     pub tap_records: u64,
+    pub samples: u64,
     pub files: u64,
     /// Bytes written to every file.
     pub written: u64,
@@ -428,8 +501,7 @@ impl<S: Sink> Capture<S> {
             }
             TapKind::Lost { count } => self.write(now, &Record::TapLost { count })?,
             kind if self.tap => {
-                if let Some((code, fields)) = self.tap_fields(kind) {
-                    let r = TapRecord::new(code, peer.unwrap_or(0), swarm.unwrap_or(0), &fields);
+                if let Some(r) = self.tap_record(kind, peer.unwrap_or(0), swarm.unwrap_or(0)) {
                     self.stats.tap_records += 1;
                     self.write(now, &Record::Tap(r))?;
                 }
@@ -439,63 +511,73 @@ impl<S: Sink> Capture<S> {
         Ok(())
     }
 
-    /// A decision's code and fields (unused ones 0).
-    fn tap_fields(&self, kind: TapKind) -> Option<(u32, [i64; 3])> {
+    /// A decision's record, with the fields its kind's table names.
+    fn tap_record(&self, kind: TapKind, peer: u32, swarm: u32) -> Option<TapRecord> {
         let b = |b: Bin| b.0 as i64;
         let push = |p: bool| i64::from(p);
         let s = i64::from;
-        Some(match kind {
+        let r = |code: u32, fields: &[i64]| Some(TapRecord::new(code, peer, swarm, fields));
+        match kind {
             TapKind::DataSent {
                 bin,
                 push: p,
                 queued,
-            } => (1, [b(bin), push(p), queued.unix_nanos()]),
-            TapKind::DataRefused { bin, push: p } => (2, [b(bin), push(p), 0]),
-            TapKind::DataDropped { bin, push: p } => (3, [b(bin), push(p), 0]),
-            TapKind::PushStale { bin, queued } => (4, [b(bin), queued.unix_nanos(), 0]),
-            TapKind::PushSuppressed { bin } => (5, [b(bin), 0, 0]),
-            TapKind::DataStale { bin } => (6, [b(bin), 0, 0]),
-            TapKind::PushHit { bin, lag } => (7, [b(bin), lag.as_nanos(), 0]),
-            TapKind::PushLate { bin, lag } => (8, [b(bin), lag.as_nanos(), 0]),
-            TapKind::PushUnsolicited { bin } => (9, [b(bin), 0, 0]),
-            TapKind::PushMiss { bin } => (10, [b(bin), 0, 0]),
-            TapKind::RequestTimeout { bin } => (11, [b(bin), 0, 0]),
-            TapKind::Pruned { stream } => (12, [s(stream), 0, 0]),
-            TapKind::Switched { stream, from } => {
-                let from = self.peers.get(&from).copied().unwrap_or(0);
-                (13, [s(stream), i64::from(from), 0])
-            }
-            TapKind::OpenTimeout { stream } => (14, [s(stream), 0, 0]),
-            TapKind::Declined { stream } => (15, [s(stream), 0, 0]),
-            TapKind::ShedBy { stream } => (16, [s(stream), 0, 0]),
-            TapKind::Admitted { stream } => (17, [s(stream), 0, 0]),
-            TapKind::Rejected { stream } => (18, [s(stream), 0, 0]),
-            TapKind::Shed { stream } => (19, [s(stream), 0, 0]),
-            TapKind::HolderJoined => (20, [0; 3]),
-            TapKind::HolderLeft => (21, [0; 3]),
+            } => r(1, &[b(bin), push(p), queued.unix_nanos()]),
+            TapKind::DataRefused { bin, push: p } => r(2, &[b(bin), push(p)]),
+            TapKind::DataDropped { bin, push: p } => r(3, &[b(bin), push(p)]),
+            TapKind::PushStale { bin, queued } => r(4, &[b(bin), queued.unix_nanos()]),
+            TapKind::PushSuppressed { bin } => r(5, &[b(bin)]),
+            TapKind::DataStale { bin } => r(6, &[b(bin)]),
+            TapKind::PushHit { bin, lag } => r(7, &[b(bin), lag.as_nanos()]),
+            TapKind::PushLate { bin, lag } => r(8, &[b(bin), lag.as_nanos()]),
+            TapKind::PushUnsolicited { bin } => r(9, &[b(bin)]),
+            TapKind::PushMiss { bin } => r(10, &[b(bin)]),
+            TapKind::RequestTimeout { bin } => r(11, &[b(bin)]),
+            TapKind::Pruned { stream } => r(12, &[s(stream)]),
+            TapKind::Switched { stream, from } => r(13, &[s(stream), self.peer_field(from)]),
+            TapKind::OpenTimeout { stream } => r(14, &[s(stream)]),
+            TapKind::Declined { stream } => r(15, &[s(stream)]),
+            TapKind::ShedBy { stream } => r(16, &[s(stream)]),
+            TapKind::Admitted { stream } => r(17, &[s(stream)]),
+            TapKind::Rejected { stream } => r(18, &[s(stream)]),
+            TapKind::Shed { stream } => r(19, &[s(stream)]),
+            TapKind::HolderJoined => r(20, &[]),
+            TapKind::HolderLeft => r(21, &[]),
             TapKind::SeedBudget {
                 budget,
                 copies,
                 streams,
-            } => (22, [budget as i64, copies as i64, streams as i64]),
+            } => r(22, &[budget as i64, copies as i64, streams as i64]),
             TapKind::SeedWindow {
                 copies,
                 pushed,
                 behind,
-            } => (23, [copies as i64, pushed as i64, behind as i64]),
-            TapKind::HolderSilent => (24, [0; 3]),
-            TapKind::HolderUnserved { reporters } => (25, [reporters as i64, 0, 0]),
-            TapKind::PushCancelled { bin } => (26, [b(bin), 0, 0]),
-            _ => return None,
-        })
-        .map(|(code, f)| {
-            let n = tap_kind(code).map_or(0, |k| k.fields.len());
-            let mut out = [0; 3];
-            for (dst, src) in out.iter_mut().zip(f).take(n) {
-                *dst = src;
-            }
-            (code, out)
-        })
+            } => r(23, &[copies as i64, pushed as i64, behind as i64]),
+            TapKind::HolderSilent => r(24, &[]),
+            TapKind::HolderUnserved { reporters } => r(25, &[reporters as i64]),
+            TapKind::PushCancelled { bin } => r(26, &[b(bin)]),
+            _ => None,
+        }
+    }
+
+    /// A peer's dump id as a field, 0 if the capture doesn't know it.
+    fn peer_field(&self, peer: PeerKey) -> i64 {
+        i64::from(self.peers.get(&peer).copied().unwrap_or(0))
+    }
+
+    /// Writes a sample of the state below ppspp: of `peer`'s link, or of
+    /// the node.
+    pub fn sample(&mut self, now: Time, peer: Option<PeerKey>, sample: &Sample) {
+        if !self.live() {
+            return;
+        }
+        let peer = peer.map_or(0, |p| self.peer_id(p));
+        let (source, fields) = sample.encode();
+        self.stats.samples += 1;
+        let r = Record::Sample(SampleRecord::new(source, peer, &fields));
+        if let Err(e) = self.write(now, &r) {
+            self.fail(e);
+        }
     }
 
     /// Writes a frame. Peers the capture hasn't seen get an id here; the
