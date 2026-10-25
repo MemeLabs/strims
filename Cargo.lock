@@ -2604,8 +2604,12 @@ dependencies = [
 name = "strims-testbed"
 version = "0.1.0"
 dependencies = [
+ "hex",
+ "strims-crypto",
  "strims-node-core",
  "strims-ppspp",
+ "strims-proto",
+ "tokio",
 ]
 
 [[package]]

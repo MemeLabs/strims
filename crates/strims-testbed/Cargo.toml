@@ -8,8 +8,13 @@ license.workspace = true
 publish = false
 
 [dependencies]
+strims-crypto.workspace = true
 strims-node-core.workspace = true
 strims-ppspp.workspace = true
+strims-proto.workspace = true
+hex.workspace = true
+# `select!`, `join!` and channels, which need no runtime and build on wasm32.
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 [lints]
 workspace = true
