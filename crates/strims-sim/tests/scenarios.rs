@@ -1777,6 +1777,12 @@ struct Calibration {
     seed_up_steps: Vec<(f64, f64)>,
     /// Every node's rate limit, in percent of its starting uplink.
     rate_limit_pct: Option<u64>,
+    /// The send buffers' congestion windows ([`SendBuffer::window`]), which
+    /// `STRIMS_SIM_TCP=1` also turns on.
+    window: bool,
+    /// The swarm's chunk and munro sizes ([`SwarmSpec::with_chunks`]);
+    /// `None` keeps the testbed's.
+    chunks: Option<(usize, usize)>,
     /// Bulk uploads from the seed's host, from given seconds of stream on
     /// for given seconds (`<s>:<d> ...`), to a sink 30 ms away (the seed's
     /// delay and the testbed sink's). They need the window model
@@ -1825,6 +1831,8 @@ fn calibration_settings() -> Calibration {
         topology,
         seed_up_steps,
         rate_limit_pct: knob("STRIMS_SIM_CAL_RATE_LIMIT_PCT"),
+        window: false,
+        chunks: None,
         compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
     }
 }
@@ -1909,7 +1917,7 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     });
     s.send_buffer = Some(SendBuffer {
         uplink_queue: UPLINK_QUEUE,
-        window: false,
+        window: c.window,
     });
     let all: Vec<HostIx> = std::iter::once(seed_host)
         .chain(vs.iter().copied())
@@ -1955,11 +1963,13 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             s.at(secs(5 + c.join_at), Fault::Restart(v));
         }
     }
-    s.swarm(
-        SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
-            .with_push_mode(PushMode::Hybrid)
-            .with_live_window(WAN_WINDOW),
-    );
+    let mut swarm = SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
+        .with_push_mode(PushMode::Hybrid)
+        .with_live_window(WAN_WINDOW);
+    if let Some((chunk, munro)) = c.chunks {
+        swarm = swarm.with_chunks(chunk, munro).unwrap();
+    }
+    s.swarm(swarm);
     // The heap grows with the swarm: a 32-node full mesh holds about
     // 450 MiB. Past the bound, the trace names the heap's bytes, which
     // vary between processes, and the farm's reruns would disagree.
@@ -2088,6 +2098,187 @@ fn calibration_star() {
             println!("SERIES {}", calibration_series(r));
         }
     }
+}
+
+// 11b. Collapse modes: fixed cases of `calibration_star` in which an
+// honest Hybrid swarm stops delivering or lets its lag grow, each with the
+// check that its mode is there. A change that removes a mode fails its
+// case: the case then becomes that change's target and checks the healthy
+// outcome instead. All run 4 KiB chunks and 32 KiB munros (the swarm
+// defaults), a full mesh and the window model, with uplinks the nodes
+// don't know.
+
+/// The testbed's settings for `viewers` viewers in a full mesh behind a
+/// `seed_up_mbit` seed, streaming `secs`, at the swarm defaults' chunks in
+/// the window model.
+fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
+    Calibration {
+        viewers,
+        seed_up_mbit,
+        viewer_up_mbit: 20,
+        seed_delay_ms: 20,
+        viewer_delay_ms: 10,
+        secs,
+        join_at: 0,
+        slow_down_kbit: None,
+        topology: Some(full_mesh(viewers)),
+        seed_up_steps: Vec::new(),
+        rate_limit_pct: None,
+        window: true,
+        chunks: Some((4096, 32 * 1024)),
+        compete: Vec::new(),
+    }
+}
+
+/// Runs collapse case `c` as test `name` for one seed and its replay.
+fn collapse_sweep(name: &str, c: &Calibration, check: impl Fn(&Report) -> Result<(), String>) {
+    sweep_n(name, 1, |s| calibration_star_scenario(s, c), check);
+}
+
+/// The seed's host and its stream's start.
+fn collapse_seed(r: &Report) -> (HostIx, Duration) {
+    let spec = &r.scenario.swarms[0];
+    (spec.seed, spec.start)
+}
+
+/// **First-wave overshoot.** The upload meter takes capacity as the bytes
+/// written over the share of time some peer had data queued, that share
+/// counted as at least `MIN_BUSY` (5 %). The node hands a fresh stream's
+/// data straight to its links' buffers and sockets, so at the first wave
+/// it reads busy near zero and its capacity at up to 20 times its sending
+/// rate. The adaptive seed sizes its first wave from that reading over the
+/// store rate since the first chunk, so behind a 10 Mbit uplink that pays
+/// for 2 copies it opens a copy to each of 15 neighbours. The pushes queue
+/// behind each holder's connection, go stale, and its window falls back
+/// over the next seconds while the viewers pull. Checks that the first
+/// wave opens at least twice the copies the seed's uplink pays for.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_first_wave_overshoot() {
+    collapse_sweep(
+        "collapse_first_wave_overshoot",
+        &collapse_case(15, 10, 30),
+        |r| {
+            let (seed, _) = collapse_seed(r);
+            let wave = r.hosts[seed]
+                .runner
+                .seeds
+                .get(&0)
+                .map_or(0, |s| s.first_wave);
+            let paid = r.paid_copies(0).unwrap_or(0).max(1);
+            if wave >= 2 * paid {
+                Ok(())
+            } else {
+                Err(format!(
+                    "first wave {wave} copies, the uplink pays for {paid}"
+                ))
+            }
+        },
+    );
+}
+
+/// **The meter's oscillation.** Past the first wave the same floor keeps
+/// misreading: whenever the seed's uplink isn't saturated it reads busy
+/// near zero and its capacity at many times the uplink, so its window
+/// grows copies past what the uplink pays for, the uplink saturates, the
+/// holders' pushes fall behind and the window halves, until the uplink
+/// idles again. Behind a 5 Mbit uplink (one copy) three viewers ride this
+/// cycle every 10–20 s, with lag spikes of a second or two. Checks for at
+/// least three cycles: a reading over four times the uplink while busy
+/// under 5 %, then one at over 90 % busy.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_meter_oscillation() {
+    collapse_sweep(
+        "collapse_meter_oscillation",
+        &collapse_case(3, 5, 90),
+        |r| {
+            let (seed, start) = collapse_seed(r);
+            let (mut cycles, mut overread) = (0, false);
+            for m in r.hosts[seed]
+                .runner
+                .meter
+                .iter()
+                .filter(|m| m.t > start + secs(5))
+            {
+                let cap = r.upload_cap_at(seed, m.t).unwrap_or(u64::MAX);
+                if m.busy_permille < 50 && m.capacity > 4 * cap {
+                    overread = true;
+                } else if overread && m.busy_permille > 900 {
+                    cycles += 1;
+                    overread = false;
+                }
+            }
+            if cycles >= 3 {
+                Ok(())
+            } else {
+                Err(format!("{cycles} cycles of overreading then saturating"))
+            }
+        },
+    );
+}
+
+/// **Pull lock-in.** Viewers without timely pushes pull the newest chunks,
+/// and the seed, which announces every chunk first, answers each fresh
+/// chunk several times over. Its uplink fills with answers, and on a node
+/// with no rate limit its QoS never arbitrates between peers (each peer
+/// blocks on its own link), so its holders get only their TCP share of the
+/// access link: their pushes wait, go stale or arrive after the children
+/// pulled the chunks, the children prune them, and more viewers pull from
+/// the seed. Behind a 5 Mbit seed 15 viewers never get out: the seed sends
+/// most of its chunks as answers and the lag grows for the whole stream.
+/// Bounding the seed's answers per chunk, or a rate limit under the uplink
+/// (so the holders' QoS weights apply), lets the trees close. Checks that
+/// the seed sent under half its chunks as pushes and that the frames
+/// written in the stream's last 20 s lag over 5 s at p99.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_pull_lock_in() {
+    collapse_sweep("collapse_pull_lock_in", &collapse_case(15, 5, 60), |r| {
+        let (seed, start) = collapse_seed(r);
+        let (sent, pushed) = r.hosts[seed]
+            .transfers
+            .iter()
+            .rev()
+            .find(|(_, s, _)| *s == 0)
+            .map_or((0, 0), |(_, _, x)| (x.chunks_sent, x.pushed_chunks));
+        let late = r.lag_between(0, start + secs(40), start + secs(60)).p99;
+        if pushed * 2 < sent && late > 5000 {
+            Ok(())
+        } else {
+            Err(format!(
+                "pushed {pushed} of {sent} chunks; late frames' p99 {late} ms"
+            ))
+        }
+    });
+}
+
+/// **Lock-in after a halving.** A swarm whose trees stand falls into the
+/// pull lock-in when its seed's uplink halves: the seed's copies no longer
+/// fit, its holders' pushes fall behind, viewers prune it and pull from it,
+/// and its queue never drains while the uplink stays halved, though the
+/// halved uplink still carries two copies. Behind a 10 Mbit seed halved at
+/// 30 s, 7 viewers stream well before and lag seconds after. Checks that
+/// frames written in the 10 s before the halving lag under 2 s at p99, and
+/// those written from 10 s after it over 3 s (`hack/capture/analyze.py`'s
+/// latency collapse).
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_halving_lock_in() {
+    let mut c = collapse_case(7, 10, 70);
+    c.seed_up_steps = vec![(30.0, 5.0)];
+    collapse_sweep("collapse_halving_lock_in", &c, |r| {
+        let (_, start) = collapse_seed(r);
+        let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
+        let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
+        if before < 2000 && after > 3000 {
+            Ok(())
+        } else {
+            Err(format!(
+                "p99 lag {before} ms before the halving, {after} ms after"
+            ))
+        }
+    });
 }
 
 // 10d. Mobile viewers: six on LTE and six on cable in North America.

@@ -644,12 +644,7 @@ impl Report {
         let spec = self.scenario.swarms.get(swarm)?;
         let seed = self.hosts.get(spec.seed)?.runner.seeds.get(&swarm)?;
         let cap = self.upload_cap(spec.seed)?;
-        let rate = self.swarm_rate(swarm) * PUSH_OVERHEAD;
-        let oracle = if rate > 0.0 {
-            ((cap as f64 * ALLOC_UTILIZATION / rate) as usize).min(spec.viewers.len())
-        } else {
-            0
-        };
+        let oracle = self.paid_copies(swarm)?;
         Some(format!(
             "\n  swarm {swarm} seed: first wave {} copies from {} KiB/s (cap {} KiB/s pays for {oracle}), budget {} slots, window {}, copies {}",
             seed.first_wave,
@@ -659,6 +654,21 @@ impl Report {
             seed.window,
             seed.copies,
         ))
+    }
+
+    /// The whole copies swarm `swarm`'s seed's starting upload cap pays
+    /// for under the adaptive seed's sizing rule (its utilization target
+    /// over the stream rate with push overhead), at most one a viewer:
+    /// what its first wave should open.
+    pub fn paid_copies(&self, swarm: usize) -> Option<usize> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let cap = self.upload_cap(spec.seed)?;
+        let rate = self.swarm_rate(swarm) * PUSH_OVERHEAD;
+        Some(if rate > 0.0 {
+            ((cap as f64 * ALLOC_UTILIZATION / rate) as usize).min(spec.viewers.len())
+        } else {
+            0
+        })
     }
 
     pub fn summary(&self) -> String {
